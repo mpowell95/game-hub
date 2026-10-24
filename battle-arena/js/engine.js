@@ -22,6 +22,9 @@ export const MOVES_PER_TURN = 2;
 /** Berries are a sixth tile that MATCHES like a gem (3+ in a line), as in the reference game:
  *  each berry in a line counts toward evolving. Roughly one tile in ten. */
 export const BERRY_RATE = 0.10;
+/** No new berry falls in while this many are on the board: berries charge nothing, so unmatched ones
+ *  piled up (Matt saw 11 of 35, 2026-10-24); the reference shows 3-6. */
+export const MAX_BERRIES = 4;
 export const BOMB_RATE = 0.025;
 const MAX_LOOPS = 40;            // cascade / special safety valve (never reached in the soak)
 /** After each side's 20th turn, heals stop ("Sudden death"): two healing teams could otherwise
@@ -59,12 +62,13 @@ function newTile(s, kind) {
   if (kind === 'bomb') t.n = 5 + (rand(s) < 0.5 ? 0 : 1);
   return t;
 }
-const bombCount = (board) => board.reduce((n, t) => n + (t && t.k === 'bomb' ? 1 : 0), 0);
+const countKind = (board, k) => board.reduce((n, t) => n + (t && t.k === k ? 1 : 0), 0);
+const bombCount = (board) => countKind(board, 'bomb');
 
 /** A falling-in tile: ~10% Berry, ~2.5% Bomb (at most MAX_BOMBS on the board), the rest gems evenly. */
-function spawnTile(s, bombsNow) {
+function spawnTile(s, bombsNow, berriesNow) {
   const r = rand(s);
-  if (r < BERRY_RATE) return newTile(s, 'berry');
+  if (r < BERRY_RATE) return berriesNow < MAX_BERRIES ? newTile(s, 'berry') : newTile(s, pick(s, ELEMENTS));
   if (r < BERRY_RATE + BOMB_RATE && bombsNow < MAX_BOMBS) return newTile(s, 'bomb');
   return newTile(s, pick(s, ELEMENTS));
 }
@@ -206,7 +210,7 @@ function fillFresh(s) {
       const r = rowOf(i), c = colOf(i);
       let k;
       for (let g = 0; g < 20; g++) {
-        k = rand(s) < BERRY_RATE ? 'berry' : pick(s, ELEMENTS);
+        k = rand(s) < BERRY_RATE && countKind(s.board, 'berry') < MAX_BERRIES ? 'berry' : pick(s, ELEMENTS);
         const left = c >= 2 && s.board[i - 1].k === k && s.board[i - 2].k === k;
         const up = r >= 2 && s.board[i - COLS].k === k && s.board[i - 2 * COLS].k === k;
         if (!left && !up) break;
@@ -293,6 +297,7 @@ function collect(s, ev, side, set, cause) {
 function gravity(s, ev) {
   const moves = [], spawns = [];
   let bombs = bombCount(s.board);
+  let berries = countKind(s.board, 'berry');
   for (let c = 0; c < COLS; c++) {
     let write = ROWS - 1;
     for (let r = ROWS - 1; r >= 0; r--) {
@@ -307,8 +312,9 @@ function gravity(s, ev) {
     }
     const empty = write + 1;
     for (let r = write; r >= 0; r--) {
-      const t = spawnTile(s, bombs);
+      const t = spawnTile(s, bombs, berries);
       if (t.k === 'bomb') bombs++;
+      if (t.k === 'berry') berries++;
       s.board[idx(r, c)] = t;
       spawns.push({ id: t.id, k: t.k, n: t.n, to: idx(r, c), fromRow: r - empty });
     }

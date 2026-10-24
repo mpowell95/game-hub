@@ -24,7 +24,8 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
 ## Rules we decided (not in the spec, or changed from it)
 
 - **Berries are a sixth tile that MATCHES like a gem** (3+ in a line; each counts toward evolving), as
-  the reference shows ("3 🍒" by the counter); ~10% of tiles (2026-10-24, v2). **Bombs**: a match
+  the reference shows ("3 🍒" by the counter); ~10% of new tiles, but **never more than 4 on the board**
+  (`MAX_BERRIES`: they charge nothing, so unmatched ones piled up to 11; Matt, 2026-10-24). **Bombs**: a match
   orthogonally NEXT TO one sets it off (the reference's stage text). Blast and special-cleared gems
   charge the mover; a bomb at 0 charges nobody.
 - **Move timer 25 s, reset after every move: LIVE ONLINE ONLY, never vs the computer** (Matt,

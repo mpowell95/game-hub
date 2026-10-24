@@ -15,7 +15,7 @@ const count = (ev, t, f = () => true) => ev.filter((e) => e.t === t && f(e)).len
 const LETTER = { F: 'fire', W: 'water', S: 'spark', L: 'leaf', D: 'shadow', B: 'berry' };
 /** A match with a hand-built board. Rows top to bottom; X1..X9 = a bomb with that countdown. */
 function setup(teams, rows, opts = {}) {
-  const s = newMatch({ seed: opts.seed || 7, teams, first: 0 });
+  const s = newMatch({ seed: opts.seed || 2, teams, first: 0 });
   s.board = [];
   for (const row of rows) {
     const cells = row.match(/X\d|[FWSLDB]/g);
@@ -296,6 +296,22 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const tick = r.events.find((e) => e.t === 'tick');
   const bombId = s.board[idx(4, 6)].id;
   ok('a bomb counts down by 1 per turn', tick && tick.bombs.find((x) => x.id === bombId).n === 3);
+}
+
+// --- berries never pile up --------------------------------------------------------------------------------
+{
+  let most = 0;
+  for (let g = 0; g < 20; g++) {
+    let m = newMatch({ seed: 500 + g, teams: TEAM });
+    most = Math.max(most, m.board.filter((t) => t.k === 'berry').length);
+    for (let k = 0; k < 60 && m.winner == null; k++) {
+      const r = apply(m, chooseMove(m, 'medium', () => 0.5));
+      if (!r.ok) break;
+      m = r.state;
+      most = Math.max(most, m.board.filter((t) => t.k === 'berry').length);
+    }
+  }
+  ok('never more than 4 berries on the board (Matt saw 11)', most <= 4);
 }
 
 // --- the turn timer -------------------------------------------------------------------------------------
