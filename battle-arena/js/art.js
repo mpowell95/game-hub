@@ -15,36 +15,44 @@ const ICON = {
   leaf: '<path d="M12 27c0-9 7-14 16-15 0 9-5 16-14 16z" fill="#fff"/><path d="M12 28c4-4 8-8 12-12" stroke="#2E9E44" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
   swirl: '<path d="M20 20a2.5 2.5 0 1 1 3 2.5 5 5 0 1 1-8-5 7.5 7.5 0 1 1 1 12" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/>',
 };
-const GEM_SHAPE = {
-  fire: { body: '<rect x="4" y="4" width="32" height="32" rx="7" fill="#E0532F" stroke="#8e2a12" stroke-width="2"/>', shine: '<rect x="8" y="7" width="16" height="5" rx="2.5" fill="#fff" opacity=".28"/>', icon: 'flame' },
-  water: { body: '<path d="M20 3.5 37 34a2.5 2.5 0 0 1-2.2 3.5H5.2A2.5 2.5 0 0 1 3 34z" fill="#1F5FA8" stroke="#0f3466" stroke-width="2" stroke-linejoin="round"/>', shine: '<path d="M18 10 12 21" stroke="#fff" stroke-width="3" opacity=".3" stroke-linecap="round"/>', icon: 'drop', dy: 3 },
-  spark: { body: '<circle cx="20" cy="20" r="16.5" fill="#F2B705" stroke="#8a6400" stroke-width="2"/>', shine: '<path d="M10 14a11 11 0 0 1 8-7" stroke="#fff" stroke-width="3" opacity=".5" fill="none" stroke-linecap="round"/>', icon: 'bolt' },
-  leaf: { body: '<rect x="8.2" y="8.2" width="23.6" height="23.6" rx="4" transform="rotate(45 20 20)" fill="#2E9E44" stroke="#165a24" stroke-width="2"/>', shine: '<path d="M13 15 19 9" stroke="#fff" stroke-width="3" opacity=".3" stroke-linecap="round"/>', icon: 'leaf' },
-  shadow: { body: '<path d="M20 2.8 35 11.4v17.2L20 37.2 5 28.6V11.4z" fill="#7B4FC4" stroke="#40227a" stroke-width="2" stroke-linejoin="round"/>', shine: '<path d="M10 13 17 9" stroke="#fff" stroke-width="3" opacity=".3" stroke-linecap="round"/>', icon: 'swirl' },
+/** Each gem's outline as one SVG element with `{f}` for its fill, plus its three tones (dark rim,
+ *  body, light face). Drawn as stacked copies (rim, body, an inset lighter face, a gloss) so it
+ *  reads as a cut jewel without gradients (gradient ids would collide across many copies). */
+const GEM = {
+  fire: { el: '<rect x="3" y="3" width="34" height="34" rx="8" fill="{f}"/>', dark: '#8e2a12', mid: '#E0532F', lite: '#FF8D60', icon: 'flame' },
+  water: { el: '<path d="M20 2.5 38 34.5a2.6 2.6 0 0 1-2.3 3.8H4.3A2.6 2.6 0 0 1 2 34.5z" fill="{f}" stroke="{f}" stroke-width="1.5" stroke-linejoin="round"/>', dark: '#0f3466', mid: '#1F6FC8', lite: '#5FA3F0', icon: 'drop', dy: 4 },
+  spark: { el: '<circle cx="20" cy="20" r="17.5" fill="{f}"/>', dark: '#8a6400', mid: '#F2B705', lite: '#FFE070', icon: 'bolt' },
+  leaf: { el: '<rect x="7.6" y="7.6" width="24.8" height="24.8" rx="4.5" transform="rotate(45 20 20)" fill="{f}"/>', dark: '#165a24', mid: '#2EA048', lite: '#6AD67C', icon: 'leaf' },
+  shadow: { el: '<path d="M20 2 36 11v18L20 38 4 29V11z" fill="{f}" stroke="{f}" stroke-width="1.5" stroke-linejoin="round"/>', dark: '#40227a', mid: '#7B4FC4', lite: '#B48AF2', icon: 'swirl' },
 };
+const inset = (svgEl, k, dx = 0, dy = 0) => `<g transform="translate(${20 + dx} ${20 + dy}) scale(${k}) translate(-20 -20)">${svgEl}</g>`;
 
 /** One tile's picture. `n` is a bomb's countdown. */
 export function gemSVG(kind, n) {
   if (kind === 'berry') {
-    return `<svg viewBox="0 0 40 40" aria-hidden="true"><g stroke="#5a0f1f" stroke-width="1.8">
-      <circle cx="14" cy="23" r="8" fill="#A3203A"/><circle cx="26" cy="23" r="8" fill="#A3203A"/><circle cx="20" cy="31" r="7.5" fill="#B8293F"/>
-      <circle cx="20" cy="17" r="7" fill="#B8293F"/></g>
-      <circle cx="12" cy="20" r="2" fill="#fff" opacity=".55"/><circle cx="18" cy="14" r="1.8" fill="#fff" opacity=".55"/>
-      <path d="M20 10c-1-4 2-7 7-7-1 4-3 6-7 7z" fill="#2E9E44" stroke="#165a24" stroke-width="1.4"/></svg>`;
+    return `<svg viewBox="0 0 40 40" aria-hidden="true"><g stroke="#4a0a18" stroke-width="2">
+      <circle cx="13" cy="24" r="8.5" fill="#B5203E"/><circle cx="27" cy="24" r="8.5" fill="#B5203E"/><circle cx="20" cy="31.5" r="7.5" fill="#C92B48"/>
+      <circle cx="20" cy="17" r="7.5" fill="#C92B48"/></g>
+      <circle cx="10.5" cy="21" r="2.6" fill="#fff" opacity=".7"/><circle cx="24.5" cy="21" r="2.4" fill="#fff" opacity=".6"/><circle cx="17.5" cy="14" r="2.3" fill="#fff" opacity=".7"/><circle cx="17.5" cy="29" r="2" fill="#fff" opacity=".55"/>
+      <path d="M20 10c-1-5 3-8 9-8-1 5-4 7-9 8z" fill="#3DBA55" stroke="#165a24" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
   }
   if (kind === 'bomb') {
     return `<svg viewBox="0 0 40 40" aria-hidden="true">
       <path d="M26 9c3-4 6-4 8-2" stroke="#8a7a62" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      <path d="M35 4l1.5 2.5L39 7l-2.5 1.5L36 11l-1.2-2.4L32 7.6l2.6-1z" fill="#F2B705"/>
-      <rect x="21" y="8" width="7" height="6" rx="1.5" transform="rotate(35 24 11)" fill="#5b6270"/>
-      <circle cx="19" cy="23" r="14.5" fill="#3A3F47" stroke="#15181d" stroke-width="2"/>
-      <path d="M9 18a11 11 0 0 1 7-6" stroke="#fff" stroke-width="2.6" opacity=".35" fill="none" stroke-linecap="round"/>
-      <text x="19" y="29.5" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="17" fill="#fff">${n == null ? '' : n}</text></svg>`;
+      <g class="ba-fuse"><path d="M35 3l1.6 2.8L40 6.6l-2.8 1.6L36.4 11.4l-1.3-2.7L32 7.5l2.9-1.1z" fill="#FFD23A"/><circle cx="35.4" cy="7" r="1.6" fill="#fff"/></g>
+      <rect x="21" y="8" width="7" height="6" rx="1.5" transform="rotate(35 24 11)" fill="#5b6270" stroke="#22262c" stroke-width="1.2"/>
+      <circle cx="19" cy="23" r="15" fill="#22262c"/><circle cx="19" cy="23" r="13" fill="#3F4550"/>
+      <ellipse cx="13.5" cy="16.5" rx="5" ry="3" transform="rotate(-35 13.5 16.5)" fill="#fff" opacity=".35"/>
+      <text x="19" y="29.6" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="17" fill="#fff" stroke="#000" stroke-width=".6">${n == null ? '' : n}</text></svg>`;
   }
-  const g = GEM_SHAPE[kind];
+  const g = GEM[kind];
   if (!g) return '';
+  const shape = (f) => g.el.replace(/\{f\}/g, f);
   const icon = g.dy ? `<g transform="translate(0 ${g.dy})">${ICON[g.icon]}</g>` : ICON[g.icon];
-  return `<svg viewBox="0 0 40 40" aria-hidden="true">${g.body}${g.shine}${icon}</svg>`;
+  return `<svg viewBox="0 0 40 40" aria-hidden="true">
+    ${inset(shape('rgba(0,0,0,.35)'), 1, 0, 1.6)}${shape(g.dark)}${inset(shape(g.mid), 0.86, 0, -0.6)}${inset(shape(g.lite), 0.6, 0, -1.6)}
+    ${inset(shape('#fff'), 0.22, -6, -8).replace('<g ', '<g opacity=".55" ')}
+    <g transform="translate(20 20) scale(.82) translate(-20 -20)"><g transform="translate(0 1.4)">${icon.replace(/#fff/g, 'rgba(0,0,0,.3)').replace(/#4a3300/g, 'rgba(255,255,255,.35)')}</g>${icon}</g></svg>`;
 }
 
 /** A small element badge (the gem's shape) for cards and floaters. 'all' = a prism. */
@@ -409,3 +417,44 @@ export function monsterSVG(id, evolved) {
 
 /** The hub tile's face (also used as this game's own "brand" mark). */
 export const TITLE_MONSTERS = ['emberkit', 'driplet'];
+
+// --- the arena ---------------------------------------------------------------------------------------
+/** The Boiler Room: a warm furnace hall, pipes, two tank-top platforms at the back, a steel
+ *  floor with hazard stripes at the front. One copy per page, so its pattern id is safe. Drawn in a
+ *  400x500 box and sliced to fill (`xMidYMax slice`), so the floor always sits at the bottom. */
+export function arenaSVG() {
+  const tank = (cx, cy, rx) => `<g>
+    <path d="M${cx - rx} ${cy} v60 a${rx} ${rx * 0.28} 0 0 0 ${rx * 2} 0 v-60" fill="#8a2f1c" stroke="#3a1208" stroke-width="3"/>
+    <path d="M${cx - rx + 8} ${cy + 6} v50" stroke="#c4502c" stroke-width="7" stroke-linecap="round" opacity=".7"/>
+    <path d="M${cx - rx} ${cy + 22} a${rx} ${rx * 0.28} 0 0 0 ${rx * 2} 0" fill="none" stroke="#3a1208" stroke-width="3" opacity=".6"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${rx * 0.28}" fill="#b2442a" stroke="#3a1208" stroke-width="3"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="${rx * 0.78}" ry="${rx * 0.2}" fill="#7a2614"/></g>`;
+  return `<svg viewBox="0 0 400 500" preserveAspectRatio="xMidYMax slice" width="100%" height="100%" aria-hidden="true">
+    <defs><pattern id="ba-haz" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="22" height="22" fill="#1f1a14"/><rect width="11" height="22" fill="#f2b705"/></pattern></defs>
+    <rect width="400" height="500" fill="#3b1a10"/>
+    <rect y="0" width="400" height="300" fill="#4a2214"/>
+    <g opacity=".9">
+      <rect x="150" y="40" width="100" height="150" rx="10" fill="#2a120a"/>
+      <rect x="160" y="52" width="80" height="126" rx="6" fill="#ff8a2a" class="ba-furnace"/>
+      <rect x="160" y="52" width="80" height="126" rx="6" fill="#ffd36a" opacity=".45" class="ba-furnace-2"/>
+      <path d="M160 92h80M160 132h80M200 52v126" stroke="#2a120a" stroke-width="6"/>
+    </g>
+    <g fill="#5c3424" stroke="#26110a" stroke-width="3">
+      <rect x="-10" y="18" width="420" height="20" rx="10"/><rect x="40" y="-10" width="22" height="330" rx="11"/>
+      <rect x="338" y="-10" width="22" height="330" rx="11"/><rect x="-10" y="226" width="420" height="16" rx="8"/>
+      <rect x="100" y="-10" width="14" height="120" rx="7"/><rect x="286" y="-10" width="14" height="120" rx="7"/>
+    </g>
+    <g fill="#7a4a34" stroke="#26110a" stroke-width="3">
+      <rect x="33" y="218" width="36" height="32" rx="6"/><rect x="331" y="218" width="36" height="32" rx="6"/>
+    </g>
+    <g stroke="#2a1a12" stroke-width="5" fill="none" opacity=".85"><path d="M0 262h400"/><path d="M0 286h400"/>
+      ${[20, 70, 120, 170, 220, 270, 320, 370].map((x) => `<path d="M${x} 262v24"/>`).join('')}</g>
+    ${tank(92, 250, 62)}${tank(308, 250, 62)}
+    <path d="M0 330 L400 330 L400 500 L0 500z" fill="#4b3226"/>
+    <path d="M0 330 L400 330 L400 344 L0 344z" fill="url(#ba-haz)"/>
+    <g stroke="#2e1e16" stroke-width="2" opacity=".8">
+      <path d="M0 400h400M0 452h400"/><path d="M100 344 70 500M200 344v156M300 344l30 156"/></g>
+    <rect x="0" y="0" width="400" height="500" fill="#ff7a2a" opacity=".07"/>
+  </svg>`;
+}

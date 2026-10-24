@@ -12,3 +12,15 @@ every HP went up by half and the weakest/strongest monsters were nudged (list in
 first went off from ANY orthogonal neighbour, which blew ~11 a match; they now go off only in line
 with a match. The soak then found a match between two healing teams still going at 3000 moves, which
 is where the Sudden death rule (no heals after each side's 20th turn) came from.
+
+
+## 2026-10-24: v2, the battle screen rebuilt
+
+Matt, after his first test: *"This game is NOT ready for me to waste my time testing it. It's very bad.
+It's in no way, shape, or form a clone of the other game. Gameplay is missing pieces, it doesn't register
+4 in a rows, it gives you 3 turns to begin, there's little to no animation at all."* A recording of the
+first build confirmed it: specials were a small box, damage a tiny number, the extra move a tiny "+1 move"
+pill, the move dots showed 3 after an extra move (likely the "3 turns"), gems vanished, monsters were
+static. The rules missed that berries MATCH in the reference (they were picked up next to matches).
+Rebuilt: engine (matchable berries, bombs set off by an adjacent match, a `pass` move for the 30 s timer),
+glossy gems, a Boiler Room scene, and the whole event-to-animation layer (see CLAUDE.md, "The battle screen").

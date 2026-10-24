@@ -7,7 +7,8 @@
 // phase 2 (live rooms, turn-by-turn challenges) replays moves on every phone and gets one board.
 //
 // Moves: { type: 'swap', a, b } (two orthogonally adjacent cells; illegal = no match = refused,
-// nothing changes) and { type: 'evolve', mon } (only while `pendingEvolve` is the mover's side).
+// nothing changes), { type: 'evolve', mon } (only while `pendingEvolve` is the mover's side) and
+// { type: 'pass' } (the turn timer ran out).
 // `events` is the ordered story of what happened, for the UI to animate (see the EVENTS list at
 // the bottom of this file). Rules: docs/BATTLE-ARENA-SPEC.md; deviations in battle-arena/CLAUDE.md.
 import {
@@ -18,8 +19,10 @@ export const COLS = 7;
 export const ROWS = 5;
 export const N = COLS * ROWS;
 export const MOVES_PER_TURN = 2;
-export const BERRY_RATE = 0.04;
-export const BOMB_RATE = 0.03;
+/** Berries are a sixth tile that MATCHES like a gem (3+ in a line), as in the reference game:
+ *  each berry in a line counts toward evolving. Roughly one tile in ten. */
+export const BERRY_RATE = 0.10;
+export const BOMB_RATE = 0.025;
 const MAX_LOOPS = 40;            // cascade / special safety valve (never reached in the soak)
 /** After each side's 20th turn, heals stop ("Sudden death"): two healing teams could otherwise
  *  out-heal each other for ever (the soak found one still going at 3000 moves). Our rule. */
@@ -29,6 +32,8 @@ export const idx = (r, c) => r * COLS + c;
 export const rowOf = (i) => Math.floor(i / COLS);
 export const colOf = (i) => i % COLS;
 export const isGem = (t) => !!t && ELEMENTS.includes(t.k);
+/** Gems and berries line up; bombs never do. */
+export const canMatch = (t) => !!t && (t.k === 'berry' || ELEMENTS.includes(t.k));
 export function adjacent(a, b) {
   if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= N || b >= N) return false;
   const dr = Math.abs(rowOf(a) - rowOf(b)), dc = Math.abs(colOf(a) - colOf(b));
@@ -52,7 +57,7 @@ function newTile(s, kind) {
 }
 const bombCount = (board) => board.reduce((n, t) => n + (t && t.k === 'bomb' ? 1 : 0), 0);
 
-/** A falling-in tile: ~4% Berry, ~3% Bomb (at most MAX_BOMBS on the board), the rest gems evenly. */
+/** A falling-in tile: ~10% Berry, ~2.5% Bomb (at most MAX_BOMBS on the board), the rest gems evenly. */
 function spawnTile(s, bombsNow) {
   const r = rand(s);
   if (r < BERRY_RATE) return newTile(s, 'berry');
@@ -61,7 +66,7 @@ function spawnTile(s, bombsNow) {
 }
 
 // --- matching ----------------------------------------------------------------------------------
-/** Every line of 3+ same-element gems: [{ cells, len, k }]. Berries and bombs never match. */
+/** Every line of 3+ alike tiles (gems or berries): [{ cells, len, k }]. Bombs never match. */
 export function findRuns(board) {
   const runs = [];
   const scan = (cellAt, outer, inner) => {
@@ -69,8 +74,8 @@ export function findRuns(board) {
       let start = 0;
       for (let i = 1; i <= inner; i++) {
         const a = board[cellAt(o, start)], b = i < inner ? board[cellAt(o, i)] : null;
-        if (i < inner && isGem(a) && isGem(b) && a.k === b.k) continue;
-        if (i - start >= 3 && isGem(a)) {
+        if (i < inner && canMatch(a) && canMatch(b) && a.k === b.k) continue;
+        if (i - start >= 3 && canMatch(a)) {
           const cells = [];
           for (let j = start; j < i; j++) cells.push(cellAt(o, j));
           runs.push({ cells, len: cells.length, k: a.k });
@@ -103,25 +108,17 @@ export function legalMoves(state) {
   return out;
 }
 
-/** The cells a set of matched cells takes with it: a berry orthogonally next to any matched gem;
- *  a bomb IN LINE with a match (just past either end of it); then every bomb's whole row and
- *  column (chaining into other bombs). `runs` null = no neighbours (a special, a bomb on its own). */
+/** The cells a set of matched cells takes with it: a bomb orthogonally NEXT TO any matched tile
+ *  goes off ("matching tiles can trigger bomb explosions", the reference's stage rule), then every
+ *  bomb's whole row and column (chaining into other bombs). `runs` null = no neighbours (a
+ *  special, a bomb on its own). */
 function expand(board, seed, runs) {
   const set = new Set(seed);
-  const berryOrBomb = (j, kind) => j >= 0 && j < N && board[j] && board[j].k === kind;
   if (runs) {
     for (const i of seed) {
       for (const j of [i - COLS, i + COLS, colOf(i) > 0 ? i - 1 : -1, colOf(i) < COLS - 1 ? i + 1 : -1]) {
-        if (berryOrBomb(j, 'berry')) set.add(j);
+        if (j >= 0 && j < N && board[j] && board[j].k === 'bomb') set.add(j);
       }
-    }
-    for (const r of runs) {
-      const first = r.cells[0], last = r.cells[r.cells.length - 1];
-      const across = rowOf(first) === rowOf(last);
-      const ends = across
-        ? [colOf(first) > 0 ? first - 1 : -1, colOf(last) < COLS - 1 ? last + 1 : -1]
-        : [first - COLS, last + COLS];
-      for (const j of ends) if (berryOrBomb(j, 'bomb')) set.add(j);
     }
   }
   const blasts = [];
@@ -185,7 +182,7 @@ export function newMatch({ seed = 1, teams, first = 0, arena = 'boiler' }) {
   return s;
 }
 
-/** A board of gems with no line already on it and at least one legal move; one berry somewhere. */
+/** A board of gems and berries with no line already on it and at least one legal move. */
 function fillFresh(s) {
   for (let tries = 0; tries < 100; tries++) {
     s.board = [];
@@ -193,15 +190,13 @@ function fillFresh(s) {
       const r = rowOf(i), c = colOf(i);
       let k;
       for (let g = 0; g < 20; g++) {
-        k = pick(s, ELEMENTS);
+        k = rand(s) < BERRY_RATE ? 'berry' : pick(s, ELEMENTS);
         const left = c >= 2 && s.board[i - 1].k === k && s.board[i - 2].k === k;
         const up = r >= 2 && s.board[i - COLS].k === k && s.board[i - 2 * COLS].k === k;
         if (!left && !up) break;
       }
       s.board.push(newTile(s, k));
     }
-    const b = Math.floor(rand(s) * N);
-    s.board[b] = newTile(s, 'berry');
     if (!findRuns(s.board).length && legalMoves(s).length) return;
   }
 }
@@ -520,6 +515,19 @@ export function apply(state, move) {
     return { ok: true, state: s, events: ev };
   }
 
+  if (move.type === 'pass') {
+    // The turn timer ran out: the moves left are lost. A pending evolution takes the first
+    // monster still to evolve (the player never chose, so nothing is lost by choosing for them).
+    if (s.pendingEvolve === side) {
+      s.pendingEvolve = null;
+      evolve(s, ev, side, s.sides[side].mons.findIndex((m) => !m.evo));
+    }
+    ev.push({ t: 'pass', side });
+    endTurn(s, ev);
+    if (s.winner == null) ensureMove(s, ev);
+    return { ok: true, state: s, events: ev };
+  }
+
   if (move.type !== 'swap') return refuse('bad-move');
   if (s.pendingEvolve != null) return refuse('evolve-first');
   const { a, b } = move;
@@ -542,4 +550,4 @@ export function apply(state, move) {
 //   drain {side,mon,n,energy}  freeze {side}  curse {side,left,tick}  rows {side,rows}
 //   convert {side,cells,k,board}  evolveReady {side}  evolve {side,mon,id,hp,maxHp}
 //   tick {bombs:[{id,at,n}]}  turn {side,moves,frozen}  curseTick {side,left}  shuffle {board}
-//   win {side}
+//   pass {side}  win {side}

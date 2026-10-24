@@ -27,7 +27,7 @@ seeded RNG, so online play can replay it later.
    with a banner (monster + move name). Bar resets to 0. Excess energy is lost.
 8. **Team HP.** Every team starts at 80, and heals can never take it above 80 ("MAX HP" flash).
    Monsters have no HP of their own (Matt, 2026-10-24). The HP column below is obsolete.
-9. **Berries.** Clearing a Berry tile adds 1 to your berry counter (0/4). At 4: your two
+9. **Berries.** Berries MATCH like gems (3+ in a line, v2 2026-10-24); each berry matched adds 1 to your berry counter (0/4). At 4: your two
    monsters show "Evolve!", you tap one (computer picks the one closer to full), it evolves:
    new form, stronger special, heals 5 (never above 80). Counter
    resets. Each monster evolves once; when both are evolved, berries do nothing.
@@ -36,12 +36,11 @@ seeded RNG, so online play can replay it later.
 ## Boiler Room bombs
 
 - A bomb tile shows a countdown (starts 5-6). It counts down by 1 at the end of EVERY turn.
-- Including a bomb in a match (as a matching neighbour, i.e. clearing a gem next to it in a
-  line, or swapping it into a line) detonates it: clears its whole row and column (those gems
+- A match orthogonally next to a bomb detonates it: clears its whole row and column (those gems
   charge the mover's monsters as normal).
 - A bomb reaching 0 explodes on its own: clears its row + column and deals 10 damage to the
   side whose turn just ended (we could not see this in the recordings; this is our rule).
-- New tiles falling in: ~4% Berry, ~3% Bomb (max 2 bombs on the board), rest gems evenly.
+- New tiles falling in: ~10% Berry, ~2.5% Bomb (max 2 bombs on the board), rest gems evenly.
 
 ## Elements and gems (colourblind-safe: every gem has its own SHAPE + icon)
 
