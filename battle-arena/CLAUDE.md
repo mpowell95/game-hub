@@ -23,8 +23,12 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
 
 ## Rules we decided (not in the spec, or changed from it)
 
-- **Berries**: picked up by a match ORTHOGONALLY next to them. **Bombs**: set off only IN LINE with a
-  match (just past either end). Blast and special-cleared gems charge the mover; a bomb at 0 charges nobody.
+- **Berries are a sixth tile that MATCHES like a gem** (3+ in a line; each counts toward evolving), as
+  the reference shows ("3 🍒" by the counter); ~10% of tiles (2026-10-24, v2). **Bombs**: a match
+  orthogonally NEXT TO one sets it off (the reference's stage text). Blast and special-cleared gems
+  charge the mover; a bomb at 0 charges nobody.
+- **Turn timer 30 s** for the player (runs only while they can act, paused during animation and
+  with any overlay open); at 0 the engine's `{type:'pass'}` ends the turn. Idle 8 s: a hint wiggles.
 - Extra move: any 4+ line during the move's resolution (cascades included), once per turn.
 - Specials fire after the board settles, seat order; a special that changes the board settles again.
 - **Sudden death**: after each side's 20th turn heals do nothing (the soak found two healing teams
@@ -34,7 +38,17 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side.
 - **Balance (soak-tuned 2026-10-24, from the spec's first guess)**: Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
   4/6→3/5; Frostling 10/15→8/12 dmg; Prismote cost 12→14.
-- No turn timer yet (the spec's optional 30 s is for online).
+
+## The battle screen (rebuilt 2026-10-24 after Matt: "in no way, shape, or form a clone")
+
+Modelled on the reference recordings, beat by beat: team panels (avatar, HP, berries) over the arena,
+move hexes + clock in the top row, the other team LEFT and the player RIGHT facing each other, bobbing.
+Every engine event is animation: matched tiles glow then burst, ORBS fly to the monster they charge
+(count pops over it), "EXTRA MOVE!" across the board, a special = dimmed stage + full-width banner
+with the big monster + lunge + projectile + hit flash + "-N DMG" by the HP, a turn = a white banner
+"<name>'s turn", 4 berries = full-screen evolution flicker, a win = losers faint + Victory card.
+**Verify any change by recording a match** (Playwright `recordVideo`) and reading the frames; the
+first build's flat UI passed every test.
 
 ## Hub integration
 

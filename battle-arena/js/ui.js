@@ -17,7 +17,7 @@ import { STRINGS } from './strings.js';
 import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
-import { monsterSVG, gemSVG, elementBadge } from './art.js';
+import { monsterSVG, gemSVG, elementBadge, arenaSVG } from './art.js';
 
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-battlearena-css';
@@ -26,13 +26,20 @@ const SAVE_KEY = 'gamehub.battlearena.save.v1';
 const DIFFS = ['easy', 'medium', 'hard'];
 const ME = 0, CPU = 1;
 
-const SWAP_MS = 150;
-const CLEAR_MS = 210;
-const FALL_BASE_MS = 120;
-const FALL_ROW_MS = 50;
-const BANNER_MS = 950;
-const CPU_THINK_MS = 420;
-const CPU_SHOW_MS = 300;
+// Timings, from the reference recordings (slower and weightier than a puzzle game).
+const SWAP_MS = 190;
+const GLOW_MS = 170;
+const POP_MS = 230;
+const FALL_BASE_MS = 150;
+const FALL_ROW_MS = 60;
+const SPECIAL_MS = 1250;
+const TURN_BANNER_MS = 1150;
+const PROJ_MS = 380;
+const CPU_THINK_MS = 650;
+const CPU_SHOW_MS = 450;
+const TURN_SECONDS = 30;
+const HINT_MS = 8000;
+const MOVE_HEXES = 2;
 
 let instance = null;
 
@@ -184,6 +191,8 @@ class BattleArena {
   clearTimers() {
     for (const id of this._timers) clearTimeout(id);
     this._timers.clear();
+    for (const id of this._intervals || []) clearInterval(id);
+    if (this._intervals) this._intervals.clear();
   }
   /** A pause inside an animation chain. Resolves (never hangs) even after a screen change; the
    *  chain checks its generation after every await. */
@@ -429,96 +438,110 @@ class BattleArena {
     return (o && o.name) || t('computer');
   }
 
+  // --- the battle screen --------------------------------------------------------------------------
+  // Modelled on the reference recordings: the two teams' panels across the top (avatar, HP, berries)
+  // with the move hexes between them, the four monsters on a stage (the other team on the LEFT, the
+  // player on the RIGHT, facing each other), the board below. Every engine event is a beat of
+  // animation: gems glow and burst, orbs fly to the monster they charge, a special is a full-width
+  // banner then an attack and a hit, a turn change is a banner across the stage.
   renderBattle() {
     const gen = this.newScreen('battle');
     this.names = [myName(), this.foeName];
-    const side = (sd) => `
-      <div class="ba-side" data-side="${sd}">
-        <div class="ba-head">
+    const prof = (() => { try { return loadProfile(); } catch { return null; } })();
+    this.avatars = [(prof && prof.emoji) || '🙂', '🤖'];
+    const team = (sd) => `
+      <div class="ba-team" data-side="${sd}">
+        <div class="ba-avatar"><span>${escapeHTML(this.avatars[sd])}</span></div>
+        <div class="ba-team-info">
           <span class="ba-name">${escapeHTML(this.names[sd])}</span>
-          <div class="ba-hp" role="img"><span class="ba-hp-fill"></span><span class="ba-hp-txt"></span></div>
-          <div class="ba-status"><span class="ba-berries"></span><span class="ba-badges"></span></div>
+          <div class="ba-stats">
+            <span class="ba-stat ba-stat-hp">${ICONS.heart}<b class="ba-hp-n"></b></span>
+            <span class="ba-stat ba-stat-berry">${ICONS.berry}<b class="ba-berry-n"></b></span>
+            <span class="ba-badges"></span>
+          </div>
+          <div class="ba-hpbar"><i></i></div>
         </div>
-        ${[0, 1].map((mi) => `
-          <div class="ba-mon" data-mon="${mi}" role="button" tabindex="0">
-            <div class="ba-mon-art"></div>
-            <div class="ba-bar"><span class="ba-bar-fill"></span><span class="ba-bar-gem"></span><span class="ba-bar-txt"></span></div>
-            <span class="ba-evo-pill" hidden>${t('evolve')}</span>
-          </div>`).join('')}
+      </div>`;
+    const mon = (sd, mi) => `
+      <div class="ba-mon ${mi === 0 ? 'is-back' : 'is-front'}" data-side="${sd}" data-mon="${mi}" role="button" tabindex="0">
+        <div class="ba-plat"></div>
+        <div class="ba-mon-art"><div class="ba-mon-bob"></div></div>
+        <div class="ba-bar"><span class="ba-bar-gem"></span><span class="ba-bar-track"><i class="ba-bar-fill"></i></span><span class="ba-bar-txt"></span></div>
+        <span class="ba-evo-pill" hidden>${ICONS.berry}<b>${t('evolve')}</b></span>
       </div>`;
     this.root.innerHTML = `
       <div class="ba-battle">
-        <div class="ba-hubrow">
-          <div class="ba-turn" aria-live="polite"><span class="ba-turn-name"></span><span class="ba-pips"></span></div>
-          <button type="button" class="ba-iconbtn ba-menu" aria-label="${t('menu')}">${ICONS.menu}</button>
+        <div class="ba-scene">
+          <div class="ba-arena-bg" aria-hidden="true">${arenaSVG()}</div>
+          <div class="ba-hubrow">
+            <div class="ba-moves" aria-live="polite"></div>
+            <div class="ba-clock" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 13V8.5M9.5 2.5h5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><b class="ba-clock-n"></b></div>
+            <button type="button" class="ba-iconbtn ba-menu" aria-label="${t('menu')}">${ICONS.menu}</button>
+          </div>
+          <div class="ba-hud">${team(CPU)}${team(ME)}</div>
+          <div class="ba-field">${mon(CPU, 0)}${mon(CPU, 1)}${mon(ME, 0)}${mon(ME, 1)}</div>
         </div>
-        <div class="ba-arena">
-          <div class="ba-arena-bg" aria-hidden="true"></div>
-          ${side(CPU)}${side(ME)}
-        </div>
-        <div class="ba-boardwrap">
-          <div class="ba-board" role="application" aria-label="${t('board')}"></div>
-          <p class="ba-tip" aria-live="polite"></p>
-        </div>
+        <div class="ba-boardwrap"><div class="ba-board" role="application" aria-label="${t('board')}"></div></div>
         <div class="ba-fx" aria-hidden="true"></div>
       </div>`;
-    this.arenaBg();
     for (const sd of [0, 1]) {
-      const el = this.sideEl(sd);
       this.state.sides[sd].mons.forEach((m, mi) => {
-        const art = el.querySelector(`.ba-mon[data-mon="${mi}"] .ba-mon-art`);
-        art.innerHTML = monsterSVG(m.id, m.evo);
-        art.dataset.evo = m.evo ? '1' : '0';
-        el.querySelector(`.ba-mon[data-mon="${mi}"] .ba-bar-gem`).innerHTML = elementBadge(BY_ID[m.id].el);
-        el.querySelector(`.ba-mon[data-mon="${mi}"] .ba-bar`).style.setProperty('--ba-el', BY_ID[m.id].el === 'all' ? '#C9A2F0' : ELEMENT_COLOR[BY_ID[m.id].el]);
-        el.querySelector(`.ba-mon[data-mon="${mi}"]`).classList.toggle('is-all', BY_ID[m.id].el === 'all');
+        const el = this.monEl(sd, mi);
+        const def = BY_ID[m.id];
+        el.querySelector('.ba-mon-bob').innerHTML = monsterSVG(m.id, m.evo);
+        el.querySelector('.ba-mon-bob').dataset.evo = m.evo ? '1' : '0';
+        el.querySelector('.ba-bar-gem').innerHTML = elementBadge(def.el);
+        el.style.setProperty('--ba-el', def.el === 'all' ? '#C9A2F0' : ELEMENT_COLOR[def.el]);
+        el.classList.toggle('is-all', def.el === 'all');
       });
     }
+    this.hpShown = this.state.sides.map((x) => x.hp);
     this.bindBoard();
     this.on(this.root.querySelector('.ba-menu'), 'click', () => this.showPause());
-    this.on(this.root.querySelector('.ba-arena'), 'click', (e) => this.onMonTap(e));
+    this.on(this.root.querySelector('.ba-field'), 'click', (e) => this.onMonTap(e));
     this.offViewport = onViewportResize(() => this.fit());
     this.fit();
     this.buildTiles();
     this.ui = null;
     this.syncAll();
-    // The layout may still be settling on the first frame (flex inside the hub's container).
+    this.timerLeft = TURN_SECONDS;
+    this.lastAct = Date.now();
+    this.startClock(gen);
     requestAnimationFrame(() => { if (gen === this.gen) { this.fit(); this.placeAll(); } });
-    this.later(() => { if (gen === this.gen) this.next(); }, 350);
+    const fresh = this.state.moveNo === 0 && this.state.turnNo === 1;
+    this.busy = true;
+    (async () => {
+      await this.sleep(250);
+      if (gen !== this.gen) return;
+      if (fresh) {
+        await this.stageIntro();
+        if (gen !== this.gen) return;
+        await this.turnBanner(this.state.turn);
+        if (gen !== this.gen) return;
+      }
+      this.busy = false;
+      this.timerLeft = TURN_SECONDS;
+      this.next();
+    })();
   }
 
-  /** The Boiler Room: pipes, and a gauge, behind the monsters. Decoration only. */
-  arenaBg() {
-    const bg = this.root.querySelector('.ba-arena-bg');
-    if (!bg) return;
-    bg.innerHTML = `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" width="100%" height="100%">
-      <g class="ba-pipe"><rect x="-10" y="40" width="420" height="16" rx="8"/><rect x="60" y="0" width="16" height="300" rx="8"/><rect x="324" y="0" width="16" height="300" rx="8"/><rect x="-10" y="250" width="420" height="12" rx="6"/></g>
-      <g class="ba-pipe-joint"><rect x="54" y="34" width="28" height="28" rx="5"/><rect x="318" y="34" width="28" height="28" rx="5"/><rect x="54" y="242" width="28" height="28" rx="5"/><rect x="318" y="242" width="28" height="28" rx="5"/></g>
-      <g class="ba-gauge"><circle cx="200" cy="48" r="20"/><path d="M200 48l10-12" stroke-width="3" stroke-linecap="round"/></g>
-    </svg>`;
-  }
+  sideEl(sd) { return this.root.querySelector(`.ba-team[data-side="${sd}"]`); }
+  monEl(sd, mi) { return this.root.querySelector(`.ba-mon[data-side="${sd}"][data-mon="${mi}"]`); }
 
-  sideEl(sd) { return this.root.querySelector(`.ba-side[data-side="${sd}"]`); }
-  monEl(sd, mi) { const s = this.sideEl(sd); return s && s.querySelector(`.ba-mon[data-mon="${mi}"]`); }
-
-  /** Board cell size and monster art size, from the space really there (measured, not guessed). */
+  /** Board cell size and monster size, measured from the space really there. */
   fit() {
     const battle = this.root.querySelector('.ba-battle');
-    const wrap = this.root.querySelector('.ba-boardwrap');
-    const arena = this.root.querySelector('.ba-arena');
-    if (!battle || !wrap || !arena) return;
+    const field = this.root.querySelector('.ba-field');
+    if (!battle || !field) return;
     const W = battle.clientWidth, H = battle.clientHeight;
     if (!W || !H) { this.later(() => this.fit(), 50); return; }
-    const byW = Math.floor((Math.min(W, 520) - 20) / E.COLS);
-    const byH = Math.floor((H * 0.42) / E.ROWS);
-    const cell = Math.max(34, Math.min(64, byW, byH));
+    const byW = Math.floor((Math.min(W, 520) - 16) / E.COLS);
+    const byH = Math.floor((H * 0.40) / E.ROWS);
+    const cell = Math.max(34, Math.min(66, byW, byH));
     this.cell = cell;
     battle.style.setProperty('--ba-cell', cell + 'px');
-    // The arena takes what is left; two monsters per column share it.
-    const aH = arena.clientHeight;
-    const head = this.root.querySelector('.ba-head');
-    const headH = head ? head.offsetHeight : 52;
-    const art = Math.max(44, Math.min(112, Math.floor((aH - headH - 2 * 26 - 14) / 2)));
+    const fH = field.clientHeight, fW = field.clientWidth;
+    const art = Math.max(56, Math.min(150, Math.floor((fH - 2 * 30) / 1.9), Math.floor(fW * 0.3)));
     battle.style.setProperty('--ba-art', art + 'px');
     this.placeAll();
   }
@@ -531,8 +554,15 @@ class BattleArena {
     el.className = 'ba-tile';
     el.dataset.id = tile.id;
     el.dataset.k = tile.k;
-    el.innerHTML = gemSVG(tile.k, tile.n);
+    if (tile.k === 'bomb') el.dataset.n = String(tile.n);
+    el.innerHTML = `<div class="ba-gem">${gemSVG(tile.k, tile.n)}</div>`;
     return el;
+  }
+
+  setTileArt(el, tile) {
+    el.dataset.k = tile.k;
+    if (tile.k === 'bomb') el.dataset.n = String(tile.n); else delete el.dataset.n;
+    el.innerHTML = `<div class="ba-gem">${gemSVG(tile.k, tile.n)}</div>`;
   }
 
   buildTiles() {
@@ -569,16 +599,16 @@ class BattleArena {
         host.appendChild(el);
         this.tiles.set(tile.id, el);
       } else if (el.dataset.k !== tile.k || (tile.k === 'bomb' && el.dataset.n !== String(tile.n))) {
-        el.dataset.k = tile.k;
-        el.innerHTML = gemSVG(tile.k, tile.n);
+        this.setTileArt(el, tile);
       }
-      if (tile.k === 'bomb') el.dataset.n = String(tile.n);
       el.style.transform = this.xy(i);
       el.style.opacity = '';
+      el.classList.remove('is-sel', 'is-cpu', 'is-hint', 'is-glow');
     });
     for (const [id, el] of this.tiles) {
       if (!keep.has(id)) { el.remove(); this.tiles.delete(id); }
     }
+    for (const el of host.querySelectorAll('.ba-tile')) if (!keep.has(Number(el.dataset.id))) el.remove();
   }
 
   cellAt(clientX, clientY) {
@@ -603,6 +633,7 @@ class BattleArena {
       if (!this.canInput()) return;
       const i = this.cellAt(e.clientX, e.clientY);
       if (i < 0) return;
+      this.poke();
       start = { i, x: e.clientX, y: e.clientY, id: e.pointerId };
       try { board.setPointerCapture(e.pointerId); } catch {}
       if (e.cancelable) e.preventDefault();
@@ -610,7 +641,7 @@ class BattleArena {
     const move = (e) => {
       if (!start || e.pointerId !== start.id) return;
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < this.cell * 0.32) return;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < this.cell * 0.3) return;
       const i = start.i;
       start = null;
       let j;
@@ -630,6 +661,12 @@ class BattleArena {
     this.on(board, 'pointermove', move);
     this.on(board, 'pointerup', up);
     this.on(board, 'pointercancel', cancel);
+  }
+
+  /** The player did something: the hint waits again. */
+  poke() {
+    this.lastAct = Date.now();
+    for (const el of this.root.querySelectorAll('.ba-tile.is-hint')) el.classList.remove('is-hint');
   }
 
   tapCell(i) {
@@ -655,6 +692,7 @@ class BattleArena {
 
   async trySwap(a, b) {
     if (!this.canInput()) return;
+    this.poke();
     const res = E.apply(this.state, { type: 'swap', a, b, side: ME });
     if (!res.ok) {
       if (res.error === 'no-match') await this.badSwap(a, b);
@@ -668,10 +706,10 @@ class BattleArena {
     const gen = this.gen;
     this.busy = true;
     const ea = this.tiles.get(this.state.board[a].id), eb = this.tiles.get(this.state.board[b].id);
-    const go = (el, from, to) => el && el.animate([{ transform: this.xy(from) }, { transform: this.xy(to) }, { transform: this.xy(from) }],
-      { duration: SWAP_MS * 2.2, easing: 'ease-in-out' });
+    const go = (el, from, to) => el && el.animate([{ transform: this.xy(from) }, { transform: this.xy(to), offset: 0.45 }, { transform: this.xy(to), offset: 0.55 }, { transform: this.xy(from) }],
+      { duration: SWAP_MS * 2.6, easing: 'ease-in-out' });
     go(ea, a, b); go(eb, b, a);
-    await this.sleep(SWAP_MS * 2.2);
+    await this.sleep(SWAP_MS * 2.6);
     if (gen === this.gen) this.busy = false;
   }
 
@@ -690,6 +728,7 @@ class BattleArena {
     this.syncTiles();
     this.syncAll();
     this.busy = false;
+    this.lastAct = Date.now();
     this.next();
   }
 
@@ -700,23 +739,6 @@ class BattleArena {
     if (s.winner != null) { this.finish(); return; }
     if (s.turn === CPU) { this.cpuTurn(); return; }
     this.syncAll();
-    if (s.pendingEvolve === ME) return;
-    this.maybeTip();
-  }
-
-  maybeTip() {
-    const tips = this.settings.tips;
-    let key = null;
-    if (!tips.moves) key = 'moves';
-    else if (!tips.four && this.state.sides[ME].turns >= 2) key = 'four';
-    if (!key) return;
-    tips[key] = true;
-    writeJSON(SETTINGS_KEY, this.settings);
-    const el = this.root.querySelector('.ba-tip');
-    if (!el) return;
-    el.textContent = t(key === 'moves' ? 'tipMoves' : 'tipFour');
-    el.classList.add('is-on');
-    this.later(() => el.classList.remove('is-on'), 3200);
   }
 
   async cpuTurn() {
@@ -741,7 +763,7 @@ class BattleArena {
   onMonTap(e) {
     const mon = e.target.closest('.ba-mon');
     if (!mon) return;
-    const sd = Number(mon.closest('.ba-side').dataset.side), mi = Number(mon.dataset.mon);
+    const sd = Number(mon.dataset.side), mi = Number(mon.dataset.mon);
     const s = this.state;
     const m = s.sides[sd].mons[mi];
     if (sd === ME && s.pendingEvolve === ME && s.turn === ME && !this.busy && !m.evo) {
@@ -749,20 +771,61 @@ class BattleArena {
       if (res.ok) { this.hideEvolve(); this.commit(res); }
       return;
     }
+    if (this.busy) return;
     this.showCard(m.id, { evolved: m.evo });
   }
 
   hideEvolve() { for (const p of this.root.querySelectorAll('.ba-evo-pill')) p.hidden = true; for (const m of this.root.querySelectorAll('.ba-mon')) m.classList.remove('is-evo-pick'); }
+
+  // --- the turn clock and the hint ----------------------------------------------------------------
+  /** 30 s a turn for the player, as in the reference. It only runs while the player can act (it
+   *  stops during animations and with the menu open); at 0 the turn passes (moves left are lost). */
+  startClock(gen) {
+    let last = Date.now();
+    const id = setInterval(() => {
+      if (gen !== this.gen || this.disposed) { clearInterval(id); return; }
+      const now = Date.now(), dt = (now - last) / 1000;
+      last = now;
+      const s = this.state;
+      const clock = this.root.querySelector('.ba-clock');
+      if (!s || !clock) return;
+      const mine = s.turn === ME && s.winner == null;
+      clock.hidden = !mine;
+      if (!mine) return;
+      const paused = this.busy || !!this.root.querySelector('.gh-overlay');
+      if (!paused) this.timerLeft = Math.max(0, this.timerLeft - dt);
+      const n = Math.ceil(this.timerLeft);
+      const label = clock.querySelector('.ba-clock-n');
+      if (label.textContent !== String(n)) label.textContent = String(n);
+      clock.classList.toggle('is-low', n <= 5);
+      if (this.timerLeft <= 0 && !paused) {
+        this.timerLeft = TURN_SECONDS;
+        const res = E.apply(s, { type: 'pass', side: ME });
+        if (res.ok) { this.select(null); this.hideEvolve(); this.commit(res); }
+        return;
+      }
+      // The hint: idle 8 s on a turn, the two tiles of a good swap wiggle.
+      if (!paused && this.canInput() && now - this.lastAct > HINT_MS && !this.root.querySelector('.ba-tile.is-hint')) {
+        const mv = chooseMove(s, 'medium');
+        if (mv && mv.type === 'swap') {
+          for (const i of [mv.a, mv.b]) { const el = this.tiles.get(s.board[i].id); if (el) el.classList.add('is-hint'); }
+        }
+      }
+    }, 200);
+    this._intervals = this._intervals || new Set();
+    this._intervals.add(id);
+  }
 
   // --- the HUD ------------------------------------------------------------------------------------
   syncAll() {
     const s = this.state;
     if (!s || this.screen !== 'battle') return;
     for (const sd of [0, 1]) {
+      this.hpShown[sd] = s.sides[sd].hp;
       this.paintSide(sd);
       s.sides[sd].mons.forEach((_, mi) => this.paintMon(sd, mi));
     }
-    this.uiFromState();
+    this.ui = { turn: s.turn, left: s.movesLeft };
     this.paintTurn();
     const pick = s.pendingEvolve === ME && s.turn === ME && s.winner == null;
     s.sides[ME].mons.forEach((m, mi) => {
@@ -779,15 +842,17 @@ class BattleArena {
     const side = this.state.sides[sd];
     if (!el) return;
     const hp = hpOverride != null ? hpOverride : side.hp;
-    el.querySelector('.ba-hp-fill').style.transform = `scaleX(${Math.max(0, Math.min(1, hp / side.maxHp))})`;
-    el.querySelector('.ba-hp-txt').innerHTML = `${hp}<small>/${side.maxHp}</small>${side.shield ? `<span class="ba-shield">${ICONS.shield}${side.shield}</span>` : ''}`;
-    el.querySelector('.ba-hp').setAttribute('aria-label', `${t('hp')} ${hp} / ${side.maxHp}`);
+    el.querySelector('.ba-hp-n').textContent = String(hp);
+    el.querySelector('.ba-hpbar i').style.transform = `scaleX(${Math.max(0, Math.min(1, hp / side.maxHp))})`;
+    el.querySelector('.ba-stat-hp').setAttribute('aria-label', `${t('hp')} ${hp} / ${side.maxHp}`);
     const allEvo = side.mons.every((m) => m.evo);
-    const b = el.querySelector('.ba-berries');
-    b.innerHTML = allEvo ? '' : Array.from({ length: BERRIES_TO_EVOLVE }, (_, i) => `<span class="ba-berry${i < side.berries ? ' is-on' : ''}">${ICONS.berry}</span>`).join('');
-    b.setAttribute('aria-label', allEvo ? '' : t('berries', { n: side.berries }));
+    const b = el.querySelector('.ba-stat-berry');
+    b.hidden = allEvo;
+    b.querySelector('.ba-berry-n').textContent = `${side.berries}/${BERRIES_TO_EVOLVE}`;
+    b.setAttribute('aria-label', t('berries', { n: side.berries }));
     let badges = '';
-    if (side.frozen) badges += `<span class="ba-badge" title="${t('frozen')}">${ICONS.snow}</span>`;
+    if (side.shield) badges += `<span class="ba-badge">${ICONS.shield}<b>${side.shield}</b></span>`;
+    if (side.frozen) badges += `<span class="ba-badge">${ICONS.snow}</span>`;
     if (side.curse && side.curse.left > 0) badges += `<span class="ba-badge">${ICONS.hex}<b>${side.curse.left}</b></span>`;
     el.querySelector('.ba-badges').innerHTML = badges;
   }
@@ -796,8 +861,8 @@ class BattleArena {
     const el = this.monEl(sd, mi);
     const m = this.state.sides[sd].mons[mi];
     if (!el || !m) return;
-    const art = el.querySelector('.ba-mon-art');
-    if (art.dataset.evo !== (m.evo ? '1' : '0')) { art.innerHTML = monsterSVG(m.id, m.evo); art.dataset.evo = m.evo ? '1' : '0'; }
+    const bob = el.querySelector('.ba-mon-bob');
+    if (bob.dataset.evo !== (m.evo ? '1' : '0')) { bob.innerHTML = monsterSVG(m.id, m.evo); bob.dataset.evo = m.evo ? '1' : '0'; }
     const cost = BY_ID[m.id].cost;
     const e = energyOverride != null ? energyOverride : m.energy;
     el.querySelector('.ba-bar-fill').style.transform = `scaleX(${Math.min(1, e / cost)})`;
@@ -806,120 +871,284 @@ class BattleArena {
     el.setAttribute('aria-label', `${monName(m.id, m.evo)}, ${t('energy', { n: e, max: cost })}`);
   }
 
-  /** The turn marker follows the STORY (this.ui, stepped by the events as they play), not the
-   *  final state, which is already a move ahead while the animation runs. */
-  uiFromState() {
-    const s = this.state;
-    if (!this.ui || this.ui.turn !== s.turn) this.ui = { turn: s.turn, left: s.movesLeft, total: Math.max(s.movesLeft, 1) };
-    else { this.ui.left = s.movesLeft; this.ui.total = Math.max(this.ui.total, s.movesLeft); }
-  }
-
+  /** The move hexes follow the STORY (this.ui, stepped by events as they play), never the final
+   *  state, which is already a move ahead while the animation runs. */
   paintTurn() {
     const s = this.state;
-    const ui = this.ui || { turn: s.turn, left: s.movesLeft, total: s.movesLeft };
-    const name = this.root.querySelector('.ba-turn-name');
-    const pips = this.root.querySelector('.ba-pips');
-    if (!name || !pips) return;
+    const ui = this.ui || { turn: s.turn, left: s.movesLeft };
+    const box = this.root.querySelector('.ba-moves');
+    if (!box) return;
     const over = s.winner != null && !this.busy;
-    if (over) {
-      name.textContent = t('wins', { name: this.names[s.winner] });
-      pips.innerHTML = '';
-    } else {
-      name.textContent = this.names[ui.turn];
-      pips.innerHTML = Array.from({ length: Math.max(ui.total, ui.left) }, (_, i) => `<span class="ba-pip${i < ui.left ? ' is-on' : ''}"></span>`).join('');
-      pips.setAttribute('aria-label', t('movesLeft', { n: ui.left }));
-    }
+    const n = over ? 0 : Math.max(MOVE_HEXES, ui.left);
+    box.classList.toggle('is-cpu', ui.turn === CPU);
+    box.innerHTML = Array.from({ length: n }, (_, i) => `<span class="ba-hex${i < ui.left ? ' is-on' : ''}"><svg viewBox="0 0 24 26" aria-hidden="true"><path d="M12 1.5 22.5 7.5v11L12 24.5 1.5 18.5v-11z"/></svg></span>`).join('');
+    box.setAttribute('aria-label', t('movesLeft', { n: ui.left }));
     for (const sd of [0, 1]) {
       const el = this.sideEl(sd);
       if (el) el.classList.toggle('is-turn', !over && ui.turn === sd);
     }
-    const turnEl = this.root.querySelector('.ba-turn');
-    if (turnEl) turnEl.classList.toggle('is-cpu', !over && ui.turn === CPU);
   }
 
-  // --- the story of a move ----------------------------------------------------------------------
+  // --- effects ------------------------------------------------------------------------------------
   fxLayer() { return this.root.querySelector('.ba-fx'); }
 
-  /** Position of an element's centre relative to the battle screen. */
+  /** Centre of an element (or of a board cell) relative to the battle screen. */
   centre(el) {
     const host = this.root.querySelector('.ba-battle');
     if (!el || !host) return { x: 0, y: 0 };
     const a = el.getBoundingClientRect(), b = host.getBoundingClientRect();
     return { x: a.left - b.left + a.width / 2, y: a.top - b.top + a.height / 2 };
   }
-
-  floater(atEl, html, cls = '', dy = -10) {
-    const layer = this.fxLayer();
-    if (!layer || !atEl) return;
-    const p = this.centre(atEl);
-    const f = document.createElement('div');
-    f.className = 'ba-float ' + cls;
-    f.innerHTML = html;
-    f.style.left = p.x + 'px';
-    f.style.top = (p.y + dy) + 'px';
-    layer.appendChild(f);
-    const rm = reducedMotion();
-    const a = f.animate(rm
-      ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }]
-      : [{ transform: 'translate(-50%, -50%) scale(.6)', opacity: 0 }, { transform: 'translate(-50%, -70%) scale(1.1)', opacity: 1, offset: 0.25 },
-        { transform: 'translate(-50%, -110%) scale(1)', opacity: 1, offset: 0.75 }, { transform: 'translate(-50%, -135%) scale(1)', opacity: 0 }],
-    { duration: 900, easing: 'ease-out' });
-    a.finished.catch(() => {}).then(() => f.remove());
-  }
-
-  shake(el) {
-    if (!el || reducedMotion()) return;
-    el.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
-      { duration: 320, easing: 'ease-out' });
-  }
-
-  async banner(sd, mi, id, evo) {
-    const layer = this.fxLayer();
-    const arena = this.root.querySelector('.ba-arena');
-    if (!layer || !arena) return;
-    const b = document.createElement('div');
-    b.className = 'ba-banner' + (sd === ME ? ' is-me' : '');
-    const el = BY_ID[id].el;
-    b.style.setProperty('--ba-el', el === 'all' ? '#C9A2F0' : ELEMENT_COLOR[el]);
-    b.innerHTML = `<div class="ba-banner-art${sd === ME ? ' ba-face-left' : ''}">${monsterSVG(id, evo)}</div><b class="ba-banner-name">${escapeHTML(t('sp_' + id + (evo ? '_evo' : '')))}</b>`;
-    const p = this.centre(arena);
-    b.style.top = p.y + 'px';
-    layer.appendChild(b);
-    fitText(b.querySelector('.ba-banner-name'), 22);
-    const mon = this.monEl(sd, mi);
-    if (mon && !reducedMotion()) {
-      mon.animate([{ transform: 'translateX(0) scale(1)' }, { transform: `translateX(${sd === ME ? -14 : 14}px) scale(1.12)`, offset: 0.4 }, { transform: 'translateX(0) scale(1)' }],
-        { duration: 520, easing: 'ease-out' });
-    }
-    const from = sd === ME ? '60%' : '-60%';
-    const a = b.animate(reducedMotion()
-      ? [{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }]
-      : [{ transform: `translate(${from}, -50%)`, opacity: 0 }, { transform: 'translate(0, -50%)', opacity: 1, offset: 0.18 },
-        { transform: 'translate(0, -50%)', opacity: 1, offset: 0.82 }, { transform: `translate(${sd === ME ? '-30%' : '30%'}, -50%)`, opacity: 0 }],
-    { duration: BANNER_MS, easing: 'ease-out' });
-    await a.finished.catch(() => {});
-    b.remove();
-  }
-
-  /** The whole board flashes a beam along a bomb's row and column. */
-  beam(at, cells, boom) {
+  cellCentre(i) {
     const board = this.root.querySelector('.ba-board');
-    if (!board) return;
-    const mk = (cls, style) => {
-      const d = document.createElement('div');
-      d.className = 'ba-beam ' + cls;
-      Object.assign(d.style, style);
-      board.appendChild(d);
-      d.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 380, easing: 'ease-out' }).finished.catch(() => {}).then(() => d.remove());
-    };
-    const c = this.cell;
-    mk('is-row', { top: E.rowOf(at) * c + 'px', height: c + 'px' });
-    mk('is-col', { left: E.colOf(at) * c + 'px', width: c + 'px' });
-    if (boom) this.shake(this.root.querySelector('.ba-boardwrap'));
+    const host = this.root.querySelector('.ba-battle');
+    if (!board || !host) return { x: 0, y: 0 };
+    const a = board.getBoundingClientRect(), b = host.getBoundingClientRect();
+    return { x: a.left - b.left + (E.colOf(i) + 0.5) * this.cell, y: a.top - b.top + (E.rowOf(i) + 0.5) * this.cell };
   }
 
+  fx(cls, html = '', at = null) {
+    const layer = this.fxLayer();
+    if (!layer) return null;
+    const d = document.createElement('div');
+    d.className = cls;
+    d.innerHTML = html;
+    if (at) { d.style.left = at.x + 'px'; d.style.top = at.y + 'px'; }
+    layer.appendChild(d);
+    return d;
+  }
+
+  /** Big outlined text that pops in and floats up (the reference's "-10 DMG", "EXTRA MOVE!"). */
+  pop(at, html, cls = '', ms = 1100) {
+    const d = this.fx('ba-pop ' + cls, html, at);
+    if (!d) return;
+    const rm = reducedMotion();
+    d.animate(rm
+      ? [{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }]
+      : [{ transform: 'translate(-50%, -50%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%, -50%) scale(1.18)', opacity: 1, offset: 0.14 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1, offset: 0.26 }, { transform: 'translate(-50%, -80%) scale(1)', opacity: 1, offset: 0.82 },
+        { transform: 'translate(-50%, -100%) scale(.9)', opacity: 0 }],
+    { duration: ms, easing: 'ease-out' }).finished.catch(() => {}).then(() => d.remove());
+  }
+
+  /** Little sparks flying out of a point. */
+  burst(at, color, n = 7, spread = 34, size = 8) {
+    if (reducedMotion()) return;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + Math.random() * 0.6;
+      const r = spread * (0.6 + Math.random() * 0.6);
+      const d = this.fx('ba-spark', '', at);
+      if (!d) return;
+      d.style.background = color;
+      d.style.width = d.style.height = size + 'px';
+      d.animate([{ transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }, { transform: `translate(calc(-50% + ${Math.cos(a) * r}px), calc(-50% + ${Math.sin(a) * r}px)) scale(.2)`, opacity: 0 }],
+        { duration: 420 + Math.random() * 160, easing: 'cubic-bezier(.2,.8,.3,1)' }).finished.catch(() => {}).then(() => d.remove());
+    }
+  }
+
+  /** A glowing orb flying on a curve from `a` to `b`; resolves when it lands. */
+  orb(a, b, color, delay = 0, ms = 520) {
+    return new Promise((res) => {
+      const d = this.fx('ba-orb', '', a);
+      if (!d || reducedMotion()) { if (d) d.remove(); res(); return; }
+      d.style.setProperty('--c', color);
+      const mx = (a.x + b.x) / 2 + (a.x < b.x ? -40 : 40), my = Math.min(a.y, b.y) - 60;
+      const frames = [];
+      for (let k = 0; k <= 10; k++) {
+        const u = k / 10;
+        const x = (1 - u) * (1 - u) * a.x + 2 * (1 - u) * u * mx + u * u * b.x;
+        const y = (1 - u) * (1 - u) * a.y + 2 * (1 - u) * u * my + u * u * b.y;
+        frames.push({ transform: `translate(${x - a.x}px, ${y - a.y}px) translate(-50%, -50%) scale(${1 - u * 0.35})`, opacity: u > 0.92 ? 0.6 : 1 });
+      }
+      d.animate(frames, { duration: ms, delay, easing: 'ease-in', fill: 'backwards' }).finished.catch(() => {}).then(() => { d.remove(); res(); });
+    });
+  }
+
+  shake(el, amp = 6, ms = 340) {
+    if (!el || reducedMotion()) return;
+    el.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${-amp}px, ${amp / 3}px)` }, { transform: `translate(${amp}px, ${-amp / 3}px)` },
+      { transform: `translate(${-amp / 2}px, 0)` }, { transform: 'translate(0,0)' }], { duration: ms, easing: 'ease-out' });
+  }
+
+  flash(el, color = '#fff') {
+    if (!el || reducedMotion()) return;
+    el.animate([{ filter: 'brightness(1)' }, { filter: `brightness(2.6) drop-shadow(0 0 10px ${color})` }, { filter: 'brightness(1)' }, { filter: 'brightness(2.2)' }, { filter: 'brightness(1)' }],
+      { duration: 420, easing: 'linear' });
+  }
+
+  /** Count a team's HP number from what is shown to `to`. */
+  tweenHP(sd, to) {
+    const from = this.hpShown[sd];
+    this.hpShown[sd] = to;
+    if (from === to || reducedMotion()) { this.paintSide(sd, to); return; }
+    const t0 = performance.now(), ms = 450;
+    const step = (now) => {
+      if (this.screen !== 'battle') return;
+      const u = Math.min(1, (now - t0) / ms);
+      this.paintSide(sd, Math.round(from + (to - from) * u));
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /** "Boiler Room": the arena's name in a hexagon, as the reference's stage reveal. */
+  async stageIntro() {
+    const d = this.fx('ba-stage', `<div class="ba-stage-hex">${gemSVG('bomb', 5)}</div><b class="ba-stage-name">${escapeHTML(t('stage_boiler'))}</b>`);
+    if (!d) return;
+    const a = d.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1.06)', offset: 0.18 }, { opacity: 1, transform: 'scale(1)', offset: 0.3 },
+      { opacity: 1, transform: 'scale(1)', offset: 0.82 }, { opacity: 0, transform: 'scale(1.1)' }], { duration: 1600, easing: 'ease-out' });
+    await a.finished.catch(() => {});
+    d.remove();
+  }
+
+  /** "<name>'s turn." on a white strip that slides across the stage. */
+  async turnBanner(sd) {
+    const scene = this.root.querySelector('.ba-field');
+    const d = this.fx('ba-tbanner' + (sd === ME ? ' is-me' : ''), `<span class="ba-tbanner-av">${escapeHTML(this.avatars[sd])}</span><b>${escapeHTML(t('turnOf', { name: this.names[sd] }))}</b>`);
+    if (!d || !scene) return;
+    d.style.top = this.centre(scene).y + 'px';
+    fitText(d.querySelector('b'), 22);
+    const rm = reducedMotion();
+    const a = d.animate(rm
+      ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }]
+      : [{ transform: 'translate(100%, -50%)' }, { transform: 'translate(0, -50%)', offset: 0.2 }, { transform: 'translate(0, -50%)', offset: 0.8 }, { transform: 'translate(-100%, -50%)' }],
+    { duration: TURN_BANNER_MS, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    await a.finished.catch(() => {});
+    d.remove();
+  }
+
+  /** The special's banner: a white slab across the stage, the monster big at its edge, the move's
+   *  name in its element's colour, speed lines behind; the monster lunges as it ends. */
+  async specialBanner(sd, mi, id, evo) {
+    const field = this.root.querySelector('.ba-field');
+    const el = BY_ID[id].el;
+    const color = el === 'all' ? '#9b6fe0' : ELEMENT_COLOR[el];
+    const d = this.fx('ba-sbanner' + (sd === ME ? ' is-me' : ''), `<div class="ba-sbanner-lines"></div><div class="ba-sbanner-slab"><b class="ba-sbanner-name">${escapeHTML(t('sp_' + id + (evo ? '_evo' : '')))}</b></div><div class="ba-sbanner-art">${monsterSVG(id, evo)}</div>`);
+    if (!d || !field) return;
+    d.style.setProperty('--c', color);
+    d.style.top = this.centre(field).y + 'px';
+    fitText(d.querySelector('.ba-sbanner-name'), 30);
+    const dim = this.fx('ba-dim');
+    const rm = reducedMotion();
+    const from = sd === ME ? '100%' : '-100%', to = sd === ME ? '-100%' : '100%';
+    dim && dim.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1, offset: 0.88 }, { opacity: 0 }], { duration: SPECIAL_MS, fill: 'forwards' });
+    const a = d.animate(rm
+      ? [{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }]
+      : [{ transform: `translate(${from}, -50%)` }, { transform: 'translate(0, -50%)', offset: 0.16 }, { transform: 'translate(0, -50%)', offset: 0.84 }, { transform: `translate(${to}, -50%)` }],
+    { duration: SPECIAL_MS, easing: 'cubic-bezier(.2,.8,.3,1)' });
+    await a.finished.catch(() => {});
+    d.remove();
+    if (dim) dim.remove();
+    const mon = this.monEl(sd, mi);
+    if (mon && !rm) {
+      mon.querySelector('.ba-mon-art').animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${sd === ME ? -26 : 26}px, -6px) scale(1.15)`, offset: 0.45 }, { transform: 'translate(0,0) scale(1)' }],
+        { duration: 380, easing: 'ease-out' });
+      await this.sleep(170);
+    }
+  }
+
+  /** The middle of a team's two monsters (where a hit lands). */
+  teamCentre(sd) {
+    const a = this.centre(this.monEl(sd, 0) && this.monEl(sd, 0).querySelector('.ba-mon-art'));
+    const b = this.centre(this.monEl(sd, 1) && this.monEl(sd, 1).querySelector('.ba-mon-art'));
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+  teamArts(sd) { return [0, 1].map((mi) => this.monEl(sd, mi)).filter(Boolean).map((m) => m.querySelector('.ba-mon-art')); }
+  hpAt(sd) { const el = this.sideEl(sd); return this.centre(el && el.querySelector('.ba-stat-hp')); }
+
+  /** A projectile from the attacker to the other team: an element-coloured ball with a trail. */
+  async projectile(sd, mi) {
+    const from = this.centre(this.monEl(sd, mi) && this.monEl(sd, mi).querySelector('.ba-mon-art'));
+    const to = this.teamCentre(1 - sd);
+    const m = this.state.sides[sd].mons[mi];
+    const el = BY_ID[m.id].el;
+    const color = el === 'all' ? '#ffffff' : ELEMENT_COLOR[el];
+    if (reducedMotion()) return;
+    const d = this.fx('ba-proj', '', from);
+    if (!d) return;
+    d.style.setProperty('--c', color);
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const trail = (delay) => {
+      const t2 = this.fx('ba-proj is-trail', '', from);
+      if (!t2) return;
+      t2.style.setProperty('--c', color);
+      t2.animate([{ transform: 'translate(-50%, -50%) scale(.8)', opacity: 0.7 }, { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.3)`, opacity: 0 }],
+        { duration: PROJ_MS, delay, easing: 'ease-in', fill: 'backwards' }).finished.catch(() => {}).then(() => t2.remove());
+    };
+    trail(40); trail(80);
+    await d.animate([{ transform: 'translate(-50%, -50%) scale(.6)' }, { transform: `translate(calc(-50% + ${dx * 0.5}px), calc(-50% + ${dy * 0.5 - 30}px)) scale(1.2)`, offset: 0.5 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)` }], { duration: PROJ_MS, easing: 'ease-in' }).finished.catch(() => {});
+    d.remove();
+    this.burst(to, color, 12, 60, 10);
+    const ring = this.fx('ba-ring', '', to);
+    if (ring) {
+      ring.style.setProperty('--c', color);
+      ring.animate([{ transform: 'translate(-50%, -50%) scale(.2)', opacity: 1 }, { transform: 'translate(-50%, -50%) scale(2.2)', opacity: 0 }], { duration: 420, easing: 'ease-out' })
+        .finished.catch(() => {}).then(() => ring.remove());
+    }
+  }
+
+  /** A row/column blast on the board from a bomb. */
+  blast(at, boom) {
+    const p = this.cellCentre(at);
+    const board = this.root.querySelector('.ba-board');
+    const c = this.cell;
+    if (board) {
+      for (const [cls, style] of [['is-row', { top: E.rowOf(at) * c + 'px', height: c + 'px' }], ['is-col', { left: E.colOf(at) * c + 'px', width: c + 'px' }]]) {
+        const d = document.createElement('div');
+        d.className = 'ba-beam ' + cls;
+        Object.assign(d.style, style);
+        board.appendChild(d);
+        d.animate([{ opacity: 0, transform: cls === 'is-row' ? 'scaleX(.1)' : 'scaleY(.1)' }, { opacity: 1, transform: 'scale(1)', offset: 0.3 }, { opacity: 0, transform: 'scale(1)' }],
+          { duration: 480, easing: 'ease-out' }).finished.catch(() => {}).then(() => d.remove());
+      }
+    }
+    this.burst(p, '#ffb02e', 14, 70, 11);
+    this.burst(p, '#ff5a1f', 8, 40, 9);
+    this.shake(this.root.querySelector('.ba-boardwrap'), boom ? 9 : 6, 380);
+  }
+
+  /** Four berries: the reference's full-screen evolution. The old form flickers into the new one. */
+  async evolveScene(sd, mi, id) {
+    const rm = reducedMotion();
+    const d = this.fx('ba-evo', `<div class="ba-evo-rays"></div><div class="ba-evo-art"><div class="ba-evo-old">${monsterSVG(id, false)}</div><div class="ba-evo-new">${monsterSVG(id, true)}</div></div><b class="ba-evo-txt">${escapeHTML(t('evolvedInto', { a: monName(id, false), b: monName(id, true) }))}</b>`);
+    if (!d) return;
+    if (sd === ME) d.classList.add('is-me');
+    fitText(d.querySelector('.ba-evo-txt'), 22);
+    const oldEl = d.querySelector('.ba-evo-old'), newEl = d.querySelector('.ba-evo-new'), txt = d.querySelector('.ba-evo-txt');
+    newEl.style.opacity = '0';
+    txt.style.opacity = '0';
+    await d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, fill: 'forwards' }).finished.catch(() => {});
+    if (!rm) {
+      // Flicker, faster and faster, between the two silhouettes.
+      const steps = [220, 190, 160, 130, 100, 80, 65, 55];
+      oldEl.classList.add('is-sil'); newEl.classList.add('is-sil');
+      for (let k = 0; k < steps.length; k++) {
+        oldEl.style.opacity = k % 2 ? '1' : '0';
+        newEl.style.opacity = k % 2 ? '0' : '1';
+        await this.sleep(steps[k]);
+      }
+      oldEl.style.opacity = '0'; newEl.style.opacity = '1';
+      const flash = this.fx('ba-evo-flash');
+      if (flash) flash.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' }).finished.catch(() => {}).then(() => flash.remove());
+      newEl.classList.remove('is-sil');
+      newEl.animate([{ transform: 'scale(.8)' }, { transform: 'scale(1.12)', offset: 0.5 }, { transform: 'scale(1)' }], { duration: 450, easing: 'ease-out' });
+    } else {
+      oldEl.style.opacity = '0'; newEl.style.opacity = '1';
+    }
+    txt.style.opacity = '1';
+    this.paintMon(sd, mi);
+    await this.sleep(rm ? 900 : 1300);
+    await d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: 'forwards' }).finished.catch(() => {});
+    d.remove();
+  }
+
+  // --- the story of a move ----------------------------------------------------------------------
   async play(events, gen) {
     const rm = reducedMotion();
+    let extra = false;
+    let landed = Promise.resolve();      // the orbs of the last clear; a special waits for them
+    let attacker = null;                 // the monster whose special is playing
     for (let k = 0; k < events.length; k++) {
       if (gen !== this.gen) return;
       const e = events[k];
@@ -934,12 +1163,16 @@ class BattleArena {
             el.animate([{ transform: this.xy(from) }, { transform: this.xy(to) }], { duration: SWAP_MS, easing: 'ease-in-out' });
           }
           this.paintTurn();
-          await this.sleep(SWAP_MS + 20);
+          await this.sleep(SWAP_MS + 30);
           break;
         }
+        case 'extra':
+          extra = true;
+          if (this.ui) this.ui.left += 1;
+          break;
         case 'bomb':
-          this.beam(e.at, e.cells, e.boom);
-          await this.sleep(rm ? 120 : 200);
+          this.blast(e.at, e.boom);
+          await this.sleep(rm ? 120 : 300);
           break;
         case 'rows': {
           const board = this.root.querySelector('.ba-board');
@@ -949,24 +1182,68 @@ class BattleArena {
             d.style.top = r * this.cell + 'px';
             d.style.height = this.cell + 'px';
             board.appendChild(d);
-            d.animate([{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }], { duration: 420 }).finished.catch(() => {}).then(() => d.remove());
+            d.animate([{ opacity: 0, transform: 'scaleX(.1)' }, { opacity: 1, transform: 'scaleX(1)', offset: 0.3 }, { opacity: 0 }], { duration: 520 }).finished.catch(() => {}).then(() => d.remove());
+            for (let c = 0; c < E.COLS; c++) this.burst(this.cellCentre(E.idx(r, c)), '#ff7a2a', 4, 26, 7);
           }
-          await this.sleep(240);
+          await this.sleep(320);
           break;
         }
         case 'clear': {
-          const els = e.ids.map((id) => this.tiles.get(id)).filter(Boolean);
-          for (const el of els) {
-            this.tiles.delete(Number(el.dataset.id));
-            const base = el.style.transform;
-            el.animate(rm
-              ? [{ opacity: 1 }, { opacity: 0 }]
-              : [{ transform: base + ' scale(1)', opacity: 1 }, { transform: base + ' scale(1.25)', opacity: 1, offset: 0.35 }, { transform: base + ' scale(0.2)', opacity: 0 }],
-            { duration: CLEAR_MS, easing: 'ease-in', fill: 'forwards' }).finished.catch(() => {}).then(() => el.remove());
+          // What this clear gave: the charges and berries ride along with it.
+          const gains = [];
+          while (k + 1 < events.length && ['energy', 'berry'].includes(events[k + 1].t)) gains.push(events[++k]);
+          const cells = e.cells.map((i, n) => ({ i, id: e.ids[n], el: this.tiles.get(e.ids[n]) })).filter((c) => c.el);
+          for (const c of cells) { c.k = c.el.dataset.k; c.at = this.cellCentre(c.i); }
+          // 1. glow
+          for (const c of cells) c.el.classList.add('is-glow');
+          await this.sleep(rm ? 60 : GLOW_MS);
+          if (gen !== this.gen) return;
+          // 2. burst
+          for (const c of cells) {
+            this.tiles.delete(c.id);
+            const base = c.el.style.transform;
+            c.el.animate(rm ? [{ opacity: 1 }, { opacity: 0 }] : [{ transform: base + ' scale(1.15)', opacity: 1 }, { transform: base + ' scale(.1)', opacity: 0 }],
+              { duration: POP_MS, easing: 'ease-in', fill: 'forwards' }).finished.catch(() => {}).then(() => c.el.remove());
+            if (c.k !== 'bomb') this.burst(c.at, c.k === 'berry' ? '#e0405e' : ELEMENT_COLOR[c.k], 5, 26, 7);
           }
-          // The charges, berries and extra move that this clear produced show WITH it, not after.
-          while (k + 1 < events.length && ['energy', 'berry', 'extra'].includes(events[k + 1].t)) this.instant(events[++k]);
-          await this.sleep(CLEAR_MS);
+          // 3. orbs to whoever they charge
+          const flights = [];
+          for (const g of gains) {
+            if (g.t === 'energy') {
+              const mon = this.monEl(g.side, g.mon);
+              const from = cells.filter((c) => g.k === 'all' ? E.isGem({ k: c.k }) : c.k === g.k).slice(0, 7);
+              const to = this.centre(mon && mon.querySelector('.ba-bar'));
+              const color = g.k === 'all' ? '#ffffff' : ELEMENT_COLOR[g.k];
+              const all = from.map((c, n) => this.orb(c.at, to, color, n * 45));
+              flights.push(Promise.all(all).then(() => {
+                if (gen !== this.gen) return;
+                this.paintMon(g.side, g.mon, g.energy);
+                if (mon && !rm) mon.querySelector('.ba-bar').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)' }, { transform: 'scale(1)' }], { duration: 300 });
+                const art = mon && mon.querySelector('.ba-mon-art');
+                this.pop({ x: this.centre(art).x, y: this.centre(art).y - this.artSize() * 0.45 }, `<b>${g.n}</b>${elementBadge(g.k)}`, 'is-count', 1000);
+              }));
+            } else if (g.t === 'berry') {
+              const stat = this.sideEl(g.side) && this.sideEl(g.side).querySelector('.ba-stat-berry');
+              const to = this.centre(stat);
+              const from = cells.filter((c) => c.k === 'berry').slice(0, 7);
+              flights.push(Promise.all(from.map((c, n) => this.orb(c.at, to, '#e0405e', n * 45))).then(() => {
+                if (gen !== this.gen) return;
+                if (stat) stat.querySelector('.ba-berry-n').textContent = `${g.berries}/${BERRIES_TO_EVOLVE}`;
+                if (stat && !rm) stat.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 320 });
+                this.pop({ x: to.x, y: to.y + 26 }, `<b>+${g.n}</b>${ICONS.berry}`, 'is-count is-berry', 1000);
+              }));
+            }
+          }
+          landed = Promise.all(flights);
+          await this.sleep(rm ? 80 : POP_MS);
+          if (extra) {
+            extra = false;
+            const board = this.root.querySelector('.ba-board');
+            this.pop(this.centre(board), escapeHTML(t('extraMove')), 'is-extra', 1300);
+            this.paintTurn();
+            const box = this.root.querySelector('.ba-moves');
+            if (box && !rm) box.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 420 });
+          }
           break;
         }
         case 'fall': {
@@ -979,11 +1256,10 @@ class BattleArena {
             const ms = FALL_BASE_MS + rows * FALL_ROW_MS;
             longest = Math.max(longest, ms);
             el.style.transform = this.xy(m.to);
-            el.animate([{ transform: this.xy(m.from) }, { transform: this.xy(m.to) }], { duration: ms, easing: 'cubic-bezier(.5,0,.75,1.2)' });
+            el.animate([{ transform: this.xy(m.from) }, { transform: this.xy(m.to) }], { duration: ms, easing: 'cubic-bezier(.45,0,.6,1.35)' });
           }
           for (const sp of e.spawns) {
             const el = this.makeTile(sp);
-            if (sp.k === 'bomb') el.dataset.n = String(sp.n);
             el.style.transform = this.xy(sp.to);
             host.appendChild(el);
             this.tiles.set(sp.id, el);
@@ -991,158 +1267,199 @@ class BattleArena {
             const ms = FALL_BASE_MS + rows * FALL_ROW_MS;
             longest = Math.max(longest, ms);
             const from = `translate(${E.colOf(sp.to) * this.cell}px, ${sp.fromRow * this.cell}px)`;
-            el.animate([{ transform: from }, { transform: this.xy(sp.to) }], { duration: ms, easing: 'cubic-bezier(.5,0,.75,1.2)' });
+            el.animate([{ transform: from, opacity: 0 }, { transform: from, opacity: 1, offset: 0.05 }, { transform: this.xy(sp.to), opacity: 1 }], { duration: ms, easing: 'cubic-bezier(.45,0,.6,1.35)' });
           }
-          await this.sleep(longest + 30);
+          await this.sleep(longest + 40);
           break;
         }
-        case 'energy': case 'berry': case 'extra': case 'shield': case 'drain': case 'tick': case 'curse':
-          this.instant(e);
-          break;
-        case 'special':
-          await this.banner(e.side, e.mon, e.id, e.evo);
-          this.paintMon(e.side, e.mon);
-          break;
-        case 'damage': {
-          const head = this.sideEl(e.side) && this.sideEl(e.side).querySelector('.ba-head');
-          this.shake(this.sideEl(e.side));
-          if (e.absorbed) this.floater(head, `${ICONS.shield}-${e.absorbed}`, 'is-shield', 8);
-          if (e.n) this.floater(head, `-${e.n}`, 'is-dmg', 16);
-          this.paintSide(e.side, e.hp);
-          await this.sleep(rm ? 200 : 380);
-          break;
-        }
-        case 'heal': {
-          const head = this.sideEl(e.side) && this.sideEl(e.side).querySelector('.ba-head');
-          if (e.blocked) this.floater(head, t('noHeal'), 'is-note');
-          else {
-            this.floater(head, `+${e.n}`, 'is-heal');
-            if (e.capped) this.later(() => this.floater(head, t('maxHp'), 'is-note', 14), 260);
-          }
-          this.paintSide(e.side, e.hp);
-          await this.sleep(rm ? 200 : 360);
-          break;
-        }
-        case 'freeze': {
-          const head = this.sideEl(e.side) && this.sideEl(e.side).querySelector('.ba-head');
-          this.floater(head, `${ICONS.snow}${t('frozen')}`, 'is-note');
-          this.paintSide(e.side);
+        case 'energy': {
+          // A charge that did not come from a clear (Chain Bolt's gift to the partner).
+          const mon = this.monEl(e.side, e.mon);
+          this.paintMon(e.side, e.mon, e.energy);
+          const art = mon && mon.querySelector('.ba-mon-art');
+          this.pop({ x: this.centre(art).x, y: this.centre(art).y - this.artSize() * 0.45 }, `<b>+${e.n}</b>${elementBadge(e.k)}`, 'is-count', 1000);
           await this.sleep(300);
           break;
         }
-        case 'curseTick': {
-          this.paintSide(e.side);
+        case 'berry': {
+          const stat = this.sideEl(e.side) && this.sideEl(e.side).querySelector('.ba-stat-berry');
+          if (stat) stat.querySelector('.ba-berry-n').textContent = `${e.berries}/${BERRIES_TO_EVOLVE}`;
           break;
         }
+        case 'special': {
+          await landed;
+          if (gen !== this.gen) return;
+          this.paintMon(e.side, e.mon);
+          attacker = { side: e.side, mon: e.mon };
+          const mon = this.monEl(e.side, e.mon);
+          if (mon) mon.classList.add('is-full');
+          await this.specialBanner(e.side, e.mon, e.id, e.evo);
+          if (gen !== this.gen) return;
+          this.paintMon(e.side, e.mon, 0);
+          break;
+        }
+        case 'damage': {
+          const sd = e.side;
+          if (e.cause === 'special' && attacker) {
+            await this.projectile(attacker.side, attacker.mon);
+            if (gen !== this.gen) return;
+          } else if (e.cause === 'curse') {
+            this.burst(this.teamCentre(sd), '#9b6fe0', 12, 60, 9);
+          }
+          for (const a of this.teamArts(sd)) { this.flash(a, '#fff'); this.shake(a, 8, 380); }
+          this.shake(this.root.querySelector('.ba-scene'), 4, 300);
+          if (e.absorbed) this.pop({ x: this.hpAt(sd).x, y: this.hpAt(sd).y + 34 }, `${ICONS.shield}<b>-${e.absorbed}</b>`, 'is-shield', 1100);
+          if (e.n) this.pop({ x: this.hpAt(sd).x, y: this.hpAt(sd).y + (e.absorbed ? 62 : 38) }, `<b>-${e.n}</b><small>${escapeHTML(t('dmg'))}</small>`, 'is-dmg', 1300);
+          this.tweenHP(sd, e.hp);
+          this.paintSide(sd, e.hp);
+          await this.sleep(rm ? 250 : 620);
+          break;
+        }
+        case 'heal': {
+          const sd = e.side;
+          if (!rm) for (const a of this.teamArts(sd)) { const p = this.centre(a); for (let n = 0; n < 6; n++) this.healSpark(p, n); }
+          const at = this.hpAt(sd);
+          if (e.blocked) this.pop({ x: at.x, y: at.y + 38 }, escapeHTML(t('noHeal')), 'is-note', 1200);
+          else {
+            if (e.n) this.pop({ x: at.x, y: at.y + 38 }, `<b>+${e.n}</b><small>${escapeHTML(t('healTxt'))}</small>`, 'is-heal', 1300);
+            if (e.capped) this.later(() => this.pop({ x: at.x, y: at.y + (e.n ? 66 : 38) }, escapeHTML(t('maxHp')), 'is-max', 1200), e.n ? 260 : 0);
+            this.tweenHP(sd, e.hp);
+          }
+          await this.sleep(rm ? 250 : 620);
+          break;
+        }
+        case 'shield': {
+          for (const a of this.teamArts(e.side)) {
+            const b = this.fx('ba-bubble', '', this.centre(a));
+            if (b) b.animate([{ transform: 'translate(-50%, -50%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%, -50%) scale(1.1)', opacity: 1, offset: 0.4 }, { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
+              { duration: 800, easing: 'ease-out' }).finished.catch(() => {}).then(() => b.remove());
+          }
+          this.pop({ x: this.hpAt(e.side).x, y: this.hpAt(e.side).y + 38 }, `${ICONS.shield}<b>+${e.n}</b>`, 'is-shield', 1200);
+          this.paintSide(e.side);
+          await this.sleep(rm ? 200 : 520);
+          break;
+        }
+        case 'drain': {
+          const mon = this.monEl(e.side, e.mon);
+          if (e.n) {
+            const art = mon && mon.querySelector('.ba-mon-art');
+            this.burst(this.centre(mon && mon.querySelector('.ba-bar')), '#9b6fe0', 8, 34, 8);
+            this.pop({ x: this.centre(art).x, y: this.centre(art).y - this.artSize() * 0.45 }, `<b>-${e.n}</b>${elementBadge(BY_ID[this.state.sides[e.side].mons[e.mon].id].el)}`, 'is-count is-drain', 1000);
+          }
+          this.paintMon(e.side, e.mon, e.energy);
+          await this.sleep(rm ? 120 : 260);
+          break;
+        }
+        case 'freeze': {
+          for (const a of this.teamArts(e.side)) {
+            a.classList.add('is-frozen');
+            this.burst(this.centre(a), '#bfe6ff', 10, 50, 8);
+          }
+          this.later(() => { for (const a of this.root.querySelectorAll('.ba-mon-art.is-frozen')) a.classList.remove('is-frozen'); }, 1400);
+          this.paintSide(e.side);
+          await this.sleep(rm ? 200 : 520);
+          break;
+        }
+        case 'curse':
+          for (const a of this.teamArts(e.side)) this.burst(this.centre(a), '#9b6fe0', 10, 46, 8);
+          this.paintSide(e.side);
+          await this.sleep(rm ? 120 : 380);
+          break;
+        case 'curseTick':
+          this.paintSide(e.side);
+          break;
         case 'convert': {
           for (const i of e.cells) {
             const tile = e.board[i];
             const el = this.tiles.get(tile.id);
             if (!el) continue;
-            el.dataset.k = tile.k;
-            el.innerHTML = gemSVG(tile.k);
-            if (!rm) el.animate([{ transform: this.xy(i) + ' scale(0.3)' }, { transform: this.xy(i) + ' scale(1.15)', offset: 0.6 }, { transform: this.xy(i) }], { duration: 300, easing: 'ease-out' });
+            this.setTileArt(el, tile);
+            this.burst(this.cellCentre(i), ELEMENT_COLOR.leaf, 5, 24, 7);
+            if (!rm) el.animate([{ transform: this.xy(i) + ' scale(0.3)' }, { transform: this.xy(i) + ' scale(1.2)', offset: 0.6 }, { transform: this.xy(i) }], { duration: 360, easing: 'ease-out' });
           }
-          await this.sleep(320);
+          await this.sleep(380);
           break;
         }
         case 'evolveReady':
+          await landed;
           this.syncAll();
           break;
         case 'evolve': {
-          const mon = this.monEl(e.side, e.mon);
+          await landed;
+          if (gen !== this.gen) return;
           this.hideEvolve();
-          if (mon) {
-            const art = mon.querySelector('.ba-mon-art');
-            if (!rm) await art.animate([{ filter: 'brightness(1)', transform: 'scale(1)' }, { filter: 'brightness(3)', transform: 'scale(1.18)' }], { duration: 380, easing: 'ease-in' }).finished.catch(() => {});
-            if (gen !== this.gen) return;
-            this.paintMon(e.side, e.mon);
-            if (!rm) art.animate([{ filter: 'brightness(3)', transform: 'scale(1.18)' }, { filter: 'brightness(1)', transform: 'scale(1)' }], { duration: 420, easing: 'ease-out' });
-            this.floater(mon, `${escapeHTML(monName(e.id, true))}`, 'is-evo');
-            const head = this.sideEl(e.side).querySelector('.ba-head');
-            this.floater(head, '+5', 'is-heal');
-          }
-          this.paintSide(e.side);
-          await this.sleep(rm ? 300 : 650);
+          await this.evolveScene(e.side, e.mon, e.id);
+          if (gen !== this.gen) return;
+          this.paintMon(e.side, e.mon);
+          const at = this.hpAt(e.side);
+          this.pop({ x: at.x, y: at.y + 38 }, `<b>+5</b><small>${escapeHTML(t('healTxt'))}</small>`, 'is-heal', 1100);
+          this.tweenHP(e.side, e.hp);
+          const sd = this.sideEl(e.side);
+          if (sd) sd.querySelector('.ba-berry-n').textContent = `0/${BERRIES_TO_EVOLVE}`;
+          this.paintSide(e.side, e.hp);
+          await this.sleep(rm ? 200 : 450);
           break;
         }
+        case 'tick': {
+          await landed;
+          for (const b of e.bombs) {
+            const el = this.tiles.get(b.id);
+            if (!el) continue;
+            this.setTileArt(el, { k: 'bomb', n: Math.max(0, b.n) });
+            if (!rm) el.animate([{ transform: this.xy(b.at) + ' scale(1)' }, { transform: this.xy(b.at) + ' scale(1.3)' }, { transform: this.xy(b.at) + ' scale(1)' }], { duration: 320 });
+          }
+          await this.sleep(rm ? 80 : 260);
+          break;
+        }
+        case 'pass':
+          this.shake(this.root.querySelector('.ba-clock'), 5, 400);
+          await this.sleep(300);
+          break;
         case 'turn': {
-          this.ui = { turn: e.side, left: e.moves, total: e.moves };
+          await landed;
+          if (gen !== this.gen) return;
+          this.ui = { turn: e.side, left: e.moves };
           this.paintTurn();
-          await this.sleep(rm ? 120 : 260);
+          for (const sd of [0, 1]) this.paintSide(sd, this.hpShown[sd]);
+          await this.turnBanner(e.side);
+          if (e.frozen) {
+            for (const a of this.teamArts(e.side)) { a.classList.add('is-frozen'); this.later(() => a.classList.remove('is-frozen'), 1200); }
+            await this.sleep(500);
+          }
+          if (e.side === ME) this.timerLeft = TURN_SECONDS;
           break;
         }
         case 'suddenDeath': {
-          const arena = this.root.querySelector('.ba-arena');
-          this.floater(arena, t('suddenDeath'), 'is-big');
-          await this.sleep(700);
+          const field = this.root.querySelector('.ba-field');
+          this.pop(this.centre(field), escapeHTML(t('suddenDeath')), 'is-extra', 1500);
+          await this.sleep(900);
           break;
         }
         case 'shuffle': {
           const board = this.root.querySelector('.ba-board');
-          if (board && !rm) await board.animate([{ opacity: 1 }, { opacity: 0.1 }], { duration: 200 }).finished.catch(() => {});
+          if (board && !rm) await board.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.1, transform: 'scale(.94)' }], { duration: 220 }).finished.catch(() => {});
           this.syncTiles(e.board);
-          if (board && !rm) board.animate([{ opacity: 0.1 }, { opacity: 1 }], { duration: 220 });
-          await this.sleep(220);
+          if (board && !rm) board.animate([{ opacity: 0.1, transform: 'scale(.94)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 240 });
+          await this.sleep(240);
           break;
         }
-        case 'win':
-          break;
         default:
           break;
       }
     }
+    await landed;
   }
 
-  /** The small things that ride along with a clear. */
-  instant(e) {
-    switch (e.t) {
-      case 'energy': {
-        const mon = this.monEl(e.side, e.mon);
-        this.floater(mon, `+${e.n}${elementBadge(e.k)}`, 'is-energy', -18);
-        this.paintMon(e.side, e.mon, e.energy);
-        if (mon && e.gained && !reducedMotion()) mon.querySelector('.ba-bar').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }], { duration: 260 });
-        break;
-      }
-      case 'berry': {
-        const el = this.sideEl(e.side);
-        const b = el && el.querySelector('.ba-berries');
-        this.floater(b, `+${e.n}${ICONS.berry}`, 'is-berry', 22);
-        if (b) b.innerHTML = Array.from({ length: BERRIES_TO_EVOLVE }, (_, i) => `<span class="ba-berry${i < e.berries ? ' is-on' : ''}">${ICONS.berry}</span>`).join('');
-        break;
-      }
-      case 'extra': {
-        const turn = this.root.querySelector('.ba-turn');
-        this.floater(turn, t('extraMove'), 'is-note', 26);
-        if (this.ui) { this.ui.left += 1; this.ui.total += 1; }
-        this.paintTurn();
-        break;
-      }
-      case 'shield':
-        this.paintSide(e.side);
-        break;
-      case 'drain': {
-        const mon = this.monEl(e.side, e.mon);
-        if (e.n) this.floater(mon, `-${e.n}`, 'is-dmg', -18);
-        this.paintMon(e.side, e.mon, e.energy);
-        break;
-      }
-      case 'tick': {
-        for (const b of e.bombs) {
-          const el = this.tiles.get(b.id);
-          if (!el) continue;
-          el.dataset.n = String(b.n);
-          el.innerHTML = gemSVG('bomb', Math.max(0, b.n));
-          if (!reducedMotion()) el.animate([{ transform: this.xy(b.at) + ' scale(1)' }, { transform: this.xy(b.at) + ' scale(1.2)' }, { transform: this.xy(b.at) + ' scale(1)' }], { duration: 300 });
-        }
-        break;
-      }
-      case 'curse':
-        this.paintSide(e.side);
-        break;
-      default:
-        break;
-    }
+  artSize() {
+    const b = this.root.querySelector('.ba-battle');
+    return b ? parseFloat(getComputedStyle(b).getPropertyValue('--ba-art')) || 100 : 100;
+  }
+
+  healSpark(p, n) {
+    const d = this.fx('ba-healspark', '+', { x: p.x + (Math.random() - 0.5) * 70, y: p.y + 10 + Math.random() * 20 });
+    if (!d) return;
+    d.animate([{ transform: 'translate(-50%, 0) scale(.5)', opacity: 0 }, { transform: 'translate(-50%, -20px) scale(1)', opacity: 1, offset: 0.3 }, { transform: 'translate(-50%, -70px) scale(.8)', opacity: 0 }],
+      { duration: 900, delay: n * 70, easing: 'ease-out', fill: 'backwards' }).finished.catch(() => {}).then(() => d.remove());
   }
 
   // --- the end ----------------------------------------------------------------------------------
@@ -1160,7 +1477,11 @@ class BattleArena {
       writeJSON(SETTINGS_KEY, this.settings);
     }
     this.syncAll();
-    this.later(() => this.showResult(), 700);
+    // The losers faint; then the result.
+    for (const a of this.teamArts(1 - s.winner)) {
+      if (!reducedMotion()) a.animate([{ transform: 'translateY(0) rotate(0)', opacity: 1 }, { transform: 'translateY(20px) rotate(-12deg)', opacity: 0.35 }], { duration: 700, easing: 'ease-in', fill: 'forwards' });
+    }
+    this.later(() => this.showResult(), 1000);
   }
 
   showResult() {
@@ -1169,19 +1490,23 @@ class BattleArena {
     const w = s.winner;
     const title = t('wins', { name: this.names[w] });
     const el = document.createElement('div');
-    el.className = 'gh-overlay ba-overlay';
+    el.className = 'gh-overlay ba-overlay ba-result-ov';
     el.innerHTML = `
-      <div class="gh-modal ba-result" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}">
+      <div class="gh-modal ba-result${w === ME ? ' is-win' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
-        <div class="ba-result-art">${s.sides[w].mons.map((m) => `<div class="ba-result-mon">${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
-        <h2 class="ba-result-title">${escapeHTML(title)}</h2>
-        <div class="gh-modal__actions">
+        <b class="ba-result-big">${escapeHTML(t(w === ME ? 'victory' : 'defeat'))}</b>
+        <div class="ba-result-art">${s.sides[w].mons.map((m, i) => `<div class="ba-result-mon${w === ME ? ' ba-face-left' : ''}" style="animation-delay:${i * -0.6}s">${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
+        <h2 class="ba-result-title"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span>${escapeHTML(title)}</span></h2>
+        <div class="ba-result-actions">
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('playAgain')}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="team">${t('newTeam')}</button>
         </div>
       </div>`;
     this.root.appendChild(el);
-    fitText(el.querySelector('.ba-result-title'), 24);
+    fitText(el.querySelector('.ba-result-title span:last-child'), 24);
+    if (!reducedMotion()) {
+      el.querySelector('.ba-result-big').animate([{ transform: 'scale(2.4)', opacity: 0 }, { transform: 'scale(.92)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 520, easing: 'ease-out' });
+    }
     const team = s.sides[ME].mons.map((m) => m.id);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
     this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.startMatch(team); });

@@ -42,6 +42,9 @@ const THREE = ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDLWS', 'LFFSFLD'];
 // Swapping (4,3)<->(4,4) makes leaf at row 4 cols 1-3.
 const LEAF = ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'DLLSLFD'];
 
+// Swapping (4,3)<->(4,4) makes three BERRIES at row 4 cols 1-3.
+const BERRY3 = ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LBBSBLD'];
+
 const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- the board -------------------------------------------------------------------------------------
@@ -54,7 +57,8 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('a row of three is a run', runs.length === 1 && runs[0].len === 3 && runs[0].k === 'fire');
   const v = findRuns(setup(TEAM, ['FWSLDFW', 'FLDFWSL', 'FFWSLDF', 'FSLDFWS', 'LDFWSLD']).board);
   ok('a column of four is one run of 4', v.length === 1 && v[0].len === 4);
-  ok('berries never match', findRuns(setup(TEAM, ['BBBLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LDFWSLD']).board).length === 0);
+  ok('three berries are a run', findRuns(setup(TEAM, ['BBBLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LDFWSLD']).board).length === 1);
+  ok('bombs never match', findRuns(setup(TEAM, ['X5X5X5LDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LDFWSLD']).board).length === 0);
   ok('a fresh match has no lines and a legal move', [1, 2, 3, 99, 12345].every((seed) => {
     const m = newMatch({ seed, teams: TEAM });
     return noRuns(m) && legalMoves(m).length > 0 && m.board.length === COLS * ROWS;
@@ -200,11 +204,13 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- berries and evolving -----------------------------------------------------------------------------
 {
-  // A berry next to the matched fire (row 3 col 1) is picked up.
-  const s = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WBLDLWS', 'LFFSFLD']);
-  s.sides[0].berries = 3;
+  // Three berries in a row (row 4 cols 1-3) are matched like gems: +3.
+  const s = setup(TEAM, BERRY3);
+  ok('berry board clean', noRuns(s));
+  s.sides[0].berries = 1;
   const r = apply(s, swap(4, 3, 4, 4));
-  ok('a berry next to a match is collected', has(r.events, 'berry', (e) => e.side === 0));
+  ok('a line of 3 berries counts 3', has(r.events, 'berry', (e) => e.side === 0 && e.n === 3));
+  ok('berries charge no monster', !has(r.events, 'energy'));
   ok('4 berries: choose who evolves', r.state.pendingEvolve === 0 && has(r.events, 'evolveReady'));
   ok('a swap waits for the choice', apply(r.state, swap(0, 0, 0, 1)).error === 'evolve-first');
   const hp = r.state.sides[0].hp, max = r.state.sides[0].maxHp;
@@ -217,12 +223,12 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('evolve: cannot evolve twice', apply({ ...e.state, pendingEvolve: 0 }, { type: 'evolve', mon: 1 }).error === 'bad-mon');
 }
 {
-  const s = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WBLDLWS', 'LFFSFLD']);
-  s.sides[0].berries = 3;
+  const s = setup(TEAM, BERRY3);
+  s.sides[0].berries = 1;
   s.sides[0].mons[0].evo = true;
   const r = apply(s, swap(4, 3, 4, 4));
   ok('one monster left to evolve evolves on its own', r.state.sides[0].mons[1].evo && r.state.pendingEvolve == null && has(r.events, 'evolve'));
-  const t = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WBLDLWS', 'LFFSFLD']);
+  const t = setup(TEAM, BERRY3);
   t.sides[0].mons.forEach((m) => { m.evo = true; });
   const r2 = apply(t, swap(4, 3, 4, 4));
   ok('both evolved: berries do nothing', r2.state.sides[0].berries === 0 && !has(r2.events, 'berry'));
@@ -235,12 +241,12 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- bombs ----------------------------------------------------------------------------------------------
 {
-  // A bomb in line with the match (row 4 col 0) detonates: its row and column go.
-  const s = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDLWS', 'X5FFSFLD']);
+  // A bomb right next to the match (row 3 col 2, above the matched fire) detonates.
+  const s = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSX5DLWS', 'LFFSFLD']);
   ok('bomb board clean', noRuns(s));
   const r = apply(s, swap(4, 3, 4, 4));
   const b = r.events.find((e) => e.t === 'bomb');
-  ok('a bomb in line with a match detonates', !!b && b.at === idx(4, 0));
+  ok('a bomb next to a match detonates', !!b && b.at === idx(3, 2));
   ok('the blast covers its row and column', b && b.cells.length === COLS + ROWS - 1);
   ok('blast gems charge the mover (water in the blast)', r.state.sides[0].mons[1].energy > 0);
 }
@@ -261,7 +267,19 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   s.movesLeft = 1;
   const r = apply(s, swap(4, 3, 4, 4));
   const tick = r.events.find((e) => e.t === 'tick');
-  ok('a bomb counts down by 1 per turn', tick && tick.bombs[0].n === 3);
+  const bombId = s.board[idx(4, 6)].id;
+  ok('a bomb counts down by 1 per turn', tick && tick.bombs.find((x) => x.id === bombId).n === 3);
+}
+
+// --- the turn timer -------------------------------------------------------------------------------------
+{
+  const s = setup(TEAM, BASE);
+  const r = apply(s, { type: 'pass' });
+  ok('pass ends the turn', r.ok && r.state.turn === 1 && r.state.movesLeft === 2 && has(r.events, 'pass'));
+  const t = setup(TEAM, BASE);
+  t.pendingEvolve = 0; t.sides[0].berries = 4;
+  const r2 = apply(t, { type: 'pass' });
+  ok('pass with an evolve pending evolves the first one', r2.ok && r2.state.sides[0].mons[0].evo && r2.state.turn === 1);
 }
 
 // --- winning --------------------------------------------------------------------------------------------
