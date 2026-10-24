@@ -7,12 +7,12 @@
 // phase 2 (live rooms, turn-by-turn challenges) replays moves on every phone and gets one board.
 //
 // Moves: { type: 'swap', a, b } (any two orthogonally adjacent cells; a swap that makes no line
-// still spends the move), { type: 'evolve', mon } (only while `pendingEvolve` is the mover's side) and
+// still spends the move), { type: 'evolve', mon } (a MOVE, with 4 berries: see evolveOptions) and
 // { type: 'pass' } (the turn timer ran out).
 // `events` is the ordered story of what happened, for the UI to animate (see the EVENTS list at
 // the bottom of this file). Rules: docs/BATTLE-ARENA-SPEC.md; deviations in battle-arena/CLAUDE.md.
 import {
-  ELEMENTS, BY_ID, specialOf, BERRIES_TO_EVOLVE, EVOLVE_HP, TEAM_HP, BOMB_DAMAGE, MAX_BOMBS,
+  ELEMENTS, BY_ID, specialOf, BERRIES_TO_EVOLVE, TEAM_HP, BOMB_DAMAGE, MAX_BOMBS,
 } from './monsters.js';
 
 export const COLS = 7;
@@ -27,6 +27,10 @@ const MAX_LOOPS = 40;            // cascade / special safety valve (never reache
 /** After each side's 20th turn, heals stop ("Sudden death"): two healing teams could otherwise
  *  out-heal each other for ever (the soak found one still going at 3000 moves). Our rule. */
 export const SUDDEN_DEATH = 20;
+/** A match of 5 or more tiles (a straight 5, or an L / T of two crossing lines) heals the mover's
+ *  team and always gives an extra move (seen in the reference: "MAX HP" + "EXTRA MOVE!" on an L of 5,
+ *  and a second extra move the same turn). The heal amount is a reasoned guess (5). */
+export const FIVE_HEAL = 5;
 
 export const idx = (r, c) => r * COLS + c;
 export const rowOf = (i) => Math.floor(i / COLS);
@@ -87,6 +91,18 @@ export function findRuns(board) {
   scan((r, c) => idx(r, c), ROWS, COLS);
   scan((c, r) => idx(r, c), COLS, ROWS);
   return runs;
+}
+
+/** Runs of one kind that share a tile are ONE match (an L or a T): [{ cells:Set, k, runs:[...] }]. */
+export function matchGroups(runs) {
+  const groups = [];
+  for (const r of runs) {
+    const hit = groups.filter((g) => g.k === r.k && r.cells.some((c) => g.cells.has(c)));
+    const g = { k: r.k, cells: new Set(r.cells), runs: [r] };
+    for (const h of hit) { for (const c of h.cells) g.cells.add(c); g.runs.push(...h.runs); groups.splice(groups.indexOf(h), 1); }
+    groups.push(g);
+  }
+  return groups;
 }
 
 function swapCells(board, a, b) { const t = board[a]; board[a] = board[b]; board[b] = t; }
@@ -171,7 +187,7 @@ export function newMatch({ seed = 1, teams, first = 0, arena = 'boiler' }) {
     v: 1, arena, rng: (seed >>> 0) || 1, nextId: 1,
     board: [], turn: first === 1 ? 1 : 0, first: first === 1 ? 1 : 0,
     movesLeft: MOVES_PER_TURN, extraUsed: false, turnNo: 1, moveNo: 0,
-    pendingEvolve: null, winner: null,
+    pendingEvolve: null, winner: null,   // pendingEvolve: no longer used (kept for old saves)
     sides: teams.map((ids) => {
       const mons = ids.map((id) => ({ id, evo: false, energy: 0, part: 0 }));
       return { mons, hp: TEAM_HP, maxHp: TEAM_HP, shield: 0, berries: 0, curse: { tick: 0, left: 0 }, frozen: false, turns: 0 };
@@ -216,12 +232,12 @@ function damage(s, ev, target, n, cause) {
   }
 }
 
-function heal(s, ev, target, n) {
+function heal(s, ev, target, n, cause = 'special') {
   const side = s.sides[target];
   const before = side.hp;
   const blocked = s.turnNo > 2 * SUDDEN_DEATH;
   if (!blocked) side.hp = Math.min(side.maxHp, side.hp + n);
-  ev.push({ t: 'heal', side: target, n: side.hp - before, capped: !blocked && side.hp - before < n, blocked, hp: side.hp });
+  ev.push({ t: 'heal', side: target, n: side.hp - before, capped: !blocked && side.hp - before < n, blocked, hp: side.hp, cause });
 }
 
 function addEnergy(s, ev, side, mi, n, k) {
@@ -307,14 +323,24 @@ function settle(s, ev, side) {
     if (!runs.length) return;
     const seed = new Set();
     for (const r of runs) for (const i of r.cells) seed.add(i);
-    if (side != null && side === s.turn && !s.extraUsed && runs.some((r) => r.len >= 4)) {
-      s.extraUsed = true;
-      s.movesLeft += 1;
-      ev.push({ t: 'extra', side, moves: s.movesLeft });
+    // Extra moves (the mover only): every match of 5+ tiles gives one (no cap); a straight 4 gives
+    // one, once per turn (the reference's tip: "Match 4 for extra move (1x per turn)").
+    let fives = 0;
+    if (side != null && side === s.turn) {
+      const groups = matchGroups(runs);
+      fives = groups.filter((g) => g.cells.size >= 5).length;
+      const four = groups.some((g) => g.cells.size === 4);
+      for (let n = 0; n < fives; n++) { s.movesLeft += 1; ev.push({ t: 'extra', side, moves: s.movesLeft, five: true }); }
+      if (four && !s.extraUsed) {
+        s.extraUsed = true;
+        s.movesLeft += 1;
+        ev.push({ t: 'extra', side, moves: s.movesLeft });
+      }
     }
     const { set, blasts } = expand(s.board, seed, runs);
     for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
     collect(s, ev, side, set, 'match');
+    for (let n = 0; n < fives && s.winner == null; n++) heal(s, ev, side, FIVE_HEAL, 'five');
     gravity(s, ev);
   }
 }
@@ -375,6 +401,38 @@ function fireSpecial(s, ev, side, mi) {
     collect(s, ev, side, set, 'special');
     gravity(s, ev);
   }
+  if (sp.col) {
+    // Clear the column(s) with the most gems of the caster's element (ties: the leftmost).
+    const el = BY_ID[m.id].el;
+    const score = [];
+    for (let c = 0; c < COLS; c++) { let f = 0; for (let r = 0; r < ROWS; r++) if (s.board[idx(r, c)].k === el) f++; score.push({ c, f }); }
+    score.sort((a, b) => b.f - a.f || a.c - b.c);
+    const cols = score.slice(0, sp.col).map((x) => x.c);
+    const cells = [];
+    for (const c of cols) for (let r = 0; r < ROWS; r++) cells.push(idx(r, c));
+    const { set, blasts } = expand(s.board, cells, null);
+    ev.push({ t: 'cols', side, cols });
+    for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
+    collect(s, ev, side, set, 'special');
+    gravity(s, ev);
+  }
+  if (sp.block) {
+    // Blast the n x n block holding the most gems of the caster's element (ties: top-left first).
+    const el = BY_ID[m.id].el, n = sp.block;
+    let best = null;
+    for (let r = 0; r + n <= ROWS; r++) for (let c = 0; c + n <= COLS; c++) {
+      let f = 0;
+      for (let dr = 0; dr < n; dr++) for (let dc = 0; dc < n; dc++) if (s.board[idx(r + dr, c + dc)].k === el) f++;
+      if (!best || f > best.f) best = { r, c, f };
+    }
+    const cells = [];
+    for (let dr = 0; dr < n; dr++) for (let dc = 0; dc < n; dc++) cells.push(idx(best.r + dr, best.c + dc));
+    const { set, blasts } = expand(s.board, cells, null);
+    ev.push({ t: 'block', side, cells });
+    for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
+    collect(s, ev, side, set, 'special');
+    gravity(s, ev);
+  }
   if (sp.convert) {
     const cand = [];
     for (let i = 0; i < N; i++) if (isGem(s.board[i]) && s.board[i].k !== 'leaf') cand.push(i);
@@ -408,19 +466,24 @@ function evolve(s, ev, side, mi) {
   const sd = s.sides[side];
   sd.mons[mi].evo = true;
   sd.berries = 0;
-  sd.hp = Math.min(sd.maxHp, sd.hp + EVOLVE_HP);
   ev.push({ t: 'evolve', side, mon: mi, id: sd.mons[mi].id, hp: sd.hp, maxHp: sd.maxHp });
 }
 
-/** Four berries: one monster left to evolve evolves at once; two = the mover chooses. */
+/** Four berries: the mover MAY now evolve one monster, as a move (the reference: tap the monster;
+ *  it costs a move, and with no move left it waits for their next turn). Nothing is automatic. */
 function checkBerries(s, ev, side) {
   const sd = s.sides[side];
-  if (sd.berries < BERRIES_TO_EVOLVE) return;
-  const open = sd.mons.map((m, i) => (m.evo ? -1 : i)).filter((i) => i >= 0);
-  if (!open.length) { sd.berries = 0; return; }
-  if (open.length === 1) { evolve(s, ev, side, open[0]); return; }
-  s.pendingEvolve = side;
-  ev.push({ t: 'evolveReady', side });
+  if (sd.berries >= BERRIES_TO_EVOLVE && sd.mons.some((m) => !m.evo) && !sd.ready) {
+    sd.ready = true;
+    ev.push({ t: 'evolveReady', side });
+  }
+}
+
+/** Who may evolve right now: [mon index] (the mover, 4 berries, a move left, not yet evolved). */
+export function evolveOptions(state) {
+  const sd = state.sides[state.turn];
+  if (state.winner != null || state.movesLeft <= 0 || sd.berries < BERRIES_TO_EVOLVE) return [];
+  return sd.mons.map((m, i) => (m.evo ? -1 : i)).filter((i) => i >= 0);
 }
 
 /** No legal move left: the tiles are reshuffled (same tiles, new places) until there is one. */
@@ -485,7 +548,7 @@ function afterMove(s, ev, side) {
   if (s.winner != null) return;
   checkBerries(s, ev, side);
   ensureMove(s, ev);
-  if (s.pendingEvolve == null && s.movesLeft <= 0) {
+  if (s.movesLeft <= 0) {
     endTurn(s, ev);
     if (s.winner == null) ensureMove(s, ev);
   }
@@ -502,26 +565,20 @@ export function apply(state, move) {
   const side = s.turn;
 
   if (move.type === 'evolve') {
+    // Evolving is a MOVE: it spends one (the reference: no swap, a move gone, berries back to 0).
     const mi = move.mon;
-    if (s.pendingEvolve !== side) return refuse('no-evolve');
-    const m = s.sides[side].mons[mi];
-    if (!m || m.evo) return refuse('bad-mon');
-    s.pendingEvolve = null;
+    if (!evolveOptions(s).includes(mi)) return refuse('no-evolve');
+    s.movesLeft -= 1;
+    s.moveNo += 1;
+    s.sides[side].ready = false;
     evolve(s, ev, side, mi);
-    if (s.movesLeft <= 0) {
-      endTurn(s, ev);
-      if (s.winner == null) ensureMove(s, ev);
-    }
+    afterMove(s, ev, side);
     return { ok: true, state: s, events: ev };
   }
 
   if (move.type === 'pass') {
     // The turn timer ran out: the moves left are lost. A pending evolution takes the first
     // monster still to evolve (the player never chose, so nothing is lost by choosing for them).
-    if (s.pendingEvolve === side) {
-      s.pendingEvolve = null;
-      evolve(s, ev, side, s.sides[side].mons.findIndex((m) => !m.evo));
-    }
     ev.push({ t: 'pass', side });
     endTurn(s, ev);
     if (s.winner == null) ensureMove(s, ev);
@@ -529,7 +586,6 @@ export function apply(state, move) {
   }
 
   if (move.type !== 'swap') return refuse('bad-move');
-  if (s.pendingEvolve != null) return refuse('evolve-first');
   const { a, b } = move;
   if (!adjacent(a, b)) return refuse('not-adjacent');
   swapCells(s.board, a, b);
@@ -549,6 +605,6 @@ export function apply(state, move) {
 //   berry {side,n,berries}  extra {side,moves}  fall {moves,spawns,board}  special {side,mon,id,evo}
 //   damage {side,n,absorbed,hp,shield,cause}  heal {side,n,capped,hp}  shield {side,n,shield}
 //   drain {side,mon,n,energy}  freeze {side}  curse {side,left,tick}  rows {side,rows}
-//   convert {side,cells,k,board}  evolveReady {side}  evolve {side,mon,id,hp,maxHp}
+//   convert {side,cells,k,board}  cols {side,cols}  block {side,cells}  evolveReady {side}  evolve {side,mon,id,hp,maxHp}
 //   tick {bombs:[{id,at,n}]}  turn {side,moves,frozen}  curseTick {side,left}  shuffle {board}
 //   pass {side}  win {side}

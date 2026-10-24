@@ -24,3 +24,15 @@ pill, the move dots showed 3 after an extra move (likely the "3 turns"), gems va
 static. The rules missed that berries MATCH in the reference (they were picked up next to matches).
 Rebuilt: engine (matchable berries, bombs set off by an adjacent match, a `pass` move for the 30 s timer),
 glossy gems, a Boiler Room scene, and the whole event-to-animation layer (see CLAUDE.md, "The battle screen").
+
+
+## 2026-10-24: v3, a frame-by-frame comparison with the reference
+
+Matt: *"Now go back and review everything again. Compare the real game with ours. Find the
+discrepancies. Fix them."* A move-by-move log of rec3 (vs oksurely09, 22 moves) plus my own frame
+checks found: any adjacent swap is legal (fixed earlier the same night); a 5-match (incl. L/T) gives
+an extra move outside the once-a-turn 4 cap and heals; evolving is a chosen move that costs a move and
+heals nothing (the +5 seen in the bravomike match was a 5-match in the same turn); specials clear part
+of the board; the timer is per move; the board dims on the other side's turn; the HUD, banners, stage
+reveal and ending all looked different. The first two recordings (vs bravomike) were no longer in
+Dropbox, so they could not be re-checked move by move.

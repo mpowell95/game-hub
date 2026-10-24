@@ -6,7 +6,9 @@
 // drain (energy taken from EACH enemy monster), rows (Scorch: clear the N rows with the most Fire
 // gems), convert (N random gems become Leaf), freeze (the other side gets 1 move next turn),
 // chain (energy to your other monster), curse ({ tick, turns }: tick damage at the start of each
-// of their next `turns` turns).
+// of their next `turns` turns), col (clear the N columns with the most of its element's gems),
+// block (blast the N x N block with the most of them). Board clears charge the caster, as the
+// reference's specials do (a column, a 2x2), which keeps cascades going.
 
 export const ELEMENTS = ['fire', 'water', 'spark', 'leaf', 'shadow'];
 
@@ -18,13 +20,13 @@ export const ELEMENT_COLOR = {
 
 export const MONSTERS = [
   { id: 'emberkit', name: 'Emberkit', evoName: 'Blazelynx', el: 'fire', cost: 6,
-    sp: { dmg: 10 }, evo: { dmg: 18 } },
+    sp: { dmg: 12, col: 1 }, evo: { dmg: 18, col: 2 } },
   { id: 'sproutle', name: 'Sproutle', evoName: 'Mossback', el: 'leaf', cost: 6,
-    sp: { heal: 10 }, evo: { heal: 15, dmg: 15 } },
+    sp: { dmg: 10, heal: 10 }, evo: { dmg: 15, heal: 15 } },
   { id: 'driplet', name: 'Driplet', evoName: 'Tidefang', el: 'water', cost: 4,
     sp: { dmg: 8 }, evo: { dmg: 14 } },
   { id: 'zapup', name: 'Zapup', evoName: 'Voltail', el: 'spark', cost: 4,
-    sp: { dmg: 10 }, evo: { dmg: 20 } },
+    sp: { dmg: 5, block: 2 }, evo: { dmg: 10, block: 3 } },
   { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6,
     sp: { dmg: 10, drain: 2 }, evo: { dmg: 15, drain: 3 } },
   { id: 'pebbleop', name: 'Pebbleop', evoName: 'Cragoon', el: 'fire', cost: 8,
@@ -67,6 +69,5 @@ export const specialOf = (id, evolved) => {
 export const BERRIES_TO_EVOLVE = 4;
 /** Every team starts at 80 and can never go above it (Matt, 2026-10-24: like the real game). */
 export const TEAM_HP = 80;
-export const EVOLVE_HP = 5;
 export const BOMB_DAMAGE = 10;
 export const MAX_BOMBS = 2;
