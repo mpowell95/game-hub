@@ -6,7 +6,7 @@
 //          turn-ending swap that leaves the other side a special in one move
 // `rand` is the caller's (the UI's Math.random, the soak's seeded one); the match's own RNG is
 // never touched, so the computer cannot change the board it is thinking about.
-import { apply, legalMoves, previewSwap } from './engine.js';
+import { apply, legalMoves, previewSwap, evolveOptions } from './engine.js';
 import { BY_ID, specialOf, BERRIES_TO_EVOLVE } from './monsters.js';
 
 export const LEVELS = ['easy', 'medium', 'hard'];
@@ -99,7 +99,9 @@ export function chooseEvolve(state, side) {
 
 export function chooseMove(state, level, rand = Math.random) {
   const side = state.turn;
-  if (state.pendingEvolve === side) return { type: 'evolve', mon: chooseEvolve(state, side) };
+  // Evolving costs a move; the computer takes it when it can (Easy only half the time).
+  const evo = evolveOptions(state);
+  if (evo.length && (level !== 'easy' || rand() < 0.5)) return { type: 'evolve', mon: chooseEvolve(state, side) };
   const moves = legalMoves(state);
   if (!moves.length) return null;
   const swap = (m) => ({ type: 'swap', a: m.a, b: m.b });
@@ -114,7 +116,7 @@ export function chooseMove(state, level, rand = Math.random) {
       v = scoreOutcome(state, side, res);
       const st = res.state;
       if (st.winner == null) {
-        if (st.turn === side && st.pendingEvolve == null) v += 0.8 * Math.max(0, bestPreview(st, side));
+        if (st.turn === side) v += 0.8 * Math.max(0, bestPreview(st, side));
         else if (st.turn !== side) v -= 0.6 * threat(st, st.turn);
       }
     } else {

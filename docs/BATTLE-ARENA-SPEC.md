@@ -19,7 +19,8 @@ seeded RNG, so online play can replay it later.
 4. **Turns.** 2 moves per turn. A move = swap two ADJACENT tiles (orthogonal) that makes a
    line of 3+. Illegal swap snaps back, costs nothing. Cascades resolve fully. 30 s turn timer
    vs computer is optional (off by default; it exists for online).
-5. **Extra move.** A match of 4 or more gives +1 move, **once per turn**.
+5. **Extra move.** A straight 4 gives +1 move, **once per turn**; a match of 5+ (straight, L or T)
+   gives +1 move every time and heals 5 (v3, 2026-10-24).
 6. **Charging.** Every gem cleared (matches, cascades, bombs, specials) adds 1 energy to YOUR
    monster of that element (if you have one). Gems of other elements do nothing. Show "+3 [gem]"
    floating over the monster.
@@ -28,7 +29,7 @@ seeded RNG, so online play can replay it later.
 8. **Team HP.** Every team starts at 80, and heals can never take it above 80 ("MAX HP" flash).
    Monsters have no HP of their own (Matt, 2026-10-24). The HP column below is obsolete.
 9. **Berries.** Berries MATCH like gems (3+ in a line, v2 2026-10-24); each berry matched adds 1 to your berry counter (0/4). At 4: your two
-   monsters show "Evolve!", you tap one (computer picks the one closer to full), it evolves:
+   monsters show "Evolve!"; tapping one IS a move (costs 1, heals nothing; v3). It evolves:
    new form, stronger special, heals 5 (never above 80). Counter
    resets. Each monster evolves once; when both are evolved, berries do nothing.
 10. **Win.** Other team's HP hits 0: "Victory" / "<profile name> wins!" card with an X close.

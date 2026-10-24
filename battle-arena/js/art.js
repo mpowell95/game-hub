@@ -419,42 +419,24 @@ export function monsterSVG(id, evolved) {
 export const TITLE_MONSTERS = ['emberkit', 'driplet'];
 
 // --- the arena ---------------------------------------------------------------------------------------
-/** The Boiler Room: a warm furnace hall, pipes, two tank-top platforms at the back, a steel
- *  floor with hazard stripes at the front. One copy per page, so its pattern id is safe. Drawn in a
- *  400x500 box and sliced to fill (`xMidYMax slice`), so the floor always sits at the bottom. */
+/** The Boiler Room's back WALL: warm brick, pipes, a small furnace window. Anchored to the top of the
+ *  screen (`xMidYMin slice`); the floor and the tanks under the back monsters are drawn by CSS so
+ *  they follow the layout on every phone height. One copy per page. */
 export function arenaSVG() {
-  const tank = (cx, cy, rx) => `<g>
-    <path d="M${cx - rx} ${cy} v60 a${rx} ${rx * 0.28} 0 0 0 ${rx * 2} 0 v-60" fill="#8a2f1c" stroke="#3a1208" stroke-width="3"/>
-    <path d="M${cx - rx + 8} ${cy + 6} v50" stroke="#c4502c" stroke-width="7" stroke-linecap="round" opacity=".7"/>
-    <path d="M${cx - rx} ${cy + 22} a${rx} ${rx * 0.28} 0 0 0 ${rx * 2} 0" fill="none" stroke="#3a1208" stroke-width="3" opacity=".6"/>
-    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${rx * 0.28}" fill="#b2442a" stroke="#3a1208" stroke-width="3"/>
-    <ellipse cx="${cx}" cy="${cy}" rx="${rx * 0.78}" ry="${rx * 0.2}" fill="#7a2614"/></g>`;
-  return `<svg viewBox="0 0 400 500" preserveAspectRatio="xMidYMax slice" width="100%" height="100%" aria-hidden="true">
-    <defs><pattern id="ba-haz" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="22" height="22" fill="#1f1a14"/><rect width="11" height="22" fill="#f2b705"/></pattern></defs>
-    <rect width="400" height="500" fill="#3b1a10"/>
-    <rect y="0" width="400" height="300" fill="#4a2214"/>
-    <g opacity=".9">
-      <rect x="150" y="40" width="100" height="150" rx="10" fill="#2a120a"/>
-      <rect x="160" y="52" width="80" height="126" rx="6" fill="#ff8a2a" class="ba-furnace"/>
-      <rect x="160" y="52" width="80" height="126" rx="6" fill="#ffd36a" opacity=".45" class="ba-furnace-2"/>
-      <path d="M160 92h80M160 132h80M200 52v126" stroke="#2a120a" stroke-width="6"/>
+  return `<svg viewBox="0 0 390 480" preserveAspectRatio="xMidYMin slice" width="100%" height="100%" aria-hidden="true">
+    <rect width="390" height="480" fill="#4a2214"/>
+    <g fill="#5a2a18" opacity=".55">${Array.from({ length: 12 }, (_, r) => Array.from({ length: 9 }, (_, c) => `<rect x="${c * 46 + (r % 2 ? 23 : 0) - 23}" y="${r * 40}" width="42" height="36" rx="3"/>`).join('')).join('')}</g>
+    <g>
+      <rect x="160" y="96" width="70" height="92" rx="8" fill="#2a120a"/>
+      <rect x="167" y="103" width="56" height="78" rx="5" fill="#ff8a2a" class="ba-furnace"/>
+      <rect x="167" y="103" width="56" height="78" rx="5" fill="#ffd36a" opacity=".45" class="ba-furnace-2"/>
+      <path d="M167 129h56M167 155h56M195 103v78" stroke="#2a120a" stroke-width="4"/>
     </g>
     <g fill="#5c3424" stroke="#26110a" stroke-width="3">
-      <rect x="-10" y="18" width="420" height="20" rx="10"/><rect x="40" y="-10" width="22" height="330" rx="11"/>
-      <rect x="338" y="-10" width="22" height="330" rx="11"/><rect x="-10" y="226" width="420" height="16" rx="8"/>
-      <rect x="100" y="-10" width="14" height="120" rx="7"/><rect x="286" y="-10" width="14" height="120" rx="7"/>
+      <rect x="-10" y="70" width="410" height="16" rx="8"/><rect x="24" y="-10" width="18" height="500" rx="9"/>
+      <rect x="348" y="-10" width="18" height="500" rx="9"/><rect x="118" y="-10" width="12" height="110" rx="6"/><rect x="262" y="-10" width="12" height="110" rx="6"/>
     </g>
-    <g fill="#7a4a34" stroke="#26110a" stroke-width="3">
-      <rect x="33" y="218" width="36" height="32" rx="6"/><rect x="331" y="218" width="36" height="32" rx="6"/>
-    </g>
-    <g stroke="#2a1a12" stroke-width="5" fill="none" opacity=".85"><path d="M0 262h400"/><path d="M0 286h400"/>
-      ${[20, 70, 120, 170, 220, 270, 320, 370].map((x) => `<path d="M${x} 262v24"/>`).join('')}</g>
-    ${tank(92, 250, 62)}${tank(308, 250, 62)}
-    <path d="M0 330 L400 330 L400 500 L0 500z" fill="#4b3226"/>
-    <path d="M0 330 L400 330 L400 344 L0 344z" fill="url(#ba-haz)"/>
-    <g stroke="#2e1e16" stroke-width="2" opacity=".8">
-      <path d="M0 400h400M0 452h400"/><path d="M100 344 70 500M200 344v156M300 344l30 156"/></g>
-    <rect x="0" y="0" width="400" height="500" fill="#ff7a2a" opacity=".07"/>
+    <g fill="#7a4a34" stroke="#26110a" stroke-width="3"><rect x="18" y="64" width="30" height="28" rx="5"/><rect x="342" y="64" width="30" height="28" rx="5"/></g>
+    <rect width="390" height="480" fill="#ff7a2a" opacity=".06"/>
   </svg>`;
 }

@@ -2,7 +2,7 @@
 //   node battle-arena/js/test.js            rules + a 300-match soak
 //   node battle-arena/js/test.js --soak=N   a different soak size
 import {
-  apply, newMatch, findRuns, legalMoves, adjacent, idx, COLS, ROWS,
+  apply, newMatch, findRuns, legalMoves, adjacent, idx, COLS, ROWS, evolveOptions,
 } from './engine.js';
 import { chooseMove, chooseTeam, LEVELS } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, STARTERS } from './monsters.js';
@@ -104,7 +104,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const hp = s.sides[1].hp;
   const r = apply(s, swap(4, 3, 4, 4));
   ok('a full bar fires on its own', has(r.events, 'special', (e) => e.side === 0 && e.mon === 0));
-  ok('the special hits the other team (10)', r.state.sides[1].hp === hp - 10);
+  ok('the special hits the other team (12)', r.state.sides[1].hp === hp - BY_ID.emberkit.sp.dmg);
   ok('the bar resets, excess lost', r.state.sides[0].mons[0].energy < 7);
 }
 {
@@ -132,7 +132,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   t.sides[1].mons[0].energy = 3;                              // Zapup costs 4
   const hp = t.sides[0].hp;
   const r2 = apply(t, swap(4, 3, 4, 4));
-  ok('the shield soaks first', r2.state.sides[0].hp === hp - Math.max(0, ZD - SH) && r2.state.sides[0].shield === 0);
+  ok('the shield soaks first', r2.state.sides[0].hp === hp - Math.max(0, ZD - SH) && r2.state.sides[0].shield === Math.max(0, SH - ZD));
   ok('the damage event shows what the shield took', has(r2.events, 'damage', (e) => e.side === 0 && e.absorbed === Math.min(SH, ZD) && e.n === Math.max(0, ZD - SH)));
 }
 {
@@ -212,23 +212,21 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const r = apply(s, swap(4, 3, 4, 4));
   ok('a line of 3 berries counts 3', has(r.events, 'berry', (e) => e.side === 0 && e.n === 3));
   ok('berries charge no monster', !has(r.events, 'energy'));
-  ok('4 berries: choose who evolves', r.state.pendingEvolve === 0 && has(r.events, 'evolveReady'));
-  ok('a swap waits for the choice', apply(r.state, swap(0, 0, 0, 1)).error === 'evolve-first');
-  const hp = r.state.sides[0].hp, max = r.state.sides[0].maxHp;
+  ok('4 berries: evolving is now possible (announced), never automatic', has(r.events, 'evolveReady') && !has(r.events, 'evolve'));
+  ok('the move left can still be a swap', r.state.movesLeft === 1 && evolveOptions(r.state).length === 2);
+  const hp = r.state.sides[0].hp;
   const e = apply(r.state, { type: 'evolve', mon: 1 });
   ok('evolve: new form', e.ok && e.state.sides[0].mons[1].evo && !e.state.sides[0].mons[0].evo);
-  ok('evolve: +5 HP, never past 80', e.state.sides[0].hp === Math.min(80, hp + 5) && e.state.sides[0].maxHp === 80 && max === 80);
-  const low = { ...r.state, sides: r.state.sides.map((x, i) => i ? x : { ...x, hp: 50 }) };
-  ok('evolve heals 5 when hurt', apply(low, { type: 'evolve', mon: 1 }).state.sides[0].hp === 55);
-  ok('evolve: berries reset', e.state.sides[0].berries === 0 && e.state.pendingEvolve == null);
-  ok('evolve: cannot evolve twice', apply({ ...e.state, pendingEvolve: 0 }, { type: 'evolve', mon: 1 }).error === 'bad-mon');
+  ok('evolve costs a move (here the last: the turn passes)', e.state.turn === 1);
+  ok('evolve heals nothing', e.state.sides[0].hp === hp);
+  ok('evolve: berries reset', e.state.sides[0].berries === 0);
+  ok('evolve: not without 4 berries', apply({ ...e.state, turn: 0, movesLeft: 2 }, { type: 'evolve', mon: 0 }).error === 'no-evolve');
+  const done = { ...r.state, sides: r.state.sides.map((x, i) => i ? x : { ...x, mons: x.mons.map((m, j) => j === 1 ? { ...m, evo: true } : m) }) };
+  ok('evolve: not an evolved monster', apply(done, { type: 'evolve', mon: 1 }).error === 'no-evolve');
+  const none = { ...r.state, movesLeft: 0 };
+  ok('evolve: not with no move left', evolveOptions(none).length === 0);
 }
 {
-  const s = setup(TEAM, BERRY3);
-  s.sides[0].berries = 1;
-  s.sides[0].mons[0].evo = true;
-  const r = apply(s, swap(4, 3, 4, 4));
-  ok('one monster left to evolve evolves on its own', r.state.sides[0].mons[1].evo && r.state.pendingEvolve == null && has(r.events, 'evolve'));
   const t = setup(TEAM, BERRY3);
   t.sides[0].mons.forEach((m) => { m.evo = true; });
   const r2 = apply(t, swap(4, 3, 4, 4));
@@ -238,6 +236,34 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   u.sides[0].mons[0].evo = true; u.sides[0].mons[0].energy = 6;
   const hp = u.sides[1].hp;
   ok('the evolved special is stronger', apply(u, swap(4, 3, 4, 4)).state.sides[1].hp === hp - 18);
+}
+
+// --- five in a match ------------------------------------------------------------------------------------
+{
+  // Swapping (4,3)<->(4,4) makes an L: fire at row 4 cols 1-3 AND column 3 rows 2-4 = 5 tiles.
+  const s = setup(TEAM, ['FWSLDFW', 'SLDWFSL', 'DFWFLDF', 'WSLFSWS', 'LFFDFLD']);
+  ok('L board clean', noRuns(s));
+  s.sides[0].hp = 60;
+  const r = apply(s, swap(4, 3, 4, 4));
+  ok('an L of 5 is one match of 5', r.ok && r.events.find((e) => e.t === 'extra').five === true);
+  ok('a 5 gives an extra move (no cap: cascaded 5s give more)', r.state.movesLeft === 1 + count(r.events, 'extra'));
+  ok('a 5 heals the mover 5', has(r.events, 'heal', (e) => e.cause === 'five' && e.n === 5) && r.state.sides[0].hp >= 65);
+  ok('a 5 does not use up the once-a-turn 4', !r.state.extraUsed);
+}
+
+// --- board-clearing specials ----------------------------------------------------------------------------
+{
+  // Emberkit (fire, cost 6) fires on THREE: 12 damage + clears the column with the most fire.
+  const s = setup(TEAM, THREE);
+  s.sides[0].mons[0].energy = 5;
+  const hp = s.sides[1].hp;
+  const r = apply(s, swap(4, 3, 4, 4));
+  ok('Flare Pounce: 12 damage', r.state.sides[1].hp <= hp - 12);
+  ok('and clears a column', has(r.events, 'cols', (e) => e.cols.length === 1));
+  const z = setup([['zapup', 'driplet'], ['emberkit', 'sproutle']], ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDLWS', 'LSSDSLF']);
+  z.sides[0].mons[0].energy = 3;
+  const r2 = apply(z, swap(4, 3, 4, 4));
+  ok('Static Nip: a 2x2 block', has(r2.events, 'block', (e) => e.cells.length === 4));
 }
 
 // --- bombs ----------------------------------------------------------------------------------------------
@@ -278,9 +304,9 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const r = apply(s, { type: 'pass' });
   ok('pass ends the turn', r.ok && r.state.turn === 1 && r.state.movesLeft === 2 && has(r.events, 'pass'));
   const t = setup(TEAM, BASE);
-  t.pendingEvolve = 0; t.sides[0].berries = 4;
+  t.sides[0].berries = 4;
   const r2 = apply(t, { type: 'pass' });
-  ok('pass with an evolve pending evolves the first one', r2.ok && r2.state.sides[0].mons[0].evo && r2.state.turn === 1);
+  ok('pass never evolves for the player', r2.ok && !r2.state.sides[0].mons[0].evo && r2.state.sides[0].berries === 4);
 }
 
 // --- winning --------------------------------------------------------------------------------------------

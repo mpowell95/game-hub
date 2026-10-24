@@ -27,11 +27,20 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   the reference shows ("3 🍒" by the counter); ~10% of tiles (2026-10-24, v2). **Bombs**: a match
   orthogonally NEXT TO one sets it off (the reference's stage text). Blast and special-cleared gems
   charge the mover; a bomb at 0 charges nobody.
-- **Turn timer 30 s: LIVE ONLINE ONLY, never vs the computer** (Matt, 2026-10-24). Built and off
-  (`this.timed`); when on it runs only while the player can act and at 0 sends `{type:'pass'}`.
+- **Move timer 25 s, reset after every move: LIVE ONLINE ONLY, never vs the computer** (Matt,
+  2026-10-24; per-move as in the reference). Built and off (`this.timed`); at 0 sends `{type:'pass'}`.
   Idle 8 s: a hint wiggles.
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
-- Extra move: any 4+ line during the move's resolution (cascades included), once per turn.
+- **Extra moves** (reference, rec3 1:03 + 1:13): a straight 4 gives one, ONCE per turn; every match
+  of 5+ tiles (a straight 5, or an L/T: same-kind lines sharing a tile, `matchGroups`) gives one with
+  no cap AND heals the mover 5 (`FIVE_HEAL`, amount a guess: the reference team was already full).
+- **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
+  one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
+- Specials pair damage with a board clear that charges the caster, as the reference's do (Flare: a
+  column, Electroclaw: a 2x2): Emberkit clears a column (`col`), Zapup a 2x2 (`block`), Sproutle
+  hits AND heals (like Heal Leaf).
+- The Garden's grapes cost the matcher 5 HP (rec3 1:28): a GARDEN stage rule, not ours (the bravomike
+  match's cherries cost nothing). Add it with a Garden arena.
 - Specials fire after the board settles, seat order; a special that changes the board settles again.
 - **Sudden death**: after each side's 20th turn heals do nothing (the soak found two healing teams
   out-healing each other past 3000 moves).
@@ -51,6 +60,13 @@ with the big monster + lunge + projectile + hit flash + "-N DMG" by the HP, a tu
 "<name>'s turn", 4 berries = full-screen evolution flicker, a win = losers faint + Victory card.
 **Verify any change by recording a match** (Playwright `recordVideo`) and reading the frames; the
 first build's flat UI passed every test.
+
+**Layout (v3, 2026-10-24, from rec3's frames):** no boxed panels; berries over HP (big, outlined) +
+avatar with name / "Your Turn", the other team LEFT; MOVES hexes + label centre; STAGE button (the
+arena's rule); the arena behind the whole screen (wall SVG + CSS floor + tanks under the back
+monsters) with the board see-through on top, DIMMED on the other side's turn; banners at the
+arena/board seam, move names blue; steel doors after the stage reveal; the ending on the stage
+(VICTORY/DEFEAT, a white "<name> wins!" strip, the losers' monsters in tears).
 
 ## Hub integration
 

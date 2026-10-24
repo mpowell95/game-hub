@@ -37,7 +37,7 @@ const TURN_BANNER_MS = 1150;
 const PROJ_MS = 380;
 const CPU_THINK_MS = 650;
 const CPU_SHOW_MS = 450;
-const TURN_SECONDS = 30;
+const TURN_SECONDS = 25;          // per MOVE (the reference resets it after every move); online only
 const HINT_MS = 8000;
 const MOVE_HEXES = 2;
 
@@ -126,6 +126,8 @@ function effectLines(sp) {
   if (sp.chain) out.push(t('fx_chain', { n: sp.chain }));
   if (sp.rows) out.push(sp.rows === 1 ? t('fx_rows1') : t('fx_rowsN', { n: sp.rows }));
   if (sp.convert) out.push(t('fx_convert', { n: sp.convert }));
+  if (sp.col) out.push(sp.col === 1 ? t('fx_col1') : t('fx_colN', { n: sp.col }));
+  if (sp.block) out.push(t('fx_block', { n: sp.block }));
   return out;
 }
 
@@ -260,7 +262,7 @@ class BattleArena {
   showHelp() {
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
-    const lines = ['helpSwap', 'helpCharge', 'helpEx', 'helpFull', 'helpFour', 'helpBerry', 'helpBomb', 'helpBoom', 'helpSudden'];
+    const lines = ['helpSwap', 'helpCharge', 'helpEx', 'helpFull', 'helpFour', 'helpFive', 'helpBerry', 'helpBomb', 'helpBoom', 'helpSudden'];
     el.innerHTML = `
       <div class="gh-modal ba-help" role="dialog" aria-modal="true" aria-label="${t('help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
@@ -285,7 +287,7 @@ class BattleArena {
           aria-label="${escapeHTML(m.name)}${locked ? ', ' + t('locked') : ''}">
           <div class="ba-pick-art">${monsterSVG(m.id)}</div>
           <span class="ba-pick-gem">${elementBadge(m.el)}</span>
-          <span class="ba-pick-name">${locked ? `${ICONS.lock}${m.unlock}` : escapeHTML(m.name)}</span>
+          ${locked ? `<span class="ba-pick-name">${ICONS.lock}${m.unlock}</span>` : ''}
         </div>`;
     }).join('');
     this.root.innerHTML = `
@@ -449,36 +451,47 @@ class BattleArena {
     this.names = [myName(), this.foeName];
     const prof = (() => { try { return loadProfile(); } catch { return null; } })();
     this.avatars = [(prof && prof.emoji) || '🙂', '🤖'];
+    // The reference's top bar: each side shows its berries over its HP (big), then its avatar with
+    // the name under it; the other team LEFT, the player RIGHT; MOVES in the middle under the clock.
     const team = (sd) => `
       <div class="ba-team" data-side="${sd}">
-        <div class="ba-avatar"><span>${escapeHTML(this.avatars[sd])}</span></div>
-        <div class="ba-team-info">
+        <div class="ba-counts">
+          <span class="ba-stat ba-stat-berry"><b class="ba-berry-n"></b>${ICONS.berry}</span>
+          <span class="ba-stat ba-stat-hp"><b class="ba-hp-n"></b>${ICONS.heart}</span>
+          <span class="ba-badges"></span>
+        </div>
+        <div class="ba-who">
+          <div class="ba-avatar"><span>${escapeHTML(this.avatars[sd])}</span></div>
           <span class="ba-name">${escapeHTML(this.names[sd])}</span>
-          <div class="ba-stats">
-            <span class="ba-stat ba-stat-hp">${ICONS.heart}<b class="ba-hp-n"></b></span>
-            <span class="ba-stat ba-stat-berry">${ICONS.berry}<b class="ba-berry-n"></b></span>
-            <span class="ba-badges"></span>
-          </div>
-          <div class="ba-hpbar"><i></i></div>
+          ${sd === ME ? `<span class="ba-yourturn" hidden>${escapeHTML(t('yourTurn'))}</span>` : ''}
         </div>
       </div>`;
     const mon = (sd, mi) => `
       <div class="ba-mon ${mi === 0 ? 'is-back' : 'is-front'}" data-side="${sd}" data-mon="${mi}" role="button" tabindex="0">
         <div class="ba-plat"></div>
         <div class="ba-mon-art"><div class="ba-mon-bob"></div></div>
-        <div class="ba-bar"><span class="ba-bar-gem"></span><span class="ba-bar-track"><i class="ba-bar-fill"></i></span><span class="ba-bar-txt"></span></div>
+        <div class="ba-bar"><span class="ba-bar-gem"></span><span class="ba-bar-track"><i class="ba-bar-fill"></i><span class="ba-bar-txt"></span></span></div>
         <span class="ba-evo-pill" hidden>${ICONS.berry}<b>${t('evolve')}</b></span>
       </div>`;
     this.root.innerHTML = `
       <div class="ba-battle">
+        <div class="ba-arena-bg" aria-hidden="true">${arenaSVG()}</div>
+        <div class="ba-floor" aria-hidden="true"></div>
         <div class="ba-scene">
-          <div class="ba-arena-bg" aria-hidden="true">${arenaSVG()}</div>
           <div class="ba-hubrow">
-            <div class="ba-moves" aria-live="polite"></div>
-            <div class="ba-clock" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 13V8.5M9.5 2.5h5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><b class="ba-clock-n"></b></div>
+            <span class="ba-hubspace"></span>
+            ${team(CPU)}
+            <div class="ba-center">
+              <div class="ba-clock" hidden><small>${escapeHTML(t('timer'))}</small><b class="ba-clock-n"></b></div>
+            </div>
+            ${team(ME)}
             <button type="button" class="ba-iconbtn ba-menu" aria-label="${t('menu')}">${ICONS.menu}</button>
           </div>
-          <div class="ba-hud">${team(CPU)}${team(ME)}</div>
+          <div class="ba-subrow">
+            <span></span>
+            <div class="ba-movesbox"><div class="ba-moves" aria-live="polite"></div><span class="ba-moves-label">${escapeHTML(t('moves'))}</span></div>
+            <button type="button" class="ba-stagebtn">${escapeHTML(t('stage'))}</button>
+          </div>
           <div class="ba-field">${mon(CPU, 0)}${mon(CPU, 1)}${mon(ME, 0)}${mon(ME, 1)}</div>
         </div>
         <div class="ba-boardwrap"><div class="ba-board" role="application" aria-label="${t('board')}"></div></div>
@@ -498,6 +511,7 @@ class BattleArena {
     this.hpShown = this.state.sides.map((x) => x.hp);
     this.bindBoard();
     this.on(this.root.querySelector('.ba-menu'), 'click', () => this.showPause());
+    this.on(this.root.querySelector('.ba-stagebtn'), 'click', () => this.showStage());
     this.on(this.root.querySelector('.ba-field'), 'click', (e) => this.onMonTap(e));
     this.offViewport = onViewportResize(() => this.fit());
     this.fit();
@@ -542,6 +556,9 @@ class BattleArena {
     this.cell = cell;
     battle.style.setProperty('--ba-cell', cell + 'px');
     const fH = field.clientHeight, fW = field.clientWidth;
+    // The floor starts just under the back monsters' tanks (the scene follows the layout).
+    const floor = this.root.querySelector('.ba-floor');
+    if (floor) floor.style.top = Math.round(field.offsetTop + fH * 0.47) + 'px';
     const art = Math.max(56, Math.min(150, Math.floor((fH - 2 * 30) / 1.9), Math.floor(fW * 0.3)));
     battle.style.setProperty('--ba-art', art + 'px');
     this.placeAll();
@@ -623,7 +640,7 @@ class BattleArena {
 
   canInput() {
     const s = this.state;
-    return !!s && this.screen === 'battle' && !this.busy && s.winner == null && s.turn === ME && s.pendingEvolve == null;
+    return !!s && this.screen === 'battle' && !this.busy && s.winner == null && s.turn === ME;
   }
 
   /** Swipe a tile into its neighbour, or tap one then the other. Bound to the board only. */
@@ -730,6 +747,7 @@ class BattleArena {
     this.syncAll();
     this.busy = false;
     this.lastAct = Date.now();
+    this.timerLeft = TURN_SECONDS;     // the clock is per move
     this.next();
   }
 
@@ -767,9 +785,9 @@ class BattleArena {
     const sd = Number(mon.dataset.side), mi = Number(mon.dataset.mon);
     const s = this.state;
     const m = s.sides[sd].mons[mi];
-    if (sd === ME && s.pendingEvolve === ME && s.turn === ME && !this.busy && !m.evo) {
+    if (sd === ME && s.turn === ME && !this.busy && E.evolveOptions(s).includes(mi)) {
       const res = E.apply(s, { type: 'evolve', mon: mi, side: ME });
-      if (res.ok) { this.hideEvolve(); this.commit(res); }
+      if (res.ok) { this.poke(); this.select(null); this.hideEvolve(); this.commit(res); }
       return;
     }
     if (this.busy) return;
@@ -779,7 +797,7 @@ class BattleArena {
   hideEvolve() { for (const p of this.root.querySelectorAll('.ba-evo-pill')) p.hidden = true; for (const m of this.root.querySelectorAll('.ba-mon')) m.classList.remove('is-evo-pick'); }
 
   // --- the turn clock and the hint ----------------------------------------------------------------
-  /** The turn clock: 30 s a turn, LIVE ONLINE MATCHES ONLY (Matt, 2026-10-24: never vs the
+  /** The move clock: 25 s a MOVE (reset after each), LIVE ONLINE MATCHES ONLY (Matt, 2026-10-24: never vs the
    *  computer). `this.timed` is false for every match today; when it is on, the clock runs only
    *  while the player can act and at 0 the turn passes. The same tick drives the idle hint. */
   startClock(gen) {
@@ -829,11 +847,11 @@ class BattleArena {
     }
     this.ui = { turn: s.turn, left: s.movesLeft };
     this.paintTurn();
-    const pick = s.pendingEvolve === ME && s.turn === ME && s.winner == null;
+    const opts = s.turn === ME ? E.evolveOptions(s) : [];
     s.sides[ME].mons.forEach((m, mi) => {
       const el = this.monEl(ME, mi);
       if (!el) return;
-      const on = pick && !m.evo;
+      const on = opts.includes(mi);
       el.querySelector('.ba-evo-pill').hidden = !on;
       el.classList.toggle('is-evo-pick', on);
     });
@@ -845,7 +863,7 @@ class BattleArena {
     if (!el) return;
     const hp = hpOverride != null ? hpOverride : side.hp;
     el.querySelector('.ba-hp-n').textContent = String(hp);
-    el.querySelector('.ba-hpbar i').style.transform = `scaleX(${Math.max(0, Math.min(1, hp / side.maxHp))})`;
+    el.classList.toggle('is-low', hp <= side.maxHp * 0.25);
     el.querySelector('.ba-stat-hp').setAttribute('aria-label', `${t('hp')} ${hp} / ${side.maxHp}`);
     const allEvo = side.mons.every((m) => m.evo);
     const b = el.querySelector('.ba-stat-berry');
@@ -889,6 +907,30 @@ class BattleArena {
       const el = this.sideEl(sd);
       if (el) el.classList.toggle('is-turn', !over && ui.turn === sd);
     }
+    const yt = this.root.querySelector('.ba-yourturn');
+    if (yt) yt.hidden = over || ui.turn !== ME;
+    // As in the reference, the board dims while it is the other side's turn.
+    const board = this.root.querySelector('.ba-board');
+    if (board) board.classList.toggle('is-dim', !over && ui.turn !== ME);
+  }
+
+  /** The STAGE button: the arena's name and its rule (the reference's stage card). */
+  showStage() {
+    const el = document.createElement('div');
+    el.className = 'gh-overlay ba-overlay';
+    el.innerHTML = `
+      <div class="gh-modal ba-stagecard" role="dialog" aria-modal="true" aria-label="${escapeHTML(t('stage_boiler'))}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <div class="ba-stage-hex">${gemSVG('bomb', 5)}</div>
+        <b class="ba-stage-name">${escapeHTML(t('stage_boiler'))}</b>
+        <p class="ba-help-line">${gemSVG('bomb', 5)}<span>${escapeHTML(t('helpBomb'))}</span></p>
+        <p class="ba-help-line">${gemSVG('bomb', 0)}<span>${escapeHTML(t('helpBoom'))}</span></p>
+      </div>`;
+    this.root.appendChild(el);
+    for (const p of el.querySelectorAll('.ba-help-line span')) fitText(p, 15);
+    const close = () => el.remove();
+    this.on(el, 'click', (e) => { if (e.target === el) close(); });
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
   }
 
   // --- effects ------------------------------------------------------------------------------------
@@ -1001,14 +1043,32 @@ class BattleArena {
       { opacity: 1, transform: 'scale(1)', offset: 0.82 }, { opacity: 0, transform: 'scale(1.1)' }], { duration: 1600, easing: 'ease-out' });
     await a.finished.catch(() => {});
     d.remove();
+    if (reducedMotion()) return;
+    // The doors: shut over the screen, then open on the arena.
+    const doors = document.createElement('div');
+    doors.className = 'ba-doors';
+    doors.innerHTML = '<div class="ba-door"></div><div class="ba-door"></div>';
+    this.root.querySelector('.ba-battle').appendChild(doors);
+    const [l, r] = doors.children;
+    await Promise.all([
+      l.animate([{ transform: 'translateX(-100%)' }, { transform: 'translateX(0)' }], { duration: 280, easing: 'ease-in', fill: 'forwards' }).finished,
+      r.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: 280, easing: 'ease-in', fill: 'forwards' }).finished,
+    ]).catch(() => {});
+    this.shake(doors, 4, 200);
+    await this.sleep(320);
+    await Promise.all([
+      l.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-100%)' }], { duration: 420, easing: 'ease-out', fill: 'forwards' }).finished,
+      r.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { duration: 420, easing: 'ease-out', fill: 'forwards' }).finished,
+    ]).catch(() => {});
+    doors.remove();
   }
 
   /** "<name>'s turn." on a white strip that slides across the stage. */
   async turnBanner(sd) {
-    const scene = this.root.querySelector('.ba-field');
+    const scene = this.root.querySelector('.ba-boardwrap');
     const d = this.fx('ba-tbanner' + (sd === ME ? ' is-me' : ''), `<span class="ba-tbanner-av">${escapeHTML(this.avatars[sd])}</span><b>${escapeHTML(t('turnOf', { name: this.names[sd] }))}</b>`);
     if (!d || !scene) return;
-    d.style.top = this.centre(scene).y + 'px';
+    d.style.top = (this.centre(scene).y - scene.offsetHeight / 2 - 6) + 'px';
     fitText(d.querySelector('b'), 22);
     const rm = reducedMotion();
     const a = d.animate(rm
@@ -1022,13 +1082,13 @@ class BattleArena {
   /** The special's banner: a white slab across the stage, the monster big at its edge, the move's
    *  name in its element's colour, speed lines behind; the monster lunges as it ends. */
   async specialBanner(sd, mi, id, evo) {
-    const field = this.root.querySelector('.ba-field');
+    const field = this.root.querySelector('.ba-boardwrap');
     const el = BY_ID[id].el;
     const color = el === 'all' ? '#9b6fe0' : ELEMENT_COLOR[el];
     const d = this.fx('ba-sbanner' + (sd === ME ? ' is-me' : ''), `<div class="ba-sbanner-lines"></div><div class="ba-sbanner-slab"><b class="ba-sbanner-name">${escapeHTML(t('sp_' + id + (evo ? '_evo' : '')))}</b></div><div class="ba-sbanner-art">${monsterSVG(id, evo)}</div>`);
     if (!d || !field) return;
     d.style.setProperty('--c', color);
-    d.style.top = this.centre(field).y + 'px';
+    d.style.top = (this.centre(field).y - field.offsetHeight / 2 - 10) + 'px';
     fitText(d.querySelector('.ba-sbanner-name'), 30);
     const dim = this.fx('ba-dim');
     const rm = reducedMotion();
@@ -1190,6 +1250,24 @@ class BattleArena {
           await this.sleep(320);
           break;
         }
+        case 'cols': case 'block': {
+          const board = this.root.querySelector('.ba-board');
+          const cells = e.t === 'block' ? e.cells : e.cols.flatMap((c) => Array.from({ length: E.ROWS }, (_, r) => E.idx(r, c)));
+          if (e.t === 'cols' && board) {
+            for (const c of e.cols) {
+              const d = document.createElement('div');
+              d.className = 'ba-beam is-col is-fire';
+              d.style.left = c * this.cell + 'px';
+              d.style.width = this.cell + 'px';
+              board.appendChild(d);
+              d.animate([{ opacity: 0, transform: 'scaleY(.1)' }, { opacity: 1, transform: 'scaleY(1)', offset: 0.3 }, { opacity: 0 }], { duration: 520 }).finished.catch(() => {}).then(() => d.remove());
+            }
+          }
+          for (const i of cells) this.burst(this.cellCentre(i), e.t === 'block' ? '#ffe070' : '#ff7a2a', 4, 26, 7);
+          if (e.t === 'block') this.shake(this.root.querySelector('.ba-boardwrap'), 5, 300);
+          await this.sleep(rm ? 120 : 320);
+          break;
+        }
         case 'clear': {
           // What this clear gave: the charges and berries ride along with it.
           const gains = [];
@@ -1198,7 +1276,16 @@ class BattleArena {
           for (const c of cells) { c.k = c.el.dataset.k; c.at = this.cellCentre(c.i); }
           // 1. glow
           for (const c of cells) c.el.classList.add('is-glow');
-          await this.sleep(rm ? 60 : GLOW_MS);
+          if (extra) {
+            // As in the reference: "EXTRA MOVE!" shows while the matched tiles still glow.
+            extra = false;
+            const board = this.root.querySelector('.ba-board');
+            this.pop(this.centre(board), escapeHTML(t('extraMove')), 'is-extra', 1300);
+            this.paintTurn();
+            const box = this.root.querySelector('.ba-moves');
+            if (box && !rm) box.animate([{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.35)', filter: 'brightness(2)' }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 520 });
+          }
+          await this.sleep(rm ? 60 : GLOW_MS + 120);
           if (gen !== this.gen) return;
           // 2. burst
           for (const c of cells) {
@@ -1238,14 +1325,6 @@ class BattleArena {
           }
           landed = Promise.all(flights);
           await this.sleep(rm ? 80 : POP_MS);
-          if (extra) {
-            extra = false;
-            const board = this.root.querySelector('.ba-board');
-            this.pop(this.centre(board), escapeHTML(t('extraMove')), 'is-extra', 1300);
-            this.paintTurn();
-            const box = this.root.querySelector('.ba-moves');
-            if (box && !rm) box.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 420 });
-          }
           break;
         }
         case 'fall': {
@@ -1393,9 +1472,6 @@ class BattleArena {
           await this.evolveScene(e.side, e.mon, e.id);
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon);
-          const at = this.hpAt(e.side);
-          this.pop({ x: at.x, y: at.y + 38 }, `<b>+5</b><small>${escapeHTML(t('healTxt'))}</small>`, 'is-heal', 1100);
-          this.tweenHP(e.side, e.hp);
           const sd = this.sideEl(e.side);
           if (sd) sd.querySelector('.ba-berry-n').textContent = `0/${BERRIES_TO_EVOLVE}`;
           this.paintSide(e.side, e.hp);
@@ -1486,28 +1562,39 @@ class BattleArena {
     this.later(() => this.showResult(), 1000);
   }
 
+  /** The reference's ending, on the stage: the winners in the middle under a big VICTORY (or DEFEAT),
+   *  a white strip "<name> wins!", and a panel with the losers' monsters in tears. X closes it. */
   showResult() {
     const s = this.state;
     if (!s || s.winner == null || this.root.querySelector('.ba-result')) return;
-    const w = s.winner;
-    const title = t('wins', { name: this.names[w] });
+    const w = s.winner, l = 1 - w;
+    const title = t('teamWins', { name: this.names[w] });
     const el = document.createElement('div');
-    el.className = 'gh-overlay ba-overlay ba-result-ov';
+    el.className = 'ba-result-ov';
     el.innerHTML = `
-      <div class="gh-modal ba-result${w === ME ? ' is-win' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}">
-        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
-        <b class="ba-result-big">${escapeHTML(t(w === ME ? 'victory' : 'defeat'))}</b>
-        <div class="ba-result-art">${s.sides[w].mons.map((m, i) => `<div class="ba-result-mon${w === ME ? ' ba-face-left' : ''}" style="animation-delay:${i * -0.6}s">${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
-        <h2 class="ba-result-title"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span>${escapeHTML(title)}</span></h2>
-        <div class="ba-result-actions">
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="again">${t('playAgain')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="team">${t('newTeam')}</button>
+      <div class="ba-result${w === ME ? ' is-win' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}">
+        <button type="button" class="gh-modal__close ba-result-x" data-role="close" aria-label="${t('close')}">&times;</button>
+        <div class="ba-result-stage">
+          <div class="ba-result-art">${s.sides[w].mons.map((m, i) => `<div class="ba-result-mon${w === ME ? ' ba-face-left' : ''}" style="animation-delay:${i * -0.6}s"><span class="ba-result-emo">${i ? '😊' : '🎉'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
+          <b class="ba-result-big">${escapeHTML(t(w === ME ? 'victory' : 'defeat'))}</b>
+        </div>
+        <div class="ba-result-strip"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span class="ba-result-title">${escapeHTML(title)}</span></div>
+        <div class="ba-result-lose">
+          <span class="ba-result-luck">${escapeHTML(t('betterLuck', { name: this.names[l] }))}</span>
+          <div class="ba-result-losers"><span class="ba-result-av">${escapeHTML(this.avatars[l])}</span>${s.sides[l].mons.map((m, i) => `<div class="ba-result-hex${l === ME ? ' ba-face-left' : ''}"><span class="ba-result-emo">${i ? '😥' : '😭'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
+          <div class="ba-result-actions">
+            <button type="button" class="gh-btn gh-btn--primary" data-role="again">${t('playAgain')}</button>
+            <button type="button" class="gh-btn gh-btn--ghost" data-role="team">${t('newTeam')}</button>
+          </div>
         </div>
       </div>`;
-    this.root.appendChild(el);
-    fitText(el.querySelector('.ba-result-title span:last-child'), 24);
+    this.root.querySelector('.ba-battle').appendChild(el);
+    fitText(el.querySelector('.ba-result-title'), 22);
+    fitText(el.querySelector('.ba-result-luck'), 14);
     if (!reducedMotion()) {
-      el.querySelector('.ba-result-big').animate([{ transform: 'scale(2.4)', opacity: 0 }, { transform: 'scale(.92)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 520, easing: 'ease-out' });
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 350 });
+      el.querySelector('.ba-result-big').animate([{ transform: 'scale(2.6)', opacity: 0 }, { transform: 'scale(.9)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 560, easing: 'ease-out' });
+      el.querySelector('.ba-result-strip').animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: 420, delay: 250, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
     }
     const team = s.sides[ME].mons.map((m) => m.id);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
