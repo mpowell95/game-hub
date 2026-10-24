@@ -31,7 +31,11 @@ export const TABLE_NOW = 5;
 /** RULES VERSIONS, kept per match like the table (`m.rv`, none = 1), for the same reason: an online
  *  match replays its log. 1: a shot that pots nothing and sends no ball to a cushion after the hit
  *  is a foul (WPA 6.3). 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it"): it is not. */
-export const RULES_NOW = 2;
+export const RULES_NOW = 3;
+/** 3 (2026-10-24, Matt, after Moonis sank a solid off the break and the table stayed open: "Fix"):
+ *  a ball potted on a clean break decides the groups, the first one in giving the breaker its group
+ *  (bar rules; WPA keeps the table open). */
+const knownRules = (rv) => (rv === 1 || rv === 2 || rv === 3 ? rv : null);
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -343,7 +347,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
   return {
     v: 2,
     tb: tbl,
-    rv: rv === 1 ? 1 : 2,
+    rv: knownRules(rv) || RULES_NOW,
     mode: md,
     n,
     opts: o,
@@ -367,7 +371,7 @@ export function newMatch(mode = '8', racks = 1, breaker = 0, seed = 1, opts = {}
 
 /** A saved match is only trusted if it has the shape this engine writes, at rest. */
 export function validMatch(m) {
-  if (!m || m.v !== 2 || (m.tb != null && !knownTable(m.tb)) || (m.rv != null && m.rv !== 1 && m.rv !== 2) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
+  if (!m || m.v !== 2 || (m.tb != null && !knownTable(m.tb)) || (m.rv != null && !knownRules(m.rv)) || !MODES.includes(m.mode) || m.n !== seatsOf(m.mode)) return false;
   if (!Array.isArray(m.b) || m.b.length !== ballCount(m.mode)) return false;
   if (!RACK_OPTIONS.includes(m.racks) || !Array.isArray(m.scores) || m.scores.length !== m.n) return false;
   if (!Number.isInteger(m.turn) || m.turn < 0 || m.turn >= m.n) return false;
@@ -724,7 +728,7 @@ export function settle(m, ev) {
       const wins = isBreak ? !foul : (!foul && targets.length === 1 && targets[0] === EIGHT && counts(EIGHT));
       return endRack(m, wins ? seat : seat ^ 1, foul);
     }
-    if (!foul && !m.groups && !isBreak) {
+    if (!foul && !m.groups && (!isBreak || (m.rv || 1) >= 3)) {
       const g = counted.map((i) => groupOf(i, '8')).find(Boolean);
       if (g) m.groups = seat === 0 ? [g, g === 'a' ? 'b' : 'a'] : [g === 'a' ? 'b' : 'a', g];
     }
