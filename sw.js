@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1238;
-const CACHE = 'game-hub-v1246';
+const CACHE = 'game-hub-v1247';
 
 const ASSETS = [
   './',
@@ -27,6 +27,7 @@ const ASSETS = [
   './js/i18n.js',
   './js/theme.js',
   './js/layout.js',
+  './js/tabbar-fix.js',
   './js/viewport.js',
   './js/strings.js',
   './js/profile-store.js',
@@ -829,7 +830,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '2253567714',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '0c6880c991',
+  './js/hub.js': '0affc158da',
   './js/name-gate.js': '9f3aa22f34',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -840,6 +841,7 @@ const REST_MANIFEST = {
   './js/i18n.js': '82070fcbe4',
   './js/theme.js': 'e8b40b1bc2',
   './js/layout.js': '2517577123',
+  './js/tabbar-fix.js': 'ba4e290b37',
   './js/viewport.js': '756ba19ed9',
   './js/strings.js': '8931da55f6',
   './js/profile-store.js': '33523b1fdd',

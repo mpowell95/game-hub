@@ -1320,3 +1320,15 @@ version pill.
 - `tools/test-sw-update.mjs`: case 5 (a player's page is not reloaded; pill shows behind; a tap reloads),
   case 6 (an app launch reloads onto a build landing in its first seconds). Test hook
   `window.__GH_UPDATE_POLICY__`. Case 3 is flaky in this sandbox's Chromium on main too (2 of 4 runs).
+
+## Compact tab bar: repaired in place instead of a layout change (2026-10-24)
+
+Matt's screenshot: the bar halfway up again, tiles below it ("Sometimes this happens still to the bottom
+menu. Fix permanently"). Same iOS 26 bug as 2026-10-20. Locking the page failed then, so the layout is
+untouched. `js/tabbar-fix.js` (`watchTabBar()`, started in hub.js `init`) checks the bar on scroll, resize,
+visualViewport resize/scroll, focusout, pageshow, visibilitychange and every 2 s. The true bottom is
+`innerHeight`, or the screen height on an installed app (standalone + cover fills the screen even when the
+bug shrinks innerHeight). Off by more than 24 px: toggle `position` to make WebKit place it again; still off
+next frame: `translateY` by the gap, cleared when it measures right. Headless proof: a bar forced 45vh up
+was moved back to the bottom and released when the fault went. NOT proven on an iPhone: if WebKit reports
+the bar's rect as correct while painting it wrong, the guard sees nothing and does nothing (harmless).

@@ -24,6 +24,7 @@ import { getLang, setLang, makeT, myName } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { isCompact, setLayout, onLayoutChange } from './layout.js';
+import { watchTabBar } from './tabbar-fix.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
@@ -842,6 +843,8 @@ class Hub {
     // Comfortable <-> Compact (js/layout.js): repaint the launcher, never under a mounted game
     // (render() rewrites the game area too); the class on <html> is already stamped either way.
     this._layoutUnsub = onLayoutChange(() => { if (!this.current && this.root) { this.render(); this._paintReplyBadge(); } });
+    // Compact's tab bar: repaired in place if iOS 26 places it halfway up the screen (js/tabbar-fix.js).
+    this._tabBarUnsub = watchTabBar();
     // EVERYTHING BELOW WAITS FOR THE LAUNCHER TO PAINT (2026-09-01).
     //
     // These all fire dynamic imports, and firing them here - synchronously, immediately after
@@ -2824,6 +2827,7 @@ class Hub {
     }
     if (this._themeUnsub) this._themeUnsub();
     if (this._layoutUnsub) this._layoutUnsub();
+    if (this._tabBarUnsub) this._tabBarUnsub();
     if (this._endTour) this._endTour();
     clearTimeout(this._tourTimer);
     this.root.innerHTML = '';
