@@ -453,6 +453,8 @@ tab says what it is; seen-stamp `compact-tour-2026-10-17` (an ANNOUNCEMENTS entr
 popup) so Admin > Announcements lists who has seen it. The popup was redesigned under the SAME id (not resent).
 **The PAGE scrolls in Compact (2026-10-20). Never lock `html`/`body` to the screen height** (v1208 tried it to dodge an
 iOS 26 keyboard bug; on Matt's iPhone it left the tab bar ~65pt above the bottom). Story: `CLAUDE-HISTORY.md`.
+**The bar halfway up is repaired in place (2026-10-24, `js/tabbar-fix.js`)**: it measures the bar against the true screen bottom
+and, when off, re-lays it out, then `translateY`s it down. Layout untouched. Unverified on an iPhone by the session.
 
 ## The profile page's structure (2026-08-31)
 
