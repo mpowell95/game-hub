@@ -30,7 +30,7 @@ module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/tes
   charge the mover; a bomb at 0 charges nobody.
 - **Move timer 25 s, reset after every move: LIVE ONLINE ONLY, never vs the computer** (Matt,
   2026-10-24; per-move as in the reference). Built and off (`this.timed`); at 0 sends `{type:'pass'}`.
-  Idle 8 s: a hint wiggles.
+- **No idle hint** (no wiggling tiles; Matt turned it off, 2026-10-24).
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
 - **Extra moves** (reference, rec3 1:03 + 1:13): a straight 4 gives one, ONCE per turn; every match
   of 5+ tiles (a straight 5, or an L/T: same-kind lines sharing a tile, `matchGroups`) gives one with

@@ -38,7 +38,6 @@ const PROJ_MS = 380;
 const CPU_THINK_MS = 650;
 const CPU_SHOW_MS = 450;
 const TURN_SECONDS = 25;          // per MOVE (the reference resets it after every move); online only
-const HINT_MS = 8000;
 const MOVE_HEXES = 2;
 
 let instance = null;
@@ -824,13 +823,7 @@ class BattleArena {
         if (res.ok) { this.select(null); this.hideEvolve(); this.commit(res); }
         return;
       }
-      // The hint: idle 8 s on a turn, the two tiles of a good swap wiggle.
-      if (!paused && this.canInput() && now - this.lastAct > HINT_MS && !this.root.querySelector('.ba-tile.is-hint')) {
-        const mv = chooseMove(s, 'medium');
-        if (mv && mv.type === 'swap') {
-          for (const i of [mv.a, mv.b]) { const el = this.tiles.get(s.board[i].id); if (el) el.classList.add('is-hint'); }
-        }
-      }
+      // No idle hint: Matt turned it off (2026-10-24).
     }, 200);
     this._intervals = this._intervals || new Set();
     this._intervals.add(id);
