@@ -497,6 +497,18 @@ export async function usernameStatus(name, myCode) {
   } catch { return 'offline'; }
 }
 
+/** Who reserved `name`: { code, at } (at = server ms of the claim, 0 if unknown), or null if free or
+ *  unreachable. The name gate's "That's me" uses it (an iPhone's Home Screen app shares no storage
+ *  with the Safari tab that just claimed the name). */
+export async function usernameOwner(name) {
+  const key = uname(name);
+  if (!key || !(await init())) return null;
+  try {
+    const v = (await _api.get(_api.ref(_db, 'usernames/' + encodeKey(key)))).val();
+    return (v && v.code) ? { code: String(v.code).toUpperCase(), at: +v.at || 0 } : null;
+  } catch { return null; }
+}
+
 /** Claim `name` for myCode, releasing a previously-owned `prevName` (only if I owned it). Best-effort. */
 export async function claimUsername(name, myCode, prevName) {
   if (!myCode || !writesAllowed('claimUsername') || !(await init())) return false;

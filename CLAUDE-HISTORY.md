@@ -1332,3 +1332,13 @@ bug shrinks innerHeight). Off by more than 24 px: toggle `position` to make WebK
 next frame: `translateY` by the gap, cleared when it measures right. Headless proof: a bar forced 45vh up
 was moved back to the bottom and released when the fault went. NOT proven on an iPhone: if WebKit reports
 the bar's rect as correct while painting it wrong, the guard sees nothing and does nothing (harmless).
+
+## 2026-10-25: "That's me" on the name gate
+
+Matt: nobody understands the codes. An iPhone's Home Screen app shares no storage with the Safari tab, so a
+person who chose a name in Safari, then added the hub to the Home Screen, met the gate again and got "Taken.
+Use that code instead." for their own name, with a code they had never seen. Now, when the typed name was
+claimed in the last 24 h (`usernames/<name>.at`), the gate asks "Is this you?" with a "That's me" button that
+links to that code exactly as the code Link does (`js/name-gate.js` `linkTo`, `ME_WINDOW_MS`;
+`stats-net.js` `usernameOwner`). Older claims still need the code. Anyone could tap it on someone else's
+name claimed that day; accepted by Matt as the trade-off (family-grade, like the registry itself).

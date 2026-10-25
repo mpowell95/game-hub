@@ -74,7 +74,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `gridlock-v1map.js` | GENERATED; never hand-edit |
 | `difficulty-tiers.js` | READ path only; separate from `normDiff()` (write path) on purpose |
 | `net.js` | rooms, lockstep log, recovery, N-seat roster, online gate. **Yahtzee uses it with no consumer write-up here (open gap)** |
-| `name-gate.js` | undismissable; every entry point calls it before `init()` |
+| `name-gate.js` | undismissable; every entry point calls it before `init()`; a name claimed <24 h ago offers "That's me" (links to that code; iPhone Home Screen app, 2026-10-25) |
 | `device-report.js` | `gatherDeviceReport()` load-bearing (bug reports); `uploadDeviceReport()` dormant, keep |
 | `install-state.js` | dependency-free on purpose; checks both `display-mode` and `navigator.standalone` |
 | `error-log.js` | `gamehub.errorlog.v1`, installed at LOAD so it catches a failing game import |

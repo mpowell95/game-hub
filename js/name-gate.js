@@ -26,7 +26,7 @@
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode,
   hasName, isPlaceholderName } from './profile-store.js';
 import { statsOwner } from './game-stats.js';
-import { usernameStatus, claimUsername, lookupCodeOwner, syncMyStats } from './stats-net.js';
+import { usernameStatus, usernameOwner, claimUsername, lookupCodeOwner, syncMyStats } from './stats-net.js';
 import { getLang, setLang, makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -49,6 +49,10 @@ function ensureCss() {
   link.setAttribute('data-ng-css', '1');
   document.head.appendChild(link);
 }
+
+// How recent a claim of the typed name must be for "That's me" (one day: covers adding to the Home
+// Screen right after the Safari tab's first run; older names still need their code).
+const ME_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 let _pending = null;   // the in-flight gate, so concurrent callers share ONE overlay
 
@@ -106,6 +110,9 @@ function mountGate(done) {
         <button type="button" class="ng-btn ng-btn-ghost" data-role="ng-link">${esc(t('hub_fr_link'))}</button>
       </div>
       <p class="ng-msg" data-role="ng-msg" role="status" aria-live="polite"></p>
+      <div class="ng-row ng-me" data-role="ng-me-row" hidden>
+        <button type="button" class="ng-btn ng-btn-primary" data-role="ng-me">${esc(t('hub_fr_me'))}</button>
+      </div>
     </div>`;
   document.body.appendChild(box);
 
@@ -115,8 +122,11 @@ function mountGate(done) {
   const msgEl = q('[data-role="ng-msg"]');
   const saveBtn = q('[data-role="ng-save"]');
   const linkBtn = q('[data-role="ng-link"]');
-  const say = (s) => { msgEl.textContent = s || ''; };
-  const busy = (on) => { saveBtn.disabled = on; linkBtn.disabled = on; };
+  const meRow = q('[data-role="ng-me-row"]');
+  const meBtn = q('[data-role="ng-me"]');
+  let meCode = '';   // the code "That's me" links to; set only by a recent claim of the typed name
+  const say = (s) => { msgEl.textContent = s || ''; meRow.hidden = true; meCode = ''; };
+  const busy = (on) => { saveBtn.disabled = on; linkBtn.disabled = on; meBtn.disabled = on; };
 
   setTimeout(() => { try { nameIn.focus(); } catch { /* ignore */ } }, 60);
 
@@ -146,6 +156,7 @@ function mountGate(done) {
     codeIn.placeholder = t('hub_fr_code_placeholder');
     saveBtn.textContent = t('hub_fr_save');
     linkBtn.textContent = t('hub_fr_link');
+    meBtn.textContent = t('hub_fr_me');
     q('.ng-card').setAttribute('aria-label', t('hub_fr_dialog_aria'));
     say('');
   }
@@ -172,7 +183,20 @@ function mountGate(done) {
     say(t('hub_fr_msg_checking'));
     let status = 'offline';
     try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
-    if (status === 'taken') { busy(false); say(t('hub_fr_msg_taken')); return; }
+    if (status === 'taken') {
+      // Claimed in the last day: almost always this same person's Safari tab, and an iPhone's Home
+      // Screen app cannot see it (Matt, 2026-10-25: nobody understands the codes). Offer "That's me"
+      // instead of asking for a code they were never shown. Older claims still need the code.
+      let claim = null;
+      try { claim = await usernameOwner(name); } catch { claim = null; }
+      busy(false);
+      if (claim && claim.at && Date.now() - claim.at < ME_WINDOW_MS) {
+        say(t('hub_fr_msg_is_you'));
+        meCode = claim.code;
+        meRow.hidden = false;
+      } else say(t('hub_fr_msg_taken'));
+      return;
+    }
     saveProfile(Object.assign({}, cur, { name, playerId: code }));
     // The real previous name, not '' - the hardcoded empty string in the hub's old gate is what left
     // "natalia" reserved against Ana's code (js/CLAUDE.md, "The Ana/Natalia correction").
@@ -185,9 +209,21 @@ function mountGate(done) {
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveBtn.click(); });
   codeIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') linkBtn.click(); });
 
-  linkBtn.addEventListener('click', async () => {
+  linkBtn.addEventListener('click', () => {
     const code = canonicalizeCode(codeIn.value);
     if (!code) { say(t('hub_fr_msg_invalid_code')); return; }
+    linkTo(code, '');
+  });
+
+  // "That's me": link to the code that claimed the typed name in the last day. The typed name IS
+  // that code's registered name, so it stands in if the owner's record has not synced yet.
+  meBtn.addEventListener('click', () => {
+    const code = meCode, name = (nameIn.value || '').trim();
+    if (!code || !name) return;
+    linkTo(code, name);
+  });
+
+  async function linkTo(code, knownName) {
     busy(true);
     say(t('hub_fr_msg_linking'));
     const cur = loadProfile() || {};
@@ -195,6 +231,7 @@ function mountGate(done) {
     // name normalizes to 'You' and, being the newest device, would rename the whole player.
     let owner = null;
     try { owner = await lookupCodeOwner(code); } catch { owner = null; }
+    if ((!owner || !owner.name) && knownName) owner = { name: knownName, emoji: '' };
     if (!owner || !owner.name) {
       // A code that resolves to nobody would leave this device named 'You' - still nameless by every
       // rule above, and back on the board as an "Unnamed player". Refuse it instead.
@@ -206,7 +243,7 @@ function mountGate(done) {
     if (owner.emoji) next.emoji = owner.emoji;
     saveProfile(next);
     finish();
-  });
+  }
 }
 
 function esc(s) {
