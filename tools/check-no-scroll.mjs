@@ -115,7 +115,7 @@ const EXTRA_SCREENS = {
         await page.waitForTimeout(250);
       },
     },
-    ...['hints', 'yesterday', 'rankings', 'help'].map((k) => ({
+    ...['hints', 'yesterday', 'rankings', 'help', 'past'].map((k) => ({
       name: k,
       async open(page) {
         await page.waitForFunction(() => window.__sbTest, null, { timeout: 15000 });

@@ -49,6 +49,12 @@ export function dayNumber(epoch, d) {
   return Math.round((b - a) / 86400000);
 }
 
+/** The local Date of day n (noon, so DST never moves it to another day). */
+export function dateOfDay(epoch, n) {
+  const [y, m, dd] = epoch.split('-').map(Number);
+  return new Date(y, m - 1, dd + n, 12);
+}
+
 /** Puzzle for day n: { center, outer: [6], letters: Set, key }. */
 export function puzzleAt(data, n) {
   const len = data.puzzles.length;
