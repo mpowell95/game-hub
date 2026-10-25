@@ -163,6 +163,25 @@
 .sb-root .sb-ylist li.is-pangram { font-weight: 800; }
 .sb-root .sb-tick { margin-right: 4px; }
 
+.sb-root .sb-hud-fill { display: flex; justify-content: flex-end; padding-right: 4px; }
+.sb-root .sb-hud-date { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.sb-root .sb-iconbtn[disabled] { opacity: .25; cursor: default; }
+.sb-root .sb-cal-head { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 36px 8px; }
+.sb-root .sb-cal-title { margin: 0; flex: 1; text-align: center; font-size: 18px; white-space: nowrap; }
+.sb-root .sb-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.sb-root .sb-cal-wk { text-align: center; font-size: 12px; font-weight: 700; color: var(--sb-muted); }
+.sb-root .sb-cal-day {
+  position: relative; height: 44px; padding: 0; border: 1px solid var(--sb-line); border-radius: 6px;
+  background: transparent; color: var(--sb-ink); font: inherit; font-size: 15px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px; cursor: pointer; touch-action: manipulation;
+}
+.sb-root .sb-cal-day.is-off { border-color: transparent; color: var(--sb-muted); opacity: .4; cursor: default; }
+.sb-root .sb-cal-day.is-today span { font-weight: 800; text-decoration: underline; text-decoration-thickness: 2px; }
+.sb-root .sb-cal-day.is-now { background: var(--sb-yellow); color: #000; border-color: #000; }
+.sb-root .sb-cal-mark { font-style: normal; font-size: 14px; line-height: 1; }
+.sb-root .sb-cal-bar { display: block; width: 26px; height: 5px; border-radius: 3px; background: var(--sb-cell); overflow: hidden; }
+.sb-root .sb-cal-bar b { display: block; height: 100%; background: var(--sb-ink); }
+
 .sb-root .sb-help-hive { display: block; width: 120px; height: 125px; margin: 6px auto 8px; }
 .sb-root .sb-help-hive polygon { fill: #e6e6e6; }
 .sb-root .sb-help-hive polygon.is-center { fill: #f7da21; }
@@ -186,3 +205,4 @@
   .sb-root .sb-caret { animation: none; }
   .sb-root .sb-chev, .sb-root .sb-cell text { transition: none; }
 }
+.sb-root .sb-cal-day.is-now .sb-cal-bar b { background: #000; }

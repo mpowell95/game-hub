@@ -10,10 +10,10 @@
 // lossless (the Contexto / Sudoku class).
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
-import { makeT } from '../../js/i18n.js';
+import { makeT, getLang } from '../../js/i18n.js';
 import { recordResult } from '../../js/game-stats.js';
 import {
-  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, puzzleAt, answersFor, totalPoints,
+  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, answersFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
@@ -105,6 +105,9 @@ const ICON = {
   rankings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>',
   help: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.7 2.7 0 0 1 5.1 1.3c0 1.8-2.4 2.1-2.4 4"/><path d="M12 17.6v.01"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>',
+  past: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+  fwd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
 };
 
@@ -155,10 +158,11 @@ class SpellingBee {
 
   // --- the day's puzzle ------------------------------------------------------------------------
 
-  _startDay() {
-    const now = new Date();
-    this.day = dayKey(now);
-    this.n = dayNumber(this.data.epoch, now);
+  /** Day n's puzzle (default today). Past days play exactly like today: same save, same Genius win. */
+  _startDay(n) {
+    this.todayN = dayNumber(this.data.epoch, new Date());
+    this.n = (Number.isInteger(n) && n >= 0 && n <= this.todayN) ? n : this.todayN;
+    this.day = dayKey(dateOfDay(this.data.epoch, this.n));
     this.puzzle = puzzleAt(this.data, this.n);
     this.answers = answersFor(this.data, this.puzzle);
     this.answerSet = new Set(this.answers);
@@ -172,12 +176,15 @@ class SpellingBee {
     this.open = false;
     this._render();
     this._maybeRecord();
-    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); } }; } catch { /* ignore */ }
+    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d) => this._startDay(d) }; } catch { /* ignore */ }
   }
 
   _checkDay() {
     if (!this.data || this.disposed) return;
-    if (dayKey(new Date()) !== this.day) { this._closeOverlay(); this._startDay(); }
+    const tn = dayNumber(this.data.epoch, new Date());
+    if (tn === this.todayN) return;
+    // Midnight: today's puzzle moves on to the new day; a past puzzle being played stays put.
+    if (this.n === this.todayN) { this._closeOverlay(); this._startDay(); } else this.todayN = tn;
   }
 
   get score() {
@@ -191,9 +198,10 @@ class SpellingBee {
   _render() {
     this.root.innerHTML = `
       <div class="sb-hud">
-        <span class="sb-hud-fill"></span>
+        <span class="sb-hud-fill">${this.n < this.todayN ? `<span class="sb-hud-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</span>` : ''}</span>
+        <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
         <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
-        <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}">${ICON.yesterday}</button>
+        <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 ? '' : ' hidden'}>${ICON.yesterday}</button>
         <button type="button" class="sb-iconbtn" data-act="rankings" aria-label="${esc(t('rankings_aria'))}">${ICON.rankings}</button>
         <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
       </div>
@@ -337,6 +345,7 @@ class SpellingBee {
     else if (a === 'toggle') { this.open = !this.open; this._paintFound(); }
     else if (a === 'hints') this._openHints();
     else if (a === 'yesterday') this._openYesterday();
+    else if (a === 'past') this._openPast();
     else if (a === 'rankings') this._openRankings();
     else if (a === 'help') this._openHelp();
     else if (a === 'retry') this._load();
@@ -509,6 +518,73 @@ class SpellingBee {
       <p class="sb-hint-sum sb-fit">${esc(t('hint_words', { n: h.words }))} · ${esc(t('hint_points', { n: h.points }))} · ${esc(t('hint_pangrams', { n: h.pangrams }))}${h.perfect ? ' ' + esc(t('hint_perfect', { n: h.perfect })) : ''}</p>
       <table class="sb-grid"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
       <h3 class="sb-h3">${esc(t('hint_two'))}</h3><div class="sb-two">${two}</div>`);
+  }
+
+  _fmt(n, opts) {
+    try { return new Intl.DateTimeFormat(getLang(), opts).format(dateOfDay(this.data.epoch, n)); } catch { return dayKey(dateOfDay(this.data.epoch, n)); }
+  }
+
+  /** Past puzzles: a month calendar, epoch to today. Tap a day to play it. */
+  _openPast(ym) {
+    const ep = this.data.epoch;
+    const first = dateOfDay(ep, 0);
+    const today = dateOfDay(ep, this.todayN);
+    const lo = first.getFullYear() * 12 + first.getMonth();
+    const hi = today.getFullYear() * 12 + today.getMonth();
+    if (!Number.isInteger(ym)) { const d = dateOfDay(ep, this.n); ym = d.getFullYear() * 12 + d.getMonth(); }
+    ym = Math.max(lo, Math.min(hi, ym));
+    const y = Math.floor(ym / 12);
+    const m = ym % 12;
+    const n1 = dayNumber(ep, new Date(y, m, 1, 12));
+    const days = new Date(y, m + 1, 0).getDate();
+    const lead = new Date(y, m, 1).getDay();
+    const save = loadSave();
+    const wk = [];
+    for (let i = 0; i < 7; i++) {
+      let w = '';
+      try { w = new Intl.DateTimeFormat(getLang(), { weekday: 'narrow' }).format(new Date(2026, 9, 4 + i, 12)); } catch { w = 'SMTWTFS'[i]; }
+      wk.push(`<span class="sb-cal-wk" aria-hidden="true">${esc(w)}</span>`);
+    }
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push('<span></span>');
+    for (let d = 1; d <= days; d++) {
+      const n = n1 + d - 1;
+      if (n < 0 || n > this.todayN) { cells.push(`<span class="sb-cal-day is-off">${d}</span>`); continue; }
+      const p = puzzleAt(this.data, n);
+      const r = save.games[p.key];
+      const got = r && Array.isArray(r.found) ? r.found : [];
+      let mark = '';
+      let label = this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' });
+      if (got.length) {
+        const ans = answersFor(this.data, p);
+        const set = new Set(ans);
+        let sc = 0;
+        for (const w of new Set(got)) if (set.has(w)) sc += scoreWord(w, p);
+        const max = totalPoints(ans, p);
+        const ri = rankIndex(sc, max);
+        const g = rankThresholds(max)[GENIUS] || 1;
+        mark = ri >= GENIUS ? `<i class="sb-cal-mark">${ri === QUEEN ? '👑' : '🐝'}</i>`
+          : `<i class="sb-cal-bar"><b style="width:${Math.max(8, Math.round(Math.min(1, sc / g) * 100))}%"></b></i>`;
+        label += ', ' + t('rank_' + RANKS[ri].id);
+      }
+      const cls = `sb-cal-day${n === this.n ? ' is-now' : ''}${n === this.todayN ? ' is-today' : ''}`;
+      cells.push(`<button type="button" class="${cls}" data-day="${n}" aria-label="${esc(label)}"><span>${d}</span>${mark}</button>`);
+    }
+    let title = '';
+    try { title = new Intl.DateTimeFormat(getLang(), { month: 'long', year: 'numeric' }).format(new Date(y, m, 1, 12)); } catch { title = `${y}-${m + 1}`; }
+    this._openOverlay('past', `${this._closeBtn()}
+      <div class="sb-cal-head">
+        <button type="button" class="sb-iconbtn" data-cal="${ym - 1}" aria-label="${esc(t('prev_month_aria'))}"${ym > lo ? '' : ' disabled'}>${ICON.back}</button>
+        <h2 class="gh-modal__title sb-cal-title">${esc(title)}</h2>
+        <button type="button" class="sb-iconbtn" data-cal="${ym + 1}" aria-label="${esc(t('next_month_aria'))}"${ym < hi ? '' : ' disabled'}>${ICON.fwd}</button>
+      </div>
+      <div class="sb-cal">${wk.join('')}${cells.join('')}</div>`);
+    this._overlay.addEventListener('click', (ev) => {
+      const day = ev.target.closest('[data-day]');
+      if (day) { this._closeOverlay(); this._startDay(Number(day.dataset.day)); return; }
+      const nav = ev.target.closest('[data-cal]');
+      if (nav && !nav.disabled) this._openPast(Number(nav.dataset.cal));
+    });
   }
 
   _openYesterday() {
