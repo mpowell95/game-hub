@@ -40,6 +40,9 @@
 .ng-root .ng-row { display: flex; align-items: center; gap: 8px; }
 .ng-root .ng-langrow { margin-bottom: 14px; }
 .ng-root .ng-langrow .ng-btn { flex: 1 1 0; }
+.ng-root .ng-me { margin-top: 8px; }
+.ng-root .ng-me[hidden] { display: none; }
+.ng-root .ng-me .ng-btn { flex: 1 1 0; }
 
 .ng-root .ng-input {
   flex: 1 1 auto;
