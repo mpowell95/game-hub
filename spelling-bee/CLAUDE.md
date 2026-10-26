@@ -61,7 +61,7 @@ relative to the puzzle shown (hidden on day 0). Opening the game always starts o
 | CSS | `.sb-root` / `.sb-` |
 | Save key | `gamehub.spellingbee.save.v1`: `{ v, games: { "<centre>:<outer>": { day, found: [in order found], recorded, seenGenius, seenQueen } } }`. Found words only grow; nothing is ever removed |
 | `isInProgress()` | always `false`: every word saves at once |
-| Daily board (2026-10-26, Matt) | `js/board.js`: `beeDaily/<c-abcdef>/<CODE>` = `{name, emoji, words, points, rank, at}`, posted 2.5 s after a word (and on open if behind; `gamehub.spellingbee.posted.v1` = last verified count). Rules: own msgAuth code only, `words` never goes down. Watched while the puzzle is on screen. Trophy = the board; the progress row = Rankings. A report of the save, never the save. Test accounts hidden (`isHiddenName`). `BOARD_ONLY` in `tools/test-game-conventions.mjs` (no match, so no chat) |
+| Daily board (2026-10-26, Matt) | `js/board.js`: `beeDaily/<c-abcdef>/<CODE>` = `{name, emoji, words, points, rank, at}`, posted 2.5 s after a word (and on open if behind; `gamehub.spellingbee.posted.v1` = last verified count). Rules: own msgAuth code only, `words` never goes down. Watched while the puzzle is on screen. Trophy = the board (2026-10-26 redesign, Matt: "This is bad": place, emoji, name + rank, a bar toward Genius, words; own row yellow; Genius/Queen shown as 🐝/👑; title "Today"); the progress row = Rankings. A report of the save, never the save. Test accounts hidden (`isHiddenName`). `BOARD_ONLY` in `tools/test-game-conventions.mjs` (no match, so no chat) |
 
 ## Tests
 
