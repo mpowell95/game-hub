@@ -738,20 +738,17 @@ class SpellingBee {
     }
   }
 
+  /** Fewest words (Matt, 2026-10-26: "Too. Many. Words."): the hive, then four short lines. */
   _openHelp() {
     const mini = SPOTS.map(([x, y], i) => `<g transform="translate(${x} ${y})"><polygon points="${HEX}" class="${i === 0 ? 'is-center' : ''}"/><text x="0" y="2" text-anchor="middle" dominant-baseline="central">${'ATBLERC'[i]}</text></g>`).join('');
     this._openOverlay('help', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('howto'))}</h2>
-      <p class="sb-help-goal sb-fit"><b>${esc(t('howto_goal'))}</b></p>
       <svg class="sb-help-hive" viewBox="-134 -140 268 280" aria-hidden="true">${mini}</svg>
-      <p class="sb-fit">${esc(t('howto_r2'))}</p>
-      <p class="sb-fit sb-help-ex">${esc(t('howto_example'))}</p>
-      <p class="sb-fit">${esc(t('howto_r1'))}</p>
-      <p class="sb-fit">${esc(t('howto_r3'))}</p>
-      <p class="sb-fit">${esc(t('howto_p1'))}</p>
-      <p class="sb-fit">${esc(t('howto_p2'))}</p>
-      <p class="sb-fit">${esc(t('howto_p3'))}</p>
+      <p class="sb-fit">${esc(t('howto_rule'))}</p>
+      <p class="sb-fit">${esc(t('howto_points'))}</p>
+      <p class="sb-fit">${esc(t('howto_pangram'))}</p>
       <p class="sb-fit"><i>${esc(t('howto_bonus_word'))}</i> ${esc(t('howto_bonus'))}</p>`);
   }
+
 
   // --- layout ----------------------------------------------------------------------------------
 
