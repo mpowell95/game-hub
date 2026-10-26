@@ -504,6 +504,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`. Deployed 2026-10-24 (workflow run, Battle
   Arena online): `battleArenaTurnPush` and the `battlearena` rules branch (+ in the nudges key pattern).
+  2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs

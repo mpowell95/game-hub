@@ -275,9 +275,13 @@ check(
 // challenge node); it HAS CHAT if any of its files uses js/match-chat-ui.js (or the older
 // js/mp-reactions-ui.js / js/mp-reactions.js palette that the live-room games use).
 
+// Solo games that only post a score to a shared board (no match, so nothing to chat in).
+// Spelling Bee: the daily board, beeDaily/ (2026-10-26).
+const BOARD_ONLY = new Set(['spelling-bee']);
+
 check(
   'every multiplayer game has quick chat inside a match',
-  GAMES.filter((g) => {
+  GAMES.filter((g) => !BOARD_ONLY.has(g)).filter((g) => {
     const files = gameJs(g).map(({ src }) => stripComments(src));
     const online = files.some((s) => /js\/net\.js|firebase-boot\.js/.test(s));
     const chat = files.some((s) => /match-chat-ui\.js|mp-reactions(?:-ui)?\.js/.test(s));

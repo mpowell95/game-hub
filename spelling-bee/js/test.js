@@ -64,5 +64,16 @@ ok('hint grid adds up', gridSum === h.words);
 ok('two-letter list adds up', h.two.reduce((s, [, n]) => s + n, 0) === h.words);
 ok('shuffle keeps the letters', shuffled(['a', 'b', 'c', 'd', 'e', 'f']).sort().join('') === 'abcdef');
 
+// The daily board (board.js): pure parts, and the rules + backup entries it needs.
+const { rowsOf, boardKey } = await import('./board.js');
+ok('board key has no colon', boardKey('a:chlnrt') === 'a-chlnrt');
+const rows = rowsOf({ A: { name: 'Ana', words: 12, points: 40, rank: 5 }, B: { name: 'test1', words: 30 }, C: { name: 'Zed', words: 12, points: 50, rank: 5 }, D: { name: 'X', words: 0 } });
+ok('board: most words first, ties by points, test accounts and zero rows out', rows.map((r) => r.code).join() === 'C,A');
+const fsx = await import('node:fs');
+const rules = JSON.parse(fsx.readFileSync(new URL('../../database.rules.json', import.meta.url), 'utf8')).rules;
+const bd = rules.beeDaily && rules.beeDaily.$puzzle && rules.beeDaily.$puzzle.$code;
+ok('beeDaily rules: own code only, words never go down', !!bd && /msgAuth/.test(bd['.write']) && /newData\.child\('words'\)\.val\(\) >= data\.child\('words'\)\.val\(\)/.test(bd['.validate']));
+ok('beeDaily is backed up', /'beeDaily'/.test(fsx.readFileSync(new URL('../../backups/rtdb-backup.mjs', import.meta.url), 'utf8')));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

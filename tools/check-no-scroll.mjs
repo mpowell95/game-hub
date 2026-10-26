@@ -115,7 +115,7 @@ const EXTRA_SCREENS = {
         await page.waitForTimeout(250);
       },
     },
-    ...['hints', 'yesterday', 'rankings', 'help', 'past'].map((k) => ({
+    ...['hints', 'yesterday', 'board', 'help', 'past'].map((k) => ({
       name: k,
       async open(page) {
         await page.waitForFunction(() => window.__sbTest, null, { timeout: 15000 });
@@ -124,6 +124,14 @@ const EXTRA_SCREENS = {
         await page.waitForTimeout(250);
       },
     })),
+    {
+      name: 'rankings',
+      async open(page) {
+        await page.evaluate(() => window.__sbTest.ui._closeOverlay());
+        await page.click('[data-role="progress"]');
+        await page.waitForTimeout(250);
+      },
+    },
   ],
   // Chinchón: the Challenge pane (2026-10-18), the fourth choice on the setup switch. With this
   // run's profile (no player code) it is the New challenge button and "No matches"; the lists with

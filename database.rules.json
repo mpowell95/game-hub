@@ -76,6 +76,23 @@
       }
     },
 
+    "beeDaily": {
+      "$puzzle": {
+        ".read": "auth != null",
+        "$code": {
+          ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val()",
+          ".validate": "$puzzle.matches(/^[a-z]-[a-z]{6}$/) && newData.hasChildren(['name', 'words', 'points', 'rank', 'at']) && (!data.exists() || newData.child('words').val() >= data.child('words').val())",
+          "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "emoji": { ".validate": "newData.isString() && newData.val().length <= 16" },
+          "words": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 500" },
+          "points": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000" },
+          "rank": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9" },
+          "at": { ".validate": "newData.val() === now" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "pushSubs": {
       "$code": {
         ".read": "auth != null",
