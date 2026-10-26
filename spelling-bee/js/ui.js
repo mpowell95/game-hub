@@ -13,7 +13,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { recordResult } from '../../js/game-stats.js';
 import {
-  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, answersFor, totalPoints,
+  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, answersFor, extrasFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
@@ -166,11 +166,12 @@ class SpellingBee {
     this.puzzle = puzzleAt(this.data, this.n);
     this.answers = answersFor(this.data, this.puzzle);
     this.answerSet = new Set(this.answers);
+    this.extraSet = new Set(extrasFor(this.data, this.puzzle));
     this.max = totalPoints(this.answers, this.puzzle);
     this.save = loadSave();
     this.rec = recOf(this.save, this.puzzle, this.day);
-    // Keep only words that are still answers for the SCORE, but never drop a stored word (rule 5).
-    this.found = new Set(this.rec.found.filter((w) => this.answerSet.has(w)));
+    // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
+    this.found = new Set(this.rec.found.filter((w) => this.counts(w)));
     this.outer = this.puzzle.outer.slice();
     this.input = '';
     this.open = false;
@@ -185,6 +186,18 @@ class SpellingBee {
     if (tn === this.todayN) return;
     // Midnight: today's puzzle moves on to the new day; a past puzzle being played stays put.
     if (this.n === this.todayN) { this._closeOverlay(); this._startDay(); } else this.todayN = tn;
+  }
+
+  /** An answer or a bonus word (a rarer real word: scores, never counted in hints or ranks). */
+  counts(w) { return this.answerSet.has(w) || this.extraSet.has(w); }
+
+  /** The rank shown. A puzzle that already reached Genius stays at least Genius (rule 2): the
+   *  2026-10-26 bigger word list raised every total, and an earned Genius never goes backwards. */
+  rank() {
+    let all = true;
+    for (const w of this.answers) if (!this.found.has(w)) { all = false; break; }
+    const i = rankIndex(this.score, this.max, all);
+    return this.rec.recorded && i < GENIUS ? GENIUS : i;
   }
 
   get score() {
@@ -272,7 +285,7 @@ class SpellingBee {
 
   _paintProgress() {
     const sc = this.score;
-    const ri = rankIndex(sc, this.max);
+    const ri = this.rank();
     const shown = Math.min(ri, GENIUS);
     const dots = [];
     for (let i = 0; i <= GENIUS; i++) {
@@ -286,10 +299,10 @@ class SpellingBee {
 
   _paintFound() {
     const n = this.found.size;
-    const order = this.rec.found.filter((w) => this.answerSet.has(w));
+    const order = this.rec.found.filter((w) => this.counts(w));
     this.el.recent.innerHTML = this.open
       ? `<span class="sb-found-count">${esc(n === 1 ? t('words_1') : t('words_n', { n }))}</span>`
-      : (n ? order.slice().reverse().map((w) => `<span class="${isPangram(w, this.puzzle) ? 'is-pangram' : ''}">${esc(cap(w))}</span>`).join('')
+      : (n ? order.slice().reverse().map((w) => `<span class="${this._cls(w)}">${esc(cap(w))}</span>`).join('')
         : `<span class="sb-found-count">${esc(t('words_n', { n: 0 }))}</span>`);
     this.el.toggle.setAttribute('aria-expanded', this.open ? 'true' : 'false');
     this.el.toggle.classList.toggle('is-open', this.open);
@@ -297,12 +310,14 @@ class SpellingBee {
     if (this.open) this._layoutPanel();
   }
 
+  _cls(w) { return isPangram(w, this.puzzle) ? 'is-pangram' : this.answerSet.has(w) ? '' : 'is-bonus'; }
+
   /** The open word list: alphabetical, in as many columns as it takes to fit with no scrolling. */
   _layoutPanel() {
     if (!this.open || !this.el || !this.el.panel) return;
     const words = [...this.found].sort();
     const p = this.el.panel;
-    p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${isPangram(w, this.puzzle) ? 'is-pangram' : ''}">${esc(cap(w))}</li>`).join('')}</ul>`;
+    p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${this._cls(w)}">${esc(cap(w))}</li>`).join('')}</ul>`;
     const ul = p.firstChild;
     const h = p.clientHeight - 24;
     const w = p.clientWidth - 24;
@@ -387,9 +402,9 @@ class SpellingBee {
     if (!this.puzzle || this._busy || !this.input) return;
     this._checkDay();
     const word = this.input;
-    const why = checkWord(word, this.puzzle, this.answerSet, this.found);
+    const why = checkWord(word, this.puzzle, this.answerSet, this.found, this.extraSet);
     if (why) { this._reject(why); return; }
-    const before = rankIndex(this.score, this.max);
+    const before = this.rank();
     this.found.add(word);
     this.rec.found.push(word);
     writeSave(this.save);
@@ -407,7 +422,7 @@ class SpellingBee {
     this._paintProgress();
     this._paintFound();
     this._maybeRecord();
-    const after = rankIndex(this.score, this.max);
+    const after = this.rank();
     if (after !== before && after >= GENIUS) this._celebrate(after);
   }
 
@@ -439,7 +454,7 @@ class SpellingBee {
 
   /** One win per puzzle, the first time it reaches Genius. Flag set only once the recorder took it. */
   _maybeRecord() {
-    if (this.rec.recorded || rankIndex(this.score, this.max) < GENIUS) return;
+    if (this.rec.recorded || this.rank() < GENIUS) return;
     let st = null;
     try { st = recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
@@ -495,7 +510,7 @@ class SpellingBee {
 
   _openRankings() {
     const th = rankThresholds(this.max);
-    const ri = rankIndex(this.score, this.max);
+    const ri = this.rank();
     const rows = RANKS.map((r, i) => {
       if (i === QUEEN && ri < QUEEN) return '';
       return `<li class="${i === ri ? 'is-now' : ''}"><span class="sb-rk-mark" aria-hidden="true">${i === ri ? '▶' : ''}</span><span class="sb-rk-name">${esc(t('rank_' + r.id))}</span><span class="sb-rk-pts">${th[i]}</span></li>`;
@@ -515,7 +530,7 @@ class SpellingBee {
     const foot = `<tr class="sb-sumrow"><th>Σ</th>${h.lens.map((l) => `<td>${colSum(l) || '-'}</td>`).join('')}<td>${h.words}</td></tr>`;
     const two = h.two.map(([k, n]) => `<span>${k.toUpperCase()}-${n}</span>`).join('');
     this._openOverlay('hints', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('hints'))}</h2>
-      <p class="sb-hint-sum sb-fit">${esc(t('hint_words', { n: h.words }))} · ${esc(t('hint_points', { n: h.points }))} · ${esc(t('hint_pangrams', { n: h.pangrams }))}${h.perfect ? ' ' + esc(t('hint_perfect', { n: h.perfect })) : ''}</p>
+      <p class="sb-hint-sum sb-fit">${esc(h.words === 1 ? t('words_1') : t('hint_words', { n: h.words }))} · ${esc(t(h.points === 1 ? 'hint_points_1' : 'hint_points', { n: h.points }))} · ${esc(t(h.pangrams === 1 ? 'hint_pangrams_1' : 'hint_pangrams', { n: h.pangrams }))}${h.perfect ? ' ' + esc(t('hint_perfect', { n: h.perfect })) : ''}</p>
       <table class="sb-grid"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>
       <h3 class="sb-h3">${esc(t('hint_two'))}</h3><div class="sb-two">${two}</div>`);
   }
@@ -558,10 +573,13 @@ class SpellingBee {
       if (got.length) {
         const ans = answersFor(this.data, p);
         const set = new Set(ans);
+        const ex = new Set(extrasFor(this.data, p));
+        const gs = new Set(got);
         let sc = 0;
-        for (const w of new Set(got)) if (set.has(w)) sc += scoreWord(w, p);
+        for (const w of gs) if (set.has(w) || ex.has(w)) sc += scoreWord(w, p);
         const max = totalPoints(ans, p);
-        const ri = rankIndex(sc, max);
+        let ri = rankIndex(sc, max, ans.every((w) => gs.has(w)));
+        if (r.recorded && ri < GENIUS) ri = GENIUS;
         const g = rankThresholds(max)[GENIUS] || 1;
         mark = ri >= GENIUS ? `<i class="sb-cal-mark">${ri === QUEEN ? '👑' : '🐝'}</i>`
           : `<i class="sb-cal-bar"><b style="width:${Math.max(8, Math.round(Math.min(1, sc / g) * 100))}%"></b></i>`;

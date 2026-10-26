@@ -23,10 +23,13 @@ export const MAX_LEN = 19; // longer input is refused ("Too long")
 
 const DATA_URL = new URL('../data/bee.json', import.meta.url);
 
-/** Parse the generated file into { epoch, words: string[], puzzles: string[] }. */
+/** Parse the generated file into { epoch, words: string[], extra: string[], puzzles: string[] }.
+ *  `words` are the answers (hints and ranks count them); `extra` are rarer real words, accepted and
+ *  scored as bonus words but never counted (Matt, 2026-10-26: "all words should count"). */
 export function parseData(raw) {
   if (!raw || typeof raw.words !== 'string' || !Array.isArray(raw.puzzles) || !raw.puzzles.length) throw new Error('bad bee data');
-  return { epoch: raw.epoch, words: raw.words.split(' '), puzzles: raw.puzzles };
+  const extra = typeof raw.extra === 'string' && raw.extra ? raw.extra.split(' ') : [];
+  return { epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles };
 }
 
 export async function loadData() {
@@ -75,8 +78,17 @@ export function scoreWord(word, puzzle) {
 
 /** Every answer for the puzzle, alphabetical. */
 export function answersFor(data, puzzle) {
+  return fits(data.words, puzzle);
+}
+
+/** The bonus words for the puzzle: real words outside the answer list, alphabetical. */
+export function extrasFor(data, puzzle) {
+  return fits(data.extra || [], puzzle);
+}
+
+function fits(list, puzzle) {
   const out = [];
-  for (const w of data.words) {
+  for (const w of list) {
     if (!w.includes(puzzle.center)) continue;
     let ok = true;
     for (let i = 0; i < w.length; i++) if (!puzzle.letters.has(w[i])) { ok = false; break; }
@@ -96,20 +108,21 @@ export function rankThresholds(max) {
   return RANKS.map((r) => (r.pct === 100 ? max : Math.round((r.pct / 100) * max)));
 }
 
-export function rankIndex(score, max) {
+/** Bonus words add points, so the score can pass `max` early: Queen Bee needs every answer (`all`). */
+export function rankIndex(score, max, all = true) {
   const th = rankThresholds(max);
   let i = 0;
   for (let k = 0; k < th.length; k++) if (score >= th[k]) i = k;
-  return i;
+  return i === QUEEN && !all ? GENIUS : i;
 }
 
-/** Why a typed word is refused, or null if it is a new answer. Order matches the NYT game. */
-export function checkWord(word, puzzle, answerSet, found) {
+/** Why a typed word is refused, or null if it is a new answer or bonus word. Order matches the NYT game. */
+export function checkWord(word, puzzle, answerSet, found, extraSet) {
   if (word.length < 4) return 'too_short';
   if (word.length > MAX_LEN) return 'too_long';
   for (const c of word) if (!puzzle.letters.has(c)) return 'bad_letters';
   if (!word.includes(puzzle.center)) return 'missing_center';
-  if (!answerSet.has(word)) return 'not_in_list';
+  if (!answerSet.has(word) && !(extraSet && extraSet.has(word))) return 'not_in_list';
   if (found.has(word)) return 'already_found';
   return null;
 }

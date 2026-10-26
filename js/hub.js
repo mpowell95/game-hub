@@ -689,9 +689,7 @@ export const GAMES = [
     immersive: true,
     accent: '#f7da21',
     art: GAME_ART['spelling-bee'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-10-26',         // Matt switched it live for Ana (2026-10-26); the New pill counts from here
   },
   {
     // Battle Arena (2026-10-24): a match-3 monster battle vs the computer. Draft two monsters,
