@@ -1181,7 +1181,7 @@ class Hub {
     // drops it below 2, fall out of edit mode gracefully rather than leaving a dangling toggle.
     const compact = isCompact();
     this._compact = compact;
-    // Compact edit mode also REMOVES favorites (its tiles carry no heart), so one is enough there.
+    // Compact edit mode also REMOVES favorites, so one is enough there.
     if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;
     // The divider only earns its place between two non-empty groups; with zero favorites
     // (the common first-run case) or with every visible game favorited, the grid is a plain
@@ -2640,10 +2640,11 @@ class Hub {
     // of .hub-card - see .hub-cell/.hub-fav in hub.css.
     const favored = this._favIds.has(g.id);
     let overlay;
-    if (favGroup && this._compact) {
-      // COMPACT: a favorite tile carries no heart (they are all favorites). Edit mode puts move
-      // left / move right and a filled heart (tap = remove) on it instead.
-      if (this._favEdit) {
+    if (favGroup && this._compact && this._favEdit) {
+      // COMPACT edit mode: move left / move right and a filled heart (tap = remove). Outside edit
+      // mode a compact favorite keeps its heart like everywhere else (Matt, 2026-10-26: "Put the
+      // heart back on favorited games. I never wanted that to go away").
+      {
         const idx = this._favOrder.indexOf(g.id);
         overlay = `
         <span class="hub-fav-tools">
@@ -2654,7 +2655,7 @@ class Hub {
           <button type="button" class="hub-fav-move" data-fav-id="${g.id}" data-dir="down" ${idx >= this._favOrder.length - 1 ? 'disabled' : ''}
                   aria-label="${tf('hub_fav_move_right', `Move ${titleText(g)} right`, { title: titleText(g) })}">›</button>
         </span>`;
-      } else overlay = '';
+      }
     } else if (favGroup && this._favEdit) {
       const idx = this._favOrder.indexOf(g.id);
       const upLabel = t('hub_fav_move_up', { title: titleText(g) });
