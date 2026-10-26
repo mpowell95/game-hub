@@ -5,7 +5,7 @@
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
 import { createHash } from 'node:crypto';
-import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START, buildRush, rushLevel } from './engine.js';
+import { TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START, buildRush, rushLevel, buildMore, moreLevel, isMore, ladderSpec } from './engine.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -214,6 +214,42 @@ function checkLadder(gen, from, to) {
   for (const n of [101, 125, 150, 175, 200, 201, 225, 260, 300]) h.update(JSON.stringify(buildLadder(n, 6)));
   const pin = h.digest('hex').slice(0, 16);
   ok(`ladder g6 unchanged (${pin})`, pin === '5b8571064bfd2397');
+}
+
+// MORE LEVELS (2026-10-26): Easy, Medium and Hard never end. Their boards past 50 / 100 / 200 are
+// well formed, solvable, the same every time, all different, and never bigger than the band's last
+// ladder board (the arrows never get smaller than that difficulty already has).
+{
+  let good = true, worst = 0, small = true;
+  const seen = new Set();
+  for (const band of ['easy', 'medium', 'hard']) {
+    const last = buildLadder(bandEnd(band));
+    for (let n = bandEnd(band) + 1; n <= bandEnd(band) + 40; n++) {
+      const t0 = performance.now();
+      const lvl = buildMore(band, n);
+      worst = Math.max(worst, performance.now() - t0);
+      if (n <= bandEnd(band) + 3 && JSON.stringify(lvl) !== JSON.stringify(buildMore(band, n))) good = false;
+      seen.add(JSON.stringify(lvl.arrows));
+      if (lvl.cols > last.cols || lvl.rows > last.rows) small = false;
+      const gone = new Array(lvl.arrows.length).fill(false);
+      let left = lvl.arrows.length, guard = 0;
+      while (left && guard++ < 100000) { const id = hintArrow(lvl, gone, null); if (id < 0) break; gone[id] = true; left--; }
+      if (left || lvl.arrows.some((c) => c.length < 2)) good = false;
+      const m = moreLevel(band, n);
+      if (!(m >= 1 && m <= bandEnd(band) && bandOf(m) === band)) good = false;
+    }
+  }
+  ok('more levels: boards well formed, solvable, the same every time, from the top of their own band', good);
+  ok('more levels: 120 boards, all different', seen.size === 120);
+  ok('more levels: never bigger than the band\'s last ladder board', small);
+  ok('more levels: Easy, Medium and Hard have them, Expert does not', isMore('easy', 51) && !isMore('easy', 50) && isMore('medium', 101)
+    && isMore('hard', 201) && !isMore('hard', 200) && !isMore('expert', 5000));
+  ok(`more levels: a board builds fast (slowest ${worst.toFixed(0)} ms)`, worst < 400);
+  const h = createHash('sha256');
+  for (const [b, n] of [['easy', 51], ['easy', 99], ['medium', 101], ['medium', 250], ['hard', 201], ['hard', 333]]) h.update(JSON.stringify(buildMore(b, n)));
+  const pin = h.digest('hex').slice(0, 16);
+  console.log(`more levels: pin ${pin}; slowest build ${worst.toFixed(0)} ms`);
+  ok(`more levels (generator 7) unchanged (${pin})`, pin === '10a0cc7e78ac7353');
 }
 
 // RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different

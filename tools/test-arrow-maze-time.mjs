@@ -157,5 +157,51 @@ ok('Rush: tuning data in Firebase object form reads back; junk is left out',
   JSON.stringify(T.woRushExtras({ bt: { 1: 7, 0: 5 }, mx: [1, 'x', -2], pk: 'no', rv: 3 })) === '{"bt":[5,7],"mx":[1],"rv":3}');
 ok('Rush: time played reads m:ss / h:mm:ss', T.woRushTime(602000) === '10:02' && T.woRushTime(3725000) === '1:02:05' && T.woRushTime(0) === '0:00');
 
+// --- REPLAY (2026-10-26): win back the points a level missed; only the difference, never twice ---
+store.clear();
+G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 1, hints: 1, timed: true, level: 201, gen: 6 }); // 2 of 6
+G.recordWayOut('expert', { timeMs: 80000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, timed: true, level: 202, gen: 6 }); // 6 of 6
+G.recordWayOut('medium', { timeMs: 30000, penaltyMs: 0, arrows: 40, rounds: 14, mistakes: 1, hints: 0, timed: true, level: 61, gen: 6 }); // 1 of 2
+G.recordWayOut('easy', { timeMs: 20000, penaltyMs: 0, arrows: 12, rounds: 4, mistakes: 2, hints: 0, timed: true, level: 3, gen: 6 }); // 1 of 1
+G.recordWayOut('hard', { timeMs: 50000, penaltyMs: 0, arrows: 60, rounds: 20, mistakes: 0, hints: 0, timed: false, level: 101, gen: 6 }); // untimed: full
+g = G.loadStats().games.wayout;
+const before = JSON.parse(JSON.stringify(g));
+ok('replay: only levels that missed points are listed (Easy never; clean and untimed levels never)',
+  JSON.stringify(T.woMissed(g, 'expert').map((x) => [x.n, x.best, x.gain])) === '[[201,2,4]]'
+  && T.woMissed(g, 'medium').length === 1 && T.woMissed(g, 'easy').length === 0 && T.woMissed(g, 'hard').length === 0);
+const old = JSON.parse(JSON.stringify(g)); old.wo.log.expert[0].d = T.WO_SLIP_SINCE - 1;
+ok('replay: a level finished before slips cost points (full points then) is never listed', T.woMissed(old, 'expert').length === 0);
+ok('replay: a first-ladder Expert board shows today\'s number', T.woShownLevel('expert', 155, 5) === 205 && T.woShownLevel('hard', 120, 5) === 120 && T.woShownLevel('expert', 210, 6) === 210);
+const p0 = T.woPoints(g);
+const r1 = G.recordWayOutReplay('expert', { timeMs: 70000, penaltyMs: 30000, arrows: 90, rounds: 25, mistakes: 1, hints: 0, level: 201, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('replay: one slip on an Expert level that earned 2 adds 2 (now 4 of 6)', r1 === 2 && T.woPoints(g) === p0 + 2 && T.woMissed(g, 'expert')[0].gain === 2);
+const r2 = G.recordWayOutReplay('expert', { timeMs: 70000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 3, hints: 2, level: 201, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('replay: a worse replay adds nothing and takes nothing', r2 === 0 && T.woPoints(g) === p0 + 2);
+const r3 = G.recordWayOutReplay('expert', { timeMs: 60000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, level: 201, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('replay: a clean replay tops it up to full points and the level leaves the list', r3 === 2 && T.woPoints(g) === p0 + 4 && T.woMissed(g, 'expert').length === 0);
+const r4 = G.recordWayOutReplay('expert', { timeMs: 60000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, level: 201, gen: 6 });
+const r5 = G.recordWayOutReplay('expert', { timeMs: 60000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, level: 202, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('replay: a level already at full points can never earn more', r4 === 0 && r5 === 0 && T.woPoints(g) === p0 + 4);
+ok('replay: every replay is kept raw, with what it added', g.wo.replay.expert.length === 5 && g.wo.replay.expert.map((x) => x.u).join() === '2,0,2,0,0'
+  && g.wo.replay.expert.every((x) => x.l > 0 && x.g === 6 && x.d > 0 && x.t > 0));
+ok('replay: not a level cleared (totals, byDiff, timed, ptsN and the log untouched)',
+  ['total', 'byDiff'].every((k) => JSON.stringify(g[k]) === JSON.stringify(before[k]))
+  && ['timed', 'ptsN', 'log', 'mistakes', 'hints'].every((k) => JSON.stringify(g.wo[k]) === JSON.stringify(before.wo[k])));
+ok('replay: a finished level still within its full points (woPoints clamp holds)', T.woPoints(g, 'expert') === 12);
+ok('replay: refused without a board, a time or a known difficulty',
+  G.recordWayOutReplay('expert', { timeMs: 1000, arrows: 9, rounds: 2 }) === null && G.recordWayOutReplay('nope', { timeMs: 1, arrows: 1, rounds: 1, level: 1, gen: 6 }) === null);
+G.recordWayOutReplay('medium', { timeMs: 20000, penaltyMs: 0, arrows: 40, rounds: 14, mistakes: 0, hints: 0, level: 61, gen: 6 });
+g = G.loadStats().games.wayout;
+ok('replay: Medium 1 of 2 tops up by 1', T.woPoints(g, 'medium') === 2 && T.woMissed(g, 'medium').length === 0);
+ok('replay: lists in Firebase object form read back', T.woReplayList({ 1: g.wo.replay.expert[1], 0: g.wo.replay.expert[0] }).map((x) => x.u).join() === '2,0');
+
+// --- MORE LEVELS (2026-10-26): Easy 51 is an Easy level, worth Easy's points ---
+ok('more levels: points follow the difficulty, not the number', T.woLevelPoints(51, 'easy') === 1 && T.woLevelPoints(150, 'medium') === 2
+  && T.woLevelPoints(400, 'hard') === 4 && T.woLevelPoints(51) === 2 && T.woLevelPoints(51, 'nope') === 2);
+
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
