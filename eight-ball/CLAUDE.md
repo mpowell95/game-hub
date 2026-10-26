@@ -120,21 +120,30 @@ black pockets, coral and cyan groups).
     a ball), obstacles kept further off it (`rackMid`, `rackKeep`). Catch width in balls is table
     3's. (Measured both racks at one scale: GamePigeon's ball IS 5.9% of its cloth, its number circle
     ~57% of the ball like ours; its loose rack made the balls look bigger.)
-  - **Table 5 (2026-10-23, today's)**: table 4's balls and rack on table 3's pockets, which are
+  - **Table 5 (2026-10-23 to 26)**: table 4's balls and rack on table 3's pockets, which are
     GamePigeon's exactly in proportion to the TABLE (Matt: "they seem too big still. measure the
     pockets in proportion to the table"; table 4 had scaled them with the ball, 25% too big). Hole
     84 px of 717 = 11.7% of the cloth's width (1.6 of our balls). Measured on screen at one scale:
     side opening 76 px, GamePigeon's 74. Harder than GamePigeon's (bigger balls, same holes): catch
     width corners ~0.4 balls, sides ~0.9 straight in; matches take ~2x the shots; Hard beat Easy in
     9-ball 5 of 8 (8 of 8 in 8-ball and Cutthroat), so `test.js` plays 8 games per level now.
-  - **Table 6 (2026-10-26, today's)**: table 5 with the pocket MOUTHS opened halfway to GamePigeon's fit
+  - **Table 6 (2026-10-26, live an hour)**: table 5 with the pocket MOUTHS opened halfway to GamePigeon's fit
     (Matt's 14, aimed at the hole's centre vs Ana, rattled off the far jaw; "make it better but not too
     easy"). Table 5 kept GamePigeon's noses in table pixels, so with our bigger ball the corner mouth was
     1.27 balls (GamePigeon 1.58), the side 1.71 (2.14). Noses and jaw backs moved out 12.5%: corner 1.42,
     side 1.93; holes and balls unchanged. Catch straight in: corners 0.64 balls (5: 0.46, GamePigeon
     0.83), sides 1.17 (0.95, 1.37). Option C (GamePigeon's 1.58) was shown to Matt and not chosen.
     For reference, a WPA table's mouths are ~2.0 (corner) and ~2.25 (side) balls.
-  - `test.js` pins tables 1-5 to their old fingerprints (table 5: a real 31-shot online match). Whole table on screen,
+  - **Table 7 (2026-10-26, today's)**: table 6 with hits taken AT THE MOMENT OF CONTACT (`TABLE.ccd`;
+    Matt: "something was/is wrong with the game that you are not seeing"). Tables 1-6 bounced two balls
+    from their OVERLAPPED centres (a step moves a ball up to ~2 units), which bent every cut shot: on
+    table 5 at 60% power a 30-degree cut went ~1.8 degrees off (up to 3.8), at 80% a 45-degree cut ~5
+    (up to 9), full power up to 17; straight shots were exact. The ghost-ball guide was right, the
+    physics was not, so aimed balls missed; the computer never noticed (it simulates). `hitAtContact`
+    winds both balls back to first touch, bounces there, moves on; cushion TIPS (jaw points) the same
+    in `bounce(..., atTouch)`. Measured after: 0.00 degrees at every power and cut. Same mouths as 6.
+  - `test.js` pins tables 1-6 to their old fingerprints (5 and 6: a real 31-shot online match), and
+    checks table 7's object ball follows the guide exactly. Whole table on screen,
     `SIDE_K` 11.5% of the width free each side.
 - `DT` 1/240, `MAX_SPEED` 400 (the break x1.35 = 540, ~2.25 a step, under `R`): nothing tunnels.
 - Skid then roll: each ball carries `r` (the speed its spin would roll it at). A centre hit starts

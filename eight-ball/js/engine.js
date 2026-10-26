@@ -27,7 +27,7 @@ export const H = 200;
  * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
  * match does it first, and so must anything that steps balls or draws them.
  */
-export const TABLE_NOW = 6;
+export const TABLE_NOW = 7;
 /** RULES VERSIONS, kept per match like the table (`m.rv`, none = 1), for the same reason: an online
  *  match replays its log. 1: a shot that pots nothing and sends no ball to a cushion after the hit
  *  is a foul (WPA 6.3). 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it"): it is not. */
@@ -133,9 +133,12 @@ const T6 = (() => {
   const px = W / 717, k = 1.125;
   return { ...T5, G: 47 * px * k, S: 45 * px * k, GB: 30 * px * k, SB: 39 * px * k };
 })();
-const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4, 5: T5, 6: T6 };
+/** Table 7 (2026-10-26): table 6 with ball-on-ball hits taken at the moment of contact (`hitAtContact`;
+ *  Matt: "something was/is wrong with the game that you are not seeing"). Same table, true angles. */
+const T7 = (() => ({ ...T6, ccd: true }))();
+const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4, 5: T5, 6: T6, 7: T7 };
 /** A known table id, or null. */
-const knownTable = (tb) => (Number.isInteger(tb) && tb >= 1 && tb <= 6 ? tb : null);
+const knownTable = (tb) => (Number.isInteger(tb) && tb >= 1 && tb <= 7 ? tb : null);
 export const tableOf = (m) => (m && knownTable(m.tb)) || 1;
 
 /** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
@@ -537,6 +540,7 @@ export function step(b, ev, obs) {
       const dx = q.x - p.x, dy = q.y - p.y;
       const d2 = dx * dx + dy * dy;
       if (d2 >= 4 * R * R) continue;
+      if (TABLE.ccd && hitAtContact(p, q, dx, dy, d2, i, j, ev)) continue;
       let d = Math.sqrt(d2), nx, ny;
       if (d < 1e-9) { nx = 1; ny = 0; d = 0; } else { nx = dx / d; ny = dy / d; }
       const over = (2 * R - d) / 2;
@@ -562,8 +566,9 @@ export function step(b, ev, obs) {
     for (const s of SEGS) {
       const ex = s.bx - s.ax, ey = s.by - s.ay;
       let tt = ((o.x - s.ax) * ex + (o.y - s.ay) * ey) / (ex * ex + ey * ey);
+      const tip = tt <= 0 || tt >= 1;
       tt = tt < 0 ? 0 : tt > 1 ? 1 : tt;
-      if (bounce(o, s.ax + ex * tt, s.ay + ey * tt, R, E_RAIL) && ev) {
+      if (bounce(o, s.ax + ex * tt, s.ay + ey * tt, R, E_RAIL, tip && TABLE.ccd) && ev) {
         if (ev.first >= 0) ev.rail = true;
         if (i === CUE) { if (ev.first < 0) ev.cueRail = true; } else ev.kiss[i] = true;
       }
@@ -628,12 +633,67 @@ export function step(b, ev, obs) {
   }
 }
 
+/** Table 7 on (`TABLE.ccd`, 2026-10-26): two balls found overlapping are wound back along this step's
+ *  motion to the instant they first touched, bounced there, and moved on for the rest of the step.
+ *  Before table 7 the bounce used the OVERLAPPED centres, which bends a cut shot's angle by the
+ *  overlap: measured on table 5, at 60% power a 30-degree cut went ~1.8 degrees off on average (up
+ *  to 3.8), at 80% a 45-degree cut ~5 (up to 9); a straight shot was exact. The object ball did not
+ *  go where the guide (and the player) aimed it. Returns false when no touching instant falls
+ *  inside this step (balls already pressed together): the old push-apart handles those. */
+function hitAtContact(p, q, dx, dy, d2, i, j, ev) {
+  const wx = q.vx - p.vx, wy = q.vy - p.vy;
+  const a = wx * wx + wy * wy;
+  if (a < 1e-12) return false;
+  const dw = dx * wx + dy * wy;
+  if (dw >= 0) return false;                        // moving apart
+  const c = d2 - 4 * R * R;
+  const t = (dw + Math.sqrt(dw * dw - a * c)) / a;  // seconds back to first touch
+  if (!(t > 0) || t > DT) return false;
+  p.x -= p.vx * t; p.y -= p.vy * t;
+  q.x -= q.vx * t; q.y -= q.vy * t;
+  let nx = q.x - p.x, ny = q.y - p.y;
+  const nl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= nl; ny /= nl;
+  const vn = (q.vx - p.vx) * nx + (q.vy - p.vy) * ny;
+  if (vn < 0) {
+    const jm = (-(1 + E_BALL) * vn) / 2;
+    p.vx -= jm * nx; p.vy -= jm * ny;
+    q.vx += jm * nx; q.vy += jm * ny;
+    if (ev) {
+      if (i === CUE || j === CUE) { if (ev.first < 0) ev.first = i === CUE ? j : i; }
+      else { ev.kiss[i] = true; ev.kiss[j] = true; }
+    }
+  }
+  p.x += p.vx * t; p.y += p.vy * t;
+  q.x += q.vx * t; q.y += q.vy * t;
+  return true;
+}
+
 /** A moving ball `o` against the solid point (cx, cy) at distance `reach`: pushed out and bounced.
  *  Returns true when it was moving into it (a real bounce). */
-function bounce(o, cx, cy, reach, e) {
+function bounce(o, cx, cy, reach, e, atTouch = false) {
   const dx = o.x - cx, dy = o.y - cy;
   const d2 = dx * dx + dy * dy;
   if (d2 >= reach * reach) return false;
+  if (atTouch) {
+    // Table 7: a cushion's TIP (a jaw's point) is a fixed point, so wind the ball back to the instant
+    // it touched it and bounce there, as `hitAtContact` does for two balls; the overlapped position
+    // bent the rebound (a ball clipping a jaw went out at the wrong angle).
+    const a = o.vx * o.vx + o.vy * o.vy, dv = dx * o.vx + dy * o.vy;
+    if (a > 1e-12 && dv < 0) {
+      const t = (dv + Math.sqrt(dv * dv - a * (d2 - reach * reach))) / a;
+      if (t > 0 && t <= DT) {
+        o.x -= o.vx * t; o.y -= o.vy * t;
+        let nx = o.x - cx, ny = o.y - cy;
+        const nl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= nl; ny /= nl;
+        const vn = o.vx * nx + o.vy * ny;
+        o.vx -= (1 + e) * vn * nx; o.vy -= (1 + e) * vn * ny;
+        const rn = o.rx * nx + o.ry * ny;
+        if (rn < 0) { o.rx -= (1 + e) * rn * nx; o.ry -= (1 + e) * rn * ny; }
+        o.x += o.vx * t; o.y += o.vy * t;
+        return true;
+      }
+    }
+  }
   let d = Math.sqrt(d2), nx, ny;
   if (d < 1e-9) {
     const sp = Math.sqrt(o.vx * o.vx + o.vy * o.vy) || 1;

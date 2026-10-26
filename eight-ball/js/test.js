@@ -272,15 +272,43 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
     let h4 = 2166136261; for (let i = 0; i < str4.length; i++) h4 = Math.imul(h4 ^ str4.charCodeAt(i), 16777619) >>> 0;
     ok('a table-4 match replays bit for bit as before table 5', h4 === 775933696, h4);
   }
+  const TABLE5_LOG = [[1,0,-1,1,0,50,162],[1,0.117916,0.993024,0.566,0],[0,0.948999,0.31528,0.5685,0],[1,0.274276,-0.961651,0.4245,0,50,162],[0,0.191538,0.981485,0.7429,0],[0,-0.514535,-0.85747,0.9076,0],[1,0.992688,-0.120706,1,0],[1,-0.782421,0.62275,1,0],[0,-0.491674,0.870779,1,0],[1,0.788133,-0.615504,0.7075,0],[0,-0.889926,-0.456105,0.688,0],[0,0.38988,0.920866,0.8479,0],[1,0.418622,-0.908161,1,0],[0,-0.999476,-0.032354,0.6815,0],[1,-0.117171,0.993112,1,0],[0,0.378473,-0.925612,0.6977,0],[1,-0.366139,-0.93056,1,0],[0,-0.461628,-0.887074,0.6089,0],[1,-0.127597,-0.991826,1,0],[1,0.883143,-0.469104,1,0],[0,-0.723221,-0.690616,0.7429,0,39.39,30.057],[0,0.174241,0.984703,0.7429,0],[1,0.120204,-0.992749,1,0],[0,0.401364,0.915919,0.3553,0],[1,-0.328709,-0.944431,1,0],[0,0.740236,-0.672347,0.6024,0],[0,-0.075427,0.997151,1,0],[1,0.172478,0.985013,1,0],[0,0.992515,0.122125,0.6589,-0.38],[1,-0.829261,-0.558862,1,0],[0,0.464172,0.885745,0.6864,0,57.958,130.027]];
   {
     // ...and table 5 as it played before table 6: a real 31-shot online match (shots only), from
     // before table 6 (2026-10-26), replayed to the same table.
-    const L = [[1,0,-1,1,0,50,162],[1,0.117916,0.993024,0.566,0],[0,0.948999,0.31528,0.5685,0],[1,0.274276,-0.961651,0.4245,0,50,162],[0,0.191538,0.981485,0.7429,0],[0,-0.514535,-0.85747,0.9076,0],[1,0.992688,-0.120706,1,0],[1,-0.782421,0.62275,1,0],[0,-0.491674,0.870779,1,0],[1,0.788133,-0.615504,0.7075,0],[0,-0.889926,-0.456105,0.688,0],[0,0.38988,0.920866,0.8479,0],[1,0.418622,-0.908161,1,0],[0,-0.999476,-0.032354,0.6815,0],[1,-0.117171,0.993112,1,0],[0,0.378473,-0.925612,0.6977,0],[1,-0.366139,-0.93056,1,0],[0,-0.461628,-0.887074,0.6089,0],[1,-0.127597,-0.991826,1,0],[1,0.883143,-0.469104,1,0],[0,-0.723221,-0.690616,0.7429,0,39.39,30.057],[0,0.174241,0.984703,0.7429,0],[1,0.120204,-0.992749,1,0],[0,0.401364,0.915919,0.3553,0],[1,-0.328709,-0.944431,1,0],[0,0.740236,-0.672347,0.6024,0],[0,-0.075427,0.997151,1,0],[1,0.172478,0.985013,1,0],[0,0.992515,0.122125,0.6589,-0.38],[1,-0.829261,-0.558862,1,0],[0,0.464172,0.885745,0.6864,0,57.958,130.027]];
+    const L = TABLE5_LOG;
     const m5 = E.newMatch('8', 1, 1, 2145862393, {}, 5, 2);
     for (const [, dx, dy, p, s, x, y] of L) { const sh = { dx, dy, p, s }; if (x != null) { sh.x = x; sh.y = y; } const r = E.play(m5, sh); if (r && r.kind === 'rack') E.nextRack(m5); }
     const str5 = JSON.stringify(m5.b.map((o) => [o.x, o.y, o.on])) + m5.turn + m5.scores + m5.groups;
     let h5 = 2166136261; for (let i = 0; i < str5.length; i++) h5 = Math.imul(h5 ^ str5.charCodeAt(i), 16777619) >>> 0;
     ok('a table-5 match replays bit for bit as before table 6', h5 === 1436965958, h5);
+  }
+  {
+    // ...and table 6 as it played before table 7: the same 31 shots on table 6 (where shot 31's
+    // ball-in-hand spot is refused: the position differs), hashed with table 6's own engine.
+    const m6 = E.newMatch('8', 1, 1, 2145862393, {}, 6, 2);
+    for (const [, dx, dy, p, s, x, y] of TABLE5_LOG) { const sh = { dx, dy, p, s }; if (x != null) { sh.x = x; sh.y = y; } const r = E.play(m6, sh); if (!r) break; if (r.kind === 'rack') E.nextRack(m6); }
+    const str6 = JSON.stringify(m6.b.map((o) => [o.x, o.y, o.on])) + m6.turn + m6.scores + m6.groups;
+    let h6 = 2166136261; for (let i = 0; i < str6.length; i++) h6 = Math.imul(h6 ^ str6.charCodeAt(i), 16777619) >>> 0;
+    ok('a table-6 match replays bit for bit as before table 7', h6 === 966065583, h6);
+  }
+  {
+    // Table 7: a cut shot sends the object ball exactly along the guide's line at any power and cut
+    // (tables 1-6 bent it by the overlap: up to 17 degrees at full power, 60-degree cut).
+    let worst = 0;
+    for (const p of [0.4, 0.7, 1]) for (const cut of [0, 20, 40, 60]) for (let j = 0; j < 12; j++) {
+      const m = E.newMatch('8', 1, 0, 1, {}, 7);
+      for (let i = 1; i < m.b.length; i++) m.b[i].on = false;
+      const ob = m.b[1]; ob.on = true; ob.x = 50; ob.y = 100;
+      const c = cut * Math.PI / 180, ux = Math.sin(c), uy = -Math.cos(c), d = 25 + j * 0.61;
+      m.b[0].x = 50 - ux * d; m.b[0].y = 100 + 2 * E.R - uy * d;
+      const g = E.aimContact(m, ux, uy);
+      const ev = E.begin(m, { dx: ux, dy: uy, p, s: 0 });
+      for (let k = 0; k < 4000 && ev.first < 0; k++) E.step(m.b, ev, m.obs);
+      const sp = Math.sqrt(ob.vx * ob.vx + ob.vy * ob.vy);
+      worst = Math.max(worst, Math.abs(ob.vx / sp - g.ox), Math.abs(ob.vy / sp - g.oy));
+    }
+    ok('table 7: the object ball goes exactly where the guide points', worst < 1e-6, worst);
   }
   E.useTable(5);
   ok('table 5: table 4\'s balls, GamePigeon\'s pockets (84 px of 717)', Math.abs(E.R * 2 - 1.25 * 42 * 100 / 717) < 1e-9 && E.POCKETS.every((p) => p.rp === p.r && Math.abs(p.r * 2 - 84 * 100 / 717) < 1e-9));
@@ -309,7 +337,7 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
     ok('rules 3: a ball potted on the break decides the groups; rules 2 left the table open',
       m3.last.pots.includes(11) && !m3.last.foul && m3.groups && m3.groups[0] === 'b' && m3.turn === 0 && m2.groups == null, JSON.stringify([m3.groups, m2.groups]));
   }
-  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 6);
+  ok('a new match is on today\'s table', E.newMatch('8').tb === E.TABLE_NOW && E.TABLE_NOW === 7);
   ok('a saved match with no table reads as table 1', E.tableOf({}) === 1 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 1), tb: undefined }));
   E.useTable(2);
   ok('table 2 is kept as it was: a ball of 41 px on 717 px of cloth', Math.abs(E.R * 2 - 41 * 100 / 717) < 1e-9);
