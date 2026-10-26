@@ -55,7 +55,7 @@ const p0 = await pts();
 // ADMIN ONLY until released (NEWS_FOR_ALL in way-out/js/ui.js): first as a player's phone.
 await page.reload();
 await page.waitForSelector('.wo-home');
-ok('player: no popup, no Replay button', (await page.locator('.wo-news').count()) === 0 && (await page.locator('.wo-replay').count()) === 0);
+ok('player: no popup, no Replay button, no test boards', (await page.locator('.wo-news').count()) === 0 && (await page.locator('.wo-replay').count()) === 0 && (await page.locator('.wo-testq').count()) === 0);
 await page.locator('.wo-seg[data-tier="easy"]').click();
 ok('player: Easy past 50 still says Complete, Play disabled', /Complet/.test(await page.locator('.wo-seg[data-tier="easy"] .wo-seg-sub').innerText())
   && (await page.locator('.wo-play[disabled]').count()) === 1);
@@ -77,6 +77,33 @@ await page.reload();
 await page.waitForSelector('.wo-home');
 await page.waitForTimeout(200);
 ok('admin: it shows once only', (await page.locator('.wo-news').count()) === 0);
+// TEST BOARDS (admin only): the list, a board played to the end, its result kept on the phone.
+await page.locator('.wo-testq').click();
+await page.waitForSelector('.wo-rp-row[data-act="test"]');
+ok('tests: ten boards listed', (await page.locator('.wo-rp-row[data-act="test"]').count()) === 10);
+await shot('8-tests');
+await page.locator('.wo-rp-row[data-n="5"]').click();
+await page.waitForFunction(() => window.__woTest);
+ok('tests: Test 5 on screen', /5/.test(await page.locator('.wo-level').innerText()));
+await shot('9-test-board');
+{
+  const keep0 = await snap();
+  for (let guard = 0; guard < 400; guard++) {
+    const s = await page.evaluate(() => (window.__woTest ? window.__woTest.state() : null));
+    if (!s || !s.left) break;
+    const id = await page.evaluate(() => window.__woTest.clearId());
+    if (id < 0) { await page.waitForTimeout(60); continue; }
+    const p = await page.evaluate((i) => window.__woTest.pointOf(i), id); await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(20);
+  }
+  await page.waitForSelector('.wo-rp-row[data-act="test"]', { timeout: 8000 });
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('gamehub.wayout.tests.v1') || '{}'));
+  ok('tests: the finish is kept on the phone, and the list shows it', Array.isArray(kept['5']) && kept['5'].length === 1 && kept['5'][0].m === 0
+    && /♥♥♥/.test(await page.locator('.wo-rp-row[data-n="5"] .wo-rp-gain').innerText()));
+  ok('tests: no save, clock or level touched, no stats recorded', JSON.stringify(await snap()) === JSON.stringify(keep0)
+    && (await page.evaluate(async () => (await import('/js/game-stats.js')).loadStats().games.wayout.byDiff.medium.won)) === 2);
+  await page.locator('.wo-modal [data-act="close"]').click();
+}
 const rbtn = page.locator('.wo-replay');
 ok('setup: a Replay button with the count (1)', (await rbtn.count()) === 1 && (await rbtn.innerText()).trim() === '1');
 ok('setup: the paused level still offers New game | Resume', (await page.locator('[data-act="new-level"]').count()) === 1);
