@@ -108,7 +108,7 @@ export function termsOf(raw) {
     opts: { call: o.call === true, bank: o.bank === true, obst: o.obst === true },
     aids: raw && AID_IDS.includes(raw.aids) ? raw.aids : 'medium',
     seed: raw && Number.isInteger(+raw.seed) && +raw.seed > 0 ? (+raw.seed >>> 0) : 1,
-    tb: raw && [2, 3, 4, 5].includes(+raw.tb) ? +raw.tb : 1,    // the table (engine.js, TABLE VERSIONS); none: the first
+    tb: raw && [2, 3, 4, 5, 6].includes(+raw.tb) ? +raw.tb : 1,    // the table (engine.js, TABLE VERSIONS); none: the first
     rv: raw && [2, 3].includes(+raw.rv) ? +raw.rv : 1,    // the rules (engine.js, RULES VERSIONS); none: the first
     ...fixOf(raw),
   };
