@@ -123,6 +123,8 @@
   touch-action: manipulation;
 }
 .wo-root button.wo-howq:focus-visible { outline: 3px solid #ffce3a; outline-offset: 2px; }
+/* Admin only (2026-10-26): the test boards, at the picture row's LEFT edge. */
+.wo-root button.wo-howq.wo-testq { right: auto; left: 0; font-size: 20px; }
 .wo-root .wo-hero { box-shadow: 0 10px 30px rgba(63, 214, 189, .16), 0 4px 14px rgba(0, 0, 0, .35); }
 /* The picture plays itself (2026-10-14): the free teal arrow waits, slides off the right edge with a
    trail and sparks, vanishes, and fades back in. CSS px on an SVG element are user units here. */
