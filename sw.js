@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1250;
-const CACHE = 'game-hub-v1253';
+const CACHE = 'game-hub-v1254';
 
 const ASSETS = [
   './',
@@ -219,6 +219,7 @@ const ASSETS = [
   './spelling-bee/js/strings.js',
   './spelling-bee/js/board.js',
   './spelling-bee/data/bee.json',
+  './spelling-bee/data/bee-es.json',
   './murdoku/',
   './murdoku/index.html',
   './murdoku/css/murdoku.css',
@@ -614,7 +615,7 @@ const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
 
 // --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-... [docs/SW-NOTES.md #10]
-const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee\.json)$/;
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json)$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -1004,11 +1005,12 @@ const REST_MANIFEST = {
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
   './spelling-bee/css/spelling-bee.css': '04bfe1bb1e',
-  './spelling-bee/js/ui.js': '9e64c1d9b0',
-  './spelling-bee/js/engine.js': '7c01ad8098',
-  './spelling-bee/js/strings.js': '9e301ced17',
-  './spelling-bee/js/board.js': '7464e603e2',
+  './spelling-bee/js/ui.js': '405f81dcdb',
+  './spelling-bee/js/engine.js': '91c982fda9',
+  './spelling-bee/js/strings.js': '969d3d648a',
+  './spelling-bee/js/board.js': '4bcbc9f43f',
   './spelling-bee/data/bee.json': 'c95ed8d253',
+  './spelling-bee/data/bee-es.json': '5b3bd30b10',
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
   './murdoku/css/murdoku.css': 'ec84773045',

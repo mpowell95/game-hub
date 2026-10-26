@@ -64,9 +64,28 @@ ok('hint grid adds up', gridSum === h.words);
 ok('two-letter list adds up', h.two.reduce((s, [, n]) => s + n, 0) === h.words);
 ok('shuffle keeps the letters', shuffled(['a', 'b', 'c', 'd', 'e', 'f']).sort().join('') === 'abcdef');
 
+// Spanish (2026-10-26): its own file, the same fairness bar, folded words with their real spelling kept.
+const { fold, puzzleOf } = await import('./engine.js');
+const es = parseData(JSON.parse(fs.readFileSync(fileURLToPath(new URL('../data/bee-es.json', import.meta.url)), 'utf8')));
+ok('es: word list is big, folded, no S, 4+', es.words.length > 4000 && es.words.every((w) => /^[a-rt-z]{4,}$/.test(w)), String(es.words.length));
+ok('es: at least 1000 puzzles, unique', es.puzzles.length >= 1000 && new Set(es.puzzles).size === es.puzzles.length);
+let esFair = true, esBad = '';
+for (let n = 0; n < es.puzzles.length; n++) {
+  const q = puzzleAt(es, n);
+  const a = answersFor(es, q);
+  const max = totalPoints(a, q);
+  if (q.letters.size !== 7 || !a.some((w) => isPangram(w, q)) || a.length < 25 || a.length > 90 || max < 80 || max > 450) { esFair = false; esBad = q.key; break; }
+}
+ok('es: every puzzle 7 letters, a pangram, 25-90 words, 80-450 points', esFair, esBad);
+ok('es: keys carry es: so they never meet an English save', puzzleAt(es, 0).key.startsWith('es:') && !puzzleOf('a:bcdefg').key.startsWith('es:'));
+ok('es: folding drops accents and makes Ñ an N', fold('Canción') === 'cancion' && fold('niña') === 'nina');
+ok('es: the real spelling is kept to show', es.spell.nina === 'niña' && es.spell.cancion === 'canción', JSON.stringify([es.spell.nina, es.spell.cancion]));
+ok('es: no bad word is an answer or a bonus word', !['puta', 'mierda', 'joder', 'cabron'].some((w) => es.words.includes(w) || es.extra.includes(w)));
+ok('es: names stay out of the answers', !['maria', 'martin', 'rita'].some((w) => es.words.includes(w)));
+
 // The daily board (board.js): pure parts, and the rules + backup entries it needs.
 const { rowsOf, boardKey } = await import('./board.js');
-ok('board key has no colon', boardKey('a:chlnrt') === 'a-chlnrt');
+ok('board key has no colon', boardKey('a:chlnrt') === 'a-chlnrt' && boardKey('es:a:chlnrt') === 'es-a-chlnrt');
 const rows = rowsOf({ A: { name: 'Ana', words: 12, points: 40, rank: 5 }, B: { name: 'test1', words: 30 }, C: { name: 'Zed', words: 12, points: 50, rank: 5 }, D: { name: 'X', words: 0 } });
 ok('board: most words first, ties by points, test accounts and zero rows out', rows.map((r) => r.code).join() === 'C,A');
 const fsx = await import('node:fs');

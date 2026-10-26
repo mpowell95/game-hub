@@ -31,7 +31,13 @@ Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 2
 swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); anyone with words on one sees it
 as a row under the calendar and can keep playing it (`_startDay(n, old)`), so no progress is hidden (rule 1).
 A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2).
-Credits: `data/CREDITS.md`. `bee.json` stays LAZY in `sw.js`.
+**Spanish (2026-10-26, Matt)**: `data/bee-es.json` from `tools/build-spelling-bee-es.mjs` (read its header); the
+puzzle language follows the hub's EN/ES setting (switching reloads). Answers = top 20,000 subtitle words in both
+RLA-ES and lemmatization-lists (conjugations count), ~49 a puzzle; the rest are bonus words. FOLDED like Boggle
+(no accents, Ñ = N; typing á/ñ works); words are stored in real spelling and shown that way ("Niña"). Keys
+`es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,491 puzzles (a letter set may return
+with a second centre). Names out of the answers (`NOT_ANSWERS`), vulgar families out (`BLOCK_RE`).
+Credits: `data/CREDITS.md`. `bee.json` and `bee-es.json` stay LAZY in `sw.js`.
 
 ## Screens
 

@@ -21,7 +21,13 @@ export const GENIUS = 8;   // index of Genius in RANKS
 export const QUEEN = 9;
 export const MAX_LEN = 19; // longer input is refused ("Too long")
 
-const DATA_URL = new URL('../data/bee.json', import.meta.url);
+const DATA_URL = {
+  en: new URL('../data/bee.json', import.meta.url),
+  es: new URL('../data/bee-es.json', import.meta.url),   // Spanish (2026-10-26), its own puzzles
+};
+
+/** Accents off, Ñ as N: how every Spanish word is stored, typed and checked (Boggle does the same). */
+export const fold = (w) => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /** Parse the generated file into { epoch, words: string[], extra: string[], puzzles: string[] }.
  *  `words` are the answers (hints and ranks count them); `extra` are rarer real words, accepted and
@@ -31,11 +37,16 @@ export function parseData(raw) {
   const extra = typeof raw.extra === 'string' && raw.extra ? raw.extra.split(' ') : [];
   // retired: day -> the letters that day had before it was swapped for a fuller puzzle.
   const retired = raw.retired && typeof raw.retired === 'object' ? raw.retired : {};
-  return { epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles, retired };
+  const lang = raw.lang === 'es' ? 'es' : 'en';
+  // Spanish words arrive in their real spelling ("niña"): fold them, keep the spelling to show.
+  const spell = {};
+  const folded = (list) => list.map((w) => { const f = fold(w); if (f !== w) spell[f] = w; return f; });
+  const words = raw.words.split(' ');
+  return { lang, epoch: raw.epoch, words: lang === 'es' ? folded(words) : words, extra: lang === 'es' ? folded(extra) : extra, spell, puzzles: raw.puzzles, retired };
 }
 
-export async function loadData() {
-  const res = await fetch(DATA_URL);
+export async function loadData(lang = 'en') {
+  const res = await fetch(DATA_URL[lang] || DATA_URL.en);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return parseData(await res.json());
 }
@@ -63,14 +74,15 @@ export function dateOfDay(epoch, n) {
 /** Puzzle for day n: { center, outer: [6], letters: Set, key }. */
 export function puzzleAt(data, n) {
   const len = data.puzzles.length;
-  return puzzleOf(data.puzzles[((n % len) + len) % len]);
+  return puzzleOf(data.puzzles[((n % len) + len) % len], data.lang);
 }
 
-/** Puzzle from its letters 'c:abcdef'. */
-export function puzzleOf(s) {
+/** Puzzle from its letters 'c:abcdef'. A Spanish puzzle's key is 'es:c:abcdef', so it never shares a
+ *  save or a daily board with an English puzzle on the same letters. */
+export function puzzleOf(s, lang) {
   const center = s[0];
   const outer = s.slice(2).split('');
-  return { center, outer, letters: new Set([center, ...outer]), key: s };
+  return { center, outer, letters: new Set([center, ...outer]), key: (lang === 'es' ? 'es:' : '') + s };
 }
 
 export function isPangram(word, puzzle) {
