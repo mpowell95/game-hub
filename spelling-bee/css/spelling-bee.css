@@ -134,6 +134,7 @@
 .sb-root .sb-panel-list { list-style: none; margin: 0; padding: 0; column-count: var(--sb-cols, 2); column-gap: 16px; column-fill: auto; height: 100%; font-size: var(--sb-pfs, 16px); }
 .sb-root .sb-panel-list li { line-height: 1.55; border-bottom: 1px solid var(--sb-line); break-inside: avoid; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sb-root .sb-panel-list li.is-pangram { font-weight: 800; }
+.sb-root .sb-panel-list li.is-bonus, .sb-root .sb-found-list .is-bonus { font-style: italic; }
 
 /* --- modals --------------------------------------------------------------------------------- */
 .sb-root .sb-modal { font-size: 15px; }
