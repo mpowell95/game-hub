@@ -10,8 +10,15 @@
 //     gave 22-word days; Matt, 2026-10-26: "Obviously all words should count". Size 70 brought in
 //     CEORL, ORLE, OCREA as words to find, so 60.)
 //   * boggle/data/words.txt (ENABLE, public domain): a SCOWL word must also be here, which drops
-//     proper nouns, abbreviations and odd spellings. Every OTHER ENABLE word that fits the rules is
-//     written as `extra`: accepted and scored as a bonus word, never counted in hints or ranks.
+//     proper nouns, abbreviations and odd spellings.
+//   * BONUS words (`extra`: accepted and scored, never in hints or ranks) = ENABLE words that are ALSO
+//     in SCOWL size 70 and said at least MIN_SAID times in FrequencyWords en 2018 (Hermit Dave,
+//     OpenSubtitles, CC BY-SA 4.0), not a first name, AND on the hand-checked BONUS_KEEP list. Until 2026-10-26 it was every ENABLE word, and Matt found CRATCH,
+//     CRANCH, HANT, ANNA, CARL ("Why are you allowing so many names?... words that I'm pretty sure
+//     aren't words"). Words a player already found keep counting (spelling-bee/js/ui.js `_kept`).
+//   * NAMES: a word in either first-name list (dominictarr/random-name, smashew/NameDatabases, both
+//     MIT) is never a BONUS word (ANNA, CARL). The answers are left alone: their names are words first
+//     (TEDDY, JOEY, GRAHAM).
 //   * LDNOOBW English bad-word list (CC BY 4.0) plus BLOCK below: dropped entirely.
 //
 // RULES (the NYT game's): 4+ letters, no S anywhere, at most 7 different letters.
@@ -43,6 +50,36 @@ const EPOCH = '2026-10-22';
 const SCOWL_TGZ = 'https://registry.npmjs.org/wordlist-english/-/wordlist-english-1.2.1.tgz';
 const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en';
 const LEVELS = [10, 20, 35, 40, 50, 55, 60];
+const BONUS_LEVEL = 70;
+const MIN_SAID = 50;
+// HAND-CHECKED (2026-10-26): every candidate the filters below let through (789) was read, and only
+// these real, recognisable words were kept. Place names (COLORADO), foreign words (VIER), surnames,
+// archaic forms (AFORE) and odd Scrabble words were left out. A candidate NOT on this list is not a bonus
+// word, so a re-run with newer sources never lets new junk in unseen: read the new ones, add the good.
+const BONUS_KEEP = new Set(`
+  accelerant actin aikido airboat airframe albedo alchemical alginate alopecia amygdala anabolic angiogram
+  apnea arcana armoire arnica attaboy auteur axeman backbeat bambino bechamel bedouin bellflower belvedere
+  bended bigfoot billabong bioengineering biogenic birdman brachial brumby brut bubonic cabernet cacciatore
+  calzone campion candela cannoli cannula cantina capybara caracara carioca cartoony cautery celadon celiac
+  cellblock challah charnel chewable chinook chorizo chroma citrate corniche corrida creatine creatinine
+  croaker cubby cupbearer cutwater cyanotic daikon decoction decrypt decrypted deltoid diazepam doornail
+  doozy doughboy dozer dreidel duffel dugong durian earthman earthmen ecotone ectopic eidetic electro
+  empanada epically everyman evite expander fakery falafel fatted firebird flathead flytrap focaccia frag
+  frittata froggy gamelan gawker genomic glitchy glom glutamate goby goldeneye golem gonzo gothic grappa
+  grappler grayling grift grifter gunplay hadron handoff hardwired heartbreaker hearted hellhound hematoma
+  henbane hypoxia icefall ideation igniter iguanodon ikebana iliac illuminati impaler intubate jillion
+  jodhpur jughead juju juke kahuna kakapo keycard kimchi klatch koto kraken kremlin kudu kulak latino lockbox
+  lollapalooza loverly lurker luxe mako mandragora manhattan manicotti marmite martian matchup medevac
+  meerkat meltwater merengue mezuzah midline minke mojo multimillion muncher norepinephrine occipital olivine
+  opioid orca oryx outthink oxytocin pandit panzer papilloma penne peridot photonic picklock pika pineal
+  playa pleural polenta porkpie porphyria pouty ranchero rancho recut recycler redline reflux regenerator
+  rehydrate relatable remora retractor revenant riddler ringtail roulade tach taipan tantric tarnation
+  taverna telluride tetherball tiffin tiki tinhorn titrate torero trattoria trebuchet tuff tupelo turndown
+  unburied unclench undead unelected untethered untuck unturned valerian veiny venetian wahoo warfarin
+  wendigo wheelman whirly witchy woodruff yenta yippie youngling ziggurat zirconia ziti`.split(/\s+/).filter(Boolean));
+const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt';
+const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
+  'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
 const KEEP = 10;   // days 0-9 (Oct 22-31 2026): shipped before the 2026-10-26 re-pick
 // Days swapped for a fuller puzzle (Matt, 2026-10-26: "I hate today's puzzle", 23 words). day -> the
 // letters it had; swapped only while it still has them, so a re-run never swaps twice.
@@ -84,19 +121,27 @@ async function main() {
   for (const w of BLOCK) bad.add(w);
   const enable = new Set(fs.readFileSync(path.join(ROOT, 'boggle/data/words.txt'), 'utf8').split('\n').map((w) => w.trim().toLowerCase()));
 
-  const set = new Set();
-  for (const p of ['english', 'american']) {
-    for (const l of LEVELS) {
+  const level = new Map();   // word -> the smallest SCOWL size that has it
+  for (const l of [...LEVELS, BONUS_LEVEL]) {
+    for (const p of ['english', 'american']) {
       const f = path.join(dir, 'package', `${p}-words-${l}.json`);
-      if (fs.existsSync(f)) for (const w of JSON.parse(fs.readFileSync(f, 'utf8'))) set.add(w);
+      if (fs.existsSync(f)) for (const w of JSON.parse(fs.readFileSync(f, 'utf8'))) if (!level.has(w)) level.set(w, l);
     }
   }
-  const words = [...set]
-    .filter((w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && enable.has(w) && !bad.has(w) && bits(maskOf(w)) <= 7)
-    .sort();
+  const said = new Map();
+  for (const line of fs.readFileSync(await cached(FREQ_URL, 'en_full.txt'), 'utf8').split('\n')) {
+    const [w, n] = line.split(' ');
+    if (w && !said.has(w)) said.set(w, Number(n) || 0);
+  }
+  const names = new Set();
+  for (const [i, u] of NAME_URLS.entries()) {
+    for (const n of fs.readFileSync(await cached(u, `names-${i}.txt`), 'utf8').split(/\r?\n/)) if (n.trim()) names.add(n.trim().toLowerCase());
+  }
+  const fits = (w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && enable.has(w) && !bad.has(w) && bits(maskOf(w)) <= 7;
+  const words = [...level.keys()].filter((w) => level.get(w) <= LEVELS[LEVELS.length - 1] && fits(w)).sort();
   const answerSet = new Set(words);
-  const extra = [...enable]
-    .filter((w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && !answerSet.has(w) && !bad.has(w) && bits(maskOf(w)) <= 7)
+  const extra = [...level.keys()]
+    .filter((w) => !answerSet.has(w) && level.get(w) <= BONUS_LEVEL && (said.get(w) || 0) >= MIN_SAID && !names.has(w) && BONUS_KEEP.has(w) && fits(w))
     .sort();
   const masks = words.map(maskOf);
 

@@ -9,6 +9,8 @@
 //     boggle/data/CREDITS.md) plus every inflected form in lemmatization-lists (Michal Boleslav
 //     Mechura, ODbL) whose lemma or form is in that list. The second source brings the conjugations
 //     ("tengo", "hacen") that Boggle's list leaves out on purpose: "all words should count".
+//   * BONUS words: accepted forms that are also in the subtitle list (people say them), never a first
+//     name (the same two name lists as English, MIT). Everything else is "not in word list".
 //   * ANSWERS (what hints and ranks count) = accepted words that are in BOTH sources and among the
 //     20,000 most frequent words of FrequencyWords es 2018 (Hermit Dave, OpenSubtitles, CC BY-SA 4.0),
 //     minus NOT_ANSWERS (names and loanwords that survive both lists). 20,000 gives ~48 answers a
@@ -43,6 +45,8 @@ const EPOCH = '2026-10-26';
 const TOP = 20000;
 const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt';
 const LEM_URL = 'https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-es.txt';
+const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
+  'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
 const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/es';
 
 // Vulgarities and slurs LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
@@ -108,6 +112,10 @@ async function main() {
     const ff = fold(form);
     if (WORD.test(ff) && (A.has(flat(lemma)) || A.has(flat(ff)))) B.add(ff);
   }
+  const names = new Set();
+  for (const [i, u] of NAME_URLS.entries()) {
+    for (const n of (await cached(u, `names-${i}.txt`)).split(/\r?\n/)) if (n.trim()) names.add(fold(n.trim()));
+  }
   const rank = new Map();
   for (const [i, line] of (await cached(FREQ_URL, 'es_50k.txt')).split(/\r?\n/).entries()) {
     const f = fold(line.split(' ')[0] || '');
@@ -122,7 +130,9 @@ async function main() {
   const accepted = [...new Set([...fromA, ...B])].filter(fits).sort();
   const words = accepted.filter((w) => L.has(w) && rank.has(w) && rank.get(w) < TOP && !NOT_ANSWERS.has(w));
   const answerSet = new Set(words);
-  const extra = accepted.filter((w) => !answerSet.has(w));
+  // Bonus words (2026-10-26, after Matt found CRATCH and ANNA in English): only forms people actually
+  // say (in the 50,000-word subtitle list) and in lemmatization-lists, never a name.
+  const extra = accepted.filter((w) => !answerSet.has(w) && rank.has(w) && L.has(w) && !NOT_ANSWERS.has(w) && !names.has(w));
 
   const masks = words.map(maskOf);
   const sets = [...new Set(masks.filter((m) => bits(m) === 7))].sort((a, b) => a - b);

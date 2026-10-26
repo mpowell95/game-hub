@@ -28,6 +28,10 @@ const STATS_ID = 'spellingbee';
 let instance = null;
 const DATA_PROMISE = {};   // per language: the word list, fetched once per page
 
+/** A word found under an older, bigger bonus list keeps counting (THE LAW rules 1-2: Matt's CRATCH,
+ *  found 2026-10-26, before the list was hand-checked). Only words that passed checkWord were ever
+ *  saved, so a stored word that still fits the puzzle's letters was accepted when it was found. */
+const legal = (w, p) => typeof w === 'string' && w.length >= 4 && w.includes(p.center) && [...w].every((c) => p.letters.has(c));
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
@@ -181,7 +185,7 @@ class SpellingBee {
     this.save = loadSave();
     this.rec = recOf(this.save, this.puzzle, this.day);
     // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
-    this.found = new Set(this.rec.found.filter((w) => this.counts(w)));
+    this.found = new Set(this.rec.found.filter((w) => this.counts(w) || legal(w, this.puzzle)));
     this.outer = this.puzzle.outer.slice();
     this._settle = null;
     this._busy = false;
@@ -321,7 +325,7 @@ class SpellingBee {
 
   _paintFound() {
     const n = this.found.size;
-    const order = this.rec.found.filter((w) => this.counts(w));
+    const order = this.rec.found.filter((w) => this.found.has(w));
     this.el.recent.innerHTML = this.open
       ? `<span class="sb-found-count">${esc(n === 1 ? t('words_1') : t('words_n', { n }))}</span>`
       : (n ? order.slice().reverse().map((w) => `<span class="${this._cls(w)}">${esc(this._show(w))}</span>`).join('')
@@ -705,7 +709,7 @@ class SpellingBee {
     const ex = new Set(extrasFor(this.data, p));
     const gs = new Set(got);
     let sc = 0;
-    for (const w of gs) if (set.has(w) || ex.has(w)) sc += scoreWord(w, p);
+    for (const w of gs) if (set.has(w) || ex.has(w) || legal(w, p)) sc += scoreWord(w, p);
     const max = totalPoints(ans, p);
     let ri = rankIndex(sc, max, ans.every((w) => gs.has(w)));
     if (r.recorded && ri < GENIUS) ri = GENIUS;
