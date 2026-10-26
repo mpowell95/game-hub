@@ -41,7 +41,11 @@ const MODEL_YAW = -1.1;
 // Leaned MODEL_CANT (radians) so the arm rises from low on the left up to the hand, as from a shoulder
 // below the eye; flat, it read as the arm held above the head (Matt, 2026-10-22). The bow leans with it.
 const MODEL_CANT = 0.3;
-const MODEL_REST = [0.6, -2.95, 0.3];     // the arrow lies on the hand, just left of the bow (before MODEL_CANT)
+// DRAWN, the bow stands UPRIGHT (Matt, 2026-10-26: leaned 0.3 it cut across the middle of the screen
+// while aiming). The arm still rises from low on the left: turned toward you (yaw) and tipped down
+// toward the eye (pitch), it runs off the bottom-left corner instead. setPose blends rest -> drawn by p.
+const MODEL_DRAWN = { pitch: 0.3, yaw: -0.7, cant: -0.15 };
+const MODEL_REST = [0.6, -2.95, 0.3];     // the arrow lies on the hand, just left of the bow (model unleaned)
 const MODEL_COLORS = ['#f1c7a6', '#79a3dc', '#2c7cf0', '#2a2f36', '#3b4048'];   // skin, sleeve, bow, grip, tips
 
 export class BowView {
@@ -345,13 +349,14 @@ export class BowView {
       this.model = { mesh, tipT, tipB, rods, v: [new THREE.Vector3()] };
       for (const ch of this.built) ch.visible = false;
       this.forearm.visible = this.sleeve.visible = this.cuff.visible = false;
-      // MODEL_REST is where the arrow lies on the hand with the model upright; lean it with the model.
+      // MODEL_REST is where the arrow lies on the hand with the model unleaned; kept in the model's own
+      // frame so it turns with the model in every pose (setPose).
       mesh.rotation.z = 0;
       mesh.updateMatrix();
-      const rest = new THREE.Vector3(...MODEL_REST).applyMatrix4(mesh.matrix.clone().invert());
+      this.model.rest = new THREE.Vector3(...MODEL_REST).applyMatrix4(mesh.matrix.clone().invert());
       mesh.rotation.z = MODEL_CANT;
       mesh.updateMatrix();
-      this.rest = rest.applyMatrix4(mesh.matrix).toArray();
+      this.rest = this.model.rest.clone().applyMatrix4(mesh.matrix).toArray();
       if (this._lastPose) this.setPose(this._lastPose);
     } catch (e) {
       console.warn('archery: the bow model did not load; using the built bow', e);
@@ -385,6 +390,13 @@ export class BowView {
     const rig = this.rig;
     rig.position.set(((x - this.w / 2) / this.f) * depth, (-(y - this.h / 2) / this.f) * depth, -depth);
     rig.rotation.set(0.05, 0.22 + 0.3 * (1 - p), (-rot * Math.PI) / 180, 'ZYX');
+    if (this.model) {
+      // Down: leaned as before. Drawn: upright (MODEL_DRAWN). The arrow's rest turns with it.
+      const M = this.model.mesh;
+      M.rotation.set(MODEL_DRAWN.pitch * p, Math.PI / 2 + MODEL_YAW + (MODEL_DRAWN.yaw - MODEL_YAW) * p, MODEL_CANT + (MODEL_DRAWN.cant - MODEL_CANT) * p);
+      M.updateMatrix();
+      this.rest = a.copy(this.model.rest).applyMatrix4(M.matrix).toArray();
+    }
     rig.updateMatrixWorld(true);
     // The arrow: from the nock by the face, through the rest, its point a little past the shelf.
     const nk = NOCK.idle.map((v, i) => v + (NOCK.drawn[i] - v) * p);
