@@ -853,7 +853,7 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
     ok(`js/hub.js ${fn} imports alerts only for games on this launcher`, /onLauncher\.has\(g\.id\)/.test(body));
   }
   // Every admin-only game in js/hub.js today has an entry (a stale block: run validate-sw-assets.mjs).
-  for (const id of ['air-hockey', 'archery', 'baseball', 'cuppong', 'darts', 'gridlock', 'hoops4', 'way-out']) {
+  for (const id of ['archery', 'baseball', 'battle-arena', 'gridlock', 'way-out']) {   // Air Hockey, Cup Pong, Darts, Hoops, Pool released 2026-10-26
     ok(`admin-only game ${id} has a HELD_BACK entry`, ids.includes(id));
   }
 

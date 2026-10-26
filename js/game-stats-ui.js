@@ -66,10 +66,9 @@ const TABS = [
   { id: 'brickblitz', labelKey: 'game_title_brickblitz' },
   // Texas Hold'em (released 2026-09-27). total/byDiff only, so the generic screen draws it.
   { id: 'holdem', labelKey: 'game_title_holdem' },
-  // Admin only while it is built in stages (docs/AIR-HOCKEY-BRIEF.md); same reasoning as Baseball's row below.
-  { id: 'airhockey', labelKey: 'game_title_airhockey', devOnly: true },
-  // Admin only while it is built in stages (docs/CUP-PONG-BRIEF.md); plain total/byDiff vs the computer.
-  { id: 'cuppong', labelKey: 'game_title_cuppong', devOnly: true },
+  // Air Hockey and Cup Pong: released 2026-10-26 (live from the admin page since 2026-09-28).
+  { id: 'airhockey', labelKey: 'game_title_airhockey' },
+  { id: 'cuppong', labelKey: 'game_title_cuppong' },
   // Darts (2026-10-01): admin only at first, but NOT devOnly here (Murdoku's reasoning): a row only
   // renders for a game with plays, and a devOnly tab would stay hidden after Matt releases it from
   // the admin page. total/byDiff only, so the generic screen draws it.
