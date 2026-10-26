@@ -49,11 +49,34 @@ await page.evaluate(async () => {
 const keep = ['gamehub.wayout.v1', 'gamehub.wayout.ladder2.saves.v1', 'gamehub.wayout.ladder2.clocks.v1'];
 const snap = () => page.evaluate((ks) => ks.map((k) => localStorage.getItem(k)), keep);
 const pts = () => page.evaluate(async () => { const T = await import('/js/arrow-maze-time.js'); const G = await import('/js/game-stats.js'); return T.woPoints(G.loadStats().games.wayout); });
-const before = await snap();
+let before = await snap();
 const p0 = await pts();
 
+// ADMIN ONLY until released (NEWS_FOR_ALL in way-out/js/ui.js): first as a player's phone.
 await page.reload();
 await page.waitForSelector('.wo-home');
+ok('player: no popup, no Replay button', (await page.locator('.wo-news').count()) === 0 && (await page.locator('.wo-replay').count()) === 0);
+await page.locator('.wo-seg[data-tier="easy"]').click();
+ok('player: Easy past 50 still says Complete, Play disabled', /Complet/.test(await page.locator('.wo-seg[data-tier="easy"] .wo-seg-sub').innerText())
+  && (await page.locator('.wo-play[disabled]').count()) === 1);
+await page.locator('.wo-seg[data-tier="medium"]').click();
+const after0 = await snap();
+ok('player: saves, clocks and every next level untouched (only the chosen difficulty is remembered)', after0[1] === before[1] && after0[2] === before[2]
+  && JSON.stringify(JSON.parse(after0[0]).ladder2) === JSON.stringify(JSON.parse(before[0]).ladder2));
+before = after0;
+// Now one of Matt's devices.
+await page.evaluate(() => localStorage.setItem('gamehub.adminDevice.v1', '1'));
+await page.reload();
+await page.waitForSelector('.wo-news');
+ok('admin: the popup shows, with this person\'s count (1)', (await page.locator('.wo-news-chip b').innerText()).trim() === '1');
+await shot('0-news');
+await page.locator('.wo-news .gh-btn--primary').click();
+ok('admin: Got it closes it and stamps it seen', (await page.locator('.wo-modal[hidden]').count()) === 1
+  && (await page.evaluate(() => localStorage.getItem('gamehub.wayout.news.v1'))) === '["replay-more-2026-10-26"]');
+await page.reload();
+await page.waitForSelector('.wo-home');
+await page.waitForTimeout(200);
+ok('admin: it shows once only', (await page.locator('.wo-news').count()) === 0);
 const rbtn = page.locator('.wo-replay');
 ok('setup: a Replay button with the count (1)', (await rbtn.count()) === 1 && (await rbtn.innerText()).trim() === '1');
 ok('setup: the paused level still offers New game | Resume', (await page.locator('[data-act="new-level"]').count()) === 1);

@@ -247,6 +247,12 @@ Matt: *"People have beaten easy and medium and hard ... we need to add WAY more 
 Expert arrows are too small to tap reliably), and *"let people see and replay the ones they messed up on
 ... if I made 1 mistake, I have to make zero mistakes to get all the points."* Matt chose: never end,
 keep counting (Easy 51 ...), Easy stays 1 point (so it never has anything to replay).
+**ADMIN ONLY until Matt releases it** (*"Release it admin only too"*): `NEWS_FOR_ALL = false` in ui.js,
+`hasNews()` = that or `isAdminDevice()`. Everyone else plays as before (bands end, "Complete", no
+Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder already shipped).
+- **Popup** (`_showNews`, Matt's mock-up): once per phone on the setup screen, NEW badge, ↻ chip with the
+  person's own count across all difficulties (icon alone at 0), Easy / Level 51 chip, Got it + X; stamped
+  in `gamehub.wayout.news.v1` (`replay-more-2026-10-26`, a seen-list) when it closes by any route.
 
 - **More levels**: `src: {k:'X', band, n, g: 7}`, `buildMore(band, n)` (engine.js, GENERATOR 7, pinned by
   hash): each board is built like a ladder level picked by its seed from the top of its own band

@@ -621,3 +621,6 @@ they were given full points. The more-levels boards pick their spec from the top
 arrows never get smaller than the difficulty already had (Matt's tapping complaint). Built on branch
 `claude/arrow-maze-replay-more-levels`, held back from `main` for Matt's review (Arrow Maze is network-first
 while devOnly, so a merge would reach every player at once).
+
+Same day: Matt approved a mock announcement and said *"Release it admin only too"*: merged to `main` behind
+`NEWS_FOR_ALL = false` (only `isAdminDevice()` phones get more levels, Replay and the popup).

@@ -62,6 +62,11 @@ const V1_START = { easy: 1, medium: 51, hard: 101, expert: 151 };
 /** A first-ladder position, in today's numbering: the same place in the same band. Only Expert
  *  moved (151 -> 201); Hard's 151 was "complete" and is now simply Hard's 51st level. */
 const v1ToV2 = (band, n) => (band === 'expert' ? n - V1_START.expert + BAND_START.expert : n);
+// MORE LEVELS, REPLAY and their announcement (2026-10-26) are ADMIN ONLY until Matt releases them
+// (Matt: "Release it admin only"). Everyone else plays exactly as before: Easy, Medium and Hard end
+// at 50 / 100 / 200 ("Complete"), no Replay button, no popup. Releasing = set this to true.
+const NEWS_FOR_ALL = false;
+const hasNews = () => NEWS_FOR_ALL || isAdminDevice();
 const MAX_LEVEL = 1000000;   // a sane ceiling: corrupt settings once showed "Level 1e+21"
 const LIVES = 3;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
@@ -161,6 +166,19 @@ function readOldSave(tier, level) {
     const gen = Number.isInteger(s.gen) && s.gen >= 1 && s.gen <= GEN_LATEST ? s.gen : 1;
     return { gone: ids(s.gone), red: ids(s.red), lives, gen };
   } catch { return null; }
+}
+// The Replay / more-levels popup's seen stamp (2026-10-26): a seen-list, a preference (per phone).
+const NEWS_KEY = 'gamehub.wayout.news.v1';
+const NEWS_ID = 'replay-more-2026-10-26';
+function newsSeen() {
+  try { const v = JSON.parse(localStorage.getItem(NEWS_KEY) || '[]'); return Array.isArray(v) && v.includes(NEWS_ID); } catch { return false; }
+}
+function markNewsSeen() {
+  try {
+    const v = JSON.parse(localStorage.getItem(NEWS_KEY) || '[]');
+    const list = Array.isArray(v) ? v : [];
+    if (!list.includes(NEWS_ID)) localStorage.setItem(NEWS_KEY, JSON.stringify(list.concat([NEWS_ID])));
+  } catch (err) { console.error('[way-out] news seen-stamp NOT saved', err); }
 }
 function readJSON(key) {
   try {
@@ -475,7 +493,7 @@ class WayOut {
     this.offLang = onLangChange(() => this.render());
     // A Rush run saved between boards opens by itself, and no other Arrow Maze game can be played
     // until it is finished (Matt, 2026-10-22).
-    if (!this._resumeAnyRush()) this.render();
+    if (!this._resumeAnyRush()) { this.render(); this._showNews(); }
   }
 
   destroy() {
@@ -643,20 +661,23 @@ class WayOut {
     if (this.settings.mode === 'rush') return this._rushHomeHTML(modeTabs);
     const tier = this.settings.tier;
     const level = this.settings.ladder[tier];
-    const paused = isPaused(tier, level);
+    const news = hasNews();
+    // Without the more levels (everyone but Matt until released), Easy, Medium and Hard end.
+    const done = !news && level > bandEnd(tier);
+    const paused = !done && isPaused(tier, level);
     // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
     // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
     // (Matt, 2026-10-14: a solid line like the others, not a dashed one). Since 2026-10-26 no
     // difficulty ends: past its last ladder level each bar does the same, 50 levels a lap.
     const segs = TIERS.map((k) => {
-      const n = this.settings.ladder[k], end = bandEnd(k);
+      const n = this.settings.ladder[k], end = bandEnd(k), fin = !news && n > end;
       const pct = k === 'expert' ? Math.round(100 * (((n - BAND_START[k]) % EXPERT_LAP) / EXPERT_LAP))
-        : n > end ? Math.round(100 * (((n - end - 1) % EXPERT_LAP) / EXPERT_LAP))
+        : n > end && news ? Math.round(100 * (((n - end - 1) % EXPERT_LAP) / EXPERT_LAP))
         : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
       return `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
-        <span class="wo-seg-sub">${t('level_n', { n })}</span>
+        <span class="wo-seg-sub">${fin ? t('band_done') : t('level_n', { n })}</span>
         <span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
       </button>`;
     }).join('');
@@ -664,17 +685,19 @@ class WayOut {
     // 2026-10-16: the lives tile "is just there"; fewer words). The words stay for screen readers.
     const thick = this._thick();
     const tiles = this._tilesHTML([
-      { cls: 'is-pts', icon: ICON_STAR, v: t('lv_pts', { n: woLevelPoints(level, tier) }), l: t('lv_tile_worth'), quiet: true },
+      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level, tier) }), l: t('lv_tile_worth'), quiet: true },
       { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine'), quiet: true },
       { cls: 'is-thick', html: `<button type="button" class="wo-thick${thick ? ' is-on' : ''}" data-act="thick" role="switch" aria-checked="${thick}" aria-label="${t('thick_aria')}">${thick ? ICON_THICK : ICON_THIN}<i class="wo-thick-sw" aria-hidden="true"></i></button>` },
     ], t('lv_tiles_aria'));
     // Replay (2026-10-26): levels of this difficulty that earned less than their full points, a
     // count on a button at the left of the Play row; it opens the list. Absent when there are none.
-    const missed = woMissed(this._myWayout(), tier).length;
+    const missed = news ? woMissed(this._myWayout(), tier).length : 0;
     const replay = missed ? `<button type="button" class="gh-btn wo-play wo-replay" data-act="replays" aria-label="${t('replay_aria', { n: missed })}">${ICON_REPLAY}<b>${missed}</b></button>` : '';
     // A paused level: New game (left, the same board from nothing, clock at 0:00) and Resume
     // (right), Minesweeper's order (Matt, 2026-10-16). Otherwise one Play button.
-    const play = paused ? `<div class="wo-playrow${replay ? ' is-three' : ''}">${replay}
+    const play = done
+      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
+      : paused ? `<div class="wo-playrow${replay ? ' is-three' : ''}">${replay}
           <button type="button" class="gh-btn gh-btn--block wo-play" data-act="new-level">${t('new_game')}</button>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('resume')}</button>
         </div>`
@@ -813,14 +836,15 @@ class WayOut {
     else if (act === 'tier') {
       if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
     } else if (act === 'play') {
-      const k = this.settings.tier;
-      this._startLevel(k, this.settings.ladder[k]);
+      const k = this.settings.tier, n = this.settings.ladder[k];
+      if (hasNews() || n <= bandEnd(k)) this._startLevel(k, n);
     } else if (act === 'new-level') {
-      const k = this.settings.tier;
-      this._newLevel(k, this.settings.ladder[k]);
+      const k = this.settings.tier, n = this.settings.ladder[k];
+      if (hasNews() || n <= bandEnd(k)) this._newLevel(k, n);
     }
-    else if (act === 'replays') this._openReplays();
-    else if (act === 'replay') this._startReplay(this.settings.tier, +btn.dataset.l, +btn.dataset.g);
+    else if (act === 'replays' && hasNews()) this._openReplays();
+    else if (act === 'replay' && hasNews()) this._startReplay(this.settings.tier, +btn.dataset.l, +btn.dataset.g);
+    else if (act === 'news-close') this._closeModal();
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
@@ -887,6 +911,7 @@ class WayOut {
   }
 
   _closeModal() {
+    if (this._newsOpen) { this._newsOpen = false; markNewsSeen(); }
     const m = this.root.querySelector('.wo-modal');
     m.hidden = true;
     m.innerHTML = '';
@@ -957,6 +982,37 @@ class WayOut {
   // js/arrow-maze-time.js "REPLAY" has the rules. A replay is played on the level's own board with
   // three hearts and its own clock from 0:00, and keeps NOTHING on the phone (no save, no clock key):
   // leaving drops it, Restart and Try again start it clean. Only its finish is recorded.
+
+  /** The one-time popup about Replay and the more levels (2026-10-26, Matt's approved mock-up): shown
+   *  on the setup screen the first time this phone opens Arrow Maze with them, stamped seen when it
+   *  closes by any route (Got it, X, Escape). The ↻ chip carries this person's own count of levels to
+   *  replay, all difficulties; with none, the icon alone. */
+  _showNews() {
+    if (!hasNews() || this.screen !== 'home' || newsSeen()) return;
+    const m = this.root.querySelector('.wo-modal');
+    if (!m || !m.hidden) return;
+    const rec = this._myWayout();
+    const n = TIERS.reduce((a, k) => a + woMissed(rec, k).length, 0);
+    m.innerHTML = `
+      <div class="gh-modal wo-dialog wo-news" role="dialog" aria-modal="true" aria-labelledby="wo-news-h">
+        <button type="button" class="gh-modal__close" data-act="news-close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="wo-news-badge" id="wo-news-h">${t('news_new')}</h2>
+        <div class="wo-news-row">
+          <div class="wo-news-pic"><span class="wo-news-chip">${ICON_REPLAY}${n ? `<b>${n}</b>` : ''}</span></div>
+          <p class="wo-news-txt">${t('news_replay')}</p>
+        </div>
+        <div class="wo-news-row">
+          <div class="wo-news-pic"><span class="wo-news-seg"><b>${diffShapeSVG(TIER_NUM.easy)}${t('tier_easy')}</b><span>${t('level_n', { n: 51 })}</span></span></div>
+          <p class="wo-news-txt">${t('news_more')}</p>
+        </div>
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="news-close">${t('got_it')}</button>
+      </div>`;
+    this._opener = document.activeElement;
+    this._newsOpen = true;
+    m.hidden = false;
+    const go = m.querySelector('.gh-btn--primary');
+    if (go) go.focus({ preventScroll: true });
+  }
 
   /** The list of this difficulty's levels with points to win back. */
   _openReplays() {
@@ -1370,9 +1426,11 @@ class WayOut {
     clearSave(this.tier);
     this.settings = saveSettings({ ladder: { [this.tier]: this.level + 1 } });
     this._later(() => this._banner(), motion ? 650 : 100);
-    // On to the next level. (Easy, Medium and Hard ended at 50 / 100 / 200 until 2026-10-26; now
-    // they go on with their more-levels boards, like Expert.)
-    this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
+    // On to the next level. Easy, Medium and Hard ended at 50 / 100 / 200 until 2026-10-26; with the
+    // more levels they go on, like Expert (admin only until released: hasNews). Without them the
+    // last level of a difficulty goes back to the setup screen, which says "Complete".
+    if (!hasNews() && this.level + 1 > bandEnd(this.tier)) this._later(() => this._toSetup(false), motion ? 2300 : 1500);
+    else this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
   }
 
   /** A replay cleared: record it (only a better result adds points), show what it added, then back

@@ -896,3 +896,16 @@
 .wo-root .wo-thick-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
 .wo-root .wo-thick.is-on .wo-thick-sw { background: #ffce3a; }
 .wo-root .wo-thick.is-on .wo-thick-sw::after { left: 18px; background: #16243a; }
+
+/* The one-time Replay / more-levels popup (2026-10-26, Matt's mock-up). */
+.wo-root .wo-news { text-align: center; gap: 14px; }
+.wo-root .wo-news-badge { align-self: center; margin: 0; padding: 3px 9px; border-radius: 999px; background: #f2b705; color: #1a1400; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.wo-root .wo-news-row { display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px; border-radius: 14px; background: var(--gh-surface-2, #f2f5fa); }
+.wo-root .wo-news-pic { flex: none; width: 84px; display: flex; justify-content: center; }
+.wo-root .wo-news-chip { display: inline-flex; align-items: center; gap: 5px; height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--gh-border, rgba(16, 36, 58, .14)); background: var(--gh-surface, #fff); font-weight: 900; font-size: 18px; }
+.wo-root .wo-news-chip svg { width: 22px; height: 22px; }
+.wo-root .wo-news-seg { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 10px; border-radius: 12px; border: 2px solid #ffce3a; background: var(--gh-surface, #fff); }
+.wo-root .wo-news-seg b { font-size: 14px; display: inline-flex; align-items: center; gap: 5px; }
+.wo-root .wo-news-seg b svg { width: 12px; height: 12px; flex: none; }
+.wo-root .wo-news-seg span { font-size: 12px; color: var(--gh-muted, #5b6b82); }
+.wo-root .wo-news-txt { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.3; }
