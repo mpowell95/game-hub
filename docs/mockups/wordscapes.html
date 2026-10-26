@@ -1,0 +1,113 @@
+<title>Wordscapes Mockup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Two phones side by side (stack on narrow): the board mid-level, then the level done. */
+  :root {
+    --page: #e9edf2; --frame: #1d2230; --cap: #3a4256;
+    --sky1: #2c4a7a; --sky2: #c9795c; --sky3: #f3c58f;
+    --tile: #ffffff; --tile-ink: #1d2230; --slot: rgba(255,255,255,.28); --slot-line: rgba(255,255,255,.55);
+    --wheel: rgba(255,255,255,.88); --wheel-ink: #1d2230; --path: #f2b705; --chip: rgba(0,0,0,.28);
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --page: #12151c; --cap: #b9c0d0; color-scheme: dark; } }
+  :root[data-theme="dark"] { --page: #12151c; --cap: #b9c0d0; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background: var(--page); color: var(--cap); font-family: var(--ui); padding-block: 24px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .cap { text-align: center; font-weight: 700; font-size: 14px; margin: 10px 0 0; }
+  .phone { width: 320px; max-width: 100%; height: 660px; border-radius: 36px; border: 8px solid var(--frame); position: relative; overflow: hidden;
+    background: linear-gradient(180deg, var(--sky1) 0%, var(--sky2) 62%, var(--sky3) 100%); color: #fff; }
+  .top { position: absolute; top: 14px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .hub { background: var(--chip); border-radius: 12px; padding: 8px 12px; font-weight: 700; font-size: 15px; }
+  .lvl { font-weight: 800; font-size: 20px; letter-spacing: .02em; }
+  .grid { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(7, 36px); grid-auto-rows: 36px; gap: 4px; }
+  .c { border-radius: 6px; display: grid; place-items: center; font-weight: 800; font-size: 20px; }
+  .c.e { background: var(--slot); border: 1.5px solid var(--slot-line); }
+  .c.f { background: var(--tile); color: var(--tile-ink); box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .c.h { background: var(--tile); color: var(--tile-ink); opacity: .55; }
+  .word { position: absolute; left: 50%; top: 318px; transform: translateX(-50%); background: var(--tile); color: var(--tile-ink);
+    border-radius: 10px; padding: 4px 14px; font-weight: 800; font-size: 24px; letter-spacing: .08em; }
+  .wheelwrap { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); width: 224px; height: 224px; }
+  .wheelwrap svg { width: 100%; height: 100%; display: block; }
+  .side { position: absolute; bottom: 60px; width: 46px; height: 46px; border-radius: 50%; background: var(--chip); display: grid; place-items: center; }
+  .side svg { width: 24px; height: 24px; }
+  .side.l { left: 12px; } .side.r { right: 12px; }
+  .side.r2 { position: relative; bottom: auto; width: 40px; height: 40px; }
+  .side.r2 svg { width: 20px; height: 20px; }
+  .right { display: flex; align-items: center; gap: 12px; }
+  .badge { position: absolute; top: -4px; right: -4px; background: var(--path); color: #1d2230; border-radius: 9px; min-width: 18px; height: 18px; font-size: 11px; font-weight: 800; display: grid; place-items: center; padding: 0 4px; }
+  .done { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+  .done h2 { margin: 0; font-size: 34px; font-weight: 900; }
+  .next { display: inline-block; margin-top: 18px; background: var(--path); color: #1d2230; font-weight: 800; font-size: 20px; border-radius: 28px; padding: 14px 54px; }
+  .bonus { margin-top: 14px; font-weight: 700; font-size: 15px; opacity: .9; }
+</style>
+
+<div class="row">
+  <div>
+    <div class="phone" aria-label="Board">
+      <div class="top"><span class="hub">‹ Hub</span><span class="right"><span class="side r2" aria-label="Extra words"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z"/></svg><span class="badge">3</span></span><span class="lvl">12</span></span></div>
+      <div class="grid" id="g1"></div>
+      <div class="word">STER</div>
+      <div class="wheelwrap">
+        <svg viewBox="-120 -120 240 240" aria-hidden="true">
+          <circle r="116" fill="var(--wheel)"/>
+          <polyline points="0,-78 67.5,-39 67.5,39 0,78" fill="none" stroke="var(--path)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+          <g font-family="system-ui, sans-serif" font-weight="800" font-size="40" text-anchor="middle" dominant-baseline="central">
+            <circle cx="0" cy="-78" r="27" fill="var(--path)"/><circle cx="67.5" cy="-39" r="27" fill="var(--path)"/>
+            <circle cx="67.5" cy="39" r="27" fill="var(--path)"/><circle cx="0" cy="78" r="27" fill="var(--path)"/>
+            <text x="0" y="-76" fill="var(--wheel-ink)">S</text>
+            <text x="67.5" y="-37" fill="var(--wheel-ink)">T</text>
+            <text x="67.5" y="41" fill="var(--wheel-ink)">E</text>
+            <text x="0" y="80" fill="var(--wheel-ink)">R</text>
+            <text x="-67.5" y="41" fill="var(--wheel-ink)">N</text>
+            <text x="-67.5" y="-37" fill="var(--wheel-ink)">O</text>
+          </g>
+        </svg>
+      </div>
+      <div class="side l" aria-label="Shuffle"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg></div>
+      <div class="side r" aria-label="Hint"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg></div>
+    </div>
+    <p class="cap">Playing</p>
+  </div>
+
+  <div>
+    <div class="phone" aria-label="Level done">
+      <div class="top"><span class="hub">‹ Hub</span><span class="lvl">12</span></div>
+      <div class="grid" id="g2"></div>
+      <div class="done">
+        <h2>Level 12</h2>
+        <div class="bonus">★ 5</div>
+        <span class="next">Next</span>
+      </div>
+    </div>
+    <p class="cap">Done</p>
+  </div>
+</div>
+
+<script>
+  // 6 x 7 crossword: STONE, SORT, NEST, ROES, TONE, STERN.
+  const W = {
+    STONE: [0, 0, 'a'], SORT: [0, 0, 'd'], NEST: [0, 3, 'd'],
+    ROES: [2, 0, 'a'], TONE: [3, 3, 'a'], STERN: [1, 6, 'd'],
+  };
+  function build(id, found, hinted) {
+    const cells = {};
+    for (const [w, [r, c, d]] of Object.entries(W)) {
+      [...w].forEach((ch, i) => {
+        const k = d === 'a' ? `${r},${c + i}` : `${r + i},${c}`;
+        const st = found.includes(w) ? 'f' : (cells[k] && cells[k].s === 'f') ? 'f' : (hinted[k] ? 'h' : 'e');
+        if (!cells[k] || st === 'f') cells[k] = { ch, s: st };
+      });
+    }
+    const g = document.getElementById(id);
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) {
+      const v = cells[`${r},${c}`];
+      const d = document.createElement('div');
+      if (v) { d.className = 'c ' + v.s; d.textContent = v.s === 'e' ? '' : v.ch; }
+      g.appendChild(d);
+    }
+  }
+  build('g1', ['STONE', 'SORT', 'NEST', 'TONE'], { '1,6': 1 });
+  build('g2', Object.keys(W), {});
+</script>
