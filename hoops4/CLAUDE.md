@@ -18,7 +18,7 @@ since 2026-09-22 (rules PUBLISHED by Matt 2026-09-22). Open items: "Still open" 
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../hoops4/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `hoops4` |
+| Registry | `module: '../hoops4/js/ui.js'`, `immersive: true`, released 2026-10-26, hub id `hoops4` |
 | Stats id | `hoops4` — plain `recordResult(id, difficulty, won)`, **no sub-counter** (item 7's three-edit rule does not apply) |
 | CSS root / prefix | `.h4-root` / `.h4-` |
 | Settings key | `gamehub.hoops4.v1` (two preferences: the opponent, and `shots`: `'until'` \| `'one'`) |
@@ -27,8 +27,7 @@ since 2026-09-22 (rules PUBLISHED by Matt 2026-09-22). Open items: "Still open" 
 | Difficulty axis | CPU skill `easy`/`medium`/`hard`, plus `'mp'` for a multiplayer match (unmapped in `js/difficulty-tiers.js`, so `tierOf('mp')` is null). A two-players-on-one-phone match records nothing |
 | `isInProgress()` | the **no mid-game resume** meaning; true while a match has a disc and is not over; false for `mp.kind === 'async'` (nothing can be lost; entering a challenge toasts that the match is saved) |
 
-- **`devOnly: true` and NO `released` date**, deliberately (`released` drives the New pill and must
-  announce the day it goes live). Releasing needs no commit: the admin page's live switch overrides.
+- **Released 2026-10-26** in code (`released: '2026-09-22'`, the admin switch day).
 - It **has** a `GAME_META` row in `js/leaderboard-ui.js` even while admin-only (`OFF_THE_BOARD` in
   `tools/players-agg.test.mjs` is empty and must stay empty); `isGameOnLauncher` hides it from the board.
 - **Difficulties are `Easy / Medium / Hard`** (the hub's words). Never invent new terminology.

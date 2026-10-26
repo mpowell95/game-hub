@@ -354,10 +354,7 @@ export const GAMES = [
     immersive: true,
     accent: '#d4252b',
     art: GAME_ART['cuppong'],
-    // ADMIN ONLY while it is built (docs/CUP-PONG-BRIEF.md). No `released` date on purpose: it is
-    // the only input to the launcher's New pill and must be the day Matt releases it, which he
-    // does from the admin page with no commit.
-    devOnly: true,
+    released: '2026-09-28',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Darts (2026-10-01): a clone of GamePigeon's Darts. 301 down to exactly zero, three darts a
@@ -374,10 +371,7 @@ export const GAMES = [
     immersive: true,
     accent: '#b8282d',
     art: GAME_ART['darts'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it, which he does from
-    // the admin page with no commit.
-    devOnly: true,
+    released: '2026-10-03',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Flick Soccer (2026-10-11): table soccer with flicked discs (the Soccer Stars kind). Pull back
@@ -435,9 +429,7 @@ export const GAMES = [
     immersive: true,
     accent: '#0F8A3C',
     art: GAME_ART['eight-ball'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-10-23',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Cup Baseball (2026-10-23): the drinking-game baseball, on Cup Pong's table. Four cups in a
@@ -478,12 +470,7 @@ export const GAMES = [
     immersive: true,
     accent: '#1f5fa8',
     art: GAME_ART['hoops4'],
-    // ADMIN ONLY while Matt plays it in ("build and deploy for testing", 2026-09-21). No
-    // `released` date on purpose: that field is the only input to the launcher's New pill and it
-    // must announce the day the game ACTUALLY goes live, not the day it went up for testing.
-    // Releasing it needs no commit - the admin page's live switch overrides this (root
-    // CLAUDE.md, "The admin control page").
-    devOnly: true,
+    released: '2026-09-22',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Baseball. It was released
@@ -594,10 +581,7 @@ export const GAMES = [
     immersive: true,
     accent: '#1f5fa8',
     art: GAME_ART['air-hockey'],
-    // ADMIN ONLY while it is built in stages. No `released` date on purpose: that field drives
-    // the launcher's New pill and must be the day the game actually goes live. Releasing it needs
-    // no commit (the admin page's live switch overrides this).
-    devOnly: true,
+    released: '2026-09-28',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Texas Hold'em (2026-09-27): no-limit tournament poker, vs up to 7 computers or at an online

@@ -71,7 +71,7 @@ it should not make any sound ever."*
   (`tools/players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
   hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
-  (**`devOnly: true`**, Pinball's reasoning: admin-only since birth, so nobody else can have plays)
+  (no `devOnly` since the 2026-10-26 release)
   plus `HUB_ID` `airhockey -> air-hockey`, `GAME_META` in `js/leaderboard-ui.js`, and
   `game_title_airhockey` in `js/strings.js`. My Stats has its own screen (`airHockeyScreen`). **When Matt releases it, drop `devOnly` from the TABS row too.**
 - **Rule 1 on the game's own screens:** the setup card and the result card both show "Vs <level>:
@@ -81,8 +81,8 @@ it should not make any sound ever."*
 
 ## Hub integration
 
-- In-hub `module:` (`air-hockey/js/ui.js`), **immersive**, **`devOnly: true`, no `released` date**
-  (the admin page's live switch releases it; a `released` date goes on the day it really does).
+- In-hub `module:` (`air-hockey/js/ui.js`), **immersive**, released 2026-10-26 (`released: '2026-09-28'`,
+  the admin switch day).
 - **Hub id `air-hockey`, not `airhockey`.** The brief said `airhockey` for both ids; the hub id was
   made the FOLDER name instead, as every other game does, because the dev tools (`tools/check-no-scroll.mjs`,
   `tools/test-visual.mjs`) launch a game by its folder name. The stats id stays `airhockey` (Brick

@@ -15,8 +15,7 @@ the scoring area, avatars and green score plaques in the bottom corners, 301 cou
 
 - In-hub `module: '../darts/js/ui.js'`, **immersive** (full-bleed wall; the top row keeps right of the
   hub's back button). Hub id and stats id both `darts`; `.dt-root` / `.dt-`.
-- **ADMIN ONLY** (`devOnly: true`, no `released` date); Matt releases it from the admin page. Its
-  `GAME_META` row, My Stats tab and leaderboard wiring already ship.
+- **Released** (2026-10-26 in code; live from the admin page since 2026-10-03).
 - `isInProgress()` is always `false`: the match autosaves after every dart and hand-over
   (`gamehub.darts.save.v1`); setup offers **Continue match**.
 

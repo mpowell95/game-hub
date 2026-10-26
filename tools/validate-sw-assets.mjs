@@ -339,7 +339,7 @@ const reachedUnlisted = new Set(); // files outside ASSETS that something every 
   const top = (f) => f.split('/')[0];
   const left = missingFromAssets.filter((f) => heldFolder[top(f)] && !reachedUnlisted.has('./' + f));
   reportMissing(missingFromAssets.filter((f) => !left.includes(f)));
-  if (left.length) console.log(`ok   ${left.length} new file(s) in unreleased games left out of ASSETS on purpose (no update for players)`);
+  if (left.length) console.log(`ok   ${left.length} new file(s) in unreleased games left out of ASSETS on purpose (no update for players): ${left.join(", ")}`);
 }
 
 let manifestFailed = false;

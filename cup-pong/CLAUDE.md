@@ -189,7 +189,7 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../cup-pong/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `cuppong`, no `released` date |
+| Registry | `module: '../cup-pong/js/ui.js'`, `immersive: true`, released 2026-10-26 (`released: '2026-09-28'`, the admin switch day), hub id `cuppong` |
 | Stats id | `cuppong`: `recordResult('cuppong', difficulty, won)` once per finished match vs the computer (`easy`/`medium`/`hard`; `mp` is for challenges); solo via `recordCupPongSolo` into `cp`. Registered in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only; `OFF_THE_BOARD` stays empty), `js/game-stats-ui.js` `TABS`, label `game_title_cuppong` |
 | CSS | `.cp-root` / `.cp-` |
 | Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` (preferences; `nextFirst` alternates) |

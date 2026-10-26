@@ -35,8 +35,8 @@ black pockets, coral and cyan groups).
   (`adminConfig/v1/games/eight-ball/allow/<CODE>`; her codes K99MB, newest, and 89N3N). Still devOnly.
   Leaderboard stays difficulty-first with MP and level tabs (Matt: "of course differentiate by
   difficulty and mode").
-- In-hub `module: '../eight-ball/js/ui.js'`, **immersive**, `devOnly: true` (admin only), no
-  `released` (that is the release day). `GAME_META`, My Stats tab and `game_title_eightball` ship
+- In-hub `module: '../eight-ball/js/ui.js'`, **immersive**, released 2026-10-26 (`released: '2026-10-23'`,
+  the admin switch day). `GAME_META`, My Stats tab and `game_title_eightball` ship
   with it, so results recorded before release show the moment it is released.
 - `isInProgress()` is `false`: the match is saved at every rest (`gamehub.eightball.save.v1`) and the
   setup card offers Continue. The shot is saved WITH the position the moment it is taken, so a kill
