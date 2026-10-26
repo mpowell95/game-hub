@@ -565,19 +565,22 @@ class SpellingBee {
     const rows = this.boardRows.filter((r) => r.code !== code).map((r) => ({ ...r }));
     rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
     rows.sort((a, b) => b.words - a.words || b.points - a.points || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
-    // Place (ties share it), emoji, name over a bar toward Genius with the rank, words on the right.
+    // Place (ties share it), emoji, name (🐝/👑 at Genius/Queen Bee) over a bar toward Genius, then words
+    // over points (Matt, 2026-10-26: "I wanna see how many points they have too"). No rank word: too
+    // tight beside points on a 360-wide phone; the bar shows it.
     const genius = rankThresholds(this.max)[GENIUS] || 1;
     let place = 0;
     const li = rows.map((r, i) => {
       if (i === 0 || r.words !== rows[i - 1].words || r.points !== rows[i - 1].points) place = i + 1;
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
       const crest = r.rank >= GENIUS ? (r.rank === QUEEN ? '👑' : '🐝') : '';
-      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}">
+      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
         <span class="sb-bd-pos${place <= 3 ? ' is-top' : ''}">${place}</span>
         <span class="sb-bd-av" aria-hidden="true">${esc(r.emoji)}</span>
-        <span class="sb-bd-mid"><span class="sb-bd-line"><span class="sb-bd-name">${esc(r.name)}</span><span class="sb-bd-rank${crest ? ' is-crest' : ''}" aria-label="${esc(t('rank_' + RANKS[r.rank].id))}">${crest || esc(t('rank_' + RANKS[r.rank].id))}</span></span>
-          <span class="sb-bd-bar"><b style="width:${pct}%"></b></span></span>
-        <span class="sb-bd-n"><b>${r.words}</b><small>${esc(r.words === 1 ? t('word_1') : t('words_col'))}</small></span></li>`;
+        <span class="sb-bd-mid"><span class="sb-bd-name">${esc(r.name)}</span>
+          <span class="sb-bd-line"><span class="sb-bd-bar"><b style="width:${pct}%"></b></span><span class="sb-bd-crest" aria-hidden="true">${crest}</span></span></span>
+        <span class="sb-bd-n"><span><b>${r.words}</b> <small>${esc(r.words === 1 ? t('word_1') : t('words_col'))}</small></span>
+          <span class="sb-bd-pts"><b>${r.points}</b> <small>${esc(r.points === 1 ? t('point_1') : t('points_col'))}</small></span></span></li>`;
     }).join('');
     const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
     this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2><ol class="sb-board">${li}</ol>`);
