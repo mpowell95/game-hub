@@ -10,10 +10,10 @@
 // lossless (the Contexto / Sudoku class).
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
-import { makeT, getLang } from '../../js/i18n.js';
+import { makeT, getLang, onLangChange } from '../../js/i18n.js';
 import { recordResult } from '../../js/game-stats.js';
 import {
-  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, answersFor, extrasFor, totalPoints,
+  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
@@ -26,15 +26,18 @@ const CSS_MARK = 'data-spellingbee-css';
 const SAVE_KEY = 'gamehub.spellingbee.save.v1';
 const STATS_ID = 'spellingbee';
 let instance = null;
-let DATA_PROMISE = null;   // the word list, fetched once per page
+const DATA_PROMISE = {};   // per language: the word list, fetched once per page
 
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
-function getData() {
-  if (!DATA_PROMISE) DATA_PROMISE = loadData().catch((err) => { DATA_PROMISE = null; throw err; });
-  return DATA_PROMISE;
+/** The puzzle language follows the hub's EN/ES setting (2026-10-26): Spanish players get Spanish words. */
+const wordLang = () => (getLang() === 'es' ? 'es' : 'en');
+
+function getData(lang) {
+  if (!DATA_PROMISE[lang]) DATA_PROMISE[lang] = loadData(lang).catch((err) => { DATA_PROMISE[lang] = null; throw err; });
+  return DATA_PROMISE[lang];
 }
 
 function ensureCSS() {
@@ -137,12 +140,13 @@ class SpellingBee {
     this._dayTimer = setInterval(() => this._checkDay(), 60000);
     await ensureCSS();
     if (this.disposed) return;
+    this._offLang = onLangChange(() => { if (this.data && this.data.lang !== wordLang()) { this._closeOverlay(); this._load(); } });
     this._load();
   }
 
   async _load() {
     try {
-      this.data = await getData();
+      this.data = await getData(wordLang());
     } catch (err) {
       if (this.disposed) return;
       console.error('[spelling-bee] data', err);
@@ -169,7 +173,7 @@ class SpellingBee {
     this.n = (Number.isInteger(n) && n >= 0 && n <= this.todayN) ? n : this.todayN;
     this.day = dayKey(dateOfDay(this.data.epoch, this.n));
     this.old = !!(old && this.data.retired[this.n] === old);
-    this.puzzle = this.old ? puzzleOf(old) : puzzleAt(this.data, this.n);
+    this.puzzle = this.old ? puzzleOf(old, this.data.lang) : puzzleAt(this.data, this.n);
     this.answers = answersFor(this.data, this.puzzle);
     this.answerSet = new Set(this.answers);
     this.extraSet = new Set(extrasFor(this.data, this.puzzle));
@@ -320,13 +324,16 @@ class SpellingBee {
     const order = this.rec.found.filter((w) => this.counts(w));
     this.el.recent.innerHTML = this.open
       ? `<span class="sb-found-count">${esc(n === 1 ? t('words_1') : t('words_n', { n }))}</span>`
-      : (n ? order.slice().reverse().map((w) => `<span class="${this._cls(w)}">${esc(cap(w))}</span>`).join('')
+      : (n ? order.slice().reverse().map((w) => `<span class="${this._cls(w)}">${esc(this._show(w))}</span>`).join('')
         : `<span class="sb-found-count">${esc(t('words_n', { n: 0 }))}</span>`);
     this.el.toggle.setAttribute('aria-expanded', this.open ? 'true' : 'false');
     this.el.toggle.classList.toggle('is-open', this.open);
     this.el.panel.hidden = !this.open;
     if (this.open) this._layoutPanel();
   }
+
+  /** A word as written: Spanish keeps its accents and Ñ ("niña"), English is just capitalised. */
+  _show(w) { return cap((this.data && this.data.spell[w]) || w); }
 
   _cls(w) { return !this.answerSet.has(w) ? 'is-bonus' : isPangram(w, this.puzzle) ? 'is-pangram' : ''; }
 
@@ -335,7 +342,7 @@ class SpellingBee {
     if (!this.open || !this.el || !this.el.panel) return;
     const words = [...this.found].sort();
     const p = this.el.panel;
-    p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${this._cls(w)}">${esc(cap(w))}</li>`).join('')}</ul>`;
+    p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${this._cls(w)}">${esc(this._show(w))}</li>`).join('')}</ul>`;
     const ul = p.firstChild;
     const h = p.clientHeight - 24;
     const w = p.clientWidth - 24;
@@ -389,7 +396,8 @@ class SpellingBee {
     if (!this.puzzle || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (this._overlay) { if (ev.key === 'Escape') this._closeOverlay(); return; }
     const k = ev.key;
-    if (/^[a-zA-Z]$/.test(k)) { this.type(k.toLowerCase()); const i = [this.puzzle.center, ...this.outer].indexOf(k.toLowerCase()); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
+    const ch = k.length === 1 ? fold(k) : '';   // á -> a, ñ -> n (Spanish keyboards)
+    if (/^[a-z]$/.test(ch)) { this.type(ch); const i = [this.puzzle.center, ...this.outer].indexOf(ch); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
     else if (k === 'Backspace') { this.backspace(); ev.preventDefault(); }
     else if (k === 'Enter') { this.submit(); ev.preventDefault(); }
     else if (k === ' ') { this.shuffle(); ev.preventDefault(); }
@@ -647,9 +655,9 @@ class SpellingBee {
       cells.push(`<button type="button" class="${cls}" data-day="${n}" aria-label="${esc(label)}"><span>${d}</span>${pr ? pr.mark : ''}</button>`);
       // A retired puzzle this player has words on: still shown and playable, under the grid.
       const old = this.data.retired[n];
-      const po = old && this._progress(save, puzzleOf(old));
+      const po = old && this._progress(save, puzzleOf(old, this.data.lang));
       if (po) {
-        const q = puzzleOf(old);
+        const q = puzzleOf(old, this.data.lang);
         olds.push(`<button type="button" class="sb-cal-old${n === this.n && this.old ? ' is-now' : ''}" data-day="${n}" data-old="${esc(old)}" aria-label="${esc(this._fmt(n, { month: 'long', day: 'numeric' }) + ', ' + t('rank_' + RANKS[po.ri].id))}">
           <span class="sb-cal-old-d">${esc(this._fmt(n, { month: 'short', day: 'numeric' }))}</span>
           <span class="sb-yletters"><span class="is-center">${q.center.toUpperCase()}</span>${q.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</span>${po.mark}</button>`);
@@ -699,7 +707,7 @@ class SpellingBee {
     const r = save.games[p.key];
     const got = new Set(r && Array.isArray(r.found) ? r.found : []);
     const letters = `<div class="sb-yletters" aria-label="${esc([p.center, ...p.outer].join(' ').toUpperCase())}"><span class="is-center">${p.center.toUpperCase()}</span>${p.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</div>`;
-    const list = ans.map((w) => `<li class="${isPangram(w, p) ? 'is-pangram' : ''}${got.has(w) ? ' is-got' : ''}">${got.has(w) ? '<span class="sb-tick" aria-hidden="true">✓</span>' : ''}${esc(cap(w))}${isPangram(w, p) ? ' <span aria-hidden="true">★</span>' : ''}</li>`).join('');
+    const list = ans.map((w) => `<li class="${isPangram(w, p) ? 'is-pangram' : ''}${got.has(w) ? ' is-got' : ''}">${got.has(w) ? '<span class="sb-tick" aria-hidden="true">✓</span>' : ''}${esc(this._show(w))}${isPangram(w, p) ? ' <span aria-hidden="true">★</span>' : ''}</li>`).join('');
     this._openOverlay('yesterday', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('yesterday'))}</h2>${letters}<ul class="sb-ylist">${list}</ul>`);
     // No scrolling: up to ~90 words, so more columns, then smaller type (11px floor), until it fits.
     const m = this._overlay.querySelector('.gh-modal');
@@ -758,6 +766,7 @@ class SpellingBee {
     this.disposed = true;
     if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
     if (this._stopBoard) this._stopBoard();
+    if (this._offLang) this._offLang();
     try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
