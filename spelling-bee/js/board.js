@@ -17,7 +17,8 @@ import { watchPath } from '../../js/live-read.js';
 
 const POSTED_KEY = 'gamehub.spellingbee.posted.v1';   // { "<puzzle>": words last verified on the board }
 
-export const boardKey = (puzzleKey) => String(puzzleKey || '').replace(/:/g, '-');   // 'es:a:bcdefg' -> 'es-a-bcdefg'
+// 'es:a:bcdefñ' -> 'es-a-bcdef0': ASCII for the database key and its rule (Ñ is written 0).
+export const boardKey = (puzzleKey) => String(puzzleKey || '').replace(/:/g, '-').replace(/ñ/g, '0');
 
 function loadPosted() {
   try { const v = JSON.parse(localStorage.getItem(POSTED_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; }
@@ -33,7 +34,7 @@ export function needsPost(puzzleKey, words) {
 export async function postProgress(puzzleKey, { words, points, rank }) {
   const code = myCode();
   const k = boardKey(puzzleKey);
-  if (!code || !/^(es-)?[a-z]-[a-z]{6}$/.test(k) || !needsPost(puzzleKey, words)) return false;
+  if (!code || !/^(es-)?[a-z0]-[a-z0]{6}$/.test(k) || !needsPost(puzzleKey, words)) return false;
   if (!writesAllowed('Spelling Bee board')) return false;
   const boot = await getStatsApp();
   if (!boot) return false;

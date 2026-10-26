@@ -32,11 +32,12 @@ swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); 
 as a row under the calendar and can keep playing it (`_startDay(n, old)`), so no progress is hidden (rule 1).
 A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2).
 **Spanish (2026-10-26, Matt)**: `data/bee-es.json` from `tools/build-spelling-bee-es.mjs` (read its header); the
-puzzle language follows the hub's EN/ES setting (switching reloads). Answers = top 20,000 subtitle words in both
-RLA-ES and lemmatization-lists (conjugations count), ~49 a puzzle; the rest are bonus words. FOLDED like Boggle
-(no accents, Ñ = N; typing á/ñ works); words are stored in real spelling and shown that way ("Niña"). Keys
-`es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,491 puzzles (a letter set may return
-with a second centre). Names out of the answers (`NOT_ANSWERS`), vulgar families out (`BLOCK_RE`).
+puzzle language follows the hub's EN/ES setting (switching reloads). Answers = top 20,000 subtitle words in
+lemmatization-lists (conjugations count), ~46 a puzzle; the rest are bonus words. **No accents anywhere; Ñ is its own
+letter** (Ana: "Ñ is different from n... for the rest do not use accents"): words are stored without accents and with
+ñ, typing á gives a, ñ stays ñ; 13 puzzles have Ñ in the hive. Board keys write Ñ as `0` (ASCII rule). Keys
+`es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,493 puzzles. The first build folded Ñ to N;
+its day 0 (`o:aeimnt`) is `retired`, still playable. Names out of the answers (`NOT_ANSWERS`), vulgar families out (`BLOCK_RE`).
 Credits: `data/CREDITS.md`. `bee.json` and `bee-es.json` stay LAZY in `sw.js`.
 
 ## Screens
