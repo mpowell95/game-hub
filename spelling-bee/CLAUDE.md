@@ -26,8 +26,10 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 (22,045; hints and ranks count only these); `extra` = every other ENABLE word that fits (22,447), accepted
 and scored as a BONUS word (italic in the found list), never counted. No S, ≤7 distinct letters, bad words
 out of both. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
-every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 23-90 answers, median 51.
-**Days 0-9 never change** (`KEEP`); the rest were re-picked once on 2026-10-26; after that append-only.
+every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
+Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 24, 26, 28 (33, 23, 28 words)
+swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); anyone with words on one sees it
+as a row under the calendar and can keep playing it (`_startDay(n, old)`), so no progress is hidden (rule 1).
 A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2).
 Credits: `data/CREDITS.md`. `bee.json` stays LAZY in `sw.js`.
 

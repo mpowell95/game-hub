@@ -13,7 +13,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { recordResult } from '../../js/game-stats.js';
 import {
-  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, answersFor, extrasFor, totalPoints,
+  RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, answersFor, extrasFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
@@ -158,12 +158,15 @@ class SpellingBee {
 
   // --- the day's puzzle ------------------------------------------------------------------------
 
-  /** Day n's puzzle (default today). Past days play exactly like today: same save, same Genius win. */
-  _startDay(n) {
+  /** Day n's puzzle (default today). Past days play exactly like today: same save, same Genius win.
+   *  `old` = the day's RETIRED letters (swapped 2026-10-26 for a fuller puzzle): still playable, so
+   *  progress on it stays visible (THE LAW rule 1). */
+  _startDay(n, old) {
     this.todayN = dayNumber(this.data.epoch, new Date());
     this.n = (Number.isInteger(n) && n >= 0 && n <= this.todayN) ? n : this.todayN;
     this.day = dayKey(dateOfDay(this.data.epoch, this.n));
-    this.puzzle = puzzleAt(this.data, this.n);
+    this.old = !!(old && this.data.retired[this.n] === old);
+    this.puzzle = this.old ? puzzleOf(old) : puzzleAt(this.data, this.n);
     this.answers = answersFor(this.data, this.puzzle);
     this.answerSet = new Set(this.answers);
     this.extraSet = new Set(extrasFor(this.data, this.puzzle));
@@ -177,7 +180,7 @@ class SpellingBee {
     this.open = false;
     this._render();
     this._maybeRecord();
-    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d) => this._startDay(d) }; } catch { /* ignore */ }
+    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old) }; } catch { /* ignore */ }
   }
 
   _checkDay() {
@@ -185,7 +188,7 @@ class SpellingBee {
     const tn = dayNumber(this.data.epoch, new Date());
     if (tn === this.todayN) return;
     // Midnight: today's puzzle moves on to the new day; a past puzzle being played stays put.
-    if (this.n === this.todayN) { this._closeOverlay(); this._startDay(); } else this.todayN = tn;
+    if (this.n === this.todayN && !this.old) { this._closeOverlay(); this._startDay(); } else this.todayN = tn;
   }
 
   /** An answer or a bonus word (a rarer real word: scores, never counted in hints or ranks). */
@@ -211,7 +214,7 @@ class SpellingBee {
   _render() {
     this.root.innerHTML = `
       <div class="sb-hud">
-        <span class="sb-hud-fill">${this.n < this.todayN ? `<span class="sb-hud-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</span>` : ''}</span>
+        <span class="sb-hud-fill">${this.n < this.todayN || this.old ? `<span class="sb-hud-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</span>` : ''}</span>
         <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
         <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
         <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 ? '' : ' hidden'}>${ICON.yesterday}</button>
@@ -561,32 +564,24 @@ class SpellingBee {
       wk.push(`<span class="sb-cal-wk" aria-hidden="true">${esc(w)}</span>`);
     }
     const cells = [];
+    const olds = [];
     for (let i = 0; i < lead; i++) cells.push('<span></span>');
     for (let d = 1; d <= days; d++) {
       const n = n1 + d - 1;
       if (n < 0 || n > this.todayN) { cells.push(`<span class="sb-cal-day is-off">${d}</span>`); continue; }
-      const p = puzzleAt(this.data, n);
-      const r = save.games[p.key];
-      const got = r && Array.isArray(r.found) ? r.found : [];
-      let mark = '';
-      let label = this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' });
-      if (got.length) {
-        const ans = answersFor(this.data, p);
-        const set = new Set(ans);
-        const ex = new Set(extrasFor(this.data, p));
-        const gs = new Set(got);
-        let sc = 0;
-        for (const w of gs) if (set.has(w) || ex.has(w)) sc += scoreWord(w, p);
-        const max = totalPoints(ans, p);
-        let ri = rankIndex(sc, max, ans.every((w) => gs.has(w)));
-        if (r.recorded && ri < GENIUS) ri = GENIUS;
-        const g = rankThresholds(max)[GENIUS] || 1;
-        mark = ri >= GENIUS ? `<i class="sb-cal-mark">${ri === QUEEN ? '👑' : '🐝'}</i>`
-          : `<i class="sb-cal-bar"><b style="width:${Math.max(8, Math.round(Math.min(1, sc / g) * 100))}%"></b></i>`;
-        label += ', ' + t('rank_' + RANKS[ri].id);
+      const pr = this._progress(save, puzzleAt(this.data, n));
+      const label = this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' }) + (pr ? ', ' + t('rank_' + RANKS[pr.ri].id) : '');
+      const cls = `sb-cal-day${n === this.n && !this.old ? ' is-now' : ''}${n === this.todayN ? ' is-today' : ''}`;
+      cells.push(`<button type="button" class="${cls}" data-day="${n}" aria-label="${esc(label)}"><span>${d}</span>${pr ? pr.mark : ''}</button>`);
+      // A retired puzzle this player has words on: still shown and playable, under the grid.
+      const old = this.data.retired[n];
+      const po = old && this._progress(save, puzzleOf(old));
+      if (po) {
+        const q = puzzleOf(old);
+        olds.push(`<button type="button" class="sb-cal-old${n === this.n && this.old ? ' is-now' : ''}" data-day="${n}" data-old="${esc(old)}" aria-label="${esc(this._fmt(n, { month: 'long', day: 'numeric' }) + ', ' + t('rank_' + RANKS[po.ri].id))}">
+          <span class="sb-cal-old-d">${esc(this._fmt(n, { month: 'short', day: 'numeric' }))}</span>
+          <span class="sb-yletters"><span class="is-center">${q.center.toUpperCase()}</span>${q.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</span>${po.mark}</button>`);
       }
-      const cls = `sb-cal-day${n === this.n ? ' is-now' : ''}${n === this.todayN ? ' is-today' : ''}`;
-      cells.push(`<button type="button" class="${cls}" data-day="${n}" aria-label="${esc(label)}"><span>${d}</span>${mark}</button>`);
     }
     let title = '';
     try { title = new Intl.DateTimeFormat(getLang(), { month: 'long', year: 'numeric' }).format(new Date(y, m, 1, 12)); } catch { title = `${y}-${m + 1}`; }
@@ -596,13 +591,33 @@ class SpellingBee {
         <h2 class="gh-modal__title sb-cal-title">${esc(title)}</h2>
         <button type="button" class="sb-iconbtn" data-cal="${ym + 1}" aria-label="${esc(t('next_month_aria'))}"${ym < hi ? '' : ' disabled'}>${ICON.fwd}</button>
       </div>
-      <div class="sb-cal">${wk.join('')}${cells.join('')}</div>`);
+      <div class="sb-cal">${wk.join('')}${cells.join('')}</div>${olds.length ? `<div class="sb-cal-olds">${olds.join('')}</div>` : ''}`);
     this._overlay.addEventListener('click', (ev) => {
       const day = ev.target.closest('[data-day]');
-      if (day) { this._closeOverlay(); this._startDay(Number(day.dataset.day)); return; }
+      if (day) { this._closeOverlay(); this._startDay(Number(day.dataset.day), day.dataset.old); return; }
       const nav = ev.target.closest('[data-cal]');
       if (nav && !nav.disabled) this._openPast(Number(nav.dataset.cal));
     });
+  }
+
+  /** A puzzle's saved progress for the calendar: { ri, mark } or null if no words found. */
+  _progress(save, p) {
+    const r = save.games[p.key];
+    const got = r && Array.isArray(r.found) ? r.found : [];
+    if (!got.length) return null;
+    const ans = answersFor(this.data, p);
+    const set = new Set(ans);
+    const ex = new Set(extrasFor(this.data, p));
+    const gs = new Set(got);
+    let sc = 0;
+    for (const w of gs) if (set.has(w) || ex.has(w)) sc += scoreWord(w, p);
+    const max = totalPoints(ans, p);
+    let ri = rankIndex(sc, max, ans.every((w) => gs.has(w)));
+    if (r.recorded && ri < GENIUS) ri = GENIUS;
+    const g = rankThresholds(max)[GENIUS] || 1;
+    const mark = ri >= GENIUS ? `<i class="sb-cal-mark">${ri === QUEEN ? '👑' : '🐝'}</i>`
+      : `<i class="sb-cal-bar"><b style="width:${Math.max(8, Math.round(Math.min(1, sc / g) * 100))}%"></b></i>`;
+    return { ri, mark };
   }
 
   _openYesterday() {

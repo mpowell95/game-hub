@@ -22,8 +22,9 @@
 //   works them out from `words` (spelling-bee/js/engine.js `answersFor`), which keeps the file small.
 //   Puzzle #n (n = whole days since `epoch`, local time) is puzzles[n % count].
 //
-// THE FIRST KEEP PUZZLES NEVER CHANGE (days already played; 2026-10-26 the rest were re-picked once
-// for the bigger list, 25-90 answers). After that the order is APPEND-ONLY. Saves are keyed by the puzzle's letters, not its
+// THE PUZZLE ORDER IS APPEND-ONLY (2026-10-26 the days after Oct 31 were re-picked once for the bigger
+// list, 25-90 answers). REPLACE swaps a too-small day once; the old puzzle is written under `retired`
+// (day -> old letters) so the game still shows anyone's progress on it. Saves are keyed by the puzzle's letters, not its
 // number (spelling-bee/js/ui.js), so a regeneration never corrupts one, but it WOULD change what
 // "today" is for everyone mid-day. To extend the list, keep the old entries and add to the end.
 
@@ -42,7 +43,10 @@ const EPOCH = '2026-10-22';
 const SCOWL_TGZ = 'https://registry.npmjs.org/wordlist-english/-/wordlist-english-1.2.1.tgz';
 const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en';
 const LEVELS = [10, 20, 35, 40, 50, 55, 60];
-const KEEP = 10;   // days 0-9 (Oct 22-31 2026): shipped before the 2026-10-26 re-pick, never touched
+const KEEP = 10;   // days 0-9 (Oct 22-31 2026): shipped before the 2026-10-26 re-pick
+// Days swapped for a fuller puzzle (Matt, 2026-10-26: "I hate today's puzzle", 23 words). day -> the
+// letters it had; swapped only while it still has them, so a re-run never swaps twice.
+const REPLACE = { 2: 'o:hilprw', 4: 'u:dfgino', 6: 'e:ijlnuv' };
 
 // Slurs and vulgarities LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
 const BLOCK = `nigger nigga negro faggot fagot dyke kike coon chink gook wetback retard retarded tranny whore
@@ -111,7 +115,7 @@ async function main() {
         n++; pts += score(words[i], pg); if (pg) pangrams++;
       }
       // NYT-like size: 25-90 answers (90 is what the Yesterday sheet fits), 80-450 points.
-      if (n >= 25 && n <= 90 && pts >= 80 && pts <= 450) options.push(b);
+      if (n >= 25 && n <= 90 && pts >= 80 && pts <= 450) options.push({ b, n });
     }
     if (options.length) candidates.push({ pm, options });
   }
@@ -120,27 +124,49 @@ async function main() {
   for (let i = candidates.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [candidates[i], candidates[j]] = [candidates[j], candidates[i]]; }
   const puzzles = [];
   for (const c of candidates.slice(0, DAYS + KEEP)) {
-    const centre = c.options[Math.floor(rand() * c.options.length)];
+    const centre = c.options[Math.floor(rand() * c.options.length)].b;
     let outer = '';
     for (let b = 0; b < 26; b++) if ((c.pm & (1 << b)) && b !== centre) outer += String.fromCharCode(97 + b);
     puzzles.push(String.fromCharCode(97 + centre) + ':' + outer);
   }
 
   const file = path.join(ROOT, 'spelling-bee/data/bee.json');
-  // The first KEEP puzzles keep their days; the rest come from this run, appended after them.
+  // Every shipped puzzle keeps its day; this run only appends (and makes the REPLACE swaps once).
   let kept = [];
-  try { kept = (JSON.parse(fs.readFileSync(file, 'utf8')).puzzles || []).slice(0, KEEP); } catch { /* first run */ }
+  let retired = {};
+  try {
+    const prev = JSON.parse(fs.readFileSync(file, 'utf8'));
+    kept = prev.puzzles || [];
+    retired = prev.retired || {};
+  } catch { /* first run */ }
   if (kept.length) {
     const setOf = (q) => [...q.replace(':', '')].sort().join('');   // the 7 letters, whatever the centre
-    const seen = new Set(kept.map(setOf));
+    const seen = new Set([...kept, ...Object.values(retired)].map(setOf));
     for (const q of puzzles) {
       if (kept.length >= DAYS) break;
       if (!seen.has(setOf(q))) { kept.push(q); seen.add(setOf(q)); }
     }
+    // Replacements: unused letter sets, the centre with the most answers in 45-70.
+    const spare = [];
+    for (const c of candidates.slice(DAYS + KEEP)) {
+      const best = c.options.filter((o) => o.n >= 45 && o.n <= 70).sort((a, b) => b.n - a.n)[0];
+      if (!best) continue;
+      let outer = '';
+      for (let b = 0; b < 26; b++) if ((c.pm & (1 << b)) && b !== best.b) outer += String.fromCharCode(97 + b);
+      const q = String.fromCharCode(97 + best.b) + ':' + outer;
+      if (!seen.has(setOf(q))) spare.push(q);
+    }
+    for (const [day, old] of Object.entries(REPLACE)) {
+      if (kept[day] !== old || retired[day]) continue;
+      const q = spare.shift();
+      retired[day] = old;
+      kept[day] = q;
+      seen.add(setOf(q));
+    }
     puzzles.length = 0;
     puzzles.push(...kept);
   }
-  const out = { v: 1, epoch: EPOCH, words: words.join(' '), extra: extra.join(' '), puzzles };
+  const out = { v: 1, epoch: EPOCH, words: words.join(' '), extra: extra.join(' '), puzzles, retired };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(out) + '\n');
   console.log(`words ${words.length}, extra ${extra.length}, pangram sets ${sets.length}, fair ${candidates.length}, puzzles ${puzzles.length}, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);

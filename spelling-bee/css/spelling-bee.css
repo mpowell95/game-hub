@@ -207,3 +207,12 @@
   .sb-root .sb-chev, .sb-root .sb-cell text { transition: none; }
 }
 .sb-root .sb-cal-day.is-now .sb-cal-bar b { background: #000; }
+.sb-root .sb-cal-olds { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.sb-root .sb-cal-old {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--sb-line); border-radius: 6px;
+  background: transparent; color: var(--sb-ink); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.sb-root .sb-cal-old.is-now { border: 2px solid var(--sb-ink); }
+.sb-root .sb-cal-old-d { font-weight: 700; min-width: 52px; text-align: left; white-space: nowrap; }
+.sb-root .sb-cal-old .sb-yletters { margin: 0; gap: 3px; }
+.sb-root .sb-cal-old .sb-yletters span { width: 22px; height: 22px; font-size: 13px; }

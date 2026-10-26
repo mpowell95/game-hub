@@ -29,7 +29,9 @@ const DATA_URL = new URL('../data/bee.json', import.meta.url);
 export function parseData(raw) {
   if (!raw || typeof raw.words !== 'string' || !Array.isArray(raw.puzzles) || !raw.puzzles.length) throw new Error('bad bee data');
   const extra = typeof raw.extra === 'string' && raw.extra ? raw.extra.split(' ') : [];
-  return { epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles };
+  // retired: day -> the letters that day had before it was swapped for a fuller puzzle.
+  const retired = raw.retired && typeof raw.retired === 'object' ? raw.retired : {};
+  return { epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles, retired };
 }
 
 export async function loadData() {
@@ -61,7 +63,11 @@ export function dateOfDay(epoch, n) {
 /** Puzzle for day n: { center, outer: [6], letters: Set, key }. */
 export function puzzleAt(data, n) {
   const len = data.puzzles.length;
-  const s = data.puzzles[((n % len) + len) % len];
+  return puzzleOf(data.puzzles[((n % len) + len) % len]);
+}
+
+/** Puzzle from its letters 'c:abcdef'. */
+export function puzzleOf(s) {
   const center = s[0];
   const outer = s.slice(2).split('');
   return { center, outer, letters: new Set([center, ...outer]), key: s };
