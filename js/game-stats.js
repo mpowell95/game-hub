@@ -219,6 +219,11 @@
 //                                                   // Levels cleared before the timer, or resumed
 //                                                   // from a save made before it, count in
 //                                                   // total/byDiff only.
+//         wo.replay: { <tier>: [{t, a, r, m, h, l, g, d, u}] }
+//                                                   // (2026-10-26) every REPLAY of a level that
+//                                                   // missed points, raw; u = points it added to
+//                                                   // wo.pts (only a better result adds, only the
+//                                                   // difference). Not a level: totals untouched.
 //         wo.rush: { runs: { easy: [run], hard: [run] }, best: { easy: { <Monday>: s }, hard } }
 //                                                   // (2026-10-14) RUSH, its own mode: EVERY run
 //                                                   // stored raw (js/arrow-maze-time.js woRushRuns:
@@ -255,7 +260,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
@@ -513,6 +518,9 @@ function ensureWo(g) {
     for (const k of ['pts', 'ptsN']) if (!Number.isFinite(g.wo[k][tier])) g.wo[k][tier] = 0;
     g.wo.log[tier] = woList(seed ? (g.wo.recent || {})[tier] : g.wo.log[tier]);
   }
+  // (2026-10-26) Every replay of a level that missed points, raw (recordWayOutReplay).
+  if (g.wo.replay != null && (typeof g.wo.replay !== 'object' || Array.isArray(g.wo.replay))) g.wo.replay = {};
+  if (g.wo.replay) for (const tier of WO_TIERS) if (g.wo.replay[tier] != null) g.wo.replay[tier] = woReplayList(g.wo.replay[tier]);
 }
 
 /** Gridlock (2026-10-14): the per-level map and a lifetime hint count. A malformed map or entry is
@@ -1766,6 +1774,34 @@ export function recordWayOut(tier, f = {}) {
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
+}
+
+/** Arrow Maze: one REPLAY of a level that earned less than its full points (2026-10-26; see
+ *  js/arrow-maze-time.js, "REPLAY"). Not a level cleared: totals, byDiff, timed and ptsN are not
+ *  touched. Only a better result adds, and only the difference, to `wo.pts[band]`; every replay is
+ *  kept raw in `wo.replay[band]`. `f` = { timeMs, penaltyMs, arrows, rounds, mistakes, hints, level,
+ *  gen } with `level` / `gen` exactly the replayed log entry's `l` / `g`. Returns the points added
+ *  (0 or more), or null when refused. */
+export function recordWayOutReplay(tier, f = {}) {
+  if (!WO_TIERS.includes(normDiff(tier))) return null;
+  if (tooFast('wayout')) return null;
+  const d = normDiff(tier);
+  const l = f.level | 0, gen = f.gen | 0;
+  const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
+  const a = Math.max(0, f.arrows | 0), r = Math.max(0, f.rounds | 0);
+  if (!(l > 0) || !(gen > 0) || !(t > 0) || !(a > 0) || !(r > 0)) return null;
+  const st = loadStats();
+  const g = st.games.wayout;
+  ensureWo(g);
+  const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
+  const miss = woMissed(g, d).find((x) => x.l === l && x.g === gen);
+  const up = miss ? Math.max(0, woEarnedPoints(d, m + h) - miss.best) : 0;
+  if (!g.wo.replay) g.wo.replay = {};
+  g.wo.replay[d] = woReplayList(g.wo.replay[d]).concat([{ t, a, r, m, h, l, g: gen, d: Date.now(), u: up }]);
+  g.wo.pts[d] += up;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return up;
 }
 
 /** Arrow Maze RUSH: one run ended (2026-10-14). Its own branch, `wo.rush`, created on the first run;

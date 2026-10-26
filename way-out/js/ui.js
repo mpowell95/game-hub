@@ -14,9 +14,9 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWayOut, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
-import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
+import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
+import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -196,14 +196,26 @@ function writeRushSave(mode, run) {
 /** Which board a save or clock is for, as one comparable string. (A first-ladder board was
  *  `L:<n>:5` then too, so its clock carries across unchanged.) */
 function srcKey(src) {
+  if (src && src.k === 'X') return `X:${src.band}:${src.n}`;
   return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${(src && src.g) || LADDER_GEN}`;
 }
+/** The board level n of `band` is played on when nothing older is in progress: the ladder's, or past
+ *  50 / 100 / 200 one of the band's MORE boards (2026-10-26, engine.js "MORE LEVELS"). */
+function defaultSrc(band, n) {
+  return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
+}
+/** The board a save's `src` names. */
+function boardOf(src) {
+  if (src.k === 'X') return buildMore(src.band, src.n);
+  return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
+}
 function validSrc(src, band, n) {
-  if (!src || typeof src !== 'object') return { k: 'L', n, g: LADDER_GEN };
+  if (!src || typeof src !== 'object') return defaultSrc(band, n);
+  if (src.k === 'X' && src.band === band && src.n === n && src.g === MORE_GEN && isMore(band, n)) return { k: 'X', band, n, g: MORE_GEN };
   if (src.k === 'T' && src.tier === band && Number.isInteger(src.level) && src.level >= 1
     && Number.isInteger(src.gen) && src.gen >= 1 && src.gen <= GEN_LATEST) return { k: 'T', tier: band, level: src.level, gen: src.gen };
   if (src.k === 'L' && Number.isInteger(src.n) && src.n >= 1 && (src.g === 5 || src.g === LADDER_GEN)) return { k: 'L', n: src.n, g: src.g };
-  return { k: 'L', n, g: LADDER_GEN };
+  return defaultSrc(band, n);
 }
 
 /** ONCE per device, the first time this version opens: a level that was IN PROGRESS - on the first
@@ -280,7 +292,7 @@ function isPaused(band, n) {
   if (hasProgress(band, n)) return true;
   const s = readSave(band, n, 1e6);
   const c = loadClock(band);
-  return !!c && c.n === n && c.key === srcKey(s ? s.src : { k: 'L', n, g: LADDER_GEN }) && c.ms + c.pen >= 1000;
+  return !!c && c.n === n && c.key === srcKey(s ? s.src : defaultSrc(band, n)) && c.ms + c.pen >= 1000;
 }
 function writeSave(o) {
   const map = readJSON(LSAVES2_KEY);
@@ -322,6 +334,8 @@ const ICON_BULB = `<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" st
 const RUSH_ARROW = (c) => `<svg viewBox="0 0 28 16" aria-hidden="true"><path d="M3 12V5h15" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M25 5l-7-4.5v9z" fill="${c}"/></svg>`;
 // The hand is its own element so the picture's stopwatch can spin it (`.wo-watch-hand`).
 const RUSH_WATCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9.5 2.5h5M12 2.5v3M18.5 6.5l1.6-1.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path class="wo-watch-hand" d="M12 13.5V8.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="1.4" fill="currentColor"/></svg>';
+// Replay (2026-10-26): a circular arrow round a star, the points to win back.
+const ICON_REPLAY = `<svg ${SVGA}><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4.2h4.2"/><path d="M12 8.6l1.1 2.2 2.4.3-1.8 1.6.5 2.4-2.2-1.2-2.2 1.2.5-2.4-1.8-1.6 2.4-.3z" fill="currentColor" stroke-width="1"/></svg>`;
 const ICON_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="currentColor"/></svg>';
 const ICON_CUP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v5a5 5 0 0 1-10 0z M7 5.5H4v1.5a3 3 0 0 0 3 3 M17 5.5h3v1.5a3 3 0 0 1-3 3 M12 13.5v3.5 M8 20.5h8 M9.5 17h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // The thick-arrows switch (2026-10-16): a thin or a thick arrow, the way the board will draw them.
@@ -629,19 +643,20 @@ class WayOut {
     if (this.settings.mode === 'rush') return this._rushHomeHTML(modeTabs);
     const tier = this.settings.tier;
     const level = this.settings.ladder[tier];
-    const done = level > bandEnd(tier);
-    const paused = !done && isPaused(tier, level);
+    const paused = isPaused(tier, level);
     // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
     // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
-    // (Matt, 2026-10-14: a solid line like the others, not a dashed one).
+    // (Matt, 2026-10-14: a solid line like the others, not a dashed one). Since 2026-10-26 no
+    // difficulty ends: past its last ladder level each bar does the same, 50 levels a lap.
     const segs = TIERS.map((k) => {
-      const n = this.settings.ladder[k], end = bandEnd(k), fin = n > end;
+      const n = this.settings.ladder[k], end = bandEnd(k);
       const pct = k === 'expert' ? Math.round(100 * (((n - BAND_START[k]) % EXPERT_LAP) / EXPERT_LAP))
+        : n > end ? Math.round(100 * (((n - end - 1) % EXPERT_LAP) / EXPERT_LAP))
         : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
       return `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
         <span class="wo-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
-        <span class="wo-seg-sub">${fin ? t('band_done') : t('level_n', { n })}</span>
+        <span class="wo-seg-sub">${t('level_n', { n })}</span>
         <span class="wo-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
       </button>`;
     }).join('');
@@ -649,17 +664,22 @@ class WayOut {
     // 2026-10-16: the lives tile "is just there"; fewer words). The words stay for screen readers.
     const thick = this._thick();
     const tiles = this._tilesHTML([
-      { cls: 'is-pts', icon: ICON_STAR, v: done ? '-' : t('lv_pts', { n: woLevelPoints(level) }), l: t('lv_tile_worth'), quiet: true },
+      { cls: 'is-pts', icon: ICON_STAR, v: t('lv_pts', { n: woLevelPoints(level, tier) }), l: t('lv_tile_worth'), quiet: true },
       { cls: 'is-mine', icon: ICON_CUP, v: String(this._myPoints()), l: t('lv_tile_mine'), quiet: true },
       { cls: 'is-thick', html: `<button type="button" class="wo-thick${thick ? ' is-on' : ''}" data-act="thick" role="switch" aria-checked="${thick}" aria-label="${t('thick_aria')}">${thick ? ICON_THICK : ICON_THIN}<i class="wo-thick-sw" aria-hidden="true"></i></button>` },
     ], t('lv_tiles_aria'));
-    const play = done
-      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" disabled>${t('band_done_play', { name: t('tier_' + tier) })}</button>`
-      // A paused level: New game (left, the same board from nothing, clock at 0:00) and Resume
-      // (right), Minesweeper's order (Matt, 2026-10-16). Otherwise one Play button.
-      : paused ? `<div class="wo-playrow">
+    // Replay (2026-10-26): levels of this difficulty that earned less than their full points, a
+    // count on a button at the left of the Play row; it opens the list. Absent when there are none.
+    const missed = woMissed(this._myWayout(), tier).length;
+    const replay = missed ? `<button type="button" class="gh-btn wo-play wo-replay" data-act="replays" aria-label="${t('replay_aria', { n: missed })}">${ICON_REPLAY}<b>${missed}</b></button>` : '';
+    // A paused level: New game (left, the same board from nothing, clock at 0:00) and Resume
+    // (right), Minesweeper's order (Matt, 2026-10-16). Otherwise one Play button.
+    const play = paused ? `<div class="wo-playrow${replay ? ' is-three' : ''}">${replay}
           <button type="button" class="gh-btn gh-btn--block wo-play" data-act="new-level">${t('new_game')}</button>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('resume')}</button>
+        </div>`
+      : replay ? `<div class="wo-playrow">${replay}
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('play_level', { n: level })}</button>
         </div>`
       : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block wo-play" data-act="play">${t('play_level', { n: level })}</button>`;
     return `
@@ -739,7 +759,7 @@ class WayOut {
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
             <span class="wo-tierpill">${diffShapeSVG(TIER_NUM[tier])}${t('tier_' + tier)}</span>
-            <span class="wo-level">${t('level_n', { n: this.level })}</span>
+            <span class="wo-level">${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}</span>
           </div>
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
@@ -767,7 +787,7 @@ class WayOut {
       if (btn.dataset.mode !== this.settings.mode) { this.settings = saveSettings({ mode: btn.dataset.mode }); this.render(); }
     } else if (act === 'rush-mode') {
       if (btn.dataset.rmode !== this.settings.rushMode) { this.settings = saveSettings({ rushMode: btn.dataset.rmode }); this.render(); }
-    } else if ((act === 'rush-play' || act === 'play' || act === 'new-level') && this._resumeAnyRush()) {
+    } else if ((act === 'rush-play' || act === 'play' || act === 'new-level' || act === 'replays') && this._resumeAnyRush()) {
       // a saved Rush run comes first
     } else if (act === 'rush-later') this._rushLater();
     else if (act === 'rush-play') { this._settleRushSave(this.settings.rushMode, true); this._startRush(this.settings.rushMode); }
@@ -793,12 +813,14 @@ class WayOut {
     else if (act === 'tier') {
       if (btn.dataset.tier !== this.settings.tier) { this.settings = saveSettings({ tier: btn.dataset.tier }); this.render(); }   // saved on selection
     } else if (act === 'play') {
-      const k = this.settings.tier, n = this.settings.ladder[k];
-      if (n <= bandEnd(k)) this._startLevel(k, n);
+      const k = this.settings.tier;
+      this._startLevel(k, this.settings.ladder[k]);
     } else if (act === 'new-level') {
-      const k = this.settings.tier, n = this.settings.ladder[k];
-      if (n <= bandEnd(k)) this._newLevel(k, n);
+      const k = this.settings.tier;
+      this._newLevel(k, this.settings.ladder[k]);
     }
+    else if (act === 'replays') this._openReplays();
+    else if (act === 'replay') this._startReplay(this.settings.tier, +btn.dataset.l, +btn.dataset.g);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
@@ -827,10 +849,12 @@ class WayOut {
     // Leaving a Rush run before its clock runs out loses it (Matt: "they lose that round").
     // Between boards it is saved instead (_rushBoardDone), and waits on the setup screen.
     if (this.rush && !this.rush.over && !this.rush.atReady) this._rushEnd('left', true);
-    const wasRush = !!this.rush;
+    const wasRush = !!this.rush, wasReplay = !!this.replay;
     this.rush = null;
+    this.replay = null;
     this._stopLevel();
-    if (dropSave && this.tier && !wasRush) resetSave(this.tier, this.level, this.src);
+    // A replay keeps nothing (no save, no clock), so it has nothing to drop.
+    if (dropSave && this.tier && !wasRush && !wasReplay) resetSave(this.tier, this.level, this.src);
     this.screen = 'home';
     this.settings = loadSettings();
     this.render();
@@ -879,16 +903,35 @@ class WayOut {
    *  arrows still mean the same arrows. */
   _startLevel(tier, level) {
     this.rush = null;
+    this.replay = null;
     this.tier = tier;
     this.level = level;
     this._helpPaused = false;
     const pre = readSave(tier, level, 1e6);
-    this.src = pre ? pre.src : { k: 'L', n: level, g: LADDER_GEN };
+    this.src = pre ? pre.src : defaultSrc(tier, level);
     this.gen = this.src.k === 'T' ? this.src.gen : this.src.g;
-    this.lvl = this.src.k === 'T' ? buildLevel(this.src.tier, this.src.level, this.src.gen) : buildLadder(this.src.n, this.src.g);
+    this.lvl = boardOf(this.src);
+    const saved = readSave(tier, level, this.lvl.arrows.length);
+    this._resetBoard(saved);
+    // The clock carries on through Restart and Try again on the same level; a new level starts at 0.
+    // A level with progress but no clock was started before the timer existed: no honest time.
+    const c = loadClock(tier), key = srcKey(this.src);
+    this.clock = c && c.n === level && c.key === key ? c
+      : { n: level, key, ms: 0, pen: 0, mistakes: 0, hints: 0, partial: !!(saved && (saved.gone.length || saved.red.length || saved.lives < LIVES)) };
+    writeClock(tier, this.clock);
+    this.screen = 'play';
+    this.render();
+    this._clockRun();
+    // Every arrow already gone: the player left (or the app was closed) while the LAST arrow was
+    // still sliding out, so the win was never counted. Count it now instead of showing an empty
+    // board with nothing left to tap.
+    if (!this._left()) { this.won = true; this._kick(); }
+  }
+
+  /** Every arrow back (or, from a save, the ones it says are gone and red) and three hearts. */
+  _resetBoard(saved) {
     const n = this.lvl.arrows.length;
     this.rounds = (peel(this.lvl.cols, this.lvl.rows, this.lvl.arrows) || {}).layers || 1;
-    const saved = readSave(tier, level, n);
     this.gone = new Array(n).fill(false);
     this.red = new Array(n).fill(false);
     this.lives = LIVES;
@@ -908,19 +951,58 @@ class WayOut {
     this.wave = null;
     this.geomWas = null;
     this.winSub = '';
-    // The clock carries on through Restart and Try again on the same level; a new level starts at 0.
-    // A level with progress but no clock was started before the timer existed: no honest time.
-    const c = loadClock(tier), key = srcKey(this.src);
-    this.clock = c && c.n === level && c.key === key ? c
-      : { n: level, key, ms: 0, pen: 0, mistakes: 0, hints: 0, partial: !!(saved && (saved.gone.length || saved.red.length || saved.lives < LIVES)) };
-    writeClock(tier, this.clock);
+  }
+
+  // --- REPLAY (2026-10-26) ------------------------------------------------------------------------
+  // js/arrow-maze-time.js "REPLAY" has the rules. A replay is played on the level's own board with
+  // three hearts and its own clock from 0:00, and keeps NOTHING on the phone (no save, no clock key):
+  // leaving drops it, Restart and Try again start it clean. Only its finish is recorded.
+
+  /** The list of this difficulty's levels with points to win back. */
+  _openReplays() {
+    const band = this.settings.tier, list = woMissed(this._myWayout(), band);
+    if (!list.length) return;
+    const m = this.root.querySelector('.wo-modal');
+    m.innerHTML = `
+      <div class="gh-modal wo-dialog wo-replays" role="dialog" aria-modal="true" aria-labelledby="wo-rp-h">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="wo-rp-h">${t('replay_title')}</h2>
+        <ul class="wo-rp-list">${list.map((x) => `
+          <li><button type="button" class="wo-rp-row" data-act="replay" data-l="${x.l}" data-g="${x.g}">
+            <span class="wo-rp-n">${diffShapeSVG(TIER_NUM[band])}${t('level_n', { n: x.n })}</span>
+            <b class="wo-rp-gain">${ICON_STAR}${t('lv_pts', { n: x.gain })}</b>
+          </button></li>`).join('')}
+        </ul>
+      </div>`;
+    if (m.hidden) this._opener = document.activeElement;
+    m.hidden = false;
+    const first = m.querySelector('.wo-rp-row');
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  /** Replay the level whose log entry is (`l`, `g`): the board it was played on. */
+  _startReplay(band, l, g) {
+    const miss = woMissed(this._myWayout(), band).find((x) => x.l === l && x.g === g);
+    if (!miss) return;
+    const m = this.root.querySelector('.wo-modal');
+    if (m && !m.hidden) { m.hidden = true; m.innerHTML = ''; this._opener = null; }
+    this._stopLevel();
+    this.rush = null;
+    this.replay = { l, g };
+    this.tier = band;
+    this.level = miss.n;
+    this._helpPaused = false;
+    // Generator 5 and 6 boards are rebuilt exactly; a more-levels board too. A board from the old
+    // tiers (g 1-4, finished on its own board after the ladder came) cannot be rebuilt from the log,
+    // so its level's ladder board stands in.
+    this.src = { k: 'R', l, g };
+    this.gen = g;
+    this.lvl = g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
+    this._resetBoard(null);
+    this.clock = { n: miss.n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
     this.screen = 'play';
     this.render();
     this._clockRun();
-    // Every arrow already gone: the player left (or the app was closed) while the LAST arrow was
-    // still sliding out, so the win was never counted. Count it now instead of showing an empty
-    // board with nothing left to tap.
-    if (!this._left()) { this.won = true; this._kick(); }
   }
 
   /** New game on a paused level: the same board (an old-tier board stays that board) with every
@@ -928,7 +1010,7 @@ class WayOut {
    *  are reset; every finished level's time is already in `wo.log`. */
   _newLevel(tier, level) {
     const s = readSave(tier, level, 1e6);
-    const src = s ? s.src : { k: 'L', n: level, g: LADDER_GEN };
+    const src = s ? s.src : defaultSrc(tier, level);
     resetSave(tier, level, src);
     writeClock(tier, { n: level, key: srcKey(src), ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false });
     this._startLevel(tier, level);
@@ -936,13 +1018,14 @@ class WayOut {
 
   _restart() {
     if (!this.lvl || this.won) return;
+    if (this.replay) { const { l, g } = this.replay; this._startReplay(this.tier, l, g); return; }
     resetSave(this.tier, this.level, this.src);
     this._stopLevel();
     this._startLevel(this.tier, this.level);
   }
 
   _save() {
-    if (this.won || this.failed || this.rush) return;   // a Rush board is never saved
+    if (this.won || this.failed || this.rush || this.replay) return;   // a Rush board or a replay is never saved
     const ids = (arr) => arr.reduce((a, v, i) => (v ? (a.push(i), a) : a), []);
     writeSave({ band: this.tier, n: this.level, src: this.src, gone: ids(this.gone), red: ids(this.red), lives: this.lives });
     this._clockStore();
@@ -971,7 +1054,7 @@ class WayOut {
     this._clockStore();
   }
   _clockStore() {
-    if (!this.clock || !this.tier) return;
+    if (!this.clock || !this.tier || this.replay) return;
     writeClock(this.tier, { ...this.clock, ms: Math.round(this._clockMs()) });
   }
   _paintClock() {
@@ -1242,7 +1325,7 @@ class WayOut {
     if (this.lives === 0) {
       this.failed = true;
       this._clockPause();
-      resetSave(this.tier, this.level, this.src);
+      if (!this.replay) resetSave(this.tier, this.level, this.src);
       this._later(() => this._showFail(), 650);
     }
   }
@@ -1263,6 +1346,7 @@ class WayOut {
     if (this.rush) { if (!this.rush.over && !this.rush.paused) this._rushBoardDone(now); return; }
     this._confetti(now);
     const motion = !reduceMotion();
+    if (this.replay) { this._replayDone(motion); return; }
     // Record once, then move the player on (the level number only ever goes up). The clock stops
     // at the last arrow; its time (penalties in) is recorded with the finish.
     this._clockPause();
@@ -1279,17 +1363,37 @@ class WayOut {
     this._paintClock();
     // Shown under the win word: the level's time, penalties in, and what the level earned (hints and
     // lost lives cost points since 2026-10-17; an untimed level keeps its full points).
-    const earned = c.partial ? woLevelPoints(this.level) : woEarnedPoints(this.tier, (c.mistakes | 0) + (c.hints | 0));
+    const earned = c.partial ? woLevelPoints(this.level, this.tier) : woEarnedPoints(this.tier, (c.mistakes | 0) + (c.hints | 0));
     this.winSub = `${woClock(c.ms + c.pen)} · ${t('lv_pts', { n: earned })}`;
     writeClock(this.tier, null);
     this.clock = null;
     clearSave(this.tier);
     this.settings = saveSettings({ ladder: { [this.tier]: this.level + 1 } });
     this._later(() => this._banner(), motion ? 650 : 100);
-    // The last level of Easy, Medium or Hard: that difficulty is complete, back to the setup screen
-    // (it says so there). Otherwise on to the next level.
-    if (this.level + 1 > bandEnd(this.tier)) this._later(() => this._toSetup(false), motion ? 2300 : 1500);
-    else this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
+    // On to the next level. (Easy, Medium and Hard ended at 50 / 100 / 200 until 2026-10-26; now
+    // they go on with their more-levels boards, like Expert.)
+    this._later(() => this._startLevel(this.tier, this.level + 1), motion ? 2300 : 1500);
+  }
+
+  /** A replay cleared: record it (only a better result adds points), show what it added, then back
+   *  to the setup screen, with the list again if there is still something to win back. */
+  _replayDone(motion) {
+    this._clockPause();
+    const c = this.clock, { l, g } = this.replay;
+    let up = null;
+    try {
+      up = recordWayOutReplay(this.tier, { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds,
+        mistakes: c.mistakes, hints: c.hints, level: l, gen: g });
+    } catch (err) { console.error('[way-out] recordWayOutReplay threw - the replay was NOT recorded', err); }
+    if (up == null) console.error('[way-out] the replay was NOT recorded', { tier: this.tier, l, g });
+    this._paintClock();
+    this.winSub = `${woClock(c.ms + c.pen)} · ${t('lv_pts', { n: up | 0 })}`;
+    this.clock = null;
+    this._later(() => this._banner(), motion ? 650 : 100);
+    this._later(() => {
+      this._toSetup(false);
+      if (woMissed(this._myWayout(), this.settings.tier).length) this._openReplays();
+    }, motion ? 2300 : 1500);
   }
 
   /** The win's green wave and confetti (the wave is drawn by _draw, the confetti by _frame). */
@@ -1310,7 +1414,8 @@ class WayOut {
   _banner() {
     const b = this.root.querySelector('.wo-banner');
     if (!b) return;
-    b.querySelector('span').textContent = t('win_' + (1 + ((Math.random() * 5) | 0)));
+    // A replay goes back to the setup screen, so never "Next level" (win_5) after one.
+    b.querySelector('span').textContent = t('win_' + (1 + ((Math.random() * (this.replay ? 4 : 5)) | 0)));
     const sub = b.querySelector('b');
     if (sub) sub.textContent = this.winSub || '';
     b.classList.add('is-on');

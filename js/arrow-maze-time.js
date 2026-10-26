@@ -78,10 +78,12 @@ export function bandEnd(band) {
 }
 /** What one cleared level of each difficulty is worth. */
 export const WO_BAND_POINTS = { easy: 1, medium: 2, hard: 4, expert: 6 };
-/** What ladder level n is worth: its difficulty's points. */
-export function woLevelPoints(n) {
+/** What level n is worth: its difficulty's points. Since 2026-10-26 Easy, Medium and Hard go on past
+ *  50 / 100 / 200 (their MORE levels, numbered on: "Easy 51" is an Easy level), so a caller that knows
+ *  the difficulty passes it; without one, the ladder number says which. */
+export function woLevelPoints(n, band = null) {
   const L = Math.max(1, Math.floor(Number(n) || 1));
-  return WO_BAND_POINTS[bandOf(L)];
+  return WO_BAND_POINTS[WO_BAND_POINTS[band] ? band : bandOf(L)];
 }
 /** Points for `cleared` levels of a band. A count past the band's 50 (possible only from the old
  *  endless tiers) earns the same per level: never dropped, never more. */
@@ -121,6 +123,57 @@ export function woPoints(rec, band = null) {
     return woBandPoints(b, won - n) + (n ? Math.min(n * (WO_BAND_POINTS[b] || 0), Math.max(n, earned)) : 0);
   };
   return band ? (WO_TIERS.includes(band) ? one(band) : 0) : WO_TIERS.reduce((n, b) => n + one(b), 0);
+}
+
+// REPLAY (2026-10-26, Matt: "we need to let people see and replay the ones they messed up on ... if I
+// made 1 mistake, I have to make zero mistakes to get all the points"). A level SCORED with its slips
+// (a timed finish in `wo.log` from WO_SLIP_SINCE on) that earned less than its full points can be
+// played again, on the same board, as often as wanted. A replay that does better adds ONLY the
+// difference to `wo.pts[band]` (so a level never counts more than its full points, and woPoints'
+// clamp still holds); it is not a level cleared (byDiff, totals, ptsN untouched). Every replay is kept
+// raw in `wo.replay[band]`: { t, a, r, m, h, l, g, d, u } (u = the points it added, often 0).
+// Easy is worth 1 whatever happens, so it never has anything to win back.
+// Levels finished before slips cost points kept their full points, so they are never listed.
+/** When hints and lost lives started costing points: the merge of that change (2026-10-17 00:15 EDT). */
+export const WO_SLIP_SINCE = Date.UTC(2026, 9, 17, 4, 15, 32);
+/** A replay list (array or Firebase object); anything malformed is left out. */
+export function woReplayList(x) {
+  const arr = Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.keys(x).sort((p, q) => p - q).map((k) => x[k]) : []);
+  const out = [];
+  for (const raw of arr) {
+    const f = asFinish(raw);
+    if (!f || !(f.l > 0) || !(f.g > 0) || !(f.d > 0)) continue;
+    f.m = f.m | 0; f.h = f.h | 0;
+    f.u = Math.max(0, Math.floor(Number(raw.u)) || 0);
+    out.push(f);
+  }
+  return out;
+}
+/** The number a board is SHOWN as, from its log `l` and `g`: a first-ladder (g 5) Expert board was
+ *  151 on, today's Expert starts at 201; everything else already is today's number. */
+export function woShownLevel(band, l, g) {
+  return g === 5 && band === 'expert' && l >= 151 ? l - 151 + BAND_START.expert : l;
+}
+/** The levels of `band` on this record that earned less than their full points, best attempt first
+ *  counted: [{ l, g, n (shown number), best, full, gain }], most points to win first, then by level. */
+export function woMissed(rec, band) {
+  const full = WO_BAND_POINTS[band];
+  const wo = (rec && rec.wo) || {};
+  if (!full) return [];
+  const by = new Map();
+  for (const f of woList((wo.log || {})[band])) {
+    if (!(f.d >= WO_SLIP_SINCE) || !(f.l > 0) || !(f.g > 0)) continue;
+    const k = `${f.g}:${f.l}`, e = woEarnedPoints(band, (f.m | 0) + (f.h | 0));
+    const cur = by.get(k);
+    by.set(k, { l: f.l, g: f.g, best: cur ? Math.max(cur.best, e) : e });
+  }
+  for (const f of woReplayList((wo.replay || {})[band])) {
+    const cur = by.get(`${f.g}:${f.l}`);
+    if (cur) cur.best = Math.max(cur.best, woEarnedPoints(band, f.m + f.h));
+  }
+  return [...by.values()].filter((x) => x.best < full)
+    .map((x) => ({ ...x, n: woShownLevel(band, x.l, x.g), full, gain: full - x.best }))
+    .sort((a, b) => b.gain - a.gain || a.n - b.n);
 }
 
 // --- RUSH (2026-10-14) ------------------------------------------------------------------------------

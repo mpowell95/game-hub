@@ -596,3 +596,28 @@ thirds wide and a little over half a gap long. PR #1084 was reverted whole (`git
 Taps still pick the nearest segment (unchanged). Browser-checked Easy 1, Hard 101, Expert 201: real
 taps send the hinted arrow, no magnifier for anyone. Held-back game: no CACHE bump.
 
+
+
+## More levels and Replay (2026-10-26)
+
+Matt, verbatim: *"Arrows. I didn't realize there was a finite number of games in each difficulty ... People
+have beaten easy and medium and hard. That makes this a very small game. First, we need to let people see
+and replay the ones they messed up on. So if I made a mistake on easy and didn't get all the points that
+were available, I need to be able to go back and be able to replay those ones to get the points I missed
+out on. So if I made 1 mistake, I have to make zero mistakes to get all the points. You know? Then we need
+to add WAY more per difficulty. It's not that expert is actually more difficult, it's that people would
+like to play it, but the arrows are so small that you hit arrows you didn't mean to hit ... Don't make
+anything live. I don't want people to get a random update with this half completed it before I can
+review it."*
+
+Asked and answered the same day: Easy stays 1 point (his table has nothing to take away, so Easy never
+has a replay); Easy, Medium and Hard never end; the new levels keep counting (Easy 51, 52 ...).
+
+Design choices: a replay adds only the DIFFERENCE between its result and the level's best so far to the
+existing `wo.pts` counter (so every reader of points, the merge and the server-built board pick it up with
+no change, and the woPoints clamp still holds); nothing a replay does is a "level cleared". Levels
+finished before 2026-10-17 04:15 UTC (the merge of "hints and lost lives cost points") are not listed:
+they were given full points. The more-levels boards pick their spec from the top of their own band so the
+arrows never get smaller than the difficulty already had (Matt's tapping complaint). Built on branch
+`claude/arrow-maze-replay-more-levels`, held back from `main` for Matt's review (Arrow Maze is network-first
+while devOnly, so a merge would reach every player at once).
