@@ -127,7 +127,14 @@ black pockets, coral and cyan groups).
     side opening 76 px, GamePigeon's 74. Harder than GamePigeon's (bigger balls, same holes): catch
     width corners ~0.4 balls, sides ~0.9 straight in; matches take ~2x the shots; Hard beat Easy in
     9-ball 5 of 8 (8 of 8 in 8-ball and Cutthroat), so `test.js` plays 8 games per level now.
-  - `test.js` pins tables 1-4 to their old fingerprints. Whole table on screen,
+  - **Table 6 (2026-10-26, today's)**: table 5 with the pocket MOUTHS opened halfway to GamePigeon's fit
+    (Matt's 14, aimed at the hole's centre vs Ana, rattled off the far jaw; "make it better but not too
+    easy"). Table 5 kept GamePigeon's noses in table pixels, so with our bigger ball the corner mouth was
+    1.27 balls (GamePigeon 1.58), the side 1.71 (2.14). Noses and jaw backs moved out 12.5%: corner 1.42,
+    side 1.93; holes and balls unchanged. Catch straight in: corners 0.64 balls (5: 0.46, GamePigeon
+    0.83), sides 1.17 (0.95, 1.37). Option C (GamePigeon's 1.58) was shown to Matt and not chosen.
+    For reference, a WPA table's mouths are ~2.0 (corner) and ~2.25 (side) balls.
+  - `test.js` pins tables 1-5 to their old fingerprints (table 5: a real 31-shot online match). Whole table on screen,
     `SIDE_K` 11.5% of the width free each side.
 - `DT` 1/240, `MAX_SPEED` 400 (the break x1.35 = 540, ~2.25 a step, under `R`): nothing tunnels.
 - Skid then roll: each ball carries `r` (the speed its spin would roll it at). A centre hit starts

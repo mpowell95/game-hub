@@ -27,7 +27,7 @@ export const H = 200;
  * `useTable(tb)` points the live bindings below at one of them; every function here that takes a
  * match does it first, and so must anything that steps balls or draws them.
  */
-export const TABLE_NOW = 5;
+export const TABLE_NOW = 6;
 /** RULES VERSIONS, kept per match like the table (`m.rv`, none = 1), for the same reason: an online
  *  match replays its log. 1: a shot that pots nothing and sends no ball to a cushion after the hit
  *  is a foul (WPA 6.3). 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it"): it is not. */
@@ -123,9 +123,19 @@ const T4 = (() => {
  *  pockets in proportion to the table"): a hole 84 px of 717 (11.7% of the cloth's width, 1.6 of
  *  our balls), the same centres and jaws. Table 4 had grown them with the ball, 25% too big. */
 const T5 = (() => ({ ...T3, R: T4.R, rackGap: T4.rackGap, rackMid: T4.rackMid, rackKeep: T4.rackKeep }))();
-const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4, 5: T5 };
+/** Table 6 (2026-10-26): table 5 with its pocket MOUTHS opened halfway to GamePigeon's fit (Matt: his
+ *  14 aimed at the centre of the hole rattled out; "make it better but not too easy"). Table 5's
+ *  cushion noses were GamePigeon's in table pixels, so with our bigger ball the corner mouth was 1.27
+ *  balls (GamePigeon 1.58) and the side 1.71 (2.14). The noses and jaw backs move out 12.5% (half of
+ *  table 4's 25%): corner 1.42 balls, side 1.93. Holes and balls unchanged. Catch width straight in:
+ *  corners 0.64 balls (5: 0.46, GamePigeon 0.83), sides 1.17 (0.95, 1.37). */
+const T6 = (() => {
+  const px = W / 717, k = 1.125;
+  return { ...T5, G: 47 * px * k, S: 45 * px * k, GB: 30 * px * k, SB: 39 * px * k };
+})();
+const TABLES = { 1: T1, 2: T2, 3: T3, 4: T4, 5: T5, 6: T6 };
 /** A known table id, or null. */
-const knownTable = (tb) => (Number.isInteger(tb) && tb >= 1 && tb <= 5 ? tb : null);
+const knownTable = (tb) => (Number.isInteger(tb) && tb >= 1 && tb <= 6 ? tb : null);
 export const tableOf = (m) => (m && knownTable(m.tb)) || 1;
 
 /** The live table: the ball's radius; a corner pocket's jaws sit CORNER_G along each rail from the
