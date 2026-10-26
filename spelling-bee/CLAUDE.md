@@ -24,7 +24,7 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 `data/bee.json` from `tools/build-spelling-bee-data.mjs` (read its header). **Two lists (2026-10-26, Matt:
 "Obviously all words should count")**: `words` = the answers, SCOWL size ≤60 English + American ∩ ENABLE
 (22,045; hints and ranks count only these); `extra` = every other ENABLE word that fits (22,447), accepted
-and scored as a BONUS word (italic in the found list), never counted. No S, ≤7 distinct letters, bad words
+and scored as a BONUS word (italic in the found list, toast "Bonus word!", one How to Play line), never counted. No S, ≤7 distinct letters, bad words
 out of both. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
 every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
 Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 24, 26, 28 (33, 23, 28 words)
