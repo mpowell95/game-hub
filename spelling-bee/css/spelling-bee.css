@@ -187,7 +187,6 @@
 .sb-root .sb-help-hive polygon { fill: #e6e6e6; }
 .sb-root .sb-help-hive polygon.is-center { fill: #f7da21; }
 .sb-root .sb-help-hive text { font-size: 44px; font-weight: 700; fill: #000; }
-.sb-root .sb-help-ex { font-weight: 700; }
 
 .sb-root .sb-win-bee { font-size: 54px; text-align: center; line-height: 1.1; }
 .sb-root .sb-win-title { text-align: center; margin-right: 0; }
