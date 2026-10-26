@@ -40,6 +40,7 @@ Rankings), the found-words bar (tap = the whole list, alphabetical, columns fit 
 input (centre letter yellow, wrong letters grey), the hive, Delete / shuffle / Enter. Keyboard:
 letters, Backspace, Enter, Space = shuffle. Hints show what is LEFT, titled "Left to find" (Matt could not tell, 2026-10-26).
 Genius and Queen Bee each pop once per puzzle (`seenGenius` / `seenQueen`).
+**Type-ahead (2026-10-26)**: typing during the accepted/refused feedback ends it at once (`_feedback`/`_settle`); it used to swallow the next word's first letter.
 **Past puzzles (Matt, 2026-10-25)**: a month calendar, epoch to today; tap a day to play it (`_startDay(n)`). Same save
 record per puzzle, same one Genius win per puzzle. The HUD shows the date while on a past day; Yesterday's Answers is
 relative to the puzzle shown (hidden on day 0). Opening the game always starts on today.

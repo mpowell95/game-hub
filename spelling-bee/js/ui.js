@@ -179,6 +179,8 @@ class SpellingBee {
     // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
     this.found = new Set(this.rec.found.filter((w) => this.counts(w)));
     this.outer = this.puzzle.outer.slice();
+    this._settle = null;
+    this._busy = false;
     this.input = '';
     this.open = false;
     this._render();
@@ -394,6 +396,7 @@ class SpellingBee {
   }
 
   type(ch) {
+    if (this._settle) this._settle();
     if (!this.puzzle || this._busy) return;
     if (this.open) { this.open = false; this._paintFound(); }
     if (this.input.length >= MAX_LEN + 1) return;
@@ -402,6 +405,7 @@ class SpellingBee {
   }
 
   backspace() {
+    if (this._settle) { this._settle(); return; }   // the shown word is already on its way out
     if (this._busy || !this.input) return;
     this.input = this.input.slice(0, -1);
     this._paintInput();
@@ -429,14 +433,7 @@ class SpellingBee {
     // A bonus word (a rarer real word, not in the hints) says so (Matt, 2026-10-26).
     const praise = this.answerSet.has(word) ? praiseFor(word, this.puzzle) : 'bonus';
     this._toast(t('praise_' + praise), praise === 'pangram' ? 'is-pangram' : 'is-good', pts);
-    this._busy = true;
-    this.el.input.classList.add('is-accepted');
-    this._later(() => {
-      this._busy = false;
-      this.input = '';
-      this.el.input.classList.remove('is-accepted');
-      this._paintInput();
-    }, reduced() ? 0 : 450);
+    this._feedback('is-accepted', reduced() ? 0 : 450);
     this._paintProgress();
     this._paintFound();
     this._maybeRecord();
@@ -447,14 +444,25 @@ class SpellingBee {
 
   _reject(why) {
     this._toast(t(why), 'is-bad');
+    this._feedback(reduced() ? '' : 'is-shake', 700);
+  }
+
+  /** The accepted / refused word stays up for `ms`, then clears. Typing during it ends it at once,
+   *  so the next word's first letter is never lost (Matt, 2026-10-26: "_ATCH", HATCH then LATCH lost
+   *  the L every time). */
+  _feedback(cls, ms) {
     this._busy = true;
-    if (!reduced()) this.el.input.classList.add('is-shake');
-    this._later(() => {
+    if (cls) this.el.input.classList.add(cls);
+    const done = () => {
+      if (this._settle !== done) return;
+      this._settle = null;
       this._busy = false;
       this.input = '';
-      this.el.input.classList.remove('is-shake');
+      if (cls) this.el.input.classList.remove(cls);
       this._paintInput();
-    }, 700);
+    };
+    this._settle = done;
+    this._later(done, ms);
   }
 
   _toast(text, cls, pts) {
