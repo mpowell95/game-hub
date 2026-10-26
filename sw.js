@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1260;
-const CACHE = 'game-hub-v1261';
+const CACHE = 'game-hub-v1262';
 
 const ASSETS = [
   './',
