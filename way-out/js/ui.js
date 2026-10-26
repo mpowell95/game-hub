@@ -667,12 +667,14 @@ class WayOut {
     const paused = !done && isPaused(tier, level);
     // Each difficulty: its name, the level it is on, and a thin bar of how far through its stretch
     // of the ladder that is. Expert never ends, so its bar fills every 50 levels and starts over
-    // (Matt, 2026-10-14: a solid line like the others, not a dashed one). Since 2026-10-26 no
-    // difficulty ends: past its last ladder level each bar does the same, 50 levels a lap.
+    // (Matt, 2026-10-14: a solid line like the others, not a dashed one). Since 2026-10-26 Easy,
+    // Medium and Hard go on past their last ladder level: their bar then shows every level cleared in
+    // that difficulty against the next 50 mark (Medium 101 = 50 of 100, half full; Matt: "Give me
+    // some progress on the medium. I've beaten 100 levels"), so it never drops back to empty.
     const segs = TIERS.map((k) => {
       const n = this.settings.ladder[k], end = bandEnd(k), fin = !news && n > end;
       const pct = k === 'expert' ? Math.round(100 * (((n - BAND_START[k]) % EXPERT_LAP) / EXPERT_LAP))
-        : n > end && news ? Math.round(100 * (((n - end - 1) % EXPERT_LAP) / EXPERT_LAP))
+        : n > end && news ? Math.round(100 * (n - BAND_START[k]) / ((Math.floor((n - BAND_START[k]) / EXPERT_LAP) + 1) * EXPERT_LAP))
         : Math.round(100 * Math.min(1, (n - BAND_START[k]) / (end - BAND_START[k] + 1)));
       return `
       <button type="button" class="wo-seg${k === tier ? ' is-selected' : ''}" data-act="tier" data-tier="${k}" role="radio" aria-checked="${k === tier}">
