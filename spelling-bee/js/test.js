@@ -47,6 +47,7 @@ ok('already found', checkWord('table', p, set, new Set(['table'])) === 'already_
 ok('a new answer passes', checkWord('table', p, set, new Set()) === null);
 ok('a bonus word passes', checkWord('blat', p, set, new Set(), new Set(['blat'])) === null);
 ok('queen bee needs every answer', rankIndex(100, 100, false) === GENIUS && rankIndex(100, 100, true) === GENIUS + 1);
+ok('a retired puzzle is never a current day', Object.entries(data.retired).every(([d, k]) => data.puzzles[d] !== k && !data.puzzles.includes(k)));
 ok('every bonus word is outside the answers', (() => { const s = new Set(data.words); return data.extra.length > 1000 && data.extra.every((w) => !s.has(w)); })());
 ok('praise', praiseFor('able', p) === 'good' && praiseFor('table', p) === 'nice' && praiseFor('tabletal', p) === 'awesome' && praiseFor('bracelet', p) === 'pangram');
 

@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1249;
-const CACHE = 'game-hub-v1249';
+const IMPORTANT_SINCE = 1250;
+const CACHE = 'game-hub-v1250';
 
 const ASSETS = [
   './',
@@ -1002,11 +1002,11 @@ const REST_MANIFEST = {
   './contexto/data/es.bin': 'b604406b23',
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
-  './spelling-bee/css/spelling-bee.css': '9031ab039c',
-  './spelling-bee/js/ui.js': '5adcaaf039',
-  './spelling-bee/js/engine.js': '23fdab7941',
+  './spelling-bee/css/spelling-bee.css': 'fdb0382e9c',
+  './spelling-bee/js/ui.js': '257f2b05f0',
+  './spelling-bee/js/engine.js': '7c01ad8098',
   './spelling-bee/js/strings.js': '9f3d9ad55e',
-  './spelling-bee/data/bee.json': '01176dc209',
+  './spelling-bee/data/bee.json': 'c95ed8d253',
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
   './murdoku/css/murdoku.css': 'ec84773045',
