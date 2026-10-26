@@ -455,6 +455,46 @@ export function buildLadder(n, gen = LADDER_GEN) {
   return best.lvl;
 }
 
+// --- MORE LEVELS (2026-10-26) -------------------------------------------------------------------
+//
+// Matt: "People have beaten easy and medium and hard ... we need to add WAY more per difficulty. It's
+// not that expert is actually more difficult, it's that people would like to play it, but the arrows
+// are so small that you hit arrows you didn't mean to hit." So Easy, Medium and Hard NEVER END now,
+// like Expert: past 50 / 100 / 200 each goes on, numbered on (Easy 51, 52 ...; "Easy 51" is not
+// Medium 51). GENERATOR 7: each of these boards is built like a ladder level picked (by its seed)
+// from the top of its own difficulty (MORE_FROM .. the band's last), never bigger than the band's
+// last board, so the arrows never get smaller than the difficulty already has. Own seeds
+// (`seedOf('more-<band>', n)`), so no board repeats a ladder board. Pinned by hash in test.js.
+export const MORE_GEN = 7;
+/** The ladder levels a band's MORE boards are modelled on: from here to the band's last level. */
+export const MORE_FROM = { easy: 31, medium: 81, hard: 161 };
+/** The ladder level MORE board n of `band` is built like. */
+export function moreLevel(band, n) {
+  const lo = MORE_FROM[band], hi = bandEnd(band);
+  return lo + (seedOf(`more-pick-${band}`, n | 0) % (hi - lo + 1));
+}
+/** MORE board n (n past the band's last ladder level) of Easy, Medium or Hard. Deterministic. */
+export function buildMore(band, n) {
+  const m = moreLevel(band, n);
+  const { spec, target } = ladderSpec(m, LADDER_GEN);
+  const seed = seedOf(`more-${band}`, n | 0);
+  const K = m > 100 ? 10 : spec.cols * spec.rows > 600 ? 6 : 8;
+  const miss = (layers) => (layers < target ? (target - layers) * 2 : layers - target);
+  let best = null;
+  for (let i = 0; i < K; i++) {
+    const s = (seed + i * 7919) >>> 0;
+    const lvl = generate(spec, s);
+    const h = harden(lvl.cols, lvl.rows, lvl.arrows, s, 8, true, target);
+    if (h && (!best || miss(h.layers) < miss(best.layers))) best = { lvl, layers: h.layers };
+    if (best && best.layers >= target && best.layers <= target + 1) break;
+  }
+  return best.lvl;
+}
+/** Is level n of `band` one of its MORE levels (past the ladder's stretch)? Expert has none. */
+export function isMore(band, n) {
+  return band !== 'expert' && MORE_FROM[band] != null && (n | 0) > bandEnd(band);
+}
+
 // --- RUSH (2026-10-14) --------------------------------------------------------------------------
 //
 // Rush's boards (js/arrow-maze-time.js, "RUSH"): board i of a run is built to the spec of a ladder

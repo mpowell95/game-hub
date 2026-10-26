@@ -142,3 +142,16 @@ bow so far the sight looked detached). The sleeve's closed end stays 380-620 px 
 Same day, Matt's screenshot ("You messed something up bad"): the lean moved the hand but not the
 arrow's rest point, so the drawn arrow lay across the fingers and ran into the grip. `_loadModel` now
 leans `MODEL_REST` with the model (into the model's frame upright, back out leaned).
+
+## 2026-10-26: the bow upright while aiming
+
+Matt's recording (`ScreenRecording_10-26-2026 18-31-08_1.MP4`): drawn, the bow leaned about 30 degrees
+on screen and its upper limb cut across the middle of the view, through the sight. Matt: "2 is the most
+important... undo that rule and fix it" (the 2026-10-22 `MODEL_CANT` 0.3 lean). Standing the model up
+by cant alone put the arm flat across the screen again (the "above the head" look), and no yaw fixes
+that (a level arm at eye height always projects flat). Instead the drawn pose turns the arm toward the
+eye (yaw -0.7) and tips it down toward the eye (pitch 0.3), with cant -0.15 to stand the bow up: the
+arm now runs off the bottom-left corner, as a real bow arm does from the eye. The bow down keeps the
+old turn (a pitched resting bow swung its sleeve across the view); `setPose` blends the two by `p` and
+turns the arrow's rest with the model each frame. Checked headless at 360, 393, 430 wide: drawn,
+mid-draw (p 0.5), aimed at the face's corners, and down.

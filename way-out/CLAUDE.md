@@ -193,9 +193,10 @@ all data from all plays by everyone."*
 
 **One ladder, four difficulties.** Levels numbered 1, 2, 3 ... Easy 1-50, Medium 51-100, **Hard 101-200,
 Expert 201 on** (never ends). A player picks any difficulty and plays its levels in order; each remembers
-its own next level (`ladder2[band]`). Finishing 50, 100 or 200 completes that difficulty (setup says
-"Complete", Play disabled). Not "highest level" on the board: a new player picking Expert would pass
-everyone.
+its own next level (`ladder2[band]`). **No difficulty ends (2026-10-26)**: past 50 / 100 / 200 Easy,
+Medium and Hard go on with MORE levels, numbered on ("Easy 51" is an Easy level, worth Easy's points;
+`woLevelPoints(n, band)`), see "More levels and Replay". Not "highest level" on the board: a new player
+picking Expert would pass everyone.
 
 **Points** (`js/arrow-maze-time.js`, `WO_BAND_POINTS`): **flat per difficulty, Easy 1, Medium 2, Hard 4,
 Expert 6 a level** (set from real times ~20 s, ~45 s, ~1.5 min, ~2 min). The first build shipped an
@@ -239,6 +240,37 @@ holds the old Expert's largest at 260 (28x38, 32 rounds); up to 10 candidates ab
 
 Setup shows each difficulty's next level and range ("Levels 51-100"), Play level N, "This level is worth
 N points"; How to play's third page says every level earns points.
+
+## More levels and Replay (2026-10-26)
+
+Matt: *"People have beaten easy and medium and hard ... we need to add WAY more per difficulty"* (the
+Expert arrows are too small to tap reliably), and *"let people see and replay the ones they messed up on
+... if I made 1 mistake, I have to make zero mistakes to get all the points."* Matt chose: never end,
+keep counting (Easy 51 ...), Easy stays 1 point (so it never has anything to replay).
+**ADMIN ONLY until Matt releases it** (*"Release it admin only too"*): `NEWS_FOR_ALL = false` in ui.js,
+`hasNews()` = that or `isAdminDevice()`. Everyone else plays as before (bands end, "Complete", no
+Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder already shipped).
+- **Popup** (`_showNews`, Matt's mock-up): once per phone on the setup screen, NEW badge, ↻ chip with the
+  person's own count across all difficulties (icon alone at 0), Easy / Level 51 chip, Got it + X; stamped
+  in `gamehub.wayout.news.v1` (`replay-more-2026-10-26`, a seen-list) when it closes by any route.
+
+- **More levels**: `src: {k:'X', band, n, g: 7}`, `buildMore(band, n)` (engine.js, GENERATOR 7, pinned by
+  hash): each board is built like a ladder level picked by its seed from the top of its own band
+  (`MORE_FROM`: Easy 31-50, Medium 81-100, Hard 161-200), never bigger than the band's last board. Log
+  `l` = the band's own number, `g` = 7. The seg bar laps every 50 past the band's end.
+- **Replay** (`js/arrow-maze-time.js` `woMissed`, `WO_SLIP_SINCE`): a level is listed when a log finish
+  from 2026-10-17 04:15 UTC on (when slips started costing points) earned less than full; earlier ones
+  kept full points and are never listed. Setup: a **↻ N** button at the left of the Play row opens the
+  list (Level N, +points to win); none = no button. A replay: same board (`l`, `g`), 3 hearts, its own
+  clock from 0:00, **keeps NOTHING on the phone** (no save, no clock key, `ladder2` untouched; Restart and
+  Try again start it clean), then back to setup (the list again if more remain).
+- **Recorder `recordWayOutReplay`** (`js/game-stats.js`): not a level cleared (totals, byDiff, timed,
+  ptsN, log untouched); a better result adds ONLY the difference to `wo.pts[band]`, so a level never
+  passes its full points and players-agg / the server board need no change. Every replay raw in
+  `wo.replay[band]` `{t,a,r,m,h,l,g,d,u}` (u = points added). Local to the phone that played the level
+  (the log is per device).
+- Tests: `tools/test-arrow-maze-time.mjs` (replay maths), `way-out/js/test.js` (generator 7),
+  `tools/test-arrow-maze-replay.mjs` (browser, `--size 360x724 --es` too).
 
 ## Rush (2026-10-14)
 

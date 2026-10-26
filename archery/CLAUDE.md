@@ -120,7 +120,10 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   edge in every pose (as made it showed inside the edge with the bow down). `bow3d.js _loadModel` only places
   it (grip at `MODEL_GRIP`, `MODEL_S` 10.5, +x into the screen) and turns it `MODEL_YAW` -1.1 rad about
   the bow's upright, so the arm runs off the left edge, and leans it `MODEL_CANT` 0.3 rad so the arm
-  rises from low on the left up to the hand (flat, it read as an arm held above the head, Matt 2026-10-22); the arrow's rest
+  rises from low on the left up to the hand (flat, it read as an arm held above the head, Matt 2026-10-22). **Drawn, the
+  bow stands UPRIGHT** (Matt, 2026-10-26: leaned, it cut across the middle of the screen while aiming): `setPose` blends
+  to `MODEL_DRAWN` (pitch 0.3, yaw -0.7, cant -0.15) by `p`, so the arm comes up from the bottom-left corner
+  instead; the bow down is unchanged (checked at 360, 393, 430 wide, mid-draw and aimed at the face's corners). The arrow's rest
   (`MODEL_REST`, given upright) is leaned with it, or the arrow lies across the fingers into the grip (turned less, the sleeve's closed end shows
   with the bow down; checked at 360, 390, 402, 430 wide). Not mirrored: the back of the hand faces you,
   fingers round the far side. The
