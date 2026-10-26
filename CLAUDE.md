@@ -444,7 +444,7 @@ never crash.
 ## The compact layout (2026-10-17)
 
 A per-device choice (Profile > Settings > Layout; default Comfortable). Compact = one title row, 3-across
-tiles with the name under the art, no heart on favorites (the edit button moves AND removes them), and
+tiles with the name under the art, favorites keep their heart (Matt, 2026-10-26; it was removed 2026-10-17 against his wishes), the edit button moves and removes them, and
 an icons-only bottom tab bar (Games, Multiplayer, Messages, Leaderboards, Profile) carrying the same
 badges. CSS is `html.gh-compact:not(.gh-ingame)` so games mount identically. Each tab calls the comfortable
 layout's own button, so the two cannot drift. Announced by `compact-layout-2026-10-17` (Try it = switch).
