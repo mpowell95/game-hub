@@ -26,8 +26,8 @@ const DATA_URL = {
   es: new URL('../data/bee-es.json', import.meta.url),   // Spanish (2026-10-26), its own puzzles
 };
 
-/** Accents off, Ñ as N: how every Spanish word is stored, typed and checked (Boggle does the same). */
-export const fold = (w) => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+/** Accents off, Ñ KEPT: Ñ is its own letter, á is just a (Ana, 2026-10-26). How a typed key is read. */
+export const fold = (w) => String(w).toLowerCase().replace(/ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'ñ');
 
 /** Parse the generated file into { epoch, words: string[], extra: string[], puzzles: string[] }.
  *  `words` are the answers (hints and ranks count them); `extra` are rarer real words, accepted and
@@ -38,11 +38,7 @@ export function parseData(raw) {
   // retired: day -> the letters that day had before it was swapped for a fuller puzzle.
   const retired = raw.retired && typeof raw.retired === 'object' ? raw.retired : {};
   const lang = raw.lang === 'es' ? 'es' : 'en';
-  // Spanish words arrive in their real spelling ("niña"): fold them, keep the spelling to show.
-  const spell = {};
-  const folded = (list) => list.map((w) => { const f = fold(w); if (f !== w) spell[f] = w; return f; });
-  const words = raw.words.split(' ');
-  return { lang, epoch: raw.epoch, words: lang === 'es' ? folded(words) : words, extra: lang === 'es' ? folded(extra) : extra, spell, puzzles: raw.puzzles, retired };
+  return { lang, epoch: raw.epoch, words: raw.words.split(' '), extra, puzzles: raw.puzzles, retired };
 }
 
 export async function loadData(lang = 'en') {

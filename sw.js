@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1250;
-const CACHE = 'game-hub-v1254';
+const CACHE = 'game-hub-v1255';
 
 const ASSETS = [
   './',
@@ -1005,12 +1005,12 @@ const REST_MANIFEST = {
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
   './spelling-bee/css/spelling-bee.css': '04bfe1bb1e',
-  './spelling-bee/js/ui.js': '405f81dcdb',
-  './spelling-bee/js/engine.js': '91c982fda9',
-  './spelling-bee/js/strings.js': '969d3d648a',
-  './spelling-bee/js/board.js': '4bcbc9f43f',
+  './spelling-bee/js/ui.js': '597da4aa1e',
+  './spelling-bee/js/engine.js': 'a75e78dc3e',
+  './spelling-bee/js/strings.js': 'af43df3ec1',
+  './spelling-bee/js/board.js': 'cb1e14e8a9',
   './spelling-bee/data/bee.json': 'c95ed8d253',
-  './spelling-bee/data/bee-es.json': '5b3bd30b10',
+  './spelling-bee/data/bee-es.json': '519b5513db',
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
   './murdoku/css/murdoku.css': 'ec84773045',

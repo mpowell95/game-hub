@@ -17,8 +17,8 @@
 
 - **RLA-ES** (MPL 1.1), via Boggle's `boggle/data/words-es.txt`; see `boggle/data/CREDITS.md`.
 - **lemmatization-lists** Spanish, by Michal Boleslav Mechura, https://github.com/michmech/lemmatization-lists,
-  licensed **ODbL**: inflected forms (conjugations) and spellings.
+  licensed **ODbL**: inflected forms (conjugations) and their spelling (which words have Ñ).
 - **FrequencyWords** Spanish 2018 (OpenSubtitles), by Hermit Dave, https://github.com/hermitdave/FrequencyWords,
-  licensed **CC BY-SA 4.0**: which words are common enough to be answers, and their usual spelling. The shipped
+  licensed **CC BY-SA 4.0**: which words are common enough to be answers. The shipped
   word list is a derived work and is shared under the same licence.
 - **LDNOOBW** Spanish list (CC BY 4.0): words on it are removed.

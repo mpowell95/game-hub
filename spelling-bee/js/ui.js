@@ -332,8 +332,8 @@ class SpellingBee {
     if (this.open) this._layoutPanel();
   }
 
-  /** A word as written: Spanish keeps its accents and Ñ ("niña"), English is just capitalised. */
-  _show(w) { return cap((this.data && this.data.spell[w]) || w); }
+  /** A word as shown: capitalised (Spanish is written without accents, Ñ included). */
+  _show(w) { return cap(w); }
 
   _cls(w) { return !this.answerSet.has(w) ? 'is-bonus' : isPangram(w, this.puzzle) ? 'is-pangram' : ''; }
 
@@ -396,8 +396,8 @@ class SpellingBee {
     if (!this.puzzle || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (this._overlay) { if (ev.key === 'Escape') this._closeOverlay(); return; }
     const k = ev.key;
-    const ch = k.length === 1 ? fold(k) : '';   // á -> a, ñ -> n (Spanish keyboards)
-    if (/^[a-z]$/.test(ch)) { this.type(ch); const i = [this.puzzle.center, ...this.outer].indexOf(ch); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
+    const ch = k.length === 1 ? fold(k) : '';   // á -> a; ñ stays ñ (its own letter)
+    if (/^[a-zñ]$/.test(ch)) { this.type(ch); const i = [this.puzzle.center, ...this.outer].indexOf(ch); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
     else if (k === 'Backspace') { this.backspace(); ev.preventDefault(); }
     else if (k === 'Enter') { this.submit(); ev.preventDefault(); }
     else if (k === ' ') { this.shuffle(); ev.preventDefault(); }

@@ -1,4 +1,4 @@
-// spelling-bee/js/strings.js - EN/ES for the CHROME. The words themselves are English only.
+// spelling-bee/js/strings.js - EN/ES for the CHROME. The puzzle words come from bee.json / bee-es.json.
 // English is the source of truth; a missing Spanish key falls back to English. Call t() at render time.
 export const STRINGS = {
   en: {
