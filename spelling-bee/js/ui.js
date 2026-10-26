@@ -17,6 +17,9 @@ import {
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
+import { postProgress, watchDaily, needsPost } from './board.js';
+import { myCode } from '../../js/messages.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-spellingbee-css';
@@ -180,6 +183,16 @@ class SpellingBee {
     this.open = false;
     this._render();
     this._maybeRecord();
+    // The daily board for THIS puzzle: watched while it is on screen, and our count posted if behind.
+    if (this._stopBoard) this._stopBoard();
+    this.boardRows = [];
+    const key = this.puzzle.key;
+    this._stopBoard = watchDaily(key, (rows) => {
+      if (this.disposed || !this.puzzle || this.puzzle.key !== key) return;
+      this.boardRows = rows;
+      if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
+    });
+    this._postSoon(0);
     try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old) }; } catch { /* ignore */ }
   }
 
@@ -218,7 +231,7 @@ class SpellingBee {
         <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
         <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
         <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 ? '' : ' hidden'}>${ICON.yesterday}</button>
-        <button type="button" class="sb-iconbtn" data-act="rankings" aria-label="${esc(t('rankings_aria'))}">${ICON.rankings}</button>
+        <button type="button" class="sb-iconbtn" data-act="board" aria-label="${esc(t('board_aria'))}">${ICON.rankings}</button>
         <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
       </div>
       <button type="button" class="sb-progress" data-act="rankings" data-role="progress"></button>
@@ -365,6 +378,7 @@ class SpellingBee {
     else if (a === 'yesterday') this._openYesterday();
     else if (a === 'past') this._openPast();
     else if (a === 'rankings') this._openRankings();
+    else if (a === 'board') this._openBoard();
     else if (a === 'help') this._openHelp();
     else if (a === 'retry') this._load();
   }
@@ -425,6 +439,7 @@ class SpellingBee {
     this._paintProgress();
     this._paintFound();
     this._maybeRecord();
+    this._postSoon(2500);
     const after = this.rank();
     if (after !== before && after >= GENIUS) this._celebrate(after);
   }
@@ -484,6 +499,7 @@ class SpellingBee {
     this._closeOverlay();
     const ov = document.createElement('div');
     ov.className = 'gh-overlay sb-overlay';
+    ov.dataset.kind = kind;
     ov.innerHTML = `<div class="gh-modal sb-modal sb-modal--${kind}" role="dialog" aria-modal="true">${html}</div>`;
     ov.addEventListener('click', (ev) => {
       if (ev.target === ov || ev.target.closest('[data-ov="close"]')) this._closeOverlay();
@@ -510,6 +526,53 @@ class SpellingBee {
   }
 
   _closeBtn() { return `<button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>`; }
+
+  // --- the daily board (board.js) -------------------------------------------------------------
+
+  _postSoon(ms) {
+    clearTimeout(this._postT);
+    this._postT = null;
+    if (!needsPost(this.puzzle.key, this.found.size)) return;
+    this._postT = setTimeout(() => { this._postT = null; this._post(); }, ms);
+  }
+
+  _post() {
+    if (!this.puzzle) return;
+    postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank() }).catch(() => {});
+  }
+
+  /** Everyone's word count on the puzzle shown, ours live from this screen (not the board's copy). */
+  _openBoard() {
+    const code = myCode();
+    const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
+    const rows = this.boardRows.filter((r) => r.code !== code).map((r) => ({ ...r }));
+    rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
+    rows.sort((a, b) => b.words - a.words || b.points - a.points || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
+    const li = rows.map((r) => `<li class="${r.me ? 'is-me' : ''}"><span class="sb-bd-mark" aria-hidden="true">${r.me ? '▶' : ''}</span>
+      <span class="sb-bd-name">${esc(r.emoji)} ${esc(r.name)}</span><span class="sb-bd-rank">${esc(t('rank_' + RANKS[r.rank].id))}</span><span class="sb-bd-n">${r.words}</span></li>`).join('');
+    this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</h2>
+      <div class="sb-bd-head"><span>${esc(t('words_col'))}</span></div><ol class="sb-board">${li}</ol>`);
+    // No scrolling: drop the lowest rows (never ours) until it fits, and say how many.
+    const m = this._overlay.querySelector('.gh-modal');
+    const ol = this._overlay.querySelector('.sb-board');
+    let cut = 0;
+    while (m.scrollHeight > m.clientHeight + 1) {
+      const last = [...ol.children].reverse().find((x) => !x.classList.contains('is-me'));
+      if (!last) break;
+      last.remove();
+      cut += 1;
+    }
+    if (cut) {
+      ol.insertAdjacentHTML('beforeend', `<li class="sb-bd-more">+${cut}</li>`);
+      while (m.scrollHeight > m.clientHeight + 1) {
+        const last = [...ol.children].reverse().find((x) => !x.classList.contains('is-me') && !x.classList.contains('sb-bd-more'));
+        if (!last) break;
+        last.remove();
+        cut += 1;
+        ol.querySelector('.sb-bd-more').textContent = '+' + cut;
+      }
+    }
+  }
 
   _openRankings() {
     const th = rankThresholds(this.max);
@@ -683,6 +746,8 @@ class SpellingBee {
 
   destroy() {
     this.disposed = true;
+    if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
+    if (this._stopBoard) this._stopBoard();
     try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);

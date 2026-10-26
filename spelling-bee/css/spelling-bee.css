@@ -216,3 +216,12 @@
 .sb-root .sb-cal-old-d { font-weight: 700; min-width: 52px; text-align: left; white-space: nowrap; }
 .sb-root .sb-cal-old .sb-yletters { margin: 0; gap: 3px; }
 .sb-root .sb-cal-old .sb-yletters span { width: 22px; height: 22px; font-size: 13px; }
+.sb-root .sb-bd-head { display: flex; justify-content: flex-end; padding: 0 8px 4px; font-size: 12px; font-weight: 700; color: var(--sb-muted); }
+.sb-root .sb-board { list-style: none; margin: 0; padding: 0; }
+.sb-root .sb-board li { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--gh-border, #ddd); }
+.sb-root .sb-board li.is-me { font-weight: 800; }
+.sb-root .sb-bd-mark { width: 12px; flex: none; font-size: 11px; }
+.sb-root .sb-bd-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-root .sb-bd-rank { flex: none; font-size: 13px; color: var(--sb-muted); white-space: nowrap; }
+.sb-root .sb-bd-n { flex: none; min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
+.sb-root .sb-board li.sb-bd-more { justify-content: center; color: var(--sb-muted); border-bottom: 0; }
