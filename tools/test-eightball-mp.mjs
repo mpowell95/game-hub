@@ -202,7 +202,7 @@ const used = [...new Set((engineSrc.match(/Math\.[a-z0-9]+/gi) || []))].sort();
 ok('engine.js uses only cross-engine-safe Math (sqrt, imul, min, max, round, floor, ceil)', used.every((f) => ['Math.sqrt', 'Math.imul', 'Math.min', 'Math.max', 'Math.round', 'Math.floor', 'Math.ceil'].includes(f)), used.join(','));
 // Table versions (eight-ball/js/engine.js): a new challenge is stored on today's table; one stored
 // before tables had versions (no `tb`) replays on table 1, where it was played.
-ok('a new challenge records its table', (await MP.readGame(id1)).tb === 5 && MP.termsOf({ tb: 2 }).tb === 2 && MP.termsOf({ tb: 3 }).tb === 3);
+ok('a new challenge records its table', (await MP.readGame(id1)).tb === 6 && MP.termsOf({ tb: 5 }).tb === 5 && MP.termsOf({ tb: 2 }).tb === 2 && MP.termsOf({ tb: 3 }).tb === 3);
 ok('a new challenge records its rules; one with none is rules 1', (await MP.readGame(id1)).rv === 3 && MP.termsOf({ mode: '8' }).rv === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).rv === 1);
 ok('a stored match with no table replays on table 1', MP.termsOf({ mode: '8' }).tb === 1 && MP.freshMatch(MP.termsOf({ mode: '8' })).tb === 1);
 // A hand fix (Moonis's match, 2026-10-24): the real log, groups decided after shot 2 and nothing else.
