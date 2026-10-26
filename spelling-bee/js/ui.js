@@ -326,7 +326,7 @@ class SpellingBee {
     if (this.open) this._layoutPanel();
   }
 
-  _cls(w) { return isPangram(w, this.puzzle) ? 'is-pangram' : this.answerSet.has(w) ? '' : 'is-bonus'; }
+  _cls(w) { return !this.answerSet.has(w) ? 'is-bonus' : isPangram(w, this.puzzle) ? 'is-pangram' : ''; }
 
   /** The open word list: alphabetical, in as many columns as it takes to fit with no scrolling. */
   _layoutPanel() {
@@ -426,7 +426,8 @@ class SpellingBee {
     this.rec.found.push(word);
     writeSave(this.save);
     const pts = scoreWord(word, this.puzzle);
-    const praise = praiseFor(word, this.puzzle);
+    // A bonus word (a rarer real word, not in the hints) says so (Matt, 2026-10-26).
+    const praise = this.answerSet.has(word) ? praiseFor(word, this.puzzle) : 'bonus';
     this._toast(t('praise_' + praise), praise === 'pangram' ? 'is-pangram' : 'is-good', pts);
     this._busy = true;
     this.el.input.classList.add('is-accepted');
@@ -713,7 +714,8 @@ class SpellingBee {
       <p class="sb-fit">${esc(t('howto_r3'))}</p>
       <p class="sb-fit">${esc(t('howto_p1'))}</p>
       <p class="sb-fit">${esc(t('howto_p2'))}</p>
-      <p class="sb-fit">${esc(t('howto_p3'))}</p>`);
+      <p class="sb-fit">${esc(t('howto_p3'))}</p>
+      <p class="sb-fit"><i>${esc(t('howto_bonus_word'))}</i> ${esc(t('howto_bonus'))}</p>`);
   }
 
   // --- layout ----------------------------------------------------------------------------------
