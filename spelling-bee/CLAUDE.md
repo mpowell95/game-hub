@@ -23,17 +23,17 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 
 `data/bee.json` from `tools/build-spelling-bee-data.mjs` (read its header). **Two lists (2026-10-26, Matt:
 "Obviously all words should count")**: `words` = the answers, SCOWL size ≤60 English + American ∩ ENABLE
-(22,045; hints and ranks count only these); `extra` = every other ENABLE word that fits (22,447), accepted
+(22,045; hints and ranks count only these); `extra` = 253 HAND-CHECKED words (2026-10-26, Matt: CRATCH, CRANCH, ANNA, CARL "aren't words"/"so many names": ENABLE ∩ SCOWL 70 ∩ said 50+ in subtitles, no first names, then read one by one into `BONUS_KEEP`), accepted
 and scored as a BONUS word (italic in the found list, toast "Bonus word!", one How to Play line), never counted. No S, ≤7 distinct letters, bad words
 out of both. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
 every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
 Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 24, 26, 28 (33, 23, 28 words)
 swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); anyone with words on one sees it
 as a row under the calendar and can keep playing it (`_startDay(n, old)`), so no progress is hidden (rule 1).
-A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2).
+A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2). A word found under an older list keeps counting (`legal()` in ui.js; checkWord says Already found).
 **Spanish (2026-10-26, Matt)**: `data/bee-es.json` from `tools/build-spelling-bee-es.mjs` (read its header); the
 puzzle language follows the hub's EN/ES setting (switching reloads). Answers = top 20,000 subtitle words in
-lemmatization-lists (conjugations count), ~46 a puzzle; the rest are bonus words. **No accents anywhere; Ñ is its own
+lemmatization-lists (conjugations count), ~46 a puzzle; bonus = other forms in the 50k subtitle list, no names (6,069). **No accents anywhere; Ñ is its own
 letter** (Ana: "Ñ is different from n... for the rest do not use accents"): words are stored without accents and with
 ñ, typing á gives a, ñ stays ñ; 13 puzzles have Ñ in the hive. Board keys write Ñ as `0` (ASCII rule). Keys
 `es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,493 puzzles. The first build folded Ñ to N;

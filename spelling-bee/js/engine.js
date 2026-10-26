@@ -136,7 +136,8 @@ export function checkWord(word, puzzle, answerSet, found, extraSet) {
   if (word.length > MAX_LEN) return 'too_long';
   for (const c of word) if (!puzzle.letters.has(c)) return 'bad_letters';
   if (!word.includes(puzzle.center)) return 'missing_center';
-  if (!answerSet.has(word) && !(extraSet && extraSet.has(word))) return 'not_in_list';
+  // A word kept from an older list (ui.js `legal`) is in `found` but not the lists: it was found, not refused.
+  if (!answerSet.has(word) && !(extraSet && extraSet.has(word))) return found.has(word) ? 'already_found' : 'not_in_list';
   if (found.has(word)) return 'already_found';
   return null;
 }

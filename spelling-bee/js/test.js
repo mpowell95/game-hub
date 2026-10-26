@@ -48,7 +48,7 @@ ok('a new answer passes', checkWord('table', p, set, new Set()) === null);
 ok('a bonus word passes', checkWord('blat', p, set, new Set(), new Set(['blat'])) === null);
 ok('queen bee needs every answer', rankIndex(100, 100, false) === GENIUS && rankIndex(100, 100, true) === GENIUS + 1);
 ok('a retired puzzle is never a current day', Object.entries(data.retired).every(([d, k]) => data.puzzles[d] !== k && !data.puzzles.includes(k)));
-ok('every bonus word is outside the answers', (() => { const s = new Set(data.words); return data.extra.length > 1000 && data.extra.every((w) => !s.has(w)); })());
+ok('every bonus word is outside the answers', (() => { const s = new Set(data.words); return data.extra.length > 200 && data.extra.every((w) => !s.has(w)); })());
 ok('praise', praiseFor('able', p) === 'good' && praiseFor('table', p) === 'nice' && praiseFor('tabletal', p) === 'awesome' && praiseFor('bracelet', p) === 'pangram');
 
 const th = rankThresholds(100);
@@ -84,6 +84,9 @@ ok('es: some puzzles have Ñ in the hive', es.puzzles.some((q) => q.includes('ñ
 ok('es: the folded first build\'s day 0 stays playable (retired)', es.retired[0] === 'o:aeimnt');
 ok('es: no bad word is an answer or a bonus word', !['puta', 'mierda', 'joder', 'cabron'].some((w) => es.words.includes(w) || es.extra.includes(w)));
 ok('es: names stay out of the answers', !['maria', 'martin', 'rita'].some((w) => es.words.includes(w)));
+
+ok('junk Matt found is no longer a bonus word (cratch, cranch, hant, anna, carl)', !['cratch', 'cranch', 'hant', 'anna', 'carl'].some((w) => data.extra.includes(w) || data.words.includes(w)));
+ok('real rare words still are (dugong)', data.extra.includes('dugong'));
 
 // The daily board (board.js): pure parts, and the rules + backup entries it needs.
 const { rowsOf, boardKey } = await import('./board.js');
