@@ -298,6 +298,10 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   before the end, but dev tools could read it. Never call it hidden. Live rooms still never send one.
 - **A hit shoots again, a miss passes** (Matt: *"Isn't keep shooting on a hit the standard?"*; it is a
   common house rule, not the printed one). Stored per match as `bonus: true`.
+- **Shots a turn: 1, 3 or 5** (Matt, same day: *"So it doesn't take a month"*; and "hits add a shot").
+  A turn is that many MISSES; a hit never uses one. `shots` on the match (challenger's "Shots" chip,
+  setting `chShots`, default 3); a match without it is 1. One rule for replay and screen: `mp.js`
+  `fireShot` (state carries `chLeft`; dots in the turn bar).
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot
   needs the fleet it lands on). Both index rows are written at creation. OPEN until the receiver's
   first SHOT (placing is not an answer). Cancel / decline / resign / 3-day expiry: `js/challenge-life.js`.
@@ -312,7 +316,7 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
 
 ## Settings & keys
 
-- `gamehub.battleship.v1` — `{ v:1, size, difficulty, bonusShotOnHit, firstMode, nextStarter }`.
+- `gamehub.battleship.v1` — `{ v:1, size, difficulty, bonusShotOnHit, firstMode, nextStarter, chShots }`.
 - `gamehub.battleship.save.v1` — solo mid-battle autosave.
 - `gamehub.battleship.mp.v1` — MP autosave, including `myFleet`. Permanent (THE LAW rule 5).
 - Challenges (2026-10-27): `gamehub.battleship.{seen,shown,counted,unseenResults,outbox,open}.v1`
