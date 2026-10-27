@@ -575,9 +575,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   the launcher), "Your turn: N" from each alerts module's `myTurnCount()`.
 - `js/challenges.js` only READS each game's index through the game's own reader; Cancel / Decline
   / Resign call the game's own writer.
-- **Open matches are loaded before the tap (2026-10-27, Matt: "I don't want it to just show the setup card
-  forever")**: `js/challenges.js` `holdMatches` watches every your-turn / their-turn match (game's own
-  `watchGame`, max 12) whenever the lists are read, so Play's `readGame` is answered locally (0 ms vs 0.05-23 s).
+- **NEVER keep a listener on a challenge MATCH outside the game (2026-10-27, reverted within 7 min):** v1267 watched
+  every open match to make Play instant; with a listener on the path, Firebase `get()` answers from its
+  local copy, so each game's `appendLog` "fresh" re-read was stale and darts 2-3 of Matt's turn were refused
+  as `moved-on` while the screen said "Sent" (one dart per try saved). Writers' re-reads must hit the server.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

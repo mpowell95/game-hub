@@ -1542,8 +1542,6 @@ class Hub {
           // Keep the registry's order, so the pills never swap places.
           this._gameAlerts = GAMES.map((x) => rest.find((r) => r.game === x.id)).filter(Boolean);
           this._paintGameAlert();
-          // A new turn: load that match now, so Play opens it at once (js/challenges.js holdMatches).
-          if (alert) this._primeMultiplayer();
         });
         // mod.watch has attached its listener once it resolves (after Firebase boots); the check
         // above waits for that, not for the data.
