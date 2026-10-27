@@ -165,7 +165,6 @@
 .sb-root .sb-tick { margin-right: 4px; }
 
 .sb-root .sb-hud-fill { display: flex; justify-content: flex-end; padding-right: 4px; }
-.sb-root .sb-hud-date { font-size: 15px; font-weight: 700; white-space: nowrap; }
 .sb-root .sb-iconbtn[disabled] { opacity: .25; cursor: default; }
 .sb-root .sb-cal-head { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 0 36px 8px; }
 .sb-root .sb-cal-title { margin: 0; flex: 1; text-align: center; font-size: 18px; white-space: nowrap; }
@@ -216,7 +215,7 @@
 .sb-root .sb-cal-old .sb-yletters { margin: 0; gap: 3px; }
 .sb-root .sb-cal-old .sb-yletters span { width: 22px; height: 22px; font-size: 13px; }
 .sb-root .sb-board { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.sb-root .sb-bd-row { display: flex; align-items: center; gap: 8px; padding: 10px 10px; border-radius: 12px; background: color-mix(in srgb, currentColor 7%, transparent); }
+.sb-root .sb-bd-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 12px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .sb-root .sb-bd-row.is-me { background: color-mix(in srgb, var(--sb-yellow) 22%, transparent); box-shadow: inset 0 0 0 2px var(--sb-yellow); }
 .sb-root .sb-bd-pos { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; opacity: .7; }
 .sb-root .sb-bd-pos.is-top { opacity: 1; }
@@ -233,3 +232,20 @@
 .sb-root .sb-bd-n .sb-bd-pts b { font-size: 14px; font-weight: 700; }
 .sb-root .sb-bd-n small { font-size: 11px; opacity: .65; }
 .sb-root .sb-board li.sb-bd-more { justify-content: center; color: var(--sb-muted); background: none; box-shadow: none; padding: 4px; }
+.sb-root .sb-langbtn {
+  flex: none; min-width: 40px; height: 30px; margin-right: 4px; padding: 0 6px; border: 1.5px solid currentColor; border-radius: 8px;
+  background: transparent; color: var(--sb-ink); font: inherit; font-size: 13px; font-weight: 800; letter-spacing: .04em;
+  cursor: pointer; touch-action: manipulation;
+}
+.sb-root .sb-bd-lang { margin: 10px 2px 6px; font-size: 14px; font-weight: 800; opacity: .75; }
+.sb-root .sb-bd-lang:first-of-type { margin-top: 2px; }
+.sb-root .sb-board li.sb-bd-none { justify-content: center; opacity: .5; background: none; padding: 4px; }
+.sb-root .sb-rank { display: flex; flex-direction: column; line-height: 1.15; }
+.sb-root .sb-rank-date { font-size: 12px; font-weight: 700; opacity: .65; }
+@media (max-width: 380px) {
+  .sb-root .sb-iconbtn { width: 40px; padding: 8px; }
+  .sb-root .sb-langbtn { min-width: 36px; padding: 0 4px; }
+}
+/* Two lists made the board tall enough to slide under the hub's Back button: keep it below (rows past
+   this fold into "+N", _openBoard). */
+.sb-root .sb-modal--board { max-height: calc(100% - 2 * (var(--sb-top, 8px) + 52px)); }

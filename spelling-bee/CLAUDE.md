@@ -32,7 +32,7 @@ swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); 
 as a row under the calendar and can keep playing it (`_startDay(n, old)`), so no progress is hidden (rule 1).
 A puzzle that reached Genius under the old list still shows at least Genius (`rank()`, rule 2). A word found under an older list keeps counting (`legal()` in ui.js; checkWord says Already found).
 **Spanish (2026-10-26, Matt)**: `data/bee-es.json` from `tools/build-spelling-bee-es.mjs` (read its header); the
-puzzle language follows the hub's EN/ES setting (switching reloads). Answers = top 20,000 subtitle words in
+puzzle language is the in-game **EN/ES button** (2026-10-27, Matt; `gamehub.spellingbee.lang.v1`, per phone, words only, screens keep the hub's language), else the hub's EN/ES setting. The **board shows both languages** as two sections, the one being played first (`_watchOther`). A past day's date sits over the rank (the HUD has no room). Answers = top 20,000 subtitle words in
 lemmatization-lists (conjugations count), ~46 a puzzle; bonus = other forms in the 50k subtitle list, no names (6,069). **No accents anywhere; Ñ is its own
 letter** (Ana: "Ñ is different from n... for the rest do not use accents"): words are stored without accents and with
 ñ, typing á gives a, ñ stays ñ; 13 puzzles have Ñ in the hive. Board keys write Ñ as `0` (ASCII rule). Keys
