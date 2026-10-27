@@ -247,7 +247,7 @@ Expert arrows are too small to tap reliably), and *"let people see and replay th
 keep counting (Easy 51 ...), Easy stays 1 point (so it never has anything to replay).
 **Released to everyone 2026-10-27** (Matt: *"Yes release to everyone"*, v1277) with generator 8 below:
 `NEWS_FOR_ALL = true` in ui.js (`hasNews()` = that or `isAdminDevice()`; it was admin only first, *"Release
-it admin only too"*). The 🧪 test boards stay `isAdminDevice()` only.
+it admin only too"*).
 - **Popup** (`_showNews`, Matt's mock-up): once per phone on the setup screen, NEW badge, ↻ chip with the
   person's own count across all difficulties (icon alone at 0), Easy / Level 51 chip, Got it + X; stamped
   in `gamehub.wayout.news.v1` (`replay-more-2026-10-26`, a seen-list) when it closes by any route.
@@ -277,25 +277,16 @@ Matt, after the test boards: *"WAY harder. And WAY better"*; on the Hard ones: *
 Make the updates."* With `hasNews()` (same switch as Replay), every Hard level from 101 and Expert level
 from 201 that is not already in progress on an older board is a **generator 8** board: `src {k:'N', band,
 n, g:8}`, log `g` 8, `buildB8(band, n)`. 16x22 grid (bigger arrows than the ladder's Hard/Expert).
-`js/boards8.js` is GENERATED (`tools/build-arrow-boards8.mjs`, search in `tools/arrow-search.mjs`, shared
-with the test boards), 250 boards a band, packed (~78 KB), **APPEND-ONLY** (pinned by hash in test.js).
+`js/boards8.js` is GENERATED (`tools/build-arrow-boards8.mjs`, search in `tools/arrow-search.mjs`), 250 boards a band, packed (~78 KB), **APPEND-ONLY** (pinned by hash in test.js).
 Hard = the "hard" style (45 arrows, ~2 free, blockers ~5 dots); Expert ramps far / mixed / forced
 (`expertStyle`). Past the list boards come round MIRRORED (`b8Slot`; Expert from its top 40%). Points
 unchanged.
 
-## Test boards (2026-10-26, admin only)
+## Test boards (2026-10-26, removed 2026-10-27)
 
-Matt: *"what's the most difficult level you can possibly think of?"* on a Medium-sized board. Measured:
-every ladder board's blocker sits ~1.1 dots from the head and a third of the arrows are free at the start.
-`tools/build-arrow-tricky.mjs` searches (peel-proved solvable at every step) 10 boards of 16x22 and writes
-`js/tricky.js` (GENERATED): **1-3 far** (open lanes, blockers ~10 dots away), **4-7 mixed** (55% full,
-~7 dots, 1-2 free), **8-10 forced** (packed, exactly one arrow free at a time, 65 moves). The 🧪 button at
-the picture row's left (`isAdminDevice()` only) lists them with his best (time, hearts, hints); a test plays
-like a replay (keeps nothing) and its finish goes only to `gamehub.wayout.tests.v1` on that phone, never
-the stats store. **11-15 "Hard 1-5"** (2026-10-27, Matt: *"I think you could upgrade hard a bit too"*): 45 arrows,
-~2 free at a time, blockers ~5 dots, listed first. Matt on 1-10: *"WAY harder. And WAY better"*; proposed
-(not yet agreed): they become Expert, ramping far → mixed → forced. Boards 1-10 must stay byte-identical
-(his saved results name them): the tool's defaults rebuild them exactly.
+Admin-only 🧪 boards that proved generator 8's styles (Matt: *"WAY harder. And WAY better"*). Removed once
+they became Hard and Expert (Matt: *"Remove the test levels"*): `tricky.js` and its tool are in git
+history; his results stay as stored in `gamehub.wayout.tests.v1` (rule 5), read by nothing.
 
 ## Rush (2026-10-14)
 
