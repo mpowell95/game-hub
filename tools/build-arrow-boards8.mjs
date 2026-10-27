@@ -1,5 +1,5 @@
 // tools/build-arrow-boards8.mjs - GENERATES way-out/js/boards8.js: Arrow Maze's Hard and Expert levels on
-// GENERATOR 8 (2026-10-27). Matt played the admin test boards (tools/build-arrow-tricky.mjs): "Holy shit
+// GENERATOR 8 (2026-10-27). Matt played the admin test boards (since removed): "Holy shit
 // these are WAY harder. And WAY better", then on the milder five: "That's perfect for Hard. Make the
 // updates". So Hard is that style throughout, and Expert climbs through the three test styles (far
 // blockers, mixed, forced order). Same 16x22 grid as the test boards: bigger arrows than today's Hard

@@ -1,6 +1,6 @@
 // tools/arrow-search.mjs - the board search behind Arrow Maze's hard-by-thinking boards (2026-10-26),
-// shared by tools/build-arrow-tricky.mjs (the admin test boards) and tools/build-arrow-boards8.mjs (the
-// Hard and Expert levels). Pure maths on a 16x22 grid; every board it keeps is proved solvable by
+// used by tools/build-arrow-boards8.mjs (the Hard and Expert levels). It first built the admin test boards
+// (tools/build-arrow-tricky.mjs, removed 2026-10-27 with them; in git history). Pure maths on a 16x22 grid; every board it keeps is proved solvable by
 // peel. Changing ANY of it changes what both tools build: the shipped files are pinned by test.js.
 const E = await import('../way-out/js/engine.js');
 export const W = 16, H = 22;
