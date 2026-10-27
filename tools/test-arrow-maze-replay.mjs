@@ -166,6 +166,18 @@ st = await page.evaluate(() => window.__woTest.state());
 ok('easy: Easy level 51 plays', st.level === 51 && st.tier === 'easy', JSON.stringify(st));
 await shot('7-easy-51-board');
 
+// GENERATOR 8 (2026-10-27): on Matt's devices Hard 101 and Expert 201 are the new 16x22 boards.
+for (const [band, n] of [['hard', 101], ['expert', 201]]) {
+  await page.locator('[data-act="menu"]').click();
+  await page.waitForSelector('.wo-home');
+  await page.locator(`.wo-seg[data-tier="${band}"]`).click();
+  await page.locator('.wo-play[data-act="play"]').click();
+  await page.waitForFunction(() => window.__woTest);
+  const clock = await page.evaluate((b) => JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1') || '{}')[b], band);
+  ok(`${band}: level ${n} is a generator 8 board`, clock && clock.key === `N:${band}:${n}`, JSON.stringify(clock));
+  await shot(`10-${band}-${n}`);
+}
+
 await browser.close();
 console.log(`\nArrow Maze replay / more-levels probe: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
