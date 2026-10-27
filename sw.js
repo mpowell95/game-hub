@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1267;
-const CACHE = 'game-hub-v1268';
+const IMPORTANT_SINCE = 1268;
+const CACHE = 'game-hub-v1270';
 
 const ASSETS = [
   './',
@@ -780,7 +780,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'ecee024c5e',
+  './js/hub.js': '90dca1dd6a',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -793,7 +793,7 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': 'ba4e290b37',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'f3368c291a',
+  './js/strings.js': '36c47e4048',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -814,7 +814,7 @@ const REST_MANIFEST = {
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5349424c2f',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': '8a0abf78c0',
+  './js/challenges.js': 'a0109139ff',
   './js/challenges-ui.js': '857219db28',
   './js/challenge-life.js': '44ab3fcbc6',
   './js/challenges-strings.js': 'd45ac6cd00',
@@ -828,7 +828,7 @@ const REST_MANIFEST = {
   './js/players-agg.js': '494725a0a5',
   './js/game-art.js': 'ba73866754',
   './js/hidden-players.js': '8a870d0456',
-  './js/leaderboard-ui.js': 'd72ca41abf',
+  './js/leaderboard-ui.js': '3d7a34aaff',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',

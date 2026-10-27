@@ -276,9 +276,7 @@ export async function loadAll(gameIds, now = Date.now()) {
     try {
       const M = await SOURCES[g].load();
       const raw = await SOURCES[g].read(M);
-      const rows = toRows(g, M, raw, now);
-      holdMatches(g, M, rows);
-      return rows;
+      return toRows(g, M, raw, now);
     } catch (err) {
       console.warn('[challenges] could not read', g, err);
       failed.push(g);
@@ -287,33 +285,6 @@ export async function loadAll(gameIds, now = Date.now()) {
   }));
   return { rows: parts.flat(), failed };
 }
-
-// OPEN MATCHES ARE LOADED BEFORE THE TAP (2026-10-27). Matt: "I don't want it to just show the
-// setup card forever." Tapping Play used to READ the match from the server only after the game had
-// mounted, so the setup card sat there for 2.5 s (on 700 Mbps wifi; up to 15 s right after the app
-// loaded). Every open match on the list is now WATCHED through its game's own watchGame(), so the
-// game's readGame() is answered from the phone at once (Firebase's get() uses the local copy while a
-// listener is on that path). Read only; listeners for matches that leave the list are dropped.
-const HOLD_MAX = 12;
-const _held = new Map();             // `${game}/${id}` -> Promise<stop>
-function holdMatches(g, M, rows) {
-  if (typeof M.watchGame !== 'function') return;
-  const open = rows.filter((r) => r.state === 'yours' || r.state === 'theirs')
-    .sort((x, y) => (x.state === 'yours' ? 0 : 1) - (y.state === 'yours' ? 0 : 1));
-  const want = new Set(open.map((r) => r.id));
-  for (const [k, p] of _held) {
-    if (!k.startsWith(g + '/') || want.has(k.slice(g.length + 1))) continue;
-    _held.delete(k);
-    p.then((stop) => { try { stop(); } catch { /* already detached */ } });
-  }
-  for (const r of open) {
-    const k = `${g}/${r.id}`;
-    if (_held.has(k) || _held.size >= HOLD_MAX) continue;
-    _held.set(k, Promise.resolve().then(() => M.watchGame(r.id, () => {})).catch(() => () => {}));
-  }
-}
-/** The matches being held, for tools/test-challenges.mjs. */
-export const heldMatches = () => [..._held.keys()];
 
 function toRows(g, M, raw, now = Date.now()) {
   const src = SOURCES[g];
@@ -335,7 +306,6 @@ export async function watchAll(gameIds, cb) {
       const M = await SOURCES[g].load();
       const stop = await SOURCES[g].watch(M, (raw) => {
         per[g] = toRows(g, M, raw);
-        holdMatches(g, M, per[g]);
         if (!stopped) {
           try { cb(ids.flatMap((x) => per[x] || []), Object.keys(per)); } catch (err) { console.warn('[challenges] watch', err); }
         }

@@ -378,11 +378,11 @@ All read-time display; nothing stored or migrated.
   Climb is tiered; read the recorder, not the extractor.** One order, `boardMetricCmp(id)`, for rows,
   badges and By Game's leader; ties by comparator; `compareBoardRow` for all six sort sites.
 - **Games Played sort ignores difficulty** (Matt). **No minimum-games rule.**
-- Tier chip (`tierChipHTML`) rides the NAME line; By Game's leader shows a wordless `tierMarkHTML`,
+- Tier chip (`tierChipHTML`) rides the NAME line; the You tab's numbers show a wordless `tierMarkHTML`,
   hidden while a filter is selected; a selected filter makes that tier everyone's tier. Ball Run, Snake,
   Hill Climb rank a BEST (`brBestAt`/`snBestAt`/`hcBestAt`); Tic Tac Toe's two numbers stay all-tier.
-- Sort persists in `gamehub.lb.sort.v1`; By Player defaults to Wins. By Game's top tab has no sort
-  (alphabetical by displayed title).
+- Sort persists in `gamehub.lb.sort.v1` (seed) and `gamehub.lb.view.v1`; **tab, both sorts and category are
+  remembered as they change** (`persistView`, 2026-10-27, Matt; no "make default" button). Nothing saved = By Game, A to Z.
 - Chrome bands are shared `css/hub.css` vars: `--gh-band-title` 44px, `--gh-band-controls` 36px,
   `--gh-band-filter` 34px.
 - `metaLine()`/`runsAtTier()` unused, kept. `js/game-art.js` is the one source of tile art (by hub id).
@@ -410,7 +410,11 @@ set from `openLeaderboard({game:'wayout', woMode, woRush})`); Rush = Easy | Hard
 On All views the row's difficulty is a bordered pill under the name (`tierPillHTML`, shape + word; Matt:
 "more obvious"), not a shape beside the number.
 Ranks 1-3 are ribboned medals (`medalSVG`, number on the face) with a metal rail; #1's row is lit gold
-(Matt: "She's in first. Act like it."). Medals only on lists of every player; By Game (leaders only) has no medal and no "Top" label.
+(Matt: "She's in first. Act like it."). Medals only on lists of every player.
+**Three tabs (2026-10-27, Matt): By Player | By Game | You.** By Game = top 3 per game, NO numbers (Ana: mixed
+units), via `gameStanding` (the board's own order). You = records held, closest to breaking (`gapText`, read at the
+RECORD'S tier), not played yet + Play; "You" is allowed on that tab ONLY. Each board ends with
+"<name> is 3rd. <gap>" (`standLineHTML`). Story: `CLAUDE-HISTORY.md`.
 
 ### The leaderboard's spacing (2026-10-11)
 
