@@ -31,6 +31,7 @@ import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement, loadSeen, markSeen } from './announce.js';
 import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
+import { setGameShownCheck } from './online-gate.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -766,6 +767,15 @@ function hiddenFromPlayer(g, code, dev) {
   if (isAdminDevice()) return false;
   return g.hideFrom.includes(String(code).toUpperCase());
 }
+
+/** Is this game on THAT player's launcher (a dev profile aside)? The launcher's own rule, handed to
+ *  js/online-gate.js so a challenge in an admin-only game is never sent to someone who cannot see it. */
+const shownToCode = (id, code) => {
+  const g = GAMES.find((x) => x.id === id);
+  if (!g) return true;
+  return (isGameLive(g.id, !g.devOnly) || isGameAllowed(g.id, code)) && !hiddenFromPlayer(g, code, false);
+};
+setGameShownCheck(shownToCode);
 
 /** How often a foregrounded app may ask for a new build. Long enough that switching apps back
  *  and forth costs nothing; short enough that a phone kept alive all day still catches the day's
@@ -1657,7 +1667,7 @@ class Hub {
   _challengeGames() {
     const shown = new Set((this.games || []).map((g) => g.id));
     return GAMES.filter((g) => typeof g.alerts === 'function' && shown.has(g.id))
-      .map((g) => ({ id: g.id, name: titleText(g) }));
+      .map((g) => ({ id: g.id, name: titleText(g), test: !isGameLive(g.id, !g.devOnly) }));
   }
 
   /** "2 your turn" on the Challenges button: summed from each game's alerts module, off the rows
@@ -1681,7 +1691,7 @@ class Hub {
   _liveGames() {
     const shown = new Set((this.games || []).map((g) => g.id));
     return GAMES.filter((g) => LIVE_MP_GAMES.has(g.id) && shown.has(g.id) && typeof g.alerts !== 'function')
-      .map((g) => ({ id: g.id, name: titleText(g) }));
+      .map((g) => ({ id: g.id, name: titleText(g), test: !isGameLive(g.id, !g.devOnly) }));
   }
 
   /** The Multiplayer screen (2026-10-18; the Challenges screen before). Full screen; in the compact

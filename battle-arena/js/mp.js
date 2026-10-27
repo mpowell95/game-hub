@@ -413,7 +413,7 @@ export function opponentsFrom(all, me) {
 /** The pick-a-person list: the small server-built directory (stats-net.js readOpponentProfiles),
  *  never all of players/. Only people who may play online (js/online-gate.js). */
 export async function readOpponents() {
-  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
+  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code, 'battle-arena', r.name)); }
   catch (err) { console.warn('[battle-arena] could not read the player list', err); return []; }
 }
 
@@ -459,7 +459,7 @@ export async function createGame({ them, team, seed = freshSeed() }) {
   // Both people must be allowed online (js/online-gate.js).
   const gate = onlineGate();
   if (gate) return fail(gate);
-  if (!codeMayPlayOnline(to)) return fail('them-not-approved');
+  if (!codeMayPlayOnline(to, 'battle-arena', String(them.name || ''))) return fail('them-not-approved');
   if (!allowed('createGame')) return fail('dev-origin-blocked');
   const mineTeam = cleanTeam(team);
   if (!mineTeam) return fail('bad-team');

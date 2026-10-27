@@ -20,7 +20,7 @@
 // red/green colourblind). Your-turn rows carry a heavier border AND a "Play" pill with a word.
 //
 // Entry point (lazily imported by js/hub.js):
-//   openChallenges({ games: [{id, name}], live: [{id, name}], onOpen(gameId, matchId),
+//   openChallenges({ games: [{id, name, test}], live: [{id, name, test}], onOpen(gameId, matchId),
 //                    onChallenge(gameId, them), onLaunch(gameId), onClose() })
 
 import { summarize, loadAll, watchAll, readOpponents, myCode, endAction, endMatch } from './challenges.js';
@@ -153,6 +153,10 @@ function ensureCss() {
              cursor: pointer; touch-action: manipulation; }
   .cx-tile-art { display: block; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 12px; overflow: hidden; }
   .cx-tile-art svg { display: block; width: 100%; height: 100%; }
+  /* An admin-only game wears the launcher's own Test pill (css/hub.css .hub-soon-tag), top-left. */
+  .cx-tile-art { position: relative; }
+  .cx-tile-art .hub-tags { top: 5px; left: 5px; }
+  .cx-tile-art .hub-soon-tag { font-size: 0.55rem; padding: 2px 6px; }
   .cx-tile-name { display: block; margin-top: 5px; font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center;
                   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   /* Records */
@@ -236,6 +240,8 @@ function shell(card, { title, emoji, back, rec, body, footer }) {
 
 const art = (id) => GAME_ART[id] || '';
 const thumb = (id) => `<span class="cx-thumb" aria-hidden="true">${art(id)}</span>`;
+/** The launcher's Test pill on an admin-only game's tile (`test` comes from js/hub.js). */
+const testTag = (g) => (g && g.test ? `<span class="hub-tags"><span class="hub-soon-tag">${esc(t('cx_test'))}</span></span>` : '');
 
 function whenText(atMs) {
   const n = Number(atMs) || 0;
@@ -466,7 +472,7 @@ export async function openChallenges(opts = {}) {
     const tiles = allGames.slice().sort((a, b) => a.name.localeCompare(b.name, lang));
     body += tiles.length ? `<h3 class="cx-h">${esc(t('cx_games'))}</h3>
       <div class="cx-tiles">${tiles.map((g) => `<button type="button" class="cx-tile" data-tile="${esc(g.id)}">
-          <span class="cx-tile-art" aria-hidden="true">${art(g.id)}</span><span class="cx-tile-name">${esc(g.name)}</span>
+          <span class="cx-tile-art" aria-hidden="true">${art(g.id)}${testTag(g)}</span><span class="cx-tile-name">${esc(g.name)}</span>
         </button>`).join('')}</div>` : '';
     const tot = records().total;
     shell(card, { title: t('cx_title'), rec: noCode ? '' : `${tot.won}–${tot.lost}`, body: flashHTML() + warn + body });
@@ -599,7 +605,7 @@ export async function openChallenges(opts = {}) {
     shell(card, {
       title: name, emoji: them.emoji, back,
       body: `<div class="cx-tiles">${list.map((g) => `<button type="button" class="cx-tile" data-g="${esc(g.id)}">
-          <span class="cx-tile-art" aria-hidden="true">${art(g.id)}</span><span class="cx-tile-name">${esc(g.name)}</span>
+          <span class="cx-tile-art" aria-hidden="true">${art(g.id)}${testTag(g)}</span><span class="cx-tile-name">${esc(g.name)}</span>
         </button>`).join('')}</div>`,
     });
     if (!current(gen)) return;
