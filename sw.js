@@ -828,7 +828,7 @@ const REST_MANIFEST = {
   './js/players-agg.js': '494725a0a5',
   './js/game-art.js': 'ba73866754',
   './js/hidden-players.js': '8a870d0456',
-  './js/leaderboard-ui.js': 'cec963e173',
+  './js/leaderboard-ui.js': 'f1e18c43bc',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',

@@ -1881,9 +1881,13 @@ function youHTML(list) {
   let favs = [];
   try { favs = loadFavorites() || []; } catch { favs = []; }
   const star = (id) => (favs.includes(hubIdOf(id)) ? '<i class="lb-star" aria-hidden="true">★</i>' : '');
+  // The number big, its unit word small beside it, so "68 obstacles" fits a half-width box.
   const val = (g, id) => {
     const tier = boardTierOf(g, id);
-    return `${tierMarkHTML(tier)}<span>${esc(youValText(id, boardMetricOf(g, id)))}</span>`;
+    const txt = youValText(id, boardMetricOf(g, id));
+    const cut = txt.indexOf(' ');
+    const body = cut > 0 ? `${esc(txt.slice(0, cut))}<small>${esc(txt.slice(cut + 1))}</small>` : esc(txt);
+    return `${tierMarkHTML(tier)}<span class="lb-yv">${body}</span>`;
   };
   const hold = tx('lb_you_hold', '', { x: `<b>${esc(tx('lb_n_of_m', `${held.length} of ${withRecord}`, { n: held.length, m: withRecord }))}</b>`, m: withRecord });
   const head = `<div class="lb-you-head">${avatarHTML(me)}<span class="lb-you-id"><span class="lb-you-nm">${rankName(me)}</span><span class="lb-you-sub">${hold}</span></span></div>`;
@@ -3167,6 +3171,7 @@ function ensureCss() {
     '.lb-ybox-c b,.lb-yrow-v{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}',
     '.lb-ybox-c b{font-size:20px;font-weight:800;letter-spacing:-.01em;min-width:0}',
     '.lb-ybox-c b .lb-tiermark,.lb-yrow-v .lb-tiermark{margin:0}',
+    '.lb-yv small{font-size:.62em;font-weight:700;margin-left:.3em;color:var(--lb-muted);letter-spacing:0}',
     '.lb-ygap{font-size:13px;font-weight:800;color:var(--lb-gap)}',
     '.lb-ynew{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px}',
     '.lb-ynew-id{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}',
