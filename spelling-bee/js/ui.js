@@ -38,7 +38,14 @@ const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
 /** The puzzle language follows the hub's EN/ES setting (2026-10-26): Spanish players get Spanish words. */
-const wordLang = () => (getLang() === 'es' ? 'es' : 'en');
+// The puzzle language: this phone's EN/ES choice in the game (Matt, 2026-10-27: "add a language toggle
+// within the Spelling Bee game"), else the hub's language. Only the words change; the screens keep the
+// hub's language.
+const LANG_KEY = 'gamehub.spellingbee.lang.v1';
+const wordLang = () => {
+  try { const v = localStorage.getItem(LANG_KEY); if (v === 'en' || v === 'es') return v; } catch { /* hub's */ }
+  return getLang() === 'es' ? 'es' : 'en';
+};
 
 function getData(lang) {
   if (!DATA_PROMISE[lang]) DATA_PROMISE[lang] = loadData(lang).catch((err) => { DATA_PROMISE[lang] = null; throw err; });
@@ -243,7 +250,8 @@ class SpellingBee {
   _render() {
     this.root.innerHTML = `
       <div class="sb-hud">
-        <span class="sb-hud-fill">${this.n < this.todayN || this.old ? `<span class="sb-hud-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</span>` : ''}</span>
+        <span class="sb-hud-fill"></span>
+        <button type="button" class="sb-langbtn" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.data.lang === 'es' ? 'ES' : 'EN'}</button>
         <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
         <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
         <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 ? '' : ' hidden'}>${ICON.yesterday}</button>
@@ -324,7 +332,10 @@ class SpellingBee {
       const cls = i < shown ? 'is-past' : i === shown ? 'is-now' : '';
       dots.push(`<span class="sb-dot ${cls}" style="left:calc(16px + (100% - 32px) * ${(i / GENIUS).toFixed(4)})">${i === shown ? `<b>${sc}</b>` : ''}</span>`);
     }
-    this.el.progress.innerHTML = `<span class="sb-rank">${esc(t('rank_' + RANKS[ri].id))}</span>
+    // A past day's date sits over the rank (2026-10-27: the HUD's left end is the hub's Back button now
+    // that the EN/ES button joined the icons).
+    const date = this.n < this.todayN || this.old ? `<small class="sb-rank-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</small>` : '';
+    this.el.progress.innerHTML = `<span class="sb-rank">${date}${esc(t('rank_' + RANKS[ri].id))}</span>
       <span class="sb-track"><span class="sb-line"></span>${dots.join('')}</span>`;
     this.el.progress.setAttribute('aria-label', `${t('rank_' + RANKS[ri].id)}, ${t('points_n', { n: sc })}`);
   }
@@ -398,6 +409,7 @@ class SpellingBee {
     else if (a === 'past') this._openPast();
     else if (a === 'rankings') this._openRankings();
     else if (a === 'board') this._openBoard();
+    else if (a === 'lang') this._switchLang();
     else if (a === 'help') this._openHelp();
     else if (a === 'retry') this._load();
   }
@@ -566,6 +578,15 @@ class SpellingBee {
 
   // --- the daily board (board.js) -------------------------------------------------------------
 
+  /** EN <-> ES puzzle words, remembered on this phone. Both saves are kept (keys differ by language). */
+  _switchLang() {
+    const next = this.data.lang === 'es' ? 'en' : 'es';
+    try { localStorage.setItem(LANG_KEY, next); } catch { /* this session only */ }
+    this._log('lang', { r: next });
+    this._closeOverlay();
+    this._load();
+  }
+
   /** Every guess and action, timed (log.js; Matt, 2026-10-27: "Everything."). Never shown in the game. */
   _log(e, extra) {
     if (this.puzzle) { try { logAction(this.puzzle.key, e, extra); } catch (err) { console.error('[spelling-bee] log', err); } }
@@ -595,16 +616,42 @@ class SpellingBee {
   }
 
   /** Everyone's word count on the puzzle shown, ours live from this screen (not the board's copy). */
+  /** The day's board, English and Spanish as two sections (Matt, 2026-10-27: "show both english and spanish.
+   *  separate, but both visible"). The puzzle being played comes first, its own row live from this screen. */
   _openBoard() {
+    const other = this.data.lang === 'es' ? 'en' : 'es';
+    this._watchOther(other);
+    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true);
+    const theirs = this._boardSection(other, this._other ? this._other.rows : [], this._other ? this._other.max : 0, false);
+    const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
+    this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2>${mine}${theirs}`);
+    // No scrolling: drop the lowest rows (never ours), from the longer list first, and say how many.
+    const m = this._overlay.querySelector('.gh-modal');
+    const lists = [...this._overlay.querySelectorAll('.sb-board')];
+    const cuts = new Map(lists.map((ol) => [ol, 0]));
+    const removable = (ol) => [...ol.children].filter((x) => !x.classList.contains('is-me') && !x.classList.contains('sb-bd-more') && !x.classList.contains('sb-bd-none'));
+    while (m.scrollHeight > m.clientHeight + 1) {
+      const ol = lists.filter((l) => removable(l).length).sort((a, b) => removable(b).length - removable(a).length)[0];
+      if (!ol) break;
+      const rows = removable(ol);
+      rows[rows.length - 1].remove();
+      cuts.set(ol, cuts.get(ol) + 1);
+      let more = ol.querySelector('.sb-bd-more');
+      if (!more) { ol.insertAdjacentHTML('beforeend', '<li class="sb-bd-more"></li>'); more = ol.querySelector('.sb-bd-more'); }
+      more.textContent = '+' + cuts.get(ol);
+    }
+  }
+
+  /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
+  _boardSection(lang, serverRows, max, live) {
     const code = myCode();
-    const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
-    const rows = this.boardRows.filter((r) => r.code !== code).map((r) => ({ ...r }));
-    rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
+    const rows = serverRows.filter((r) => !live || r.code !== code).map((r) => ({ ...r, me: r.code === code }));
+    if (live) {
+      const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
+      rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
+    }
     rows.sort((a, b) => b.words - a.words || b.points - a.points || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
-    // Place (ties share it), emoji, name (🐝/👑 at Genius/Queen Bee) over a bar toward Genius, then words
-    // over points (Matt, 2026-10-26: "I wanna see how many points they have too"). No rank word: too
-    // tight beside points on a 360-wide phone; the bar shows it.
-    const genius = rankThresholds(this.max)[GENIUS] || 1;
+    const genius = rankThresholds(max || 1)[GENIUS] || 1;
     let place = 0;
     const li = rows.map((r, i) => {
       if (i === 0 || r.words !== rows[i - 1].words || r.points !== rows[i - 1].points) place = i + 1;
@@ -617,29 +664,31 @@ class SpellingBee {
           <span class="sb-bd-line"><span class="sb-bd-bar"><b style="width:${pct}%"></b></span><span class="sb-bd-crest" aria-hidden="true">${crest}</span></span></span>
         <span class="sb-bd-n"><span><b>${r.words}</b> <small>${esc(r.words === 1 ? t('word_1') : t('words_col'))}</small></span>
           <span class="sb-bd-pts"><b>${r.points}</b> <small>${esc(r.points === 1 ? t('point_1') : t('points_col'))}</small></span></span></li>`;
-    }).join('');
-    const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
-    this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2><ol class="sb-board">${li}</ol>`);
-    // No scrolling: drop the lowest rows (never ours) until it fits, and say how many.
-    const m = this._overlay.querySelector('.gh-modal');
-    const ol = this._overlay.querySelector('.sb-board');
-    let cut = 0;
-    while (m.scrollHeight > m.clientHeight + 1) {
-      const last = [...ol.children].reverse().find((x) => !x.classList.contains('is-me'));
-      if (!last) break;
-      last.remove();
-      cut += 1;
-    }
-    if (cut) {
-      ol.insertAdjacentHTML('beforeend', `<li class="sb-bd-more">+${cut}</li>`);
-      while (m.scrollHeight > m.clientHeight + 1) {
-        const last = [...ol.children].reverse().find((x) => !x.classList.contains('is-me') && !x.classList.contains('sb-bd-more'));
-        if (!last) break;
-        last.remove();
-        cut += 1;
-        ol.querySelector('.sb-bd-more').textContent = '+' + cut;
-      }
-    }
+    }).join('') || '<li class="sb-bd-none">-</li>';
+    return `<h3 class="sb-bd-lang">${esc(lang === 'es' ? 'Español' : 'English')}</h3><ol class="sb-board">${li}</ol>`;
+  }
+
+  /** The other language's board for the same date: its puzzle (its own file, fetched once), watched while
+   *  this puzzle is on screen. A date before that language's first puzzle has no board. */
+  _watchOther(lang) {
+    const date = dateOfDay(this.data.epoch, this.n);
+    const want = `${lang}:${dayKey(date)}`;
+    if (this._other && this._other.want === want) return;
+    if (this._other && this._other.stop) this._other.stop();
+    const o = { want, rows: [], max: 0, stop: null };
+    this._other = o;
+    getData(lang).then((d) => {
+      if (this._other !== o || this.disposed) return;
+      const n = dayNumber(d.epoch, date);
+      if (n < 0) return;
+      const pz = puzzleAt(d, n);
+      o.max = totalPoints(answersFor(d, pz), pz);
+      o.stop = watchDaily(pz.key, (rows) => {
+        if (this._other !== o || this.disposed) return;
+        o.rows = rows;
+        if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
+      });
+    }).catch((err) => console.warn('[spelling-bee] other board', err));
   }
 
   _openRankings() {
@@ -815,6 +864,7 @@ class SpellingBee {
     this.disposed = true;
     if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
     if (this._stopBoard) this._stopBoard();
+    if (this._other && this._other.stop) this._other.stop();
     if (this._offLang) this._offLang();
     try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }
     document.removeEventListener('keydown', this._onKey);
