@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1273;
-const CACHE = 'game-hub-v1281';
+const CACHE = 'game-hub-v1282';
 
 const ASSETS = [
   './',
@@ -233,6 +233,7 @@ const ASSETS = [
   './way-out/js/engine.js',
   './way-out/js/strings.js',
   './way-out/js/boards8.js',
+  './way-out/js/boards9.js',
   './gridlock/',
   './gridlock/index.html',
   './gridlock/css/gridlock.css',
@@ -961,10 +962,11 @@ const REST_MANIFEST = {
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '7b14f8cd37',
-  './way-out/js/ui.js': 'df8b946cc8',
-  './way-out/js/engine.js': 'ae046d980e',
+  './way-out/js/ui.js': '4fec7e8669',
+  './way-out/js/engine.js': '6c0fdfeb27',
   './way-out/js/strings.js': '30f6bb04a0',
   './way-out/js/boards8.js': '56f9933468',
+  './way-out/js/boards9.js': 'dfd4be284c',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',

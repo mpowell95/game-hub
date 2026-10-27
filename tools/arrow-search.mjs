@@ -96,8 +96,8 @@ function mutate(R, arrows) {
 
 /** One board: a generated start, then ITERS random changes kept by simulated annealing on `style`'s
  *  score. Every kept board is solvable (score() is -Infinity for one peel cannot empty). */
-export function search(seed, style, ITERS) {
-  const S = STYLES[style];
+export function search(seed, style, ITERS, over) {
+  const S = over ? { ...STYLES[style], ...over } : STYLES[style];   // `over` (2026-10-27): per-board tweaks, e.g. Expert's growing arrow count
   const R = E.rng(seed);
   let cur = E.generate({ cols: W, rows: H, minLen: 3, maxLen: 9, density: 0.8, straight: 0.6, jitter: 0.3 }, seed).arrows;
   let cs = score(measure(cur), S), best = cur, bs = cs;

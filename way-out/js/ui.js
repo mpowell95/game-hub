@@ -16,7 +16,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
-import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
+import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -219,7 +219,7 @@ function writeRushSave(mode, run) {
  *  `L:<n>:5` then too, so its clock carries across unchanged.) */
 function srcKey(src) {
   if (src && src.k === 'X') return `X:${src.band}:${src.n}`;
-  if (src && src.k === 'N') return `N:${src.band}:${src.n}`;
+  if (src && src.k === 'N') return src.g === B9_GEN ? `N9:${src.band}:${src.n}` : `N:${src.band}:${src.n}`;
   return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${(src && src.g) || LADDER_GEN}`;
 }
 /** The board level n of `band` is played on when nothing older is in progress: the ladder's, or past
@@ -227,18 +227,21 @@ function srcKey(src) {
 function defaultSrc(band, n) {
   // Hard and Expert by thinking (2026-10-27, engine.js "GENERATOR 8"): every Hard level from 101 and
   // Expert level from 201 not already in progress on an older board. Admin only until released.
+  // Expert moved on to generator 9 the same evening (harder: engine.js "GENERATOR 9").
+  if (hasNews() && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (hasNews() && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
 }
 /** The board a save's `src` names. */
 function boardOf(src) {
   if (src.k === 'X') return buildMore(src.band, src.n);
-  if (src.k === 'N') return buildB8(src.band, src.n);
+  if (src.k === 'N') return src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
   return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
 }
 function validSrc(src, band, n) {
   if (!src || typeof src !== 'object') return defaultSrc(band, n);
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B8_GEN && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
+  if (src.k === 'N' && src.band === band && src.n === n && src.g === B9_GEN && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (src.k === 'X' && src.band === band && src.n === n && src.g === MORE_GEN && isMore(band, n)) return { k: 'X', band, n, g: MORE_GEN };
   if (src.k === 'T' && src.tier === band && Number.isInteger(src.level) && src.level >= 1
     && Number.isInteger(src.gen) && src.gen >= 1 && src.gen <= GEN_LATEST) return { k: 'T', tier: band, level: src.level, gen: src.gen };
@@ -1065,7 +1068,7 @@ class WayOut {
     // so its level's ladder board stands in. Generator 8 (Hard / Expert by thinking) is a fixed list.
     this.src = { k: 'R', l, g };
     this.gen = g;
-    this.lvl = g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
+    this.lvl = g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
     this._resetBoard(null);
     this.clock = { n: miss.n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
     this.screen = 'play';

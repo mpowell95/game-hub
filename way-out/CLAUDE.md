@@ -282,6 +282,13 @@ Hard = the "hard" style (45 arrows, ~2 free, blockers ~5 dots); Expert ramps far
 (`expertStyle`). Past the list boards come round MIRRORED (`b8Slot`; Expert from its top 40%). Points
 unchanged.
 
+**Expert moved to GENERATOR 9 the same evening** (Matt: *"the test expert levels were much more difficult than
+the ones I'm doing rn"*; generator 8's Expert 201-260 were only the far/mixed styles, the forced ones began at
+261). `js/boards9.js` (GENERATED, `tools/build-arrow-boards9.mjs`, APPEND-ONLY, pinned): FORCED ORDER four
+levels in five, ~52 arrows growing to ~70 by level 300, MIXED every fifth (`expertPlan`), no far boards.
+`src {k:'N', g:9}`, clock key `N9:expert:<n>` (generator 8 keeps `N:<band>:<n>`); g 8 Expert levels already
+played or in progress keep their boards.
+
 ## Test boards (2026-10-26, removed 2026-10-27)
 
 Admin-only 🧪 boards that proved generator 8's styles (Matt: *"WAY harder. And WAY better"*). Removed once

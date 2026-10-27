@@ -22,6 +22,7 @@
 
 import { BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
 import { B8, B8_W, B8_H } from './boards8.js';
+import { B9 } from './boards9.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -524,17 +525,29 @@ export function unpackB8(s) {
   return arrows;
 }
 /** Which shipped board, and which mirror (0 none, 1 left-right, 2 top-bottom, 3 both), level n is. */
-export function b8Slot(band, n) {
-  const list = B8[band] || [], k = Math.max(0, (n | 0) - B8_FROM[band]);
+export function b8Slot(band, n, lists = B8) {
+  const list = lists[band] || [], k = Math.max(0, (n | 0) - B8_FROM[band]);
   if (k < list.length) return { i: k, t: 0 };
   const from = band === 'expert' ? Math.floor(list.length * 0.6) : 0, span = list.length - from, j = k - list.length;
   return { i: from + (j % span), t: 1 + (Math.floor(j / span) % 3) };
 }
 /** Level n of Hard or Expert on generator 8. Deterministic: a fixed board from the shipped file. */
-export function buildB8(band, n) {
-  const { i, t } = b8Slot(band, n);
+export function buildB8(band, n, lists = B8) {
+  const { i, t } = b8Slot(band, n, lists);
   const mx = (c) => { const x = c % B8_W, y = (c / B8_W) | 0; return ((t & 2) ? B8_H - 1 - y : y) * B8_W + ((t & 1) ? B8_W - 1 - x : x); };
-  return { cols: B8_W, rows: B8_H, arrows: unpackB8(B8[band][i]).map((c) => c.map(mx)) };
+  return { cols: B8_W, rows: B8_H, arrows: unpackB8(lists[band][i]).map((c) => c.map(mx)) };
+}
+// GENERATOR 9 (2026-10-27, Matt: "I feel like the test expert levels were much more difficult than the
+// ones I'm doing rn"): generator 8's Expert 201-260 were only the milder test styles. Generator 9 is
+// Expert only, FORCED ORDER four levels in five (one arrow free at a time, ~50 arrows growing to ~70)
+// and MIXED every fifth; boards9.js, built by tools/build-arrow-boards9.mjs, the same packing and the
+// same mirrored wrap. Generator 8's Expert boards stay for levels already played or in progress.
+export const B9_GEN = 9;
+/** Expert level n on generator 9. */
+export function buildB9(band, n) { return buildB8(band, n, B9); }
+/** Is there a generator-9 board for level n of `band`? (Expert from 201.) */
+export function hasB9(band, n) {
+  return band === 'expert' && (B9.expert || []).length > 0 && (n | 0) >= B8_FROM.expert;
 }
 /** Is there a generator-8 board for level n of `band`? (Hard from 101, Expert from 201.) */
 export function hasB8(band, n) {
