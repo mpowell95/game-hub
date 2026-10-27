@@ -15,7 +15,7 @@
 import { loadStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isDevProfile } from './challenge/hooks.js';
-import { isGameLive, corrections } from './admin-config.js';
+import { isGameLive, isGameAllowed, corrections } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -153,14 +153,23 @@ function visibleTabs() {
  *  person's own ledger and must not). Do not "unify" the two: the asymmetry is load-bearing. */
 export function isGameOnLauncher(statsId) {
   let dev = false;
-  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
+  let code = '';
+  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); code = String((p && p.playerId) || '').toUpperCase(); } catch { /* stay hidden */ }
   const tab = TABS.find((x) => x.id === statsId);
   // A RETIRED build is never on the launcher, for anyone, dev included: there is no card to tap.
   // Checked before the dev bypass for that reason.
   if (tab && tab.retired) return false;
   if (dev) return true;
-  return isGameLive(hubIdOf(statsId), !(tab && tab.devOnly));
+  const hub = hubIdOf(statsId);
+  // The hub's OWN rule (js/hub.js: live, or dev, or opened to this code). The code default comes
+  // from LAUNCHER_DEV_ONLY, not TABS: TABS leaves most admin-only games un-flagged on purpose (My
+  // Stats), and reading it here showed Archery, Battle Arena, Cup Baseball and Gridlock on the
+  // leaderboard to everyone (found 2026-10-27; Matt: "Don't show admin only games in the leaderboard").
+  return isGameLive(hub, !((tab && tab.devOnly) || LAUNCHER_DEV_ONLY.has(hub))) || (!!code && isGameAllowed(hub, code));
 }
+/** Hub ids carrying `devOnly: true` in js/hub.js's GAMES (the launcher's code default). Kept in step
+ *  by tools/test-leaderboard-rank.mjs, which reads hub.js and fails on any difference. */
+export const LAUNCHER_DEV_ONLY = new Set(['archery', 'cup-baseball', 'course-creator', 'baseball', 'battle-arena', 'gridlock']);
 
 const C4_DIFFS = [['easy', 'gs_diff_easy'], ['medium', 'gs_diff_medium'], ['hard', 'gs_diff_hard'], ['expert', 'gs_diff_expert']];
 /** A game's display title in the active language (call at render time, never module scope). */

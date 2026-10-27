@@ -67,7 +67,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `arcade-scores.js` | daily best is a MAP by local day, never a resetting value; no `highscores/` node (`tools/test-arcade-scores.mjs`) |
 | `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `tools/test-leaderboard-rank.mjs` on purpose |
 | `players-agg.js` | identity graph (code ∪ name). **A sub-counter needs an explicit branch here or is silently dropped.** Holds `SOLO`, `ARCHIVED_GAMES`, `NAME_ALIAS`, `DISPLAY_NAME` |
-| `game-stats-ui.js` | top-left back (`gs-up`: game page -> list -> close, 2026-10-15) beside the X; owns `gameListHTML`, `hubIdOf`, `unitKeyOf`, `gameChoices`, `isGameOnLauncher`, `visibleTabs` (more permissive, on purpose) |
+| `game-stats-ui.js` | `isGameOnLauncher` = the hub's rule, code default from `LAUNCHER_DEV_ONLY` (= hub.js `devOnly`, test-enforced; TABS' flags leaked 4 admin-only games onto the leaderboard until 2026-10-27); top-left back (`gs-up`: game page -> list -> close, 2026-10-15) beside the X; owns `gameListHTML`, `hubIdOf`, `unitKeyOf`, `gameChoices`, `isGameOnLauncher`, `visibleTabs` (more permissive, on purpose) |
 | `leaderboard-ui.js` | read-only on data; owns `GAME_META`, `gamehub.lb.sort.v1`; `openLeaderboard({game})` opens on that board and backing out of it closes (a game's own Leaderboard button, 2026-10-15); `{onPlay, canPlay}` (the launcher only) adds Play to a game's board (2026-10-20) |
 | `leaderboard-rank.js` | wins = stored `won`; rating exports dormant, keep; tier comparators |
 | `arrow-maze-time.js`, `gridlock-points.js` | pure point/ladder maths; network-first; `way-out/CLAUDE.md`, `gridlock/CLAUDE.md`. Gridlock keys are `L<n>` (Firebase arrays numeric keys) |

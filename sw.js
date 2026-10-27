@@ -801,7 +801,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '3c9804e43b',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': '5f22195a52',
+  './js/game-stats-ui.js': 'e76eca777b',
   './js/stats-net.js': '0777e13469',
   './js/firebase-boot.js': '5a63920ff7',
   './js/device-report.js': '22d5aec601',

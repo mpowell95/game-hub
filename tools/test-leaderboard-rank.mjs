@@ -596,6 +596,23 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] GAME_META itself is NOT filtered, so a hidden game\'s wins still count',
     /const ALL_IDS = GAME_META\.map\(\(g\) => g\.id\);/.test(src),
     'filtering GAME_META would drop those wins out of every cross-game total');
+  {
+    // 2026-10-27: the leaderboard showed admin-only games to everyone because it read TABS' devOnly
+    // (deliberately incomplete) instead of the hub's. LAUNCHER_DEV_ONLY must equal hub.js exactly.
+    const hubSrc = readFileSync(new URL('./js/hub.js', __ROOT_URL), 'utf8');
+    const hubDev = new Set();
+    let curId = null;
+    for (const line of hubSrc.split('\n')) {
+      const m = /^ {4}id: '([^']+)'/.exec(line);
+      if (m) curId = m[1];
+      if (/^ {4}devOnly: true/.test(line) && curId) hubDev.add(curId);
+    }
+    const m2 = /export const LAUNCHER_DEV_ONLY = new Set\(\[([^\]]*)\]\)/.exec(uiSrc);
+    const listed = new Set(m2 ? [...m2[1].matchAll(/'([^']+)'/g)].map((x) => x[1]) : []);
+    const same = hubDev.size > 0 && hubDev.size === listed.size && [...hubDev].every((x) => listed.has(x));
+    ok('[KNOWN-BUG PROBE] the leaderboard hides exactly the hub\'s admin-only games', same,
+      `hub.js devOnly: ${[...hubDev].join(', ')} / LAUNCHER_DEV_ONLY: ${[...listed].join(', ')}`);
+  }
   ok('a hidden board cannot be reached through a stale _game',
     /if \(_game && !isGameOnLauncher\(_game\)\) _game = null;/.test(src));
   ok('[KNOWN-BUG PROBE] My Stats keeps its OWN, more permissive rule, so your own history stays',
