@@ -238,8 +238,8 @@ screenshots (VISUAL-PROCESS.md), not a one-liner.
 Solo only (hidden in multiplayer: the lockstep log cannot take a move back). **Undo** sits in the in-game action row.
 Each tap takes back the player's last drawn edge plus every computer move after it (one edge at a time, so a chain
 comes back box by box), rebuilt by replaying `_moves` (`[seat, type, r, c]` per edge) from an empty board
-(`replayMoves`). **Connect Four's rule: the first undo in a game needs a second tap ("Not counted. Tap again") and that
-game then records nothing** (`_undone`; the end card adds "Not counted"); later undos in that game go straight through.
+(`replayMoves`). **One tap, no confirm (Matt, same day: "make it an undo button. That I press once")**; a game where
+it was used records nothing (`_undone`; the end card adds "Not counted").
 Both fields ride the solo save additively (`moves`, `undone`); an older save without `moves`, or one whose replay does
 not rebuild the saved board, simply has no Undo for that game. Probe: a Playwright run (undo, re-undo, reload, play out,
 stats unchanged, next game recorded); `test-dotsboxes-stats.mjs` needs jsdom, absent in the cloud container.

@@ -945,8 +945,7 @@ class DotsBoxesUI {
     const won = humanScore === aiScore ? null : humanScore > aiScore;
     const difficulty = this.mp ? MP_DIFFICULTY : this._setup.difficulty;
     const extras = { boxes: humanScore, bestChain: this._humanBestChainThisGame };
-    // A solo game where Undo was used records nothing (Connect Four's rule; the player was told
-    // when they first tapped Undo, and the end card says so).
+    // A solo game where Undo was used records nothing (Matt, 2026-10-27; the end card says so).
     if (!this.mp && this._undone) return;
     try { recordDotsBoxes(difficulty, won, extras); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
@@ -1076,13 +1075,13 @@ class DotsBoxesUI {
    *  require a second confirming tap on `btn` (guards Restart against
    *  accidentally discarding an in-progress game). Same shape as Connect
    *  Four's confirmDestructive/resetConfirms (connect-four/js/ui.js). */
-  confirmDestructive(btn, action, armedKey = 'tap_again_confirm') {
+  confirmDestructive(btn, action) {
     if (!this.state || isOver(this.state)) { action(); return; }
     if (btn.dataset.armed === '1') { this.resetConfirms(); action(); return; }
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t(armedKey);
+    btn.textContent = t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -1102,9 +1101,8 @@ class DotsBoxesUI {
   // Takes back the player's most recent drawn edge and everything the computer did after it,
   // rebuilt by replaying the move list (_moves) from an empty board, so nothing about the
   // board, turn or chain counters can drift. Each tap undoes one edge, so a chain is taken back
-  // one box at a time. The first undo in a game asks for a second tap and the game then records
-  // nothing (Connect Four's rule); later undos in that game go straight through. Never in
-  // multiplayer: the lockstep log cannot take a move back.
+  // one box at a time. One tap, no confirm (Matt, 2026-10-27); a game where it was used records
+  // nothing. Never in multiplayer: the lockstep log cannot take a move back.
 
   _logMove(edge) {
     if (this._moves && !this.mp) this._moves.push([this.state.turn, edge.type, edge.r, edge.c]);
@@ -1171,8 +1169,7 @@ class DotsBoxesUI {
     } else if (action === 'restart') {
       this.confirmDestructive(btn, () => this.startGame());
     } else if (action === 'undo') {
-      if (this._undone) this.undo();
-      else this.confirmDestructive(btn, () => this.undo(), 'undo_confirm');
+      this.undo();
     } else if (action === 'change-settings') {
       this.closeOverlays();
       this.renderSetup();
