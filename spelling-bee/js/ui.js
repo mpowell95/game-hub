@@ -440,6 +440,12 @@ class SpellingBee {
     const before = this.rank();
     this.found.add(word);
     this.rec.found.push(word);
+    // When each word was found (Matt, 2026-10-26: "Just record when he plays"). Parallel to `found`,
+    // additive; words found before this have no time.
+    const now = Date.now();
+    if (!this.rec.times || typeof this.rec.times !== 'object') this.rec.times = {};
+    this.rec.times[word] = now;
+    if (!this.rec.geniusAt && this.rank() >= GENIUS) this.rec.geniusAt = now;
     writeSave(this.save);
     const pts = scoreWord(word, this.puzzle);
     // A bonus word (a rarer real word, not in the hints) says so (Matt, 2026-10-26).
@@ -557,9 +563,20 @@ class SpellingBee {
     this._postT = setTimeout(() => { this._postT = null; this._post(); }, ms);
   }
 
+  /** Play times for the board row: first word, Genius, and every timed word as seconds after the first
+   *  ("12,40,95"). Never shown in the game; read with tools/read-bee-times.mjs. */
+  _times() {
+    const tm = (this.rec.times && typeof this.rec.times === 'object') ? this.rec.times : {};
+    const ms = this.rec.found.map((w) => tm[w]).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+    if (!ms.length) return null;
+    const out = { t0: ms[0], ts: ms.map((x) => Math.round((x - ms[0]) / 1000)).join(',').slice(0, 3000) };
+    if (Number.isFinite(this.rec.geniusAt)) out.tg = this.rec.geniusAt;
+    return out;
+  }
+
   _post() {
     if (!this.puzzle) return;
-    postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank() }).catch(() => {});
+    postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank(), times: this._times() }).catch(() => {});
   }
 
   /** Everyone's word count on the puzzle shown, ours live from this screen (not the board's copy). */

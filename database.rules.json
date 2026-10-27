@@ -89,6 +89,9 @@
           "points": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000" },
           "rank": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9" },
           "at": { ".validate": "newData.val() === now" },
+          "t0": { ".validate": "newData.isNumber()" },
+          "tg": { ".validate": "newData.isNumber()" },
+          "ts": { ".validate": "newData.isString() && newData.val().length <= 3000" },
           "$other": { ".validate": false }
         }
       }
