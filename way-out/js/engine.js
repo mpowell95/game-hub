@@ -21,6 +21,7 @@
 // the outer arrows placed later are the ones that block it.
 
 import { BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
+import { B8, B8_W, B8_H } from './boards8.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -493,6 +494,51 @@ export function buildMore(band, n) {
 /** Is level n of `band` one of its MORE levels (past the ladder's stretch)? Expert has none. */
 export function isMore(band, n) {
   return band !== 'expert' && MORE_FROM[band] != null && (n | 0) > bandEnd(band);
+}
+
+// --- GENERATOR 8: HARD AND EXPERT BY THINKING (2026-10-27) ---------------------------------------
+//
+// Matt played the admin test boards: "Holy shit these are WAY harder. And WAY better", and on the
+// milder Hard ones "That's perfect for Hard. Make the updates". The search that finds such boards
+// (tools/arrow-search.mjs) is far too slow for a phone, so tools/build-arrow-boards8.mjs builds them once
+// and boards8.js ships them packed. Hard is the "hard" style throughout (45 arrows, ~2 free at a
+// time, blockers ~5 dots away); Expert climbs through far blockers, mixed and forced order. Both on a
+// 16x22 grid, so the arrows are BIGGER than the ladder's Hard and Expert, the mis-tap complaint.
+// Level n of a band is board k = n - B8_FROM[band]; past the shipped list the boards come round again
+// MIRRORED (a mirror of a solvable board is solvable: every blocker mirrors with it), Expert from the
+// top of its list, so it never drops back to its gentler start.
+export const B8_GEN = 8;
+export const B8_FROM = { hard: 101, expert: 201 };
+/** A packed generator-8 board back to arrows (tail first, head last). */
+export function unpackB8(s) {
+  const bin = atob(s);
+  let pos = 0;
+  const get = (n) => { let v = 0; for (let k = 0; k < n; k++, pos++) v = (v << 1) | ((bin.charCodeAt(pos >> 3) >> (7 - (pos & 7))) & 1); return v; };
+  const step = [1, -1, B8_W, -B8_W];
+  const arrows = [];
+  for (let a = get(7); a > 0; a--) {
+    const c = [get(9)];
+    for (let len = get(4); len > 0; len--) c.push(c[c.length - 1] + step[get(2)]);
+    arrows.push(c);
+  }
+  return arrows;
+}
+/** Which shipped board, and which mirror (0 none, 1 left-right, 2 top-bottom, 3 both), level n is. */
+export function b8Slot(band, n) {
+  const list = B8[band] || [], k = Math.max(0, (n | 0) - B8_FROM[band]);
+  if (k < list.length) return { i: k, t: 0 };
+  const from = band === 'expert' ? Math.floor(list.length * 0.6) : 0, span = list.length - from, j = k - list.length;
+  return { i: from + (j % span), t: 1 + (Math.floor(j / span) % 3) };
+}
+/** Level n of Hard or Expert on generator 8. Deterministic: a fixed board from the shipped file. */
+export function buildB8(band, n) {
+  const { i, t } = b8Slot(band, n);
+  const mx = (c) => { const x = c % B8_W, y = (c / B8_W) | 0; return ((t & 2) ? B8_H - 1 - y : y) * B8_W + ((t & 1) ? B8_W - 1 - x : x); };
+  return { cols: B8_W, rows: B8_H, arrows: unpackB8(B8[band][i]).map((c) => c.map(mx)) };
+}
+/** Is there a generator-8 board for level n of `band`? (Hard from 101, Expert from 201.) */
+export function hasB8(band, n) {
+  return B8_FROM[band] != null && (B8[band] || []).length > 0 && (n | 0) >= B8_FROM[band];
 }
 
 // --- RUSH (2026-10-14) --------------------------------------------------------------------------
