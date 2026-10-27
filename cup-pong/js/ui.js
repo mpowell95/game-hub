@@ -731,7 +731,8 @@ class CupPong {
       this.pendingReplay = e;
       this.shooter = 'b';
       R.setBallHeat(m.heat('b', m.ball), 0);
-      this.throwState = this.engine.phys.startThrow({ power: e.p, aim: e.a, cups });
+      const v = this.engine.phys.replayVector({ power: e.p, aim: e.a, cups }, e.m);
+      this.throwState = this.engine.phys.startThrow({ power: v.power, aim: v.aim, cups });
       return;
     }
     const ev = this.MP.applyEntry(m, e) || [];

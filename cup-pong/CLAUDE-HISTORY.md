@@ -603,3 +603,16 @@ A chat button on every challenge match (`mpMountChat` in `js/ui.js`, torn down i
 ## The Tuesday question retired (2026-10-19)
 
 Matt asked for the joke gate removed. It asked King of Games `3VN33` to agree "Tuesdays > Mondays" before each turn against Matt `QZCC4` (added 2026-10-03). Deleted `TUESDAY`, `tuesdayOwed`, `askTuesday`, the `.cp-tuesday` CSS and the `tuesday*` strings. Nothing was ever written, so no data was touched.
+
+
+## 2026-10-27: a replayed make flew off the table
+
+Matt (`/dropbox`, screen recording): "That first shot by Moonis CLEARLY did NOT go in!?" On Matt's
+phone King of Games' first throw (match `mvpu7t4hktipvp0l`, log entry 18) hit the front cup's rim,
+bounced back and fell off the table, yet cup k2 was removed. The SCORE was right: the throw really went
+in on the thrower's phone. The REPLAY was wrong: `cleanEntry` rounded `p` and `a` to 5 decimals, and
+inside that rounding box 167 of 441 vectors go into k2, 274 fly off. Re-simulating every stored throw:
+64 of 1,400 replays disagreed with the record (most from finished games on older physics, Sept/early
+Oct). Fix: full precision on write and read (`appendLog`'s retry check tolerates the old rounding), and
+`replayVector` searches the rounding box (nearest first, 61 tries, 400 ms cap) for a flight that lands
+as recorded. Every throw since 2026-10-23 now replays as recorded. Test: `tools/test-cuppong-mp.mjs`.
