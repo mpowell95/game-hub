@@ -192,6 +192,8 @@ function addTest(n, f) {
   all[n] = list.concat([f]);
   try { localStorage.setItem(TESTS_KEY, JSON.stringify(all)); } catch (err) { console.error('[way-out] test result NOT saved', err); }
 }
+/** Test boards 1-10 are "Test N"; 11-15 (2026-10-27, candidates for an upgraded Hard) are "Hard 1-5". */
+const testName = (n) => (n > 10 ? `${t('tier_hard')} ${n - 10}` : t('test_n', { n }));
 /** The best finish of test board n: fewest slips, then fastest. */
 function bestTest(n) {
   const list = readTests()[n];
@@ -803,7 +805,7 @@ class WayOut {
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
             <span class="wo-tierpill">${diffShapeSVG(TIER_NUM[tier])}${t('tier_' + tier)}</span>
-            <span class="wo-level">${this.replay && this.replay.test ? t('test_n', { n: this.level }) : `${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}`}</span>
+            <span class="wo-level">${this.replay && this.replay.test ? testName(this.level) : `${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}`}</span>
           </div>
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
@@ -1044,11 +1046,11 @@ class WayOut {
       <div class="gh-modal wo-dialog wo-replays" role="dialog" aria-modal="true" aria-labelledby="wo-ts-h">
         <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="wo-ts-h">${t('tests_title')}</h2>
-        <ul class="wo-rp-list">${TRICKY.map((_, i) => {
-          const b = bestTest(i + 1);
+        <ul class="wo-rp-list">${TRICKY.map((_, i) => i + 1).sort((a, b) => (b > 10) - (a > 10) || a - b).map((n) => {
+          const b = bestTest(n);
           return `
-          <li><button type="button" class="wo-rp-row" data-act="test" data-n="${i + 1}">
-            <span class="wo-rp-n">${t('test_n', { n: i + 1 })}</span>
+          <li><button type="button" class="wo-rp-row" data-act="test" data-n="${n}">
+            <span class="wo-rp-n">${n > 10 ? diffShapeSVG(TIER_NUM.hard) : ''}${testName(n)}</span>
             <b class="wo-rp-gain">${b ? `${woClock(b.t)} · ${'♥'.repeat(Math.max(0, LIVES - b.m))}${'♡'.repeat(Math.min(LIVES, b.m))}${b.h ? ` 💡${b.h}` : ''}` : '-'}</b>
           </button></li>`;
         }).join('')}
@@ -1066,7 +1068,7 @@ class WayOut {
     this._stopLevel();
     this.rush = null;
     this.replay = { test: n };
-    this.tier = 'medium';
+    this.tier = n > 10 ? 'hard' : 'medium';
     this.level = n;
     this._helpPaused = false;
     this.src = { k: 'R', test: n };
