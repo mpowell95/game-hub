@@ -1342,3 +1342,16 @@ claimed in the last 24 h (`usernames/<name>.at`), the gate asks "Is this you?" w
 links to that code exactly as the code Link does (`js/name-gate.js` `linkTo`, `ME_WINDOW_MS`;
 `stats-net.js` `usernameOwner`). Older claims still need the code. Anyone could tap it on someone else's
 name claimed that day; accepted by Matt as the trade-off (family-grade, like the registry itself).
+
+## 2026-10-26: admin-switched games were slow to open (Darts ~4 s)
+
+Matt's screen recording: Play on a Darts challenge, ~1.3 s on the launcher, ~2.5 s on the setup card,
+then the match. Darts, Cup Pong, Pool, Connect 4 Hoops, Air Hockey and Arrow Maze were live from the
+admin page but still `devOnly` in code, so `sw.js` held them back: no hash, network-first with a 2.5 s
+deadline, every module of the game fetched on every open. Matt: "If I switch it from admin only to fully
+released, obviously you should update the code as soon as you see that. Or even better, me making the
+switch solves it instantly." Fixed both ways: the six released in code (v1264, v1265), and `LIVE_HELD`
+(js/hub.js `_tellWorkerLive`, sw.js `noteLiveHeld`/`liveHeld`): a held-back game switched live is served
+from the cache at once, and each hub load refreshes all its files in the background (`cache: 'no-cache'`,
+at most every 2 min per game), so a switch is fast with no commit. Probes in `tools/test-sw-strategy.mjs`.
+

@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1264;
-const CACHE = 'game-hub-v1264';
+const CACHE = 'game-hub-v1265';
 
 const ASSETS = [
   './',
@@ -232,6 +232,7 @@ const ASSETS = [
   './way-out/js/ui.js',
   './way-out/js/engine.js',
   './way-out/js/strings.js',
+  './way-out/js/tricky.js',
   './gridlock/',
   './gridlock/index.html',
   './gridlock/css/gridlock.css',
@@ -734,19 +735,16 @@ const HELD_BACK = {
     './pinball2/piernine/rules.js',
     './pinball2/piernine/style.css',
   ],
-  'way-out': [
-    './way-out/',
-    './way-out/index.html',
-    './way-out/css/way-out.css',
-    './way-out/js/ui.js',
-    './way-out/js/engine.js',
-    './way-out/js/strings.js',
-  ],
 };
 // __HELD_BACK_END__
 const HELD_BACK_OWNER = new Map();
 for (const [id, paths] of Object.entries(HELD_BACK)) for (const p of paths) HELD_BACK_OWNER.set(p, id);
 const SHOWN_KEY = './__shown-games__';
+// HELD BACK BUT SWITCHED LIVE (2026-10-26). Matt: "me making the switch solves it instantly". A
+// held-back game switched live on the admin page (js/hub.js `LIVE_HELD`) is served from the cache at
+// once instead of network-first (Darts took ~4 s to open on his phone), and the hub's message on
+// each page load refreshes ALL its files in the background, so the next open has the new code.
+const LIVE_KEY = './__live-held__';
 
 // --- the shell's own split: always-fresh vs cache-first (2026-09-01) ----------------------... [docs/SW-NOTES.md #11]
 const NETWORK_FIRST = [
@@ -780,7 +778,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '2bb463fea1',
+  './js/hub.js': '429018c371',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -958,6 +956,13 @@ const REST_MANIFEST = {
   './murdoku/js/ui.js': '49446a4207',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
+  './way-out/': '266cc82dc4',
+  './way-out/index.html': '266cc82dc4',
+  './way-out/css/way-out.css': '57ffd24975',
+  './way-out/js/ui.js': '28caa7989d',
+  './way-out/js/engine.js': 'a73ec75fbd',
+  './way-out/js/strings.js': '0a72197767',
+  './way-out/js/tricky.js': '0acb0a9350',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',
@@ -1510,10 +1515,54 @@ async function noteShownGames(ids) {
   if (want.some((id) => !had.includes(id))) await queueWarm();
 }
 
+// The held-back games switched live (LIVE_HELD), read once per worker life from the cache.
+let _liveHeld = null;
+function liveHeld() {
+  if (!_liveHeld) {
+    _liveHeld = (async () => {
+      for (const name of [CACHE, ...(await caches.keys())]) {
+        try {
+          const res = await (await caches.open(name)).match(LIVE_KEY);
+          if (res) return new Set(await res.json());
+        } catch { /* unreadable: try the next */ }
+      }
+      return new Set();
+    })().catch(() => new Set());
+  }
+  return _liveHeld;
+}
+const _heldRefreshedAt = new Map();
+const HELD_REFRESH_MS = 2 * 60 * 1000;
+async function noteLiveHeld(ids) {
+  const want = [...new Set(ids.filter((id) => typeof id === 'string' && HELD_BACK[id]))].sort();
+  _liveHeld = Promise.resolve(new Set(want));
+  const cache = await caches.open(CACHE);
+  await cache.put(LIVE_KEY, new Response(JSON.stringify(want)));
+  // Refresh each live game's files as a SET, so a cached copy never mixes two builds for long.
+  const queue = [];
+  for (const id of want) {
+    if (Date.now() - (_heldRefreshedAt.get(id) || 0) < HELD_REFRESH_MS) continue;
+    _heldRefreshedAt.set(id, Date.now());
+    queue.push(...HELD_BACK[id]);
+  }
+  const worker = async () => {
+    for (let path; (path = queue.shift()) !== undefined;) {
+      try {
+        const res = await fetch(new Request(path, { cache: 'no-cache' }));
+        if (res && res.ok) await cache.put(path, res);
+      } catch { /* offline: the cached copy stays */ }
+    }
+  };
+  await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
+}
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_VERSION') {
     const port = event.ports && event.ports[0];
     if (port) port.postMessage({ type: 'VERSION', cache: CACHE, important: IMPORTANT_SINCE });
+  }
+  if (event.data && event.data.type === 'LIVE_HELD' && Array.isArray(event.data.ids)) {
+    event.waitUntil(noteLiveHeld(event.data.ids).catch((err) => console.warn('[sw] LIVE_HELD failed', err)));
   }
   if (event.data && event.data.type === 'SHOWN_GAMES' && Array.isArray(event.data.ids)) {
     event.waitUntil(noteShownGames(event.data.ids).catch((err) => console.warn('[sw] SHOWN_GAMES failed', err)));
@@ -1605,6 +1654,8 @@ self.addEventListener('activate', (event) => {
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 
 // The REST tier's own paths, for the cache-first branch below. [docs/SW-NOTES.md #27]
+// Held-back file pathname -> its hub id (the LIVE_HELD check in the fetch handler).
+const HELD_PATH_OWNER = new Map([...HELD_BACK_OWNER].map(([p, id]) => [new URL(p, self.location.href).pathname, id]));
 const DEV_FRESH_PATHS = new Set([...HELD_BACK_OWNER.keys()].map((p) => new URL(p, self.location.href).pathname));
 const CACHE_FIRST_PATHS = new Set(
   [...REST, ...SHELL_CACHE_FIRST]
@@ -1679,6 +1730,10 @@ self.addEventListener('fetch', (event) => {
     const cur = await caches.open(CACHE);
     const cached = (await cur.match(req, { ignoreSearch: true }))
       || (await caches.match(req, { ignoreSearch: true }));
+
+    // A held-back game switched live: the cached copy at once; `net` refreshes it behind.
+    const heldOwner = cached && sameOrigin ? HELD_PATH_OWNER.get(url.pathname) : null;
+    if (heldOwner && (await liveHeld()).has(heldOwner)) return cached;
 
     if (!cached) {
       try {

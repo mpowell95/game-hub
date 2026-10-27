@@ -344,7 +344,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 |---|---|---|---|---|
 | Air Hockey | module, immersive, released 2026-10-26; vs computer + live online (`rooms/<CODE>/ah/`); hub id `air-hockey`, stats id `airhockey` | `.ah-root` / `.ah-` | `gamehub.airhockey.v1` | `recordAirHockey` (`ah`) |
 | Archery | module, immersive, devOnly; vs computer, pass and play, online challenges (`archery/`) | `.ar-root` / `.ar-` | `gamehub.archery.v1` (+ `.save.v1`) | `recordResult('archery', …)` |
-| Arrow Maze | module, immersive, devOnly; one ladder, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
+| Arrow Maze | module, immersive, released 2026-10-27; one ladder, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
 | Battle Arena | module, immersive, devOnly; match-3 monster battle vs computer, pure JSON engine + seeded RNG (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); online 2026-10-24: turn-by-turn challenges (`battlearena/`) + live rooms (25 s a move), a seed + teams + moves replayed on both phones; hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` (online: `'mp'`; live rooms + h2h) |
@@ -390,8 +390,12 @@ Matt says "release X" (or has switched it live on the admin page), remove `devOn
 `GAMES` entry (add `released`), run `tools/validate-sw-assets.mjs` (it drops X from `HELD_BACK` and gives
 its files hashes), bump `CACHE`, deploy. That alone makes it live for everyone unless the admin
 page holds an explicit "hidden" override for it; a session never writes the admin config. Players get ONE update and the
-game is saved cache-first like any other. A game left `devOnly` but switched live re-downloads its
-files on every open (held back: network-first, no hash).
+game is saved cache-first like any other. **A session that sees a `devOnly` game switched live
+(`adminConfig/v1/games/<id>/live: true`) makes that release commit at once, unasked** (Matt, 2026-10-26:
+"obviously you should update the code as soon as you see that"; 6 games had sat for weeks). Until then
+the switch alone keeps it fast: the hub posts `LIVE_HELD` and `sw.js` serves those games cache-first,
+refreshing all their files behind on each hub load (before 2026-10-26 they were network-first on every
+open: Darts took ~4 s from Play to the match).
 
 ## Archived games (2026-09-28)
 

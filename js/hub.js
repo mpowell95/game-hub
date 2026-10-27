@@ -731,10 +731,7 @@ export const GAMES = [
     immersive: true,
     accent: '#4471a3',
     art: GAME_ART['way-out'],
-    // ADMIN ONLY at first, like every new game here (Matt: "add it to the hub as admin only").
-    // No `released` date on purpose: it is the only input to the launcher's New pill and must be
-    // the day Matt releases it, which he does from the admin page with no commit.
-    devOnly: true,
+    released: '2026-10-13',         // switched live on the admin page that day; released in code 2026-10-27
     // King of Games (3VN33) was held back with `hideFrom` on 2026-10-13 and again 10-14 while the
     // bands were reworked; given back 2026-10-14 (Matt: "Let king of games see and play arrows").
   },
@@ -1145,6 +1142,7 @@ class Hub {
     const visible = GAMES.filter((g) => (isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode))
       && !hiddenFromPlayer(g, myCode, dev));
     this._tellWorkerShown(visible.map((g) => g.id));
+    this._tellWorkerLive(GAMES.filter((g) => g.devOnly && isGameLive(g.id, false)).map((g) => g.id));
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
@@ -2336,6 +2334,22 @@ class Hub {
         .then((reg) => { if (reg.active) reg.active.postMessage({ type: 'SHOWN_GAMES', ids }); })
         .catch(() => {});
     } catch { /* no worker: nothing is warmed anyway */ }
+  }
+
+  /** Tell the service worker which admin-only games are switched LIVE on the admin page (2026-10-26).
+   *  sw.js serves those from its cache at once (they used to wait on the network on every open, ~4 s
+   *  for Darts) and refreshes all their files behind, so the switch alone makes them fast. Sent on
+   *  the first launcher paint of each page load (that is the refresh) and whenever the list changes. */
+  _tellWorkerLive(ids) {
+    const key = ids.slice().sort().join(',');
+    if (key === this._liveSent) return;
+    this._liveSent = key;
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.ready
+        .then((reg) => { if (reg.active) reg.active.postMessage({ type: 'LIVE_HELD', ids }); })
+        .catch(() => {});
+    } catch { /* no worker: nothing to tell */ }
   }
 
   /** Ask the ACTIVE service worker which cache version it runs. Null when unknown. */

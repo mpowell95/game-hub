@@ -149,6 +149,7 @@ function bootWorker({ net, src = SW_SRC, existingCaches } = {}) {
 }
 
 const CACHE_NAME = /const CACHE = '([^']+)'/.exec(SW_SRC)[1];
+const LIVE_KEY_TEST = /const LIVE_KEY = '([^']+)'/.exec(SW_SRC)[1];
 
 // The real ASSETS/SHELL/REST arrays, pulled from the file itself so the tests describe the shipped
 // list rather than a guess at it (the same extraction trick validate-sw-assets.mjs uses).
@@ -853,7 +854,7 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
     ok(`js/hub.js ${fn} imports alerts only for games on this launcher`, /onLauncher\.has\(g\.id\)/.test(body));
   }
   // Every admin-only game in js/hub.js today has an entry (a stale block: run validate-sw-assets.mjs).
-  for (const id of ['archery', 'baseball', 'battle-arena', 'gridlock', 'way-out']) {   // Air Hockey, Cup Pong, Darts, Hoops, Pool released 2026-10-26
+  for (const id of ['archery', 'baseball', 'battle-arena', 'gridlock']) {   // Air Hockey, Cup Pong, Darts, Hoops, Pool released 2026-10-26; Arrow Maze 10-27
     ok(`admin-only game ${id} has a HELD_BACK entry`, ids.includes(id));
   }
 
@@ -920,6 +921,39 @@ console.log('\n--- held back: admin-only games warm only where they are shown --
     (await w4.fire('fetch', { request: new FakeRequest(p0) })).body, 'NEW');
   const w5 = bootWorker({ net: async () => { throw new Error('offline'); } , existingCaches: w4.caches });
   eq('...and offline it falls back to the cached copy', (await w5.fire('fetch', { request: new FakeRequest(p0) })).body, 'NEW');
+
+  // [KNOWN-BUG PROBE] HELD BACK BUT SWITCHED LIVE (2026-10-26). Darts, live from the admin page but
+  // devOnly in code, waited on the network for every file on every open (~4 s on Matt's phone).
+  // Matt: "me making the switch solves it instantly". The hub names those games (LIVE_HELD); the
+  // worker serves them from the cache at once and refreshes the whole game behind.
+  {
+    const gid = HELD_BACK.gridlock ? 'gridlock' : HELD_BACK_OWNER.get(p0);
+    let mode = 'v2';
+    const hang = new Promise(() => {});
+    const w6 = bootWorker({ net: async () => (mode === 'hang' ? hang : new FakeResponse(mode)) });
+    await w6.fire('install');
+    await w6.fire('activate');
+    await drainWarm(w6, CACHE_NAME);
+    for (const p of HELD_BACK[gid]) await w6.caches.get(CACHE_NAME).put(p, new FakeResponse('v1'));
+    await w6.fire('message', { data: { type: 'LIVE_HELD', ids: [gid, 'not-a-game'] } });
+    const c6 = w6.caches.get(CACHE_NAME);
+    const bodies = await Promise.all(HELD_BACK[gid].map(async (p) => (await c6.match(p)).body));
+    ok('LIVE_HELD refreshes EVERY file of that game in the background', bodies.every((b) => b === 'v2'), bodies.join(','));
+    eq('...and stores only real held-back ids', (await c6.match(LIVE_KEY_TEST)).body, JSON.stringify([gid]));
+    mode = 'hang';
+    const quick = (pr) => Promise.race([pr, new Promise((r) => setTimeout(() => r({ body: 'WAITED' }), 300))]);
+    eq('[KNOWN-BUG PROBE] a live-switched held-back file is served from the cache at once, never waiting on the network',
+      (await quick(w6.fire('fetch', { request: new FakeRequest(p0) }))).body, 'v2');
+    const w7 = bootWorker({ net: async () => hang, existingCaches: w6.caches });
+    eq('...and still after the worker restarts (the list is read back from the cache)',
+      (await quick(w7.fire('fetch', { request: new FakeRequest(p0) }))).body, 'v2');
+    mode = 'v3';
+    await w6.fire('message', { data: { type: 'LIVE_HELD', ids: [] } });
+    eq('switched back to admin only: network-first again', (await w6.fire('fetch', { request: new FakeRequest(p0) })).body, 'v3');
+    const hubSrc2 = readFileSync(join(ROOT, 'js', 'hub.js'), 'utf8');
+    ok('js/hub.js tells the worker which admin-only games are switched live',
+      /_tellWorkerLive\(GAMES\.filter\(\(g\) => g\.devOnly && isGameLive\(g\.id, false\)\)/.test(hubSrc2));
+  }
 }
 
 // --- [KNOWN-BUG PROBE] a tool under active development is never served stale ----------------------
