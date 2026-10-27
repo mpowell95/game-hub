@@ -12,8 +12,9 @@ Hub integration: in-hub `module:` (`battleship/js/ui.js`), `immersive: true`. `i
 **mode-split**: **solo** returns `false` (autosave/resume built in, leaving mid-battle is lossless);
 **MP** returns `true` while a room is joined (lobby and placement included).
 
-The repo's **first hidden-information game**: each side's fleet must never be known to the other;
-that shapes almost everything below. Accent `#34506E` is unverified on a real launcher grid; if it
+The repo's **first hidden-information game**: in a LIVE room each side's fleet must never be known
+to the other; that shapes almost everything below. (Challenges store both fleets in the match on
+Matt's call: "Challenges, turn by turn".) Accent `#34506E` is unverified on a real launcher grid; if it
 does not read distinctly from Dominoes, go darker and greyer, not brighter.
 
 ## Layout & responsibilities
@@ -287,11 +288,35 @@ to the ordinary offline error (a late reply is harmless). `_tryRestoreMP` arms `
 a timer (`net.init()` proves Firebase is reachable, not that the room exists); the first real room
 snapshot disarms it, otherwise the save is cleared and setup returns. Cleared in `destroy()`.
 
+## Challenges, turn by turn (2026-10-27)
+
+Matt: *"Why hasn't battleship been modified to have turn based multiplayer???"* Play vs. Friend's
+third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battle Arena's model) +
+`alert.js`; the screen glue is the `_ch*` methods in `ui.js`. The live-room `_mp*` code is untouched.
+- **BOTH FLEETS ARE STORED IN THE MATCH** (Matt chose this: nobody is online to say "hit"). Every
+  phone resolves every shot with `game.js` exactly as solo; the screen never draws the other fleet
+  before the end, but dev tools could read it. Never call it hidden. Live rooms still never send one.
+- **A hit shoots again, a miss passes** (Matt: *"Isn't keep shooting on a hit the standard?"*; it is a
+  common house rule, not the printed one). Stored per match as `bonus: true`.
+- The challenger places and sends; **the receiver places on first open and shoots first** (a shot
+  needs the fleet it lands on). Both index rows are written at creation. OPEN until the receiver's
+  first SHOT (placing is not an answer). Cancel / decline / resign / 3-day expiry: `js/challenge-life.js`.
+- Node `battleship/` (`games/<id>`, `index/<CODE>/<id>`, `chat/<id>`); a match is two fleets + a log
+  of shots, replayed and refused whole if it does not replay. Shots are written one at a time
+  (outbox `gamehub.battleship.outbox.v1`); the other person's arrive by watch and play one at a time
+  (`_chNext`). Counted once in `'mp'` with shots/hits (`countResult`, ledger
+  `gamehub.battleship.counted.v1`), never head-to-head. Push: `battleshipTurnPush`, reminder, Remind bell.
+- The list is LIVE while up (`_chWatchList`): a one-off read raced a cancel's second row write.
+- The Challenge tab shows at most 4 rows (one fewer each for a note and Notify me), fitted in the hub
+  at 390x664. A challenge never writes the solo save (`saveGame` returns on `ui.ch`).
+
 ## Settings & keys
 
 - `gamehub.battleship.v1` — `{ v:1, size, difficulty, bonusShotOnHit, firstMode, nextStarter }`.
 - `gamehub.battleship.save.v1` — solo mid-battle autosave.
 - `gamehub.battleship.mp.v1` — MP autosave, including `myFleet`. Permanent (THE LAW rule 5).
+- Challenges (2026-10-27): `gamehub.battleship.{seen,shown,counted,unseenResults,outbox,open}.v1`
+  (`open` is sessionStorage). All one-tap recreatable except `counted`, the count-once ledger.
 
 ## Tests
 
@@ -299,8 +324,11 @@ snapshot disarms it, otherwise the save is cleared and setup returns. Cleared in
 node battleship/js/test.js          # engine, fleet, AI no-cheat, hash, full solo playthroughs
 node tools/test-mp-lockstep.mjs           # BS1-BS7
 node tools/test-visual.mjs battleship
-node tools/check-no-scroll.mjs battleship
+node tools/check-no-scroll.mjs battleship          # includes the Challenge tab (EXTRA_SCREENS)
+node tools/test-battleship-mp.mjs                   # challenges: replay, a whole match, cancel/decline/resign/expire
 ```
+Two-phone browser check (2026-10-27): `js/firebase-boot.js` routed to a fake database held in node
+(Playwright `exposeFunction`), test1/DREG5 vs a made-up TQWX7. Story: `CLAUDE-HISTORY.md`.
 
 ## The mode screen fits a short phone in the hub (2026-09-08)
 

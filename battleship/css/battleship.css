@@ -857,6 +857,36 @@
 .bs-mp-msg-action { appearance: none; border: 0; background: transparent; cursor: pointer; text-decoration: underline; }
 .bs-mp-series { text-align: center; font-size: .76rem; font-weight: 700; color: var(--bs-muted); margin: 0; }
 
+/* --- challenges, turn by turn (2026-10-27): the Challenge tab's list and the person picker ------- */
+/* At most four rows (ui.js _chHTML), so the card never scrolls. Your turn = a bold accent border
+   AND a play triangle, never a colour alone. */
+.bs-ch-newbtn { width: 100%; }
+.bs-ch-list { width: 100%; display: grid; gap: 4px; }
+.bs-ch-h {
+  margin: 0; font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--bs-muted); display: flex; gap: 6px; align-items: center;
+}
+.bs-ch-h span { color: var(--bs-ink); }
+.bs-ch-row {
+  appearance: none; cursor: pointer; width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px;
+  padding: 5px 10px; border-radius: 12px; border: 1px solid var(--bs-surface-2); background: var(--bs-bg);
+  color: var(--bs-ink); font: inherit; text-align: left; touch-action: manipulation;
+}
+.bs-ch-row.is-mine { border: 2px solid var(--bs-header); padding: 4px 9px; }
+:root.gh-dark .bs-root .bs-ch-row.is-mine { border-color: var(--bs-theirs); }
+.bs-ch-face { font-size: 1.35rem; line-height: 1; flex: none; }
+.bs-ch-text { display: grid; min-width: 0; flex: 1; }
+.bs-ch-name { font-weight: 800; font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-ch-sub { font-size: .72rem; font-weight: 700; color: var(--bs-muted); }
+.bs-ch-chev { flex: none; font-weight: 900; color: var(--bs-header); }
+:root.gh-dark .bs-root .bs-ch-chev { color: var(--bs-theirs); }
+.bs-ch-note { margin: 0; text-align: center; font-size: .78rem; font-weight: 700; color: var(--bs-muted); }
+.bs-ch-pick { width: 100%; display: grid; gap: 8px; justify-items: center; }
+.bs-ch-search {
+  width: 100%; font: inherit; font-size: 1rem; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--bs-surface-2); background: var(--bs-surface); color: var(--bs-ink);
+}
+
 /* --- reduced motion: every animation becomes an instant state change --------------------------- */
 /* NEVER `display: none` here. That is exactly how this game shipped a blank screen: a decoration
    rule landing on a structural class, hidden outright for anyone with Reduce Motion on. Everything

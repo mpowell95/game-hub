@@ -118,3 +118,5 @@ LEFT by profile name + emoji, their moves played exactly like the computer's (`u
 `node tools/test-game-conventions.mjs`; `node tools/test-battlearena-mp.mjs` (online: replay, placeholder,
 mirror, a full challenge and a full live match, cancel/decline/resign/expire, gate, structure). Two-phone
 recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see CLAUDE-HISTORY.md).
+`test-battlearena-mp.mjs` is FLAKY (seen 2026-10-27, on `main` too): about 1 run in 3 fails "decline: the receiver
+calls it off before moving" (+ 1-2 after it); likely a random computer turn that already answers. Not yet fixed.

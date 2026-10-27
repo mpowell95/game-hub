@@ -472,7 +472,7 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
   const rules = JSON.parse(src('database.rules.json'));
   ok('`battlearena` is in database.rules.json, signed-in read and write (darts\' shape)', rules.rules.battlearena && rules.rules.battlearena['.read'] === 'auth != null' && rules.rules.battlearena['.write'] === 'auth != null');
   ok('`battlearena` is in the backup branch list', /\n\s*'battlearena',/.test(src('backups/rtdb-backup.mjs')));
-  ok('the Remind bell may name battlearena matches', /battlearena\)~/.test(JSON.stringify(rules.rules.nudges)));
+  ok('the Remind bell may name battlearena matches', /battlearena[|)]/.test(JSON.stringify(rules.rules.nudges)));
   const hub = src('js/hub.js');
   ok('hub: Battle Arena declares its alerts module', /alerts: \(\) => import\('\.\.\/battle-arena\/js\/alert\.js'\)/.test(hub));
   ok('hub: a live-room game (LIVE_MP_GAMES) and js/mp-records.js LIVE_GAMES', /'battle-arena'/.test(hub.match(/const LIVE_MP_GAMES = new Set\(\[[^\]]*\]/)[0]) && /'battle-arena': 'battlearena'/.test(src('js/mp-records.js')));

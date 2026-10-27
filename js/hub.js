@@ -549,6 +549,9 @@ export const GAMES = [
     blurb: { en: 'Place your fleet, then hunt the enemy\'s. Three AI tiers, or play a friend.',
       es: 'Coloca tu flota y luego caza la del rival. Tres niveles de IA, o juega con un amigo.' },
     module: '../battleship/js/ui.js',
+    // Turn-by-turn challenges (2026-10-27): a new one, your turn, a result you missed, on the
+    // launcher. Its live rooms (Host / Join) are unchanged.
+    alerts: () => import('../battleship/js/alert.js'),
     // Its own full-bleed chrome (two boards plus the fleet roster and back affordance), same call
     // as Escoba, Mancala, Ball Run, Yahtzee and Hill Climb.
     immersive: true,

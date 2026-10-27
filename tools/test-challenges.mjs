@@ -65,9 +65,9 @@ ok('a person with only live games is still listed', S.opponents.some((o) => o.co
 ok('finished newest first', S.finished[0].updated >= S.finished[S.finished.length - 1].updated);
 ok('summarize does not mutate its input', rows[0].id === 'd1' && rows.length === 7);
 // Chinchón and Escoba joined 2026-10-18 (turn-by-turn challenges beside their live rooms).
-// Battle Arena joined 2026-10-24 (challenges beside its live rooms).
-ok('every registry source is one of the ten challenge games',
-  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'hoops4', 'skeeball']));
+// Battle Arena joined 2026-10-24, Battleship 2026-10-27 (challenges beside their live rooms).
+ok('every registry source is one of the eleven challenge games',
+  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'battleship', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'hoops4', 'skeeball']));
 
 // --- the handoff contract, per game ---------------------------------------------------------------
 const them = { code: 'ANABB', name: 'Ana', emoji: '🦊' };
@@ -77,6 +77,7 @@ for (const [game, path, take] of [
   ['chinchon', './chinchon/js/alert.js', 'takeOpen'],
   ['escoba', './escoba/js/alert.js', 'takeOpen'],
   ['battle-arena', './battle-arena/js/alert.js', 'takeOpen'],
+  ['battleship', './battleship/js/alert.js', 'takeOpen'],
   ['flick-soccer', './flick-soccer/js/alert.js', 'takeOpen'],
   ['eight-ball', './eight-ball/js/alert.js', 'takeOpen'],
   ['cuppong', './cup-pong/js/alert.js', 'takeOpen'],
@@ -108,6 +109,8 @@ ok('flick soccer: a pick opens the challenge card', /o\.kind === 'pick'\) this\.
 ok('flick soccer: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./flick-soccer/js/mp-ui.js')));
 ok('archery: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./archery/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./archery/js/ui.js')));
 ok('archery: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./archery/js/mp-ui.js')));
+ok('battleship: a pick opens the deploy screen for that person, a match id opens the match',
+  /o\.kind === 'pick'[\s\S]{0,200}_chStartPlacement\(\{ kind: 'new', them: o\.them/.test(src('./battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('./battleship/js/ui.js')));
 ok('battle arena: a pick opens the draft for that person, a match id opens the match',
   /o\.kind === 'pick'\) \{ pickTeamFor\(ui, o\.them\)/.test(src('./battle-arena/js/online-ui.js')) && /if \(o && o\.id\) \{ await openChallenge\(ui, o\.id\)/.test(src('./battle-arena/js/online-ui.js')));
 ok('escoba: a pick opens the length screen with that person', /o\.kind === 'pick'\) this\._chOpenLen\(o\.them/.test(src('./escoba/js/ui.js')));
@@ -145,7 +148,7 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
 
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
-  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js']]) {
+  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js']]) {
     const M = await import(new URL(path, __ROOT_URL).href);
     ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
       ['cancelGame', 'resignGame', 'lifeOf', 'recipientOf', 'isCalledOff', 'readGame', 'sideOf', 'myCode'].every((k) => typeof M[k] === 'function'));
