@@ -1208,7 +1208,7 @@ const REST_MANIFEST = {
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
   './battleship/css/battleship.css': '1b4481fddd',
-  './battleship/js/ui.js': 'aa8c56aabb',
+  './battleship/js/ui.js': '2addcde203',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',

@@ -2745,6 +2745,9 @@ class BattleshipUI {
   /** What the hub handed over: a person to challenge, or a match to open. */
   _chTakeArmed(o) {
     if (!o) return;
+    // A solo battle on screen (a notification tapped mid-game) stays in its save, untouched: without
+    // this, renderSetup would treat leaving it as "New game" and clear it. It resumes next open.
+    if (!this.mp && !this.ch && this.view === 'battle') { this._stopGameTimers(); this.state = null; }
     this._mode = 'ch';
     this._lobby = null;
     if (o.kind === 'pick' && o.them && o.them.code) {
