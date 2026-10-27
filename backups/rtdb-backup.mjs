@@ -63,6 +63,8 @@ export const BRANCHES = [
   // beeDaily/ (2026-10-26): Spelling Bee's daily board, <puzzle>/<CODE> = words found. Readable by
   // any signed-in session.
   'beeDaily',
+  // beeLog/ (2026-10-27): Spelling Bee's every guess and action, per puzzle and code.
+  'beeLog',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',
