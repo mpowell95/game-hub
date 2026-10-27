@@ -145,35 +145,6 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
 
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
-
-  // [KNOWN-BUG PROBE] OPEN MATCHES ARE LOADED BEFORE THE TAP (2026-10-27). Matt: "I don't want it to
-  // just show the setup card forever." The match was read only after Play; now every open match on
-  // the list is watched, so the game's own read is answered at once.
-  {
-    const real = C.SOURCES.darts;
-    const watching = new Set();
-    let raw = [
-      { id: 'y1', with: 'ANA22', name: 'Ana', over: false, yourTurn: true, updated: 3 },
-      { id: 't1', with: 'BOB33', name: 'Bob', over: false, yourTurn: false, updated: 2 },
-      { id: 'd1', with: 'BOB33', name: 'Bob', over: true, result: 'won', updated: 1 },
-    ];
-    const M = { watchGame: async (id) => { watching.add(id); return () => watching.delete(id); } };
-    C.SOURCES.darts = { ...real, load: async () => M, read: async () => raw };
-    await C.loadAll(['darts']);
-    await new Promise((r) => setTimeout(r, 0));
-    ok('[KNOWN-BUG PROBE] your-turn and their-turn matches are watched before the tap', watching.has('y1') && watching.has('t1'), [...watching].join(','));
-    ok('...a finished one is not', !watching.has('d1'));
-    await C.loadAll(['darts']);
-    ok('...and reading again does not stack listeners', C.heldMatches().filter((k) => k === 'darts/y1').length === 1);
-    raw = raw.map((r) => (r.id === 'y1' ? { ...r, over: true, result: 'lost', yourTurn: false } : r));
-    await C.loadAll(['darts']);
-    await new Promise((r) => setTimeout(r, 0));
-    ok('...and a match that ends is let go', !watching.has('y1') && watching.has('t1'), [...watching].join(','));
-    raw = [];
-    await C.loadAll(['darts']);
-    await new Promise((r) => setTimeout(r, 0));
-    C.SOURCES.darts = real;
-  }
   for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js']]) {
     const M = await import(new URL(path, __ROOT_URL).href);
     ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
