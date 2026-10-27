@@ -138,7 +138,7 @@ for (const [band, n] of [['hard', 101], ['expert', 201]]) {
   await page.locator('.wo-play[data-act="play"]').click();
   await page.waitForFunction(() => window.__woTest);
   const clock = await page.evaluate((b) => JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1') || '{}')[b], band);
-  ok(`${band}: level ${n} is a generator 8 board`, clock && clock.key === `N:${band}:${n}`, JSON.stringify(clock));
+  ok(`${band}: level ${n} is a generator ${band === 'expert' ? 9 : 8} board`, clock && clock.key === `${band === 'expert' ? 'N9' : 'N'}:${band}:${n}`, JSON.stringify(clock));
   await shot(`10-${band}-${n}`);
 }
 
