@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1273;
-const CACHE = 'game-hub-v1278';
+const CACHE = 'game-hub-v1279';
 
 const ASSETS = [
   './',
@@ -1030,11 +1030,11 @@ const REST_MANIFEST = {
   './dots-boxes/': 'db0a41b47e',
   './dots-boxes/index.html': 'db0a41b47e',
   './dots-boxes/css/dots-boxes.css': 'f17de2de92',
-  './dots-boxes/js/ui.js': '020a16d556',
+  './dots-boxes/js/ui.js': '476af37c0f',
   './dots-boxes/js/game.js': 'cd0edd18d7',
   './dots-boxes/js/ai.js': '37b84eb6ff',
   './dots-boxes/js/hash.js': '4efa5d47bf',
-  './dots-boxes/js/strings.js': '2a03038732',
+  './dots-boxes/js/strings.js': '589690a969',
   './ball-run/index.html': 'd92adb2397',
   './ball-run/css/ball-run.css': '4e83977223',
   './ball-run/js/ui.js': 'e8f19edb1e',
