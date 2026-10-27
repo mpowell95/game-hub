@@ -234,7 +234,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `firebase-boot.js` | the ONE bootstrap for the `'stats'` Firebase app |
 | `stats-net.js` | mirror to `players/<id>`; username registry; `syncHealth()`; device reset |
 | `players-agg.js` | per-person aggregation of synced devices (no `headToHeadRows`; removed 2026-08-11) |
-| `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game) |
+| `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game; tabs By Player / By Game top 3 / You, last tab remembered) |
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |

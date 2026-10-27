@@ -43,7 +43,8 @@
 //    position, so re-sorting by name cannot renumber the podium.
 //  - #ffce3a marks the selected sort pill, the selected list option and the selected key badge.
 //    Nothing else. It is never first place, never a win, never "good".
-//  - A saved DEFAULT VIEW (sort + category, and By Game's own sort) per device, see VIEW_KEY.
+//  - The tab, both sorts and the category are REMEMBERED per device as they change, see VIEW_KEY
+//    (2026-10-27; the "Make this my default view" button that did it by hand is gone).
 //  - A game board with no difficulty axis gets no difficulty filter. Skeeball gets a MACHINE
 //    filter in its place, which belongs to that visit and is deliberately not persisted.
 
@@ -55,7 +56,7 @@ import { loadProfile } from './profile-store.js';
 import { statsId, holdemBalance, holdemSuspect } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
-  boardRankTier, formatBoardMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
+  boardRankTier, formatBoardMetric, formatTimeMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
 import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
@@ -63,7 +64,7 @@ import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.j
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
-import { makeT } from './i18n.js';
+import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -115,12 +116,15 @@ function saveSort(sort) {
 const VIEW_KEY = 'gamehub.lb.view.v1';
 const VALID_CATS = new Set(['all', '1', '2', '3', '4', 'NT', 'VS']);
 const VALID_GAME_SORTS = new Set(['alpha', 'popular', 'fav']);
+// The TAB is remembered too (2026-10-27, Matt: "whatever tab and sort the person leaves it on is
+// where it opens next time"). A record written before this has no `seg` and opens on By Game.
+const VALID_SEGS = new Set(['players', 'games', 'you']);
 /** Stored cats are strings (JSON has no distinction between 1 and '1'); tiers live in memory as
  *  NUMBERS, because every helper below compares them against `bucketsOf`'s numeric tier. */
 function catFromStored(v) { return v === '1' || v === '2' || v === '3' || v === '4' ? Number(v) : v; }
 function catToStored(v) { return typeof v === 'number' ? String(v) : v; }
 function loadView() {
-  const fallback = { sort: loadSort(), cat: 'all', gameSort: 'alpha' };
+  const fallback = { sort: loadSort(), cat: 'all', gameSort: 'alpha', seg: 'games' };
   try {
     const raw = localStorage.getItem(VIEW_KEY);
     const v = raw ? JSON.parse(raw) : null;
@@ -129,16 +133,19 @@ function loadView() {
       sort: VALID_SORTS.has(v.sort) ? v.sort : fallback.sort,
       cat: VALID_CATS.has(String(v.cat)) ? catFromStored(String(v.cat)) : 'all',
       gameSort: VALID_GAME_SORTS.has(v.gameSort) ? v.gameSort : 'alpha',
+      seg: VALID_SEGS.has(v.seg) ? v.seg : 'games',
     };
   } catch { return fallback; }
 }
 function saveView(view) {
   try {
     localStorage.setItem(VIEW_KEY, JSON.stringify({
-      version: 1, sort: view.sort, cat: catToStored(view.cat), gameSort: view.gameSort, updatedAt: Date.now(),
+      version: 1, sort: view.sort, cat: catToStored(view.cat), gameSort: view.gameSort, seg: view.seg, updatedAt: Date.now(),
     }));
   } catch { /* best-effort; never throw into the caller */ }
 }
+/** Every change the viewer makes is remembered as it happens: tab, both sorts, the category. */
+function persistView() { saveView({ sort: _sort, cat: _cat, gameSort: _gameSort, seg: _seg }); }
 
 // Every game, ALPHABETICAL BY TITLE - the hub launcher's convention (CLAUDE.md, "Adding a game",
 // item 5). Fixed order: a tile never moves between visits, unlike the old plays-sorted tab strip.
@@ -537,7 +544,18 @@ function msBoardHTML(list) {
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', tierPillHTML(h.tier), '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf('minesweeper') }));
-  return msTabsHTML() + cards;
+  // Minesweeper ranks its own way (msAllCmp / msCellCmp), so its gap is read off the same cells.
+  const cellOf = (g) => (tier == null ? msHeadline(g) : { tier, c: msCellAt(g, tier) });
+  const msGap = (me, rec) => {
+    const hm = cellOf(me), hr = cellOf(rec);
+    if (!hr || hr.c.ms == null) return '';
+    if (hm && hm.c.ms != null && hm.tier === hr.tier) {
+      const d = Math.floor(hm.c.ms / 1000) - Math.floor(hr.c.ms / 1000);
+      return d > 0 ? tx('lb_gap', '', { k: 'time', v: `<b>${formatTimeMetric(d * 1000)}</b>`, n: d }) : '';
+    }
+    return hr.tier ? tx('lb_gap', '', { k: 'tier', v: `<b>${formatTimeMetric(hr.c.ms)}</b>`, tier: esc(t(TIER_LABEL_KEY[hr.tier])) }) : '';
+  };
+  return msTabsHTML() + cards + (rows.length ? standLineHTML(rows, rankOf, tiedAt, msGap) : '');
 }
 
 // --- EVERY OTHER PLAIN BOARD, SAME SHAPE (2026-10-15) ---------------------------------------------
@@ -584,7 +602,7 @@ function boardView(list, id) {
     rows.sort((a, b) => cmp(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)) || recent(a, b));
     const unit = id === 'contexto' ? t('lb_unit_ct_medals') : unitTextOf(id, null);
     return {
-      rows, cmp, unit,
+      rows, cmp, unit, gap: true,
       val: (g) => {
         const txt = id === 'holdem' && hbReview(g) ? t('lb_hb_review') : metricText(boardMetricOf(g, id), id);
         return `<span>${esc(txt)}</span>`;
@@ -612,7 +630,7 @@ function boardView(list, id) {
     const played = (g) => t('lb_played_count', { n: skPlaysAt(g, _machine) });
     v = _view === 'high'
       ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played)
-      : simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played);
+      : { ...simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played), gap: true };
   } else if (id === 'holdem') {
     const vtab = (view, label) => `<button type="button" class="lb-pill lb-mstab${(_view || 'bank') === view ? ' is-sel' : ''}" data-lbview="${view}" aria-pressed="${(_view || 'bank') === view}">${esc(label)}</button>`;
     tabs = `<div class="lb-pills lb-mstabs" role="group">${vtab('bank', t('lb_sort_bank'))}${vtab('wins', t('lb_sort_wins'))}</div>`;
@@ -728,7 +746,21 @@ function plainBoardHTML(list, id) {
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
-  return v.tabs + cards;
+  // Only on a view ranked by the board's own number (gameMetricAt), which is what gapText reads.
+  const line = v.gap && v.rows.length
+    ? standLineHTML(v.rows, rankOf, tiedAt, (me, rec) => gapText(me, rec, id, (x) => `<b>${x}</b>`)) : '';
+  return v.tabs + cards + line;
+}
+
+/** ONE LINE UNDER A BOARD (2026-10-27, Matt's mockup 2b): where the viewer stands and what it takes
+ *  to be first, "MattyIce is 3rd. 1:43 faster to take the record." By profile name, never "You"
+ *  (root CLAUDE.md). Nothing when the viewer is not on this board. */
+function standLineHTML(rows, rankOf, tiedAt, gapFn) {
+  const me = rows.find((g) => g.key === _meKey);
+  const rank = me && rankOf[me.key];
+  if (!rank) return '';
+  const gap = rank > 1 ? gapFn(me, rows[0]) : '';
+  return `<p class="lb-note lb-standline">${rankWords('lb_rank_name', rank, tiedAt(me.key), rankName(me))}${gap ? ' ' + gap : ''}</p>`;
 }
 
 function snBestAt(g, tier) {
@@ -1192,17 +1224,16 @@ function optionHTML({ attr, value, keyText, name, count, selected }) {
 }
 
 /** By Player's category filter: the select button, and (when open) all seven options with the
- *  field-wide total beside each, plus the save-as-default row. */
+ *  field-wide total beside each. (The "Make this my default view" row went 2026-10-27: every
+ *  choice is now remembered as it is made, see persistView.) */
 function catControlsHTML(list) {
   const cur = catMeta(_cat);
   const total = (id) => list.reduce((a, g) => a + catValueOf(g, id), 0);
-  const isDefault = _saved.sort === _sort && _saved.cat === _cat;
   const panel = _panel !== 'cat' ? '' : `<div class="lb-panel-list" role="listbox" aria-label="${esc(t('lb_cat_filter_aria'))}">
     ${[CAT_ALL, ...CATS].map((c) => optionHTML({
       attr: 'cat', value: catToStored(c.id), keyText: t(c.keyKey), name: t(c.nameKey),
       count: total(c.id), selected: _cat === c.id,
     })).join('')}
-    <button type="button" class="lb-default${isDefault ? ' is-set' : ''}" data-role="lb-default"${isDefault ? ' disabled' : ''}>${esc(t(isDefault ? 'lb_is_default' : 'lb_make_default'))}</button>
   </div>`;
   return `<div class="lb-ctrls">
     ${sortPillsHTML(SORT_ITEMS_DEFAULT, effectiveSort(null), 'sort')}
@@ -1674,11 +1705,97 @@ function playerListHTML(list) {
   }).join('')}</div>`;
 }
 
-// --- By Game ------------------------------------------------------------------
-// Every game, always, in one of three orders (2026-08-25). A game NOBODY has played still gets a
-// row - it says so in words and sorts to the bottom, rather than dropping off the list, so "22
-// games" always reads as 22 games. The favorites order reads js/favorites.js, the same list the
-// launcher's own star writes, so a game starred on the hub is starred here too.
+// --- one game's standing: who leads, and where everyone is (2026-10-27) ----------------------
+/** Everyone with a number on this game's board, in the board's OWN order (boardMetricCmp, the same
+ *  function that numbers the board's rank badges), with the ranks. By Game's top three and the You
+ *  tab both read this, so #1 here, the "1" on the board and the record on the You tab are the same
+ *  person by construction. */
+function gameStanding(list, id) {
+  const order = boardMetricCmp(id);
+  const rows = list.filter((g) => hasBoardMetric(gameMetricAt(g, id, null), id))
+    .sort((a, b) => order(a, b) || (b.updatedAt || 0) - (a.updatedAt || 0));
+  const { rankOf, tiedAt } = rankMap(rows, () => 0, order);
+  return { rows, rankOf, tiedAt };
+}
+
+/** Which unit family a game's number is in, for the "your best" value and the gap line. Contexto's
+ *  packed medal score has no honest difference to print, so it gets no gap (null). */
+function gapKind(id) {
+  if (id === 'contexto') return null;
+  return ({
+    lb_unit_ms_best: 'time', lb_unit_golf_best: 'golf', lb_unit_meters: 'meters', lb_unit_points: 'points',
+    lb_unit_obstacles: 'obstacles', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank',
+  })[lbUnitKeyOf(id)] || 'wins';
+}
+function numText(n) {
+  try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US'); } catch { return String(n); }
+}
+/** A board number with its short unit ("820 pts", "7:05", "43 long", "3 wins"). Plain text. */
+function youValText(id, v) {
+  const k = gapKind(id);
+  if (v == null || (typeof v === 'number' && Number.isNaN(v))) return '—';
+  if (!k || k === 'time' || k === 'golf') return metricText(v, id);
+  if (k === 'bank') return bankText(v);
+  return tx('lb_yval', numText(v), { k, v: numText(v), n: v });
+}
+/** What it takes to reach #1, in one plain line, or '' when there is no honest number to give.
+ *  `b` wraps the number (the board line bolds it). The gap is read at the RECORD'S tier, because
+ *  difficulty outranks score on every board: a Medium 40 is not "30 ahead" of a Hard 10. When the
+ *  viewer has no score at that tier, the line says what to beat and where instead of a difference. */
+function gapText(me, rec, id, b = (x) => x) {
+  const k = gapKind(id);
+  if (!k || !me || !rec || me.key === rec.key) return '';
+  const tier = boardTierOf(rec, id);
+  const r = gameMetricAt(rec, id, tier);
+  const m = gameMetricAt(me, id, tier);
+  const myTier = boardTierOf(me, id);
+  if (m == null || (tier || 0) !== (myTier || 0)) {
+    if (!tier || (myTier || 0) > tier) return '';
+    return tx('lb_gap', '', { k: 'tier', v: b(esc(youValText(id, r))), tier: esc(t(TIER_LABEL_KEY[tier])) });
+  }
+  let d;
+  let v;
+  if (k === 'time') {
+    d = Math.floor(m / 1000) - Math.floor(r / 1000);
+    v = formatTimeMetric(d * 1000);
+  } else {
+    d = LOWER_IS_BETTER.has(id) ? m - r : r - m;
+    v = k === 'bank' ? bankText(d) : numText(d);
+  }
+  if (!(d > 0)) return '';
+  return tx('lb_gap', '', { k, v: b(v), n: d });
+}
+/** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
+function closeness(me, rec, id) {
+  if (!gapText(me, rec, id)) return -1;
+  const tier = boardTierOf(rec, id);
+  const r = gameMetricAt(rec, id, tier);
+  const m = gameMetricAt(me, id, tier);
+  if (!LOWER_IS_BETTER.has(id)) return r > 0 ? Math.max(0, m) / r : 0;
+  if (r > 0 && m > 0) return r / m;
+  return 1 / (1 + Math.max(0, m - r));   // golf: scores to par can be 0 or below, so no ratio
+}
+/** The rank in words: "You're 3rd" on the You tab, "{name} is 3rd." under a board. */
+function rankWords(key, rank, tie, name) { return tx(key, String(rank), { n: rank, tie, name }); }
+
+/** A rank badge for By Game's top three: the number in a circle, FILLED for first and outlined
+ *  for second and third, so the order reads without colour (Matt is red/green colorblind). */
+function topBadgeHTML(rank, tie) {
+  return `<i class="lb-tb${rank === 1 ? ' is-1' : ''}">${tie ? esc(tieMark()) : ''}${rank}</i>`;
+}
+/** One name in By Game's top three. The viewer's own name is drawn inside an outline, never a
+ *  word: root CLAUDE.md, profile names, never "You", outside the You tab (Matt, 2026-10-27). */
+function topNameHTML(g, rank, tie, first) {
+  const me = g.key === _meKey ? ' is-me' : '';
+  return `<span class="lb-gtop${first ? ' is-first' : ''}">${topBadgeHTML(rank, tie)}<span class="lb-gtop-who${me}">${avatarHTML(g)}<span class="lb-gtop-nm">${rankName(g)}</span></span></span>`;
+}
+
+// --- By Game: the top three in every game (2026-10-27) ------------------------------------------
+// Ana: the list mixed units (points, a time, solved, obstacles, wins, metres), so the numbers on
+// the right could not be compared and read as noise. So: NO NUMBERS on this list, just who is 1st,
+// 2nd and 3rd in each game; the scores are one tap away on the game's own board. Every game, always,
+// in one of three orders. A game nobody has played still gets a card that says so and sorts to the
+// bottom. The favorites order reads js/favorites.js, the launcher's own list.
 function gameListHTML(list) {
   let favs = [];
   try { favs = loadFavorites() || []; } catch { favs = []; }
@@ -1693,12 +1810,7 @@ function gameListHTML(list) {
   // which is untouched. A game released later simply reappears with its whole history intact.
   const rows = gameMetaSorted().filter((meta) => isGameOnLauncher(meta.id)).map((meta) => {
     const plays = list.reduce((a, g) => a + playsAtTier(g, [meta.id], null), 0);
-    // The leader shown here must be the row the board itself puts at #1, so it sorts through the
-    // board's OWN order - the same function that numbers the rank badges.
-    const order = boardMetricCmp(meta.id);
-    const leaders = list.filter((g) => hasBoardMetric(gameMetricAt(g, meta.id, null), meta.id))
-      .sort((a, b) => order(a, b) || (b.updatedAt || 0) - (a.updatedAt || 0));
-    return { meta, plays, lead: leaders.length ? leaders[0] : null, fav: isFav(meta.id) };
+    return { meta, plays, st: gameStanding(list, meta.id), fav: isFav(meta.id) };
   });
   rows.sort((a, b) => {
     // Unplayed games always sink, in every order: they have no leader to rank.
@@ -1707,22 +1819,22 @@ function gameListHTML(list) {
     if (_gameSort === 'fav' && a.fav !== b.fav) return a.fav ? -1 : 1;
     return t(a.meta.labelKey).localeCompare(t(b.meta.labelKey));
   });
-  const cards = rows.map(({ meta, lead, fav }) => {
+  const chevron = '<svg class="lb-gchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
+  const cards = rows.map(({ meta, st, fav }) => {
     const art = GAME_ART[hubIdOf(meta.id)] || '';
-    const body = lead
-      ? `<span class="lb-glead">${avatarHTML(lead)}<span class="lb-glead-nm">${rankName(lead)}</span>${tierMarkHTML(boardTierOf(lead, meta.id))}</span>`
+    const top = st.rows.slice(0, 3);
+    const rankOf = (g) => st.rankOf[g.key];
+    const body = top.length
+      ? topNameHTML(top[0], rankOf(top[0]), st.tiedAt(top[0].key), true)
+        + (top.length > 1 ? `<span class="lb-gtop-rest">${top.slice(1).map((g) => topNameHTML(g, rankOf(g), st.tiedAt(g.key), false)).join('')}</span>` : '')
       : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
-    const metric = lead
-      ? `<span class="lb-gnum"><b>${esc(metricText(boardMetricOf(lead, meta.id), meta.id))}</b><span>${esc(unitTextOf(meta.id, boardMetricOf(lead, meta.id)))}</span></span>`
-      // A dash only: "No games yet" already sits under the title (said twice, it crushed the title).
-      : `<span class="lb-gnum is-empty"><b>&mdash;</b></span>`;
-    return `<button type="button" class="lb-grow${lead ? '' : ' is-empty'}" data-game="${meta.id}">
-      <span class="lb-gart">${art}</span>
-      <span class="lb-gmain">
+    return `<button type="button" class="lb-gcard${top.length ? '' : ' is-empty'}" data-game="${meta.id}">
+      <span class="lb-gcard-head">
+        <span class="lb-gart is-sm">${art}</span>
         <span class="lb-gtitle">${fav ? '<i class="lb-star" aria-hidden="true">★</i>' : ''}<span class="lb-gname">${esc(t(meta.labelKey))}</span></span>
-        ${body}
+        ${chevron}
       </span>
-      ${metric}
+      ${body}
     </button>`;
   });
   if (!cards.length) return emptyState(t('lb_empty_all'));
@@ -1731,7 +1843,69 @@ function gameListHTML(list) {
   // cache-first - and makeT then returns the key itself, so that case shows nothing.)
   const favNote = _gameSort === 'fav' && !rows.some((r) => r.fav) && t('lb_fav_none') !== 'lb_fav_none'
     ? `<p class="lb-note">${esc(t('lb_fav_none'))}</p>` : '';
-  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div>${favNote}${legendHTML()}<div class="lb-glist">${cards.join('')}</div>`;
+  const caption = tx('lb_bygame_note', 'The top 3 players in every game. Tap a game to see their scores.');
+  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div>${favNote}<p class="lb-note">${esc(caption)}</p><div class="lb-glist">${cards.join('')}</div>`;
+}
+
+// --- You: your records, and the ones you are closest to (2026-10-27) ----------------------------
+// Matt: "The You tab is great." Three blocks: the records the viewer holds, every game they have
+// played and do not lead (closest to the record first, with what it takes in one plain line), and
+// the games they have not played yet with that game's record and a Play button. "You" is allowed on
+// THIS tab only (Matt, 2026-10-27); every other screen names people by their profile name.
+// Read-only, like the rest of this file: every number is the board's own, read the board's way.
+function youHTML(list) {
+  const me = list.find((g) => g.key === _meKey);
+  if (!me) return emptyState(tx('lb_you_empty', 'Play a game to see your records here.'));
+  const held = [];
+  const close = [];
+  const fresh = [];
+  let withRecord = 0;
+  for (const meta of gameMetaSorted()) {
+    const id = meta.id;
+    if (!isGameOnLauncher(id)) continue;
+    const st = gameStanding(list, id);
+    const rec = st.rows[0] || null;
+    if (rec) withRecord++;
+    const played = boardPlaysOf(me, id) > 0;
+    const rank = st.rankOf[me.key];
+    if (rank === 1) held.push({ id, meta });
+    else if (played && rec) close.push({ id, meta, rec, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id) });
+    else if (!played && rec) fresh.push({ id, meta, rec });
+  }
+  close.sort((a, b) => b.c - a.c || t(a.meta.labelKey).localeCompare(t(b.meta.labelKey)));
+  let favs = [];
+  try { favs = loadFavorites() || []; } catch { favs = []; }
+  const star = (id) => (favs.includes(hubIdOf(id)) ? '<i class="lb-star" aria-hidden="true">★</i>' : '');
+  const val = (g, id) => {
+    const tier = boardTierOf(g, id);
+    return `${tierMarkHTML(tier)}<span>${esc(youValText(id, boardMetricOf(g, id)))}</span>`;
+  };
+  const hold = tx('lb_you_hold', '', { x: `<b>${esc(tx('lb_n_of_m', `${held.length} of ${withRecord}`, { n: held.length, m: withRecord }))}</b>`, m: withRecord });
+  const head = `<div class="lb-you-head">${avatarHTML(me)}<span class="lb-you-id"><span class="lb-you-nm">${rankName(me)}</span><span class="lb-you-sub">${hold}</span></span></div>`;
+  const heldHTML = held.length
+    ? `<h3 class="lb-yh">${esc(tx('lb_you_hold_h', 'Records you hold'))}</h3><div class="lb-ylist">${held.map(({ id, meta }) =>
+      `<button type="button" class="lb-yrow" data-ygame="${id}">${topBadgeHTML(1, false)}<span class="lb-yrow-nm">${star(id)}${esc(t(meta.labelKey))}</span><span class="lb-yrow-v">${val(me, id)}</span></button>`).join('')}</div>`
+    : '';
+  const closeHTML = close.length
+    ? `<div class="lb-yh-row"><h3 class="lb-yh">${esc(tx('lb_you_close_h', 'Closest to breaking'))}</h3><span class="lb-yh-k">${esc(tx('lb_you_close_k', 'Closest first'))}</span></div><div class="lb-ylist">${close.map(({ id, meta, rec, rank, tie }) => {
+      const gap = gapText(me, rec, id);
+      const chip = rank ? `<span class="lb-ychip">${esc(rankWords('lb_you_rank', rank, tie))}</span>` : '';
+      return `<button type="button" class="lb-ycard" data-ygame="${id}">
+        <span class="lb-ycard-head"><span class="lb-ycard-nm">${star(id)}${esc(t(meta.labelKey))}</span>${chip}</span>
+        <span class="lb-ybox">
+          <span class="lb-ybox-c is-me"><em>${esc(tx('lb_you_best', 'Your best'))}</em><b>${val(me, id)}</b></span>
+          <span class="lb-ybox-c is-rec"><em>${esc(tx('lb_you_record', 'Record'))} · ${avatarHTML(rec)}${rankName(rec)}</em><b>${val(rec, id)}</b></span>
+        </span>
+        ${gap ? `<span class="lb-ygap">${gap}</span>` : ''}
+      </button>`;
+    }).join('')}</div>`
+    : '';
+  const freshHTML = fresh.length
+    ? `<h3 class="lb-yh">${esc(tx('lb_you_new_h', 'Not played yet'))}</h3><div class="lb-ylist">${fresh.map(({ id, meta, rec }) =>
+      `<div class="lb-ynew"><span class="lb-ynew-id"><span class="lb-ycard-nm">${star(id)}${esc(t(meta.labelKey))}</span>`
+      + `<span class="lb-ynew-rec">${tx('lb_you_rec_by', '', { v: esc(youValText(id, boardMetricOf(rec, id))), who: `${avatarHTML(rec)}${rankName(rec)}` })}</span></span>${playBtnHTML(id)}</div>`).join('')}</div>`
+    : '';
+  return head + heldHTML + closeHTML + freshHTML;
 }
 
 // --- game detail (drill-in from By Game) -------------------------------------
@@ -2303,11 +2477,12 @@ function bodyFor(list) {
   if (_game) return gameDetail(list, _game);
   // Each list owns its own control row now (By Game's is three sort pills and no filter), so the
   // shell no longer emits one on their behalf.
+  if (_seg === 'you') return youHTML(list);
   return _seg === 'games' ? gameListHTML(list) : catControlsHTML(list) + legendHTML() + playerListHTML(list);
 }
 
 let _host = null;
-let _seg = 'players';       // 'players' | 'games'
+let _seg = 'players';       // 'players' | 'games' | 'you' - remembered (persistView)
 let _game = null;           // non-null => showing that game's detail board
 let _onPlay = null;         // openLeaderboard({onPlay}): the launcher's own way to open a game (hub id)
 let _canPlay = () => false; // openLeaderboard({canPlay}): is that hub id on this launcher
@@ -2321,9 +2496,8 @@ let _machine = 'all';       // 'all' | a Skeeball machine id - that board's filt
 let _woMode = 'levels';     // Arrow Maze's board: 'levels' | 'rush' (2026-10-16), per visit
 let _woRush = 'easy';       // which Rush version (RUSH_MODES), per visit
 let _sort = 'wins';         // 'alpha' | 'played' | 'wins' (or a game's own metric on a game board) - persisted, see loadView/saveView
-let _gameSort = 'popular';  // 'alpha' | 'popular' | 'fav' - By Game's own order; the leaderboard OPENS on this
+let _gameSort = 'alpha';    // 'alpha' | 'popular' | 'fav' - By Game's own order, remembered (persistView)
 let _boardSort = 'wins';    // a game board's own sort, reset to that board's leftmost pill on every entry
-let _saved = { sort: 'wins', cat: 'all' };   // what "Make this my default view" last stored, for the row's own label
 let _panel = null;          // null | 'cat' | 'machine' - which in-place select panel is open
 let _all = {};
 let _board = null;          // the server-built board ({ list, idsByKey }, stats-net.js watchBoard), when there is one
@@ -2332,7 +2506,7 @@ let _unsub = null;
 let _connected = false;
 let _onLine = null;   // 'online' listener, removed in closeLeaderboard (listeners must balance)
 
-const SEGMENTS = [{ id: 'players', labelKey: 'lb_by_player' }, { id: 'games', labelKey: 'lb_by_game' }];
+const SEGMENTS = [{ id: 'players', labelKey: 'lb_by_player' }, { id: 'games', labelKey: 'lb_by_game' }, { id: 'you', labelKey: 'lb_you_tab' }];
 
 // The segmented highlight follows the CONTENT on screen, not the last segment tapped: a player
 // detail reached from By Game (tap a game, then a player) still shows as "By Player" - `_seg`
@@ -2431,11 +2605,11 @@ function onClick(e) {
   // The sort pills stay in place; the panel options close the panel behind them.
   const pill = e.target.closest('[data-sort],[data-gsort]');
   if (pill) {
-    if (pill.dataset.gsort) { _gameSort = pill.dataset.gsort; saveView({ sort: _sort, cat: _cat, gameSort: _gameSort }); }
+    if (pill.dataset.gsort) { _gameSort = pill.dataset.gsort; persistView(); }
     // On a board this is that board's own sort and nothing else: it is not persisted, and it does
     // not touch the By Player preference the saved default view owns.
     else if (_game) { _boardSort = pill.dataset.sort; }
-    else { _sort = pill.dataset.sort; saveSort(_sort); saveView({ sort: _sort, cat: _cat, gameSort: _gameSort }); }
+    else { _sort = pill.dataset.sort; saveSort(_sort); persistView(); }
     rerender();
     return;
   }
@@ -2451,18 +2625,10 @@ function onClick(e) {
   if (woRushTab) { if (RUSH_MODES.includes(woRushTab.dataset.lbworush)) _woRush = woRushTab.dataset.lbworush; rerender(); return; }
   const opt = e.target.closest('.lb-opt');
   if (opt) {
-    if (opt.dataset.cat !== undefined) _cat = catFromStored(opt.dataset.cat);
+    if (opt.dataset.cat !== undefined) { _cat = catFromStored(opt.dataset.cat); persistView(); }
     else if (opt.dataset.tier !== undefined) _tier = opt.dataset.tier === '' ? null : Number(opt.dataset.tier);
     else if (opt.dataset.machine !== undefined) _machine = opt.dataset.machine;
     _panel = null;
-    rerender();
-    return;
-  }
-  // "Make this my default view": stores the sort + category pair By Player opens on next time.
-  // A preference, one tap to set and one tap to change, so THE LAW rule 2's carve-out applies.
-  if (e.target.closest('[data-role="lb-default"]')) {
-    _saved = { sort: _sort, cat: _cat };
-    saveView({ sort: _sort, cat: _cat, gameSort: _gameSort });
     rerender();
     return;
   }
@@ -2496,7 +2662,7 @@ function onClick(e) {
   if (seg && seg.dataset.seg) {
     const next = seg.dataset.seg;
     if (next === _seg && !_game && !_player) return;
-    _seg = next; _game = null; _player = null; _playerGame = null; _tier = null; _view = ''; _machine = 'all'; rerender();
+    _seg = next; persistView(); _game = null; _player = null; _playerGame = null; _tier = null; _view = ''; _machine = 'all'; rerender();
     return;
   }
   const card = e.target.closest('.lb-pcard[data-pkey]');
@@ -2511,9 +2677,9 @@ function onClick(e) {
   // only one of the two is ever on screen at once, but check player context first to be explicit.
   const gsRow = e.target.closest('.gs-grow[data-game]');
   if (gsRow && _player) { _playerGame = gsRow.dataset.game; rerender(); return; }
-  const row = e.target.closest('.lb-grow');
-  if (row && row.dataset.game) {
-    _game = row.dataset.game;
+  const row = e.target.closest('.lb-grow, .lb-gcard, [data-ygame]');
+  if (row && (row.dataset.game || row.dataset.ygame)) {
+    _game = row.dataset.game || row.dataset.ygame;
     // Always the game's own number - Longest, Points, Wins, whatever that board calls it. See
     // effectiveSort for why this is read off the pill list rather than hardcoded.
     _boardSort = sortItemsFor(_game)[0].sort;
@@ -2540,24 +2706,21 @@ export async function openLeaderboard(opts = {}) {
   ensureCss();
   ensureStatsCss();   // the player detail screen reuses My Stats' gs-* renderers/markup verbatim
   closeLeaderboard();
-  // THE LEADERBOARD OPENS ON BY GAME, MOST PLAYED (2026-09-11, Matt's ask, in those words). Fixed,
-  // not remembered: it is where he wants to land every time, so the stored `gameSort` is no longer
-  // read here. The key still carries it (rule 5 - never repurposed, and the pill still writes it),
-  // it simply no longer decides where an open begins.
-  _seg = 'games';
-  _gameSort = 'popular';
+  // THE LEADERBOARD OPENS WHERE IT WAS LEFT (2026-10-27, Matt, reversing his 2026-09-11 "always By
+  // Game, Most played"): Ana could not tell why the games were in that order. Tab, both sorts and the
+  // category are remembered as they change (persistView); nothing saved yet = By Game, A to Z.
+  const view = loadView();
+  _seg = view.seg;
+  _gameSort = view.gameSort;
   _game = null;
   _entryGame = null;
   _onPlay = opts && typeof opts.onPlay === 'function' ? opts.onPlay : null;
   _canPlay = opts && typeof opts.canPlay === 'function' ? opts.canPlay : () => false;
   _player = null;
   _playerGame = null;
-  // The saved default view (2026-08-25) still owns BY PLAYER's sort + category, which is what it
-  // was for. A board's own sort and filters are per-visit and start clean.
-  const view = loadView();
+  // A board's own sort and filters are per-visit and start clean.
   _sort = view.sort;
   _cat = view.cat;
-  _saved = { sort: view.sort, cat: view.cat };
   _tier = null;
   _view = '';
   _machine = 'all';
@@ -2668,8 +2831,8 @@ function ensureCss() {
     // The values sit inside the hub's existing ones (same bg/surface/ink/muted), so the overlay
     // still reads as part of the app. Dark is a CLASS on <html> (js/theme.js), never a
     // prefers-color-scheme query: the player's explicit choice has to win.
-    '.lb-overlay{--lb-bg:#f4f6fb;--lb-surface:#ffffff;--lb-surface-2:#eef2f8;--lb-ink:#16243a;--lb-muted:#5b6b82;--lb-line:#dde5ef;--lb-accent:#1769d4;--lb-accent-text:#1769d4;--lb-sel:#ffce3a;--lb-sel-ink:#16243a}',
-    ':root.gh-dark .lb-overlay{--lb-bg:#0e1420;--lb-surface:#1b2333;--lb-surface-2:#2b3547;--lb-ink:#e9eef6;--lb-muted:#9db0c9;--lb-line:#33405a;--lb-accent:#1769d4;--lb-accent-text:#6db0fb;--lb-sel:#ffce3a;--lb-sel-ink:#16243a}',
+    '.lb-overlay{--lb-bg:#f4f6fb;--lb-surface:#ffffff;--lb-surface-2:#eef2f8;--lb-ink:#16243a;--lb-muted:#5b6b82;--lb-line:#dde5ef;--lb-accent:#1769d4;--lb-accent-text:#1769d4;--lb-sel:#ffce3a;--lb-sel-ink:#16243a;--lb-gap:#8a5a00}',
+    ':root.gh-dark .lb-overlay{--lb-bg:#0e1420;--lb-surface:#1b2333;--lb-surface-2:#2b3547;--lb-ink:#e9eef6;--lb-muted:#9db0c9;--lb-line:#33405a;--lb-accent:#1769d4;--lb-accent-text:#6db0fb;--lb-sel:#ffce3a;--lb-sel-ink:#16243a;--lb-gap:#ffce3a}',
     // overscroll-behavior:contain stops SCROLL CHAINING. Without it, a flick that reaches the top or
     // bottom of this overlay keeps going and scrolls the hub launcher underneath it - so the board
     // rubber-bands, the page behind moves, and closing the overlay lands somewhere you never chose.
@@ -2719,8 +2882,6 @@ function ensureCss() {
     // The key badge: one or two characters, always beside the full name, filled when selected.
     '.lb-key{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--lb-muted);border:1px solid var(--lb-line);border-radius:3px;padding:1px 4px;background:transparent}',
     '.lb-key.is-sel{color:var(--lb-sel-ink);background:var(--lb-sel);border-color:var(--lb-sel)}',
-    '.lb-default{width:100%;min-height:40px;border:0;cursor:pointer;font-size:12.5px;font-weight:800;background:var(--lb-surface);color:var(--lb-accent-text)}',
-    '.lb-default.is-set{color:var(--lb-muted);cursor:default}',
     // --- the card list ------------------------------------------------------------------------
     '.lb-plist{display:flex;flex-direction:column;gap:8px}',
     // .lb-pcard is a <button> (every card opens the player detail screen) - reset the native
@@ -2952,6 +3113,55 @@ function ensureCss() {
     '@media (max-width:360px){.lb-pcard{padding:12px 10px}.lb-pcard-row{gap:8px}.lb-chip{width:28px;height:28px;font-size:12px}'
       + '.lb-av{width:32px;height:32px;font-size:17px}.lb-pnum b{font-size:20px}.lb-pfoot{padding-left:0}.lb-msgbtn-t{display:none}.lb-msgbtn{padding:0}'
       + '.lb-pill{padding:0 4px;font-size:12px}.lb-board-h{font-size:22px}}',
+    // --- By Game's top three, and the You tab (2026-10-27) ------------------------------------------
+    '.lb-gcard{appearance:none;cursor:pointer;display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;padding:12px;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px;font:inherit;color:inherit;touch-action:manipulation}',
+    '.lb-gcard.is-empty{opacity:.72}',
+    '.lb-gcard-head{display:flex;align-items:center;gap:10px;min-width:0}',
+    '.lb-gcard-head .lb-gtitle{flex:1 1 auto}',
+    '.lb-gart.is-sm{width:38px;height:28px}',
+    '.lb-gchev{flex:none;width:20px;height:20px;color:var(--lb-muted)}',
+    '.lb-gtop{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--lb-muted)}',
+    '.lb-gtop.is-first{padding:7px 10px;border-radius:10px;background:var(--lb-surface-2);font-size:15px;font-weight:800;color:var(--lb-ink)}',
+    '.lb-gtop-rest{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 2px}',
+    '.lb-gtop-who{display:inline-flex;align-items:center;gap:5px;min-width:0;padding:1px 7px 1px 2px;border:1.5px solid transparent;border-radius:999px}',
+    '.lb-gtop-who.is-me{border-color:var(--lb-sel)}',
+    '.lb-gtop .lb-av{width:20px;height:20px;font-size:14px;border:0;background:transparent}',
+    '.lb-gtop.is-first .lb-av{width:24px;height:24px;font-size:17px}',
+    '.lb-gtop-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-tb{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:999px;border:1.5px solid var(--lb-muted);font-style:normal;font-size:12px;font-weight:800;color:var(--lb-muted);font-variant-numeric:tabular-nums}',
+    '.lb-tb.is-1{background:#f5c842;border-color:#f5c842;color:#3a2a00}',
+    '.lb-you-head{display:flex;align-items:center;gap:12px;margin:4px 0 4px}',
+    '.lb-you-head .lb-av{width:52px;height:52px;font-size:28px}',
+    '.lb-you-id{display:flex;flex-direction:column;gap:2px;min-width:0}',
+    '.lb-you-nm{font-size:22px;font-weight:800;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-you-sub{font-size:14px;color:var(--lb-muted)}',
+    '.lb-you-sub b{color:var(--lb-ink)}',
+    '.lb-yh{margin:20px 0 10px;font-size:18px;font-weight:800;color:var(--lb-ink)}',
+    '.lb-yh-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}',
+    '.lb-yh-k{flex:none;font-size:12px;font-weight:700;color:var(--lb-muted)}',
+    '.lb-ylist{display:flex;flex-direction:column;gap:8px}',
+    '.lb-yrow{appearance:none;cursor:pointer;display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 14px;text-align:left;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:12px;font:inherit;color:inherit;touch-action:manipulation}',
+    '.lb-yrow-nm{flex:1 1 auto;min-width:0;font-size:15px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}',
+    '.lb-yrow-v{flex:none;display:inline-flex;align-items:center;gap:5px;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}',
+    '.lb-ycard{appearance:none;cursor:pointer;display:flex;flex-direction:column;gap:10px;width:100%;padding:12px 14px;text-align:left;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px;font:inherit;color:inherit;touch-action:manipulation}',
+    '.lb-ycard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}',
+    '.lb-ycard-nm{font-size:16px;font-weight:800;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.lb-ychip{flex:none;font-size:12px;font-weight:800;padding:3px 8px;border-radius:999px;background:var(--lb-surface-2);color:var(--lb-muted)}',
+    '.lb-ybox{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}',
+    '.lb-ybox-c{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:10px;min-width:0;border:1px solid var(--lb-line)}',
+    '.lb-ybox-c.is-rec{background:var(--lb-surface-2);border-color:var(--lb-surface-2)}',
+    '.lb-ybox-c em{font-style:normal;font-size:12px;font-weight:700;color:var(--lb-muted);display:flex;align-items:center;gap:3px;flex-wrap:wrap;line-height:1.3}',
+    '.lb-ybox-c em .lb-av{width:16px;height:16px;font-size:12px;border:0;background:transparent}',
+    '.lb-ybox-c b,.lb-yrow-v{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}',
+    '.lb-ybox-c b{font-size:20px;font-weight:800;letter-spacing:-.01em;min-width:0}',
+    '.lb-ybox-c b .lb-tiermark,.lb-yrow-v .lb-tiermark{margin:0}',
+    '.lb-ygap{font-size:13px;font-weight:800;color:var(--lb-gap)}',
+    '.lb-ynew{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px}',
+    '.lb-ynew-id{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}',
+    '.lb-ynew-rec{font-size:13px;color:var(--lb-muted);line-height:1.35}',
+    '.lb-ynew-rec .lb-av{display:inline-flex;width:16px;height:16px;font-size:12px;border:0;background:transparent;vertical-align:-3px}',
+    '.lb-standline{margin:12px 0 0}',
+    '.lb-standline b{color:var(--lb-ink)}',
     // --- skeleton + empty -------------------------------------------------------------------------
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--lb-surface-2);vertical-align:middle}',
     '.lb-sk-n{width:14px}', '.lb-sk-w{width:60%}',
