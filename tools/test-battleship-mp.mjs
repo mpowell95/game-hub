@@ -92,6 +92,30 @@ const randomFleet = (size) => stored(F.autoPlace(size, F.shipSetFor(size), rng))
   const one = MP.replay('classic', fa, fb, log.slice(0, firstHit + 1), false);
   ok('replay: a match stored with bonus:false is one shot a turn (the rule travels with the match)',
     firstHit >= 0 && one.ok && one.state.turn === r1.shots[firstHit].seat);
+  // SHOTS A TURN (2026-10-27): a turn is N misses; a hit never uses one up.
+  for (const N of [3, 5]) {
+    let st = MP.replay('classic', fa, fb, [], true, N).state;
+    const occA = new Set(), occB = new Set();
+    for (const [set, f] of [[occA, fa], [occB, fb]]) for (const sh of MP.engineFleet(f, 'classic').ships) for (const [r, c] of sh.cells) set.add(`${r},${c}`);
+    const water = (occ) => { const out = []; for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) if (!occ.has(`${r},${c}`)) out.push([r, c]); return out; };
+    const wa = water(occA), hitB = [...occA][0].split(',').map(Number);
+    const lg = [];
+    // b misses N-1 times: still b's turn, one shot left
+    for (let i = 0; i < N - 1; i++) lg.push({ by: 'b', r: wa[i][0], c: wa[i][1] });
+    let rp = MP.replay('classic', fa, fb, lg, true, N);
+    ok(`${N} a turn: after ${N - 1} misses it is still the shooter's turn, 1 left`, rp.ok && rp.state.turn === 1 && rp.state.chLeft === 1);
+    lg.push({ by: 'b', r: hitB[0], c: hitB[1] });
+    rp = MP.replay('classic', fa, fb, lg, true, N);
+    ok(`${N} a turn: a hit does not use one up`, rp.ok && rp.state.turn === 1 && rp.state.chLeft === 1);
+    lg.push({ by: 'b', r: wa[N][0], c: wa[N][1] });
+    rp = MP.replay('classic', fa, fb, lg, true, N);
+    ok(`${N} a turn: the ${N}th miss passes the turn, with ${N} for the other side`, rp.ok && rp.state.turn === 0 && rp.state.chLeft === N);
+    // the screen's one-shot path agrees with the replay at every step
+    let live = MP.replay('classic', fa, fb, [], true, N).state;
+    for (const e of lg) live = MP.fireShot(live, MP.seatOfSide(e.by), e.r, e.c, N).state;
+    ok(`${N} a turn: fireShot one at a time = the replay`, same(live, rp.state));
+  }
+  ok('shots: only 1, 3 or 5', MP.asShots(3) === 3 && MP.asShots(2) === null && MP.asShots('5') === 5);
   ok('cleanShot: off the board, or not a side, is not a shot', MP.cleanShot({ by: 'a', r: 10, c: 0 }) === null && MP.cleanShot({ by: 'x', r: 0, c: 0 }) === null
     && MP.cleanShot({ by: 'a', r: 7, c: 7 }, 'quick') && MP.cleanShot({ by: 'a', r: 8, c: 0 }, 'quick') === null);
 }
@@ -144,6 +168,7 @@ const B_THEM = { code: 'TQWX7', name: 'Tester B', emoji: '🐼' };
   ok('gate: nobody can challenge a code that is not let in', (await MP.createGame({ them: { code: 'CCCCC', name: 'C' }, fleet: randomFleet('classic') })).reason === 'them-not-approved');
   ok('create: a bad fleet is refused', (await MP.createGame({ them: B_THEM, fleet: randomFleet('classic').slice(1) })).reason === 'bad-fleet');
   ok('create: a bad size is refused', (await MP.createGame({ them: B_THEM, fleet: randomFleet('classic'), size: 'huge' })).reason === 'bad-fleet');
+  ok('create: shots a turn other than 1, 3 or 5 is refused', (await MP.createGame({ them: B_THEM, fleet: randomFleet('classic'), shots: 4 })).reason === 'bad-shots');
   ok('create: you cannot challenge yourself', (await MP.createGame({ them: { code: 'DREG5', name: 'x' }, fleet: randomFleet('classic') })).reason === 'bad-opponent');
 }
 
@@ -182,7 +207,8 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   const st = MP.buildState(r2.game);
   ok('b\'s turn ended on a miss (a hit shoots again)', G.cellAt(st.shots[0], lastB.r, lastB.c) === G.CELL_MISS);
   ok('rows stop saying open; a\'s turn now', !row('TQWX7', id).open && !row('DREG5', id).open && row('DREG5', id).yourTurn === true && row('DREG5', id).lastBy === 'them');
-  const stale = await MP.appendLog(id, 0, [{ by: 'b', r: lastB.r, c: lastB.c }]);
+  const first = r2.game.log[0];
+  const stale = await MP.appendLog(id, 0, [{ by: 'b', r: (first.r + 1) % 10, c: first.c }]);
   ok('a shot built on a stale log is refused, never overwrites', !stale.ok);
   use('A');
   const cancelLate = await MP.cancelGame(id);
@@ -226,6 +252,24 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
     ok(`no head-to-head written by a challenge (phone ${p})`, !loadStats().h2h || !loadStats().h2h.battleship);
     ok(`the result is queued for the "who won" card (phone ${p})`, MP.readUnseen().includes(id));
   }
+}
+
+// A whole match at 3 shots a turn; and a stored match with no `shots` (the first ones) plays 1.
+{
+  use('A');
+  const c = await MP.createGame({ them: B_THEM, fleet: randomFleet('quick'), size: 'quick', shots: 3 });
+  ok('3 a turn: stored on the match', c.ok && getAt(`battleship/games/${c.id}/shots`) === 3 && c.game.shots === 3);
+  use('B'); await MP.placeFleet(c.id, randomFleet('quick'));
+  let g = await MP.readGame(c.id), turns = 0;
+  while (!g.over && turns++ < 200) { const r = await playTurn(c.id, g.turn, 'intermediate'); if (!r.ok) break; use('A'); g = await MP.readGame(c.id); }
+  ok('3 a turn: a whole match to a sunk fleet', g.over && g.over.why === 'sunk');
+  let runs = [], cur = null;
+  for (const e of g.log) { if (!cur || cur.by !== e.by) { cur = { by: e.by, n: 0 }; runs.push(cur); } cur.n++; }
+  ok('3 a turn: every finished turn but the last has at least 3 shots', runs.slice(0, -1).every((x) => x.n >= 3), JSON.stringify(runs.map((x) => x.n)));
+  const raw = clone(getAt(`battleship/games/${c.id}`)); delete raw.shots;
+  ok('a stored match with no `shots` is 1 a turn (the 3-shot log no longer replays as one)', MP.validateGame(raw) === null);
+  const raw4 = clone(getAt(`battleship/games/${c.id}`)); raw4.shots = 4;
+  ok('a stored `shots` other than 1, 3, 5 is refused whole', MP.validateGame(raw4) === null);
 }
 
 // Shot extras: a result counted by the match screen carries shots and hits.

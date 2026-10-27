@@ -9,6 +9,10 @@
 // hidden (the live rooms, js/net.js, still never send a fleet). On shots a turn: "Isn't keep shooting
 // on a hit the standard?" So a HIT SHOOTS AGAIN and a miss passes the turn (`bonus: true` on the
 // match; a match without it would be one shot a turn, so the rule travels with the match).
+// SHOTS A TURN (2026-10-27, Matt: "build the option for multiple shots per turn. 1, 3, or 5. So it
+// doesn't take a month", and yes, "hits add a shot"): `shots` on the match, picked by the challenger.
+// A turn is that many MISSES; a hit never uses one up. A match without the field is 1 (the first
+// matches, made the same day), so nothing already started changes its rule.
 //
 // THE LAW applies. A match is not a player's earned history, but the writes still follow rule 6:
 // every one is VERIFIED by a fresh re-read, and nothing here ever deletes anything.
@@ -151,25 +155,49 @@ export function cleanShot(e, size = 'classic') {
   return { by, r, c };
 }
 
+export const SHOTS = [1, 3, 5];
+export const asShots = (v) => (SHOTS.includes(Number(v)) ? Number(v) : null);
+
+/**
+ * PURE. One shot by `shooter` (seat) at (r, c), with the turn rule of a match that has `perTurn`
+ * shots a turn and hit-shoots-again: the state carries `chLeft`, the misses the shooter still has
+ * this turn. Returns { state, answer }. Both the replay and the match screen (ui.js) go through
+ * this, so the two can never disagree about whose turn it is.
+ */
+export function fireShot(state, shooter, r, c, perTurn = 1) {
+  const n = asShots(perTurn) || 1;
+  const left = state.turn === shooter && Number.isInteger(state.chLeft) ? state.chLeft : n;
+  const res = fireAndResolve(state, 1 - shooter, r, c);
+  let next = res.state;
+  if (!next.over && res.answer.result === 'miss') {
+    next = left > 1 ? { ...next, turn: shooter, chLeft: left - 1 } : { ...next, chLeft: n };
+  } else if (!next.over) {
+    next = { ...next, chLeft: left };
+  }
+  return { state: next, answer: res.answer };
+}
+
 /**
  * PURE. The match after `log` (shots) against the two stored fleets: side a is seat 0, side b seat 1,
  * and B SHOOTS FIRST (see the header). `fleetB` may be null only while the log is empty. Returns
  * { ok, state, shots: [{ seat (the DEFENDER), r, c, result, shipId, sunk, cells }] } or { ok:false }.
  */
-export function replay(size, fleetA, fleetB, log, bonus = true) {
+export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1) {
   const sz = asSize(size);
   const fa = sz && engineFleet(fleetA, sz);
   const fb = sz && (fleetB ? engineFleet(fleetB, sz) : emptyFleet(sz));
   if (!fa || !fb || ((log || []).length && !fleetB)) return { ok: false };
   let s = newGame(boardSizeFor(sz), sz, bonus !== false, 1);
   s = setFleet(setFleet(s, 0, fa), 1, fb);
+  const n = bonus !== false ? (asShots(perTurn) || 1) : 1;
+  s = { ...s, chLeft: n };
   const shots = [];
   for (const e of log || []) {
     const shooter = seatOfSide(e.by);
     if (s.over || s.turn !== shooter) return { ok: false };
     const target = 1 - shooter;
     if (!isShotLegal(s, target, e.r, e.c)) return { ok: false };
-    const res = fireAndResolve(s, target, e.r, e.c);
+    const res = bonus !== false ? fireShot(s, shooter, e.r, e.c, n) : fireAndResolve(s, target, e.r, e.c);
     s = res.state;
     shots.push({ seat: target, r: e.r, c: e.c, result: res.answer.result, shipId: res.answer.shipId, sunk: res.answer.sunk, cells: res.answer.cells });
   }
@@ -178,7 +206,7 @@ export function replay(size, fleetA, fleetB, log, bonus = true) {
 
 /** The engine state after the first `upto` shots. validateGame proved they replay. */
 export function buildState(game, upto = game.log.length) {
-  return replay(game.size, game.a.fleet, game.b.fleet, game.log.slice(0, upto), game.bonus).state;
+  return replay(game.size, game.a.fleet, game.b.fleet, game.log.slice(0, upto), game.bonus, game.shots).state;
 }
 /** Hits landed by `seat` on the other fleet, from the public grid. */
 export function hitsBy(state, seat) {
@@ -201,6 +229,8 @@ export function validateGame(raw) {
   const size = asSize(raw.size);
   if (!size) return null;
   const bonus = raw.bonus !== false;
+  const shots = raw.shots == null ? 1 : asShots(raw.shots);
+  if (!shots) return null;
   const fleetA = cleanFleet(raw.a.fleet, size);
   if (!fleetA) return null;
   const fleetB = raw.b.fleet == null ? null : cleanFleet(raw.b.fleet, size);
@@ -214,7 +244,7 @@ export function validateGame(raw) {
     if (!e) return null;
     log.push(e);
   }
-  const rep = replay(size, fleetA, fleetB, log, bonus);
+  const rep = replay(size, fleetA, fleetB, log, bonus, shots);
   if (!rep.ok) return null;
   const st = rep.state;
   let over = null;
@@ -237,7 +267,7 @@ export function validateGame(raw) {
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   const who = (x, fleet) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂'), fleet });
   return {
-    v: 1, id, size, bonus,
+    v: 1, id, size, bonus, shots,
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -535,7 +565,7 @@ async function writeRows(api, db, game, writer, only = null) {
  * `size` board. The challenger is side 'a'; the other person places theirs and shoots first, so BOTH
  * rows are written here (the challenge reaches them at once). Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, fleet, size = 'classic' }) {
+export async function createGame({ them, fleet, size = 'classic', shots = 1 }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -548,11 +578,13 @@ export async function createGame({ them, fleet, size = 'classic' }) {
   const sz = asSize(size);
   const mine = sz && cleanFleet(fleet, sz);
   if (!mine) return fail('bad-fleet');
+  const perTurn = asShots(shots);
+  if (!perTurn) return fail('bad-shots');
   const label = meLabel();
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, size: sz, bonus: true, lapse: true, by: me, created: now, updated: now,
+    v: 1, id, size: sz, bonus: true, shots: perTurn, lapse: true, by: me, created: now, updated: now,
     a: { code: me, name: label.name, emoji: label.emoji, fleet: mine },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -650,7 +682,7 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no shot can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
-    const rep = replay(fresh.size, fresh.a.fleet, fresh.b.fleet, fresh.log.concat(todo), fresh.bonus);
+    const rep = replay(fresh.size, fresh.a.fleet, fresh.b.fleet, fresh.log.concat(todo), fresh.bonus, fresh.shots);
     if (!rep.ok) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };

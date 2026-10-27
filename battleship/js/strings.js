@@ -165,7 +165,9 @@ export const STRINGS = {
     ch_e_expired: 'This challenge expired.',
     ch_e_dev: 'Blocked on a test server.',
     ch_e_failed: 'Something went wrong. Try again.',
-    help_rule_ch: 'Challenges: a hit fires again.',
+    help_rule_ch: 'Challenges: 1, 3 or 5 shots a turn. A hit gives one more.',
+    chip_ch_shots: 'Shots',
+    shots_left: '{n} shots left',
   },
   es: {
     title: 'Hundir la Flota',
@@ -316,7 +318,9 @@ export const STRINGS = {
     ch_e_expired: 'Este reto caducó.',
     ch_e_dev: 'Bloqueado en un servidor de pruebas.',
     ch_e_failed: 'Algo salió mal. Inténtalo otra vez.',
-    help_rule_ch: 'Retos: un acierto dispara otra vez.',
+    help_rule_ch: 'Retos: 1, 3 o 5 disparos por turno. Un acierto da uno más.',
+    chip_ch_shots: 'Disparos',
+    shots_left: 'Quedan {n} disparos',
   },
 };
 
