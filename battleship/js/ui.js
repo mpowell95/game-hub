@@ -51,6 +51,16 @@ const t = makeT(STRINGS);
 // It was 340ms and Matt could not see the ball move at all -- across a whole phone screen that is
 // a blink. At 850ms the shot is something you actually watch cross the water.
 const FLY_MS = 850;
+// A volley's balls leave the barrel this far apart (a salvo challenge fires up to five at once), and
+// the first one leaves LAUNCH_MS after the shot is taken: the time the barrel needs to swing onto
+// its new target. Every impact is timed off these (`_lateMs`).
+const STAGGER_MS = 150;
+const LAUNCH_MS = 260;
+const RETICLE_SVG = `<svg class="bs-reticle-svg" viewBox="0 0 44 44" focusable="false">
+  <circle class="bs-reticle-ring" cx="22" cy="22" r="11"/>
+  <line class="bs-reticle-cross" x1="22" y1="2" x2="22" y2="42"/>
+  <line class="bs-reticle-cross" x1="2" y1="22" x2="42" y2="22"/>
+</svg>`;
 const SETTINGS_KEY = 'gamehub.battleship.v1';
 const SAVE_KEY = 'gamehub.battleship.save.v1';
 const MP_SAVE_KEY = 'gamehub.battleship.mp.v1';
@@ -187,9 +197,13 @@ class BattleshipUI {
     this._bannerTimer = null;
     this._mpRestoreTimer = null;  // see _tryRestoreMP's watchdog
     this._statsCommitted = false;
-    this._lastShot = null;     // { seat, r, c, result, sunk, cells } -- the one cell that gets an entrance animation
+    this._lastShot = null;     // { seat, r, c, result, sunk, cells }: the last shot of `_volley`
+    this._volley = [];         // the latest volley: the shots that land together (see _setVolley)
+    this._volleyKey = 0;       // bumped per volley; `_fxPlayed` holds the one already thrown
+    this._fxPlayed = 0;
+    this._fxTimers = [];       // the volley's own timers (balls, recoil, shake); see _clearFx
     this._sunkBanner = '';
-    this._aimCell = null;   // the square the crosshair is parked on, awaiting FIRE
+    this._aims = [];        // the squares aimed at, awaiting FIRE (more than one in a salvo challenge)
     this._sunkShips = {};      // seat -> shipId -> {id,len,r,c,dir}, reconstructed from revealed cells (see _recordSunkShipGeometry)
     this._sinkPlayed = new Set(); // "seat:shipId" already played its one-shot sink animation (see _shouldPlaySink)
 
@@ -205,7 +219,7 @@ class BattleshipUI {
     this._soloStarterSeat = 0;
     this._botFleet = null;        // screen 3: the bot's fleet, built before the battle starts
     this._botPlaceTimer = null;
-    this._cannonPlayed = null;    // "seat:r:c" whose recoil has already played (see _resolveCannons)
+    this._cannonDeg = {};         // where each gun was last left pointing, so it never swings round from north
     this._aimBySide = { mine: null, theirs: null }; // where each cannon is left pointing
     this._botAiming = false;      // the bot has the gun up and is choosing a cell
     this._fxPending = null;       // a shot whose cannonball still has to be thrown this render
@@ -254,6 +268,8 @@ class BattleshipUI {
     if (this._bannerTimer) { clearTimeout(this._bannerTimer); this._bannerTimer = null; }
     if (this._botPlaceTimer) { clearTimeout(this._botPlaceTimer); this._botPlaceTimer = null; }
     if (this._endTimer) { clearTimeout(this._endTimer); this._endTimer = null; }
+    for (const id of this._fxTimers || []) clearTimeout(id);
+    this._fxTimers = [];
     if (this._mpRestoreTimer) { clearTimeout(this._mpRestoreTimer); this._mpRestoreTimer = null; }
     // Same reasoning as every other MP game: destroy() runs for any hub teardown (including just
     // navigating back), so a live room is preserved for the 30-minute rejoin window. A hosted room
@@ -400,11 +416,10 @@ class BattleshipUI {
     this._statsCommitted = false;
     this.state = saved.state;
     this.view = 'battle';
-    this._aimCell = null;
-    this._lastShot = null;
+    this._aims = [];
+    this._setVolley([]);
     this._sunkShips = {};
     this._sinkPlayed = new Set();
-    this._cannonPlayed = null;
     this._aimBySide = { mine: null, theirs: null };
     this._botAiming = false;
     this._fxPending = null;
@@ -491,7 +506,7 @@ class BattleshipUI {
     this.state = null;
     this._botFleet = null;
     this._stopGameTimers();
-    this._aimCell = null;
+    this._aims = [];
     const id = this._identity();
     const s = this._setup;
     const stats = this._statsLine();
@@ -608,6 +623,7 @@ class BattleshipUI {
     this._botAiming = false;
     this.busy = false;
     this._armed = null;
+    this._clearFx();
   }
 
   _resolveStarter() {
@@ -632,7 +648,7 @@ class BattleshipUI {
     clearGame();
     this._stopGameTimers();
     this.state = null;
-    this._aimCell = null;
+    this._aims = [];
     this._statsCommitted = false;
     this._newPlacement(this._setup.size);
     this.view = 'placement';
@@ -641,15 +657,21 @@ class BattleshipUI {
 
   // --- placement screen --------------------------------------------------------------------------
 
+  /** THE FLEET STARTS ON THE BOARD (2026-10-27). Matt: "Placing ships is weird and awkward." It
+   *  started in a tray of thumbnail silhouettes, each to be dragged on one at a time. Now every ship
+   *  is already placed at random: SAVE is there at once, a ship is dragged to move it and tapped to
+   *  turn it, the dice deals a new layout and the bin empties the board into the tray. */
   _newPlacement(sizeKey) {
     this._placeSizeKey = sizeKey;
     this._placeShipSet = shipSetFor(sizeKey);
-    this._placeFleet = emptyFleet(sizeKey);
+    const rng = mulberry32((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
+    this._placeFleet = autoPlace(sizeKey, this._placeShipSet, rng) || emptyFleet(sizeKey);
     this._placeDir = {};
-    this._placeSelected = this._placeShipSet[0].id;
+    const first = this._placeShipSet.find((d) => !this._placeFleet.ships.some((sh) => sh.id === d.id));
+    this._placeSelected = first ? first.id : null;
     this._placePreview = null;
     this._placeInvalid = null;
-    this._dragging = null;
+    this._endDrag();
   }
 
   _placementLegalAt(shipId, r, c, dir) {
@@ -749,9 +771,8 @@ class BattleshipUI {
     this.state = s;
     this.view = 'battle';
     this._statsCommitted = false;
-    this._aimCell = null;
-    this._lastShot = null;
-    this._cannonPlayed = null;
+    this._aims = [];
+    this._setVolley([]);
     this._aimBySide = { mine: null, theirs: null };
     this._botAiming = false;
     this._fxPending = null;
@@ -938,6 +959,8 @@ class BattleshipUI {
     const remaining = trayDefs.length;
     const justRotated = this._justRotatedShip;
     this._justRotatedShip = null;
+    // the ship in your hand is in neither place: not on the board and not in the tray
+    const held = this._dragging && this._dragging.lifted ? this._dragging.shipId : null;
 
     // THE TRAY IS ONE FIXED-HEIGHT ROW AND IT NEVER REFLOWS. Matt, 2026-08-11: "It moves around if
     // you drag your boats while placing them." It did, and the tray was why: five named chips with
@@ -952,14 +975,13 @@ class BattleshipUI {
     // the natural place to grab a ship -- and `onPointerDown` returns early on it, so a drag begun
     // there did nothing at all. Rotation is now the same gesture a placed ship already used: tap
     // the ship. Tap an unselected chip to select it, tap it again to rotate.
-    const tray = trayDefs.map((def) => {
-      const dir = this._placeDir[def.id] || 'h';
+    const tray = trayDefs.filter((def) => def.id !== held).map((def) => {
       const label = t(SHIP_LABEL_KEY[def.id]);
       // Sized by FLEX, proportional to the ship's length, never a pixel width: five chips at a fixed
       // px-per-cell overflowed a 390px phone and the longest ship was silently clipped by the row's
       // own `overflow: hidden`. Flex-basis 0 with grow = len means the row always fits exactly,
       // whatever the board size or the screen, and the ships stay in correct relative proportion.
-      return `<div class="bs-trayship ${this._placeSelected === def.id ? 'is-selected' : ''} ${dir === 'v' ? 'is-vert' : ''} ${justRotated === def.id ? 'is-spinning' : ''}"
+      return `<div class="bs-trayship ${this._placeSelected === def.id ? 'is-selected' : ''}"
           style="flex-grow:${def.len}" data-role="ship-chip" data-ship="${def.id}" role="button" tabindex="0"
           aria-label="${esc(label)}" title="${esc(label)}">
         <span class="bs-trayship-art">${shipArtHtml(def.id, def.len)}</span>
@@ -1014,7 +1036,8 @@ class BattleshipUI {
 
     // A placed ship is a real sprite you can pick straight off the board: drag to move, tap to
     // rotate in place.
-    const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship, { draggable: true })).join('');
+    const placedSprites = this._placeFleet.ships.map((ship) => this._shipSpriteHtml(ship, { draggable: true })
+      .replace('class="bs-ship-sprite', `class="bs-ship-sprite${justRotated === ship.id ? ' is-turned' : ''}`)).join('');
     // The floating corner rotate arrows are gone with the tray's rotate buttons, for the same
     // reason: they are one more control sitting on top of the thing you are trying to drag, and
     // tapping the ship itself has always rotated it (onPointerUp's `origin` branch). The keyboard
@@ -1036,7 +1059,7 @@ class BattleshipUI {
             <button type="button" class="bs-iconbtn" data-action="exit-placement" aria-label="${esc(t('exit'))}" title="${esc(t('exit'))}">${ICON_CLOSE}</button>
             <button type="button" class="bs-iconbtn" data-action="clear-fleet" aria-label="${esc(t('clear_fleet'))}" title="${esc(t('clear_fleet'))}">${ICON_TRASH}</button>
             <button type="button" class="bs-iconbtn bs-iconbtn-random" data-action="auto-place" aria-label="${esc(t('random'))}" title="${esc(t('random'))}">${DICE_ICON}</button>
-            ${remaining === 0
+            ${remaining === 0 && !held
               ? `<button type="button" class="bs-pill bs-pill-save" data-action="placement-ready" aria-label="${esc(t('save'))}">${BOLT_ICON}${esc(t('save'))}</button>`
               : ''}
             <button type="button" class="bs-iconbtn" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
@@ -1106,32 +1129,54 @@ class BattleshipUI {
 
   _aiThinkMs() { return reducedMotion() ? 120 : 300 + Math.random() * 300; }
 
-  /** How long a just-rendered shot's own ordnance animation needs before it's safe to wipe the
-   *  board with the NEXT re-render -- battleship-redesign-spec bug 3: `_aiThinkMs()` alone
-   *  (300-600ms) is far shorter than the ~1.15-2.05s travel/impact/sink sequence in
-   *  battleship.css, so the bot's re-render was cutting the player's own shot off mid-flight.
-   *  Numbers track (not duplicate exactly, just bound) the CSS keyframe delays/durations: travel
-   *  ends .36s in, impact settle by ~.7-1.1s, the sink reveal (`bs-sink-reveal`) adds another .9s
-   *  on top. Reduced motion strips the animation to an instant state change, so it only needs
-   *  enough time to be legible, not to let anything play out. */
-  _shotSettleMs(shot) {
-    if (!shot) return 0;
-    if (reducedMotion()) return 150;
-    // + FLY_MS: the ball's time in the air happens BEFORE the impact, and the impact's own
-    // animations are held back by the same amount (`--bs-fly`), so the whole sequence is that
-    // much longer than the impact alone.
-    return FLY_MS + (shot.result === 'hit' ? 1150 : 1100) + (shot.sunk ? 900 : 0);
+  // --- THE SHOT, ONCE (rebuilt 2026-10-27) ---------------------------------------------------------
+  // Matt: "The animations are all weird and messed up." They were, for one reason underneath all of
+  // it: renderBattle rebuilt the whole battle screen from a string on every state change, every
+  // timer and every banner, so anything that animates on arrival (a splash, a peg, the reticle, the
+  // cannon swinging to its target) played again on every rebuild, and the board washes snapped
+  // instead of fading because their elements were new each time. The screen is now built ONCE per
+  // battle and PATCHED: a cell, sprite, cannon or banner is only replaced when what it shows
+  // changes, so an effect plays exactly once. The ball, its reticle, the recoil and the shake are
+  // thrown imperatively by `_playVolleyFx` into the `.bs-fx` overlay, which no render touches.
+  //
+  // A VOLLEY is the shots that land together: one shot everywhere except a salvo challenge, where it
+  // is up to five (mp.js, "SALVOS"). `_volley` is the latest one; `_lastShot` its last shot (the
+  // live-room code reads that). Shot i leaves the barrel at LAUNCH_MS + i * STAGGER_MS and lands
+  // FLY_MS later (`_lateMs`); every impact, the banner and the settle are timed off that.
+
+  _setVolley(shots) {
+    this._volley = (shots || []).filter(Boolean);
+    this._lastShot = this._volley.length ? this._volley[this._volley.length - 1] : null;
+    this._volleyKey = (this._volleyKey | 0) + 1;
   }
 
-  /** Renders the just-applied shot, then holds `busy` (which gates `fireAt`/the fire buttons)
-   *  until that shot's own animation has actually had time to play, instead of flipping back to
-   *  "your turn" the instant state updates. Shared by both solo branches below so a shot's
-   *  animation is respected whether it was the player's own bonus-chain continuation or the bot's
-   *  reply passing the turn back. */
+  /** Where (seat, r, c) sits in the latest volley, or -1. `seat` is the board shot at. */
+  _volleyIdx(seat, r, c) {
+    const v = this._volley || [];
+    for (let i = 0; i < v.length; i++) if (v[i].seat === seat && v[i].r === r && v[i].c === c) return i;
+    return -1;
+  }
+
+  /** When shot i of the volley lands, in ms from the render that showed it. */
+  _lateMs(i) { return reducedMotion() ? 0 : LAUNCH_MS + FLY_MS + Math.max(0, i) * STAGGER_MS; }
+
+  /** How long a just-rendered volley needs before the next beat (the bot's reply, the next queued
+   *  challenge volley, the end card): the last ball's flight plus the impact and, for a sink, the
+   *  reveal. Takes a volley (array) or one shot. Reduced motion only needs it to be legible. */
+  _shotSettleMs(volley) {
+    const v = Array.isArray(volley) ? volley : volley ? [volley] : [];
+    if (!v.length) return 0;
+    if (reducedMotion()) return 150;
+    const hit = v.some((x) => x.result === 'hit'), sunk = v.some((x) => x.sunk);
+    return this._lateMs(v.length - 1) + (hit ? 950 : 800) + (sunk ? 700 : 0);
+  }
+
+  /** Renders the just-applied volley, then holds `busy` (which gates aiming and FIRE) until it has
+   *  played out. */
   _settleThenIdle() {
     this.busy = true;
     this.renderBattle();
-    const ms = this._shotSettleMs(this._lastShot);
+    const ms = this._shotSettleMs(this._volley);
     if (ms <= 0) { this.busy = false; this.renderBattle(); return; }
     this._settleTimer = setTimeout(() => {
       this._settleTimer = null;
@@ -1152,7 +1197,7 @@ class BattleshipUI {
     // reconstructed geometry from a previous game in a rematch series without needing to touch the
     // MP methods that start one (root CLAUDE.md polish pass: no `_mp*` method edited here).
     if (this.state.shotCount[0] === 0 && this.state.shotCount[1] === 0) {
-      this._sunkShips = {}; this._sinkPlayed = new Set(); this._cannonPlayed = null;
+      this._sunkShips = {}; this._sinkPlayed = new Set();
       this._aimBySide = { mine: null, theirs: null };
     }
     if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
@@ -1169,8 +1214,8 @@ class BattleshipUI {
       return;
     }
     if (this.ch) {
-      // A challenge: let the shot that just landed play out, then show the next of the other
-      // person's shots (if any are queued). Nothing here ever plays for them.
+      // A challenge: let the volley that just landed play out, then show the next of the other
+      // person's volleys (if any are queued). Nothing here ever plays for them.
       this.busy = true;
       this.renderBattle();
       if (this._chTimer) clearTimeout(this._chTimer);
@@ -1180,7 +1225,7 @@ class BattleshipUI {
         this.busy = false;
         this.renderBattle();
         this._chNext();
-      }, Math.max(0, this._shotSettleMs(this._lastShot)));
+      }, Math.max(0, this._shotSettleMs(this._volley)));
       return;
     }
     if (this.state.turn === this._remoteSeat()) {
@@ -1191,7 +1236,7 @@ class BattleshipUI {
       // finishing its shot. Only THEN does the bot's cannon come up on its own water wearing the
       // "Bot thinking" pill, and it fires a think-beat later. Firing straight out of one timer
       // meant the bot's gun never appeared before the shot it fired.
-      const settle = this._shotSettleMs(this._lastShot);
+      const settle = this._shotSettleMs(this._volley);
       const fire = () => {
         this.aiTimer = null;
         if (this._dead || !this.state || this.state.over) return;
@@ -1200,7 +1245,7 @@ class BattleshipUI {
         if (!shot) return;
         const res = fireAndResolve(this.state, this._localSeat(), shot[0], shot[1]);
         this.state = res.state;
-        this._lastShot = { seat: this._localSeat(), r: shot[0], c: shot[1], result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
+        this._setVolley([{ seat: this._localSeat(), r: shot[0], c: shot[1], result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells }]);
         this._maybeShowSunkBanner(res.answer, this._localSeat());
         this._afterStateChange();
       };
@@ -1216,49 +1261,42 @@ class BattleshipUI {
     }
   }
 
-  /** EVERY SHOT SAYS WHAT IT DID. Matt, 2026-08-11: "there's no 'hit' or 'miss'."
-   *
-   *  It used to announce only a SINK, and only as a picture. That was a text cut taken too far: a
-   *  hit and a miss both left nothing but a small mark on a board that was being dimmed at the same
-   *  moment, so the single most important question in the game -- did that shot do anything? -- had
-   *  no answer on screen. Every resolved shot now raises a banner: MISS, HIT!, or SUNK with the
-   *  ship's own silhouette struck through. Words here are the point, not clutter.
-   *
-   *  `seat` is the DEFENDER, which is what decides whose news this is: your hit on them is good
-   *  news, their hit on you is not, and the banner is coloured accordingly. */
-  _maybeShowSunkBanner(answer, seat) {
-    if (!answer || !answer.result) return;
-    if (answer.sunk && answer.shipId) this._recordSunkShipGeometry(answer);
-    // `seat` is the DEFENDER, so a defender who is NOT me means I scored this. Two different things
-    // key off that and they point opposite ways, which is why they are separate fields: the
-    // BANNER's colour is whose good news it is (mine when I scored), while a sunk ship is drawn in
-    // its OWNER's fleet colour (theirs when I sank it).
+  /** EVERY SHOT SAYS WHAT IT DID (Matt, 2026-08-11: "there's no 'hit' or 'miss'"). One banner per
+   *  volley: SUNK with the ship(s) struck through if any sank, else HIT! (x2 for two), else MISS.
+   *  It sits over the board that was SHOT AT (it used to sit over the enemy board whoever fired, so
+   *  the bot's MISS covered the bot's own gun), and lands with the last ball. `seat` is the
+   *  DEFENDER: the banner's colour is whose good news it is, a sunk ship is drawn in its OWNER's. */
+  _showResultBanner(answers, seat) {
+    const list = (answers || []).filter((a) => a && a.result);
+    if (!list.length) return;
+    for (const a of list) if (a.sunk && a.shipId) this._recordSunkShipGeometry(a);
     const iScored = seat != null && seat !== this._localSeat();
-    const def = answer.shipId ? (this._shipSetForState() || []).find((d) => d.id === answer.shipId) : null;
-    if (answer.sunk && answer.shipId) {
-      this._sunkBanner = {
-        kind: 'sunk',
-        word: t('res_sunk'),
-        html: shipArtHtml(answer.shipId, def ? def.len : 3),
-        len: def ? def.len : 3,
-        mine: iScored,
-        shipTheirs: iScored,
-        label: t('sunk_banner', { ship: t(SHIP_LABEL_KEY[answer.shipId] || answer.shipId) }),
-      };
+    const set = this._shipSetForState() || [];
+    const sunk = list.filter((a) => a.sunk && a.shipId);
+    const hits = list.filter((a) => a.result === 'hit').length;
+    const base = { id: (this._bannerId = (this._bannerId | 0) + 1), mine: iScored, shipTheirs: iScored,
+      board: seat === this._localSeat() ? 'own' : 'enemy', delay: this._lateMs(list.length - 1) };
+    if (sunk.length) {
+      const art = sunk.map((a) => {
+        const def = set.find((d) => d.id === a.shipId);
+        const len = def ? def.len : 3;
+        return `<span class="bs-sunk-banner-art" style="width:${len * 22}px">${shipArtHtml(a.shipId, len)}</span>`;
+      }).join('');
+      this._sunkBanner = { ...base, kind: 'sunk', word: t('res_sunk'), html: art,
+        label: sunk.map((a) => t('sunk_banner', { ship: t(SHIP_LABEL_KEY[a.shipId] || a.shipId) })).join(' ') };
     } else {
-      const hit = answer.result === 'hit';
-      this._sunkBanner = {
-        kind: hit ? 'hit' : 'miss',
-        word: hit ? t('res_hit') : t('res_miss'),
-        html: '', len: 0, mine: iScored, shipTheirs: iScored,
-        label: hit ? t('res_hit') : t('res_miss'),
-      };
+      const hit = hits > 0;
+      const word = hit ? `${t('res_hit')}${hits > 1 ? ` ×${hits}` : ''}` : t('res_miss');
+      this._sunkBanner = { ...base, kind: hit ? 'hit' : 'miss', word, html: '', label: word };
     }
     if (this._bannerTimer) clearTimeout(this._bannerTimer);
-    // Held back by the shell's flight time: the news lands with the ball, not before it leaves.
-    const wait = (reducedMotion() ? 0 : FLY_MS) + (this._sunkBanner.kind === 'sunk' ? 1700 : 1150);
+    // Down as the volley's settle ends (`_shotSettleMs`), never across into the next turn.
+    const wait = reducedMotion() ? 900 : this._sunkBanner.delay + (hits ? 950 : 800) + (sunk.length ? 700 : 0) - 120;
     this._bannerTimer = setTimeout(() => { this._sunkBanner = ''; this._bannerTimer = null; if (!this._dead && this.view === 'battle') this.renderBattle(); }, wait);
   }
+
+  /** One shot's banner (solo, the live rooms). */
+  _maybeShowSunkBanner(answer, seat) { this._showResultBanner([answer], seat); }
 
   /** Reconstructs a just-sunk ship's board position purely from its own already-public revealed
    *  cells (`answer.cells`), for the enemy board's visual reveal sprite -- never new hidden
@@ -1294,18 +1332,54 @@ class BattleshipUI {
     if (this.ch) { this._chFireAt(r, c); return; }
     const res = fireAndResolve(this.state, target, r, c);
     this.state = res.state;
-    this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
+    this._setVolley([{ seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells }]);
     this._maybeShowSunkBanner(res.answer, target);
     this._afterStateChange();
   }
 
-  /** Shoot at whatever the crosshair is parked on. The aim is cleared FIRST so the confirm button
-   *  cannot be double-fired while the shot is resolving. */
+  /** Is this a SALVO challenge (pick N squares, fire them together)? Old challenges, the bot and the
+   *  live rooms are one aim at a time. */
+  _isSalvo() { return !!(this.ch && this.ch.game && this.ch.game.salvo === true); }
+
+  /** How many squares can be aimed at before FIRE: the volley owed in a salvo match, else one. */
+  _aimCap() {
+    if (!this._isSalvo() || !this.state) return 1;
+    return CH.volleyLeft(this.state, this._localSeat(), this.ch.game.shots);
+  }
+
+  /** A tap on an enemy square while it is your turn. One aim: tap to aim, tap it again (or FIRE) to
+   *  shoot. A salvo: tap to add a square, tap an aimed one to take it back; with every square
+   *  chosen, a new tap moves the last one. FIRE shows once the volley is full. */
+  _aimAt(r, c) {
+    if (this.busy || !this._isMyTurn() || !isShotLegal(this.state, this._remoteSeat(), r, c)) return;
+    const cap = this._aimCap();
+    const i = this._aims.findIndex((a) => a.r === r && a.c === c);
+    if (cap <= 1) {
+      if (i >= 0) { this._confirmFire(); return; }
+      this._aims = [{ r, c }];
+    } else if (i >= 0) {
+      this._aims = this._aims.filter((_, k) => k !== i);
+    } else if (this._aims.length < cap) {
+      this._aims = this._aims.concat([{ r, c }]);
+    } else {
+      this._aims = this._aims.slice(0, cap - 1).concat([{ r, c }]);
+    }
+    this.renderBattle();
+  }
+
+  /** Shoot at whatever is aimed. The aims are cleared FIRST so FIRE cannot be double-fired while the
+   *  volley is resolving. */
   _confirmFire() {
-    const aim = this._aimCell;
-    if (!aim || this.busy || !this._isMyTurn()) return;
-    this._aimCell = null;
-    this.fireAt(aim.r, aim.c);
+    const aims = this._aims;
+    if (!aims.length || this.busy || !this._isMyTurn()) return;
+    if (this._isSalvo()) {
+      if (aims.length < this._aimCap()) return;
+      this._aims = [];
+      this._chFireVolley(aims);
+      return;
+    }
+    this._aims = [];
+    this.fireAt(aims[0].r, aims[0].c);
   }
 
   _statusText() {
@@ -1327,25 +1401,17 @@ class BattleshipUI {
     return t('opp_turn', { opp: id.oppName });
   }
 
-  /** The battle screen's turn indicator, WITHOUT WORDS. Matt, 2026-08-11: "There's way too much
-   *  text." The whole sentence this replaced ("Your turn: fire!", "Incoming!", "Bot thinking",
-   *  "Hit! Fire again.") said one thing: which board is about to be shot at. So that is what it
-   *  draws -- the shooter's own avatar, and a chevron pointing at the board taking the shot. Up is
-   *  enemy waters, down is your own deck; the same geometry the whole screen is built on.
-   *
-   *  `_statusText()` is NOT deleted: it still feeds the screen-reader live region below, so nothing
-   *  was actually taken away from anyone who needs the sentence.
-   *
-   *  MP status messages (connection error, resyncing, opponent disconnected) deliberately stay as
-   *  WORDS -- they are failures, not instructions, and a symbol for "we lost sync" teaches nobody
-   *  anything. They render as a pill over the bar. */
-  _turnBarHtml() {
+  /** The battle screen's turn indicator: a full-width bar in the SHOOTER's colour carrying their
+   *  name and a chevron at the board about to be hit (up = enemy waters, down = your deck). Matt,
+   *  2026-08-11: "it's not clear whose turn it is." `_statusText()` still feeds the screen-reader
+   *  live region inside it. MP failures stay WORDS, as a pill over the bar. Returns the bar's
+   *  class, direction and inner markup: the bar itself is never rebuilt, so its colour FADES. */
+  _turnBarParts() {
     const s = this.state, id = this._identity();
     const mine = this._cannons && this._cannons.mine;
     const theirs = this._cannons && this._cannons.theirs;
     // Who is SHOOTING, which is not the same as whose turn it is: while your own shell is still in
-    // the air the turn has already passed. The cannon on screen is the authority (same source the
-    // board wash uses), falling back to the turn when no gun is up.
+    // the air the turn has already passed. The cannon on screen is the authority.
     const shootingMine = mine ? true : theirs ? false : s.turn === this._localSeat();
     const face = s.over
       ? (s.winner === this._localSeat() ? id.humanEmoji : id.oppEmoji)
@@ -1357,26 +1423,31 @@ class BattleshipUI {
           stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>`;
     const err = this.mp && this._mpStatusMsg
       ? `<span class="bs-turn-msg">${esc(t(this._mpStatusMsg))}</span>` : '';
-    // WHOSE TURN, AT A GLANCE. The first cut of this bar was a small emoji and a small chevron on
-    // the deck colour, and Matt's verdict was "it's not clear whose turn it is" -- correct: two
-    // 19px marks on a busy screen are not an announcement. It is a full-width coloured bar now,
-    // YOUR colour when you are shooting and THEIRS when they are, carrying the name of whoever is
-    // up. That is a deliberate step back from the wordless pass: "no word INSTRUCTIONS during the
-    // game" was the rule, and a name is not an instruction.
     const who = s.over
       ? (s.winner === this._localSeat() ? id.humanName : id.oppName)
       : (shootingMine ? id.humanName : id.oppName);
-    // Shots left this turn in a challenge of 3 or 5 (a hit never uses one): filled dots = left.
-    const per = this.ch && !s.over ? (chShotsOf(this.ch.game.shots) || 1) : 1;
-    const left = per > 1 ? (Number.isInteger(s.chLeft) ? s.chLeft : per) : 0;
-    const pips = per > 1
-      ? `<span class="bs-turn-shots" role="img" aria-label="${esc(t('shots_left', { n: left }))}">${'●'.repeat(left)}${'○'.repeat(per - left)}</span>` : '';
-    return `<div class="bs-turnbar bs-turn-${shootingMine ? 'mine' : 'theirs'}" data-dir="${dir}">
-      <span class="bs-turn-face" aria-hidden="true">${esc(face)}</span>
+    let pips = '';
+    if (this.ch && !s.over) {
+      if (this._isSalvo()) {
+        // A salvo: one dot per square in the volley, filled as you aim them. Only on your turn.
+        const cap = shootingMine && s.turn === this._localSeat() && !this.busy ? this._aimCap() : 0;
+        const n = Math.min(cap, this._aims.length);
+        if (cap > 1) pips = `<span class="bs-turn-shots" role="img" aria-label="${esc(t('shots_left', { n: cap - n }))}">${'●'.repeat(n)}${'○'.repeat(cap - n)}</span>`;
+      } else {
+        // An older challenge of 3 or 5 (a turn is that many misses): filled dots = misses left.
+        const per = chShotsOf(this.ch.game.shots) || 1;
+        const left = per > 1 ? (Number.isInteger(s.chLeft) ? s.chLeft : per) : 0;
+        if (per > 1) pips = `<span class="bs-turn-shots" role="img" aria-label="${esc(t('shots_left', { n: left }))}">${'●'.repeat(left)}${'○'.repeat(per - left)}</span>`;
+      }
+    }
+    return {
+      cls: `bs-turnbar bs-turn-${shootingMine ? 'mine' : 'theirs'}`,
+      dir,
+      inner: `<span class="bs-turn-face" aria-hidden="true">${esc(face)}</span>
       <span class="bs-turn-name">${esc(who)}</span>
       ${chevron}${pips}${err}
-      <p class="bs-sr" aria-live="polite">${esc(this._statusText())}</p>
-    </div>`;
+      <p class="bs-sr" aria-live="polite">${esc(this._statusText())}</p>`,
+    };
   }
 
   /** One line of the roster strip: a fleet as small silhouettes, each struck through once sunk.
@@ -1391,27 +1462,18 @@ class BattleshipUI {
     }).join('');
   }
 
-  /** THE CANNON. Seen from directly above, the way the reference draws it: a fat black ring base
-   *  with the owner's colour banded inside it, a stubby grey barrel lying across the middle with a
-   *  bright highlight down one side, and a black muzzle collar around a dark bore at the tip.
-   *  Nothing about it is a side view -- no wheels, no carriage, no silhouette. It is a gun turret
-   *  seen from a helicopter.
-   *
-   *  Each side's cannon sits on ITS OWN board and fires across at the other one: yours red-ringed
-   *  on your deck pointing north, theirs blue-ringed on their water pointing south. The barrel is
-   *  drawn pointing straight up here and the whole thing is ROTATED to aim (`_aimCannons`, which
-   *  needs real layout, so it runs after the HTML is in the document).
-   *
-   *  Three nested elements, and the nesting is load-bearing:
-   *    .bs-cannon      positioned + drop-shadow. Only ever TRANSLATED, so the shadow keeps
-   *                    falling the same way however the barrel is pointing.
-   *    .bs-cannon-aim  the rotation, about the base centre (`transform-origin: 50% 60%`).
-   *    .bs-cannon-rig  the recoil, a shove backwards ALONG the barrel -- which is what a plain
-   *                    translateY means once it is inside the rotation.
-   *  Its own namespace (.bs-cannon...), never a layout class -- see the header of battleship.css. */
-  _cannonHtml(side, { firing = false, thinking = false } = {}) {
-    return `<div class="bs-cannon bs-cannon-${side} ${firing ? 'is-firing' : ''}" data-role="cannon-${side}" aria-hidden="true">
-      <div class="bs-cannon-aim">
+  /** THE CANNON, seen from directly above the way the reference draws it: a fat black ring base with
+   *  the owner's colour banded inside, a stubby grey barrel, a black muzzle collar. Each side's gun
+   *  stands on ITS OWN board and fires across at the other one. Three nested elements, and the
+   *  nesting is load-bearing: .bs-cannon (positioned + drop shadow, only ever translated),
+   *  .bs-cannon-aim (the rotation), .bs-cannon-rig (the recoil, thrown by `_playVolleyFx`). It is
+   *  born pointing where that gun was last left (`_cannonDeg`), so a gun coming back up does not
+   *  swing round from north. Its own namespace (.bs-cannon...), never a layout class. */
+  _cannonHtml(side, { thinking = false } = {}) {
+    const base = side === 'mine' ? 0 : 180;
+    const deg = this._cannonDeg && Number.isFinite(this._cannonDeg[side]) ? this._cannonDeg[side] : base;
+    return `<div class="bs-cannon bs-cannon-${side}" data-role="cannon-${side}" aria-hidden="true">
+      <div class="bs-cannon-aim" style="--bs-aim:${deg.toFixed(1)}deg">
         <div class="bs-cannon-rig">
           <svg class="bs-cannon-svg" viewBox="0 0 100 100" focusable="false">
             <circle cx="50" cy="50" r="46" fill="#0A0B0D"/>
@@ -1429,56 +1491,40 @@ class BattleshipUI {
     </div>`;
   }
 
-  /** The crosshair on the cell being fired at: a ring with a full cross straight through it,
-   *  overhanging on all four sides. It marks the target while the ball is in the air and fades as
-   *  the shot lands. */
-  _reticleHtml(r, c, { fading = false } = {}) {
+  /** The crosshair on a cell: a ring with a full cross straight through it, overhanging on all four
+   *  sides. Drawn by the board only for a live room's shot still waiting for its answer; a flying
+   *  ball's crosshair is thrown by `_playVolleyFx` and fades as the ball lands. */
+  _reticleHtml(r, c) {
     const style = `left:calc(var(--bs-pad) + var(--bs-cell) * ${(c + 0.5).toFixed(2)}); `
       + `top:calc(var(--bs-pad) + var(--bs-cell) * ${(r + 0.5).toFixed(2)});`;
-    return `<div class="bs-reticle ${fading ? 'is-fading' : ''}" style="${style}" aria-hidden="true">
-      <svg class="bs-reticle-svg" viewBox="0 0 44 44" focusable="false">
-        <circle class="bs-reticle-ring" cx="22" cy="22" r="11"/>
-        <line class="bs-reticle-cross" x1="22" y1="2" x2="22" y2="42"/>
-        <line class="bs-reticle-cross" x1="2" y1="22" x2="42" y2="22"/>
-      </svg>
-    </div>`;
+    return `<div class="bs-reticle" style="${style}" aria-hidden="true">${RETICLE_SVG}</div>`;
   }
 
-  /** Decides, ONCE per render, which cannon is on screen and what it is doing -- rather than
-   *  letting each board work it out for itself, which is how you end up with both of them on
-   *  screen at once. Returns `{ mine, theirs }`, at most one non-null.
-   *
-   *  Exactly one cannon is up at any moment, belonging to whichever side is doing the shooting:
-   *   - a shot just resolved and its recoil has NOT played  -> the SHOOTER's cannon, firing, and
-   *     `_fxPending` is armed so `_playShotFx` throws the ball once layout exists. Gated on
-   *     `_cannonPlayed` for the same reason the sink reveal is gated on `_sinkPlayed`:
-   *     `_lastShot` outlives many re-renders and an ungated CSS `animation:` replays on each one.
-   *   - the bot is choosing a cell -> theirs, on their water, wearing the "Bot thinking" pill.
-   *   - still settling a shot      -> the shooter's cannon stays put while its shot plays out.
-   *   - otherwise                  -> the cannon of whoever's turn it is, idle, still pointing
-   *     where that side last fired (`_aimBySide`), because a gun does not snap back to north. */
+  /** Decides, ONCE per render, which cannon is on screen and what it is doing. Returns
+   *  `{ mine, theirs }`, at most one non-null. Exactly one cannon is up at any moment:
+   *   - a volley that has not been thrown yet -> the SHOOTER's cannon, and `_fxPending` is armed so
+   *     `_playVolleyFx` throws it once layout exists (gated on `_volleyKey`, so never twice);
+   *   - a live room's shot waiting for its answer -> ours, aimed at it;
+   *   - the bot choosing a cell -> theirs, wearing the "Bot thinking" pill;
+   *   - still settling a volley -> the shooter's stays up while it plays out;
+   *   - otherwise the cannon of whoever's turn it is, still pointing where it last fired (or, on
+   *     your turn, at the squares you are aiming at). */
   _resolveCannons() {
     const out = { mine: null, theirs: null };
     const s = this.state;
     if (!s || s.over) return out;
     const local = this._localSeat();
-    const last = this._lastShot;
-    // `_lastShot.seat` is the DEFENDER, so the shooter is the other seat.
-    const shooterSide = last ? (last.seat === local ? 'theirs' : 'mine') : null;
-    if (shooterSide) this._aimBySide[shooterSide] = { r: last.r, c: last.c };
-    if (this.mp && this.mp.pendingShot) this._aimBySide.mine = { r: this.mp.pendingShot.r, c: this.mp.pendingShot.c };
-    const key = last ? `${last.seat}:${last.r}:${last.c}` : null;
-
-    let side = null, firing = false, thinking = false;
-    if (key && this._cannonPlayed !== key) {
-      this._cannonPlayed = key;
+    const v = this._volley || [];
+    // `seat` on a shot is the DEFENDER, so the shooter is the other side.
+    const shooterSide = v.length ? (v[0].seat === local ? 'theirs' : 'mine') : null;
+    if (shooterSide) this._aimBySide[shooterSide] = v.map((x) => ({ r: x.r, c: x.c }));
+    if (this.mp && this.mp.pendingShot) this._aimBySide.mine = [{ r: this.mp.pendingShot.r, c: this.mp.pendingShot.c }];
+    let side = null, thinking = false;
+    if (v.length && this._fxPlayed !== this._volleyKey) {
+      this._fxPlayed = this._volleyKey;
       side = shooterSide;
-      firing = true;
-      this._fxPending = last;
+      this._fxPending = v;
     } else if (this.mp && this.mp.pendingShot) {
-      // MP: our shot is out but the defender has not answered yet. We are the one shooting, so our
-      // gun is the one up, aimed at the pending cell -- it just has not gone off. (The recoil and
-      // the ball wait for the answer, which is when `_lastShot` finally exists.)
       side = 'mine';
     } else if (this._botAiming) {
       side = 'theirs';
@@ -1487,115 +1533,187 @@ class BattleshipUI {
       side = shooterSide;
     } else {
       side = s.turn === local ? 'mine' : 'theirs';
+      if (side === 'mine' && this._aims.length) this._aimBySide.mine = this._aims.slice();
     }
-    if (side) out[side] = { firing, thinking };
+    if (side) out[side] = { thinking };
     return out;
   }
 
-  /** Points every on-screen cannon at the cell it is shooting at. Has to run after the markup is
-   *  in the document: the angle is the real geometry between the cannon's pivot and the target
-   *  cell, both measured from the DOM, because the two boards are separate elements and nothing
-   *  in CSS knows how far apart they ended up. */
+  /** The middle of the cells a gun is aimed at, in client px, or null. */
+  _aimPoint(side) {
+    const at = this._aimBySide[side];
+    if (!at || !at.length) return null;
+    const role = side === 'mine' ? 'enemy-board' : 'own-board';
+    let x = 0, y = 0, n = 0;
+    for (const a of at) {
+      const cell = this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${a.r}"][data-c="${a.c}"]`);
+      const b = cell && cell.getBoundingClientRect();
+      if (!b || !b.width) continue;
+      x += b.left + b.width / 2; y += b.top + b.height / 2; n++;
+    }
+    return n ? { x: x / n, y: y / n } : null;
+  }
+
+  /** Points every on-screen cannon at what it is shooting at, from real DOM geometry (the two boards
+   *  are separate elements and nothing in CSS knows how far apart they ended up). Each gun has its
+   *  own forward (yours north, theirs south: Matt, 2026-08-11, "the cannon isn't even facing the
+   *  right direction"), and only the DEVIATION from it is clamped. The angle is remembered per side
+   *  and only written when it changes, so the barrel swings once, to a new target, and never again. */
   _aimCannons() {
     if (this._dead || !this.shell) return;
+    this._cannonDeg = this._cannonDeg || {};
     for (const cannon of this.shell.querySelectorAll('.bs-cannon')) {
       const aim = cannon.querySelector('.bs-cannon-aim');
       if (!aim) continue;
       const side = cannon.classList.contains('bs-cannon-mine') ? 'mine' : 'theirs';
-      const at = this._aimBySide[side];
-      // Yours shoots at their board; theirs shoots at yours.
-      const role = side === 'mine' ? 'enemy-board' : 'own-board';
-      // EACH GUN HAS ITS OWN FORWARD. The SVG is drawn pointing NORTH, which is right for YOUR
-      // cannon (it stands on your deck at the bottom and fires up at enemy waters) and exactly
-      // backwards for THEIRS (it stands on their water at the top and fires DOWN at you). The
-      // clamp below used to be a flat +/-64deg about north for both, so the enemy's gun was pinned
-      // sideways and never once pointed at the board it was shooting at -- Matt, 2026-08-11: "the
-      // cannon isn't even facing the right direction." Clamp the DEVIATION from each side's own
-      // forward heading instead, and rest at that heading when there is nothing to aim at.
       const base = side === 'mine' ? 0 : 180;
-      const cell = at && this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${at.r}"][data-c="${at.c}"]`);
-      if (!cell) { aim.style.setProperty('--bs-aim', `${base}deg`); continue; }
+      const pt = this._aimPoint(side);
       const cr = cannon.getBoundingClientRect();
-      const b = cell.getBoundingClientRect();
-      if (!cr.width || !b.width) { aim.style.setProperty('--bs-aim', `${base}deg`); continue; }
-      // the pivot matches .bs-cannon-aim's transform-origin (the base centre of the SVG)
-      const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
-      const dx = (b.left + b.width / 2) - px, dy = (b.top + b.height / 2) - py;
-      const deg = Math.atan2(dx, -dy) * 180 / Math.PI;
-      let delta = deg - base;
-      while (delta > 180) delta -= 360;
-      while (delta < -180) delta += 360;
-      const aimed = base + Math.max(-64, Math.min(64, delta));
-      aim.style.setProperty('--bs-aim', `${aimed.toFixed(1)}deg`);
+      let deg = Number.isFinite(this._cannonDeg[side]) ? this._cannonDeg[side] : base;
+      if (pt && cr.width) {
+        const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
+        const raw = Math.atan2(pt.x - px, -(pt.y - py)) * 180 / Math.PI;
+        let delta = raw - base;
+        while (delta > 180) delta -= 360;
+        while (delta < -180) delta += 360;
+        deg = base + Math.max(-64, Math.min(64, delta));
+      }
+      if (aim._bsDeg !== deg.toFixed(1)) {
+        aim._bsDeg = deg.toFixed(1);
+        aim.style.setProperty('--bs-aim', `${deg.toFixed(1)}deg`);
+      }
+      this._cannonDeg[side] = deg;
     }
   }
 
-  /** Throws the cannonball. A black-rimmed iron sphere with a hard grey highlight, launched from
-   *  the muzzle (wherever the barrel is currently pointing) and landing dead centre on the target
-   *  cell, with a puff of white smoke left behind at the muzzle. Lives in `.bs-fx`, an overlay
-   *  spanning BOTH boards, because the whole point is that the shot crosses between them.
-   *
-   *  Purely decorative and entirely skippable: under reduced motion, or if anything it needs is
-   *  missing, it does nothing and the shot still resolves normally. */
-  _playShotFx(shot) {
-    if (!shot || this._dead || reducedMotion()) return;
+  _fxLater(ms, fn) {
+    const id = setTimeout(() => {
+      this._fxTimers = (this._fxTimers || []).filter((x) => x !== id);
+      if (!this._dead) fn();
+    }, Math.max(0, ms));
+    (this._fxTimers = this._fxTimers || []).push(id);
+  }
+
+  _clearFx() {
+    for (const id of this._fxTimers || []) clearTimeout(id);
+    this._fxTimers = [];
+    const fx = this.shell && this.shell.querySelector('[data-role="fx"]');
+    if (fx) fx.innerHTML = '';
+  }
+
+  /** THROWS A VOLLEY, once (`_resolveCannons` arms it). Crosshairs snap onto every target, the gun
+   *  swings onto them (LAUNCH_MS), recoils, and the balls leave the muzzle STAGGER_MS apart and land
+   *  FLY_MS later, on the beat each cell's own splash or flash is timed to (`_lateMs`). A hit shakes
+   *  the board it lands on. All of it lives in `.bs-fx` or is a Web Animation on an element no render
+   *  replaces, so nothing here can play twice. Decorative only: under reduced motion it does nothing
+   *  and the volley still resolves. */
+  _playVolleyFx(volley) {
+    if (!volley || !volley.length || this._dead || reducedMotion()) return;
     const fx = this.shell && this.shell.querySelector('[data-role="fx"]');
     if (!fx) return;
-    const iShot = shot.seat === this._remoteSeat();
-    const cannon = this.shell.querySelector(iShot ? '.bs-cannon-mine' : '.bs-cannon-theirs');
-    const cell = this.shell.querySelector(`[data-role="${iShot ? 'enemy-board' : 'own-board'}"] .bs-cell[data-r="${shot.r}"][data-c="${shot.c}"]`);
-    if (!cannon || !cell) return;
+    const local = this._localSeat();
+    const iShot = volley[0].seat !== local;
+    const side = iShot ? 'mine' : 'theirs';
+    const role = iShot ? 'enemy-board' : 'own-board';
+    const board = this.shell.querySelector(`[data-role="${role}"]`);
+    const cellOf = (s) => this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${s.r}"][data-c="${s.c}"]`);
+    const cannonEl = () => this.shell.querySelector(`.bs-cannon-${side}`);
+    const host = () => fx.getBoundingClientRect();
+
+    // the crosshairs: on at once, each fading as its ball lands
+    volley.forEach((shot, i) => {
+      const cell = cellOf(shot);
+      const b = cell && cell.getBoundingClientRect();
+      if (!b || !b.width) return;
+      const h = host();
+      const el = document.createElement('div');
+      el.className = 'bs-reticle bs-reticle-fx';
+      el.innerHTML = RETICLE_SVG;
+      const d = b.width * 1.5;
+      el.style.width = el.style.height = `${d.toFixed(1)}px`;
+      el.style.left = `${(b.left - h.left + b.width / 2).toFixed(1)}px`;
+      el.style.top = `${(b.top - h.top + b.height / 2).toFixed(1)}px`;
+      fx.appendChild(el);
+      if (typeof el.animate !== 'function') { el.remove(); return; }
+      el.animate([{ transform: 'translate(-50%, -50%) scale(2.2)', opacity: 0 }, { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }],
+        { duration: 260, easing: 'ease-out', fill: 'forwards' });
+      const off = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, delay: this._lateMs(i), easing: 'ease-in', fill: 'forwards' });
+      off.onfinish = () => el.remove();
+    });
+
+    // the recoil, as the first ball leaves
+    this._fxLater(LAUNCH_MS, () => {
+      const rig = cannonEl() && cannonEl().querySelector('.bs-cannon-rig');
+      if (rig && typeof rig.animate === 'function') {
+        rig.animate([
+          { transform: 'translateY(0)' }, { transform: 'translateY(11%)', offset: 0.14 },
+          { transform: 'translateY(-2.5%)', offset: 0.55 }, { transform: 'translateY(0)' },
+        ], { duration: 400, easing: 'cubic-bezier(.2, .8, .3, 1)' });
+      }
+    });
+    // the balls
+    volley.forEach((shot, i) => {
+      this._fxLater(LAUNCH_MS + i * STAGGER_MS, () => this._throwBall(fx, cannonEl(), cellOf(shot), side));
+    });
+    // a hit shakes the board it lands on, once, as the first hit lands
+    const firstHit = volley.findIndex((x) => x.result === 'hit');
+    if (firstHit >= 0 && board && typeof board.animate === 'function') {
+      this._fxLater(this._lateMs(firstHit), () => board.animate([
+        { transform: 'translateX(0)' }, { transform: 'translateX(-3px)', offset: 0.1 }, { transform: 'translateX(3px)', offset: 0.3 },
+        { transform: 'translateX(-2px)', offset: 0.5 }, { transform: 'translateX(2px)', offset: 0.7 }, { transform: 'translateX(0)' },
+      ], { duration: 320, easing: 'ease-in-out' }));
+    }
+  }
+
+  /** One cannonball: a black-rimmed iron sphere launched from the muzzle (wherever the barrel points)
+   *  to the middle of `cell`, with a puff of white smoke left at the muzzle. Constant speed; the
+   *  SCALE sells the arc (top-down, "up" is "bigger"). */
+  _throwBall(fx, cannon, cell, side) {
+    if (!fx || !cannon || !cell || this._dead) return;
     const host = fx.getBoundingClientRect();
     const cr = cannon.getBoundingClientRect();
     const b = cell.getBoundingClientRect();
     if (!cr.width || !b.width) return;
-    const aim = cannon.querySelector('.bs-cannon-aim');
-    const deg = parseFloat((aim && aim.style.getPropertyValue('--bs-aim')) || '0') || 0;
+    const deg = (this._cannonDeg && Number.isFinite(this._cannonDeg[side])) ? this._cannonDeg[side] : (side === 'mine' ? 0 : 180);
     const rad = deg * Math.PI / 180;
     const px = cr.left + cr.width * 0.5, py = cr.top + cr.height * 0.5;
     const reach = cr.height * 0.36;   // pivot -> muzzle, matching the SVG's own geometry
     const mx = px + Math.sin(rad) * reach, my = py - Math.cos(rad) * reach;
     const tx = b.left + b.width / 2, ty = b.top + b.height / 2;
-    const size = Math.max(14, cr.width * 0.55);
+    const size = Math.max(12, Math.min(cr.width * 0.42, b.width * 1.05));
 
-    const puff = (n) => {
-      for (let i = 0; i < n; i++) {
-        const s = document.createElement('span');
-        s.className = 'bs-puff';
-        const d = size * (0.4 + Math.random() * 0.55);
-        s.style.width = s.style.height = `${d.toFixed(1)}px`;
-        s.style.left = `${(mx - host.left + Math.sin(rad) * size * 0.35).toFixed(1)}px`;
-        s.style.top = `${(my - host.top - Math.cos(rad) * size * 0.35).toFixed(1)}px`;
-        s.style.setProperty('--bs-px', `${((Math.random() - 0.5) * size * 1.9 + Math.sin(rad) * size).toFixed(1)}px`);
-        s.style.setProperty('--bs-py', `${((Math.random() - 0.5) * size * 1.9 - Math.cos(rad) * size).toFixed(1)}px`);
-        s.style.animationDelay = `${(i * 28)}ms`;
-        fx.appendChild(s);
-        s.addEventListener('animationend', () => s.remove());
-      }
-    };
+    for (let i = 0; i < 6; i++) {
+      const s = document.createElement('span');
+      s.className = 'bs-puff';
+      const d = size * (0.4 + Math.random() * 0.55);
+      s.style.width = s.style.height = `${d.toFixed(1)}px`;
+      s.style.left = `${(mx - host.left + Math.sin(rad) * size * 0.35).toFixed(1)}px`;
+      s.style.top = `${(my - host.top - Math.cos(rad) * size * 0.35).toFixed(1)}px`;
+      s.style.setProperty('--bs-px', `${((Math.random() - 0.5) * size * 1.9 + Math.sin(rad) * size).toFixed(1)}px`);
+      s.style.setProperty('--bs-py', `${((Math.random() - 0.5) * size * 1.9 - Math.cos(rad) * size).toFixed(1)}px`);
+      s.style.animationDelay = `${(i * 28)}ms`;
+      fx.appendChild(s);
+      s.addEventListener('animationend', () => s.remove());
+    }
 
     const ball = document.createElement('span');
     ball.className = 'bs-ball';
     ball.style.width = ball.style.height = `${size.toFixed(1)}px`;
+    // the black iron rim is a px box-shadow spread: a percentage silently drops the declaration
     ball.style.boxShadow = `0 0 0 ${(size * 0.1).toFixed(1)}px #0A0B0D, 0 ${(size * 0.14).toFixed(1)}px ${(size * 0.2).toFixed(1)}px rgba(0, 0, 0, .4)`;
     ball.style.left = `${(mx - host.left).toFixed(1)}px`;
     ball.style.top = `${(my - host.top).toFixed(1)}px`;
     fx.appendChild(ball);
-    puff(7);
-    const dx = tx - mx, dy = ty - my;
     if (typeof ball.animate !== 'function') { ball.remove(); return; }
-    const at = (f, s) => ({ transform: `translate(calc(-50% + ${(dx * f).toFixed(1)}px), calc(-50% + ${(dy * f).toFixed(1)}px)) scale(${s})` });
-    // Constant speed (linear, with the keyframes evenly spaced along the path) -- a ball that
-    // accelerates or brakes mid-air reads as a glitch rather than as a shot. The SCALE is what
-    // sells the arc: in a top-down view "up" is "bigger", so it swells out of the muzzle, rides
-    // large across the middle, and shrinks as it drops onto the cell.
+    const dx = tx - mx, dy = ty - my;
+    const at = (f, k) => ({ transform: `translate(calc(-50% + ${(dx * f).toFixed(1)}px), calc(-50% + ${(dy * f).toFixed(1)}px)) scale(${k})` });
     const anim = ball.animate(
       [
         { ...at(0, 0.55), opacity: 0.3, offset: 0 },
-        { ...at(0.10, 1.18), opacity: 1, offset: 0.10 },
-        { ...at(0.50, 1.36), opacity: 1, offset: 0.50 },
-        { ...at(0.88, 1.06), opacity: 1, offset: 0.88 },
-        { ...at(1, 0.78), opacity: 1, offset: 1 },
+        { ...at(0.10, 1.12), opacity: 1, offset: 0.10 },
+        { ...at(0.50, 1.3), opacity: 1, offset: 0.50 },
+        { ...at(0.88, 1.0), opacity: 1, offset: 0.88 },
+        { ...at(1, 0.7), opacity: 0, offset: 1 },
       ],
       { duration: FLY_MS, easing: 'linear', fill: 'forwards' },
     );
@@ -1604,21 +1722,21 @@ class BattleshipUI {
   }
 
   /** One absolutely-positioned sprite per ship, sized/positioned from --bs-cell. The inner element
-   *  is always drawn at its natural horizontal size and rotated in place for vertical ships -- the
-   *  SVG markup from ship-art.js is never redrawn for orientation (HANDOFF-BATTLESHIP-POLISH.md
-   *  section 3). `sinking` plays the one-shot list-and-slide reveal; gate it on `_lastShot` the same
-   *  way `_cellHtml` gates the peg entrance animation, so it plays once, not on every re-render. */
-  _shipSpriteHtml(ship, { ghost = false, sinking = false, faint = false, draggable = false } = {}) {
+   *  is always drawn at its natural horizontal size and rotated in place for vertical ships. The art
+   *  FILLS the ship's own squares exactly (`fill`): it used to keep its aspect ratio, so it sat a
+   *  little short and off-centre of the squares it was on. */
+  _shipSpriteHtml(ship, { ghost = false, sinking = false, sunk = false, faint = false, draggable = false, sinkDelay = 0 } = {}) {
     const vertical = ship.dir === 'v';
     const span = (n) => `calc(var(--bs-cell) * ${n} - var(--bs-gap))`;
     const wrapStyle = `left:calc(var(--bs-pad) + var(--bs-cell) * ${ship.c}); top:calc(var(--bs-pad) + var(--bs-cell) * ${ship.r}); `
       + `width:${span(vertical ? 1 : ship.len)}; height:${span(vertical ? ship.len : 1)};`;
     const innerStyle = `position:absolute; top:50%; left:50%; width:${span(ship.len)}; height:${span(1)}; `
       + `transform:translate(-50%,-50%)${vertical ? ' rotate(90deg)' : ''};`;
-    const cls = ['bs-ship-sprite', ghost ? 'is-ghost' : '', faint ? 'is-faint' : '',
+    const cls = ['bs-ship-sprite', ghost ? 'is-ghost' : '', faint ? 'is-faint' : '', sunk ? 'is-sunk' : '',
       sinking ? 'is-sinking' : '', draggable ? 'is-draggable' : ''].filter(Boolean).join(' ');
     const hook = draggable ? ` data-role="board-ship" data-ship="${ship.id}"` : '';
-    return `<div class="${cls}" style="${wrapStyle}"${hook} aria-hidden="true"><div style="${innerStyle}">${shipArtHtml(ship.id, ship.len)}</div></div>`;
+    const delay = sinking && sinkDelay ? ` --bs-sink-delay:${sinkDelay}ms;` : '';
+    return `<div class="${cls}" style="${wrapStyle}${delay}"${hook} aria-hidden="true"><div class="bs-ship-inner" style="${innerStyle}">${shipArtHtml(ship.id, ship.len, { fill: true })}</div></div>`;
   }
 
   _shipSpritesHtml(fleet, opts) {
@@ -1626,67 +1744,49 @@ class BattleshipUI {
     return fleet.ships.map((s) => this._shipSpriteHtml(s, opts && opts(s))).join('');
   }
 
-  _cellHtml(size, r, c, opts) {
-    const { shots, interactive, isTarget, occupied } = opts;
+  /** One cell of a battle board. A cell in the latest volley is `is-late`: its splash (miss) or
+   *  flash (hit) is held back until its own ball lands (`--bs-fly`, per cell). Nothing in the
+   *  markup depends on whose turn it is or on `busy`, so a cell's string only changes when the cell
+   *  itself does, and the patcher leaves it (and its animation) alone otherwise. */
+  _cellHtml(r, c, { shots, isTarget, seat, occupied }) {
     const v = cellAt(shots, r, c);
-    const isLast = this._lastShot && this._lastShot.seat === opts.seat && this._lastShot.r === r && this._lastShot.c === c;
+    const vi = this._volleyIdx(seat, r, c);
+    const late = vi >= 0;
     const classes = ['bs-cell'];
     if (occupied && occupied.has(`${r},${c}`)) classes.push('bs-cell-ship');
-    const aimed = isTarget && this._aimCell && this._aimCell.r === r && this._aimCell.c === c;
-    if (aimed) classes.push('bs-cell-aimed');
+    if (isTarget && this._aims.some((a) => a.r === r && a.c === c)) classes.push('bs-cell-aimed');
     let inner = '';
-    // Miss = a burst of white bubbles spreading and fading on the water, settling to a hollow ring.
-    // Hit  = an impact flash and a filled marker. The two SHAPES differ, never just the color.
-    // `is-late` holds the whole impact back by --bs-fly, the cannonball's time in the air, so the
-    // splash happens when the ball ARRIVES. It also switches the settled marker's entrance
-    // animation on: without it the marker re-drops on every one of the many re-renders a cell
-    // outlives, which read as the board twitching.
-    const peg = `bs-peg${isLast ? ' is-late' : ''}`;
+    const peg = `class="bs-peg${late ? ' is-late' : ''}"${late ? ` style="--bs-fly:${this._lateMs(vi)}ms"` : ''}`;
     if (v === CELL_MISS) {
-      const bubbles = isLast ? [...Array(7)].map((_, i) => {
+      const bubbles = late ? [...Array(7)].map((_, i) => {
         const ang = (i / 7) * Math.PI * 2 + 0.5;
         return `<span class="bs-bubble" style="--bs-dx:${(Math.cos(ang) * 15).toFixed(1)}px;--bs-dy:${(Math.sin(ang) * 15 - 4).toFixed(1)}px;animation-delay:calc(var(--bs-fly) + ${(i * 34)}ms)"></span>`;
       }).join('') : '';
-      inner = `<span class="${peg}">${isLast ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
+      inner = `<span ${peg}>${late ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
     } else if (v === CELL_HIT || v === CELL_SUNK) {
       if (v === CELL_SUNK) classes.push('bs-cell-sunk');
-      inner = `<span class="${peg}">${isLast ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
+      inner = `<span ${peg}>${late ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
     }
     const label = v === CELL_MISS ? t('cell_miss') : v === CELL_HIT ? t('cell_hit') : v === CELL_SUNK ? t('cell_sunk') : t('cell_unknown');
-    const isFree = v === 0;
-    const canFire = isTarget && interactive && isFree;
-    // data-r/data-c on BOTH boards' cells, not just the clickable ones: the cannon-aim maths and
-    // the cannonball's landing point both look a cell up by coordinate, and the bot shoots at
-    // cells on your board, which are plain divs.
-    const el = isTarget
-      ? `<button type="button" class="${classes.join(' ')}" data-action="fire" data-r="${r}" data-c="${c}" ${canFire ? '' : 'disabled'}
+    // data-r/data-c on BOTH boards' cells: the cannon's aim and the ball's landing point look a cell
+    // up by coordinate. Only a square already fired at is disabled; the rest are refused in code
+    // while it is not your turn (a `disabled` that flipped every turn rebuilt all 100 cells).
+    return isTarget
+      ? `<button type="button" class="${classes.join(' ')}" data-action="fire" data-r="${r}" data-c="${c}" ${v === 0 ? '' : 'disabled'}
           aria-label="${esc(t('shot_cell_aria', { r: r + 1, c: c + 1, state: label }))}">${inner}</button>`
       : `<div class="${classes.join(' ')}" data-r="${r}" data-c="${c}" aria-hidden="true">${inner}</div>`;
-    return el;
   }
 
-  /** True if the fired-at cell of `ship` is the one just sunk on `seat`'s board. `ship` is either
-   *  a real fleet ship ({cells: [[r,c],...]}) or a reconstructed enemy-board entry
-   *  ({r,c,dir,len}, see `_recordSunkShipGeometry`) -- both shapes are checked. */
+  /** Is `ship` (a real fleet ship, or a reconstructed {r,c,dir,len}) sunk by the latest volley? */
   _shipHoldsLastShot(ship, seat) {
-    if (!this._lastShot || !this._lastShot.sunk || this._lastShot.seat !== seat) return false;
-    const { r: lr, c: lc } = this._lastShot;
-    if (Array.isArray(ship.cells)) return ship.cells.some(([r, c]) => r === lr && c === lc);
-    for (let i = 0; i < ship.len; i++) {
-      const rr = ship.dir === 'v' ? ship.r + i : ship.r;
-      const cc = ship.dir === 'h' ? ship.c + i : ship.c;
-      if (rr === lr && cc === lc) return true;
-    }
-    return false;
+    const v = (this._volley || []).filter((x) => x.sunk && x.seat === seat);
+    if (!v.length) return false;
+    const cells = Array.isArray(ship.cells) ? ship.cells
+      : [...Array(ship.len)].map((_, i) => [ship.dir === 'v' ? ship.r + i : ship.r, ship.dir === 'h' ? ship.c + i : ship.c]);
+    return v.some((x) => cells.some(([r, c]) => r === x.r && c === x.c));
   }
 
-  /** Gates the one-shot sink-reveal animation. `_shipHoldsLastShot` alone isn't enough: `_lastShot`
-   *  stays pointed at the same sunk shot across every re-render until the NEXT shot (the sunk-
-   *  banner's own 1600ms auto-clear re-renders the board while it's still current, for one), so a
-   *  naive "is this the last shot" gate replayed the reveal on a freshly-built DOM element every
-   *  time -- the redesign spec's "sink animation plays twice" bug. `_sinkPlayed` marks a
-   *  {seat,shipId} pair the first time it's rendered as sinking and never again, so every
-   *  subsequent render shows the settled sunk pose instead of replaying the animation. */
+  /** The sink reveal plays once per ship, ever (`_sinkPlayed`), however many renders follow. */
   _shouldPlaySink(ship, seat) {
     if (!this._shipHoldsLastShot(ship, seat)) return false;
     const key = `${seat}:${ship.id}`;
@@ -1695,163 +1795,222 @@ class BattleshipUI {
     return true;
   }
 
-  /** Enemy-board sunk ships this device can legitimately show a sprite for. In solo, at game end,
-   *  every remaining ship is known outright (this device always held both fleets). Otherwise
-   *  (mid-battle, or MP where the enemy fleet is never known -- see battleship/CLAUDE.md) only
-   *  ships this device has actually seen sunk are shown, from the reconstructed geometry recorded
-   *  in `_recordSunkShipGeometry`, itself built only from cells this device already knew as hits. */
-  _enemySpritesHtml(seat) {
+  /** The sprites one board shows, keyed by ship. The enemy board: every ship once the match is over
+   *  where this phone knows both fleets (solo, challenges), otherwise only ships seen sunk (rebuilt
+   *  from public cells, `_recordSunkShipGeometry`). Your own board: your fleet, faint until sunk. A
+   *  sprite's `sig` leaves out `is-sinking`, so the next render does not cut the reveal short. */
+  _spriteItems(isEnemy, seat) {
     const s = this.state;
-    if (!this.mp && s.over) {
-      return this._shipSpritesHtml(s.fleets[seat], () => ({}));
+    // A ship sunk by this volley surfaces as the ball that sank it lands.
+    const sinkAt = (ship) => {
+      const cells = Array.isArray(ship.cells) ? ship.cells
+        : [...Array(ship.len)].map((_, i) => [ship.dir === 'v' ? ship.r + i : ship.r, ship.dir === 'h' ? ship.c + i : ship.c]);
+      const i = (this._volley || []).findIndex((x) => x.sunk && x.seat === seat && cells.some(([r, c]) => r === x.r && c === x.c));
+      return i >= 0 ? this._lateMs(i) : 0;
+    };
+    const item = (ship, opts) => {
+      const html = this._shipSpriteHtml(ship, opts.sinking ? { ...opts, sinkDelay: sinkAt(ship) } : opts);
+      return { key: ship.id, html, sig: opts.sinking ? this._shipSpriteHtml(ship, { ...opts, sinking: false }) : html };
+    };
+    if (isEnemy) {
+      if (!this.mp && s.over) {
+        const sunkIds = new Set(s.shots[seat].sunkIds);
+        return (s.fleets[seat] ? s.fleets[seat].ships : []).map((ship) => item(ship, { sunk: sunkIds.has(ship.id), sinking: sunkIds.has(ship.id) && this._shouldPlaySink(ship, seat) }));
+      }
+      const known = (this._sunkShips && this._sunkShips[seat]) || {};
+      return Object.values(known).map((ship) => item(ship, { sunk: true, sinking: this._shouldPlaySink(ship, seat) }));
     }
-    const known = (this._sunkShips && this._sunkShips[seat]) || {};
-    return Object.values(known).map((ship) => this._shipSpriteHtml(ship, { sinking: this._shouldPlaySink(ship, seat) })).join('');
+    const fleet = this.mp ? this.mp.myFleet : s.fleets[seat];
+    const sunkIds = new Set((s.shots[seat] && s.shots[seat].sunkIds) || []);
+    return ((fleet && fleet.ships) || []).map((ship) => item(ship, {
+      sunk: sunkIds.has(ship.id), faint: !sunkIds.has(ship.id), sinking: this._shouldPlaySink(ship, seat),
+    }));
   }
 
-  _boardHtml(kind, active) {
+  /** The battle screen's frame, built ONCE per battle (and again only if the board size or the kind
+   *  of match changes). Everything that changes is filled in by `_patchBattle`. */
+  _battleSkeletonHtml(size) {
+    const blank = new Array(size * size).fill('<div class="bs-cell"></div>').join('');
+    const board = (kind) => `<div class="bs-board bs-board-${kind} ${kind === 'enemy' ? 'bs-target' : ''}"
+        style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">${blank}<div class="bs-layer" data-layer="sprites"></div><div class="bs-layer" data-layer="reticle"></div><div class="bs-layer" data-layer="cannon"></div></div>`;
+    const panel = (kind) => `<div class="bs-boardpanel bs-boardpanel-${kind}" data-panel="${kind}">
+        <div class="bs-board-wrap">${board(kind)}<div class="bs-banner-slot" data-slot="banner-${kind}"></div></div>
+      </div>`;
+    return `<div class="bs-battle" data-sig="${size}|${this.mp ? 1 : 0}">
+      <div class="bs-turnbar" data-slot="bar"></div>
+      ${this.mp ? '<p class="bs-mp-series" data-slot="series"></p>' : ''}
+      ${panel('enemy')}
+      <div class="bs-strip">
+        <div class="bs-scoredisc" role="img" data-slot="score"></div>
+        <div class="bs-rosterrows">
+          <div class="bs-rosterrow bs-rosterrow-theirs" data-slot="roster-theirs"></div>
+          <div class="bs-rosterrow bs-rosterrow-mine" data-slot="roster-mine"></div>
+        </div>
+        <span class="bs-slot" data-slot="exit"></span>
+      </div>
+      ${panel('own')}
+      <div class="bs-fx" data-role="fx" aria-hidden="true"></div>
+      <div class="bs-actions" data-slot="actions"></div>
+    </div>`;
+  }
+
+  /** innerHTML, only when it changed. */
+  _patchHtml(el, html) {
+    if (!el || el._bsH === html) return;
+    el.innerHTML = html;
+    el._bsH = html;
+  }
+
+  _parseOne(html) {
+    const tpl = this._tpl || (this._tpl = document.createElement('template'));
+    tpl.innerHTML = html.trim();
+    return tpl.content.firstElementChild;
+  }
+
+  /** Replaces only the cells whose markup changed. */
+  _patchCells(board, htmls) {
+    if (!board._bsCells) {
+      board._bsCells = [...board.children].filter((el) => el.classList.contains('bs-cell'));
+      board._bsCellH = [];
+    }
+    for (let i = 0; i < htmls.length; i++) {
+      if (board._bsCellH[i] === htmls[i] || !board._bsCells[i]) continue;
+      const el = this._parseOne(htmls[i]);
+      board._bsCells[i].replaceWith(el);
+      board._bsCells[i] = el;
+      board._bsCellH[i] = htmls[i];
+    }
+  }
+
+  /** Keyed children: kept while their `sig` holds, replaced when it changes, removed when gone. */
+  _patchKeyed(layer, items) {
+    if (!layer) return;
+    const have = new Map();
+    for (const ch of [...layer.children]) have.set(ch.dataset.key, ch);
+    const keep = new Set();
+    for (const it of items) {
+      const ex = have.get(it.key);
+      if (ex && ex._bsSig === it.sig) { keep.add(ex); continue; }
+      const el = this._parseOne(it.html);
+      el.dataset.key = it.key;
+      el._bsSig = it.sig;
+      if (ex) ex.replaceWith(el); else layer.appendChild(el);
+      keep.add(el);
+    }
+    for (const ch of [...layer.children]) if (!keep.has(ch)) ch.remove();
+  }
+
+  _patchBoard(kind, live) {
     const s = this.state;
-    const size = s.size;
-    const localSeat = this._localSeat(), remoteSeat = this._remoteSeat();
     const isEnemy = kind === 'enemy';
-    const seat = isEnemy ? remoteSeat : localSeat;
-    const shots = s.shots[seat];
-    const interactive = isEnemy && this._isMyTurn() && !this.busy;
-    // Same reason as the deploy board's tint: a hull sprite drawn over a grid never lines up with
-    // the gridlines, so on your own board you cannot tell which squares your fleet is actually on.
-    // Fill the cells in. (The enemy board gets none -- that is the whole game.)
+    const seat = isEnemy ? this._remoteSeat() : this._localSeat();
+    const panel = this.shell.querySelector(`[data-panel="${kind}"]`);
+    const board = panel && panel.querySelector('.bs-board');
+    if (!board) return;
+    panel.classList.toggle('is-live', live);
+    board.classList.toggle('is-active-turn', live);
+    board.classList.toggle('is-locked', !(isEnemy && this._isMyTurn() && !this.busy));
+    // Your own board's ship squares are filled in (a hull never lines up with the gridlines).
     const occupied = new Set();
     if (!isEnemy) {
-      const fleet = this.mp ? this.mp.myFleet : s.fleets[localSeat];
+      const fleet = this.mp ? this.mp.myFleet : s.fleets[seat];
       for (const ship of (fleet && fleet.ships) || []) {
-        for (let i = 0; i < ship.len; i++) {
-          occupied.add(`${ship.dir === 'v' ? ship.r + i : ship.r},${ship.dir === 'h' ? ship.c + i : ship.c}`);
-        }
+        for (let i = 0; i < ship.len; i++) occupied.add(`${ship.dir === 'v' ? ship.r + i : ship.r},${ship.dir === 'h' ? ship.c + i : ship.c}`);
       }
     }
     const cells = [];
-    for (let r = 0; r < size; r++) {
-      for (let c = 0; c < size; c++) {
-        cells.push(this._cellHtml(size, r, c, { shots, interactive, isTarget: isEnemy, seat, occupied }));
-      }
+    for (let r = 0; r < s.size; r++) {
+      for (let c = 0; c < s.size; c++) cells.push(this._cellHtml(r, c, { shots: s.shots[seat], isTarget: isEnemy, seat, occupied }));
     }
-    // YOUR OWN ships stay visible on your board as faint ghosted silhouettes, so incoming fire can
-    // be seen landing on them. The enemy board only ever shows a ship once it is sunk.
-    const sprites = isEnemy
-      ? this._enemySpritesHtml(seat)
-      : this._shipSpritesHtml(this.mp ? this.mp.myFleet : s.fleets[localSeat], (ship) => ({
-        sinking: this._shouldPlaySink(ship, seat),
-        faint: !(s.shots[seat] && s.shots[seat].sunkIds.includes(ship.id)),
-      }));
-    const shake = this._lastShot && this._lastShot.seat === seat && (this._lastShot.result === 'hit') ? 'bs-shake' : '';
-    // The cannon standing on THIS board belongs to this board's owner and shoots at the other one
-    // (`_resolveCannons`). The reticle is the opposite way round: it marks the cell being shot AT,
-    // so it belongs to the board under fire.
-    const mine = !isEnemy;
-    const c = this._cannons && this._cannons[mine ? 'mine' : 'theirs'];
-    const cannon = c ? this._cannonHtml(mine ? 'mine' : 'theirs', c) : '';
-    let reticle = '';
-    const shooter = this._cannons && (this._cannons.mine ? 'mine' : this._cannons.theirs ? 'theirs' : null);
-    const at = this._aimBySide[isEnemy ? 'mine' : 'theirs'];
-    if (at && shooter === (isEnemy ? 'mine' : 'theirs')) {
-      const pending = isEnemy && this.mp && this.mp.pendingShot;
-      reticle = this._reticleHtml(at.r, at.c, { fading: !pending });
-    }
-    return `<div class="bs-board bs-board-${isEnemy ? 'enemy' : 'own'} ${isEnemy ? 'bs-target' : ''} ${active ? 'is-active-turn' : ''} ${shake}"
-        style="grid-template-columns:repeat(${size},1fr)" data-role="${kind}-board">
-      ${cells.join('')}
-      ${sprites}
-      ${reticle}
-      ${cannon}
-    </div>`;
+    this._patchCells(board, cells);
+    this._patchKeyed(board.querySelector('[data-layer="sprites"]'), this._spriteItems(isEnemy, seat));
+    const pending = isEnemy && this.mp && this.mp.pendingShot;
+    this._patchHtml(board.querySelector('[data-layer="reticle"]'), pending ? this._reticleHtml(pending.r, pending.c) : '');
+    const side = isEnemy ? 'theirs' : 'mine';
+    const cn = this._cannons && this._cannons[side];
+    this._patchKeyed(board.querySelector('[data-layer="cannon"]'),
+      cn ? [{ key: side, sig: `${side}|${cn.thinking ? 1 : 0}`, html: this._cannonHtml(side, cn) }] : []);
+    const sb = this._sunkBanner;
+    const slot = panel.querySelector('[data-slot^="banner"]');
+    this._patchHtml(slot, sb && sb.board === kind
+      ? `<div class="bs-sunk-banner bs-res-${sb.kind} ${sb.mine ? 'is-mine' : 'is-theirs'} ${sb.shipTheirs ? 'ship-theirs' : 'ship-mine'}" data-banner="${sb.id}"
+           role="status" aria-label="${esc(sb.label)}" style="--bs-fly-in:${sb.delay}ms">
+          ${sb.html}<span class="bs-res-word">${esc(sb.word)}</span>
+        </div>`
+      : '');
   }
 
   renderBattle() {
     if (this._dead || !this.state) return;
-    const id = this._identity();
     const s = this.state;
     const isMyTurn = this._isMyTurn();
-    const series = this.mp ? `<p class="bs-mp-series">${esc(this._seriesLine())}</p>` : '';
-    const sb = this._sunkBanner;
-    const banner = sb
-      ? `<div class="bs-sunk-banner bs-res-${sb.kind} ${sb.mine ? 'is-mine' : 'is-theirs'} ${sb.shipTheirs ? 'ship-theirs' : 'ship-mine'}"
-           role="status" aria-label="${esc(sb.label)}" style="--bs-fly-in:${reducedMotion() ? 0 : FLY_MS}ms">
-          ${sb.html ? `<span class="bs-sunk-banner-art" style="width:${sb.len * 22}px">${sb.html}</span>` : ''}
-          <span class="bs-res-word">${esc(sb.word)}</span>
-        </div>`
-      : '';
-    // THE VERTICAL SANDWICH, and the whole visual identity of the game: enemy waters (navy) on
-    // top, the roster strip in the middle, your own board (wood on a salmon deck) below. Both are
-    // always visible and NEITHER ever resizes -- whose turn it is shows only via .is-active-turn
-    // (box-shadow/opacity, compositor-safe) and the status line.
-    const theirSunk = s.shots[this._remoteSeat()].sunkIds.length;
-    const mySunk = s.shots[this._localSeat()].sunkIds.length;
-    // Both fleets ride in the strip between the boards, and the one currently being SHOT AT is the
-    // one drawn in full colour -- the other sinks back into the deck. Same read as the boards'
-    // own wash: at a glance, the bright half of the screen is the half being fought over.
     this._shellMode('battle');
-    // FLY_MS is the single source of truth for the shot's timing; the stylesheet's own --bs-fly is
-    // only a fallback, so push the real value in rather than letting the two drift apart. Under
-    // reduced motion it MUST be zero here, not just in the stylesheet's reduced-motion block: an
-    // inline custom property beats any rule, so leaving 850ms in would hold every impact back by
-    // most of a second with no ball in the air to explain the wait.
+    // FLY_MS is the single source of truth for the shot's timing; under reduced motion it MUST be
+    // zero inline (an inline custom property beats the stylesheet's reduced-motion block).
     this.root.style.setProperty('--bs-fly', reducedMotion() ? '0ms' : `${FLY_MS}ms`);
     this._cannons = this._resolveCannons();
-    // The BRIGHT half of the screen is the half being shot at, and the dim half is the one doing
-    // the shooting -- which is not the same thing as "whose turn is it". While your own shell is
-    // still in the air the turn has already passed to the bot, and washing your target board out
-    // underneath your own shot was exactly backwards. The cannon that is up tells us who is
-    // shooting; the live board is the other one.
+    let battle = this.shell.querySelector(':scope > .bs-battle');
+    const sig = `${s.size}|${this.mp ? 1 : 0}`;
+    if (!battle || battle.dataset.sig !== sig) {
+      this._clearFx();
+      this.shell.innerHTML = this._battleSkeletonHtml(s.size);
+      battle = this.shell.querySelector(':scope > .bs-battle');
+    }
+    // The BRIGHT half of the screen is the half being SHOT AT, which is not "whose turn it is":
+    // while your own shell is still in the air the turn has already passed. At the end both are lit.
     const shooting = this._cannons.mine ? 'mine' : this._cannons.theirs ? 'theirs' : (isMyTurn ? 'mine' : 'theirs');
-    // At game end nobody is shooting and both fleets are revealed, so both boards come up bright:
-    // dimming the losing half would hide the reveal that is the whole point of the last frame.
     const enemyLive = s.over || shooting === 'mine';
     const ownLive = s.over || shooting === 'theirs';
-    const theirsLive = enemyLive;
-    this.shell.innerHTML = `
-      <div class="bs-battle">
-        ${this._turnBarHtml()}
-        ${series}
-        <div class="bs-boardpanel bs-boardpanel-enemy ${enemyLive ? 'is-live' : ''}">
-          <div class="bs-board-wrap">${this._boardHtml('enemy', enemyLive)}</div>
-        </div>
-        <div class="bs-strip">
-          <div class="bs-scoredisc" role="img" aria-label="${esc(t('score_aria', { them: theirSunk, me: mySunk }))}">
-            <span class="bs-scoredisc-n bs-scoredisc-them">${theirSunk}</span>
-            <span class="bs-scoredisc-dot" aria-hidden="true"></span>
-            <span class="bs-scoredisc-n bs-scoredisc-me">${mySunk}</span>
-          </div>
-          <div class="bs-rosterrows">
-            <div class="bs-rosterrow bs-rosterrow-theirs ${theirsLive ? '' : 'is-dim'}">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
-            <div class="bs-rosterrow bs-rosterrow-mine ${theirsLive ? 'is-dim' : ''}">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
-          </div>
-          ${this._armedBtn('bs-exitdisc', this.mp ? 'mp-leave' : this.ch ? 'ch-back' : 'exit-battle', 'exit')}
-        </div>
-        <div class="bs-boardpanel bs-boardpanel-own ${ownLive ? 'is-live' : ''}">
-          <div class="bs-board-wrap">${this._boardHtml('own', ownLive)}</div>
-        </div>
-        <div class="bs-fx" data-role="fx" aria-hidden="true"></div>
-        ${banner}
-        <div class="bs-actions">
-          <button type="button" class="bs-iconbtn bs-iconbtn-sm" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
-          ${this._aimCell && this._isMyTurn() && !this.busy && !s.over
-            ? `<button type="button" class="bs-firebtn" data-action="fire-confirm">${ICON_TARGET}${esc(t('fire'))}</button>`
-            : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
-          ${this.mp
-            ? ''
-            : this.ch
-              ? (s.over ? '' : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'ch-resign', this._chResignKey()))
-              : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'restart', 'restart_game')}
-        </div>
-      </div>`;
+
+    const bar = battle.querySelector('[data-slot="bar"]');
+    const tb = this._turnBarParts();
+    if (bar.className !== tb.cls) bar.className = tb.cls;
+    if (bar.dataset.dir !== tb.dir) bar.dataset.dir = tb.dir;
+    this._patchHtml(bar, tb.inner);
+    const series = battle.querySelector('[data-slot="series"]');
+    if (series && series.textContent !== this._seriesLine()) series.textContent = this._seriesLine();
+
+    this._patchBoard('enemy', enemyLive);
+    this._patchBoard('own', ownLive);
+
+    const theirSunk = s.shots[this._remoteSeat()].sunkIds.length;
+    const mySunk = s.shots[this._localSeat()].sunkIds.length;
+    const score = battle.querySelector('[data-slot="score"]');
+    score.setAttribute('aria-label', t('score_aria', { them: theirSunk, me: mySunk }));
+    this._patchHtml(score, `<span class="bs-scoredisc-n bs-scoredisc-them">${theirSunk}</span>
+      <span class="bs-scoredisc-dot" aria-hidden="true"></span>
+      <span class="bs-scoredisc-n bs-scoredisc-me">${mySunk}</span>`);
+    // Both fleets ride in the strip; the one being SHOT AT is in full colour, the other sinks back.
+    const rt = battle.querySelector('[data-slot="roster-theirs"]');
+    const rm = battle.querySelector('[data-slot="roster-mine"]');
+    rt.classList.toggle('is-dim', !enemyLive);
+    rm.classList.toggle('is-dim', enemyLive);
+    this._patchHtml(rt, this._rosterItems(s.shots[this._remoteSeat()].sunkIds));
+    this._patchHtml(rm, this._rosterItems(s.shots[this._localSeat()].sunkIds));
+    this._patchHtml(battle.querySelector('[data-slot="exit"]'),
+      this._armedBtn('bs-exitdisc', this.mp ? 'mp-leave' : this.ch ? 'ch-back' : 'exit-battle', 'exit'));
+
+    const cap = this._aimCap();
+    const ready = this._aims.length && this._aims.length >= cap && isMyTurn && !this.busy && !s.over;
+    this._patchHtml(battle.querySelector('[data-slot="actions"]'), `
+      <button type="button" class="bs-iconbtn bs-iconbtn-sm" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
+      ${ready
+        ? `<button type="button" class="bs-firebtn" data-action="fire-confirm">${ICON_TARGET}${esc(t('fire'))}</button>`
+        : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
+      ${this.mp
+        ? ''
+        : this.ch
+          ? (s.over ? '' : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'ch-resign', this._chResignKey()))
+          : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'restart', 'restart_game')}`);
+
     this._fitBattleBoards();
     this._updateCellSize();
     this._aimCannons();
     if (this.ch) this._chPlaceChat();
     if (this._fxPending) {
-      const shot = this._fxPending;
+      const v = this._fxPending;
       this._fxPending = null;
-      this._playShotFx(shot);
+      this._playVolleyFx(v);
     }
   }
 
@@ -1951,7 +2110,7 @@ class BattleshipUI {
     // most, played out underneath a modal. The stats are written above, immediately; only the CARD
     // waits for the shot to land. A restart or exit in that window cancels it (_stopGameTimers).
     if (this._endTimer) { clearTimeout(this._endTimer); this._endTimer = null; }
-    const wait = this._shotSettleMs(this._lastShot);
+    const wait = this._shotSettleMs(this._volley);
     if (wait <= 0) { this._showEndCard(); return; }
     this._endTimer = setTimeout(() => {
       this._endTimer = null;
@@ -2099,8 +2258,8 @@ class BattleshipUI {
     this.view = 'placement';
     this.busy = false;
     this._mpStatusMsg = '';
-    this._lastShot = null;
-    this._aimCell = null;
+    this._setVolley([]);
+    this._aims = [];
     this._stopGameTimers();
     this.closeOverlays();
     this._mpSaveSnapshot();
@@ -2191,7 +2350,7 @@ class BattleshipUI {
     mp.myFleet = res.fleet;
     const answer = { result: res.result, shipId: res.shipId, sunk: res.sunk, fleetSunk: res.fleetSunk, cells: res.cells };
     this.state = applyAnswer(this.state, mySeat, r, c, answer);
-    this._lastShot = { seat: mySeat, r, c, result: answer.result, sunk: answer.sunk, cells: answer.cells };
+    this._setVolley([{ seat: mySeat, r, c, result: answer.result, sunk: answer.sunk, cells: answer.cells }]);
     this._maybeShowSunkBanner(answer, mySeat);
     const seq = ++mp.appliedSeq;
     net.appendMove(mp.code, mp.role, seq,
@@ -2275,7 +2434,7 @@ class BattleshipUI {
       mp.recoveryAttempts = 0;
       if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
       mp.pendingShot = null;
-      this._lastShot = { seat: defenderSeat, r: move.r | 0, c: move.c | 0, result: answer.result, sunk: answer.sunk, cells: answer.cells };
+      this._setVolley([{ seat: defenderSeat, r: move.r | 0, c: move.c | 0, result: answer.result, sunk: answer.sunk, cells: answer.cells }]);
       this._maybeShowSunkBanner(answer, defenderSeat);
       this.busy = true;
       this.renderBattle();
@@ -2836,7 +2995,10 @@ class BattleshipUI {
   }
 
   /** The Challenge tab: the board size, New challenge, then your matches (yours first), cut to fit. */
-  _chStale() { return typeof CH.fireShot !== 'function' || typeof CH.replay !== 'function'; }
+  _chStale() {
+    return typeof CH.fireShot !== 'function' || typeof CH.replay !== 'function'
+      || typeof CH.fireVolley !== 'function' || typeof CH.fireSalvoShot !== 'function' || typeof CH.volleyLeft !== 'function';
+  }
 
   /** After picking a person: the board and shots a turn, then the deploy screen. Every way into a new
    *  challenge comes through here (the Challenge tab, the Multiplayer screen, Rematch), so neither
@@ -2979,7 +3141,7 @@ class BattleshipUI {
     this._stopGameTimers();
     this.closeOverlays();
     this.state = null;
-    this._aimCell = null;
+    this._aims = [];
     this._statsCommitted = false;
     this._chPlace = { ...target, size: CH.asSize(target.size) || 'classic' };
     this._newPlacement(this._chPlace.size);
@@ -3041,7 +3203,7 @@ class BattleshipUI {
       link.known += link.pending.length;
       if (queue.length) queue = queue.concat(link.pending); else log = log.concat(link.pending);
     }
-    const rep = CH.replay(game.size, game.a.fleet, game.b.fleet, log, game.bonus, game.shots);
+    const rep = CH.replay(game.size, game.a.fleet, game.b.fleet, log, game.bonus, game.shots, game.salvo);
     if (!rep.ok) { CH.savePending(id, 0, []); this._chHome(this._chReason('failed')); return; }
     CH.markShown(id, game.log.length);
     this._chStopList();
@@ -3054,9 +3216,8 @@ class BattleshipUI {
     this.state = rep.state;
     this.view = 'battle';
     this._statsCommitted = false;
-    this._aimCell = null;
-    this._lastShot = null;
-    this._cannonPlayed = null;
+    this._aims = [];
+    this._setVolley([]);
     this._aimBySide = { mine: null, theirs: null };
     this._botAiming = false;
     this._fxPending = null;
@@ -3079,17 +3240,33 @@ class BattleshipUI {
     this._afterStateChange();
   }
 
-  /** Show the next queued shot from the other person, or, with none left, a resignation. */
+  /** Show the other person's next queued VOLLEY (one shot in an older match: they still land one at
+   *  a time), or, with none left, a resignation. A salvo volley is every shot up to the end of that
+   *  volley, thrown together exactly as they fired it. */
   _chNext() {
     if (this._dead || !this.ch || !this.state || this._chTimer) return;
-    const e = this._chQueue.shift();
-    if (!e) { this._chMaybeForceEnd(); return; }
-    const shooter = CH.seatOfSide(e.by), target = 1 - shooter;
-    if (this.state.over || this.state.turn !== shooter || !isShotLegal(this.state, target, e.r, e.c)) { this._chResync(); return; }
-    const res = CH.fireShot(this.state, shooter, e.r, e.c, this.ch.game.shots);
-    this.state = res.state;
-    this._lastShot = { seat: target, r: e.r, c: e.c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
-    this._maybeShowSunkBanner(res.answer, target);
+    if (!this._chQueue.length) { this._chMaybeForceEnd(); return; }
+    const salvo = this._isSalvo(), per = this.ch.game.shots;
+    const shots = [], answers = [];
+    let target = null;
+    while (this._chQueue.length) {
+      const e = this._chQueue[0];
+      const shooter = CH.seatOfSide(e.by);
+      if (target !== null && 1 - shooter !== target) break;
+      if (this.state.over || this.state.turn !== shooter || !isShotLegal(this.state, 1 - shooter, e.r, e.c)) {
+        if (shots.length) break;
+        this._chResync(); return;
+      }
+      this._chQueue.shift();
+      target = 1 - shooter;
+      const res = salvo ? CH.fireSalvoShot(this.state, shooter, e.r, e.c, per) : CH.fireShot(this.state, shooter, e.r, e.c, per);
+      this.state = res.state;
+      shots.push({ seat: target, r: e.r, c: e.c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells });
+      answers.push(res.answer);
+      if (!salvo || this.state.over || !this.state.chVol) break;
+    }
+    this._setVolley(shots);
+    this._showResultBanner(answers, target);
     this._afterStateChange();
   }
 
@@ -3101,6 +3278,7 @@ class BattleshipUI {
     this._afterStateChange();
   }
 
+  /** One shot in an older (one-at-a-time) challenge. */
   _chFireAt(r, c) {
     const link = this.ch;
     if (!link || this._chQueue.length) return;
@@ -3108,17 +3286,32 @@ class BattleshipUI {
     const target = this._remoteSeat();
     const res = CH.fireShot(this.state, this._localSeat(), r, c, link.game.shots);
     this.state = res.state;
-    this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
+    this._setVolley([{ seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells }]);
     this._maybeShowSunkBanner(res.answer, target);
-    this._chSend(link, { by: link.side, r, c });
+    this._chSend(link, [{ by: link.side, r, c }]);
     this._afterStateChange();
   }
 
-  /** A shot of ours: sent at once, one batch at a time, kept in the outbox until it lands. */
-  _chSend(link, entry) {
+  /** A salvo: every aimed square at once (mp.js fireVolley stops at a winning shot), written as ONE
+   *  batch so the other phone always receives the volley whole. */
+  _chFireVolley(aims) {
+    const link = this.ch;
+    if (!link || this._chQueue.length || !aims.length) return;
+    if (CH.lifeOf(link.game).expired) { this._chHome(t('ch_e_expired')); return; }
+    const target = this._remoteSeat();
+    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), link.game.shots);
+    if (!res.fired.length) return;
+    this.state = res.state;
+    this._setVolley(res.fired.map(([r, c], i) => ({ seat: target, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
+    this._showResultBanner(res.answers, target);
+    this._chSend(link, res.fired.map(([r, c]) => ({ by: link.side, r, c })));
+    this._afterStateChange();
+  }
+
+  /** Our shots: sent at once, one batch at a time, kept in the outbox until they land. */
+  _chSend(link, entries) {
     if (!link.pending) { link.pending = []; link.pendingBase = link.known; }
-    link.pending.push(entry);
-    link.known++;
+    for (const e of entries) { link.pending.push(e); link.known++; }
     CH.savePending(link.id, link.pendingBase, link.pending);
     this._chFlush(link);
   }
@@ -3341,43 +3534,44 @@ class BattleshipUI {
     if (clean.length === MP_CODE_LEN) this._mpJoinSubmit();
   }
 
-  /** The WHOLE ship is the drag handle, on the board and in the tray alike. Nothing is layered on
-   *  top of it any more -- the tray's rotate buttons and the board's corner arrows both used to
-   *  sit right where a thumb naturally lands, and `onPointerDown` bailed out on them, so a drag
-   *  started there silently did nothing. */
+  // --- dragging a ship (rebuilt 2026-10-27) --------------------------------------------------------
+  // Matt: placing ships "is weird and awkward and riddled with bugs". What was wrong underneath:
+  //  - The board re-rendered the moment a finger touched a ship, destroying the element under it.
+  //    On an iPhone the rest of that touch keeps going to the destroyed element and never reaches
+  //    the game, so a placed ship could vanish into the tray on a touch and never follow the drag.
+  //    The pointer is now CAPTURED BY THE ROOT (never re-rendered) and nothing re-renders until the
+  //    finger has really moved.
+  //  - The ship jumped square to square by re-rendering the whole board on every square. It now
+  //    FOLLOWS THE FINGER (`.bs-drag-float`, moved by transform), and the squares it will land on
+  //    light up in place (solid + tick = fits, dashed + cross = does not).
+  //  - Dropping a placed ship off the board ROTATED it back where it was; dropping it where it did
+  //    not fit lost it to the tray. Off the board now puts it in the tray; a drop that does not fit
+  //    puts it back where it came from.
+  //  - A tap that could not turn a ship (too near an edge) did nothing; it now slides along the
+  //    board to make room when it can.
+
   onPointerDown(e) {
-    if (this.view !== 'placement') return;
-    // A ship already ON the board is picked straight off it: drag to move, or release without
-    // moving to rotate it in place (see onPointerUp). `origin` is what a no-move release goes
-    // back to, so a tap can never lose the ship.
+    if (this.view !== 'placement' || this._dragging) return;
     const sprite = e.target.closest('[data-role="board-ship"]');
+    const chip = !sprite && e.target.closest('[data-role="ship-chip"]');
+    if (!sprite && !chip) return;
+    const shipId = (sprite || chip).dataset.ship;
+    const def = this._placeShipSet.find((d) => d.id === shipId);
+    if (!def) return;
+    let origin = null, grab = 0;
     if (sprite) {
-      const shipId = sprite.dataset.ship;
-      const ship = this._placeFleet.ships.find((s) => s.id === shipId);
-      const origin = ship ? { r: ship.r, c: ship.c, dir: ship.dir } : null;
-      // WHICH CELL OF THE SHIP DID THE FINGER LAND ON. Everything about how the drag FEELS hangs
-      // on this one number -- see _cellAtPoint's caller in onPointerMove.
-      const grab = ship ? this._grabIndexOnBoard(sprite, ship, e.clientX, e.clientY) : 0;
-      this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId, origin, grab, x: e.clientX, y: e.clientY, moved: false };
-      return;
-    }
-    const chip = e.target.closest('[data-role="ship-chip"]');
-    if (chip) {
-      const shipId = chip.dataset.ship;
-      // `wasSelected` is what makes a second tap on the same tray chip a ROTATE, mirroring the
-      // gesture a placed ship already answered to. Read BEFORE _selectShip, which sets it.
-      const wasSelected = this._placeSelected === shipId;
-      const def = this._placeShipSet.find((d) => d.id === shipId);
-      // Same idea from the tray: grabbing the middle of the chip should put the MIDDLE of the ship
-      // under your finger, not its bow.
+      const ship = this._placeFleet.ships.find((x) => x.id === shipId);
+      if (!ship) return;
+      origin = { r: ship.r, c: ship.c, dir: ship.dir };
+      grab = this._grabIndexOnBoard(sprite, ship, e.clientX, e.clientY);
+    } else {
+      // grabbing the middle of a chip puts the MIDDLE of the ship under your finger, not its bow
       const cb = chip.getBoundingClientRect();
       const frac = cb.width ? (e.clientX - cb.left) / cb.width : 0.5;
-      const grab = def ? Math.max(0, Math.min(def.len - 1, Math.floor(frac * def.len))) : 0;
-      this._selectShip(shipId);
-      this._dragging = { shipId, pointerId: e.pointerId, origin: null, grab, wasSelected, x: e.clientX, y: e.clientY, moved: false };
-      try { chip.setPointerCapture(e.pointerId); } catch { /* not all browsers need this */ }
+      grab = Math.max(0, Math.min(def.len - 1, Math.floor(frac * def.len)));
     }
+    this._dragging = { shipId, pointerId: e.pointerId, origin, grab, x: e.clientX, y: e.clientY, moved: false, lifted: false, anchor: null, float: null, ghost: [] };
+    try { this.root.setPointerCapture(e.pointerId); } catch { /* the drag still works without it on most browsers */ }
   }
 
   /** Which cell along a PLACED ship the pointer went down on, 0 = stern. Measured off the sprite's
@@ -3390,13 +3584,8 @@ class BattleshipUI {
     return Math.max(0, Math.min(ship.len - 1, Math.floor(along * ship.len)));
   }
 
-  /** Redesign spec bug 1: `document.elementFromPoint` under an active `setPointerCapture` is
-   *  unreliable on several mobile browsers (it can keep resolving to the CAPTURING element -- the
-   *  ship chip -- for every pointer position, so a real drag never finds a target cell and every
-   *  placement fell back to the separate tap-a-cell path, which read as "click to place" even
-   *  though the drag code was there). Computing the target cell directly from the pointer's own
-   *  coordinates against the board's own geometry sidesteps hit-testing (and its capture quirks)
-   *  entirely, so it works the same everywhere. */
+  /** The board cell under a point, from the board's own geometry (never `elementFromPoint`, which
+   *  keeps answering with the capturing element on several mobile browsers). */
   _cellAtPoint(clientX, clientY) {
     const board = this.root && this.root.querySelector('[data-role="place-board"]');
     if (!board) return null;
@@ -3410,30 +3599,87 @@ class BattleshipUI {
     return { r, c };
   }
 
-  /** THE SHIP STAYS UNDER YOUR FINGER. Matt, 2026-08-11: "when you drag a boat, it shoots somewhere
-   *  else. It's not a natural drag, it's all weird fucked up." It was: the preview cell was used as
-   *  the ship's BOW-END ANCHOR, so a five-long carrier grabbed anywhere along its body jumped four
-   *  cells away from the finger the moment it moved, and you had to aim at empty water to the left
-   *  of where you wanted it. The cell under the finger is now the cell of the ship you actually
-   *  grabbed (`d.grab`), and the anchor is derived back from it -- so the ship sits exactly where
-   *  your thumb is, in both orientations, from the tray and from the board alike. */
-  onPointerMove(e) {
-    if (this.view !== 'placement' || !this._dragging) return;
-    const d = this._dragging;
-    if (!d.moved && (Math.abs(e.clientX - d.x) > 6 || Math.abs(e.clientY - d.y) > 6)) d.moved = true;
-    const under = this._cellAtPoint(e.clientX, e.clientY);
-    if (!under) { if (this._placePreview) { this._placePreview = null; this.renderPlacement(); } return; }
-    const cell = this._anchorFor(d.shipId, under, d.grab | 0);
-    if (this._placePreview && this._placePreview.r === cell.r && this._placePreview.c === cell.c) return;
-    this._placePreview = cell;
-    this.renderPlacement();
+  /** The board's cell step, padding and gap in px (set per board by _updateCellSize). */
+  _placeGeom() {
+    const board = this.root && this.root.querySelector('[data-role="place-board"]');
+    if (!board) return null;
+    const px = (k) => parseFloat(board.style.getPropertyValue(k)) || 0;
+    const step = px('--bs-cell');
+    return step > 0 ? { board, step, pad: px('--bs-pad'), gap: px('--bs-gap') } : null;
   }
 
-  /** The ship's anchor (its stern cell, what _tryPlaceAt takes) given the cell the FINGER is over
-   *  and which cell of the ship that is. Kept on the board: a ship half off the edge would be
-   *  illegal for a reason the player never asked for, so the anchor slides back into range and the
-   *  ship simply stops travelling once its far end reaches the edge -- the way a physical piece
-   *  behaves against the side of a board. */
+  /** Picks the ship up: off the board (or out of the tray) and into your hand. */
+  _liftShip(d) {
+    d.lifted = true;
+    if (d.origin) {
+      this._placeDir[d.shipId] = d.origin.dir;
+      this._placeFleet = { ...this._placeFleet, ships: this._placeFleet.ships.filter((x) => x.id !== d.shipId) };
+    }
+    this._placeSelected = d.shipId;
+    this._placeInvalid = null;
+    this._placePreview = null;
+    this.renderPlacement();
+    const g = this._placeGeom();
+    const def = this._placeShipSet.find((x) => x.id === d.shipId);
+    if (!g || !def) return;
+    const dir = this._placeDir[d.shipId] || 'h';
+    const long = def.len * g.step - g.gap, short = g.step - g.gap;
+    const el = document.createElement('div');
+    el.className = 'bs-drag-float';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.width = `${(dir === 'v' ? short : long).toFixed(1)}px`;
+    el.style.height = `${(dir === 'v' ? long : short).toFixed(1)}px`;
+    el.innerHTML = `<div class="bs-ship-inner" style="position:absolute; top:50%; left:50%; width:${long.toFixed(1)}px; height:${short.toFixed(1)}px; transform:translate(-50%,-50%)${dir === 'v' ? ' rotate(90deg)' : ''};">${shipArtHtml(def.id, def.len, { fill: true })}</div>`;
+    this.root.appendChild(el);
+    // the grabbed square's middle sits under the finger
+    const along = (d.grab + 0.5) * g.step - g.gap / 2;
+    d.float = el;
+    d.offX = dir === 'v' ? short / 2 : along;
+    d.offY = dir === 'v' ? along : short / 2;
+  }
+
+  onPointerMove(e) {
+    const d = this._dragging;
+    if (this.view !== 'placement' || !d || e.pointerId !== d.pointerId) return;
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.x) <= 6 && Math.abs(e.clientY - d.y) <= 6) return;
+      d.moved = true;
+      this._liftShip(d);
+    }
+    if (d.float) d.float.style.transform = `translate(${(e.clientX - d.offX).toFixed(1)}px, ${(e.clientY - d.offY).toFixed(1)}px)`;
+    const under = this._cellAtPoint(e.clientX, e.clientY);
+    const anchor = under ? this._anchorFor(d.shipId, under, d.grab | 0) : null;
+    if ((anchor && d.anchor && anchor.r === d.anchor.r && anchor.c === d.anchor.c) || (!anchor && !d.anchor)) return;
+    d.anchor = anchor;
+    this._paintGhost(d);
+  }
+
+  /** Lights the squares the held ship would land on, in place (no re-render mid-drag). */
+  _paintGhost(d) {
+    for (const el of d.ghost) {
+      el.classList.remove('bs-ghost-valid', 'bs-ghost-invalid');
+      const badge = el.querySelector('.bs-ghost-badge');
+      if (badge) badge.remove();
+    }
+    d.ghost = [];
+    const board = this.root.querySelector('[data-role="place-board"]');
+    const def = this._placeShipSet.find((x) => x.id === d.shipId);
+    if (!board || !def || !d.anchor) return;
+    const dir = this._placeDir[d.shipId] || 'h';
+    const legal = this._placementLegalAt(d.shipId, d.anchor.r, d.anchor.c, dir);
+    for (let i = 0; i < def.len; i++) {
+      const r = dir === 'v' ? d.anchor.r + i : d.anchor.r;
+      const c = dir === 'h' ? d.anchor.c + i : d.anchor.c;
+      const el = board.querySelector(`[data-role="place-cell"][data-r="${r}"][data-c="${c}"]`);
+      if (!el) continue;
+      el.classList.add(legal ? 'bs-ghost-valid' : 'bs-ghost-invalid');
+      el.insertAdjacentHTML('beforeend', `<span class="bs-ghost-badge" aria-hidden="true">${legal ? '&#10003;' : '&times;'}</span>`);
+      d.ghost.push(el);
+    }
+  }
+
+  /** The ship's anchor (its stern cell) given the cell the FINGER is over and which cell of the ship
+   *  that is, slid back onto the board so the ship stops at the edge like a real piece would. */
   _anchorFor(shipId, under, grab) {
     const def = this._placeShipSet.find((x) => x.id === shipId);
     if (!def) return under;
@@ -3444,30 +3690,64 @@ class BattleshipUI {
     return { r: Math.max(0, Math.min(max, under.r - grab)), c: under.c };
   }
 
-  onPointerUp() {
-    if (this.view !== 'placement' || !this._dragging) return;
-    const { shipId, origin, moved, wasSelected } = this._dragging;
+  _endDrag() {
+    const d = this._dragging;
     this._dragging = null;
-    if (this._placePreview && (moved || !origin)) {
-      const { r, c } = this._placePreview;
-      this._placePreview = null;
-      this._tryPlaceAt(shipId, r, c);
+    if (!d) return;
+    if (d.float) d.float.remove();
+    try { if (this.root && this.root.hasPointerCapture && this.root.hasPointerCapture(d.pointerId)) this.root.releasePointerCapture(d.pointerId); } catch { /* already released */ }
+  }
+
+  /** Turns a placed ship about its first square, sliding it back onto the board if the turn would
+   *  hang it off the edge. A turn that cannot fit anywhere there leaves it as it was. */
+  _turnPlaced(shipId) {
+    const ship = this._placeFleet.ships.find((x) => x.id === shipId);
+    if (!ship) return;
+    const size = boardSizeFor(this._placeSizeKey);
+    const rest = { ...this._placeFleet, ships: this._placeFleet.ships.filter((x) => x.id !== shipId) };
+    const def = this._placeShipSet.find((x) => x.id === shipId);
+    const dir = ship.dir === 'h' ? 'v' : 'h';
+    const r = dir === 'v' ? Math.min(ship.r, size - ship.len) : ship.r;
+    const c = dir === 'h' ? Math.min(ship.c, size - ship.len) : ship.c;
+    const turned = def && placeShip(rest, def, r, c, dir);
+    if (!turned) return;
+    this._placeFleet = turned;
+    this._placeDir[shipId] = dir;
+    this._justRotatedShip = shipId;
+  }
+
+  onPointerUp(e) {
+    const d = this._dragging;
+    if (this.view !== 'placement' || !d || (e && e.pointerId != null && e.pointerId !== d.pointerId)) return;
+    const cancelled = !!(e && e.type === 'pointercancel');
+    this._endDrag();
+    if (!d.moved) {
+      if (cancelled) return;
+      // a TAP: on a placed ship, turn it; on a tray ship, pick it (then tap a square to put it there)
+      if (d.origin) this._turnPlaced(d.shipId);
+      else { this._placeSelected = d.shipId; this._placeInvalid = null; }
+      this.renderPlacement();
       return;
     }
-    this._placePreview = null;
-    // A second tap on an already-selected TRAY chip rotates it, the same gesture a placed ship
-    // answers to below. This is what replaced the per-chip rotate button.
-    if (!origin && !moved && wasSelected) { this._rotateShip(shipId); return; }
-    if (origin) {
-      // A tap (no drag) on a placed ship rotates it in place. It was lifted off the board by
-      // onPointerDown's _selectShip, so put it back either way -- rotated if that fits, exactly
-      // as it was if it does not.
-      const flipped = origin.dir === 'h' ? 'v' : 'h';
-      this._placeDir[shipId] = this._placementLegalAt(shipId, origin.r, origin.c, flipped) ? flipped : origin.dir;
-      this._justRotatedShip = shipId;
-      this._tryPlaceAt(shipId, origin.r, origin.c);
-      return;
+    const def = this._placeShipSet.find((x) => x.id === d.shipId);
+    const dir = this._placeDir[d.shipId] || 'h';
+    const at = !cancelled && d.anchor;
+    const placed = at && def && placeShip(this._placeFleet, def, at.r, at.c, dir);
+    if (placed) {
+      this._placeFleet = placed;
+      this._placeInvalid = null;
+      const next = this._placeShipSet.find((x) => !placed.ships.some((sh) => sh.id === x.id));
+      this._placeSelected = next ? next.id : null;
+    } else if (d.origin && (at || cancelled)) {
+      // dropped where it does not fit: back where it came from
+      const back = placeShip(this._placeFleet, def, d.origin.r, d.origin.c, d.origin.dir);
+      if (back) this._placeFleet = back;
+      this._placeDir[d.shipId] = d.origin.dir;
+    } else if (at) {
+      // from the tray onto a square it does not fit: leave its dashed ghost where it was refused
+      this._placeInvalid = { shipId: d.shipId, r: at.r, c: at.c, dir };
     }
+    // (dropped off the board: it stays in the tray, selected)
     this.renderPlacement();
   }
 
@@ -3549,10 +3829,7 @@ class BattleshipUI {
       // nothing on screen ever said "this is the square you are about to shoot at." The first tap
       // parks the crosshair and raises the FIRE button; tapping the same square again, or FIRE,
       // shoots. Tapping a different square just moves the aim.
-      const r = Number(btn.dataset.r), c = Number(btn.dataset.c);
-      if (this._aimCell && this._aimCell.r === r && this._aimCell.c === c) { this._confirmFire(); return; }
-      this._aimCell = { r, c };
-      this.renderBattle();
+      this._aimAt(Number(btn.dataset.r), Number(btn.dataset.c));
     } else if (action === 'fire-confirm') {
       this._confirmFire();
     } else if (action === 'restart') {

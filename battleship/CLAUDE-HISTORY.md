@@ -1005,3 +1005,32 @@ Battleship": reproduced by serving the new ui.js beside v1270's mp.js, which sw.
 not yet in the current cache is answered from an older cache): `TypeError: CH.asShots is not a function`
 in `_loadSetup`, i.e. in the constructor. Fix: the shots helpers live in ui.js too, and a stale mp.js
 (no `fireShot`) shows "Update required" instead of a crash.
+
+
+## 2026-10-27 — Salvos, placement rebuilt, the battle screen patched in place
+
+Matt: *"Battleship is a disaster of a game. The animations are all weird and messed up. Placing ships is weird
+and awkward and riddled with bugs. And multiplayer isn't how I wanted it. If you're playing with 3 shots, you
+should choose the 3 spots, they shoot at once, then if you hit one, you go again."*
+
+What was found by playing it in a 390x844 touch browser, frame by frame:
+- **Animations.** `renderBattle` assigned the whole battle screen's innerHTML on every state change, timer and
+  banner. Every arrival animation (splash, peg, reticle snap) replayed on each rebuild; the cannon was a new
+  element every time, so its rotation transition swung it from north to the target on every render; the
+  board washes and ring could not transition (new elements); a crosshair was drawn on the last shot cell
+  whenever that side was idle (it sat on old misses for a whole turn); the banner was `position: fixed` at
+  16% from the top, so the bot's MISS covered the bot's own gun; the sink reveal ended tilted 12 degrees
+  and snapped upright on the next render. Fix: build once, patch (see `CLAUDE.md`).
+- **Placement.** `_selectShip` re-rendered on pointerdown, destroying the touched sprite; the ship art's
+  stern arc (`A1.8,1.8` across a 6.8 gap, which SVG enlarges) bulged ~3 units left of its box and the art
+  kept its aspect ratio, so ships sat a third of a square off their squares; dropping a placed ship off
+  the board ROTATED it back in place (the tap branch ran for any `origin`); an illegal drop of a placed
+  ship lost it to the tray; the tray chips were 15px silhouettes, and a vertical one was clipped.
+- **Salvos** replace the "N misses a turn" rule for new challenges only; older matches replay with their
+  stored rule. `tools/test-battleship-mp.mjs` covers volleys, partial volleys, the winning shot, the board's
+  last squares and the old/new rule split.
+
+Verified: two phones (test1/DREG5 vs made-up TQWX7) in Playwright against a fake database (`js/firebase-boot.js`
+routed to a module whose reads and writes go to an object in node): a salvo of 3 with one hit gave another
+volley, three misses passed the turn, the other phone animated both volleys. A live room (Host/Join) played
+16 shots on the same fake database, both phones agreeing. No real Firebase room or match was created.

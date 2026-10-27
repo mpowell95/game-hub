@@ -77,11 +77,38 @@ and "New game" mid-battle. **Placement is not autosaved** (nothing earned at ris
 - `.bs-tray` has a **fixed height**, one row of bare silhouettes; `.bs-deploy-btns` fixed height and
   `flex-wrap: nowrap` (SAVE appearing must not reflow; a wrapping tray once pulled the board 71px
   up under the finger).
-- **Rotate = tap the ship** everywhere (tap tray chip to select, again to rotate; tap a placed ship;
-  `R`). No rotate buttons (they sat dead centre and blocked the drag).
+- **Rotate = tap a placed ship** (slides along the board to fit; `R` for the keyboard). No rotate
+  buttons (they sat dead centre and blocked the drag). A tray chip tap only selects it.
 - `tools/test-visual.mjs`'s battleship PLAY probe drags all five ships with real touches and fails if the
   board's box changes. A screenshot cannot catch this.
 - Board sizes use `svh` under `@supports (height: 1svh)` (plain `vh` shifts with the iOS toolbar).
+
+## Placement, rebuilt (2026-10-27)
+
+Matt: *"Placing ships is weird and awkward and riddled with bugs."*
+- **The fleet starts ON the board** (random): SAVE at once; drag to move, tap to turn, dice = new
+  layout, bin = empty into the tray (the visual PLAY probe taps the bin first).
+- **The pointer is captured by the ROOT** (`onPointerDown`); nothing re-renders until the finger moves 6px.
+  Re-rendering the element under a finger loses the rest of an iPhone touch.
+- The held ship FOLLOWS THE FINGER (`.bs-drag-float`, transform only); its landing squares light in place
+  (`_paintGhost`). Off the board = back to the tray; a drop that does not fit = back where it came from.
+- **Ship art fills its squares exactly** (`shipArtHtml(id, len, { fill: true })`, and the stern half-circle is
+  inside the box: it used to bulge a third of a square past the first one).
+
+## The battle screen is PATCHED, never rebuilt (2026-10-27)
+
+Matt: *"The animations are all weird and messed up."* `renderBattle` rebuilt everything from a string on every
+change, so every arrival animation replayed and the turn washes snapped. Now `_battleSkeletonHtml` builds it
+once (again only if size or live-room-ness changes) and `_patchBoard` / `_patchCells` / `_patchKeyed` /
+`_patchHtml` replace only what changed. **Never put turn- or `busy`-dependent markup in a cell** (a `disabled`
+that flipped each turn rebuilt all 100); the board's `is-locked` class carries it.
+- A **volley** (`_setVolley`) = the shots that land together. Shot i leaves at `LAUNCH_MS + i*STAGGER_MS`,
+  lands `FLY_MS` later (`_lateMs`); pegs, sink reveal (`--bs-sink-delay`), banner and settle time off that.
+- `_playVolleyFx` (once per `_volleyKey`) throws reticles, recoil, balls and the hit shake into `.bs-fx` or as
+  Web Animations. No crosshair sits on the board except a live room's unanswered shot.
+- The gun keeps its angle (`_cannonDeg`, born at it, written only on change): it swings once, to a new target.
+- The MISS / HIT! / SUNK banner sits over the board SHOT AT and clears as the volley settles.
+- A sunk ship settles ON its squares (`is-sunk`, darker); the old reveal ended tilted 12 degrees.
 
 ## The words are gone (2026-08-11)
 
@@ -296,19 +323,21 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
 - **BOTH FLEETS ARE STORED IN THE MATCH** (Matt chose this: nobody is online to say "hit"). Every
   phone resolves every shot with `game.js` exactly as solo; the screen never draws the other fleet
   before the end, but dev tools could read it. Never call it hidden. Live rooms still never send one.
-- **A hit shoots again, a miss passes** (Matt: *"Isn't keep shooting on a hit the standard?"*; it is a
-  common house rule, not the printed one). Stored per match as `bonus: true`.
-- **Shots a turn: 1, 3 or 5** (Matt, same day: *"So it doesn't take a month"*; and "hits add a shot").
-  A turn is that many MISSES; a hit never uses one. `shots` on the match (challenger's "Shots" chip,
-  setting `chShots`, default 3); a match without it is 1. One rule for replay and screen: `mp.js`
-  `fireShot` (state carries `chLeft`; dots in the turn bar).
+- **SALVOS (Matt, 2026-10-27: "choose the 3 spots, they shoot at once, then if you hit one, you go
+  again")**: every match made since carries `salvo: true`. Pick N squares (`shots` 1, 3 or 5; fewer only
+  if fewer are left), FIRE lands them together, ANY hit = another volley, all miss = the turn passes.
+  `mp.js` `fireSalvoShot` / `fireVolley` / `volleyLeft`; state carries `chVol` (shots owed) and `chVHit`,
+  so a log cut mid-volley replays. A volley is written as ONE `appendLog` batch and shown on the other
+  phone as one volley (`_chNext`). Tap an aimed square to take it back.
+- **Older matches keep their stored rule** (THE LAW: the rule travels with the match): no `salvo` = a hit
+  shoots again and a turn is N MISSES (`fireShot`, `chLeft`); no `shots` = 1.
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot
   needs the fleet it lands on). Both index rows are written at creation. OPEN until the receiver's
   first SHOT (placing is not an answer). Cancel / decline / resign / 3-day expiry: `js/challenge-life.js`.
 - Node `battleship/` (`games/<id>`, `index/<CODE>/<id>`, `chat/<id>`); a match is two fleets + a log
-  of shots, replayed and refused whole if it does not replay. Shots are written one at a time
-  (outbox `gamehub.battleship.outbox.v1`); the other person's arrive by watch and play one at a time
-  (`_chNext`). Counted once in `'mp'` with shots/hits (`countResult`, ledger
+  of shots, replayed and refused whole if it does not replay. Shots are written as they are fired (a
+  salvo volley as one batch; outbox `gamehub.battleship.outbox.v1`); the other person's arrive by watch
+  and play one volley at a time (`_chNext`). Counted once in `'mp'` with shots/hits (`countResult`, ledger
   `gamehub.battleship.counted.v1`), never head-to-head. Push: `battleshipTurnPush`, reminder, Remind bell.
 - The list is LIVE while up (`_chWatchList`): a one-off read raced a cancel's second row write.
 - **The chat button sits on the turn bar's right end** (`_chPlaceChat`, measured every render). Matt: *"No quick
@@ -317,7 +346,8 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   (tab, Multiplayer screen, Rematch). Matt, 2026-10-27: no choice was offered from the Multiplayer screen.
 - **ui.js calls nothing new from mp.js while the game is BUILT** (`CH_SHOTS` is local): mid-update sw.js can
   serve a new ui.js beside the previous build's mp.js, and `CH.asShots` in `_loadSetup` made Battleship fail
-  to open on Ana's iPhone. `_chStale()` turns that case into an "Update required" button.
+  to open on Ana's iPhone. `_chStale()` turns that case into an "Update required" button; it checks every
+  mp.js function a match needs (`fireVolley`, `fireSalvoShot`, `volleyLeft` too).
 - The Challenge tab shows at most 4 rows (one fewer each for a note and Notify me), fitted in the hub
   at 390x664. A challenge never writes the solo save (`saveGame` returns on `ui.ch`).
 

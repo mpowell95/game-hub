@@ -889,6 +889,10 @@ const PLAY = {
       // drags all five ships with real touch and fails if the board's box EVER changes -- a check
       // no screenshot can make, because every individual frame of that bug looks correct.
       await page.waitForSelector('[data-role="place-board"]', { timeout: 20000 });
+      // The fleet starts ON the board since 2026-10-27; the bin empties it into the tray, which is
+      // the drag this probe is about.
+      await go('[data-action="clear-fleet"]');
+      await page.waitForSelector('[data-role="ship-chip"]', { timeout: 20000 });
       const boxOf = () => page.evaluate(() => {
         const el = document.querySelector('[data-role="place-board"]');
         if (!el) return null;
