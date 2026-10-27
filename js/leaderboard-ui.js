@@ -1658,8 +1658,8 @@ function playerListHTML(list) {
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     });
   }
-  const tieNote = rows.some((g) => tiedAt(g.key)) ? `<p class="lb-note">${esc(tx('lb_note_tie', 'T = tied.'))}</p>` : '';
-  return `${tieNote}<div class="lb-plist">${rows.map((g) => {
+  // No "T = tied." line (Matt, 2026-10-27: "Delete this"); a tied rank still reads T2 on its chip.
+  return `<div class="lb-plist">${rows.map((g) => {
     const played = playedOf(g, null);
     // THE HEADLINE NUMBER IS WHAT YOU SORTED BY. Matt, 2026-08-26: "Before you touched the
     // leaderboard tonight, it showed the played number when I clicked on played and the wins
