@@ -310,7 +310,7 @@ function checkLadder(gen, from, to) {
   for (let k = 0; k < 250; k++) h.update(B9.expert[k]);
   const pin = h.digest('hex').slice(0, 16);
   console.log(`generator 9: ${B9.expert.length} Expert boards; pin ${pin}`);
-  ok(`generator 9: the shipped boards never change (${pin})`, pin === 'PIN9');
+  ok(`generator 9: the shipped boards never change (${pin})`, pin === '5eb30555834497dc');
 }
 
 // RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different
