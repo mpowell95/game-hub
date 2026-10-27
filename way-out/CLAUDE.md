@@ -22,9 +22,7 @@ keep the first name on purpose**: the stats id keys every level already cleared 
 ## Hub integration
 
 - In-hub `module: '../way-out/js/ui.js'`, **immersive**. Hub id `way-out`; stats id `wayout`; `.wo-root`.
-- **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the day
-  Matt releases it from the admin page). Its `GAME_META` row shipped with the game. The live admin
-  config has `way-out` `live: true`.
+- **Released** 2026-10-27 in code (`released: '2026-10-13'`, the admin switch day).
 - **King of Games (3VN33) can see and play it again since 2026-10-14** (Matt: *"Let king of games see
   and play arrows"*). He was hidden with `hideFrom: ['3VN33']` on the `GAMES` entry 2026-10-13 and
   again the evening of 10-14 while the bands were reworked; re-add that line to hide it from him.
