@@ -584,6 +584,9 @@ None of this makes the hub cheat-proof; never describe it that way.
   every open match to make Play instant; with a listener on the path, Firebase `get()` answers from its
   local copy, so each game's `appendLog` "fresh" re-read was stale and darts 2-3 of Matt's turn were refused
   as `moved-on` while the screen said "Sent" (one dart per try saved). Writers' re-reads must hit the server.
+- **A pick from the Multiplayer screen (`armChallenge`) opens the game's challenge-options screen, never past it**
+  (Matt, 2026-10-27: Battleship skipped Board and Shots; "fix every other game that's like this": Darts' game and
+  Escoba's deck were also setup-only). Every option a challenge carries is choosable on that screen.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

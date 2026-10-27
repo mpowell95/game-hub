@@ -219,3 +219,9 @@ vs-computer, pass and play or practice): `js/match-chat-ui.js` + `js/match-chat.
 sits on the top row LEFT of the darts-left icons and the menu button (`CHAT_PLACE`, `right: 118px`);
 bubbles come down under that row. Node `darts/chat/<matchId>/<key>` beside `darts/games/<id>`; sends with
 the STORED side (`mp.side`), right whichever seat the left plaque is.
+
+## Challenge options on the pick path (2026-10-27)
+
+- **The challenge card chooses the game** (2026-10-27): Game 301/201/101/Cricket, and Cricket's Order / Points, on
+  `mp-ui.js` `confirm` (the setup card's own settings via `ui._saveSettings`). Before, a challenge from the
+  Multiplayer screen could only be whatever game the setup card last had.

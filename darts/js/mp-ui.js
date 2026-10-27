@@ -173,12 +173,35 @@ async function picker(ui, MP) {
 
 /** One tap to send: who, and that you throw first. Exported for the hub's Challenges screen. */
 export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
+// THE GAME IS CHOSEN HERE (2026-10-27). Matt, after a Battleship challenge from the Multiplayer screen
+// offered no options: "fix every other game that's like this". This card used to show the game the
+// setup card last had and no way to change it, so a challenge sent from the Multiplayer screen could
+// only ever be that game. The choices are the setup card's own settings (ui._saveSettings).
+const CH_GAMES = ['301', '201', '101', 'cricket'];
 function confirm(ui, MP, them) {
+  const s = ui.settings;
+  const seg = (key, ids, cur, label) => `<div class="gh-seg dt-seg" role="group" aria-label="${esc(t(key))}">${ids.map((id) =>
+    `<button type="button" class="gh-seg__item dt-seg-item" data-ch${key}="${id}" aria-pressed="${cur === id}"><span>${esc(label(id))}</span></button>`).join('')}</div>`;
   const body = page(ui, t('mp_challenge'), 'home', `
     <p class="dt-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
+    <div class="dt-field">${seg('game', CH_GAMES, s.game, (id) => (id === 'cricket' ? t('game_cricket') : id))}</div>
+    ${s.game === 'cricket' ? `<div class="dt-pair">
+      <div class="dt-field"><span class="dt-label">${esc(t('order'))}</span>${seg('order', ['any', 'order'], s.order, (id) => t('order_' + id))}</div>
+      <div class="dt-field"><span class="dt-label">${esc(t('points'))}</span>${seg('points', ['on', 'off'], s.points, (id) => t('points_' + id))}</div>
+    </div>` : ''}
     <p class="dt-mp-note">${esc(t('mp_game_note', { game: gameName(ui._kind()), name: them.name }))}</p>
     <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-mp="send">${esc(t('mp_send', { name: them.name }))}</button>
     <p class="dt-mp-note dt-mp-err" aria-live="polite" hidden></p>`);
+  body.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-chgame], [data-chorder], [data-chpoints]');
+    if (!b) return;
+    e.stopPropagation();
+    if (b.dataset.chgame) s.game = b.dataset.chgame;
+    else if (b.dataset.chorder) s.order = b.dataset.chorder;
+    else s.points = b.dataset.chpoints;
+    ui._saveSettings();
+    confirm(ui, MP, them);
+  });
   const send = body.querySelector('[data-mp="send"]');
   send.addEventListener('click', async () => {
     send.disabled = true;

@@ -113,6 +113,11 @@ ok('battleship: a pick opens the board + shots choice for that person, a match i
   /o\.kind === 'pick'[\s\S]{0,200}this\._chChooseFor\(o\.them\)/.test(src('./battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('./battleship/js/ui.js')));
 ok('battle arena: a pick opens the draft for that person, a match id opens the match',
   /o\.kind === 'pick'\) \{ pickTeamFor\(ui, o\.them\)/.test(src('./battle-arena/js/online-ui.js')) && /if \(o && o\.id\) \{ await openChallenge\(ui, o\.id\)/.test(src('./battle-arena/js/online-ui.js')));
+// EVERY OPTION ON THE PICK PATH (2026-10-27, Matt: "fix every other game that's like this"): a
+// challenge sent from the Multiplayer screen must offer every choice the game's own challenge offers.
+ok('darts: the challenge card chooses the game (and Cricket\'s order / points), not the setup card alone',
+  /data-ch\$\{key\}/.test(src('./darts/js/mp-ui.js')) && /seg\('game', CH_GAMES/.test(src('./darts/js/mp-ui.js')) && /seg\('order'/.test(src('./darts/js/mp-ui.js')) && /seg\('points'/.test(src('./darts/js/mp-ui.js')));
+ok('escoba: the length screen chooses the deck too', /ui\._seg\('ch-deck'/.test(src('./escoba/js/mp-ui.js')) && /case 'ch-deck':/.test(src('./escoba/js/ui.js')));
 ok('escoba: a pick opens the length screen with that person', /o\.kind === 'pick'\) this\._chOpenLen\(o\.them/.test(src('./escoba/js/ui.js')));
 ok('cup pong: a pick opens the terms', /o\.kind === 'pick'\) this\.openMultiplayer\(o\.them\)/.test(src('./cup-pong/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./cup-pong/js/ui.js')));
 ok('cup pong: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./cup-pong/js/mp-ui.js')));

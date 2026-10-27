@@ -60,7 +60,11 @@ export function paint(ui) {
       <div class="eb-ch-list" data-role="ch-list">${peopleHTML(v)}</div>`;
   } else if (v.screen === 'len') {
     const them = v.them || {};
+    // THE DECK IS CHOSEN HERE TOO (2026-10-27, Matt: "fix every other game that's like this"): the
+    // challenge carries the sender's card numbering, which used to come silently from the setup
+    // card, so one sent from the Multiplayer screen could not change it. Same setting as setup's.
     body = `${head(`<span aria-hidden="true">${esc(them.emoji || '🙂')}</span> ${esc(them.name || '')}`)}
+      ${ui._seg('ch-deck', ui._setup.deckMode, [['spanish', t('deckmode_spanish')], ['american', t('deckmode_american')]])}
       <div class="eb-ch-lens">
         ${['1', '11', '21'].map((l) => `<button type="button" class="eb-btn eb-btn-primary eb-ch-len" data-action="ch-len" data-v="${l}" ${v.busy ? 'disabled' : ''}>${esc(lenText(l))}</button>`).join('')}
       </div>
