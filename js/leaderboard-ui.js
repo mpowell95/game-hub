@@ -1185,6 +1185,7 @@ function effectiveSort(id) {
 }
 // By Game's own three orders, remembered the same way By Player's are (saved default view).
 // 'fav' reads js/favorites.js, the launcher's own favorites list, keyed by HUB id.
+// `star: true` draws the favorites mark (a heart since 2026-10-27, matching the launcher).
 const GAME_SORTS = [
   { sort: 'alpha', labelKey: 'lb_gsort_alpha' },
   { sort: 'popular', labelKey: 'lb_gsort_popular' },
@@ -1198,7 +1199,7 @@ function sortPillsHTML(items, current, attr) {
     const sel = current === it.sort;
     return `<button type="button" class="lb-pill${sel ? ' is-sel' : ''}" data-${attr}="${it.sort}"`
       + `${sel ? ' aria-pressed="true"' : ' aria-pressed="false"'}>`
-      + `${it.star ? '<i class="lb-star" aria-hidden="true">★</i>' : ''}${esc(t(it.labelKey))}</button>`;
+      + `${it.star ? '<i class="lb-star" aria-hidden="true">♥</i>' : ''}${esc(t(it.labelKey))}</button>`;
   }).join('')}</div>`;
 }
 
@@ -1820,7 +1821,7 @@ function gameListHTML(list) {
     return t(a.meta.labelKey).localeCompare(t(b.meta.labelKey));
   });
   const chevron = '<svg class="lb-gchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
-  const title = (meta, fav) => `<span class="lb-gtitle">${fav ? '<i class="lb-star" aria-hidden="true">★</i>' : ''}<span class="lb-gname">${esc(t(meta.labelKey))}</span></span>`;
+  const title = (meta, fav) => `<span class="lb-gtitle">${fav ? '<i class="lb-star" aria-hidden="true">♥</i>' : ''}<span class="lb-gname">${esc(t(meta.labelKey))}</span></span>`;
   // THE GAME IS THE LOUDEST THING ON THE CARD (2026-10-27, Ana: "You need to emphasize the game!!!!!!").
   // Big art and a big title; the three names sit under the title, smaller.
   const cards = rows.filter((r) => r.st.rows.length).map(({ meta, st, fav }) => {
@@ -1880,7 +1881,7 @@ function youHTML(list) {
   close.sort((a, b) => b.c - a.c || t(a.meta.labelKey).localeCompare(t(b.meta.labelKey)));
   let favs = [];
   try { favs = loadFavorites() || []; } catch { favs = []; }
-  const star = (id) => (favs.includes(hubIdOf(id)) ? '<i class="lb-star" aria-hidden="true">★</i>' : '');
+  const star = (id) => (favs.includes(hubIdOf(id)) ? '<i class="lb-star" aria-hidden="true">♥</i>' : '');
   // The number big, its unit word small beside it, so "68 obstacles" fits a half-width box.
   const val = (g, id) => {
     const tier = boardTierOf(g, id);
@@ -2876,7 +2877,9 @@ function ensureCss() {
     // carries weight and an inset ring, so it is never colour alone.
     '.lb-pill{flex:1 1 0;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 8px;white-space:nowrap;font-size:12.5px;font-weight:800;cursor:pointer;border-radius:8px;border:1px solid var(--lb-line);background:transparent;color:var(--lb-muted)}',
     '.lb-pill.is-sel{border-color:var(--lb-sel);background:var(--lb-sel);color:var(--lb-sel-ink);box-shadow:inset 0 0 0 1px var(--lb-sel)}',
-    '.lb-star{font-style:normal;font-size:12px;line-height:1}',
+    // Favorites are the launcher's gold HEART, here too (Matt, 2026-10-27: "Hearts."; it was a star).
+    '.lb-star{font-style:normal;font-size:12px;line-height:1;color:#f2b705;margin-right:4px}',
+    '.lb-pill.is-sel .lb-star{color:inherit}',
     '.lb-select{width:100%;min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 12px;cursor:pointer;font-size:13px;font-weight:800;color:var(--lb-ink);background:var(--lb-surface-2);border:1px solid var(--lb-line);border-radius:8px}',
     '.lb-select.is-open{border-radius:8px 8px 0 0}',
     '.lb-caret{width:15px;height:15px;flex:none}',
