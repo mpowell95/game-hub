@@ -440,6 +440,7 @@
 .bs-turn-theirs { background: var(--bs-theirs); }
 .bs-turn-face { font-size: 1.35rem; line-height: 1; }
 .bs-turn-name { font-size: .95rem; max-width: 48vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-turn-shots { font-size: .78rem; letter-spacing: .14em; line-height: 1; flex: none; }
 .bs-turn-arrow { width: 22px; height: 22px; display: block; animation: bs-turn-nudge 1.5s ease-in-out infinite; }
 .bs-turnbar[data-dir="down"] .bs-turn-arrow { transform: rotate(180deg); animation-name: bs-turn-nudge-down; }
 @keyframes bs-turn-nudge { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-3px); } }

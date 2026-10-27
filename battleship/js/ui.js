@@ -292,12 +292,13 @@ class BattleshipUI {
       bonusShotOnHit: !!saved.bonusShotOnHit,
       firstMode: (saved.firstMode === 'you' || saved.firstMode === 'opponent' || saved.firstMode === 'alternate') ? saved.firstMode : 'alternate',
       nextStarter: saved.nextStarter === 'opponent' ? 'opponent' : 'you',
+      chShots: CH.asShots(saved.chShots) || 3,   // shots a turn for a NEW challenge (2026-10-27)
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(SETTINGS_KEY, { v: 1, size: s.size, difficulty: s.difficulty, bonusShotOnHit: s.bonusShotOnHit, firstMode: s.firstMode, nextStarter: s.nextStarter });
+    saveJSON(SETTINGS_KEY, { v: 1, size: s.size, difficulty: s.difficulty, bonusShotOnHit: s.bonusShotOnHit, firstMode: s.firstMode, nextStarter: s.nextStarter, chShots: s.chShots });
   }
 
   /** IN MULTIPLAYER THE PROFILE'S BOT OPPONENT IS NEVER A FALLBACK. It used to be, and that is what
@@ -1358,10 +1359,15 @@ class BattleshipUI {
     const who = s.over
       ? (s.winner === this._localSeat() ? id.humanName : id.oppName)
       : (shootingMine ? id.humanName : id.oppName);
+    // Shots left this turn in a challenge of 3 or 5 (a hit never uses one): filled dots = left.
+    const per = this.ch && !s.over ? (CH.asShots(this.ch.game.shots) || 1) : 1;
+    const left = per > 1 ? (Number.isInteger(s.chLeft) ? s.chLeft : per) : 0;
+    const pips = per > 1
+      ? `<span class="bs-turn-shots" role="img" aria-label="${esc(t('shots_left', { n: left }))}">${'●'.repeat(left)}${'○'.repeat(per - left)}</span>` : '';
     return `<div class="bs-turnbar bs-turn-${shootingMine ? 'mine' : 'theirs'}" data-dir="${dir}">
       <span class="bs-turn-face" aria-hidden="true">${esc(face)}</span>
       <span class="bs-turn-name">${esc(who)}</span>
-      ${chevron}${err}
+      ${chevron}${pips}${err}
       <p class="bs-sr" aria-live="polite">${esc(this._statusText())}</p>
     </div>`;
   }
@@ -2753,7 +2759,7 @@ class BattleshipUI {
     if (o.kind === 'pick' && o.them && o.them.code) {
       const gate = onlineGate();
       if (gate) { this._chHome(onlineGateText(gate)); return; }
-      this._chStartPlacement({ kind: 'new', them: o.them, size: this._setup.size });
+      this._chStartPlacement({ kind: 'new', them: o.them, size: this._setup.size, shots: this._setup.chShots });
       return;
     }
     if (o.id) { this._chHome(); this._chOpen(o.id); }
@@ -2844,7 +2850,10 @@ class BattleshipUI {
     }
     const notify = this._chPushOff
       ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="ch-notify">${esc(t('ch_notify'))}</button>` : '';
-    return `<button type="button" class="bs-chip" data-action="cycle-size">${esc(t('chip_size'))}: <span class="bs-chip-value">${esc(s.size === 'quick' ? t('size_quick') : t('size_classic'))}</span></button>
+    return `<div class="bs-chips">
+        <button type="button" class="bs-chip" data-action="cycle-size">${esc(t('chip_size'))}: <span class="bs-chip-value">${esc(s.size === 'quick' ? t('size_quick') : t('size_classic'))}</span></button>
+        <button type="button" class="bs-chip" data-action="cycle-chshots">${esc(t('chip_ch_shots'))}: <span class="bs-chip-value">${s.chShots}</span></button>
+      </div>
       <button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
       ${note}
       <div class="bs-ch-list">${list}</div>
@@ -2947,7 +2956,7 @@ class BattleshipUI {
     const fleet = this._placeFleet.ships.map((sh) => ({ id: sh.id, r: sh.r, c: sh.c, dir: sh.dir }));
     this.renderWaiting(this._identity().oppName, null);
     const res = p.kind === 'new'
-      ? await CH.createGame({ them: p.them, fleet, size: p.size })
+      ? await CH.createGame({ them: p.them, fleet, size: p.size, shots: p.shots })
       : await CH.placeFleet(p.id, fleet);
     this._chSaving = false;
     if (this._dead || this._chPlace !== p) return;
@@ -2992,7 +3001,7 @@ class BattleshipUI {
       link.known += link.pending.length;
       if (queue.length) queue = queue.concat(link.pending); else log = log.concat(link.pending);
     }
-    const rep = CH.replay(game.size, game.a.fleet, game.b.fleet, log, game.bonus);
+    const rep = CH.replay(game.size, game.a.fleet, game.b.fleet, log, game.bonus, game.shots);
     if (!rep.ok) { CH.savePending(id, 0, []); this._chHome(this._chReason('failed')); return; }
     CH.markShown(id, game.log.length);
     this._chStopList();
@@ -3037,7 +3046,7 @@ class BattleshipUI {
     if (!e) { this._chMaybeForceEnd(); return; }
     const shooter = CH.seatOfSide(e.by), target = 1 - shooter;
     if (this.state.over || this.state.turn !== shooter || !isShotLegal(this.state, target, e.r, e.c)) { this._chResync(); return; }
-    const res = fireAndResolve(this.state, target, e.r, e.c);
+    const res = CH.fireShot(this.state, shooter, e.r, e.c, this.ch.game.shots);
     this.state = res.state;
     this._lastShot = { seat: target, r: e.r, c: e.c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
     this._maybeShowSunkBanner(res.answer, target);
@@ -3057,7 +3066,7 @@ class BattleshipUI {
     if (!link || this._chQueue.length) return;
     if (CH.lifeOf(link.game).expired) { this._chHome(t('ch_e_expired')); return; }
     const target = this._remoteSeat();
-    const res = fireAndResolve(this.state, target, r, c);
+    const res = CH.fireShot(this.state, this._localSeat(), r, c, link.game.shots);
     this.state = res.state;
     this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
     this._maybeShowSunkBanner(res.answer, target);
@@ -3435,6 +3444,9 @@ class BattleshipUI {
       // the same settings key -- the vocabulary in storage is untouched (THE LAW rule 5).
       const i = SIZES.findIndex(([v]) => v === this._setup.size);
       this._setup.size = SIZES[(i + 1) % SIZES.length][0]; this._saveSetup(); this.renderSetup();
+    } else if (action === 'cycle-chshots') {
+      const i = CH.SHOTS.indexOf(this._setup.chShots);
+      this._setup.chShots = CH.SHOTS[(i + 1) % CH.SHOTS.length]; this._saveSetup(); this.renderSetup();
     } else if (action === 'cycle-first') {
       const order = ['you', 'opponent', 'alternate'];
       this._setup.firstMode = order[(order.indexOf(this._setup.firstMode) + 1) % order.length];
@@ -3513,7 +3525,7 @@ class BattleshipUI {
       this._chNewPicker();
     } else if (action === 'ch-pick') {
       const o = this._chPick && (this._chPick.opps || []).find((x) => x.code === btn.dataset.code);
-      if (o) this._chStartPlacement({ kind: 'new', them: o, size: this._setup.size });
+      if (o) this._chStartPlacement({ kind: 'new', them: o, size: this._setup.size, shots: this._setup.chShots });
     } else if (action === 'ch-pick-back') {
       this._chPick = null; this.renderSetup();
     } else if (action === 'ch-open') {
@@ -3525,7 +3537,7 @@ class BattleshipUI {
       if (!link) return;
       const them = { code: link.them.code, name: link.them.name, emoji: link.them.emoji };
       this.closeOverlays();
-      this._chStartPlacement({ kind: 'new', them, size: link.game.size });
+      this._chStartPlacement({ kind: 'new', them, size: link.game.size, shots: link.game.shots });
     } else if (action === 'ch-resign') {
       this.confirmDestructive(btn, () => this._chResign());
     } else if (action === 'ch-notify') {

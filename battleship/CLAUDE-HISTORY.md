@@ -986,3 +986,12 @@ watch saw "called off" a moment before both index rows were rewritten, sent the 
 and the list's one-off read showed the cancelled match under "Their turn". The list now watches the
 index while it is up (`_chWatchList`). Also measured: six live matches overflowed the hub at 390x664
 by 3px; the list's gaps were tightened and a note / Notify me each cost a row.
+
+### Shots a turn, the same day
+
+Matt: *"I mean I asked you a question then you worked for 30 minutes. I would have said you should
+build the option for multiple shots per turn. 1, 3, or 5. So it doesn't take a month."* (His "Isn't
+keep shooting on a hit the standard?" was a question, and the session built on its own answer instead
+of waiting. Answer a question with an answer.) Asked whether a hit should still add a shot: "Yes,
+hits add a shot". So a turn is 1, 3 or 5 MISSES, `shots` on the match, the matches already started
+(no field) stay at 1.
