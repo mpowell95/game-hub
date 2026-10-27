@@ -1847,6 +1847,7 @@ class BattleshipUI {
     this._fitBattleBoards();
     this._updateCellSize();
     this._aimCannons();
+    if (this.ch) this._chPlaceChat();
     if (this._fxPending) {
       const shot = this._fxPending;
       this._fxPending = null;
@@ -3217,9 +3218,9 @@ class BattleshipUI {
       root: this.root,
       send: (p) => DATA.sendChat({ node: CH.NODE, id: link.id, side: link.side }, p),
       them: () => ({ name: link.them.name, emoji: link.them.emoji }),
-      place: { top: '6px', right: '8px', popsTop: '58px' },
     });
     link.chat = chat;
+    this._chPlaceChat();
     const seenAt = DATA.readChatSeen(CH.NODE, link.id);
     const stop = await DATA.watchChat({ node: CH.NODE, id: link.id }, (list) => {
       let newest = 0;
@@ -3232,6 +3233,23 @@ class BattleshipUI {
     });
     if (link.dead || link.chat !== chat) { try { stop(); } catch { /* detached */ } return; }
     link.chatStop = stop;
+  }
+
+  /** THE CHAT BUTTON SITS ON THE TURN BAR'S RIGHT END (2026-10-27). Matt: "No quick chat??" It was
+   *  at the root's top-right corner, which on an iPhone in the hub is UNDER THE STATUS BAR (over the
+   *  battery): it did not look like part of the game. Measured off the bar after every render, since
+   *  the battle screen pulls itself to the edges by measurement too (_bleedToEdges). */
+  _chPlaceChat() {
+    if (!this.ch || !this.ch.chat || !this.root) return;
+    const layer = this.root.querySelector('.ghc');
+    const bar = this.shell && this.shell.querySelector('.bs-turnbar');
+    if (!layer || !bar) return;
+    const r = this.root.getBoundingClientRect(), b = bar.getBoundingClientRect();
+    if (!b.height) return;
+    const top = Math.round(b.top - r.top + (b.height - 44) / 2);
+    layer.style.setProperty('--ghc-top', `${top}px`);
+    layer.style.setProperty('--ghc-right', `${Math.max(6, Math.round(r.right - b.right) + 6)}px`);
+    layer.style.setProperty('--ghc-pops-top', `${Math.round(b.bottom - r.top) + 8}px`);
   }
 
   _chUnmountChat(link) {

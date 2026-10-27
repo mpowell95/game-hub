@@ -311,6 +311,8 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   (`_chNext`). Counted once in `'mp'` with shots/hits (`countResult`, ledger
   `gamehub.battleship.counted.v1`), never head-to-head. Push: `battleshipTurnPush`, reminder, Remind bell.
 - The list is LIVE while up (`_chWatchList`): a one-off read raced a cancel's second row write.
+- **The chat button sits on the turn bar's right end** (`_chPlaceChat`, measured every render). Matt: *"No quick
+  chat??"*: it had been at the root's top-right, under the iPhone status bar in the hub.
 - **New challenge = pick a person, then Board + Shots (`_chChooseFor`), then deploy**, from every way in
   (tab, Multiplayer screen, Rematch). Matt, 2026-10-27: no choice was offered from the Multiplayer screen.
 - **ui.js calls nothing new from mp.js while the game is BUILT** (`CH_SHOTS` is local): mid-update sw.js can
