@@ -22,9 +22,7 @@ keep the first name on purpose**: the stats id keys every level already cleared 
 ## Hub integration
 
 - In-hub `module: '../way-out/js/ui.js'`, **immersive**. Hub id `way-out`; stats id `wayout`; `.wo-root`.
-- **Admin only** (`devOnly: true`, no `released` date: that is the New pill's input and must be the day
-  Matt releases it from the admin page). Its `GAME_META` row shipped with the game. The live admin
-  config has `way-out` `live: true`.
+- **Released** 2026-10-27 in code (`released: '2026-10-13'`, the admin switch day).
 - **King of Games (3VN33) can see and play it again since 2026-10-14** (Matt: *"Let king of games see
   and play arrows"*). He was hidden with `hideFrom: ['3VN33']` on the `GAMES` entry 2026-10-13 and
   again the evening of 10-14 while the bands were reworked; re-add that line to hide it from him.
@@ -257,7 +255,8 @@ Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder 
 - **More levels**: `src: {k:'X', band, n, g: 7}`, `buildMore(band, n)` (engine.js, GENERATOR 7, pinned by
   hash): each board is built like a ladder level picked by its seed from the top of its own band
   (`MORE_FROM`: Easy 31-50, Medium 81-100, Hard 161-200), never bigger than the band's last board. Log
-  `l` = the band's own number, `g` = 7. The seg bar laps every 50 past the band's end.
+  `l` = the band's own number, `g` = 7. Past the band's end the seg bar shows every level cleared in it
+  against the next 50 mark (Medium 101 = half full; Matt: "Give me some progress on the medium").
 - **Replay** (`js/arrow-maze-time.js` `woMissed`, `WO_SLIP_SINCE`): a level is listed when a log finish
   from 2026-10-17 04:15 UTC on (when slips started costing points) earned less than full; earlier ones
   kept full points and are never listed. Setup: a **↻ N** button at the left of the Play row opens the
@@ -271,6 +270,17 @@ Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder 
   (the log is per device).
 - Tests: `tools/test-arrow-maze-time.mjs` (replay maths), `way-out/js/test.js` (generator 7),
   `tools/test-arrow-maze-replay.mjs` (browser, `--size 360x724 --es` too).
+
+## Test boards (2026-10-26, admin only)
+
+Matt: *"what's the most difficult level you can possibly think of?"* on a Medium-sized board. Measured:
+every ladder board's blocker sits ~1.1 dots from the head and a third of the arrows are free at the start.
+`tools/build-arrow-tricky.mjs` searches (peel-proved solvable at every step) 10 boards of 16x22 and writes
+`js/tricky.js` (GENERATED): **1-3 far** (open lanes, blockers ~10 dots away), **4-7 mixed** (55% full,
+~7 dots, 1-2 free), **8-10 forced** (packed, exactly one arrow free at a time, 65 moves). The 🧪 button at
+the picture row's left (`isAdminDevice()` only) lists them with his best (time, hearts, hints); a test plays
+like a replay (keeps nothing) and its finish goes only to `gamehub.wayout.tests.v1` on that phone, never
+the stats store. Waiting on Matt's verdict on which style to turn into levels.
 
 ## Rush (2026-10-14)
 

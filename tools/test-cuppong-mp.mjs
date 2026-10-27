@@ -274,6 +274,29 @@ localStorage.removeItem(MP.OUTBOX_KEY);
 
 // --- structural -------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
+// A REPLAY SHOWS WHAT HAPPENED (2026-10-27, Matt: "That first shot by Moonis CLEARLY did NOT go in"):
+// throws were stored rounded to 5 decimals, and this rim shot (entry 18 of a real match, k2 made on the
+// thrower's phone) flew off the table from the rounded vector. Throws now keep full precision, and
+// replayVector finds a vector inside the rounding that lands where the throw was recorded.
+{
+  const PH = await import('../cup-pong/js/physics.js');
+  const { cupsXZ } = await import('../cup-pong/js/rack.js');
+  const log = [{"a":-0.00613,"b":0,"by":"a","k":"t","m":"","p":0.71817},{"a":0.0151,"b":0,"by":"a","k":"t","m":"","p":0.65227},{"a":0.00237,"b":0,"by":"b","k":"t","m":"k5","p":0.60173},{"a":0.06502,"b":0,"by":"b","k":"t","m":"","p":0.77867},{"a":-0.00455,"b":0,"by":"a","k":"t","m":"","p":0.63609},{"a":0.03245,"b":0,"by":"a","k":"t","m":"k0","p":0.72931},{"a":0.01318,"b":0,"by":"b","k":"t","m":"","p":0.47804},{"a":0.01172,"b":0,"by":"b","k":"t","m":"","p":0.51454},{"a":-0.0533,"b":0,"by":"a","k":"t","m":"","p":0.46524},{"a":0.04708,"b":0,"by":"a","k":"t","m":"","p":0.78981},{"a":0.06477,"b":1,"by":"b","k":"t","m":"k8","p":0.28078},{"a":-0.02415,"b":1,"by":"b","k":"t","m":"k7","p":0.2531},{"by":"b","id":"k9","k":"i"},{"a":0.0594,"b":1,"by":"b","k":"t","m":"k6","p":0.30246},{"by":"b","id":"k9","k":"i"},{"a":0.02805,"b":1,"by":"b","k":"t","m":"k1","p":0.52629},{"a":-0.08995,"b":0,"by":"a","k":"t","m":"","p":0.29873},{"a":0.03573,"b":1,"by":"a","k":"t","m":"k8","p":0.23954},{"a":-0.0516,"b":0,"by":"b","k":"t","m":"k2","p":0.44499}];
+  const g = MP.validateGame({ id: 'rimshot', a: { code: 'MATTA', name: 'Matt' }, b: { code: 'ANABB', name: 'Ana' }, by: 'MATTA',
+    created: 1, updated: 2, rules: {"bk":true,"fb":true,"gb":true,"gent":true,"io":true,"lc":true,"rr":1}, log: Object.fromEntries(log.map((e, i) => [String(i).padStart(4, '0'), { ...e, at: i + 1 }])) });
+  ok('the rim-shot match replays', !!g && g.log.length === 19);
+  const e = g.log[18];
+  const m = MP.buildLocal(g, 'a', 18); if (!m.queue.length) m.startTurn();
+  const cups = cupsXZ(m.target());
+  ok('the rounded vector alone flies off the table (the bug Matt saw)', PH.simulateThrow({ power: e.p, aim: e.a, cups }).outcome.kind !== 'made');
+  const v = PH.replayVector({ power: e.p, aim: e.a, cups }, e.m);
+  const o = PH.simulateThrow({ power: v.power, aim: v.aim, cups }).outcome;
+  ok('replayVector flies it into k2, inside the rounding', o.kind === 'made' && o.id === 'k2'
+    && Math.abs(v.power - e.p) <= PH.REPLAY_BOX && Math.abs(v.aim - e.a) <= PH.REPLAY_BOX);
+  const x = MP.cleanEntry({ by: 'a', k: 't', p: 0.123456789012, a: -0.0987654321, m: '' });
+  ok('cleanEntry keeps a throw at full precision', x.p === 0.123456789012 && x.a === -0.0987654321);
+}
+
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));
 ok('the backup reads the cuppong branch', /['"]cuppong['"]/.test(readFileSync('backups/rtdb-backup.mjs', 'utf8')));
 ok('mp.js deletes nothing', !/\.remove\(|set\([^)]*,\s*null\)/.test(readFileSync('cup-pong/js/mp.js', 'utf8')));

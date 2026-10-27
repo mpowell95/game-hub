@@ -264,5 +264,32 @@ export function simulateThrow(params) {
   };
 }
 
+/**
+ * The launch vector to REPLAY a recorded throw with (2026-10-27). Throws stored before then were
+ * rounded to 5 decimals, and a rim shot turns on the 6th: King of Games' cup went in on his phone
+ * and the rounded replay flew off the table on Matt's. So when the stored vector does not land
+ * where the throw was recorded, try the vectors that round to it (nearest first) and fly the first
+ * one that does. Any of them could have been the real throw; nothing is invented and nothing is
+ * steered. Full-precision throws (every throw from then on) match on the first try.
+ * `made` is the recorded cup id, or '' for a miss.
+ */
+export const REPLAY_BOX = 5e-6;
+const REPLAY_TRIES = (() => {
+  const out = [];
+  for (let i = -5; i <= 5; i++) for (let j = -5; j <= 5; j++) out.push([i, j]);
+  return out.sort((x, y) => (x[0] ** 2 + x[1] ** 2) - (y[0] ** 2 + y[1] ** 2)).slice(0, 61);
+})();
+export function replayVector({ power, aim, cups }, made) {
+  const want = made || '';
+  const lands = (o) => (o && o.kind === 'made' ? o.id : '') === want;
+  const until = Date.now() + 400;      // a throw from an older physics may match none: never hang the phone
+  for (const [i, j] of REPLAY_TRIES) {
+    if (Date.now() > until) break;
+    const p = power + i * REPLAY_BOX / 5, a = aim + j * REPLAY_BOX / 5;
+    if (lands(simulateThrow({ power: p, aim: a, cups }).outcome)) return { power: p, aim: a };
+  }
+  return { power, aim };
+}
+
 export { substep };
-export default { startThrow, step, takeEvents, simulateThrow, launchSpeed, heading, innerR, STEP };
+export default { startThrow, step, takeEvents, simulateThrow, replayVector, launchSpeed, heading, innerR, STEP };

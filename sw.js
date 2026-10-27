@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1260;
-const CACHE = 'game-hub-v1263';
+const IMPORTANT_SINCE = 1267;
+const CACHE = 'game-hub-v1268';
 
 const ASSETS = [
   './',
@@ -232,6 +232,7 @@ const ASSETS = [
   './way-out/js/ui.js',
   './way-out/js/engine.js',
   './way-out/js/strings.js',
+  './way-out/js/tricky.js',
   './gridlock/',
   './gridlock/index.html',
   './gridlock/css/gridlock.css',
@@ -649,19 +650,6 @@ const WARMED = REST.filter((p) => !isLazyAsset(p));
 // is what lets those modules be held back too.
 // __HELD_BACK_START__
 const HELD_BACK = {
-  'air-hockey': [
-    './air-hockey/',
-    './air-hockey/index.html',
-    './air-hockey/css/air-hockey.css',
-    './air-hockey/js/ui.js',
-    './air-hockey/js/physics.js',
-    './air-hockey/js/ai.js',
-    './air-hockey/js/render.js',
-    './air-hockey/js/strings.js',
-    './air-hockey/js/live.js',
-    './air-hockey/js/net-test.js',
-    './air-hockey/net-test.html',
-  ],
   'archery': [
     './archery/',
     './archery/index.html',
@@ -723,39 +711,6 @@ const HELD_BACK = {
     './battle-arena/js/online-ui.js',
     './battle-arena/js/alert.js',
   ],
-  'cuppong': [
-    './cup-pong/index.html',
-    './cup-pong/css/cup-pong.css',
-    './cup-pong/js/ui.js',
-    './cup-pong/js/physics.js',
-    './cup-pong/js/render.js',
-    './cup-pong/js/strings.js',
-    './cup-pong/js/mp-ui.js',
-    './cup-pong/js/alert.js',
-    './cup-pong/js/cpu.js',
-  ],
-  'darts': [
-    './darts/',
-    './darts/index.html',
-    './darts/css/darts.css',
-    './darts/js/ui.js',
-    './darts/js/render.js',
-    './darts/js/flight.js',
-    './darts/js/strings.js',
-    './darts/js/mp-ui.js',
-    './darts/js/alert.js',
-  ],
-  'eight-ball': [
-    './eight-ball/',
-    './eight-ball/index.html',
-    './eight-ball/css/eight-ball.css',
-    './eight-ball/js/ui.js',
-    './eight-ball/js/ai.js',
-    './eight-ball/js/render.js',
-    './eight-ball/js/strings.js',
-    './eight-ball/js/mp-ui.js',
-    './eight-ball/js/alert.js',
-  ],
   'gridlock': [
     './gridlock/',
     './gridlock/index.html',
@@ -765,19 +720,6 @@ const HELD_BACK = {
     './gridlock/js/art.js',
     './gridlock/js/levels.js',
     './gridlock/js/strings.js',
-  ],
-  'hoops4': [
-    './hoops4/index.html',
-    './hoops4/css/hoops4.css',
-    './hoops4/js/ui.js',
-    './hoops4/js/boarddef.js',
-    './hoops4/js/machine.js',
-    './hoops4/js/physics.js',
-    './hoops4/js/render.js',
-    './hoops4/js/cpu.js',
-    './hoops4/js/mp-ui.js',
-    './hoops4/js/alert.js',
-    './hoops4/js/strings.js',
   ],
   'pinball2': [
     './pinball2/index.html',
@@ -795,19 +737,16 @@ const HELD_BACK = {
     './pinball2/piernine/rules.js',
     './pinball2/piernine/style.css',
   ],
-  'way-out': [
-    './way-out/',
-    './way-out/index.html',
-    './way-out/css/way-out.css',
-    './way-out/js/ui.js',
-    './way-out/js/engine.js',
-    './way-out/js/strings.js',
-  ],
 };
 // __HELD_BACK_END__
 const HELD_BACK_OWNER = new Map();
 for (const [id, paths] of Object.entries(HELD_BACK)) for (const p of paths) HELD_BACK_OWNER.set(p, id);
 const SHOWN_KEY = './__shown-games__';
+// HELD BACK BUT SWITCHED LIVE (2026-10-26). Matt: "me making the switch solves it instantly". A
+// held-back game switched live on the admin page (js/hub.js `LIVE_HELD`) is served from the cache at
+// once instead of network-first (Darts took ~4 s to open on his phone), and the hub's message on
+// each page load refreshes ALL its files in the background, so the next open has the new code.
+const LIVE_KEY = './__live-held__';
 
 // --- the shell's own split: always-fresh vs cache-first (2026-09-01) ----------------------... [docs/SW-NOTES.md #11]
 const NETWORK_FIRST = [
@@ -841,7 +780,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '92da93e2a7',
+  './js/hub.js': 'ecee024c5e',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -862,7 +801,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '3c9804e43b',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': 'a560827aab',
+  './js/game-stats-ui.js': '5f22195a52',
   './js/stats-net.js': '0777e13469',
   './js/firebase-boot.js': '5a63920ff7',
   './js/device-report.js': '22d5aec601',
@@ -875,7 +814,7 @@ const REST_MANIFEST = {
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5349424c2f',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': 'a0109139ff',
+  './js/challenges.js': '8a0abf78c0',
   './js/challenges-ui.js': '857219db28',
   './js/challenge-life.js': '44ab3fcbc6',
   './js/challenges-strings.js': 'd45ac6cd00',
@@ -1019,6 +958,13 @@ const REST_MANIFEST = {
   './murdoku/js/ui.js': '49446a4207',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
+  './way-out/': '266cc82dc4',
+  './way-out/index.html': '266cc82dc4',
+  './way-out/css/way-out.css': '57ffd24975',
+  './way-out/js/ui.js': '28caa7989d',
+  './way-out/js/engine.js': 'a73ec75fbd',
+  './way-out/js/strings.js': '0a72197767',
+  './way-out/js/tricky.js': '0acb0a9350',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',
@@ -1032,14 +978,32 @@ const REST_MANIFEST = {
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',
   './archery/js/engine.js': 'a7a170fc9d',
   './archery/js/mp.js': '2d04eae495',
+  './eight-ball/': '91e30df217',
+  './eight-ball/index.html': '91e30df217',
+  './eight-ball/css/eight-ball.css': 'b1fe3b4efb',
+  './eight-ball/js/ui.js': '37b262ab46',
   './eight-ball/js/engine.js': '79a8c4ab1f',
+  './eight-ball/js/ai.js': '41a18ecd9b',
+  './eight-ball/js/render.js': '517a0ff153',
+  './eight-ball/js/strings.js': '3f0aa2edb9',
   './eight-ball/js/mp.js': '9da15467d8',
+  './eight-ball/js/mp-ui.js': 'b79597954d',
+  './eight-ball/js/alert.js': '24d28eb007',
   './battle-arena/js/engine.js': '8e390bbd63',
   './battle-arena/js/monsters.js': '00cecd68bc',
   './battle-arena/js/online.js': 'e715141fd7',
   './battle-arena/js/mp.js': '813b87356c',
+  './darts/': '9565b5b35f',
+  './darts/index.html': '9565b5b35f',
+  './darts/css/darts.css': 'd4360f7631',
+  './darts/js/ui.js': '3321bcc4d6',
   './darts/js/engine.js': '2d603f0ee2',
+  './darts/js/render.js': 'd05671e727',
+  './darts/js/flight.js': '60b3524662',
+  './darts/js/strings.js': '844396d26a',
   './darts/js/mp.js': '81e6dd8ba9',
+  './darts/js/mp-ui.js': 'aa1e3c1b56',
+  './darts/js/alert.js': 'c8ce53e4a8',
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',
   './sudoku/css/sudoku.css': '146887ebaf',
@@ -1103,6 +1067,17 @@ const REST_MANIFEST = {
   './brick-blitz/js/ui.js': 'b62a23fe1c',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': '00a75d8c6d',
+  './air-hockey/': 'c4f7eb7ae7',
+  './air-hockey/index.html': 'c4f7eb7ae7',
+  './air-hockey/css/air-hockey.css': '4a9868313e',
+  './air-hockey/js/ui.js': 'c58e7bfca7',
+  './air-hockey/js/physics.js': 'a8e3192cef',
+  './air-hockey/js/ai.js': '05aee99aee',
+  './air-hockey/js/render.js': 'b056ca690e',
+  './air-hockey/js/strings.js': '2f98208046',
+  './air-hockey/js/live.js': '94988ac956',
+  './air-hockey/js/net-test.js': '7037b18203',
+  './air-hockey/net-test.html': 'c50ec11a90',
   './holdem/': '11f6e0e99f',
   './holdem/index.html': '11f6e0e99f',
   './holdem/css/holdem.css': '1f9fda9318',
@@ -1130,12 +1105,32 @@ const REST_MANIFEST = {
   './skeeball/css/skeeball.css': 'c50f746472',
   './skeeball/js/ui.js': 'a2dc23cf10',
   './skeeball/js/swipe.js': 'c596f565de',
+  './cup-pong/index.html': '698942a954',
+  './cup-pong/css/cup-pong.css': 'd71937af33',
+  './cup-pong/js/ui.js': '0daa0c79f4',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': 'e23be8d550',
+  './cup-pong/js/physics.js': '108758b93f',
+  './cup-pong/js/render.js': '905aee5064',
+  './cup-pong/js/strings.js': 'cc6066dc26',
   './cup-pong/js/match.js': 'a7e6d50a1d',
-  './cup-pong/js/mp.js': '1ba3a4ece0',
+  './cup-pong/js/mp.js': 'ff8d2917b2',
+  './cup-pong/js/mp-ui.js': 'cf358d5147',
+  './cup-pong/js/alert.js': 'd71546586b',
+  './cup-pong/js/cpu.js': '03725812df',
+  './hoops4/index.html': '533fd79845',
+  './hoops4/css/hoops4.css': '38efeef410',
+  './hoops4/js/ui.js': '677f1cd260',
+  './hoops4/js/boarddef.js': 'd1214c250c',
+  './hoops4/js/machine.js': '657e6330a1',
+  './hoops4/js/physics.js': 'a5793407ee',
+  './hoops4/js/render.js': '267329ba3c',
   './hoops4/js/game.js': '2e0010da15',
+  './hoops4/js/cpu.js': 'f1b8a3e68b',
   './hoops4/js/mp.js': '8783f95060',
+  './hoops4/js/mp-ui.js': '769eccbb9c',
+  './hoops4/js/alert.js': '18ae0c4d78',
+  './hoops4/js/strings.js': '8ffabf9682',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
   './skeeball/js/challenge.js': '9fc771ac95',
@@ -1212,14 +1207,14 @@ const REST_MANIFEST = {
   './yahtzee/js/hash.js': '14b905be65',
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
-  './battleship/css/battleship.css': '75634de09a',
-  './battleship/js/ui.js': '68eca869fb',
+  './battleship/css/battleship.css': '1b4481fddd',
+  './battleship/js/ui.js': 'aa8c56aabb',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',
   './battleship/js/hash.js': 'aed473aee9',
   './battleship/js/ship-art.js': '11ea9db668',
-  './battleship/js/strings.js': 'c6b75bdfc1',
+  './battleship/js/strings.js': '86805a5c29',
   './battleship/js/mp.js': '761192038f',
   './battleship/js/alert.js': '1703a8f589',
   './chinchon/decks/baraja-libre/oros-1.webp': '740f863677',
@@ -1524,10 +1519,54 @@ async function noteShownGames(ids) {
   if (want.some((id) => !had.includes(id))) await queueWarm();
 }
 
+// The held-back games switched live (LIVE_HELD), read once per worker life from the cache.
+let _liveHeld = null;
+function liveHeld() {
+  if (!_liveHeld) {
+    _liveHeld = (async () => {
+      for (const name of [CACHE, ...(await caches.keys())]) {
+        try {
+          const res = await (await caches.open(name)).match(LIVE_KEY);
+          if (res) return new Set(await res.json());
+        } catch { /* unreadable: try the next */ }
+      }
+      return new Set();
+    })().catch(() => new Set());
+  }
+  return _liveHeld;
+}
+const _heldRefreshedAt = new Map();
+const HELD_REFRESH_MS = 2 * 60 * 1000;
+async function noteLiveHeld(ids) {
+  const want = [...new Set(ids.filter((id) => typeof id === 'string' && HELD_BACK[id]))].sort();
+  _liveHeld = Promise.resolve(new Set(want));
+  const cache = await caches.open(CACHE);
+  await cache.put(LIVE_KEY, new Response(JSON.stringify(want)));
+  // Refresh each live game's files as a SET, so a cached copy never mixes two builds for long.
+  const queue = [];
+  for (const id of want) {
+    if (Date.now() - (_heldRefreshedAt.get(id) || 0) < HELD_REFRESH_MS) continue;
+    _heldRefreshedAt.set(id, Date.now());
+    queue.push(...HELD_BACK[id]);
+  }
+  const worker = async () => {
+    for (let path; (path = queue.shift()) !== undefined;) {
+      try {
+        const res = await fetch(new Request(path, { cache: 'no-cache' }));
+        if (res && res.ok) await cache.put(path, res);
+      } catch { /* offline: the cached copy stays */ }
+    }
+  };
+  await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
+}
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'GET_VERSION') {
     const port = event.ports && event.ports[0];
     if (port) port.postMessage({ type: 'VERSION', cache: CACHE, important: IMPORTANT_SINCE });
+  }
+  if (event.data && event.data.type === 'LIVE_HELD' && Array.isArray(event.data.ids)) {
+    event.waitUntil(noteLiveHeld(event.data.ids).catch((err) => console.warn('[sw] LIVE_HELD failed', err)));
   }
   if (event.data && event.data.type === 'SHOWN_GAMES' && Array.isArray(event.data.ids)) {
     event.waitUntil(noteShownGames(event.data.ids).catch((err) => console.warn('[sw] SHOWN_GAMES failed', err)));
@@ -1619,6 +1658,8 @@ self.addEventListener('activate', (event) => {
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 
 // The REST tier's own paths, for the cache-first branch below. [docs/SW-NOTES.md #27]
+// Held-back file pathname -> its hub id (the LIVE_HELD check in the fetch handler).
+const HELD_PATH_OWNER = new Map([...HELD_BACK_OWNER].map(([p, id]) => [new URL(p, self.location.href).pathname, id]));
 const DEV_FRESH_PATHS = new Set([...HELD_BACK_OWNER.keys()].map((p) => new URL(p, self.location.href).pathname));
 const CACHE_FIRST_PATHS = new Set(
   [...REST, ...SHELL_CACHE_FIRST]
@@ -1693,6 +1734,10 @@ self.addEventListener('fetch', (event) => {
     const cur = await caches.open(CACHE);
     const cached = (await cur.match(req, { ignoreSearch: true }))
       || (await caches.match(req, { ignoreSearch: true }));
+
+    // A held-back game switched live: the cached copy at once; `net` refreshes it behind.
+    const heldOwner = cached && sameOrigin ? HELD_PATH_OWNER.get(url.pathname) : null;
+    if (heldOwner && (await liveHeld()).has(heldOwner)) return cached;
 
     if (!cached) {
       try {

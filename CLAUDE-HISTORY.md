@@ -1342,3 +1342,27 @@ claimed in the last 24 h (`usernames/<name>.at`), the gate asks "Is this you?" w
 links to that code exactly as the code Link does (`js/name-gate.js` `linkTo`, `ME_WINDOW_MS`;
 `stats-net.js` `usernameOwner`). Older claims still need the code. Anyone could tap it on someone else's
 name claimed that day; accepted by Matt as the trade-off (family-grade, like the registry itself).
+
+## 2026-10-26: admin-switched games were slow to open (Darts ~4 s)
+
+Matt's screen recording: Play on a Darts challenge, ~1.3 s on the launcher, ~2.5 s on the setup card,
+then the match. Darts, Cup Pong, Pool, Connect 4 Hoops, Air Hockey and Arrow Maze were live from the
+admin page but still `devOnly` in code, so `sw.js` held them back: no hash, network-first with a 2.5 s
+deadline, every module of the game fetched on every open. Matt: "If I switch it from admin only to fully
+released, obviously you should update the code as soon as you see that. Or even better, me making the
+switch solves it instantly." Fixed both ways: the six released in code (v1264, v1265), and `LIVE_HELD`
+(js/hub.js `_tellWorkerLive`, sw.js `noteLiveHeld`/`liveHeld`): a held-back game switched live is served
+from the cache at once, and each hub load refreshes all its files in the background (`cache: 'no-cache'`,
+at most every 2 min per game), so a switch is fast with no commit. Probes in `tools/test-sw-strategy.mjs`.
+
+## 2026-10-27: Play sat on the setup card (the match read)
+
+After the release fix, Matt: "I don't want it to just show the setup card forever... I'm connected to
+WiFi. My internet is like 700mbps." Measured: the game code now loads from the phone in 0.1-0.3 s; the
+wait was the game reading the match from Firebase AFTER mounting (`readGame` = `get()`), 0.05 s to 23 s
+in headless runs, worst right after the app loads. Fix: `js/challenges.js` `holdMatches` keeps a
+listener (`watchGame`) on every open match whenever the Multiplayer lists are read (the hub primes them
+on every launcher paint and on each new turn alert); Firebase's `get()` then answers from the local copy
+(measured 0 ms). Probe in `tools/test-challenges.mjs`. Also seen: 11 deploys in 43 min that evening; an
+admin device reloads onto each one and must reconnect to Firebase.
+

@@ -354,10 +354,7 @@ export const GAMES = [
     immersive: true,
     accent: '#d4252b',
     art: GAME_ART['cuppong'],
-    // ADMIN ONLY while it is built (docs/CUP-PONG-BRIEF.md). No `released` date on purpose: it is
-    // the only input to the launcher's New pill and must be the day Matt releases it, which he
-    // does from the admin page with no commit.
-    devOnly: true,
+    released: '2026-09-28',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Darts (2026-10-01): a clone of GamePigeon's Darts. 301 down to exactly zero, three darts a
@@ -374,10 +371,7 @@ export const GAMES = [
     immersive: true,
     accent: '#b8282d',
     art: GAME_ART['darts'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it, which he does from
-    // the admin page with no commit.
-    devOnly: true,
+    released: '2026-10-03',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Flick Soccer (2026-10-11): table soccer with flicked discs (the Soccer Stars kind). Pull back
@@ -435,9 +429,7 @@ export const GAMES = [
     immersive: true,
     accent: '#0F8A3C',
     art: GAME_ART['eight-ball'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-10-23',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Cup Baseball (2026-10-23): the drinking-game baseball, on Cup Pong's table. Four cups in a
@@ -478,12 +470,7 @@ export const GAMES = [
     immersive: true,
     accent: '#1f5fa8',
     art: GAME_ART['hoops4'],
-    // ADMIN ONLY while Matt plays it in ("build and deploy for testing", 2026-09-21). No
-    // `released` date on purpose: that field is the only input to the launcher's New pill and it
-    // must announce the day the game ACTUALLY goes live, not the day it went up for testing.
-    // Releasing it needs no commit - the admin page's live switch overrides this (root
-    // CLAUDE.md, "The admin control page").
-    devOnly: true,
+    released: '2026-09-22',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // ADMIN ONLY AGAIN (Matt's ask, 2026-08-23), exactly like Baseball. It was released
@@ -597,10 +584,7 @@ export const GAMES = [
     immersive: true,
     accent: '#1f5fa8',
     art: GAME_ART['air-hockey'],
-    // ADMIN ONLY while it is built in stages. No `released` date on purpose: that field drives
-    // the launcher's New pill and must be the day the game actually goes live. Releasing it needs
-    // no commit (the admin page's live switch overrides this).
-    devOnly: true,
+    released: '2026-09-28',         // switched live on the admin page that day; released in code 2026-10-26
   },
   {
     // Texas Hold'em (2026-09-27): no-limit tournament poker, vs up to 7 computers or at an online
@@ -750,10 +734,7 @@ export const GAMES = [
     immersive: true,
     accent: '#4471a3',
     art: GAME_ART['way-out'],
-    // ADMIN ONLY at first, like every new game here (Matt: "add it to the hub as admin only").
-    // No `released` date on purpose: it is the only input to the launcher's New pill and must be
-    // the day Matt releases it, which he does from the admin page with no commit.
-    devOnly: true,
+    released: '2026-10-13',         // switched live on the admin page that day; released in code 2026-10-27
     // King of Games (3VN33) was held back with `hideFrom` on 2026-10-13 and again 10-14 while the
     // bands were reworked; given back 2026-10-14 (Matt: "Let king of games see and play arrows").
   },
@@ -1164,6 +1145,7 @@ class Hub {
     const visible = GAMES.filter((g) => (isGameLive(g.id, !g.devOnly) || dev || isGameAllowed(g.id, myCode))
       && !hiddenFromPlayer(g, myCode, dev));
     this._tellWorkerShown(visible.map((g) => g.id));
+    this._tellWorkerLive(GAMES.filter((g) => g.devOnly && isGameLive(g.id, false)).map((g) => g.id));
     const storedFavIds = loadFavorites();
     const favIdSet = new Set(storedFavIds);
     // FAVORITES ARE NEVER TOUCHED BY THE SORT. They stay above, in the player's own custom order
@@ -1563,6 +1545,8 @@ class Hub {
           // Keep the registry's order, so the pills never swap places.
           this._gameAlerts = GAMES.map((x) => rest.find((r) => r.game === x.id)).filter(Boolean);
           this._paintGameAlert();
+          // A new turn: load that match now, so Play opens it at once (js/challenges.js holdMatches).
+          if (alert) this._primeMultiplayer();
         });
         // mod.watch has attached its listener once it resolves (after Firebase boots); the check
         // above waits for that, not for the data.
@@ -2355,6 +2339,22 @@ class Hub {
         .then((reg) => { if (reg.active) reg.active.postMessage({ type: 'SHOWN_GAMES', ids }); })
         .catch(() => {});
     } catch { /* no worker: nothing is warmed anyway */ }
+  }
+
+  /** Tell the service worker which admin-only games are switched LIVE on the admin page (2026-10-26).
+   *  sw.js serves those from its cache at once (they used to wait on the network on every open, ~4 s
+   *  for Darts) and refreshes all their files behind, so the switch alone makes them fast. Sent on
+   *  the first launcher paint of each page load (that is the refresh) and whenever the list changes. */
+  _tellWorkerLive(ids) {
+    const key = ids.slice().sort().join(',');
+    if (key === this._liveSent) return;
+    this._liveSent = key;
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      navigator.serviceWorker.ready
+        .then((reg) => { if (reg.active) reg.active.postMessage({ type: 'LIVE_HELD', ids }); })
+        .catch(() => {});
+    } catch { /* no worker: nothing to tell */ }
   }
 
   /** Ask the ACTIVE service worker which cache version it runs. Null when unknown. */
