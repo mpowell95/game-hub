@@ -18,6 +18,7 @@ import {
 } from './engine.js';
 import STRINGS from './strings.js';
 import { postProgress, watchDaily, needsPost } from './board.js';
+import { logAction, flushLog } from './log.js';
 import { myCode } from '../../js/messages.js';
 import { loadProfile } from '../../js/profile-store.js';
 
@@ -139,7 +140,10 @@ class SpellingBee {
     this._offResize = onViewportResize(() => { this._positionRoot(); this._layoutPanel(); });
     this._onKey = (ev) => this._handleKey(ev);
     document.addEventListener('keydown', this._onKey);
-    this._onVis = () => { if (!document.hidden) this._checkDay(); };
+    this._onVis = () => {
+      this._log(document.hidden ? 'hidden' : 'visible');
+      if (document.hidden) flushLog(); else this._checkDay();
+    };
     document.addEventListener('visibilitychange', this._onVis);
     this._dayTimer = setInterval(() => this._checkDay(), 60000);
     await ensureCSS();
@@ -203,6 +207,8 @@ class SpellingBee {
       if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
     });
     this._postSoon(0);
+    this._log('open', { r: `day ${this.n}${this.old ? ' old' : ''}` });
+    flushLog();   // anything queued from an earlier session (offline, closed too fast)
     try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old) }; } catch { /* ignore */ }
   }
 
@@ -386,7 +392,7 @@ class SpellingBee {
     if (a === 'delete') this.backspace();
     else if (a === 'shuffle') this.shuffle();
     else if (a === 'enter') this.submit();
-    else if (a === 'toggle') { this.open = !this.open; this._paintFound(); }
+    else if (a === 'toggle') { this.open = !this.open; this._paintFound(); if (this.open) this._log('list'); }
     else if (a === 'hints') this._openHints();
     else if (a === 'yesterday') this._openYesterday();
     else if (a === 'past') this._openPast();
@@ -425,6 +431,7 @@ class SpellingBee {
 
   shuffle() {
     if (!this.puzzle) return;
+    this._log('shuffle');
     this.outer = shuffled(this.outer);
     if (reduced()) { this._paintLetters(); return; }
     this.el.hive.classList.add('is-shuffling');
@@ -436,6 +443,7 @@ class SpellingBee {
     this._checkDay();
     const word = this.input;
     const why = checkWord(word, this.puzzle, this.answerSet, this.found, this.extraSet);
+    this._log('guess', { w: word, r: why || (this.answerSet.has(word) ? 'ok' : 'bonus') });
     if (why) { this._reject(why); return; }
     const before = this.rank();
     this.found.add(word);
@@ -523,10 +531,12 @@ class SpellingBee {
   // --- overlays --------------------------------------------------------------------------------
 
   _openOverlay(kind, html) {
+    const was = this._overlay ? this._overlay.dataset.kind : null;   // a refresh or a month flip is not a new open
     this._closeOverlay();
     const ov = document.createElement('div');
     ov.className = 'gh-overlay sb-overlay';
     ov.dataset.kind = kind;
+    if (kind !== was) this._log(kind);   // hints, yesterday, past, board, rankings, help, win
     ov.innerHTML = `<div class="gh-modal sb-modal sb-modal--${kind}" role="dialog" aria-modal="true">${html}</div>`;
     ov.addEventListener('click', (ev) => {
       if (ev.target === ov || ev.target.closest('[data-ov="close"]')) this._closeOverlay();
@@ -555,6 +565,11 @@ class SpellingBee {
   _closeBtn() { return `<button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>`; }
 
   // --- the daily board (board.js) -------------------------------------------------------------
+
+  /** Every guess and action, timed (log.js; Matt, 2026-10-27: "Everything."). Never shown in the game. */
+  _log(e, extra) {
+    if (this.puzzle) { try { logAction(this.puzzle.key, e, extra); } catch (err) { console.error('[spelling-bee] log', err); } }
+  }
 
   _postSoon(ms) {
     clearTimeout(this._postT);
@@ -796,6 +811,7 @@ class SpellingBee {
   }
 
   destroy() {
+    if (this.puzzle) { this._log('close'); flushLog(); }
     this.disposed = true;
     if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
     if (this._stopBoard) this._stopBoard();
