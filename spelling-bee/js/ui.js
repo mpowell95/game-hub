@@ -34,6 +34,8 @@ const DATA_PROMISE = {};   // per language: the word list, fetched once per page
  *  saved, so a stored word that still fits the puzzle's letters was accepted when it was found. */
 const legal = (w, p) => typeof w === 'string' && w.length >= 4 && w.includes(p.center) && [...w].every((c) => p.letters.has(c));
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// The mark at Genius and above (Matt, 2026-10-27: "Obviously a bee should be the highest award").
+const crestOf = (ri) => (ri === QUEEN ? '🐝' : '🧠');
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
@@ -534,7 +536,7 @@ class SpellingBee {
     writeSave(this.save);
     this._later(() => this._openOverlay('win', `
       <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
-      <div class="sb-win-bee" aria-hidden="true">${ri === QUEEN ? '👑' : '🐝'}</div>
+      <div class="sb-win-bee" aria-hidden="true">${crestOf(ri)}</div>
       <h2 class="gh-modal__title sb-win-title">${esc(t(ri === QUEEN ? 'queen_title' : 'genius_title'))}</h2>
       <p class="sb-win-pts">${esc(t('points_n', { n: this.score }))}</p>
       <div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--block sb-keep" data-ov="close">${esc(t('keep_going'))}</button></div>`), 700);
@@ -651,12 +653,14 @@ class SpellingBee {
       rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
     }
     rows.sort((a, b) => b.words - a.words || b.points - a.points || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
+    // Place (ties share it), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words
+    // over points (Matt, 2026-10-26: "I wanna see how many points they have too").
     const genius = rankThresholds(max || 1)[GENIUS] || 1;
     let place = 0;
     const li = rows.map((r, i) => {
       if (i === 0 || r.words !== rows[i - 1].words || r.points !== rows[i - 1].points) place = i + 1;
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
-      const crest = r.rank >= GENIUS ? (r.rank === QUEEN ? '👑' : '🐝') : '';
+      const crest = r.rank >= GENIUS ? crestOf(r.rank) : '';
       return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
         <span class="sb-bd-pos${place <= 3 ? ' is-top' : ''}">${place}</span>
         <span class="sb-bd-av" aria-hidden="true">${esc(r.emoji)}</span>
@@ -795,7 +799,7 @@ class SpellingBee {
     let ri = rankIndex(sc, max, ans.every((w) => gs.has(w)));
     if (r.recorded && ri < GENIUS) ri = GENIUS;
     const g = rankThresholds(max)[GENIUS] || 1;
-    const mark = ri >= GENIUS ? `<i class="sb-cal-mark">${ri === QUEEN ? '👑' : '🐝'}</i>`
+    const mark = ri >= GENIUS ? `<i class="sb-cal-mark">${crestOf(ri)}</i>`
       : `<i class="sb-cal-bar"><b style="width:${Math.max(8, Math.round(Math.min(1, sc / g) * 100))}%"></b></i>`;
     return { ri, mark };
   }
