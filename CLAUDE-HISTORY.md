@@ -1369,3 +1369,15 @@ js/firebase-boot.js: forceWebSockets(); goOffline/goOnline when the app comes ba
 NOT verified on an iPhone (the sandbox cannot run WebKit; its proxy also distorts websocket timings). Also seen:
 11 deploys in 43 min the night before; an admin device reloads onto each one and opens a new connection.
 
+
+
+## Admin-only games on the Multiplayer screen (2026-10-27)
+
+Matt: "on the main gamehub page, admin only games have the 'test' badge on them. But they don't on the
+multiplayer screen. Why? Make sure NO admin only game is visible to ANY player besides me."
+Why: the Multiplayer grid (js/challenges-ui.js) drew only art and name; it never had the Test pill. Its game
+list was already the launcher's visible list, so players never saw admin-only games there. One gap closed:
+Matt or test1 could still CHALLENGE a regular player in an admin-only game (Archery, Battle Arena), which
+would push them, write their index row and show the chat in Messages for a game they cannot see. Now every
+challenge picker filters, and every createGame refuses, a person whose launcher hides that game (dev
+profiles and admin-page `allow` codes excepted). Checked live that day: no archery/battlearena index rows existed.

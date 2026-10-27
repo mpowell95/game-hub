@@ -223,11 +223,29 @@ console.log('\n-- online play (js/online-gate.js) --');
   for (const p of ['./hoops4/js/mp.js', './cup-pong/js/mp.js', './darts/js/mp.js', './flick-soccer/js/mp.js', './archery/js/mp.js']) {
     const s = read(p);
     const body = s.slice(s.indexOf('export async function createGame('), s.indexOf('export async function createGame(') + 1200);
-    ok(`${p} createGame checks both people`, /onlineGate\(\)/.test(body) && /codeMayPlayOnline\(to\)/.test(body));
+    ok(`${p} createGame checks both people`, /onlineGate\(\)/.test(body) && /codeMayPlayOnline\(to\b/.test(body));
     ok(`${p} only offers allowed opponents`, /readOpponents[\s\S]{0,400}codeMayPlayOnline/.test(s));
   }
+  // An admin-only game is never sent to a player who cannot see it (Matt, 2026-10-27). The hub
+  // registers the launcher's rule; a dev profile (test1 here) still may; a released game is open.
+  {
+    const G = await import(new URL('./js/online-gate.js', __ROOT_URL).href);
+    G.setGameShownCheck((id) => id !== 'secret-game');
+    eq('an admin-only game: a regular player is refused', G.codeMayPlayOnline('3VN33', 'secret-game', 'Someone'), false);
+    eq('an admin-only game: the test profile may', G.codeMayPlayOnline('3VN33', 'secret-game', 'test1'), true);
+    eq('a released game: anyone allowed online', G.codeMayPlayOnline('3VN33', 'darts', 'Someone'), true);
+    eq('no game named: the online check alone', G.codeMayPlayOnline('3VN33'), true);
+    eq('the online check still comes first', G.codeMayPlayOnline('NEW99', 'darts', 'test1'), false);
+    G.setGameShownCheck(null);
+    const hub = read('./js/hub.js');
+    ok('the hub registers the launcher rule', /setGameShownCheck\(shownToCode\)/.test(hub));
+    for (const p of ['archery', 'battle-arena', 'battleship', 'chinchon', 'cup-pong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'hoops4']) {
+      const s = read(`./${p}/js/mp.js`);
+      ok(`${p}: picker and createGame name the game`, (s.match(/codeMayPlayOnline\([^\n]*?, '[a-z0-9-]+', /g) || []).length >= 2);
+    }
+  }
   const sk = read('./skeeball/js/challenge.js');
-  ok('skeeball challenges check both people', /onlineGate\(\)/.test(sk) && /codeMayPlayOnline\(to\)/.test(sk));
+  ok('skeeball challenges check both people', /onlineGate\(\)/.test(sk) && /codeMayPlayOnline\(to\b/.test(sk));
 }
 
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);

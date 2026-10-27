@@ -563,6 +563,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   list. Two devices on ONE code cannot join the same room (`'same-player'`).
 - Refusals: `'no-code'`, `'not-approved'`, `'same-player'`, `'them-not-approved'`; show
   `onlineGateText(err)`.
+- **An admin-only game is never sent to a player who cannot see it (Matt, 2026-10-27).** Every challenge
+  picker and `createGame` passes `codeMayPlayOnline(code, '<hubId>', name)`; `js/hub.js` registers the launcher's
+  rule (`setGameShownCheck`). Only dev profiles and codes the admin page opened it to. The Multiplayer tiles wear the
+  launcher's Test pill (`test` from `_challengeGames`/`_liveGames`).
 - It does not stop collusion between two real approved players or dev-tools tampering. A new
   family member cannot play online until Matt taps them in.
 

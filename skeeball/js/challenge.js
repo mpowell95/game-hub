@@ -520,7 +520,7 @@ export async function createChallenge({ them, legs, scoring = 'games', all = fal
   // Both people must be allowed online (2026-10-08, the play-yourself cheat): js/online-gate.js.
   const gate = onlineGate();
   if (gate) return { ok: false, reason: gate };
-  if (!codeMayPlayOnline(to)) return { ok: false, reason: 'them-not-approved' };
+  if (!codeMayPlayOnline(to, 'skeeball', String(them.name || ''))) return { ok: false, reason: 'them-not-approved' };
   if (!Array.isArray(legs) || !legs.length || legs.length > MAX_LEGS
     || !legs.every((l) => l && BOARD_RE.test(String(l.board || '')))) return { ok: false, reason: 'bad-challenge' };
   if (!writesAllowed('createChallenge')) return { ok: false, reason: 'dev-origin-blocked' };

@@ -412,7 +412,7 @@ export function opponentsFrom(all, me) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 export async function readOpponents() {
-  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
+  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code, 'archery', r.name)); }
   catch (err) { console.warn('[archery] could not read the player list', err); return []; }
 }
 
@@ -453,7 +453,7 @@ export async function createGame({ them }) {
   if (!to || to === me) return fail('bad-opponent');
   const gate = onlineGate();
   if (gate) return fail(gate);
-  if (!codeMayPlayOnline(to)) return fail('them-not-approved');
+  if (!codeMayPlayOnline(to, 'archery', String(them.name || ''))) return fail('them-not-approved');
   if (!allowed('createGame')) return fail('dev-origin-blocked');
   const mine = meLabel();
   const now = Date.now();

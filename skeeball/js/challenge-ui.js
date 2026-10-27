@@ -207,7 +207,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const all = await readPlayersForMe().catch(() => ({}));
     state.recs = all || {};
     // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
-    state.players = CH.opponentsFrom(state.recs, CH.myCode()).filter((r) => codeMayPlayOnline(r.code));
+    state.players = CH.opponentsFrom(state.recs, CH.myCode()).filter((r) => codeMayPlayOnline(r.code, 'skeeball', r.name));
     return state.players;
   };
   const viewPick = async () => {

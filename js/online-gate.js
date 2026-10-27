@@ -20,6 +20,7 @@
 import { loadProfile } from './profile-store.js';
 import { isOnlineAllowed, isAdminDevice } from './admin-config.js';
 import { makeT } from './i18n.js';
+import { isDevProfile } from './challenge/hooks.js';
 
 const t = makeT({
   en: {
@@ -55,8 +56,22 @@ export function onlineGate() {
   return 'not-approved';
 }
 
-/** May this OTHER player code play online? For opponent lists and challenge checks. */
-export function codeMayPlayOnline(code) { return isOnlineAllowed(code); }
+/** May this OTHER player code play online? For opponent lists and challenge checks. With `game`
+ *  (a hub id) and their `name`, also: may they SEE that game? An admin-only game is never sent to a
+ *  player whose launcher hides it (Matt, 2026-10-27: "NO admin only game visible to ANY player
+ *  besides me"), so its picker lists only dev profiles and codes Matt opened it to, and createGame
+ *  refuses anyone else (no push, no Messages line, no index row for a game they cannot see). */
+export function codeMayPlayOnline(code, game, name) {
+  if (!isOnlineAllowed(code)) return false;
+  if (!game || !_gameShown || _gameShown(game, code)) return true;
+  return !!name && isDevProfile(name);
+}
+
+/** js/hub.js registers `(hubId, code) => bool`: is that game on that player's launcher? It owns the
+ *  registry (devOnly) and the admin overrides, so the rule lives in one place. Unset (a standalone
+ *  game page) = no game check. */
+let _gameShown = null;
+export function setGameShownCheck(fn) { _gameShown = typeof fn === 'function' ? fn : null; }
 
 /** The words for a refusal from this module, or '' when `err` is not one of ours (so a caller can
  *  write `onlineGateText(err) || itsOwnMessage`). */
@@ -68,4 +83,4 @@ export function onlineGateText(err) {
   return '';
 }
 
-export default { myPlayerCode, onlineGate, codeMayPlayOnline, onlineGateText };
+export default { myPlayerCode, onlineGate, codeMayPlayOnline, setGameShownCheck, onlineGateText };

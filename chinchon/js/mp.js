@@ -598,7 +598,7 @@ export function opponentsFrom(all, me) {
 }
 export async function readOpponents() {
   // Only people who may play online (js/online-gate.js): a made-up second account is never offered.
-  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code)); }
+  try { return opponentsFrom(await readOpponentProfiles(), myCode()).filter((r) => codeMayPlayOnline(r.code, 'chinchon', r.name)); }
   catch (err) { console.warn('[chinchon] could not read the player list', err); return []; }
 }
 
@@ -651,7 +651,7 @@ export async function createGame({ them, len = 'hand' }) {
   // Both people must be allowed online (js/online-gate.js).
   const gate = onlineGate();
   if (gate) return fail(gate);
-  if (!codeMayPlayOnline(to)) return fail('them-not-approved');
+  if (!codeMayPlayOnline(to, 'chinchon', String(them.name || ''))) return fail('them-not-approved');
   if (!allowed('createGame')) return fail('dev-origin-blocked');
   if (!LENS.includes(len)) return fail('bad-len');
   const mine = meLabel();
