@@ -42,6 +42,11 @@ async function boot() {
   let app;
   try { app = appMod.getApp('stats'); }
   catch { app = appMod.initializeApp(cfg, 'stats'); }
+  // WEBSOCKETS ONLY (2026-10-27). After any dropped connection (a phone put away, a network change)
+  // Firebase remembers a "websocket failure" and starts the next connection with long-polling, then
+  // upgrades; every read waited 6-8 s through that switch (measured). Every browser that runs the hub
+  // has websockets, so the slow path is never needed. Must run before getDatabase().
+  try { if (typeof dbMod.forceWebSockets === 'function') dbMod.forceWebSockets(); } catch { /* default transport */ }
   const db = dbMod.getDatabase(app);
   const auth = authMod.getAuth(app);
   if (!auth.currentUser) await authMod.signInAnonymously(auth);
@@ -49,7 +54,60 @@ async function boot() {
   // sign-in's own id - stable for this browser until its site data is cleared - and it is the only
   // identity the RTDB rules can see. `messages/` scopes itself on it (js/messages.js claims
   // msgAuth/<uid>), and `admins/<uid>` is the allowlist that grants Matt the read-all.
-  return { db, api: dbMod, uid: (auth.currentUser && auth.currentUser.uid) || null };
+  watchResume(db, dbMod);
+  return { db, api: timedApi(dbMod), uid: (auth.currentUser && auth.currentUser.uid) || null };
+}
+
+// BACK FROM THE BACKGROUND: RECONNECT AT ONCE (2026-10-27). Matt: "fix whatever is slowing
+// everything down so much" - Play sat on a setup card for up to 12 s. Backgrounding a phone (an iPhone
+// most of all) leaves the database connection dead or waiting out its own retry timer, and every read
+// queues behind it. After 20 s away, coming back drops the connection and opens a new one straight
+// away (goOffline/goOnline: Firebase connects at once instead of on its backoff). Pending writes are
+// kept and re-sent by Firebase itself; nothing is lost.
+const AWAY_MS = 20 * 1000;
+let _hiddenAt = 0;
+let _resumeAt = 0;
+let _watching = false;
+function reconnect(db, dbMod) { try { dbMod.goOffline(db); dbMod.goOnline(db); _resumeAt = Date.now(); } catch { /* stays as it was */ } }
+function watchResume(db, dbMod) {
+  if (_watching || typeof document === 'undefined') return;
+  _watching = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { _hiddenAt = Date.now(); return; }
+    if (_hiddenAt && Date.now() - _hiddenAt >= AWAY_MS) reconnect(db, dbMod);
+    _hiddenAt = 0;
+  });
+  if (typeof window !== 'undefined') window.addEventListener('online', () => reconnect(db, dbMod));
+}
+
+// SLOW READS ARE WRITTEN DOWN (2026-10-27), so "it is slow" can be answered with the phone's own
+// numbers: any get() over SLOW_MS lands in `gamehub.perf.v1` (the last 30), mirrored as
+// players/<id>/perf by stats-net.js. A REPORT: nothing reads it back. The read itself is untouched.
+const PERF_KEY = 'gamehub.perf.v1';
+const SLOW_MS = 1500;
+function noteSlow(ms, q, ok) {
+  try {
+    const list = JSON.parse(localStorage.getItem(PERF_KEY) || '[]');
+    let p = '';
+    try { p = decodeURIComponent(new URL(String(q)).pathname).slice(1, 80); } catch { /* unnamed */ }
+    list.push({ t: Date.now(), ms: Math.round(ms), p, ok: ok ? 1 : 0,
+      back: _resumeAt ? Math.round((Date.now() - _resumeAt) / 1000) : -1 });
+    localStorage.setItem(PERF_KEY, JSON.stringify(list.slice(-30)));
+  } catch { /* a report only */ }
+}
+export function perfReport() {
+  try { const list = JSON.parse(localStorage.getItem(PERF_KEY) || '[]'); return Array.isArray(list) && list.length ? list : null; } catch { return null; }
+}
+function timedApi(dbMod) {
+  const api = { ...dbMod };
+  api.get = (q) => {
+    const t = Date.now();
+    const p = dbMod.get(q);
+    p.then(() => { if (Date.now() - t > SLOW_MS) noteSlow(Date.now() - t, q, true); },
+      () => { if (Date.now() - t > SLOW_MS) noteSlow(Date.now() - t, q, false); });
+    return p;
+  };
+  return api;
 }
 
 /** Resolves to { db, api } once the named 'stats' app + anonymous auth are ready, or null if

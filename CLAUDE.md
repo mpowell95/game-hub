@@ -66,6 +66,10 @@ on the phone; no session spotted it, despite Matt asking more than once why the 
 server (`boards/`, `directory/`) made it instantly faster. **When anything feels slow, check bytes over the network
 before code speed. A new screen must never read all of `players/`**: use `readPeople()`, `readPlayersForMe()`,
 `readOpponentProfiles()` or `watchBoard()` (`js/stats-net.js`). Mention any whole-node read you see, unasked.
+**The database connection (2026-10-27, Play sat on a setup card up to 12 s):** `js/firebase-boot.js` forces websockets
+(after any drop Firebase restarted on long-polling and reads stalled 6-8 s through the upgrade), reconnects at once when
+the app returns after 20 s away (Firebase's own retry can wait up to 5 min if the line dropped while hidden), and logs any
+read over 1.5 s to `gamehub.perf.v1`, mirrored as `players/<id>/perf` (report only). Read real phones' numbers there first.
 
 ## Tests NEVER use Matt's code or name (Matt, 2026-10-23)
 

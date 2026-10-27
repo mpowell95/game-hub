@@ -62,7 +62,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `new-badge.js` | pure dates, no storage/DOM |
 | `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
 | `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
-| `firebase-boot.js` | the ONE boot of the named `'stats'` app (`getStatsApp()`, returns `uid`) |
+| `firebase-boot.js` | the ONE boot of the named `'stats'` app (`getStatsApp()`, returns `uid`); `forceWebSockets()` before `getDatabase`; reconnect on return after 20 s away; `api.get` timed, slow reads in `gamehub.perf.v1` (`perfReport()`, mirrored `players/<id>/perf`) |
 | `stats-net.js` | `players/<statsId>` mirror, `usernames/`, `syncHealth()`, `writesAllowed()`, `applyDeviceReset()`; `readPlayersOnce()` reuses the page's last `players/` read for 60 s (own sync clears it; callers get copies); pass `{fresh: true}` where a write follows the read (admin, code-owner lookup) |
 | `arcade-scores.js` | daily best is a MAP by local day, never a resetting value; no `highscores/` node (`tools/test-arcade-scores.mjs`) |
 | `hidden-players.js` | `isHiddenName`/`isHiddenDeviceId`; dependency-free; mirrored by hand in `tools/test-leaderboard-rank.mjs` on purpose |
