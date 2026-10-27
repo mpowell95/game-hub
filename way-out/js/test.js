@@ -301,7 +301,7 @@ function checkLadder(gen, from, to) {
   for (const band of ['hard', 'expert']) for (let k = 0; k < 250; k++) h.update(B8[band][k]);
   const pin = h.digest('hex').slice(0, 16);
   console.log(`generator 8: ${B8.hard.length} Hard, ${B8.expert.length} Expert boards; pin ${pin}`);
-  ok(`generator 8: the shipped boards never change (${pin})`, pin === 'PIN8');
+  ok(`generator 8: the shipped boards never change (${pin})`, pin === '9f8510f265ee3cad');
   void unpackB8;
 }
 

@@ -271,6 +271,18 @@ Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder 
 - Tests: `tools/test-arrow-maze-time.mjs` (replay maths), `way-out/js/test.js` (generator 7),
   `tools/test-arrow-maze-replay.mjs` (browser, `--size 360x724 --es` too).
 
+## Hard and Expert by thinking: generator 8 (2026-10-27, admin only until released)
+
+Matt, after the test boards: *"WAY harder. And WAY better"*; on the Hard ones: *"That's perfect for Hard.
+Make the updates."* With `hasNews()` (same switch as Replay), every Hard level from 101 and Expert level
+from 201 that is not already in progress on an older board is a **generator 8** board: `src {k:'N', band,
+n, g:8}`, log `g` 8, `buildB8(band, n)`. 16x22 grid (bigger arrows than the ladder's Hard/Expert).
+`js/boards8.js` is GENERATED (`tools/build-arrow-boards8.mjs`, search in `tools/arrow-search.mjs`, shared
+with the test boards), 250 boards a band, packed (~78 KB), **APPEND-ONLY** (pinned by hash in test.js).
+Hard = the "hard" style (45 arrows, ~2 free, blockers ~5 dots); Expert ramps far / mixed / forced
+(`expertStyle`). Past the list boards come round MIRRORED (`b8Slot`; Expert from its top 40%). Points
+unchanged. Non-admin phones: the ladder exactly as before.
+
 ## Test boards (2026-10-26, admin only)
 
 Matt: *"what's the most difficult level you can possibly think of?"* on a Medium-sized board. Measured:
