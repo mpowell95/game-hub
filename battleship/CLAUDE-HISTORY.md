@@ -1034,3 +1034,14 @@ Verified: two phones (test1/DREG5 vs made-up TQWX7) in Playwright against a fake
 routed to a module whose reads and writes go to an object in node): a salvo of 3 with one hit gave another
 volley, three misses passed the turn, the other phone animated both volleys. A live room (Host/Join) played
 16 shots on the same fake database, both phones agreeing. No real Firebase room or match was created.
+
+
+## 2026-10-27 — The setup card
+
+Matt: *"please update the battleship setup screen"*, then chose: cut the words, salvos vs the bot too, and a new
+look *"more in line with other gamehub setup screens. This one doesn't have anything in common with the other,
+especially the newer, ones"*. Measured against Darts, Archery, Pool and Flick Soccer: a card centred over the
+game's own scene, ? top-right, title, Multiplayer first, segmented rows with small uppercase labels only where
+the values need one, one Play button. The old screen (navy header + tagline, bot avatar, difficulty slider, two
+big PLAY VS buttons, cycling Options chips, a stats line) was replaced whole; every stored value kept its
+vocabulary. The Bonus shot chip went with its rule: in a salvo a hit always shoots again.

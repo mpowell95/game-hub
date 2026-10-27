@@ -136,108 +136,90 @@
 }
 :root.gh-dark .bs-root .bs-link { color: var(--bs-theirs); }
 
-.bs-seg { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
-.bs-segbtn {
-  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 10px;
-  background: var(--bs-surface); color: var(--bs-ink); font: inherit; font-weight: 700; font-size: .85rem;
-  padding: 9px 12px; display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
-}
-.bs-segbtn.is-selected { background: var(--bs-header); color: #fff; border-color: var(--bs-header); }
 
 /* difficulty ski-slope shape sizing (js/difficulty-tiers.js's diffShapeSVG) -- the colorblind-safe
    difficulty marker, a repo-wide rule: the tier is never conveyed by hue alone. */
 .bs-root .lb-dshape { width: 18px; height: 18px; vertical-align: -4px; margin-right: 4px; }
 .bs-root .lb-dshape-x2 { width: 30px; height: 18px; }
 
-/* --- screen 1: the mode screen ---------------------------------------------------------------- */
-
-.bs-mode { display: grid; gap: 10px; }
-/* the card rides UP over the header panel (margin-top below), so the panel needs that much room
-   under its tagline -- without it the card sat on top of the second half of the sentence */
-.bs-mode .bs-headerpanel { padding-bottom: 34px; }
-.bs-modecard {
-  background: var(--bs-surface); border: 1px solid var(--bs-surface-2); border-radius: 18px;
-  padding: 16px 16px 12px; display: grid; gap: 10px; justify-items: center;
-  box-shadow: 0 8px 26px rgba(20, 35, 60, .12); margin-top: -26px; width: calc(100% - 24px);
-  justify-self: center; position: relative; z-index: 1;
+/* --- screen 1: the setup card (rebuilt 2026-10-27) ------------------------------------------- */
+/* Matt: "make it be more in line with other gamehub setup screens" -- Darts' and Archery's card:
+   centred over the game's own scene (here, enemy waters edge to edge), ? top-right, the title,
+   Multiplayer first, segmented choices, one Play button. ui.js `_fitScene` stretches the shell to the
+   screen (minus host chrome) and bleeds the root to the edges, so it never scrolls. */
+.bs-root.bs-scene {
+  background-color: var(--bs-enemy-water);
+  background-image:
+    linear-gradient(var(--bs-enemy-line) 2px, transparent 2px),
+    linear-gradient(90deg, var(--bs-enemy-line) 2px, transparent 2px);
+  background-size: 36px 36px;
+  background-position: center;
 }
-.bs-avatar {
-  width: 78px; height: 78px; border-radius: 50%; background: var(--bs-surface-2);
-  display: flex; align-items: center; justify-content: center; font-size: 2.4rem;
-  border: 3px solid var(--bs-header);
+.bs-shell-scene { display: flex; align-items: center; justify-content: center; padding: 12px 16px; }
+.bs-setup { width: 100%; display: flex; justify-content: center; }
+.bs-setcard {
+  position: relative; width: min(380px, 100%); display: flex; flex-direction: column; gap: 9px;
+  padding: 18px 16px 16px; border-radius: 18px; background: var(--bs-surface); color: var(--bs-ink);
+  border: 3px solid #cfdbea; box-shadow: 0 16px 44px rgba(0, 0, 0, .4);
 }
-.bs-avatar-name { font-weight: 800; font-size: .9rem; }
-.bs-diffname {
-  font-size: 1.45rem; font-weight: 900; letter-spacing: .08em; color: var(--bs-gold);
-  text-transform: uppercase; display: flex; align-items: center; gap: 4px;
+:root.gh-dark .bs-root .bs-setcard { border-color: var(--bs-surface-2); }
+.bs-logo {
+  margin: 0 40px; text-align: center; font-size: 30px; font-weight: 900; line-height: 1.05;
+  color: var(--bs-header); letter-spacing: .01em;
 }
-.bs-slider-wrap { width: 100%; display: grid; gap: 2px; }
-.bs-slider {
-  appearance: none; -webkit-appearance: none; width: 100%; height: 26px; background: transparent;
-  touch-action: manipulation; cursor: pointer; margin: 0;
+:root.gh-dark .bs-root .bs-logo { color: var(--bs-theirs); }
+/* ? (How to play) top-right, Back top-left on a sub-card: 44px circles */
+.bs-cardbtn {
+  position: absolute; top: 6px; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: var(--bs-surface-2); color: var(--bs-header);
+  font: inherit; font-size: 22px; font-weight: 900; line-height: 1; cursor: pointer; touch-action: manipulation;
 }
-.bs-slider::-webkit-slider-runnable-track {
-  height: 10px; border-radius: 999px;
-  background: linear-gradient(90deg, var(--bs-gold), var(--bs-btn-friend));
+.bs-cardbtn-r { right: 6px; }
+.bs-cardbtn-l { left: 6px; font-size: 28px; }
+:root.gh-dark .bs-root .bs-cardbtn { color: var(--bs-ink); }
+/* Multiplayer, the card's first row (Cup Pong, Hoops, Darts and Archery have the same row) */
+.bs-mprow {
+  appearance: none; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px;
+  padding: 0 14px; border: 2px solid var(--bs-surface-2); border-radius: 12px; background: var(--bs-surface);
+  color: var(--bs-ink); font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
 }
-.bs-slider::-moz-range-track {
-  height: 10px; border-radius: 999px;
-  background: linear-gradient(90deg, var(--bs-gold), var(--bs-btn-friend));
+.bs-mprow b { flex: 1 1 auto; font-size: 17px; font-weight: 800; }
+.bs-mprow-badge {
+  flex: 0 0 auto; min-width: 24px; padding: 3px 8px; border-radius: 999px; text-align: center;
+  background: var(--bs-hit); color: #fff; font-size: 12px; font-weight: 800;
 }
-.bs-slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff;
-  border: 3px solid var(--bs-header); margin-top: -7px;
+.bs-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--bs-header); }
+:root.gh-dark .bs-root .bs-mprow-chev { color: var(--bs-theirs); }
+.bs-field { display: flex; flex-direction: column; gap: 4px; }
+.bs-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--bs-muted); }
+/* segmented choice: a full-width track, the chosen item white with a navy ring (a SHAPE, not a hue).
+   Drawn 34px, tapped 44px (the ::after reaches 5px above and below). */
+.bs-seg {
+  display: flex; width: 100%; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bs-surface-2); border: 1px solid var(--bs-surface-2);
 }
-.bs-slider::-moz-range-thumb {
-  width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid var(--bs-header);
+.bs-segbtn {
+  appearance: none; position: relative; flex: 1 1 0; min-width: 0; min-height: 34px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--bs-muted);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation;
 }
-.bs-slider-stops { display: flex; justify-content: space-between; font-size: .68rem; font-weight: 800; color: var(--bs-muted); }
-.bs-slider-stop.is-on { color: var(--bs-ink); }
-
-.bs-bigbtn {
-  appearance: none; cursor: pointer; width: 100%; border: 0; border-radius: 14px; color: #14181f;
-  font: inherit; font-weight: 900; font-size: 1rem; letter-spacing: .05em; padding: 14px 12px;
-  display: flex; align-items: center; justify-content: center; gap: 10px; touch-action: manipulation;
-  text-transform: uppercase; box-shadow: 0 4px 0 rgba(0, 0, 0, .18);
+.bs-segbtn::after { content: ''; position: absolute; inset: -5px 0; }
+.bs-segbtn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 5px; }
+.bs-segbtn[aria-pressed="true"] { background: var(--bs-surface); color: var(--bs-ink); box-shadow: 0 0 0 2px var(--bs-header); }
+:root.gh-dark .bs-root .bs-segbtn[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bs-theirs); }
+.bs-segbtn .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; margin: 0; vertical-align: 0; }
+.bs-seg-name { display: block; overflow: hidden; text-overflow: ellipsis; }
+.bs-go {
+  appearance: none; width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: var(--bs-header);
+  color: #fff; font: inherit; font-size: 17px; font-weight: 800; cursor: pointer; touch-action: manipulation;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .22);
 }
-.bs-bigbtn-bot { background: var(--bs-btn-bot); }
-.bs-bigbtn-friend { background: var(--bs-btn-friend); color: #fff; }
-.bs-bigbtn-icon { width: 24px; height: 24px; flex: none; }
-
-.bs-options { width: 100%; display: grid; gap: 6px; justify-items: center; margin-top: 2px; }
-.bs-options-label { font-size: .68rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--bs-muted); }
-.bs-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.bs-chip {
-  appearance: none; cursor: pointer; border: 1px solid var(--bs-surface-2); border-radius: 999px;
-  background: var(--bs-bg); color: var(--bs-ink); font: inherit; font-weight: 700; font-size: .72rem;
-  padding: 7px 11px; touch-action: manipulation;
-}
-.bs-chip-value { font-weight: 900; }
-
-/* A SHORT PHONE IN THE HUB IS THE ONLY SCREEN THIS DOES NOT FIT ON (2026-09-08). Matt: "I've told
-   you several times before that I don't want any game in the gamehub to be scrollable at all.
-   Everything MUST fit on a single screen. Always." Measured, the mode screen stands 629px against
-   the 526px the hub leaves at 390x664, and 127px over at 360x640; standalone fits at every size
-   tested, because the hub spends ~138px on its own chrome that no height media query can see -
-   hence the `.hub-main` scope.
-
-   Every number below is SPACING or the decorative avatar. Nothing is hidden, no text drops under
-   11px, and the two big buttons keep 44px of height because they are the tap targets - which is
-   also the floor on how far their padding may come down. */
-@media (max-height: 760px) {
-  .hub-main .bs-root .bs-shell { padding: 6px 10px 8px; gap: 8px; }
-  .hub-main .bs-root .bs-headerpanel { padding: 10px 16px; gap: 4px; }
-  .hub-main .bs-root .bs-mode .bs-headerpanel { padding-bottom: 26px; }
-  .hub-main .bs-root .bs-title { font-size: 1.15rem; }
-  .hub-main .bs-root .bs-modecard { padding: 10px 14px 8px; gap: 7px; margin-top: -20px; }
-  .hub-main .bs-root .bs-avatar { width: 52px; height: 52px; font-size: 1.6rem; border-width: 2px; }
-  .hub-main .bs-root .bs-diffname { font-size: 1.15rem; }
-  .hub-main .bs-root .bs-bigbtn { padding: 10px 12px; }
-  .hub-main .bs-root .bs-options { gap: 4px; margin-top: 0; }
-  .hub-main .bs-root .bs-chips { gap: 4px; }
-  .hub-main .bs-root .bs-chip { padding: 6px 9px; }
-  .hub-main .bs-root .bs-link { padding: 4px 4px; }
-}
+:root.gh-dark .bs-root .bs-go { background: #2f6ea3; }
+.bs-go:disabled { opacity: .45; cursor: default; }
+/* the Multiplayer card's own content (lobby, challenge list, picker) inherits the card's column */
+.bs-setcard .bs-mp-lobby, .bs-setcard .bs-ch-pick { padding: 0; gap: 8px; }
+.bs-setcard .bs-mp-msg:empty { display: none; }
 
 /* --- screen 2: deploy your ships --------------------------------------------------------------- */
 

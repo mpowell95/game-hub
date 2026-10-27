@@ -140,8 +140,7 @@ Lesson: **play it and look at it**; `tools/test-visual.mjs` was green throughout
 **The vertical sandwich**: enemy waters (navy) on top, fleet roster strip in the middle, your wooden
 board on the salmon deck below. Both boards always visible, never resize, no swap/mode switch.
 
-1. **Mode screen** (`renderSetup`): PLAY VS. BOT / PLAY VS. FRIEND (opens the EXISTING lobby
-   `_friendHTML()`, no second MP path); option chips write the same `gamehub.battleship.v1` fields.
+1. **Setup card** (`renderSetup`, rebuilt 2026-10-27, see "The setup card" below).
 2. **Deploy screen** (`renderPlacement`): green **SAVE** pill **absent, not disabled** until all
    ships are placed. Legality is SHAPE first (solid + check vs **dashed** + cross). Use
    `_cellAtPoint(clientX, clientY)` against the board's rect, NOT `document.elementFromPoint`
@@ -353,7 +352,7 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
 
 ## Settings & keys
 
-- `gamehub.battleship.v1` — `{ v:1, size, difficulty, bonusShotOnHit, firstMode, nextStarter, chShots }`.
+- `gamehub.battleship.v1` — `{ v:1, size, difficulty, bonusShotOnHit, firstMode, nextStarter, chShots, soloShots }`.
 - `gamehub.battleship.save.v1` — solo mid-battle autosave.
 - `gamehub.battleship.mp.v1` — MP autosave, including `myFleet`. Permanent (THE LAW rule 5).
 - Challenges (2026-10-27): `gamehub.battleship.{seen,shown,counted,unseenResults,outbox,open}.v1`
@@ -371,12 +370,17 @@ node tools/test-battleship-mp.mjs                   # challenges: replay, a whol
 Two-phone browser check (2026-10-27): `js/firebase-boot.js` routed to a fake database held in node
 (Playwright `exposeFunction`), test1/DREG5 vs a made-up TQWX7. Story: `CLAUDE-HISTORY.md`.
 
-## The mode screen fits a short phone in the hub (2026-09-08)
+## The setup card (2026-10-27)
 
-Matt: *"I don't want any game in the gamehub to be scrollable at all. Everything MUST fit on a
-single screen. Always."* `.bs-shell` must fit the 526px the hub leaves at 390x664 (and 640 high); the
-`battleship.css` block is scoped under `.hub-main` (standalone fits everywhere). No text under 11px,
-big buttons keep 44px. If it grows again, shorten the option-chip labels, not the font.
+Matt: *"make it be more in line with other gamehub setup screens"* and cut the words. Darts'/Archery's card
+(`.bs-setcard`) centred on enemy water edge to edge (`_shellMode('scene')`, `_fitScene`: shell stretched to the
+screen minus host chrome, then `_bleedToEdges`; never scrolls, fits the hub at 390x664): ? top-right, title,
+**Multiplayer ›** (opens Host / Join / Challenge on Challenge, a "your turn" count badge from the index),
+Easy/Medium/Hard (shapes), 10×10 / 8×8, Shots 1/3/5, First shot Alternate/Me/<bot>, Play. Sub-cards use
+the top-left ‹ instead of Back buttons. Gone: tagline, avatar, slider, chips, stats line, Bonus shot chip.
+**Salvos vs the bot**: `soloShots` (default 3) rides on the game as `state.salvo`; the bot picks its volley
+together (`_botVolley`: earlier picks count as fired, so it never learns mid-volley). A save without
+`salvo` plays one shot a turn as before. `bonusShotOnHit` stays stored (live rooms still read it).
 
 ## Review and bug pass (2026-10-13)
 
