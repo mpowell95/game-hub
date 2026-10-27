@@ -1712,6 +1712,17 @@ class Hub {
     if (this.current || (!this._challengeGames().length && !this._liveGames().length)) return;
     const ids = this._challengeGames().map((g) => g.id);
     import('./challenges-ui.js').then((m) => { if (!this.current && typeof m.prime === 'function') return m.prime(ids); }).catch(() => {});
+    // THE GAME'S CODE TOO, for every game where it is this player's turn (2026-10-27): Play then
+    // mounts from memory instead of walking the game's imports one by one. Code only, no data.
+    for (const g of GAMES) {
+      const mod = this._alertMods && this._alertMods[g.id];
+      let n = 0;
+      try { n = mod && typeof mod.myTurnCount === 'function' ? mod.myTurnCount() | 0 : 0; } catch { /* none */ }
+      if (n > 0 && g.module && !(this._codePrimed || (this._codePrimed = new Set())).has(g.id)) {
+        this._codePrimed.add(g.id);
+        import(g.module).catch(() => this._codePrimed.delete(g.id));
+      }
+    }
   }
 
   /** The Leaderboard and Messages screens' code, fetched ONCE per load ahead of the tap (2026-10-18),

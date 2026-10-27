@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1271;
-const CACHE = 'game-hub-v1271';
+const IMPORTANT_SINCE = 1272;
+const CACHE = 'game-hub-v1272';
 
 const ASSETS = [
   './',
@@ -780,7 +780,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '90dca1dd6a',
+  './js/hub.js': '684269a7b8',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -802,8 +802,8 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': '5f22195a52',
-  './js/stats-net.js': '0777e13469',
-  './js/firebase-boot.js': '5a63920ff7',
+  './js/stats-net.js': '1a6dfaeb0b',
+  './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '22d5aec601',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'f2c4625238',

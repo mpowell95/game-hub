@@ -1355,3 +1355,17 @@ switch solves it instantly." Fixed both ways: the six released in code (v1264, v
 from the cache at once, and each hub load refreshes all its files in the background (`cache: 'no-cache'`,
 at most every 2 min per game), so a switch is fast with no commit. Probes in `tools/test-sw-strategy.mjs`.
 
+## 2026-10-27: what was really slowing multiplayer (the database connection)
+
+Matt: "Just do a thorough review and fix whatever is slowing everything down so much." Measured, read-only,
+test profile: every read his phone makes is small (indexes 0-16 KB, a match 4 KB, his stats record 29 KB, all of
+players/ 444 KB) and answers in ~45 ms on a healthy connection, so neither data size nor server speed. The waits came
+from the CONNECTION: (1) after any drop, Firebase restarts on long-polling and upgrades to a websocket, and reads
+stalled 6-8 s through that switch (traced frame by frame); (2) Firebase's own code (10.12.2 onRealtimeDisconnect_)
+sets the retry delay to maxReconnectDelay_ (5 min) when the line drops while the page is hidden, which is what a
+phone in a pocket or a switch to Dropbox does; an iPhone can also leave the socket silently dead. Fixes in
+js/firebase-boot.js: forceWebSockets(); goOffline/goOnline when the app comes back after 20 s away; slow reads logged
+(gamehub.perf.v1 -> players/<id>/perf). Also js/hub.js preloads the game code for games where it is your turn.
+NOT verified on an iPhone (the sandbox cannot run WebKit; its proxy also distorts websocket timings). Also seen:
+11 deploys in 43 min the night before; an admin device reloads onto each one and opens a new connection.
+

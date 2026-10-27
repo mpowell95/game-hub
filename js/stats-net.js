@@ -14,7 +14,7 @@
 
 import { statsId, statsKey, loadStats, rateReport, activityReport, GAMES } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
-import { getStatsApp } from './firebase-boot.js';
+import { getStatsApp, perfReport } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
 import { loadSeen } from './announce.js';
 import { hubReadReport } from './hub-messages.js';
@@ -248,6 +248,10 @@ export async function syncMyStats() {
     // read only by the admin page, never by a phone, and omitted while there is nothing to report.
     const hubRead = hubReadReport();
     if (hubRead) rec.hubMsgs = hubRead;
+    // SLOW DATABASE READS ON THIS PHONE (2026-10-27, js/firebase-boot.js perfReport). Same additive
+    // REPORT shape: read by no phone, omitted while there is nothing slow to report.
+    const perf = perfReport();
+    if (perf) rec.perf = perf;
     const sig = syncSignature(rec);
     const last = readSyncSig();
     if (last && last.id === id && last.sig === sig && Date.now() - (+last.at || 0) < SYNC_HEARTBEAT_MS) return true;   // nothing new
