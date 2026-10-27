@@ -80,7 +80,7 @@ ok('admin: it shows once only', (await page.locator('.wo-news').count()) === 0);
 // TEST BOARDS (admin only): the list, a board played to the end, its result kept on the phone.
 await page.locator('.wo-testq').click();
 await page.waitForSelector('.wo-rp-row[data-act="test"]');
-ok('tests: ten boards listed', (await page.locator('.wo-rp-row[data-act="test"]').count()) === 10);
+ok('tests: fifteen boards listed, the five Hard ones first', (await page.locator('.wo-rp-row[data-act="test"]').count()) === 15 && (await page.locator('.wo-rp-row[data-act="test"]').first().getAttribute('data-n')) === '11');
 await shot('8-tests');
 await page.locator('.wo-rp-row[data-n="5"]').click();
 await page.waitForFunction(() => window.__woTest);

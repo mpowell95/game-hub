@@ -16,7 +16,7 @@ import { writeFileSync } from 'node:fs';
 
 const E = await import('../way-out/js/engine.js');
 const arg = (k, d) => (process.argv.includes(k) ? +process.argv[process.argv.indexOf(k) + 1] : d);
-const COUNT = arg('--count', 10), ITERS = arg('--iters', 12000);
+const COUNT = arg('--count', 15), ITERS = arg('--iters', 20000);   // these defaults built the shipped file
 const W = 16, H = 22;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
@@ -46,7 +46,7 @@ function measure(arrows) {
   const cells = arrows.reduce((a, c) => a + c.length, 0);
   return { n, rounds, avgFree: freeSum / rounds, freeSq, maxFree, free0: first.length, dist: dN ? dSum / dN : 0, far, farShare: dN ? far / dN : 0, fill: cells / (W * H) };
 }
-// Three STYLES, so Matt can say which kind of hard he likes (boards 1-3, 4-7, 8-10), each kept to a
+// STYLES, so Matt can say which kind of hard he likes (boards 1-3, 4-7, 8-10, 11-15), each kept to a
 // sane number of arrows (a 90-move forced chain is a chore, not a puzzle):
 //   far    open lanes, almost every blocker 6+ dots away, a few arrows free at a time;
 //   mixed  a fuller board (55%+ of the dots), blockers still a few dots away, one or two free;
@@ -55,12 +55,15 @@ const STYLES = {
   far: { rounds: 1.2, free: 0.6, dist: 12, farS: 40, minN: 30, maxN: 40, fill: 0.45 },
   mixed: { rounds: 1.0, free: 0.8, dist: 9, farS: 30, minN: 40, maxN: 50, fill: 0.55 },
   forced: { rounds: 2.2, free: 1.2, dist: 5, farS: 14, minN: 50, maxN: 65, fill: 0.62 },
+  // (2026-10-27, Matt: "I think you could upgrade hard a bit too") boards 11-15: a milder mix for
+  // Hard: blockers a few dots away, two or three arrows free at a time, a fuller board.
+  hard: { rounds: 0.8, free: 0.35, dist: 5, farS: 10, minN: 45, maxN: 55, fill: 0.6, free0: 5, maxR: 26 },
 };
-export const styleOf = (i) => (i <= 3 ? 'far' : i <= 7 ? 'mixed' : 'forced');
+export const styleOf = (i) => (i <= 3 ? 'far' : i <= 7 ? 'mixed' : i <= 10 ? 'forced' : 'hard');
 let S = STYLES.far;
 function score(m) {
   if (!m) return -Infinity;
-  return S.rounds * m.rounds - S.free * m.freeSq - 6 * Math.max(0, m.free0 - 3) + S.dist * m.dist + S.farS * m.farShare
+  return S.rounds * m.rounds - S.free * m.freeSq - 6 * Math.max(0, m.free0 - (S.free0 || 3)) - 4 * Math.max(0, m.rounds - (S.maxR || Infinity)) + S.dist * m.dist + S.farS * m.farShare
     - 8 * Math.max(0, S.minN - m.n) - 8 * Math.max(0, m.n - S.maxN) - 60 * Math.max(0, S.fill - m.fill);
 }
 

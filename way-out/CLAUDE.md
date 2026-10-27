@@ -280,7 +280,10 @@ every ladder board's blocker sits ~1.1 dots from the head and a third of the arr
 ~7 dots, 1-2 free), **8-10 forced** (packed, exactly one arrow free at a time, 65 moves). The 🧪 button at
 the picture row's left (`isAdminDevice()` only) lists them with his best (time, hearts, hints); a test plays
 like a replay (keeps nothing) and its finish goes only to `gamehub.wayout.tests.v1` on that phone, never
-the stats store. Waiting on Matt's verdict on which style to turn into levels.
+the stats store. **11-15 "Hard 1-5"** (2026-10-27, Matt: *"I think you could upgrade hard a bit too"*): 45 arrows,
+~2 free at a time, blockers ~5 dots, listed first. Matt on 1-10: *"WAY harder. And WAY better"*; proposed
+(not yet agreed): they become Expert, ramping far → mixed → forced. Boards 1-10 must stay byte-identical
+(his saved results name them): the tool's defaults rebuild them exactly.
 
 ## Rush (2026-10-14)
 
