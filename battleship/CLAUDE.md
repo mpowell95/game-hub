@@ -311,6 +311,11 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   (`_chNext`). Counted once in `'mp'` with shots/hits (`countResult`, ledger
   `gamehub.battleship.counted.v1`), never head-to-head. Push: `battleshipTurnPush`, reminder, Remind bell.
 - The list is LIVE while up (`_chWatchList`): a one-off read raced a cancel's second row write.
+- **New challenge = pick a person, then Board + Shots (`_chChooseFor`), then deploy**, from every way in
+  (tab, Multiplayer screen, Rematch). Matt, 2026-10-27: no choice was offered from the Multiplayer screen.
+- **ui.js calls nothing new from mp.js while the game is BUILT** (`CH_SHOTS` is local): mid-update sw.js can
+  serve a new ui.js beside the previous build's mp.js, and `CH.asShots` in `_loadSetup` made Battleship fail
+  to open on Ana's iPhone. `_chStale()` turns that case into an "Update required" button.
 - The Challenge tab shows at most 4 rows (one fewer each for a note and Notify me), fitted in the hub
   at 390x664. A challenge never writes the solo save (`saveGame` returns on `ui.ch`).
 

@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1272;
-const CACHE = 'game-hub-v1272';
+const IMPORTANT_SINCE = 1273;
+const CACHE = 'game-hub-v1273';
 
 const ASSETS = [
   './',
@@ -1208,7 +1208,7 @@ const REST_MANIFEST = {
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
   './battleship/css/battleship.css': 'bfd0572ee2',
-  './battleship/js/ui.js': 'f42a99a053',
+  './battleship/js/ui.js': '7387906201',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',

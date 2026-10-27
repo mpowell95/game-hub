@@ -374,7 +374,11 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   ok('chat: challenge chat beside the match (js/match-chat.js) and in Messages', /createMatchChat/.test(src('battleship/js/ui.js')) && /battleship: \{ stats: 'battleship', node: 'battleship' \}/.test(src('js/game-chat-history.js')));
   ok('challenges never write head-to-head', !/recordHeadToHead/.test(src('battleship/js/mp.js')));
   ok('the pickers read the small directory, never all of players/', /readOpponentProfiles/.test(src('battleship/js/mp.js')) && !/readPlayersOnce|ref\([^)]*'players'/.test(src('battleship/js/mp.js')));
-  ok('ui.js: a pick opens the deploy screen for that person; a match id opens the match', /o\.kind === 'pick'[\s\S]{0,200}_chStartPlacement\(\{ kind: 'new', them: o\.them/.test(src('battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('battleship/js/ui.js')));
+  ok('ui.js: a pick opens the board + shots choice for that person; a match id opens the match', /o\.kind === 'pick'[\s\S]{0,200}this\._chChooseFor\(o\.them\)/.test(src('battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('battleship/js/ui.js')));
+  ok('ui.js: every new challenge goes through the board + shots choice (tab picker, Multiplayer screen, Rematch)',
+    (src('battleship/js/ui.js').match(/this\._chChooseFor\(/g) || []).length === 3 && !/_chStartPlacement\(\{ kind: 'new', them: (o|them|o\.them), size: this/.test(src('battleship/js/ui.js')));
+  ok('ui.js: nothing from mp.js is called while the game is being built (an older mp.js mid-update cannot crash it)',
+    !/CH\.asShots|CH\.SHOTS/.test(src('battleship/js/ui.js')) && /_chStale\(\)/.test(src('battleship/js/ui.js')));
   ok('ui.js: exports openArmed for a notification tapped with the game open', /export function openArmed\(\)/.test(src('battleship/js/ui.js')));
   ok('ui.js: a challenge never writes the solo autosave', /if \(ui\.mp \|\| ui\.ch\) return;/.test(src('battleship/js/ui.js')));
   ok('the live-room protocol still never sends a fleet (net.js appendMove carries r / s / a only)', !/myFleet[^\n]*appendMove|appendMove[^\n]*myFleet/.test(src('battleship/js/ui.js')));

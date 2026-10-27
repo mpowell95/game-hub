@@ -98,6 +98,11 @@ const ICON_RESTART = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true"
 const ICON_TARGET = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
   stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke-linecap="round"/></svg>`;
 
+// Shots a turn for a challenge. Kept HERE as well as in mp.js on purpose (2026-10-27): mid-update a
+// phone can serve this file new and mp.js from the previous build, and ui.js used to call
+// mp.js's asShots while it was being built, so the whole game failed to open (Ana's iPhone).
+const CH_SHOTS = [1, 3, 5];
+const chShotsOf = (v) => (CH_SHOTS.includes(Number(v)) ? Number(v) : null);
 const ICON_FLAG = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
   stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h11l-2.5 4L17 12H6"/></svg>`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -216,6 +221,7 @@ class BattleshipUI {
     this._chRows = null;       // your matches (mp.js readMyGames), null while loading
     this._chNote = '';         // one line on the list: why we came back to it
     this._chPick = null;       // the pick-a-person view: { opps|null, q }
+    this._chChoose = null;     // the board + shots step after picking: { them, size, shots }
     this._chPlace = null;      // what the deploy screen is placing for: { kind:'new', them, size } | { kind:'fleet', id, size }
     this._chQueue = [];        // the other person's shots still to show
     this._chTimer = null;      // holds the next queued shot back until this one has landed
@@ -292,7 +298,7 @@ class BattleshipUI {
       bonusShotOnHit: !!saved.bonusShotOnHit,
       firstMode: (saved.firstMode === 'you' || saved.firstMode === 'opponent' || saved.firstMode === 'alternate') ? saved.firstMode : 'alternate',
       nextStarter: saved.nextStarter === 'opponent' ? 'opponent' : 'you',
-      chShots: CH.asShots(saved.chShots) || 3,   // shots a turn for a NEW challenge (2026-10-27)
+      chShots: chShotsOf(saved.chShots) || 3,   // shots a turn for a NEW challenge (2026-10-27)
     };
   }
 
@@ -453,6 +459,7 @@ class BattleshipUI {
    *  button instead of a mode segment -- there is no second multiplayer path. */
   _friendHTML() {
     if (this._lobby) return this._lobbyHTML();
+    if (this._mode === 'ch' && this._chChoose) return this._chChooseHTML();
     if (this._mode === 'ch' && this._chPick) return this._chPickerHTML();
     const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')], ['ch', t('mode_ch')]]);
     const back = `<button type="button" class="bs-btn bs-btn-ghost" data-action="mode-solo">${t('mp_back_btn')}</button>`;
@@ -1360,7 +1367,7 @@ class BattleshipUI {
       ? (s.winner === this._localSeat() ? id.humanName : id.oppName)
       : (shootingMine ? id.humanName : id.oppName);
     // Shots left this turn in a challenge of 3 or 5 (a hit never uses one): filled dots = left.
-    const per = this.ch && !s.over ? (CH.asShots(this.ch.game.shots) || 1) : 1;
+    const per = this.ch && !s.over ? (chShotsOf(this.ch.game.shots) || 1) : 1;
     const left = per > 1 ? (Number.isInteger(s.chLeft) ? s.chLeft : per) : 0;
     const pips = per > 1
       ? `<span class="bs-turn-shots" role="img" aria-label="${esc(t('shots_left', { n: left }))}">${'●'.repeat(left)}${'○'.repeat(per - left)}</span>` : '';
@@ -2759,7 +2766,7 @@ class BattleshipUI {
     if (o.kind === 'pick' && o.them && o.them.code) {
       const gate = onlineGate();
       if (gate) { this._chHome(onlineGateText(gate)); return; }
-      this._chStartPlacement({ kind: 'new', them: o.them, size: this._setup.size, shots: this._setup.chShots });
+      this._chChooseFor(o.them);
       return;
     }
     if (o.id) { this._chHome(); this._chOpen(o.id); }
@@ -2770,6 +2777,7 @@ class BattleshipUI {
     this._chClose();
     this._chPlace = null;
     this._chPick = null;
+    this._chChoose = null;
     this._lobby = null;
     this._mode = 'ch';
     this._chNote = note;
@@ -2778,7 +2786,7 @@ class BattleshipUI {
     this._chLoadList();
   }
 
-  _chOnList() { return this.view === 'setup' && this._mode === 'ch' && !this._chPick && !this._lobby; }
+  _chOnList() { return this.view === 'setup' && this._mode === 'ch' && !this._chPick && !this._chChoose && !this._lobby; }
 
   async _chLoadList() {
     const gen = ++this._chGen;
@@ -2827,8 +2835,35 @@ class BattleshipUI {
   }
 
   /** The Challenge tab: the board size, New challenge, then your matches (yours first), cut to fit. */
+  _chStale() { return typeof CH.fireShot !== 'function' || typeof CH.replay !== 'function'; }
+
+  /** After picking a person: the board and shots a turn, then the deploy screen. Every way into a new
+   *  challenge comes through here (the Challenge tab, the Multiplayer screen, Rematch), so neither
+   *  choice can be skipped (Matt, 2026-10-27: "I didn't get a choice on the size of the board either"). */
+  _chChooseFor(them, { size = this._setup.size, shots = this._setup.chShots } = {}) {
+    if (this._chStale()) { this._chHome(); return; }
+    this._chStopList();
+    this._chClose();
+    this._chPick = null;
+    this._lobby = null;
+    this._mode = 'ch';
+    this._chChoose = { them, size: size === 'quick' ? 'quick' : 'classic', shots: chShotsOf(shots) || 3 };
+    this.renderSetup();
+  }
+
+  _chChooseHTML() {
+    const c = this._chChoose;
+    return `<div class="bs-ch-pick">
+      <div class="bs-mp-oppslot"><span>${esc(c.them.emoji || '🙂')}</span><span>${esc(c.them.name || '?')}</span></div>
+      ${this._seg('ch-size', c.size, SIZES.map(([v, k]) => [v, t(k)]))}
+      <span class="bs-mp-label">${esc(t('chip_ch_shots'))}</span>
+      ${this._seg('ch-shots', c.shots, CH_SHOTS.map((n) => [n, String(n)]))}
+      <button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-place">${esc(t('start'))}</button>
+      <button type="button" class="bs-btn bs-btn-ghost" data-action="ch-choose-back">${esc(t('mp_back_btn'))}</button>
+    </div>`;
+  }
+
   _chHTML() {
-    const s = this._setup;
     const note = this._chNote ? `<p class="bs-mp-msg" aria-live="polite">${esc(this._chNote)}</p>` : '';
     const rows = this._chRows;
     let list;
@@ -2850,11 +2885,12 @@ class BattleshipUI {
     }
     const notify = this._chPushOff
       ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="ch-notify">${esc(t('ch_notify'))}</button>` : '';
-    return `<div class="bs-chips">
-        <button type="button" class="bs-chip" data-action="cycle-size">${esc(t('chip_size'))}: <span class="bs-chip-value">${esc(s.size === 'quick' ? t('size_quick') : t('size_classic'))}</span></button>
-        <button type="button" class="bs-chip" data-action="cycle-chshots">${esc(t('chip_ch_shots'))}: <span class="bs-chip-value">${s.chShots}</span></button>
-      </div>
-      <button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
+    // An mp.js from an older build (mid-update, see CH_SHOTS above): no challenge can be played
+    // with it, so the only button is the update. Never a crash.
+    if (this._chStale()) {
+      return `<button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`;
+    }
+    return `<button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
       ${note}
       <div class="bs-ch-list">${list}</div>
       ${notify}`;
@@ -2934,9 +2970,11 @@ class BattleshipUI {
 
   /** The deploy screen, placing a fleet for a new challenge or for one sent to you. */
   _chStartPlacement(target) {
+    if (this._chStale()) { this._chHome(); return; }
     this._chStopList();
     this._chClose();
     this._chPick = null;
+    this._chChoose = null;
     this._stopGameTimers();
     this.closeOverlays();
     this.state = null;
@@ -2968,6 +3006,7 @@ class BattleshipUI {
   /** Open a match on the battle screen. A first-time receiver places their fleet first. The other
    *  person's latest run of shots, not yet shown on this phone, is played back one at a time. */
   async _chOpen(id, given = null) {
+    if (this._chStale()) { this._chHome(); return; }
     const gen = ++this._chGen;
     if (!given) { try { await CH.drainOutbox(id); } catch { /* still owed: sent next time */ } }
     const game = given || await CH.readGame(id);
@@ -3444,9 +3483,17 @@ class BattleshipUI {
       // the same settings key -- the vocabulary in storage is untouched (THE LAW rule 5).
       const i = SIZES.findIndex(([v]) => v === this._setup.size);
       this._setup.size = SIZES[(i + 1) % SIZES.length][0]; this._saveSetup(); this.renderSetup();
-    } else if (action === 'cycle-chshots') {
-      const i = CH.SHOTS.indexOf(this._setup.chShots);
-      this._setup.chShots = CH.SHOTS[(i + 1) % CH.SHOTS.length]; this._saveSetup(); this.renderSetup();
+    } else if (action === 'ch-size' && this._chChoose) {
+      this._chChoose.size = btn.dataset.v === 'quick' ? 'quick' : 'classic';
+      this._setup.size = this._chChoose.size; this._saveSetup(); this.renderSetup();
+    } else if (action === 'ch-shots' && this._chChoose) {
+      this._chChoose.shots = chShotsOf(btn.dataset.v) || 3;
+      this._setup.chShots = this._chChoose.shots; this._saveSetup(); this.renderSetup();
+    } else if (action === 'ch-place' && this._chChoose) {
+      const c = this._chChoose;
+      this._chStartPlacement({ kind: 'new', them: c.them, size: c.size, shots: c.shots });
+    } else if (action === 'ch-choose-back') {
+      this._chChoose = null; this._chHome();
     } else if (action === 'cycle-first') {
       const order = ['you', 'opponent', 'alternate'];
       this._setup.firstMode = order[(order.indexOf(this._setup.firstMode) + 1) % order.length];
@@ -3462,7 +3509,7 @@ class BattleshipUI {
     } else if (action === 'play-friend') {
       this._mode = 'host'; this._mpError = ''; this.renderSetup();
     } else if (action === 'mode-solo') {
-      this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this._chPick = null; this._chNote = ''; this._chGen++; this.renderSetup();
+      this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this._chPick = null; this._chChoose = null; this._chNote = ''; this._chGen++; this.renderSetup();
     } else if (action === 'start') {
       this.startGame();
     } else if (action === 'select-ship') {
@@ -3525,7 +3572,7 @@ class BattleshipUI {
       this._chNewPicker();
     } else if (action === 'ch-pick') {
       const o = this._chPick && (this._chPick.opps || []).find((x) => x.code === btn.dataset.code);
-      if (o) this._chStartPlacement({ kind: 'new', them: o, size: this._setup.size, shots: this._setup.chShots });
+      if (o) this._chChooseFor(o);
     } else if (action === 'ch-pick-back') {
       this._chPick = null; this.renderSetup();
     } else if (action === 'ch-open') {
@@ -3537,7 +3584,7 @@ class BattleshipUI {
       if (!link) return;
       const them = { code: link.them.code, name: link.them.name, emoji: link.them.emoji };
       this.closeOverlays();
-      this._chStartPlacement({ kind: 'new', them, size: link.game.size, shots: link.game.shots });
+      this._chChooseFor(them, { size: link.game.size, shots: link.game.shots });
     } else if (action === 'ch-resign') {
       this.confirmDestructive(btn, () => this._chResign());
     } else if (action === 'ch-notify') {
