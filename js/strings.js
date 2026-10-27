@@ -700,7 +700,6 @@ export const STRINGS = {
     lb_no_games_yet: 'No games yet',
     // --- 2026-10-27: the You tab, By Game's top three, the line under a board ----------------------
     lb_you_tab: 'You',
-    lb_bygame_note: 'The top 3 players in every game. Tap a game to see their scores.',
     lb_you_empty: 'Play a game to see your records here.',
     lb_n_of_m: '{n} of {m}',
     lb_you_hold: (p) => `You hold ${p.x} ${Number(p.m) === 1 ? 'record' : 'records'}`,
@@ -1479,7 +1478,6 @@ export const STRINGS = {
     lb_empty_all: 'Todavía no hay partidas registradas.',
     lb_no_games_yet: 'Todavía sin partidas',
     lb_you_tab: 'Tú',
-    lb_bygame_note: 'Los 3 mejores de cada juego. Toca un juego para ver sus marcas.',
     lb_you_empty: 'Juega una partida para ver aquí tus récords.',
     lb_n_of_m: '{n} de {m}',
     lb_you_hold: (p) => `Tienes ${p.x} ${Number(p.m) === 1 ? 'récord' : 'récords'}`,

@@ -1820,31 +1820,36 @@ function gameListHTML(list) {
     return t(a.meta.labelKey).localeCompare(t(b.meta.labelKey));
   });
   const chevron = '<svg class="lb-gchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>';
-  const cards = rows.map(({ meta, st, fav }) => {
-    const art = GAME_ART[hubIdOf(meta.id)] || '';
+  const title = (meta, fav) => `<span class="lb-gtitle">${fav ? '<i class="lb-star" aria-hidden="true">★</i>' : ''}<span class="lb-gname">${esc(t(meta.labelKey))}</span></span>`;
+  // THE GAME IS THE LOUDEST THING ON THE CARD (2026-10-27, Ana: "You need to emphasize the game!!!!!!").
+  // Big art and a big title; the three names sit under the title, smaller.
+  const cards = rows.filter((r) => r.st.rows.length).map(({ meta, st, fav }) => {
     const top = st.rows.slice(0, 3);
     const rankOf = (g) => st.rankOf[g.key];
-    const body = top.length
-      ? topNameHTML(top[0], rankOf(top[0]), st.tiedAt(top[0].key), true)
-        + (top.length > 1 ? `<span class="lb-gtop-rest">${top.slice(1).map((g) => topNameHTML(g, rankOf(g), st.tiedAt(g.key), false)).join('')}</span>` : '')
-      : `<span class="lb-glead lb-glead-empty">${esc(t('lb_no_games_yet'))}</span>`;
-    return `<button type="button" class="lb-gcard${top.length ? '' : ' is-empty'}" data-game="${meta.id}">
-      <span class="lb-gcard-head">
-        <span class="lb-gart is-sm">${art}</span>
-        <span class="lb-gtitle">${fav ? '<i class="lb-star" aria-hidden="true">★</i>' : ''}<span class="lb-gname">${esc(t(meta.labelKey))}</span></span>
-        ${chevron}
+    return `<button type="button" class="lb-gcard" data-game="${meta.id}">
+      <span class="lb-gart is-big">${GAME_ART[hubIdOf(meta.id)] || ''}</span>
+      <span class="lb-gcard-main">
+        ${title(meta, fav)}
+        ${topNameHTML(top[0], rankOf(top[0]), st.tiedAt(top[0].key), true)}
+        ${top.length > 1 ? `<span class="lb-gtop-rest">${top.slice(1).map((g) => topNameHTML(g, rankOf(g), st.tiedAt(g.key), false)).join('')}</span>` : ''}
       </span>
-      ${body}
+      ${chevron}
     </button>`;
   });
+  // Games nobody has played yet: one small tile each, art and name, two to a row (Matt: the full
+  // cards saying "No games yet" made the list far too long). Still tappable, still every game.
+  const empty = rows.filter((r) => !r.st.rows.length);
+  if (empty.length) {
+    cards.push(`<div class="lb-gempty">${empty.map(({ meta, fav }) => `<button type="button" class="lb-gcard is-empty" data-game="${meta.id}">
+      <span class="lb-gart is-sm">${GAME_ART[hubIdOf(meta.id)] || ''}</span>${title(meta, fav)}</button>`).join('')}</div>`);
+  }
   if (!cards.length) return emptyState(t('lb_empty_all'));
   // Favorites with none picked used to just show the alphabetical list, which read as a broken
   // tab. Say why, once. (A new key can be missing for one visit after a deploy - js/strings.js is
   // cache-first - and makeT then returns the key itself, so that case shows nothing.)
   const favNote = _gameSort === 'fav' && !rows.some((r) => r.fav) && t('lb_fav_none') !== 'lb_fav_none'
     ? `<p class="lb-note">${esc(t('lb_fav_none'))}</p>` : '';
-  const caption = tx('lb_bygame_note', 'The top 3 players in every game. Tap a game to see their scores.');
-  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div>${favNote}<p class="lb-note">${esc(caption)}</p><div class="lb-glist">${cards.join('')}</div>`;
+  return `<div class="lb-ctrls">${sortPillsHTML(GAME_SORTS, _gameSort, 'gsort')}</div>${favNote}<div class="lb-glist">${cards.join('')}</div>`;
 }
 
 // --- You: your records, and the ones you are closest to (2026-10-27) ----------------------------
@@ -3114,22 +3119,27 @@ function ensureCss() {
       + '.lb-av{width:32px;height:32px;font-size:17px}.lb-pnum b{font-size:20px}.lb-pfoot{padding-left:0}.lb-msgbtn-t{display:none}.lb-msgbtn{padding:0}'
       + '.lb-pill{padding:0 4px;font-size:12px}.lb-board-h{font-size:22px}}',
     // --- By Game's top three, and the You tab (2026-10-27) ------------------------------------------
-    '.lb-gcard{appearance:none;cursor:pointer;display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;padding:12px;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px;font:inherit;color:inherit;touch-action:manipulation}',
-    '.lb-gcard.is-empty{opacity:.72}',
-    '.lb-gcard-head{display:flex;align-items:center;gap:10px;min-width:0}',
-    '.lb-gcard-head .lb-gtitle{flex:1 1 auto}',
-    '.lb-gart.is-sm{width:38px;height:28px}',
+    '.lb-gcard{appearance:none;cursor:pointer;display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;background:var(--lb-surface);border:1px solid var(--lb-line);border-radius:14px;font:inherit;color:inherit;touch-action:manipulation}',
+    '.lb-gart.is-big{width:80px;height:45px;border-radius:8px}',
+    '.lb-gcard-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:5px}',
+    '.lb-gcard .lb-gname{font-size:19px;font-weight:800;letter-spacing:-.015em}',
+    '.lb-gcard .lb-star{font-size:15px}',
     '.lb-gchev{flex:none;width:20px;height:20px;color:var(--lb-muted)}',
-    '.lb-gtop{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;color:var(--lb-muted)}',
-    '.lb-gtop.is-first{padding:7px 10px;border-radius:10px;background:var(--lb-surface-2);font-size:15px;font-weight:800;color:var(--lb-ink)}',
-    '.lb-gtop-rest{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 2px}',
-    '.lb-gtop-who{display:inline-flex;align-items:center;gap:5px;min-width:0;padding:1px 7px 1px 2px;border:1.5px solid transparent;border-radius:999px}',
+    '.lb-gtop{display:flex;align-items:center;gap:5px;min-width:0;font-size:12.5px;color:var(--lb-muted)}',
+    '.lb-gtop.is-first{font-size:14px;font-weight:700;color:var(--lb-ink)}',
+    '.lb-gtop-rest{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}',
+    '.lb-gtop-who{display:inline-flex;align-items:center;gap:4px;min-width:0;padding:0 6px 0 1px;border:1.5px solid transparent;border-radius:999px}',
     '.lb-gtop-who.is-me{border-color:var(--lb-sel)}',
-    '.lb-gtop .lb-av{width:20px;height:20px;font-size:14px;border:0;background:transparent}',
-    '.lb-gtop.is-first .lb-av{width:24px;height:24px;font-size:17px}',
+    '.lb-gtop .lb-av{width:16px;height:16px;font-size:12px;border:0;background:transparent}',
+    '.lb-gtop.is-first .lb-av{width:18px;height:18px;font-size:14px}',
     '.lb-gtop-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.lb-tb{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:999px;border:1.5px solid var(--lb-muted);font-style:normal;font-size:12px;font-weight:800;color:var(--lb-muted);font-variant-numeric:tabular-nums}',
+    '.lb-tb{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 3px;box-sizing:border-box;border-radius:999px;border:1.5px solid var(--lb-muted);font-style:normal;font-size:10.5px;font-weight:800;color:var(--lb-muted);font-variant-numeric:tabular-nums}',
     '.lb-tb.is-1{background:#f5c842;border-color:#f5c842;color:#3a2a00}',
+    '.lb-yrow .lb-tb{min-width:24px;height:24px;font-size:12px}',
+    '.lb-gempty{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:4px}',
+    '.lb-gcard.is-empty{gap:8px;padding:8px;min-height:44px;opacity:.72;border-radius:11px}',
+    '.lb-gcard.is-empty .lb-gname{font-size:13px;font-weight:700;letter-spacing:0}',
+    '.lb-gart.is-sm{width:40px;height:23px;border-radius:4px}',
     '.lb-you-head{display:flex;align-items:center;gap:12px;margin:4px 0 4px}',
     '.lb-you-head .lb-av{width:52px;height:52px;font-size:28px}',
     '.lb-you-id{display:flex;flex-direction:column;gap:2px;min-width:0}',
