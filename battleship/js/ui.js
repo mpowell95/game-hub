@@ -29,7 +29,7 @@ import {
 import { chooseShot } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordBattleship, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
+import { recordBattleship, recordHeadToHead, deviceId } from '../../js/game-stats.js';
 import { makeT, myName } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -74,19 +74,11 @@ const MP_RECOVERY_MAX_ATTEMPTS = 3;
 const MP_DIFFICULTY = 'mp';
 const DIFFICULTIES = [['beginner', 'diff_beginner'], ['intermediate', 'diff_intermediate'], ['pro', 'diff_pro']];
 const DIFF_LABEL_KEY = Object.fromEntries(DIFFICULTIES);
-const SIZES = [['classic', 'size_classic'], ['quick', 'size_quick']];
 const SKILL_TO_DIFF = { 1: 'beginner', 2: 'intermediate', 3: 'pro' };
 const SHIP_LABEL_KEY = { carrier: 'ship_carrier', battleship: 'ship_battleship', cruiser: 'ship_cruiser', submarine: 'ship_submarine', destroyer: 'ship_destroyer' };
 
 // Inline glyphs for the two big mode buttons and the two deploy pills. Drawn here rather than in
 // ship-art.js: that file is the SHIP silhouette builder and nothing else.
-const BOT_ICON = `<svg class="bs-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
-  <rect x="4" y="8" width="16" height="11" rx="3"/><rect x="11" y="3" width="2" height="4"/><circle cx="12" cy="3" r="1.6"/>
-  <circle cx="9" cy="13" r="1.7" fill="#fff"/><circle cx="15" cy="13" r="1.7" fill="#fff"/><rect x="9" y="16" width="6" height="1.4" rx=".7" fill="#fff"/>
-</svg>`;
-const PERSON_ICON = `<svg class="bs-bigbtn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
-  <circle cx="12" cy="7.5" r="3.8"/><path d="M4.5 20c0-4.1 3.4-6.5 7.5-6.5S19.5 15.9 19.5 20z"/>
-</svg>`;
 const DICE_ICON = `<svg class="bs-pill-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="currentColor">
   <rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.8" fill="#fff"/>
   <circle cx="15.5" cy="15.5" r="1.8" fill="#fff"/><circle cx="12" cy="12" r="1.8" fill="#fff"/>
@@ -315,12 +307,13 @@ class BattleshipUI {
       firstMode: (saved.firstMode === 'you' || saved.firstMode === 'opponent' || saved.firstMode === 'alternate') ? saved.firstMode : 'alternate',
       nextStarter: saved.nextStarter === 'opponent' ? 'opponent' : 'you',
       chShots: chShotsOf(saved.chShots) || 3,   // shots a turn for a NEW challenge (2026-10-27)
+      soloShots: chShotsOf(saved.soloShots) || 3,   // a volley vs the bot (salvos, 2026-10-27)
     };
   }
 
   _saveSetup() {
     const s = this._setup;
-    saveJSON(SETTINGS_KEY, { v: 1, size: s.size, difficulty: s.difficulty, bonusShotOnHit: s.bonusShotOnHit, firstMode: s.firstMode, nextStarter: s.nextStarter, chShots: s.chShots });
+    saveJSON(SETTINGS_KEY, { v: 1, size: s.size, difficulty: s.difficulty, bonusShotOnHit: s.bonusShotOnHit, firstMode: s.firstMode, nextStarter: s.nextStarter, chShots: s.chShots, soloShots: s.soloShots });
   }
 
   /** IN MULTIPLAYER THE PROFILE'S BOT OPPONENT IS NEVER A FALLBACK. It used to be, and that is what
@@ -363,15 +356,6 @@ class BattleshipUI {
     return { name: id.humanName, avatar: id.humanEmoji, deviceId: deviceId() };
   }
 
-  _statsLine() {
-    let rec = null;
-    try { rec = (loadStats().games || {}).battleship; } catch { rec = null; }
-    const bs = rec && rec.bs;
-    if (!bs || !bs.played) return '';
-    const acc = bs.shots > 0 ? Math.round((bs.hits / bs.shots) * 100) : 0;
-    return t('stats_line', { total: bs.played, w: bs.won, l: bs.lost, acc });
-  }
-
   // --- seats -------------------------------------------------------------------------------------
   // Seats are SYMMETRIC here (both sides have a fleet and shoot): host = seat 0, guest = seat 1,
   // fixed for the whole room. In solo the local human is always seat 0 and the AI is seat 1.
@@ -395,7 +379,7 @@ class BattleshipUI {
     // the boards several times per frame while a mobile URL bar animates (js/CLAUDE.md, "Overlay
     // scrolling" / hill-climb/js/ui.js's usage). --bs-cell is the one value ship sprites, the
     // roster, and both boards all derive from, computed once per real viewport change.
-    this._offViewport = onViewportResize(() => { this._fitBattleBoards(); this._updateCellSize(); });
+    this._offViewport = onViewportResize(() => { this._fitBattleBoards(); this._updateCellSize(); this._fitScene(); });
     // A challenge handed over by the hub (a tapped notification, the launcher bubble, the
     // Multiplayer screen) opens first. A live room or solo save is left exactly where it was.
     let armed = null;
@@ -441,61 +425,44 @@ class BattleshipUI {
 
   // --- setup screen --------------------------------------------------------------------------
 
-  _seg(action, value, opts) {
-    return `<div class="bs-seg">${opts.map(([v, lbl]) =>
-      `<button type="button" class="bs-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
+  /** A segmented control, the newer setup screens' way (Darts, Archery): a full-width track, the
+   *  chosen item outlined. `opts` = [[value, label-html, aria?]]. */
+  _seg(action, value, opts, aria = '') {
+    return `<div class="bs-seg" role="group"${aria ? ` aria-label="${esc(aria)}"` : ''}>${opts.map(([v, lbl]) =>
+      `<button type="button" class="bs-segbtn" data-action="${action}" data-v="${v}" aria-pressed="${String(v) === String(value)}"><span>${lbl}</span></button>`).join('')}</div>`;
   }
 
-  /** The three Options chips: board size, first shot, bonus shot on hit. Every setting the old
-   *  accordion carried is still here (and writes the same keys) -- it is one compact line of
-   *  chips now instead of four expanding rows, per the redesign. Each chip CYCLES its value. */
-  _optionChips() {
-    const s = this._setup;
-    const id = this._identity();
-    const firstLbl = s.firstMode === 'you' ? t('you') : s.firstMode === 'opponent' ? id.oppName : t('first_alternate');
-    const chip = (action, label, value) =>
-      `<button type="button" class="bs-chip" data-action="${action}">${esc(label)}: <span class="bs-chip-value">${esc(value)}</span></button>`;
-    return `<div class="bs-options">
-      <span class="bs-options-label">${t('options_label')}</span>
-      <div class="bs-chips">
-        ${chip('cycle-size', t('chip_size'), s.size === 'quick' ? t('size_quick') : t('size_classic'))}
-        ${chip('cycle-first', t('chip_first'), firstLbl)}
-        ${chip('cycle-bonus', t('chip_bonus'), s.bonusShotOnHit ? t('bonus_on') : t('bonus_off'))}
-      </div>
-    </div>`;
+  /** The setup card's header: How to play (?) top-right, or Back top-left on a sub-card, then the title. */
+  _cardTop(title, { back = '' } = {}) {
+    return `${back ? `<button type="button" class="bs-cardbtn bs-cardbtn-l" data-action="${back}" aria-label="${esc(t('mp_back_btn'))}">‹</button>` : ''}
+      <button type="button" class="bs-cardbtn bs-cardbtn-r" data-action="help" aria-label="${esc(t('howto'))}">?</button>
+      <h1 class="bs-logo">${esc(title)}</h1>`;
   }
 
-  _diffIndex() {
-    const i = DIFFICULTIES.findIndex(([k]) => k === this._setup.difficulty);
-    return i < 0 ? 1 : i;
-  }
-
-  /** The Play vs. Friend panel. This is the EXISTING host/join lobby, reached from the purple
-   *  button instead of a mode segment -- there is no second multiplayer path. */
+  /** Multiplayer: Host / Join / Challenge, the EXISTING lobby and challenge list (no second path). */
   _friendHTML() {
     if (this._lobby) return this._lobbyHTML();
     if (this._mode === 'ch' && this._chChoose) return this._chChooseHTML();
     if (this._mode === 'ch' && this._chPick) return this._chPickerHTML();
     const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')], ['ch', t('mode_ch')]]);
-    const back = `<button type="button" class="bs-btn bs-btn-ghost" data-action="mode-solo">${t('mp_back_btn')}</button>`;
-    if (this._mode === 'join') return `${seg}${this._joinBodyHTML()}${back}`;
-    if (this._mode === 'ch') return `${seg}${this._chHTML()}${back}`;
+    if (this._mode === 'join') return `${seg}${this._joinBodyHTML()}`;
+    if (this._mode === 'ch') return `${seg}${this._chHTML()}`;
+    const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
     return `${seg}
-      <p class="bs-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
-      <button type="button" class="bs-btn bs-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>
-      ${back}`;
+      ${msg ? `<p class="bs-mp-msg">${esc(msg)}</p>` : ''}
+      <button type="button" class="bs-go" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`;
   }
 
-  /** Screen 1: the mode screen. A dark navy header with the game's own one-line explanation, and a
-   *  card riding over it with the opponent avatar, the difficulty in gold caps over a three-stop
-   *  slider, the two big play buttons, and the Options chips.
-   *
-   *  THE SLIDER IS DISPLAY ONLY: the stored values stay `beginner`/`intermediate`/`pro` (storage
-   *  vocabulary that js/difficulty-tiers.js and js/game-stats-ui.js's DIFF_META both key on) --
-   *  only the labels are Easy/Medium/Hard. The ski-slope tier shape (diffShapeSVG) stays beside
-   *  the name: it is the repo's colorblind-safe difficulty marker, never hue alone. */
+  /** SCREEN 1, THE SETUP CARD (rebuilt 2026-10-27). Matt: "make it be more in line with other gamehub
+   *  setup screens. This one doesn't have anything in common with the other, especially the newer,
+   *  ones", and cut the words. So it is Darts' and Archery's card: centred over the game's own water,
+   *  ? top-right, the title, **Multiplayer ›** first, then Easy/Medium/Hard (shape markers), the board,
+   *  Shots (a volley vs the bot too: salvos) and First shot, and one Play button. The tagline, the
+   *  bot avatar, the slider, the "Options" label, the cycling chips and the stats line are gone. The
+   *  stored values are unchanged (`beginner`/`intermediate`/`pro`, `classic`/`quick`, THE LAW rule 5);
+   *  the old Bonus shot chip is gone with the rule it set (a hit always shoots again in a salvo). */
   renderSetup() {
-    this._shellMode('');
+    this._shellMode('scene');
     if (this._dead) return;
     this.closeOverlays();
     if (this.view === 'battle' && this.state && !this.state.over && !this.mp && !this.ch) clearGame();
@@ -509,39 +476,69 @@ class BattleshipUI {
     this._aims = [];
     const id = this._identity();
     const s = this._setup;
-    const stats = this._statsLine();
-    const header = `<div class="bs-headerpanel">
-      <h1 class="bs-title">${t('title')}</h1>
-      <p class="bs-sub">${t('tagline')}</p>
-    </div>`;
-    const statsLine = stats ? `<p class="bs-stats">${esc(stats)}</p>` : '';
 
     if (this._lobby || this._mode === 'host' || this._mode === 'join' || this._mode === 'ch') {
-      this.shell.innerHTML = `<div class="bs-mode">${header}
-        <div class="bs-modecard">${this._friendHTML()}</div>${statsLine}</div>`;
+      const back = this._lobby ? 'mp-cancel' : this._chChoose ? 'ch-choose-back' : this._chPick ? 'ch-pick-back' : 'mode-solo';
+      this.shell.innerHTML = `<div class="bs-setup"><div class="bs-setcard bs-setcard-mp">
+        ${this._cardTop(t('multiplayer'), { back })}
+        ${this._friendHTML()}
+      </div></div>`;
+      this._fitScene();
       return;
     }
 
-    const di = this._diffIndex();
-    this.shell.innerHTML = `<div class="bs-mode">
-      ${header}
-      <div class="bs-modecard">
-        <div class="bs-avatar" aria-hidden="true">${esc(id.oppEmoji)}</div>
-        <div class="bs-avatar-name">${esc(id.oppName)}</div>
-        <div class="bs-diffname">${diffShapeSVG(tierOf(s.difficulty))}${esc(t(DIFF_LABEL_KEY[s.difficulty]))}</div>
-        <div class="bs-slider-wrap">
-          <input class="bs-slider" type="range" min="0" max="2" step="1" value="${di}"
-            data-role="diff-slider" aria-label="${esc(t('row_difficulty'))}">
-          <div class="bs-slider-stops">${DIFFICULTIES.map(([, k], i) =>
-            `<span class="bs-slider-stop ${i === di ? 'is-on' : ''}">${esc(t(k))}</span>`).join('')}</div>
-        </div>
-        <button type="button" class="bs-bigbtn bs-bigbtn-bot" data-action="play-bot">${BOT_ICON}${esc(t('play_vs_bot'))}</button>
-        <button type="button" class="bs-bigbtn bs-bigbtn-friend" data-action="play-friend">${PERSON_ICON}${esc(t('play_vs_friend'))}</button>
-        ${this._optionChips()}
-        <button type="button" class="bs-link" data-action="help">${t('howto')}</button>
+    const diffs = DIFFICULTIES.map(([v, k]) => [v, `${diffShapeSVG(tierOf(v))}${esc(t(k))}`]);
+    const firstName = (n) => `<span class="bs-seg-name">${esc(n)}</span>`;
+    this.shell.innerHTML = `<div class="bs-setup"><div class="bs-setcard">
+      ${this._cardTop(t('title'))}
+      <button type="button" class="bs-mprow" data-action="play-friend">
+        <b>${esc(t('multiplayer'))}</b>
+        <span class="bs-mprow-badge" data-role="mp-badge" hidden></span>
+        <span class="bs-mprow-chev" aria-hidden="true">›</span>
+      </button>
+      ${this._seg('set-diff', s.difficulty, diffs, t('row_difficulty'))}
+      ${this._seg('set-size', s.size, [['classic', '10×10'], ['quick', '8×8']], t('chip_size'))}
+      <div class="bs-field">
+        <span class="bs-label">${esc(t('chip_ch_shots'))}</span>
+        ${this._seg('set-shots', s.soloShots, CH_SHOTS.map((n) => [n, String(n)]))}
       </div>
-      ${statsLine}
-    </div>`;
+      <div class="bs-field">
+        <span class="bs-label">${esc(t('chip_first'))}</span>
+        ${this._seg('set-first', s.firstMode, [['alternate', esc(t('first_alternate'))], ['you', esc(t('first_me'))], ['opponent', firstName(id.oppName)]])}
+      </div>
+      <button type="button" class="bs-go" data-action="play-bot">${esc(t('play'))}</button>
+    </div></div>`;
+    this._fitScene();
+    this._paintMpBadge();
+  }
+
+  /** "N" on the Multiplayer row: challenges waiting on you (the index, one small read). */
+  _paintMpBadge() {
+    const gen = this._chGen;
+    Promise.resolve().then(() => CH.readMyGames()).then((rows) => {
+      if (this._dead || gen !== this._chGen || this.view !== 'setup') return;
+      const n = (rows || []).filter((r) => !r.over && r.yourTurn).length;
+      const el = this.shell && this.shell.querySelector('[data-role="mp-badge"]');
+      if (!el) return;
+      el.textContent = String(n);
+      el.setAttribute('aria-label', t('ch_your_turn'));
+      el.hidden = !n;
+    }).catch(() => { /* no badge offline */ });
+  }
+
+  /** The setup card sits CENTRED on the game's own water, edge to edge (`_bleedToEdges`). The shell is
+   *  stretched to the screen height minus whatever host chrome lies below it (measured as overflow,
+   *  as `_fitBattleBoards` does), so the page never scrolls; a card taller than that starts at the top. */
+  _fitScene() {
+    if (this._dead || !this.shell || this.view !== 'setup') return;
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    this.shell.style.minHeight = '';
+    const top = this.shell.getBoundingClientRect().top;
+    let h = Math.max(0, vh - Math.max(0, top));
+    this.shell.style.minHeight = `${h}px`;
+    const over = document.documentElement.scrollHeight - vh;
+    if (over > 1) { h = Math.max(0, h - over); this.shell.style.minHeight = `${h}px`; }
+    this._bleedToEdges();
   }
 
   // --- multiplayer lobby (Tic Tac Toe's shape) --------------------------------------------------
@@ -550,18 +547,18 @@ class BattleshipUI {
     const err = this._mpError;
     const msg = err === 'version'
       ? `<button type="button" class="bs-mp-msg bs-mp-msg-action" data-action="mp-update-required">${t('mp_update_required')}</button>`
-      : `<p class="bs-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? t('mp_joining') : t('mp_join_hint')))}</p>`;
+      : `<p class="bs-mp-msg" data-role="mp-msg">${esc(err || (this._mpBusy ? t('mp_joining') : ''))}</p>`;
     return `<div class="bs-mp-lobby">
       <span class="bs-mp-label">${t('mp_enter_code')}</span>
       <input class="bs-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}"
         value="${esc(this._mpJoinCode)}" autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('mp_code_aria')}">
       ${msg}
-      <button type="button" class="bs-btn bs-btn-primary" data-action="mp-join-submit">${t('mp_join_btn')}</button>
+      <button type="button" class="bs-go" data-action="mp-join-submit">${t('mp_join_btn')}</button>
     </div>`;
   }
 
   _lobbyHTML() {
-    const back = `<button type="button" class="bs-btn bs-btn-ghost" data-action="mp-cancel">${t('mp_back_btn')}</button>`;
+    const back = '';
     if (this._lobby === 'host') {
       const room = this._mpLobbyRoom;
       const guest = room && room.guest;
@@ -575,7 +572,7 @@ class BattleshipUI {
           ? `<span>${esc(guest.avatar || '🙂')}</span><span>${esc(guest.name || '')}</span>`
           : `<span class="bs-mp-oppempty">${t('mp_waiting_opponent')}</span>`}</div>
         <p class="bs-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-        <button type="button" class="bs-btn bs-btn-primary" data-action="mp-start" ${guest ? '' : 'disabled'}>${t('mp_start_btn')}</button>
+        <button type="button" class="bs-go" data-action="mp-start" ${guest ? '' : 'disabled'}>${t('mp_start_btn')}</button>
         ${back}
       </div>`;
     }
@@ -765,6 +762,8 @@ class BattleshipUI {
     if (this._dead || !this._botFleet) return;
     const size = boardSizeFor(this._placeSizeKey);
     let s = newGame(size, this._placeSizeKey, this._setup.bonusShotOnHit, this._soloStarterSeat);
+    // SALVOS vs the bot (2026-10-27): the volley size rides on the game, so a resumed save keeps it
+    if (typeof CH.fireVolley === 'function') s = { ...s, salvo: chShotsOf(this._setup.soloShots) || 3 };
     s = setFleet(s, 0, this._placeFleet);
     s = setFleet(s, 1, this._botFleet);
     this._botFleet = null;
@@ -1240,6 +1239,18 @@ class BattleshipUI {
       const fire = () => {
         this.aiTimer = null;
         if (this._dead || !this.state || this.state.over) return;
+        const n = this._salvoN();
+        if (n) {
+          const local = this._localSeat();
+          const cells = this._botVolley(CH.volleyLeft(this.state, this._remoteSeat(), n));
+          const res = CH.fireVolley(this.state, this._remoteSeat(), cells, n);
+          if (!res.fired.length) return;
+          this.state = res.state;
+          this._setVolley(res.fired.map(([r, c], i) => ({ seat: local, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
+          this._showResultBanner(res.answers, local);
+          this._afterStateChange();
+          return;
+        }
         const shipSet = this._shipSetForState();
         const shot = chooseShot(this.state, this._localSeat(), shipSet, this._setup.difficulty, Math.random);
         if (!shot) return;
@@ -1339,12 +1350,54 @@ class BattleshipUI {
 
   /** Is this a SALVO challenge (pick N squares, fire them together)? Old challenges, the bot and the
    *  live rooms are one aim at a time. */
-  _isSalvo() { return !!(this.ch && this.ch.game && this.ch.game.salvo === true); }
+  _isSalvo() { return this._salvoN() > 0; }
 
-  /** How many squares can be aimed at before FIRE: the volley owed in a salvo match, else one. */
+  /** Squares a volley holds in a salvo game, 0 if it is not one: a challenge stored `salvo: true`, or
+   *  a game vs the bot started with Shots (`state.salvo`, 2026-10-27). Never a live room. A bot game's
+   *  save from an mp.js without volleys (mid-update) falls back to one shot a turn. */
+  _salvoN() {
+    if (this.ch) return this.ch.game && this.ch.game.salvo === true ? (chShotsOf(this.ch.game.shots) || 1) : 0;
+    if (this.mp || !this.state || typeof CH.fireVolley !== 'function') return 0;
+    return chShotsOf(this.state.salvo) || 0;
+  }
+
+  /** How many squares can be aimed at before FIRE: the volley owed in a salvo game, else one. */
   _aimCap() {
-    if (!this._isSalvo() || !this.state) return 1;
-    return CH.volleyLeft(this.state, this._localSeat(), this.ch.game.shots);
+    const n = this._salvoN();
+    if (!n || !this.state) return 1;
+    return CH.volleyLeft(this.state, this._localSeat(), n);
+  }
+
+  /** A salvo vs the bot: every aimed square at once (mp.js fireVolley, the challenges' own rule). */
+  _soloFireVolley(aims) {
+    const target = this._remoteSeat();
+    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), this._salvoN());
+    if (!res.fired.length) return;
+    this.state = res.state;
+    this._setVolley(res.fired.map(([r, c], i) => ({ seat: target, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
+    this._showResultBanner(res.answers, target);
+    this._afterStateChange();
+  }
+
+  /** The bot's volley of `k` squares, chosen TOGETHER like a person's: each pick is made on a copy of
+   *  your board where its earlier picks already count as fired (unknown result), so it never learns
+   *  mid-volley what it hit. ai.js still never reads a fleet. */
+  _botVolley(k) {
+    const local = this._localSeat();
+    const set = this._shipSetForState();
+    let st = this.state;
+    const out = [];
+    for (let i = 0; i < k; i++) {
+      const shot = chooseShot(st, local, set, this._setup.difficulty, Math.random);
+      if (!shot) break;
+      out.push(shot);
+      const shots = st.shots.slice();
+      const grid = { ...shots[local], cells: shots[local].cells.slice() };
+      grid.cells[shot[0] * st.size + shot[1]] = CELL_MISS;
+      shots[local] = grid;
+      st = { ...st, shots };
+    }
+    return out;
   }
 
   /** A tap on an enemy square while it is your turn. One aim: tap to aim, tap it again (or FIRE) to
@@ -1375,7 +1428,7 @@ class BattleshipUI {
     if (this._isSalvo()) {
       if (aims.length < this._aimCap()) return;
       this._aims = [];
-      this._chFireVolley(aims);
+      if (this.ch) this._chFireVolley(aims); else this._soloFireVolley(aims);
       return;
     }
     this._aims = [];
@@ -1427,7 +1480,7 @@ class BattleshipUI {
       ? (s.winner === this._localSeat() ? id.humanName : id.oppName)
       : (shootingMine ? id.humanName : id.oppName);
     let pips = '';
-    if (this.ch && !s.over) {
+    if (!s.over && (this.ch || this._isSalvo())) {
       if (this._isSalvo()) {
         // A salvo: one dot per square in the volley, filled as you aim them. Only on your turn.
         const cap = shootingMine && s.turn === this._localSeat() && !this.busy ? this._aimCap() : 0;
@@ -2022,6 +2075,10 @@ class BattleshipUI {
     const battling = mode === 'battle';
     this.shell.classList.toggle('bs-shell-battle', battling);
     this.root.classList.toggle('bs-battling', battling);
+    // the setup card's water (renderSetup / _fitScene)
+    this.shell.classList.toggle('bs-shell-scene', mode === 'scene');
+    this.root.classList.toggle('bs-scene', mode === 'scene');
+    if (mode !== 'scene') this.shell.style.minHeight = '';
     if (!battling) {
       for (const k of ['marginLeft', 'marginRight', 'marginTop', 'marginBottom', 'paddingTop', 'paddingBottom']) {
         this.root.style[k] = '';
@@ -3018,11 +3075,12 @@ class BattleshipUI {
     const c = this._chChoose;
     return `<div class="bs-ch-pick">
       <div class="bs-mp-oppslot"><span>${esc(c.them.emoji || '🙂')}</span><span>${esc(c.them.name || '?')}</span></div>
-      ${this._seg('ch-size', c.size, SIZES.map(([v, k]) => [v, t(k)]))}
-      <span class="bs-mp-label">${esc(t('chip_ch_shots'))}</span>
-      ${this._seg('ch-shots', c.shots, CH_SHOTS.map((n) => [n, String(n)]))}
-      <button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-place">${esc(t('start'))}</button>
-      <button type="button" class="bs-btn bs-btn-ghost" data-action="ch-choose-back">${esc(t('mp_back_btn'))}</button>
+      ${this._seg('ch-size', c.size, [['classic', '10×10'], ['quick', '8×8']], t('chip_size'))}
+      <div class="bs-field">
+        <span class="bs-label">${esc(t('chip_ch_shots'))}</span>
+        ${this._seg('ch-shots', c.shots, CH_SHOTS.map((n) => [n, String(n)]))}
+      </div>
+      <button type="button" class="bs-go" data-action="ch-place">${esc(t('start'))}</button>
     </div>`;
   }
 
@@ -3051,9 +3109,9 @@ class BattleshipUI {
     // An mp.js from an older build (mid-update, see CH_SHOTS above): no challenge can be played
     // with it, so the only button is the update. Never a crash.
     if (this._chStale()) {
-      return `<button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`;
+      return `<button type="button" class="bs-go bs-ch-newbtn" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`;
     }
-    return `<button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
+    return `<button type="button" class="bs-go bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
       ${note}
       <div class="bs-ch-list">${list}</div>
       ${notify}`;
@@ -3088,7 +3146,6 @@ class BattleshipUI {
       <input type="search" class="bs-ch-search" data-role="ch-search" value="${esc(this._chPick.q || '')}"
         placeholder="${esc(t('ch_search'))}" aria-label="${esc(t('ch_search'))}" autocomplete="off">
       <div class="bs-ch-list" data-role="ch-pick-list">${this._chPickListHTML()}</div>
-      <button type="button" class="bs-btn bs-btn-ghost" data-action="ch-pick-back">${t('mp_back_btn')}</button>
     </div>`;
   }
 
@@ -3508,16 +3565,6 @@ class BattleshipUI {
   // --- events --------------------------------------------------------------------------------
 
   onInput(e) {
-    // The difficulty slider is DISPLAY ONLY: it picks one of the three canonical stored values
-    // (beginner/intermediate/pro), which js/difficulty-tiers.js and js/game-stats-ui.js's
-    // DIFF_META both key on. Only the labels are Easy/Medium/Hard.
-    const slider = e.target.closest('[data-role="diff-slider"]');
-    if (slider) {
-      const i = Math.max(0, Math.min(DIFFICULTIES.length - 1, Number(slider.value) | 0));
-      const next = DIFFICULTIES[i][0];
-      if (next !== this._setup.difficulty) { this._setup.difficulty = next; this._saveSetup(); this.renderSetup(); }
-      return;
-    }
     const search = e.target.closest('[data-role="ch-search"]');
     if (search && this._chPick) {
       this._chPick.q = search.value;
@@ -3776,12 +3823,7 @@ class BattleshipUI {
     const btn = e.target.closest('[data-action]');
     if (!btn || !this.root.contains(btn)) return;
     const action = btn.dataset.action;
-    if (action === 'cycle-size') {
-      // Every Options chip CYCLES through the same values the old accordion offered, and writes
-      // the same settings key -- the vocabulary in storage is untouched (THE LAW rule 5).
-      const i = SIZES.findIndex(([v]) => v === this._setup.size);
-      this._setup.size = SIZES[(i + 1) % SIZES.length][0]; this._saveSetup(); this.renderSetup();
-    } else if (action === 'ch-size' && this._chChoose) {
+    if (action === 'ch-size' && this._chChoose) {
       this._chChoose.size = btn.dataset.v === 'quick' ? 'quick' : 'classic';
       this._setup.size = this._chChoose.size; this._saveSetup(); this.renderSetup();
     } else if (action === 'ch-shots' && this._chChoose) {
@@ -3792,12 +3834,15 @@ class BattleshipUI {
       this._chStartPlacement({ kind: 'new', them: c.them, size: c.size, shots: c.shots });
     } else if (action === 'ch-choose-back') {
       this._chChoose = null; this._chHome();
-    } else if (action === 'cycle-first') {
-      const order = ['you', 'opponent', 'alternate'];
-      this._setup.firstMode = order[(order.indexOf(this._setup.firstMode) + 1) % order.length];
-      this._saveSetup(); this.renderSetup();
-    } else if (action === 'cycle-bonus') {
-      this._setup.bonusShotOnHit = !this._setup.bonusShotOnHit; this._saveSetup(); this.renderSetup();
+    } else if (action === 'set-diff') {
+      if (DIFFICULTIES.some(([k]) => k === btn.dataset.v)) { this._setup.difficulty = btn.dataset.v; this._saveSetup(); this.renderSetup(); }
+    } else if (action === 'set-size') {
+      this._setup.size = btn.dataset.v === 'quick' ? 'quick' : 'classic'; this._saveSetup(); this.renderSetup();
+    } else if (action === 'set-shots') {
+      this._setup.soloShots = chShotsOf(btn.dataset.v) || 3; this._saveSetup(); this.renderSetup();
+    } else if (action === 'set-first') {
+      const v = btn.dataset.v;
+      if (v === 'you' || v === 'opponent' || v === 'alternate') { this._setup.firstMode = v; this._saveSetup(); this.renderSetup(); }
     } else if (action === 'set-mode') {
       this._mode = btn.dataset.v; this._setupExpanded = null; this._mpError = '';
       if (this._mode === 'ch') { this._chHome(); return; }
@@ -3805,7 +3850,8 @@ class BattleshipUI {
     } else if (action === 'play-bot') {
       this._mode = 'solo'; this.startGame();
     } else if (action === 'play-friend') {
-      this._mode = 'host'; this._mpError = ''; this.renderSetup();
+      // Multiplayer opens on Challenge: the matches waiting on you are what people come here for.
+      this._mpError = ''; this._chHome();
     } else if (action === 'mode-solo') {
       this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this._chPick = null; this._chChoose = null; this._chNote = ''; this._chGen++; this.renderSetup();
     } else if (action === 'start') {

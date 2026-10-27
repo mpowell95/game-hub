@@ -260,8 +260,13 @@ const MOTION = {
       if (await page.$('.bs-wait')) await page.click('.bs-wait').catch(() => {});
       // Firing is two steps now: tap a square to aim, then FIRE to confirm (battleship/CLAUDE.md,
       // "Aim, then FIRE"). A probe that only taps the square never actually shoots.
-      const cell = await page.waitForSelector('[data-action="fire"]:not([disabled])', { timeout: 8000 });
-      await cell.click();
+      // A game vs the bot is a SALVO since 2026-10-27 (1, 3 or 5 squares, default 3): aim until FIRE shows.
+      await page.waitForSelector('[data-role="enemy-board"]:not(.is-locked) [data-action="fire"]:not([disabled])', { timeout: 15000 });
+      for (let i = 0; i < 5 && !(await page.$('[data-action="fire-confirm"]')); i++) {
+        const cells = await page.$$('[data-action="fire"]:not([disabled]):not(.bs-cell-aimed)');
+        await cells[i * 11].click();
+        await page.waitForTimeout(120);
+      }
       await page.waitForSelector('[data-action="fire-confirm"]', { timeout: 10000 });
       await page.click('[data-action="fire-confirm"]');
     },
@@ -963,9 +968,15 @@ const PLAY = {
         });
         return { ok: false, why: `saved the fleet and the battle screen never appeared (stuck on: ${where})` };
       }
-      await go('[data-action="fire"]:not([disabled])');
+      // A SALVO vs the bot since 2026-10-27 (1, 3 or 5 squares, default 3): aim until FIRE shows.
+      await page.waitForSelector('[data-role="enemy-board"]:not(.is-locked) [data-action="fire"]:not([disabled])', { timeout: 20000 }).catch(() => null);
+      for (let i = 0; i < 5 && !(await page.$('[data-action="fire-confirm"]')); i++) {
+        const cells = await page.$$('[data-action="fire"]:not([disabled]):not(.bs-cell-aimed)');
+        if (cells[i * 11]) await tap(cells[i * 11]).catch(() => {});
+        await page.waitForTimeout(150);
+      }
       try { await page.waitForSelector('[data-action="fire-confirm"]', { timeout: 10000 }); }
-      catch { return { ok: false, why: 'tapped a square and no FIRE button appeared to confirm the shot' }; }
+      catch { return { ok: false, why: 'aimed the volley and no FIRE button appeared to confirm it' }; }
       await go('[data-action="fire-confirm"]');
       // a resolved shot says what it did, and leaves a settled marker on the cell it hit
       try { await page.waitForSelector('.bs-res-hit, .bs-res-miss, .bs-res-sunk', { timeout: 15000 }); }
