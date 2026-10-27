@@ -275,7 +275,7 @@
    five chips or none, so an emptying tray changes nothing below it. */
 .bs-tray {
   display: flex; flex-wrap: nowrap; gap: 8px; justify-content: center; align-items: center;
-  height: 34px; width: 100%; overflow: hidden;
+  height: 44px; width: 100%; overflow: hidden;
 }
 .bs-trayship {
   display: flex; align-items: center; justify-content: center; cursor: grab;
@@ -290,7 +290,8 @@
    in -- that is the whole feedback for the tap-again-to-rotate gesture that replaced the buttons.
    The chip's own box does NOT rotate (that would change the row's height and move the board), only
    the art inside it. */
-.bs-trayship-art { height: 15px; width: 100%; min-width: 0; display: block; transition: transform .18s ease; }
+.bs-trayship { height: 40px; max-width: 34%; }
+.bs-trayship-art { height: 20px; width: 100%; min-width: 0; display: block; transition: transform .18s ease; }
 .bs-trayship.is-vert .bs-trayship-art { transform: rotate(90deg); }
 .bs-trayship.is-spinning .bs-trayship-art { animation: bs-tray-spin .3s ease-out; }
 @keyframes bs-tray-spin { from { transform: rotate(0deg); } }
@@ -397,6 +398,15 @@
 }
 .bs-ship-sprite.is-draggable { pointer-events: auto; cursor: grab; touch-action: none; }
 .bs-ship-sprite.is-ghost { opacity: .6; }
+/* a placed ship just turned by a tap: one small settle, so the tap visibly did something */
+.bs-ship-sprite.is-turned { animation: bs-ship-turn .22s ease-out; }
+@keyframes bs-ship-turn { from { transform: scale(.82); opacity: .6; } to { transform: scale(1); opacity: 1; } }
+/* the ship in your hand while dragging: follows the finger (ui.js moves it by transform), lifted
+   off the board by its shadow. Fixed, so nothing it passes over can clip it. */
+.bs-drag-float {
+  position: fixed; left: 0; top: 0; z-index: 300; pointer-events: none; will-change: transform;
+  filter: drop-shadow(0 6px 7px rgba(0, 0, 0, .38));
+}
 .bs-ship-sprite.is-faint { opacity: .55; }
 
 /* --- screen 3: the opponent placing ------------------------------------------------------------ */
@@ -435,6 +445,8 @@
   display: flex; align-items: center; justify-content: center; gap: 8px;
   height: 38px; width: 100%; position: relative; color: #fff;
   font-weight: 900; letter-spacing: .03em;
+  /* the bar is never rebuilt (ui.js patches the battle screen in place), so the turn FADES across */
+  transition: background-color .35s ease;
 }
 .bs-turn-mine { background: var(--bs-mine); }
 .bs-turn-theirs { background: var(--bs-theirs); }
@@ -533,6 +545,7 @@
 .bs-battle .bs-boardpanel.is-live .bs-board-wrap::after { opacity: 0; }
 /* the board being shot at wears a ring in the shooter's colour -- the loudest, most glanceable
    "this half of the screen is where it is happening" cue on the page */
+.bs-battle .bs-board-wrap { transition: box-shadow .35s ease; }
 .bs-battle .bs-boardpanel-enemy.is-live .bs-board-wrap { box-shadow: inset 0 0 0 3px var(--bs-mine); }
 .bs-battle .bs-boardpanel-own.is-live .bs-board-wrap { box-shadow: inset 0 0 0 3px var(--bs-theirs); }
 .bs-battle .bs-board-enemy { background: var(--bs-enemy-frame); }
@@ -599,6 +612,15 @@
    that it crosses from one to the other -- and is absolutely positioned so it costs the grid no
    height (`_fitBattleBoards` skips out-of-flow children for exactly this reason). */
 .bs-fx { position: absolute; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+/* A board's own layers (sprites, the live room's pending crosshair, the cannon). Absolutely placed,
+   so they take no grid cell, and with no z-index of their own, so what is inside them stacks with
+   the cells exactly as it did when it was inside the board directly. Their origin is the board's
+   padding box, the same one --bs-pad is measured from. */
+.bs-layer { position: absolute; inset: 0; pointer-events: none; }
+.bs-slot { display: contents; }
+/* the result banner sits over the board that was SHOT AT */
+.bs-banner-slot { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
+.bs-board.is-locked .bs-cell { cursor: default; }
 
 /* --- THE CANNON: the centrepiece ornament (its own namespace, never a layout name) -------------- */
 /* Seen from straight above, the way the reference draws it: a fat black ring base with the owner's
@@ -628,15 +650,8 @@
 }
 .bs-cannon-rig { width: 100%; height: 100%; }
 .bs-cannon-svg { width: 100%; height: 100%; display: block; }
-/* the recoil is a shove straight back along the barrel -- which is what a plain translateY means
-   once it is inside the rotation */
-.bs-cannon.is-firing .bs-cannon-rig { animation: bs-cannon-recoil .4s cubic-bezier(.2, .8, .3, 1) both; }
-@keyframes bs-cannon-recoil {
-  0% { transform: translateY(0); }
-  14% { transform: translateY(11%); }
-  55% { transform: translateY(-2.5%); }
-  100% { transform: translateY(0); }
-}
+/* the recoil (a shove straight back along the barrel) is a Web Animation on .bs-cannon-rig, thrown
+   once per volley by ui.js _playVolleyFx */
 .bs-cannon-pill {
   position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
   background: rgba(10, 16, 26, .92); color: #fff; font-size: .62rem; font-weight: 900;
@@ -670,12 +685,12 @@
   transform: translate(-50%, -50%);
   animation: bs-reticle-snap .28s ease-out both;
 }
-.bs-reticle.is-fading { animation: bs-reticle-snap .28s ease-out both, bs-reticle-off .5s var(--bs-fly) ease-in both; }
+/* a flying ball's crosshair, in .bs-fx: sized and animated from ui.js */
+.bs-reticle.bs-reticle-fx { animation: none; }
 .bs-reticle-svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
 .bs-reticle-ring { fill: none; stroke: #fff; stroke-width: 3; }
 .bs-reticle-cross { stroke: #fff; stroke-width: 3; stroke-linecap: round; }
 @keyframes bs-reticle-snap { from { transform: translate(-50%, -50%) scale(2.2); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
-@keyframes bs-reticle-off { from { opacity: 1; } to { opacity: 0; } }
 
 /* --- shot results: miss = bubble burst, hit = flash + marker, sunk = reveal + settle ------------ */
 
@@ -750,22 +765,24 @@
 @keyframes bs-flash { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.25); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 .bs-smoke { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: var(--bs-smoke); animation: bs-smoke .9s .14s ease-out both; }
 @keyframes bs-smoke { 0% { transform: translateY(0) scale(.5); opacity: .5; } 100% { transform: translateY(-140%) scale(1.4); opacity: 0; } }
-.bs-board.bs-shake { animation: bs-shake .32s ease-in-out; }
-@keyframes bs-shake { 10% { transform: translateX(-3px); } 30% { transform: translateX(3px); } 50% { transform: translateX(-2px); } 70% { transform: translateX(2px); } 100% { transform: translateX(0); } }
+/* (a hit's board shake is a Web Animation, thrown once as the ball lands: ui.js _playVolleyFx) */
 
-/* sunk: the ship reveals in its owner's color and settles under the waterline */
+/* sunk: the ship surfaces in its owner's colour, settles ON ITS OWN SQUARES and stays there, a
+   little darker. It used to end tipped 12 degrees off its squares, and snap back upright on the next
+   render: one of the "weird" animations (Matt, 2026-10-27). The reveal plays once (ui.js keys it). */
 .bs-cell.bs-cell-sunk { background: var(--bs-sunk); }
-.bs-ship-sprite.is-sinking { animation: bs-sink-reveal .9s ease-in both; }
+.bs-ship-sprite.is-sunk { filter: brightness(.82) drop-shadow(0 1px 1.5px rgba(0, 0, 0, .4)); }
+.bs-ship-sprite.is-sinking { animation: bs-sink-reveal .7s var(--bs-sink-delay, 0ms) cubic-bezier(.3, 1.4, .5, 1) both; }
 @keyframes bs-sink-reveal {
-  0% { transform: rotate(0deg) translateY(-8%); opacity: 1; }
-  40% { transform: rotate(8deg) translateY(2%); opacity: 1; }
-  100% { transform: rotate(12deg) translateY(14%); opacity: .78; }
+  0% { transform: scale(1.25); opacity: 0; }
+  60% { transform: scale(.95); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
 }
 /* THE SHIP, STRUCK THROUGH -- no sentence. Drawn in the losing fleet's own colour, so "whose ship
    was that" is answered by the same picture that answers "which ship". The words survive as the
    element's aria-label; see _maybeShowSunkBanner. */
 .bs-sunk-banner {
-  position: fixed; left: 50%; top: 16%; transform: translate(-50%, 0); z-index: 60;
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60;
   background: var(--bs-sunk); padding: 9px 18px; border-radius: 999px;
   display: flex; align-items: center; animation: bs-banner .3s ease-out both;
   /* IT IS A LABEL, NOT A CONTROL. Without this it sat over the middle of the screen for its whole
@@ -786,14 +803,14 @@
 .bs-res-miss { background: #2b3648; }
 .bs-res-hit.is-mine, .bs-res-sunk.is-mine { background: var(--bs-hit); }
 .bs-res-hit.is-theirs, .bs-res-sunk.is-theirs { background: #1F6FA8; }
-.bs-sunk-banner-art { height: 18px; display: block; position: relative; }
+.bs-sunk-banner-art { height: 18px; display: block; position: relative; flex: none; }
 /* the strike: one bar straight through the hull, the universal "gone" mark, and a SHAPE rather
    than a colour change (Matt is red/green colorblind) */
 .bs-sunk-banner-art::after {
   content: ''; position: absolute; left: -6%; right: -6%; top: 50%; height: 3px;
   transform: translateY(-50%); background: #fff; border-radius: 2px;
 }
-@keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -18px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes bs-banner { from { opacity: 0; transform: translate(-50%, -50%) scale(.7); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 
 /* --- overlays (end-of-game / how-to-play / mp) ------------------------------------------------- */
 
@@ -898,7 +915,7 @@
   .bs-trayship.is-spinning .bs-trayship-art,
   .bs-iconbtn.is-confirm,
   .bs-exitdisc.is-confirm,
-  .bs-board.bs-shake,
+  .bs-ship-sprite.is-turned,
   .bs-wait-dots {
     animation: none !important;
   }
@@ -914,18 +931,15 @@
      about -- a decoration rule landing on something structural. */
   .bs-sunk-banner {
     animation: none !important; opacity: 1 !important;
-    transform: translate(-50%, 0) !important;
+    transform: translate(-50%, -50%) !important;
   }
+  .bs-turnbar, .bs-battle .bs-board-wrap, .bs-battle .bs-board::after, .bs-battle .bs-board-wrap::after { transition: none !important; }
   /* No flight, so no delay to hold anything back by: every impact is instant. ui.js reads the same
      media query and skips throwing a ball at all. */
   .bs-root { --bs-fly: 0ms; }
   .bs-reticle {
     animation: none !important; opacity: 1 !important; transform: translate(-50%, -50%) !important;
   }
-  /* With no flight there is nothing to mark the target THROUGH, so the fading crosshair simply
-     isn't there -- otherwise it never fades and sits on top of the marker it was pointing at. The
-     genuinely-pending MP crosshair (not `is-fading`) still shows. */
-  .bs-reticle.is-fading { opacity: 0 !important; }
   /* The cannon still AIMS -- rotating to point at the cell being fired at is a state, not a
      flourish, and it is the only thing on screen saying which cell that is. Only the movement
      between poses is dropped. */
@@ -936,7 +950,5 @@
     animation: none !important; opacity: 0 !important;
   }
   .bs-peg-hit::after { opacity: 0 !important; }
-  .bs-ship-sprite.is-sinking {
-    animation: none !important; opacity: .78 !important; transform: rotate(12deg) translateY(14%) !important;
-  }
+  .bs-ship-sprite.is-sinking { animation: none !important; opacity: 1 !important; transform: none !important; }
 }

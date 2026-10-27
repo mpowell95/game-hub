@@ -116,6 +116,55 @@ const randomFleet = (size) => stored(F.autoPlace(size, F.shipSetFor(size), rng))
     ok(`${N} a turn: fireShot one at a time = the replay`, same(live, rp.state));
   }
   ok('shots: only 1, 3 or 5', MP.asShots(3) === 3 && MP.asShots(2) === null && MP.asShots('5') === 5);
+  // SALVOS (2026-10-27, Matt): pick N squares, they land together, ANY hit = another volley, all
+  // misses = the turn passes. Stored as `salvo: true`; a match without it keeps the rule above.
+  {
+    const N = 3;
+    const occA = new Set(), occB = new Set();
+    for (const [set, f] of [[occA, fa], [occB, fb]]) for (const sh of MP.engineFleet(f, 'classic').ships) for (const [r, c] of sh.cells) set.add(`${r},${c}`);
+    const water = (occ) => { const out = []; for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) if (!occ.has(`${r},${c}`)) out.push([r, c]); return out; };
+    const wa = water(occA), wb = water(occB), shipA = [...occA].map((k) => k.split(',').map(Number));
+    const S = (lg) => MP.replay('classic', fa, fb, lg, true, N, true);
+    const lg = [{ by: 'b', r: wa[0][0], c: wa[0][1] }, { by: 'b', r: wa[1][0], c: wa[1][1] }];
+    let rp = S(lg);
+    ok('salvo: two of three fired, still the shooter\'s volley, one owed', rp.ok && rp.state.turn === 1 && rp.state.chVol === 1);
+    lg.push({ by: 'b', r: wa[2][0], c: wa[2][1] });
+    rp = S(lg);
+    ok('salvo: three misses pass the turn', rp.ok && rp.state.turn === 0 && !rp.state.chVol);
+    lg.push({ by: 'a', r: wb[0][0], c: wb[0][1] }, { by: 'a', r: wb[1][0], c: wb[1][1] });
+    const hitOnA = [...occB][0].split(',').map(Number);
+    lg.push({ by: 'a', r: hitOnA[0], c: hitOnA[1] });
+    rp = S(lg);
+    ok('salvo: a hit anywhere in the volley gives another whole volley', rp.ok && rp.state.turn === 0 && !rp.state.chVol);
+    ok('salvo: the next volley is N again', MP.volleyLeft(rp.state, 0, N) === N);
+    const bad = lg.concat([{ by: 'b', r: wa[3][0], c: wa[3][1] }]);
+    ok('salvo: the other side cannot shoot into a volley it does not own', !S(bad).ok);
+    // the screen's whole-volley path agrees with the replay
+    let live = S([]).state;
+    for (const v of [lg.slice(0, 3), lg.slice(3, 6)]) {
+      const shooter = MP.seatOfSide(v[0].by);
+      live = MP.fireVolley(live, shooter, v.map((e) => [e.r, e.c]), N).state;
+    }
+    ok('salvo: fireVolley = the replay', same(live, rp.state));
+    const more = lg.concat([{ by: 'a', r: wb[2][0], c: wb[2][1] }]);
+    ok('salvo: the old rule replays the same log differently (it travels with the match)',
+      S(more).state.turn === 0 && MP.replay('classic', fa, fb, more, true, N).state.turn === 1);
+    // a winning volley stops at the shot that wins it
+    let w = S([]).state;
+    const allA = shipA.slice();
+    let guard = 0;
+    while (!w.over && guard++ < 60) {
+      if (w.turn === 1) { const v = allA.splice(0, MP.volleyLeft(w, 1, N)); w = MP.fireVolley(w, 1, v, N).state; }
+      else { const open = wb.filter(([r, c]) => G.isShotLegal(w, 1, r, c)).slice(0, MP.volleyLeft(w, 0, N)); w = MP.fireVolley(w, 0, open, N).state; }
+    }
+    ok('salvo: b sinks every ship of a by volleys, a\'s all-miss volleys passing back', w.over && w.winner === 1);
+    const last = MP.fireVolley(S(lg.slice(0, 0)).state, 1, shipA.concat(wa.slice(0, 5)), N);
+    ok('salvo: fireVolley never fires past the volley', last.fired.length === N);
+    // fewer squares left than N: the volley is what is left
+    const nearly = { ...S([]).state };
+    nearly.shots = nearly.shots.slice(); nearly.shots[0] = { ...nearly.shots[0], cells: nearly.shots[0].cells.map((v, i) => (i < 98 ? 1 : 0)) };
+    ok('salvo: with 2 squares left a volley of 3 is 2', MP.volleySize(nearly, 0, 3) === 2);
+  }
   ok('cleanShot: off the board, or not a side, is not a shot', MP.cleanShot({ by: 'a', r: 10, c: 0 }) === null && MP.cleanShot({ by: 'x', r: 0, c: 0 }) === null
     && MP.cleanShot({ by: 'a', r: 7, c: 7 }, 'quick') && MP.cleanShot({ by: 'a', r: 8, c: 0 }, 'quick') === null);
 }
@@ -265,7 +314,9 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   ok('3 a turn: a whole match to a sunk fleet', g.over && g.over.why === 'sunk');
   let runs = [], cur = null;
   for (const e of g.log) { if (!cur || cur.by !== e.by) { cur = { by: e.by, n: 0 }; runs.push(cur); } cur.n++; }
-  ok('3 a turn: every finished turn but the last has at least 3 shots', runs.slice(0, -1).every((x) => x.n >= 3), JSON.stringify(runs.map((x) => x.n)));
+  ok('3 a turn: stored as a SALVO match', getAt(`battleship/games/${c.id}/salvo`) === true && c.game.salvo === true);
+  ok('3 a turn: every finished turn but the last is whole volleys of 3', runs.slice(0, -1).every((x) => x.n % 3 === 0), JSON.stringify(runs.map((x) => x.n)));
+
   const raw = clone(getAt(`battleship/games/${c.id}`)); delete raw.shots;
   ok('a stored match with no `shots` is 1 a turn (the 3-shot log no longer replays as one)', MP.validateGame(raw) === null);
   const raw4 = clone(getAt(`battleship/games/${c.id}`)); raw4.shots = 4;
