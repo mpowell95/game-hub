@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1273;
-const CACHE = 'game-hub-v1273';
+const CACHE = 'game-hub-v1274';
 
 const ASSETS = [
   './',
@@ -911,9 +911,9 @@ const REST_MANIFEST = {
   './escoba/js/game.js': 'd86364718a',
   './escoba/js/hash.js': '032dbfed1a',
   './escoba/js/ai.js': '66a7d1f37a',
-  './escoba/js/ui.js': '8228059455',
+  './escoba/js/ui.js': '5f2cdc5576',
   './escoba/js/mp.js': '8c6a63f54e',
-  './escoba/js/mp-ui.js': '528aefa2f7',
+  './escoba/js/mp-ui.js': '7219984d16',
   './escoba/js/alert.js': 'e82a10d729',
   './escoba/js/strings.js': 'f77944680f',
   './escoba/img/broom-sprite.webp': 'c1a0f8a912',
@@ -996,13 +996,13 @@ const REST_MANIFEST = {
   './darts/': '9565b5b35f',
   './darts/index.html': '9565b5b35f',
   './darts/css/darts.css': 'd4360f7631',
-  './darts/js/ui.js': '3321bcc4d6',
+  './darts/js/ui.js': '8441f0b22d',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/render.js': 'd05671e727',
   './darts/js/flight.js': '60b3524662',
   './darts/js/strings.js': '844396d26a',
   './darts/js/mp.js': '81e6dd8ba9',
-  './darts/js/mp-ui.js': 'aa1e3c1b56',
+  './darts/js/mp-ui.js': 'ebf4b4a706',
   './darts/js/alert.js': 'c8ce53e4a8',
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',

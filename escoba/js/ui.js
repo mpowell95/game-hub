@@ -1979,6 +1979,7 @@ class EscobaUI {
       case 'ch-new': this._chOpenPick(); break;
       case 'ch-pick': this._chPickPerson(a.dataset.code); break;
       case 'ch-len': this._chSend(a.dataset.v); break;
+      case 'ch-deck': this._setup.deckMode = a.dataset.v === 'american' ? 'american' : 'spanish'; this._setup.deckModeChosen = true; this._saveSetup(); this._chScreen('len', {}); break;
       case 'ch-open': this._chOpenMatch(a.dataset.id); break;
       case 'ch-home': this._closeModal(); this._chOpenHome(); break;
       case 'ch-rematch': this._chRematch(); break;

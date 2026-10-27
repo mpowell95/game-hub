@@ -245,3 +245,8 @@ node tools/test-escoba-mp.mjs          # challenges: replay == engine, the write
 ```
 Deck construction (both modes), ~85 full AI-vs-AI matches of capture/escoba/scoring invariants, and a
 JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs Node >= 22.7 (no package.json).
+
+## Challenge options on the pick path (2026-10-27)
+
+- **The length screen chooses the deck too** (2026-10-27): Spanish / American on the challenge length screen
+  (`mp-ui.js`, `ch-deck`, the setup card's own `deckMode`). Before, the deck came silently from setup.

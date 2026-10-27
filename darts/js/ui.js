@@ -521,6 +521,9 @@ class DartsUI {
 
   /** The game the setup screen has chosen (an online challenge is sent as this). */
   _kind() { return kindFrom(this.settings); }
+  /** The challenge card's own Game / Order / Points choices (mp-ui.js confirm) are the setup card's
+   *  settings, so the two never disagree. */
+  _saveSettings() { writeJSON(SETTINGS_KEY, this.settings); this._relabel(); }
 
   /** Play again: the same game as the one just finished, whatever the setup screen now says. */
   _rematch() {
