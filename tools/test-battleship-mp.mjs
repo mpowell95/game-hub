@@ -379,6 +379,7 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
     (src('battleship/js/ui.js').match(/this\._chChooseFor\(/g) || []).length === 3 && !/_chStartPlacement\(\{ kind: 'new', them: (o|them|o\.them), size: this/.test(src('battleship/js/ui.js')));
   ok('ui.js: nothing from mp.js is called while the game is being built (an older mp.js mid-update cannot crash it)',
     !/CH\.asShots|CH\.SHOTS/.test(src('battleship/js/ui.js')) && /_chStale\(\)/.test(src('battleship/js/ui.js')));
+  ok('ui.js: the chat button is placed on the turn bar (never the corner under the status bar)', /_chPlaceChat\(\)/.test(src('battleship/js/ui.js')) && /querySelector\('\.bs-turnbar'\)/.test(src('battleship/js/ui.js')) && !/place: \{ top: '6px'/.test(src('battleship/js/ui.js')));
   ok('ui.js: exports openArmed for a notification tapped with the game open', /export function openArmed\(\)/.test(src('battleship/js/ui.js')));
   ok('ui.js: a challenge never writes the solo autosave', /if \(ui\.mp \|\| ui\.ch\) return;/.test(src('battleship/js/ui.js')));
   ok('the live-room protocol still never sends a fleet (net.js appendMove carries r / s / a only)', !/myFleet[^\n]*appendMove|appendMove[^\n]*myFleet/.test(src('battleship/js/ui.js')));
