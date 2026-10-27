@@ -497,7 +497,10 @@ class BattleshipUI {
         <span class="bs-mprow-chev" aria-hidden="true">›</span>
       </button>
       ${this._seg('set-diff', s.difficulty, diffs, t('row_difficulty'))}
-      ${this._seg('set-size', s.size, [['classic', '10×10'], ['quick', '8×8']], t('chip_size'))}
+      <div class="bs-field">
+        <span class="bs-label">${esc(t('grid_size'))}</span>
+        ${this._seg('set-size', s.size, [['quick', '8×8'], ['classic', '10×10']])}
+      </div>
       <div class="bs-field">
         <span class="bs-label">${esc(t('chip_ch_shots'))}</span>
         ${this._seg('set-shots', s.soloShots, CH_SHOTS.map((n) => [n, String(n)]))}
@@ -3075,7 +3078,10 @@ class BattleshipUI {
     const c = this._chChoose;
     return `<div class="bs-ch-pick">
       <div class="bs-mp-oppslot"><span>${esc(c.them.emoji || '🙂')}</span><span>${esc(c.them.name || '?')}</span></div>
-      ${this._seg('ch-size', c.size, [['classic', '10×10'], ['quick', '8×8']], t('chip_size'))}
+      <div class="bs-field">
+        <span class="bs-label">${esc(t('grid_size'))}</span>
+        ${this._seg('ch-size', c.size, [['quick', '8×8'], ['classic', '10×10']])}
+      </div>
       <div class="bs-field">
         <span class="bs-label">${esc(t('chip_ch_shots'))}</span>
         ${this._seg('ch-shots', c.shots, CH_SHOTS.map((n) => [n, String(n)]))}

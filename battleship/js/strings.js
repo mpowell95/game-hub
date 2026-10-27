@@ -169,7 +169,8 @@ export const STRINGS = {
     ch_e_dev: 'Blocked on a test server.',
     ch_e_failed: 'Something went wrong. Try again.',
     help_rule_ch: 'Challenges: pick 1, 3 or 5 squares, they fire together. Any hit, fire again.',
-    chip_ch_shots: 'Shots',
+    chip_ch_shots: 'Shots per turn',
+    grid_size: 'Grid size',
     shots_left: '{n} shots left',
   },
   es: {
@@ -325,7 +326,8 @@ export const STRINGS = {
     ch_e_dev: 'Bloqueado en un servidor de pruebas.',
     ch_e_failed: 'Algo salió mal. Inténtalo otra vez.',
     help_rule_ch: 'Retos: elige 1, 3 o 5 casillas y disparan a la vez. Si aciertas una, vuelves a disparar.',
-    chip_ch_shots: 'Disparos',
+    chip_ch_shots: 'Disparos por turno',
+    grid_size: 'Tamaño de cuadrícula',
     shots_left: 'Quedan {n} disparos',
   },
 };
