@@ -9,7 +9,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, isActive, ACTIVE_WINDOW_MS,
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, isActive, ACTIVE_WINDOW_MS,
   decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, REMIND_AFTER_MS, REMIND_UNTIL_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
@@ -308,7 +308,30 @@ console.log('\nBattle Arena challenges (2026-10-24)');
   check('battle arena: the trigger watches battlearena/index and names the match', /ref: '\/battlearena\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'battle-arena', match: id \}/.test(fnSrc));
   check('battle arena: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'battlearena' && x.game === 'battle-arena')
     && decideNudge({ key: 'battlearena~m1', from: 'MATTA', row: { name: 'Matt', with: 'MATTA', updated: 1, yourTurn: true, over: false } }) !== null
-    && /battlearena\)~/.test(read('database.rules.json')) && /'battle-arena': 'battlearena'/.test(read('js/messages.js')));
+    && /battlearena[|)]/.test(read('database.rules.json')) && /'battle-arena': 'battlearena'/.test(read('js/messages.js')));
+}
+
+console.log('\nBattleship challenges (2026-10-27)');
+{
+  const fnSrc = read('functions/index.js');
+  const row = (o = {}) => ({ with: 'ANABB', name: 'Ana', yourTurn: false, over: false, mine: 0, theirs: 0, lastBy: 'them', ...o });
+  const b = (n) => n && n.text('en').body;
+  const d = (before, after) => decideBattleship({ code: 'TESTA', id: 'x', before, after });
+  check('battleship: a new row that is your turn is a challenge', b(d(null, row({ yourTurn: true }))) === 'Ana challenged you to Battleship. Your turn!');
+  check('battleship: the challenger\'s own new row is not news', d(null, row({ lastBy: 'me' })) === null);
+  check('battleship: the turn coming back says the ships sunk', b(d(row(), row({ yourTurn: true, mine: 2, theirs: 1 }))) === 'Your turn vs Ana. Ships sunk: you 2, Ana 1');
+  check('battleship: already your turn is not news again', d(row({ yourTurn: true }), row({ yourTurn: true })) === null);
+  check('battleship: your own shots (turn going away) say nothing', d(row({ yourTurn: true, lastBy: 'me' }), row({ lastBy: 'me' })) === null);
+  check('battleship: they won', b(d(row(), row({ over: true, result: 'lost' }))) === 'Ana sank your fleet.');
+  check('battleship: they resigned, you won', /resigned/.test(b(d(row(), row({ over: true, result: 'won', why: 'resign' })))));
+  check('battleship: your own last shot does not notify you', d(row(), row({ over: true, result: 'won', lastBy: 'me' })) === null);
+  check('battleship: a finished row again is not news', d(row({ over: true, result: 'lost' }), row({ over: true, result: 'lost' })) === null);
+  check('battleship: a called-off row (over:false, ended) says nothing', d(row({ yourTurn: true }), row({ ended: 'declined' })) === null);
+  check('battleship: Spanish wording', d(null, row({ yourTurn: true })).text('es').title === 'Hundir la Flota');
+  check('battleship: the trigger watches battleship/index and names the match', /ref: '\/battleship\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'battleship', match: id \}/.test(fnSrc));
+  check('battleship: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'battleship' && x.game === 'battleship')
+    && decideNudge({ key: 'battleship~m1', from: 'TESTA', row: { name: 'Test', with: 'TESTA', updated: 1, yourTurn: true, over: false } }) !== null
+    && /battleship\)~/.test(read('database.rules.json')) && /battleship: 'battleship'/.test(read('js/messages.js')));
 }
 
 console.log('\n24-hour reminder (2026-10-20)');
@@ -331,7 +354,7 @@ console.log('\n24-hour reminder (2026-10-20)');
   check('reminder: a new move since the last reminder sends again', r({ updated: now - 30 * H }, now - 60 * H) !== null);
   check('reminder: no time on the row, nothing', r({ updated: 0 }) === null);
   check('reminder: every challenge game has a turn trigger on the node it reads',
-    REMINDER_GAMES.length === 9 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
+    REMINDER_GAMES.length === 10 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
   check('reminder: the scheduled function exists and stamps its own node, never the index row',
     /export const turnReminderPush = onSchedule\(/.test(fnSrc) && /pushReminders\/\$\{code\}\/\$\{key\}/.test(fnSrc));
 }

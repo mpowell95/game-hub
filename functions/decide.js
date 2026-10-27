@@ -581,6 +581,52 @@ export function decideBattleArena({ code, id, before, after }) {
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }
 
+// --- BATTLESHIP CHALLENGES (2026-10-27) ----------------------------------------------------------------
+// battleship/js/mp.js writes battleship/index/<code>/<id> from each person's side, with `lastBy`
+// saying whose write it was ('me' = this row's owner); `mine` / `theirs` are the ships each side has
+// sunk. The challenge is delivered when it is made (the receiver places their fleet and shoots first):
+//   - a NEW row that is your turn           -> a challenge
+//   - your turn coming back                 -> "your turn", with the ships sunk on both sides
+//   - the match ending by THEIR hand         -> they won (they sank your fleet) / you won (they resigned)
+// Your own writes (lastBy 'me') never notify you. A called-off row (over:false, `ended`) says nothing.
+const SHIP_TEXT = {
+  en: {
+    title: 'Battleship',
+    challenge: (w) => `${w} challenged you to Battleship. Your turn!`,
+    turn: (w, a, b) => `Your turn vs ${w}. Ships sunk: you ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} sank your fleet.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+  },
+  es: {
+    title: 'Hundir la Flota',
+    challenge: (w) => `${w} te ha retado a Hundir la Flota. ¡Te toca!`,
+    turn: (w, a, b) => `Te toca contra ${w}. Hundidos: tú ${a}, ${w} ${b}`,
+    theyWon: (w) => `${w} hundió tu flota.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+  },
+};
+
+export function decideBattleship({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = SHIP_TEXT[lang] || SHIP_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
+}
+
 // --- THE 24-HOUR REMINDER (2026-10-20) ------------------------------------------------------------
 // Matt: "Anita is taking a long time to play me back ... have one send automatically", "for every
 // game". A scheduled function (index.js turnReminderPush, hourly) reads every challenge game's index
@@ -602,6 +648,7 @@ export const REMINDER_GAMES = [
   { node: 'chinchon', game: 'chinchon', tag: 'chinchon', en: 'Chinchón', es: 'Chinchón' },
   { node: 'escoba', game: 'escoba', tag: 'escoba', en: 'Escoba', es: 'Escoba' },
   { node: 'battlearena', game: 'battle-arena', tag: 'battlearena', en: 'Battle Arena', es: 'Arena de Batalla' },
+  { node: 'battleship', game: 'battleship', tag: 'battleship', en: 'Battleship', es: 'Hundir la Flota' },
 ];
 const REMIND_TEXT = {
   en: (w) => `Reminder: your turn vs ${w}`,

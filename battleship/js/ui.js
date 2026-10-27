@@ -13,6 +13,10 @@
 // 'r' (ready) entry per seat, gating the first shot on both being present -- the one genuinely
 // concurrent beat in the protocol, since placement happens simultaneously. See battleship/CLAUDE.md
 // for the full write-up and js/CLAUDE.md's "tenth consumer" section.
+//
+// CHALLENGES, turn by turn (2026-10-27): a third way to play a person, beside Host and Join. The
+// match lives in Firebase (mp.js: both fleets and a log of shots), every phone replays it, and a hit
+// shoots again. The `_ch*` methods below are the whole of it; the live-room `_mp*` code is untouched.
 
 import {
   CELL_MISS, CELL_HIT, CELL_SUNK, cellAt, newGame, setFleet, isShotLegal,
@@ -26,15 +30,17 @@ import { chooseShot } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBattleship, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
-import { makeT } from '../../js/i18n.js';
+import { makeT, myName } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { shipArtHtml } from './ship-art.js';
 import * as net from '../../js/net.js';
-import { onlineGateText } from '../../js/online-gate.js';
+import { onlineGate, onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
+import * as CH from './mp.js';
+import { takeOpen } from './alert.js';
 
 const t = makeT(STRINGS);
 // How long a cannonball spends in the air, in ms, and the ONE place it is set: `renderBattle`
@@ -92,6 +98,8 @@ const ICON_RESTART = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true"
 const ICON_TARGET = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
   stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6.5"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5" stroke-linecap="round"/></svg>`;
 
+const ICON_FLAG = `<svg class="bs-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none"
+  stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h11l-2.5 4L17 12H6"/></svg>`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const deepCopy = (v) => JSON.parse(JSON.stringify(v));
 const reducedMotion = () => { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; } };
@@ -126,7 +134,7 @@ function validSoloState(s, sizeKey) {
 
 function saveGame(ui) {
   try {
-    if (ui.mp) return;
+    if (ui.mp || ui.ch) return;   // a challenge lives in Firebase (mp.js), never in the solo save
     if (!ui.state || ui.state.over || ui.view !== 'battle') { clearGame(); return; }
     localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, sizeKey: ui.state.sizeKey, difficulty: ui._setup.difficulty, state: ui.state }));
   } catch { /* a full quota must never break the game */ }
@@ -203,6 +211,19 @@ class BattleshipUI {
 
     this.mp = null;
 
+    // Challenges (the `_ch*` methods). `ch` is the open match's link, null off the battle screen.
+    this.ch = null;
+    this._chRows = null;       // your matches (mp.js readMyGames), null while loading
+    this._chNote = '';         // one line on the list: why we came back to it
+    this._chPick = null;       // the pick-a-person view: { opps|null, q }
+    this._chPlace = null;      // what the deploy screen is placing for: { kind:'new', them, size } | { kind:'fleet', id, size }
+    this._chQueue = [];        // the other person's shots still to show
+    this._chTimer = null;      // holds the next queued shot back until this one has landed
+    this._chGen = 0;           // bumped by every list read and open, so a late one is dropped
+    this._chPushOff = false;   // notifications are off on this phone: the list offers to turn them on
+    this._chListStop = null;   // the list's live watch (mp.js watchMyGames), only while it is up
+    this._chSaving = false;
+
     this._onClick = (e) => this.onClick(e);
     this._onInput = (e) => this.onInput(e);
     this._onPointerDown = (e) => this.onPointerDown(e);
@@ -217,6 +238,8 @@ class BattleshipUI {
 
   destroy() {
     this._dead = true;
+    this._chStopList();
+    this._chClose();
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
     if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
@@ -287,6 +310,15 @@ class BattleshipUI {
     try { profile = loadProfile(); } catch { profile = null; }
     const bot = profile && profile.opponents && profile.opponents[0];
     const mpOpp = this.mp && this.mp.opp;
+    if (this.ch || (this._chPlace && this._chPlace.them)) {
+      const them = this.ch ? this.ch.them : this._chPlace.them;
+      return {
+        humanName: (profile && profile.name) || t('you'),
+        humanEmoji: (profile && profile.emoji) || '🙂',
+        oppName: (them && them.name) || t('mp_opponent_label'),
+        oppEmoji: (them && them.emoji) || '🙂',
+      };
+    }
     if (this.mp) {
       return {
         humanName: (profile && profile.name) || t('you'),
@@ -320,7 +352,7 @@ class BattleshipUI {
   // --- seats -------------------------------------------------------------------------------------
   // Seats are SYMMETRIC here (both sides have a fleet and shoot): host = seat 0, guest = seat 1,
   // fixed for the whole room. In solo the local human is always seat 0 and the AI is seat 1.
-  _localSeat() { return this.mp ? this.mp.localSeat : 0; }
+  _localSeat() { return this.mp ? this.mp.localSeat : this.ch ? this.ch.seat : 0; }
   _remoteSeat() { return 1 - this._localSeat(); }
 
   // --- DOM construction --------------------------------------------------------------------------
@@ -341,6 +373,11 @@ class BattleshipUI {
     // scrolling" / hill-climb/js/ui.js's usage). --bs-cell is the one value ship sprites, the
     // roster, and both boards all derive from, computed once per real viewport change.
     this._offViewport = onViewportResize(() => { this._fitBattleBoards(); this._updateCellSize(); });
+    // A challenge handed over by the hub (a tapped notification, the launcher bubble, the
+    // Multiplayer screen) opens first. A live room or solo save is left exactly where it was.
+    let armed = null;
+    try { armed = takeOpen(); } catch { armed = null; }
+    if (armed) { this._chTakeArmed(armed); return; }
     const mpSave = this._mpLoadSave();
     if (mpSave) {
       this.renderSetup();
@@ -415,9 +452,11 @@ class BattleshipUI {
    *  button instead of a mode segment -- there is no second multiplayer path. */
   _friendHTML() {
     if (this._lobby) return this._lobbyHTML();
-    const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')]]);
+    if (this._mode === 'ch' && this._chPick) return this._chPickerHTML();
+    const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')], ['ch', t('mode_ch')]]);
     const back = `<button type="button" class="bs-btn bs-btn-ghost" data-action="mode-solo">${t('mp_back_btn')}</button>`;
     if (this._mode === 'join') return `${seg}${this._joinBodyHTML()}${back}`;
+    if (this._mode === 'ch') return `${seg}${this._chHTML()}${back}`;
     return `${seg}
       <p class="bs-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
       <button type="button" class="bs-btn bs-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>
@@ -436,7 +475,10 @@ class BattleshipUI {
     this._shellMode('');
     if (this._dead) return;
     this.closeOverlays();
-    if (this.view === 'battle' && this.state && !this.state.over && !this.mp) clearGame();
+    if (this.view === 'battle' && this.state && !this.state.over && !this.mp && !this.ch) clearGame();
+    this._chClose();
+    this._chPlace = null;
+    if (this._mode !== 'ch') this._chStopList();
     this.view = 'setup';
     this.state = null;
     this._botFleet = null;
@@ -451,7 +493,7 @@ class BattleshipUI {
     </div>`;
     const statsLine = stats ? `<p class="bs-stats">${esc(stats)}</p>` : '';
 
-    if (this._lobby || this._mode === 'host' || this._mode === 'join') {
+    if (this._lobby || this._mode === 'host' || this._mode === 'join' || this._mode === 'ch') {
       this.shell.innerHTML = `<div class="bs-mode">${header}
         <div class="bs-modecard">${this._friendHTML()}</div>${statsLine}</div>`;
       return;
@@ -551,7 +593,7 @@ class BattleshipUI {
    *  fires into the NEXT screen: the bot's two-beat shot timer used to land a second after Restart
    *  and repaint the old battle over the fresh deploy screen, then shoot at the old board. */
   _stopGameTimers() {
-    for (const k of ['aiTimer', '_settleTimer', '_bannerTimer', '_botPlaceTimer', '_endTimer']) {
+    for (const k of ['aiTimer', '_settleTimer', '_bannerTimer', '_botPlaceTimer', '_endTimer', '_chTimer']) {
       if (this[k]) { clearTimeout(this[k]); this[k] = null; }
     }
     this._sunkBanner = '';
@@ -576,6 +618,9 @@ class BattleshipUI {
   startGame() {
     const starter = this._resolveStarter();
     this._soloStarterSeat = starter === 'you' ? 0 : 1;
+    this._chStopList();
+    this._chClose();
+    this._chPlace = null;
     clearGame();
     this._stopGameTimers();
     this.state = null;
@@ -661,6 +706,7 @@ class BattleshipUI {
 
   _placementReady() {
     if (this.mp) this._mpAfterLocalReady();
+    else if (this._chPlace) this._chPlaced();
     else this._finishPlacementSolo();
   }
 
@@ -1114,6 +1160,21 @@ class BattleshipUI {
       this._mpTryDeliverNextMove();
       return;
     }
+    if (this.ch) {
+      // A challenge: let the shot that just landed play out, then show the next of the other
+      // person's shots (if any are queued). Nothing here ever plays for them.
+      this.busy = true;
+      this.renderBattle();
+      if (this._chTimer) clearTimeout(this._chTimer);
+      this._chTimer = setTimeout(() => {
+        this._chTimer = null;
+        if (this._dead || !this.ch || !this.state) return;
+        this.busy = false;
+        this.renderBattle();
+        this._chNext();
+      }, Math.max(0, this._shotSettleMs(this._lastShot)));
+      return;
+    }
     if (this.state.turn === this._remoteSeat()) {
       this.busy = true;
       this.renderBattle();
@@ -1222,6 +1283,7 @@ class BattleshipUI {
     const target = this._remoteSeat();
     if (!isShotLegal(this.state, target, r, c)) return;
     if (this.mp) { this._mpFireAt(r, c); return; }
+    if (this.ch) { this._chFireAt(r, c); return; }
     const res = fireAndResolve(this.state, target, r, c);
     this.state = res.state;
     this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
@@ -1750,7 +1812,7 @@ class BattleshipUI {
             <div class="bs-rosterrow bs-rosterrow-theirs ${theirsLive ? '' : 'is-dim'}">${this._rosterItems(s.shots[this._remoteSeat()].sunkIds)}</div>
             <div class="bs-rosterrow bs-rosterrow-mine ${theirsLive ? 'is-dim' : ''}">${this._rosterItems(s.shots[this._localSeat()].sunkIds)}</div>
           </div>
-          ${this._armedBtn('bs-exitdisc', this.mp ? 'mp-leave' : 'exit-battle', 'exit')}
+          ${this._armedBtn('bs-exitdisc', this.mp ? 'mp-leave' : this.ch ? 'ch-back' : 'exit-battle', 'exit')}
         </div>
         <div class="bs-boardpanel bs-boardpanel-own ${ownLive ? 'is-live' : ''}">
           <div class="bs-board-wrap">${this._boardHtml('own', ownLive)}</div>
@@ -1764,7 +1826,9 @@ class BattleshipUI {
             : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
           ${this.mp
             ? ''
-            : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'restart', 'restart_game')}
+            : this.ch
+              ? (s.over ? '' : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'ch-resign', this._chResignKey()))
+              : this._armedBtn('bs-iconbtn bs-iconbtn-sm', 'restart', 'restart_game')}
         </div>
       </div>`;
     this._fitBattleBoards();
@@ -1807,7 +1871,7 @@ class BattleshipUI {
   _armedBtn(cls, action, labelKey) {
     const armed = this._armed === action;
     const label = esc(t(armed ? 'tap_again_confirm' : labelKey));
-    const icon = action === 'restart' ? ICON_RESTART : ICON_CLOSE;
+    const icon = action === 'restart' ? ICON_RESTART : action === 'ch-resign' ? ICON_FLAG : ICON_CLOSE;
     return `<button type="button" class="${cls} ${armed ? 'is-confirm' : ''}" data-action="${action}" data-armable="1"
       aria-label="${label}" title="${label}">${icon}</button>`;
   }
@@ -1831,7 +1895,7 @@ class BattleshipUI {
     if (!was || !this.shell) return;
     const b = this.shell.querySelector(`[data-armable][data-action="${was}"]`);
     if (!b) return;
-    const label = t(was === 'restart' ? 'restart_game' : 'exit');
+    const label = t(was === 'restart' ? 'restart_game' : was === 'ch-resign' ? this._chResignKey() : 'exit');
     b.classList.remove('is-confirm');
     b.setAttribute('aria-label', label);
     b.setAttribute('title', label);
@@ -1854,6 +1918,12 @@ class BattleshipUI {
     // fewestShotsWin: recordBattleship applies the sentinel-aware Math.min itself (0 = "no win
     // recorded yet", never "zero shots") and only when `won` -- see js/game-stats.js.
     const extras = { shots: myShots, hits, sunk, accuracy };
+    if (this.ch) {
+      // Counted once per match on this phone, through mp.js's ledger (the launcher's list read may
+      // have counted it already, without these extras). Challenges write no head-to-head.
+      try { CH.countResult(this.ch.id, won, extras); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
+      return;
+    }
     try { recordBattleship(difficulty, won, extras); } catch { /* never block the result */ }
     const opp = this.mp && this.mp.opp;
     if (opp) { try { recordHeadToHead('battleship', opp, won); } catch { /* never block the result */ } }
@@ -1883,7 +1953,10 @@ class BattleshipUI {
     const title = won ? t('you_win') : t('opp_wins', { opp: id.oppName });
     const emoji = won ? '🏆' : id.oppEmoji;
     const isHost = !!(this.mp && this.mp.role === 'host');
-    const actions = !this.mp
+    const actions = this.ch
+      ? `<button type="button" class="bs-btn bs-btn-primary" data-action="ch-rematch">${esc(t('ch_rematch'))}</button>
+         <button type="button" class="bs-btn bs-btn-ghost" data-action="ch-back">${esc(t('mp_back_btn'))}</button>`
+      : !this.mp
       ? `<button type="button" class="bs-btn bs-btn-primary" data-action="rematch">${t('play_again')}</button>
          <button type="button" class="bs-btn bs-btn-ghost" data-action="change-settings">${t('change_settings')}</button>`
       : isHost
@@ -1900,7 +1973,7 @@ class BattleshipUI {
         <button type="button" class="bs-x" data-action="close-overlay" aria-label="${t('close')}">&times;</button>
         <span class="bs-card-emoji">${esc(emoji)}</span>
         <h3 class="bs-card-title">${esc(title)}</h3>
-        <p class="bs-card-sub">${this.mp ? esc(this._seriesLine()) : t(DIFF_LABEL_KEY[this._setup.difficulty])}</p>
+        ${this.ch ? '' : `<p class="bs-card-sub">${this.mp ? esc(this._seriesLine()) : t(DIFF_LABEL_KEY[this._setup.difficulty])}</p>`}
         ${this._endStatsHtml()}
         <div class="bs-card-actions">${actions}</div>
       </div>`;
@@ -2649,6 +2722,475 @@ class BattleshipUI {
     this.finish();
   }
 
+  // ==============================================================================================
+  // CHALLENGES, turn by turn (2026-10-27). The data is mp.js; the launcher bubble alert.js. Three
+  // screens live inside the Play vs. Friend card (its Challenge tab): your matches, a person picker,
+  // and the deploy screen. A match plays on the ordinary battle screen with `this.ch` set: both
+  // fleets are known here (they are in the match), so a shot resolves at once through game.js
+  // exactly as solo, and is then written (`_chSend`, kept in mp.js's outbox until it lands). The
+  // other person's shots arrive by `watchGame` and are shown one at a time (`_chNext`), each with its
+  // ball, its banner and its settle, like the bot's. Leaving loses nothing, so isInProgress() stays false.
+  // ==============================================================================================
+
+  _chReason(reason) {
+    const gate = onlineGateText(reason);
+    if (gate) return gate;
+    if (reason === 'offline' || reason === 'did-not-land') return t('ch_e_offline');
+    if (reason === 'not-found') return t('ch_e_not_found');
+    if (reason === 'expired') return t('ch_e_expired');
+    if (reason === 'dev-origin-blocked') return t('ch_e_dev');
+    return t('ch_e_failed');
+  }
+
+  /** What the hub handed over: a person to challenge, or a match to open. */
+  _chTakeArmed(o) {
+    if (!o) return;
+    // A solo battle on screen (a notification tapped mid-game) stays in its save, untouched: without
+    // this, renderSetup would treat leaving it as "New game" and clear it. It resumes next open.
+    if (!this.mp && !this.ch && this.view === 'battle') { this._stopGameTimers(); this.state = null; }
+    this._mode = 'ch';
+    this._lobby = null;
+    if (o.kind === 'pick' && o.them && o.them.code) {
+      const gate = onlineGate();
+      if (gate) { this._chHome(onlineGateText(gate)); return; }
+      this._chStartPlacement({ kind: 'new', them: o.them, size: this._setup.size });
+      return;
+    }
+    if (o.id) { this._chHome(); this._chOpen(o.id); }
+  }
+
+  /** Back to the list of matches (the Challenge tab), with an optional one-line note. */
+  _chHome(note = '') {
+    this._chClose();
+    this._chPlace = null;
+    this._chPick = null;
+    this._lobby = null;
+    this._mode = 'ch';
+    this._chNote = note;
+    this.closeOverlays();
+    this.renderSetup();
+    this._chLoadList();
+  }
+
+  _chOnList() { return this.view === 'setup' && this._mode === 'ch' && !this._chPick && !this._lobby; }
+
+  async _chLoadList() {
+    const gen = ++this._chGen;
+    try { await CH.drainOutbox(); } catch { /* sent next time */ }
+    const rows = await CH.readMyGames();
+    if (this._dead || gen !== this._chGen) return;
+    this._chApplyRows(rows);
+    // LIVE while the list is up: a move, a cancel or a result lands on it without a reload. (A
+    // one-off read raced the other half of a cancel: the match said "called off" a moment before
+    // both list rows were rewritten, and the stale row stayed on screen.)
+    this._chWatchList();
+    const onList = () => this._chOnList();
+    try {
+      const P = await import('../../js/push.js');
+      const off = (await P.pushState()) === 'off';
+      if (this._dead || gen !== this._chGen || off === this._chPushOff) return;
+      this._chPushOff = off;
+      if (onList()) this.renderSetup();
+    } catch { /* no notifications on this phone */ }
+  }
+
+  _chApplyRows(rows) {
+    try { CH.recordFinished(rows); } catch (err) { console.warn('[battleship] recordFinished', err); }
+    this._chRows = rows;
+    if (this._chOnList()) { this.renderSetup(); this._chShowUnseen(rows); }
+  }
+
+  _chWatchList() {
+    if (this._chListStop) return;
+    let stop = null, stopped = false;
+    this._chListStop = () => { stopped = true; if (stop) { try { stop(); } catch { /* detached */ } } };
+    CH.watchMyGames((rows) => { if (!stopped && !this._dead) this._chApplyRows(rows); })
+      .then((s) => { if (stopped) { try { s(); } catch { /* detached */ } } else stop = s; });
+  }
+
+  _chStopList() {
+    if (this._chListStop) { this._chListStop(); this._chListStop = null; }
+  }
+
+  async _chEnablePush() {
+    try {
+      const P = await import('../../js/push.js');
+      const res = await P.enablePush();
+      if (res && res.ok) { this._chPushOff = false; if (this.view === 'setup' && this._mode === 'ch') this.renderSetup(); }
+    } catch { /* stays offered */ }
+  }
+
+  /** The Challenge tab: the board size, New challenge, then your matches (yours first), cut to fit. */
+  _chHTML() {
+    const s = this._setup;
+    const note = this._chNote ? `<p class="bs-mp-msg" aria-live="polite">${esc(this._chNote)}</p>` : '';
+    const rows = this._chRows;
+    let list;
+    if (!rows) list = '<p class="bs-ch-note">…</p>';
+    else {
+      const live = rows.filter((r) => !r.over);
+      const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
+      // NO SCROLLING (root CLAUDE.md): at most four rows, one fewer for a note and one fewer for
+      // Notify me (measured in the hub at 390x664), then "+N more". The Multiplayer screen lists
+      // every match.
+      let left = 4 - (this._chNote ? 1 : 0) - (this._chPushOff ? 1 : 0);
+      const take = (arr) => { const out = arr.slice(0, left); left -= out.length; return out; };
+      const m = take(mine), th = take(theirs);
+      const more = live.length - m.length - th.length;
+      list = (m.length ? `<h3 class="bs-ch-h">${esc(t('ch_your_turn'))} <span>${mine.length}</span></h3>${m.map((r) => this._chRowHTML(r)).join('')}` : '')
+        + (th.length ? `<h3 class="bs-ch-h">${esc(t('ch_their_turn'))} <span>${theirs.length}</span></h3>${th.map((r) => this._chRowHTML(r)).join('')}` : '')
+        + (more > 0 ? `<p class="bs-ch-note">${esc(t('ch_more', { n: more }))}</p>` : '')
+        + (live.length ? '' : `<p class="bs-ch-note">${esc(t('ch_none'))}</p>`);
+    }
+    const notify = this._chPushOff
+      ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="ch-notify">${esc(t('ch_notify'))}</button>` : '';
+    return `<button type="button" class="bs-chip" data-action="cycle-size">${esc(t('chip_size'))}: <span class="bs-chip-value">${esc(s.size === 'quick' ? t('size_quick') : t('size_classic'))}</span></button>
+      <button type="button" class="bs-btn bs-btn-primary bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
+      ${note}
+      <div class="bs-ch-list">${list}</div>
+      ${notify}`;
+  }
+
+  _chRowHTML(r) {
+    const sub = r.mine || r.theirs ? `${myName()} ${r.mine} · ${r.name || '?'} ${r.theirs}` : '';
+    return `<button type="button" class="bs-ch-row${r.yourTurn ? ' is-mine' : ''}" data-action="ch-open" data-id="${esc(r.id)}">
+      <span class="bs-ch-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="bs-ch-text"><span class="bs-ch-name">${esc(r.name || '?')}</span>${sub ? `<span class="bs-ch-sub">${esc(sub)}</span>` : ''}</span>
+      <span class="bs-ch-chev" aria-hidden="true">${r.yourTurn ? '▶' : '›'}</span>
+    </button>`;
+  }
+
+  /** Who to challenge: a search box and the names that match it (the small directory, never players/). */
+  _chNewPicker() {
+    const gate = onlineGate();
+    if (gate) { this._chNote = onlineGateText(gate); this.renderSetup(); return; }
+    this._chPick = { opps: null, q: '' };
+    this.renderSetup();
+    const gen = ++this._chGen;
+    CH.readOpponents().then((opps) => {
+      if (this._dead || gen !== this._chGen || !this._chPick) return;
+      this._chPick.opps = opps;
+      const list = this.shell.querySelector('[data-role="ch-pick-list"]');
+      if (list) list.innerHTML = this._chPickListHTML();
+    });
+  }
+
+  _chPickerHTML() {
+    return `<div class="bs-ch-pick">
+      <input type="search" class="bs-ch-search" data-role="ch-search" value="${esc(this._chPick.q || '')}"
+        placeholder="${esc(t('ch_search'))}" aria-label="${esc(t('ch_search'))}" autocomplete="off">
+      <div class="bs-ch-list" data-role="ch-pick-list">${this._chPickListHTML()}</div>
+      <button type="button" class="bs-btn bs-btn-ghost" data-action="ch-pick-back">${t('mp_back_btn')}</button>
+    </div>`;
+  }
+
+  _chPickListHTML() {
+    const p = this._chPick;
+    if (!p || !p.opps) return '<p class="bs-ch-note">…</p>';
+    const k = String(p.q || '').trim().toLowerCase();
+    const all = p.opps.filter((o) => !k || String(o.name).toLowerCase().includes(k));
+    if (!all.length) return `<p class="bs-ch-note">${esc(t('ch_nobody'))}</p>`;
+    const SHOW = 5;
+    return all.slice(0, SHOW).map((o) => `<button type="button" class="bs-ch-row" data-action="ch-pick" data-code="${esc(o.code)}">
+        <span class="bs-ch-face" aria-hidden="true">${esc(o.emoji)}</span>
+        <span class="bs-ch-text"><span class="bs-ch-name">${esc(o.name)}</span></span>
+        <span class="bs-ch-chev" aria-hidden="true">›</span>
+      </button>`).join('')
+      + (all.length > SHOW ? `<p class="bs-ch-note">${esc(t('ch_more', { n: all.length - SHOW }))}</p>` : '');
+  }
+
+  /** A match that ended while this phone was away: who won, by profile name, a close (X) and OK. */
+  _chShowUnseen(rows) {
+    const ids = CH.readUnseen();
+    const ended = (rows || []).filter((r) => r.over && r.result && ids.includes(r.id)).sort((a, b) => b.updated - a.updated);
+    if (!ended.length || !this.root || this.root.querySelector('[data-role="ch-unseen"]')) return;
+    const r = ended[0];
+    const won = r.result === 'won';
+    const title = t('opp_wins', { opp: won ? myName() : (r.name || '?') });
+    const all = ended.map((x) => x.id).join(',');
+    const overlay = document.createElement('div');
+    overlay.className = 'bs-overlay';
+    overlay.dataset.role = 'ch-unseen';
+    overlay.innerHTML = `
+      <div class="bs-scrim"></div>
+      <div class="bs-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <button type="button" class="bs-x" data-action="ch-unseen-ok" data-ids="${esc(all)}" aria-label="${esc(t('close'))}">&times;</button>
+        <span class="bs-card-emoji">${esc(won ? '🏆' : r.emoji)}</span>
+        <h3 class="bs-card-title">${esc(title)}</h3>
+        ${r.why === 'resign' ? `<p class="bs-card-sub">${esc(t('ch_resigned', { name: won ? (r.name || '?') : myName() }))}</p>` : ''}
+        <div class="bs-card-actions"><button type="button" class="bs-btn bs-btn-primary" data-action="ch-unseen-ok" data-ids="${esc(all)}">${esc(t('ch_ok'))}</button></div>
+      </div>`;
+    this.root.appendChild(overlay);
+  }
+
+  /** The deploy screen, placing a fleet for a new challenge or for one sent to you. */
+  _chStartPlacement(target) {
+    this._chStopList();
+    this._chClose();
+    this._chPick = null;
+    this._stopGameTimers();
+    this.closeOverlays();
+    this.state = null;
+    this._aimCell = null;
+    this._statsCommitted = false;
+    this._chPlace = { ...target, size: CH.asSize(target.size) || 'classic' };
+    this._newPlacement(this._chPlace.size);
+    this.view = 'placement';
+    this.renderPlacement();
+  }
+
+  /** SAVE on the deploy screen: send the challenge, or put your fleet on the one sent to you. */
+  async _chPlaced() {
+    const p = this._chPlace;
+    if (!p || this._chSaving) return;
+    this._chSaving = true;
+    const fleet = this._placeFleet.ships.map((sh) => ({ id: sh.id, r: sh.r, c: sh.c, dir: sh.dir }));
+    this.renderWaiting(this._identity().oppName, null);
+    const res = p.kind === 'new'
+      ? await CH.createGame({ them: p.them, fleet, size: p.size })
+      : await CH.placeFleet(p.id, fleet);
+    this._chSaving = false;
+    if (this._dead || this._chPlace !== p) return;
+    // Placing on a challenge that was called off while you placed: say so, not "went wrong".
+    if (!res.ok) { this._chHome(res.reason === 'already-over' ? t('ch_called_off') : this._chReason(res.reason)); return; }
+    this._chOpen(p.kind === 'new' ? res.id : p.id, res.game);
+  }
+
+  /** Open a match on the battle screen. A first-time receiver places their fleet first. The other
+   *  person's latest run of shots, not yet shown on this phone, is played back one at a time. */
+  async _chOpen(id, given = null) {
+    const gen = ++this._chGen;
+    if (!given) { try { await CH.drainOutbox(id); } catch { /* still owed: sent next time */ } }
+    const game = given || await CH.readGame(id);
+    if (this._dead || gen !== this._chGen) return;
+    const me = CH.myCode();
+    const side = game && CH.sideOf(game, me);
+    if (!game || !side) { this._chHome(this._chReason('not-found')); return; }
+    if (CH.isCalledOff(game)) { this._chHome(t('ch_called_off')); return; }
+    const them = CH.themOf(game, me);
+    if (CH.needsFleet(game, side)) {
+      if (CH.lifeOf(game).expired) { this._chHome(t('ch_e_expired')); return; }
+      this._chStartPlacement({ kind: 'fleet', id, size: game.size, them });
+      return;
+    }
+    const theirs = side === 'a' ? 'b' : 'a';
+    const shown = Math.min(game.log.length, CH.readShown(id));
+    const start = Math.max(CH.lastRunStart(game, theirs), shown);
+    let log = game.log.slice(0, start);
+    let queue = game.log.slice(start);
+    const link = {
+      id, game, side, seat: CH.seatOfSide(side),
+      them: { code: them.code, name: them.name || '?', emoji: them.emoji || '🙂' },
+      known: game.log.length, foeUnknown: !game[theirs].fleet,
+      pending: null, pendingBase: 0, sending: false, retry: null, stop: null, dead: false, chat: null, chatStop: null,
+    };
+    // Shots this phone fired and still owes the server (the outbox): they are part of the match here.
+    const owed = CH.pendingFor(id);
+    if (owed && owed.base === game.log.length && Array.isArray(owed.entries) && owed.entries.length) {
+      link.pending = owed.entries.slice();
+      link.pendingBase = owed.base;
+      link.known += link.pending.length;
+      if (queue.length) queue = queue.concat(link.pending); else log = log.concat(link.pending);
+    }
+    const rep = CH.replay(game.size, game.a.fleet, game.b.fleet, log, game.bonus);
+    if (!rep.ok) { CH.savePending(id, 0, []); this._chHome(this._chReason('failed')); return; }
+    CH.markShown(id, game.log.length);
+    this._chStopList();
+    this._chClose();
+    this._chPlace = null;
+    this._chPick = null;
+    this._stopGameTimers();
+    this.closeOverlays();
+    this.ch = link;
+    this.state = rep.state;
+    this.view = 'battle';
+    this._statsCommitted = false;
+    this._aimCell = null;
+    this._lastShot = null;
+    this._cannonPlayed = null;
+    this._aimBySide = { mine: null, theirs: null };
+    this._botAiming = false;
+    this._fxPending = null;
+    this._sunkShips = {};
+    this._sinkPlayed = new Set();
+    // Every ship already sunk is drawn at once (the same rebuild a solo resume does): both fleets
+    // are known, and a sunk ship's cells are public anyway.
+    for (let seat = 0; seat < 2; seat++) {
+      for (const ship of ((this.state.fleets[seat] || {}).ships || [])) {
+        if (!ship.hits.every(Boolean)) continue;
+        this._sunkShips[seat] = this._sunkShips[seat] || {};
+        this._sunkShips[seat][ship.id] = { id: ship.id, len: ship.len, r: ship.r, c: ship.c, dir: ship.dir };
+        this._sinkPlayed.add(`${seat}:${ship.id}`);
+      }
+    }
+    this._chQueue = queue.slice();
+    this._chWatch(link);
+    this._chMountChat(link);
+    if (link.pending) this._chFlush(link);
+    this._afterStateChange();
+  }
+
+  /** Show the next queued shot from the other person, or, with none left, a resignation. */
+  _chNext() {
+    if (this._dead || !this.ch || !this.state || this._chTimer) return;
+    const e = this._chQueue.shift();
+    if (!e) { this._chMaybeForceEnd(); return; }
+    const shooter = CH.seatOfSide(e.by), target = 1 - shooter;
+    if (this.state.over || this.state.turn !== shooter || !isShotLegal(this.state, target, e.r, e.c)) { this._chResync(); return; }
+    const res = fireAndResolve(this.state, target, e.r, e.c);
+    this.state = res.state;
+    this._lastShot = { seat: target, r: e.r, c: e.c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
+    this._maybeShowSunkBanner(res.answer, target);
+    this._afterStateChange();
+  }
+
+  /** A resignation is not in the log: once every shot is shown, end the match the way it ended. */
+  _chMaybeForceEnd() {
+    const g = this.ch && this.ch.game;
+    if (!g || !g.over || g.over.why !== 'resign' || !this.state || this.state.over) return;
+    this.state = { ...this.state, over: true, winner: CH.seatOfSide(g.over.winner) };
+    this._afterStateChange();
+  }
+
+  _chFireAt(r, c) {
+    const link = this.ch;
+    if (!link || this._chQueue.length) return;
+    if (CH.lifeOf(link.game).expired) { this._chHome(t('ch_e_expired')); return; }
+    const target = this._remoteSeat();
+    const res = fireAndResolve(this.state, target, r, c);
+    this.state = res.state;
+    this._lastShot = { seat: target, r, c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells };
+    this._maybeShowSunkBanner(res.answer, target);
+    this._chSend(link, { by: link.side, r, c });
+    this._afterStateChange();
+  }
+
+  /** A shot of ours: sent at once, one batch at a time, kept in the outbox until it lands. */
+  _chSend(link, entry) {
+    if (!link.pending) { link.pending = []; link.pendingBase = link.known; }
+    link.pending.push(entry);
+    link.known++;
+    CH.savePending(link.id, link.pendingBase, link.pending);
+    this._chFlush(link);
+  }
+
+  async _chFlush(link) {
+    if (link.sending || link.dead || !link.pending || !link.pending.length) return;
+    link.sending = true;
+    const batch = link.pending.slice();
+    const res = await CH.appendLog(link.id, link.pendingBase, batch);
+    link.sending = false;
+    if (res.ok) {
+      if (res.game) link.game = res.game;
+      link.pending = link.pending.slice(batch.length);
+      link.pendingBase += batch.length;
+      CH.savePending(link.id, link.pendingBase, link.pending);
+      if (!link.pending.length) link.pending = null;
+      else this._chFlush(link);
+      return;
+    }
+    // No signal: kept (the outbox holds it), tried again in a moment and on the next open.
+    if (res.retryable) { if (!link.dead) link.retry = setTimeout(() => { link.retry = null; this._chFlush(link); }, 3000); return; }
+    // The match moved on without these shots (expired, over, another phone): say so, start again.
+    CH.savePending(link.id, link.pendingBase, []);
+    link.pending = null;
+    if (!link.dead && this.ch === link) this._chHome(this._chReason(res.reason));
+  }
+
+  _chWatch(link) {
+    CH.watchGame(link.id, (g) => this._chOnGame(link, g)).then((stop) => {
+      if (link.dead) { try { stop(); } catch { /* detached */ } } else link.stop = stop;
+    });
+  }
+
+  _chOnGame(link, g) {
+    if (link.dead || this.ch !== link || !g) return;
+    link.game = g;
+    if (CH.isCalledOff(g)) { this._chHome(t('ch_called_off')); return; }
+    const theirs = link.side === 'a' ? 'b' : 'a';
+    // They have just placed their fleet: open the match again with it.
+    if (link.foeUnknown && g[theirs].fleet) { this._chResync(); return; }
+    if (g.log.length > link.known) {
+      for (const e of g.log.slice(link.known)) {
+        if (e.by !== theirs) { this._chResync(); return; }   // our own shot, from another phone
+        link.known++;
+        this._chQueue.push(e);
+      }
+      CH.markShown(link.id, g.log.length);
+    }
+    if (!this.busy && !this._chTimer) this._chNext();
+  }
+
+  _chResync() {
+    const link = this.ch;
+    if (link) this._chOpen(link.id);
+  }
+
+  async _chResign() {
+    const link = this.ch;
+    if (!link) return;
+    const res = await CH.resignGame(link.id);
+    if (this.ch !== link) return;
+    if (!res.ok) { this._chHome(this._chReason(res.reason)); return; }
+    if (res.cancelled) { this._chHome(t('ch_called_off')); return; }
+    link.game = res.game;
+    this._chQueue = [];
+    this._chMaybeForceEnd();
+  }
+
+  /** The battle screen's flag: Cancel / Decline while the challenge is unanswered, else Resign. */
+  _chResignKey() {
+    const link = this.ch;
+    if (!link || !CH.lifeOf(link.game).open) return 'ch_resign';
+    return link.side === CH.recipientOf(link.game) ? 'ch_decline' : 'ch_cancel';
+  }
+
+  /** Take the open match down: its watch, its retry timer, its chat. Shots still owed stay in the outbox. */
+  _chClose() {
+    this._chQueue = [];
+    if (this._chTimer) { clearTimeout(this._chTimer); this._chTimer = null; }
+    const link = this.ch;
+    if (!link) return;
+    this.ch = null;
+    link.dead = true;
+    if (link.retry) { clearTimeout(link.retry); link.retry = null; }
+    if (link.stop) { try { link.stop(); } catch { /* detached */ } link.stop = null; }
+    this._chUnmountChat(link);
+  }
+
+  // --- quick chat (REQUIRED in every online match, root CLAUDE.md) ---------------------------------
+  // js/match-chat-ui.js is the panel; js/match-chat.js keeps the lines at `battleship/chat/<id>`,
+  // BESIDE the match (never inside it).
+  async _chMountChat(link) {
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (link.dead || this.ch !== link || link.chat || !this.root) return;
+    const chat = UI.createMatchChat({
+      root: this.root,
+      send: (p) => DATA.sendChat({ node: CH.NODE, id: link.id, side: link.side }, p),
+      them: () => ({ name: link.them.name, emoji: link.them.emoji }),
+      place: { top: '6px', right: '8px', popsTop: '58px' },
+    });
+    link.chat = chat;
+    const seenAt = DATA.readChatSeen(CH.NODE, link.id);
+    const stop = await DATA.watchChat({ node: CH.NODE, id: link.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === link.side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(CH.NODE, link.id, newest);
+    });
+    if (link.dead || link.chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    link.chatStop = stop;
+  }
+
+  _chUnmountChat(link) {
+    if (link.chatStop) { try { link.chatStop(); } catch { /* detached */ } link.chatStop = null; }
+    if (link.chat) { try { link.chat.destroy(); } catch { /* gone */ } link.chat = null; }
+  }
+
   // --- how to play (root CLAUDE.md's pattern; tic-tac-toe/js/ui.js's openHelp() is the reference) */
 
   _helpDiagram() {
@@ -2693,6 +3235,7 @@ class BattleshipUI {
           <p class="bs-help-caption">${t('help_caption')}</p>
           ${this._helpMarkerKey()}
           <p class="bs-help-rule">${t('help_rule')}</p>
+          <p class="bs-help-rule">${t('help_rule_ch')}</p>
         </div>
       </div>`;
     this.root.appendChild(overlay);
@@ -2714,6 +3257,13 @@ class BattleshipUI {
       const i = Math.max(0, Math.min(DIFFICULTIES.length - 1, Number(slider.value) | 0));
       const next = DIFFICULTIES[i][0];
       if (next !== this._setup.difficulty) { this._setup.difficulty = next; this._saveSetup(); this.renderSetup(); }
+      return;
+    }
+    const search = e.target.closest('[data-role="ch-search"]');
+    if (search && this._chPick) {
+      this._chPick.q = search.value;
+      const list = this.shell.querySelector('[data-role="ch-pick-list"]');
+      if (list) list.innerHTML = this._chPickListHTML();
       return;
     }
     const el = e.target.closest('[data-role="mp-code-input"]');
@@ -2892,18 +3442,21 @@ class BattleshipUI {
     } else if (action === 'cycle-bonus') {
       this._setup.bonusShotOnHit = !this._setup.bonusShotOnHit; this._saveSetup(); this.renderSetup();
     } else if (action === 'set-mode') {
-      this._mode = btn.dataset.v; this._setupExpanded = null; this._mpError = ''; this.renderSetup();
+      this._mode = btn.dataset.v; this._setupExpanded = null; this._mpError = '';
+      if (this._mode === 'ch') { this._chHome(); return; }
+      this.renderSetup();
     } else if (action === 'play-bot') {
       this._mode = 'solo'; this.startGame();
     } else if (action === 'play-friend') {
       this._mode = 'host'; this._mpError = ''; this.renderSetup();
     } else if (action === 'mode-solo') {
-      this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this.renderSetup();
+      this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this._chPick = null; this._chNote = ''; this._chGen++; this.renderSetup();
     } else if (action === 'start') {
       this.startGame();
     } else if (action === 'select-ship') {
       this._selectShip(btn.dataset.ship);
     } else if (action === 'exit-placement') {
+      if (this._chPlace) { this._chHome(); return; }
       this.renderSetup();
     } else if (action === 'skip-botplace') {
       this._skipBotPlacing();
@@ -2956,6 +3509,30 @@ class BattleshipUI {
       this.closeOverlays(); this.renderSetup();
     } else if (action === 'mp-update-required') {
       this._mpForceUpdate();
+    } else if (action === 'ch-new') {
+      this._chNewPicker();
+    } else if (action === 'ch-pick') {
+      const o = this._chPick && (this._chPick.opps || []).find((x) => x.code === btn.dataset.code);
+      if (o) this._chStartPlacement({ kind: 'new', them: o, size: this._setup.size });
+    } else if (action === 'ch-pick-back') {
+      this._chPick = null; this.renderSetup();
+    } else if (action === 'ch-open') {
+      this._chOpen(btn.dataset.id);
+    } else if (action === 'ch-back') {
+      this.closeOverlays(); this._chHome();
+    } else if (action === 'ch-rematch') {
+      const link = this.ch;
+      if (!link) return;
+      const them = { code: link.them.code, name: link.them.name, emoji: link.them.emoji };
+      this.closeOverlays();
+      this._chStartPlacement({ kind: 'new', them, size: link.game.size });
+    } else if (action === 'ch-resign') {
+      this.confirmDestructive(btn, () => this._chResign());
+    } else if (action === 'ch-notify') {
+      this._chEnablePush();
+    } else if (action === 'ch-unseen-ok') {
+      for (const id of String(btn.dataset.ids || '').split(',')) if (id) CH.markResultSeen(id);
+      this.closeOverlays();
     }
   }
 }
@@ -2972,4 +3549,12 @@ export function destroy() {
 export function isInProgress() {
   return !!(instance && instance.isInProgress());
 }
-export default { init, destroy, isInProgress };
+/** The hub hands a notified match to the game already open (js/hub.js `_openPushedGameNow`). Never
+ *  while a live room is joined: that match is someone else's live game. */
+export function openArmed() {
+  if (!instance || instance.mp) return;
+  let o = null;
+  try { o = takeOpen(); } catch { o = null; }
+  if (o) instance._chTakeArmed(o);
+}
+export default { init, destroy, isInProgress, openArmed };

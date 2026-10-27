@@ -348,7 +348,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
 | Battle Arena | module, immersive, devOnly; match-3 monster battle vs computer, pure JSON engine + seeded RNG (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); online 2026-10-24: turn-by-turn challenges (`battlearena/`) + live rooms (25 s a move), a seed + teams + moves replayed on both phones; hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` (online: `'mp'`; live rooms + h2h) |
-| Battleship | module, immersive, multiplayer (`gamehub.battleship.mp.v1`) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` |
+| Battleship | module, immersive, multiplayer (`gamehub.battleship.mp.v1`) + turn-by-turn challenges (`battleship/`, 2026-10-27: both fleets in the match, a hit shoots again) | `.bs-root` / `.bs-` | `gamehub.battleship.v1` | `recordBattleship` (challenges: `'mp'`, never h2h) |
 | Boggle | module, multiplayer (`gamehub.boggle.mp.v1`), EN/ES word lists | `.bg-root` / `.bg-` | `gamehub.boggle.v1` | `recordBoggle` |
 | Brick Breaker | module, immersive, solo | `.bx-root` / `.bx-` | `gamehub.brickblitz.v1` | `recordBrickBlitz` |
 | Chinchón | module; live rooms + turn-by-turn challenges (`chinchon/`, 2026-10-18) | `.cc-root` / `.cc-` (many bare rules) | `chinchon-settings` (frozen) | `recordChinchon` |
@@ -509,6 +509,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`. Deployed 2026-10-24 (workflow run, Battle
   Arena online): `battleArenaTurnPush` and the `battlearena` rules branch (+ in the nudges key pattern).
   2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`).
+  2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs

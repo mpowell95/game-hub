@@ -964,3 +964,25 @@ Played end to end in a real browser (390x844, touch). What was wrong, and the fi
 - **Hard (Pro) AI**: target-mode placements are weighted by how many live hits they cover, squared,
   so it finishes a line instead of probing sideways. Measured over 300 games: 46.2 -> 45.2 shots on
   10x10, 30.2 -> 29.8 on 8x8. Easy ~71 and Medium ~60 on 10x10 are unchanged.
+
+## Turn-by-turn challenges (2026-10-27)
+
+Matt: *"Why hasn't battleship been modified to have turn based multiplayer???"* It was first on the
+agreed 2026-10-18 list (TODO.md) and no session had started it. Asked how to keep the fleets secret
+with nobody online to answer a shot (a server answering each shot, ~1-3 s a shot, vs both fleets in
+the match, instant but readable with dev tools), Matt picked **"Ships in the match"**. Asked about
+shots a turn, he answered *"Isn't keep shooting on a hit the standard?"*: the printed rules are one
+shot a turn; "hit = go again" is a common house rule. Built as hit-shoots-again, stored per match
+(`bonus: true`) so a later change of rule cannot rewrite old matches.
+
+Shape (battleship/js/mp.js, Battle Arena's mp.js line for line where it could be): `battleship/games/<id>`
+= `{ size, bonus, lapse, by, a: {code, name, emoji, fleet}, b: {..., fleet?}, log: {0000: {by, r, c, at}}, over }`.
+The receiver shoots first because the challenger's first shot would need a fleet that does not exist
+until the receiver opens the challenge. `validateGame` replays the log through game.js and refuses
+the document whole if anything disagrees.
+
+Found while testing in two real browsers against a fake database: after a CANCEL the match's own
+watch saw "called off" a moment before both index rows were rewritten, sent the screen to the list,
+and the list's one-off read showed the cancelled match under "Their turn". The list now watches the
+index while it is up (`_chWatchList`). Also measured: six live matches overflowed the hub at 390x664
+by 3px; the list's gaps were tightened and a note / Notify me each cost a row.

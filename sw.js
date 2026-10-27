@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1268;
-const CACHE = 'game-hub-v1269';
+const CACHE = 'game-hub-v1270';
 
 const ASSETS = [
   './',
@@ -587,6 +587,8 @@ const ASSETS = [
   './battleship/js/hash.js',
   './battleship/js/ship-art.js',
   './battleship/js/strings.js',
+  './battleship/js/mp.js',
+  './battleship/js/alert.js',
 ];
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png, [docs/SW-NOTES.md #7]
@@ -778,7 +780,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '429018c371',
+  './js/hub.js': '90dca1dd6a',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -808,11 +810,11 @@ const REST_MANIFEST = {
   './js/bug-report-ui.js': '70d7e7b2a6',
   './js/announce.js': '6cce5c6cc6',
   './js/announce-ui.js': '0bdfcd673d',
-  './js/messages.js': 'dd0618b1cd',
+  './js/messages.js': 'b8ebafec81',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5349424c2f',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': 'f8b9e99f84',
+  './js/challenges.js': 'a0109139ff',
   './js/challenges-ui.js': '857219db28',
   './js/challenge-life.js': '44ab3fcbc6',
   './js/challenges-strings.js': 'd45ac6cd00',
@@ -839,7 +841,7 @@ const REST_MANIFEST = {
   './js/mp-reactions-ui.js': 'dce07d73bf',
   './js/match-chat.js': '784d478433',
   './js/match-chat-ui.js': '969116343f',
-  './js/game-chat-history.js': '709ca4671b',
+  './js/game-chat-history.js': '43f78e5de1',
   './js/challenge/crypt.js': '8d4c5fe938',
   './js/challenge/secrets.js': '0ddf67616f',
   './js/challenge/challenge-store.js': '0b930c4f9e',
@@ -1205,14 +1207,16 @@ const REST_MANIFEST = {
   './yahtzee/js/hash.js': '14b905be65',
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
-  './battleship/css/battleship.css': 'e0f411836a',
-  './battleship/js/ui.js': 'bf46758ee5',
+  './battleship/css/battleship.css': '1b4481fddd',
+  './battleship/js/ui.js': '2addcde203',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',
   './battleship/js/hash.js': 'aed473aee9',
   './battleship/js/ship-art.js': '11ea9db668',
-  './battleship/js/strings.js': 'fc697544c4',
+  './battleship/js/strings.js': '86805a5c29',
+  './battleship/js/mp.js': '761192038f',
+  './battleship/js/alert.js': '1703a8f589',
   './chinchon/decks/baraja-libre/oros-1.webp': '740f863677',
   './chinchon/decks/baraja-libre/oros-2.webp': '1de2771991',
   './chinchon/decks/baraja-libre/oros-3.webp': '2f904d4399',

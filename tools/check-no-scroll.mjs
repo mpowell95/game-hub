@@ -146,6 +146,20 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // Battleship (2026-10-27): Play vs. Friend's Challenge tab. With this run's profile (no player
+  // code) it is the board chip, New challenge and "No matches"; with matches it shows at most four
+  // rows (battleship/js/ui.js _chHTML), measured full in the hub at 390x664 when it was built.
+  battleship: [
+    {
+      name: 'challenge tab',
+      async open(page) {
+        await page.click('[data-action="play-friend"]');
+        await page.click('[data-action="set-mode"][data-v="ch"]');
+        await page.waitForSelector('[data-action="ch-new"]', { timeout: 8000 });
+        await page.waitForTimeout(400);
+      },
+    },
+  ],
   // Murdoku: the setup screen is the default one; the four below are the ones a player reaches by
   // tapping. Each runs on the SAME page as the one before it (see the note above), so each starts by
   // closing whatever overlay is up and going back to the setup screen. The board screens are the

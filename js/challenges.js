@@ -129,6 +129,15 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Battleship (2026-10-27): battleship/js/mp.js, Battle Arena's shape (two fleets and a log of
+  // shots). Also a live-room game: js/mp-records.js counts its Games row from 'mp'.
+  battleship: {
+    load: () => import('../battleship/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
   // Pool (2026-10-22): eight-ball/js/mp.js. Two OR THREE players (Cutthroat): a match keeps a list
   // of seats, not sides, so its own action reader; a row's `with` is one fixed other player (its
   // records count against that person) and `name` names both.
