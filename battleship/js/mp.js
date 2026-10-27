@@ -13,6 +13,13 @@
 // doesn't take a month", and yes, "hits add a shot"): `shots` on the match, picked by the challenger.
 // A turn is that many MISSES; a hit never uses one up. A match without the field is 1 (the first
 // matches, made the same day), so nothing already started changes its rule.
+// SALVOS (2026-10-27, Matt: "If you're playing with 3 shots, you should choose the 3 spots, they
+// shoot at once, then if you hit one, you go again"): a match stored with `salvo: true` (every match
+// made from then on) is played in VOLLEYS. The shooter picks N squares (fewer only if fewer are left
+// unfired), all N land together, and if ANY of them hit the shooter fires another volley; if all
+// miss the turn passes. The log still holds one entry per shot, a volley being N entries in a row;
+// the state carries `chVol` (shots still owed in this volley) and `chVHit` (did one hit yet), so a
+// log cut mid-volley still replays. A match without the flag keeps the rule above (N misses a turn).
 //
 // THE LAW applies. A match is not a player's earned history, but the writes still follow rule 6:
 // every one is VERIFIED by a fresh re-read, and nothing here ever deletes anything.
@@ -43,7 +50,7 @@ import { recordBattleship, noteVoidedResult } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
-import { newGame, setFleet, isShotLegal, fireAndResolve, CELL_HIT, CELL_SUNK } from './game.js';
+import { newGame, setFleet, isShotLegal, fireAndResolve, CELL_UNKNOWN, CELL_HIT, CELL_SUNK } from './game.js';
 import { shipSetFor, boardSizeFor, emptyFleet, placeShip } from './fleet.js';
 
 export const NODE = 'battleship';
@@ -177,12 +184,57 @@ export function fireShot(state, shooter, r, c, perTurn = 1) {
   return { state: next, answer: res.answer };
 }
 
+/** PURE. How many squares the next volley at `target` holds: N, or every square left if fewer. */
+export function volleySize(state, target, perTurn = 1) {
+  const n = asShots(perTurn) || 1;
+  let open = 0;
+  for (const v of state.shots[target].cells) if (v === CELL_UNKNOWN) open++;
+  return Math.max(1, Math.min(n, open));
+}
+/** PURE. Shots still owed in the volley `shooter` is firing: the whole next volley if none is under way. */
+export function volleyLeft(state, shooter, perTurn = 1) {
+  return state.turn === shooter && state.chVol > 0 ? state.chVol : volleySize(state, 1 - shooter, perTurn);
+}
+
+/**
+ * PURE. One shot of a SALVO match (see the header): the volley is `volleyLeft` shots; any hit in it
+ * keeps the turn once it is complete, all misses pass it. The match ends the moment a fleet sinks,
+ * so a winning volley stops at the shot that wins it. Returns { state, answer }.
+ */
+export function fireSalvoShot(state, shooter, r, c, perTurn = 1) {
+  const target = 1 - shooter;
+  const k = volleyLeft(state, shooter, perTurn);
+  const hitSoFar = state.turn === shooter && state.chVol > 0 && !!state.chVHit;
+  const res = fireAndResolve(state, target, r, c);
+  let next = res.state;
+  if (!next.over) {
+    const anyHit = hitSoFar || res.answer.result === 'hit';
+    next = k > 1
+      ? { ...next, turn: shooter, chVol: k - 1, chVHit: anyHit }
+      : { ...next, turn: anyHit ? shooter : target, chVol: 0, chVHit: false };
+  }
+  return { state: next, answer: res.answer };
+}
+/** PURE. A whole volley of `cells` ([[r, c], ...]) in order, stopping at the shot that wins. Returns
+ *  { state, answers, fired } (`fired` = the cells actually shot: what goes in the log). */
+export function fireVolley(state, shooter, cells, perTurn = 1) {
+  let s = state;
+  const answers = [], fired = [];
+  for (const [r, c] of cells) {
+    if (s.over || s.turn !== shooter || !isShotLegal(s, 1 - shooter, r, c)) break;
+    const res = fireSalvoShot(s, shooter, r, c, perTurn);
+    s = res.state; answers.push(res.answer); fired.push([r, c]);
+    if (!s.chVol) break;   // the volley is complete (or the match is over)
+  }
+  return { state: s, answers, fired };
+}
+
 /**
  * PURE. The match after `log` (shots) against the two stored fleets: side a is seat 0, side b seat 1,
  * and B SHOOTS FIRST (see the header). `fleetB` may be null only while the log is empty. Returns
  * { ok, state, shots: [{ seat (the DEFENDER), r, c, result, shipId, sunk, cells }] } or { ok:false }.
  */
-export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1) {
+export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1, salvo = false) {
   const sz = asSize(size);
   const fa = sz && engineFleet(fleetA, sz);
   const fb = sz && (fleetB ? engineFleet(fleetB, sz) : emptyFleet(sz));
@@ -197,7 +249,8 @@ export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1) {
     if (s.over || s.turn !== shooter) return { ok: false };
     const target = 1 - shooter;
     if (!isShotLegal(s, target, e.r, e.c)) return { ok: false };
-    const res = bonus !== false ? fireShot(s, shooter, e.r, e.c, n) : fireAndResolve(s, target, e.r, e.c);
+    const res = salvo === true && bonus !== false ? fireSalvoShot(s, shooter, e.r, e.c, n)
+      : bonus !== false ? fireShot(s, shooter, e.r, e.c, n) : fireAndResolve(s, target, e.r, e.c);
     s = res.state;
     shots.push({ seat: target, r: e.r, c: e.c, result: res.answer.result, shipId: res.answer.shipId, sunk: res.answer.sunk, cells: res.answer.cells });
   }
@@ -206,7 +259,7 @@ export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1) {
 
 /** The engine state after the first `upto` shots. validateGame proved they replay. */
 export function buildState(game, upto = game.log.length) {
-  return replay(game.size, game.a.fleet, game.b.fleet, game.log.slice(0, upto), game.bonus, game.shots).state;
+  return replay(game.size, game.a.fleet, game.b.fleet, game.log.slice(0, upto), game.bonus, game.shots, game.salvo).state;
 }
 /** Hits landed by `seat` on the other fleet, from the public grid. */
 export function hitsBy(state, seat) {
@@ -244,7 +297,8 @@ export function validateGame(raw) {
     if (!e) return null;
     log.push(e);
   }
-  const rep = replay(size, fleetA, fleetB, log, bonus, shots);
+  const salvo = raw.salvo === true;
+  const rep = replay(size, fleetA, fleetB, log, bonus, shots, salvo);
   if (!rep.ok) return null;
   const st = rep.state;
   let over = null;
@@ -268,6 +322,7 @@ export function validateGame(raw) {
   const who = (x, fleet) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂'), fleet });
   return {
     v: 1, id, size, bonus, shots,
+    ...(salvo ? { salvo: true } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -584,7 +639,7 @@ export async function createGame({ them, fleet, size = 'classic', shots = 1 }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, size: sz, bonus: true, shots: perTurn, lapse: true, by: me, created: now, updated: now,
+    v: 1, id, size: sz, bonus: true, shots: perTurn, salvo: true, lapse: true, by: me, created: now, updated: now,
     a: { code: me, name: label.name, emoji: label.emoji, fleet: mine },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -682,7 +737,7 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no shot can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
-    const rep = replay(fresh.size, fresh.a.fleet, fresh.b.fleet, fresh.log.concat(todo), fresh.bonus, fresh.shots);
+    const rep = replay(fresh.size, fresh.a.fleet, fresh.b.fleet, fresh.log.concat(todo), fresh.bonus, fresh.shots, fresh.salvo);
     if (!rep.ok) return fail('rules-refused');
     const now = Date.now();
     const patch = { updated: now };

@@ -14,20 +14,26 @@
 function hull(len) {
   const w = len * 10;
   const bow = w * 0.78;
-  return `<path d="M0.4,1.6 H${bow.toFixed(1)} L${(w - 0.4).toFixed(1)},5 L${bow.toFixed(1)},8.4 H0.4 `
-    + `A1.8,1.8 0 0 1 0.4,1.6 Z" class="bs-ship-hull"/>`
+  // The rounded stern is a half circle INSIDE the box (x 0.4 to 3.8). It used to be drawn from x 0.4
+  // with a radius too small for the gap, which SVG silently enlarges: the stern bulged ~3 units out
+  // of the left of the box, so every ship hung a third of a square past its first square (Matt,
+  // 2026-10-27: placing ships "is weird").
+  return `<path d="M3.8,1.6 H${bow.toFixed(1)} L${(w - 0.4).toFixed(1)},5 L${bow.toFixed(1)},8.4 H3.8 `
+    + `A3.4,3.4 0 0 1 3.8,1.6 Z" class="bs-ship-hull"/>`
     + `<path d="M1,6.6 H${(bow - 0.6).toFixed(1)} L${(w - 1.1).toFixed(1)},5 L${(bow - 0.6).toFixed(1)},6.6" `
     + `class="bs-ship-waterline"/>`;
 }
 
-function svgWrap(len, inner) {
-  return `<svg viewBox="0 0 ${len * 10} 10" class="bs-ship-svg" aria-hidden="true" focusable="false">${inner}</svg>`;
+// `fill` (the ships ON a board) stretches the art to its squares exactly. Left to keep its aspect
+// ratio it drew a little short of them and centred, so a ship never quite sat on its own squares.
+function svgWrap(len, fill, inner) {
+  return `<svg viewBox="0 0 ${len * 10} 10" class="bs-ship-svg"${fill ? ' preserveAspectRatio="none"' : ''} aria-hidden="true" focusable="false">${inner}</svg>`;
 }
 
 // Carrier(5): long flat deck, a wide island block set off-center, a runway stripe. No turrets.
-function carrier(len) {
+function carrier(len, fill) {
   const w = len * 10;
-  return svgWrap(len, `
+  return svgWrap(len, fill, `
     ${hull(len)}
     <rect x="${(w * 0.58).toFixed(1)}" y="0.9" width="${(w * 0.15).toFixed(1)}" height="3.4" rx="0.6" class="bs-ship-deck"/>
     <rect x="${(w * 0.6).toFixed(1)}" y="1.5" width="${(w * 0.05).toFixed(1)}" height="1.2" class="bs-ship-hull"/>
@@ -36,9 +42,9 @@ function carrier(len) {
 }
 
 // Battleship(4): heavy hull, two turret clusters (fore larger, aft smaller), a bridge tower.
-function battleship(len) {
+function battleship(len, fill) {
   const w = len * 10;
-  return svgWrap(len, `
+  return svgWrap(len, fill, `
     ${hull(len)}
     <circle cx="${(w * 0.66).toFixed(1)}" cy="5" r="1.7" class="bs-ship-turret"/>
     <circle cx="${(w * 0.66).toFixed(1)}" cy="5" r="0.7" class="bs-ship-hull"/>
@@ -49,9 +55,9 @@ function battleship(len) {
 }
 
 // Cruiser(3): slimmer hull, a single turret fore and aft, one small bridge.
-function cruiser(len) {
+function cruiser(len, fill) {
   const w = len * 10;
-  return svgWrap(len, `
+  return svgWrap(len, fill, `
     ${hull(len)}
     <circle cx="${(w * 0.68).toFixed(1)}" cy="5" r="1.3" class="bs-ship-turret"/>
     <circle cx="${(w * 0.22).toFixed(1)}" cy="5" r="1.1" class="bs-ship-turret"/>
@@ -61,9 +67,9 @@ function cruiser(len) {
 
 // Submarine(3): rounded low-profile hull, a conning tower. Deliberately NO turrets, the one
 // silhouette cue that must never be confused with the surface combatants.
-function submarine(len) {
+function submarine(len, fill) {
   const w = len * 10;
-  return svgWrap(len, `
+  return svgWrap(len, fill, `
     <ellipse cx="${(w / 2).toFixed(1)}" cy="5" rx="${(w / 2 - 0.8).toFixed(1)}" ry="2.3" class="bs-ship-hull"/>
     <path d="M1.6,5 H${(w - 1.6).toFixed(1)}" class="bs-ship-waterline"/>
     <rect x="${(w * 0.44).toFixed(1)}" y="1.7" width="1.8" height="2.6" rx="0.6" class="bs-ship-deck"/>
@@ -71,9 +77,9 @@ function submarine(len) {
 }
 
 // Destroyer(2): small, sharp bow, single funnel. Shortest silhouette in the fleet.
-function destroyer(len) {
+function destroyer(len, fill) {
   const w = len * 10;
-  return svgWrap(len, `
+  return svgWrap(len, fill, `
     ${hull(len)}
     <rect x="${(w * 0.34).toFixed(1)}" y="2.6" width="1.8" height="3.6" rx="0.4" class="bs-ship-deck"/>
   `);
@@ -81,9 +87,9 @@ function destroyer(len) {
 
 export const SHIP_ART = { carrier, battleship, cruiser, submarine, destroyer };
 
-export function shipArtHtml(shipId, len) {
+export function shipArtHtml(shipId, len, { fill = false } = {}) {
   const fn = SHIP_ART[shipId];
-  return fn ? fn(len) : '';
+  return fn ? fn(len, fill) : '';
 }
 
 export default { SHIP_ART, shipArtHtml };
