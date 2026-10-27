@@ -245,9 +245,9 @@ Matt: *"People have beaten easy and medium and hard ... we need to add WAY more 
 Expert arrows are too small to tap reliably), and *"let people see and replay the ones they messed up on
 ... if I made 1 mistake, I have to make zero mistakes to get all the points."* Matt chose: never end,
 keep counting (Easy 51 ...), Easy stays 1 point (so it never has anything to replay).
-**ADMIN ONLY until Matt releases it** (*"Release it admin only too"*): `NEWS_FOR_ALL = false` in ui.js,
-`hasNews()` = that or `isAdminDevice()`. Everyone else plays as before (bands end, "Complete", no
-Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder already shipped).
+**Released to everyone 2026-10-27** (Matt: *"Yes release to everyone"*, v1277) with generator 8 below:
+`NEWS_FOR_ALL = true` in ui.js (`hasNews()` = that or `isAdminDevice()`; it was admin only first, *"Release
+it admin only too"*). The 🧪 test boards stay `isAdminDevice()` only.
 - **Popup** (`_showNews`, Matt's mock-up): once per phone on the setup screen, NEW badge, ↻ chip with the
   person's own count across all difficulties (icon alone at 0), Easy / Level 51 chip, Got it + X; stamped
   in `gamehub.wayout.news.v1` (`replay-more-2026-10-26`, a seen-list) when it closes by any route.
@@ -271,7 +271,7 @@ Replay, no popup). Releasing = set it `true` (+ CACHE bump; the shared recorder 
 - Tests: `tools/test-arrow-maze-time.mjs` (replay maths), `way-out/js/test.js` (generator 7),
   `tools/test-arrow-maze-replay.mjs` (browser, `--size 360x724 --es` too).
 
-## Hard and Expert by thinking: generator 8 (2026-10-27, admin only until released)
+## Hard and Expert by thinking: generator 8 (2026-10-27, released to everyone the same day)
 
 Matt, after the test boards: *"WAY harder. And WAY better"*; on the Hard ones: *"That's perfect for Hard.
 Make the updates."* With `hasNews()` (same switch as Replay), every Hard level from 101 and Expert level
@@ -281,7 +281,7 @@ n, g:8}`, log `g` 8, `buildB8(band, n)`. 16x22 grid (bigger arrows than the ladd
 with the test boards), 250 boards a band, packed (~78 KB), **APPEND-ONLY** (pinned by hash in test.js).
 Hard = the "hard" style (45 arrows, ~2 free, blockers ~5 dots); Expert ramps far / mixed / forced
 (`expertStyle`). Past the list boards come round MIRRORED (`b8Slot`; Expert from its top 40%). Points
-unchanged. Non-admin phones: the ladder exactly as before.
+unchanged.
 
 ## Test boards (2026-10-26, admin only)
 

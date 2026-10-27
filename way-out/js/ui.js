@@ -63,10 +63,11 @@ const V1_START = { easy: 1, medium: 51, hard: 101, expert: 151 };
 /** A first-ladder position, in today's numbering: the same place in the same band. Only Expert
  *  moved (151 -> 201); Hard's 151 was "complete" and is now simply Hard's 51st level. */
 const v1ToV2 = (band, n) => (band === 'expert' ? n - V1_START.expert + BAND_START.expert : n);
-// MORE LEVELS, REPLAY and their announcement (2026-10-26) are ADMIN ONLY until Matt releases them
-// (Matt: "Release it admin only"). Everyone else plays exactly as before: Easy, Medium and Hard end
-// at 50 / 100 / 200 ("Complete"), no Replay button, no popup. Releasing = set this to true.
-const NEWS_FOR_ALL = false;
+// MORE LEVELS, REPLAY, their announcement (2026-10-26) and Hard / Expert on generator 8 (2026-10-27)
+// were admin only until Matt released them to everyone on 2026-10-27 ("Yes release to everyone").
+// false = Matt's devices only (Easy, Medium and Hard ending at 50 / 100 / 200, no Replay, no popup,
+// the ladder's Hard and Expert boards for everyone else).
+const NEWS_FOR_ALL = true;
 const hasNews = () => NEWS_FOR_ALL || isAdminDevice();
 const MAX_LEVEL = 1000000;   // a sane ceiling: corrupt settings once showed "Level 1e+21"
 const LIVES = 3;

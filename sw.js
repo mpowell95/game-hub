@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1273;
-const CACHE = 'game-hub-v1276';
+const CACHE = 'game-hub-v1277';
 
 const ASSETS = [
   './',
@@ -962,7 +962,7 @@ const REST_MANIFEST = {
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '57ffd24975',
-  './way-out/js/ui.js': '4d0d0e2186',
+  './way-out/js/ui.js': '9f3eb28f78',
   './way-out/js/engine.js': 'ae046d980e',
   './way-out/js/strings.js': '0a72197767',
   './way-out/js/tricky.js': 'acd8ed8767',
