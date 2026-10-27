@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1266;
-const CACHE = 'game-hub-v1266';
+const IMPORTANT_SINCE = 1267;
+const CACHE = 'game-hub-v1267';
 
 const ASSETS = [
   './',
@@ -778,7 +778,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '429018c371',
+  './js/hub.js': '65a73adbbf',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -812,7 +812,7 @@ const REST_MANIFEST = {
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5349424c2f',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': 'f8b9e99f84',
+  './js/challenges.js': '1f2eb567bb',
   './js/challenges-ui.js': '857219db28',
   './js/challenge-life.js': '44ab3fcbc6',
   './js/challenges-strings.js': 'd45ac6cd00',

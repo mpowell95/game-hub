@@ -1355,3 +1355,14 @@ switch solves it instantly." Fixed both ways: the six released in code (v1264, v
 from the cache at once, and each hub load refreshes all its files in the background (`cache: 'no-cache'`,
 at most every 2 min per game), so a switch is fast with no commit. Probes in `tools/test-sw-strategy.mjs`.
 
+## 2026-10-27: Play sat on the setup card (the match read)
+
+After the release fix, Matt: "I don't want it to just show the setup card forever... I'm connected to
+WiFi. My internet is like 700mbps." Measured: the game code now loads from the phone in 0.1-0.3 s; the
+wait was the game reading the match from Firebase AFTER mounting (`readGame` = `get()`), 0.05 s to 23 s
+in headless runs, worst right after the app loads. Fix: `js/challenges.js` `holdMatches` keeps a
+listener (`watchGame`) on every open match whenever the Multiplayer lists are read (the hub primes them
+on every launcher paint and on each new turn alert); Firebase's `get()` then answers from the local copy
+(measured 0 ms). Probe in `tools/test-challenges.mjs`. Also seen: 11 deploys in 43 min that evening; an
+admin device reloads onto each one and must reconnect to Firebase.
+
