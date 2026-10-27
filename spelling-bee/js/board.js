@@ -31,7 +31,7 @@ export function needsPost(puzzleKey, words) {
 }
 
 /** Post this player's progress on one puzzle. Resolves true once it is verified by a re-read. */
-export async function postProgress(puzzleKey, { words, points, rank }) {
+export async function postProgress(puzzleKey, { words, points, rank, times }) {
   const code = myCode();
   const k = boardKey(puzzleKey);
   if (!code || !/^(es-)?[a-z0]-[a-z0]{6}$/.test(k) || !needsPost(puzzleKey, words)) return false;
@@ -46,6 +46,7 @@ export async function postProgress(puzzleKey, { words, points, rank }) {
     await api.set(ref, {
       name: String(p.name || '').slice(0, 40), emoji: String(p.emoji || '').slice(0, 16),
       words, points, rank, at: api.serverTimestamp(),
+      ...(times ? times : {}),   // t0 / tg / ts: when they played (never shown in the game)
     });
     const snap = await api.get(ref);
     const v = snap && snap.exists() ? snap.val() : null;
