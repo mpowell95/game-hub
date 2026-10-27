@@ -3830,3 +3830,20 @@ Same day, Matt answered the nine with *"Yes to all"*: each game-specific board k
 as tabs (`boardView`): Tic Tac Toe Ultimate/Classic, Snake Walls off/on, Skeeball machines over
 Points/High score, Cup Pong Solo, Hold'em Bankroll/Wins; Contexto, Golf, Arrow Maze, Gridlock in the
 plain shape. Contexto's average guesses left the row (it cut names short); it still breaks ties.
+
+
+## The leaderboard's You tab, By Game top 3, remembered view (2026-10-27)
+
+Ana found the leaderboard confusing: it opened on By Game, Most played, with nothing saying why the games
+were in that order, and the right-hand numbers mixed units (points, a time, solved, obstacles, wins,
+metres). A Claude.ai design round (mockups 2a, 2b, 3) went to Matt; he answered: build the You tab ("The
+You tab is great"), build By Game as mocked up, remember whatever tab and sort the person leaves it on
+(reversing his 2026-09-11 "always By Game, Most played"), remove "Make this my default view", a brand-new
+player opens on By Game, and allow "You" on the You tab only (the root rule "profile names, never You"
+still holds everywhere else, so By Game marks your own name with an outline, not a "You" tag, and the
+line under a board says "MattyIce is 3rd.").
+
+Gap lines are read at the RECORD holder's difficulty, because difficulty outranks score on every board:
+when your best is on an easier difficulty the line says "Beat 10 on Hard to take the record" instead of a
+meaningless difference. Contexto gets no gap line (its packed medal score has no honest difference).
+`gamehub.lb.view.v1` gained a `seg` field (additive; an old record without it opens By Game).
