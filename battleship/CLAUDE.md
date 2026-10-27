@@ -376,7 +376,8 @@ Matt: *"make it be more in line with other gamehub setup screens"* and cut the w
 (`.bs-setcard`) centred on enemy water edge to edge (`_shellMode('scene')`, `_fitScene`: shell stretched to the
 screen minus host chrome, then `_bleedToEdges`; never scrolls, fits the hub at 390x664): ? top-right, title,
 **Multiplayer ›** (opens Host / Join / Challenge on Challenge, a "your turn" count badge from the index),
-Easy/Medium/Hard (shapes), 10×10 / 8×8, Shots 1/3/5, First shot Alternate/Me/<bot>, Play. Sub-cards use
+Easy/Medium/Hard (shapes), Grid size 8×8 / 10×10 (small first, Matt), Shots per turn 1/3/5, First shot
+Alternate/Me/<bot>, Play. The challenge chooser uses the same labels and order. Sub-cards use
 the top-left ‹ instead of Back buttons. Gone: tagline, avatar, slider, chips, stats line, Bonus shot chip.
 **Salvos vs the bot**: `soloShots` (default 3) rides on the game as `state.salvo`; the bot picks its volley
 together (`_botVolley`: earlier picks count as fired, so it never learns mid-volley). A save without
