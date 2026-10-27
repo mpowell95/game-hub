@@ -602,17 +602,25 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| dev \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
     'unifying visibleTabs with isGameOnLauncher would hide a player\'s own record of a pulled game');
   // WHERE THE LEADERBOARD OPENS, and where a board opens (2026-09-11, Matt).
-  ok('the overlay opens on By Game, Most played, whatever was saved before',
-    /_seg = 'games';\s*\n\s*_gameSort = 'popular';/.test(src)
-    && !/_gameSort = view\.gameSort;/.test(src));
+  // REVERSED 2026-10-27 (Matt): it opens on the tab and sort it was left on; nothing saved = By Game.
+  ok('the overlay opens on the remembered tab and sort',
+    /_seg = view\.seg;\s*\n\s*_gameSort = view\.gameSort;/.test(src)
+    && /seg: VALID_SEGS\.has\(v\.seg\) \? v\.seg : 'games',/.test(src)
+    && /fallback = \{ sort: loadSort\(\), cat: 'all', gameSort: 'alpha', seg: 'games' \}/.test(src));
+  ok('every tab, sort and category change is remembered as it happens',
+    (src.match(/persistView\(\);/g) || []).length >= 4 && !/data-role="lb-default"/.test(src));
+  ok('[KNOWN-BUG PROBE] the old sort key is still read as the seed, never repurposed (rule 5)',
+    /const SORT_KEY = 'gamehub\.lb\.sort\.v1';/.test(src) && /sort: loadSort\(\)/.test(src));
   ok('a board opens on its OWN leftmost pill, read off the list rather than hardcoded',
     /_boardSort = sortItemsFor\(_game\)\[0\]\.sort;/.test(src));
   ok('[KNOWN-BUG PROBE] a board\'s sort is separate from By Player\'s persisted one',
     /function effectiveSort\(id\) \{\s*\n\s*if \(id == null\) return _sort;/.test(src)
     && /else if \(_game\) \{ _boardSort = pill\.dataset\.sort; \}/.test(src),
     'they were one value, so a board visit silently rewrote the saved By Player preference');
-  ok('By Game\'s leader row marks the tier its number belongs to',
-    /\$\{tierMarkHTML\(boardTierOf\(lead, meta\.id\)\)\}/.test(src) && /\.lb-tiermark\{/.test(src));
+  // 2026-10-27: By Game shows the top three with NO numbers (Ana: mixed units read as noise).
+  ok('By Game\'s top three come from the board\'s own order, the one the badges use',
+    /function gameStanding\(list, id\) \{\s*\n\s*const order = boardMetricCmp\(id\);/.test(src)
+    && /st: gameStanding\(list, meta\.id\)/.test(src) && /\.lb-tiermark\{/.test(src));
   ok('the chip is suppressed while a difficulty filter is selected, which already says it once',
     /function tierChipHTML\(tier\) \{[\s\S]{0,400}?if \(_tier != null\) return '';/.test(src));
   ok('[KNOWN-BUG PROBE] the board\'s number is the metric AT that row\'s tier',
@@ -624,8 +632,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && !/const metric = gameMetricAt\(g, id, _tier\);/.test(src));
   ok('Snake\'s walls split is read at the row\'s own tier',
     /const rowTier = boardTierOf\(g, 'snake'\);\s*\n\s*const off = snBestAtWalls\(g, rowTier, 'off'\);\s*\n\s*const on = snBestAtWalls\(g, rowTier, 'on'\);/.test(src));
-  ok('By Game\'s leader row prints the same number the board does',
-    /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src));
+  ok('the You tab and the line under a board read the record at the RECORD\'S tier',
+    /const tier = boardTierOf\(rec, id\);\s*\n\s*const r = gameMetricAt\(rec, id, tier\);\s*\n\s*const m = gameMetricAt\(me, id, tier\);/.test(src));
   ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
   ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
     /const d = \(boardTierOf\(b, id\) \|\| 0\) - \(boardTierOf\(a, id\) \|\| 0\);\s*\n\s*if \(d\) return d;/.test(src));
@@ -646,12 +654,12 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('the rank badges call a tie by the comparator, so equal scores in different tiers are not tied',
     /const same = i > 0 && \(cmp \? cmp\(ranked\[i - 1\], g\) === 0 : v === prev\);/.test(src));
   ok('[KNOWN-BUG PROBE] the leader filter asks "has a round", not "is it positive"',
-    /\.filter\(\(g\) => hasBoardMetric\(gameMetricAt\(g, meta\.id, null\), meta\.id\)\)/.test(src)
-    && !/gameMetricAt\(g, meta\.id, null\) > 0/.test(src));
+    /\.filter\(\(g\) => hasBoardMetric\(gameMetricAt\(g, id, null\), id\)\)/.test(src)
+    && !/gameMetricAt\(g, (meta\.)?id, null\) > 0/.test(src));
   ok('rankMap can take a comparator, so the rank badges follow the sort',
     /function rankMap\(list, valueOf, cmp\)/.test(src) && /sort\(cmp \|\| \(\(a, b\)/.test(src));
   ok('the metric is printed through the formatter, so a to-par score keeps its sign',
-    /metricText\(boardMetricOf\(lead, meta\.id\), meta\.id\)/.test(src)
+    /if \(!k \|\| k === 'time' \|\| k === 'golf'\) return metricText\(v, id\);/.test(src)
     // Hold'em's "Under review" (a ledger no real play could produce, 2026-09-28) is the one
     // exception, and it replaces the number rather than formatting a different one.
     && /const metricStr = (id === 'holdem' && hbReview\(g\) \? t\('lb_hb_review'\) : )?metricText\(metric, id\);/.test(src));

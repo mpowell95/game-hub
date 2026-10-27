@@ -12,6 +12,13 @@
 // Per-game hub card blurbs are NOT here — they live as {en, es} objects on each GAMES entry
 // in js/hub.js (decision 3: registry data stays co-located with its entry).
 
+/** 1st, 2nd, 3rd, 4th ... 11th, 12th, 13th, 21st (the leaderboard's rank words). */
+function enOrd(n) {
+  const v = Math.abs(Number(n) | 0);
+  const suf = v % 100 >= 11 && v % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' })[v % 10] || 'th';
+  return `${n}${suf}`;
+}
+
 export const STRINGS = {
   en: {
     hub_stats_btn: 'My Stats',
@@ -578,7 +585,7 @@ export const STRINGS = {
     lb_wo_arrows: 'arrows', lb_wo_runs_unit: 'runs', lb_wo_won_unit: 'weeks won', lb_wo_of: 'of {n}', lb_wo_winner: 'winner',
     lb_wo_none_week: 'No runs this week yet', lb_wo_none_past: 'No finished weeks yet',
     lb_dialog_aria: 'Leaderboard',
-    lb_segs_aria: 'By player or by game',
+    lb_segs_aria: 'By player, by game or you',
     lb_by_player: 'By Player',
     lb_by_game: 'By Game',
     lb_play: 'Play',
@@ -691,6 +698,45 @@ export const STRINGS = {
     lb_machine_filter_aria: 'Filter by machine',
     lb_empty_all: 'No games recorded yet.',
     lb_no_games_yet: 'No games yet',
+    // --- 2026-10-27: the You tab, By Game's top three, the line under a board ----------------------
+    lb_you_tab: 'You',
+    lb_bygame_note: 'The top 3 players in every game. Tap a game to see their scores.',
+    lb_you_empty: 'Play a game to see your records here.',
+    lb_n_of_m: '{n} of {m}',
+    lb_you_hold: (p) => `You hold ${p.x} ${Number(p.m) === 1 ? 'record' : 'records'}`,
+    lb_you_hold_h: 'Records you hold',
+    lb_you_close_h: 'Closest to breaking',
+    lb_you_close_k: 'Closest first',
+    lb_you_new_h: 'Not played yet',
+    lb_you_best: 'Your best',
+    lb_you_record: 'Record',
+    lb_you_rec_by: (p) => `Record: ${p.v} by ${p.who}`,
+    lb_you_rank: (p) => `You're ${p.tie ? 'tied ' : ''}${enOrd(p.n)}`,
+    lb_rank_name: (p) => `${p.name} is ${p.tie ? 'tied ' : ''}${enOrd(p.n)}.`,
+    // A board number with its short unit; `k` is the unit family (leaderboard-ui.js gapKind).
+    lb_yval: (p) => {
+      const one = Number(p.n) === 1;
+      return ({
+        points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstacle' : 'obstacles'}`,
+        longest: `${p.v} long`, solved: `${p.v} solved`, wins: `${p.v} ${one ? 'win' : 'wins'}`,
+      })[p.k] || String(p.v);
+    },
+    // What it takes to be first. `tier`: the record is at a harder difficulty than your best.
+    lb_gap: (p) => {
+      const one = Number(p.n) === 1;
+      return ({
+        time: `${p.v} faster to take the record`,
+        golf: `${p.v} fewer ${one ? 'stroke' : 'strokes'} to take the record`,
+        meters: `${p.v} m farther to take the record`,
+        points: `${p.v} more ${one ? 'point' : 'points'} to take the record`,
+        obstacles: `${p.v} more ${one ? 'obstacle' : 'obstacles'} to take the record`,
+        longest: `${p.v} longer to take the record`,
+        solved: `${p.v} more ${one ? 'puzzle' : 'puzzles'} to take the record`,
+        bank: `${p.v} more to take the record`,
+        wins: `${p.v} more ${one ? 'win' : 'wins'} to take the record`,
+        tier: `Beat ${p.v} on ${p.tier} to take the record`,
+      })[p.k] || '';
+    },
     lb_empty_game: 'No {label} games recorded yet.',
     lb_who_leads_h: 'Who leads what',
     lb_back_players: '&larr; Players',
@@ -1332,7 +1378,7 @@ export const STRINGS = {
     lb_wo_arrows: 'flechas', lb_wo_runs_unit: 'partidas', lb_wo_won_unit: 'semanas ganadas', lb_wo_of: 'de {n}', lb_wo_winner: 'ganador',
     lb_wo_none_week: 'Aún no hay partidas esta semana', lb_wo_none_past: 'Aún no hay semanas terminadas',
     lb_dialog_aria: 'Clasificación',
-    lb_segs_aria: 'Por jugador o por juego',
+    lb_segs_aria: 'Por jugador, por juego o tú',
     lb_by_player: 'Por jugador',
     lb_by_game: 'Por juego',
     lb_play: 'Jugar',
@@ -1432,6 +1478,42 @@ export const STRINGS = {
     lb_machine_filter_aria: 'Filtrar por máquina',
     lb_empty_all: 'Todavía no hay partidas registradas.',
     lb_no_games_yet: 'Todavía sin partidas',
+    lb_you_tab: 'Tú',
+    lb_bygame_note: 'Los 3 mejores de cada juego. Toca un juego para ver sus marcas.',
+    lb_you_empty: 'Juega una partida para ver aquí tus récords.',
+    lb_n_of_m: '{n} de {m}',
+    lb_you_hold: (p) => `Tienes ${p.x} ${Number(p.m) === 1 ? 'récord' : 'récords'}`,
+    lb_you_hold_h: 'Tus récords',
+    lb_you_close_h: 'A punto de batir',
+    lb_you_close_k: 'Más cerca primero',
+    lb_you_new_h: 'Sin jugar todavía',
+    lb_you_best: 'Tu mejor',
+    lb_you_record: 'Récord',
+    lb_you_rec_by: (p) => `Récord: ${p.v}, de ${p.who}`,
+    lb_you_rank: (p) => (p.tie ? `Empatas en ${p.n}.º` : `Vas ${p.n}.º`),
+    lb_rank_name: (p) => (p.tie ? `${p.name} empata en ${p.n}.º.` : `${p.name} va ${p.n}.º.`),
+    lb_yval: (p) => {
+      const one = Number(p.n) === 1;
+      return ({
+        points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstáculo' : 'obstáculos'}`,
+        longest: `${p.v} de largo`, solved: `${p.v} ${one ? 'resuelto' : 'resueltos'}`, wins: `${p.v} ${one ? 'victoria' : 'victorias'}`,
+      })[p.k] || String(p.v);
+    },
+    lb_gap: (p) => {
+      const one = Number(p.n) === 1;
+      return ({
+        time: `${p.v} más rápido para batir el récord`,
+        golf: `${p.v} ${one ? 'golpe' : 'golpes'} menos para batir el récord`,
+        meters: `${p.v} m más para batir el récord`,
+        points: `${p.v} ${one ? 'punto' : 'puntos'} más para batir el récord`,
+        obstacles: `${p.v} ${one ? 'obstáculo' : 'obstáculos'} más para batir el récord`,
+        longest: `${p.v} más de largo para batir el récord`,
+        solved: `${p.v} ${one ? 'puzle' : 'puzles'} más para batir el récord`,
+        bank: `${p.v} más para batir el récord`,
+        wins: `${p.v} ${one ? 'victoria' : 'victorias'} más para batir el récord`,
+        tier: `Supera ${p.v} en ${p.tier} para batir el récord`,
+      })[p.k] || '';
+    },
     lb_empty_game: 'Todavía no hay partidas de {label} registradas.',
     lb_who_leads_h: 'Quién lidera qué',
     lb_back_players: '&larr; Jugadores',
