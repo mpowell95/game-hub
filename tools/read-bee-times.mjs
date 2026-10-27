@@ -57,6 +57,7 @@ for (const [file, label] of [['bee.json', 'English'], ['bee-es.json', 'Spanish']
             const gap = prev == null ? '' : `+${Math.round((x.t - prev) / 1000)}s`;
             prev = x.t;
             const shown = x.e !== 'guess' ? (x.r ? `(${x.r})` : '')
+              : x.r === 'already_found' ? (WORDS ? `${x.w} (already found)` : `${String(x.w || '').length} letters (already found)`)
               : (x.r === 'ok' || x.r === 'bonus') ? (WORDS ? `${x.w} ✓${x.r === 'bonus' ? ' bonus' : ''}` : `✓ ${String(x.w || '').length} letters${x.r === 'bonus' ? ' bonus' : ''}`)
               : `${x.w} ✗ ${x.r}`;
             const late = Math.abs((x.s || x.t) - x.t) > 120000 ? `  [phone clock off by ${Math.round(((x.s || x.t) - x.t) / 60000)} min, or sent late]` : '';
