@@ -109,8 +109,8 @@ ok('flick soccer: a pick opens the challenge card', /o\.kind === 'pick'\) this\.
 ok('flick soccer: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./flick-soccer/js/mp-ui.js')));
 ok('archery: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./archery/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./archery/js/ui.js')));
 ok('archery: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./archery/js/mp-ui.js')));
-ok('battleship: a pick opens the deploy screen for that person, a match id opens the match',
-  /o\.kind === 'pick'[\s\S]{0,200}_chStartPlacement\(\{ kind: 'new', them: o\.them/.test(src('./battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('./battleship/js/ui.js')));
+ok('battleship: a pick opens the board + shots choice for that person, a match id opens the match',
+  /o\.kind === 'pick'[\s\S]{0,200}this\._chChooseFor\(o\.them\)/.test(src('./battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('./battleship/js/ui.js')));
 ok('battle arena: a pick opens the draft for that person, a match id opens the match',
   /o\.kind === 'pick'\) \{ pickTeamFor\(ui, o\.them\)/.test(src('./battle-arena/js/online-ui.js')) && /if \(o && o\.id\) \{ await openChallenge\(ui, o\.id\)/.test(src('./battle-arena/js/online-ui.js')));
 ok('escoba: a pick opens the length screen with that person', /o\.kind === 'pick'\) this\._chOpenLen\(o\.them/.test(src('./escoba/js/ui.js')));

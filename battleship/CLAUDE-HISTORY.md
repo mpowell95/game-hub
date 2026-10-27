@@ -995,3 +995,13 @@ keep shooting on a hit the standard?" was a question, and the session built on i
 of waiting. Answer a question with an answer.) Asked whether a hit should still add a shot: "Yes,
 hits add a shot". So a turn is 1, 3 or 5 MISSES, `shots` on the match, the matches already started
 (no field) stay at 1.
+
+### "Couldn't load Battleship" on Ana's iPhone, and no Board / Shots choice (2026-10-27)
+
+Matt sent Ana a challenge from the Multiplayer screen: its pick went straight to the deploy screen, so
+neither the Board nor the new Shots chip (both on the Challenge tab) was offered. Every new challenge now
+goes through one Board + Shots step. Ana's phone (v1272, iOS 18.3) then showed "Couldn't load
+Battleship": reproduced by serving the new ui.js beside v1270's mp.js, which sw.js does mid-warm (a file
+not yet in the current cache is answered from an older cache): `TypeError: CH.asShots is not a function`
+in `_loadSetup`, i.e. in the constructor. Fix: the shots helpers live in ui.js too, and a stale mp.js
+(no `fireShot`) shows "Update required" instead of a crash.
