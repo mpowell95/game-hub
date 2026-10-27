@@ -165,7 +165,11 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
   `drainOutbox` keeps refused throws (only an over match drops them); the waiting line says "Not sent
   yet" while any are unsent.
 - **Replay**: the other person's latest run plays with real flights from their vectors; **the
-  recorded outcome decides each one**. Progress in `gamehub.cuppong.shown.v1`.
+  recorded outcome decides each one**. Progress in `gamehub.cuppong.shown.v1`. **Throws are stored at
+  FULL precision (2026-10-27)**: the old 5-decimal rounding made a rim shot fly differently on the other
+  phone (King of Games' made cup flew off the table on Matt's). Old throws replay via
+  `physics.replayVector` (a vector inside the rounding that lands as recorded; 400 ms cap).
+  Never round `p`/`a` again.
 - **This phone is always side `'a'` locally** (`buildLocal`, `toLocal`/`toStored`).
 - **The island's second cup is OWED** (`async: true` counts `owed[side]`; taken at the defender's
   next turn, `askOwed`); owed cups that are every cup left clear the rack at once.

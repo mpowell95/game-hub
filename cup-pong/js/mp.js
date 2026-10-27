@@ -137,7 +137,9 @@ export function cleanEntry(e) {
       if (!Number.isFinite(p) || !Number.isFinite(a)) return null;
       const m = e.m ? String(e.m) : '';
       if (m && !KEY_RE.test(m)) return null;
-      return { by: e.by, k: 't', p: Math.round(p * 1e5) / 1e5, a: Math.round(a * 1e5) / 1e5, m, b: e.b ? 1 : 0, at };
+      // FULL precision (2026-10-27): a rim shot turns on the 6th decimal, so the 5-decimal rounding
+      // used before made the other phone's replay fly a different path (a made cup shown missing).
+      return { by: e.by, k: 't', p, a, m, b: e.b ? 1 : 0, at };
     }
     case 'g': return { by: e.by, k: 'g', at };
     case 'c': return { by: e.by, k: 'c', at };            // the last cup centred (match.centerLast)
@@ -643,7 +645,9 @@ export async function appendLog(id, base, entries) {
     if (list.some((e) => e.by !== side)) return fail('bad-entry');
     const have = fresh.log.length;
     // Already landed (a retry after a verify that timed out): nothing to write.
-    const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && x.p === y.p && x.a === y.a
+    // Within the old 5-decimal rounding: a throw written by an older build still matches its retry.
+    const near = (u, v) => u === v || (Number.isFinite(u) && Number.isFinite(v) && Math.abs(u - v) <= 6e-6);
+    const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && near(x.p, y.p) && near(x.a, y.a)
       && JSON.stringify(x.cells || null) === JSON.stringify(y.cells || null);
     // The OTHER person's throws after `base` are ones this phone already watched land before taking
     // its own (Matt, 2026-10-02: two cups refused as "moved on" because the base was counted before
