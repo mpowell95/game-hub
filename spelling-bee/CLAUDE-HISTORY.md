@@ -25,3 +25,12 @@ English-only words (`SPANISH_TOO` keeps tortilla, yoga...) and `SKIP` (rude, sla
 unchanged (verified byte-equal); no playable bonus word lost. Bonus list 6,069 -> 48,386, trimmed to words some
 puzzle can make (476 KB, 134 KB gzipped, was 40 KB). Checked against `beeLog`: every real word refused in the
 three Spanish days logged is now accepted; what is still refused is typos and names.
+
+## 2026-10-28: English bonus list, after the Spanish fix (Matt: "do what you think is best")
+
+Checked first: 7 days of English `beeLog` had 65 refused guesses, only 3 dictionary words (HADE, CADE, YUCA, all
+obscure), because English has 22,045 answers (Spanish 6,317). So English keeps its hand-checked `BONUS_KEEP`
+(opening it to all of ENABLE would bring back CRATCH, CRANCH, HANT). Two changes: a kept word no longer also needs
+50+ subtitle mentions (FUNGO, said 7 times, had stayed refused although the header named it), and the 824 SCOWL-70
+words said 10-49 times were read; 123 recognisable ones added (AGLET, FUNGO, TAHINI, LATKE, GOOGOL...). 253 -> 376.
+Answers and puzzles byte-identical.

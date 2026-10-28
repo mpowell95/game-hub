@@ -23,7 +23,7 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 
 `data/bee.json` from `tools/build-spelling-bee-data.mjs` (read its header). **Two lists (2026-10-26, Matt:
 "Obviously all words should count")**: `words` = the answers, SCOWL size ≤60 English + American ∩ ENABLE
-(22,045; hints and ranks count only these); `extra` = 253 HAND-CHECKED words (2026-10-26, Matt: CRATCH, CRANCH, ANNA, CARL "aren't words"/"so many names": ENABLE ∩ SCOWL 70 ∩ said 50+ in subtitles, no first names, then read one by one into `BONUS_KEEP`), accepted
+(22,045; hints and ranks count only these); `extra` = 376 HAND-CHECKED words (2026-10-26, Matt: CRATCH, CRANCH, ANNA, CARL "aren't words"/"so many names": ENABLE ∩ SCOWL 70, no first names, read one by one into `BONUS_KEEP`; 2026-10-28 +123 incl. FUNGO, AGLET, and a kept word no longer needs the subtitle count). English stays hand-checked on purpose: 7 days of `beeLog` showed no real word refused (Spanish did, GONADA), accepted
 and scored as a BONUS word (italic in the found list, toast "Bonus word!", the How to Play line "Italic = bonus, not in hints"), never counted. No S, ≤7 distinct letters, bad words
 out of both. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
 every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
