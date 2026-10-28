@@ -112,6 +112,7 @@
     "playLog": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       "$code": {
+        ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
         "$k": {
           ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
           ".validate": "$k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'g', 's'])",

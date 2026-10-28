@@ -287,6 +287,8 @@ console.log('\n--- the play log: every finished game, every Contexto guess ---')
   const rulesJ = JSON.parse(read('database.rules.json')).rules;
   ok('rules: playLog is admin-read, written only under your own claimed code, server time stamped',
     /admins/.test(rulesJ.playLog['.read']) && /msgAuth/.test(rulesJ.playLog.$code.$k['.write']) && rulesJ.playLog.$code.$k.s['.validate'] === 'newData.val() === now');
+  ok('rules: a phone can read back ITS OWN code\'s log (the sender verifies by re-read), nobody else\'s',
+    /\$code === root\.child\('msgAuth'\)\.child\(auth\.uid\)\.val\(\)/.test(rulesJ.playLog.$code['.read'] || ''));
   ok('backup and hub: playLog in BRANCHES; the hub starts the sender', /'playLog',/.test(read('backups/rtdb-backup.mjs')) && /m\.startPlayLog\(\)/.test(read('js/hub.js')));
   for (let i = 0; i < 3200; i++) Q.appendPlayLog('DREG5', { g: 'snake' });
   ok('the queue keeps the newest 3,000 at most', Q.readQueue().length === 3000);

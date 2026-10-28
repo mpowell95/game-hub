@@ -119,8 +119,8 @@ Cup Pong and Hoops, within reach of the others; no rule fires. The one alert is 
   the app and coming back. Puzzle key `en-31`.
 - Sent by `js/play-log.js` (started by the hub; 5 s after the last entry, on leaving the app, on each
   sync) to **`playLog/<CODE>/<t>-<n>`** = `{t, s, g, f?, a?, e?, k?, w?, r?}` (`s` = server time),
-  verified by re-read, retried until sent. **Admin-read only** (Contexto guesses hold answers); a phone
-  writes only under its own claimed code. In the backup's `BRANCHES` (an anonymous backup is denied:
+  verified by re-read, retried until sent. **Admins read all; a phone reads and writes only its own
+  claimed code's entries** (the re-read needs that; Contexto guesses hold answers, so nobody else's). In the backup's `BRANCHES` (an anonymous backup is denied:
   export it from the console).
 - Nothing reads it yet. Checks on it come after real logs exist, replayed per Matt's rule 5.
 - Before this, only Spelling Bee (`beeLog`) logged moves; nothing earlier can be recovered.
