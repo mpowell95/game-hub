@@ -34,7 +34,7 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 |---|---|
 | `js/engine.js` | the whole puzzle, pure: board notation, legal slides (`range`, `moves`), the solver (`solve`, breadth-first, one slide = one move). Used by the game, the level maker and the tests |
 | `js/levels.js` | **GENERATED** by `tools/build-gridlock-levels.mjs` (repo root). One line per ladder level: board + fewest moves. **APPEND-ONLY once shipped**, never hand-edited |
-| `js/art.js` | the drawings: wooden blocks (grain, knots, bevel, shine; eight wood tones) and cars (sedan, sports, hatch, sunroof, taxi) and trucks (box truck, bus, tanker), top-down with tyres, glass, lights and mirrors. Pure, returns SVG |
+| `js/art.js` | the drawings: wooden blocks (grain, knots, bevel, shine; eight wood tones) and cartoon cars (sedan, sports, hatch, sunroof, taxi) and trucks (box truck, bus, tanker): flat colour, thick outline, one silhouette each. Pure, returns SVG |
 | `js/ui.js` | setup and play screens, the board (DOM blocks moved by `transform`), dragging, undo / restart / hint, the win popup, autosave, the module contract, the `window.__glTest` seam |
 | `js/strings.js` | EN/ES, every visible string and aria-label |
 | `js/test.js` | headless checks: `node gridlock/js/test.js` (not precached) |
@@ -107,6 +107,12 @@ a band in the cab's colour so it reads as one vehicle). The car park is asphalt 
 lines and a concrete curb. The variety is seeded by level and piece, so a level always looks the
 same. Upright pieces are the same drawing turned a quarter (front up, light from the left). **The red piece carries a shape** (a white arrow badge on the wooden block, a white star on
 the red car), because Matt is red/green colourblind.
+
+**Cars redrawn CARTOONY (Matt, 2026-10-28: the cars were "difficult to understand at a glance ... tough
+to identify cars as single objects")**: flat bright colours (no dark or grey cars), a thick dark outline
+round each whole vehicle, a clear gap to its neighbours, big round headlights, crisp offset shadow; flat
+lighter asphalt with faint bay lines. A truck is ONE outlined body (pale load, coloured cab), never two
+shapes. Keep it that way: one silhouette per vehicle.
 
 ## The ladder, stars and points
 

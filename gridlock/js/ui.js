@@ -848,10 +848,11 @@ class Gridlock {
 function lookThumb(kind) {
   if (kind === 'wood') return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#6b4220"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#3c2614"/>
     <rect x="7" y="7" width="22" height="11" rx="3" fill="#d9a866"/><rect x="7" y="21" width="20" height="11" rx="3" fill="${RED}"/><rect x="33" y="7" width="11" height="25" rx="3" fill="#c98f4e"/></svg>`;
-  return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#c9ccd2"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#3d434d"/>
-    <rect x="7" y="7" width="22" height="11" rx="4" fill="#1F5FA8"/><rect x="22" y="9" width="4" height="7" rx="1" fill="#9fd3ee"/>
-    <rect x="7" y="21" width="20" height="11" rx="4" fill="${RED}"/><rect x="20" y="23" width="4" height="7" rx="1" fill="#9fd3ee"/>
-    <rect x="33" y="7" width="11" height="25" rx="4" fill="#F2B705"/><rect x="35" y="25" width="7" height="4" rx="1" fill="#9fd3ee"/></svg>`;
+  const car = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4.5" fill="${c}" stroke="#1d2230" stroke-width="1.6"/>`;
+  return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#c9ccd2"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#535c6c"/>
+    ${car(7, 7.5, 21, 10, '#2f7de1')}<rect x="21" y="9.5" width="3.5" height="6" rx="1" fill="#9fdcfb" stroke="#1d2230" stroke-width="1"/>
+    ${car(7, 21.5, 19, 10, RED)}<rect x="19" y="23.5" width="3.5" height="6" rx="1" fill="#9fdcfb" stroke="#1d2230" stroke-width="1"/>
+    ${car(33, 7.5, 10, 24, '#ffc61a')}<rect x="35" y="11" width="6" height="3.5" rx="1" fill="#9fdcfb" stroke="#1d2230" stroke-width="1"/></svg>`;
 }
 
 // --- module contract -------------------------------------------------------------------------------
