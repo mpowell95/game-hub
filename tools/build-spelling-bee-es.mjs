@@ -9,12 +9,18 @@
 //     boggle/data/CREDITS.md) plus every inflected form in lemmatization-lists (Michal Boleslav
 //     Mechura, ODbL) whose lemma or form is in that list. The second source brings the conjugations
 //     ("tengo", "hacen") that Boggle's list leaves out on purpose: "all words should count".
-//   * BONUS words: accepted forms that are also in the subtitle list (people say them), never a first
-//     name (the same two name lists as English, MIT). Everything else is "not in word list".
+//   * BONUS words: EVERY other accepted word, never a first name (the same two name lists as English,
+//     MIT, plus NOT_ANSWERS) unless NAME_WORDS says it is also an ordinary word (luna, clara, julio).
+//     Until 2026-10-28 a bonus word also had to be in the subtitle list and in lemmatization-lists:
+//     that refused ~30,000 dictionary words (Ana: GONADA; "some normal words ... are not registered")
+//     and DONDE, ALLI, LUNA, PALOMA. Spanish has no CRATCH problem: Boggle's list is a dictionary.
 //   * ANSWERS (what hints and ranks count) = accepted words that are in BOTH sources and among the
 //     20,000 most frequent words of FrequencyWords es 2018 (Hermit Dave, OpenSubtitles, CC BY-SA 4.0),
 //     minus NOT_ANSWERS (names and loanwords that survive both lists). 20,000 gives ~48 answers a
 //     puzzle, English's ~51. The rest of ACCEPTED is `extra` (bonus words).
+//   * COMMON words Boggle's list lacks (2026-10-28: DEDO, RODILLA, TORTILLA were refused): every
+//     lemmatization-lists word that is also in the subtitle list, is bonus too, except names, words that
+//     are also English (city, drive: SPANISH_TOO keeps the Spanish ones) and SKIP (slang, places, brands).
 //   * Ñ IS ITS OWN LETTER, accents are not (Ana, 2026-10-26: "Ñ is different from n. But for the vowels
 //     it doesn't matter... For the rest do not use accents"). Every word is written without accents and
 //     with its ñ ("nino" is not "niño"); a puzzle can have Ñ in the hive. Boggle's list folds ñ to n, so
@@ -63,6 +69,25 @@ pilar regina rina rocio rosa rosario teresa victoria alberto antonio benito carl
 gabriel ignacio juan julio lorenzo manuel mario pablo pedro ramon roberto ramiro tomas victor carla leila
 lidia noemi raquel miriam karina nadia natalia yolanda irma lorena teo tito adan eden`.split(/\s+/).filter((w) => w !== 'tito'));
 // Families of vulgar words.
+// On a name list but ordinary Spanish words (hand-checked 2026-10-28): accepted as bonus words.
+const NAME_WORDS = new Set(`adore adorne alameda aleen aleta alexia alia alie alla alli amparo angelica arda
+atlante aurea aurora aviva azucena beata bobina bobine brear brinda bula calandra camelia camella candida
+carena carie chandal clara clemente codee concordia crin dale dalia diana dominica dora dore doro eden edita
+elida emerita farra felicita filia fleta flora fonda gema germana gloria grata iluminada jacinto julio kelvin
+lavada leda lian lien lira loan loma lucio luna magnolia malva mana mariano marina mella mica mora natividad
+nereida ninfa nona opalina paloma petunia pilar randa refugia rema reta roda rubi tiara tilda trinidad
+valencia veda veta victoria`.split(/\s+/));
+// COMMON words (header) that English also has but are ordinary Spanish (hand-checked 2026-10-28).
+const SPANISH_TOO = new Set(`adorable banana banjo bilateral bipolar buffet bulldog cocktail corrector dandy derby
+dharma dingo futon ghetto gigolo glaucoma graffiti henna inflexible inventor irregular irreparable irritable
+jockey judo kamikaze karate kayak kimono kiwi koala lamentable lemur mahatma mozzarella nylon papilla poker
+quark rally reactor reggae retina reunion rumba tarot terrier tortilla venerable yeti yoga yuan zeppelin`.split(/\s+/));
+// COMMON words left out (hand-checked 2026-10-28): rude, slang, places, brands, names the lists missed.
+const SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy pedofilo culito picha cagon pajero
+ninfomana drogata huevon macarra yonqui papi chachi cholo chapera paco online apache yankee yoda brando wichita
+bora genova etiopia touche duce olimpo renard chechenia abba cardio valhalla thai colombo kame caprica fane buro
+paulino vichy provo pullman ruanda maitre tintin polaroid trafalgar macon lando belcebu trullo albin rocha
+cocker airbag titi letonia figaro egeo mahdi pepito dojo donut cucu`.split(/\s+/));
 const BLOCK_RE = /coñ|^put[aoe]|mierd|^jod[aeoi]|cabron|foll[aeo]|ching|^polla$|pendej|maric/;
 const FIRST_BUILD_DAY0 = 'o:aeimnt';   // the folded build's day 0 (see the header)
 
@@ -130,9 +155,13 @@ async function main() {
   const accepted = [...new Set([...fromA, ...B])].filter(fits).sort();
   const words = accepted.filter((w) => L.has(w) && rank.has(w) && rank.get(w) < TOP && !NOT_ANSWERS.has(w));
   const answerSet = new Set(words);
-  // Bonus words (2026-10-26, after Matt found CRATCH and ANNA in English): only forms people actually
-  // say (in the 50,000-word subtitle list) and in lemmatization-lists, never a name.
-  const extra = accepted.filter((w) => !answerSet.has(w) && rank.has(w) && L.has(w) && !NOT_ANSWERS.has(w) && !names.has(w));
+  // Bonus words: every other accepted word, never a name unless it is also an ordinary word (header).
+  const isName = (w) => (names.has(w) || NOT_ANSWERS.has(w)) && !NAME_WORDS.has(w);
+  const en = JSON.parse(fs.readFileSync(path.join(ROOT, 'spelling-bee/data/bee.json'), 'utf8'));
+  const english = new Set(`${en.words} ${en.extra}`.split(' '));
+  const acceptedSet = new Set(accepted);
+  const common = [...L].filter((w) => fits(w) && !acceptedSet.has(w) && rank.has(w) && !names.has(w) && !SKIP.has(w) && (!english.has(w) || SPANISH_TOO.has(w)));
+  const extra = [...accepted.filter((w) => !answerSet.has(w) && !isName(w)), ...common].sort();
 
   const masks = words.map(maskOf);
   const sets = [...new Set(masks.filter((m) => bits(m) === 7))].sort((a, b) => a - b);
@@ -173,9 +202,12 @@ async function main() {
     if (puzzles.length >= DAYS) break;
     if (!seen.has(setOf(q))) { puzzles.push(q); seen.add(setOf(q)); }
   }
-  const out = { v: 1, lang: 'es', epoch: EPOCH, words: words.join(' '), extra: extra.join(' '), puzzles, retired };
+  // Only bonus words some puzzle (shipped or retired) can make: 133 KB gzipped instead of 218.
+  const hives = [...puzzles, ...Object.values(retired)].map((q) => { const [c, o] = q.split(':'); return { c: maskOf(c), all: maskOf(c + o) }; });
+  const playable = extra.filter((w) => { const m = maskOf(w); return hives.some((h) => (m & h.c) && !(m & ~h.all)); });
+  const out = { v: 1, lang: 'es', epoch: EPOCH, words: words.join(' '), extra: playable.join(' '), puzzles, retired };
   fs.writeFileSync(file, JSON.stringify(out) + '\n');
-  console.log(`words ${words.length}, extra ${extra.length}, pangram sets ${sets.length}, fair ${candidates.length}, puzzles ${puzzles.length}, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
+  console.log(`words ${words.length}, extra ${playable.length}, pangram sets ${sets.length}, fair ${candidates.length}, puzzles ${puzzles.length}, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
