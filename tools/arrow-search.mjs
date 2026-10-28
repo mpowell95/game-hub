@@ -4,6 +4,8 @@
 // peel. Changing ANY of it changes what both tools build: the shipped files are pinned by test.js.
 const E = await import('../way-out/js/engine.js');
 export const W = 16, H = 22;
+/** A move whose next arrow is closer than this (dots) to the arrow just removed is "near" (no searching). */
+export const JUMP_MIN = 5;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 /** Everything the score needs, from one peel that also measures each blocked arrow's blocker distance. */
@@ -12,17 +14,41 @@ export function measure(arrows) {
   const occ = new Int16Array(W * H).fill(-1);
   arrows.forEach((c, id) => { for (const p of c) occ[p] = id; });
   const gone = new Uint8Array(n);
-  let left = n, rounds = 0, freeSum = 0, freeSq = 0, dSum = 0, dN = 0, far = 0, maxFree = 0;
+  let left = n, rounds = 0, freeSum = 0, freeSq = 0, dSum = 0, dN = 0, far = 0, maxFree = 0, trains = 0;
+  // JUMPS (2026-10-28, Matt cleared the first Impossible tests in 1:43 and 1:41: the next free arrow's head
+  // was ~2 dots from the arrow just removed, so he never had to search). For each move, how far (dots)
+  // the newly free arrow's head is from the arrow that just left; `near` counts the moves under JUMP_MIN.
+  let jumpSum = 0, jumpN = 0, near = 0;
+  let lastGone = null;
   const first = [];
+  // TRAINS (2026-10-28, Matt's recording of Expert 251: a row of arrows all pointing the same way, each
+  // freed by the one in front, "just tapping directly in order"): an arrow freed this round whose
+  // blocker last round was an arrow pointing the SAME way with its head in the SAME row or column.
+  const blk = new Int16Array(n).fill(-1);
+  const same = (a, b) => {
+    const [dx, dy] = E.dirOf(arrows[a], W), [ex, ey] = E.dirOf(arrows[b], W);
+    if (dx !== ex || dy !== ey) return false;
+    const h = arrows[a][arrows[a].length - 1], g = arrows[b][arrows[b].length - 1];
+    return dx ? ((h / W) | 0) === ((g / W) | 0) : (h % W) === (g % W);
+  };
   while (left) {
     const now = [];
     for (let id = 0; id < n; id++) {
       if (gone[id]) continue;
       const b = E.blockerOf(arrows[id], occ, W, H, id);
-      if (!b) now.push(id);
-      else { dSum += b.steps; dN++; if (b.steps >= 4) far++; }
+      if (!b) { now.push(id); if (blk[id] >= 0 && same(id, blk[id])) trains++; }
+      else { dSum += b.steps; dN++; if (b.steps >= 4) far++; blk[id] = occ[b.cell]; }
     }
     if (!now.length) return null;
+    if (lastGone) {
+      for (const id of now) {
+        const h = arrows[id][arrows[id].length - 1], hx = h % W, hy = (h / W) | 0;
+        let d = Infinity;
+        for (const g of lastGone) for (const p of arrows[g]) d = Math.min(d, Math.abs((p % W) - hx) + Math.abs(((p / W) | 0) - hy));
+        jumpSum += Math.min(d, 10); jumpN++; if (d < JUMP_MIN) near++;
+      }
+    }
+    lastGone = now;
     rounds++;
     if (rounds === 1) first.push(...now);
     freeSum += now.length; freeSq += (now.length - 1) ** 2; maxFree = Math.max(maxFree, now.length);
@@ -30,7 +56,7 @@ export function measure(arrows) {
     left -= now.length;
   }
   const cells = arrows.reduce((a, c) => a + c.length, 0);
-  return { n, rounds, avgFree: freeSum / rounds, freeSq, maxFree, free0: first.length, dist: dN ? dSum / dN : 0, far, farShare: dN ? far / dN : 0, fill: cells / (W * H) };
+  return { n, rounds, trains, jump: jumpN ? jumpSum / jumpN : 0, near, avgFree: freeSum / rounds, freeSq, maxFree, free0: first.length, dist: dN ? dSum / dN : 0, far, farShare: dN ? far / dN : 0, fill: cells / (W * H) };
 }
 // STYLES, so Matt can say which kind of hard he likes (boards 1-3, 4-7, 8-10, 11-15), each kept to a
 // sane number of arrows (a 90-move forced chain is a chore, not a puzzle):
@@ -41,6 +67,13 @@ export const STYLES = {
   far: { rounds: 1.2, free: 0.6, dist: 12, farS: 40, minN: 30, maxN: 40, fill: 0.45 },
   mixed: { rounds: 1.0, free: 0.8, dist: 9, farS: 30, minN: 40, maxN: 50, fill: 0.55 },
   forced: { rounds: 2.2, free: 1.2, dist: 5, farS: 14, minN: 50, maxN: 65, fill: 0.62 },
+  // (2026-10-28, Matt: "an 'impossible' category ... 70+ arrows and there's exactly 1 way to solve it ...
+  // only one arrow can be moved at a time. And zero arrows ... from the same column or row facing the same
+  // direction") IMPOSSIBLE: one arrow free at every step (so one order), 70+ arrows, and no trains.
+  impossible: { rounds: 3, free: 12, dist: 3, farS: 8, minN: 73, maxN: 80, fill: 0.7, free0: 1, train: 25 },
+  // (2026-10-28, Matt: "Make them harder. I want a puzzle that's going to take me 5+ minutes of active
+  // focus") IMPOSSIBLE with JUMPS: as impossible, and every next arrow far from the one just removed.
+  jumps: { rounds: 3, free: 12, dist: 3, farS: 8, minN: 60, maxN: 80, fill: 0.62, free0: 1, train: 25, jump: 6, near: 3 },
   // (2026-10-27, Matt: "I think you could upgrade hard a bit too") boards 11-15: a milder mix for
   // Hard: blockers a few dots away, two or three arrows free at a time, a fuller board.
   hard: { rounds: 0.8, free: 0.35, dist: 5, farS: 10, minN: 45, maxN: 55, fill: 0.6, free0: 5, maxR: 26 },
@@ -48,7 +81,8 @@ export const STYLES = {
 function score(m, S) {
   if (!m) return -Infinity;
   return S.rounds * m.rounds - S.free * m.freeSq - 6 * Math.max(0, m.free0 - (S.free0 || 3)) - 4 * Math.max(0, m.rounds - (S.maxR || Infinity)) + S.dist * m.dist + S.farS * m.farShare
-    - 8 * Math.max(0, S.minN - m.n) - 8 * Math.max(0, m.n - S.maxN) - 60 * Math.max(0, S.fill - m.fill);
+    - 8 * Math.max(0, S.minN - m.n) - 8 * Math.max(0, m.n - S.maxN) - 60 * Math.max(0, S.fill - m.fill)
+    - (S.train || 0) * m.trains + (S.jump || 0) * m.jump - (S.near || 0) * m.near;
 }
 
 function clone(a) { return a.map((c) => c.slice()); }

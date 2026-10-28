@@ -766,7 +766,11 @@ class BattleshipUI {
     const size = boardSizeFor(this._placeSizeKey);
     let s = newGame(size, this._placeSizeKey, this._setup.bonusShotOnHit, this._soloStarterSeat);
     // SALVOS vs the bot (2026-10-27): the volley size rides on the game, so a resumed save keeps it
-    if (typeof CH.fireVolley === 'function') s = { ...s, salvo: chShotsOf(this._setup.soloShots) || 3 };
+    if (typeof CH.fireVolley === 'function') {
+      s = { ...s, salvo: chShotsOf(this._setup.soloShots) || 3 };
+      // one bonus shot per hit (2026-10-28), when this build's mp.js knows it
+      if (Array.isArray(CH.SALVO_RULES) && CH.SALVO_RULES.includes(2)) s = { ...s, salvoRule: 2 };
+    }
     s = setFleet(s, 0, this._placeFleet);
     s = setFleet(s, 1, this._botFleet);
     this._botFleet = null;
@@ -1246,7 +1250,7 @@ class BattleshipUI {
         if (n) {
           const local = this._localSeat();
           const cells = this._botVolley(CH.volleyLeft(this.state, this._remoteSeat(), n));
-          const res = CH.fireVolley(this.state, this._remoteSeat(), cells, n);
+          const res = CH.fireVolley(this.state, this._remoteSeat(), cells, n, this._salvoRuleN());
           if (!res.fired.length) return;
           this.state = res.state;
           this._setVolley(res.fired.map(([r, c], i) => ({ seat: local, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
@@ -1359,9 +1363,16 @@ class BattleshipUI {
    *  a game vs the bot started with Shots (`state.salvo`, 2026-10-27). Never a live room. A bot game's
    *  save from an mp.js without volleys (mid-update) falls back to one shot a turn. */
   _salvoN() {
-    if (this.ch) return this.ch.game && this.ch.game.salvo === true ? (chShotsOf(this.ch.game.shots) || 1) : 0;
+    if (this.ch) return this.ch.game && this.ch.game.salvo ? (chShotsOf(this.ch.game.shots) || 1) : 0;
     if (this.mp || !this.state || typeof CH.fireVolley !== 'function') return 0;
     return chShotsOf(this.state.salvo) || 0;
+  }
+
+  /** Which salvo rule this game plays (mp.js "ONE BONUS SHOT PER HIT"): 2 = a hit earns one more
+   *  shot, 1 = any hit earns another full volley (the first day's challenges and bot saves). */
+  _salvoRuleN() {
+    if (this.ch) return this.ch.game && this.ch.game.salvo === 2 ? 2 : 1;
+    return this.state && this.state.salvoRule === 2 ? 2 : 1;
   }
 
   /** How many squares can be aimed at before FIRE: the volley owed in a salvo game, else one. */
@@ -1374,7 +1385,7 @@ class BattleshipUI {
   /** A salvo vs the bot: every aimed square at once (mp.js fireVolley, the challenges' own rule). */
   _soloFireVolley(aims) {
     const target = this._remoteSeat();
-    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), this._salvoN());
+    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), this._salvoN(), this._salvoRuleN());
     if (!res.fired.length) return;
     this.state = res.state;
     this._setVolley(res.fired.map(([r, c], i) => ({ seat: target, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
@@ -3111,7 +3122,8 @@ class BattleshipUI {
   /** The Challenge tab: the board size, New challenge, then your matches (yours first), cut to fit. */
   _chStale() {
     return typeof CH.fireShot !== 'function' || typeof CH.replay !== 'function'
-      || typeof CH.fireVolley !== 'function' || typeof CH.fireSalvoShot !== 'function' || typeof CH.volleyLeft !== 'function';
+      || typeof CH.fireVolley !== 'function' || typeof CH.fireSalvoShot !== 'function' || typeof CH.volleyLeft !== 'function'
+      || !Array.isArray(CH.SALVO_RULES) || !CH.SALVO_RULES.includes(2);
   }
 
   /** After picking a person: the board and shots a turn, then the deploy screen. Every way into a new
@@ -3376,7 +3388,7 @@ class BattleshipUI {
       }
       this._chQueue.shift();
       target = 1 - shooter;
-      const res = salvo ? CH.fireSalvoShot(this.state, shooter, e.r, e.c, per) : CH.fireShot(this.state, shooter, e.r, e.c, per);
+      const res = salvo ? CH.fireSalvoShot(this.state, shooter, e.r, e.c, per, this._salvoRuleN()) : CH.fireShot(this.state, shooter, e.r, e.c, per);
       this.state = res.state;
       shots.push({ seat: target, r: e.r, c: e.c, result: res.answer.result, sunk: res.answer.sunk, cells: res.answer.cells });
       answers.push(res.answer);
@@ -3416,7 +3428,7 @@ class BattleshipUI {
     if (!link || this._chQueue.length || !aims.length) return;
     if (CH.lifeOf(link.game).expired) { this._chHome(t('ch_e_expired')); return; }
     const target = this._remoteSeat();
-    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), link.game.shots);
+    const res = CH.fireVolley(this.state, this._localSeat(), aims.map((a) => [a.r, a.c]), link.game.shots, this._salvoRuleN());
     if (!res.fired.length) return;
     this.state = res.state;
     this._setVolley(res.fired.map(([r, c], i) => ({ seat: target, r, c, result: res.answers[i].result, sunk: res.answers[i].sunk, cells: res.answers[i].cells })));
