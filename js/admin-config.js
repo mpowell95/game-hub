@@ -108,7 +108,9 @@ export function normalizeConfig(raw) {
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
   const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
   const online = (src.online && typeof src.online === 'object') ? src.online : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online };
+  const bee = (src.bee && typeof src.bee === 'object') ? src.bee : {};
+  const beeUndo = (bee.undo && typeof bee.undo === 'object') ? bee.undo : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo } };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -323,6 +325,12 @@ export function resolveDeviceReset(cfg, statsIdOf) {
 }
 
 /** The cached config, normalized. Synchronous, never throws, `{}`-shaped when there is nothing. */
+/** Spelling Bee: has Matt undone the void on this player's day? `bee/undo/<boardKey>/<CODE>` = true. */
+export function resolveBeeUndone(cfg, boardKey, code) {
+  const u = normalizeConfig(cfg).bee.undo[boardKey];
+  return !!(u && typeof u === 'object' && u[code] === true);
+}
+
 export function readCachedConfig() {
   if (_mem) return _mem;
   let raw = null;
@@ -378,6 +386,8 @@ export function corrections() { return resolveCorrections(readCachedConfig()); }
 export function myBoardCorrections(statsIdOf) { return resolveBoardCorrections(readCachedConfig(), statsIdOf); }
 
 /** May this player code play online? Synchronous cache read; see ONLINE_BEFORE above. */
+export function isBeeUndone(boardKey, code) { return resolveBeeUndone(readCachedConfig(), boardKey, code); }
+
 export function isOnlineAllowed(code) { return resolveOnlineAllowed(readCachedConfig(), code); }
 
 /** Subscribe to config changes (a refresh that actually changed something). Returns an unsubscribe. */

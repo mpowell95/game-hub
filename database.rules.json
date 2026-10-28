@@ -92,9 +92,17 @@
           "t0": { ".validate": "newData.isNumber()" },
           "tg": { ".validate": "newData.isNumber()" },
           "ts": { ".validate": "newData.isString() && newData.val().length <= 3000" },
+          "dw": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 500" },
+          "dp": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5000" },
+          "dr": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 9" },
           "$other": { ".validate": false }
         }
       }
+    },
+
+    "beeFlags": {
+      ".read": "auth != null",
+      ".write": false
     },
 
     "beeLog": {

@@ -514,7 +514,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`. Deployed 2026-10-24 (workflow run, Battle
   Arena online): `battleArenaTurnPush` and the `battlearena` rules branch (+ in the nudges key pattern).
-  2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`). 2026-10-27: `beeLog` (every Spelling Bee guess and action, timed).
+  2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`). 2026-10-27: `beeLog` (every Spelling Bee guess and action, timed). 2026-10-28: `beeFlags` (server-written fair-play flags, read by every phone) + `dw`/`dp`/`dr` on `beeDaily` rows.
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
