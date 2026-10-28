@@ -42,7 +42,9 @@ const TABS = [
   { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
   { id: 'wayout', labelKey: 'game_title_wayout' },
-  { id: 'gridlock', labelKey: 'game_title_gridlock' },
+  // devOnly matches js/hub.js (Matt, 2026-10-28: admin-only games off the leaderboard, for everyone).
+  // tools/test-leaderboard-rank.mjs fails if this list and the hub's devOnly list drift apart.
+  { id: 'gridlock', labelKey: 'game_title_gridlock', devOnly: true },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -76,21 +78,23 @@ const TABS = [
   // Flick Soccer (2026-10-11): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'flicksoccer', labelKey: 'game_title_flicksoccer' },
-  // Archery (2026-10-14): admin only at first, NOT devOnly here (Darts' reasoning above).
+  // Archery (2026-10-14): admin only, so devOnly here too (2026-10-28: without it the leaderboard
+  // showed it to every player). Releasing it from the admin page still shows it (visibleTabs and
+  // isGameOnLauncher resolve the admin switch); the release commit drops this flag with the hub's.
   // total/byDiff only, so the generic screen draws it.
-  { id: 'archery', labelKey: 'game_title_archery' },
+  { id: 'archery', labelKey: 'game_title_archery', devOnly: true },
   // Pool (2026-10-22, eight-ball/): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'eightball', labelKey: 'game_title_eightball' },
   // Cup Baseball (2026-10-23, cup-baseball/): admin only at first, NOT devOnly here (Darts' reasoning
-  // above). total/byDiff only, so the generic screen draws it.
-  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball' },
+  // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
+  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball', devOnly: true },
   // Spelling Bee (2026-10-23, spelling-bee/): admin only at first, NOT devOnly here (Darts' reasoning
   // above). total/byDiff only (a win = a puzzle taken to Genius), so the generic screen draws it.
   { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
   // Battle Arena (2026-10-24, battle-arena/): admin only at first, NOT devOnly here (Darts' reasoning
-  // above). total/byDiff only, so the generic screen draws it.
-  { id: 'battlearena', labelKey: 'game_title_battlearena' },
+  // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
+  { id: 'battlearena', labelKey: 'game_title_battlearena', devOnly: true },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
@@ -144,7 +148,8 @@ function visibleTabs() {
  *  the same question the hub card asks, rather than keeping a third copy of "which games are
  *  released". Matt: *"hide admin only games from the leaderboard too."* `js/hub.js` computes
  *  `isGameLive(g.id, !g.devOnly) || dev`; this is that, with `hubIdOf` in front and TABS supplying
- *  the same `devOnly` default the hub registry does.
+ *  the same `devOnly` default the hub registry does, but WITHOUT `|| dev` since 2026-10-28 (Matt:
+ *  admin-only games off the leaderboard "not for me and not for anyone else").
  *
  *  **It is NOT visibleTabs() above, and the difference is the point.** That one passes any tab that
  *  is not `devOnly`, so a game hidden by an admin OVERRIDE still has its My Stats screen - which is
@@ -152,13 +157,12 @@ function visibleTabs() {
  *  rule 1: the leaderboard is the bragging wall and may hide an unreleased game; My Stats is that
  *  person's own ledger and must not). Do not "unify" the two: the asymmetry is load-bearing. */
 export function isGameOnLauncher(statsId) {
-  let dev = false;
-  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
   const tab = TABS.find((x) => x.id === statsId);
   // A RETIRED build is never on the launcher, for anyone, dev included: there is no card to tap.
   // Checked before the dev bypass for that reason.
   if (tab && tab.retired) return false;
-  if (dev) return true;
+  // NO dev bypass on the board (Matt, 2026-10-28: "Admin only games should not appear on the
+  // leaderboard. Not for me and not for anyone else"). The leaderboard is its only caller.
   return isGameLive(hubIdOf(statsId), !(tab && tab.devOnly));
 }
 
@@ -1378,7 +1382,12 @@ export function gameListHTML(games, opts) {
   // games first; My Stats keeps the A-Z order it has always had.
   const plays = (id) => (((g[id] || {}).total || {}).played) | 0;
   const byPlays = !!(opts && opts.order === 'plays');
+  // `board: true` (the leaderboard's player page): a never-released admin-only game is off it even
+  // for Matt (2026-10-28). A game PULLED BACK by an admin override is not devOnly, so it stays
+  // (THE LAW rule 1, the note above isGameOnLauncher).
+  const board = !!(opts && opts.board);
   const rows = visibleTabs()
+    .filter((tab) => !(board && tab.devOnly && !isGameLive(hubIdOf(tab.id), false)))
     .filter((tab) => hasPlays(tab.id, g[tab.id] || {}))
     .sort((a, b) => (byPlays ? plays(b.id) - plays(a.id) : 0) || t(a.labelKey).localeCompare(t(b.labelKey)))
     .map((tab) => {

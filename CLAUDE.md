@@ -632,7 +632,9 @@ no Default buttons.
   `sk.unlocked`; moving a machine back never deletes an earned unlock. A Testing machine records to
   `sk.practice`, which counts for nothing.
 - **An admin-only game is hidden from the launcher AND the leaderboard** via one helper,
-  `isGameOnLauncher(statsId)`. **Never filter `GAME_META`, the player-detail game list or stored
+  `isGameOnLauncher(statsId)`. **Off the leaderboard even for Matt and dev profiles** (Matt, 2026-10-28: "Not for me and not
+  for anyone else"); `game-stats-ui.js` TABS mark the same games `devOnly` as the hub (a test checks), and the release
+  commit drops both flags. **Never filter `GAME_META`, the player-detail game list or stored
   data with it** (wins would vanish from totals). `visibleTabs()` keeps its own, more permissive
   rule on purpose; do not unify them.
 - `hideFrom: ['<CODE>']` on a `GAMES` entry hides a game from named players (never Matt/dev).

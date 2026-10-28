@@ -1381,3 +1381,15 @@ Matt or test1 could still CHALLENGE a regular player in an admin-only game (Arch
 would push them, write their index row and show the chat in Messages for a game they cannot see. Now every
 challenge picker filters, and every createGame refuses, a person whose launcher hides that game (dev
 profiles and admin-page `allow` codes excepted). Checked live that day: no archery/battlearena index rows existed.
+
+
+## Admin-only games off the leaderboard, for everyone (2026-10-28)
+
+Matt (screenshot: Archery and Baseball on By Game): "Admin only games should not appear on the leaderboard. Not for
+me and not for anyone else." Two faults. (1) `isGameOnLauncher` let dev profiles through, so Matt saw them. (2) Worse:
+`game-stats-ui.js` TABS had Archery, Cup Baseball, Battle Arena and Gridlock NOT `devOnly` (the "Darts' reasoning"
+comment, which assumed a devOnly tab stays hidden after an admin release; it does not, `isGameLive` resolves the
+switch), so isGameOnLauncher returned true for EVERY player: they saw those boards on By Game and on Matt's player
+page. Fixed: no dev bypass; TABS devOnly now match the hub (tools/test-leaderboard-rank.mjs fails on drift); the
+player page passes `board: true` to drop never-released admin-only games. Checked players/ that day: only MattyIce had
+plays in any of them, so no player's My Stats lost a row. Cross-game totals (ALL_IDS) still count them (rule 1).

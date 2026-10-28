@@ -2416,7 +2416,7 @@ function playerDetail(list, key) {
     ${sendMsgHTML(g)}
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays' });
+  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays', board: true });
 }
 
 // --- shared shell -------------------------------------------------------------
