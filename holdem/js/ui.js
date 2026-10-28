@@ -14,7 +14,7 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { corrections } from '../../js/admin-config.js';
 import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
@@ -492,7 +492,7 @@ class Game {
       const [net, agg] = await Promise.all([import('../../js/stats-net.js'), import('../../js/players-agg.js')]);
       const all = await Promise.race([net.readPlayersForMe(), new Promise((res) => setTimeout(() => res(null), BANK_TIMEOUT_MS))]);
       if (!all || this.dead) return;
-      const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats(), corrections());
+      const mine = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStoredStats(), corrections());
       const hb = mine && mine.games && mine.games.holdem && mine.games.holdem.hb;
       if (!hb) return;
       const l = this._myLedger();

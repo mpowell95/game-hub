@@ -180,7 +180,7 @@ export async function loadLiveRecords() {
       // Own devices in full + everyone's name (2026-10-22): the same records (tools/test-boards.mjs).
       all = await Promise.race([readPlayersForMe(), new Promise((res) => setTimeout(() => res({}), 8000))]) || {};
     } catch { all = {}; }
-    return liveRecords(all, loadProfile() || {}, gs.statsId(), gs.loadStats(), corrections());
+    return liveRecords(all, loadProfile() || {}, gs.statsId(), gs.loadStoredStats(), corrections());
   } catch (err) {
     console.warn('[mp-records] could not read the live-game records', err);
     return { byGame: {}, people: [] };

@@ -12,7 +12,7 @@
 // belong to whom).
 
 import { loadProfile } from './profile-store.js';
-import { loadStats, deviceId, statsId, statsKey, statsOwner, FORK_KEY } from './game-stats.js';
+import { loadStoredStats, deviceId, statsId, statsKey, statsOwner, FORK_KEY } from './game-stats.js';
 import { syncHealth } from './stats-net.js';
 import { getStatsApp } from './firebase-boot.js';
 
@@ -49,7 +49,7 @@ async function gatherLocal() {
   // page load that must stay side-effect-free.
   const id = deviceId();
   const profile = loadProfile();
-  const stats = loadStats();
+  const stats = loadStoredStats();
   const favorites = readJSON('gamehub.favorites.v1');
   let health = null;
   try { health = syncHealth(); } catch { /* stats-net not booted yet */ }

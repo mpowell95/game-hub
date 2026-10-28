@@ -274,6 +274,7 @@ import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest, wwStarsFor } from './word-weaver-points.js';
+import { isGameLive } from './admin-config.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -1311,7 +1312,7 @@ function verifyEscobaMpSplit(st, persisted) {
 // for every game that shares this store.
 function persist(st) {
   const key = statsKey();
-  try { localStorage.setItem(key, JSON.stringify(st)); return true; }
+  try { localStorage.setItem(key, JSON.stringify(storedShape(st))); return true; }
   catch (err) { console.error(`[game-stats] persist failed, this write was not saved (${key})`, err); return false; }
 }
 
@@ -1352,6 +1353,79 @@ function resetKingOfGamesSkeeball(st) {
   } catch (err) { console.error('[game-stats] KoG Skeeball reset failed', err); return false; }
 }
 
+// --- ADMIN-ONLY GAMES PLAY INTO A TEST AREA (Matt, 2026-10-28) -----------------------------------
+//
+// Matt: "admin only games should be released with 0 plays by anyone... Leave all data as is, and
+// start doing this going forward." While a game is admin-only, loadStats() hands every caller a
+// view in which `games.<id>` (and `h2h.<id>`) IS that game's test record, kept in the store under
+// `testGames.<id>` / `testH2h.<id>` (new fields, THE LAW rule 5). So the recorders and the games'
+// own progress reads (Gridlock's cleared levels, Battle Arena's unlocks) work unchanged during
+// testing, while the REAL record is left exactly as it was (a new test record starts as a copy of
+// it, so a tester's progress carries on). persist() always writes the stored
+// shape back (real record under `games`, test record under `testGames`), and everything that shows
+// or uploads stats reads loadStoredStats(), so a test play can never reach a leaderboard, My Stats
+// or players/. At release (no longer admin-only) the swap stops and the game starts on its real
+// record. Plays recorded before this existed sit in the real record and count (Matt's choice).
+// Nothing is moved, zeroed or deleted; `testGames` is kept forever, counted by nothing.
+//
+// Stats id -> hub id for every game js/hub.js marks devOnly (tools/test-leaderboard-rank.mjs fails
+// if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
+export const ADMIN_ONLY = {
+  archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
+  gridlock: 'gridlock', wordweaver: 'word-weaver',
+};
+/** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
+export function isTestGame(id) {
+  const hub = Object.prototype.hasOwnProperty.call(ADMIN_ONLY, id) ? ADMIN_ONLY[id] : '';
+  if (!hub) return false;
+  try { return !isGameLive(hub, false); } catch { return true; }
+}
+const REAL = Symbol('realRecords');
+const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const clone = (v) => JSON.parse(JSON.stringify(v));
+/** Put each admin-only game's test record where the recorders and the game look. */
+function swapInTestGames(st) {
+  const real = { games: {}, h2h: {} };
+  let any = false;
+  for (const id of Object.keys(ADMIN_ONLY)) {
+    if (GAMES.indexOf(id) < 0 || !isTestGame(id)) continue;
+    if (!isObj(st.testGames)) st.testGames = {};
+    real.games[id] = st.games[id];
+    // A test record that does not exist yet STARTS AS A COPY of the real one, so a tester's own
+    // progress (Gridlock's levels, Battle Arena's unlocks) carries on. The real record is untouched.
+    st.games[id] = isObj(st.testGames[id]) ? st.testGames[id] : clone(st.games[id] || {});
+    const hasRealH2h = isObj(st.h2h) && Object.prototype.hasOwnProperty.call(st.h2h, id);
+    real.h2h[id] = hasRealH2h ? st.h2h[id] : undefined;
+    const testH2h = isObj(st.testH2h) && isObj(st.testH2h[id]) ? st.testH2h[id] : (hasRealH2h && isObj(st.h2h[id]) ? clone(st.h2h[id]) : null);
+    if (testH2h) { if (!isObj(st.h2h)) st.h2h = {}; st.h2h[id] = testH2h; }
+    else if (isObj(st.h2h)) delete st.h2h[id];
+    any = true;
+  }
+  if (!any) return st;
+  Object.defineProperty(st, REAL, { value: real, enumerable: false, configurable: true });
+  normalize(st);   // fill a fresh test record's shape (total/byDiff + its sub-counter)
+  return st;
+}
+/** The store as it is SAVED: real records under `games`/`h2h`, test records under `testGames`/`testH2h`. */
+function storedShape(st) {
+  const real = st && st[REAL];
+  if (!real) return st;
+  const out = { ...st, games: { ...st.games }, testGames: { ...(st.testGames || {}) } };
+  const h2h = isObj(st.h2h) ? { ...st.h2h } : null;
+  const testH2h = { ...(isObj(st.testH2h) ? st.testH2h : {}) };
+  for (const id of Object.keys(real.games)) {
+    out.testGames[id] = st.games[id];
+    out.games[id] = real.games[id];
+    if (h2h && isObj(h2h[id])) testH2h[id] = h2h[id];
+    if (real.h2h[id] === undefined) { if (h2h) delete h2h[id]; } else { (out.h2h = h2h || {})[id] = real.h2h[id]; }
+  }
+  if (h2h) out.h2h = h2h;
+  if (Object.keys(testH2h).length) out.testH2h = testH2h;
+  return out;
+}
+/** The stats as STORED (no test swap): for everything that shows or uploads stats. */
+export function loadStoredStats() { return storedShape(loadStats()); }
+
 /** The unified stats, with the legacy stores folded in (persisted the first time). */
 export function loadStats() {
   const store = resolveStore();
@@ -1382,6 +1456,7 @@ export function loadStats() {
   const movedAny = splitRan && st.games.escoba.esMpSplit && st.games.escoba.esMpSplit.moved.played > 0;
   // Queued results are folded in BEFORE the write below, so a queued result and a migration that
   // both land on the same load are saved together rather than one overwriting the other.
+  swapInTestGames(st);   // admin-only games: the view below plays into their test record
   const drained = drainPendingResults(st);
   changed = drained || changed;
   changed = resetKingOfGamesSkeeball(st) || changed;   // one-time, one-device (see the function's note)
