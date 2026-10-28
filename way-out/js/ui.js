@@ -20,7 +20,8 @@ import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel,
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
-import { IMPOSSIBLE_TESTS, IMP_W, IMP_H } from './impossible-tests.js';
+import * as IMPT from './impossible-tests.js';
+const { IMPOSSIBLE_TESTS, IMP_W, IMP_H } = IMPT;
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
@@ -1087,7 +1088,9 @@ class WayOut {
     this._helpPaused = false;
     this.src = { k: 'R', test: n };
     this.gen = 0;
-    this.lvl = { cols: IMP_W, rows: IMP_H, arrows: arrows.map((c) => c.slice()) };
+    // Each board's own grid (boards 7-8 are 18 wide, 2026-10-28); older files had one for all.
+    const [cols, rows] = (IMPT.IMPOSSIBLE_GRID && IMPT.IMPOSSIBLE_GRID[n - 1]) || [IMP_W, IMP_H];
+    this.lvl = { cols, rows, arrows: arrows.map((c) => c.slice()) };
     this._resetBoard(null);
     this.clock = { n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
     this.screen = 'play';

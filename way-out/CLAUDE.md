@@ -308,6 +308,11 @@ minutes of active focus"*): the next free arrow sat ~2 dots from the one just re
 `measure()` now reports **jumps** (that distance) and style `jumps` rewards them. On 16x22 more arrows means
 shorter jumps, so boards **4-6** are three trade-offs: 34 arrows / ~7 dots, 46 / ~5.4, 50 / ~5.1 (boards 1-3
 unchanged; the tool appends).
+**Round 3 (same day)**: Matt's times (penalties out): boards 1-2 ~1.0-1.4 s a move, 5-6 ~1.7-1.9, **4 (long jumps)
+3.2 s**; *"None of them are difficult as is"*; *"make 2 at 18 wide"*. Boards **7-8 are 18x25** (`setGrid` in
+`arrow-search.mjs`; `IMPOSSIBLE_GRID` gives each board's grid): 7 = 43 arrows, next arrow ~7.9 dots away, 85%
+of blockers 4+ dots off; 8 = 52 arrows, ~6.3 dots, 77%. His results are on his phone only (the 🧪 list
+shows them; nothing uploads).
 
 ## Test boards (2026-10-26, removed 2026-10-27)
 

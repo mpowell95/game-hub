@@ -3,7 +3,10 @@
 // (tools/build-arrow-tricky.mjs, removed 2026-10-27 with them; in git history). Pure maths on a 16x22 grid; every board it keeps is proved solvable by
 // peel. Changing ANY of it changes what both tools build: the shipped files are pinned by test.js.
 const E = await import('../way-out/js/engine.js');
-export const W = 16, H = 22;
+export let W = 16, H = 22;
+/** The grid the search works on (2026-10-28: Impossible tests at 18 wide). 16x22 unless set; every
+ *  shipped board file was built on 16x22, and its tool never calls this. */
+export function setGrid(w, h) { W = w; H = h; }
 /** A move whose next arrow is closer than this (dots) to the arrow just removed is "near" (no searching). */
 export const JUMP_MIN = 5;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
