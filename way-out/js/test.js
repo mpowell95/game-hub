@@ -319,10 +319,10 @@ function checkLadder(gen, from, to) {
 // behind it pointing the same way in its row or column (no "trains").
 {
   const { IMPOSSIBLE_TESTS, IMP_W: W, IMP_H: H } = await import('./impossible-tests.js');
-  let good = IMPOSSIBLE_TESTS.length >= 3;
+  let good = IMPOSSIBLE_TESTS.length >= 6;
   for (const arrows of IMPOSSIBLE_TESTS) {
     const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false);
-    if (n < 70) good = false;
+    if (n < (IMPOSSIBLE_TESTS.indexOf(arrows) < 3 ? 70 : 32)) good = false;
     let prev = -1;
     for (let step = 0; step < n; step++) {
       const occ = occupancy(lvl, gone);
@@ -342,7 +342,21 @@ function checkLadder(gen, from, to) {
       gone[id] = true; prev = id;
     }
   }
-  ok('impossible tests: 70+ arrows, exactly one arrow free at every step, no trains', good);
+  ok('impossible tests: 1-3 70+ arrows, 4-6 jump boards; exactly one arrow free at every step, no trains', good);
+  // Boards 4-6 (round 2): on average the next free arrow's head is 5+ dots from the arrow just removed.
+  let jumps = true;
+  for (const arrows of IMPOSSIBLE_TESTS.slice(3)) {
+    const lvl = { cols: W, rows: H, arrows }, gone = new Array(arrows.length).fill(false), d = [];
+    let prev = -1;
+    for (let step = 0; step < arrows.length; step++) {
+      const occ = occupancy(lvl, gone);
+      const id = arrows.findIndex((c, i) => !gone[i] && !blockerOf(c, occ, W, H, i));
+      if (prev >= 0) { const h = arrows[id][arrows[id].length - 1]; d.push(Math.min(...arrows[prev].map((p) => Math.abs((p % W) - (h % W)) + Math.abs(((p / W) | 0) - ((h / W) | 0))))); }
+      gone[id] = true; prev = id;
+    }
+    if (d.reduce((a, b) => a + b, 0) / d.length < 5) jumps = false;
+  }
+  ok('impossible tests 4-6: the next arrow is 5+ dots away on average', jumps);
 }
 
 // RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different
