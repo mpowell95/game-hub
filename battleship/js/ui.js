@@ -2115,11 +2115,18 @@ class BattleshipUI {
 
     const cap = this._aimCap();
     const ready = this._aims.length && this._aims.length >= cap && isMyTurn && !this.busy && !s.over;
+    // Shots left this turn, big, beside the board (Matt, 2026-10-28: "show the shots left on screen each
+    // turn"; with 5s shrinking 5, 4, 3, 2 the count changes turn to turn). Counts down as you aim; FIRE
+    // takes its place at 0. Salvo games of 3 or 5 only (a bonus volley of 1 shows 1).
+    const left = Math.max(0, cap - this._aims.length);
+    const showLeft = !ready && isMyTurn && !this.busy && !s.over && this._salvoN() > 1;
     this._patchHtml(battle.querySelector('[data-slot="actions"]'), `
       <button type="button" class="bs-iconbtn bs-iconbtn-sm" data-action="help" aria-label="${esc(t('howto'))}" title="${esc(t('howto'))}">${ICON_HELP}</button>
       ${ready
         ? `<button type="button" class="bs-firebtn" data-action="fire-confirm">${ICON_TARGET}${esc(t('fire'))}</button>`
-        : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
+        : showLeft
+          ? `<span class="bs-shotsleft" role="img" aria-label="${esc(t('shots_left', { n: left }))}"><b>${left}</b><span class="bs-shotsleft-dots" aria-hidden="true">${'<i></i>'.repeat(left)}${'<i class="is-used"></i>'.repeat(cap - left)}</span></span>`
+          : `<span class="bs-shotcount" role="img" aria-label="${esc(t('shots_fired', { n: s.shotCount[this._localSeat()] | 0 }))}">${ICON_TARGET}${s.shotCount[this._localSeat()] | 0}</span>`}
       ${this.mp
         ? ''
         : this.ch

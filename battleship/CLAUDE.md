@@ -341,6 +341,8 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   (bot games `state.salvoRule: 3`): each side's own turns open with 5, 4, 3, then 2 for the rest (`chTurns`,
   `openingVolley`); bonus volleys are not turns. 1 and 3 a turn stay rule 2. Why: going first with 5 won ~59%
   in bot sims; this gives ~52%. `_chStale` refuses an mp.js without rule 3.
+- **Shots left (Matt, 2026-10-28: "show the shots left on screen each turn")**: on your turn in a 3/5 salvo game
+  a big count + dots (`.bs-shotsleft`) sits where FIRE goes, counting down as you aim; FIRE replaces it at 0.
 - **Older matches keep their stored rule** (THE LAW: the rule travels with the match): no `salvo` = a hit
   shoots again and a turn is N MISSES (`fireShot`, `chLeft`); no `shots` = 1.
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot

@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1305;
-const CACHE = 'game-hub-v1307';
+const CACHE = 'game-hub-v1308';
 
 const ASSETS = [
   './',
@@ -1215,8 +1215,8 @@ const REST_MANIFEST = {
   './yahtzee/js/hash.js': '14b905be65',
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
-  './battleship/css/battleship.css': 'ebd43ea88d',
-  './battleship/js/ui.js': '1b1fcab875',
+  './battleship/css/battleship.css': 'dbfd9edb07',
+  './battleship/js/ui.js': '97a2686070',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',
