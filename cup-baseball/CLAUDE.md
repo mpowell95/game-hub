@@ -14,7 +14,10 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 - Four cups in a line down the middle of each end: **single nearest the shooter, then double,
   triple, home run** at the back, **TOUCHING, one straight line** (Matt, 2026-10-23; `js/field.js CUPS`,
   pitch `CUP_D`, Cup Pong's rack pitch).
-- Ball in a cup = that hit; ball in no cup = **an out**. **2 outs and the sides switch.**
+- Ball in a cup = that hit. **2 outs and the sides switch.**
+- **Strikes (Matt, 2026-10-28, "calling outs too easily")**: touches the table or a cup, no cup = a **strike**;
+  the **2nd strike is an out**. Misses the table completely = an out at once. Strikes reset after a hit or an out
+  (`game.js STRIKES`; `touched` = the physics' `tableHits`/`touchedCup`). HUD: S circle beside the O circles.
 - **No defensive shot back** (Matt said no to that variant).
 - Every runner moves as many bases as the batter (a double moves first to third).
 - Innings 3 / 5 / 9 (default 3). Real baseball's end: the side batting second skips the last bottom

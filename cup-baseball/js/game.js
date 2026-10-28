@@ -2,7 +2,11 @@
 //
 // Matt's house rules (2026-10-23): four cups in a line on each end of the table, single nearest the
 // shooter, then double, triple, home run at the far end. The batting side throws; a ball in a cup is
-// that hit, a ball in no cup is an OUT. TWO outs and the sides switch. No defensive shot back.
+// that hit. TWO outs and the sides switch. No defensive shot back.
+//
+// Strikes (Matt, 2026-10-28): a ball that touches the table or a cup and stays out of every cup is a
+// STRIKE; the batter's second strike is an out. A ball that misses the table completely is an out.
+// Strikes reset after every hit and every out.
 //
 // Base running is the drinking game's: every runner moves as many bases as the batter (a double
 // moves a runner on first to third). A runner who reaches home scores.
@@ -11,10 +15,11 @@
 // second does not bat in the last inning if it is already ahead, and wins the moment it goes ahead
 // there (walk-off). A tie after the last inning plays extra innings until it is broken.
 //
-// Public surface: new Game({ innings, first }), g.throwResult(hit) -> events, g.batting,
+// Public surface: new Game({ innings, first }), g.throwResult(hit, strike) -> events, g.batting,
 // g.fielding, plus read-only state for the screen.
 
 export const OUTS = 2;
+export const STRIKES = 2;                 // the second strike is an out
 export const HITS = [1, 2, 3, 4];          // single, double, triple, home run
 export const INNINGS = [3, 5, 9];
 
@@ -27,6 +32,7 @@ export class Game {
     this.inning = 1;
     this.half = 0;                         // 0 = top (first side bats), 1 = bottom
     this.outs = 0;
+    this.strikes = 0;
     this.bases = [false, false, false];    // first, second, third
     this.runs = { a: 0, b: 0 };
     this.line = { [this.first]: [0], [this.second]: [] };   // runs per inning, as a scoreboard shows them
@@ -39,13 +45,20 @@ export class Game {
   get batting() { return this.half === 0 ? this.first : this.second; }
   get fielding() { return this.half === 0 ? this.second : this.first; }
 
-  /** One throw. `hit` is 1-4 (the cup it went in) or 0 / null for an out. Returns the events. */
-  throwResult(hit) {
+  /** One throw. `hit` is 1-4 (the cup it went in) or 0 / null for no cup; `strike` is true when that
+   *  ball touched the table or a cup (false = it missed the table: an out). Returns the events. */
+  throwResult(hit, strike = false) {
     if (this.over) return [];
     const ev = [];
     const side = this.batting;
     this.throws++;
     const n = HITS.includes(hit) ? hit : 0;
+    if (!n && strike) {
+      this.strikes++;
+      ev.push({ type: 'strike', side, strikes: this.strikes });
+      if (this.strikes < STRIKES) return ev;
+    }
+    this.strikes = 0;
     if (!n) {
       this.outs++;
       ev.push({ type: 'out', side, outs: this.outs });
@@ -108,4 +121,4 @@ export class Game {
   }
 }
 
-export default { Game, OUTS, HITS, INNINGS };
+export default { Game, OUTS, STRIKES, HITS, INNINGS };

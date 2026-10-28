@@ -74,16 +74,17 @@ const reducedMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
 };
 
-/** The bases and outs, drawn: an occupied base is a FILLED diamond, an empty one an outline; an out
- *  is a filled circle. Shape and fill carry it, never colour alone. */
-function diamondSVG(bases, outs) {
+/** The bases, strikes and outs, drawn: an occupied base is a FILLED diamond, an empty one an outline;
+ *  a strike (S) or an out (O) is a filled circle. Shape, fill and letter carry it, never colour alone. */
+function diamondSVG(bases, outs, strikes) {
   const base = (x, y, on) => `<rect x="${x - 7}" y="${y - 7}" width="14" height="14" transform="rotate(45 ${x} ${y})"
     class="${on ? 'is-on' : ''}"/>`;
   const out = (x, on) => `<circle cx="${x}" cy="62" r="5" class="${on ? 'is-on' : ''}"/>`;
   return `<svg viewBox="0 0 64 70" width="110" height="120" aria-hidden="true">
     ${base(48, 26, bases[0])}${base(32, 10, bases[1])}${base(16, 26, bases[2])}
     <rect x="27" y="37" width="10" height="10" transform="rotate(45 32 42)" class="cb-home"/>
-    ${out(25, outs >= 1)}${out(39, outs >= 2)}</svg>`;
+    <text x="3" y="65.5" class="cb-dia-txt">S</text>${out(16, strikes >= 1)}
+    <text x="29" y="65.5" class="cb-dia-txt">O</text>${out(43, outs >= 1)}${out(56, outs >= 2)}</svg>`;
 }
 
 /** How to play's diagram: the four cups in a line, the shooter's ball below, each cup's hit beside it. */
@@ -191,6 +192,7 @@ class CupBaseball {
         <p class="cb-help-goal">${t('helpGoal')}</p>
         ${HELP_SVG}
         <p class="cb-help-line">${t('helpCups')}</p>
+        <p class="cb-help-line">${t('helpStrike')}</p>
         <p class="cb-help-line">${t('helpEx')}</p>
         <p class="cb-help-line">${t('helpOuts')}</p>
         <p class="cb-help-line">${t('helpTie')}</p>
@@ -276,9 +278,9 @@ class CupBaseball {
     sub.textContent = t('score', { a: N.a, ra: g.runs.a, rb: g.runs.b, b: N.b })
       + ' · ' + t(g.half === 0 ? 'top' : 'bottom', { n: g.inning });
     if (dia) {
-      dia.innerHTML = diamondSVG(g.bases, g.outs);
+      dia.innerHTML = diamondSVG(g.bases, g.outs, g.strikes);
       const on = ['1B', '2B', '3B'].filter((_, i) => g.bases[i]);
-      dia.setAttribute('aria-label', `${t('bases')}: ${on.join(', ') || '0'}. ${t('outsLabel')}: ${g.outs}`);
+      dia.setAttribute('aria-label', `${t('bases')}: ${on.join(', ') || '0'}. ${t('strikesLabel')}: ${g.strikes}. ${t('outsLabel')}: ${g.outs}`);
     }
   }
 
@@ -360,11 +362,12 @@ class CupBaseball {
   /** Whose cups a throw in the air is going at: the computer throws from the far end at side a's. */
   get rackSide() { return this.shooter === 'b' ? 'a' : 'b'; }
 
-  /** A throw has resolved: the rules decide, the screen says it, what comes next waits. */
-  applyThrow(outcome) {
+  /** A throw has resolved: the rules decide, the screen says it, what comes next waits. `touched` =
+   *  the ball hit the table or a cup (no cup = a strike); a ball that touched neither is an out. */
+  applyThrow(outcome, touched) {
     const g = this.game;
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
-    const ev = g.throwResult(made ? hitOf(made) : 0);
+    const ev = g.throwResult(made ? hitOf(made) : 0, !!touched);
     this.throwState = null;
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = true;
@@ -372,12 +375,14 @@ class CupBaseball {
     const switched = ev.some((e) => e.type === 'side');
     const won = ev.find((e) => e.type === 'win');
     const extra = ev.some((e) => e.type === 'extra');
+    const out = ev.some((e) => e.type === 'out');
     let word;
     if (hit) {
       word = t(HIT_WORD[hit.n]);
       if (hit.runs) word += ' ' + (hit.runs === 1 ? t('runs1') : t('runsN', { n: hit.runs }));
       if (won) word = t('walkOff') + ' ' + word;
-    } else word = switched || won ? t('outs2') : t('out');
+    } else if (!out) word = t('strike');
+    else word = switched || won ? t('outs2') : t('out');
     this.toast(word, hit ? 1500 : 1100);
     this.paintHud();
     if (won) { this.finish(); return; }
@@ -564,9 +569,10 @@ class CupBaseball {
     } else if (ev.type === 'done') {
       const o = ev.outcome;
       const st = this.throwState;
+      const touched = !!(st && (st.tableHits > 0 || st.touchedCup));
       this.throwState = { done: true, ball: st && st.ball };
       this.busy = true;
-      this.later(() => this.applyThrow(o), o.kind === 'made' ? 250 : SETTLE_MS);
+      this.later(() => this.applyThrow(o, touched), o.kind === 'made' ? 250 : SETTLE_MS);
     }
   }
 
