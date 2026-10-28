@@ -109,6 +109,25 @@
       ".write": false
     },
 
+    "playLog": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      "$code": {
+        "$k": {
+          ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
+          ".validate": "$k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'g', 's'])",
+          "t": { ".validate": "newData.isNumber()" },
+          "s": { ".validate": "newData.val() === now" },
+          "g": { ".validate": "newData.isString() && newData.val().length <= 24" },
+          "f": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "a": { ".validate": "newData.isString() && newData.val().length <= 1600" },
+          "e": { ".validate": "newData.isString() && newData.val().length <= 12" },
+          "k": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "w": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "r": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
     "beeLog": {
       "$puzzle": {
         ".read": "auth != null",

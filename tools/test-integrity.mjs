@@ -67,8 +67,7 @@ const honest = G.loadStoredStats();
 const honestHits = I.checkStats(honest);
 const strongHonest = Object.entries(honestHits).flatMap(([g, l]) => l.filter((h) => h.void).map((h) => `${g}:${h.rule}`));
 ok('the recorders\' own records break no strong rule, at every limit', strongHonest.length === 0, strongHonest.join(', '));
-ok('...the only alert is the 1-guess Contexto, which is an alert, never a void',
-  JSON.stringify(Object.keys(honestHits)) === '["contexto"]' && honestHits.contexto.every((h) => !h.void && h.rule === 'contexto-first-guess'));
+ok('...and no alert either (a 1-typed-guess Contexto, hints or not, is honest play: that alert was dropped)', JSON.stringify(honestHits) === '{}', JSON.stringify(honestHits));
 
 // --- tampered records ---------------------------------------------------------------------------
 console.log('\n--- a number the game cannot produce is caught ---');
@@ -188,8 +187,8 @@ function fakeDb(tree) {
   const db = fakeDb({});
   const r1 = await S.writeFlags(db, players, 1000);
   const w = r1.written.map((f) => `${f.id}/${f.gid}/${f.rule}`).sort();
-  ok('the first pass flags the cheat (void) and both 1-guess Contextos (alerts), never a test name',
-    JSON.stringify(w) === JSON.stringify(['cheat1/contexto/contexto-first-guess', 'cheat1/snake/snake-longer-than-board', 'good1/contexto/contexto-first-guess']), JSON.stringify(w));
+  ok('the first pass flags the cheat, never the honest record or a test name',
+    JSON.stringify(w) === JSON.stringify(['cheat1/snake/snake-longer-than-board']), JSON.stringify(w));
   ok('the flag holds the numbers, the name and the code', JSON.stringify(db.tree.integrityFlags.cheat1.snake['snake-longer-than-board'])
     === JSON.stringify({ void: true, v: 999, lim: 255, name: 'Cheat', code: 'AAAAA', when: 1000 }));
   const r2 = await S.writeFlags(db, players, 2000);
@@ -259,6 +258,38 @@ console.log('\n--- wiring ---');
   const ui = read('js/admin-ui.js');
   ok('admin page: a section, read from both nodes, one button per row (Void an alert, Undo a void)', /sec\('integrity'/.test(ui) && /get\('integrityFlags'\), get\('integrityAlerts'\)/.test(ui) && /setIntegrityVoided\(id, gid, voided\)/.test(ui) && /data-ivset="\$\{voided \? 'count' : 'void'\}"/.test(ui));
   ok('hoops: validateGame checks the stored result against the moves', /if \(over\.why !== 'resign' && !sameResult\(replayResult\(moves\), over\.winner\)\) return null;/.test(read('hoops4/js/mp.js')));
+}
+
+// --- the play log ---------------------------------------------------------------------------------
+console.log('\n--- the play log: every finished game, every Contexto guess ---');
+{
+  const Q = await import('../js/play-log-queue.js');
+  const read = (p) => readFileSync(new URL(p, new URL('..', import.meta.url)), 'utf8');
+  localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'test1', playerId: 'DREG5' }));
+  const before = Q.readQueue().length;
+  G.recordSnake(42, 'hard', 'on');
+  G.recordSudoku('easy', { timeMs: 123456, mistakes: 1, hints: 0 });
+  const q = Q.readQueue();
+  const snake = q.find((x) => x.f === 'recordSnake' && x.a === '[42,"hard","on"]');
+  ok('a recorder logs its game, the time, the code and its own arguments', q.length === before + 2 && snake && snake.g === 'snake' && snake.c === 'DREG5'
+    && Math.abs(snake.t - Date.now()) < 5000 && /^[0-9]{13}-[0-9]{1,4}$/.test(snake.id));
+  ok('...with the numbers (a Sudoku time)', q.some((x) => x.f === 'recordSudoku' && JSON.parse(x.a)[1].timeMs === 123456));
+  const src = read('js/game-stats.js');
+  const recs = [...src.matchAll(/^export function (record\w+)\(/gm)].map((m) => m[1]);
+  const missing = recs.filter((r) => { const i = src.indexOf(`export function ${r}(`); return !src.slice(i, src.indexOf('\n}\n', i)).includes(`notePlay(`); });
+  ok(`every recorder logs (${recs.length})`, missing.length === 0, missing.join(', '));
+  Q.appendPlayLog('nope', { g: 'x' }); Q.appendPlayLog('DREG5', { g: 'contexto', e: 'guess', k: 'en-31', w: 'x'.repeat(90), r: 12 });
+  const last = Q.readQueue().slice(-1)[0];
+  ok('no entry without a real code; long text is cut, a rank is a string', last.g === 'contexto' && last.w.length === 40 && last.r === '12' && last.k === 'en-31');
+  const ui = read('contexto/js/ui.js');
+  ok('Contexto logs open, every guess (unknown and again too), hint, win, give up, leaving and coming back',
+    ["_log('open'", "_log('guess', canon, rank)", "'unknown'", "'again'", "_log('hint', w, hr)", "kind === 'won' ? 'win' : 'giveup'", "'hidden' : 'visible'"].every((x) => ui.includes(x)));
+  const rulesJ = JSON.parse(read('database.rules.json')).rules;
+  ok('rules: playLog is admin-read, written only under your own claimed code, server time stamped',
+    /admins/.test(rulesJ.playLog['.read']) && /msgAuth/.test(rulesJ.playLog.$code.$k['.write']) && rulesJ.playLog.$code.$k.s['.validate'] === 'newData.val() === now');
+  ok('backup and hub: playLog in BRANCHES; the hub starts the sender', /'playLog',/.test(read('backups/rtdb-backup.mjs')) && /m\.startPlayLog\(\)/.test(read('js/hub.js')));
+  for (let i = 0; i < 3200; i++) Q.appendPlayLog('DREG5', { g: 'snake' });
+  ok('the queue keeps the newest 3,000 at most', Q.readQueue().length === 3000);
 }
 
 // --- replay over a real snapshot -------------------------------------------------------------------

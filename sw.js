@@ -75,6 +75,8 @@ const ASSETS = [
   './js/admin-config.js',
   './js/admin-ui.js',
   './js/integrity.js',
+  './js/play-log-queue.js',
+  './js/play-log.js',
   // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
   // it while painting - a device without it would show scores the rest of the family no longer does.
   './js/stats-corrections.js',

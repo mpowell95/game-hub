@@ -275,6 +275,7 @@ import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, 
 import { glBest } from './gridlock-points.js';
 import { wwBest, wwStarsFor } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
+import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -386,6 +387,13 @@ export function activeCode() {
     const c = (p && typeof p.playerId === 'string' ? p.playerId : '').trim().toUpperCase();
     return CODE_RE.test(c) ? c : null;
   } catch { return null; }
+}
+
+/** THE PLAY LOG (2026-10-28, js/play-log-queue.js): every finished game, with its time and the recorder's
+ *  own arguments (score, time, moves, hints, difficulty), queued for playLog/<CODE> (admins only). Called
+ *  by each recorder once its result is accepted. Evidence only: never read back, never a stat, never throws. */
+export function notePlay(gameId, fn, args) {
+  try { appendPlayLog(activeCode(), { g: gameId, f: fn, a: argsJSON(args) }); } catch (err) { console.error('[game-stats] play not logged', err); }
 }
 function activeName() {
   try {
@@ -1620,6 +1628,7 @@ export function rateReport() {
 
 export function recordResult(gameId, difficulty, won) {
   if (tooFast(gameId)) return null;
+  notePlay(gameId, 'recordResult', arguments);
   if (GAMES.indexOf(gameId) < 0) return null;
   const st = loadStats();
   bumpTotals(st.games[gameId], normDiff(difficulty), won);
@@ -1633,6 +1642,7 @@ export function recordResult(gameId, difficulty, won) {
  *  Genius?"). Before that day a puzzle was recorded only at Genius, played and won together. */
 export function recordSpellingBeeGenius() {
   if (tooFast('spellingbee')) return null;
+  notePlay('spellingbee', 'recordSpellingBeeGenius', arguments);
   const st = loadStats();
   const g = st.games.spellingbee;
   if (!g.byDiff.daily) g.byDiff.daily = bucket();
@@ -1664,6 +1674,7 @@ export function noteVoidedResult(gameId, matchId, result) {
  *  pick (easy/medium/hard/expert). A draw (won === null) counts in totals only, never in the grid. */
 export function recordConnect4(difficulty, firstMove, won) {
   if (tooFast('connect4')) return null;
+  notePlay('connect4', 'recordConnect4', arguments);
   const st = loadStats();
   const g = st.games.connect4;
   const d = normDiff(difficulty);
@@ -1683,6 +1694,7 @@ export function recordConnect4(difficulty, firstMove, won) {
  *  counters `cc` from this match's per-round tallies. `extras` = { closed, minusTen, chinchons }. */
 export function recordChinchon(difficulty, won, extras) {
   if (tooFast('chinchon')) return null;
+  notePlay('chinchon', 'recordChinchon', arguments);
   const st = loadStats();
   const g = st.games.chinchon;
   bumpTotals(g, normDiff(difficulty), won);
@@ -1713,6 +1725,7 @@ export function recordChinchon(difficulty, won, extras) {
  */
 export function recordSudoku(tier, extras = {}) {
   if (tooFast('sudoku')) return null;
+  notePlay('sudoku', 'recordSudoku', arguments);
   const st = loadStats();
   const g = st.games.sudoku;
   ensureSd(g);
@@ -1746,6 +1759,7 @@ export function recordSudoku(tier, extras = {}) {
  *  WRITES ARE ADDITIVE ONLY (THE LAW rule 2); `fewest` takes Math.min against a nonzero prior. */
 export function recordContexto(lang, won, extras = {}) {
   if (tooFast('contexto')) return null;
+  notePlay('contexto', 'recordContexto', arguments);
   const st = loadStats();
   const g = st.games.contexto;
   ensureCt(g);
@@ -1783,6 +1797,7 @@ export function recordContexto(lang, won, extras = {}) {
  */
 export function recordMinesweeper(level, won, extras = {}) {
   if (tooFast('minesweeper')) return null;
+  notePlay('minesweeper', 'recordMinesweeper', arguments);
   const st = loadStats();
   const g = st.games.minesweeper;
   ensureMs(g);
@@ -1857,6 +1872,7 @@ export function recordMinesweeper(level, won, extras = {}) {
  *  (rule 4: never invent a number). */
 export function recordWayOut(tier, f = {}) {
   if (tooFast('wayout')) return null;
+  notePlay('wayout', 'recordWayOut', arguments);
   const st = loadStats();
   const g = st.games.wayout;
   ensureWo(g);
@@ -1895,6 +1911,7 @@ export function recordWayOut(tier, f = {}) {
 export function recordWayOutReplay(tier, f = {}) {
   if (!WO_TIERS.includes(normDiff(tier))) return null;
   if (tooFast('wayout')) return null;
+  notePlay('wayout', 'recordWayOutReplay', arguments);
   const d = normDiff(tier);
   const l = f.level | 0, gen = f.gen | 0;
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
@@ -1923,6 +1940,7 @@ export function recordWayOutReplay(tier, f = {}) {
 export function recordWayOutRush(mode, run = {}) {
   if (!RUSH_MODES.includes(mode)) return null;
   if (tooFast('wayout')) return null;
+  notePlay('wayout', 'recordWayOutRush', arguments);
   const st = loadStats();
   const g = st.games.wayout;
   ensureWo(g);
@@ -1955,6 +1973,7 @@ export function recordWayOutRush(mode, run = {}) {
  *  with no moves, records the play but writes no level entry (rule 4: never invent a level). */
 export function recordGridlock(band, f = {}) {
   if (tooFast('gridlock')) return null;
+  notePlay('gridlock', 'recordGridlock', arguments);
   const st = loadStats();
   const g = st.games.gridlock;
   ensureGl(g);
@@ -1979,6 +1998,7 @@ export function recordGridlock(band, f = {}) {
  *  rate-gated. From then on that level earns half its points and no crown, unless it had already been
  *  solved with no hint before (js/gridlock-points.js glCrowned). */
 export function recordGridlockHint(level) {
+  notePlay('gridlock', 'recordGridlockHint', arguments);
   const n = Math.floor(Number(level) || 0);
   if (n < 1) return null;
   const st = loadStats();
@@ -2002,6 +2022,7 @@ export function recordGridlockHint(level) {
  *  entry is written (rule 4: never invent a level). Returns the store, or null when rate-gated. */
 export function recordWordWeaver(level, { hints, extra } = {}) {
   if (tooFast('wordweaver')) return null;
+  notePlay('wordweaver', 'recordWordWeaver', arguments);
   const st = loadStats();
   const g = st.games.wordweaver;
   ensureWw(g);
@@ -2021,6 +2042,7 @@ export function recordWordWeaver(level, { hints, extra } = {}) {
 
 export function recordNutsBolts(level, moves, tier) {
   if (tooFast('nutsbolts')) return null;
+  notePlay('nutsbolts', 'recordNutsBolts', arguments);
   const st = loadStats();
   const g = st.games.nutsbolts;
   ensureNb(g);
@@ -2045,6 +2067,7 @@ export function recordNutsBolts(level, moves, tier) {
  *  counter from this match. `extras` = { escobas }. Additive; never overwrites. */
 export function recordEscoba(difficulty, won, extras) {
   if (tooFast('escoba')) return null;
+  notePlay('escoba', 'recordEscoba', arguments);
   const st = loadStats();
   const g = st.games.escoba;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2067,6 +2090,7 @@ export function recordEscoba(difficulty, won, extras) {
  *  A write that fails is queued rather than dropped (persistOrQueue), same as recordEscoba above. */
 export function recordBaseball(league, won, extras) {
   if (tooFast('baseball')) return null;
+  notePlay('baseball', 'recordBaseball', arguments);
   const st = loadStats();
   const g = st.games.baseball;
   ensureBb(g);
@@ -2114,6 +2138,7 @@ export function setBaseballHand(hand) {
  *  career, at the moment the career document is minted (`baseball/js/career-io.js`'s
  *  `startCareer`). */
 export function recordBaseballCareerStarted() {
+  notePlay('baseball', 'recordBaseballCareerStarted', arguments);
   const st = loadStats();
   const g = st.games.baseball;
   ensureBb(g);
@@ -2130,6 +2155,7 @@ export function recordBaseballCareerStarted() {
  *  in js/CLAUDE.md, "Career sync" - the full career document lives in Firebase
  *  (careers/<CODE>/baseball/history/<careerId>), this is only the summary. */
 export function recordBaseballCareerFinished(row) {
+  notePlay('baseball', 'recordBaseballCareerFinished', arguments);
   const st = loadStats();
   const g = st.games.baseball;
   ensureBb(g);
@@ -2155,6 +2181,7 @@ export function recordBaseballCareerFinished(row) {
  *  best-score bucket (`br` for Classic, `brOrbital` for Orbital) is chosen by it. */
 export function recordBallRun(obstaclesPassed, difficulty, mapKey = 'classic') {
   if (tooFast('ballrun')) return null;
+  notePlay('ballrun', 'recordBallRun', arguments);
   const st = loadStats();
   const g = st.games.ballrun;
   ensureBr(g);
@@ -2180,6 +2207,7 @@ export function recordBallRun(obstaclesPassed, difficulty, mapKey = 'classic') {
  *  overwrites. */
 export function recordTicTacToe(variant, difficulty, won) {
   if (tooFast('tictactoe')) return null;
+  notePlay('tictactoe', 'recordTicTacToe', arguments);
   const st = loadStats();
   const g = st.games.tictactoe;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2204,6 +2232,7 @@ export function recordTicTacToe(variant, difficulty, won) {
  *  Additive; never overwrites. */
 export function recordDotsBoxes(difficulty, won, extras) {
   if (tooFast('dotsboxes')) return null;
+  notePlay('dotsboxes', 'recordDotsBoxes', arguments);
   const st = loadStats();
   const g = st.games.dotsboxes;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2231,6 +2260,7 @@ export function recordDotsBoxes(difficulty, won, extras) {
  *  than the stored one, per THE LAW rule 2. Additive; never overwrites. */
 export function recordBoggle(difficulty, won, extras) {
   if (tooFast('boggle')) return null;
+  notePlay('boggle', 'recordBoggle', arguments);
   const st = loadStats();
   const g = st.games.boggle;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2261,6 +2291,7 @@ export function recordBoggle(difficulty, won, extras) {
  *  overwrites. */
 export function recordYahtzee(difficulty, won, extras) {
   if (tooFast('yahtzee')) return null;
+  notePlay('yahtzee', 'recordYahtzee', arguments);
   const st = loadStats();
   const g = st.games.yahtzee;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2288,6 +2319,7 @@ export function recordYahtzee(difficulty, won, extras) {
  *  raises the stored best (Math.max), per THE LAW rule 2. Additive; never overwrites. */
 export function recordDominoes(difficulty, won, extras) {
   if (tooFast('dominoes')) return null;
+  notePlay('dominoes', 'recordDominoes', arguments);
   const st = loadStats();
   const g = st.games.dominoes;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2314,6 +2346,7 @@ export function recordDominoes(difficulty, won, extras) {
  *  every run, per THE LAW rule 1) and their walls-mode-split counterparts. */
 export function recordSnake(length, difficulty, walls) {
   if (tooFast('snake')) return null;
+  notePlay('snake', 'recordSnake', arguments);
   const st = loadStats();
   const g = st.games.snake;
   ensureSn(g);
@@ -2340,6 +2373,7 @@ export function recordSnake(length, difficulty, walls) {
  *  Additive; the bests only ever go up, the lifetime coin/flip counters only ever add. */
 export function recordHillClimb(distance, stage, extras) {
   if (tooFast('hillclimb')) return null;
+  notePlay('hillclimb', 'recordHillClimb', arguments);
   const st = loadStats();
   const g = st.games.hillclimb;
   ensureHc(g);
@@ -2369,6 +2403,7 @@ export function recordHillClimb(distance, stage, extras) {
  *  unset, never a real "won in 0 shots"). Additive; never overwrites. */
 export function recordBattleship(difficulty, won, extras) {
   if (tooFast('battleship')) return null;
+  notePlay('battleship', 'recordBattleship', arguments);
   const st = loadStats();
   const g = st.games.battleship;
   bumpTotals(g, normDiff(difficulty), won);
@@ -2404,6 +2439,7 @@ export function recordBattleship(difficulty, won, extras) {
  *  Mirrors recordSkeeball's own `e.practice` branch exactly. */
 export function recordGolf(difficulty, extras) {
   if (tooFast('golf')) return null;
+  notePlay('golf', 'recordGolf', arguments);
   const st = loadStats();
   if (!st.games.golf) st.games.golf = {};
   const g = st.games.golf;
@@ -2491,6 +2527,7 @@ export function recordGolf(difficulty, extras) {
  */
 export function recordSkeeball(boardId, extras) {
   if (tooFast('skeeball')) return null;
+  notePlay('skeeball', 'recordSkeeball', arguments);
   const st = loadStats();
   const g = st.games.skeeball;
   const board = String(boardId || 'classic');
@@ -2569,6 +2606,7 @@ function ensureBz(g) {
  *  played+won (no loss state), like Snake / Hill Climb. Additive: bests only go up, counters only add. */
 export function recordBrickBlitz(score, difficulty, extras) {
   if (tooFast('brickblitz')) return null;
+  notePlay('brickblitz', 'recordBrickBlitz', arguments);
   const st = loadStats();
   const g = st.games.brickblitz;
   ensureBz(g);
@@ -2606,6 +2644,7 @@ function ensureAh(g) {
  *  bestStreak only go up; `streak` (live state) is the only field a loss sets back to 0. */
 export function recordAirHockey(difficulty, won, extras) {
   if (tooFast('airhockey')) return null;
+  notePlay('airhockey', 'recordAirHockey', arguments);
   const st = loadStats();
   const g = st.games.airhockey;
   ensureAh(g);
@@ -2644,6 +2683,7 @@ function ensureCp(g) {
  *  never recorded (there is nothing to rank). Additive: counters add, the best only improves. */
 export function recordCupPongSolo(throws) {
   if (tooFast('cuppong')) return null;
+  notePlay('cuppong', 'recordCupPongSolo', arguments);
   const n = Number.isFinite(throws) ? Math.floor(throws) : 0;
   if (n < 1) return null;
   const st = loadStats();
@@ -2664,6 +2704,7 @@ export function recordCupPongSolo(throws) {
  *  reracks ranks higher. Additive only; a loss touches `cr` not at all. */
 export function recordCupPong(difficulty, won, reracks) {
   if (tooFast('cuppong')) return null;
+  notePlay('cuppong', 'recordCupPong', arguments);
   const st = loadStats();
   const g = st.games.cuppong;
   const d = normDiff(difficulty);
@@ -2829,6 +2870,7 @@ function holdemPrizeTooFast() {
  *  win Behind the Dumpster (HOLDEM_ALLEY_PRIZE). Returns this device's ledger after the write, or null when the
  *  write was refused as impossible (see the deterrents above). */
 export function recordHoldemBank(e) {
+  notePlay('holdem', 'recordHoldemBank', arguments);
   const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.floor(+v)) : 0);
   const buyin = n(e && e.buyin), prize = n(e && e.prize), grant = n(e && e.grant);
   const alley = !!(e && e.alley);
@@ -2883,6 +2925,7 @@ function applyHoldemHand(g, e) {
  *  collected, `score`/`cat`/`cards` their best five when they saw all five board cards (0 / -1 /
  *  [] otherwise). */
 export function recordHoldemHand(e) {
+  notePlay('holdem', 'recordHoldemHand', arguments);
   const hand = {
     won: !!(e && e.won), amt: (e && e.amt) | 0, score: (e && e.score) | 0,
     cat: e && Number.isFinite(+e.cat) ? +e.cat : -1, cards: (e && Array.isArray(e.cards)) ? e.cards.slice(0, 5) : [],
@@ -2910,6 +2953,7 @@ export function recordHoldemHand(e) {
  *  `opponent` is a room participant, `{ name, avatar, deviceId }` (js/net.js). `won` is true/false;
  *  anything else records the encounter without crediting either side. */
 export function recordHeadToHead(gameId, opponent, won) {
+  notePlay(gameId, 'recordHeadToHead', arguments);
   if (GAMES.indexOf(gameId) < 0) return null;
   const oppId = String((opponent && opponent.deviceId) || '').trim();
   if (!oppId || oppId === deviceId()) return null;         // no self-play rows

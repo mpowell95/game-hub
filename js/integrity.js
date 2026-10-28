@@ -199,9 +199,9 @@ export const RULES = [
   // on the Leaderboard).
   { id: 'holdem-ledger', game: 'holdem', void: false, text: 'a bankroll play could not produce',
     test(g) { const why = g.hb ? holdemSuspect(g.hb) : ''; return why ? { v: why, lim: '' } : null; } },
-  // Contexto: the secret word as the very first guess (about 1 in 30,000 a puzzle, or the answer known).
-  { id: 'contexto-first-guess', game: 'contexto', void: false, text: 'solved in 1 guess',
-    test(g) { return num(obj(g.ct).fewest) === 1 ? { v: 1, lim: '' } : null; } },
+  // (Contexto's "solved in 1 guess" alert was DROPPED 2026-10-28: `fewest` counts typed guesses only, and
+  // 8 hints walk any puzzle from a blank board to rank 2, so an honest hint-heavy solve trips it. King of
+  // Games tripped it that way the day it shipped. Contexto's guesses are logged since (js/play-log.js).)
 ];
 
 // --- ONLINE CHALLENGE MATCHES: ALERTS only, judged when a match ends (functions/integrity.js) ----------
@@ -276,7 +276,8 @@ export function checkMatch(node, m) {
   }
   return out;
 }
-export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.id, r.text]), ['hoops-winner-not-moves', 'a winner the moves do not give']]);
+export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.id, r.text]), ['hoops-winner-not-moves', 'a winner the moves do not give'],
+  ['contexto-first-guess', 'solved in 1 typed guess (alert retired: hints do not count as guesses)']]);
 
 export const RULE_BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
 

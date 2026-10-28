@@ -1136,6 +1136,13 @@ class Hub {
     import('./stats-net.js')
       .then((m) => m.syncMyStats())
       .catch((err) => console.error('[hub] stats sync could not start', err));
+    // THE PLAY LOG (2026-10-28, js/play-log.js): sends what the games queued, then keeps sending.
+    if (!this._playLogOn) {
+      this._playLogOn = true;
+      import('./play-log.js').then((m) => m.startPlayLog()).catch((err) => console.error('[hub] play log could not start', err));
+    } else {
+      import('./play-log.js').then((m) => m.flushPlayLog()).catch(() => {});
+    }
   }
 
   render() {
