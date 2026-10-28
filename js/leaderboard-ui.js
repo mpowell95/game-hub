@@ -619,11 +619,12 @@ function boardView(list, id) {
       },
       tier: (g) => (_tier == null ? boardTierOf(g, id) : null),
       // Spelling Bee: days played is already 📅 under the name.
-      sub: (g) => {
-        if (id === 'spellingbee' && beeBoard()) return '';
-        const played = t('lb_played_count', { n: boardPlaysOf(g, id) });
+      sub: (g) => (id === 'spellingbee' && beeBoard() ? '' : t('lb_played_count', { n: boardPlaysOf(g, id) })),
+      // Cup Pong's reracks go on their own line under "played": on one line the column grew wide
+      // enough to run over the name and the tier pill (2026-10-28).
+      sub2: (g) => {
         const cr = id === 'cuppong' ? cpReracksOf(g) : null;
-        return cr && cr.w ? `${played} \u00b7 ${tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r })}` : played;
+        return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
       },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : null,
     };
@@ -759,7 +760,7 @@ function plainBoardHTML(list, id) {
   const { rankOf, tiedAt } = rankMap(v.rows, () => 0, v.cmp);
   const cards = v.rows.length
     ? `<div class="lb-unith">${esc(v.unit)}</div><div class="lb-plist is-board">${v.rows.map((g) => {
-        const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g) };
+        const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g), unit2: v.sub2 ? v.sub2(g) : '' };
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.subHtml ? v.subHtml(g) : v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
@@ -1677,7 +1678,7 @@ function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
       ${chip}
       ${avatarHTML(g)}
       <span class="lb-pid"><span class="lb-pline"><span class="lb-pname">${rankName(g)}</span>${youBadge(g)}${tierHtml || ''}</span><span class="lb-psubline">${sub}</span></span>
-      <span class="lb-pnum"><b${big.cls ? ` class="${big.cls}"` : ''}>${big.val}</b><span>${esc(big.unit)}</span></span>
+      <span class="lb-pnum"><b${big.cls ? ` class="${big.cls}"` : ''}>${big.val}</b><span>${esc(big.unit)}</span>${big.unit2 ? `<span>${esc(big.unit2)}</span>` : ''}</span>
     </div>
     ${footer}
   </button>`;
