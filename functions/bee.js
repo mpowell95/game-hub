@@ -40,12 +40,13 @@ export async function checkPlayer(db, bk, code, row) {
   if (await valOf(db, `beeFlags/${bk}/${code}`)) return null;   // already flagged
   const log = await valOf(db, `beeLog/${bk}/${code}`);
   if (!log) return null;
-  const d = detectCopying(log, { words: row.words | 0 });
+  const d = detectCopying(log, { words: row.words | 0, puzzle: PUZZLES[bk] });
   if (!d.void) return null;
   const flag = {
     rules: [...d.strong, ...d.supporting], summary: flagSummary(d), name: String(row.name || code).slice(0, 40),
-    sorted: d.sorted, burst: d.burst.n, burstAvgMs: Math.round(d.burst.avg), leave: d.leave,
-    geniusMs: d.geniusMs == null ? -1 : Math.round(d.geniusMs), at: Date.now(),
+    sorted: d.sorted, burst: d.burst.n, burstAvgMs: Math.round(d.burst.avg), best: d.best, leave: d.leave,
+    geniusMs: d.geniusMs == null ? -1 : Math.round(d.geniusMs), right: d.right == null ? -1 : d.right,
+    wrong: d.wrong == null ? -1 : d.wrong, retyped: d.retyped == null ? -1 : d.retyped, at: Date.now(),
   };
   const res = await db.ref(`beeFlags/${bk}/${code}`).transaction((cur) => (cur ? undefined : flag));
   return res && res.committed ? flag : null;

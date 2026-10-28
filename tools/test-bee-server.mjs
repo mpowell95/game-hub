@@ -62,6 +62,49 @@ ok('speed alone does not void', !detectCopying(fastOnly).void && detectCopying(f
 const already = [g(1, 'abed'), g(2, 'aced'), g(3, 'ache'), g(4, 'ache', 'already_found'), g(5, 'bade'), g(6, 'beau'), g(7, 'each')];
 ok('an already-found guess restarts a sorted run', detectCopying(already).sorted === 3);
 
+// --- the three checks added 2026-10-28 (best words first, right vs wrong, re-typed) -------------
+// Scores come from length and the key's letters (a pangram uses all seven): stand-in words only.
+const PZ = { key: 'e:abcdhu', top: [16, 16, 14, 10, 9, 8, 8, 8, 8, 7, 7, 7, 7, 7, 6] };
+const PAN9 = 'abcdhueee', PAN9B = 'abcdhueeb', PAN7 = 'abcdhue';
+const best = [ev(0, 'open'), g(5, 'eeee'), g(9, 'eeeh'), ev(20, 'hidden'), ev(29, 'visible'),
+  g(41, 'eeeeeeeeee'), g(48, 'zzzzzzz', 'not_in_list'), g(57, 'eeeeeeeeb'), g(65, 'eeeeeeec'), g(73, PAN7), g(80, PAN9), g(96, PAN9B), g(100, 'eebe')];
+const db1 = detectCopying(best, { puzzle: PZ });
+ok('best words first: the 6 top answers after coming back, misses between', db1.best === 6 && db1.strong.includes('best') && db1.void);
+ok('best words first: named for Matt', /Best 6 first/.test(flagSummary(db1)));
+ok('best words first needs the puzzle', detectCopying(best).best === 0);
+const honestStart = [ev(0, 'open'), g(10, 'eeee'), g(20, PAN9), g(30, 'eeeeeeeeee'), g(40, 'eeeeeeeeb'), g(50, 'eeeeeeec'), g(60, PAN7)];
+ok('a small word first breaks it (pangrams later count for nothing)', detectCopying(honestStart, { puzzle: PZ }).best === 0);
+const slow = [ev(0, 'visible'), g(30, 'eeeeeeeeee'), g(60, 'eeeeeeeeb'), g(90, 'eeeeeeec'), g(110, PAN7), g(130, PAN9)];
+ok('only the first 2 minutes after coming back count', detectCopying(slow, { puzzle: PZ }).best === 4);
+const left = [ev(0, 'visible'), g(5, 'eeeeeeeeee'), g(10, 'eeeeeeeeb'), ev(12, 'hidden'), ev(20, 'visible'), g(25, 'eeeeeeec'), g(30, PAN7), g(35, PAN9)];
+ok('leaving again ends the stretch; the new one starts from what is left', detectCopying(left, { puzzle: PZ }).best === 3);
+const late = [ev(0, 'open'), ...[PAN9, PAN9B, PAN7, 'eeeeeeeeee', 'eeeeeeeeb', 'eeeeeeeec', 'eeeeeeeed', 'eeeeeeee', 'eeeeeeeb', 'eeeeeeeh', 'eeeeeeeu'].map((w, i) => g(100 + i * 60, w)),
+  ev(2000, 'visible'), ...['eeeeeee', 'eeeeeeb', 'eeeeeec', 'eeeeeeh', 'eeeeeeu'].map((w, i) => g(2010 + i * 5, w))];
+ok('late in a game, 5 words of 7 points at the top of what is left still count', detectCopying(late, { puzzle: PZ }).best === 5);
+const lateSmall = { key: PZ.key, top: [16, 16, 14, 10, 9, 8, 8, 8, 8, 7, 7, 6, 6, 6, 6] };
+ok('...but never words under 7 points', detectCopying([...late.slice(0, 12), ev(2000, 'visible'), ...['eeeeee', 'eeeeeb', 'eeeeec', 'eeeeeh', 'eeeeeu'].map((w, i) => g(2010 + i * 5, w))], { puzzle: lateSmall }).best === 1);
+
+const game = (rightN, wrongN, retypeN) => {
+  const out = [ev(0, 'open')];
+  let t = 10;
+  for (let i = 0; i < rightN; i++) out.push(g((t += 60), `w${String(99 - i).padStart(2, '0')}`));   // descending: no sorted run
+  for (let i = 0; i < wrongN; i++) out.push(g((t += 60), 'nope', 'not_in_list'));
+  for (let i = 0; i < retypeN; i++) out.push(g((t += 60), 'x000r', 'already_found'));
+  out.push(ev((t += 60), 'win'));
+  return out;
+};
+const gr = detectCopying(game(20, 10, 1));
+ok('right vs wrong: 20 right, 10 wrong = 2 per wrong, flagged', gr.supporting.includes('ratio') && gr.right === 20 && gr.wrong === 10);
+ok('right vs wrong: 20 right, 11 wrong, not flagged', !detectCopying(game(20, 11, 5)).supporting.includes('ratio'));
+ok('re-typed: 1 of 20 right answers, flagged', gr.supporting.includes('retype') && gr.retyped === 1);
+ok('re-typed: 2 of 20 (1 in 10) is not', !detectCopying(game(20, 30, 2)).supporting.includes('retype'));
+ok('right vs wrong + re-typed together void the day', gr.void && /Right 20 \/ wrong 10/.test(flagSummary(gr)) && /Re-typed 1/.test(flagSummary(gr)));
+ok('one of them alone does not', !detectCopying(game(20, 10, 5)).void && !detectCopying(game(20, 30, 0)).void);
+ok('both need Genius in the log', detectCopying(game(20, 10, 0).slice(0, -1)).right === null);
+ok('both need 20+ right answers (a short Genius is not judged)', detectCopying(game(19, 0, 0)).supporting.length === 0 || !detectCopying(game(19, 0, 0)).supporting.some((r) => r === 'ratio' || r === 'retype'));
+ok('both need every board word in the log', detectCopying(game(20, 10, 0), { words: 25 }).right === null);
+ok('counted only up to Genius', detectCopying([...game(20, 10, 0), g(99999, 'nope', 'not_in_list'), g(99999, 'nope', 'not_in_list')]).wrong === 10);
+
 // --- buildBeeBoard / beeTotals: own day, voids, replaced puzzles, places -----------------------
 const puzzles = { 'e-abcdhu': { lang: 'en', day: '2026-10-28', key: 'e:abcdhu' }, 'a-chlnrt': { lang: 'en', day: '2026-10-26', key: 'a:chlnrt' }, 'u-dfgino': { lang: 'en', day: '2026-10-26', key: 'u:dfgino' }, 'es-a-deiqru': { lang: 'es', day: '2026-10-27', key: 'es:a:deiqru' } };
 const daily = {

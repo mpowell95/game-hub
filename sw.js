@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1322;
-const CACHE = 'game-hub-v1324';
+const CACHE = 'game-hub-v1325';
 
 const ASSETS = [
   './',
@@ -831,7 +831,7 @@ const REST_MANIFEST = {
   './js/admin-config.js': '480d791fda',
   './js/admin-ui.js': '5e38873449',
   './js/stats-corrections.js': '8c4705191b',
-  './js/bee-fairplay.js': '0b19190160',
+  './js/bee-fairplay.js': '578fe6bae3',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'b8cc9ce48a',
