@@ -304,7 +304,7 @@ console.log('\nBattle Arena challenges (2026-10-24)');
   check('battle arena: your own knockout does not notify you', decideBattleArena({ code: 'MATTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
   check('battle arena: a finished row again is not news', decideBattleArena({ code: 'MATTA', id: 'x', before: row({ over: true, result: 'lost' }), after: row({ over: true, result: 'lost' }) }) === null);
   check('battle arena: a called-off row (over:false, ended) says nothing', decideBattleArena({ code: 'MATTA', id: 'x', before: row({ yourTurn: true }), after: row({ ended: 'cancelled' }) }) === null);
-  check('battle arena: Spanish wording', decideBattleArena({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Arena de Batalla');
+  check('battle arena: Spanish wording', decideBattleArena({ code: 'MATTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').title === 'Arena de Batalla (PRUEBA)');
   check('battle arena: the trigger watches battlearena/index and names the match', /ref: '\/battlearena\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'battle-arena', match: id \}/.test(fnSrc));
   check('battle arena: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'battlearena' && x.game === 'battle-arena')
     && decideNudge({ key: 'battlearena~m1', from: 'MATTA', row: { name: 'Matt', with: 'MATTA', updated: 1, yourTurn: true, over: false } }) !== null

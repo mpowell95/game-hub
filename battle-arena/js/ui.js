@@ -19,6 +19,7 @@ import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG } from './art.js';
 import { mirror, mirrorEvents, entryOf, moveOf } from './online.js';
+import { playAttack, evolveScene } from './attacks.js';
 
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-battlearena-css';
@@ -36,12 +37,15 @@ const FALL_BASE_MS = 150;
 const FALL_ROW_MS = 60;
 const SPECIAL_MS = 1250;
 const TURN_BANNER_MS = 1150;
-const PROJ_MS = 380;
 const CPU_THINK_MS = 650;
 const CPU_SHOW_MS = 450;
 const TURN_SECONDS = 25;          // per MOVE (the reference resets it after every move); live rooms only
 const REMOTE_SHOW_MS = 450;       // the other person's swap: the two tiles light up, as the computer's do
 const MOVE_HEXES = 2;
+// TEST MODE (2026-10-28, Matt: real players he tests with must know "it's in test mode. That must be
+// obvious and always clearly present"): a TEST tag on every screen of this game (CSS `.ba-root.is-test
+// ::after`). REMOVE AT RELEASE, together with the devOnly line and the push title's "(TEST)".
+const TEST_MODE = true;
 
 let instance = null;
 
@@ -74,6 +78,9 @@ function readSave() {
 function hasArmedOpen() { try { return !!sessionStorage.getItem('gamehub.battlearena.open.v1'); } catch { return false; } }
 /** Was this phone in a live room when the game last closed (live.js ROOM_KEY)? */
 function hasLiveRoom() { try { return !!localStorage.getItem('gamehub.battlearena.room.v1'); } catch { return false; } }
+
+/** "3 more wins" (one win: "1 more win"). */
+const winsMore = (n) => (n === 1 ? t('winsMore1') : t('winsMore', { n }));
 
 /** Total Battle Arena wins on this device's store: the ONLY input to unlocks. */
 function totalWins() {
@@ -234,6 +241,7 @@ class BattleArena {
     await ensureCSS();
     if (this.disposed) return;
     this.root.classList.add('ba-root');
+    if (TEST_MODE) { this.root.classList.add('is-test'); this.root.dataset.test = t('test'); }
     // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
     try { window.__baTest = this; } catch {}
     // ONLINE FIRST: a match handed over by the launcher / Multiplayer screen / a notification
@@ -333,16 +341,18 @@ class BattleArena {
   renderDraft(opts = {}) {
     this.newScreen('draft');
     this.draftOpts = opts;
-    const unlocked = unlockedIds(totalWins());
+    const wins = totalWins();
+    const unlocked = unlockedIds(wins);
     this.unlocked = unlocked;
+    this.wins = wins;
     this.picks = this.settings.team.filter((id) => unlocked.includes(id));
     const cells = MONSTERS.map((m) => {
       const locked = !unlocked.includes(m.id);
       return `<div class="ba-pick${locked ? ' is-locked' : ''}" role="button" tabindex="0" data-id="${m.id}"
-          aria-label="${escapeHTML(m.name)}${locked ? ', ' + t('locked') : ''}">
+          aria-label="${escapeHTML(m.name)}${locked ? ', ' + t('locked') + ', ' + winsMore(m.unlock - wins) : ''}">
           <div class="ba-pick-art">${monsterSVG(m.id)}</div>
           <span class="ba-pick-gem">${elementBadge(m.el)}</span>
-          ${locked ? `<span class="ba-pick-name">${ICONS.lock}${m.unlock}</span>` : ''}
+          ${locked ? `<span class="ba-pick-name">${ICONS.lock}${m.unlock - wins}</span>` : ''}
         </div>`;
     }).join('');
     this.root.innerHTML = `
@@ -427,7 +437,7 @@ class BattleArena {
         </div>`;
     };
     const action = !draft ? '' : locked
-      ? `<p class="ba-card-lock">${ICONS.lock}<span>${t('winsN', { n: m.unlock })}</span></p>`
+      ? `<p class="ba-card-lock">${ICONS.lock}<span>${winsMore(m.unlock - (this.wins | 0))}</span></p>`
       : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="pick">${this.picks.includes(id) ? t('remove') : t('pick')}</button>`;
     el.innerHTML = `
       <div class="gh-modal ba-card" role="dialog" aria-modal="true" aria-label="${escapeHTML(m.name)}">
@@ -1267,38 +1277,6 @@ class BattleArena {
   teamArts(sd) { return [0, 1].map((mi) => this.monEl(sd, mi)).filter(Boolean).map((m) => m.querySelector('.ba-mon-art')); }
   hpAt(sd) { const el = this.sideEl(sd); return this.centre(el && el.querySelector('.ba-stat-hp')); }
 
-  /** A projectile from the attacker to the other team: an element-coloured ball with a trail. */
-  async projectile(sd, mi) {
-    const from = this.centre(this.monEl(sd, mi) && this.monEl(sd, mi).querySelector('.ba-mon-art'));
-    const to = this.teamCentre(1 - sd);
-    const m = this.state.sides[sd].mons[mi];
-    const el = BY_ID[m.id].el;
-    const color = el === 'all' ? '#ffffff' : ELEMENT_COLOR[el];
-    if (reducedMotion()) return;
-    const d = this.fx('ba-proj', '', from);
-    if (!d) return;
-    d.style.setProperty('--c', color);
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const trail = (delay) => {
-      const t2 = this.fx('ba-proj is-trail', '', from);
-      if (!t2) return;
-      t2.style.setProperty('--c', color);
-      t2.animate([{ transform: 'translate(-50%, -50%) scale(.8)', opacity: 0.7 }, { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.3)`, opacity: 0 }],
-        { duration: PROJ_MS, delay, easing: 'ease-in', fill: 'backwards' }).finished.catch(() => {}).then(() => t2.remove());
-    };
-    trail(40); trail(80);
-    await d.animate([{ transform: 'translate(-50%, -50%) scale(.6)' }, { transform: `translate(calc(-50% + ${dx * 0.5}px), calc(-50% + ${dy * 0.5 - 30}px)) scale(1.2)`, offset: 0.5 },
-      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)` }], { duration: PROJ_MS, easing: 'ease-in' }).finished.catch(() => {});
-    d.remove();
-    this.burst(to, color, 12, 60, 10);
-    const ring = this.fx('ba-ring', '', to);
-    if (ring) {
-      ring.style.setProperty('--c', color);
-      ring.animate([{ transform: 'translate(-50%, -50%) scale(.2)', opacity: 1 }, { transform: 'translate(-50%, -50%) scale(2.2)', opacity: 0 }], { duration: 420, easing: 'ease-out' })
-        .finished.catch(() => {}).then(() => ring.remove());
-    }
-  }
-
   /** A row/column blast on the board from a bomb. */
   blast(at, boom) {
     const p = this.cellCentre(at);
@@ -1319,47 +1297,11 @@ class BattleArena {
     this.shake(this.root.querySelector('.ba-boardwrap'), boom ? 9 : 6, 380);
   }
 
-  /** Four berries: the reference's full-screen evolution. The old form flickers into the new one. */
-  async evolveScene(sd, mi, id) {
-    const rm = reducedMotion();
-    const d = this.fx('ba-evo', `<div class="ba-evo-rays"></div><div class="ba-evo-art"><div class="ba-evo-old">${monsterSVG(id, false)}</div><div class="ba-evo-new">${monsterSVG(id, true)}</div></div><b class="ba-evo-txt">${escapeHTML(t('evolvedInto', { a: monName(id, false), b: monName(id, true) }))}</b>`);
-    if (!d) return;
-    if (sd === ME) d.classList.add('is-me');
-    fitText(d.querySelector('.ba-evo-txt'), 22);
-    const oldEl = d.querySelector('.ba-evo-old'), newEl = d.querySelector('.ba-evo-new'), txt = d.querySelector('.ba-evo-txt');
-    newEl.style.opacity = '0';
-    txt.style.opacity = '0';
-    await d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 250, fill: 'forwards' }).finished.catch(() => {});
-    if (!rm) {
-      // Flicker, faster and faster, between the two silhouettes.
-      const steps = [220, 190, 160, 130, 100, 80, 65, 55];
-      oldEl.classList.add('is-sil'); newEl.classList.add('is-sil');
-      for (let k = 0; k < steps.length; k++) {
-        oldEl.style.opacity = k % 2 ? '1' : '0';
-        newEl.style.opacity = k % 2 ? '0' : '1';
-        await this.sleep(steps[k]);
-      }
-      oldEl.style.opacity = '0'; newEl.style.opacity = '1';
-      const flash = this.fx('ba-evo-flash');
-      if (flash) flash.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: 'ease-out' }).finished.catch(() => {}).then(() => flash.remove());
-      newEl.classList.remove('is-sil');
-      newEl.animate([{ transform: 'scale(.8)' }, { transform: 'scale(1.12)', offset: 0.5 }, { transform: 'scale(1)' }], { duration: 450, easing: 'ease-out' });
-    } else {
-      oldEl.style.opacity = '0'; newEl.style.opacity = '1';
-    }
-    txt.style.opacity = '1';
-    this.paintMon(sd, mi);
-    await this.sleep(rm ? 900 : 1300);
-    await d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: 'forwards' }).finished.catch(() => {});
-    d.remove();
-  }
-
   // --- the story of a move ----------------------------------------------------------------------
   async play(events, gen) {
     const rm = reducedMotion();
     let extra = false;
     let landed = Promise.resolve();      // the orbs of the last clear; a special waits for them
-    let attacker = null;                 // the monster whose special is playing
     for (let k = 0; k < events.length; k++) {
       if (gen !== this.gen) return;
       const e = events[k];
@@ -1520,20 +1462,19 @@ class BattleArena {
           await landed;
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon);
-          attacker = { side: e.side, mon: e.mon };
           const mon = this.monEl(e.side, e.mon);
           if (mon) mon.classList.add('is-full');
           await this.specialBanner(e.side, e.mon, e.id, e.evo);
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon, 0);
+          // The monster's OWN attack (attacks.js); the damage, heal, shield that follow land on its impact.
+          await playAttack(this, e.side, e.mon, e.id, e.evo);
+          if (gen !== this.gen) return;
           break;
         }
         case 'damage': {
           const sd = e.side;
-          if (e.cause === 'special' && attacker) {
-            await this.projectile(attacker.side, attacker.mon);
-            if (gen !== this.gen) return;
-          } else if (e.cause === 'curse') {
+          if (e.cause === 'curse') {
             this.burst(this.teamCentre(sd), '#9b6fe0', 12, 60, 9);
           }
           for (const a of this.teamArts(sd)) { this.flash(a, '#fff'); this.shake(a, 8, 380); }
@@ -1618,7 +1559,7 @@ class BattleArena {
           await landed;
           if (gen !== this.gen) return;
           this.hideEvolve();
-          await this.evolveScene(e.side, e.mon, e.id);
+          await evolveScene(this, e.side, e.mon, e.id, t('evoName', { b: monName(e.id, true) }));
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon);
           const sd = this.sideEl(e.side);
@@ -1692,6 +1633,8 @@ class BattleArena {
   // --- the end ----------------------------------------------------------------------------------
   finish() {
     const s = this.state;
+    // Unlocks before this result is recorded: a win that crosses a threshold gets a reveal.
+    if (!this.recorded) this.unlockedBefore = unlockedIds(totalWins());
     if (!this.recorded && this.link) {
       // ONLINE: the link records it ('mp' bucket, once per match through its own ledger; a live
       // room also writes head-to-head). Never the computer's save slot or who-opens-next.
@@ -1758,6 +1701,38 @@ class BattleArena {
     this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.startMatch(team); });
     this.on(el.querySelector('[data-role="done"]'), 'click', () => { el.remove(); if (this.link) this.link.done(); });
     this.on(el.querySelector('[data-role="team"]'), 'click', () => { el.remove(); this.renderDraft(); });
+    if (w === ME && this.unlockedBefore) {
+      const fresh = unlockedIds(totalWins()).filter((id) => !this.unlockedBefore.includes(id));
+      this.unlockedBefore = null;
+      if (fresh.length) this.later(() => this.showUnlock(fresh), reducedMotion() ? 300 : 1100);
+    }
+  }
+
+  /** A win that unlocked a monster: it bursts onto the screen over the result. */
+  showUnlock(ids) {
+    const id = ids[0];
+    if (!BY_ID[id] || this.screen !== 'battle') return;
+    const el = document.createElement('div');
+    el.className = 'ba-unlock-ov';
+    el.innerHTML = `
+      <div class="ba-unlock" role="dialog" aria-modal="true" aria-label="${escapeHTML(t('newMonster'))}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <div class="ba-evo-rays"></div>
+        <b class="ba-unlock-kicker">${escapeHTML(t('newMonster'))}</b>
+        <div class="ba-unlock-art">${monsterSVG(id)}</div>
+        <b class="ba-unlock-name">${escapeHTML(BY_ID[id].name)}</b>
+      </div>`;
+    (this.root.querySelector('.ba-battle') || this.root).appendChild(el);
+    fitText(el.querySelector('.ba-unlock-name'), 34);
+    if (!reducedMotion()) {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
+      el.querySelector('.ba-unlock-art').animate([{ transform: 'scale(0) rotate(-20deg)', filter: 'brightness(0) invert(1)' }, { transform: 'scale(1.2) rotate(6deg)', filter: 'brightness(2)', offset: 0.6 }, { transform: 'scale(1)', filter: 'none' }],
+        { duration: 700, delay: 200, easing: 'cubic-bezier(.2,.8,.3,1.2)', fill: 'backwards' });
+      el.querySelector('.ba-unlock-name').animate([{ transform: 'scale(3)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: 380, delay: 700, easing: 'ease-in', fill: 'backwards' });
+    }
+    const close = () => { el.remove(); if (ids.length > 1) this.showUnlock(ids.slice(1)); };
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el, 'click', (e) => { if (e.target === el) close(); });
   }
 
   showPause() {
@@ -1836,7 +1811,8 @@ class BattleArena {
     this.clearTimers();
     this.unbindAll();
     if (this.offViewport) { try { this.offViewport(); } catch {} this.offViewport = null; }
-    this.root.classList.remove('ba-root');
+    this.root.classList.remove('ba-root', 'is-test');
+    delete this.root.dataset.test;
     this.root.innerHTML = '';
     this.tiles = new Map();
   }

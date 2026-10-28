@@ -18,7 +18,8 @@ moves `{type:'swap', a, b}` / `{type:'evolve', mon}`; `events` (listed at the fi
 animation · `js/monsters.js` roster, unlock thresholds, `unlockedIds(wins)` · `js/cpu.js` Easy (any
 legal swap) / Medium (best first-step clear) / Hard (plays each swap out + follow-up, avoids handing
 over a special); `chooseTeam` · `js/art.js` all SVG: 12 monsters x normal/evolved (120 box, facing
-right, no ids/gradients), gems (shape + icon per element) · `js/ui.js` home, draft, card, battle,
+right, no ids/gradients), gems (shape + icon per element) · `js/attacks.js` every monster's own special
+attack + the evolution scene (presentation only, one particle canvas) · `js/ui.js` home, draft, card, battle,
 module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/test.js` (dev only) ·
 online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (challenges) · `js/live.js`
 (live rooms over `js/net.js`) · `js/online-ui.js` (screens + the two links, lazy) · `js/alert.js` (launcher).
@@ -58,8 +59,17 @@ Modelled on the reference recordings, beat by beat: team panels (avatar, HP, ber
 move hexes + clock in the top row, the other team LEFT and the player RIGHT facing each other, bobbing.
 Every engine event is animation: matched tiles glow then burst, ORBS fly to the monster they charge
 (count pops over it), "EXTRA MOVE!" across the board, a special = dimmed stage + full-width banner
-with the big monster + lunge + projectile + hit flash + "-N DMG" by the HP, a turn = a white banner
-"<name>'s turn", 4 berries = full-screen evolution flicker, a win = losers faint + Victory card.
+with the big monster + lunge + THAT MONSTER'S OWN ATTACK + hit flash + "-N DMG" by the HP, a turn = a white banner
+"<name>'s turn", evolving = the evolution scene, a win = losers faint + Victory card.
+
+**Every monster has its own attack (2026-10-28, Matt: "every attack looks the same: an energy ball... This is
+where the game must stand out"; mockup approved "those are sick").** `js/attacks.js` `ATTACKS[id]`: Emberkit
+leaps + fire pillars; Sproutle vines; Driplet water jet (evolved: a wave across the stage); Zapup zips + sky
+lightning; Gloomite a shadow maw snaps shut; Pebbleop falls as a boulder (evolved: three); Cinderwing swoops
+breathing fire; Thornpaw thorn ring + leaf storm onto the board; Frostling ice shards (evolved: icicles) + ice
+blocks; Stormhorn chain lightning ending on its partner; Hexowl a hex seal slams down; Prismote rainbow beams.
+Evolved = the same attack, bigger, plus an extra. Evolving: energy in, white glow, a ball of light cracks open,
+the new form, its name slammed on. Reduced motion skips both. A new monster needs an `ATTACKS` entry.
 **Verify any change by recording a match** (Playwright `recordVideo`) and reading the frames; the
 first build's flat UI passed every test.
 
@@ -76,7 +86,8 @@ arena/board seam, move names blue; steel doors after the stage reveal; the endin
 |---|---|
 | Registry | `module: '../battle-arena/js/ui.js'`, `alerts: alert.js`, `immersive: true`, `devOnly: true`, no `released`; `LIVE_MP_GAMES` / `LIVE_GAMES` / `SOURCES` |
 | Stats id | `battlearena`: `recordResult('battlearena', 'easy'\|'medium'\|'hard', won)` once per finished match. In `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META`, `js/game-stats-ui.js` `TABS` + `HUB_ID`, label `game_title_battlearena` |
-| Unlocks | DERIVED from `loadStats().games.battlearena.total.won` at read time; never stored |
+| Unlocks | DERIVED from `loadStats().games.battlearena.total.won` at read time; never stored. Testers get the 6 starters, the rest by wins (Matt, 2026-10-28). A locked tile shows wins still to go; a win that crosses a threshold shows "New monster!" (`showUnlock`) |
+| TEST MODE | `TEST_MODE` in `ui.js`: a "TEST" tag on every screen (`.ba-root.is-test::after`) and "(TEST)" in the push title (`functions/decide.js` `BATTLE_TEXT`). Matt, 2026-10-28: testers "know it's in test mode... always clearly present". **Remove both at release.** Open it to chosen players: Admin > games > Battle Arena (`ALLOW_PICKER`) |
 | CSS | `.ba-root` / `.ba-` (every rule under `.ba-root`); battle screen dark in both themes |
 | Settings | `gamehub.battlearena.v1`: `{ diff, team, nextFirst, tips }` (preferences only) |
 | Save | `gamehub.battlearena.save.v1`: `{ v:1, diff, state }`, written BEFORE each move's animation; removed only after the result is recorded. A save whose last move won is resumed and recorded on the next mount. Menu > New match / Home abandons (nothing recorded) |

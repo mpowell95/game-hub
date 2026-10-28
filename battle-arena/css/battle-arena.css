@@ -469,11 +469,6 @@
   position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%);
   background: radial-gradient(circle at 35% 35%, #fff 0 25%, var(--c) 60%); box-shadow: 0 0 12px var(--c), 0 0 3px #fff;
 }
-.ba-root .ba-proj {
-  position: absolute; width: 38px; height: 38px; border-radius: 50%; transform: translate(-50%, -50%);
-  background: radial-gradient(circle at 40% 40%, #fff 0 22%, var(--c) 55%, rgba(0, 0, 0, 0) 72%); box-shadow: 0 0 26px var(--c);
-}
-.ba-root .ba-proj.is-trail { width: 26px; height: 26px; }
 .ba-root .ba-ring { position: absolute; width: 64px; height: 64px; border-radius: 50%; border: 7px solid var(--c); box-shadow: 0 0 18px var(--c); transform: translate(-50%, -50%); }
 .ba-root .ba-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); opacity: 0; }
 .ba-root .ba-sbanner { position: absolute; left: 0; right: 0; height: 130px; transform: translateY(-50%); }
@@ -512,19 +507,37 @@
   font-size: 32px; font-weight: 900; font-style: italic; color: var(--ba-hl); text-transform: uppercase;
   text-shadow: 2px 0 0 #000, -2px 0 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 0 5px 10px rgba(0, 0, 0, .6);
 }
+/* The evolution (attacks.js evolveScene): dark stage, turning rays in the element's colour, energy rushing
+ * in, a ball of light that cracks open, the new form, and its name slammed on in big letters. */
 .ba-root .ba-evo {
-  position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  background: radial-gradient(circle, #fffdf3 0 35%, #ffe6a0 100%); color: #2a1a00; opacity: 0;
+  position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(circle at 50% 45%, #3a1a0c, #0a0604 72%); /* before color-mix (older iPhones) */
+  background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--c, #ffb02e) 35%, #1a0d06), #0a0604 72%); opacity: 0;
 }
-.ba-root .ba-evo-rays { position: absolute; left: -50%; top: -50%; width: 200%; height: 200%; background: repeating-conic-gradient(rgba(255, 196, 40, .3) 0 9deg, rgba(255, 196, 40, 0) 9deg 18deg); animation: ba-spin 9s linear infinite; }
+.ba-root .ba-evo-rays {
+  position: absolute; left: -50%; top: -50%; width: 200%; height: 200%; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255, 196, 40, .3) 0 9deg, rgba(255, 196, 40, 0) 9deg 22deg);
+  background: repeating-conic-gradient(color-mix(in srgb, var(--c, #ffc428) 30%, transparent) 0 9deg, rgba(0, 0, 0, 0) 9deg 22deg); animation: ba-spin 9s linear infinite;
+}
 @keyframes ba-spin { to { transform: rotate(360deg); } }
-.ba-root .ba-evo-art { position: relative; width: 210px; height: 210px; }
+.ba-root .ba-evo-art { position: relative; width: min(56vw, 230px); height: min(56vw, 230px); }
 .ba-root .ba-evo-old, .ba-root .ba-evo-new { position: absolute; inset: 0; }
 .ba-root .ba-evo-old svg, .ba-root .ba-evo-new svg { width: 100%; height: 100%; overflow: visible; }
 .ba-root .ba-evo.is-me .ba-evo-old svg, .ba-root .ba-evo.is-me .ba-evo-new svg { transform: scaleX(-1); }
-.ba-root .ba-evo .is-sil svg { filter: brightness(0) drop-shadow(0 0 12px #fff); }
-.ba-root .ba-evo-txt { position: relative; max-width: 92%; font-size: 22px; font-weight: 900; white-space: nowrap; overflow: hidden; text-transform: uppercase; transition: opacity .3s; }
-.ba-root .ba-evo-flash { position: absolute; inset: 0; background: #fff; }
+.ba-root .ba-evo-orb {
+  position: absolute; left: 50%; top: 50%; width: 120%; height: 120%; border-radius: 50%; transform: translate(-50%, -50%) scale(0);
+  background: radial-gradient(circle, #fff 0 45%, #fff4cf 58%, rgba(255, 220, 140, 0) 70%);
+}
+.ba-root .ba-evo-crack {
+  position: absolute; left: 50%; top: 50%; width: 160%; height: 10px; margin-top: -5px; transform-origin: 0 50%; border-radius: 6px;
+  background: linear-gradient(90deg, #fff, rgba(255, 236, 170, 0));
+}
+.ba-root .ba-evo-txt {
+  position: relative; max-width: 94%; font-size: 44px; font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; line-height: 1.15;
+  color: #ffd23a; text-transform: uppercase; letter-spacing: .01em;
+  text-shadow: 3px 0 0 #000, -3px 0 0 #000, 0 3px 0 #000, 0 -3px 0 #000, 0 6px 0 #000;
+  text-shadow: 3px 0 0 #000, -3px 0 0 #000, 0 3px 0 #000, 0 -3px 0 #000, 0 6px 0 #000, 0 0 26px color-mix(in srgb, var(--c, #ffb02e) 80%, transparent);
+}
 .ba-root .ba-bubble {
   position: absolute; width: calc(var(--ba-art) * 1.1); height: calc(var(--ba-art) * 1.1); border-radius: 50%; transform: translate(-50%, -50%);
   border: 4px solid #9fd0ff; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .55), rgba(120, 180, 255, .18) 60%); box-shadow: 0 0 18px #9fd0ff;
@@ -643,3 +656,71 @@
 /* A challenge the other person has not opened: their team is not picked yet, so no monsters there. */
 .ba-root .ba-battle.is-foe-unknown .ba-mon[data-side="1"] .ba-mon-art,
 .ba-root .ba-battle.is-foe-unknown .ba-mon[data-side="1"] .ba-bar { visibility: hidden; }
+
+/* --- the monsters' own attacks (attacks.js, 2026-10-28) ----------------------------------------- */
+.ba-root .ba-sparks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ba-root .ba-aflash { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+/* The tint darkens the arena BEHIND the monsters (the field's back layer), never the board. */
+.ba-root .ba-tint { position: absolute; left: -100vw; right: -100vw; top: -100vh; bottom: -100vh; z-index: -1; opacity: 0; pointer-events: none; }
+.ba-root .ba-pillar { position: absolute; transform-origin: 50% 100%; pointer-events: none; filter: drop-shadow(0 0 14px #ff8a1f); }
+/* A column of flame: a jagged top (clip-path), hot white at the root, flickering. */
+.ba-root .ba-pillar i {
+  position: absolute; inset: 0; animation: ba-flick .12s steps(2) infinite alternate;
+  clip-path: polygon(0 100%, 4% 40%, 12% 22%, 18% 34%, 27% 8%, 36% 26%, 46% 0, 56% 20%, 66% 6%, 74% 28%, 84% 12%, 90% 32%, 96% 24%, 100% 100%);
+  background: linear-gradient(to top, #fff6c8 0%, #ffd23a 20%, #ff8a1f 48%, #e0532f 75%, rgba(224, 83, 47, .2) 100%);
+}
+.ba-root .ba-pillar i + i { inset: 18% 20% 0; animation-delay: -.06s; background: linear-gradient(to top, #fff, #fff6c8 45%, rgba(255, 214, 90, .3)); }
+@keyframes ba-flick { to { transform: scaleX(.92) scaleY(1.04); } }
+.ba-root .ba-abeam { position: absolute; transform-origin: 0 50%; pointer-events: none; border-radius: 999px; }
+.ba-root .ba-abeam i { position: absolute; inset: 22% 0; border-radius: 999px; background: #fff; filter: blur(2px); }
+.ba-root .ba-abeam.is-water { background: linear-gradient(180deg, rgba(95, 182, 255, .2), #5fb6ff 25%, #cfeeff 50%, #5fb6ff 75%, rgba(95, 182, 255, .2)); box-shadow: 0 0 16px #5fb6ff; }
+.ba-root .ba-abeam.is-prism { background: linear-gradient(180deg, #E0532F, #F2B705 22%, #2E9E44 42%, #1F5FA8 62%, #7B4FC4 82%, #E0532F); box-shadow: 0 0 22px #fff; }
+.ba-root .ba-asvg { position: absolute; inset: 0; pointer-events: none; }
+.ba-root .ba-asvg svg { overflow: visible; }
+.ba-root .ba-maw { position: absolute; pointer-events: none; filter: drop-shadow(0 0 16px rgba(167, 123, 255, .8)); }
+.ba-root .ba-maw svg { width: 100%; height: 100%; overflow: visible; }
+.ba-root .ba-boulder { position: absolute; filter: drop-shadow(0 8px 6px rgba(0, 0, 0, .45)); }
+.ba-root .ba-boulder svg { width: 100%; height: 100%; }
+.ba-root .ba-ghost { position: absolute; transform: translate(-50%, -50%); filter: brightness(2.2) drop-shadow(0 0 8px #ffe45a); opacity: 0; }
+.ba-root .ba-ghost svg { width: 100%; height: 100%; overflow: visible; }
+.ba-root .ba-ghost.is-me svg { transform: scaleX(-1); }
+.ba-root .ba-shard {
+  position: absolute; width: 34px; height: 12px; transform: translate(-50%, -50%);
+  clip-path: polygon(0 50%, 30% 0, 100% 50%, 30% 100%); background: linear-gradient(90deg, #7fc8ff, #fff); filter: drop-shadow(0 0 6px #bfe6ff);
+}
+.ba-root .ba-icicle {
+  position: absolute; width: 22px; height: 64px; transform: translate(-50%, -50%);
+  clip-path: polygon(0 0, 100% 0, 50% 100%); background: linear-gradient(90deg, #bfe6ff, #fff 45%, #7fc8ff); filter: drop-shadow(0 0 8px #bfe6ff);
+}
+.ba-root .ba-iceblock {
+  position: absolute; transform: translate(-50%, -50%); border-radius: 14px; border: 3px solid rgba(255, 255, 255, .85);
+  background: linear-gradient(135deg, rgba(220, 244, 255, .7), rgba(127, 200, 255, .35) 45%, rgba(220, 244, 255, .55)); box-shadow: 0 0 18px #bfe6ff, inset 0 0 14px #fff;
+}
+
+/* --- a win that unlocks a monster ---------------------------------------------------------------- */
+.ba-root .ba-unlock-ov { position: absolute; inset: 0; z-index: 45; display: grid; place-items: center; background: rgba(8, 4, 2, .7); padding: 16px; }
+.ba-root .ba-unlock {
+  position: relative; overflow: hidden; width: min(340px, 100%); padding: 26px 16px 22px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: radial-gradient(circle at 50% 45%, #4a2a0c, #140a04 75%); border: 3px solid var(--ba-hl); box-shadow: 0 16px 40px rgba(0, 0, 0, .6); color: #fff;
+}
+.ba-root .ba-unlock .ba-evo-rays { --c: #ffc428; }
+.ba-root .ba-unlock .gh-modal__close { z-index: 2; }
+.ba-root .ba-unlock-kicker { position: relative; font-size: 20px; font-weight: 900; font-style: italic; text-transform: uppercase; color: var(--ba-hl); text-shadow: 0 2px 0 #000; }
+.ba-root .ba-unlock-art { position: relative; width: 170px; height: 170px; }
+.ba-root .ba-unlock-art svg { width: 100%; height: 100%; overflow: visible; }
+.ba-root .ba-unlock-name {
+  position: relative; max-width: 100%; font-size: 34px; font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; text-transform: uppercase;
+  text-shadow: 3px 0 0 #000, -3px 0 0 #000, 0 3px 0 #000, 0 -3px 0 #000, 0 5px 0 #000;
+}
+
+/* --- TEST MODE (2026-10-28): a hazard-striped tag on EVERY screen while the game is being tested with
+ * real players. ui.js TEST_MODE; remove at release. Above every overlay, never takes a tap. */
+.ba-root.is-test::after {
+  content: attr(data-test); position: absolute; z-index: 60; pointer-events: none;
+  top: calc(env(safe-area-inset-top, 0px) + 4px); left: 50%; transform: translateX(-50%);
+  padding: 4px 12px 3px 15px; border-radius: 7px; border: 2px solid #1f1a14;
+  font: 900 16px/1.1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: .16em; color: #1f1a14;
+  background: repeating-linear-gradient(-45deg, #f2b705 0 8px, #ffd84a 8px 16px); box-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+}
+/* In a match the top rows are the two teams and MOVES; the tag sits on the stage just under them. */
+.ba-root.is-test:has(.ba-battle)::after { top: calc(env(safe-area-inset-top, 0px) + 106px); }
