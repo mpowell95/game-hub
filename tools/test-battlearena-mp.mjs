@@ -143,14 +143,23 @@ const api = {
 };
 MP.__setBootForTest(async () => (offline ? null : { db: {}, api }), { allowDev: true });
 
-/** Every move `side` makes in one turn, chosen by the computer, WITHOUT writing. */
+/** Every move `side` makes in one turn, chosen by the computer, WITHOUT writing.
+ *  REPEATABLE (2026-10-28): the computer's choices come from a generator seeded by the match's seed
+ *  and how far its log has got, never Math.random, so a given seed plays the same match every run.
+ *  It used to be random, and about 1 run in 3 failed: a lucky chain of 4+ matches (an extra move
+ *  each, no cap) knocked out the other team in the challenger's FIRST turn, before the receiver
+ *  could decline, resign or expire. That is a legal finish, tested on its own below; the lifecycle
+ *  matches use seeds checked not to end early. The old 20-move cap also cut long turns short
+ *  (the hard computer's longest first turn is 31 moves); 200 is only a runaway guard. */
 function turnEntries(g, side, level = 'hard') {
   let s = MP.buildState(g);
   const out = [];
   const seat = side === 'a' ? 0 : 1;
-  for (let guard = 0; guard < 20 && s.turn === seat && s.winner == null; guard++) {
+  let r = ((g.seed >>> 0) ^ Math.imul((g.log || []).length + 1, 2654435761)) >>> 0 || 1;
+  const rand = () => { r = (Math.imul(r, 1103515245) + 12345) >>> 0; return r / 4294967296; };
+  for (let guard = 0; guard < 200 && s.turn === seat && s.winner == null; guard++) {
     const evo = E.evolveOptions(s);
-    const mv = { ...(evo.length ? { type: 'evolve', mon: evo[0] } : chooseMove(s, level)), side: seat };
+    const mv = { ...(evo.length ? { type: 'evolve', mon: evo[0] } : chooseMove(s, level, rand)), side: seat };
     const res = E.apply(s, mv);
     out.push(O.entryOf(mv));
     s = res.state;
@@ -268,13 +277,13 @@ let id;
 // Cancel, decline, resign, expire, offline.
 {
   use('A');
-  const c1 = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const c1 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1001 });
   const can = await MP.cancelGame(c1.id);
   ok('cancel: the sender calls off an unanswered challenge', can.ok && can.cancelled && MP.isCalledOff(can.game) && can.game.over.why === 'cancelled');
   ok('cancel: the row is stored over:false with `ended` (no push shape)', row('DREG5', c1.id).over === false && row('DREG5', c1.id).ended === 'cancelled');
   ok('cancel: the match is kept, nothing deleted', !!getAt(`battlearena/games/${c1.id}/a/team`));
 
-  const c2 = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const c2 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1002 });
   await playTurn(c2.id, 'a');
   use('B');
   const dec = await MP.cancelGame(c2.id);
@@ -283,7 +292,7 @@ let id;
   ok('a declined match reads as finished with no result', rows.find((r) => r.id === c2.id).over && rows.find((r) => r.id === c2.id).result === null);
 
   use('A');
-  const c3 = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const c3 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1003 });
   await playTurn(c3.id, 'a');
   use('B');
   await MP.draftTeam(c3.id, TEAMS.b);
@@ -291,7 +300,7 @@ let id;
   ok('resign on an unanswered challenge calls it off instead (nobody is handed a win)', resOpen.ok && resOpen.cancelled);
 
   use('A');
-  const c4 = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const c4 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1004 });
   await playTurn(c4.id, 'a');
   use('B'); await MP.draftTeam(c4.id, TEAMS.b); await playTurn(c4.id, 'b');
   use('A');
@@ -299,7 +308,7 @@ let id;
   ok('resign once answered: the other person wins', rs.ok && rs.game.over.winner === 'b' && rs.game.over.why === 'resign');
   ok('resign rows: lost / won, why resign', row('DREG5', c4.id).result === 'lost' && row('TQWX7', c4.id).result === 'won' && row('TQWX7', c4.id).why === 'resign');
 
-  const c5 = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const c5 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1005 });
   await playTurn(c5.id, 'a');
   // Waiting on b for more than 3 days.
   setAt(`battlearena/games/${c5.id}/updated`, Date.now() - 4 * 24 * 3600 * 1000);
@@ -310,7 +319,18 @@ let id;
   setAt(`battlearena/games/${c5.id}/b/team`, TEAMS.b);
   ok('expire: a late move is refused', (await MP.appendLog(c5.id, g5.log.length, turnEntries(await MP.readGame(c5.id), 'b').slice(0, 1))).reason === 'expired');
 
-  // A log with a pass (no clock in challenges) is not a match.
+  // A KNOCKOUT IN THE CHALLENGER'S FIRST TURN (2026-10-28): legal (every 4+ match is an extra move,
+  // no cap; Matt, 2026-10-24) and about 1 in 90 first turns for the hard computer. Seed 1041 does it.
+  // The receiver must still get the match, as a finished loss, and nothing can call it off.
+  use('A');
+  const k1 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1041 });
+  const kr = await playTurn(k1.id, 'a');
+  ok('first-turn knockout: the match ends, the challenger wins', kr.ok && kr.game.over && kr.game.over.winner === 'a' && kr.game.over.why === 'ko', JSON.stringify(kr.game && kr.game.over));
+  ok('first-turn knockout: the receiver still gets the match, as a loss', row('TQWX7', k1.id) && row('TQWX7', k1.id).over === true && row('TQWX7', k1.id).result === 'lost' && row('DREG5', k1.id).result === 'won');
+  use('B');
+  ok('first-turn knockout: it cannot be declined after the fact', (await MP.cancelGame(k1.id)).reason === 'already-over');
+
+
   const raw = clone(getAt(`battlearena/games/${c4.id}`));
   raw.log['0099'] = { by: 'b', k: 'p' };
   ok('a challenge log never holds a pass (no move clock): refused whole', MP.validateGame(raw) === null);
@@ -320,7 +340,7 @@ let id;
 
   offline = true;
   use('A');
-  const off = await MP.createGame({ them: B_THEM, team: TEAMS.a });
+  const off = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1006 });
   ok('offline: a failure, retryable, nothing written', !off.ok && off.reason === 'offline' && off.retryable);
   MP.savePending('abcdefgh', 3, [{ by: 'a', k: 's', a: 0, b: 1 }]);
   ok('outbox: an unsent move is kept', MP.outboxCount() === 1 && MP.pendingFor('abcdefgh').base === 3);
