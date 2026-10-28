@@ -98,6 +98,28 @@ nudes nudity slut spic wop homo queer booze poop puke barf pee sod bonk shag hum
 breast bosom teat teats erotic orgy testes testis scrota scrotum frig glans nuder nudest
 nudism nudist`.split(/\s+/).filter(Boolean);
 
+// Whole word FAMILIES, every form (2026-10-28 review: FAGGED, RAPER, SEXIER, GAYS got through the
+// suffix rule). Anchored at both ends, so DRAPE, GRAPE, SCRAPE, SEXTET, SEXTON, SEXTANT stay.
+// The rest of the alternatives come from reading both final lists for slurs, sexual, body-slang,
+// drug-slang and crude words the same day (the full list is in the 2026-10-28 commit message).
+const BLOCK_RE = new RegExp('^(' + [
+  'fag\\w*', 'rap(e|es|ed|er|ers|ing|ist|ists)', 'sex(?!t(et|on|ant))\\w*', 'gay(s|er|est)', 'nigh(er|est)',
+  // slurs and sound-alikes
+  'wogs?', 'yids?', 'gyp(s|ped|per|pers|ping|ster|sters)?', 'gyps(y|ies)', 'negroid', 'nigg\\w*', 'coolies?', 'squaws?', 'rednecks?', 'gringos?',
+  'poofters?', 'midgets?', 'mammy', 'limeys?', 'dikes?', 'diked', 'gimp\\w*', 'fatsos?', 'sissy', 'sissies',
+  // sexual and body words
+  'anally', 'condoms?', 'crotch(es)?', 'phall(i|ic|us|uses)', 'pubic', 'scrotal', 'sperms?', 'vagina[el]?', 'vulvae?',
+  'erotica', 'fetish(es)?', 'pimp(s|ed|ing)?', 'whor(e|es|ed|ing|ish)', 'huss(y|ies)', 'flooz(y|ies)', 'bawd\\w*', 'lewd\\w*', 'lust(s|ed|ing|ful|fully|ier|iest|ily|y)?',
+  'slutty', 'smutty', 'hooters?', 'buttocks?', 'hickeys?', 'dongs?', 'ballsy', 'hornier', 'horniest', 'cockier', 'cockily',
+  'tarty', 'coit(al|us)', 'brothels?', 'lech(er|ers|ery|es|ed|ing)?', 'libidos?', 'molest\\w*', 'rectal', 'gropers?',
+  'randier', 'randiest', 'panties?', 'buxom', 'carnal\\w*', 'wanton\\w*', 'enemas?', 'pissoirs?', 'pussier',
+  // toilet words
+  'fart(s|ed|ing)?', 'crapp(ed|er|ers|ing)', 'shitted', 'boogers?', 'douch(e|es|ed|ing)',
+  // drug slang
+  'potheads?', 'hashish', 'opium', 'tok(e|es|ed|ing)', 'meths?', 'junkies?', 'druggies?', 'reefers?', 'spliffs?', 'stoners?',
+  // crude insults and oaths
+  'scumbags?', 'gits?', 'jackass(es)?', 'goddamn\\w*', 'helluva', 'sodd(ed|ing)', 'shagged', 'frigged',
+].join('|') + ')$');
 // Plain words the plural/verb-form rule in isBad() would catch by accident (read 2026-10-28).
 const STEM_OK = new Set('butter butters buttes butted butting spiced spices spicing spicy tardy luster monger mongers crapes'.split(' '));
 
@@ -296,7 +318,7 @@ async function main() {
   for (const [i, u] of NAME_URLS.entries()) {
     for (const n of fs.readFileSync(await cached(u, `names-${i}.txt`), 'utf8').split(/\r?\n/)) if (n.trim()) names.add(n.trim().toLowerCase());
   }
-  const ok = (w) => /^[a-z]{3,7}$/.test(w) && enable.has(w) && !isBad(w);
+  const ok = (w) => /^[a-z]{3,7}$/.test(w) && enable.has(w) && !isBad(w) && !BLOCK_RE.test(w);
   const grid = [...level.keys()].filter((w) => level.get(w) <= GRID_LEVEL && ok(w) && !GRID_BLOCK.has(w)
     && (said.get(w) || 0) >= MIN_SAID_GRID && (!names.has(w) || level.get(w) <= CORE_LEVEL || NAME_OK.has(w))).sort();
   const extra = [...new Set([...grid, ...[...level.keys()].filter((w) => level.get(w) <= EXTRA_LEVEL && ok(w) && !names.has(w))])].sort();

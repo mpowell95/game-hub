@@ -136,7 +136,7 @@ ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l
 // PINNED = how many levels have shipped. To add levels, APPEND (re-run the generator without
 // --fresh: it keeps every shipped level) and leave this hash alone; it covers only the first PINNED.
 const PINNED = 2000;
-const PIN_HASH = '270af19cca383208';
+const PIN_HASH = '923081f5bf83e127';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);
