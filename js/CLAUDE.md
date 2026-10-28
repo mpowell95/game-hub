@@ -251,7 +251,7 @@ shot stamps `shotError` instead of failing the send.
 
 ### How Matt is notified
 
-Matt's in-app inbox (`gamehub.bugadmin.v1`; each row and report opens with the game's tile art + name, big, `whereHTML`, 2026-10-28), `node tools/read-bug-reports.mjs` (`--shots`, `--deleted`), and
+Matt's in-app inbox (`gamehub.bugadmin.v1`; each row and report opens with the game's tile art + name, big, `whereHTML`, then the sender bold, `whoText`, 2026-10-28), `node tools/read-bug-reports.mjs` (`--shots`, `--deleted`), and
 since 2026-09-24 `bugReportPush` (root "Push notifications").
 
 ### Replying, and clearing the inbox (2026-08-13)
