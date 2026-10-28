@@ -58,6 +58,7 @@ export default {
     page_back10: 'Back 10 pages',
     page_fwd10: 'Forward 10 pages',
     hint_half: 'Hint used: half points, no crown',
+    hint_crown: 'Hint used: no crown',
   },
   es: {
     title: 'Atasco',
@@ -116,5 +117,6 @@ export default {
     page_back10: '10 páginas atrás',
     page_fwd10: '10 páginas adelante',
     hint_half: 'Con pista: mitad de puntos, sin corona',
+    hint_crown: 'Con pista: sin corona',
   },
 };
