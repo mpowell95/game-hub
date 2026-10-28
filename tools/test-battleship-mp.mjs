@@ -185,6 +185,32 @@ const randomFleet = (size) => stored(F.autoPlace(size, F.shipSetFor(size), rng))
     ok('one per hit: a rule-2 log of a bonus volley does not replay as rule 1 the same way',
       MP.replay('classic', fa, fb, l2.concat([{ by: 'b', r: wa[2][0], c: wa[2][1] }]), true, N, 2).state.turn === 0
       && MP.replay('classic', fa, fb, l2.concat([{ by: 'b', r: wa[2][0], c: wa[2][1] }]), true, N, true).state.turn === 1);
+
+    // SHRINKING 5s (rule 3, `salvo: 3`, Matt 2026-10-28): each side's own turns open with 5, 4, 3, then 2
+    // for the rest; bonus volleys (one per hit) are not turns and never shrink it.
+    const S3 = (lg3) => MP.replay('classic', fa, fb, lg3, true, 5, 3);
+    let s3 = S3([]).state, l3 = [], seen = [];
+    const wq = { 0: wb.slice(), 1: wa.slice() };
+    for (let t = 0; t < 10; t++) {
+      const me = s3.turn, k = MP.volleyLeft(s3, me, 5, 3);
+      seen.push(k);
+      const v = wq[me].splice(0, k);
+      const f = MP.fireVolley(s3, me, v, 5, 3);
+      s3 = f.state; for (const [r, c] of f.fired) l3.push({ by: MP.sideOfSeat(me), r, c });
+    }
+    ok('shrinking 5s: each side opens 5, 4, 3, 2, 2', JSON.stringify(seen) === '[5,5,4,4,3,3,2,2,2,2]', JSON.stringify(seen));
+    ok('shrinking 5s: fireVolley = the replay', same(S3(l3).state, s3));
+    ok('shrinking 5s: the same all-miss log is 5 a turn under rule 2', MP.volleyLeft(MP.replay('classic', fa, fb, l3.slice(0, 10), true, 5, 2).state, 1, 5, 2) === 5);
+    const first = S3([]).state, opener = first.turn;
+    const theirs = opener === 1 ? wa : wb, hitsOn = opener === 1 ? hitsA : [...occB].map((k) => k.split(',').map(Number));
+    const b1 = MP.fireVolley(first, opener, [hitsOn[0], theirs[0], theirs[1], theirs[2], theirs[3]], 5, 3);
+    ok('shrinking 5s: 1 hit in the opening 5 earns ONE bonus shot', b1.state.turn === opener && MP.volleyLeft(b1.state, opener, 5, 3) === 1);
+    const b2 = MP.fireVolley(b1.state, opener, [theirs[4]], 5, 3);
+    const other = 1 - opener, ow = opener === 1 ? wb : wa;
+    ok('shrinking 5s: the other side still opens with 5', b2.state.turn === other && MP.volleyLeft(b2.state, other, 5, 3) === 5);
+    const b3 = MP.fireVolley(b2.state, other, ow.slice(0, 5), 5, 3);
+    ok('shrinking 5s: a bonus volley is not a turn (the opener\'s second turn is 4)', b3.state.turn === opener && MP.volleyLeft(b3.state, opener, 5, 3) === 4);
+    ok('shrinking 5s: 1 and 3 a turn never shrink', MP.openingVolley({ chTurns: [9, 9] }, 0, 3, 3) === 3 && MP.openingVolley({ chTurns: [9, 9] }, 0, 1, 3) === 1);
   }
   ok('cleanShot: off the board, or not a side, is not a shot', MP.cleanShot({ by: 'a', r: 10, c: 0 }) === null && MP.cleanShot({ by: 'x', r: 0, c: 0 }) === null
     && MP.cleanShot({ by: 'a', r: 7, c: 7 }, 'quick') && MP.cleanShot({ by: 'a', r: 8, c: 0 }, 'quick') === null);
@@ -340,6 +366,11 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   const raw1 = clone(getAt(`battleship/games/${c.id}`)); raw1.salvo = true;
   ok('a first-day match (salvo: true) still validates on its own rule', MP.validateGame(raw1) === null || MP.validateGame(raw1).salvo === true);
 
+  use('A');
+  const c5 = await MP.createGame({ them: B_THEM, fleet: randomFleet('quick'), size: 'quick', shots: 5 });
+  ok('5 a turn: stored as shrinking 5s (salvo: 3)', c5.ok && getAt(`battleship/games/${c5.id}/salvo`) === 3 && c5.game.salvo === 3);
+  const raw2 = clone(getAt(`battleship/games/${c5.id}`)); raw2.salvo = 2;
+  ok('a 5-shot match from before shrinking (salvo: 2) keeps its rule', MP.validateGame(raw2) && MP.validateGame(raw2).salvo === 2);
   const raw = clone(getAt(`battleship/games/${c.id}`)); delete raw.shots;
   ok('a stored match with no `shots` is 1 a turn (the 3-shot log no longer replays as one)', MP.validateGame(raw) === null);
   const raw4 = clone(getAt(`battleship/games/${c.id}`)); raw4.shots = 4;

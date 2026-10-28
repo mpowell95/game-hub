@@ -25,9 +25,21 @@
 // volley of N; after any volley with H hits the shooter fires a volley of H (state `chNext`), and a
 // volley with no hit passes the turn. `salvo: true` (rule 1, the first day's matches) keeps "any hit =
 // another full volley", so they still replay exactly as played.
-export const SALVO_RULES = [1, 2];
-/** The salvo rule a stored value means: 0 (not a salvo), 1 (`true`) or 2. */
-export const salvoRule = (v) => (v === 2 ? 2 : v === true || v === 1 ? 1 : 0);
+// SHRINKING 5s (2026-10-28, Matt: going first with 5 shots was "too easy to win"; he picked this from
+// simulations: first player 59% -> 52%, ~10 turns each): `salvo: 3` = rule 2, and a 5-shot game's turns
+// OPEN with 5, then 4, then 3, then 2 for the rest of the game, per player (state `chTurns`, turns each
+// seat has started). Bonus volleys (one shot per hit) are not turns. Stored only on 5-shot matches.
+export const SALVO_RULES = [1, 2, 3];
+/** The salvo rule a stored value means: 0 (not a salvo), 1 (`true`), 2 or 3. */
+export const salvoRule = (v) => (v === 3 ? 3 : v === 2 ? 2 : v === true || v === 1 ? 1 : 0);
+/** PURE. The volley a turn of `shooter` opens with: N, or under rule 3 N minus the turns already
+ *  started, never under 2 (5, 4, 3, 2, 2...). */
+export function openingVolley(state, shooter, perTurn = 1, rule = 1) {
+  const n = asShots(perTurn) || 1;
+  if (rule !== 3 || n < 5) return n;
+  const t = (state.chTurns && state.chTurns[shooter]) | 0;
+  return Math.max(Math.min(n, 2), n - t);
+}
 //
 // THE LAW applies. A match is not a player's earned history, but the writes still follow rule 6:
 // every one is VERIFIED by a fresh re-read, and nothing here ever deletes anything.
@@ -201,10 +213,10 @@ export function volleySize(state, target, perTurn = 1) {
 }
 /** PURE. Shots still owed in the volley `shooter` is firing: the next volley if none is under way (a
  *  bonus volley of one shot per hit under rule 2, else a full N). */
-export function volleyLeft(state, shooter, perTurn = 1) {
+export function volleyLeft(state, shooter, perTurn = 1, rule = 1) {
   if (state.turn === shooter && state.chVol > 0) return state.chVol;
   if (state.turn === shooter && state.chNext > 0) return volleySize(state, 1 - shooter, state.chNext);
-  return volleySize(state, 1 - shooter, asShots(perTurn) || 1);
+  return volleySize(state, 1 - shooter, openingVolley(state, shooter, perTurn, rule));
 }
 
 /**
@@ -214,8 +226,9 @@ export function volleyLeft(state, shooter, perTurn = 1) {
  */
 export function fireSalvoShot(state, shooter, r, c, perTurn = 1, rule = 1) {
   const target = 1 - shooter;
-  const k = volleyLeft(state, shooter, perTurn);
+  const k = volleyLeft(state, shooter, perTurn, rule);
   const mid = state.turn === shooter && state.chVol > 0;
+  const starting = !mid && !(state.turn === shooter && state.chNext > 0);   // a new TURN, not a bonus volley
   const hitsSoFar = mid ? (Number.isInteger(state.chVHits) ? state.chVHits : (state.chVHit ? 1 : 0)) : 0;
   const res = fireAndResolve(state, target, r, c);
   let next = res.state;
@@ -223,7 +236,12 @@ export function fireSalvoShot(state, shooter, r, c, perTurn = 1, rule = 1) {
     const hits = hitsSoFar + (res.answer.result === 'hit' ? 1 : 0);
     next = k > 1
       ? { ...next, turn: shooter, chVol: k - 1, chVHit: hits > 0, chVHits: hits, chNext: 0 }
-      : { ...next, turn: hits ? shooter : target, chVol: 0, chVHit: false, chVHits: 0, chNext: rule === 2 && hits ? hits : 0 };
+      : { ...next, turn: hits ? shooter : target, chVol: 0, chVHit: false, chVHits: 0, chNext: rule >= 2 && hits ? hits : 0 };
+  }
+  if (rule === 3) {
+    const turns = Array.isArray(state.chTurns) ? state.chTurns.slice() : [0, 0];
+    if (starting) turns[shooter] = (turns[shooter] | 0) + 1;
+    next = { ...next, chTurns: turns };
   }
   return { state: next, answer: res.answer };
 }
@@ -334,7 +352,7 @@ export function validateGame(raw) {
   const who = (x, fleet) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂'), fleet });
   return {
     v: 1, id, size, bonus, shots,
-    ...(salvo === 2 ? { salvo: 2 } : salvo ? { salvo: true } : {}),
+    ...(salvo >= 2 ? { salvo } : salvo ? { salvo: true } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -651,7 +669,7 @@ export async function createGame({ them, fleet, size = 'classic', shots = 1 }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, size: sz, bonus: true, shots: perTurn, salvo: 2, lapse: true, by: me, created: now, updated: now,
+    v: 1, id, size: sz, bonus: true, shots: perTurn, salvo: perTurn === 5 ? 3 : 2, lapse: true, by: me, created: now, updated: now,
     a: { code: me, name: label.name, emoji: label.emoji, fleet: mine },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,

@@ -1055,3 +1055,13 @@ whole new volley for any hit. New matches store `salvo: 2`; a volley with H hits
 Matches already stored `salvo: true` keep the first rule so their logs still replay (a log refused by
 `validateGame` would make the match unopenable). Shipped IMPORTANT: a phone on the previous build would read
 `salvo: 2` as no salvo and refuse the match.
+
+
+## 2026-10-28 — Shrinking 5s
+
+Matt: *"It's too easy to win if you go first with 5 shots"*. Bot-vs-bot simulations (strong bots): 5 a turn,
+the starter won ~59% in ~6 turns each. Matt suggested *"5 each the first turn, then 4, then 3, etc."*; with 5, 4,
+3, then 2 for the rest the starter won ~52% in ~10 turns. *"yes do the 5,4,3,2 option"*. New 5-shot matches
+store `salvo: 3`; each side counts its own turns (`chTurns`), bonus volleys (one per hit) are not turns. 1 and 3
+a turn are unchanged (`salvo: 2`). Matches already stored keep their rule. Shipped IMPORTANT (an older phone
+reads `salvo: 3` as an unknown rule). Verified in a browser: a 5-shot bot game opened my volleys 5, 4, 3, 2, 2.
