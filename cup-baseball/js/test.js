@@ -1,7 +1,7 @@
 // cup-baseball/js/test.js - the rules, and the computer on the real physics. Dev only, not in sw.js.
 //   node cup-baseball/js/test.js          rules + a physics sanity sweep
 //   node cup-baseball/js/test.js --cpu    also each skill's hit rates (slow, ~1 min)
-import { Game, OUTS } from './game.js';
+import { Game, OUTS, STRIKES } from './game.js';
 import { CUPS, hitOf } from './field.js';
 import { cpuThrow } from './cpu.js';
 import { aimAt, seeded } from '../../cup-pong/js/cpu.js';
@@ -69,6 +69,22 @@ ok('two outs a half', OUTS === 2);
   ok('bad innings falls back to 5', new Game({ innings: 7 }).innings === 5);
   g.over = true;
   ok('no throws after the end', g.throwResult(1).length === 0);
+}
+{
+  // Strikes (Matt, 2026-10-28): table or cup and no cup = strike, the 2nd strike = out; missing the
+  // table = an out at once; a hit or an out clears the strikes.
+  const g = new Game({ innings: 3, first: 'a' });
+  ok('two strikes', STRIKES === 2);
+  let ev = g.throwResult(0, true);
+  ok('first strike is not an out', g.strikes === 1 && g.outs === 0 && ev.some((e) => e.type === 'strike') && !ev.some((e) => e.type === 'out'));
+  ev = g.throwResult(0, true);
+  ok('second strike is an out', g.strikes === 0 && g.outs === 1 && ev.some((e) => e.type === 'out'));
+  g.throwResult(0, true); g.throwResult(1);
+  ok('a hit clears the strike', g.strikes === 0 && g.outs === 1 && g.bases[0]);
+  g.throwResult(0, true); ev = g.throwResult(0, false);
+  ok('missing the table is an out and clears the strike', g.strikes === 0 && g.batting === 'b' && ev.some((e) => e.type === 'side'));
+  ev = g.throwResult(0, false);
+  ok('missing the table is an out at once', g.outs === 1 && g.strikes === 0);
 }
 ok('cup ids map to hits', hitOf('h1') === 1 && hitOf('h4') === 4 && hitOf('x') === 0);
 
