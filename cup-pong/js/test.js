@@ -211,6 +211,17 @@ ok('the whole rack area is on the table',
   ok('rebuttal: after ball 1 misses, ball 2 shoots', !m.over && m.ball === 1);
   m.throwResult({ made: 'k1' }); ev = m.throwResult(miss);
   ok('rebuttal: both balls missed, the side that cleared wins', m.over && m.winner === 'a');
+  // RERACKS IN A REBUTTAL (Matt, 2026-10-28): unlimited, free, any time a ball is in hand.
+  m = oneLeft('a'); m.reracksLeft.b = 0; m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
+  m.racks.a = m.racks.a.slice(0, 4);
+  ok('rebuttal: rerack offered even with none left', m.phase === 'rebuttal' && m.shooter === 'b' && m.canRerack());
+  ev = m.rerack('diamond');
+  ok('...taken, none spent, and offered again', types(ev).join() === 'rerack' && m.reracksLeft.b === 0 && m.canRerack());
+  m.throwResult({ made: ids(m, 'a')[0] });
+  ok('...still offered for the ball that comes back', m.ball === 0 && m.canRerack() && m.rerack('tri').length === 1);
+  m = new Match({ first: 'a', reracks: 0 }); m.racks.b = [{ id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn(); m.racks.a = m.racks.a.slice(0, 4);
+  ok('rebuttal: Reracks set to 0 means none', m.phase === 'rebuttal' && !m.canRerack());
   m = oneLeft('a'); m.throwResult({ made: 'k9' }); m.throwResult(miss); m.startTurn();
   for (const id of ids(m, 'a')) ev = m.throwResult({ made: id });
   ok('a rebuttal that clears everything goes to overtime', m.phase === 'overtime' && !m.over && types(ev).includes('overtime'));

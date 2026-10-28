@@ -62,7 +62,8 @@ turn's first throw:
 
 - **Gentleman's**: the rack shot at is down to 2 cups not in a line, setting On, not overtime. Free.
   **Also in a REBUTTAL any time a ball is in hand.**
-- **Rerack (n)**: before the first throw, once a turn, not in rebuttal/overtime, while reracks remain.
+- **Rerack (n)**: before the first throw, once a turn, not in overtime, while reracks remain. **In a REBUTTAL
+  unlimited and free (Matt, 2026-10-28), any time a ball is in hand; button reads Rerack (∞).** Not when Reracks = 0.
   Sheet of presets (`rack.js RERACKS`); **Make your own** is the last tile. A full rack of 10 cannot
   be reracked (`canRerack`).
 - **Island**: a cup touching no other cup; **calling spends it, hit or miss**; hit = defender owes a

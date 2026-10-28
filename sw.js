@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1312;
-const CACHE = 'game-hub-v1314';
+const IMPORTANT_SINCE = 1315;
+const CACHE = 'game-hub-v1315';
 
 const ASSETS = [
   './',
@@ -1117,13 +1117,13 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': '698942a954',
   './cup-pong/css/cup-pong.css': 'd71937af33',
-  './cup-pong/js/ui.js': '0daa0c79f4',
+  './cup-pong/js/ui.js': '530e7a59e5',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': 'e23be8d550',
   './cup-pong/js/physics.js': '108758b93f',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': 'cc6066dc26',
-  './cup-pong/js/match.js': 'a7e6d50a1d',
+  './cup-pong/js/match.js': '6a5b3d5448',
   './cup-pong/js/mp.js': '58335d27d3',
   './cup-pong/js/mp-ui.js': 'cf358d5147',
   './cup-pong/js/alert.js': 'd71546586b',

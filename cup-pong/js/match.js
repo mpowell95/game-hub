@@ -29,6 +29,7 @@
 //                    before the turn's first throw. Setting On/Off decides if it exists at all.
 //       Rerack:      a preset for the cups left (rack.js RERACKS), before the turn's first throw,
 //                    using one of the shooter's reracks (the Reracks setting, per player per game).
+//                    In a REBUTTAL: unlimited and free, any time a ball is in hand (2026-10-28).
 //       Island:      "if a cup is not touching any other cups, you can call island (once per game).
 //                    and if you hit that cup, you get 2 cups. The opposing player can choose the
 //                    second cup. If there are multiple available islands, you must call the specific
@@ -190,8 +191,15 @@ export class Match {
   }
 
   canRerack() {
-    if (this.phase !== 'normal' || this.turnThrows > 0 || this.over || this.rerackedThisTurn || this.mustPickOwed()) return false;
-    if (!(this.reracksLeft[this.shooter] > 0)) return false;
+    if (this.over || this.mustPickOwed()) return false;
+    if (this.phase === 'rebuttal') {
+      // A REBUTTAL HAS UNLIMITED RERACKS (Matt, 2026-10-28: "Rebuttals should have unlimited reracks.
+      // That's the rule."): free, none spent, any time a ball is in hand. Only a game with reracks on.
+      if (!(this.reracks > 0) || !this.queue.length) return false;
+    } else {
+      if (this.phase !== 'normal' || this.turnThrows > 0 || this.rerackedThisTurn) return false;
+      if (!(this.reracksLeft[this.shooter] > 0)) return false;
+    }
     const n = this.target().length;
     return n >= 1 && n < 10 && presetsFor(n, this.backRack).length > 0;
   }
@@ -201,7 +209,7 @@ export class Match {
     if (!p) return [];
     const to = applyPreset(this.target(), p.spots);
     this.racks[this.defender] = to;
-    if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    if (this.phase !== 'rebuttal' && Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
     this.rerackedThisTurn = true;
     return [{ type: 'rerack', side: this.defender, key, to, left: this.reracksLeft[this.shooter] }];
   }
@@ -221,7 +229,7 @@ export class Match {
     // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
     if (this.backRack && !to.some((k) => k.r === 0)) return [];
     this.racks[this.defender] = to;
-    if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    if (this.phase !== 'rebuttal' && Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
     this.rerackedThisTurn = true;
     return [{ type: 'rerack', side: this.defender, key: 'custom', to, left: this.reracksLeft[this.shooter] }];
   }
