@@ -319,6 +319,11 @@ make them closed loops"*. One-free-at-a-time BUILDS that trail in (each tap must
 **dead taps** (free nothing; the next arrow is elsewhere); `noiseScore` searches for them. 9 / 10: 70 arrows,
 36% / 41% dead taps then ~8 dots away, at most 3 free at once, 85% full, ~2.6 turns an arrow, no trains (every
 earlier board: 0 dead taps). No longer one single solving order.
+**Round 5 (same day)**: 9-10 took him 1:03 / 0:58 (*"SO EASY"*): noise made it EASIER (any free arrow is a right
+tap). The slow boards were one free arrow, far away, among lookalikes (4: 3.2 s a move). Matt: *"Make the board
+bigger? Drop all the rules ... Make it AS DIFFICULT AS POSSIBLE"*. Boards **11-12 are 28x38** (the old Expert's
+largest): 11 = 75 arrows, next arrow ~8.7 dots away on every move, blockers ~10.5 dots off (86% far); 12 = 120
+arrows, ~5.9 dots. One free at every step, no trains. Proposed, not built: 1 heart and no hints for Impossible.
 
 ## Test boards (2026-10-26, removed 2026-10-27)
 
