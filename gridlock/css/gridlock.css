@@ -361,7 +361,7 @@
   transform: translateY(-50%) rotate(45deg);
 }
 
-/* Walls (Expert): fixed metal plates on wood, striped barriers in the car park. */
+/* Walls (Hard, Expert): fixed metal plates on wood, plain black blocks in the car park (Matt, 2026-10-28). */
 .gl-root .gl-wall { width: var(--gl-cell); height: var(--gl-cell); padding: 3px; }
 .gl-root .gl-wall::before {
   content: '';
@@ -379,8 +379,8 @@
 .gl-root.gl-look-cars .gl-wall::before {
   inset: 5px;
   border-radius: 9px;
-  background: repeating-linear-gradient(135deg, #e0532f 0 9px, #f4f4f4 9px 18px);
-  box-shadow: inset 0 0 0 3px #1d2230, 0 3px 0 rgba(0, 0, 0, .35);
+  background: linear-gradient(#2c313b, #1d2230);
+  box-shadow: inset 0 0 0 3px #12151c, inset 0 5px 0 rgba(255, 255, 255, .1), 0 3px 0 rgba(0, 0, 0, .35);
 }
 
 /* Blocks. Positioned by transform (set in ui.js); only transform and opacity ever animate. */
