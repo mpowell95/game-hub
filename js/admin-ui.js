@@ -41,10 +41,10 @@ import {
   resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
   resolveHoldemCorrection, setHoldemCorrection, resolveOnlineAllowed, setOnlineAllowed,
-  resolveBeeUndone, setBeeUndone, setIntegrityUndone, resolveIntegrityUndone,
+  resolveBeeUndone, setBeeUndone, setIntegrityVoided,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
-import { hitText, gameName } from './integrity.js';
+import { hitText, gameName, isVoided, HAND_VOIDS } from './integrity.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -488,27 +488,30 @@ function beeSectionHTML(cfg) {
 }
 
 // --- Integrity checks, every other game (2026-10-28, docs/INTEGRITY-CHECKS-SPEC.md) ------------------
-/** One row per flagged game on one device's record, newest first: a voided one has Undo / Void again,
- *  an alert says so. Under them, folded, the online-match alerts. */
+/** One row per flagged game on one device's record, newest first, each with ONE button: Void when it
+ *  counts (an alert), Undo when it is voided (a strong flag, Matt's Void, or HAND_VOIDS). Under them,
+ *  folded, the online-match alerts. */
 function integritySectionHTML(cfg) {
   if (loading()) return loadingHTML();
   const date = (ms) => { try { return new Date(ms).toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  const flags = (_integ && _integ.flags) || {};
   const rows = [];
-  for (const [id, games] of Object.entries((_integ && _integ.flags) || {})) {
-    for (const [gid, rules] of Object.entries(games || {})) {
-      const list = Object.entries(rules || {}).map(([rule, f]) => ({ rule, ...(f || {}) }));
-      if (!list.length) continue;
-      const f0 = list[0];
-      const strong = list.some((f) => f.void === true);
-      const undone = strong && resolveIntegrityUndone(cfg, id, gid);
-      const at = Math.max(...list.map((f) => Number(f.when) || 0));
-      const what = list.map((f) => hitText(f)).join('; ');
-      rows.push({ at, html: `<div class="adm-row adm-bee" data-iv="${esc(id)}|${esc(gid)}">
-        <span class="adm-name">${esc(f0.name || f0.code || id)} · ${esc(gameName(gid))} · ${esc(date(at))}${undone ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
-        <span class="adm-note">${strong ? '' : `${esc(t('adm_iv_alert'))}: `}${esc(what)}</span>
-        ${strong ? `<button type="button" class="gh-btn gh-btn--sm" data-ivundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>` : ''}
+  const keys = new Set();
+  for (const [id, games] of Object.entries(flags)) for (const gid of Object.keys(games || {})) keys.add(`${id}|${gid}`);
+  for (const [id, games] of Object.entries(HAND_VOIDS)) for (const gid of Object.keys(games)) keys.add(`${id}|${gid}`);
+  for (const key of keys) {
+    const [id, gid] = key.split('|');
+    const list = Object.entries((flags[id] || {})[gid] || {}).map(([rule, f]) => ({ rule, ...(f || {}) }));
+    const rec = ((_players || {})[id] || {}).profile || {};
+    const f0 = list[0] || {};
+    const voided = isVoided(flags, cfg, id, gid);
+    const at = Math.max(0, ...list.map((f) => Number(f.when) || 0));
+    const what = list.length ? list.map((f) => hitText(f)).join('; ') : String((HAND_VOIDS[id] || {})[gid] || '');
+    rows.push({ at, html: `<div class="adm-row adm-bee" data-iv="${esc(id)}|${esc(gid)}">
+        <span class="adm-name">${esc(f0.name || rec.name || f0.code || id)} · ${esc(gameName(gid))}${at ? ` · ${esc(date(at))}` : ''} · ${esc(t(voided ? 'adm_iv_voided' : 'adm_bee_counts'))}</span>
+        <span class="adm-note">${esc(what)}</span>
+        <button type="button" class="gh-btn gh-btn--sm" data-ivset="${voided ? 'count' : 'void'}">${esc(t(voided ? 'adm_bee_undo' : 'adm_iv_void'))}</button>
       </div>` });
-    }
   }
   rows.sort((a, b) => b.at - a.at);
   const matches = [];
@@ -923,10 +926,10 @@ function wire(card) {
       const [bk, code] = e.target.closest('[data-bee]').dataset.bee.split('|');
       const on = e.target.closest('[data-beeundo]').dataset.beeundo === 'undo';
       run = () => setBeeUndone(bk, code, on);
-    } else if (e.target.closest('[data-ivundo]') && e.target.closest('[data-iv]')) {
+    } else if (e.target.closest('[data-ivset]') && e.target.closest('[data-iv]')) {
       const [id, gid] = e.target.closest('[data-iv]').dataset.iv.split('|');
-      const on = e.target.closest('[data-ivundo]').dataset.ivundo === 'undo';
-      run = () => setIntegrityUndone(id, gid, on);
+      const voided = e.target.closest('[data-ivset]').dataset.ivset === 'void';
+      run = () => setIntegrityVoided(id, gid, voided);
     } else if (e.target.closest('[data-online-code]')) {
       const b = e.target.closest('[data-online-code]');
       const on = b.getAttribute('aria-pressed') !== 'true';

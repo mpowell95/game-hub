@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1322;
-const CACHE = 'game-hub-v1330';
+const CACHE = 'game-hub-v1331';
 
 const ASSETS = [
   './',
@@ -803,7 +803,7 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '9505844726',
+  './js/strings.js': 'ede14d7f34',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -831,9 +831,9 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': '59adfa5053',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': '960028c543',
-  './js/admin-ui.js': '9d01261da8',
-  './js/integrity.js': '6c2c14af38',
+  './js/admin-config.js': 'd2db9dfed6',
+  './js/admin-ui.js': '95d315fa91',
+  './js/integrity.js': '1c170bf9ce',
   './js/stats-corrections.js': '8fc4dfe2f7',
   './js/bee-fairplay.js': '578fe6bae3',
   './js/bee-board.js': '4f8c4124f7',

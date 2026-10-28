@@ -14,6 +14,7 @@ execFileSync(process.execPath, [new URL('./sync-functions-shared.mjs', import.me
 const { buildBoardParts, packBoard, encKey } = await import('../functions/boards.js');
 const { aggregatePlayers } = await import('../js/players-agg.js');
 const { resolveCorrections } = await import('../js/admin-config.js');
+const { activeVoids } = await import('../js/integrity.js');
 const { isHiddenDeviceId } = await import('../js/hidden-players.js');
 const { fillBoardGroup, unpackBoard, boardList } = await import('../js/stats-net.js');
 const { aggregateForViewer, buildIdentity } = await import('../js/players-agg.js');
@@ -24,7 +25,9 @@ const check = (name, ok) => { if (ok) { pass++; console.log('  ok   ' + name); }
 
 async function compare(label, players, cfg) {
   const visible = Object.fromEntries(Object.entries(players).filter(([id]) => !isHiddenDeviceId(id)));
-  const phone = aggregatePlayers(visible, resolveCorrections(cfg));
+  // The board also carries the integrity voids (functions/boards.js; flags are not in a snapshot, so
+  // only Matt's admin Voids and js/integrity.js HAND_VOIDS), so the phone's grouping gets them too.
+  const phone = aggregatePlayers(visible, { ...resolveCorrections(cfg), integrity: activeVoids({}, cfg) });
   const parts = buildBoardParts(players, cfg), board = parts.people;
   // Packed exactly as the server stores it, unpacked exactly as the phone does.
   const back = await unpackBoard(packBoard(parts));

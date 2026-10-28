@@ -201,7 +201,7 @@ export const RULES = [
     test(g) { const why = g.hb ? holdemSuspect(g.hb) : ''; return why ? { v: why, lim: '' } : null; } },
   // Contexto: the secret word as the very first guess (about 1 in 30,000 a puzzle, or the answer known).
   { id: 'contexto-first-guess', game: 'contexto', void: false, text: 'solved in 1 guess',
-    test(g) { return num(obj(g.ct).fewest) === 1 ? { v: 1, lim: 2 } : null; } },
+    test(g) { return num(obj(g.ct).fewest) === 1 ? { v: 1, lim: '' } : null; } },
 ];
 
 // --- ONLINE CHALLENGE MATCHES: ALERTS only, judged when a match ends (functions/integrity.js) ----------
@@ -305,19 +305,35 @@ export function checkStats(stats) {
   return out;
 }
 
-/** The voids in force: { <statsId>: { <gameId>: true } } from the server's flags
- *  (integrityFlags/<statsId>/<gameId>/<ruleId>; a game with any strong rule) minus Matt's undo
- *  (adminConfig/v1/integrity/undo/<statsId>/<gameId>). */
+/** Games voided BY HAND in code, per record: { <statsId>: { <gameId>: 'why' } }. An alert Matt wants
+ *  voided goes on the admin page (Void); this list is for a void a session ships. Matt's Undo still wins. */
+export const HAND_VOIDS = {
+  // King of Games (3VN33): Contexto solved in 1 guess (the alert, 2026-10-28). Matt: "This must be voided."
+  // The store keeps no day or word per puzzle, so it is his whole Contexto record on this phone.
+  '090215fa-e525-4bbe-99d7-58f9ae3cd437': { contexto: '2026-10-28 Contexto in 1 guess' },
+};
+
+/** Is this game on this record voided? A strong flag, Matt's Void on the admin page
+ *  (adminConfig/v1/integrity/void/<statsId>/<gameId>) or HAND_VOIDS; Matt's Undo
+ *  (integrity/undo/<statsId>/<gameId>) beats all three. */
+export function isVoided(flags, cfg, id, gid) {
+  const ic = obj(obj(cfg).integrity);
+  if (obj(obj(ic.undo)[id])[gid] === true) return false;
+  if (obj(obj(ic.void)[id])[gid] === true) return true;
+  if (obj(HAND_VOIDS[id])[gid]) return true;
+  return Object.values(obj(obj(obj(flags)[id])[gid])).some((f) => f && f.void === true);
+}
+
+/** The voids in force: { <statsId>: { <gameId>: true } } (isVoided over every flagged record, every
+ *  admin Void and every HAND_VOIDS entry). */
 export function activeVoids(flags, cfg) {
-  const undo = obj(obj(obj(cfg).integrity).undo);
+  const ids = new Map();
+  const add = (id, gid) => { if (!ids.has(id)) ids.set(id, new Set()); ids.get(id).add(gid); };
+  for (const [id, games] of Object.entries(obj(flags))) for (const gid of Object.keys(obj(games))) add(id, gid);
+  for (const [id, games] of Object.entries(obj(obj(obj(cfg).integrity).void))) for (const gid of Object.keys(obj(games))) add(id, gid);
+  for (const [id, games] of Object.entries(HAND_VOIDS)) for (const gid of Object.keys(games)) add(id, gid);
   const out = {};
-  for (const [id, games] of Object.entries(obj(flags))) {
-    for (const [gid, byRule] of Object.entries(obj(games))) {
-      if (!Object.values(obj(byRule)).some((f) => f && f.void === true)) continue;
-      if (obj(undo[id])[gid] === true) continue;
-      (out[id] || (out[id] = {}))[gid] = true;
-    }
-  }
+  for (const [id, gids] of ids) for (const gid of gids) if (isVoided(flags, cfg, id, gid)) (out[id] || (out[id] = {}))[gid] = true;
   return out;
 }
 
@@ -343,4 +359,4 @@ export const GAME_NAMES = {
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, activeVoids, hitText, GAME_NAMES, gameName };
+export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
