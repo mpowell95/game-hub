@@ -38,8 +38,8 @@ No label, no grey row, no "VOIDED". Every in-game surface is checked in the test
 
 Replaces the current Spelling Bee board on the hub Leaderboard (the one that shows "wins").
 
-- **Toggle 1: Points | Words** (default Points). Decides the number shown, the order, AND each day's
-  1st/2nd/3rd.
+- **Toggle 1: Points | Words** (default Points). Changes the number shown and the order. **Each day's
+  1st/2nd/3rd is always decided by points** (Matt, 2026-10-28).
 - **Toggle 2: All | English | Español** (default All). Each language is its own daily race; All adds
   the two together.
 - **Each row:** place medal (1-3), emoji, name, the number (total points or words), and under it:
@@ -120,10 +120,9 @@ the thresholds.
 
 ## 9. Open questions for Matt
 
-1. **Placings toggle:** does Points/Words also change who placed 1st/2nd/3rd each day (as written), or
-   are placings always by points?
-2. **Missing log (rule 6):** alert only, as written?
-3. **"sk" (65CNF):** hide it from the Leaderboard? (Looks like another session's automated browser.)
+1. ~~Placings toggle~~ Answered: placings always by points.
+2. ~~Missing log~~ Answered: alert only.
+3. ~~"sk"~~ Answered: hidden (device `a49fcaf8`, `js/hidden-players.js`), data kept.
 4. **Other games:** you said "we do this for all games (rank 1, 2, 3...)". Daily 1st/2nd/3rd only exists
    for a game with one shared puzzle a day. Spelling Bee only for now, or another game too?
 5. **My Stats > Spelling Bee:** show the same numbers as the long-term board (points, words, places,
