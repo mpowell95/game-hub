@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1316;
-const CACHE = 'game-hub-v1317';
+const CACHE = 'game-hub-v1318';
 
 const ASSETS = [
   './',
@@ -799,12 +799,12 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '2ee5009699',
+  './js/strings.js': '607113af1d',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '63779910c9',
+  './js/game-stats.js': 'e91275f712',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': '91e4a9d169',
@@ -833,10 +833,10 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '0b19190160',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': 'f7b99b83ea',
+  './js/players-agg.js': 'b8cc9ce48a',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'b01f97d074',
-  './js/leaderboard-ui.js': '3074fb5b28',
+  './js/leaderboard-ui.js': '2e36ce3731',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',
@@ -1119,13 +1119,13 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': '698942a954',
   './cup-pong/css/cup-pong.css': 'd71937af33',
-  './cup-pong/js/ui.js': '530e7a59e5',
+  './cup-pong/js/ui.js': '70a31ddb85',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': 'e23be8d550',
   './cup-pong/js/physics.js': '108758b93f',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': 'cc6066dc26',
-  './cup-pong/js/match.js': '6a5b3d5448',
+  './cup-pong/js/match.js': '6163d2fe0e',
   './cup-pong/js/mp.js': '58335d27d3',
   './cup-pong/js/mp-ui.js': 'cf358d5147',
   './cup-pong/js/alert.js': 'd71546586b',

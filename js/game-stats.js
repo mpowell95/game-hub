@@ -2657,6 +2657,28 @@ export function recordCupPongSolo(throws) {
   return st;
 }
 
+/** Cup Pong vs the computer: one finished match, as recordResult, PLUS the reracks spent in it
+ *  (Matt, 2026-10-28: "Starting now, we need to keep track of that and that should be the tie
+ *  breaker"). A WIN adds to `cr[<difficulty>] = { w, r }`: wins tracked since that day and the
+ *  reracks spent in them (a rebuttal's free reracks not counted). Equal wins on the board: fewer
+ *  reracks ranks higher. Additive only; a loss touches `cr` not at all. */
+export function recordCupPong(difficulty, won, reracks) {
+  if (tooFast('cuppong')) return null;
+  const st = loadStats();
+  const g = st.games.cuppong;
+  const d = normDiff(difficulty);
+  bumpTotals(g, d, won);
+  if (won === true) {
+    if (!g.cr || typeof g.cr !== 'object' || Array.isArray(g.cr)) g.cr = {};
+    const c = g.cr[d] && typeof g.cr[d] === 'object' ? g.cr[d] : (g.cr[d] = { w: 0, r: 0 });
+    c.w = (c.w | 0) + 1;
+    c.r = (c.r | 0) + Math.max(0, Math.floor(Number(reracks) || 0));
+  }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 // --- Texas Hold'em bankroll (2026-09-27) --------------------------------------------------------
 //
 // Matt: "You should have a pile of money you can grow". A ledger, not a balance: three money

@@ -217,6 +217,7 @@ ok('the whole rack area is on the table',
   ok('rebuttal: rerack offered even with none left', m.phase === 'rebuttal' && m.shooter === 'b' && m.canRerack());
   ev = m.rerack('diamond');
   ok('...taken, none spent, and offered again', types(ev).join() === 'rerack' && m.reracksLeft.b === 0 && m.canRerack());
+  ok('...and not counted as used (the board\'s tie-breaker)', m.reracksUsed.b === 0);
   m.throwResult({ made: ids(m, 'a')[0] });
   ok('...still offered for the ball that comes back', m.ball === 0 && m.canRerack() && m.rerack('tri').length === 1);
   m = new Match({ first: 'a', reracks: 0 }); m.racks.b = [{ id: 'k9', c: 0, r: 3 }]; m.startTurn();
@@ -240,6 +241,7 @@ ok('the whole rack area is on the table',
   ok('rerack offered before the first throw', m.canRerack());
   ev = m.rerack('zipper');
   ok('rerack: preset applied, ids kept, one spent', types(ev).join() === 'rerack' && m.reracksLeft.a === 0 && ids(m, 'b').join() === 'k0,k1,k2,k3,k4,k5' && !m.canRerack());
+  ok('rerack: counted as used, and the count survives a save', m.reracksUsed.a === 1 && Match.fromJSON(JSON.parse(JSON.stringify(m))).reracksUsed.a === 1);
   m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.throwResult(miss);
   ok('no rerack after the turn\'s first throw', !m.canRerack());
   m = new Match({ first: 'a', reracks: Infinity }); m.racks.b = m.racks.b.slice(0, 6); m.startTurn(); m.rerack('tri');

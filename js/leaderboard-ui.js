@@ -58,7 +58,7 @@ import { statsId, holdemBalance, holdemSuspect, isTestGame } from './game-stats.
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, formatTimeMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
-import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
+import { TIERS, diffShapeSVG, TIER_COLOR, tierOf } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
@@ -619,7 +619,12 @@ function boardView(list, id) {
       },
       tier: (g) => (_tier == null ? boardTierOf(g, id) : null),
       // Spelling Bee: days played is already 📅 under the name.
-      sub: (g) => (id === 'spellingbee' && beeBoard() ? '' : t('lb_played_count', { n: boardPlaysOf(g, id) })),
+      sub: (g) => {
+        if (id === 'spellingbee' && beeBoard()) return '';
+        const played = t('lb_played_count', { n: boardPlaysOf(g, id) });
+        const cr = id === 'cuppong' ? cpReracksOf(g) : null;
+        return cr && cr.w ? `${played} \u00b7 ${tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r })}` : played;
+      },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : null,
     };
   };
@@ -1096,7 +1101,22 @@ function boardMetricCmp(id) {
   // Contexto: medals, then the LOWER average guesses (Matt, 2026-09-29). Only a pair equal on
   // both is tied, so the rank badges agree with the order (see the note above).
   if (id === 'contexto') return (a, b) => compareContexto(ctOf(a), ctOf(b));
+  // Cup Pong: equal wins, FEWER RERACKS ranks higher (Matt, 2026-10-28; counted from that day).
+  if (id === 'cuppong') return (a, b) => compareBoardRow(a, b, id) || (cpReracksOf(a).r - cpReracksOf(b).r);
   return (a, b) => compareBoardRow(a, b, id);
+}
+
+/** Cup Pong's reracks spent in wins vs the computer at the row's board tier (`games.cuppong.cr`,
+ *  js/game-stats.js recordCupPong): { w: wins tracked, r: reracks }. Tracked since 2026-10-28. */
+function cpReracksOf(g) {
+  const cr = (g.games.cuppong || {}).cr || {};
+  const tier = boardTierOf(g, 'cuppong');
+  let w = 0, r = 0;
+  for (const [d, c] of Object.entries(cr)) {
+    if (tier != null && tierOf(d) !== tier) continue;
+    w += (c && c.w) | 0; r += (c && c.r) | 0;
+  }
+  return { w, r };
 }
 
 /** The board's metric order with DIFFICULTY TAKEN OUT: the game's own number, all tiers together,
