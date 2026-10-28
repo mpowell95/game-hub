@@ -11,7 +11,8 @@
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { VOIDED_MATCHES, voidedCodesFor } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
@@ -36,6 +37,17 @@ const legal = (w, p) => typeof w === 'string' && w.length >= 4 && w.includes(p.c
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // The mark at Genius and above (Matt, 2026-10-27: "Obviously a bee should be the highest award").
 const crestOf = (ri) => (ri === QUEEN ? '🐝' : '🧠');
+/** A voided day this phone counted a Genius win for (js/stats-corrections.js): noted once, so the stats
+ *  screens take the win back out. The save itself is untouched. */
+function noteVoidedDays(save) {
+  const me = myCode();
+  if (!me) return;
+  for (const [id, v] of Object.entries(VOIDED_MATCHES[STATS_ID] || {})) {
+    const r = save && save.games && save.games[v.puzzle];
+    if (v.winner !== me || !r || !r.recorded) continue;
+    try { noteVoidedResult(STATS_ID, id, 'won'); } catch (err) { console.error('[spelling-bee] noting a voided day failed', err); }
+  }
+}
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
 const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
@@ -196,6 +208,7 @@ class SpellingBee {
     this.extraSet = new Set(extrasFor(this.data, this.puzzle));
     this.max = totalPoints(this.answers, this.puzzle);
     this.save = loadSave();
+    noteVoidedDays(this.save);
     this.rec = recOf(this.save, this.puzzle, this.day);
     // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
     this.found = new Set(this.rec.found.filter((w) => this.counts(w) || legal(w, this.puzzle)));
@@ -527,6 +540,7 @@ class SpellingBee {
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
     this.rec.recorded = true;
     writeSave(this.save);
+    noteVoidedDays(this.save);
   }
 
   _celebrate(ri) {
@@ -623,8 +637,8 @@ class SpellingBee {
   _openBoard() {
     const other = this.data.lang === 'es' ? 'en' : 'es';
     this._watchOther(other);
-    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true);
-    const theirs = this._boardSection(other, this._other ? this._other.rows : [], this._other ? this._other.max : 0, false);
+    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, this.puzzle.key);
+    const theirs = this._boardSection(other, this._other ? this._other.rows : [], this._other ? this._other.max : 0, false, this._other ? this._other.key : '');
     const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
     this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2>${mine}${theirs}`);
     // No scrolling: drop the lowest rows (never ours), from the longer list first, and say how many.
@@ -645,7 +659,7 @@ class SpellingBee {
   }
 
   /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
-  _boardSection(lang, serverRows, max, live) {
+  _boardSection(lang, serverRows, max, live, puzzleKey) {
     const code = myCode();
     const rows = serverRows.filter((r) => !live || r.code !== code).map((r) => ({ ...r, me: r.code === code }));
     if (live) {
@@ -656,9 +670,16 @@ class SpellingBee {
     // Place (ties share it), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words
     // over points (Matt, 2026-10-26: "I wanna see how many points they have too").
     const genius = rankThresholds(max || 1)[GENIUS] || 1;
+    // A voided row (js/stats-corrections.js) still takes its place, then is left out: nobody moves up
+    // (Matt, 2026-10-27: "So I came in second today... It's like nobody got first").
+    const off = voidedCodesFor(STATS_ID, puzzleKey);
     let place = 0;
-    const li = rows.map((r, i) => {
+    rows.forEach((r, i) => {
       if (i === 0 || r.words !== rows[i - 1].words || r.points !== rows[i - 1].points) place = i + 1;
+      r.place = place;
+    });
+    const li = rows.filter((r) => !off.has(r.code)).map((r) => {
+      const place = r.place;
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
       const crest = r.rank >= GENIUS ? crestOf(r.rank) : '';
       return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
@@ -679,7 +700,7 @@ class SpellingBee {
     const want = `${lang}:${dayKey(date)}`;
     if (this._other && this._other.want === want) return;
     if (this._other && this._other.stop) this._other.stop();
-    const o = { want, rows: [], max: 0, stop: null };
+    const o = { want, rows: [], max: 0, key: '', stop: null };
     this._other = o;
     getData(lang).then((d) => {
       if (this._other !== o || this.disposed) return;
@@ -687,6 +708,7 @@ class SpellingBee {
       if (n < 0) return;
       const pz = puzzleAt(d, n);
       o.max = totalPoints(answersFor(d, pz), pz);
+      o.key = pz.key;
       o.stop = watchDaily(pz.key, (rows) => {
         if (this._other !== o || this.disposed) return;
         o.rows = rows;
