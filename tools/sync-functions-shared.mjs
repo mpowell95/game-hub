@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'functions/shared');
-const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js'];
+const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js', 'js/bee-fairplay.js'];
 
 const seen = new Set();
 function walk(file) {
@@ -27,5 +27,24 @@ for (const f of seen) {
   const to = resolve(OUT, relative(ROOT, f));
   mkdirSync(dirname(to), { recursive: true });
   writeFileSync(to, readFileSync(f));
+}
+// Spelling Bee's puzzle map (2026-10-28, functions/bee.js): board key -> {lang, day, key} for every
+// puzzle in both word lists, replaced ones included, so the server knows which day and language a
+// beeDaily/beeLog node belongs to without loading the word lists.
+{
+  const E = await import('../spelling-bee/js/engine.js');
+  const map = {};
+  const bk = (k) => String(k).replace(/:/g, '-').replace(/ñ/g, '0');
+  for (const [lang, file] of [['en', 'bee.json'], ['es', 'bee-es.json']]) {
+    const d = E.parseData(JSON.parse(readFileSync(resolve(ROOT, 'spelling-bee/data', file), 'utf8')));
+    for (let n = 0; n < d.puzzles.length; n++) {
+      const day = E.dayKey(E.dateOfDay(d.epoch, n));
+      const all = [E.puzzleAt(d, n)];
+      if (d.retired && d.retired[n]) all.push(E.puzzleOf(d.retired[n], lang));
+      for (const pz of all) map[bk(pz.key)] = { lang, day, key: pz.key };
+    }
+  }
+  writeFileSync(resolve(OUT, 'bee-puzzles.json'), JSON.stringify(map));
+  console.log(`functions/shared/bee-puzzles.json: ${Object.keys(map).length} puzzles`);
 }
 console.log(`functions/shared: ${seen.size} files (${[...seen].map((f) => relative(ROOT, f)).join(', ')})`);
