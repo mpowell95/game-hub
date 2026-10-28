@@ -460,6 +460,7 @@ export const STRINGS = {
     gs_wo_rush_runs: 'Runs',
     gs_gl_three: '3 stars',
     gs_gl_nohint: 'No hints',
+    gs_ww_extra: 'Extra words',
     gs_sd_solved: 'Solved',
     gs_mk_solved: 'Cases solved',
     gs_sd_perfect: 'Perfect',
@@ -605,6 +606,7 @@ export const STRINGS = {
     lb_sort_played: 'Games Played',
     lb_sort_wins: 'Wins',
     lb_sort_points: 'Points',
+    lb_sort_stars: 'Stars',
     lb_sort_golf_best: 'Best round',
     lb_sort_ms_best: 'Best time',
     lb_sort_ct_medals: 'Medals',
@@ -631,6 +633,7 @@ export const STRINGS = {
     lb_unit_cleared: 'cleared',
     lb_unit_meters: 'meters',
     lb_unit_points: 'points',
+    lb_unit_stars: 'stars',
     // Golf's board number is a best round as a score to par, lowest wins - not points, and
     // not a count. "E" is level par, the notation every scorecard uses in both languages.
     lb_unit_golf_best: 'best round',
@@ -722,6 +725,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstacle' : 'obstacles'}`,
         longest: `${p.v} long`, solved: `${p.v} solved`, wins: `${p.v} ${one ? 'win' : 'wins'}`,
+        stars: `${p.v} ${one ? 'star' : 'stars'}`,
       })[p.k] || String(p.v);
     },
     // What it takes to be first. `tier`: the record is at a harder difficulty than your best.
@@ -737,6 +741,7 @@ export const STRINGS = {
         solved: `${p.v} more ${one ? 'puzzle' : 'puzzles'} to take the record`,
         bank: `${p.v} more to take the record`,
         wins: `${p.v} more ${one ? 'win' : 'wins'} to take the record`,
+        stars: `${p.v} more ${one ? 'star' : 'stars'} to take the record`,
         tier: `Beat ${p.v} on ${p.tier} to take the record`,
       })[p.k] || '';
     },
@@ -785,6 +790,7 @@ export const STRINGS = {
     game_title_cupbaseball: 'Cup Baseball',
     game_title_spellingbee: 'Spelling Bee',
     game_title_battlearena: 'Battle Arena',
+    game_title_wordweaver: 'Word Weaver',
     lb_tex_bz_bricks: 'Bricks smashed',
     lb_tex_bz_combo: 'Best combo',
     game_title_golf: 'Golf',
@@ -812,6 +818,8 @@ export const STRINGS = {
     lb_tex_wo_timed: 'Timed levels',
     lb_tex_gl_cleared: 'Levels cleared',
     lb_tex_gl_three: 'Three-star levels',
+    lb_tex_ww_cleared: 'Levels completed',
+    lb_tex_ww_three: 'Three-star levels',
     lb_tex_sd_solved: 'Puzzles solved',
     lb_tex_sd_perfect: 'Perfect solves',
     lb_tex_best_obstacles: 'Best obstacles',
@@ -1261,6 +1269,7 @@ export const STRINGS = {
     gs_wo_rush_runs: 'Partidas',
     gs_gl_three: '3 estrellas',
     gs_gl_nohint: 'Sin pistas',
+    gs_ww_extra: 'Palabras extra',
     gs_sd_solved: 'Resueltos',
     gs_mk_solved: 'Casos resueltos',
     gs_sd_perfect: 'Perfectos',
@@ -1401,6 +1410,7 @@ export const STRINGS = {
     lb_sort_played: 'Partidas jugadas',
     lb_sort_wins: 'Victorias',
     lb_sort_points: 'Puntos',
+    lb_sort_stars: 'Estrellas',
     lb_sort_golf_best: 'Mejor vuelta',
     lb_sort_ms_best: 'Mejor tiempo',
     lb_sort_ct_medals: 'Medallas',
@@ -1425,6 +1435,7 @@ export const STRINGS = {
     lb_unit_cleared: 'despejados',
     lb_unit_meters: 'metros',
     lb_unit_points: 'puntos',
+    lb_unit_stars: 'estrellas',
     lb_unit_golf_best: 'mejor vuelta',
     lb_unit_ms_best: 'mejor tiempo',
     lb_unit_ct_medals: 'medallas',
@@ -1503,6 +1514,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstáculo' : 'obstáculos'}`,
         longest: `${p.v} de largo`, solved: `${p.v} ${one ? 'resuelto' : 'resueltos'}`, wins: `${p.v} ${one ? 'victoria' : 'victorias'}`,
+        stars: `${p.v} ${one ? 'estrella' : 'estrellas'}`,
       })[p.k] || String(p.v);
     },
     lb_gap: (p) => {
@@ -1517,6 +1529,7 @@ export const STRINGS = {
         solved: `${p.v} ${one ? 'puzle' : 'puzles'} más para batir el récord`,
         bank: `${p.v} más para batir el récord`,
         wins: `${p.v} ${one ? 'victoria' : 'victorias'} más para batir el récord`,
+        stars: `${p.v} ${one ? 'estrella' : 'estrellas'} más para batir el récord`,
         tier: `Supera ${p.v} en ${p.tier} para batir el récord`,
       })[p.k] || '';
     },
@@ -1565,6 +1578,7 @@ export const STRINGS = {
     game_title_cupbaseball: 'Béisbol de Vasos',
     game_title_spellingbee: 'Spelling Bee',
     game_title_battlearena: 'Arena de Batalla',
+    game_title_wordweaver: 'Tejepalabras',
     lb_tex_bz_bricks: 'Ladrillos rotos',
     lb_tex_bz_combo: 'Mejor combo',
     game_title_golf: 'Golf',
@@ -1590,6 +1604,8 @@ export const STRINGS = {
     lb_tex_wo_timed: 'Niveles cronometrados',
     lb_tex_gl_cleared: 'Niveles superados',
     lb_tex_gl_three: 'Niveles con 3 estrellas',
+    lb_tex_ww_cleared: 'Niveles completados',
+    lb_tex_ww_three: 'Niveles con 3 estrellas',
     lb_tex_sd_solved: 'Tableros resueltos',
     lb_tex_sd_perfect: 'Resueltos perfectos',
     lb_tex_best_obstacles: 'Mejor obstáculos',

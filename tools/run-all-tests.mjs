@@ -37,6 +37,8 @@ const SUITES = [
   { file: 'spelling-bee/js/test.js' },
   { file: 'gridlock/js/test.js' },
   { file: 'test-gridlock.mjs' },
+  { file: 'word-weaver/js/data-test.js' },
+  { file: 'test-word-weaver.mjs' },
   { file: 'darts/js/test.js' },
   { file: 'archery/js/test.js' },
   { file: 'test-archery-mp.mjs' },
