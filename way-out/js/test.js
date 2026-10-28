@@ -318,10 +318,13 @@ function checkLadder(gen, from, to) {
 // step (so one order solves it), 70+ arrows, and the arrow freed by each move is never the one right
 // behind it pointing the same way in its row or column (no "trains").
 {
-  const { IMPOSSIBLE_TESTS, IMP_W: W, IMP_H: H } = await import('./impossible-tests.js');
-  let good = IMPOSSIBLE_TESTS.length >= 6;
+  const { IMPOSSIBLE_TESTS, IMPOSSIBLE_GRID } = await import('./impossible-tests.js');
+  let good = IMPOSSIBLE_TESTS.length >= 8 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length
+    && IMPOSSIBLE_GRID.slice(0, 6).every(([c, r]) => c === 16 && r === 22) && IMPOSSIBLE_GRID.slice(6).every(([c, r]) => c === 18 && r === 25);
   for (const arrows of IMPOSSIBLE_TESTS) {
+    const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
     const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false);
+    for (const c of arrows) for (const p of c) if (!(p >= 0 && p < W * H)) good = false;
     if (n < (IMPOSSIBLE_TESTS.indexOf(arrows) < 3 ? 70 : 32)) good = false;
     let prev = -1;
     for (let step = 0; step < n; step++) {
@@ -343,9 +346,10 @@ function checkLadder(gen, from, to) {
     }
   }
   ok('impossible tests: 1-3 70+ arrows, 4-6 jump boards; exactly one arrow free at every step, no trains', good);
-  // Boards 4-6 (round 2): on average the next free arrow's head is 5+ dots from the arrow just removed.
+  // Boards 4-8 (rounds 2-3): on average the next free arrow's head is 5+ dots from the arrow just removed.
   let jumps = true;
   for (const arrows of IMPOSSIBLE_TESTS.slice(3)) {
+    const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
     const lvl = { cols: W, rows: H, arrows }, gone = new Array(arrows.length).fill(false), d = [];
     let prev = -1;
     for (let step = 0; step < arrows.length; step++) {
@@ -356,7 +360,7 @@ function checkLadder(gen, from, to) {
     }
     if (d.reduce((a, b) => a + b, 0) / d.length < 5) jumps = false;
   }
-  ok('impossible tests 4-6: the next arrow is 5+ dots away on average', jumps);
+  ok('impossible tests 4-8: the next arrow is 5+ dots away on average', jumps);
 }
 
 // RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different
