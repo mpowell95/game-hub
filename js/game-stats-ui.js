@@ -23,7 +23,7 @@ import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
-import { wwStars, wwCleared, wwThreeStars, wwExtra } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 
 const t = makeT(STRINGS);
@@ -125,7 +125,7 @@ const HUB_ID = {
   wordweaver: 'word-weaver',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_stars', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -470,23 +470,33 @@ function wayoutScreen(rec) {
     </table>${rushTable}`;
 }
 
-/** Word Weaver (2026-10-28): total stars, levels completed, three-star levels and extra words found.
- *  Every level number comes from the per-level map (js/word-weaver-points.js), so a level finished on
- *  two phones counts once; total.won (one per first completion) gates the empty state too. New keys
- *  fall back to English for the one visit js/strings.js may be older than this file. */
+/** Word Weaver (2026-10-28; bands and points 2026-10-29): points (stars x the band's 1/2/3/4), levels
+ *  completed, stars, three-star levels and extra words found, then the same per band (Easy 1-500 ...
+ *  Expert 1501+). Every level number comes from the per-level map (js/word-weaver-points.js), so a
+ *  level finished on two phones counts once and a level finished before the bands shows under its
+ *  band; total.won (one per first completion) gates the empty state too. New keys fall back to
+ *  English for the one visit js/strings.js may be older than this file. */
 function wordWeaverScreen(rec) {
   const ww = (rec && rec.ww) || {};
   const done = ((rec && rec.total) || {}).won | 0;
   if (!done && !Object.keys(ww.lv || {}).length && !wwExtra(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
+  const rows = SD_DIFFS.filter(([k]) => WW_TIERS.includes(k)).map(([k, labelKey]) =>
+    `<tr><th scope="row">${t(labelKey)}</th><td>${wwCleared(rec, k)}</td><td>${wwStars(rec, k)}</td><td>${wwPoints(rec, k)}</td><td>${wwThreeStars(rec, k)}</td></tr>`).join('');
   return `
     <div class="gs-tallies">
-      <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>
+      <div class="gs-tally"><b>${wwPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
       <div class="gs-tally"><b>${wwCleared(rec)}</b><span>${tf('lb_tex_ww_cleared', 'Levels completed')}</span></div>
     </div>
     <div class="gs-tallies">
+      <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>
       <div class="gs-tally"><b>${wwThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
       <div class="gs-tally"><b>${wwExtra(rec)}</b><span>${tf('gs_ww_extra', 'Extra words')}</span></div>
-    </div>`;
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${tf('lb_sort_stars', 'Stars')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_gl_three')}</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 /** Gridlock (2026-10-14): points, distinct levels cleared, three-star and no-hint levels, per
@@ -1412,8 +1422,8 @@ function headlineOf(id, rec) {
   // Arrow Maze: points for levels cleared (the ladder, 2026-10-14), the leaderboard's own number.
   if (id === 'wayout') return { n: woPoints(rec), unitKey: unitKeyOf(id) };
   if (id === 'gridlock') return { n: glPoints(rec), unitKey: unitKeyOf(id) };
-  // Word Weaver: total stars over distinct levels completed, the leaderboard's own number.
-  if (id === 'wordweaver') return { n: wwStars(rec), unitKey: unitKeyOf(id) };
+  // Word Weaver: points (stars x the band's 1/2/3/4) over distinct levels, the leaderboard's own number.
+  if (id === 'wordweaver') return { n: wwPoints(rec), unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.

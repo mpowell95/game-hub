@@ -37,14 +37,29 @@ ok('stars: junk hint counts read as 0', P.wwStarsFor(undefined) === 3 && P.wwSta
 ok('best: stars Math.max, hints Math.min, the earliest time', JSON.stringify(P.wwBest({ s: 2, h: 1, t: 50 }, { s: 3, h: 0, t: 90 })) === JSON.stringify({ s: 3, h: 0, t: 50 }));
 ok('best: a malformed side is ignored, never invented', JSON.stringify(P.wwBest(null, { s: 2, h: 1, t: 5 })) === JSON.stringify({ s: 2, h: 1, t: 5 }) && P.wwBest(null, 'x') === null);
 ok('levels: only L<n> keys count', Object.keys(P.wwLevels({ ww: { lv: { L1: { s: 3 }, 2: { s: 3 }, L0: { s: 3 }, Lx: { s: 1 } } } })).join() === '1');
-ok('an empty record reads zero everywhere', P.wwStars({}) === 0 && P.wwCleared(null) === 0 && P.wwThreeStars(undefined) === 0 && P.wwExtra({}) === 0);
+ok('an empty record reads zero everywhere', P.wwStars({}) === 0 && P.wwPoints({}) === 0 && P.wwCleared(null) === 0 && P.wwThreeStars(undefined) === 0 && P.wwExtra({}) === 0);
+
+// --- bands and points (Matt, 2026-10-29) ---
+ok('bands: tiers, starts, size', P.WW_TIERS.join() === 'easy,medium,hard,expert' && P.WW_BAND_SIZE === 500
+  && P.WW_BAND_START.easy === 1 && P.WW_BAND_START.medium === 501 && P.WW_BAND_START.hard === 1001 && P.WW_BAND_START.expert === 1501);
+ok('bandOf at every edge', P.wwBandOf(1) === 'easy' && P.wwBandOf(500) === 'easy' && P.wwBandOf(501) === 'medium' && P.wwBandOf(1000) === 'medium'
+  && P.wwBandOf(1001) === 'hard' && P.wwBandOf(1500) === 'hard' && P.wwBandOf(1501) === 'expert' && P.wwBandOf(9999) === 'expert');
+ok('band ends; Expert ends at the last level', P.wwBandEnd('easy') === 500 && P.wwBandEnd('medium') === 1000 && P.wwBandEnd('hard') === 1500 && P.wwBandEnd('expert', 2000) === 2000 && P.wwBandEnd('expert') === Infinity);
+ok('multipliers 1/2/3/4', JSON.stringify(P.WW_MULT) === JSON.stringify({ easy: 1, medium: 2, hard: 3, expert: 4 }));
+{
+  const rec = { ww: { lv: { L1: { s: 3 }, L500: { s: 1 }, L501: { s: 2 }, L1001: { s: 3 }, L1501: { s: 3 }, L2000: { s: 1 } } } };
+  ok('points: stars x band (3+1)x1 + 2x2 + 3x3 + (3+1)x4 = 33', P.wwPoints(rec) === 33);
+  ok('points per band', P.wwPoints(rec, 'easy') === 4 && P.wwPoints(rec, 'medium') === 4 && P.wwPoints(rec, 'hard') === 9 && P.wwPoints(rec, 'expert') === 16);
+  ok('stars, cleared, three-star per band', P.wwStars(rec) === 13 && P.wwStars(rec, 'expert') === 4 && P.wwCleared(rec, 'easy') === 2 && P.wwCleared(rec, 'hard') === 1
+    && P.wwThreeStars(rec) === 3 && P.wwThreeStars(rec, 'easy') === 1 && P.wwThreeStars(rec, 'medium') === 0);
+}
 
 // --- the recorder ---
 ok('recordWordWeaver is exported with (level, { hints, extra })', typeof G.recordWordWeaver === 'function');
 let st = G.recordWordWeaver(1, { hints: 0, extra: 2 });
 ok('a first completion returns the store (truthy)', !!st);
 let g = G.loadStats().games.wordweaver;
-ok('one play and one win, in byDiff.ladder', g.total.played === 1 && g.total.won === 1 && g.byDiff.ladder.won === 1);
+ok('one play and one win, in the level\'s band (byDiff.easy)', g.total.played === 1 && g.total.won === 1 && g.byDiff.easy.won === 1 && !g.byDiff.ladder);
 ok('level 1 stored as L1 { s: 3, h: 0, t }', g.ww.lv.L1 && g.ww.lv.L1.s === 3 && g.ww.lv.L1.h === 0 && g.ww.lv.L1.t > 0);
 ok('extras added to x', g.ww.x === 2);
 const t1 = g.ww.lv.L1.t;
@@ -54,12 +69,15 @@ G.recordWordWeaver(3, { hints: 4 });
 g = G.loadStats().games.wordweaver;
 ok('1 hint = 2 stars, 4 hints = 1 star', g.ww.lv.L2.s === 2 && g.ww.lv.L3.s === 1 && g.ww.lv.L3.h === 4);
 ok('total stars 3 + 2 + 1 = 6, 3 levels, 1 three-star', P.wwStars(g) === 6 && P.wwCleared(g) === 3 && P.wwThreeStars(g) === 1);
+G.recordWordWeaver(1600, { hints: 0 });
+g = G.loadStats().games.wordweaver;
+ok('an Expert level goes to byDiff.expert and is worth 3 x 4 = 12 points', g.byDiff.expert.won === 1 && P.wwPoints(g) === 6 + 12 && P.wwPoints(g, 'expert') === 12);
 
 // A second call for a finished level (should not happen; the game calls once) never makes it worse.
 G.recordWordWeaver(1, { hints: 3, extra: 1 });
 g = G.loadStats().games.wordweaver;
 ok('a worse result never lowers a stored level (rule 2)', g.ww.lv.L1.s === 3 && g.ww.lv.L1.h === 0 && g.ww.lv.L1.t === t1);
-ok('...and the level still counts ONCE', P.wwCleared(g) === 3 && P.wwStars(g) === 6);
+ok('...and the level still counts ONCE', P.wwCleared(g) === 4 && P.wwStars(g) === 9);
 ok('x only increments', g.ww.x === 3);
 G.recordWordWeaver(3, { hints: 0 });
 g = G.loadStats().games.wordweaver;
@@ -69,7 +87,8 @@ G.recordWordWeaver(0, { hints: 0, extra: 1 });
 G.recordWordWeaver(2.5, { hints: 0 });
 G.recordWordWeaver('abc', { hints: 0 });
 g = G.loadStats().games.wordweaver;
-ok('a bad level number records the play but invents no level (rule 4)', P.wwCleared(g) === 3 && Object.keys(g.ww.lv).length === 3 && g.ww.x === 4);
+ok('a bad level number records the play but invents no level (rule 4)', P.wwCleared(g) === 4 && Object.keys(g.ww.lv).length === 4 && g.ww.x === 4);
+ok('...and its play has no band: byDiff.ladder (All only)', g.byDiff.ladder && g.byDiff.ladder.won === 3);
 ok('stored keys are L<n>, never bare numbers', Object.keys(g.ww.lv).every((k) => /^L\d+$/.test(k)));
 G.recordWordWeaver(4, { hints: 0, extra: -5 });
 ok('a negative extra count never lowers x', G.loadStats().games.wordweaver.ww.x === 4);
@@ -105,15 +124,30 @@ ok('merge: extra words add', m.ww.x === 12);
 ok('merge: 3 distinct levels, 3 + 3 + 1 = 7 stars', P.wwCleared(m) === 3 && P.wwStars(m) === 7 && P.wwThreeStars(m) === 2);
 ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
 
+// Plays from before the bands (byDiff 'ladder', rule 5) still count beside band plays.
+{
+  const phoneC = { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: { expert: { played: 1, won: 1, lost: 0 } },
+    ww: { lv: { L1600: { s: 2, h: 1, t: 5 } }, x: 0 } } } };
+  const m2 = A.aggregatePlayers({
+    devA: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: phoneA, updatedAt: 2 },
+    devC: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: phoneC, updatedAt: 1 },
+  })[0].games.wordweaver;
+  ok('old ladder plays and new band plays both count', m2.total.won === 3 && m2.byDiff.ladder.won === 2 && m2.byDiff.expert.won === 1);
+  ok('...and old levels show under their band: points 3x1 + 2x1 + 2x4 = 13', P.wwPoints(m2) === 13 && P.wwCleared(m2, 'easy') === 2 && P.wwPoints(m2, 'expert') === 8);
+}
+
 // --- the leaderboard ranks by total stars (static checks: the overlay needs a DOM) ---
 {
   const lb = readFileSync(new URL('js/leaderboard-ui.js', ROOT), 'utf8');
   const gs = readFileSync(new URL('js/game-stats-ui.js', ROOT), 'utf8');
   ok('leaderboard: a GAME_META row', /\{ id: 'wordweaver', labelKey: 'game_title_wordweaver' \}/.test(lb));
-  ok('leaderboard: the board number is wwStars', /id === 'wordweaver'\) return tier == null \? wwStars\(g\.games\.wordweaver\)/.test(lb));
-  ok('leaderboard: one ladder, no tier', /if \(id === 'wordweaver'\) return null;/.test(lb));
+  ok('leaderboard: the board number is wwPoints, a band filter = that band', /id === 'wordweaver'\) return wwPoints\(g\.games\.wordweaver, tier == null \? null : WW_TIERS\[tier - 1\]\)/.test(lb));
+  ok('leaderboard: All is one number across bands (no tier pill)', /\(id === 'wayout' \|\| id === 'gridlock' \|\| id === 'wordweaver'\) && _tier == null\) return null;/.test(lb));
+  ok('leaderboard: band tabs and band plays come from the per-level map (old ladder plays still show)',
+    /id === 'wordweaver'\) tiers = \[1, 2, 3, 4\]\.filter/.test(lb) && /id === 'wordweaver' && _tier != null\) return wwCleared/.test(lb));
   ok('leaderboard: standing records (levels completed, three-star levels)', /wordweaver: \[\s*\{ labelKey: 'lb_tex_ww_cleared'[\s\S]*?lb_tex_ww_three/.test(lb));
-  ok('My Stats: the unit is stars, headline wwStars, its own screen', /wordweaver: 'lb_unit_stars'/.test(gs) && /id === 'wordweaver'\) return \{ n: wwStars\(rec\)/.test(gs) && /wordWeaverScreen\(rec\)/.test(gs));
+  ok('My Stats: the unit is points, headline wwPoints, its own screen with a per-band table', /wordweaver: 'lb_unit_points'/.test(gs) && /id === 'wordweaver'\) return \{ n: wwPoints\(rec\)/.test(gs)
+    && /wordWeaverScreen\(rec\)/.test(gs) && /wwPoints\(rec, k\)/.test(gs) && /wwThreeStars\(rec, k\)/.test(gs));
   const S = (await import('../js/strings.js')).default;
   ok('strings: title EN/ES', S.en.game_title_wordweaver === 'Word Weaver' && S.es.game_title_wordweaver === 'Tejepalabras');
   ok('strings: stars unit EN/ES', S.en.lb_unit_stars === 'stars' && S.es.lb_unit_stars === 'estrellas' && S.en.lb_yval({ k: 'stars', v: '1', n: 1 }) === '1 star');
