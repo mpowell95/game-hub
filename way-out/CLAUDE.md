@@ -303,6 +303,11 @@ at every step and zero trains, into `js/impossible-tests.js` (GENERATED; 3 board
 lists them as "Impossible N"; played like a replay (Expert penalties), results only in
 `gamehub.wayout.tests2.v1`. Matt's literal rule (no two arrows in one row/column facing the same way) is NOT
 enforced: the 16x22 grid has only 76 such lanes, and 70+ arrows would need nearly all of them.
+**Round 2 (same day)**: Matt cleared 1 in 1:43 and 2 in 1:41 (*"I want a puzzle that's going to take me 5+
+minutes of active focus"*): the next free arrow sat ~2 dots from the one just removed, so no searching.
+`measure()` now reports **jumps** (that distance) and style `jumps` rewards them. On 16x22 more arrows means
+shorter jumps, so boards **4-6** are three trade-offs: 34 arrows / ~7 dots, 46 / ~5.4, 50 / ~5.1 (boards 1-3
+unchanged; the tool appends).
 
 ## Test boards (2026-10-26, removed 2026-10-27)
 
