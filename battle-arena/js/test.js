@@ -200,7 +200,11 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const t = r.state;
   t.board = setup(TEAM, FOUR).board.map((x) => ({ ...x, id: x.id + 5000 }));
   const r2 = apply(t, swap(3, 2, 4, 2));
-  ok('every 4 gives one: a second 4 the same turn gives another', has(r2.events, 'extra') && r2.state.movesLeft === 2);
+  ok('ONE extra move a turn: a second 4 the same turn gives none (Matt, 2026-10-28)', !has(r2.events, 'extra') && r2.state.movesLeft === 1);
+  const u = JSON.parse(JSON.stringify(r2.state));
+  u.turn = 0; u.movesLeft = 0;
+  const next = apply({ ...u, movesLeft: 1 }, { type: 'pass' });
+  ok('...and the next turn gets its own', next.ok && next.state.extraUsed === false);
 }
 
 // --- berries and evolving -----------------------------------------------------------------------------
@@ -246,7 +250,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   s.sides[0].hp = 60;
   const r = apply(s, swap(4, 3, 4, 4));
   ok('an L of 5 is one match of 5', r.ok && r.events.find((e) => e.t === 'extra').five === true);
-  ok('a 5 gives an extra move (no cap: cascaded 5s give more)', r.state.movesLeft === 1 + count(r.events, 'extra'));
+  ok('a 5 gives an extra move, one a turn however many cascade', count(r.events, 'extra') === 1 && r.state.movesLeft === 2);
   ok('a 5 heals the mover 5', has(r.events, 'heal', (e) => e.cause === 'five' && e.n === 5) && r.state.sides[0].hp >= 65);
 }
 
@@ -335,41 +339,44 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('HP never goes below 0', r.state.sides[1].hp === 0);
   ok('no moves after the end', apply(r.state, swap(0, 0, 0, 1)).error === 'over');
 }
-// NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible").
+// A FAIR START (Matt, 2026-10-28): a side that has not had a turn cannot go below half its HP (40).
 {
   const s = setup(TEAM, THREE);
   s.sides[0].mons[0].energy = 6;
-  s.sides[1].hp = 5;   // side 1 has not had a turn yet
+  s.sides[1].hp = 45;   // side 1 has not had a turn yet
   const r = apply(s, swap(4, 3, 4, 4));
-  ok('a side that has not had a turn stops at 1 HP', r.state.winner == null && r.state.sides[1].hp === 1 && !has(r.events, 'win'));
-  ok('...and that hit ends the mover\'s turn at once (extra moves or not)', r.state.turn === 1 && has(r.events, 'damage', (e) => e.floored) && has(r.events, 'turn', (e) => e.side === 1));
+  ok('a side that has not had a turn stops at 40 HP', r.state.winner == null && r.state.sides[1].hp === 40 && has(r.events, 'damage', (e) => e.floored && e.hp === 40));
+  const t = setup(TEAM, THREE);
+  t.sides[0].mons[0].energy = 6;
+  t.sides[1].hp = 45; t.sides[1].turns = 1;   // ...but once it has had a turn, the same hit goes through
+  ok('...once it has played, the same hit goes below 40', apply(t, swap(4, 3, 4, 4)).state.sides[1].hp < 40);
 }
 {
-  // A curse biting at the START of a side's first turn cannot finish it either (it has not moved).
+  // A curse biting at the START of a side's first turn counts as before it has played.
   const s = setup([['hexowl', 'emberkit'], ['zapup', 'sproutle']], ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDLWS', 'LDDSDLF']);
   s.sides[0].mons[0].energy = 4;
   s.movesLeft = 1;
-  s.sides[1].hp = 9;   // 5 now -> 4, then the 5 at the start of their first turn would finish them
+  s.sides[1].hp = 47;   // 5 now -> 42, then the 5 at the start of their first turn would leave 37
   const r = apply(s, swap(4, 3, 4, 4));
-  ok('a curse at the start of a side\'s first turn stops at 1 HP', r.state.turn === 1 && r.state.winner == null && r.state.sides[1].hp === 1 && has(r.events, 'curseTick', (e) => e.side === 1));
+  ok('a curse at the start of a side\'s first turn stops at 40 HP', r.state.turn === 1 && r.state.winner == null && r.state.sides[1].hp === 40 && has(r.events, 'curseTick', (e) => e.side === 1));
   const later = JSON.parse(JSON.stringify(r.state));
-  later.sides[1].turns = 2;   // ...but once they have played, a curse can knock them out
+  later.sides[1].turns = 2; later.sides[1].hp = 5;   // ...but once they have played, a curse can knock them out
   later.turn = 0; later.sides[1].curse = { tick: 5, left: 1 }; later.movesLeft = 1;
-  const r2 = apply(later, { type: 'pass' });
-  ok('...once they have played, it can', r2.state.winner === 0);
+  ok('...once they have played, it can', apply(later, { type: 'pass' }).state.winner === 0);
 }
 {
-  // The hard computer opening 3,000 matches: before this rule about 1 first turn in 90 was a knockout.
-  let ended = 0, longest = 0;
+  // The hard computer opening 3,000 matches. Before 2026-10-28: about 1 in 90 was a knockout, one turn ran 220 moves.
+  let low = 80, longest = 0, ended = 0;
   for (let seed = 1; seed <= 3000; seed++) {
     let s = newMatch({ seed, teams: [['emberkit', 'zapup'], ['sproutle', 'gloomite']], first: 0 });
     let g = 0;
     for (; g < 500 && s.turn === 0 && s.winner == null; g++) s = apply(s, chooseMove(s, 'hard', seeded(seed))).state;
     if (s.winner != null) ended++;
+    low = Math.min(low, s.sides[1].hp);
     longest = Math.max(longest, g);
   }
-  ok(`no match ends in the opener's first turn (3,000 hard openings, ${ended} ended)`, ended === 0);
-  ok(`...and no opening runs away (longest ${longest} moves)`, longest < 100);
+  ok(`3,000 hard openings: none ends the match, none leaves the other side under 40 (lowest ${low})`, ended === 0 && low >= 40);
+  ok(`...and no opening turn is longer than 3 moves (longest ${longest})`, longest <= 3);
 }
 
 // --- unlocks --------------------------------------------------------------------------------------------

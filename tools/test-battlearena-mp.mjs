@@ -149,7 +149,7 @@ MP.__setBootForTest(async () => (offline ? null : { db: {}, api }), { allowDev: 
  *  It used to be random, and about 1 run in 3 failed: a lucky chain of 4+ matches (an extra move
  *  each, no cap) knocked out the other team in the challenger's FIRST turn, before the receiver
  *  could decline, resign or expire. The lifecycle matches use fixed seeds; since the same day the
- *  engine stops a side that has not had a turn at 1 HP, so that cannot happen at all (seed 1041). The old 20-move cap also cut long turns short
+ *  engine gives one extra move a turn and keeps a side that has not had a turn at 40 HP or more (seed 1041). The old 20-move cap also cut long turns short
  *  (the hard computer's longest first turn is 31 moves); 200 is only a runaway guard. */
 function turnEntries(g, side, level = 'hard') {
   let s = MP.buildState(g);
@@ -320,13 +320,13 @@ let id;
   ok('expire: a late move is refused', (await MP.appendLog(c5.id, g5.log.length, turnEntries(await MP.readGame(c5.id), 'b').slice(0, 1))).reason === 'expired');
 
   // NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible"). Seed 1041's
-  // opening chain used to knock out the receiver before they ever played (every 4+ match is an extra
-  // move, no cap). Now the engine stops a side that has not had a turn at 1 HP: the receiver gets the
-  // match as an ordinary open challenge, on its turn.
+  // opening chain used to knock out the receiver before they ever played (every 4+ match was an extra
+  // move, no cap). Now it is one extra move a turn, and a side that has not had a turn cannot go below
+  // half its HP (40): the receiver gets the match as an ordinary open challenge, on its turn.
   use('A');
   const k1 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1041 });
   const kr = await playTurn(k1.id, 'a');
-  ok('seed 1041\'s opening chain no longer ends the match: the receiver is on 1 HP, their turn', kr.ok && !kr.game.over && kr.game.turn === 'b' && kr.game.hp.b === 1, JSON.stringify({ over: kr.game && kr.game.over, hp: kr.game && kr.game.hp }));
+  ok('seed 1041\'s opening no longer ends the match: the receiver has at least half its HP, on its turn', kr.ok && !kr.game.over && kr.game.turn === 'b' && kr.game.hp.b >= 40, JSON.stringify({ over: kr.game && kr.game.over, hp: kr.game && kr.game.hp }));
   ok('...delivered as an open challenge they can answer or decline', row('TQWX7', k1.id) && row('TQWX7', k1.id).yourTurn === true && row('TQWX7', k1.id).open === 'got');
   use('B');
   ok('...and they can decline it', (await MP.cancelGame(k1.id)).ok);
