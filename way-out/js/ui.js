@@ -16,7 +16,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
-import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
+import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildB11, hasB11, B11_GEN, B11_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -241,6 +241,7 @@ function writeRushSave(mode, run) {
  *  `L:<n>:5` then too, so its clock carries across unchanged.) */
 function srcKey(src) {
   if (src && src.k === 'X') return `X:${src.band}:${src.n}`;
+  if (src && src.k === 'N' && src.g === B11_GEN) return `N11:${src.band}:${src.n}`;
   if (src && src.k === 'N') return src.g === B10_GEN ? `N10:${src.band}:${src.n}` : src.g === B9_GEN ? `N9:${src.band}:${src.n}` : `N:${src.band}:${src.n}`;
   return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${(src && src.g) || LADDER_GEN}`;
 }
@@ -252,6 +253,8 @@ function defaultSrc(band, n) {
   // Expert moved on to generator 9 the same evening (harder: engine.js "GENERATOR 9").
   // Every Expert level, for everyone, on generator 10 (2026-10-28, engine.js "GENERATOR 10").
   if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN, m: B10_COUNT, w: 1 };
+  // Every Hard level from 101 not already in progress, for everyone, on generator 11 (2026-10-28).
+  if (hasB11(band, n)) return { k: 'N', band, n, g: B11_GEN, m: B11_COUNT };
   if (hasNews() && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (hasNews() && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
@@ -259,6 +262,7 @@ function defaultSrc(band, n) {
 /** The board a save's `src` names. */
 function boardOf(src) {
   if (src.k === 'X') return buildMore(src.band, src.n);
+  if (src.k === 'N' && src.g === B11_GEN) return buildB11(src.n, src.m);
   if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n, src.m, src.w === 1) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
   return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
 }
@@ -268,6 +272,8 @@ function validSrc(src, band, n) {
       && src.m >= 1 && src.m <= B10_COUNT ? { k: 'N', band, n, g: B10_GEN, m: src.m, w: src.w === 1 ? 1 : 0 } : defaultSrc(band, n);
   }
   if (!src || typeof src !== 'object') return defaultSrc(band, n);
+  if (src.k === 'N' && src.band === band && src.n === n && src.g === B11_GEN && hasB11(band, n) && Number.isInteger(src.m)
+    && src.m >= 1 && src.m <= B11_COUNT) return { k: 'N', band, n, g: B11_GEN, m: src.m };
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B8_GEN && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B9_GEN && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (src.k === 'X' && src.band === band && src.n === n && src.g === MORE_GEN && isMore(band, n)) return { k: 'X', band, n, g: MORE_GEN };
@@ -1149,7 +1155,7 @@ class WayOut {
     this.gen = g;
     // Expert replays are on generator 10's board for that level number (Matt, 2026-10-28: no points from the
     // old Expert boards); the replay is still logged against the level it makes up for.
-    this.lvl = hasB10(band) ? buildB10(miss.n) : g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
+    this.lvl = hasB10(band) ? buildB10(miss.n) : g === B11_GEN && hasB11(band, l) ? buildB11(l) : g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
     this._resetBoard(null);
     this.clock = { n: miss.n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
     this.screen = 'play';

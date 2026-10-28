@@ -294,7 +294,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   on your own judgement.
 - **Never hand-edit generated files** (`js/emoji-data.js`, `js/emoji-search-*.js`,
   `boggle/data/words-es.txt`, `contexto/data/*`, `spelling-bee/data/bee*.json`, `baseball/models/*`, `gridlock/js/levels.js`,
-  `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/boards10.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
+  `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/boards10.js`, `way-out/js/boards11.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 (`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
@@ -351,7 +351,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 |---|---|---|---|---|
 | Air Hockey | module, immersive, released 2026-10-26; vs computer + live online (`rooms/<CODE>/ah/`); hub id `air-hockey`, stats id `airhockey` | `.ah-root` / `.ah-` | `gamehub.airhockey.v1` | `recordAirHockey` (`ah`) |
 | Archery | module, immersive, devOnly; vs computer, pass and play, online challenges (`archery/`) | `.ar-root` / `.ar-` | `gamehub.archery.v1` (+ `.save.v1`) | `recordResult('archery', …)` |
-| Arrow Maze | module, immersive, released 2026-10-27; one ladder (no difficulty ends; Hard on generator 8's packed boards, EVERY Expert level on generator 10's 28x38 boards since 2026-10-28), Replay, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
+| Arrow Maze | module, immersive, released 2026-10-27; one ladder (no difficulty ends; every Hard level from 101 on generator 11's 18x25 boards, every Expert level on generator 10's 28x38 boards, both since 2026-10-28), Replay, points leaderboard, Rush. **Folder `way-out/`, hub id `way-out`, stats id `wayout`, `gamehub.wayout.*` keep the first name on purpose** (rule 5) | `.wo-root` / `.wo-` | `gamehub.wayout.v1` (+ several frozen save/clock keys, see `way-out/CLAUDE.md`) | `recordWayOut` + `recordWayOutRush` (`wo`) |
 | Ball Run | module, immersive | `.br-root` / `.br-` | `ballrun.*` (frozen) | `recordBallRun` |
 | Baseball | module, immersive, devOnly; three.js stadium, being rebuilt per `docs/BASEBALL-REFERENCE-B9.md` | `.bb-root` / `.bb-` | `gamehub.baseball.v1` | `recordBaseball` |
 | Battle Arena | module, immersive, devOnly, TEST MODE (tag on every screen + "(TEST)" push title; remove at release, `battle-arena/CLAUDE.md`); every monster its own attack (`js/attacks.js`, 2026-10-28); match-3 monster battle vs computer, pure JSON engine + seeded RNG (`docs/BATTLE-ARENA-SPEC.md`, 2026-10-24); online 2026-10-24: turn-by-turn challenges (`battlearena/`) + live rooms (25 s a move), a seed + teams + moves replayed on both phones; hub id `battle-arena`, stats id `battlearena` | `.ba-root` / `.ba-` | `gamehub.battlearena.v1` (+ `.save.v1`) | `recordResult('battlearena', …)` (online: `'mp'`; live rooms + h2h) |

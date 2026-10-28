@@ -1421,3 +1421,13 @@ So every Expert level, for every player, plays a generator 10 board (`way-out/js
 `tools/build-arrow-boards10.mjs`, ~3.5 min a board in four parallel parts). A level in progress on an old Expert
 board starts over on the new one; Expert replays use the new board for that level number. Points already earned
 on old Expert boards stay (THE LAW). Details: `way-out/CLAUDE.md`, "Expert = generator 10, for everyone".
+
+## Arrow Maze: Hard on generator 11 (2026-10-28)
+
+Right after Expert moved to generator 10, Matt: "Now Hard is too easy. Please take your time and make Hard a bit
+more challenging. Not as challenging as expert, but more challenging than they are right now." Generator 8's Hard
+was ~45 arrows on 16x22 with ~2 free at a time and blockers ~5 dots off. Generator 11 uses Impossible test boards
+7-8's recipe (18x25, one free at every step, next arrow ~6-8 dots away; Matt took 2:03 on board 7), between that
+and Expert's 28x38 / 75-80 arrows. Every Hard level from 101 for everyone, in the same loop as Expert; a level in
+progress finishes on its old board (no points concern was raised for Hard). Details: `way-out/CLAUDE.md`,
+"Hard = generator 11, for everyone".

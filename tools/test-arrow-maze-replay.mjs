@@ -159,7 +159,7 @@ st = await page.evaluate(() => window.__woTest.state());
 ok('easy: Easy level 51 plays', st.level === 51 && st.tier === 'easy', JSON.stringify(st));
 await shot('7-easy-51-board');
 
-// GENERATOR 8 (2026-10-27) for Hard 101; GENERATOR 10 (2026-10-28) for every Expert level, for everyone.
+// GENERATOR 11 (2026-10-28) for Hard 101; GENERATOR 10 (2026-10-28) for every Expert level, for everyone.
 for (const [band, n] of [['hard', 101], ['expert', 201]]) {
   await page.locator('[data-act="menu"]').click();
   await page.waitForSelector('.wo-home');
@@ -167,7 +167,7 @@ for (const [band, n] of [['hard', 101], ['expert', 201]]) {
   await page.locator('.wo-play[data-act="play"]').click();
   await page.waitForFunction(() => window.__woTest);
   const clock = await page.evaluate((b) => JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1') || '{}')[b], band);
-  ok(`${band}: level ${n} is a generator ${band === 'expert' ? 10 : 8} board`, clock && clock.key === `${band === 'expert' ? 'N10' : 'N'}:${band}:${n}`, JSON.stringify(clock));
+  ok(`${band}: level ${n} is a generator ${band === 'expert' ? 10 : 11} board`, clock && clock.key === `${band === 'expert' ? 'N10' : 'N11'}:${band}:${n}`, JSON.stringify(clock));
   await shot(`10-${band}-${n}`);
 }
 
@@ -210,6 +210,41 @@ st = await page.evaluate(() => window.__woTest.state());
 ok('expert: a missed generator-9 level replays on the new 28x38 board', st.level === 201 && st.tier === 'expert' && st.cols === 28, JSON.stringify(st));
 ok('expert: points earned on the old boards stay', (await pts()) === p1);
 await shot('12-expert-replay-201');
+
+// GENERATOR 11 (2026-10-28): a Hard level in progress on a generator-8 board finishes on that board (16x22);
+// the next Hard level is an 18x25 generator-11 board.
+await page.locator('[data-act="menu"]').click();
+await page.waitForSelector('.wo-home');
+await page.evaluate(() => {
+  const set = JSON.parse(localStorage.getItem('gamehub.wayout.v1'));
+  set.ladder2.hard = 150;
+  localStorage.setItem('gamehub.wayout.v1', JSON.stringify(set));
+  const sv = JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.saves.v1'));
+  sv.hard = { v: 3, band: 'hard', n: 150, src: { k: 'N', band: 'hard', n: 150, g: 8 }, gone: [0], red: [], lives: 3 };
+  localStorage.setItem('gamehub.wayout.ladder2.saves.v1', JSON.stringify(sv));
+});
+await page.reload();
+await page.waitForSelector('.wo-home');
+await page.locator('.wo-seg[data-tier="hard"]').click();
+await page.locator('.wo-play[data-act="play"]').click();
+await page.waitForFunction(() => window.__woTest);
+st = await page.evaluate(() => window.__woTest.state());
+ok('hard: a generator-8 level in progress finishes on its own 16x22 board', st.level === 150 && st.cols === 16 && st.left === st.total - 1, JSON.stringify(st));
+await page.evaluate(() => {
+  const set = JSON.parse(localStorage.getItem('gamehub.wayout.v1'));
+  set.ladder2.hard = 151;
+  localStorage.setItem('gamehub.wayout.v1', JSON.stringify(set));
+});
+await page.locator('[data-act="menu"]').click();
+await page.waitForSelector('.wo-home');
+await page.reload();
+await page.waitForSelector('.wo-home');
+await page.locator('.wo-seg[data-tier="hard"]').click();
+await page.locator('.wo-play[data-act="play"]').click();
+await page.waitForFunction(() => window.__woTest);
+st = await page.evaluate(() => window.__woTest.state());
+ok('hard: the next level is an 18x25 generator-11 board', st.level === 151 && st.cols === 18, JSON.stringify(st));
+await shot('13-hard-151');
 
 await browser.close();
 console.log(`\nArrow Maze replay / more-levels probe: ${pass} passed, ${fail} failed.`);
