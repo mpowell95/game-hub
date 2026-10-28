@@ -697,6 +697,14 @@ export function setHoldemCorrection(statsIdOf, snapshot, why) {
  * Let a player code play online, shut it out, or (null) hand it back to the default list.
  * Verified by fresh re-read, like every writer here.
  */
+/** Spelling Bee: count a voided day again (`on` true) or void it again (false). Verified by re-read. */
+export function setBeeUndone(boardKey, code, on) {
+  if (!/^(es-)?[a-z0]-[a-z0]{6}$/.test(String(boardKey || '')) || !/^[A-Z0-9]{3,12}$/.test(String(code || ''))) {
+    return Promise.resolve(fail(`not a Spelling Bee day: ${boardKey} ${code}`));
+  }
+  return writeNode(`bee/undo/${boardKey}`, { [code]: on ? true : null }, (cfg) => resolveBeeUndone(cfg, boardKey, code) === !!on, { stamp: false });
+}
+
 export function setOnlineAllowed(code, on) {
   const c = codeOf(code);
   if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));

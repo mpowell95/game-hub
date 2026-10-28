@@ -49,9 +49,9 @@ export const VOIDED_MATCHES = {
   spellingbee: {
     // `keepPlayed`: the day still counts as PLAYED, with nothing in it (Matt, 2026-10-28: "show that he
     // played, but make it so his score is 0"); only the Genius win comes out.
-    enachlnrt: { winner: '3VN33', puzzle: 'a:chlnrt', bucket: 'daily', keepPlayed: true },   // Oct 26 (Matt: "VOID")
-    enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily', keepPlayed: true },
-    eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', bucket: 'daily', keepPlayed: true },   // Oct 28 (Matt: "void today for him too")
+    enachlnrt: { winner: '3VN33', puzzle: 'a:chlnrt', day: '2026-10-26', bucket: 'daily', keepPlayed: true },   // Oct 26 (Matt: "VOID")
+    enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', day: '2026-10-27', bucket: 'daily', keepPlayed: true },
+    eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', day: '2026-10-28', bucket: 'daily', keepPlayed: true },   // Oct 28 (Matt: "void today for him too")
   },
 };
 /** Codes whose day on one puzzle counts for nothing long-term (Spelling Bee). Not the day's own board. */
