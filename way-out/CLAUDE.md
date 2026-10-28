@@ -308,6 +308,17 @@ keeps the old generator-8-style wrap.
 - **Points already earned stay** (THE LAW): `wo.pts`, logs and counts are untouched; Expert stays 6 a level.
 - Generators 8 and 9's Expert boards stay in their files (append-only) but are no longer played.
 
+## Hard = generator 11, for everyone (2026-10-28)
+
+Matt, after Expert moved: *"Now Hard is too easy ... make Hard a bit more challenging. Not as challenging as expert,
+but more challenging than they are right now."* **Every Hard level from 101 not already in progress is a generator
+11 board**: `js/boards11.js` (GENERATED, `tools/build-arrow-boards11.mjs`, 100 boards, APPEND-ONLY, pinned),
+Impossible boards 7-8's recipe on their 18x25 grid: exactly one arrow free at every step, the next one ~6-7 dots
+away, no trains, ~45-60 arrows (generator 8's Hard: ~45 arrows, ~2 free at a time; Expert: ~75-80 on 28x38).
+`src {k:'N', g:11, m}`, clock key `N11:hard:<n>`, log `g` 11, `buildB11(n, m)`, the same LOOP as Expert
+(`b10Slot` from 101). Unlike Expert, a Hard level in progress on a generator-8 board FINISHES on that board, and
+a missed generator-8 Hard level replays on its own board (Matt asked only for harder Hard). Points unchanged (4).
+
 ## Impossible test boards (2026-10-28, admin only, not yet published)
 
 Matt: *"an 'impossible' category ... 70+ arrows and there's exactly 1 way to solve it ... only one arrow can be

@@ -24,6 +24,7 @@ import { BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
 import { B8, B8_W, B8_H } from './boards8.js';
 import { B9 } from './boards9.js';
 import { B10, B10_W, B10_H } from './boards10.js';
+import { B11, B11_W, B11_H } from './boards11.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -565,11 +566,11 @@ export function hasB8(band, n) {
 export const B10_GEN = 10;
 export const B10_COUNT = B10.length;
 /** A packed generator-10 board back to arrows (tail first, head last). */
-export function unpackB10(s) {
+export function unpackB10(s, W = B10_W) {
   const bin = atob(s);
   let pos = 0;
   const get = (n) => { let v = 0; for (let k = 0; k < n; k++, pos++) v = (v << 1) | ((bin.charCodeAt(pos >> 3) >> (7 - (pos & 7))) & 1); return v; };
-  const step = [1, -1, B10_W, -B10_W];
+  const step = [1, -1, W, -W];
   const arrows = [];
   for (let a = get(7); a > 0; a--) {
     const c = [get(11)];
@@ -581,8 +582,8 @@ export function unpackB10(s) {
 /** Which generator-10 board, and which mirror, Expert level n is: the boards go round in a LOOP (Matt,
  *  2026-10-28: a player already on Expert 294 would otherwise never see boards 1-93), each lap mirrored
  *  (0 none, 1 left-right, 2 top-bottom, 3 both), so every player meets every board before any repeats. */
-export function b10Slot(n, len = B10.length) {
-  const j = Math.max(0, (n | 0) - B8_FROM.expert);
+export function b10Slot(n, len = B10.length, from = B8_FROM.expert) {
+  const j = Math.max(0, (n | 0) - from);
   return { i: j % len, t: Math.floor(j / len) % 4 };
 }
 /** Expert level n on generator 10, from the first `m` shipped boards (a save names its `m`: boards are
@@ -597,6 +598,26 @@ export function buildB10(n, m = B10.length, loop = true) {
 /** Is level n of `band` on generator 10? Every Expert level. */
 export function hasB10(band) {
   return band === 'expert' && B10.length > 0;
+}
+
+// GENERATOR 11 (2026-10-28, Matt: "Now Hard is too easy ... make Hard a bit more challenging. Not as
+// challenging as expert, but more challenging than they are right now"): every Hard level from 101 on
+// Impossible test boards 7-8's recipe, on their 18x25 grid: exactly one arrow free at every step, the next
+// one ~6-8 dots away, no trains, ~45-60 arrows (Expert: ~75-80 on 28x38). boards11.js, built by
+// tools/build-arrow-boards11.mjs, packed as generator 10's. The same LOOP as Expert (b10Slot from 101).
+// A Hard level already in progress on a generator-8 board finishes on that board.
+export const B11_GEN = 11;
+export const B11_COUNT = B11.length;
+/** Hard level n on generator 11, from the first `m` shipped boards (a save names its `m`). */
+export function buildB11(n, m = B11.length) {
+  const len = Number.isInteger(m) && m >= 1 && m <= B11.length ? m : B11.length;
+  const { i, t } = b10Slot(n, len, B8_FROM.hard);
+  const mx = (c) => { const x = c % B11_W, y = (c / B11_W) | 0; return ((t & 2) ? B11_H - 1 - y : y) * B11_W + ((t & 1) ? B11_W - 1 - x : x); };
+  return { cols: B11_W, rows: B11_H, arrows: unpackB10(B11[i], B11_W).map((c) => c.map(mx)) };
+}
+/** Is level n of `band` on generator 11? Every Hard level from 101. */
+export function hasB11(band, n) {
+  return band === 'hard' && B11.length > 0 && (n | 0) >= B8_FROM.hard;
 }
 
 // --- RUSH (2026-10-14) --------------------------------------------------------------------------
