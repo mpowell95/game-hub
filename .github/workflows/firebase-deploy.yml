@@ -25,6 +25,10 @@ on:
       - 'js/stats-corrections.js'
       - 'js/admin-config.js'
       - 'js/hidden-players.js'
+      - 'js/bee-fairplay.js'
+      - 'spelling-bee/js/engine.js'
+      - 'spelling-bee/data/bee.json'
+      - 'spelling-bee/data/bee-es.json'
       - 'tools/sync-functions-shared.mjs'
       - 'database.rules.json'
       - 'firebase.json'
@@ -59,6 +63,7 @@ jobs:
           node tools/test-boards.mjs
           node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('rules: valid JSON')"
           node tools/test-push.mjs
+          node tools/test-bee-server.mjs
 
       - name: Install function dependencies
         run: npm install --prefix functions

@@ -27,6 +27,9 @@
 //   directoryBuild    hourly + on an Online play change: the small directory/ the pickers read
 //   nudgePush         the Remind bell on the Multiplayer screen (2026-10-22)
 //   turnReminderPush  every hour: "Reminder: your turn vs X" once a turn has waited 24 h (2026-10-20)
+//   beeWatch          every 5 min: Spelling Bee copy detection + missing-log alerts, pushed to admins (2026-10-28)
+//   beeOnDaily        a Spelling Bee board row changed: rebuild boards/v1/bee (at most every 2 min)
+//   beeOnUndo         Matt undid a Spelling Bee void on the admin page: rebuild boards/v1/bee
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -38,6 +41,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
+import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -119,10 +123,7 @@ export const messagePush = onValueWritten({ ref: '/messages/index/{code}/{other}
 
 // Every admin is told: admins/<uid> === true, and msgAuth/<uid> is the player code that device
 // claimed (the Messages claim). Nobody's code is written into this file.
-export const bugReportPush = onValueCreated({ ref: '/bugReports/{id}', ...OPTS }, async (event) => {
-  const note = decideBugReport(event.data.val());
-  if (!note) return;
-  const db = getDatabase();
+async function adminCodes(db) {
   const admins = (await db.ref('admins').get()).val() || {};
   const codes = new Set();
   for (const uid of Object.keys(admins)) {
@@ -130,7 +131,13 @@ export const bugReportPush = onValueCreated({ ref: '/bugReports/{id}', ...OPTS }
     const c = (await db.ref(`msgAuth/${uid}`).get()).val();
     if (typeof c === 'string' && /^[A-Z2-9]{5}$/.test(c)) codes.add(c);
   }
-  for (const c of codes) await sendTo(db, c, note, `bug-${event.params.id}`, { game: 'bugs' });
+  return codes;
+}
+export const bugReportPush = onValueCreated({ ref: '/bugReports/{id}', ...OPTS }, async (event) => {
+  const note = decideBugReport(event.data.val());
+  if (!note) return;
+  const db = getDatabase();
+  for (const c of await adminCodes(db)) await sendTo(db, c, note, `bug-${event.params.id}`, { game: 'bugs' });
 });
 
 export const skeeChallengePush = onValueWritten({ ref: '/skeeChallenges/index/{code}/{id}', ...OPTS }, async (event) => {
@@ -327,3 +334,28 @@ export const roomsCleanup = onSchedule({ schedule: 'every 30 minutes', region: O
   if (n) await db.ref('rooms').update(patch);
   logger.info('rooms cleared', { n });
 });
+
+// SPELLING BEE FAIR PLAY (2026-10-28, functions/bee.js, docs/SPELLING-BEE-INTEGRITY-SPEC.md). Detection
+// and the missing-log check run every 5 minutes; a copied day is flagged once and every admin is told.
+export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
+  const db = getDatabase();
+  const { flags, alerts } = await scanRecent(db);
+  const codes = (flags.length || alerts.length) ? await adminCodes(db) : new Set();
+  for (const [bk, code, f] of flags) {
+    logger.info('bee flagged', { bk, code, summary: f.summary });
+    for (const c of codes) await sendTo(db, c, beeNote('flag', bk, f), `bee-flag-${bk}-${code}`, { game: 'spelling-bee' });
+  }
+  for (const [bk, code, a] of alerts) {
+    logger.info('bee log gap', { bk, code, words: a.words, logged: a.logged });
+    for (const c of codes) await sendTo(db, c, beeNote('log', bk, a), `bee-log-${bk}-${code}`, { game: 'spelling-bee' });
+  }
+  const meta = (await db.ref('boards/v1/beeMeta').get()).val() || {};
+  if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) {
+    const r = await rebuildBee(db);
+    logger.info('bee board rebuilt', r);
+  }
+});
+export const beeOnDaily = onValueWritten({ ref: '/beeDaily/{puzzle}/{code}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 },
+  async () => { await rebuildBeeIfDue(getDatabase()); });
+export const beeOnUndo = onValueWritten({ ref: '/adminConfig/v1/bee', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },
+  async () => { await rebuildBee(getDatabase()); });

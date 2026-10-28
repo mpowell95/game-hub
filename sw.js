@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1312;
-const CACHE = 'game-hub-v1313';
+const CACHE = 'game-hub-v1314';
 
 const ASSETS = [
   './',
@@ -77,6 +77,7 @@ const ASSETS = [
   // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
   // it while painting - a device without it would show scores the rest of the family no longer does.
   './js/stats-corrections.js',
+  './js/bee-fairplay.js',
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
@@ -828,6 +829,7 @@ const REST_MANIFEST = {
   './js/admin-config.js': 'af2d24b888',
   './js/admin-ui.js': '776a749fed',
   './js/stats-corrections.js': '3a30131074',
+  './js/bee-fairplay.js': '0b19190160',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'f7b99b83ea',
   './js/game-art.js': '9bdc57d580',

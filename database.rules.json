@@ -66,7 +66,8 @@
     "hoops":          { ".read": "auth != null", ".write": "auth != null" },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
     "directory":      { ".read": "auth != null", ".write": false },
-    "boards":         { "v1": { "lb": { ".read": "auth != null" } }, ".write": false },
+    "boards":         { "v1": { "lb": { ".read": "auth != null" }, "bee": { ".read": "auth != null" } }, ".write": false },
+    "beeAlerts":      { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true", ".write": false },
     "nudges": {
       "$code": {
         "$key": {

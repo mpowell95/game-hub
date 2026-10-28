@@ -85,6 +85,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1`; sides `a`/`b`, and `c` for a third player (Pool's Cutthroat, 2026-10-22; `match-chat-ui.js` `add({who})` names the sender) |
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
 | `admin-config.js`, `stats-corrections.js`, `admin-ui.js` | see "The admin config", "Score corrections" |
+| `bee-fairplay.js` | PURE and SHARED with `functions/bee.js` (copied by `tools/sync-functions-shared.mjs`): change it and both the phone and the server change; `tools/test-bee-server.mjs` + `tools/test-bee-fairplay.mjs` |
 | `announce.js` | see "The announcement layer" |
 | `career-store.js` | see "Career sync" |
 | `challenge/` | retired but LOAD-BEARING (`hooks.js` imported every load; `isDevProfile` rests on `secrets.js`). Never delete |

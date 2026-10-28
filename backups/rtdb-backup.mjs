@@ -67,6 +67,8 @@ export const BRANCHES = [
   'beeLog',
   // beeFlags/ (2026-10-28): Spelling Bee days the server flagged as copied, <puzzle>/<CODE>. Server writes only.
   'beeFlags',
+  // beeAlerts/ (2026-10-28): Spelling Bee missing-log alerts. Admin-read only, so an anonymous backup is denied.
+  'beeAlerts',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',

@@ -70,6 +70,9 @@ win and the board row's `dw`/`dp`/`dr` (own-day words/points/rank) use only thos
 (`byPoints`), shows everyone else's own-day numbers (`shownRows`), and a VOIDED row (`voidedOn`: code list + server
 `beeFlags/<puzzle>/<CODE>` - Matt's admin undo `adminConfig/v1/bee/undo/<puzzle>/<CODE>`) as played, 0, last. **A void never
 touches the viewer's own row** (silence: the cheater's phone looks unchanged). `tools/test-bee-fairplay.mjs`.
+**The server (`functions/bee.js`, `beeWatch` every 5 min)**: runs `js/bee-fairplay.js` `detectCopying` on yesterday/today/tomorrow's logs; a copied
+day is written ONCE to `beeFlags/` and pushed to admins; missing-log alerts (`beeAlerts/`) push only. `boards/v1/bee` (JSON string,
+`buildBeeBoard`) = the long-term board (own day, voids, places by points). `tools/test-bee-server.mjs`.
 
 **Never show Matt answer words** (2026-10-28, Matt: "I don't want to see the words tho!"): reading a log or board for him, run `read-bee-times.mjs` WITHOUT `--words` and report lengths/patterns only, even if he asks to "see the words"; confirm first.
 

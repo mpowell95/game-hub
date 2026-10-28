@@ -260,6 +260,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `error-log.js` | last 20 uncaught errors (`gamehub.errorlog.v1`) |
 | `admin-config.js` / `admin-ui.js` | `adminConfig/v1` resolvers (offline-safe, absent = code default) and the admin page; also the device reset |
 | `stats-corrections.js` | read-time score voids (`VOIDED_MATCHES` too); raw records untouched |
+| `bee-fairplay.js` | Spelling Bee fair play, PURE, shared with the server: `detectCopying` (the void rules), `buildBeeBoard` (the long-term board, `boards/v1/bee`), `beeTotals` |
 | `announce.js` / `announce-ui.js` | one-time launcher announcements (`gamehub.announce.v1`), each with an `until` date |
 | `challenge/` | retired challenge system, still load-bearing (`hub.js` imports `hooks.js`); do not delete |
 | `push.js` | push notifications, app half (see "Push notifications") |
@@ -514,7 +515,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   deletes `rooms/<CODE>` idle an hour, i.e. no 10 s heartbeat; rooms indexed on `updated`); rules incl. `archery`,
   `chinchon`, `escoba`, `nudges`, `directory`, `boards`. Deployed 2026-10-24 (workflow run, Battle
   Arena online): `battleArenaTurnPush` and the `battlearena` rules branch (+ in the nudges key pattern).
-  2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`). 2026-10-27: `beeLog` (every Spelling Bee guess and action, timed). 2026-10-28: `beeFlags` (server-written fair-play flags, read by every phone) + `dw`/`dp`/`dr` on `beeDaily` rows.
+  2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`). 2026-10-27: `beeLog` (every Spelling Bee guess and action, timed). 2026-10-28: `beeFlags` (server-written fair-play flags, read by every phone) + `dw`/`dp`/`dr` on `beeDaily` rows; `beeWatch` (every 5 min: copy detection + missing-log alerts pushed to admins, `functions/bee.js`), `beeOnDaily` + `beeOnUndo` (rebuild `boards/v1/bee`), `beeAlerts` (admin-read).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
