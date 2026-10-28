@@ -86,5 +86,16 @@ ok('hint is never the word itself', hintRank(2, new Set([2])) === null);
 ok('hint from 3 is 2', hintRank(3, new Set([3])) === 2);
 ok('bands', band(1) === 'close' && band(CLOSE) === 'close' && band(CLOSE + 1) === 'near' && band(NEAR + 1) === 'far');
 
+// THE OTHER PHONES (2026-10-28, integrity): a puzzle's hints, give-up and solve from the play log.
+{
+  const { logSummary } = await import('./engine.js');
+  const L = [
+    { k: 'en-3', e: 'hint', t: 10 }, { k: 'en-3', e: 'hint', t: 11 }, { k: 'en-3', e: 'guess', t: 12 },
+    { k: 'en-4', e: 'giveup', t: 13 }, { k: 'en-3', e: 'win', t: 50 }, null,
+  ];
+  const a = logSummary(L, 'en-3', 40), b = logSummary(L, 'en-3'), c = logSummary(L, 'en-4');
+  ok('logSummary: hints and a solve on that puzzle only, before the cut-off', a.hints === 2 && !a.won && !a.gave && b.won && c.gave && c.hints === 0);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

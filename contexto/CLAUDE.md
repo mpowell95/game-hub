@@ -247,6 +247,10 @@ Every open, guess (with its rank, `unknown`, or `again`), hint (word + rank), wi
 coming back goes to `playLog/<CODE>` (admin-read) via `_log()` (`js/play-log-queue.js`). Before this
 nothing per puzzle left the phone. **`ct.fewest` counts TYPED guesses only**: 8 hints from a blank board
 reach rank 2, so "1 guess" is ordinary hint-heavy play (the integrity alert on it was dropped).
+**A puzzle follows the PLAYER (2026-10-28):** `_remote()` reads the player's own `playLog/<CODE>` for the
+puzzle (`orderByChild('k')`) at open and before recording: hints from any phone or browser count, and a
+puzzle solved or given up anywhere is done here and never recorded twice. `recorded` is set only after
+that check; `_enterPuzzle` records a finished-but-unrecorded puzzle. The tie-break counts hints as tries.
 
 ## What is NOT covered by a test
 

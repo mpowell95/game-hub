@@ -11,7 +11,7 @@
 // THE LAW: nothing here changes players/, a match, or a stats store. Flags and alerts are new nodes,
 // never removed by this code.
 import './shared-env.js';
-import { checkStats, checkMatch, hitText, gameName } from './shared/js/integrity.js';
+import { checkStats, checkMatch, checkContextoWin, hitText, gameName } from './shared/js/integrity.js';
 import { isHiddenDeviceId, isHiddenName } from './shared/js/hidden-players.js';
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
@@ -75,4 +75,25 @@ export function integrityNote(kind, info) {
         : `${name}, ${game}: ${strong ? 'voided' : 'alert'}. ${what}`,
     }),
   };
+}
+
+/** A Contexto win was logged (playLog/<code>/<id>): judge it once (checkContextoWin). Returns the alerts
+ *  written. Each alert lives at integrityAlerts/contexto~<code>~<puzzle>/<rule>~x. */
+export async function checkContextoLogWin(db, code, id, win, now = Date.now()) {
+  if (!win || win.g !== 'contexto' || win.e !== 'win' || !win.k) return [];
+  const t = Number(win.t) || 0;
+  const [pz, nr] = await Promise.all([
+    db.ref(`playLog/${code}`).orderByChild('k').equalTo(win.k).get(),
+    db.ref(`playLog/${code}`).orderByKey().startAt(`${t - 60000}`).endAt(`${t + 60000}~`).get(),
+  ]);
+  const puzzle = Object.values(pz.val() || {}), near = Object.values(nr.val() || {});
+  const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
+  const written = [];
+  for (const h of checkContextoWin(puzzle, near, win)) {
+    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(win.k), when: now };
+    const key = `contexto~${code}~${String(win.k).replace(/[.#$/[\]]/g, '_')}`;
+    const res = await db.ref(`integrityAlerts/${key}/${h.rule}~x`).transaction((cur) => (cur ? undefined : alert));
+    if (res && res.committed) written.push({ ...h, ...alert, node: 'contexto' });
+  }
+  return written;
 }

@@ -125,6 +125,27 @@ Cup Pong and Hoops, within reach of the others; no rule fires. The one alert is 
 - Nothing reads it yet. Checks on it come after real logs exist, replayed per Matt's rule 5.
 - Before this, only Spelling Bee (`beeLog`) logged moves; nothing earlier can be recovered.
 
+## 6b. Contexto's holes, closed (2026-10-28, Matt: "He's clearly just pressing hint until it basically gives him the word... All holes like this MUST be fixed")
+
+- **A puzzle follows the PLAYER, not the phone.** The save is per phone storage (and on an iPhone, Safari
+  and the Home Screen app are separate storages), so a hint or give-up in one place, or a solve on a
+  second phone, was invisible in the other: look up the answer in Safari, solve hint-free in the app,
+  gold. Now the game reads the player's own play log (`playLog/<CODE>`, indexed on `k`) at open and
+  before recording (`contexto/js/ui.js` `_remote`, `engine.js` `logSummary`): hints taken anywhere count
+  toward the medal; a puzzle given up or solved anywhere is finished everywhere and never recorded twice.
+  A finished puzzle is recorded only after that check (closing the app during it records at next open).
+- **Hints count as tries** in the tie-break (`leaderboard-rank.js` `ctAvgGuesses` = (guesses + hints) /
+  solves, shown as "avg N tries"): 8 hints from a blank board reach rank 2 (300, 150, 75, 37, 18, 9, 4,
+  2), so a typed-guesses-only average rewarded pressing hint. Medals were already hint-first (gold = no
+  hints).
+- **Server alerts on every logged Contexto win** (`contextoWinCheck`, `js/integrity.js`
+  `checkContextoWin`, alerts only): solved after a solve or give-up elsewhere; hints taken elsewhere not
+  counted (a phone offline at the time); **far jump**: no hints and never closer than rank 300 before
+  the answer (or the answer as the first guess), the mark of a looked-up word. Thresholds are first
+  guesses: re-check them against real logs.
+- **Not closable in an app with no server answers**: a second player code (a made-up profile) or another
+  person can still look an answer up; the far-jump alert is what catches the result.
+
 ## 7. What would make more checks possible (not built; Matt's call)
 
 A timed log like Spelling Bee's, per game, is the only way to catch outside help (a solver, a copied

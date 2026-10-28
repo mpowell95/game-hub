@@ -778,6 +778,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     compareContexto(king1, { solved: 1, bronze: 1, guesses: 1 }) < 0 && compareContexto({ solved: 1, bronze: 1, guesses: 99 }, king3) < 0);
   ok('equal medals: the LOWER average guesses wins', compareContexto(matt, anita) < 0 && compareContexto(anita, matt) > 0);
   ok('equal medals AND equal average = tied', compareContexto(matt, { ...matt }) === 0);
+  ok('hints count as tries (2026-10-28): 1 typed guess after 8 hints loses to 5 typed guesses, no hints',
+    compareContexto({ solved: 1, guesses: 5, hints: 0 }, { solved: 1, guesses: 1, hints: 8 }) < 0);
   ok('headline is the best medal and its count',
     JSON.stringify(ctBest(ctMedalScore(matt))) === '{"medal":"gold","n":1}'
     && JSON.stringify(ctBest(ctMedalScore(king1))) === '{"medal":"silver","n":1}'

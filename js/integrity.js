@@ -277,7 +277,36 @@ export function checkMatch(node, m) {
   return out;
 }
 export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.id, r.text]), ['hoops-winner-not-moves', 'a winner the moves do not give'],
-  ['contexto-first-guess', 'solved in 1 typed guess (alert retired: hints do not count as guesses)']]);
+  ['contexto-first-guess', 'solved in 1 typed guess (alert retired: hints do not count as guesses)'],
+  ['contexto-solved-elsewhere', 'solved a puzzle already solved or given up on another phone'],
+  ['contexto-hints-not-counted', 'hints taken elsewhere not counted (counted, taken)'],
+  ['contexto-far-jump', 'solved with no hints straight from far away (closest guess before the answer, limit)']]);
+
+// --- CONTEXTO, from the play log (2026-10-28; ALERTS only, never a void) ------------------------------
+// Judged on the server when a win is logged (functions/integrity.js contextoWinCheck). `puzzle` = every
+// playLog entry this player code has for that puzzle key, `near` = the code's entries within a minute of
+// the win (where the recorder's own entry, with the hints it counted, sits). The phones already count a
+// hint, give-up or solve from another phone (contexto/js/ui.js _remote); these catch what slipped past
+// (a phone offline at the time) and the patterns a looked-up answer leaves.
+export const CONTEXTO_FAR = 300;    // the "close" band: an honest solve almost always passes through it
+export function checkContextoWin(puzzle, near, win) {
+  const out = [];
+  if (!win || win.e !== 'win') return out;
+  const before = (puzzle || []).filter((x) => x && Number(x.t) < Number(win.t));
+  if (before.some((x) => x.e === 'win' || x.e === 'giveup')) out.push({ rule: 'contexto-solved-elsewhere', v: 'yes', lim: '' });
+  const hints = before.filter((x) => x.e === 'hint').length;
+  const rec = (near || []).filter((x) => x && x.f === 'recordContexto' && Number(x.t) >= Number(win.t) - 1000)
+    .sort((a, b) => a.t - b.t)[0];
+  let counted = null;
+  try { counted = rec ? (JSON.parse(rec.a)[2] || {}).hints | 0 : null; } catch { counted = null; }
+  if (counted != null && hints > counted) out.push({ rule: 'contexto-hints-not-counted', v: counted, lim: hints });
+  if (hints === 0) {
+    const ranks = before.filter((x) => x.e === 'guess').map((x) => Number(x.r)).filter((r) => Number.isFinite(r) && r > 1);
+    const best = ranks.length ? Math.min(...ranks) : null;
+    if (best == null || best > CONTEXTO_FAR) out.push({ rule: 'contexto-far-jump', v: best == null ? 'first guess' : best, lim: CONTEXTO_FAR });
+  }
+  return out;
+}
 
 export const RULE_BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
 
@@ -360,4 +389,4 @@ export const GAME_NAMES = {
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
+export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };

@@ -45,7 +45,7 @@ import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
-import { writeFlags, checkFinishedMatch, integrityNote } from './integrity.js';
+import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote } from './integrity.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -399,3 +399,18 @@ export const dartsMatchCheck = onMatchOver('darts');
 export const cupPongMatchCheck = onMatchOver('cuppong');
 export const battleshipMatchCheck = onMatchOver('battleship');
 export const hoopsMatchCheck = onMatchOver('hoops');
+
+// CONTEXTO, FROM THE PLAY LOG (2026-10-28): every Contexto win a phone logs is judged once
+// (js/integrity.js checkContextoWin); an alert, never a void, goes to every admin.
+export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
+  const v = event.data.val();
+  if (!v || v.g !== 'contexto' || v.e !== 'win') return;
+  const db = getDatabase();
+  const written = await checkContextoLogWin(db, event.params.code, event.params.id, v);
+  if (!written.length) return;
+  const codes = await adminCodes(db);
+  for (const a of written) {
+    logger.info('integrity alert', { node: 'contexto', code: a.code, k: a.k, rule: a.rule, v: a.v });
+    for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-contexto-${a.code}-${a.k}`, { game: 'admin' });
+  }
+});

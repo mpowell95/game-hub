@@ -276,8 +276,9 @@ check(
 // js/mp-reactions-ui.js / js/mp-reactions.js palette that the live-room games use).
 
 // Solo games that only post a score to a shared board (no match, so nothing to chat in).
-// Spelling Bee: the daily board, beeDaily/ (2026-10-26).
-const BOARD_ONLY = new Set(['spelling-bee']);
+// Spelling Bee: the daily board, beeDaily/ (2026-10-26). Contexto: reads its own play log back to
+// count hints and solves from the player's other phones (2026-10-28, integrity), no match.
+const BOARD_ONLY = new Set(['spelling-bee', 'contexto']);
 
 check(
   'every multiplayer game has quick chat inside a match',
