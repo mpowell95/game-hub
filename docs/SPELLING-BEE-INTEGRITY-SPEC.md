@@ -48,6 +48,13 @@ Replaces the current Spelling Bee board on the hub Leaderboard (the one that sho
   🥇/🥈/🥉 counts (days finished 1st/2nd/3rd), 🧠 Genius days, 🐝 Queen Bee days, 📅 days played.
 - **Daily places:** per day per language, **by points**, words found on the puzzle's own day only; ties share the place; a voided day is
   always last with 0 and earns no place and no Genius.
+- **Own-day numbers (review 2, 2026-10-28):** a board row stores totals only, and per-word times without
+  points, so the server cannot tell what was found on the puzzle's own day. Each phone adds `dw`, `dp`,
+  `dr` to its row: words, points and rank from words found on the puzzle's own day (local date = the
+  puzzle's day, by each word's time; words with no time = on the day). Rows without them (older builds,
+  Oct 26) count as found on the day. `database.rules.json` must allow the three fields.
+- Other people's rows on a PAST day's in-game board show own-day numbers too; the viewer's own row stays
+  live (section 9, item 8).
 - **Source:** the daily board rows (`beeDaily/`, from 2026-10-26), built on the server into one small
   package (`boards/v1/bee`), so no phone downloads every day's rows. Rebuilt when a row changes (at
   most every 2 min) and when a void changes.
