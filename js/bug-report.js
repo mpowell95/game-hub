@@ -607,19 +607,38 @@ export async function undeleteBugReport(id) {
  * the report but the reporter will NOT see it, because that report carries no deviceId to index
  * it under. The UI says so rather than showing a green tick over a message nobody will read.
  */
-export async function replyToBugReport(report, text) {
+export async function replyToBugReport(report, text, screenshots) {
   const body = normalizeReply(text);
   if (!report || !report.id || !body) return { ok: false, reason: 'nothing to send', delivered: false };
   const atMs = Date.now();
   const reply = { text: body, atMs, at: new Date(atMs).toISOString() };
+  const shots = Array.isArray(screenshots) ? screenshots.slice(0, MAX_SHOTS) : [];
+  let shotsOk = true;
   try {
     const boot = await getStatsApp();
     if (!boot) return { ok: false, reason: 'offline', delivered: false, retryable: true };
     const { db, api } = boot;
+    // Screenshots first, in their own node keyed by this reply's time (2026-10-28): a later reply
+    // adds beside them, never over them, and the player's reply list stays one small read. A shot
+    // that fails to land does not stop the words; the reply just carries no shotCount.
+    if (shots.length) {
+      try {
+        const obj = {};
+        shots.forEach((s, i) => { obj[i] = { dataUrl: s.dataUrl, width: s.width, height: s.height, bytes: s.bytes, name: s.name }; });
+        const path = 'bugReplyShots/' + report.id + '/' + atMs;
+        await api.set(api.ref(db, path), obj);
+        const check = await api.get(api.ref(db, path + '/0/bytes'));
+        if (!check || !check.exists()) throw new Error('verify failed');
+        reply.shotCount = shots.length;
+      } catch (err) {
+        shotsOk = false;
+        console.error('[bug-report] reply screenshots failed for ' + report.id, err);
+      }
+    }
     await api.update(api.ref(db, 'bugReports/' + report.id), { reply, status: 'done', statusAt: atMs });
 
     const to = (report.reporter && report.reporter.deviceId) || null;
-    if (!to) return { ok: true, delivered: false };
+    if (!to) return { ok: true, reply, delivered: false, shotsOk };
     await api.set(api.ref(db, 'bugReplies/' + to + '/' + report.id), Object.assign({
       reportId: report.id,
       reportDescription: report.description || '',
@@ -631,13 +650,26 @@ export async function replyToBugReport(report, text) {
     const snap = await api.get(api.ref(db, 'bugReplies/' + to + '/' + report.id + '/atMs'));
     if (!snap || !snap.exists()) {
       console.error('[bug-report] reply VERIFY FAILED for bugReplies/' + to + '/' + report.id);
-      return { ok: true, delivered: false, reason: 'saved on the report, but not delivered' };
+      return { ok: true, reply, delivered: false, shotsOk, reason: 'saved on the report, but not delivered' };
     }
-    return { ok: true, delivered: true };
+    return { ok: true, reply, delivered: true, shotsOk };
   } catch (err) {
     console.error('[bug-report] reply failed', err);
     return { ok: false, reason: String((err && err.message) || err), delivered: false, retryable: true };
   }
+}
+
+/** The screenshots on one reply (`bugReplyShots/<reportId>/<replyAtMs>`), `[]` if none or unreadable. */
+export async function readReplyShots(reportId, replyAtMs) {
+  try {
+    const boot = await getStatsApp();
+    if (!boot || !reportId || !replyAtMs) return [];
+    const { db, api } = boot;
+    const snap = await api.get(api.ref(db, 'bugReplyShots/' + reportId + '/' + ms(replyAtMs)));
+    const val = (snap && snap.exists()) ? snap.val() : null;
+    if (!val) return [];
+    return Object.keys(val).sort().map((k) => val[k]).filter(Boolean);
+  } catch { return []; }
 }
 
 /** Every reply addressed to THIS device, newest first. `[]` offline - never throws. */
@@ -678,7 +710,7 @@ export default {
   gatherEnvironment, prepareScreenshot, buildBugReport, submitBugReport,
   queuePendingReport, drainPendingReports, pendingCount,
   readBugReports, readBugReportsSince, readBugShots, setBugStatus, deleteBugReport, undeleteBugReport,
-  replyToBugReport, readMyReplies, unreadReplyCount, repliesSeenAt, markRepliesSeen,
+  replyToBugReport, readReplyShots, readMyReplies, unreadReplyCount, repliesSeenAt, markRepliesSeen,
   normalizeDescription, normalizeReply, fitsShotBudget, summarizeEnvironment,
   sortReportsNewestFirst, sortRepliesNewestFirst, countUnread, countUnreadReplies, visibleInInbox,
 };

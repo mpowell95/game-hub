@@ -20,7 +20,7 @@
 import {
   MAX_SHOTS, MAX_REPLY, buildBugReport, submitBugReport, prepareScreenshot, fitsShotBudget,
   queuePendingReport, pendingCount, readBugReports, readBugReportsSince, readBugShots, setBugStatus, summarizeEnvironment,
-  countUnread, visibleInInbox, deleteBugReport, undeleteBugReport, replyToBugReport,
+  countUnread, visibleInInbox, deleteBugReport, undeleteBugReport, replyToBugReport, readReplyShots,
   readMyReplies, markRepliesSeen, repliesSeenAt, countUnreadReplies,
 } from './bug-report.js';
 import { makeT, getLang } from './i18n.js';
@@ -469,11 +469,14 @@ export async function openBugInbox() {
       <h3 style="margin:16px 0 0;font-size:15px">${esc(t('bug_inbox_shots'))}</h3>
       <div class="bug-detail-shots" data-role="shots"><span class="bug-row-meta">${esc(t('bug_inbox_loading'))}</span></div>
       ${r.reply ? `<div class="bug-reply">
-        <span class="bug-reply-who">${esc(t('bug_reply_sent_at', { when: whenText(r.reply.atMs) }))}</span>${esc(r.reply.text || '')}
+        <span class="bug-reply-who">${esc(t('bug_reply_sent_at', { when: whenText(r.reply.atMs) }))}</span>${esc(r.reply.text || '')}${r.reply.shotCount ? `<div class="bug-detail-shots" data-reply-shots="${esc(r.reply.atMs)}"></div>` : ''}
       </div>` : ''}
       <h3 style="margin:16px 0 0;font-size:15px">${esc(r.reply ? t('bug_reply_again') : t('bug_reply_title'))}</h3>
       <textarea class="gh-input bug-text" data-role="reply" rows="3" maxlength="${MAX_REPLY}"
         placeholder="${esc(t('bug_reply_placeholder'))}"></textarea>
+      <div class="bug-shots" data-role="reply-shots"></div>
+      <input type="file" accept="image/*" multiple hidden data-role="reply-file">
+      <button type="button" class="gh-btn gh-btn--sm" data-role="reply-addshot" style="margin-top:8px">${esc(t('bug_add_shot'))}</button>
       <details class="bug-disc"><summary>${esc(t('bug_inbox_details'))}</summary>
         <pre class="bug-json">${esc(JSON.stringify(r, null, 2))}</pre>
       </details>
@@ -499,6 +502,41 @@ export async function openBugInbox() {
       else { e.currentTarget.disabled = false; msg.textContent = t('bug_inbox_offline'); }
     });
 
+    // Screenshots on the reply: the same picker, downscale and caps as the report form.
+    const replyShots = [];
+    const replyShotsEl = card.querySelector('[data-role="reply-shots"]');
+    const replyFileEl = card.querySelector('[data-role="reply-file"]');
+    const renderReplyShots = () => {
+      replyShotsEl.innerHTML = replyShots.map((s, i) => `
+        <div class="bug-shot">
+          <img src="${s.dataUrl}" alt="">
+          <button type="button" data-remove="${i}" aria-label="${esc(t('bug_shot_remove', { n: i + 1 }))}">&times;</button>
+        </div>`).join('');
+    };
+    replyShotsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remove]');
+      if (!btn) return;
+      replyShots.splice(+btn.dataset.remove, 1);
+      renderReplyShots();
+    });
+    card.querySelector('[data-role="reply-addshot"]').addEventListener('click', () => replyFileEl.click());
+    replyFileEl.addEventListener('change', async () => {
+      const files = Array.from(replyFileEl.files || []);
+      replyFileEl.value = '';
+      for (const f of files) {
+        if (replyShots.length >= MAX_SHOTS) { msg.textContent = t('bug_shots_full', { n: MAX_SHOTS }); break; }
+        try {
+          const shot = await prepareScreenshot(f);
+          if (!fitsShotBudget(replyShots, shot.bytes)) { msg.textContent = t('bug_shot_too_big'); continue; }
+          replyShots.push(shot);
+          msg.textContent = '';
+        } catch (err) {
+          msg.textContent = t('bug_shot_err', { msg: (err && err.message) || err });
+        }
+      }
+      renderReplyShots();
+    });
+
     // Replying marks the report done in the same write - answering it IS handling it, and having
     // to remember a second tap is how an inbox fills up with things already dealt with.
     card.querySelector('[data-role="send-reply"]').addEventListener('click', async (e) => {
@@ -507,15 +545,17 @@ export async function openBugInbox() {
       if (!text) { msg.textContent = t('bug_reply_empty'); box.focus(); return; }
       e.currentTarget.disabled = true;
       msg.textContent = t('bug_reply_sending');
-      const res = await replyToBugReport(r, text);
-      if (!res.ok) { e.currentTarget.disabled = false; msg.textContent = t('bug_reply_failed'); return; }
-      r.reply = { text, atMs: Date.now() };
+      const btn = e.currentTarget;
+      const res = await replyToBugReport(r, text, replyShots);
+      if (!res.ok) { btn.disabled = false; msg.textContent = t('bug_reply_failed'); return; }
+      r.reply = res.reply || { text, atMs: Date.now() };
       r.status = 'done';
       detail(r);
       // `delivered:false` means it saved on the report but the reporter cannot be reached, because
       // that report carries no deviceId to index it under. Saying so beats a green tick over a
       // message nobody will ever read.
-      card.querySelector('[data-role="msg"]').textContent = res.delivered ? t('bug_reply_ok') : t('bug_reply_undeliverable');
+      card.querySelector('[data-role="msg"]').textContent = (res.delivered ? t('bug_reply_ok') : t('bug_reply_undeliverable'))
+        + (res.shotsOk === false ? ' ' + t('bug_reply_no_shots') : '');
     });
 
     // Two taps, deliberately: the confirm is the safety, not the soft delete underneath it.
@@ -537,6 +577,7 @@ export async function openBugInbox() {
         else ev.currentTarget.disabled = false;
       });
     });
+    fillReplyShots(card, r.id);
     const shotsHost = card.querySelector('[data-role="shots"]');
     const shots = await readBugShots(r.id);
     shotsHost.innerHTML = shots.length
@@ -545,6 +586,16 @@ export async function openBugInbox() {
   };
 
   list();
+}
+
+/** Load each reply's screenshots into its `[data-reply-shots]` box, on demand. */
+async function fillReplyShots(root, reportIdOf) {
+  const boxes = Array.from(root.querySelectorAll('[data-reply-shots]'));
+  await Promise.all(boxes.map(async (box) => {
+    const id = typeof reportIdOf === 'function' ? reportIdOf(box) : reportIdOf;
+    const shots = await readReplyShots(id, box.dataset.replyShots);
+    box.innerHTML = shots.map((s) => `<img src="${s.dataUrl}" alt="">`).join('');
+  }));
 }
 
 // --- the player's own side ------------------------------------------------------------------------
@@ -588,7 +639,7 @@ export async function openMyReplies() {
       <p class="bug-thread-mine">${esc([whenText(r.reportCreatedAtMs, true), r.game].filter(Boolean).join(' · '))}</p>
       <p class="bug-quote">${esc(r.reportDescription || '')}</p>
       <div class="bug-reply">
-        <span class="bug-reply-who">${esc(t('bug_mine_from', { when: whenText(r.atMs) }))}</span>${esc(r.text || '')}
+        <span class="bug-reply-who">${esc(t('bug_mine_from', { when: whenText(r.atMs) }))}</span>${esc(r.text || '')}${r.shotCount ? `<div class="bug-detail-shots" data-reply-shots="${esc(r.atMs)}" data-report="${esc(r.reportId)}"></div>` : ''}
       </div>
     </li>`).join('')}</ul>
     <div class="gh-modal__actions">
@@ -597,6 +648,7 @@ export async function openMyReplies() {
     </div>`);
   card.querySelector('[data-role="report"]').addEventListener('click', () => { closeOverlay(); openBugReport(); });
   card.querySelector('[data-role="done"]').addEventListener('click', closeOverlay);
+  fillReplyShots(card, (box) => box.dataset.report);
 }
 
 export default { openBugReport, openBugInbox, openMyReplies, adminUnreadCount, myUnreadReplies };

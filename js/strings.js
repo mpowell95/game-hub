@@ -343,6 +343,7 @@ export const STRINGS = {
     bug_reply_failed: 'Could not send. Check your connection and try again.',
     bug_reply_undeliverable: 'Saved on the report, but this one has no device id, so they will not be notified.',
     bug_reply_sent_at: '{me} replied, {when}',
+    bug_reply_no_shots: 'The screenshots did not send.',
     // --- the player's own side ---
     bug_mine_title: 'Replies to your reports',
     bug_mine_dialog_aria: 'Replies to your bug reports',
@@ -1165,6 +1166,7 @@ export const STRINGS = {
     bug_reply_failed: 'No se pudo enviar. Revisa la conexión e inténtalo otra vez.',
     bug_reply_undeliverable: 'Guardado en el reporte, pero este no tiene id de dispositivo, así que no le llegará el aviso.',
     bug_reply_sent_at: '{me} respondió, {when}',
+    bug_reply_no_shots: 'Las capturas no se enviaron.',
     // --- the player's own side ---
     bug_mine_title: 'Respuestas a tus reportes',
     bug_mine_dialog_aria: 'Respuestas a tus reportes de fallos',
