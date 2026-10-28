@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1315;
-const CACHE = 'game-hub-v1315';
+const IMPORTANT_SINCE = 1316;
+const CACHE = 'game-hub-v1316';
 
 const ASSETS = [
   './',
@@ -78,6 +78,7 @@ const ASSETS = [
   // it while painting - a device without it would show scores the rest of the family no longer does.
   './js/stats-corrections.js',
   './js/bee-fairplay.js',
+  './js/bee-board.js',
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
@@ -798,7 +799,7 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'afc6fd83a0',
+  './js/strings.js': '26ee5680ca',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -806,7 +807,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '63779910c9',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': 'b6632212a6',
+  './js/game-stats-ui.js': '91e4a9d169',
   './js/stats-net.js': 'e63d1f8e27',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': 'c2c389ae14',
@@ -830,11 +831,12 @@ const REST_MANIFEST = {
   './js/admin-ui.js': '776a749fed',
   './js/stats-corrections.js': '3a30131074',
   './js/bee-fairplay.js': '0b19190160',
+  './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'f7b99b83ea',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'b01f97d074',
-  './js/leaderboard-ui.js': '0f8f453233',
+  './js/leaderboard-ui.js': '3074fb5b28',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',

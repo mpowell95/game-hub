@@ -52,6 +52,7 @@ import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
+import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { loadProfile } from './profile-store.js';
 import { statsId, holdemBalance, holdemSuspect, isTestGame } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
@@ -617,7 +618,9 @@ function boardView(list, id) {
         return `<span>${esc(txt)}</span>`;
       },
       tier: (g) => (_tier == null ? boardTierOf(g, id) : null),
-      sub: (g) => t('lb_played_count', { n: boardPlaysOf(g, id) }),
+      // Spelling Bee: days played is already 📅 under the name.
+      sub: (g) => (id === 'spellingbee' && beeBoard() ? '' : t('lb_played_count', { n: boardPlaysOf(g, id) })),
+      subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : null,
     };
   };
   const simple = (rows, f, unit, played, cmp) => {
@@ -752,7 +755,7 @@ function plainBoardHTML(list, id) {
   const cards = v.rows.length
     ? `<div class="lb-unith">${esc(v.unit)}</div><div class="lb-plist is-board">${v.rows.map((g) => {
         const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g) };
-        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.tier ? tierPillHTML(v.tier(g)) : '', '');
+        return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.subHtml ? v.subHtml(g) : v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
     : emptyState(t('lb_empty_game', { label: labelOf(id) }));
   // Only on a view ranked by the board's own number (gameMetricAt), which is what gapText reads.
@@ -903,7 +906,41 @@ function hbBankOf(g) {
 function hbTouched(g) { const hb = hbOf(g); return !!(hb && ((hb.entries | 0) || (hb.grants | 0))); }
 const bankText = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
 
+// --- SPELLING BEE'S BOARD (2026-10-28, docs/SPELLING-BEE-INTEGRITY-SPEC.md, Matt's mockup B) ------
+// Its numbers come from the server's long-term board (boards/v1/bee, js/bee-board.js), not from the
+// stats record: points or words found on each puzzle's OWN day, voided days counted as played with 0,
+// 1st/2nd/3rd per day by points. Two toggles on the board itself (Points | Words, All | English |
+// Español); By Game and the You tab always read All by points, so they match the board as it opens.
+let _beeBy = 'points';
+let _beeLang = 'all';
+let _beeOff = null;
+let _beeMemo = { board: null, key: '', map: null };
+function beeView() { return _game === 'spellingbee' ? { lang: _beeLang, by: _beeBy } : { lang: 'all', by: 'points' }; }
+/** This person's totals on the Spelling Bee board for the current view, or null (no board yet). */
+function beeRowFor(g) {
+  const b = beeBoard();
+  if (!b) return null;
+  const v = beeView();
+  const key = `${v.lang}|${v.by}`;
+  if (_beeMemo.board !== b || _beeMemo.key !== key) _beeMemo = { board: b, key, map: new Map(beeTotals(b, v).map((r) => [r.code, r])) };
+  return _beeMemo.map.get(g.playerId) || { points: 0, words: 0, days: 0, first: 0, second: 0, third: 0, genius: 0, queen: 0 };
+}
+function beeTabsHTML() {
+  const pill = (attr, v, sel, label) => `<button type="button" class="lb-pill lb-mstab lb-wohalf${sel ? ' is-sel' : ''}" data-${attr}="${v}" aria-pressed="${sel}">${esc(label)}</button>`;
+  const third = (v, label) => pill('lbbeelang', v, _beeLang === v, label).replace('lb-wohalf', 'lb-wothird');
+  return `<div class="lb-pills lb-mstabs" role="group">${pill('lbbeeby', 'points', _beeBy === 'points', tx('lb_bee_points', 'Points'))}${pill('lbbeeby', 'words', _beeBy === 'words', tx('lb_bee_words', 'Words'))}</div>`
+    + `<div class="lb-pills lb-mstabs" role="group">${third('all', tx('lb_bee_all', 'All'))}${third('en', 'English')}${third('es', 'Español')}</div>`;
+}
+/** Under the name: 🥇🥈🥉 days (only the ones held), Genius 🧠 and Queen Bee 🐝 days, days played 📅. */
+function beeChipsHTML(g) {
+  const r = beeRowFor(g);
+  if (!r) return '';
+  const c = (glyph, n) => `<span class="lb-beechip"><span aria-hidden="true">${glyph}</span> ${n}</span>`;
+  return `<span class="lb-beechips">${r.first ? c('🥇', r.first) : ''}${r.second ? c('🥈', r.second) : ''}${r.third ? c('🥉', r.third) : ''}${c('🧠', r.genius)}${r.queen ? c('🐝', r.queen) : ''}${c('📅', r.days)}</span>`;
+}
+
 function gameMetricAt(g, id, tier) {
+  if (id === 'spellingbee' && beeBoard()) { const r = beeRowFor(g); return beeView().by === 'words' ? r.words : r.points; }
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
   if (id === 'hillclimb') return hcBestAt(g, tier);
@@ -964,11 +1001,13 @@ function lbUnitKeyOf(id) {
   // Same split: this board ranks medals; My Stats' list still leads with every solve.
   if (id === 'contexto') return 'lb_unit_ct_medals';
   if (id === 'holdem') return 'lb_unit_bank';
+  if (id === 'spellingbee' && beeBoard()) return beeView().by === 'words' ? 'lb_unit_words' : 'lb_unit_points';
   return unitKeyOf(id);
 }
 
 /** Plays for one game, honoring whichever filter that game's board actually offers. */
 function boardPlaysOf(g, id) {
+  if (id === 'spellingbee' && beeBoard()) return beeRowFor(g).days;
   if (id === 'holdem') return playsAtTier(g, [id], null);   // no difficulty filter on this board
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
 }
@@ -1739,7 +1778,7 @@ function gapKind(id) {
   if (id === 'contexto') return null;
   return ({
     lb_unit_ms_best: 'time', lb_unit_golf_best: 'golf', lb_unit_meters: 'meters', lb_unit_points: 'points', lb_unit_stars: 'stars',
-    lb_unit_obstacles: 'obstacles', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank',
+    lb_unit_obstacles: 'obstacles', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank', lb_unit_words: 'words',
   })[lbUnitKeyOf(id)] || 'wins';
 }
 function numText(n) {
@@ -2281,6 +2320,7 @@ function gameDetail(list, id) {
     ${playBtnHTML(id)}
   </div>`;
   if (id === 'minesweeper') return head + msBoardHTML(list);
+  if (id === 'spellingbee' && beeBoard()) return head + beeTabsHTML() + plainBoardHTML(list, id) + recordsHTML(list, id);
   if (id === 'wayout') return head + woModesHTML() + (woRush ? woRushHTML(list) : plainBoardHTML(list, id) + recordsHTML(list, id));
   return head + plainBoardHTML(list, id) + recordsHTML(list, id);
   const controls = boardControlsHTML(id, fieldTiers, machineIds);
@@ -2414,7 +2454,7 @@ function playerDetail(list, key) {
         <span class="lb-ctx-name">${rankName(g)}${youBadge(g)}</span>
         <span class="lb-ctx-game">${esc(labelOf(_playerGame))}</span>
       </span>
-    </div>` + screenFor(_playerGame, { games: g.games });
+    </div>` + screenFor(_playerGame, { games: g.games, code: g.playerId });
   }
   // No sort control on this screen, so the header always leads with wins (D1's default) - the
   // meta line becomes a single "N played" (playedOf, all games incl. runs), replacing the old
@@ -2641,6 +2681,10 @@ function onClick(e) {
   if (machTab) { _machine = machTab.dataset.lbmachine; rerender(); return; }
   const woModeTab = e.target.closest('[data-lbwomode]');
   if (woModeTab) { _woMode = woModeTab.dataset.lbwomode === 'rush' ? 'rush' : 'levels'; _tier = null; _view = ''; rerender(); return; }
+  const beeBy = e.target.closest('[data-lbbeeby]');
+  if (beeBy) { _beeBy = beeBy.dataset.lbbeeby === 'words' ? 'words' : 'points'; rerender(); return; }
+  const beeLang = e.target.closest('[data-lbbeelang]');
+  if (beeLang) { _beeLang = ['en', 'es'].includes(beeLang.dataset.lbbeelang) ? beeLang.dataset.lbbeelang : 'all'; rerender(); return; }
   const woRushTab = e.target.closest('[data-lbworush]');
   if (woRushTab) { if (RUSH_MODES.includes(woRushTab.dataset.lbworush)) _woRush = woRushTab.dataset.lbworush; rerender(); return; }
   const opt = e.target.closest('.lb-opt');
@@ -2714,6 +2758,7 @@ export function closeLeaderboard() {
   window.removeEventListener('popstate', onPop);
   if (_histArmed) { _histArmed = false; try { history.back(); } catch { /* ignore */ } }
   if (_onLine) { window.removeEventListener('online', _onLine); _onLine = null; }
+  if (_beeOff) { _beeOff(); _beeOff = null; }
   _connected = false;
   _board = null;
 }
@@ -2833,6 +2878,8 @@ export async function openLeaderboard(opts = {}) {
   try {
     // The server-built board first (a fraction of the download, no grouping on the phone); no board
     // yet, or unreadable: the whole players/ node, as it always was.
+    _beeBy = 'points'; _beeLang = 'all';
+    _beeOff = watchBeeBoard(() => { if (_host && _connected) rerender({ fromData: true }); });
     const offBoard = await watchBoard((b) => { _board = b; _connected = true; rerender({ fromData: true }); });
     if (offBoard) _unsub = offBoard;
     else _unsub = await watchPlayers((all) => { _board = null; _all = all || {}; _connected = true; rerender({ fromData: true }); });
@@ -2935,6 +2982,9 @@ function ensureCss() {
     '.lb-pcard.is-me .lb-pname{font-weight:800}',
     '.lb-you{flex:none;font-style:normal;font-size:11px;font-weight:800;letter-spacing:.1em;background:var(--lb-ink);color:var(--lb-surface);padding:3px 5px;border-radius:3px}',
     '.lb-psubline{flex:1 0 100%;font-size:11.5px;color:var(--lb-muted);margin-top:2px;font-variant-numeric:tabular-nums;min-width:0}',
+    // Spelling Bee's row (2026-10-28): days placed, Genius / Queen Bee days, days played, as glyph + number.
+    '.lb-beechips{display:inline-flex;flex-wrap:wrap;gap:4px 10px}',
+    '.lb-beechip{white-space:nowrap}',
     // The tier chip on a game board's card (2026-09-08): the ski-slope shape plus the word, on the
     // NAME line (`.lb-pid`'s own 6px gap spaces it), so it costs the card no height and reads as a
     // fact about the PLAYER. It is what makes the headline number legible - "6" means nothing until

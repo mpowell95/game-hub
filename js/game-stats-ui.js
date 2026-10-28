@@ -24,6 +24,7 @@ import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.j
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
 import { wwStars, wwCleared, wwThreeStars, wwExtra } from './word-weaver-points.js';
+import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 
 const t = makeT(STRINGS);
 /** t() with an English fallback, for a key newer than a cached js/strings.js (js/CLAUDE.md, Language support). */
@@ -300,6 +301,31 @@ function recordScreen(id, rec) {
       <div class="gs-tally"><b>${pct(won, played)}%</b><span>${t('gs_win_rate')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Spelling Bee (2026-10-28, docs/SPELLING-BEE-INTEGRITY-SPEC.md): the long-term board's numbers for
+ *  this person, the same ones the Leaderboard ranks on: points and words found on each puzzle's OWN day,
+ *  days finished 1st/2nd/3rd (by points), Genius and Queen Bee days, days played; All, then English and
+ *  Español. Until the board has loaded once on this phone: the stats record, as before. */
+let _beeWatching = false;
+function spellingBeeScreen(rec, code) {
+  const me = code || ((loadProfile() || {}).playerId) || '';
+  const b = beeBoard();
+  if (!_beeWatching) { _beeWatching = true; watchBeeBoard(() => { if (_game === 'spellingbee') rerender(); }); }
+  if (!b) return recordScreen('spellingbee', rec);
+  const of = (lang) => beeTotals(b, { lang }).find((r) => r.code === me) || null;
+  const all = of('all');
+  if (!all) return emptyState(gameLabel('spellingbee'));
+  const tally = (n, label) => `<div class="gs-tally"><b>${n}</b><span>${esc(label)}</span></div>`;
+  const line = (label, r) => r ? `<tr><th scope="row">${esc(label)}</th><td>${r.points}</td><td>${r.words}</td><td>${r.days}</td></tr>` : '';
+  return `
+    <div class="gs-tallies">
+      ${tally(all.points, tf('lb_bee_points', 'Points'))}${tally(all.words, tf('lb_bee_words', 'Words'))}${tally(all.days, '📅')}
+    </div>
+    <div class="gs-tallies">${tally(all.first, '🥇')}${tally(all.second, '🥈')}${tally(all.third, '🥉')}</div>
+    <div class="gs-tallies">${tally(all.genius, '🧠')}${tally(all.queen, '🐝')}</div>
+    <table class="gs-tbl"><thead><tr><th></th><th scope="col">${esc(tf('lb_bee_points', 'Points'))}</th><th scope="col">${esc(tf('lb_bee_words', 'Words'))}</th><th scope="col">📅</th></tr></thead>
+      <tbody>${line('English', of('en'))}${line('Español', of('es'))}</tbody></table>`;
 }
 
 /** Texas Hold'em: the usual wins/losses, plus the BANKROLL ledger (js/game-stats.js,
@@ -1672,6 +1698,7 @@ function baseballScreen(rec) {
 
 function screenFor(id, st) {
   const rec = (st.games && st.games[id]) || {};
+  if (id === 'spellingbee') return spellingBeeScreen(rec, st.code);
   if (id === 'connect4') return connect4Screen(rec);
   if (id === 'chinchon') return chinchonScreen(rec);
   if (id === 'nutsbolts') return nutsBoltsScreen(rec);
