@@ -599,7 +599,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('a hidden board cannot be reached through a stale _game',
     /if \(_game && !isGameOnLauncher\(_game\)\) _game = null;/.test(src));
   ok('[KNOWN-BUG PROBE] My Stats keeps its OWN, more permissive rule, so your own history stays',
-    /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| dev \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
+    /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
     'unifying visibleTabs with isGameOnLauncher would hide a player\'s own record of a pulled game');
   // NOT EVEN FOR MATT (2026-10-28): "Admin only games should not appear on the leaderboard. Not for
   // me and not for anyone else." And the stats TABS must mark the SAME games admin-only as the hub,
@@ -607,7 +607,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   {
     const fnBody = uiSrc.slice(uiSrc.indexOf('export function isGameOnLauncher('), uiSrc.indexOf('\n}\n', uiSrc.indexOf('export function isGameOnLauncher(')));
     ok('isGameOnLauncher has no dev-profile bypass', !/\bdev\b/.test(fnBody.replace(/\/\/.*$/gm, '')));
-    ok('the leaderboard\'s player page drops never-released admin-only games', /gsGameListHTML\(g\.games, \{ order: 'plays', board: true \}\)/.test(src));
+    ok('My Stats and the player page drop never-released admin-only games, for dev too', /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc));
+    ok('By Player totals leave out games admin-only right now', /function winsOf\(g, tier\) \{ return winsAtTier\(g, counted\(COMP_IDS\), tier\); \}/.test(src) && /const counted = \(ids\) => ids\.filter\(\(id\) => !isTestGame\(id\)\);/.test(src));
+    const gsSrc = readFileSync(new URL('./js/game-stats.js', __ROOT_URL), 'utf8');
+    const adminOnly = new Set([...(gsSrc.slice(gsSrc.indexOf('export const ADMIN_ONLY = {'), gsSrc.indexOf('};', gsSrc.indexOf('export const ADMIN_ONLY = {')))).matchAll(/: '([a-z0-9-]+)'/g)].map((m) => m[1]));
     const hub = readFileSync(new URL('./js/hub.js', __ROOT_URL), 'utf8');
     const hubDev = new Set();
     for (const m of hub.matchAll(/\n    id: '([^']+)'[\s\S]*?\n  \},/g)) if (/\n    devOnly: true,/.test(m[0])) hubDev.add(m[1]);
@@ -620,6 +623,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
       if (/devOnly: true/.test(line) !== hubDev.has(hid)) drift.push(`${id}(hub ${hid})`);
     }
     ok('stats TABS mark exactly the hub\'s admin-only games devOnly', tabs.length > 30 && hubDev.size > 0 && !drift.length, drift.join(', '));
+    const hubStatsDev = [...hubDev].filter((h) => h !== 'course-creator');   // a launch-out page with no stats
+    ok('game-stats.js ADMIN_ONLY names exactly the hub\'s admin-only games', hubStatsDev.length === adminOnly.size && hubStatsDev.every((h) => adminOnly.has(h)), [...adminOnly].join(','));
   }
   // WHERE THE LEADERBOARD OPENS, and where a board opens (2026-09-11, Matt).
   // REVERSED 2026-10-27 (Matt): it opens on the tab and sort it was left on; nothing saved = By Game.

@@ -295,7 +295,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
-(`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`,
+(`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
 `test-stats-corrections`, `test-rate-guard`, `test-activity`, `test-admin-config`); cross-game
 (`test-game-conventions`, `check-no-scroll`, `test-mp-lockstep`); per-feature `test-*.mjs`.
 
@@ -636,8 +636,13 @@ no Default buttons.
 - **An admin-only game is hidden from the launcher AND the leaderboard** via one helper,
   `isGameOnLauncher(statsId)`. **Off the leaderboard even for Matt and dev profiles** (Matt, 2026-10-28: "Not for me and not
   for anyone else"); `game-stats-ui.js` TABS mark the same games `devOnly` as the hub (a test checks), and the release
-  commit drops both flags. **Never filter `GAME_META`, the player-detail game list or stored
-  data with it** (wins would vanish from totals). `visibleTabs()` keeps its own, more permissive
+  commit drops both flags (and its id from `ADMIN_ONLY` in `js/game-stats.js`). **Never filter `GAME_META`, the player-detail game list or stored
+  data with it** (wins would vanish from totals).
+- **Admin-only games launch with 0 plays (Matt, 2026-10-28)**: while a game is admin-only its plays go to a TEST
+  area (`testGames`/`testH2h` in the store; `loadStats()` swaps it in so the game and its recorders work unchanged;
+  it starts as a copy of the real record). Everything that shows or uploads stats reads `loadStoredStats()`. Off My
+  Stats and out of By Player's totals for everyone while admin-only. Plays from before 2026-10-28 stay in the real
+  record and count at launch (Matt's choice). `tools/test-admin-only-plays.mjs`. `visibleTabs()` keeps its own, more permissive
   rule on purpose; do not unify them.
 - `hideFrom: ['<CODE>']` on a `GAMES` entry hides a game from named players (never Matt/dev).
   `games/<id>/allow/<CODE>` opens a hidden game to named players (`ALLOW_PICKER`); it hides the

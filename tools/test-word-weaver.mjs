@@ -22,8 +22,13 @@ globalThis.localStorage = {
   get length() { return store.size; },
 };
 
+// The recorder logic here is tested as a RELEASED game (switched live in the admin-config cache, which
+// is memoized at its first read): while a game is admin-only its plays go to a test area instead,
+// proven by tools/test-admin-only-plays.mjs (Matt, 2026-10-28).
+localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
 const P = await import('../js/word-weaver-points.js');
 const G = await import('../js/game-stats.js');
+G.isTestGame('wordweaver');   // memoize the config before any store.clear()
 const A = await import('../js/players-agg.js');
 
 // --- the stars rule (Matt, 2026-10-28) ---

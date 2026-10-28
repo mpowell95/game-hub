@@ -40,6 +40,10 @@ globalThis.localStorage = {
 };
 const CODE = 'BB7KM';
 store.set('gamehub.profile', JSON.stringify({ version: 1, name: 'Bud', playerId: CODE }));
+// The recorder logic here is tested as a RELEASED game (switched live in the admin-config cache, which
+// is memoized at its first read): while a game is admin-only its plays go to a test area instead,
+// proven by tools/test-admin-only-plays.mjs (Matt, 2026-10-28).
+store.set('gamehub.adminConfig.v1', JSON.stringify({ games: { baseball: { live: true } } }));
 
 const C = await import('../baseball/js/engine/career.js');
 const { LEAGUES, POINTS, CAPS, START_CAP, SEASON, SKILL_IDS, PRESETS, RULES_V,

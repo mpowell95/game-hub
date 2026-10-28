@@ -53,7 +53,7 @@ import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
 import { loadProfile } from './profile-store.js';
-import { statsId, holdemBalance, holdemSuspect } from './game-stats.js';
+import { statsId, holdemBalance, holdemSuspect, isTestGame } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, formatTimeMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
@@ -248,6 +248,12 @@ const ALL_IDS = GAME_META.map((g) => g.id);
 // can never disagree about which games it renders.
 const COMP_IDS = ALL_IDS.filter((id) => !SOLO.has(id));
 const SOLO_IDS = ALL_IDS.filter((id) => SOLO.has(id));
+/** The cross-game numbers (By Player's wins, plays, runs, VS) leave out every game that is admin-only
+ *  RIGHT NOW (Matt, 2026-10-28: "Admin only games should NOT be counted towards the total win
+ *  number"). Narrower than isGameOnLauncher on purpose: only js/game-stats.js ADMIN_ONLY games not yet
+ *  switched live, so a released game pulled back from the admin page still counts (THE LAW rule 1).
+ *  At release they count again, with everything recorded before 2026-10-28 (Matt's choice). */
+const counted = (ids) => ids.filter((id) => !isTestGame(id));
 // hubIdOf/unitKeyOf now live in game-stats-ui.js (single source, HANDOFF-FB2-STATS-NAV.md) so
 // this file and My Stats' game-list drill-down can never disagree on a game's thumbnail or unit.
 
@@ -329,16 +335,16 @@ function playsAtTier(group, gameIds, tier) {
  *  Kept in place though its only caller (metaLine) lost its call sites 2026-07-29 (HANDOFF-LB-
  *  FILTER-SORT.md §0/§3.6) — the documented solo-plays helper, so the next session doesn't have
  *  to re-derive it. */
-function runsAtTier(group, tier) { return playsAtTier(group, SOLO_IDS, tier); }
+function runsAtTier(group, tier) { return playsAtTier(group, counted(SOLO_IDS), tier); }
 /** Total plays across EVERY game, competitive + solo runs (Matt, 2026-07-29): the leaderboard
  *  card's "played" number. Deliberately ALL_IDS, not COMP_IDS — see HANDOFF-LB-FILTER-SORT.md §0
  *  for why folding runs in here is the rule-1-safe choice. */
-function playedOf(g, tier) { return playsAtTier(g, ALL_IDS, tier); }
+function playedOf(g, tier) { return playsAtTier(g, counted(ALL_IDS), tier); }
 /** Cross-game wins: competitive games only, UNCHANGED from before this redesign. A solo run is
  *  not a win (HANDOFF-LB-SOLO-RUNS.md, still in force). Do not "make them consistent" by moving
  *  wins onto ALL_IDS — that would re-fold solo runs into the wins number, exactly the bug that
  *  handoff fixed. The asymmetry is deliberate. */
-function winsOf(g, tier) { return winsAtTier(g, COMP_IDS, tier); }
+function winsOf(g, tier) { return winsAtTier(g, counted(COMP_IDS), tier); }
 /** The unit word for a `{n} ...` count string (e.g. 'lb_played_count' -> 'played'), reused for
  *  the card's big-number stacked unit so it never needs its own translation key — deriving it
  *  from the same string that already renders the small subline keeps the two in lockstep. */
@@ -380,13 +386,13 @@ const catMeta = (id) => (id === 'all' ? CAT_ALL : CATS.find((c) => c.id === id) 
  *  tiered game, which is exactly where that history belongs - it has no tier either). */
 function runsOf(g) {
   let n = 0;
-  for (const id of ALL_IDS) for (const b of bucketsOf(g.games[id])) if (b.tier == null && b.key !== 'mp') n += b.played;
+  for (const id of counted(ALL_IDS)) for (const b of bucketsOf(g.games[id])) if (b.tier == null && b.key !== 'mp') n += b.played;
   return n;
 }
 /** Wins against real people: the `mp` bucket, across every game that has online play. */
 function vsWinsOf(g) {
   let n = 0;
-  for (const id of ALL_IDS) for (const b of bucketsOf(g.games[id])) if (b.key === 'mp') n += b.wins;
+  for (const id of counted(ALL_IDS)) for (const b of bucketsOf(g.games[id])) if (b.key === 'mp') n += b.wins;
   return n;
 }
 /** The number one person shows for one category. 'all' is the cross-game wins number, UNCHANGED
@@ -404,7 +410,7 @@ function catValueOf(g, cat) {
   if (cat === 'NT') return runsOf(g);
   if (cat === 'VS') return vsWinsOf(g);
   if (cat === 'all') return winsOf(g, null);
-  return winsAtTier(g, COMP_IDS, cat);
+  return winsAtTier(g, counted(COMP_IDS), cat);
 }
 /** The unit word under the headline number, which follows the filter. */
 function catUnit(cat) {
@@ -2430,7 +2436,7 @@ function playerDetail(list, key) {
     ${sendMsgHTML(g)}
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays', board: true });
+  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays' });
 }
 
 // --- shared shell -------------------------------------------------------------

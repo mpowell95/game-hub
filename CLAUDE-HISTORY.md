@@ -1393,3 +1393,20 @@ switch), so isGameOnLauncher returned true for EVERY player: they saw those boar
 page. Fixed: no dev bypass; TABS devOnly now match the hub (tools/test-leaderboard-rank.mjs fails on drift); the
 player page passes `board: true` to drop never-released admin-only games. Checked players/ that day: only MattyIce had
 plays in any of them, so no player's My Stats lost a row. Cross-game totals (ALL_IDS) still count them (rule 1).
+
+
+## Admin-only games launch with 0 plays (2026-10-28)
+
+Matt: "admin only games should be released with 0 plays by anyone. They do not need to appear in My Stats either.
+Admin only games should NOT be counted towards the total win number on my Player tab. Leave all data as is, and start
+doing this going forward." Asked two things first (AskUserQuestion): his existing test plays (Gridlock 22, Battle Arena
+6, Archery 1, Baseball 1, all MattyIce) -> "Leave them, count them"; progress starting over at launch -> yes.
+Built: `js/game-stats.js` `ADMIN_ONLY` (stats id -> hub id, checked against js/hub.js and game-stats-ui TABS by
+tools/test-leaderboard-rank.mjs) and `isTestGame(id)` (admin-only unless switched live). `loadStats()` swaps each test
+game's `testGames.<id>` / `testH2h.<id>` into `games`/`h2h` (a new test record starts as a COPY of the real one, so a
+tester's Gridlock levels and Battle Arena unlocks carry on); `persist()` always writes the stored shape, so the real
+record is never touched. Every reader that shows or uploads stats moved to `loadStoredStats()` (stats-net's mirror,
+My Stats, the leaderboard's own-record merge, Multiplayer Records, Hold'em's bank, Arrow Maze's leaders, the bug-report
+device dump). My Stats' `visibleTabs()` lost its dev bypass; By Player's cross-game numbers use `counted()` (skips
+`isTestGame`). Verified on MattyIce's real record (sandbox, nothing uploaded): real records unchanged byte for byte.
+At release: drop the id from ADMIN_ONLY with the two devOnly flags; the game then plays into its real record.

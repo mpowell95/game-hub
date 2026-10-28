@@ -12,7 +12,7 @@
 // The named app + auth are booted through js/firebase-boot.js, shared with net.js, so there is
 // only ever one initializeApp('stats') call on the page (see firebase-boot.js for why).
 
-import { statsId, statsKey, loadStats, rateReport, activityReport, GAMES } from './game-stats.js';
+import { statsId, statsKey, loadStoredStats, rateReport, activityReport, GAMES } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { getStatsApp, perfReport } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
@@ -48,7 +48,7 @@ const SYNC_KEY = 'gamehub.syncHealth.v1';
 // throwaway "Visual Test" player on every run until 17 of them were deleted on 2026-08-22, and
 // twice that same day a session verifying a change in a localhost preview seeded a profile, loaded
 // the hub, and watched syncMyStats() mirror its scratch data straight onto the real leaderboard
-// where Matt then found it. syncMyStats() sends loadStats() wholesale, so ANY local store becomes a
+// where Matt then found it. syncMyStats() sends loadStoredStats() wholesale, so ANY local store becomes a
 // public record on the next hub load. Cleaning up afterwards is not a fix - it depends on the
 // person who made the mess noticing it.
 //
@@ -88,7 +88,7 @@ export function syncHealth() { return readSyncHealth(); }
 /** Total recorded plays in the local store, the number that must survive the trip to Firebase. */
 function localPlayCount() {
   try {
-    const st = loadStats();
+    const st = loadStoredStats();
     let n = 0;
     for (const g of Object.keys(st.games || {})) n += ((st.games[g] || {}).total || {}).played | 0;
     return n;
@@ -109,7 +109,7 @@ function remotePlayCount(rec) {
 // --- DEVICE RESET: the device half -------------------------------------------------------------
 //
 // The server half is a delete of `players/<id>`; on its own it survives until this device's next
-// hub load, because the mirror below sends `stats: loadStats()` - the WHOLE local store - and
+// hub load, because the mirror below sends `stats: loadStoredStats()` - the WHOLE local store - and
 // writes it straight back over that node. So the device has to drop its own copy first, and this
 // is the only place that can guarantee the ordering: syncMyStats() is the single uploader, and
 // this runs inside it, before the record is built.
@@ -209,7 +209,8 @@ export async function syncMyStats() {
         name: prof.name || '', emoji: prof.emoji || '', playerId: prof.playerId || '',
         message: prof.message || '', messageAt: +prof.messageAt || 0,
       },
-      stats: loadStats(),
+      // STORED shape: an admin-only game's test plays ride as `testGames`, never as `games` (2026-10-28).
+      stats: loadStoredStats(),
       // Is this person on the installed app or a browser tab? (2026-08-11, after Ana turned out to
       // have been in a Safari tab for two months.) ADDITIVE and diagnostic: a new child node, never
       // read by any gameplay or stats path, and it cannot affect a single counter. It rides the

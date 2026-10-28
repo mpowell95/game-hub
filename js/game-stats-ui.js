@@ -12,9 +12,8 @@
 // per-game screens) are both exported so the Leaderboard's player detail screen can reuse them
 // verbatim - see the export block at the bottom of this file.
 
-import { loadStats, statsId, holdemBalance } from './game-stats.js';
+import { loadStoredStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
-import { isDevProfile } from './challenge/hooks.js';
 import { isGameLive, corrections } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
@@ -147,9 +146,10 @@ export function gameChoices() {
  *  resolved answer the hub card uses. Without that second half, a game released from inside the app
  *  would appear on the launcher with no stats screen behind it. */
 function visibleTabs() {
-  let dev = false;
-  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
-  return TABS.filter((tab) => !tab.devOnly || dev || isGameLive(hubIdOf(tab.id), !tab.devOnly));
+  // NO dev bypass since 2026-10-28 (Matt: admin-only games "do not need to appear in My Stats
+  // either"): a devOnly game shows only once it is live. Still more permissive than
+  // isGameOnLauncher in the way that matters: a released game Matt pulls back keeps its screen.
+  return TABS.filter((tab) => !tab.devOnly || isGameLive(hubIdOf(tab.id), !tab.devOnly));
 }
 /** THE LAUNCHER'S visibility rule, for a STATS id - exported 2026-09-09 so the leaderboard can ask
  *  the same question the hub card asks, rather than keeping a third copy of "which games are
@@ -1410,12 +1410,7 @@ export function gameListHTML(games, opts) {
   // games first; My Stats keeps the A-Z order it has always had.
   const plays = (id) => (((g[id] || {}).total || {}).played) | 0;
   const byPlays = !!(opts && opts.order === 'plays');
-  // `board: true` (the leaderboard's player page): a never-released admin-only game is off it even
-  // for Matt (2026-10-28). A game PULLED BACK by an admin override is not devOnly, so it stays
-  // (THE LAW rule 1, the note above isGameOnLauncher).
-  const board = !!(opts && opts.board);
   const rows = visibleTabs()
-    .filter((tab) => !(board && tab.devOnly && !isGameLive(hubIdOf(tab.id), false)))
     .filter((tab) => hasPlays(tab.id, g[tab.id] || {}))
     .sort((a, b) => (byPlays ? plays(b.id) - plays(a.id) : 0) || t(a.labelKey).localeCompare(t(b.labelKey)))
     .map((tab) => {
@@ -1742,7 +1737,7 @@ async function refreshCombined() {
     // statsId(), not deviceId(): the fresh local store must overlay THIS player's own remote node.
     // Keyed by device, a second player on a shared phone would overlay (and hide) the first player's
     // record instead of their own.
-    const me = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStats(), corrections());
+    const me = agg.aggregateForViewer(all, loadProfile() || {}, statsId(), loadStoredStats(), corrections());
     if (me && me.games) { _st = { games: me.games }; _combinedDevices = me.devices || 1; rerender(); }
   } catch { /* stay local */ }
 }
@@ -1771,7 +1766,7 @@ export function openStatsOverlay() {
   _game = null;
   // The first paint is local, before the network answers - so it applies the corrections too.
   // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
-  _st = correctStats(loadStats(), statsId(), corrections());
+  _st = correctStats(loadStoredStats(), statsId(), corrections());
   _combinedDevices = 1;
   const host = document.createElement('div');
   host.className = 'gs-overlay';
@@ -1946,7 +1941,7 @@ function ensureCss() {
 }
 
 // Exported for the Leaderboard's player detail screen (HANDOFF-FB2-STATS-NAV.md): it hands
-// screenFor() an aggregated player's `games` map instead of the local loadStats(), reusing these
+// screenFor() an aggregated player's `games` map instead of the local loadStoredStats(), reusing these
 // exact per-game renderers so the two overlays never diverge on how a game's stats look, and
 // reuses gameListHTML() (defined above) to render the SAME game-list drill-down My Stats uses.
 // `ensureStatsCss` re-injects (id-guarded, so a second call is a no-op) the SAME `#gs-css` sheet

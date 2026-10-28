@@ -24,7 +24,12 @@ globalThis.localStorage = {
 };
 
 const P = await import('../js/gridlock-points.js');
+// The recorder logic here is tested as a RELEASED game (switched live in the admin-config cache, which
+// is memoized at its first read): while a game is admin-only its plays go to a test area instead,
+// proven by tools/test-admin-only-plays.mjs (Matt, 2026-10-28).
+localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'gridlock': { live: true } } }));
 const G = await import('../js/game-stats.js');
+G.isTestGame('gridlock');   // memoize the config before any store.clear()
 const A = await import('../js/players-agg.js');
 
 const { V1_TO_V2 } = await import('../js/gridlock-v1map.js');

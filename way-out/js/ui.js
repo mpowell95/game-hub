@@ -14,7 +14,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, statsId } from '../../js/game-stats.js';
+import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
@@ -2088,7 +2088,7 @@ class WayOut {
       if (people) {
         const [{ aggregateForViewer }, { isHiddenName }, { loadProfile }] = await Promise.all([
           import('../../js/players-agg.js'), import('../../js/hidden-players.js'), import('../../js/profile-store.js')]);
-        const me = aggregateForViewer(await net.readPlayersForMe(), loadProfile() || {}, statsId(), loadStats());
+        const me = aggregateForViewer(await net.readPlayersForMe(), loadProfile() || {}, statsId(), loadStoredStats());
         const row = (g, mine) => ({
           name: g.name, emoji: g.emoji, me: mine, pts: woPoints(g.games.wayout),
           best: Object.fromEntries(RUSH_MODES.map((m) => [m, woRushBestMap(((((g.games.wayout || {}).wo || {}).rush || {}).best || {})[m])])),
