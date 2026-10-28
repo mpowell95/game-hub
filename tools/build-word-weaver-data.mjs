@@ -105,6 +105,12 @@ daters horas bahts stoup cruse picot tromp caber serous ileum pleura hawed outdr
 caner thous treys sheila sheilas medias gasman legman redcap verso tenon ampule ampules casein instar
 isomer barres areal inmost frats prole proles conks sager vaster rater evilest tiler aerie aeries
 pules sots matins welter swelter
+felts breve bunts supra miler ivies cotes lames pedalo cavers smacker ropers wallies livest gladder whens
+shays piddles turps washy ostler scrim rotas prate deeps senors shivs napper thanes wangler ponces moaner
+sicked hided toddies lapin spinney blonder tuckers dater bests loafs stander pinny rawness dabbler varlet
+drear oversea golfs twelves alums infra roughs daemons umbra saltier rials roans gloried burgs piste sabot
+sarky anted tiddler curiae bruit wonted heteros septal larges realer lucks flied haled flacks burls treed
+huger candler planer sharer haunter outstay hearers bloater
 pusses welsher welshers mestizo mestizos ethnics gonad gonads falsies flatus estrus dopers doper`.split(/\s+/).filter(Boolean));
 // First names that are plain words first (read by hand from SCOWL 35, 2026-10-28). A name at size 35
 // NOT on this list (MARIA, PETER, HARRY, MIKE, VICTOR) is not a grid word.

@@ -163,7 +163,7 @@ const PIN_1000 = '0764e4b805fbe5d5';
   ok(`pin: levels 1-1000 are unchanged since 2026-10-28 (${h})`, LEVELS.length >= 1000 && h === PIN_1000);
 }
 const PINNED = 2000;
-const PIN_HASH = 'PIN_ALL_HASH';
+const PIN_HASH = '5057748d81d9a2f3';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);
