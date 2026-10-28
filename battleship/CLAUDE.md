@@ -337,6 +337,10 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   `salvo: 2` (bot games `state.salvoRule: 2`): a turn opens with N; a volley with H hits earns a volley of H
   (`chNext`); no hit passes the turn. `salvo: true` = rule 1 (any hit = full volley), kept for the first day's
   matches. `mp.js` `SALVO_RULES` / `salvoRule`; `_chStale` refuses an mp.js without rule 2.
+- **SHRINKING 5s (Matt, 2026-10-28: "yes do the 5,4,3,2 option")**: 5-shot matches since store `salvo: 3`
+  (bot games `state.salvoRule: 3`): each side's own turns open with 5, 4, 3, then 2 for the rest (`chTurns`,
+  `openingVolley`); bonus volleys are not turns. 1 and 3 a turn stay rule 2. Why: going first with 5 won ~59%
+  in bot sims; this gives ~52%. `_chStale` refuses an mp.js without rule 3.
 - **Older matches keep their stored rule** (THE LAW: the rule travels with the match): no `salvo` = a hit
   shoots again and a turn is N MISSES (`fireShot`, `chLeft`); no `shots` = 1.
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot

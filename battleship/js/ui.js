@@ -770,6 +770,8 @@ class BattleshipUI {
       s = { ...s, salvo: chShotsOf(this._setup.soloShots) || 3 };
       // one bonus shot per hit (2026-10-28), when this build's mp.js knows it
       if (Array.isArray(CH.SALVO_RULES) && CH.SALVO_RULES.includes(2)) s = { ...s, salvoRule: 2 };
+      // a 5-shot game shrinks 5, 4, 3, then 2 (2026-10-28)
+      if (s.salvo === 5 && CH.SALVO_RULES.includes(3)) s = { ...s, salvoRule: 3 };
     }
     s = setFleet(s, 0, this._placeFleet);
     s = setFleet(s, 1, this._botFleet);
@@ -1249,7 +1251,7 @@ class BattleshipUI {
         const n = this._salvoN();
         if (n) {
           const local = this._localSeat();
-          const cells = this._botVolley(CH.volleyLeft(this.state, this._remoteSeat(), n));
+          const cells = this._botVolley(CH.volleyLeft(this.state, this._remoteSeat(), n, this._salvoRuleN()));
           const res = CH.fireVolley(this.state, this._remoteSeat(), cells, n, this._salvoRuleN());
           if (!res.fired.length) return;
           this.state = res.state;
@@ -1371,15 +1373,15 @@ class BattleshipUI {
   /** Which salvo rule this game plays (mp.js "ONE BONUS SHOT PER HIT"): 2 = a hit earns one more
    *  shot, 1 = any hit earns another full volley (the first day's challenges and bot saves). */
   _salvoRuleN() {
-    if (this.ch) return this.ch.game && this.ch.game.salvo === 2 ? 2 : 1;
-    return this.state && this.state.salvoRule === 2 ? 2 : 1;
+    const v = this.ch ? (this.ch.game && this.ch.game.salvo) : (this.state && this.state.salvoRule);
+    return v === 3 ? 3 : v === 2 ? 2 : 1;
   }
 
   /** How many squares can be aimed at before FIRE: the volley owed in a salvo game, else one. */
   _aimCap() {
     const n = this._salvoN();
     if (!n || !this.state) return 1;
-    return CH.volleyLeft(this.state, this._localSeat(), n);
+    return CH.volleyLeft(this.state, this._localSeat(), n, this._salvoRuleN());
   }
 
   /** A salvo vs the bot: every aimed square at once (mp.js fireVolley, the challenges' own rule). */
@@ -3123,7 +3125,7 @@ class BattleshipUI {
   _chStale() {
     return typeof CH.fireShot !== 'function' || typeof CH.replay !== 'function'
       || typeof CH.fireVolley !== 'function' || typeof CH.fireSalvoShot !== 'function' || typeof CH.volleyLeft !== 'function'
-      || !Array.isArray(CH.SALVO_RULES) || !CH.SALVO_RULES.includes(2);
+      || !Array.isArray(CH.SALVO_RULES) || !CH.SALVO_RULES.includes(3);
   }
 
   /** After picking a person: the board and shots a turn, then the deploy screen. Every way into a new

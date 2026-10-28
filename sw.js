@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1304;
-const CACHE = 'game-hub-v1304';
+const IMPORTANT_SINCE = 1305;
+const CACHE = 'game-hub-v1305';
 
 const ASSETS = [
   './',
@@ -1216,14 +1216,14 @@ const REST_MANIFEST = {
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
   './battleship/css/battleship.css': 'ebd43ea88d',
-  './battleship/js/ui.js': 'e7191d22e7',
+  './battleship/js/ui.js': '1b1fcab875',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',
   './battleship/js/hash.js': 'aed473aee9',
   './battleship/js/ship-art.js': 'a362e5ebb0',
-  './battleship/js/strings.js': '56bbcf1485',
-  './battleship/js/mp.js': '7010a0aa2b',
+  './battleship/js/strings.js': '5b39afad6c',
+  './battleship/js/mp.js': '55f5c8acbd',
   './battleship/js/alert.js': '1703a8f589',
   './chinchon/decks/baraja-libre/oros-1.webp': '740f863677',
   './chinchon/decks/baraja-libre/oros-2.webp': '1de2771991',
