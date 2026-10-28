@@ -9,7 +9,7 @@
 //
 //   node tools/build-arrow-impossible.mjs   (round 1, boards 1-3: --count / --iters; round 2 below)
 import { writeFileSync } from 'node:fs';
-import { W, H, measure, search, setGrid } from './arrow-search.mjs';
+import { W, H, measure, search, setGrid, playThrough, noiseScore } from './arrow-search.mjs';
 const E = await import('../way-out/js/engine.js');
 const arg = (k, d) => (process.argv.includes(k) ? +process.argv[process.argv.indexOf(k) + 1] : d);
 const COUNT = arg('--count', 3), ITERS = arg('--iters', 80000);
@@ -56,6 +56,22 @@ for (let r = boards.length - 6; r >= 0 && r < ROUND3.length; r++) {
     const m = measure(a);
     const ok = m && m.n >= min && m.jump >= minJump && m.rounds === m.n && m.maxFree === 1 && m.trains === 0;
     console.log(`board ${boards.length + 1} seed ${seedK}: ${m.n} arrows, most free ${m.maxFree}, trains ${m.trains}, jump ${m.jump.toFixed(1)}, far ${(100 * m.farShare).toFixed(0)}% ${ok ? 'KEPT' : 'thrown away'} (${Date.now() - t0} ms)`);
+    if (ok) { boards.push(a); grids.push([18, 25]); break; }
+  }
+}
+// Round 4 (2026-10-28, Matt: "every tap leads directly to the next one" / "fill in the spaces with ...
+// noise ... and make them closed loops"). With one arrow free at a time the trail is built in, so these
+// give that up: up to 3 arrows free at once, and ~1 tap in 3 frees NOTHING (a dead tap: the next arrow is
+// elsewhere, ~8 dots away), on a full board (~85%) of curlier arrows. Played through by playThrough()
+// following the trail; no trains. 18x25.
+const NOISE = { dead: 80, deadJump: 4, free: 25, maxFree: 3, avgFree: 3, turns: 18, minN: 70, fill: 0.72 };
+for (let r = boards.length - 8; r >= 0 && r < 2; r++) {
+  for (let seedK = 0; seedK < 20; seedK++) {
+    const t0 = Date.now();
+    const a = search(E.seedOf(`impossible-noise-${r}`, seedK), 'forced', 150000, undefined, noiseScore(NOISE));
+    const m = playThrough(a);
+    const ok = m && m.n >= 65 && m.deadShare >= 0.3 && m.maxFree <= 3 && m.trains === 0;
+    console.log(`board ${boards.length + 1} seed ${seedK}: ${m.n} arrows, dead taps ${Math.round(100 * m.deadShare)}%, then ${m.deadJump.toFixed(1)} dots, most free ${m.maxFree}, trains ${m.trains} ${ok ? 'KEPT' : 'thrown away'} (${Date.now() - t0} ms)`);
     if (ok) { boards.push(a); grids.push([18, 25]); break; }
   }
 }

@@ -133,19 +133,83 @@ function mutate(R, arrows) {
 
 /** One board: a generated start, then ITERS random changes kept by simulated annealing on `style`'s
  *  score. Every kept board is solvable (score() is -Infinity for one peel cannot empty). */
-export function search(seed, style, ITERS, over) {
+export function search(seed, style, ITERS, over, scorer) {
   const S = over ? { ...STYLES[style], ...over } : STYLES[style];   // `over` (2026-10-27): per-board tweaks, e.g. Expert's growing arrow count
+  // `scorer(arrows)` (2026-10-28): a whole other score, e.g. the played-through one below; -Infinity = unsolvable.
+  const sc = scorer || ((a) => score(measure(a), S));
   const R = E.rng(seed);
   let cur = E.generate({ cols: W, rows: H, minLen: 3, maxLen: 9, density: 0.8, straight: 0.6, jitter: 0.3 }, seed).arrows;
-  let cs = score(measure(cur), S), best = cur, bs = cs;
+  let cs = sc(cur), best = cur, bs = cs;
   for (let it = 0; it < ITERS; it++) {
     const temp = 3 * (1 - it / ITERS) + 0.05;
     const nx = mutate(R, cur);
     if (!nx) continue;
-    const s = score(measure(nx), S);
+    const s = sc(nx);
     if (s === -Infinity) continue;
     if (s >= cs || R() < Math.exp((s - cs) / temp)) { cur = nx; cs = s; if (s > bs) { best = nx; bs = s; } }
   }
   return best;
 }
 
+
+// --- PLAYED THROUGH (2026-10-28) ----------------------------------------------------------------------
+// Matt, after Impossible 7-8: "it's still just too straight forward. right now it's, click an arrow, scan
+// the row and columns it blocked, and so on. every tap leads directly to the next one", and "fill in the
+// spaces with ... noise. so you have to clear them to get to the real puzzle. and make them closed loops."
+// With only one arrow free at a time, every tap MUST free the next one: that trail is built in. So this
+// plays the board the way he does (always the arrow freed most recently, the trail) and counts what
+// breaks the trail: DEAD taps, ones that free nothing, after which the next arrow is somewhere else.
+/** Play `arrows` tap by tap following the trail. null when it jams (unsolvable). */
+export function playThrough(arrows) {
+  const n = arrows.length;
+  const occ = new Int16Array(W * H).fill(-1);
+  arrows.forEach((c, id) => { for (const p of c) occ[p] = id; });
+  const gone = new Uint8Array(n), freeAt = new Int32Array(n).fill(-1), blk = new Int16Array(n).fill(-1);
+  const isFree = (id) => { const b = E.blockerOf(arrows[id], occ, W, H, id); if (b) blk[id] = occ[b.cell]; return !b; };
+  const sameLane = (a, b) => {
+    const [dx, dy] = E.dirOf(arrows[a], W), [ex, ey] = E.dirOf(arrows[b], W);
+    if (dx !== ex || dy !== ey) return false;
+    const h = arrows[a][arrows[a].length - 1], g = arrows[b][arrows[b].length - 1];
+    return dx ? ((h / W) | 0) === ((g / W) | 0) : (h % W) === (g % W);
+  };
+  const dist = (a, b) => { const h = arrows[b][arrows[b].length - 1], hx = h % W, hy = (h / W) | 0; let d = 99; for (const p of arrows[a]) d = Math.min(d, Math.abs((p % W) - hx) + Math.abs(((p / W) | 0) - hy)); return d; };
+  for (let id = 0; id < n; id++) if (isFree(id)) freeAt[id] = 0;
+  let dead = 0, deadJump = 0, trains = 0, maxFree = 0, freeSum = 0, last = -1;
+  for (let t = 1; t <= n; t++) {
+    let pick = -1, nFree = 0;
+    for (let id = 0; id < n; id++) if (!gone[id] && freeAt[id] >= 0) { nFree++; if (pick < 0 || freeAt[id] > freeAt[pick]) pick = id; }
+    if (pick < 0) return null;
+    maxFree = Math.max(maxFree, nFree); freeSum += nFree;
+    gone[pick] = 1; for (const p of arrows[pick]) occ[p] = -1;
+    let freed = 0;
+    for (let id = 0; id < n; id++) {
+      if (gone[id] || freeAt[id] >= 0) continue;
+      const was = blk[id];
+      if (isFree(id)) { freeAt[id] = t; freed++; if (was === pick && sameLane(id, pick)) trains++; }
+    }
+    if (!freed && t < n) {
+      // nothing new: the next tap is an arrow freed earlier, somewhere else
+      let nxt = -1;
+      for (let id = 0; id < n; id++) if (!gone[id] && freeAt[id] >= 0 && (nxt < 0 || freeAt[id] > freeAt[nxt])) nxt = id;
+      if (nxt < 0) return null;
+      dead++; deadJump += Math.min(10, dist(pick, nxt));
+    }
+    last = pick;
+  }
+  // "closed loops": how curly the arrows are (turns per arrow), Matt's small looped shapes
+  let turns = 0;
+  for (const c of arrows) for (let k = 2; k < c.length; k++) if ((c[k] - c[k - 1]) !== (c[k - 1] - c[k - 2])) turns++;
+  const cells = arrows.reduce((a, c) => a + c.length, 0);
+  void last;
+  return { n, dead, deadShare: n > 1 ? dead / (n - 1) : 0, deadJump: dead ? deadJump / dead : 0, trains, maxFree, avgFree: freeSum / n, turns: turns / n, fill: cells / (W * H) };
+}
+/** A score for boards that break the trail: many dead taps, far from the next arrow, few arrows free at a
+ *  time, curly arrows, a full board, no trains. */
+export function noiseScore(o) {
+  return (a) => {
+    const m = playThrough(a);
+    if (!m) return -Infinity;
+    return o.dead * m.deadShare + o.deadJump * m.deadJump - o.free * Math.max(0, m.maxFree - o.maxFree) - o.avgFree * m.avgFree
+      + o.turns * m.turns - 25 * m.trains - 8 * Math.max(0, o.minN - m.n) - 60 * Math.max(0, o.fill - m.fill);
+  };
+}

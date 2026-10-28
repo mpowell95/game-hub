@@ -319,9 +319,9 @@ function checkLadder(gen, from, to) {
 // behind it pointing the same way in its row or column (no "trains").
 {
   const { IMPOSSIBLE_TESTS, IMPOSSIBLE_GRID } = await import('./impossible-tests.js');
-  let good = IMPOSSIBLE_TESTS.length >= 8 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length
+  let good = IMPOSSIBLE_TESTS.length >= 10 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length
     && IMPOSSIBLE_GRID.slice(0, 6).every(([c, r]) => c === 16 && r === 22) && IMPOSSIBLE_GRID.slice(6).every(([c, r]) => c === 18 && r === 25);
-  for (const arrows of IMPOSSIBLE_TESTS) {
+  for (const arrows of IMPOSSIBLE_TESTS.slice(0, 8)) {
     const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
     const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false);
     for (const c of arrows) for (const p of c) if (!(p >= 0 && p < W * H)) good = false;
@@ -361,6 +361,34 @@ function checkLadder(gen, from, to) {
     if (d.reduce((a, b) => a + b, 0) / d.length < 5) jumps = false;
   }
   ok('impossible tests 4-8: the next arrow is 5+ dots away on average', jumps);
+  // Boards 9-10 (round 4, "every tap leads directly to the next one"): played following the trail (always
+  // the arrow freed most recently), at most 3 arrows free at once, 30%+ of taps free nothing, no trains.
+  let noise = true;
+  for (const arrows of IMPOSSIBLE_TESTS.slice(8)) {
+    const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
+    const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false), at = new Array(n).fill(-1);
+    const freeNow = () => { const occ = occupancy(lvl, gone); return arrows.map((c, i) => !gone[i] && !blockerOf(c, occ, W, H, i)); };
+    freeNow().forEach((f, i) => { if (f) at[i] = 0; });
+    let dead = 0;
+    for (let t = 1; t <= n; t++) {
+      const cand = at.map((v, i) => (!gone[i] && v >= 0 ? i : -1)).filter((i) => i >= 0);
+      if (!cand.length || cand.length > 3) { noise = false; break; }
+      const pick = cand.reduce((a, b) => (at[b] > at[a] ? b : a));
+      const occBefore = occupancy(lvl, gone);
+      gone[pick] = true;
+      let freed = 0;
+      freeNow().forEach((f, i) => {
+        if (!f || at[i] >= 0) return;
+        at[i] = t; freed++;
+        const b = blockerOf(arrows[i], occBefore, W, H, i), [dx, dy] = dirOf(arrows[i], W), [ex, ey] = dirOf(arrows[pick], W);
+        const h = arrows[i][arrows[i].length - 1], g = arrows[pick][arrows[pick].length - 1];
+        if (b && occBefore[b.cell] === pick && dx === ex && dy === ey && (dx ? ((h / W) | 0) === ((g / W) | 0) : (h % W) === (g % W))) noise = false;   // a train
+      });
+      if (!freed && t < n) dead++;
+    }
+    if (gone.some((g) => !g) || dead < 0.3 * (n - 1)) noise = false;
+  }
+  ok('impossible tests 9-10: solvable, at most 3 free at once, 30%+ of taps free nothing, no trains', noise);
 }
 
 // RUSH (2026-10-14): a run's boards are well formed, solvable, the same for the same seed, different
