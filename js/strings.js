@@ -633,6 +633,10 @@ export const STRINGS = {
     lb_unit_cleared: 'cleared',
     lb_unit_meters: 'meters',
     lb_unit_points: 'points',
+    lb_unit_words: 'words',
+    lb_bee_points: 'Points',
+    lb_bee_words: 'Words',
+    lb_bee_all: 'All',
     lb_unit_stars: 'stars',
     // Golf's board number is a best round as a score to par, lowest wins - not points, and
     // not a count. "E" is level par, the notation every scorecard uses in both languages.
@@ -725,7 +729,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstacle' : 'obstacles'}`,
         longest: `${p.v} long`, solved: `${p.v} solved`, wins: `${p.v} ${one ? 'win' : 'wins'}`,
-        stars: `${p.v} ${one ? 'star' : 'stars'}`,
+        stars: `${p.v} ${one ? 'star' : 'stars'}`, words: `${p.v} ${one ? 'word' : 'words'}`,
       })[p.k] || String(p.v);
     },
     // What it takes to be first. `tier`: the record is at a harder difficulty than your best.
@@ -742,6 +746,7 @@ export const STRINGS = {
         bank: `${p.v} more to take the record`,
         wins: `${p.v} more ${one ? 'win' : 'wins'} to take the record`,
         stars: `${p.v} more ${one ? 'star' : 'stars'} to take the record`,
+        words: `${p.v} more ${one ? 'word' : 'words'} to take the record`,
         tier: `Beat ${p.v} on ${p.tier} to take the record`,
       })[p.k] || '';
     },
@@ -1435,6 +1440,10 @@ export const STRINGS = {
     lb_unit_cleared: 'despejados',
     lb_unit_meters: 'metros',
     lb_unit_points: 'puntos',
+    lb_unit_words: 'palabras',
+    lb_bee_points: 'Puntos',
+    lb_bee_words: 'Palabras',
+    lb_bee_all: 'Todo',
     lb_unit_stars: 'estrellas',
     lb_unit_golf_best: 'mejor vuelta',
     lb_unit_ms_best: 'mejor tiempo',
@@ -1514,7 +1523,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstáculo' : 'obstáculos'}`,
         longest: `${p.v} de largo`, solved: `${p.v} ${one ? 'resuelto' : 'resueltos'}`, wins: `${p.v} ${one ? 'victoria' : 'victorias'}`,
-        stars: `${p.v} ${one ? 'estrella' : 'estrellas'}`,
+        stars: `${p.v} ${one ? 'estrella' : 'estrellas'}`, words: `${p.v} ${one ? 'palabra' : 'palabras'}`,
       })[p.k] || String(p.v);
     },
     lb_gap: (p) => {
@@ -1530,6 +1539,7 @@ export const STRINGS = {
         bank: `${p.v} más para batir el récord`,
         wins: `${p.v} ${one ? 'victoria' : 'victorias'} más para batir el récord`,
         stars: `${p.v} ${one ? 'estrella' : 'estrellas'} más para batir el récord`,
+        words: `${p.v} ${one ? 'palabra' : 'palabras'} más para batir el récord`,
         tier: `Supera ${p.v} en ${p.tier} para batir el récord`,
       })[p.k] || '';
     },

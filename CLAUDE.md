@@ -261,6 +261,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `admin-config.js` / `admin-ui.js` | `adminConfig/v1` resolvers (offline-safe, absent = code default) and the admin page; also the device reset |
 | `stats-corrections.js` | read-time score voids (`VOIDED_MATCHES` too); raw records untouched |
 | `bee-fairplay.js` | Spelling Bee fair play, PURE, shared with the server: `detectCopying` (the void rules), `buildBeeBoard` (the long-term board, `boards/v1/bee`), `beeTotals` |
+| `bee-board.js` | the phone's copy of `boards/v1/bee` (watch + `gamehub.beeBoard.v1` cache); read by the Leaderboard's Spelling Bee board (Points/Words, All/English/Español), By Game, the You tab and My Stats |
 | `announce.js` / `announce-ui.js` | one-time launcher announcements (`gamehub.announce.v1`), each with an `until` date |
 | `challenge/` | retired challenge system, still load-bearing (`hub.js` imports `hooks.js`); do not delete |
 | `push.js` | push notifications, app half (see "Push notifications") |
