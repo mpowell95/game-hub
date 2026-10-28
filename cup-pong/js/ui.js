@@ -2,12 +2,12 @@
 //
 // THE LAW applies here. Nothing in this folder stores anything earned: `gamehub.cuppong.v1` holds
 // preferences only (difficulty, Gentleman's, who opens next). A finished match vs the computer goes
-// to the shared recorder, `recordResult('cuppong', difficulty, won)`, exactly once; a CLEARED solo
+// to the shared recorder, `recordCupPong(difficulty, won, reracksUsed)`, exactly once; a CLEARED solo
 // rack goes to `recordCupPongSolo(throws)`, exactly once. Neither is persisted mid-way - see
 // isInProgress() for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordResult, recordCupPongSolo, loadStats } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -1306,7 +1306,7 @@ class CupPong {
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
-      try { recordResult('cuppong', this.settings.diff, won); } catch (err) { console.error('[cup-pong] record failed', err); }
+      try { recordCupPong(this.settings.diff, won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
