@@ -129,5 +129,7 @@ LEFT by profile name + emoji, their moves played exactly like the computer's (`u
 `node tools/test-game-conventions.mjs`; `node tools/test-battlearena-mp.mjs` (online: replay, placeholder,
 mirror, a full challenge and a full live match, cancel/decline/resign/expire, gate, structure). Two-phone
 recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see CLAUDE-HISTORY.md).
-`test-battlearena-mp.mjs` is FLAKY (seen 2026-10-27, on `main` too): about 1 run in 3 fails "decline: the receiver
-calls it off before moving" (+ 1-2 after it); likely a random computer turn that already answers. Not yet fixed.
+`test-battlearena-mp.mjs` was FLAKY (about 1 run in 3) until 2026-10-28: its computer moves were random and a lucky
+chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
+for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
+matches use fixed seeds, and seed 1041 tests the first-turn knockout on purpose (the receiver gets it as a loss).
