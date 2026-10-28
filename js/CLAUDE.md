@@ -93,7 +93,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 **Firebase layering:** one project, anonymous auth, one named app `'stats'` via `firebase-boot.js`
 (`challenge/challenge-net.js` alone boots the DEFAULT app). No dev/staging project exists. Node
 ownership, by convention: stats-net `players/` `usernames/`; net `rooms/`; device-report
-`deviceReports/`; bug-report `bugReports/` `bugReportShots/` `bugReplies/`; messages `messages/`
+`deviceReports/`; bug-report `bugReports/` `bugReportShots/` `bugReplies/` `bugReplyShots/`; messages `messages/`
 `msgAuth/`; push `pushSubs/`; admin-config `adminConfig/`; career-store `careers/`.
 
 ### Language support (2026-07-23)
@@ -258,6 +258,8 @@ since 2026-09-24 `bugReportPush` (root "Push notifications").
 
 Reply written TWICE: `bugReports/<id>/reply` `{text, atMs, at}` and **`bugReplies/<reporterDeviceId>/<id>`**
 (what the player reads; admin-only writes since 2026-10-14). `{ok, delivered:false}` is shown honestly.
+**Reply screenshots (2026-10-28)**: same picker and caps as the form, stored at `bugReplyShots/<reportId>/<replyAtMs>/<i>`
+(admin-only writes, additive: a new reply never overwrites old shots); the reply carries `shotCount`; both sides load them on open.
 A reply sets `status:'done'`; done reports fold into `Show done (N)`. **Delete is SOFT** (`deleted`, `deletedAtMs`, two taps + Undo) and never
 touches the player's copy; never add a hard delete. Player seen stamp `gamehub.bugreplies.seen.v1` =
 newest reply's own time, never `Date.now()`. Player reads them in `openMyReplies()`; badge on the

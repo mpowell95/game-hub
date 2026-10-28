@@ -56,6 +56,8 @@ export async function readPath(databaseURL, path, idToken) {
 export const BRANCHES = [
   'players', 'usernames', 'rooms', 'adminConfig', 'admins', 'archive',
   'bugReports', 'bugReportShots', 'bugReplies', 'deviceReports',
+  // bugReplyShots/ (2026-10-28): screenshots on Matt's bug-report replies, <reportId>/<replyAtMs>/<i>.
+  'bugReplyShots',
   'skeeballThrows', 'challenge', 'flight', 'selfies',
   // hoops/ (2026-09-22): Connect 4 Hoops' turn-by-turn matches and their per-player index. Same
   // auth shape as players/ - readable by any signed-in anonymous session.
