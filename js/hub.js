@@ -758,6 +758,24 @@ export const GAMES = [
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
   },
+  {
+    // Word Weaver (2026-10-28): a Wordscapes-style crossword. Swipe across a wheel of letters to spell
+    // the words in the grid (word-weaver/CLAUDE.md). One numbered ladder played in order, unlimited
+    // hints (0 hints 3 stars, 1 hint 2, 2+ 1), extra words count for the star chip. IMMERSIVE: the grid
+    // and the wheel want the whole screen. Hub id is the folder; stats id is `wordweaver`.
+    id: 'word-weaver',
+    added: '2026-10-28',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Word Weaver', es: 'Tejepalabras' },
+    blurb: { en: 'Swipe across the letters to fill the crossword.',
+      es: 'Desliza por las letras para llenar el crucigrama.' },
+    module: '../word-weaver/js/ui.js',
+    immersive: true,
+    accent: '#c9795c',
+    art: GAME_ART['word-weaver'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
+    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
+    devOnly: true,
+  },
 ];
 
 /** A game held back from this player's code (a `GAMES` entry's `hideFrom`, 2026-10-13). Never for

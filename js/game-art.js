@@ -1242,6 +1242,28 @@ export const GAME_ART = {
             <circle cx="116" cy="39.5" r="3.4" fill="#fff"/>
             <path d="M114 39.5h4M117 37.5l2 2-2 2" stroke="#d23b2a" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>`,
+  // Word Weaver (2026-10-28, word-weaver/): a crossword's white tiles above a letter wheel with a yellow
+  // path through its letters, on the game's own sunset sky.
+  'word-weaver': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <defs><linearGradient id="wwTileSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#2c4a7a"/><stop offset=".62" stop-color="#c9795c"/><stop offset="1" stop-color="#f3c58f"/>
+            </linearGradient></defs>
+            <rect width="160" height="90" fill="url(#wwTileSky)"/>
+            <g transform="translate(-6 8)">
+            <g fill="#fff"><rect x="82" y="10" width="14" height="14" rx="3"/><rect x="98" y="10" width="14" height="14" rx="3"/><rect x="114" y="10" width="14" height="14" rx="3"/><rect x="130" y="10" width="14" height="14" rx="3"/>
+              <rect x="114" y="26" width="14" height="14" rx="3"/><rect x="114" y="42" width="14" height="14" rx="3"/></g>
+            <g fill="rgba(255,255,255,.3)" stroke="rgba(255,255,255,.6)" stroke-width="1"><rect x="130" y="26" width="14" height="14" rx="3"/><rect x="130" y="42" width="14" height="14" rx="3"/></g>
+            <g font-family="system-ui,sans-serif" font-weight="800" font-size="10.5" text-anchor="middle" fill="#1d2230">
+              <text x="89" y="20.2">W</text><text x="105" y="20.2">O</text><text x="121" y="20.2">R</text><text x="137" y="20.2">D</text><text x="121" y="36.2">A</text><text x="121" y="52.2">Y</text>
+            </g>
+            </g>
+            <circle cx="44" cy="42" r="27" fill="rgba(255,255,255,.9)"/>
+            <polyline points="44,25 60.2,36.7 54,55.8 34,55.8" fill="none" stroke="#f2b705" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <g font-family="system-ui,sans-serif" font-weight="800" font-size="11" text-anchor="middle">
+              <circle cx="44" cy="25" r="7.5" fill="#f2b705"/><circle cx="60.2" cy="36.7" r="7.5" fill="#f2b705"/><circle cx="54" cy="55.8" r="7.5" fill="#f2b705"/><circle cx="34" cy="55.8" r="7.5" fill="#f2b705"/>
+              <g fill="#1d2230"><text x="44" y="29">W</text><text x="60.2" y="40.7">O</text><text x="54" y="59.8">R</text><text x="34" y="59.8">D</text><text x="27.8" y="40.7">E</text></g>
+            </g>
+          </svg>`,
 };
 
 export default GAME_ART;
