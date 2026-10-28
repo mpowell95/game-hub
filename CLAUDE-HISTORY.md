@@ -1410,3 +1410,14 @@ My Stats, the leaderboard's own-record merge, Multiplayer Records, Hold'em's ban
 device dump). My Stats' `visibleTabs()` lost its dev bypass; By Player's cross-game numbers use `counted()` (skips
 `isTestGame`). Verified on MattyIce's real record (sandbox, nothing uploaded): real records unchanged byte for byte.
 At release: drop the id from ADMIN_ONLY with the two devOnly flags; the game then plays into its real record.
+
+## Arrow Maze: Expert replaced by generator 10, for everyone (2026-10-28)
+
+Matt played Impossible test board 11 (28x38, 75 arrows, one free at every step, the next ~8.7 dots away,
+blockers ~10.5 dots off) and said, halfway through: "THIS is what Expert should be like." The first plan put
+the new boards on his devices only; he answered: "not just my phone. Everyone's phones. The new levels should
+replace the Expert levels that are there. I don't want anyone getting 6 points from the old (existing) levels."
+So every Expert level, for every player, plays a generator 10 board (`way-out/js/boards10.js`, built by
+`tools/build-arrow-boards10.mjs`, ~3.5 min a board in four parallel parts). A level in progress on an old Expert
+board starts over on the new one; Expert replays use the new board for that level number. Points already earned
+on old Expert boards stay (THE LAW). Details: `way-out/CLAUDE.md`, "Expert = generator 10, for everyone".

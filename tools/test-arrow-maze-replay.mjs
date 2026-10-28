@@ -159,7 +159,7 @@ st = await page.evaluate(() => window.__woTest.state());
 ok('easy: Easy level 51 plays', st.level === 51 && st.tier === 'easy', JSON.stringify(st));
 await shot('7-easy-51-board');
 
-// GENERATOR 8 (2026-10-27): on Matt's devices Hard 101 and Expert 201 are the new 16x22 boards.
+// GENERATOR 8 (2026-10-27) for Hard 101; GENERATOR 10 (2026-10-28) for every Expert level, for everyone.
 for (const [band, n] of [['hard', 101], ['expert', 201]]) {
   await page.locator('[data-act="menu"]').click();
   await page.waitForSelector('.wo-home');
@@ -167,9 +167,49 @@ for (const [band, n] of [['hard', 101], ['expert', 201]]) {
   await page.locator('.wo-play[data-act="play"]').click();
   await page.waitForFunction(() => window.__woTest);
   const clock = await page.evaluate((b) => JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1') || '{}')[b], band);
-  ok(`${band}: level ${n} is a generator ${band === 'expert' ? 9 : 8} board`, clock && clock.key === `${band === 'expert' ? 'N9' : 'N'}:${band}:${n}`, JSON.stringify(clock));
+  ok(`${band}: level ${n} is a generator ${band === 'expert' ? 10 : 8} board`, clock && clock.key === `${band === 'expert' ? 'N10' : 'N'}:${band}:${n}`, JSON.stringify(clock));
   await shot(`10-${band}-${n}`);
 }
+
+// GENERATOR 10 replaces every Expert board (Matt, 2026-10-28: "I don't want anyone getting 6 points from the
+// old (existing) levels"). An Expert level in progress on a generator-9 board starts over on the new board;
+// a missed generator-9 Expert level replays on the new board for its number. Earned points never move.
+await page.locator('[data-act="menu"]').click();
+await page.waitForSelector('.wo-home');
+await page.evaluate(async () => {
+  const G = await import('/js/game-stats.js');
+  G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 30000, arrows: 60, rounds: 60, mistakes: 1, hints: 0, timed: true, level: 201, gen: 9 });
+  const set = JSON.parse(localStorage.getItem('gamehub.wayout.v1'));
+  set.ladder2.expert = 202;
+  localStorage.setItem('gamehub.wayout.v1', JSON.stringify(set));
+  const sv = JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.saves.v1'));
+  sv.expert = { v: 3, band: 'expert', n: 202, src: { k: 'N', band: 'expert', n: 202, g: 9 }, gone: [0, 1, 2], red: [3], lives: 2 };
+  localStorage.setItem('gamehub.wayout.ladder2.saves.v1', JSON.stringify(sv));
+  const ck = JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1'));
+  ck.expert = { n: 202, key: 'N9:expert:202', ms: 50000, pen: 30000, mistakes: 1, hints: 0, partial: false };
+  localStorage.setItem('gamehub.wayout.ladder2.clocks.v1', JSON.stringify(ck));
+});
+const p1 = await pts();
+await page.reload();
+await page.waitForSelector('.wo-home');
+await page.locator('.wo-seg[data-tier="expert"]').click();
+await page.locator('.wo-play[data-act="play"]').click();
+await page.waitForFunction(() => window.__woTest);
+st = await page.evaluate(() => window.__woTest.state());
+const ck2 = await page.evaluate(() => JSON.parse(localStorage.getItem('gamehub.wayout.ladder2.clocks.v1')).expert);
+ok('expert: an old generator-9 level in progress starts over on the 28x38 board', st.level === 202 && st.cols === 28 && st.left === st.total && st.lives === 3
+  && ck2.key === 'N10:expert:202' && ck2.ms === 0, JSON.stringify({ st, ck2 }));
+await shot('11-expert-202-new');
+await page.locator('[data-act="menu"]').click();
+await page.waitForSelector('.wo-home');
+await page.locator('.wo-replay').click();
+await page.waitForSelector('.wo-rp-row');
+await page.locator('.wo-rp-row').first().click();
+await page.waitForFunction(() => window.__woTest);
+st = await page.evaluate(() => window.__woTest.state());
+ok('expert: a missed generator-9 level replays on the new 28x38 board', st.level === 201 && st.tier === 'expert' && st.cols === 28, JSON.stringify(st));
+ok('expert: points earned on the old boards stay', (await pts()) === p1);
+await shot('12-expert-replay-201');
 
 await browser.close();
 console.log(`\nArrow Maze replay / more-levels probe: ${pass} passed, ${fail} failed.`);

@@ -23,6 +23,7 @@
 import { BAND_START, bandOf, bandEnd } from '../../js/arrow-maze-time.js';
 import { B8, B8_W, B8_H } from './boards8.js';
 import { B9 } from './boards9.js';
+import { B10, B10_W, B10_H } from './boards10.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -552,6 +553,38 @@ export function hasB9(band, n) {
 /** Is there a generator-8 board for level n of `band`? (Hard from 101, Expert from 201.) */
 export function hasB8(band, n) {
   return B8_FROM[band] != null && (B8[band] || []).length > 0 && (n | 0) >= B8_FROM[band];
+}
+// GENERATOR 10 (2026-10-28, Matt, halfway through Impossible test board 11: "THIS is what Expert should
+// be like", then "The new levels should replace the Expert levels that are there. I don't want anyone
+// getting 6 points from the old (existing) levels"): EVERY Expert level, for everyone, is board 11's
+// recipe on its 28x38 grid (exactly one arrow free at every step, the next one far away, lookalike
+// arrows, no trains). boards10.js, built by tools/build-arrow-boards10.mjs (11 bits a cell, 5 bits a
+// length). Level n is board n - 201; past the list the same mirrored wrap as generator 8, from 60%.
+// Generators 8 and 9's Expert boards are no longer played (old saves on them start over; ui.js readSave).
+export const B10_GEN = 10;
+/** A packed generator-10 board back to arrows (tail first, head last). */
+export function unpackB10(s) {
+  const bin = atob(s);
+  let pos = 0;
+  const get = (n) => { let v = 0; for (let k = 0; k < n; k++, pos++) v = (v << 1) | ((bin.charCodeAt(pos >> 3) >> (7 - (pos & 7))) & 1); return v; };
+  const step = [1, -1, B10_W, -B10_W];
+  const arrows = [];
+  for (let a = get(7); a > 0; a--) {
+    const c = [get(11)];
+    for (let len = get(5); len > 0; len--) c.push(c[c.length - 1] + step[get(2)]);
+    arrows.push(c);
+  }
+  return arrows;
+}
+/** Expert level n on generator 10. */
+export function buildB10(n) {
+  const { i, t } = b8Slot('expert', n, { expert: B10 });
+  const mx = (c) => { const x = c % B10_W, y = (c / B10_W) | 0; return ((t & 2) ? B10_H - 1 - y : y) * B10_W + ((t & 1) ? B10_W - 1 - x : x); };
+  return { cols: B10_W, rows: B10_H, arrows: unpackB10(B10[i]).map((c) => c.map(mx)) };
+}
+/** Is level n of `band` on generator 10? Every Expert level. */
+export function hasB10(band) {
+  return band === 'expert' && B10.length > 0;
 }
 
 // --- RUSH (2026-10-14) --------------------------------------------------------------------------

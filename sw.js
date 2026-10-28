@@ -238,6 +238,7 @@ const ASSETS = [
   './way-out/js/strings.js',
   './way-out/js/boards8.js',
   './way-out/js/boards9.js',
+  './way-out/js/boards10.js',
   './way-out/js/impossible-tests.js',
   './gridlock/',
   './gridlock/index.html',
