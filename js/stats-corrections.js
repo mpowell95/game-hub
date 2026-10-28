@@ -42,14 +42,15 @@ export const VOIDED_MATCHES = {
   darts: {
     muzgz01qh0z10nqo: { winner: '3VN33', loser: 'QZCC4' },
   },
-  // A Spelling Bee DAY (Matt, 2026-10-27: "Do not add today to the leaderboard for Moonis. Completely
-  // omit it for him... It's like nobody got first"). `puzzle` = the save/board key; his row is left off
-  // that day's board (places unchanged for everyone else) and his Genius win comes out of 'daily'.
+  // A Spelling Bee DAY (Matt, 2026-10-27: "Do not add today to the leaderboard for Moonis... I meant that
+  // it should not be transferred to the long term leaderboard"). `puzzle` = the save/board key. The day's
+  // own board still shows him; his Genius win comes out of 'daily', and any long-term Spelling Bee
+  // board (words, points) must leave that day out for him via voidedCodesFor.
   spellingbee: {
     enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily' },
   },
 };
-/** Codes whose row is left off one puzzle's board (Spelling Bee). */
+/** Codes whose day on one puzzle counts for nothing long-term (Spelling Bee). Not the day's own board. */
 export function voidedCodesFor(gameId, puzzle) {
   const out = new Set();
   for (const v of Object.values(VOIDED_MATCHES[gameId] || {})) if (v.puzzle && v.puzzle === puzzle && v.winner) out.add(v.winner);
