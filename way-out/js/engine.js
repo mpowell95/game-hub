@@ -559,7 +559,8 @@ export function hasB8(band, n) {
 // getting 6 points from the old (existing) levels"): EVERY Expert level, for everyone, is board 11's
 // recipe on its 28x38 grid (exactly one arrow free at every step, the next one far away, lookalike
 // arrows, no trains). boards10.js, built by tools/build-arrow-boards10.mjs (11 bits a cell, 5 bits a
-// length). Level n is board n - 201; past the list the same mirrored wrap as generator 8, from 60%.
+// length). The boards go round in a LOOP: level n is board (n - 201) mod the count, each lap mirrored
+// (b10Slot), so a player deep in Expert still meets every board.
 // Generators 8 and 9's Expert boards are no longer played (old saves on them start over; ui.js readSave).
 export const B10_GEN = 10;
 export const B10_COUNT = B10.length;
@@ -577,11 +578,19 @@ export function unpackB10(s) {
   }
   return arrows;
 }
+/** Which generator-10 board, and which mirror, Expert level n is: the boards go round in a LOOP (Matt,
+ *  2026-10-28: a player already on Expert 294 would otherwise never see boards 1-93), each lap mirrored
+ *  (0 none, 1 left-right, 2 top-bottom, 3 both), so every player meets every board before any repeats. */
+export function b10Slot(n, len = B10.length) {
+  const j = Math.max(0, (n | 0) - B8_FROM.expert);
+  return { i: j % len, t: Math.floor(j / len) % 4 };
+}
 /** Expert level n on generator 10, from the first `m` shipped boards (a save names its `m`: boards are
  *  added in batches, and a level past the list wraps, so the same n can name a new board once more ship). */
-export function buildB10(n, m = B10.length) {
-  const list = Number.isInteger(m) && m >= 1 && m <= B10.length ? B10.slice(0, m) : B10;
-  const { i, t } = b8Slot('expert', n, { expert: list });
+export function buildB10(n, m = B10.length, loop = true) {
+  const len = Number.isInteger(m) && m >= 1 && m <= B10.length ? m : B10.length;
+  // v1321 only (the first hour): past the list it wrapped generator 8's way; a save from then keeps that board.
+  const { i, t } = loop ? b10Slot(n, len) : b8Slot('expert', n, { expert: B10.slice(0, len) });
   const mx = (c) => { const x = c % B10_W, y = (c / B10_W) | 0; return ((t & 2) ? B10_H - 1 - y : y) * B10_W + ((t & 1) ? B10_W - 1 - x : x); };
   return { cols: B10_W, rows: B10_H, arrows: unpackB10(B10[i]).map((c) => c.map(mx)) };
 }

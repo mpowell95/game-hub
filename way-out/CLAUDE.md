@@ -294,9 +294,12 @@ played or in progress keep their boards.
 Matt, halfway through Impossible board 11: *"THIS is what Expert should be like"*, then *"not just my phone.
 Everyone's phones. The new levels should replace the Expert levels that are there. I don't want anyone getting 6
 points from the old (existing) levels."* **Every Expert level is a generator 10 board**: `js/boards10.js`
-(GENERATED, `tools/build-arrow-boards10.mjs`, APPEND-ONLY, pinned in test.js; 52 shipped first, v1321, Matt: *"add those 53"*, the rest to 100 appended after), board 11's recipe on
+(GENERATED, `tools/build-arrow-boards10.mjs`, APPEND-ONLY, pinned in test.js; 52 shipped first (v1321, Matt: *"add those 53"*), 68 with the loop (v1322), the rest to 100 appended after), board 11's recipe on
 28x38: exactly one arrow free at every step, the next one ~8 dots away, no trains, ~75-80 arrows. `src {k:'N',
-g:10}`, clock key `N10:expert:<n>`, log `g` 10, `buildB10(n)` (board n - 201, then the mirrored wrap from 60%).
+g:10}`, clock key `N10:expert:<n>`, log `g` 10, `buildB10(n)`. **The boards go round in a LOOP** (`b10Slot`: board (n - 201) mod the count, each lap mirrored; Matt
+2026-10-28, on Expert 294: *"That means i just don't get to play the first expert levels?"*, chose the loop): from any
+level a player meets every board before a repeat. New saves carry `w: 1`; a save without it (v1321, the first hour)
+keeps the old generator-8-style wrap.
 - **No old Expert board is played again**: `validSrc` gives Expert only generator 10, `readSave` ignores an Expert
   save on any older board (that level starts over on the new board; its arrow ids named the old board's arrows),
   and an Expert REPLAY plays generator 10's board for that level number (still logged against the missed `l`,`g`).
