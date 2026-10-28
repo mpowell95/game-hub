@@ -241,6 +241,13 @@ people DO guess further down the list (ocean: fish #141, wave #252).
   exact range). More exact neighbours (K 1000 -> ~3000) and/or 128-d vectors would fix it at roughly
   6-7 MB per language (estimate, not built).
 
+## The play log (2026-10-28)
+
+Every open, guess (with its rank, `unknown`, or `again`), hint (word + rank), win, give up, and leaving /
+coming back goes to `playLog/<CODE>` (admin-read) via `_log()` (`js/play-log-queue.js`). Before this
+nothing per puzzle left the phone. **`ct.fewest` counts TYPED guesses only**: 8 hints from a blank board
+reach rank 2, so "1 guess" is ordinary hint-heavy play (the integrity alert on it was dropped).
+
 ## What is NOT covered by a test
 
 `node contexto/js/test.js` covers the engine (the word model, the ranking, the puzzle-number

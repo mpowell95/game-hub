@@ -262,6 +262,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `stats-corrections.js` | read-time score voids (`VOIDED_MATCHES` too); raw records untouched |
 | `bee-fairplay.js` | Spelling Bee fair play, PURE, shared with the server: `detectCopying` (the void rules), `buildBeeBoard` (the long-term board, `boards/v1/bee`), `beeTotals` |
 | `integrity.js` | every other game's integrity rules, PURE, shared with `functions/integrity.js`: STRONG (an impossible stored number: voids that game on that record in the server-built board, `voidIntegrityGame`) and ALERT (a push, never a void); online-match alerts (`checkMatch`). `tools/test-integrity.mjs --db <snapshot>` before any new rule |
+| `play-log-queue.js` / `play-log.js` | THE PLAY LOG (2026-10-28): every recorder's call (`notePlay`, its arguments + time) and Contexto's every guess/hint/give-up, queued locally then sent to `playLog/<CODE>` (admin-read). Evidence only, never read back |
 | `bee-board.js` | the phone's copy of `boards/v1/bee` (watch + `gamehub.beeBoard.v1` cache); read by the Leaderboard's Spelling Bee board (Points/Words, All/English/Español), By Game, the You tab and My Stats |
 | `announce.js` / `announce-ui.js` | one-time launcher announcements (`gamehub.announce.v1`), each with an `until` date |
 | `challenge/` | retired challenge system, still load-bearing (`hub.js` imports `hooks.js`); do not delete |
@@ -522,6 +523,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   2026-10-26: `beeDaily` rules branch (Spelling Bee's daily board, `spelling-bee/CLAUDE.md`). 2026-10-27: `beeLog` (every Spelling Bee guess and action, timed). 2026-10-28: `beeFlags` (server-written fair-play flags, read by every phone) + `dw`/`dp`/`dr` on `beeDaily` rows; `beeWatch` (every 5 min: copy detection + missing-log alerts pushed to admins, `functions/bee.js`), `beeOnDaily` + `beeOnUndo` (rebuild `boards/v1/bee`), `beeAlerts` (admin-read).
   2026-10-28 (integrity checks, `functions/integrity.js`): every board rebuild flags records once (`integrityFlags`, admin-read)
   and pushes admins; `integrityOnUndo`; `dartsMatchCheck`/`cupPongMatchCheck`/`battleshipMatchCheck`/`hoopsMatchCheck` (`integrityAlerts`).
+  2026-10-28: `playLog` rules branch (every finished game + Contexto's moves, admin-read; `js/play-log.js`).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
