@@ -80,6 +80,13 @@ for (const key of ['unknown', 'legacy', 'wat', '', null, undefined, 0, {}]) {
   eq(`tierOf(${JSON.stringify(key)}) is unrankable`, tierOf(key), null);
 }
 ok('an unrankable tier still weighs 1.0 (never dropped)', (TIER_WEIGHT[tierOf('legacy')] || 1.0) === 1.0);
+// Word Weaver's bands (2026-10-29) are byDiff buckets: each must land on its own tier, in order, and
+// the plays from before the bands ('ladder') on none (counted in All only).
+{
+  const { WW_TIERS } = await import('../js/word-weaver-points.js');
+  eq('Word Weaver bands map onto tiers 1-4 in order', WW_TIERS.map((b) => tierOf(b)), [1, 2, 3, 4]);
+  eq('Word Weaver\'s pre-band bucket "ladder" is unrankable (All only)', tierOf('ladder'), null);
+}
 
 // ---------------------------------------------------------------------------
 console.log('\n-- weighting: the same record is worth more on a harder tier --');

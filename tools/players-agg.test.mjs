@@ -139,6 +139,26 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   eq('dotsboxes: bestChain is the max, not the sum', db.bestChain, 7);
 }
 
+// ---- Word Weaver's ww sub-counter and its band buckets survive the cross-device combine ----
+// A level on two phones counts once (best stars, fewest hints, earliest time); extras add; plays
+// from before the bands ('ladder') and band plays both sum (2026-10-29).
+{
+  const all = {
+    d1: rec({ playerId: 'WW111', name: 'Weaver' }, {
+      wordweaver: { total: { played: 2, won: 2, lost: 0 }, byDiff: { ladder: { played: 2, won: 2, lost: 0 } },
+        ww: { lv: { L1: { s: 2, h: 1, t: 50 }, L2: { s: 3, h: 0, t: 60 } }, x: 4 } },
+    }, 100),
+    d2: rec({ playerId: 'ww111', name: 'Weaver' }, {
+      wordweaver: { total: { played: 2, won: 2, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 }, expert: { played: 1, won: 1, lost: 0 } },
+        ww: { lv: { L1: { s: 3, h: 0, t: 90 }, L1501: { s: 1, h: 3, t: 70 } }, x: 1 } },
+    }, 200),
+  };
+  const g = aggregatePlayers(all)[0].games.wordweaver;
+  eq('wordweaver: level 1 on both phones is ONE entry, best of each field', g.ww.lv.L1, { s: 3, h: 0, t: 50 });
+  eq('wordweaver: every level kept, extras summed', [Object.keys(g.ww.lv).sort(), g.ww.x], [['L1', 'L1501', 'L2'], 5]);
+  eq('wordweaver: ladder and band plays both summed', [g.total.won, g.byDiff.ladder.won, g.byDiff.easy.won, g.byDiff.expert.won], [4, 2, 1, 1]);
+}
+
 // ---- Battleship's bs sub-counter survives the cross-device combine (THE LAW rule 1), INCLUDING
 // the fewestShotsWin sentinel (this repo's first DOWNWARD-improving best) ----
 // A device with no wins yet reports fewestShotsWin: 0 (the unset sentinel, js/game-stats.js's
