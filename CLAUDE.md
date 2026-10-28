@@ -677,5 +677,6 @@ Full contract: `js/CLAUDE.md`, "The admin config".
   lines like "Your turn" may stay; the leaderboard and shared screens must not say "You".
   **Exception (Matt, 2026-10-18): the Multiplayer screen's heading and button say "Your turn".**
 - **No em dashes** in user-facing game or profile copy.
+- **ALWAYS use an Oxford comma** (Matt, 2026-10-28, in caps): in game copy, docs, and every message to Matt.
 - **Every "you win / you lose" popup gets a close (X) top-right.**
 - Text size, tap targets, safe areas, motion: `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor".
