@@ -1553,6 +1553,20 @@ export function recordResult(gameId, difficulty, won) {
   return st;
 }
 
+/** Spelling Bee: a puzzle already counted as PLAYED (recordResult(..., null) at its first word) reaches
+ *  Genius, so only the win is added (Matt, 2026-10-28: "Why would you only count it if someone reaches
+ *  Genius?"). Before that day a puzzle was recorded only at Genius, played and won together. */
+export function recordSpellingBeeGenius() {
+  if (tooFast('spellingbee')) return null;
+  const st = loadStats();
+  const g = st.games.spellingbee;
+  if (!g.byDiff.daily) g.byDiff.daily = bucket();
+  g.total.won += 1; g.byDiff.daily.won += 1;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 /** A voided online match (js/stats-corrections.js, VOIDED_MATCHES) that this device had
  *  already counted. Noted as `games.<gameId>.vd[<matchId>] = 'won' | 'lost' | 'draw'` so the display
  *  layer (correctStats) can take it back out. ADDITIVE and idempotent: no counter is touched (THE LAW

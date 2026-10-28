@@ -47,8 +47,11 @@ export const VOIDED_MATCHES = {
   // own board still shows him; his Genius win comes out of 'daily', and any long-term Spelling Bee
   // board (words, points) must leave that day out for him via voidedCodesFor.
   spellingbee: {
-    enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily' },
-    eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', bucket: 'daily' },   // Oct 28 (Matt: "void today for him too")
+    // `keepPlayed`: the day still counts as PLAYED, with nothing in it (Matt, 2026-10-28: "show that he
+    // played, but make it so his score is 0"); only the Genius win comes out.
+    enachlnrt: { winner: '3VN33', puzzle: 'a:chlnrt', bucket: 'daily', keepPlayed: true },   // Oct 26 (Matt: "VOID")
+    enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily', keepPlayed: true },
+    eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', bucket: 'daily', keepPlayed: true },   // Oct 28 (Matt: "void today for him too")
   },
 };
 /** Codes whose day on one puzzle counts for nothing long-term (Spelling Bee). Not the day's own board. */
@@ -74,17 +77,19 @@ export function correctVoidedResults(gameRec, gameId) {
   if (!vd) return g;
   // Counted per bucket: online matches sit in 'mp', a Spelling Bee day in 'daily'.
   const per = {};
-  const zero = () => ({ won: 0, lost: 0, draw: 0 });
+  const zero = () => ({ won: 0, lost: 0, draw: 0, played: 0 });
   const all = zero();
   for (const id of Object.keys(vd)) {
-    if (!isVoidedMatch(gameId, id) || all[vd[id]] == null) continue;
-    const k = VOIDED_MATCHES[gameId][id].bucket || 'mp';
-    (per[k] || (per[k] = zero()))[vd[id]] += 1;
-    all[vd[id]] += 1;
+    if (!isVoidedMatch(gameId, id) || all[vd[id]] == null || vd[id] === 'played') continue;
+    const v = VOIDED_MATCHES[gameId][id];
+    const k = v.bucket || 'mp';
+    const n = per[k] || (per[k] = zero());
+    n[vd[id]] += 1; all[vd[id]] += 1;
+    if (!v.keepPlayed) { n.played += 1; all.played += 1; }
   }
   if (!(all.won + all.lost + all.draw)) return g;
   const less = (b, n) => Object.assign({}, b || {}, {
-    played: Math.max(0, ((b || {}).played | 0) - (n.won + n.lost + n.draw)),
+    played: Math.max(0, ((b || {}).played | 0) - n.played),
     won: Math.max(0, ((b || {}).won | 0) - n.won),
     lost: Math.max(0, ((b || {}).lost | 0) - n.lost),
   });
