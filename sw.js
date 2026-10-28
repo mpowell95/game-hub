@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1300;
-const CACHE = 'game-hub-v1302';
+const IMPORTANT_SINCE = 1305;
+const CACHE = 'game-hub-v1305';
 
 const ASSETS = [
   './',
@@ -802,7 +802,7 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '1bac66283b',
+  './js/game-stats.js': '19befd88d9',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': '7a698db6f4',
@@ -827,7 +827,7 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '8036b5cae4',
   './js/admin-ui.js': '776a749fed',
-  './js/stats-corrections.js': '43ae6ab52d',
+  './js/stats-corrections.js': '3a30131074',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'f7b99b83ea',
   './js/game-art.js': '9bdc57d580',
@@ -951,12 +951,12 @@ const REST_MANIFEST = {
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
   './spelling-bee/css/spelling-bee.css': '6c9b1a2fa9',
-  './spelling-bee/js/ui.js': '1f82a26a83',
+  './spelling-bee/js/ui.js': 'bee0ce3add',
   './spelling-bee/js/engine.js': '4fe494c0fd',
   './spelling-bee/js/strings.js': '2e99d326d7',
   './spelling-bee/js/board.js': '302d5bf76c',
   './spelling-bee/js/log.js': '762516d621',
-  './spelling-bee/data/bee.json': '1ac75a70d4',
+  './spelling-bee/data/bee.json': 'f893c74b4e',
   './spelling-bee/data/bee-es.json': '50cb224a47',
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
@@ -1216,14 +1216,14 @@ const REST_MANIFEST = {
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
   './battleship/css/battleship.css': 'ebd43ea88d',
-  './battleship/js/ui.js': 'e7191d22e7',
+  './battleship/js/ui.js': '1b1fcab875',
   './battleship/js/game.js': 'd60d57f119',
   './battleship/js/fleet.js': 'b2c03f8517',
   './battleship/js/ai.js': 'c31bd9837a',
   './battleship/js/hash.js': 'aed473aee9',
   './battleship/js/ship-art.js': 'a362e5ebb0',
-  './battleship/js/strings.js': '56bbcf1485',
-  './battleship/js/mp.js': '7010a0aa2b',
+  './battleship/js/strings.js': '5b39afad6c',
+  './battleship/js/mp.js': '55f5c8acbd',
   './battleship/js/alert.js': '1703a8f589',
   './chinchon/decks/baraja-libre/oros-1.webp': '740f863677',
   './chinchon/decks/baraja-libre/oros-2.webp': '1de2771991',
