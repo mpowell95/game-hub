@@ -1065,7 +1065,7 @@ class CupPong {
     if (mine && m.canGentlemans()) html += btn('gent', t('gentlemansQ'));
     if (mine && m.canCenter()) html += btn('center', t('centerQ'));
     if (mine && m.canRerack()) {
-      const n = m.reracksLeft.a;
+      const n = m.phase === 'rebuttal' ? Infinity : m.reracksLeft.a;   // a rebuttal's reracks are unlimited
       html += btn('rerack', t('rerackQ', { n: Number.isFinite(n) ? n : '∞' }));
     }
     if (mine && m.canIsland()) html += btn('island', t('islandQ'));
