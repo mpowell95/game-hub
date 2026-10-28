@@ -319,13 +319,15 @@ function checkLadder(gen, from, to) {
 // behind it pointing the same way in its row or column (no "trains").
 {
   const { IMPOSSIBLE_TESTS, IMPOSSIBLE_GRID } = await import('./impossible-tests.js');
-  let good = IMPOSSIBLE_TESTS.length >= 10 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length
-    && IMPOSSIBLE_GRID.slice(0, 6).every(([c, r]) => c === 16 && r === 22) && IMPOSSIBLE_GRID.slice(6).every(([c, r]) => c === 18 && r === 25);
-  for (const arrows of IMPOSSIBLE_TESTS.slice(0, 8)) {
+  let good = IMPOSSIBLE_TESTS.length >= 12 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length
+    && IMPOSSIBLE_GRID.slice(0, 6).every(([c, r]) => c === 16 && r === 22) && IMPOSSIBLE_GRID.slice(6, 10).every(([c, r]) => c === 18 && r === 25)
+    && IMPOSSIBLE_GRID.slice(10).every(([c, r]) => c === 28 && r === 38);
+  // every board but the two noise ones (9-10): exactly one arrow free at every step
+  for (const arrows of IMPOSSIBLE_TESTS.filter((_, i) => i < 8 || i >= 10)) {
     const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
     const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false);
     for (const c of arrows) for (const p of c) if (!(p >= 0 && p < W * H)) good = false;
-    if (n < (IMPOSSIBLE_TESTS.indexOf(arrows) < 3 ? 70 : 32)) good = false;
+    if (n < (IMPOSSIBLE_TESTS.indexOf(arrows) < 3 || IMPOSSIBLE_TESTS.indexOf(arrows) >= 10 ? 70 : 32)) good = false;
     let prev = -1;
     for (let step = 0; step < n; step++) {
       const occ = occupancy(lvl, gone);
@@ -364,7 +366,7 @@ function checkLadder(gen, from, to) {
   // Boards 9-10 (round 4, "every tap leads directly to the next one"): played following the trail (always
   // the arrow freed most recently), at most 3 arrows free at once, 30%+ of taps free nothing, no trains.
   let noise = true;
-  for (const arrows of IMPOSSIBLE_TESTS.slice(8)) {
+  for (const arrows of IMPOSSIBLE_TESTS.slice(8, 10)) {
     const [W, H] = IMPOSSIBLE_GRID[IMPOSSIBLE_TESTS.indexOf(arrows)];
     const lvl = { cols: W, rows: H, arrows }, n = arrows.length, gone = new Array(n).fill(false), at = new Array(n).fill(-1);
     const freeNow = () => { const occ = occupancy(lvl, gone); return arrows.map((c, i) => !gone[i] && !blockerOf(c, occ, W, H, i)); };
