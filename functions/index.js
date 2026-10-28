@@ -30,6 +30,9 @@
 //   beeWatch          every 5 min: Spelling Bee copy detection + missing-log alerts, pushed to admins (2026-10-28)
 //   beeOnDaily        a Spelling Bee board row changed: rebuild boards/v1/bee (at most every 2 min)
 //   beeOnUndo         Matt undid a Spelling Bee void on the admin page: rebuild boards/v1/bee
+//   (rebuildBoards)   every board rebuild also runs the integrity checks on every record (2026-10-28)
+//   integrityOnUndo   Matt undid or redid an integrity void on the admin page: rebuild the board
+//   <game>MatchCheck  an online challenge ended (darts, cuppong, battleship, hoops): integrity alerts
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -42,6 +45,7 @@ import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
+import { writeFlags, checkFinishedMatch, integrityNote } from './integrity.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -288,7 +292,17 @@ async function rebuildBoards(db) {
   const [players, cfg, sums] = await Promise.all([
     db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
   ]).then((s) => s.map((x) => x.val()));
-  const parts = buildBoardParts(players || {}, cfg || null);
+  // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
+  // flagged once and every admin told; a strong one is voided in the package built just below.
+  const { written, flags } = await writeFlags(db, players || {});
+  if (written.length) {
+    const codes = await adminCodes(db);
+    for (const f of written) {
+      logger.info('integrity flag', { id: f.id, gid: f.gid, rule: f.rule, void: f.flag.void });
+      for (const c of codes) await sendTo(db, c, integrityNote('flag', f), `integrity-${f.id}-${f.gid}`, { game: 'admin' });
+    }
+  }
+  const parts = buildBoardParts(players || {}, cfg || null, flags);
   const sum = sumOf(JSON.stringify(parts));
   const patch = { 'meta/builtAt': Date.now(), 'meta/people': Object.keys(parts.people).length };
   // The pickers' directory/ from the same read (2026-10-22: its own hourly timer had not fired
@@ -307,11 +321,14 @@ async function rebuildIfDue(db) {
   if (!lock.committed) { await db.ref('boards/v1/meta/dirty').set(true); return; }
   await rebuildBoards(db);
 }
-export const boardsOnSync = onValueWritten({ ref: '/players/{id}/updatedAt', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 },
+// `secrets`: a rebuild may push an integrity flag to the admins (sendTo needs the VAPID key).
+export const boardsOnSync = onValueWritten({ ref: '/players/{id}/updatedAt', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5, secrets: [VAPID_PRIVATE_KEY] },
   async () => { await rebuildIfDue(getDatabase()); });
-export const boardsOnConfig = onValueWritten({ ref: '/adminConfig/v1/corrections', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },
+export const boardsOnConfig = onValueWritten({ ref: '/adminConfig/v1/corrections', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] },
   async () => { await rebuildBoards(getDatabase()); });
-export const boardsCatchUp = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1 }, async () => {
+export const integrityOnUndo = onValueWritten({ ref: '/adminConfig/v1/integrity', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] },
+  async () => { await rebuildBoards(getDatabase()); });
+export const boardsCatchUp = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
   const db = getDatabase();
   const meta = (await db.ref('boards/v1/meta').get()).val() || {};
   // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
@@ -359,3 +376,26 @@ export const beeOnDaily = onValueWritten({ ref: '/beeDaily/{puzzle}/{code}', ins
   async () => { await rebuildBeeIfDue(getDatabase()); });
 export const beeOnUndo = onValueWritten({ ref: '/adminConfig/v1/bee', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },
   async () => { await rebuildBee(getDatabase()); });
+
+// INTEGRITY ALERTS ON ONLINE CHALLENGES (2026-10-28, functions/integrity.js). When a match's `over` is
+// written, its log is checked once; an alert (never a void) goes to every admin.
+async function matchCheck(node, id, m) {
+  const db = getDatabase();
+  const written = await checkFinishedMatch(db, node, id, m);
+  if (!written.length) return;
+  const codes = await adminCodes(db);
+  for (const a of written) {
+    logger.info('integrity alert', { node, id, rule: a.rule, side: a.side, v: a.v });
+    for (const c of codes) await sendTo(db, c, integrityNote('match', { ...a, node }), `integrity-${node}-${id}`, { game: 'admin' });
+  }
+}
+const overOpts = (node) => ({ ref: `/${node}/games/{id}/over`, ...OPTS, maxInstances: 2 });
+const onMatchOver = (node) => onValueWritten(overOpts(node), async (event) => {
+  if (!event.data.after.exists()) return;
+  const m = (await getDatabase().ref(`${node}/games/${event.params.id}`).get()).val();
+  await matchCheck(node, event.params.id, m);
+});
+export const dartsMatchCheck = onMatchOver('darts');
+export const cupPongMatchCheck = onMatchOver('cuppong');
+export const battleshipMatchCheck = onMatchOver('battleship');
+export const hoopsMatchCheck = onMatchOver('hoops');

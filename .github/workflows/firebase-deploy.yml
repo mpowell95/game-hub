@@ -26,6 +26,11 @@ on:
       - 'js/admin-config.js'
       - 'js/hidden-players.js'
       - 'js/bee-fairplay.js'
+      - 'js/integrity.js'
+      - 'darts/js/engine.js'
+      - 'battleship/js/fleet.js'
+      - 'hoops4/js/replay.js'
+      - 'connect-four/js/board.js'
       - 'spelling-bee/js/engine.js'
       - 'spelling-bee/data/bee.json'
       - 'spelling-bee/data/bee-es.json'
@@ -64,6 +69,7 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('rules: valid JSON')"
           node tools/test-push.mjs
           node tools/test-bee-server.mjs
+          node tools/test-integrity.mjs
 
       - name: Install function dependencies
         run: npm install --prefix functions

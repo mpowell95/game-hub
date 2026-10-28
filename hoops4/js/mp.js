@@ -28,6 +28,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
+import { replayResult, sameResult } from './replay.js';
 import { recordResult } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
@@ -268,6 +269,11 @@ export function validateGame(raw) {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== null && w !== undefined) return null;
     over = { winner: w == null ? null : w, why: String(raw.over.why || 'four'), at: ms(raw.over.at) };
+    // THE RESULT MUST BE THE MOVES' RESULT (integrity check, 2026-10-28, docs/INTEGRITY-CHECKS-SPEC.md).
+    // Every other challenge game replays its log against `over`; this one took any stored winner, so a
+    // hand-written `over` counted as a win on both phones. Only a resignation is free-form. Checked
+    // against every finished match in the database that day: all 70 four-in-a-rows agree.
+    if (over.why !== 'resign' && !sameResult(replayResult(moves), over.winner)) return null;
   }
   // THE SERIES FIELDS ARE OPTIONAL AND DEFAULT TO A SINGLE GAME. Every match document written
   // before they existed has none of them, and `validateGame` returning null is a REFUSAL TO OPEN

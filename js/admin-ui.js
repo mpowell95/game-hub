@@ -41,9 +41,10 @@ import {
   resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
   resolveHoldemCorrection, setHoldemCorrection, resolveOnlineAllowed, setOnlineAllowed,
-  resolveBeeUndone, setBeeUndone,
+  resolveBeeUndone, setBeeUndone, setIntegrityUndone, resolveIntegrityUndone,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
+import { hitText, gameName } from './integrity.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -241,6 +242,19 @@ async function readBee() {
   } catch { return {}; }
 }
 
+/** Every game's integrity flags and match alerts (functions/integrity.js). {flags, alerts}, {} offline. */
+let _integ = null;
+async function readIntegrity() {
+  try {
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot) return {};
+    const get = async (p) => { try { const s = await boot.api.get(boot.api.ref(boot.db, p)); return s && s.exists() ? s.val() : {}; } catch { return {}; } };
+    const [flags, alerts] = await Promise.all([get('integrityFlags'), get('integrityAlerts')]);
+    return { flags, alerts };
+  } catch { return {}; }
+}
+
 async function readPlayers() {
   try {
     const net = await import('./stats-net.js');
@@ -273,9 +287,10 @@ export async function openAdmin() {
   _offline = false;
   render(card);
 
-  const [fresh, players, bee] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee()]);
+  const [fresh, players, bee, integ] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee(), readIntegrity()]);
   _players = players || {};
   _bee = bee || {};
+  _integ = integ || {};
   _offline = !fresh;
   if (!_host || _busy) return;             // a save in flight repaints when it finishes
   render(card);
@@ -288,7 +303,7 @@ function render(card) {
   // flipping a game near the bottom meant scrolling all the way down again for the next one.
   const prev = card.querySelector('.adm-scroll');
   const top = prev ? prev.scrollTop : 0;
-  const ORDER = ['online', 'games', 'bee', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
+  const ORDER = ['online', 'games', 'bee', 'integrity', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
   const openSec = ORDER.find((id) => open.has(id));     // one at a time, even from an older saved set
   const sec = (id, title, body) => `<details class="adm-sec" data-sec="${id}"${id === openSec ? ' open' : ''}>
       <summary>${esc(title)}</summary>
@@ -301,6 +316,7 @@ function render(card) {
       ${sec('online', t('adm_online_title'), onlineSectionHTML(cfg))}
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
       ${sec('bee', t('adm_bee_title'), beeSectionHTML(cfg))}
+      ${sec('integrity', t('adm_iv_title'), integritySectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
       ${sec('poker', t('adm_hb_title'), pokerSectionHTML(cfg))}
@@ -469,6 +485,43 @@ function beeSectionHTML(cfg) {
   gaps.sort((a, b) => b.at - a.at);
   return (rows.map((r) => r.html).join('') || `<p class="adm-note">${esc(t('adm_bee_none'))}</p>`)
     + (gaps.length ? `<details class="adm-sub" data-sub="bee-gaps"${openSections().has('bee-gaps') ? ' open' : ''}><summary>${esc(t('adm_bee_gaps', { n: gaps.length }))}</summary>${gaps.map((g) => g.html).join('')}</details>` : '');
+}
+
+// --- Integrity checks, every other game (2026-10-28, docs/INTEGRITY-CHECKS-SPEC.md) ------------------
+/** One row per flagged game on one device's record, newest first: a voided one has Undo / Void again,
+ *  an alert says so. Under them, folded, the online-match alerts. */
+function integritySectionHTML(cfg) {
+  if (loading()) return loadingHTML();
+  const date = (ms) => { try { return new Date(ms).toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  const rows = [];
+  for (const [id, games] of Object.entries((_integ && _integ.flags) || {})) {
+    for (const [gid, rules] of Object.entries(games || {})) {
+      const list = Object.entries(rules || {}).map(([rule, f]) => ({ rule, ...(f || {}) }));
+      if (!list.length) continue;
+      const f0 = list[0];
+      const strong = list.some((f) => f.void === true);
+      const undone = strong && resolveIntegrityUndone(cfg, id, gid);
+      const at = Math.max(...list.map((f) => Number(f.when) || 0));
+      const what = list.map((f) => hitText(f)).join('; ');
+      rows.push({ at, html: `<div class="adm-row adm-bee" data-iv="${esc(id)}|${esc(gid)}">
+        <span class="adm-name">${esc(f0.name || f0.code || id)} · ${esc(gameName(gid))} · ${esc(date(at))}${undone ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
+        <span class="adm-note">${strong ? '' : `${esc(t('adm_iv_alert'))}: `}${esc(what)}</span>
+        ${strong ? `<button type="button" class="gh-btn gh-btn--sm" data-ivundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>` : ''}
+      </div>` });
+    }
+  }
+  rows.sort((a, b) => b.at - a.at);
+  const matches = [];
+  for (const [key, byRule] of Object.entries((_integ && _integ.alerts) || {})) {
+    const node = String(key).split('~')[0];
+    for (const [rk, a] of Object.entries(byRule || {})) {
+      const rule = String(rk).split('~')[0];
+      matches.push({ at: Number((a || {}).when) || 0, html: `<div class="adm-row"><span class="adm-name">${esc((a && a.name) || '')} · ${esc(gameName(node))} · ${esc(date((a || {}).when))}</span><span class="adm-note">${esc(hitText({ rule, v: (a || {}).v, lim: (a || {}).lim }))}</span></div>` });
+    }
+  }
+  matches.sort((a, b) => b.at - a.at);
+  return (rows.map((r) => r.html).join('') || `<p class="adm-note">${esc(t('adm_bee_none'))}</p>`)
+    + (matches.length ? `<details class="adm-sub" data-sub="iv-matches"${openSections().has('iv-matches') ? ' open' : ''}><summary>${esc(t('adm_iv_matches', { n: matches.length }))}</summary>${matches.map((g) => g.html).join('')}</details>` : '');
 }
 
 /** ADMIN ONLY FIRST, LIVE FOLDED (2026-10-28). Forty-odd identical rows, nearly all Live, meant
@@ -870,6 +923,10 @@ function wire(card) {
       const [bk, code] = e.target.closest('[data-bee]').dataset.bee.split('|');
       const on = e.target.closest('[data-beeundo]').dataset.beeundo === 'undo';
       run = () => setBeeUndone(bk, code, on);
+    } else if (e.target.closest('[data-ivundo]') && e.target.closest('[data-iv]')) {
+      const [id, gid] = e.target.closest('[data-iv]').dataset.iv.split('|');
+      const on = e.target.closest('[data-ivundo]').dataset.ivundo === 'undo';
+      run = () => setIntegrityUndone(id, gid, on);
     } else if (e.target.closest('[data-online-code]')) {
       const b = e.target.closest('[data-online-code]');
       const on = b.getAttribute('aria-pressed') !== 'true';

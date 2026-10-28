@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1322;
-const CACHE = 'game-hub-v1329';
+const CACHE = 'game-hub-v1330';
 
 const ASSETS = [
   './',
@@ -74,6 +74,7 @@ const ASSETS = [
   // beside it because it is tiny and only Matt ever imports it.
   './js/admin-config.js',
   './js/admin-ui.js',
+  './js/integrity.js',
   // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
   // it while painting - a device without it would show scores the rest of the family no longer does.
   './js/stats-corrections.js',
@@ -466,6 +467,7 @@ const ASSETS = [
   './hoops4/js/game.js',
   './hoops4/js/cpu.js',
   './hoops4/js/mp.js',
+  './hoops4/js/replay.js',
   './hoops4/js/mp-ui.js',
   './hoops4/js/alert.js',
   './hoops4/js/strings.js',
@@ -788,7 +790,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '0d0b23f08b',
+  './js/hub.js': '44945e9e85',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -801,7 +803,7 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '56f3f743cc',
+  './js/strings.js': '9505844726',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -829,9 +831,10 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': '59adfa5053',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': '480d791fda',
-  './js/admin-ui.js': '5e38873449',
-  './js/stats-corrections.js': '8c4705191b',
+  './js/admin-config.js': '960028c543',
+  './js/admin-ui.js': '9d01261da8',
+  './js/integrity.js': '6c2c14af38',
+  './js/stats-corrections.js': '8fc4dfe2f7',
   './js/bee-fairplay.js': '578fe6bae3',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
@@ -1143,7 +1146,8 @@ const REST_MANIFEST = {
   './hoops4/js/render.js': '267329ba3c',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': 'e183f85e93',
+  './hoops4/js/mp.js': '987cf1b6c5',
+  './hoops4/js/replay.js': 'a5a39bdf6d',
   './hoops4/js/mp-ui.js': '769eccbb9c',
   './hoops4/js/alert.js': '18ae0c4d78',
   './hoops4/js/strings.js': '8ffabf9682',

@@ -1900,6 +1900,8 @@ class Hub {
       return;
     }
     if (id === 'bugs') { this._clearPushOpen(); this.openBugInbox(); return; }
+    // An integrity alert (2026-10-28, functions/integrity.js) opens the admin page, on an admin device only.
+    if (id === 'admin') { this._clearPushOpen(); if (isAdminDevice()) this.openAdmin(); return; }
     const g = GAMES.find((x) => x.id === id);
     if (!g) { this._clearPushOpen(); return; }
     // A game released from the admin page is only on the launcher once the config has landed, and

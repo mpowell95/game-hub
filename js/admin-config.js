@@ -110,7 +110,9 @@ export function normalizeConfig(raw) {
   const online = (src.online && typeof src.online === 'object') ? src.online : {};
   const bee = (src.bee && typeof src.bee === 'object') ? src.bee : {};
   const beeUndo = (bee.undo && typeof bee.undo === 'object') ? bee.undo : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo } };
+  const integ = (src.integrity && typeof src.integrity === 'object') ? src.integrity : {};
+  const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo } };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -329,6 +331,13 @@ export function resolveDeviceReset(cfg, statsIdOf) {
 export function resolveBeeUndone(cfg, boardKey, code) {
   const u = normalizeConfig(cfg).bee.undo[boardKey];
   return !!(u && typeof u === 'object' && u[code] === true);
+}
+
+/** Integrity checks (2026-10-28, js/integrity.js): has Matt undone the void on this record's game?
+ *  `integrity/undo/<statsId>/<gameId>` = true. */
+export function resolveIntegrityUndone(cfg, statsIdOf, gameId) {
+  const u = normalizeConfig(cfg).integrity.undo[statsIdOf];
+  return !!(u && typeof u === 'object' && u[gameId] === true);
 }
 
 export function readCachedConfig() {
@@ -703,6 +712,15 @@ export function setBeeUndone(boardKey, code, on) {
     return Promise.resolve(fail(`not a Spelling Bee day: ${boardKey} ${code}`));
   }
   return writeNode(`bee/undo/${boardKey}`, { [code]: on ? true : null }, (cfg) => resolveBeeUndone(cfg, boardKey, code) === !!on, { stamp: false });
+}
+
+/** Integrity checks: count a voided game on one record again (`on` true) or void it again (false).
+ *  The server rebuilds the leaderboard on the change (functions/index.js integrityOnUndo). */
+export function setIntegrityUndone(statsIdOf, gameId, on) {
+  if (!/^[A-Za-z0-9-]{4,80}$/.test(String(statsIdOf || '')) || !/^[a-z0-9]{2,24}$/.test(String(gameId || ''))) {
+    return Promise.resolve(fail(`not a record and game: ${statsIdOf} ${gameId}`));
+  }
+  return writeNode(`integrity/undo/${statsIdOf}`, { [gameId]: on ? true : null }, (cfg) => resolveIntegrityUndone(cfg, statsIdOf, gameId) === !!on, { stamp: false });
 }
 
 export function setOnlineAllowed(code, on) {
