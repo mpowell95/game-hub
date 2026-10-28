@@ -24,6 +24,7 @@ import {
   readMyReplies, markRepliesSeen, repliesSeenAt, countUnreadReplies,
 } from './bug-report.js';
 import { makeT, getLang } from './i18n.js';
+import { GAME_ART } from './game-art.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -99,6 +100,15 @@ function ensureCss() {
   .bug-quote { margin: var(--gh-sp-2) 0 0; padding: var(--gh-sp-3); border-radius: var(--gh-r-md);
                background: var(--gh-surface-2); white-space: pre-wrap; word-break: break-word;
                font-size: var(--gh-fs-sm); line-height: 1.5; }
+  /* Where the report came from, first and big (Matt, 2026-10-28: "It took me forever to even see
+     what game his report was about"): the game's own tile art and its name. */
+  .bug-where { display: flex; align-items: center; gap: var(--gh-sp-3); margin: 0 0 var(--gh-sp-2);
+               font-size: var(--gh-fs-lg); font-weight: 800; color: var(--gh-ink); line-height: 1.2; }
+  .bug-where-art { flex: none; width: 64px; height: 36px; border-radius: 6px; overflow: hidden;
+                   background: var(--gh-surface-2); display: grid; place-items: center; font-size: 22px; }
+  .bug-where-art svg { width: 100%; height: 100%; display: block; }
+  .bug-detail-where { margin-top: var(--gh-sp-3); font-size: var(--gh-fs-xl); }
+  .bug-detail-where .bug-where-art { width: 96px; height: 54px; }
   /* --- replies -------------------------------------------------------------------------- */
   /* Matt's answer, on both sides of the conversation. The left rule is the only decoration:
      it reads as a quoted answer at a glance without needing a colour to carry the meaning. */
@@ -420,13 +430,14 @@ export async function openBugInbox() {
 
   const rowHTML = (r, i) => `
       <li><button type="button" class="bug-row" data-open="${i}">
+        ${whereHTML(r)}
         <span class="bug-row-top">
           <span class="gh-chip${r.status === 'done' ? '' : ' gh-chip--accent'}">${esc(r.status === 'done' ? t('bug_inbox_done_tag') : t('bug_inbox_new_tag'))}</span>
           <span>${esc(r.reporter && r.reporter.name ? `${r.reporter.emoji || ''} ${r.reporter.name}` : '?')}</span>
           <span class="bug-row-when">${esc(whenText(r.createdAtMs, true))}</span>
         </span>
         <span class="bug-row-desc">${esc(r.description || '')}</span>
-        <span class="bug-row-meta">${esc([r.gameTitle || r.game, r.summary || summarizeEnvironment(r.environment),
+        <span class="bug-row-meta">${esc([r.summary || summarizeEnvironment(r.environment),
           r.shotCount ? `${r.shotCount} 📷` : '', r.reply ? t('bug_inbox_replied_tag') : ''].filter(Boolean).join(' · '))}</span>
       </button></li>`;
 
@@ -460,8 +471,9 @@ export async function openBugInbox() {
   const detail = async (r) => {
     shell(`
       <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="bug-back">${t('bug_inbox_back')}</button>
+      ${whereHTML(r, 'bug-detail-where')}
       <p class="bug-row-meta" style="margin-top:12px">
-        ${esc([r.reporter && r.reporter.name, whenText(r.createdAtMs), r.gameTitle || r.game].filter(Boolean).join(' · '))}
+        ${esc([r.reporter && r.reporter.name, whenText(r.createdAtMs)].filter(Boolean).join(' · '))}
       </p>
       <p class="bug-quote">${esc(r.description || '')}</p>
       ${r.context ? `<p class="bug-row-meta">${esc(r.context)}</p>` : ''}
@@ -586,6 +598,19 @@ export async function openBugInbox() {
   };
 
   list();
+}
+
+/** The hub's own screens, which have no tile art. */
+const SCREEN_ICON = { hub: '🏠', leaderboards: '🏆', stats: '📊', profile: '👤' };
+
+/** The game or screen a report came from: tile art + name. '' when the player picked nothing. */
+function whereHTML(r, extraClass) {
+  const id = r && r.game;
+  const name = (r && (r.gameTitle || r.game)) || '';
+  if (!name) return '';
+  const art = (id && GAME_ART[id]) || (id && SCREEN_ICON[id]) || '❓';
+  return `<span class="bug-where${extraClass ? ' ' + extraClass : ''}">
+    <span class="bug-where-art" aria-hidden="true">${art}</span><span>${esc(name)}</span></span>`;
 }
 
 /** Load each reply's screenshots into its `[data-reply-shots]` box, on demand. */
