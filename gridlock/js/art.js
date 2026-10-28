@@ -14,7 +14,9 @@
 
 export const RED = '#d8392b';
 export const WOOD_TONES = ['#e2bd84', '#d3a265', '#ecd3a1', '#c38c52', '#dcae72', '#b98048', '#e7c792', '#cc9a5e'];
-export const CAR_COLORS = ['#1F5FA8', '#F2B705', '#178A7A', '#7a52b3', '#eceef1', '#3f9be0', '#8fbf3a', '#f08a24', '#5d6b80', '#c94fa0', '#2aa7a0', '#a8743c', '#4d5bd1', '#2b2f36'];
+// Bright cartoon colours, none dark (a dark car vanished into the asphalt).
+export const CAR_COLORS = ['#2f7de1', '#ffc61a', '#19b39b', '#8c5ce0', '#f4f5f7', '#4cc3ff', '#7ed321', '#ff8a1f', '#ff6fb5', '#3dd6c6', '#5b6cff', '#c8a2ff'];
+const TAXI = '#ffc61a';
 
 /** Mix a #rrggbb colour toward white (amt > 0) or black (amt < 0). */
 export function shade(hex, amt) {
@@ -90,89 +92,94 @@ function woodSVG(L, color, isRed, R, u) {
 }
 
 // --- cars ------------------------------------------------------------------------------------------
+// CARTOON (2026-10-28, Matt: the realistic cars were "difficult to understand at a glance ... tough to
+// identify cars as single objects"). Each vehicle is ONE flat, bright shape with a thick dark outline
+// (a sticker), a clear gap to its neighbours, big round headlights at the front and a few chunky
+// details. No gradients on the body, no fine lines, nothing poking far outside the outline.
 
-function glassDefs(u) {
-  return `<linearGradient id="${u}g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5d7d99"/><stop offset=".55" stop-color="#22313f"/><stop offset="1" stop-color="#16202b"/></linearGradient>`;
+const INK = '#1d2230';
+const GLASS = '#9fdcfb';
+const glint = (x1, y1, x2, y2) => `<path d="M${x1} ${y1}L${x2} ${y2}" stroke="#fff" stroke-opacity=".85" stroke-width="5" stroke-linecap="round"/>`;
+const wheel = (x, y) => `<rect x="${x}" y="${y}" width="30" height="16" rx="6" fill="${INK}"/>`;
+const lamps = (L) => `<circle cx="${L - 27}" cy="31" r="7.5" fill="#fff4a8" stroke="${INK}" stroke-width="4"/><circle cx="${L - 27}" cy="69" r="7.5" fill="#fff4a8" stroke="${INK}" stroke-width="4"/>`
+  + `<rect x="15" y="30" width="8" height="12" rx="3" fill="#ff5a4e" stroke="${INK}" stroke-width="3"/><rect x="15" y="58" width="8" height="12" rx="3" fill="#ff5a4e" stroke="${INK}" stroke-width="3"/>`;
+/** A soft light band along the top and a shade band along the bottom, clipped to the body. */
+function bodyLight(u, c) {
+  return `<g clip-path="url(#${u}c)"><rect x="0" y="0" width="1000" height="30" fill="#fff" fill-opacity=".22"/><rect x="0" y="70" width="1000" height="30" fill="#000" fill-opacity=".13"/></g>`;
 }
-function bodyGrad(u, c) {
-  return `<linearGradient id="${u}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c, -0.32)}"/><stop offset=".16" stop-color="${shade(c, 0.1)}"/><stop offset=".5" stop-color="${shade(c, 0.26)}"/><stop offset=".84" stop-color="${shade(c, 0.04)}"/><stop offset="1" stop-color="${shade(c, -0.36)}"/></linearGradient>`;
-}
-const tire = (x, y, w = 22, h = 13) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="5" fill="#111419"/>`;
 
-/** A car, two cells long. Models: sedan, sports (stripes), hatch, taxi. */
+/** A car, two cells long. Models: sedan, sports (stripes), hatch, sunroof, taxi. */
 function carBody(L, c, model, isRed, u) {
-  let g = `<defs>${bodyGrad(u, c)}${glassDefs(u)}</defs>`;
-  g += tire(28, 4) + tire(28, 83) + tire(L - 54, 4) + tire(L - 54, 83);
-  g += `<rect x="6" y="11" width="${L - 12}" height="78" rx="30" fill="url(#${u}b)" stroke="${shade(c, -0.45)}" stroke-width="2"/>`;
-  // Racing stripes (the red car always, the sports model too), under the glass.
+  const bx = 10, by = 15, bw = L - 20, bh = 70, br = 30;
+  let g = `<defs><clipPath id="${u}c"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${br}"/></clipPath></defs>`;
+  g += wheel(34, 7) + wheel(34, 77) + wheel(L - 66, 7) + wheel(L - 66, 77);
+  g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${br}" fill="${c}"/>`;
+  g += bodyLight(u, c);
   if (isRed || model === 'sports') {
-    const sc = c === '#eceef1' ? '#1F5FA8' : '#fff';
-    g += `<rect x="8" y="38" width="${L - 16}" height="7" fill="${sc}" fill-opacity=".9"/><rect x="8" y="55" width="${L - 16}" height="7" fill="${sc}" fill-opacity=".9"/>`;
+    const sc = c === '#f4f5f7' ? '#2f7de1' : '#fff';
+    g += `<g clip-path="url(#${u}c)"><rect x="0" y="39" width="${L}" height="8" fill="${sc}"/><rect x="0" y="53" width="${L}" height="8" fill="${sc}"/></g>`;
   }
-  // Hood creases, front bumper.
-  g += `<path d="M${L - 34} 26Q${L - 16} 50 ${L - 34} 74" stroke="${shade(c, -0.3)}" stroke-opacity=".5" stroke-width="2" fill="none"/>`;
-  // Windscreen, roof, rear window.
-  const front = model === 'hatch' ? L - 66 : L - 74;
-  g += `<path d="M${front} 21L${front + 20} 26Q${front + 26} 50 ${front + 20} 74L${front} 79Z" fill="url(#${u}g)"/>`;
-  g += `<path d="M${front + 4} 27L${front + 12} 29" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>`;
-  const back = model === 'hatch' ? 18 : 26;
-  g += `<rect x="${back + 16}" y="24" width="${front - back - 18}" height="52" rx="10" fill="${shade(c, 0.12)}" stroke="${shade(c, -0.25)}" stroke-opacity=".6" stroke-width="1.5"/>`;
-  g += `<path d="M${back} 26L${back + 14} 23L${back + 14} 77L${back} 74Z" fill="url(#${u}g)" fill-opacity=".9"/>`;
-  // Mirrors, lights.
-  g += `<ellipse cx="${front + 6}" cy="9" rx="7" ry="4" fill="${shade(c, -0.25)}"/><ellipse cx="${front + 6}" cy="91" rx="7" ry="4" fill="${shade(c, -0.25)}"/>`;
-  g += `<rect x="${L - 15}" y="17" width="8" height="15" rx="3.5" fill="#fff6c2"/><rect x="${L - 15}" y="68" width="8" height="15" rx="3.5" fill="#fff6c2"/>`;
-  g += `<rect x="7" y="18" width="6" height="14" rx="2.5" fill="#ff3b30"/><rect x="7" y="68" width="6" height="14" rx="2.5" fill="#ff3b30"/>`;
+  const front = model === 'hatch' ? L - 70 : L - 78;
+  const back = model === 'hatch' ? 26 : 32;
+  // Roof between the windows, a shade lighter.
+  g += `<rect x="${back + 14}" y="27" width="${front - back - 18}" height="46" rx="12" fill="${shade(c, 0.18)}"/>`;
+  // Windscreen (big, curved, at the front) and rear window.
+  g += `<path d="M${front} 24L${front + 20} 28Q${front + 30} 50 ${front + 20} 72L${front} 76Q${front - 6} 50 ${front} 24Z" fill="${GLASS}" stroke="${INK}" stroke-width="4.5" stroke-linejoin="round"/>`;
+  g += glint(front + 6, 32, front + 13, 34);
+  g += `<path d="M${back} 28L${back + 12} 26Q${back + 16} 50 ${back + 12} 74L${back} 72Q${back - 4} 50 ${back} 28Z" fill="${GLASS}" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
   if (model === 'taxi') {
-    g += `<rect x="${(back + front) / 2 - 6}" y="38" width="22" height="24" rx="4" fill="#fff8d6" stroke="#2b2f36" stroke-width="2"/>`
-      + `<rect x="${(back + front) / 2 - 2}" y="44" width="14" height="4" fill="#2b2f36"/><rect x="${(back + front) / 2 - 2}" y="52" width="14" height="4" fill="#2b2f36"/>`;
+    const x = (back + front) / 2 - 5;
+    g += `<rect x="${x}" y="38" width="24" height="24" rx="5" fill="#fff" stroke="${INK}" stroke-width="4"/><path d="M${x + 7} 44V56M${x + 17} 44V56" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`;
   } else if (model === 'sunroof') {
-    g += `<rect x="${(back + front) / 2 - 6}" y="36" width="26" height="28" rx="6" fill="url(#${u}g)" fill-opacity=".85"/>`;
+    g += `<rect x="${(back + front) / 2 - 6}" y="37" width="28" height="26" rx="7" fill="${GLASS}" stroke="${INK}" stroke-width="4"/>`;
   }
+  g += lamps(L);
+  g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="${br}" fill="none" stroke="${INK}" stroke-width="6"/>`;
   if (isRed) {
     const cx = (back + front) / 2 + 7;
-    g += `<circle cx="${cx}" cy="52" r="21" fill="#000" fill-opacity=".25"/><circle cx="${cx}" cy="50" r="21" fill="#fff"/>`
-      + `<path d="${star(cx, 51, 15)}" fill="${RED}"/>`;
+    g += `<circle cx="${cx}" cy="50" r="22" fill="#fff" stroke="${INK}" stroke-width="4.5"/><path d="${star(cx, 51, 15)}" fill="${RED}" stroke="${INK}" stroke-width="2.5" stroke-linejoin="round"/>`;
   }
   return g;
 }
 
-/** A truck or bus, three cells long. Models: box truck, bus, tanker. */
+/** A truck or bus, three cells long. Models: box truck, bus, tanker. Cab and load share the colour
+ *  and one outline, so it reads as ONE vehicle. */
 function truckBody(L, c, model, u) {
-  let g = `<defs>${bodyGrad(u, c)}${glassDefs(u)}<linearGradient id="${u}x" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9ced6"/><stop offset=".5" stop-color="#f2f4f7"/><stop offset="1" stop-color="#a9b0ba"/></linearGradient></defs>`;
+  let g = '';
   if (model === 'bus') {
-    g += tire(36, 3) + tire(36, 84) + tire(L - 66, 3) + tire(L - 66, 84);
-    g += `<rect x="6" y="9" width="${L - 12}" height="82" rx="18" fill="url(#${u}b)" stroke="${shade(c, -0.45)}" stroke-width="2"/>`;
-    // Side windows along both edges, then the roof hatches and the windscreen.
-    for (let x = 22; x < L - 60; x += 34) {
-      g += `<rect x="${x}" y="12" width="28" height="11" rx="3" fill="url(#${u}g)"/><rect x="${x}" y="77" width="28" height="11" rx="3" fill="url(#${u}g)"/>`;
-    }
-    g += `<rect x="${L / 2 - 50}" y="36" width="34" height="28" rx="5" fill="${shade(c, -0.15)}" stroke="${shade(c, -0.35)}" stroke-width="1.5"/>`;
-    g += `<rect x="${L / 2 + 16}" y="36" width="34" height="28" rx="5" fill="${shade(c, -0.15)}" stroke="${shade(c, -0.35)}" stroke-width="1.5"/>`;
-    g += `<path d="M${L - 30} 16Q${L - 12} 50 ${L - 30} 84L${L - 40} 84L${L - 40} 16Z" fill="url(#${u}g)"/>`;
-  } else {
-    // Cab at the front, load behind it.
-    g += tire(28, 3) + tire(28, 84) + tire(96, 3) + tire(96, 84) + tire(L - 60, 3) + tire(L - 60, 84);
-    const cab = L - 92;
-    if (model === 'tanker') {
-      g += `<rect x="8" y="12" width="${cab - 14}" height="76" rx="36" fill="url(#${u}x)" stroke="#7c8490" stroke-width="2"/>`;
-      for (let x = 40; x < cab - 20; x += 46) g += `<rect x="${x}" y="12" width="5" height="76" fill="#8f97a3" fill-opacity=".7"/>`;
-      // A band in the cab's colour, so the tank and the cab read as ONE truck.
-      g += `<rect x="16" y="43" width="${cab - 30}" height="14" rx="3" fill="${c}"/>`;
-      g += `<circle cx="${cab / 2}" cy="50" r="10" fill="#9aa2ad" stroke="#6f7782" stroke-width="2"/>`;
-    } else {
-      g += `<rect x="6" y="8" width="${cab - 10}" height="84" rx="8" fill="url(#${u}x)" stroke="#7c8490" stroke-width="2"/>`;
-      for (let x = 26; x < cab - 12; x += 22) g += `<path d="M${x} 10V90" stroke="#9aa2ad" stroke-width="2"/>`;
-      g += `<rect x="18" y="38" width="${cab - 34}" height="24" rx="4" fill="${c}" fill-opacity=".9"/>`;
-    }
-    g += `<rect x="${cab - 4}" y="40" width="14" height="20" rx="3" fill="#2b2f36"/>`;
-    g += `<rect x="${cab + 6}" y="11" width="${L - cab - 12}" height="78" rx="20" fill="url(#${u}b)" stroke="${shade(c, -0.45)}" stroke-width="2"/>`;
-    g += `<rect x="${cab + 14}" y="22" width="34" height="56" rx="8" fill="${shade(c, 0.12)}" stroke="${shade(c, -0.25)}" stroke-opacity=".6" stroke-width="1.5"/>`;
-    g += `<path d="M${L - 40} 20L${L - 24} 25Q${L - 16} 50 ${L - 24} 75L${L - 40} 80Z" fill="url(#${u}g)"/>`;
-    g += `<path d="M${L - 36} 26L${L - 29} 28" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/>`;
-    g += `<ellipse cx="${L - 34}" cy="8" rx="7" ry="4" fill="${shade(c, -0.25)}"/><ellipse cx="${L - 34}" cy="92" rx="7" ry="4" fill="${shade(c, -0.25)}"/>`;
+    const bx = 10, by = 13, bw = L - 20, bh = 74;
+    g += `<defs><clipPath id="${u}c"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="20"/></clipPath></defs>`;
+    g += wheel(40, 5) + wheel(40, 79) + wheel(L - 74, 5) + wheel(L - 74, 79);
+    g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="20" fill="${c}"/>`;
+    g += bodyLight(u, c);
+    // One long window strip down each side, the roof hatches, the big windscreen.
+    g += `<rect x="28" y="21" width="${L - 92}" height="11" rx="5" fill="${GLASS}" stroke="${INK}" stroke-width="3.5"/><rect x="28" y="68" width="${L - 92}" height="11" rx="5" fill="${GLASS}" stroke="${INK}" stroke-width="3.5"/>`;
+    g += `<rect x="${L / 2 - 52}" y="39" width="34" height="22" rx="6" fill="${shade(c, 0.22)}" stroke="${INK}" stroke-width="3.5"/><rect x="${L / 2 + 6}" y="39" width="34" height="22" rx="6" fill="${shade(c, 0.22)}" stroke="${INK}" stroke-width="3.5"/>`;
+    g += `<path d="M${L - 52} 22L${L - 34} 24Q${L - 22} 50 ${L - 34} 76L${L - 52} 78Q${L - 58} 50 ${L - 52} 22Z" fill="${GLASS}" stroke="${INK}" stroke-width="4.5" stroke-linejoin="round"/>`;
+    g += glint(L - 46, 30, L - 39, 32);
+    g += lamps(L);
+    g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="20" fill="none" stroke="${INK}" stroke-width="6"/>`;
+    return g;
   }
-  g += `<rect x="${L - 14}" y="16" width="7" height="15" rx="3" fill="#fff6c2"/><rect x="${L - 14}" y="69" width="7" height="15" rx="3" fill="#fff6c2"/>`;
-  g += `<rect x="7" y="16" width="5" height="14" rx="2" fill="#ff3b30"/><rect x="7" y="70" width="5" height="14" rx="2" fill="#ff3b30"/>`;
+  // One rounded body for the whole truck: the load at the back (paler), the cab at the front (the
+  // colour), a line between them. The single outline is what makes it read as one vehicle.
+  const cab = L - 86, bx = 10, by = 12, bw = L - 20, bh = 76;
+  g += `<defs><clipPath id="${u}c"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="22"/></clipPath></defs>`;
+  g += wheel(32, 4) + wheel(32, 80) + wheel(104, 4) + wheel(104, 80) + wheel(L - 66, 4) + wheel(L - 66, 80);
+  g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="22" fill="${c}"/>`;
+  g += `<g clip-path="url(#${u}c)"><rect x="0" y="0" width="${cab}" height="100" fill="${shade(c, model === 'tanker' ? 0.5 : 0.38)}"/></g>`;
+  g += bodyLight(u, c);
+  if (model === 'tanker') {
+    for (let x = 58; x < cab - 30; x += 56) g += `<path d="M${x} 14V86" stroke="${INK}" stroke-opacity=".3" stroke-width="5"/>`;
+    g += `<circle cx="${cab / 2 + 5}" cy="50" r="11" fill="${shade(c, 0.7)}" stroke="${INK}" stroke-width="4"/>`;
+  } else {
+    g += `<rect x="26" y="38" width="${cab - 46}" height="24" rx="6" fill="${c}" stroke="${INK}" stroke-width="3.5"/>`;
+  }
+  g += `<path d="M${cab} ${by}V${by + bh}" stroke="${INK}" stroke-width="5"/>`;
+  g += `<path d="M${L - 54} 24L${L - 36} 27Q${L - 26} 50 ${L - 36} 73L${L - 54} 76Q${L - 60} 50 ${L - 54} 24Z" fill="${GLASS}" stroke="${INK}" stroke-width="4.5" stroke-linejoin="round"/>`;
+  g += glint(L - 48, 31, L - 41, 33);
+  g += lamps(L);
+  g += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="22" fill="none" stroke="${INK}" stroke-width="6"/>`;
   return g;
 }
 
@@ -185,7 +192,7 @@ export function pieceArt(p, look, color, isRed, seed, uid) {
     if (p.len === 3) inner = truckBody(L, color, ['box', 'bus', 'tanker'][Math.floor(R() * 3)], uid);
     else {
       const models = ['sedan', 'sports', 'hatch', 'sunroof'];
-      if (color === '#F2B705') models.push('taxi', 'taxi');
+      if (color === TAXI) models.push('taxi', 'taxi');
       inner = carBody(L, color, isRed ? 'sports' : models[Math.floor(R() * models.length)], isRed, uid);
     }
   } else {
