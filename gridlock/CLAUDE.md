@@ -60,7 +60,8 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
   replaying it later cannot clear it (that was the "crown trick"). A level already solved with no
   hint keeps its crown and full points whatever happens after. Across phones it is decided by time:
   a clean solve on one phone AFTER a hint on another still pays half (`glCrowned`). The win popup
-  says "Hint used: half points, no crown".
+  says "Hint used: half points, no crown", or only "Hint used: no crown" on levels 1-500, where half
+  of 1 point rounds up to 1 (2026-10-28: the popup used to claim half points there).
 - Restart puts every block back (moves 0); the hint count stays.
 - **Levels** (the setup screen, beside How to play): the selected difficulty's levels, 25 a page
   (5 x 5, pager underneath, never a scroll). A cleared level shows its best stars and its crown and
@@ -100,11 +101,9 @@ both.
 **The art was redrawn the same day** (Matt: *"Make the blocks and the cars look cooler. They're
 bland"*): `js/art.js` draws every piece as SVG. Wood: a lit top edge and shaded bottom (bevel), a
 soft shine, long wavy grain and sometimes a knot, in eight wood tones, inside a grained tray with
-recessed holes. Cars: a rounded body shaded like a cylinder, tyres at the corners, tinted glass with
-a reflection, roof, mirrors, headlights and tail lights; models vary (sedan, sports with stripes,
-hatchback, sunroof, taxi on yellow cars; trucks are a box truck, a bus or a tanker whose tank carries
-a band in the cab's colour so it reads as one vehicle). The car park is asphalt with grit, painted bay
-lines and a concrete curb. The variety is seeded by level and piece, so a level always looks the
+recessed holes. Cars: models vary (sedan, sports with stripes, hatchback, sunroof, taxi on yellow
+cars; trucks are a box truck, a bus or a tanker); their style is the cartoon one below (2026-10-28).
+The variety is seeded by level and piece, so a level always looks the
 same. Upright pieces are the same drawing turned a quarter (front up, light from the left). **The red piece carries a shape** (a white arrow badge on the wooden block, a white star on
 the red car), because Matt is red/green colourblind.
 

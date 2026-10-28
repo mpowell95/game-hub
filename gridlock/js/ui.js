@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordGridlock, recordGridlockHint, loadStats } from '../../js/game-stats.js';
-import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints } from '../../js/gridlock-points.js';
+import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints, glLevelPoints, glHintedPoints } from '../../js/gridlock-points.js';
 import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
 import { LEVELS } from './levels.js';
@@ -640,7 +640,7 @@ class Gridlock {
         <button type="button" class="gh-modal__close" data-act="win-close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="gl-win-h">${t('cleared', { n: this.n })}</h2>
         <div class="gl-stars" role="img" aria-label="${t('stars_aria', { n: r.stars })}">${starRow}</div>
-        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : r.hinted ? `<p class="gl-hint-note">${t('hint_half')}</p>` : ''}
+        ${r.crown ? `<div class="gl-crown"><span aria-hidden="true">&#128081;</span>${t('no_hints')}</div>` : r.hinted ? `<p class="gl-hint-note">${t(glHintedPoints(this.n) < glLevelPoints(this.n) ? 'hint_half' : 'hint_crown')}</p>` : ''}
         ${end ? `<p class="gl-how-txt">${this.band === 'expert' ? t('all_done') : t('band_finished', { name: t('tier_' + this.band) })}</p>` : ''}
         <div class="gl-nums">
           <div><small>${t('moves')}</small><b>${r.moves}</b></div>
