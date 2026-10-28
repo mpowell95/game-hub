@@ -273,6 +273,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 
 - `js/CLAUDE.md`: module map, THE LAW's full rules, lockstep invariants, sync health, the profile
   contract, Report a bug pipeline.
+- **Integrity checks (anti-cheat) for any game: `docs/INTEGRITY-CHECKS.md`** (Matt's rules + the Spelling Bee pattern).
 - Old handoffs and specs: `docs/archive/` (moved from the root 2026-10-14; code comments may name them bare).
 - `<game>/CLAUDE.md`: each game. `docs/BUILDING-A-GAME.md`: the UX floor, module contract, "Adding
   a game" checklist. `VISUAL-PROCESS.md`: how to verify a screen looks and plays right.
