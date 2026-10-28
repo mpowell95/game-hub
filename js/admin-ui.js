@@ -101,7 +101,10 @@ function ensureCss() {
   .adm-allow__p[aria-pressed="true"] { border: 2px solid #ffce3a; background: rgba(255,206,58,.18); font-weight: 700; }
   .adm-code { font-size: 11px; font-weight: 400; opacity: .7; letter-spacing: .04em; }
   .adm-sub { margin-top: var(--gh-sp-2, 8px); }
-  .adm-sub > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  .adm-sub > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer;
+                       font-size: var(--gh-fs-sm); font-weight: 800; color: var(--gh-muted); }
+  .adm-grp { min-height: 32px; display: flex; align-items: center;
+             font-size: var(--gh-fs-sm); font-weight: 800; color: var(--gh-muted); }
   .adm-sec:last-of-type { border-bottom: 1px solid var(--gh-border); }
   /* The headings carried gh-sp-4 top AND bottom on top of a 44px min-height, so five collapsed
      sections filled the sheet with gaps. The 44px target is untouched; only the padding went. */
@@ -109,6 +112,9 @@ function ensureCss() {
                        font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink);
                        cursor: pointer; list-style: none; min-height: 44px; }
   .adm-sec > summary::-webkit-details-marker { display: none; }
+  /* An open section's heading stays pinned while its list scrolls under it (2026-10-28, Matt:
+     "clunky"), so closing it, or seeing which one this is, never means scrolling back up. */
+  .adm-sec[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--gh-surface); }
   .adm-sec > summary::after { content: '\\203A'; margin-left: auto; font-size: 22px; line-height: 1;
                               color: var(--gh-muted); transform: rotate(90deg); transition: transform .15s; }
   .adm-sec[open] > summary::after { transform: rotate(-90deg); }
@@ -197,7 +203,10 @@ function ensureCss() {
   .adm-note.is-err { color: var(--gh-cb-vermilion); font-weight: 700; }
   .adm-msg.is-ok { color: var(--gh-cb-teal); }
   .adm-id { font-family: var(--gh-font-mono); font-size: var(--gh-fs-xs); word-break: break-all; }
-  .adm-busy { opacity: .55; pointer-events: none; }`;
+  /* A save locks the page against a second tap but dims only the thing tapped: dimming the whole
+     card on every tap made each switch feel like a page load. */
+  .adm-busy { pointer-events: none; }
+  .adm-pending { opacity: .55; }`;
   document.head.appendChild(style);
 }
 
@@ -206,8 +215,13 @@ function ensureCss() {
 let _host = null;
 let _onKey = null;
 let _busy = false;
-/** Every synced device record, for the Scores section. {} when offline - the section then says so. */
-let _players = {};
+/** Every synced device record, for the Scores section. {} when offline - the section then says so.
+ *  null while the first read is still on its way: the page paints at once from the cached config
+ *  (Games and Skeeball need nothing else) and the people-shaped sections fill in when it lands. */
+let _players = null;
+let _offline = false;
+const loading = () => _players === null;
+const loadingHTML = () => `<p class="adm-note">${esc(t('adm_loading'))}</p>`;
 
 async function readPlayers() {
   try {
@@ -235,22 +249,29 @@ export async function openAdmin() {
   document.addEventListener('keydown', _onKey);
 
   const card = host.querySelector('.gh-modal');
-  card.innerHTML = `
-    <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('adm_close'))}">&times;</button>
-    <h2 class="gh-modal__title">🛠️ ${esc(t('adm_title'))}</h2>
-    <p class="adm-note">${esc(t('adm_loading'))}</p>`;
-  card.querySelector('[data-role="close"]').addEventListener('click', () => closeOverlay());
+  // OPEN AT ONCE (2026-10-28). It used to sit on "Loading..." until the whole of players/ (~1 MB)
+  // had arrived, even to flip one game. Paint now from the cached config; repaint when both land.
+  _players = null;
+  _offline = false;
+  render(card);
 
   const [fresh, players] = await Promise.all([refreshAdminConfig(), readPlayers()]);
-  _players = players;
-  if (!_host) return;
-  render(card, { offline: !fresh });
+  _players = players || {};
+  _offline = !fresh;
+  if (!_host || _busy) return;             // a save in flight repaints when it finishes
+  render(card);
 }
 
-function render(card, opts = {}) {
+function render(card) {
   const cfg = readCachedConfig();
   const open = openSections();
-  const sec = (id, title, body) => `<details class="adm-sec" data-sec="${id}"${open.has(id) ? ' open' : ''}>
+  // KEEP THE PLACE. Every save repaints the card, which used to throw the list back to the top, so
+  // flipping a game near the bottom meant scrolling all the way down again for the next one.
+  const prev = card.querySelector('.adm-scroll');
+  const top = prev ? prev.scrollTop : 0;
+  const ORDER = ['online', 'games', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
+  const openSec = ORDER.find((id) => open.has(id));     // one at a time, even from an older saved set
+  const sec = (id, title, body) => `<details class="adm-sec" data-sec="${id}"${id === openSec ? ' open' : ''}>
       <summary>${esc(title)}</summary>
       <div class="adm-secbody">${body}</div>
     </details>`;
@@ -267,10 +288,27 @@ function render(card, opts = {}) {
       ${sec('hubmsgs', t('adm_hm_title'), hubMessagesSectionHTML())}
       ${sec('device', t('adm_device_title'), deviceSectionHTML())}
     </div>
-    <p class="adm-msg${opts.offline ? ' is-err' : ''}" data-role="msg">${opts.offline ? esc(t('adm_offline')) : ''}</p>`;
+    <p class="adm-msg${_offline ? ' is-err' : ''}" data-role="msg">${_offline ? esc(t('adm_offline')) : ''}</p>`;
   card.querySelector('[data-role="close"]').addEventListener('click', () => closeOverlay());
-  card.querySelectorAll('.adm-sec').forEach((d) =>
-    d.addEventListener('toggle', () => rememberSection(d.dataset.sec, d.open)));
+  const scroll = card.querySelector('.adm-scroll');
+  scroll.scrollTop = top;
+  // ONE SECTION OPEN AT A TIME: opening one closes the rest and brings its heading to the top, so
+  // the page never turns into every list at once. The sub-folds inside a section keep their own state.
+  // Driven from the TAP, not from `toggle`: a browser also fires `toggle` for a section painted
+  // open, and that would yank the list on every repaint.
+  const secs = [...card.querySelectorAll('.adm-sec')];
+  secs.forEach((d) => {
+    d.addEventListener('toggle', () => rememberSection(d.dataset.sec, d.open));
+    d.querySelector(':scope > summary').addEventListener('click', () => {
+      if (d.open) return;                                   // this tap closes it
+      for (const o of secs) if (o !== d && o.open) o.open = false;
+      requestAnimationFrame(() => {
+        scroll.scrollTop += d.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
+      });
+    });
+  });
+  card.querySelectorAll('details[data-sub]').forEach((d) =>
+    d.addEventListener('toggle', () => rememberSection(d.dataset.sub, d.open)));
   wire(card);
 }
 
@@ -309,19 +347,29 @@ function codedPeople() {
 }
 
 function allowPickerHTML(cfg, g) {
+  if (loading()) return loadingHTML();
   const people = codedPeople();
   const allowed = new Set(gameAllowList(cfg, g.id));
   // a code picked earlier whose person has no synced record any more still shows, so it can be removed
   for (const c of allowed) if (!people.some((p) => p.code === c)) people.push({ code: c, name: c, emoji: '' });
-  people.sort((a, b) => (allowed.has(b.code) - allowed.has(a.code)) || a.name.localeCompare(b.name));
-  const chips = people.map((p) => {
+  people.sort((a, b) => a.name.localeCompare(b.name));
+  const chip = (p) => {
     const on = resolveGameAllowed(cfg, g.id, p.code);
     return `<button type="button" class="adm-allow__p" data-allow-code="${esc(p.code)}" aria-pressed="${on}"
       >${on ? '✓ ' : ''}${p.emoji ? esc(p.emoji) + ' ' : ''}${esc(p.name)}</button>`;
-  }).join('');
+  };
+  // The people picked, in full; everyone else behind one fold (it was the whole family, every time).
+  const picked = people.filter((p) => resolveGameAllowed(cfg, g.id, p.code));
+  const rest = people.filter((p) => !resolveGameAllowed(cfg, g.id, p.code));
+  const sub = `allow-${g.id}`;
   return `<div class="adm-allow" data-allow-game="${esc(g.id)}">
-      <div class="adm-note">${esc(t('adm_allow_title', { n: allowed.size }))}</div>
-      <div class="adm-allow__list">${chips || `<span class="adm-note">${esc(t('adm_allow_none'))}</span>`}</div>
+      <div class="adm-grp">${esc(t('adm_allow_title', { n: picked.length }))}</div>
+      ${picked.length ? `<div class="adm-allow__list">${picked.map(chip).join('')}</div>` : ''}
+      ${rest.length ? `<details class="adm-sub" data-sub="${esc(sub)}"${openSections().has(sub) ? ' open' : ''}>
+        <summary>${esc(t('adm_allow_add', { n: rest.length }))}</summary>
+        <div class="adm-allow__list">${rest.map(chip).join('')}</div>
+      </details>` : ''}
+      ${people.length ? '' : `<span class="adm-note">${esc(t('adm_allow_none'))}</span>`}
     </div>`;
 }
 
@@ -345,6 +393,7 @@ function codesSeen() {
 /** Who may play online. Not yet allowed first (that is what Matt opens this for), then everyone
  *  allowed, folded. One tap flips a code; js/online-gate.js reads the answer. */
 function onlineSectionHTML(cfg) {
+  if (loading()) return loadingHTML();
   const rows = codesSeen();
   const chip = (p) => {
     const on = resolveOnlineAllowed(cfg, p.code);
@@ -353,29 +402,41 @@ function onlineSectionHTML(cfg) {
   };
   const waiting = rows.filter((p) => !resolveOnlineAllowed(cfg, p.code));
   const allowed = rows.filter((p) => resolveOnlineAllowed(cfg, p.code));
-  return `<div class="adm-note">${esc(t('adm_online_note'))}</div>
-    <div class="adm-note">${esc(t('adm_online_waiting', { n: waiting.length }))}</div>
+  return `<div class="adm-grp">${esc(t('adm_online_waiting', { n: waiting.length }))}</div>
     <div class="adm-allow__list">${waiting.map(chip).join('') || `<span class="adm-note">${esc(t('adm_online_none'))}</span>`}</div>
-    <details class="adm-sub"><summary>${esc(t('adm_online_allowed', { n: allowed.length }))}</summary>
+    <details class="adm-sub" data-sub="online-allowed"${openSections().has('online-allowed') ? ' open' : ''}><summary>${esc(t('adm_online_allowed', { n: allowed.length }))}</summary>
       <div class="adm-allow__list">${allowed.map(chip).join('')}</div>
     </details>`;
 }
 
+/** ADMIN ONLY FIRST, LIVE FOLDED (2026-10-28). Forty-odd identical rows, nearly all Live, meant
+ *  scrolling the whole list to find the handful that are not. Those few now lead, A-Z; every Live
+ *  game is one tap away under its own fold. Flipping a game moves it to the other group. */
 function gamesSectionHTML(cfg) {
-  return GAMES.slice().sort((a, b) => titleText(a).localeCompare(titleText(b))).map((g) => {
-    const live = resolveGameLive(cfg, g.id, !g.devOnly);
-    const row = `<div class="adm-row" data-game="${esc(g.id)}">
-      <div class="adm-row-main"><div class="adm-name">${esc(titleText(g))}</div></div>
-      <div class="adm-ctl">
-        ${segHTML(titleText(g), [
-          { value: 'live', label: t('adm_live') },
-          { value: 'test', label: t('adm_testing') },
-        ], live ? 'live' : 'test')}
-      </div>
-    </div>`;
-    // Only while it is hidden: a live game is already everyone's, so a picker there would be a lie.
-    return ALLOW_PICKER.has(g.id) && !live ? row + allowPickerHTML(cfg, g) : row;
-  }).join('');
+  const all = GAMES.slice().sort((a, b) => titleText(a).localeCompare(titleText(b)));
+  const isLive = (g) => resolveGameLive(cfg, g.id, !g.devOnly);
+  const hidden = all.filter((g) => !isLive(g));
+  const live = all.filter(isLive);
+  return `<div class="adm-grp">${esc(t('adm_games_hidden', { n: hidden.length }))}</div>
+    ${hidden.map((g) => gameRowHTML(cfg, g, false)).join('')}
+    <details class="adm-sub" data-sub="games-live"${openSections().has('games-live') ? ' open' : ''}>
+      <summary>${esc(t('adm_games_live', { n: live.length }))}</summary>
+      ${live.map((g) => gameRowHTML(cfg, g, true)).join('')}
+    </details>`;
+}
+
+function gameRowHTML(cfg, g, live) {
+  const row = `<div class="adm-row" data-game="${esc(g.id)}">
+    <div class="adm-row-main"><div class="adm-name">${esc(titleText(g))}</div></div>
+    <div class="adm-ctl">
+      ${segHTML(titleText(g), [
+        { value: 'live', label: t('adm_live') },
+        { value: 'test', label: t('adm_testing') },
+      ], live ? 'live' : 'test')}
+    </div>
+  </div>`;
+  // Only while it is hidden: a live game is already everyone's, so a picker there would be a lie.
+  return ALLOW_PICKER.has(g.id) && !live ? row + allowPickerHTML(cfg, g) : row;
 }
 
 // --- skeeball machines ---------------------------------------------------------------------------
@@ -420,6 +481,7 @@ function skeeballSectionHTML(cfg) {
  * "(not seen yet)".
  */
 function announceSectionHTML() {
+  if (loading()) return loadingHTML();
   const all = _players || {};
   const ids = Object.keys(all);
   if (!ids.length) return `<p class="adm-note">${esc(t('adm_ann_none'))}</p>`;
@@ -510,6 +572,7 @@ function announceSectionHTML() {
  * online since; the same honest fold as the announcements above.
  */
 function hubMessagesSectionHTML() {
+  if (loading()) return loadingHTML();
   const people = new Map(codedPeople().map((p) => [p.code, p.name]));
   const lang = getLang();
   const when = (ms) => new Date(ms).toLocaleString(lang === 'es' ? 'es-ES' : 'en-GB',
@@ -576,6 +639,7 @@ function goalsHTML(boardId, sk) {
 }
 
 function scoresSectionHTML(cfg) {
+  if (loading()) return loadingHTML();
   const blocks = playerBlocks(cfg);
   if (!blocks.length) return `<p class="adm-note">${esc(t('adm_sc_empty'))}</p>`;
   return blocks.map((p) => {
@@ -646,6 +710,7 @@ function pokerBlocks(cfg) {
 }
 
 function pokerSectionHTML(cfg) {
+  if (loading()) return loadingHTML();
   const blocks = pokerBlocks(cfg);
   if (!blocks.length) return `<p class="adm-note">${esc(t('adm_hb_empty'))}</p>`;
   const cash = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
@@ -771,6 +836,15 @@ function wire(card) {
     }
     if (!run) return;
 
+    // SHOW THE TAP AT ONCE: the pressed side moves now, only the thing tapped dims, and the repaint
+    // after the verified write shows the truth (a failed write puts it back).
+    if (seg) seg.parentElement.querySelectorAll('.gh-seg__item').forEach((b) =>
+      b.setAttribute('aria-pressed', b === seg ? 'true' : 'false'));
+    const pending = e.target.closest('.adm-allow__p, [data-online-code], .adm-row, .adm-mach, .adm-player');
+    if (pending) pending.classList.add('adm-pending');
+    const done = seg && (gameRow || boardRow)
+      ? `${(gameRow || boardRow).querySelector('.adm-name').textContent}: ${seg.textContent.trim()}`
+      : t('adm_saved');
     _busy = true;
     card.classList.add('adm-busy');
     say(card, t('adm_saving'), '');
@@ -780,7 +854,7 @@ function wire(card) {
     card.classList.remove('adm-busy');
     if (!_host) return;
     render(card);
-    say(card, res && res.ok ? t('adm_saved') : t('adm_save_failed', { why: (res && res.error) || '?' }),
+    say(card, res && res.ok ? done : t('adm_save_failed', { why: (res && res.error) || '?' }),
       res && res.ok ? 'ok' : 'err');
   });
 
