@@ -313,6 +313,12 @@ unchanged; the tool appends).
 `arrow-search.mjs`; `IMPOSSIBLE_GRID` gives each board's grid): 7 = 43 arrows, next arrow ~7.9 dots away, 85%
 of blockers 4+ dots off; 8 = 52 arrows, ~6.3 dots, 77%. His results are on his phone only (the 🧪 list
 shows them; nothing uploads).
+**Round 4 (same day)**: Matt: *"every tap leads directly to the next one"*, *"fill in the spaces with ... noise ...
+make them closed loops"*. One-free-at-a-time BUILDS that trail in (each tap must free the next), so boards
+**9-10** give it up: `playThrough()` (`arrow-search.mjs`) plays the board following the trail and counts
+**dead taps** (free nothing; the next arrow is elsewhere); `noiseScore` searches for them. 9 / 10: 70 arrows,
+36% / 41% dead taps then ~8 dots away, at most 3 free at once, 85% full, ~2.6 turns an arrow, no trains (every
+earlier board: 0 dead taps). No longer one single solving order.
 
 ## Test boards (2026-10-26, removed 2026-10-27)
 
