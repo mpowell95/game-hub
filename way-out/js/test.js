@@ -5,7 +5,7 @@
 // and a player who only ever taps clear arrows clears it (engine.js's header says why that greedy
 // check is a proof of solvability, not a sample of it).
 import { createHash } from 'node:crypto';
-import { dirOf, TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START, buildRush, rushLevel, buildMore, moreLevel, isMore, ladderSpec, buildB8, b8Slot, hasB8, unpackB8, buildB9, hasB9, buildB10, hasB10 } from './engine.js';
+import { dirOf, TIERS, buildLevel, levelSpec, rampTarget, occupancy, blockerOf, hintArrow, generate, seedOf, peel, buildLadder, bandOf, bandEnd, BAND_START, buildRush, rushLevel, buildMore, moreLevel, isMore, ladderSpec, buildB8, b8Slot, hasB8, unpackB8, buildB9, hasB9, buildB10, b10Slot, hasB10 } from './engine.js';
 
 let fails = 0;
 const ok = (label, cond) => { if (!cond) { fails++; console.log('FAIL ', label); } };
@@ -356,6 +356,12 @@ function checkLadder(gen, from, to) {
   const w4 = buildB10(205, 4);
   ok('generator 10: a save keeps its board when more ship (first m boards)', JSON.stringify(buildB10(203, 4)) === JSON.stringify(buildB10(203))
     && JSON.stringify(w4) !== JSON.stringify(buildB10(205)) && !!peel(W, H, w4.arrows));
+  const L = B10.length, laps = new Set();
+  for (let n = 290; n < 290 + L; n++) laps.add(b10Slot(n).i);
+  ok('generator 10: a loop: from any level, the next L levels meet every board once', laps.size === L
+    && b10Slot(201).i === 0 && b10Slot(201).t === 0 && b10Slot(201 + L).i === 0 && b10Slot(201 + L).t === 1);
+  ok('generator 10: a v1321 save (no loop mark) keeps its board', JSON.stringify(buildB10(294, 52, false)) === JSON.stringify(buildB10(201 + 51 + 52 * 2, 52))   // old wrap: board 51, flipped top-bottom
+    && JSON.stringify(buildB10(294, 52, false)) !== JSON.stringify(buildB10(294, 52)));
   ok('generator 10: every Expert level, nothing else', hasB10('expert') && !hasB10('hard') && !hasB10('medium'));
   const h = createHash('sha256');
   for (let k = 0; k < 52; k++) h.update(B10[k]);

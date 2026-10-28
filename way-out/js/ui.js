@@ -251,7 +251,7 @@ function defaultSrc(band, n) {
   // Expert level from 201 not already in progress on an older board. Admin only until released.
   // Expert moved on to generator 9 the same evening (harder: engine.js "GENERATOR 9").
   // Every Expert level, for everyone, on generator 10 (2026-10-28, engine.js "GENERATOR 10").
-  if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN, m: B10_COUNT };
+  if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN, m: B10_COUNT, w: 1 };
   if (hasNews() && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (hasNews() && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
@@ -259,13 +259,13 @@ function defaultSrc(band, n) {
 /** The board a save's `src` names. */
 function boardOf(src) {
   if (src.k === 'X') return buildMore(src.band, src.n);
-  if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n, src.m) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
+  if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n, src.m, src.w === 1) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
   return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
 }
 function validSrc(src, band, n) {
   if (hasB10(band)) {   // Expert: generator 10 only; a level in progress keeps the board it started on
     return src && src.k === 'N' && src.band === band && src.n === n && src.g === B10_GEN && Number.isInteger(src.m)
-      && src.m >= 1 && src.m <= B10_COUNT ? { k: 'N', band, n, g: B10_GEN, m: src.m } : defaultSrc(band, n);
+      && src.m >= 1 && src.m <= B10_COUNT ? { k: 'N', band, n, g: B10_GEN, m: src.m, w: src.w === 1 ? 1 : 0 } : defaultSrc(band, n);
   }
   if (!src || typeof src !== 'object') return defaultSrc(band, n);
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B8_GEN && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
