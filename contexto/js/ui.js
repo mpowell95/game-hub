@@ -10,7 +10,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { recordContexto, contextoMedal, backfillContextoMedals, activeCode } from '../../js/game-stats.js';
 import { appendPlayLog } from '../../js/play-log-queue.js';
-import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
+import { loadModel, puzzleNumber, hintRank, band, logSummary } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -210,6 +210,9 @@ class ContextoUI {
     this.rec.n = n;
     writeSave(this.save);
     this._log('open', null, this.rec.done || (this.rec.guesses.length ? 'resume' : 'new'));
+    // A puzzle finished but not yet recorded (the app closed during the check): record it now.
+    if (this.rec.done && !this.rec.recorded) this._recordFinished(this.rec, this.lang, this._k());
+    else if (!this.rec.done) this._syncRemote();
     this._msg = '';
     this._lastGuess = null;
     this.screen = 'play';
@@ -242,9 +245,51 @@ class ContextoUI {
   _persist() { writeSave(this.save); }
 
   /** THE PLAY LOG (2026-10-28, js/play-log-queue.js): every guess, hint and give-up with its time and
-   *  rank, for playLog/<CODE> (admins only). Puzzle key 'en-31'. Never throws, never read back here. */
+   *  rank, for playLog/<CODE> (admins, and this player's own phones). Puzzle key 'en-31'. Never throws. */
   _log(e, w, r) {
-    appendPlayLog(activeCode(), { g: 'contexto', e, k: this.n ? `${this.lang}-${this.n}` : null, w: w == null ? null : w, r: r == null ? null : r });
+    appendPlayLog(activeCode(), { g: 'contexto', e, k: this._k(), w: w == null ? null : w, r: r == null ? null : r });
+  }
+  _k() { return this.n ? `${this.lang}-${this.n}` : null; }
+
+  /** THIS PUZZLE ON THE PLAYER'S OTHER PHONES AND BROWSERS (2026-10-28, integrity; Matt: "All holes
+   *  like this MUST be fixed"). The save is per phone storage, so a hint or a give-up in Safari, or a
+   *  solve on a second phone, used to be invisible here: hint in one place, then solve hint-free in
+   *  another for a gold, or solve twice. The play log is per PLAYER CODE, so it is read back:
+   *  { hints, gave, won } before `before`, or null offline / no code (4 s at most). */
+  async _remote(k, before = Infinity) {
+    const code = activeCode();
+    if (!code || !k) return null;
+    try {
+      const [{ getStatsApp }, { ensureAuthClaim }] = await Promise.all([import('../../js/firebase-boot.js'), import('../../js/messages.js')]);
+      const work = (async () => {
+        const boot = await getStatsApp();
+        if (!boot || !(await ensureAuthClaim(boot))) return null;
+        const { api, db } = boot;
+        const snap = await api.get(api.query(api.ref(db, `playLog/${code}`), api.orderByChild('k'), api.equalTo(k)));
+        return logSummary(Object.values((snap && snap.val()) || {}), k, before);
+      })();
+      return await Promise.race([work, new Promise((r) => setTimeout(() => r(null), 4000))]);
+    } catch (err) { console.warn('[contexto] could not read this puzzle on other phones', err); return null; }
+  }
+
+  /** At open: hints taken elsewhere count here too (`rec.rh`); a puzzle given up or solved elsewhere
+   *  is finished here, and is never recorded a second time. */
+  _syncRemote() {
+    const k = this._k(), rec = this.rec;
+    this._remote(k).then((r) => {
+      if (!r || this._dead || this._k() !== k || this.rec !== rec) return;
+      if (r.hints > (rec.rh | 0)) rec.rh = r.hints;
+      if (!rec.done && (r.won || r.gave)) {
+        rec.done = r.won ? 'won' : 'gave';
+        rec.recorded = true;           // counted (or given up) on the other phone, never again here
+        rec.elsewhere = true;
+        this._persist();
+        this._overlay = 'result';
+        this.renderShell();
+        return;
+      }
+      this._persist();
+    });
   }
 
   submitGuess(raw) {
@@ -283,17 +328,34 @@ class ContextoUI {
   _finish(kind) {
     this._log(kind === 'won' ? 'win' : 'giveup');
     this.rec.done = kind === 'won' ? 'won' : 'gave';
+    this.rec.doneAt = Date.now();
     this._persist();
-    if (!this.rec.recorded) {
-      this.rec.recorded = true;
-      this._persist();
-      const guesses = this.rec.guesses.filter((g) => !g.hint).length;
-      const hints = this.rec.guesses.filter((g) => g.hint).length;
-      try { recordContexto(this.lang, kind === 'won', { guesses, hints }); }
-      catch (err) { console.error('[contexto] recordContexto', err); }
-    }
     this._overlay = 'result';
     this.renderShell();
+    this._recordFinished(this.rec, this.lang, this._k());
+  }
+
+  /** Record a finished puzzle ONCE, after checking the other phones (`_remote`): hints taken there
+   *  count toward the medal, and a puzzle already solved or given up there is not counted again.
+   *  `recorded` is set (and saved) in the same step as the recorder call, never before the check, so
+   *  closing the app during the check leaves it to be recorded at the next open (`_enterPuzzle`). */
+  async _recordFinished(rec, lang, k) {
+    if (rec.recorded || this._recording) return;
+    this._recording = true;
+    try {
+      const r = await this._remote(k, rec.doneAt || Date.now());
+      if (rec.recorded) return;
+      const guesses = rec.guesses.filter((g) => !g.hint).length;
+      const hints = Math.max(rec.guesses.filter((g) => g.hint).length, rec.rh | 0, (r && r.hints) | 0);
+      if (r && rec.done === 'won' && (r.won || r.gave)) {
+        rec.recorded = true; rec.elsewhere = true; this._persist();   // already counted, or given up, elsewhere
+        return;
+      }
+      rec.recorded = true;
+      this._persist();
+      try { recordContexto(lang, rec.done === 'won', { guesses, hints }); }
+      catch (err) { console.error('[contexto] recordContexto', err); }
+    } finally { this._recording = false; }
   }
 
   _playAnother() {

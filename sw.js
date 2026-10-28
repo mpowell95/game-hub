@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1333;
-const CACHE = 'game-hub-v1333';
+const IMPORTANT_SINCE = 1334;
+const CACHE = 'game-hub-v1334';
 
 const ASSETS = [
   './',
@@ -805,7 +805,7 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'ede14d7f34',
+  './js/strings.js': 'e5b116c4b3',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -835,7 +835,7 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'd2db9dfed6',
   './js/admin-ui.js': '95d315fa91',
-  './js/integrity.js': '3f0bad24ca',
+  './js/integrity.js': 'ac8e1c56dd',
   './js/play-log-queue.js': '0e505c4581',
   './js/play-log.js': '92ecc7da20',
   './js/stats-corrections.js': '8fc4dfe2f7',
@@ -846,7 +846,7 @@ const REST_MANIFEST = {
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'b01f97d074',
   './js/leaderboard-ui.js': '668a4ead6b',
-  './js/leaderboard-rank.js': '7d0aed67b8',
+  './js/leaderboard-rank.js': '4fe1b42b0f',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',
   './js/word-weaver-points.js': '8cdb10dc45',
@@ -954,8 +954,8 @@ const REST_MANIFEST = {
   './contexto/': 'b0c9ee8e9d',
   './contexto/index.html': 'b0c9ee8e9d',
   './contexto/css/contexto.css': 'abcf107a31',
-  './contexto/js/ui.js': '38436b8209',
-  './contexto/js/engine.js': 'f19c3f8978',
+  './contexto/js/ui.js': '668b8ce363',
+  './contexto/js/engine.js': '8bc028048a',
   './contexto/js/strings.js': 'e3ddf5db70',
   './contexto/data/en.json': '551bf113af',
   './contexto/data/en.bin': '813c417b83',

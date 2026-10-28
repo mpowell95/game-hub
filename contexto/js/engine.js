@@ -155,3 +155,18 @@ export function hintRank(best, taken) {
   for (let r = target + 1; best && r < best; r++) if (!taken.has(r)) return r;
   return null;
 }
+
+/** What this player did on ONE puzzle, from their play log entries (playLog/<CODE>, js/play-log.js),
+ *  on every phone and browser they used (2026-10-28, integrity: a hint or a give-up in Safari must
+ *  count in the Home Screen app too). Only entries before `before` (ms) count, so a solve never
+ *  counts its own just-sent win. Returns { hints, gave, won }. Pure. */
+export function logSummary(entries, key, before = Infinity) {
+  let hints = 0, gave = false, won = false;
+  for (const x of entries || []) {
+    if (!x || x.k !== key || !(Number(x.t) < before)) continue;
+    if (x.e === 'hint') hints += 1;
+    else if (x.e === 'giveup') gave = true;
+    else if (x.e === 'win') won = true;
+  }
+  return { hints, gave, won };
+}

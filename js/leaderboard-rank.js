@@ -451,10 +451,14 @@ export function ctBest(score) {
   return { medal: null, n: 0 };
 }
 
-/** Average guesses per solve, or Infinity with no solve (so it never wins a tie-break). */
+/** Average TRIES per solve (typed guesses + hints), or Infinity with no solve (so it never wins a
+ *  tie-break). Hints count since 2026-10-28 (integrity, Matt: "He's clearly just pressing hint until it
+ *  basically gives him the word. So that he can get it in one guess"): 8 hints walk any puzzle to rank
+ *  2, so a typed-guesses-only average rewarded pressing hint. `hints` is every hint stored, give-ups'
+ *  included: a hint is a try either way. */
 export function ctAvgGuesses(ct) {
   const c = ct || {};
-  return (c.solved | 0) > 0 ? (c.guesses | 0) / (c.solved | 0) : Infinity;
+  return (c.solved | 0) > 0 ? ((c.guesses | 0) + (c.hints | 0)) / (c.solved | 0) : Infinity;
 }
 
 /** Board order: medal score (higher first), then the LOWER average guesses. Equal on both = tied. */

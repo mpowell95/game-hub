@@ -294,6 +294,35 @@ console.log('\n--- the play log: every finished game, every Contexto guess ---')
   ok('the queue keeps the newest 3,000 at most', Q.readQueue().length === 3000);
 }
 
+// --- Contexto: the other phones, and the server's alerts on a win ---------------------------------
+console.log('\n--- Contexto: hints and solves follow the player; alerts on a win ---');
+{
+  const E = await import('../contexto/js/engine.js');
+  const g = (t, e, r, w) => ({ t, k: 'en-9', g: 'contexto', e, ...(r != null ? { r: String(r) } : {}), ...(w ? { w } : {}) });
+  const win = g(100, 'win');
+  const rec = (t, hints) => ({ t, f: 'recordContexto', g: 'contexto', a: JSON.stringify(['en', true, { guesses: 3, hints }]) });
+  const honest = [g(10, 'guess', 4000), g(20, 'guess', 900), g(30, 'guess', 120), g(40, 'guess', 14), win];
+  ok('an honest solve that closes in: no alert', I.checkContextoWin(honest, [rec(103, 0)], win).length === 0);
+  const ids = (l) => l.map((h) => h.rule).sort().join(',');
+  ok('no hints, first guess is the word: far-jump alert',
+    ids(I.checkContextoWin([win], [rec(103, 0)], win)) === 'contexto-far-jump');
+  ok('no hints, every guess far, then the word: far-jump alert',
+    ids(I.checkContextoWin([g(10, 'guess', 5000), g(20, 'guess', 800), win], [], win)) === 'contexto-far-jump');
+  ok('hints taken in Safari, solve counted with none: alert (and no far-jump, it had hints)',
+    ids(I.checkContextoWin([g(10, 'hint', 300), g(11, 'hint', 150), g(30, 'guess', 3000), win], [rec(103, 0)], win)) === 'contexto-hints-not-counted');
+  ok('...counted with them: nothing', I.checkContextoWin([g(10, 'hint', 300), g(11, 'hint', 150), g(30, 'guess', 40), win], [rec(103, 2)], win).length === 0);
+  ok('solved again after a solve or a give-up elsewhere: alert',
+    ids(I.checkContextoWin([g(5, 'giveup'), g(30, 'guess', 20), win], [], win)) === 'contexto-solved-elsewhere');
+  ok('the phone counts hints from the other phones (contexto/js/ui.js)', (() => {
+    const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');
+    return /api\.orderByChild\('k'\), api\.equalTo\(k\)/.test(ui) && /Math\.max\(rec\.guesses\.filter\(\(g\) => g\.hint\)\.length, rec\.rh \| 0, \(r && r\.hints\) \| 0\)/.test(ui)
+      && /if \(r && rec\.done === 'won' && \(r\.won \|\| r\.gave\)\)/.test(ui) && /_recordFinished\(this\.rec, this\.lang, this\._k\(\)\)/.test(ui);
+  })());
+  ok('server: a Contexto win is judged when it is logged', /contextoWinCheck = onValueCreated\(\{ ref: '\/playLog\/\{code\}\/\{id\}'/.test(readFileSync(new URL('../functions/index.js', import.meta.url), 'utf8')));
+  ok('rules: the play log is indexed on the puzzle key', JSON.stringify(JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules.playLog.$code['.indexOn']) === '["k"]');
+  void E;
+}
+
 // --- replay over a real snapshot -------------------------------------------------------------------
 const dbArg = process.argv.indexOf('--db');
 if (dbArg > 0) {
