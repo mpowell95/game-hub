@@ -1,6 +1,6 @@
 # Spelling Bee: fair-play rules and the long-term board (spec, 2026-10-28)
 
-Status: **FINAL pending Matt's go (2026-10-28). Nothing below is built** except section 1.
+Status: **FINAL (2026-10-28). Built and live the same day** in four stages (game, server, hub Leaderboard + My Stats, admin page).
 Decisions are Matt's words from the 2026-10-27/28 session; open questions are in section 9.
 
 ## 1. Already live (v1304)

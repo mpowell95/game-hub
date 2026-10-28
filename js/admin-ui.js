@@ -41,8 +41,9 @@ import {
   resolveGameAllowed, gameAllowList, setGameAllowed,
   setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
   resolveHoldemCorrection, setHoldemCorrection, resolveOnlineAllowed, setOnlineAllowed,
+  resolveBeeUndone, setBeeUndone,
 } from './admin-config.js';
-import { correctionFor, snapshotOf, holdemSnapshotOf } from './stats-corrections.js';
+import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -133,6 +134,10 @@ function ensureCss() {
   /* Skeeball is the one section that still stacks: three labels plus a name like "HOT SHOT: BRICK
      CITY" genuinely do not fit one 329px row, and truncating either half is worse than a line. */
   .adm-row--stack { flex-wrap: wrap; }
+  /* Spelling Bee flags: name (and button) on line 1, the rules that fired on line 2. */
+  .adm-bee { flex-wrap: wrap; row-gap: 2px; }
+  .adm-bee .adm-name { flex: 1 1 auto; min-width: 0; }
+  .adm-bee .adm-note { flex: 1 0 100%; order: 3; }
   .adm-row--stack .adm-row-main { flex: 1 1 100%; }
   .adm-ctl--wide { flex: 1 1 100%; margin-left: 0; }
   .adm-ctl--wide .gh-seg { flex: 1 1 100%; }
@@ -223,6 +228,19 @@ let _offline = false;
 const loading = () => _players === null;
 const loadingHTML = () => `<p class="adm-note">${esc(t('adm_loading'))}</p>`;
 
+/** Spelling Bee's server flags and missing-log alerts (functions/bee.js). {flags, alerts}, {} offline. */
+let _bee = null;
+async function readBee() {
+  try {
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot) return {};
+    const get = async (p) => { try { const s = await boot.api.get(boot.api.ref(boot.db, p)); return s && s.exists() ? s.val() : {}; } catch { return {}; } };
+    const [flags, alerts] = await Promise.all([get('beeFlags'), get('beeAlerts')]);
+    return { flags, alerts };
+  } catch { return {}; }
+}
+
 async function readPlayers() {
   try {
     const net = await import('./stats-net.js');
@@ -255,8 +273,9 @@ export async function openAdmin() {
   _offline = false;
   render(card);
 
-  const [fresh, players] = await Promise.all([refreshAdminConfig(), readPlayers()]);
+  const [fresh, players, bee] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee()]);
   _players = players || {};
+  _bee = bee || {};
   _offline = !fresh;
   if (!_host || _busy) return;             // a save in flight repaints when it finishes
   render(card);
@@ -269,7 +288,7 @@ function render(card) {
   // flipping a game near the bottom meant scrolling all the way down again for the next one.
   const prev = card.querySelector('.adm-scroll');
   const top = prev ? prev.scrollTop : 0;
-  const ORDER = ['online', 'games', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
+  const ORDER = ['online', 'games', 'bee', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
   const openSec = ORDER.find((id) => open.has(id));     // one at a time, even from an older saved set
   const sec = (id, title, body) => `<details class="adm-sec" data-sec="${id}"${id === openSec ? ' open' : ''}>
       <summary>${esc(title)}</summary>
@@ -281,6 +300,7 @@ function render(card) {
     <div class="adm-scroll">
       ${sec('online', t('adm_online_title'), onlineSectionHTML(cfg))}
       ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
+      ${sec('bee', t('adm_bee_title'), beeSectionHTML(cfg))}
       ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
       ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
       ${sec('poker', t('adm_hb_title'), pokerSectionHTML(cfg))}
@@ -408,6 +428,47 @@ function onlineSectionHTML(cfg) {
     <details class="adm-sub" data-sub="online-allowed"${openSections().has('online-allowed') ? ' open' : ''}><summary>${esc(t('adm_online_allowed', { n: allowed.length }))}</summary>
       <div class="adm-allow__list">${allowed.map(chip).join('')}</div>
     </details>`;
+}
+
+// --- Spelling Bee flags (2026-10-28, docs/SPELLING-BEE-INTEGRITY-SPEC.md section 6) ---------------
+/** One row per voided day, newest first: the server's flags (Undo / Void again) and the days voided by
+ *  hand in js/stats-corrections.js (read only). Under them, folded, the missing-log alerts. */
+function beeSectionHTML(cfg) {
+  if (loading()) return loadingHTML();
+  const names = new Map(codesSeen().map((p) => [p.code, p]));
+  const who = (code, fallback) => { const p = names.get(code); return `${p && p.emoji ? esc(p.emoji) + ' ' : ''}${esc((p && p.name) || fallback || code)}`; };
+  const lang = (bk) => (String(bk).startsWith('es-') ? 'ES' : 'EN');
+  const date = (ms) => { try { return new Date(ms).toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  const day = (ymd) => { const [y, m, d] = String(ymd).split('-').map(Number); return y ? date(new Date(y, m - 1, d).getTime()) : ''; };
+  const rows = [];
+  for (const [bk, byCode] of Object.entries((_bee && _bee.flags) || {})) {
+    for (const [code, f] of Object.entries(byCode || {})) {
+      const undone = resolveBeeUndone(cfg, bk, code);
+      rows.push({ at: Number(f.at) || 0, html: `<div class="adm-row adm-bee" data-bee="${esc(bk)}|${esc(code)}">
+        <span class="adm-name">${who(code, f.name)} · ${esc(date(f.at))} ${lang(bk)}${undone ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
+        <span class="adm-note">${esc(f.summary || '')}</span>
+        <button type="button" class="gh-btn gh-btn--sm" data-beeundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>
+      </div>` });
+    }
+  }
+  for (const v of Object.values(VOIDED_MATCHES.spellingbee || {})) {
+    const bk = String(v.puzzle || '').replace(/:/g, '-').replace(/ñ/g, '0');
+    const [y, m, d] = String(v.day || '').split('-').map(Number);
+    rows.push({ at: y ? new Date(y, m - 1, d).getTime() : 0, html: `<div class="adm-row adm-bee">
+      <span class="adm-name">${who(v.winner)} · ${esc(day(v.day))} ${lang(bk)}</span>
+      <span class="adm-note">${esc(t('adm_bee_manual'))}</span>
+    </div>` });
+  }
+  rows.sort((a, b) => b.at - a.at);
+  const gaps = [];
+  for (const [bk, byCode] of Object.entries((_bee && _bee.alerts) || {})) {
+    for (const [code, a] of Object.entries(byCode || {})) {
+      gaps.push({ at: Number(a.at) || 0, html: `<div class="adm-row"><span class="adm-name">${who(code, a.name)} · ${esc(date(a.at))} ${lang(bk)}</span><span class="adm-note">${a.words | 0} / ${a.logged | 0}</span></div>` });
+    }
+  }
+  gaps.sort((a, b) => b.at - a.at);
+  return (rows.map((r) => r.html).join('') || `<p class="adm-note">${esc(t('adm_bee_none'))}</p>`)
+    + (gaps.length ? `<details class="adm-sub" data-sub="bee-gaps"${openSections().has('bee-gaps') ? ' open' : ''}><summary>${esc(t('adm_bee_gaps', { n: gaps.length }))}</summary>${gaps.map((g) => g.html).join('')}</details>` : '');
 }
 
 /** ADMIN ONLY FIRST, LIVE FOLDED (2026-10-28). Forty-odd identical rows, nearly all Live, meant
@@ -805,6 +866,10 @@ function wire(card) {
         }
         return last;
       };
+    } else if (e.target.closest('[data-beeundo]') && e.target.closest('[data-bee]')) {
+      const [bk, code] = e.target.closest('[data-bee]').dataset.bee.split('|');
+      const on = e.target.closest('[data-beeundo]').dataset.beeundo === 'undo';
+      run = () => setBeeUndone(bk, code, on);
     } else if (e.target.closest('[data-online-code]')) {
       const b = e.target.closest('[data-online-code]');
       const on = b.getAttribute('aria-pressed') !== 'true';

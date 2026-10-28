@@ -76,6 +76,8 @@ day is written ONCE to `beeFlags/` and pushed to admins; missing-log alerts (`be
 **Hub Leaderboard + My Stats (2026-10-28)**: Spelling Bee's numbers come from that board (`js/bee-board.js`): `leaderboard-ui.js`
 `gameMetricAt`/`boardPlaysOf`/`lbUnitKeyOf` read it (so By Game and the You tab match), toggles Points | Words and All | English |
 Español (`beeTabsHTML`), 🥇🥈🥉 · 🧠 · 🐝 · 📅 under each name; My Stats `spellingBeeScreen`. No board yet = the stats record, as before.
+**Admin page, "Spelling Bee flags" (2026-10-28)**: every server flag with its rules and Undo / Void again (`setBeeUndone` ->
+`adminConfig/v1/bee/undo/<boardKey>/<CODE>`; `beeOnUndo` rebuilds the board), the hand-voided days read only, log gaps folded.
 
 **Never show Matt answer words** (2026-10-28, Matt: "I don't want to see the words tho!"): reading a log or board for him, run `read-bee-times.mjs` WITHOUT `--words` and report lengths/patterns only, even if he asks to "see the words"; confirm first.
 
