@@ -11,7 +11,7 @@
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
-import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, recordSpellingBeeGenius } from '../../js/game-stats.js';
 import { VOIDED_MATCHES } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
@@ -94,13 +94,40 @@ function ensureCSS() {
 }
 
 // --- save -------------------------------------------------------------------------------------
-// { v:1, games: { "<centre>:<outer>": { day, found: [words in the order found], recorded, seenGenius, seenQueen } } }
+// { v:1, games: { "<centre>:<outer>": { day, found: [words in the order found], recorded, seenGenius, seenQueen } },
+//   days: { "<en|es>:<day>": 1 } }   <- days counted as played (2026-10-28)
 
+const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 function loadSave() {
   try {
     const v = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {};
-    return { v: 1, games: (v.games && typeof v.games === 'object' && !Array.isArray(v.games)) ? v.games : {} };
-  } catch { return { v: 1, games: {} }; }
+    return { v: 1, games: isObj(v.games) ? v.games : {}, days: isObj(v.days) ? v.days : {} };
+  } catch { return { v: 1, games: {}, days: {} }; }
+}
+
+/** One play per day per language with a word found (Matt, 2026-10-28: "Why would you only count it if
+ *  someone reaches Genius?"); Genius is that play's win. Runs on every open and word, so days played
+ *  before this counted too, from this phone's own save. A day whose Genius was already recorded (played
+ *  and won together, the old way) is only marked. Marked only once the recorder took it. */
+const dayOf = (key, r) => `${String(key).startsWith('es:') ? 'es' : 'en'}:${r.day || key}`;
+function countDays(save) {
+  let changed = false;
+  const byDay = new Map();
+  for (const [key, r] of Object.entries(save.games)) {
+    if (!isObj(r) || !Array.isArray(r.found) || !r.found.length) continue;
+    const d = dayOf(key, r);
+    if (!save.days[d]) byDay.set(d, (byDay.get(d) || []).concat(r));
+  }
+  for (const [d, recs] of byDay) {
+    if (!recs.some((r) => r.recorded)) {
+      let st = null;
+      try { st = recordResult(STATS_ID, 'daily', null); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
+      if (!st) { console.error('[spelling-bee] day not counted yet; will retry on the next word or open'); break; }
+    }
+    save.days[d] = 1;
+    changed = true;
+  }
+  if (changed) writeSave(save);
 }
 
 /** Writes, then re-reads to prove it landed (THE LAW rule 6). */
@@ -208,6 +235,7 @@ class SpellingBee {
     this.extraSet = new Set(extrasFor(this.data, this.puzzle));
     this.max = totalPoints(this.answers, this.puzzle);
     this.save = loadSave();
+    countDays(this.save);
     noteVoidedDays(this.save);
     this.rec = recOf(this.save, this.puzzle, this.day);
     // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
@@ -532,13 +560,17 @@ class SpellingBee {
 
   // --- stats -----------------------------------------------------------------------------------
 
-  /** One win per puzzle, the first time it reaches Genius. Flag set only once the recorder took it. */
+  /** The day counted as played (countDays), then one win per puzzle, the first time it reaches Genius:
+   *  the win alone when the day is already counted. Flags set only once the recorder took it. */
   _maybeRecord() {
+    countDays(this.save);
     if (this.rec.recorded || this.rank() < GENIUS) return;
+    const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
-    try { st = recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
+    try { st = counted ? recordSpellingBeeGenius() : recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
     this.rec.recorded = true;
+    this.save.days[dayOf(this.puzzle.key, this.rec)] = 1;
     writeSave(this.save);
     noteVoidedDays(this.save);
   }
