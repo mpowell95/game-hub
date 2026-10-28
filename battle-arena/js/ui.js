@@ -322,7 +322,7 @@ class BattleArena {
   showHelp() {
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
-    const lines = ['helpSwap', 'helpCharge', 'helpEx', 'helpFull', 'helpFour', 'helpFive', 'helpBerry', 'helpBomb', 'helpBoom', 'helpSudden'];
+    const lines = ['helpSwap', 'helpCharge', 'helpEx', 'helpFull', 'helpFour', 'helpFive', 'helpBerry', 'helpBomb', 'helpBoom', 'helpSudden', 'helpStart'];
     el.innerHTML = `
       <div class="gh-modal ba-help" role="dialog" aria-modal="true" aria-label="${t('help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>

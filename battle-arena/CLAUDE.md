@@ -35,12 +35,14 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
   2026-10-24; per-move as in the reference). On only for a live room's link (`this.timed`); at 0 sends `{type:'pass'}`.
 - **No idle hint** (no wiggling tiles; Matt turned it off, 2026-10-24).
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
-- **Extra moves: EVERY match of 4+ tiles gives one, no cap** (Matt, 2026-10-24: "Every 4+ should give
-  me another turn"; a straight 4/5 or an L/T, `matchGroups`). A 5+ also heals the mover 5 (`FIVE_HEAL`).
-- **Nobody loses before their first turn** (Matt, 2026-10-28: "that should never be possible"; the uncapped chain
-  KO'd the receiver in ~1 in 90 hard openings): a side with `turns` 0, or bitten by a curse as its first turn starts,
-  stops at 1 HP (`damage`, event `floored`), and that hit ENDS the mover's turn (`afterMove`; else the hard computer
-  ran on 200+ moves). No new state field. No stored online match was affected (none existed).
+- **Extra moves: ONE PER TURN** (Matt, 2026-10-28: "limit extra turns to 1"; from 2026-10-24 it was every 4+, no
+  cap, and a lucky chain could knock out a whole team in one turn): the first 4+ match of a turn (a straight 4/5 or
+  an L/T, `matchGroups`) gives +1 move, marked by `extraUsed` (cleared by `endTurn`). A 5+ still heals the mover 5
+  every time (`FIVE_HEAL`).
+- **A fair start** (Matt, 2026-10-28: a first-turn knockout "should never be possible", nor starting your first turn
+  on 1 HP): a side with `turns` 0, or bitten by a curse as its first turn starts, cannot go below `OPENING_FLOOR`
+  (40, half its HP; `damage`, event `floored`). In How to play (`helpStart`). No new state field; no stored online
+  match or open room existed when both rules went in. Before: ~1 in 90 hard openings was a KO, one turn ran 220 moves.
 - **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
   one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
 - Specials pair damage with a board clear that charges the caster, as the reference's do (Flare: a
@@ -53,7 +55,7 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
   out-healing each other past 3000 moves).
 - Both monsters of one element both charge. The computer never drafts the player's monsters.
 - **Team HP is a flat 80 for every team, max 80 (Matt, 2026-10-24: "everyone starts at 80").
-  Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side.
+  Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side (8.4 with one extra move a turn, 2026-10-28).
 - **Balance (soak-tuned 2026-10-24, from the spec's first guess)**: Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
   4/6→3/5; Frostling 10/15→8/12 dmg; Prismote cost 12→14.
 
@@ -136,4 +138,4 @@ recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see
 `test-battlearena-mp.mjs` was FLAKY (about 1 run in 3) until 2026-10-28: its computer moves were random and a lucky
 chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
 for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
-matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now checks the receiver is left on 1 HP, on its turn.
+matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now checks the receiver keeps 40+ HP, on its turn.
