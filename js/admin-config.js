@@ -112,7 +112,8 @@ export function normalizeConfig(raw) {
   const beeUndo = (bee.undo && typeof bee.undo === 'object') ? bee.undo : {};
   const integ = (src.integrity && typeof src.integrity === 'object') ? src.integrity : {};
   const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo } };
+  const integVoid = (integ.void && typeof integ.void === 'object') ? integ.void : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid } };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -714,14 +715,26 @@ export function setBeeUndone(boardKey, code, on) {
   return writeNode(`bee/undo/${boardKey}`, { [code]: on ? true : null }, (cfg) => resolveBeeUndone(cfg, boardKey, code) === !!on, { stamp: false });
 }
 
-/** Integrity checks: count a voided game on one record again (`on` true) or void it again (false).
- *  The server rebuilds the leaderboard on the change (functions/index.js integrityOnUndo). */
-export function setIntegrityUndone(statsIdOf, gameId, on) {
+/** Integrity checks: Matt's Void on the admin page (`integrity/void/<statsId>/<gameId>` = true), for an
+ *  alert he wants voided. */
+export function resolveIntegrityVoid(cfg, statsIdOf, gameId) {
+  const v = normalizeConfig(cfg).integrity.void[statsIdOf];
+  return !!(v && typeof v === 'object' && v[gameId] === true);
+}
+
+/** Integrity checks, the admin page's one button: `voided` true = Void (sets void, clears undo), false =
+ *  Undo (sets undo, clears void). Both in one write, verified by re-read. The server rebuilds the
+ *  leaderboard on the change (functions/index.js integrityOnUndo). */
+export function setIntegrityVoided(statsIdOf, gameId, voided) {
   if (!/^[A-Za-z0-9-]{4,80}$/.test(String(statsIdOf || '')) || !/^[a-z0-9]{2,24}$/.test(String(gameId || ''))) {
     return Promise.resolve(fail(`not a record and game: ${statsIdOf} ${gameId}`));
   }
-  return writeNode(`integrity/undo/${statsIdOf}`, { [gameId]: on ? true : null }, (cfg) => resolveIntegrityUndone(cfg, statsIdOf, gameId) === !!on, { stamp: false });
+  const on = !!voided;
+  return writeNode('integrity', { [`void/${statsIdOf}/${gameId}`]: on ? true : null, [`undo/${statsIdOf}/${gameId}`]: on ? null : true },
+    (cfg) => resolveIntegrityVoid(cfg, statsIdOf, gameId) === on && resolveIntegrityUndone(cfg, statsIdOf, gameId) === !on, { stamp: false });
 }
+/** Kept for the first admin page build (2026-10-28): Undo (`on` true) / Void again. */
+export function setIntegrityUndone(statsIdOf, gameId, on) { return setIntegrityVoided(statsIdOf, gameId, !on); }
 
 export function setOnlineAllowed(code, on) {
   const c = codeOf(code);

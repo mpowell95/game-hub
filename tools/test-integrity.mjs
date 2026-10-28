@@ -144,11 +144,19 @@ console.log('\n--- a voided game: played, no win, every score 0 ---');
 console.log('\n--- flags and Matt\'s undo ---');
 {
   const flags = { dev1: { snake: { 'snake-longer-than-board': { void: true } }, contexto: { 'contexto-first-guess': { void: false } } } };
-  ok('a strong flag voids its game; an alert voids nothing', JSON.stringify(I.activeVoids(flags, {})) === JSON.stringify({ dev1: { snake: true } }));
+  const mine = (v) => JSON.stringify(Object.fromEntries(Object.entries(v).filter(([id]) => !I.HAND_VOIDS[id])));
+  ok('a strong flag voids its game; an alert voids nothing', mine(I.activeVoids(flags, {})) === JSON.stringify({ dev1: { snake: true } }));
   const cfg = { integrity: { undo: { dev1: { snake: true } } } };
-  ok('Matt\'s undo counts it again', JSON.stringify(I.activeVoids(flags, cfg)) === '{}');
-  ok('admin-config reads the undo', CFG.resolveIntegrityUndone(cfg, 'dev1', 'snake') === true && CFG.resolveIntegrityUndone(cfg, 'dev1', 'yahtzee') === false
-    && CFG.resolveIntegrityUndone(null, 'dev1', 'snake') === false);
+  ok('Matt\'s undo counts it again', mine(I.activeVoids(flags, cfg)) === '{}');
+  const vcfg = { integrity: { void: { dev1: { contexto: true } } } };
+  ok('Matt\'s Void on the admin page voids an alert', mine(I.activeVoids(flags, vcfg)) === JSON.stringify({ dev1: { snake: true, contexto: true } })
+    && I.isVoided(flags, vcfg, 'dev1', 'contexto') === true && I.isVoided(flags, {}, 'dev1', 'contexto') === false);
+  ok('...and Undo beats it', I.isVoided(flags, { integrity: { void: { dev1: { contexto: true } }, undo: { dev1: { contexto: true } } } }, 'dev1', 'contexto') === false);
+  const kog = '090215fa-e525-4bbe-99d7-58f9ae3cd437';
+  ok('King of Games\' Contexto is voided by hand (Matt, 2026-10-28), and his Undo would count it again',
+    I.activeVoids({}, {})[kog].contexto === true && I.isVoided({}, { integrity: { undo: { [kog]: { contexto: true } } } }, kog, 'contexto') === false);
+  ok('admin-config reads the undo and the void', CFG.resolveIntegrityUndone(cfg, 'dev1', 'snake') === true && CFG.resolveIntegrityUndone(cfg, 'dev1', 'yahtzee') === false
+    && CFG.resolveIntegrityUndone(null, 'dev1', 'snake') === false && CFG.resolveIntegrityVoid(vcfg, 'dev1', 'contexto') === true && CFG.resolveIntegrityVoid(null, 'dev1', 'contexto') === false);
   ok('hitText says the rule and the numbers', I.hitText({ rule: 'snake-longer-than-board', v: 300, lim: 255 }) === 'a snake longer than the board (300, limit 255)');
 }
 
@@ -249,7 +257,7 @@ console.log('\n--- wiring ---');
   ok('shared: js/integrity.js is copied to the server', /'js\/integrity\.js'/.test(read('tools/sync-functions-shared.mjs')));
   ok('hub: a tap on the push opens the admin page, on an admin device only', /if \(id === 'admin'\) \{ this\._clearPushOpen\(\); if \(isAdminDevice\(\)\) this\.openAdmin\(\); return; \}/.test(read('js/hub.js')));
   const ui = read('js/admin-ui.js');
-  ok('admin page: a section, read from both nodes, with Undo / Void again', /sec\('integrity'/.test(ui) && /get\('integrityFlags'\), get\('integrityAlerts'\)/.test(ui) && /setIntegrityUndone\(id, gid, on\)/.test(ui));
+  ok('admin page: a section, read from both nodes, one button per row (Void an alert, Undo a void)', /sec\('integrity'/.test(ui) && /get\('integrityFlags'\), get\('integrityAlerts'\)/.test(ui) && /setIntegrityVoided\(id, gid, voided\)/.test(ui) && /data-ivset="\$\{voided \? 'count' : 'void'\}"/.test(ui));
   ok('hoops: validateGame checks the stored result against the moves', /if \(over\.why !== 'resign' && !sameResult\(replayResult\(moves\), over\.winner\)\) return null;/.test(read('hoops4/js/mp.js')));
 }
 

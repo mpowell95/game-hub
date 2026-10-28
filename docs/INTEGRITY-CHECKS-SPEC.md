@@ -77,9 +77,15 @@ in the database that day: **75 of 75 still open**, a forged winner is refused.
   PLAYED, with no win and every score, best and point at 0, so it sorts last (Matt's rule 1). The raw
   record and the phone's own store are untouched. **Silent**: the player's own phone (My Stats, the game)
   shows its own numbers as before; everyone else's Leaderboard shows the void.
-- **Undo**: Admin > Integrity checks: one row per flagged game per record, Undo / Void again
-  (`adminConfig/v1/integrity/undo/<statsId>/<game>`); the board rebuilds at once. Match alerts are
-  folded under "Online matches (N)".
+- **Void and Undo, in the app** (2026-10-28, Matt: "Do I have a way to do this in app"): Admin > Integrity
+  checks, one row per flagged game per record with ONE button: **Void** on an alert (or anything that
+  counts), **Undo** on a void. `adminConfig/v1/integrity/void/<statsId>/<game>` and `.../undo/...`, written
+  together; Undo beats everything; the board rebuilds at once. Match alerts are folded under "Online
+  matches (N)" (a match is voided by hand in `VOIDED_MATCHES`).
+- **Voided by hand in code**: `HAND_VOIDS` in `js/integrity.js`. King of Games' Contexto (Matt, 2026-10-28,
+  on the 1-guess alert: "This must be voided"): the store keeps no day or word per puzzle, so the void is
+  his whole Contexto record on that phone (10 played, 8 wins -> 0 wins, still played). Undo on the admin
+  page counts it again.
 - Rules: `integrityFlags`, `integrityAlerts` admin-read, written only by the server. Both in the backup.
 
 **Known gap**: a phone that falls back to reading all of `players/` (no board package yet) does not see

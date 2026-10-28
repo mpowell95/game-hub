@@ -662,6 +662,8 @@ no Default buttons.
 - **Nothing on this page deletes or rewrites player data.** Every write verifies by re-read; a dev
   origin never writes the family's config.
 - **Spelling Bee flags (2026-10-28)**: server-flagged copied days with Undo / Void again (`bee/undo`), hand voids, log gaps.
+- **Integrity checks (2026-10-28)**: every flagged game per record, ONE button: Void (an alert) / Undo (a void)
+  (`integrity/void`, `integrity/undo`; Undo wins). Code hand voids: `js/integrity.js` `HAND_VOIDS`.
 - **Layout (2026-10-28, Matt: "clunky and inefficient")**: paints at once from the cached config (people
   sections fill in when `players/` lands); one section open at a time, its heading sticky; a save keeps the
   scroll place; Games = Admin only first, Live folded; allow picker = picked people + "Add someone" fold.
