@@ -27,6 +27,7 @@ import { gzipSync } from 'node:zlib';
 import { aggregatePlayers, buildIdentity } from './shared/js/players-agg.js';
 import { resolveCorrections } from './shared/js/admin-config.js';
 import { isHiddenDeviceId } from './shared/js/hidden-players.js';
+import { activeVoids } from './shared/js/integrity.js';
 
 export const EMPTY_GAME = JSON.stringify({ total: { played: 0, won: 0, lost: 0 }, byDiff: {} });
 
@@ -35,13 +36,17 @@ export function encKey(key) { return encodeURIComponent(String(key)).replace(/\.
 
 /** The leaderboard's view of players/: the same devices it showed (hidden test devices left out,
  *  as js/leaderboard-ui.js visibleRecords did), grouped and corrected exactly as the phone did. */
-export function buildBoard(players, adminConfig) {
-  return buildBoardParts(players, adminConfig).people;
+export function buildBoard(players, adminConfig, integrityFlags) {
+  return buildBoardParts(players, adminConfig, integrityFlags).people;
 }
-export function buildBoardParts(players, adminConfig) {
+/** `integrityFlags`: the integrityFlags/ node (functions/integrity.js); its strong flags, minus Matt's
+ *  undo, void those games on those records (js/stats-corrections.js voidIntegrityGame). */
+export function buildBoardParts(players, adminConfig, integrityFlags) {
   const visible = {};
   for (const id of Object.keys(players || {})) if (!isHiddenDeviceId(id)) visible[id] = players[id];
-  const groups = aggregatePlayers(visible, resolveCorrections(adminConfig || null));
+  const corrections = resolveCorrections(adminConfig || null);
+  corrections.integrity = activeVoids(integrityFlags || {}, adminConfig || {});
+  const groups = aggregatePlayers(visible, corrections);
   const ident = buildIdentity(visible);
   const ids = new Map();
   for (const id of Object.keys(visible)) {

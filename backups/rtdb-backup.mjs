@@ -71,6 +71,9 @@ export const BRANCHES = [
   'beeFlags',
   // beeAlerts/ (2026-10-28): Spelling Bee missing-log alerts. Admin-read only, so an anonymous backup is denied.
   'beeAlerts',
+  // integrityFlags/ + integrityAlerts/ (2026-10-28): every game's integrity checks (functions/integrity.js),
+  // <statsId>/<game>/<rule> and <node>~<match>/<rule>~<side>. Server writes only, admin-read only.
+  'integrityFlags', 'integrityAlerts',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',

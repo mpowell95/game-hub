@@ -1,7 +1,8 @@
 # Integrity checks across games: the playbook (2026-10-28)
 
 Written at the end of the Spelling Bee fair-play build, for the session that reviews every other game
-and adds integrity checks where possible. Spelling Bee is the worked example; its full spec is
+and adds integrity checks where possible. **Done 2026-10-28: `docs/INTEGRITY-CHECKS-SPEC.md`** (what was built,
+what each game records, and what a timed log would add). Spelling Bee is the worked example; its full spec is
 `docs/SPELLING-BEE-INTEGRITY-SPEC.md` and its contract `spelling-bee/CLAUDE.md` ("Fair play").
 
 ## Matt's decisions (they apply to every game)

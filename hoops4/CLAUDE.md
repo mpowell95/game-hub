@@ -191,6 +191,9 @@ bottom edge, MEASURED from the camera each `fit()` (`render.js` `boardBottomPx`)
   a FULL column takes the same path as a miss via one shared `_passTurn()`.
 - A ball that rims out into the NEXT hoop still counts, in that column. Nothing steers a ball.
 - The grid is a SCREEN (a `CanvasTexture`); physics only answers which hoop it went through.
+- **A challenge's stored result must be its moves' result (2026-10-28, integrity)**: `validateGame` replays the
+  columns (`js/replay.js`, shared with `js/integrity.js`) and refuses a match whose `over.winner` is not the
+  four-in-a-row or the full board (resignation excepted). Before, any stored winner counted. 75 of 75 real matches agreed.
 
 ## Setup screen and Menu (2026-09-22/24)
 

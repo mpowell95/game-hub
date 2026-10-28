@@ -222,6 +222,66 @@ export function holdemSnapshotOf(hb) {
   return out;
 }
 
+// --- integrity voids (2026-10-28, js/integrity.js, docs/INTEGRITY-CHECKS-SPEC.md) --------------------
+// The server flags a game on one device's record when a stored number is one the game cannot produce.
+// Shown as Matt's rule 1 says: the games still count as PLAYED, with no win and every score, best and
+// points at 0, so the record sorts last. The raw record is untouched; Matt's undo turns it back on.
+// Per game, the score-like parts of its sub-counter to zero (counts of games or runs are kept).
+const ZERO = {
+  snake: { sn: ['bestLen', 'bestLenByDiff', 'bestLenByWalls', 'bestLenByDiffWalls'] },
+  yahtzee: { yz: ['bestScore', 'won', 'yahtzees'] },
+  skeeball: { sk: ['bestGame', 'bestThrow', 'points', 'hundreds', 'fifties', 'colorSweeps', 'boards'] },
+  battleship: { bs: ['won', 'hits', 'sunk', 'bestAccuracy', 'fewestShotsWin'] },
+  tictactoe: { tt: ['classic.won', 'ultimate.won'] },
+  cuppong: { cp: ['soloBest', 'soloRacks', 'soloThrows'], cr: ['*.w'] },
+  golf: { gf: ['points', 'birdies', 'eagles', 'aces', 'longestDriveYd', 'bestHole', 'bestRoundByCourse'] },
+  hillclimb: { hc: ['bestDistance', 'bestDistanceByStage', 'bestCoins', 'coins', 'flips'] },
+  sudoku: { sd: ['bestTimeMs', 'perfect'] },
+  minesweeper: { ms: ['bestTimeMs', 'bestClearedPct', 'flagsRight'] },
+  airhockey: { ah: ['goalsFor', 'shutouts', 'bestShot', 'streak', 'bestStreak'] },
+  boggle: { bg: ['won', 'bestScore', 'words', 'longestWord'] },
+  dominoes: { dm: ['won', 'points', 'bestRound'] },
+  dotsboxes: { db: ['won', 'boxes', 'bestChain'] },
+  contexto: { ct: ['fewest', 'noHint', 'silver', 'bronze', 'solved', 'guesses'] },
+  wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush'] },
+  brickblitz: { bz: ['bestScore', 'bestScoreByDiff', 'points', 'bestCombo'] },
+  ballrun: { br: ['bestObstacles', 'bestObstaclesByDiff'], brOrbital: ['bestObstacles', 'bestObstaclesByDiff'] },
+  nutsbolts: { nb: ['bestLevel', 'bestByTier'] },
+  holdem: { hb: ['winnings', 'best', 'cashes'], hs: ['won', 'bigPot', 'best', 'bestCat', 'bestCards'] },
+};
+/** A copy of `v` with every number in it 0, every string '', every list emptied. */
+function zeroed(v) {
+  if (Array.isArray(v)) return [];
+  if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = zeroed(v[k]); return o; }
+  if (typeof v === 'number') return 0;
+  if (typeof v === 'string') return '';
+  return v;
+}
+function zeroPath(sub, path) {
+  const [head, ...rest] = path.split('.');
+  const keys = head === '*' ? Object.keys(sub) : [head];
+  for (const k of keys) {
+    if (!(k in sub)) continue;
+    if (!rest.length) sub[k] = zeroed(sub[k]);
+    else if (sub[k] && typeof sub[k] === 'object') { sub[k] = Object.assign({}, sub[k]); zeroPath(sub[k], rest.join('.')); }
+  }
+}
+/** One game's record with an integrity void applied. Never mutates its input. */
+export function voidIntegrityGame(gameRec, gameId) {
+  const g = gameRec || {};
+  const noWin = (b) => Object.assign({}, b || {}, { won: 0 });
+  const byDiff = {};
+  for (const k of Object.keys(g.byDiff || {})) byDiff[k] = noWin(g.byDiff[k]);
+  const out = Object.assign({}, g, { total: noWin(g.total), byDiff });
+  for (const [subKey, paths] of Object.entries(ZERO[gameId] || {})) {
+    if (!g[subKey] || typeof g[subKey] !== 'object') continue;
+    const sub = Object.assign({}, g[subKey]);
+    for (const p of paths) zeroPath(sub, p);
+    out[subKey] = sub;
+  }
+  return out;
+}
+
 /**
  * Apply every correction that names this player-device to a whole stats store.
  * @param {object} stats  a `{ version, games }` store (local) or a synced record's `stats`
@@ -246,6 +306,15 @@ export function correctStats(stats, id, all) {
     const hb = correctHoldemLedger(st.games.holdem.hb, hc);
     st = Object.assign({}, st, { games: Object.assign({}, st.games, { holdem: Object.assign({}, st.games.holdem, { hb }) }) });
   }
+  // Integrity voids: { <statsId>: { <gameId>: true } }, from the server's flags minus Matt's undo
+  // (js/integrity.js activeVoids). Applied last, so nothing above can put a voided number back.
+  const iv = (((all || {}).integrity || {})[id]) || null;
+  if (iv && st.games) {
+    for (const gid of Object.keys(iv)) {
+      if (iv[gid] !== true || !st.games[gid]) continue;
+      st = Object.assign({}, st, { games: Object.assign({}, st.games, { [gid]: voidIntegrityGame(st.games[gid], gid) }) });
+    }
+  }
   return st;
 }
 
@@ -258,4 +327,4 @@ export function snapshotOf(board, day) {
   };
 }
 
-export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, voidedCodesFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };
+export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, voidedCodesFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf, voidIntegrityGame };

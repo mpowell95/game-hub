@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'functions/shared');
-const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js', 'js/bee-fairplay.js'];
+const ENTRY = ['js/players-agg.js', 'js/admin-config.js', 'js/hidden-players.js', 'js/bee-fairplay.js', 'js/integrity.js'];
 
 const seen = new Set();
 function walk(file) {

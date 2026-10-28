@@ -32,14 +32,35 @@ const check = (name, ok, detail = '') => {
 console.log('\nCONNECT 4 HOOPS - turn-by-turn multiplayer\n');
 
 const A = 'ABCDE', B = 'FGHJK';
-const doc = (over) => ({
+const doc = (over, moves) => ({
   v: 1, created: 1, updated: 2, oneShot: false,
   a: { code: A, name: 'Matt', emoji: '🏀' },
   b: { code: B, name: 'Anita', emoji: '🌟' },
   turn: 'a',
-  moves: { '0000': { by: 'a', col: 3, shots: 2, at: 10 }, '0001': { by: 'b', col: 3, shots: 1, at: 20 } },
+  moves: moves || { '0000': { by: 'a', col: 3, shots: 2, at: 10 }, '0001': { by: 'b', col: 3, shots: 1, at: 20 } },
   over: over || null,
 });
+// A finished match's `over` must be what its moves decide (validateGame, 2026-10-28), so a finished
+// fixture carries moves that really end that way.
+const movesOf = (seq) => Object.fromEntries(seq.map(([by, col], i) => [String(i).padStart(4, '0'), { by, col, shots: 1, at: 10 + i }]));
+const WIN_A = movesOf([['a', 3], ['b', 0], ['a', 3], ['b', 0], ['a', 3], ['b', 0], ['a', 3]]);
+const WIN_B = movesOf([['a', 0], ['b', 3], ['a', 0], ['b', 3], ['a', 1], ['b', 3], ['a', 1], ['b', 3]]);
+const DRAW = await (async () => {        // a full board with no four, found by a seeded search
+  const { Board } = await import('../connect-four/js/board.js');
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  for (let tries = 0; tries < 20000; tries++) {
+    const b = new Board(); const seq = []; let p = 0, won = false;
+    while (!b.isFull()) {
+      const legal = b.legalMoves(); const c = legal[Math.floor(rnd() * legal.length)];
+      b.play(c, p); seq.push([p ? 'b' : 'a', c]);
+      if (b.isWin(p)) { won = true; break; }
+      p = 1 - p;
+    }
+    if (!won) return movesOf(seq);
+  }
+  throw new Error('no drawn board found');
+})();
 
 // --- validateGame -----------------------------------------------------------------------------
 check('a well-formed match validates', !!MP.validateGame(doc()));
@@ -56,7 +77,14 @@ check('a non-integer column is refused',
 check('a winner who is not a player is refused',
   MP.validateGame({ ...doc({ winner: 'c' }) }) === null);
 check('a DRAW (winner null) is a legal ending',
-  !!MP.validateGame(doc({ winner: null, why: 'full', at: 9 })));
+  !!MP.validateGame(doc({ winner: null, why: 'full', at: 9 }, DRAW)));
+check('a stored winner the moves do not give is refused (integrity, 2026-10-28)',
+  MP.validateGame(doc({ winner: 'a', why: 'four', at: 9 }, WIN_B)) === null
+  && MP.validateGame(doc({ winner: 'b', why: 'four', at: 9 })) === null
+  && MP.validateGame(doc({ winner: null, why: 'full', at: 9 }, WIN_A)) === null);
+check('...the winner the moves give is accepted, and a resignation needs no four',
+  !!MP.validateGame(doc({ winner: 'b', why: 'four', at: 9 }, WIN_B))
+  && !!MP.validateGame(doc({ winner: 'b', why: 'resign', at: 9 })));
 
 {
   const many = {}; for (let i = 0; i < 700; i++) many[String(i).padStart(4, '0')] = { by: 'a', col: 0 };
@@ -499,11 +527,11 @@ check('a player code is normalised and validated',
 
   // OLD ROWS: no `result` on the row. With the match read, the result is worked out from it;
   // without it, the row is counted as played and in NO column rather than guessed into one.
-  const oldGame = MP.validateGame({ ...doc({ winner: 'b', why: 'four', at: 5 }) });
+  const oldGame = MP.validateGame({ ...doc({ winner: 'b', why: 'four', at: 5 }, WIN_B) });
   const oldRows = MP.recordsFrom([
     row('o1', { game: oldGame }),                                       // A is side a, b won
     row('o2', {}),                                                      // match unreadable
-    row('o3', { game: MP.validateGame({ ...doc({ winner: null, why: 'full', at: 6 }) }) }),
+    row('o3', { game: MP.validateGame({ ...doc({ winner: null, why: 'full', at: 6 }, DRAW) }) }),
   ], A);
   const o = oldRows.opponents[0];
   check('an old row with no result takes it from its match',
@@ -631,7 +659,7 @@ check('a player code is normalised and validated',
   const game2 = MPm.validateGame({
     v: 1, created: 1, updated: 2, oneShot: false,
     a: { code: B, name: 'aa King of Games', emoji: 'k' }, b: { code: A, name: 'MattyIce', emoji: 'm' },
-    turn: 'a', moves: { '0000': { by: 'a', col: 3, shots: 1, at: 10 } },
+    turn: 'a', moves: WIN_A,
     series: 3, seriesNo: 2, seriesWins: { a: 1, b: 0 }, seriesOf: 'mudhdt7ouzug2bz0',
     over: { winner: 'a', why: 'four', at: 3 },
   });
