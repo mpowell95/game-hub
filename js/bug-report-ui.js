@@ -109,6 +109,9 @@ function ensureCss() {
   .bug-where-art svg { width: 100%; height: 100%; display: block; }
   .bug-detail-where { margin-top: var(--gh-sp-3); font-size: var(--gh-fs-xl); }
   .bug-detail-where .bug-where-art { width: 96px; height: 54px; }
+  /* The sender, second only to the game (Matt, 2026-10-28: "a bit more apparent"). */
+  .bug-who { font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink); }
+  .bug-detail-who { display: flex; align-items: baseline; gap: var(--gh-sp-2); margin: var(--gh-sp-2) 0 0; }
   /* --- replies -------------------------------------------------------------------------- */
   /* Matt's answer, on both sides of the conversation. The left rule is the only decoration:
      it reads as a quoted answer at a glance without needing a colour to carry the meaning. */
@@ -433,7 +436,7 @@ export async function openBugInbox() {
         ${whereHTML(r)}
         <span class="bug-row-top">
           <span class="gh-chip${r.status === 'done' ? '' : ' gh-chip--accent'}">${esc(r.status === 'done' ? t('bug_inbox_done_tag') : t('bug_inbox_new_tag'))}</span>
-          <span>${esc(r.reporter && r.reporter.name ? `${r.reporter.emoji || ''} ${r.reporter.name}` : '?')}</span>
+          <span class="bug-who">${esc(whoText(r))}</span>
           <span class="bug-row-when">${esc(whenText(r.createdAtMs, true))}</span>
         </span>
         <span class="bug-row-desc">${esc(r.description || '')}</span>
@@ -472,9 +475,8 @@ export async function openBugInbox() {
     shell(`
       <button type="button" class="gh-btn gh-btn--ghost gh-btn--sm" data-role="bug-back">${t('bug_inbox_back')}</button>
       ${whereHTML(r, 'bug-detail-where')}
-      <p class="bug-row-meta" style="margin-top:12px">
-        ${esc([r.reporter && r.reporter.name, whenText(r.createdAtMs)].filter(Boolean).join(' · '))}
-      </p>
+      <p class="bug-detail-who"><span class="bug-who">${esc(whoText(r))}</span>
+        <span class="bug-row-when">${esc(whenText(r.createdAtMs))}</span></p>
       <p class="bug-quote">${esc(r.description || '')}</p>
       ${r.context ? `<p class="bug-row-meta">${esc(r.context)}</p>` : ''}
       <p class="bug-row-meta" style="margin-top:12px">${esc(r.summary || summarizeEnvironment(r.environment))}</p>
@@ -599,6 +601,9 @@ export async function openBugInbox() {
 
   list();
 }
+
+/** Who sent it: their emoji and profile name. */
+const whoText = (r) => (r && r.reporter && r.reporter.name ? `${r.reporter.emoji || ''} ${r.reporter.name}`.trim() : '?');
 
 /** The hub's own screens, which have no tile art. */
 const SCREEN_ICON = { hub: '🏠', leaderboards: '🏆', stats: '📊', profile: '👤' };
