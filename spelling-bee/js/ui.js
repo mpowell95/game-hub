@@ -18,7 +18,7 @@ import {
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
 } from './engine.js';
 import STRINGS from './strings.js';
-import { postProgress, watchDaily, needsPost } from './board.js';
+import { postProgress, watchDaily, watchFlags, needsPost, shownRows, voidedOn, byPoints } from './board.js';
 import { logAction, flushLog } from './log.js';
 import { myCode } from '../../js/messages.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -109,12 +109,16 @@ function loadSave() {
  *  someone reaches Genius?"); Genius is that play's win. Runs on every open and word, so days played
  *  before this counted too, from this phone's own save. A day whose Genius was already recorded (played
  *  and won together, the old way) is only marked. Marked only once the recorder took it. */
+/** A puzzle counts only on its own day (Matt, 2026-10-28: "you have to do it on the correct day"): a word
+ *  found on another local date counts for nothing. A word with no time (found before 2026-10-27) = on the day. */
+const onDay = (r, ms) => !Number.isFinite(ms) || dayKey(new Date(ms)) === r.day;
+const dayWords = (r) => { const tm = isObj(r.times) ? r.times : {}; return r.found.filter((w) => onDay(r, tm[w])); };
 const dayOf = (key, r) => `${String(key).startsWith('es:') ? 'es' : 'en'}:${r.day || key}`;
 function countDays(save) {
   let changed = false;
   const byDay = new Map();
   for (const [key, r] of Object.entries(save.games)) {
-    if (!isObj(r) || !Array.isArray(r.found) || !r.found.length) continue;
+    if (!isObj(r) || !Array.isArray(r.found) || !dayWords(r).length) continue;
     const d = dayOf(key, r);
     if (!save.days[d]) byDay.set(d, (byDay.get(d) || []).concat(r));
   }
@@ -249,8 +253,15 @@ class SpellingBee {
     this._maybeRecord();
     // The daily board for THIS puzzle: watched while it is on screen, and our count posted if behind.
     if (this._stopBoard) this._stopBoard();
+    if (this._stopFlags) this._stopFlags();
     this.boardRows = [];
+    this.boardFlags = {};
     const key = this.puzzle.key;
+    this._stopFlags = watchFlags(key, (f) => {
+      if (this.disposed || !this.puzzle || this.puzzle.key !== key) return;
+      this.boardFlags = f;
+      if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
+    });
     this._stopBoard = watchDaily(key, (rows) => {
       if (this.disposed || !this.puzzle || this.puzzle.key !== key) return;
       this.boardRows = rows;
@@ -286,6 +297,18 @@ class SpellingBee {
     let s = 0;
     for (const w of this.found) s += scoreWord(w, this.puzzle);
     return s;
+  }
+
+  /** Words, points and rank from words found on this puzzle's own day (`onDay`): what the board and the
+   *  stats count. A Genius recorded on the day (or before word times existed) keeps its floor. */
+  _dayStats() {
+    const words = dayWords(this.rec).filter((w) => this.found.has(w));
+    const set = new Set(words);
+    let dp = 0;
+    for (const w of words) dp += scoreWord(w, this.puzzle);
+    let dr = rankIndex(dp, this.max, this.answers.every((w) => set.has(w)));
+    if (this.rec.recorded && dr < GENIUS && onDay(this.rec, this.rec.geniusAt)) dr = GENIUS;
+    return { dw: words.length, dp, dr };
   }
 
   // --- render ----------------------------------------------------------------------------------
@@ -564,7 +587,7 @@ class SpellingBee {
    *  the win alone when the day is already counted. Flags set only once the recorder took it. */
   _maybeRecord() {
     countDays(this.save);
-    if (this.rec.recorded || this.rank() < GENIUS) return;
+    if (this.rec.recorded || this._dayStats().dr < GENIUS) return;
     const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
     try { st = counted ? recordSpellingBeeGenius() : recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
@@ -660,7 +683,7 @@ class SpellingBee {
 
   _post() {
     if (!this.puzzle) return;
-    postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank(), times: this._times() }).catch(() => {});
+    postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank(), times: this._times(), day: this._dayStats() }).catch(() => {});
   }
 
   /** Everyone's word count on the puzzle shown, ours live from this screen (not the board's copy). */
@@ -669,8 +692,9 @@ class SpellingBee {
   _openBoard() {
     const other = this.data.lang === 'es' ? 'en' : 'es';
     this._watchOther(other);
-    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true);
-    const theirs = this._boardSection(other, this._other ? this._other.rows : [], this._other ? this._other.max : 0, false);
+    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, voidedOn(this.puzzle.key, this.boardFlags));
+    const o = this._other;
+    const theirs = this._boardSection(other, o ? o.rows : [], o ? o.max : 0, false, o && o.key ? voidedOn(o.key, o.flags) : new Set());
     const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
     this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2>${mine}${theirs}`);
     // No scrolling: drop the lowest rows (never ours), from the longer list first, and say how many.
@@ -691,20 +715,20 @@ class SpellingBee {
   }
 
   /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
-  _boardSection(lang, serverRows, max, live) {
+  _boardSection(lang, serverRows, max, live, voided) {
     const code = myCode();
-    const rows = serverRows.filter((r) => !live || r.code !== code).map((r) => ({ ...r, me: r.code === code }));
+    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided }).map((r) => ({ ...r, me: r.code === code }));
     if (live) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
       rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
     }
-    rows.sort((a, b) => b.words - a.words || b.points - a.points || (a.me ? -1 : b.me ? 1 : a.name.localeCompare(b.name)));
-    // Place (ties share it), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words
+    rows.sort((a, b) => b.points - a.points || b.words - a.words || (a.me ? -1 : b.me ? 1 : byPoints(a, b)));
+    // Place by POINTS (ties share it; Matt, 2026-10-28), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words
     // over points (Matt, 2026-10-26: "I wanna see how many points they have too").
     const genius = rankThresholds(max || 1)[GENIUS] || 1;
     let place = 0;
     const li = rows.map((r, i) => {
-      if (i === 0 || r.words !== rows[i - 1].words || r.points !== rows[i - 1].points) place = i + 1;
+      if (i === 0 || r.points !== rows[i - 1].points || r.words !== rows[i - 1].words) place = i + 1;
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
       const crest = r.rank >= GENIUS ? crestOf(r.rank) : '';
       return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
@@ -725,7 +749,7 @@ class SpellingBee {
     const want = `${lang}:${dayKey(date)}`;
     if (this._other && this._other.want === want) return;
     if (this._other && this._other.stop) this._other.stop();
-    const o = { want, rows: [], max: 0, stop: null };
+    const o = { want, rows: [], max: 0, key: '', flags: {}, stop: null };
     this._other = o;
     getData(lang).then((d) => {
       if (this._other !== o || this.disposed) return;
@@ -733,11 +757,11 @@ class SpellingBee {
       if (n < 0) return;
       const pz = puzzleAt(d, n);
       o.max = totalPoints(answersFor(d, pz), pz);
-      o.stop = watchDaily(pz.key, (rows) => {
-        if (this._other !== o || this.disposed) return;
-        o.rows = rows;
-        if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
-      });
+      o.key = pz.key;
+      const repaint = () => { if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard(); };
+      const offRows = watchDaily(pz.key, (rows) => { if (this._other !== o || this.disposed) return; o.rows = rows; repaint(); });
+      const offFlags = watchFlags(pz.key, (f) => { if (this._other !== o || this.disposed) return; o.flags = f; repaint(); });
+      o.stop = () => { offRows(); offFlags(); };
     }).catch((err) => console.warn('[spelling-bee] other board', err));
   }
 
@@ -914,6 +938,7 @@ class SpellingBee {
     this.disposed = true;
     if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
     if (this._stopBoard) this._stopBoard();
+    if (this._stopFlags) this._stopFlags();
     if (this._other && this._other.stop) this._other.stop();
     if (this._offLang) this._offLang();
     try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }
