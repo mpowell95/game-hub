@@ -109,6 +109,11 @@ that flipped each turn rebuilt all 100); the board's `is-locked` class carries i
 - The gun keeps its angle (`_cannonDeg`, born at it, written only on change): it swings once, to a new target.
 - The MISS / HIT! / SUNK banner sits over the board SHOT AT and clears as the volley settles.
 - A sunk ship settles ON its squares (`is-sunk`, darker); the old reveal ended tilted 12 degrees.
+- **Nothing gives a result away before its ball lands (2026-10-28)**: a sinking ship's squares darken at landing
+  (`.bs-cell-sinking`, `_sinkingAt`), impact keyframes start at opacity 0 (fill `both` showed their first frame
+  for the whole flight), the crosshair fades just before impact. Impacts drawn ABOVE the board in `.bs-fx` (the
+  in-square ones are clipped by their square): `.bs-boom` for a hit, `.bs-splashfx` for a miss, and a sink
+  bursts every square of the ship, 70ms apart outward from the last hit.
 
 ## The words are gone (2026-08-11)
 

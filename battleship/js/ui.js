@@ -1693,7 +1693,8 @@ class BattleshipUI {
       if (typeof el.animate !== 'function') { el.remove(); return; }
       el.animate([{ transform: 'translate(-50%, -50%) scale(2.2)', opacity: 0 }, { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }],
         { duration: 260, easing: 'ease-out', fill: 'forwards' });
-      const off = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, delay: this._lateMs(i), easing: 'ease-in', fill: 'forwards' });
+      // gone as the ball arrives, so it never sits on top of the splash (it used to linger 400ms after)
+      const off = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, delay: Math.max(0, this._lateMs(i) - 140), easing: 'ease-in', fill: 'forwards' });
       off.onfinish = () => el.remove();
     });
 
@@ -1710,6 +1711,44 @@ class BattleshipUI {
     // the balls
     volley.forEach((shot, i) => {
       this._fxLater(LAUNCH_MS + i * STAGGER_MS, () => this._throwBall(fx, cannonEl(), cellOf(shot), side));
+    });
+    // THE IMPACT, above the board: the in-square splash and flash are clipped by their own square, so
+    // on their own a hit or a miss barely registered (Matt, 2026-10-28: the animations after a shot
+    // "were off ... regardless of whether or not you hit something"). A fire burst for a hit, a white
+    // ring for a miss, each about two squares wide, as that ball lands.
+    volley.forEach((shot, i) => {
+      if (shot.sunk) return;   // a sink gets the whole ship's burst below
+      this._fxLater(this._lateMs(i), () => {
+        const b = cellOf(shot) && cellOf(shot).getBoundingClientRect();
+        if (!b || !b.width) return;
+        const h = host();
+        const el = document.createElement('span');
+        el.className = shot.result === 'hit' ? 'bs-boom' : 'bs-splashfx';
+        el.style.width = el.style.height = `${(b.width * (shot.result === 'hit' ? 1.8 : 2.1)).toFixed(1)}px`;
+        el.style.left = `${(b.left - h.left + b.width / 2).toFixed(1)}px`;
+        el.style.top = `${(b.top - h.top + b.height / 2).toFixed(1)}px`;
+        fx.appendChild(el);
+        el.addEventListener('animationend', () => el.remove());
+      });
+    });
+    // A SINK GOES UP IN FLAMES, square by square from the one just hit (Matt, 2026-10-28: the sink "was
+    // weird"; it used to just pop in). A burst on every square of the ship, 70ms apart, outward.
+    volley.forEach((shot, i) => {
+      if (!shot.sunk || !Array.isArray(shot.cells)) return;
+      const order = shot.cells.slice().sort((a, b2) => (Math.abs(a[0] - shot.r) + Math.abs(a[1] - shot.c)) - (Math.abs(b2[0] - shot.r) + Math.abs(b2[1] - shot.c)));
+      order.forEach(([r, c], k) => this._fxLater(this._lateMs(i) + 60 + k * 70, () => {
+        const cell = this.shell.querySelector(`[data-role="${role}"] .bs-cell[data-r="${r}"][data-c="${c}"]`);
+        const b = cell && cell.getBoundingClientRect();
+        if (!b || !b.width) return;
+        const h = host();
+        const el = document.createElement('span');
+        el.className = 'bs-boom';
+        el.style.width = el.style.height = `${(b.width * 1.9).toFixed(1)}px`;
+        el.style.left = `${(b.left - h.left + b.width / 2).toFixed(1)}px`;
+        el.style.top = `${(b.top - h.top + b.height / 2).toFixed(1)}px`;
+        fx.appendChild(el);
+        el.addEventListener('animationend', () => el.remove());
+      }));
     });
     // a hit shakes the board it lands on, once, as the first hit lands
     const firstHit = volley.findIndex((x) => x.result === 'hit');
@@ -1811,7 +1850,7 @@ class BattleshipUI {
     const classes = ['bs-cell'];
     if (occupied && occupied.has(`${r},${c}`)) classes.push('bs-cell-ship');
     if (isTarget && this._aims.some((a) => a.r === r && a.c === c)) classes.push('bs-cell-aimed');
-    let inner = '';
+    let inner = '', style = '';
     const peg = `class="bs-peg${late ? ' is-late' : ''}"${late ? ` style="--bs-fly:${this._lateMs(vi)}ms"` : ''}`;
     if (v === CELL_MISS) {
       const bubbles = late ? [...Array(7)].map((_, i) => {
@@ -1820,7 +1859,11 @@ class BattleshipUI {
       }).join('') : '';
       inner = `<span ${peg}>${late ? `${bubbles}<span class="bs-splash-ring"></span>` : ''}<span class="bs-peg-miss"></span></span>`;
     } else if (v === CELL_HIT || v === CELL_SUNK) {
-      if (v === CELL_SUNK) classes.push('bs-cell-sunk');
+      // A ship sunk by THIS volley darkens as the ball that sank it lands, never before: it used to
+      // turn black the moment FIRE was pressed and give the result away while the ball was in the air.
+      const sinkAt = v === CELL_SUNK && !reducedMotion() ? this._sinkingAt(seat, r, c) : -1;
+      if (v === CELL_SUNK) classes.push(sinkAt >= 0 ? 'bs-cell-sinking' : 'bs-cell-sunk');
+      if (sinkAt >= 0) style = ` style="--bs-sink-at:${sinkAt}ms"`;
       inner = `<span ${peg}>${late ? '<span class="bs-flash"></span><span class="bs-smoke"></span>' : ''}<span class="bs-peg-hit"></span></span>`;
     }
     const label = v === CELL_MISS ? t('cell_miss') : v === CELL_HIT ? t('cell_hit') : v === CELL_SUNK ? t('cell_sunk') : t('cell_unknown');
@@ -1828,9 +1871,20 @@ class BattleshipUI {
     // up by coordinate. Only a square already fired at is disabled; the rest are refused in code
     // while it is not your turn (a `disabled` that flipped every turn rebuilt all 100 cells).
     return isTarget
-      ? `<button type="button" class="${classes.join(' ')}" data-action="fire" data-r="${r}" data-c="${c}" ${v === 0 ? '' : 'disabled'}
+      ? `<button type="button" class="${classes.join(' ')}"${style} data-action="fire" data-r="${r}" data-c="${c}" ${v === 0 ? '' : 'disabled'}
           aria-label="${esc(t('shot_cell_aria', { r: r + 1, c: c + 1, state: label }))}">${inner}</button>`
-      : `<div class="${classes.join(' ')}" data-r="${r}" data-c="${c}" aria-hidden="true">${inner}</div>`;
+      : `<div class="${classes.join(' ')}"${style} data-r="${r}" data-c="${c}" aria-hidden="true">${inner}</div>`;
+  }
+
+  /** When the shot that sank the ship on (seat, r, c) lands, if a shot in the latest volley sank it
+   *  (ms from the render, `_lateMs`), else -1. */
+  _sinkingAt(seat, r, c) {
+    const v = this._volley || [];
+    for (let i = 0; i < v.length; i++) {
+      const x = v[i];
+      if (x.sunk && x.seat === seat && Array.isArray(x.cells) && x.cells.some(([cr, cc]) => cr === r && cc === c)) return this._lateMs(i);
+    }
+    return -1;
   }
 
   /** Is `ship` (a real fleet ship, or a reconstructed {r,c,dir,len}) sunk by the latest volley? */
