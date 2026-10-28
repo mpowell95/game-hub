@@ -245,6 +245,17 @@
 //                                                   // first hint time per ladder 2 level.
 //                                                   // POINTS come from this map, never from byDiff
 //                                                   // (js/gridlock-points.js). See recordGridlock
+//       wordweaver: {
+//         total, byDiff,                           // byDiff: 'ladder' only (one ladder, no tier);
+//                                                   // one play+won per level completed
+//         ww: { lv: { L<n>: { s, h, t } }, x } },  // (2026-10-28) per level n, written ONCE at its
+//                                                   // first completion (no replays): s = stars 1-3
+//                                                   // (0 hints 3, 1 hint 2, 2+ hints 1), h = hints
+//                                                   // used, t = when (ms). Only improves (wwBest).
+//                                                   // Keyed 'L<n>' (Firebase arrays). x = lifetime
+//                                                   // extra words found, a counter. STARS come from
+//                                                   // this map (js/word-weaver-points.js). See
+//                                                   // recordWordWeaver
 //       contexto: {
 //         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
 //         ct: { solved, guesses, hints, noHint, fewest, silver, bronze, medalsV } },
@@ -262,6 +273,7 @@
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
+import { wwBest, wwStarsFor } from './word-weaver-points.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
@@ -270,7 +282,7 @@ const STATS_KEY = 'gamehub.stats';
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
 // archive/<game>/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
 
@@ -531,6 +543,14 @@ function ensureGl(g) {
   // `lv` is LADDER 1 (frozen, kept as stored and read through js/gridlock-v1map.js); `lv2` and `hint`
   // are ladder 2 (2026-10-14). See js/gridlock-points.js.
   for (const k of ['lv', 'lv2', 'hint']) if (!g.gl[k] || typeof g.gl[k] !== 'object' || Array.isArray(g.gl[k])) g.gl[k] = {};
+}
+
+/** Word Weaver (2026-10-28): the per-level map and the lifetime extra-word count. A malformed map
+ *  is replaced by an empty one rather than guessed at; every well formed entry is kept as stored. */
+function ensureWw(g) {
+  if (!g.ww || typeof g.ww !== 'object' || Array.isArray(g.ww)) g.ww = { lv: {}, x: 0 };
+  if (!g.ww.lv || typeof g.ww.lv !== 'object' || Array.isArray(g.ww.lv)) g.ww.lv = {};
+  if (!Number.isFinite(g.ww.x) || g.ww.x < 0) g.ww.x = 0;
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -1001,6 +1021,7 @@ function normalize(raw) {
   ensureCt(st.games.contexto);
   ensureWo(st.games.wayout);
   ensureGl(st.games.gridlock);
+  ensureWw(st.games.wordweaver);
   ensureBz(st.games.brickblitz);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
@@ -1877,6 +1898,33 @@ export function recordGridlockHint(level) {
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
   g.gl.hint[k] = Date.now();
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver: a level completed for the FIRST time (2026-10-28; the game calls it once, at the
+ *  level's first completion: no replays). One play and one win in total and in `byDiff.ladder`; the
+ *  level's entry `ww.lv['L<n>'] = { s, h, t }` is written only where it is better than what is
+ *  stored (wwBest: stars Math.max, hints Math.min, the earliest time); `extra` (extra words found on
+ *  that level) is added to the lifetime counter `ww.x`.
+ *
+ *  `level` must be a positive integer; otherwise the play and the extras are recorded but no level
+ *  entry is written (rule 4: never invent a level). Returns the store, or null when rate-gated. */
+export function recordWordWeaver(level, { hints, extra } = {}) {
+  if (tooFast('wordweaver')) return null;
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  bumpTotals(g, 'ladder', true);
+  const n = Math.floor(Number(level) || 0);
+  const h = Math.max(0, Math.floor(Number(hints) || 0));
+  const x = Math.max(0, Math.floor(Number(extra) || 0));
+  g.ww.x += x;
+  if (n >= 1 && n === Number(level)) {
+    const k = 'L' + n;
+    g.ww.lv[k] = wwBest(g.ww.lv[k], { s: wwStarsFor(h), h, t: Date.now() });
+  }
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
