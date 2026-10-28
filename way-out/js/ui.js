@@ -16,7 +16,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
-import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
+import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -241,7 +241,7 @@ function writeRushSave(mode, run) {
  *  `L:<n>:5` then too, so its clock carries across unchanged.) */
 function srcKey(src) {
   if (src && src.k === 'X') return `X:${src.band}:${src.n}`;
-  if (src && src.k === 'N') return src.g === B9_GEN ? `N9:${src.band}:${src.n}` : `N:${src.band}:${src.n}`;
+  if (src && src.k === 'N') return src.g === B10_GEN ? `N10:${src.band}:${src.n}` : src.g === B9_GEN ? `N9:${src.band}:${src.n}` : `N:${src.band}:${src.n}`;
   return src && src.k === 'T' ? `T:${src.tier}:${src.level}:${src.gen}` : `L:${src && src.n}:${(src && src.g) || LADDER_GEN}`;
 }
 /** The board level n of `band` is played on when nothing older is in progress: the ladder's, or past
@@ -250,6 +250,8 @@ function defaultSrc(band, n) {
   // Hard and Expert by thinking (2026-10-27, engine.js "GENERATOR 8"): every Hard level from 101 and
   // Expert level from 201 not already in progress on an older board. Admin only until released.
   // Expert moved on to generator 9 the same evening (harder: engine.js "GENERATOR 9").
+  // Every Expert level, for everyone, on generator 10 (2026-10-28, engine.js "GENERATOR 10").
+  if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN, m: B10_COUNT };
   if (hasNews() && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (hasNews() && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
@@ -257,10 +259,14 @@ function defaultSrc(band, n) {
 /** The board a save's `src` names. */
 function boardOf(src) {
   if (src.k === 'X') return buildMore(src.band, src.n);
-  if (src.k === 'N') return src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
+  if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n, src.m) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
   return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
 }
 function validSrc(src, band, n) {
+  if (hasB10(band)) {   // Expert: generator 10 only; a level in progress keeps the board it started on
+    return src && src.k === 'N' && src.band === band && src.n === n && src.g === B10_GEN && Number.isInteger(src.m)
+      && src.m >= 1 && src.m <= B10_COUNT ? { k: 'N', band, n, g: B10_GEN, m: src.m } : defaultSrc(band, n);
+  }
   if (!src || typeof src !== 'object') return defaultSrc(band, n);
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B8_GEN && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B9_GEN && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
@@ -289,6 +295,7 @@ function migrateToLadder2() {
     if (map[band]) continue;
     const n = set.ladder[band];
     if (n > bandEnd(band)) continue;
+    if (hasB10(band)) continue;   // Expert: only generator 10's boards are played (2026-10-28)
     if (v1.migrated) {
       // Played the first ladder: carry its level in progress, numbered today's way.
       const s1 = v1[band];
@@ -327,6 +334,9 @@ function readSave(band, n, nArrows) {
   try {
     const s = readJSON(LSAVES2_KEY)[band];
     if (!s || s.v !== 3 || s.band !== band || s.n !== n) return null;
+    // Expert is generator 10 only (Matt, 2026-10-28: no points from the old Expert boards): a level in
+    // progress on an older board starts over on the new one. Its arrow ids name the OLD board's arrows.
+    if (hasB10(band) && !(s.src && s.src.k === 'N' && s.src.g === B10_GEN)) return null;
     const ids = (a) => (Array.isArray(a) ? a.filter((i) => Number.isInteger(i) && i >= 0 && i < nArrows) : []);
     const lives = Number.isInteger(s.lives) && s.lives >= 1 && s.lives <= LIVES ? s.lives : LIVES;
     return { gone: ids(s.gone), red: ids(s.red), lives, src: validSrc(s.src, band, n) };
@@ -1137,7 +1147,9 @@ class WayOut {
     // so its level's ladder board stands in. Generator 8 (Hard / Expert by thinking) is a fixed list.
     this.src = { k: 'R', l, g };
     this.gen = g;
-    this.lvl = g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
+    // Expert replays are on generator 10's board for that level number (Matt, 2026-10-28: no points from the
+    // old Expert boards); the replay is still logged against the level it makes up for.
+    this.lvl = hasB10(band) ? buildB10(miss.n) : g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
     this._resetBoard(null);
     this.clock = { n: miss.n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
     this.screen = 'play';
@@ -1271,7 +1283,7 @@ class WayOut {
     // on screen an arrow is, so the probe can tap it through the real input path.
     try {
       window.__woTest = {
-        state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier,
+        state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier, cols: this.lvl ? this.lvl.cols : 0, total: this.lvl ? this.lvl.arrows.length : 0,
           rush: this.rush ? { arrows: this.rush.arrows, boards: this.rush.boards, mistakes: this.rush.mistakes, over: this.rush.over, msLeft: Math.round(this._rushLeft()),
             paused: this.rush.paused, counting: this.rush.counting } : null }),
         clearId: () => hintArrow(this.lvl, this.gone, null, this.busy),

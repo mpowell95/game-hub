@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1316;
-const CACHE = 'game-hub-v1320';
+const IMPORTANT_SINCE = 1321;
+const CACHE = 'game-hub-v1321';
 
 const ASSETS = [
   './',
@@ -238,6 +238,7 @@ const ASSETS = [
   './way-out/js/strings.js',
   './way-out/js/boards8.js',
   './way-out/js/boards9.js',
+  './way-out/js/boards10.js',
   './way-out/js/impossible-tests.js',
   './gridlock/',
   './gridlock/index.html',
@@ -971,11 +972,12 @@ const REST_MANIFEST = {
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '48873b9523',
-  './way-out/js/ui.js': '4a5f7b2e5d',
-  './way-out/js/engine.js': '6c0fdfeb27',
+  './way-out/js/ui.js': '7af10907e3',
+  './way-out/js/engine.js': '61fc5f26ff',
   './way-out/js/strings.js': '17497f2cfa',
   './way-out/js/boards8.js': '56f9933468',
   './way-out/js/boards9.js': 'dfd4be284c',
+  './way-out/js/boards10.js': '32adf25b46',
   './way-out/js/impossible-tests.js': '019128540e',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
