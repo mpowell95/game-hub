@@ -814,7 +814,7 @@ const REST_MANIFEST = {
   './js/device-report.js': 'c2c389ae14',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'a079ac1e3f',
-  './js/bug-report-ui.js': 'c492bcdefb',
+  './js/bug-report-ui.js': 'bc87e3d2d0',
   './js/announce.js': '6cce5c6cc6',
   './js/announce-ui.js': '0bdfcd673d',
   './js/messages.js': 'b8ebafec81',
