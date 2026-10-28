@@ -691,10 +691,10 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 {
   const all = {
     d1: rec({ playerId: 'CP111', name: 'Pong' }, {
-      cuppong: { total: { played: 1, won: 1, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 } }, cp: { soloRacks: 2, soloThrows: 40, soloBest: 18 } },
+      cuppong: { total: { played: 1, won: 1, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 } }, cp: { soloRacks: 2, soloThrows: 40, soloBest: 18 }, cr: { hard: { w: 1, r: 2 } } },
     }, 100),
     d2: rec({ playerId: 'CP111', name: 'Pong' }, {
-      cuppong: { total: { played: 2, won: 0, lost: 2 }, byDiff: { hard: { played: 2, won: 0, lost: 2 } }, cp: { soloRacks: 0, soloThrows: 0, soloBest: 0 } },
+      cuppong: { total: { played: 2, won: 0, lost: 2 }, byDiff: { hard: { played: 2, won: 0, lost: 2 } }, cp: { soloRacks: 0, soloThrows: 0, soloBest: 0 }, cr: { hard: { w: 2, r: 1 }, easy: { w: 1, r: 0 } } },
     }, 200),
     d3: rec({ playerId: 'CP111', name: 'Pong' }, {
       cuppong: { total: { played: 0, won: 0, lost: 0 }, byDiff: {}, cp: { soloRacks: 1, soloThrows: 15, soloBest: 15 } },
@@ -703,6 +703,7 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   const cp = aggregatePlayers(all)[0].games.cuppong.cp;
   eq('cuppong: solo counters add', [cp.soloRacks, cp.soloThrows], [3, 55]);
   eq('cuppong: soloBest is the fewest non-zero, never the 0 sentinel', cp.soloBest, 15);
+  eq('cuppong: reracks in wins add per difficulty (the board tie-breaker)', aggregatePlayers(all)[0].games.cuppong.cr, { hard: { w: 3, r: 3 }, easy: { w: 1, r: 0 } });
 }
 
 // ---- Texas Hold'em's bankroll LEDGER combines across devices (THE LAW rule 1) ----

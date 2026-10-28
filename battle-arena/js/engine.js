@@ -19,6 +19,8 @@ export const COLS = 7;
 export const ROWS = 5;
 export const N = COLS * ROWS;
 export const MOVES_PER_TURN = 2;
+/** A side that has not had a turn cannot be taken below this (half a team's HP; Matt, 2026-10-28). */
+export const OPENING_FLOOR = TEAM_HP / 2;
 /** Berries are a sixth tile that MATCHES like a gem (3+ in a line), as in the reference game:
  *  each berry in a line counts toward evolving. Roughly one tile in ten. */
 export const BERRY_RATE = 0.10;
@@ -227,17 +229,14 @@ function damage(s, ev, target, n, cause) {
   const side = s.sides[target];
   const absorbed = Math.min(side.shield, n);
   side.shield -= absorbed;
-  // NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible"). Every
-  // 4+ match is an extra move with no cap, so a lucky chain could knock out a full team in the
-  // opener's FIRST turn (about 1 in 90 for the hard computer): in a challenge, the person challenged
-  // lost without ever playing. A side that has not had a turn yet (`turns` 0), or whose first turn
-  // is only starting (a curse biting at its start), stops at 1 HP. Pure state, no new field, so
-  // replays and hashes only differ in exactly that case (no stored online match had it).
-  // And the hit that would have knocked them out ENDS the mover's turn (afterMove reads `floored`):
-  // without that, the uncapped extra moves let the hard computer run on for 200+ moves.
+  // A FAIR START (Matt, 2026-10-28: a first-turn knockout "should never be possible", nor starting
+  // your first turn on 1 HP; "Yes do both"). A side that has not had a turn yet (`turns` 0), or that a
+  // curse bites as its first turn starts, cannot be taken below HALF its HP (OPENING_FLOOR, 40).
+  // Pure state, no new field. No stored online match or open room existed when this went in.
   const unplayed = side.turns === 0 || (cause === 'curse' && side.turns === 1);
-  const floored = unplayed && n - absorbed >= side.hp;
-  const hit = floored ? Math.max(0, side.hp - 1) : n - absorbed;
+  const floor = unplayed ? Math.min(side.hp, OPENING_FLOOR) : 0;
+  const floored = unplayed && n - absorbed > side.hp - floor;
+  const hit = floored ? side.hp - floor : n - absorbed;
   side.hp = Math.max(0, side.hp - hit);
   ev.push({ t: 'damage', side: target, n: hit, absorbed, hp: side.hp, shield: side.shield, cause, ...(floored ? { floored: true } : {}) });
   if (side.hp <= 0) {
@@ -339,14 +338,17 @@ function settle(s, ev, side) {
     if (!runs.length) return;
     const seed = new Set();
     for (const r of runs) for (const i of r.cells) seed.add(i);
-    // Extra moves (the mover only): EVERY match of 4 or more tiles (a straight 4/5, or an L / T) gives
-    // one, no cap (Matt, 2026-10-24: "Every 4+ should give me another turn"); a 5+ also heals.
+    // Extra moves (the mover only): a match of 4 or more tiles (a straight 4/5, or an L / T) gives one,
+    // ONE PER TURN (Matt, 2026-10-28: "limit extra turns to 1"; it was every 4+, no cap, from
+    // 2026-10-24, and a lucky chain could knock out a whole team in one turn). `extraUsed` marks it;
+    // endTurn clears it. A 5+ still heals every time.
     let fives = 0;
     if (side != null && side === s.turn) {
       const groups = matchGroups(runs);
       fives = groups.filter((g) => g.cells.size >= 5).length;
       for (const g of groups) {
-        if (g.cells.size < 4) continue;
+        if (g.cells.size < 4 || s.extraUsed) continue;
+        s.extraUsed = true;
         s.movesLeft += 1;
         ev.push({ t: 'extra', side, moves: s.movesLeft, five: g.cells.size >= 5 });
       }
@@ -562,8 +564,6 @@ function afterMove(s, ev, side) {
   if (s.winner != null) return;
   checkBerries(s, ev, side);
   ensureMove(s, ev);
-  // A knockout stopped at 1 HP (the other side has not had a turn) ends this turn at once.
-  if (ev.some((e) => e.t === 'damage' && e.floored && e.side !== side)) s.movesLeft = 0;
   if (s.movesLeft <= 0) {
     endTurn(s, ev);
     if (s.winner == null) ensureMove(s, ev);

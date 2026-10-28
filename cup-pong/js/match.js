@@ -100,6 +100,7 @@ export class Match {
     this.clearedBy = null;              // who cleared the rack that started the current rebuttal
     this.streak = { a: [0, 0], b: [0, 0] };
     this.reracksLeft = { a: reracks, b: reracks };
+    this.reracksUsed = { a: 0, b: 0 };   // spent this game (a rebuttal's free ones not counted): the board's tie-breaker
     this.islandUsed = { a: [false, false], b: [false, false] };   // per side, per BALL
     this.called = null;                 // the island cup called for the next throw
     this.pendingPick = null;            // { picker, n } - the defender owes n more cups (island, bounce)
@@ -209,7 +210,10 @@ export class Match {
     if (!p) return [];
     const to = applyPreset(this.target(), p.spots);
     this.racks[this.defender] = to;
-    if (this.phase !== 'rebuttal' && Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    if (this.phase !== 'rebuttal') {
+      if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+      this.reracksUsed[this.shooter]++;
+    }
     this.rerackedThisTurn = true;
     return [{ type: 'rerack', side: this.defender, key, to, left: this.reracksLeft[this.shooter] }];
   }
@@ -229,7 +233,10 @@ export class Match {
     // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
     if (this.backRack && !to.some((k) => k.r === 0)) return [];
     this.racks[this.defender] = to;
-    if (this.phase !== 'rebuttal' && Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+    if (this.phase !== 'rebuttal') {
+      if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
+      this.reracksUsed[this.shooter]++;
+    }
     this.rerackedThisTurn = true;
     return [{ type: 'rerack', side: this.defender, key: 'custom', to, left: this.reracksLeft[this.shooter] }];
   }
@@ -451,7 +458,7 @@ export class Match {
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
-      reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) },
+      reracksLeft: { a: enc(this.reracksLeft.a), b: enc(this.reracksLeft.b) }, reracksUsed: { ...this.reracksUsed },
       islandUsed: { a: this.islandUsed.a.slice(), b: this.islandUsed.b.slice() }, owed: { ...this.owed }, bonus: { ...this.bonus },
       called: this.called, pendingPick: this.pendingPick ? { ...this.pendingPick } : null,
       lastCup: this.lastCup, queue: this.queue.slice(), pairRes: this.pairRes.slice(),
@@ -472,6 +479,7 @@ export class Match {
     m.clearedBy = o.clearedBy === 'a' || o.clearedBy === 'b' ? o.clearedBy : null;
     m.streak = { a: arr((o.streak || {}).a, 2, 0).map(Number), b: arr((o.streak || {}).b, 2, 0).map(Number) };
     m.reracksLeft = { a: dec((o.reracksLeft || {}).a), b: dec((o.reracksLeft || {}).b) };
+    m.reracksUsed = { a: ((o.reracksUsed || {}).a | 0), b: ((o.reracksUsed || {}).b | 0) };
     // Per ball since 2026-09-29; an older save held one flag a side, read as both balls used.
     const used = (v) => (Array.isArray(v) || (v && typeof v === 'object') ? arr(v, 2, false).slice(0, 2).map(Boolean) : [!!v, !!v]);
     m.islandUsed = { a: used((o.islandUsed || {}).a), b: used((o.islandUsed || {}).b) };
@@ -500,7 +508,7 @@ export function swapSides(o) {
   const pair = (x) => (x && typeof x === 'object' ? { a: x.b, b: x.a } : x);
   return {
     ...o,
-    racks: pair(o.racks), streak: pair(o.streak), reracksLeft: pair(o.reracksLeft),
+    racks: pair(o.racks), streak: pair(o.streak), reracksLeft: pair(o.reracksLeft), reracksUsed: pair(o.reracksUsed),
     islandUsed: pair(o.islandUsed), owed: pair(o.owed), bonus: pair(o.bonus),
     shooter: sw(o.shooter), clearedBy: sw(o.clearedBy), winner: sw(o.winner),
     pendingPick: o.pendingPick ? { ...o.pendingPick, picker: sw(o.pendingPick.picker) } : null,

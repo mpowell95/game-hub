@@ -627,6 +627,7 @@ export const STRINGS = {
     lb_sort_meters: 'Distance',
     lb_ms_won_of: (p) => `${p.w} of ${p.n} won`,
     lb_played_count: (p) => `${p.n} played`, // a function because es needs '1 jugada'
+    lb_cp_reracks: (p) => (Number(p.n) === 1 ? '1 rerack' : `${p.n} reracks`),
     lb_wins_count: '{n} wins',
     lb_wins_unit: 'wins',
     // The multiplayer chip on a game's own leaderboard board (2026-08-11): the short tag in the
@@ -1443,6 +1444,7 @@ export const STRINGS = {
     lb_sort_meters: 'Distancia',
     lb_ms_won_of: (p) => `${p.w} de ${p.n} ganadas`,
     lb_played_count: (p) => (Number(p.n) === 1 ? `${p.n} jugada` : `${p.n} jugadas`),
+    lb_cp_reracks: (p) => (Number(p.n) === 1 ? '1 recolocación' : `${p.n} recolocaciones`),
     lb_wins_count: '{n} victorias',
     lb_wins_unit: 'victorias',
     lb_mp_short: 'MP',
