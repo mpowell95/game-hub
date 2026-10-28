@@ -20,6 +20,14 @@
 // miss the turn passes. The log still holds one entry per shot, a volley being N entries in a row;
 // the state carries `chVol` (shots still owed in this volley) and `chVHit` (did one hit yet), so a
 // log cut mid-volley still replays. A match without the flag keeps the rule above (N misses a turn).
+// ONE BONUS SHOT PER HIT (2026-10-28, Matt: "you get ONE bonus shot. Not 3 or 5. You get a single bonus
+// shot per hit. Misses get you nothing."): matches made since store `salvo: 2`. A turn opens with a full
+// volley of N; after any volley with H hits the shooter fires a volley of H (state `chNext`), and a
+// volley with no hit passes the turn. `salvo: true` (rule 1, the first day's matches) keeps "any hit =
+// another full volley", so they still replay exactly as played.
+export const SALVO_RULES = [1, 2];
+/** The salvo rule a stored value means: 0 (not a salvo), 1 (`true`) or 2. */
+export const salvoRule = (v) => (v === 2 ? 2 : v === true || v === 1 ? 1 : 0);
 //
 // THE LAW applies. A match is not a player's earned history, but the writes still follow rule 6:
 // every one is VERIFIED by a fresh re-read, and nothing here ever deletes anything.
@@ -186,14 +194,17 @@ export function fireShot(state, shooter, r, c, perTurn = 1) {
 
 /** PURE. How many squares the next volley at `target` holds: N, or every square left if fewer. */
 export function volleySize(state, target, perTurn = 1) {
-  const n = asShots(perTurn) || 1;
+  const n = Number.isInteger(+perTurn) && +perTurn > 0 ? +perTurn : 1;
   let open = 0;
   for (const v of state.shots[target].cells) if (v === CELL_UNKNOWN) open++;
   return Math.max(1, Math.min(n, open));
 }
-/** PURE. Shots still owed in the volley `shooter` is firing: the whole next volley if none is under way. */
+/** PURE. Shots still owed in the volley `shooter` is firing: the next volley if none is under way (a
+ *  bonus volley of one shot per hit under rule 2, else a full N). */
 export function volleyLeft(state, shooter, perTurn = 1) {
-  return state.turn === shooter && state.chVol > 0 ? state.chVol : volleySize(state, 1 - shooter, perTurn);
+  if (state.turn === shooter && state.chVol > 0) return state.chVol;
+  if (state.turn === shooter && state.chNext > 0) return volleySize(state, 1 - shooter, state.chNext);
+  return volleySize(state, 1 - shooter, asShots(perTurn) || 1);
 }
 
 /**
@@ -201,28 +212,29 @@ export function volleyLeft(state, shooter, perTurn = 1) {
  * keeps the turn once it is complete, all misses pass it. The match ends the moment a fleet sinks,
  * so a winning volley stops at the shot that wins it. Returns { state, answer }.
  */
-export function fireSalvoShot(state, shooter, r, c, perTurn = 1) {
+export function fireSalvoShot(state, shooter, r, c, perTurn = 1, rule = 1) {
   const target = 1 - shooter;
   const k = volleyLeft(state, shooter, perTurn);
-  const hitSoFar = state.turn === shooter && state.chVol > 0 && !!state.chVHit;
+  const mid = state.turn === shooter && state.chVol > 0;
+  const hitsSoFar = mid ? (Number.isInteger(state.chVHits) ? state.chVHits : (state.chVHit ? 1 : 0)) : 0;
   const res = fireAndResolve(state, target, r, c);
   let next = res.state;
   if (!next.over) {
-    const anyHit = hitSoFar || res.answer.result === 'hit';
+    const hits = hitsSoFar + (res.answer.result === 'hit' ? 1 : 0);
     next = k > 1
-      ? { ...next, turn: shooter, chVol: k - 1, chVHit: anyHit }
-      : { ...next, turn: anyHit ? shooter : target, chVol: 0, chVHit: false };
+      ? { ...next, turn: shooter, chVol: k - 1, chVHit: hits > 0, chVHits: hits, chNext: 0 }
+      : { ...next, turn: hits ? shooter : target, chVol: 0, chVHit: false, chVHits: 0, chNext: rule === 2 && hits ? hits : 0 };
   }
   return { state: next, answer: res.answer };
 }
 /** PURE. A whole volley of `cells` ([[r, c], ...]) in order, stopping at the shot that wins. Returns
  *  { state, answers, fired } (`fired` = the cells actually shot: what goes in the log). */
-export function fireVolley(state, shooter, cells, perTurn = 1) {
+export function fireVolley(state, shooter, cells, perTurn = 1, rule = 1) {
   let s = state;
   const answers = [], fired = [];
   for (const [r, c] of cells) {
     if (s.over || s.turn !== shooter || !isShotLegal(s, 1 - shooter, r, c)) break;
-    const res = fireSalvoShot(s, shooter, r, c, perTurn);
+    const res = fireSalvoShot(s, shooter, r, c, perTurn, rule);
     s = res.state; answers.push(res.answer); fired.push([r, c]);
     if (!s.chVol) break;   // the volley is complete (or the match is over)
   }
@@ -249,7 +261,7 @@ export function replay(size, fleetA, fleetB, log, bonus = true, perTurn = 1, sal
     if (s.over || s.turn !== shooter) return { ok: false };
     const target = 1 - shooter;
     if (!isShotLegal(s, target, e.r, e.c)) return { ok: false };
-    const res = salvo === true && bonus !== false ? fireSalvoShot(s, shooter, e.r, e.c, n)
+    const res = salvoRule(salvo) && bonus !== false ? fireSalvoShot(s, shooter, e.r, e.c, n, salvoRule(salvo))
       : bonus !== false ? fireShot(s, shooter, e.r, e.c, n) : fireAndResolve(s, target, e.r, e.c);
     s = res.state;
     shots.push({ seat: target, r: e.r, c: e.c, result: res.answer.result, shipId: res.answer.shipId, sunk: res.answer.sunk, cells: res.answer.cells });
@@ -297,7 +309,7 @@ export function validateGame(raw) {
     if (!e) return null;
     log.push(e);
   }
-  const salvo = raw.salvo === true;
+  const salvo = salvoRule(raw.salvo);
   const rep = replay(size, fleetA, fleetB, log, bonus, shots, salvo);
   if (!rep.ok) return null;
   const st = rep.state;
@@ -322,7 +334,7 @@ export function validateGame(raw) {
   const who = (x, fleet) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂'), fleet });
   return {
     v: 1, id, size, bonus, shots,
-    ...(salvo ? { salvo: true } : {}),
+    ...(salvo === 2 ? { salvo: 2 } : salvo ? { salvo: true } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -639,7 +651,7 @@ export async function createGame({ them, fleet, size = 'classic', shots = 1 }) {
   const now = Date.now();
   const id = mintGameId();
   const doc = {
-    v: 1, id, size: sz, bonus: true, shots: perTurn, salvo: true, lapse: true, by: me, created: now, updated: now,
+    v: 1, id, size: sz, bonus: true, shots: perTurn, salvo: 2, lapse: true, by: me, created: now, updated: now,
     a: { code: me, name: label.name, emoji: label.emoji, fleet: mine },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,

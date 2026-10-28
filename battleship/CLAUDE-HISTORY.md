@@ -1045,3 +1045,13 @@ game's own scene, ? top-right, title, Multiplayer first, segmented rows with sma
 the values need one, one Play button. The old screen (navy header + tagline, bot avatar, difficulty slider, two
 big PLAY VS buttons, cycling Options chips, a stats line) was replaced whole; every stored value kept its
 vocabulary. The Bonus shot chip went with its rule: in a salvo a hit always shoots again.
+
+
+## 2026-10-28 — One bonus shot per hit
+
+Matt: *"If you shoot 3 bombs (or 5 or whatever) and you hit 1 target and miss the rest, you get ONE bonus shot.
+Not 3 or 5. You get a single bonus shot per hit. Misses get you nothing."* The first day's salvo rule gave a
+whole new volley for any hit. New matches store `salvo: 2`; a volley with H hits earns a volley of H shots.
+Matches already stored `salvo: true` keep the first rule so their logs still replay (a log refused by
+`validateGame` would make the match unopenable). Shipped IMPORTANT: a phone on the previous build would read
+`salvo: 2` as no salvo and refuse the match.
