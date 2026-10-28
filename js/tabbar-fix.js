@@ -17,8 +17,10 @@ const SLACK = 24;   // px; a URL-bar animation mid-flight can leave a few px for
 
 /** The bottom of the screen the page really owns. An installed iPhone app (standalone, status bar
  *  black-translucent, viewport-fit=cover) always fills the whole screen, so when the bug shrinks
- *  innerHeight too, `screen` is still the truth; in a browser tab innerHeight is the only measure. */
-function trueBottom() {
+ *  innerHeight too, `screen` is still the truth; in a browser tab innerHeight is the only measure.
+ *  Also what a game should size itself to: never `visualViewport.height`, which the same bug leaves
+ *  at about half the screen (Battleship, 2026-10-28). */
+export function trueBottom() {
   const ih = window.innerHeight;
   const standalone = navigator.standalone === true
     || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
