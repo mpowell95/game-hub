@@ -83,8 +83,41 @@
 .gl-root .gl-home > :first-child { margin-top: auto; }
 .gl-root .gl-home > :last-child { margin-bottom: auto; }
 .gl-root.is-immersive .gl-home { padding-top: calc(var(--gl-top, 0px) + 52px); }
+/* The picture (2026-10-28): the next level's own board in the chosen look; tapping it plays. How to
+   play is the round "?" at the row's right edge (Arrow Maze's layout). */
+.gl-root .gl-herorow { position: relative; display: flex; justify-content: center; flex: none; }
+.gl-root .gl-hero {
+  --gl-hero: clamp(110px, 25vh, 240px);
+  display: block;
+  flex: none;
+  height: var(--gl-hero);
+  width: calc(var(--gl-hero) * 1.062);
+  padding: 0;
+  border: 0;
+  background: none;
+  touch-action: manipulation;
+}
+.gl-root .gl-hero .gl-preview { display: block; width: 100%; height: 100%; filter: drop-shadow(0 6px 14px rgba(16, 24, 40, .28)); }
+.gl-root button.gl-hero:active { transform: scale(.98); }
+.gl-root button.gl-hero:focus-visible { outline: 3px solid var(--gl-sel); outline-offset: 4px; border-radius: 16px; }
+.gl-root button.gl-howq {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  border-radius: 50%;
+  background: var(--gh-surface-2, #eef2f8);
+  color: var(--gh-ink, #16243a);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+.gl-root button.gl-howq:focus-visible { outline: 3px solid var(--gl-sel); outline-offset: 2px; }
 .gl-root .gl-head { text-align: center; }
-.gl-root .gl-head h1 { margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -.2px; }
+.gl-root .gl-head h1 { margin: 0 0 2px; font-size: 26px; font-weight: 800; letter-spacing: -.2px; }
 .gl-root .gl-head .gl-pts { margin: 0; color: var(--gh-muted, #5b6b82); font-size: 15px; font-weight: 700; }
 .gl-root .gl-head .gl-pts b { color: var(--gh-ink, inherit); font-size: 20px; font-variant-numeric: tabular-nums; }
 .gl-root .gl-menu-card { display: flex; flex-direction: column; gap: 12px; }
@@ -139,9 +172,47 @@
 .gl-root .gl-seg-top svg { width: 14px; height: 14px; flex: none; }
 .gl-root .gl-seg-top svg.lb-dshape-x2 { width: 24px; }
 
-/* Levels and How to play share one row under the card. */
-.gl-root .gl-home-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.gl-root .gl-home-foot .gh-btn { padding: 0 8px; white-space: nowrap; }
+/* Each difficulty's progress through its 1000 levels: a thin bar, no words (2026-10-28). */
+.gl-root .gl-seg-bar { display: block; width: 72%; height: 4px; margin-top: 5px; border-radius: 2px; background: var(--gh-border, rgba(16, 36, 58, .14)); overflow: hidden; }
+.gl-root .gl-seg-bar i { display: block; height: 100%; min-width: 0; border-radius: 2px; background: #178a7a; }
+:root.gh-dark .gl-root .gl-seg-bar i { background: #3fd6bd; }
+/* Levels (an icon) beside Play. */
+.gl-root .gl-playrow { display: flex; gap: 8px; }
+.gl-root .gl-playrow .gl-play { flex: 1 1 0; min-width: 0; min-height: 52px; font-size: 18px; font-weight: 900; white-space: nowrap; }
+.gl-root .gl-lvbtn { flex: none; width: 56px; min-height: 52px; padding: 0; display: grid; place-items: center; }
+.gl-root .gl-lvbtn svg { width: 24px; height: 24px; }
+/* The footer: the points leader and Leaderboard › (Arrow Maze's card). */
+.gl-root .gl-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
+  background: var(--gh-surface, #fff);
+  border: 1px solid var(--gh-border, rgba(16, 36, 58, .14));
+}
+.gl-root .gl-rl-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gl-root .gl-rl-label { font-size: 12px; font-weight: 700; color: var(--gh-muted, #5b6b82); }
+.gl-root .gl-rl-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.gl-root .gl-rl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 800; }
+.gl-root .gl-rl-score { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; color: #178a7a; }
+:root.gh-dark .gl-root .gl-rl-score { color: #3fd6bd; }
+.gl-root button.gl-rl-all {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--gh-border-strong, rgba(16, 36, 58, .28));
+  border-radius: 999px;
+  background: var(--gh-surface-2, #eef2f8);
+  color: var(--gh-ink, #16243a);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.gl-root button.gl-rl-all::after { content: ' \203A'; }
+.gl-root button.gl-rl-all:focus-visible { outline: 3px solid var(--gl-sel); outline-offset: 2px; }
+/* Short phones: the picture gives way first. */
+@media (max-height: 760px) { .gl-root .gl-hero { --gl-hero: clamp(90px, 19vh, 150px); } }
 
 /* --- LEVELS: the level list, 25 a page (pages, never a scroll) -------------------------------- */
 .gl-root .gl-levels {

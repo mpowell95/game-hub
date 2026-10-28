@@ -198,5 +198,18 @@ const LEGACY_SEED = {
   ok('ESM: unknown gameId returns null and writes nothing new', out === null && JSON.stringify(readStats()) === before);
 }
 
+// --- scenario 5: Word Weaver files a level's play under its BAND (2026-10-29) --------
+// recordWordWeaver(level, { hints, extra }) is what word-weaver/js/ui.js calls. While the game is
+// admin only the write lands in its test record (testGames.wordweaver), never the real one.
+{
+  freshStore();
+  const out = gs.recordWordWeaver(1600, { hints: 1, extra: 2 });
+  const st = readStats();
+  const w = (st && st.testGames && st.testGames.wordweaver) || (st && st.games.wordweaver) || {};
+  ok('ESM: recordWordWeaver returns the store', !!out);
+  ok('ESM: an Expert level\'s play is filed under byDiff.expert, not ladder', w.byDiff && w.byDiff.expert && w.byDiff.expert.won === 1 && !w.byDiff.ladder);
+  ok('ESM: the level entry is L1600 { s: 2, h: 1 } and x = 2', w.ww && w.ww.lv.L1600 && w.ww.lv.L1600.s === 2 && w.ww.lv.L1600.h === 1 && w.ww.x === 2);
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

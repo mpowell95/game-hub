@@ -246,15 +246,18 @@
 //                                                   // POINTS come from this map, never from byDiff
 //                                                   // (js/gridlock-points.js). See recordGridlock
 //       wordweaver: {
-//         total, byDiff,                           // byDiff: 'ladder' only (one ladder, no tier);
-//                                                   // one play+won per level completed
+//         total, byDiff,                           // byDiff keyed easy|medium|hard|expert, the
+//                                                   // level's band (2026-10-29); 'ladder' = plays
+//                                                   // before the bands (kept as stored, counted in
+//                                                   // All). One play+won per level completed
 //         ww: { lv: { L<n>: { s, h, t } }, x } },  // (2026-10-28) per level n, written ONCE at its
 //                                                   // first completion (no replays): s = stars 1-3
 //                                                   // (0 hints 3, 1 hint 2, 2+ hints 1), h = hints
 //                                                   // used, t = when (ms). Only improves (wwBest).
 //                                                   // Keyed 'L<n>' (Firebase arrays). x = lifetime
-//                                                   // extra words found, a counter. STARS come from
-//                                                   // this map (js/word-weaver-points.js). See
+//                                                   // extra words found, a counter. STARS and POINTS
+//                                                   // (stars x band: 1/2/3/4) come from this map
+//                                                   // (js/word-weaver-points.js). See
 //                                                   // recordWordWeaver
 //       contexto: {
 //         total, byDiff,                           // byDiff keyed en|es (the word set, no tier)
@@ -273,7 +276,7 @@
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest, wwStarsFor } from './word-weaver-points.js';
+import { wwBest, wwStarsFor, wwBandOf } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
 import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
@@ -2013,7 +2016,8 @@ export function recordGridlockHint(level) {
 }
 
 /** Word Weaver: a level completed for the FIRST time (2026-10-28; the game calls it once, at the
- *  level's first completion: no replays). One play and one win in total and in `byDiff.ladder`; the
+ *  level's first completion: no replays). One play and one win in total and in the level's band,
+ *  `byDiff[easy|medium|hard|expert]` (2026-10-29; before that `byDiff.ladder`, kept as stored); the
  *  level's entry `ww.lv['L<n>'] = { s, h, t }` is written only where it is better than what is
  *  stored (wwBest: stars Math.max, hints Math.min, the earliest time); `extra` (extra words found on
  *  that level) is added to the lifetime counter `ww.x`.
@@ -2026,8 +2030,9 @@ export function recordWordWeaver(level, { hints, extra } = {}) {
   const st = loadStats();
   const g = st.games.wordweaver;
   ensureWw(g);
-  bumpTotals(g, 'ladder', true);
   const n = Math.floor(Number(level) || 0);
+  // A level number that is not a positive integer has no band: its play goes to 'ladder' (All only).
+  bumpTotals(g, n >= 1 && n === Number(level) ? wwBandOf(n) : 'ladder', true);
   const h = Math.max(0, Math.floor(Number(hints) || 0));
   const x = Math.max(0, Math.floor(Number(extra) || 0));
   g.ww.x += x;

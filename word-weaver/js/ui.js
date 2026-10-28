@@ -3,16 +3,19 @@
 // the module contract. What a word means, the hint and the stars live in engine.js; nothing here
 // decides anything about the puzzle.
 //
-// WORD WEAVER (word-weaver/CLAUDE.md): a Wordscapes-style crossword. One ladder, played in order, no
-// difficulty and no replays: opening the game goes straight to the current level.
+// WORD WEAVER (word-weaver/CLAUDE.md): a Wordscapes-style crossword. Four difficulties (bands of one
+// ladder), each played in order, no replays. Opening the game lands on the setup screen (the points, the
+// four difficulties, Play).
 //
 // THE MODULE CONTRACT: init / destroy / isInProgress (docs/BUILDING-A-GAME.md).
-// isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.wordweaver.save.v1` after
+// isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.wordweaver.save.v2` after
 // every accepted word and every hint, so leaving is lossless.
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone page themes too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
-import { recordWordWeaver } from '../../js/game-stats.js';
+import { diffShapeSVG } from '../../js/difficulty-tiers.js';
+import { recordWordWeaver, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwPoints } from '../../js/word-weaver-points.js';
 import { loadIndex, loadLevel, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -23,16 +26,22 @@ const DEV_HOST = (() => { try { return /^(localhost|127\.0\.0\.1)$/.test(locatio
 const DATA = new URL('../data/', import.meta.url);
 
 // --- persistence ---------------------------------------------------------------------------------
-// SAVE: { v: 1, n: <current level>, found: [grid words], extra: [extra words], hints: <count on this level>,
-//         revealed: ['r,c', ...], recorded: <bool> }. Written after every accepted word and every hint.
-// BEST: { v: 1, n } the furthest level ever reached; only ever grows (THE LAW rule 2). It is the place to
-//       carry on from if the save is ever missing or unreadable, so a bad save never sends a player back to 1.
+// SETTINGS `gamehub.wordweaver.v1` = { band }: the difficulty picked on the setup screen.
+// SAVE v2 `gamehub.wordweaver.save.v2` = { easy, medium, hard, expert: attempt | null, migrated: 1 }, one attempt
+//   per difficulty; attempt = { v: 1, n, found: [grid words], extra: [extra words], hints, revealed: ['r,c', ...],
+//   recorded }. Written after every accepted word and every hint.
+// SAVE v1 `gamehub.wordweaver.save.v1` (the first build: one attempt, no difficulties) is READ ONCE into the
+//   difficulty its level falls in, then never written or deleted (THE LAW rules 3 and 5).
+// BEST `gamehub.wordweaver.best.v1` (the first build's furthest level) is no longer read or written; it stays
+//   as stored (rule 5). Where a player stands is now their stats store's `ww.lv` (the levels completed).
 // PENDING: [{ n, hints, extra }] completions the recorder refused (its rate gate); retried on every open,
-//          removed only after the recorder took them.
-const SAVE_KEY = 'gamehub.wordweaver.save.v1';
-const BEST_KEY = 'gamehub.wordweaver.best.v1';
+//          removed only after the recorder took them. They count as completed.
+const SETTINGS_KEY = 'gamehub.wordweaver.v1';
+const OLD_SAVE_KEY = 'gamehub.wordweaver.save.v1';
+const SAVE_KEY = 'gamehub.wordweaver.save.v2';
 const PENDING_KEY = 'gamehub.wordweaver.pending.v1';
 const SAVE_V = 1;
+const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
 
 const reduceMotion = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
@@ -48,19 +57,62 @@ function writeJSON(key, v, what) {
   try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch (err) { console.error(`[word-weaver] ${what} NOT saved`, err); return false; }
 }
 
-function bestLevel() {
-  const b = readObj(BEST_KEY), n = b ? Math.floor(Number(b.n)) : 0;
-  return n >= 1 ? n : 1;
+function loadBand() {
+  const v = readObj(SETTINGS_KEY);
+  return v && WW_TIERS.includes(v.band) ? v.band : 'easy';
 }
-function noteBest(n) {
-  if (n > bestLevel() || !readObj(BEST_KEY)) writeJSON(BEST_KEY, { v: 1, n: Math.max(n, bestLevel()) }, 'furthest level');
+function saveBand(band) {
+  writeJSON(SETTINGS_KEY, { ...(readObj(SETTINGS_KEY) || {}), band }, 'difficulty');
 }
 
-/** The level to open and its saved state ({ n, raw }); raw is null when there is no usable save. */
-function loadSave() {
-  const s = readObj(SAVE_KEY), n = s ? Math.floor(Number(s.n)) : 0;
-  if (s && s.v === SAVE_V && n >= 1) return { n, raw: s };
-  return { n: bestLevel(), raw: null };
+/** The attempts, one per difficulty. The first build's single save is carried across ONCE, into the
+ *  difficulty its level falls in, with its words, hints and cells exactly as stored. */
+function loadSaves() {
+  const cur = readObj(SAVE_KEY);
+  if (cur && cur.migrated) return cur;
+  const all = cur || {};
+  const old = readObj(OLD_SAVE_KEY);
+  const n = old ? Math.floor(Number(old.n)) : 0;
+  if (old && old.v === SAVE_V && n >= 1) {
+    const band = wwBandOf(n);
+    if (!all[band]) {
+      all[band] = { v: SAVE_V, n, found: old.found, extra: old.extra, hints: old.hints, revealed: old.revealed, recorded: old.recorded === true };
+      if (!readObj(SETTINGS_KEY)) saveBand(band);        // a player already at a harder level opens on that difficulty
+    }
+  }
+  all.migrated = 1;
+  const ok = writeJSON(SAVE_KEY, all, 'level progress (migration)');
+  const back = readObj(SAVE_KEY);
+  if (!ok || !back || back.migrated !== 1) console.error('[word-weaver] the first build\'s save was not carried across; it is untouched and will be read again');
+  return all;
+}
+/** The saved attempt of a difficulty, or null. */
+function attemptOf(band) {
+  const a = loadSaves()[band], n = a ? Math.floor(Number(a.n)) : 0;
+  return a && a.v === SAVE_V && n >= 1 && wwBandOf(n) === band ? a : null;
+}
+function writeAttempt(band, attempt) {
+  const all = loadSaves();
+  all[band] = attempt;
+  return writeJSON(SAVE_KEY, all, 'level progress');
+}
+
+/** Every level this phone has completed: its stats store plus completions the recorder has not taken yet. */
+function completedLevels() {
+  const done = new Set();
+  try { for (const k of Object.keys(wwLevels(loadStats().games.wordweaver))) done.add(+k); } catch { /* none */ }
+  for (const e of readPending()) done.add(Math.floor(e.n));
+  return done;
+}
+/** Where a difficulty stands: the attempt in progress, else its lowest level not yet completed.
+ *  { n, finished } (finished: every level of the band is done; n is then past its end). */
+function bandNext(band, total) {
+  const done = completedLevels(), end = wwBandEnd(band, total);
+  const a = attemptOf(band);
+  if (a && !done.has(Math.floor(a.n)) && a.n <= end) return { n: Math.floor(a.n), finished: false };
+  let n = WW_BAND_START[band];
+  while (n <= end && done.has(n)) n++;
+  return { n, finished: n > end };
 }
 
 function readPending() {
@@ -87,6 +139,7 @@ function flushPending() {
 const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 const ICON_SHUFFLE = `<svg ${SVGA}><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>`;
 const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>`;
+const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const STAR_D = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${STAR_D}"/></svg>`;
 
@@ -102,7 +155,9 @@ class WordWeaver {
   constructor(container) {
     this.container = container;
     this.timers = [];
-    this.view = 'loading';       // loading | play | done | soon | fail
+    this.view = 'setup';         // setup | play | done | bandDone | soon | fail
+    this.band = loadBand();
+    this.count = null;           // how many levels exist (data/index.json), once read
     this.level = null;
     this.st = freshState();
     this.n = 1;
@@ -132,10 +187,18 @@ class WordWeaver {
     this.root.addEventListener('pointercancel', this._onUp);
     document.addEventListener('keydown', this._onKey);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
-    this.offLang = onLangChange(() => { if (this.view !== 'loading') this._render(); });
+    this.offLang = onLangChange(() => this._render());
     this._positionRoot();
     try { flushPending(); } catch (err) { console.error('[word-weaver] queued levels', err); }
-    this._open(loadSave().n);
+    try { loadSaves(); } catch (err) { console.error('[word-weaver] saves', err); }   // the first build's save is carried across now, so its difficulty is the one picked
+    this.band = loadBand();
+    this._render();
+    // The setup screen's Play button needs to know how many levels exist: repaint when that is known.
+    loadIndex(DATA).then((idx) => {
+      if (this.dead) return;
+      this.count = idx ? idx.count : null;
+      if (this.view === 'setup') this._render();
+    });
   }
 
   destroy() {
@@ -199,6 +262,7 @@ class WordWeaver {
   async _open(n) {
     const seq = ++this.seq;
     this.n = n;
+    this.band = wwBandOf(n);
     const lv = await loadLevel(n, DATA);
     if (this.dead || seq !== this.seq) return;
     if (!lv) {
@@ -209,9 +273,9 @@ class WordWeaver {
       this._render();
       return;
     }
-    const sv = loadSave();
+    const a = attemptOf(this.band);
     this.level = lv;
-    this.st = cleanState(lv, sv.n === n ? sv.raw : null);
+    this.st = cleanState(lv, a && Math.floor(a.n) === n ? a : null);
     this.order = shuffled(lv.l.length, null);
     this.finishing = false;
     this.view = isDone(lv, this.st) ? 'done' : 'play';
@@ -223,9 +287,7 @@ class WordWeaver {
   _save() {
     if (!this.level) return false;
     const s = this.st;
-    const ok = writeJSON(SAVE_KEY, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, revealed: s.revealed, recorded: s.recorded }, 'level progress');
-    noteBest(this.n);
-    return ok;
+    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, revealed: s.revealed, recorded: s.recorded });
   }
 
   /** Count the level, once. The recorder runs FIRST (before any animation); the `recorded` flag is set only
@@ -255,6 +317,14 @@ class WordWeaver {
     this.tail = null;
     this.pillHold = null;
     const v = this.view, played = v === 'play' || v === 'done';
+    const modal = '<div class="gh-overlay ww-modal" hidden></div>';
+    this.root.classList.toggle('is-setup', v === 'setup');
+    if (v === 'setup') {
+      this.root.innerHTML = this._setupHTML() + modal;
+      this._positionRoot();
+      try { delete window.__wwTest; } catch { /* no window */ }
+      return;
+    }
     let top = `<button type="button" class="ww-help" data-act="help" aria-label="${t('help_aria')}">?</button>`;
     if (played) {
       top += `<button type="button" class="ww-chip" data-act="extras" aria-label="">${ICON_STAR}<span class="ww-badge" hidden></span></button>`
@@ -266,10 +336,15 @@ class WordWeaver {
       lower = v === 'play' ? this._playHTML() : this._doneHTML();
     } else if (v === 'soon') {
       stage = `<div class="ww-msg">${ICON_STAR}<b>${t('soon')}</b></div>`;
+    } else if (v === 'bandDone') {
+      stage = `<div class="ww-msg"><span class="ww-shapechip">${diffShapeSVG(TIER_NUM[this.band])}</span><b>${t('band_done', { name: t('tier_' + this.band) })}</b><button type="button" class="ww-next" data-act="menu">${t('back_setup')}</button></div>`;
     } else if (v === 'fail') {
       stage = `<div class="ww-msg"><b>${t('load_failed')}</b><button type="button" class="ww-next" data-act="retry">${t('retry')}</button></div>`;
     }
-    this.root.innerHTML = `<div class="ww-top">${top}</div><div class="ww-stage">${stage}</div>${lower ? `<div class="ww-lower">${lower}</div>` : ''}<div class="gh-overlay ww-modal" hidden></div>`;
+    // The way back to the setup screen: TOP LEFT, on the row UNDER the Hub button, never beside it
+    // (docs/BUILDING-A-GAME.md, Part 0; Gridlock's rule).
+    const back = `<div class="ww-row2"><button type="button" class="ww-back" data-act="menu" aria-label="${t('menu_aria')}">${ICON_BACK}</button></div>`;
+    this.root.innerHTML = `<div class="ww-top">${top}</div>${back}<div class="ww-stage">${stage}</div>${lower ? `<div class="ww-lower">${lower}</div>` : ''}${modal}`;
     this._positionRoot();
     if (played) {
       this._buildGrid();
@@ -284,6 +359,34 @@ class WordWeaver {
     } else {
       try { delete window.__wwTest; } catch { /* no window */ }
     }
+  }
+
+  /** The setup screen. AS FEW WORDS AS POSSIBLE (root CLAUDE.md): the title, the player's points, the four
+   *  difficulties (shape + name), Play with the level number, How to play. Nothing else. */
+  _setupHTML() {
+    const band = this.band, total = this.count == null ? Infinity : this.count;
+    const nx = bandNext(band, total);
+    let pts = 0;
+    try { pts = wwPoints(loadStats().games.wordweaver); } catch { pts = 0; }
+    const segs = WW_TIERS.map((k) => `
+      <button type="button" class="ww-seg${k === band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === band}">
+        ${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b>${k === band ? '<span class="ww-check" aria-hidden="true">&#10003;</span>' : ''}
+      </button>`).join('');
+    const play = nx.finished
+      ? `<button type="button" class="ww-next ww-play" disabled>${t('band_done', { name: t('tier_' + band) })}</button>`
+      : nx.n > total
+        ? `<button type="button" class="ww-next ww-play" disabled>${t('soon')}</button>`
+        : `<button type="button" class="ww-next ww-play" data-act="play">${t('play_n', { n: nx.n })}</button>`;
+    return `
+      <div class="ww-setup">
+        <div class="ww-head">
+          <h1>${t('title')}</h1>
+          <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}</p>
+        </div>
+        <div class="ww-segs" role="radiogroup" aria-label="${t('diff_aria')}">${segs}</div>
+        ${play}
+        <button type="button" class="ww-link" data-act="help">${t('how_title')}</button>
+      </div>`;
   }
 
   _playHTML() {
@@ -402,7 +505,7 @@ class WordWeaver {
 
   /** Size the wheel, then the grid to the room above it (measured, never guessed). The wheel is as big as
    *  the width and height allow (its letters stay well over 44px); a big grid takes some of that back, down
-   *  to 200px, before its cells get small. */
+   *  to 184px (a letter's touch area is still 47px), before its cells get small. */
   _layout() {
     if (!this.root || !this.level || (this.view !== 'play' && this.view !== 'done')) return;
     const stage = this.root.querySelector('.ww-stage');
@@ -421,7 +524,7 @@ class WordWeaver {
       return Math.floor(Math.min((sw - gap * (cols - 1)) / cols, (sh - gap * (rows - 1)) / rows, 54));
     };
     let cell = fit(wheel);
-    while (cell < 34 && wheel > 200) { wheel = Math.max(200, wheel - 12); cell = fit(wheel); }
+    while (cell < 34 && wheel > 184) { wheel = Math.max(184, wheel - 12); cell = fit(wheel); }
     cell = Math.max(18, cell);
     this.cell = cell;
     grid.style.setProperty('--ww-cell', cell + 'px');
@@ -638,15 +741,36 @@ class WordWeaver {
     this._later(() => { this.finishing = false; this.view = 'done'; this._render(); }, reduceMotion() ? 150 : 800);
   }
 
+  /** The next level of the same difficulty; the band's last one leads to "<Band> done". */
   _next() {
     if (this.view !== 'done') return;
     this._record();
-    const next = this.n + 1;
-    const ok = writeJSON(SAVE_KEY, { v: SAVE_V, n: next, found: [], extra: [], hints: 0, revealed: [], recorded: false }, 'level progress');
-    noteBest(next);
-    const back = readObj(SAVE_KEY);
-    if (!ok || !back || back.n !== next) console.error('[word-weaver] the next level was not saved; this level will show again after a restart');
-    this._open(next);
+    const band = this.band;
+    // The finished level's words and hints live in the stats store now (the recorder ran first); the attempt is spent.
+    if (!writeAttempt(band, null)) console.error('[word-weaver] the finished attempt was not cleared; the next level still opens');
+    const nx = bandNext(band, this.count == null ? Infinity : this.count);
+    if (nx.finished) { this.seq++; this.view = 'bandDone'; this._render(); return; }
+    this._open(nx.n);
+  }
+
+  /** The setup screen's Play: the picked difficulty's attempt in progress, else its next level. */
+  _play() {
+    const nx = bandNext(this.band, this.count == null ? Infinity : this.count);
+    if (nx.finished) return;
+    saveBand(this.band);
+    this._open(nx.n);
+  }
+
+  _toSetup() {
+    this.seq++;                                    // an open still loading must not land on the setup screen
+    for (const id of this.timers) clearTimeout(id);
+    this.timers = [];
+    this.drag = null;
+    this.finishing = false;
+    this.pillTimer = 0;
+    this._closeModal();
+    this.view = 'setup';
+    this._render();
   }
 
   // --- input --------------------------------------------------------------------------------------
@@ -663,6 +787,9 @@ class WordWeaver {
     else if (act === 'close') this._closeModal();
     else if (act === 'next') this._next();
     else if (act === 'retry') this._open(this.n);
+    else if (act === 'play') this._play();
+    else if (act === 'menu') this._toSetup();
+    else if (act === 'band') { if (WW_TIERS.includes(btn.dataset.band) && btn.dataset.band !== this.band) { this.band = btn.dataset.band; saveBand(this.band); this._render(); } }
   }
 
   /** Desktop: letters type into the pill (the wheel's letters only, respecting counts), Backspace, Enter
@@ -672,6 +799,16 @@ class WordWeaver {
     const m = this.root.querySelector('.ww-modal');
     if (m && !m.hidden) {
       if (ev.key === 'Escape') { ev.preventDefault(); this._closeModal(); }
+      return;
+    }
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[ev.key];
+    if (this.view === 'setup' && step && ev.target && ev.target.closest && ev.target.closest('.ww-seg')) {
+      ev.preventDefault();
+      this.band = WW_TIERS[(WW_TIERS.indexOf(this.band) + step + WW_TIERS.length) % WW_TIERS.length];
+      saveBand(this.band);
+      this._render();
+      const now = this.root.querySelector(`.ww-seg[data-band="${this.band}"]`);
+      if (now) now.focus();
       return;
     }
     if (this.view !== 'play' || this.finishing || this.drag) return;

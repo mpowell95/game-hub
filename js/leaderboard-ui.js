@@ -62,7 +62,7 @@ import { TIERS, diffShapeSVG, TIER_COLOR, tierOf } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
-import { wwStars, wwCleared, wwThreeStars } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwCleared, wwThreeStars } from './word-weaver-points.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -595,6 +595,9 @@ const ttOf = (g) => (g.games.tictactoe && g.games.tictactoe.tt) || {};
 function boardView(list, id) {
   const tabsExtra = [];
   let tiers = (id === 'skeeball' || id === 'holdem' || id === 'tictactoe') ? [] : fieldTiersPresent(list, [id]);
+  // Word Weaver: a band tab for every band anyone has completed a level in (the per-level map, so
+  // levels finished before the bands, filed under 'ladder', still make their band's tab).
+  if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
   if (id === 'tictactoe') tabsExtra.push({ view: 'ultimate', label: t('lb_tt_ultimate') }, { view: 'classic', label: t('lb_tt_classic') });
   if (id === 'snake') tabsExtra.push({ view: 'off', label: t('lb_sn_walls_off') }, { view: 'on', label: t('lb_sn_walls_on') });
   if (id === 'cuppong' && list.some((g) => cpSoloBest(g) !== null)) tabsExtra.push({ view: 'solo', label: tx('lb_tab_solo', 'Solo') });
@@ -968,9 +971,9 @@ function gameMetricAt(g, id, tier) {
   if (id === 'wayout') return woPoints(g.games.wayout, tier == null ? null : WO_TIERS[tier - 1]);
   // Gridlock ranks on POINTS for distinct levels cleared (js/gridlock-points.js), the same shape.
   if (id === 'gridlock') return glPoints(g.games.gridlock, tier == null ? null : GL_TIERS[tier - 1]);
-  // Word Weaver ranks on TOTAL STARS over distinct levels completed (js/word-weaver-points.js). One
-  // ladder, no difficulty: there is no number at a tier.
-  if (id === 'wordweaver') return tier == null ? wwStars(g.games.wordweaver) : null;
+  // Word Weaver ranks on POINTS: stars x the band's multiplier (1/2/3/4), over distinct levels
+  // completed (js/word-weaver-points.js, Matt 2026-10-29); at a tier, that band's own points.
+  if (id === 'wordweaver') return wwPoints(g.games.wordweaver, tier == null ? null : WW_TIERS[tier - 1]);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -1015,6 +1018,9 @@ function lbUnitKeyOf(id) {
 function boardPlaysOf(g, id) {
   if (id === 'spellingbee' && beeBoard()) return beeRowFor(g).days;
   if (id === 'holdem') return playsAtTier(g, [id], null);   // no difficulty filter on this board
+  // Word Weaver at a band: the levels completed in it (one play each), read from the per-level map,
+  // so plays recorded before the bands (byDiff 'ladder') still show under their band.
+  if (id === 'wordweaver' && _tier != null) return wwCleared(g.games.wordweaver, WW_TIERS[_tier - 1]);
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
 }
 
@@ -1054,8 +1060,7 @@ function boardTierOf(g, id) {
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
-  if ((id === 'wayout' || id === 'gridlock') && _tier == null) return null;
-  if (id === 'wordweaver') return null;                      // one ladder, no difficulty
+  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver') && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
