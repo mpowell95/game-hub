@@ -132,11 +132,38 @@ ok('never the same letters twice in a row', keys.every((k, i) => i === 0 || keys
 ok('no letter multiset is used twice anywhere', new Set(keys).size === keys.length);
 ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l.length === 7));
 
+// --- Hard and Expert (2026-10-29): their own rules (tools/build-word-weaver-data.mjs, BAND) ------
+const BANDS = [
+  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
+  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+];
+for (const B of BANDS) {
+  const part = LEVELS.slice(B.from - 1, B.to);
+  const bad = (f) => part.map((lv, i) => (f(lv) ? 0 : B.from + i)).filter(Boolean).slice(0, 5).join(', ');
+  const len = (lv, n) => lv.w.filter((e) => e[0].length === n).length;
+  let b;
+  ok(`${B.name}: every level has 7 wheel letters (${b = bad((lv) => lv.l.length === 7)})`, !b);
+  ok(`${B.name}: ${B.words[0]}-${B.words[1]} grid words (${b = bad((lv) => lv.w.length >= B.words[0] && lv.w.length <= B.words[1])})`, !b);
+  ok(`${B.name}: no grid word under ${B.minLen} letters (${b = bad((lv) => lv.w.every((e) => e[0].length >= B.minLen))})`, !b);
+  ok(`${B.name}: at most ${B.max3} three- and ${B.max4} four-letter grid words (${b = bad((lv) => len(lv, 3) <= B.max3 && len(lv, 4) <= B.max4)})`, !b);
+}
+{
+  const avgLen = (a, z) => { const ws = LEVELS.slice(a - 1, z).flatMap((lv) => lv.w.map((e) => e[0].length)); return ws.reduce((p, q) => p + q, 0) / ws.length; };
+  ok('Expert grid words are longer on average than Medium\'s, Hard\'s than Medium\'s', avgLen(1501, 2000) > avgLen(501, 1000) + 0.3 && avgLen(1001, 1500) > avgLen(501, 1000) + 0.2);
+}
+
 // --- the pin -----------------------------------------------------------------------------------
 // PINNED = how many levels have shipped. To add levels, APPEND (re-run the generator without
 // --fresh: it keeps every shipped level) and leave this hash alone; it covers only the first PINNED.
+// Levels 1-1000 have their OWN pin: they were played before 2026-10-29, when 1001-2000 were made
+// again once for Hard and Expert (nobody could have reached them); that pin never moves.
+const PIN_1000 = '0764e4b805fbe5d5';
+{
+  const h = createHash('sha256').update(LEVELS.slice(0, 1000).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
+  ok(`pin: levels 1-1000 are unchanged since 2026-10-28 (${h})`, LEVELS.length >= 1000 && h === PIN_1000);
+}
 const PINNED = 2000;
-const PIN_HASH = '923081f5bf83e127';
+const PIN_HASH = 'PIN_ALL_HASH';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);

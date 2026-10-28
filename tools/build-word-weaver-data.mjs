@@ -33,6 +33,14 @@
 //   (from level 301, the majority by 500, mixed with six after). Grid words rise to about 15.
 //   A letter multiset is never used twice anywhere (so never twice in a row).
 //   Seeded per level number (rng(SEED + n)): the same sources give the same levels.
+//   BANDS (Matt, 2026-10-29; js/word-weaver-points.js): Easy 1-500, Medium 501-1000 are the ramp
+//   above. HARD (1001-1500) and EXPERT (1501-2000) use their own grid lists (BAND below): always 7
+//   letters, rarer words, more and longer words. Hard: SCOWL <= 50, said 50+ times, at most 1
+//   three-letter and 4 four-letter grid words, 9 -> 14 grid words. Expert: SCOWL <= 60, said 20+
+//   times, no 3-letter and at most 4 four-letter grid words, 11 -> 16 (fewer when 9 x 9 cannot hold
+//   that many long words). Both lists are drawn from the EXTRA list (so no names, no bad words, and
+//   the extras of every level stay complete), minus GRID_BLOCK and EXPERT_BLOCK (odd Scrabble words).
+//   The base word and the layout prefer words outside the Easy/Medium grid list.
 //
 // WHAT IS WRITTEN
 //   word-weaver/data/index.json      { v: 1, count, chunk: 250 }
@@ -45,6 +53,10 @@
 // changed level would change what they cleared. A re-run KEEPS every level already in the files and
 // only appends up to --levels (no multiset is reused). `--fresh` throws the files away: only before
 // release. data-test.js pins the shipped levels by hash.
+// `--replace-from N` drops levels N.. before appending (the generator then remakes them). Used ONCE,
+// 2026-10-29, with N = 1001, when Hard and Expert got their own lists: the game had been admin only
+// since 2026-10-28 and played in order from level 1, so nobody could have reached level 1001.
+// Levels 1-1000 stayed byte-identical (pinned separately in data-test.js). Never again after release.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -58,6 +70,7 @@ const arg = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args
 const CACHE = arg('--cache', path.join(os.tmpdir(), 'word-weaver-cache'));
 const COUNT = Number(arg('--levels', 2000));
 const FRESH = args.includes('--fresh');
+const REPLACE_FROM = Number(arg('--replace-from', 0)) || 0;
 const OUT = path.join(ROOT, 'word-weaver/data');
 const CHUNK = 250;
 const SEED = 20261028;
@@ -72,12 +85,27 @@ const GRID_LEVEL = 35;
 const CORE_LEVEL = 20;
 const EXTRA_LEVEL = 60;
 const MIN_SAID_GRID = 200;
+// Hard and Expert grid lists (see the header). `words` = grid words from the band's first level to
+// its last; `max3`/`max4` = most three-/four-letter grid words; `minLen` = shortest grid word.
+const BAND = {
+  hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
+  expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+};
 
 // Short forms SCOWL 35 + ENABLE let through that nobody would put in a word puzzle's grid. Still
 // accepted as extras (unless bad).
 const GRID_BLOCK = new Set(`hes ins ups ifs ohs pis mas pas dos ova qua sic wot sop cox chi pap sup ope
 ain ana ani ens ern ers ess oes ons ors ose rei res tis ted teds sen pes eds ids ads ares eras aves ayes
 dis nus uns ays ohm ohms gal gals bani roman genii balder reals anon nth`.split(/\s+/).filter(Boolean));
+// Real but odd Scrabble-list words the Hard/Expert lists let through (read by hand 2026-10-29). Still
+// accepted as extras.
+const EXPERT_BLOCK = new Set(`grans lades soever ligate ligated ligates engram engrams welkin suttee nisei
+chorea stria striae septa tellies tallish meson mesons scrod snood snoods barbel lairds kopeck kopecks
+daters horas bahts stoup cruse picot tromp caber serous ileum pleura hawed outdrew outrace refile carder
+caner thous treys sheila sheilas medias gasman legman redcap verso tenon ampule ampules casein instar
+isomer barres areal inmost frats prole proles conks sager vaster rater evilest tiler aerie aeries
+pules sots matins welter swelter
+pusses welsher welshers mestizo mestizos ethnics gonad gonads falsies flatus estrus dopers doper`.split(/\s+/).filter(Boolean));
 // First names that are plain words first (read by hand from SCOWL 35, 2026-10-28). A name at size 35
 // NOT on this list (MARIA, PETER, HARRY, MIKE, VICTOR) is not a grid word.
 const NAME_OK = new Set(`adore aide angelic aura barb basil bee beret berry blanch blithe blossom bride
@@ -179,7 +207,7 @@ function maxDims(n, size) {
 const K = (r, c) => (r + 64) * 256 + (c + 64);
 
 /** Try to lay out `target` of `pool`'s words (base first) inside maxR x maxC. Returns the placed words. */
-function layout(base, pool, target, maxR, maxC, r) {
+function layout(base, pool, target, maxR, maxC, r, opts = {}) {
   const cells = new Map();   // key -> { ch, a, d }
   let minR = 0, maxRr = 0, minC = 0, maxCc = 0;
   const placed = [];
@@ -216,13 +244,17 @@ function layout(base, pool, target, maxR, maxC, r) {
   }
   put(base, 0, 0, r() < 0.65 || maxR < base.length ? 'a' : 'd');
   // Longer words first (they are hardest to fit), shuffled within a length, a little mixed.
-  const rest = pool.filter((w) => w !== base).map((w) => ({ w, k: w.length + r() * 1.6 })).sort((a, b) => b.k - a.k).map((o) => o.w);
+  // Hard/Expert (`opts.rare`) also prefer words outside the Easy/Medium list, and cap 3-letter words.
+  const rest = pool.filter((w) => w !== base).map((w) => ({ w, k: w.length + r() * 1.6 + (opts.rare && opts.rare(w) ? 1.5 : 0) })).sort((a, b) => b.k - a.k).map((o) => o.w);
+  const short = { 3: base.length === 3 ? 1 : 0, 4: base.length === 4 ? 1 : 0 };
   let progress = true;
   while (placed.length < target && progress) {
     progress = false;
     for (let wi = 0; wi < rest.length && placed.length < target; wi++) {
       const w = rest[wi];
       if (!w) continue;
+      if (opts.max3 != null && w.length === 3 && short[3] >= opts.max3) continue;
+      if (opts.max4 != null && w.length === 4 && short[4] >= opts.max4) continue;
       let best = null;
       for (const [k, cell] of cells) {
         const rr = Math.floor(k / 256) - 64, cc = (k % 256) - 64;
@@ -241,7 +273,7 @@ function layout(base, pool, target, maxR, maxC, r) {
           }
         }
       }
-      if (best) { put(w, best.r0, best.c0, best.dir); rest[wi] = null; progress = true; }
+      if (best) { put(w, best.r0, best.c0, best.dir); rest[wi] = null; progress = true; if (w.length <= 4) short[w.length]++; }
     }
   }
   return placed.map(([w, r0, c0, d]) => [w, r0 - minR, c0 - minC, d]);
@@ -343,42 +375,80 @@ async function main() {
   for (const b of bases.values()) (bySize[b.key.length] ||= []).push(b);
   for (const s of Object.keys(bySize)) bySize[s].sort((a, b) => (a.key < b.key ? -1 : 1));
 
+  // Hard and Expert: their own grid lists, 7-letter bases only.
+  const commonSet = new Set(grid);
+  const isRare = (w) => !commonSet.has(w);
+  for (const [name, B] of Object.entries(BAND)) {
+    // Short words are where the junk is (ERST, PSIS, SETT, THEW): a 3- or 4-letter Hard/Expert grid
+    // word must already be an Easy/Medium grid word. The rarity comes from the long words.
+    B.list = extra.filter((w) => w.length >= B.minLen && level.get(w) <= B.scowl && (said.get(w) || 0) >= B.said
+      && (w.length >= 5 || commonSet.has(w)) && !GRID_BLOCK.has(w) && !EXPERT_BLOCK.has(w));
+    const lc7 = B.list.map(counts), lm7 = B.list.map(maskOf);
+    const byKey = new Map();
+    for (const w of B.list) if (w.length === 7) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
+    B.bases = [...byKey.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
+    for (const b of B.bases) {
+      const lc = counts(b.key), lm = maskOf(b.key);
+      b.pool = [];
+      for (let i = 0; i < B.list.length; i++) if (!(lm7[i] & ~lm) && fitsIn(lc7[i], lc)) b.pool.push(B.list[i]);
+      b.rare = b.pool.filter(isRare).length;
+      b.common = Math.max(...b.words.map(coreScore));
+    }
+    console.log(`${name}: list ${B.list.length}, 7-letter bases ${B.bases.length}`);
+  }
+  const bandOf = (n) => (n >= BAND.expert.from ? BAND.expert : n >= BAND.hard.from ? BAND.hard : null);
+
   // Keep what has shipped (append-only).
   const kept = [];
   if (!FRESH && fs.existsSync(path.join(OUT, 'index.json'))) {
     const idx = JSON.parse(fs.readFileSync(path.join(OUT, 'index.json'), 'utf8'));
     for (let k = 0; k * CHUNK < idx.count; k++) kept.push(...JSON.parse(fs.readFileSync(path.join(OUT, `levels-${k}.json`), 'utf8')).levels);
   }
+  if (REPLACE_FROM > 0 && kept.length >= REPLACE_FROM) kept.length = REPLACE_FROM - 1;
   const used = new Set(kept.map((lv) => sortKey(lv.l.toLowerCase())));
   const levels = kept.slice(0, COUNT);
   for (let n = levels.length + 1; n <= COUNT; n++) {
     const r = rng(SEED + n * 7919);
-    let size = wheelSize(n, r);
+    const B = bandOf(n);
+    let size = B ? 7 : wheelSize(n, r);
     let target = targetWords(n, size, r);
-    const [mr, mc] = maxDims(n, size);
+    if (B) {
+      const p = (n - B.from) / (B.to - B.from);
+      target = Math.min(B.words[1], Math.max(B.words[0], Math.round(B.words[0] + (B.words[1] - B.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
+    }
+    const [mr, mc] = B ? [9, 9] : maxDims(n, size);
     let made = null;
     const failed = new Set();
     for (let tries = 0; !made && tries < 400; tries++) {
       // Unused multisets that can supply the target; early levels take the commonest bases.
-      const cands = (bySize[size] || []).filter((b) => !used.has(b.key) && !failed.has(b.key) && b.pool.length >= target + (size >= 6 ? 2 : 0));
+      const cands = (B ? B.bases : bySize[size] || []).filter((b) => !used.has(b.key) && !failed.has(b.key) && b.pool.length >= target + (size >= 6 ? 2 : 0));
+      if (B && !cands.length) break;
       if (!cands.length) {
         if (tries > 300) { size = size === 7 ? 6 : size + 1; continue; }
         target = Math.max(3, target - 1); continue;
       }
-      const from = n <= 400 ? [...cands].sort((x, y) => y.common - x.common || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * (n <= 60 ? 0.2 : 0.4)))) : cands;
+      // Hard/Expert: the bases whose pools hold the most rare words (top 40%).
+      const from = B ? [...cands].sort((x, y) => y.rare - x.rare || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * 0.4)))
+        : n <= 400 ? [...cands].sort((x, y) => y.common - x.common || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * (n <= 60 ? 0.2 : 0.4)))) : cands;
       const b = from[Math.floor(r() * from.length)];
       // The base word: the most common of its anagrams.
       const base = [...b.words].sort((x, y) => coreScore(y) - coreScore(x) || (x < y ? -1 : 1))[0];
       let best = null;
       for (let a = 0; a < 60; a++) {
-        const ws = layout(base, b.pool, target, mr, mc, r);
+        const ws = B ? layout(base, b.pool, target, mr, mc, r, { rare: isRare, max3: B.max3, max4: B.max4 }) : layout(base, b.pool, target, mr, mc, r);
         if (ws.length < target) continue;
         const rows = Math.max(...ws.map(([w, r0, , d]) => r0 + (d === 'd' ? w.length : 1)));
         const cols = Math.max(...ws.map(([w, , c0, d]) => c0 + (d === 'a' ? w.length : 1)));
         const score = rows * cols + Math.abs(rows - cols) * 3;
         if (!best || score < best.score) best = { ws, rows, cols, score };
       }
-      if (!best) { failed.add(b.key); continue; }
+      if (!best) {
+        failed.add(b.key);
+        // Hard/Expert: a big target in 9 x 9 can be out of reach; after 20 bases that could not
+        // hold it, ask one word fewer (never below the band's minimum).
+        if (B && failed.size % 20 === 0) target = Math.max(B.words[0], target - 1);
+        continue;
+      }
       const problems = gridProblems(best.ws, best.rows, best.cols);
       if (problems.length) throw new Error(`level ${n}: ${problems.join('; ')}`);
       const lc = counts(b.key), lm = maskOf(b.key);
@@ -411,6 +481,16 @@ async function main() {
 
   // A small report: the ramp per 100 levels.
   console.log(`grid words ${grid.length}, extra words ${extra.length}, levels ${levels.length} (kept ${kept.length}), ${(total / 1024).toFixed(0)} KB`);
+  const zipf = (w) => Math.log10((said.get(w.toLowerCase()) || 0) + 1);
+  for (const [band, a, z] of [['easy', 1, 500], ['medium', 501, 1000], ['hard', 1001, 1500], ['expert', 1501, 2000]]) {
+    const part = levels.slice(a - 1, z);
+    if (!part.length) continue;
+    const ws = part.flatMap((lv) => lv.w.map((e) => e[0]));
+    const sizes = {}; for (const lv of part) sizes[lv.l.length] = (sizes[lv.l.length] || 0) + 1;
+    const nw = part.map((lv) => lv.w.length);
+    const avg = (xs) => xs.reduce((p, q) => p + q, 0) / xs.length;
+    console.log(`BAND ${band.padEnd(6)} letters ${JSON.stringify(sizes)} words ${Math.min(...nw)}-${Math.max(...nw)} (avg ${avg(nw).toFixed(1)}) avg len ${avg(ws.map((w) => w.length)).toFixed(2)} 5+ letters ${(100 * ws.filter((w) => w.length >= 5).length / ws.length).toFixed(0)}% log10(said) avg ${avg(ws.map(zipf)).toFixed(2)} outside the Easy/Medium list ${(100 * ws.filter((w) => !commonSet.has(w.toLowerCase())).length / ws.length).toFixed(0)}%`);
+  }
   for (let s = 0; s < levels.length; s += s < 100 ? 10 : 100) {
     const part = levels.slice(s, s + (s < 100 ? 10 : 100));
     const sizes = {}; for (const lv of part) sizes[lv.l.length] = (sizes[lv.l.length] || 0) + 1;
