@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1305;
-const CACHE = 'game-hub-v1305';
+const CACHE = 'game-hub-v1306';
 
 const ASSETS = [
   './',
@@ -802,13 +802,13 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '19befd88d9',
+  './js/game-stats.js': '63779910c9',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': '7a698db6f4',
-  './js/stats-net.js': '1a6dfaeb0b',
+  './js/game-stats-ui.js': 'b6632212a6',
+  './js/stats-net.js': 'e63d1f8e27',
   './js/firebase-boot.js': '8d10f6458c',
-  './js/device-report.js': '22d5aec601',
+  './js/device-report.js': 'c2c389ae14',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'f2c4625238',
   './js/bug-report-ui.js': '70d7e7b2a6',
@@ -822,7 +822,7 @@ const REST_MANIFEST = {
   './js/challenges-ui.js': '34fd6b3736',
   './js/challenge-life.js': '44ab3fcbc6',
   './js/challenges-strings.js': '51d5987567',
-  './js/mp-records.js': 'addbe2f5a3',
+  './js/mp-records.js': '8c1ff025c7',
   './js/push.js': '59adfa5053',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '8036b5cae4',
@@ -832,7 +832,7 @@ const REST_MANIFEST = {
   './js/players-agg.js': 'f7b99b83ea',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': '8a870d0456',
-  './js/leaderboard-ui.js': 'd053864221',
+  './js/leaderboard-ui.js': '0f8f453233',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',
@@ -967,7 +967,7 @@ const REST_MANIFEST = {
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '48873b9523',
-  './way-out/js/ui.js': 'd26501219f',
+  './way-out/js/ui.js': '1d2862ecf6',
   './way-out/js/engine.js': '6c0fdfeb27',
   './way-out/js/strings.js': '17497f2cfa',
   './way-out/js/boards8.js': '56f9933468',
@@ -1089,7 +1089,7 @@ const REST_MANIFEST = {
   './holdem/': '11f6e0e99f',
   './holdem/index.html': '11f6e0e99f',
   './holdem/css/holdem.css': '1f9fda9318',
-  './holdem/js/ui.js': '31514ae2d7',
+  './holdem/js/ui.js': 'a725642961',
   './holdem/js/engine.js': 'b9e54a0c01',
   './holdem/js/ai.js': '3d8353f25c',
   './holdem/js/table.js': '1bd3d97111',
