@@ -63,7 +63,7 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
   says "Hint used: half points, no crown", or only "Hint used: no crown" on levels 1-500, where half
   of 1 point rounds up to 1 (2026-10-28: the popup used to claim half points there).
 - Restart puts every block back (moves 0); the hint count stays.
-- **Levels** (the setup screen, beside How to play): the selected difficulty's levels, 25 a page
+- **Levels** (the setup screen's grid icon, beside Play): the selected difficulty's levels, 25 a page
   (5 x 5, pager underneath, never a scroll). A cleared level shows its best stars and its crown and
   can be replayed for more stars; the next level wears the `#ffce3a` outline; later ones are locked,
   because a difficulty is played in order. Replaying never adds points (they count distinct levels).
@@ -82,13 +82,19 @@ button on the top left again. I don't want it in the normal location. I didn't w
 it."* The bottom bar is Undo · Restart · Hint. The Levels screen's Back is a full-width button under
 its pager. The rule is in docs/BUILDING-A-GAME.md, Part 0.
 
-## The setup screen: few words (Matt, 2026-10-14)
+## The setup screen: few words (Matt, 2026-10-14; re-laid out 2026-10-28)
 
-Title, the player's points, the two looks, the four difficulties (shape + name only), Play level N,
-then Levels and How to play. Nothing else: no tagline, no "Look" / "Difficulty" labels (they are
-`aria-label`s on the groups), no level ranges or current level on the difficulty buttons, no "worth N
-points" line. Matt: *"There are WAY too many words."* The root CLAUDE.md now carries this as a rule
-for every game.
+**Arrow Maze's layout (2026-10-28, Matt: "Improve the setup screen")**: the picture (`boardPreviewSVG`:
+the selected difficulty's NEXT level's own board in the chosen look, the play screen's own art and
+colours via `pieceColors`; tapping it plays) with How to play as the round "?" at its right; title and
+points; a card of [the two looks, the four difficulties (shape + name + a thin progress bar through
+their 1000 levels, no words), Levels as a grid icon beside **Play level N**]; a footer card of
+**🏆 Points leader** (emoji + profile name, ties all named, from `readPeople()` at most once a minute,
+this phone's own store counted for itself) and **Leaderboard ›** (`openLeaderboard({ game: 'gridlock' })`;
+until release it opens the plain leaderboard, since admin-only games are off it). Short screens shrink the
+picture first (`max-height: 760px`). `check-no-scroll` fits all 8 screens.
+Still no tagline, no "Look" / "Difficulty" labels (`aria-label`s), no level ranges or current level on
+the difficulty buttons, no "worth N points" line. Matt (10-14): *"There are WAY too many words."*
 
 ## The two looks (Matt, 2026-10-14)
 

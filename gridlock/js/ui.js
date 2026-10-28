@@ -21,6 +21,7 @@ import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cell
 import { LEVELS } from './levels.js';
 import { pieceArt, RED, WOOD_TONES, CAR_COLORS } from './art.js';
 import STRINGS from './strings.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.gridlock.v1';     // { look, band } (+ the first build's `next`, kept as stored, unread)
@@ -176,6 +177,50 @@ const HOW_SVG = `<svg viewBox="0 0 220 150" aria-hidden="true">
   <path d="M140 66h40M174 60l7 6-7 6" class="gl-how-way"/>
 </svg>`;
 
+/** Each piece's colour: red first, then the look's palette, offset by level (the board and the setup
+ *  screen's picture use this one rule, so the picture is the board the player is about to meet). */
+function pieceColors(pz, look, n) {
+  const pal = look === 'cars' ? CAR_COLORS : WOOD_TONES;
+  let k = 0;
+  return pz.pieces.map((p, i) => (i === 0 ? RED : pal[(k++ + n * 3) % pal.length]));
+}
+
+/** The setup screen's picture (2026-10-28): level n's starting board in the chosen look, drawn as one
+ *  SVG with the same piece art as the play screen. It changes with the look and the difficulty. */
+function boardPreviewSVG(look, n) {
+  const lvl = levelAt(n);
+  if (!lvl) return '';
+  const pz = parse(lvl.board), U = 100, F = 34, B = U * N, E = 46;
+  const cars = look === 'cars';
+  let g = `<defs><linearGradient id="glhf" x1="0" y1="0" x2="0" y2="1">${cars ? '<stop offset="0" stop-color="#d3d6db"/><stop offset="1" stop-color="#aeb3bb"/>' : '<stop offset="0" stop-color="#9a6535"/><stop offset="1" stop-color="#6b4220"/>'}</linearGradient>`
+    + `<filter id="glhs" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="${cars ? 4 : 4}" stdDeviation="${cars ? 0 : 2.5}" flood-opacity=".4"/></filter></defs>`;
+  const bed = cars ? '#535c6c' : '#3c2614';
+  g += `<rect x="0" y="0" width="${B + 2 * F}" height="${B + 2 * F}" rx="${F * 1.1}" fill="url(#glhf)"/>`;
+  g += `<rect x="${B + F - 4}" y="${F + EXIT_ROW * U}" width="${F + E}" height="${U}" rx="10" fill="${bed}"/>`;
+  g += `<path d="M${B + 2 * F + 12} ${F + EXIT_ROW * U + 36}l14 14-14 14" stroke="#ffce3a" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  g += `<rect x="${F - 4}" y="${F - 4}" width="${B + 8}" height="${B + 8}" rx="14" fill="${bed}"/>`;
+  for (let c = 0; c < N * N; c++) {
+    const x = F + (c % N) * U, y = F + ((c / N) | 0) * U;
+    g += cars ? `<rect x="${x + 18}" y="${y - 1}" width="${U - 36}" height="3" fill="#fff" fill-opacity=".16"/>`
+      : `<rect x="${x + 6}" y="${y + 6}" width="${U - 12}" height="${U - 12}" rx="12" fill="#4a3019"/>`;
+  }
+  for (const w of pz.walls) {
+    const x = F + (w % N) * U, y = F + ((w / N) | 0) * U;
+    g += cars ? `<rect x="${x + 10}" y="${y + 10}" width="${U - 20}" height="${U - 20}" rx="18" fill="#23272f" stroke="#12151c" stroke-width="6"/>`
+      : `<rect x="${x + 7}" y="${y + 7}" width="${U - 14}" height="${U - 14}" rx="14" fill="#949ca7" stroke="#5f6874" stroke-width="4"/>`;
+  }
+  const colors = pieceColors(pz, look, n);
+  pz.pieces.forEach((p, i) => {
+    const c = cellOf(p, p.pos, 0), x = F + (c % N) * U, y = F + ((c / N) | 0) * U;
+    const w = p.h ? p.len * U : U, h = p.h ? U : p.len * U;
+    g += `<g filter="url(#glhs)">${pieceArt(p, look, colors[i], i === 0, n * 97 + i * 13, `glh${i}`).replace('<svg class="gl-art"', `<svg x="${x}" y="${y}" width="${w}" height="${h}"`)}</g>`;
+  });
+  return `<svg class="gl-preview" viewBox="0 0 ${B + 2 * F + E} ${B + 2 * F + 6}" aria-hidden="true">${g}</svg>`;
+}
+
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ICON_GRID = `<svg ${SVGA}><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>`;
+
 // --- the game ------------------------------------------------------------------------------------
 
 class Gridlock {
@@ -288,9 +333,11 @@ class Gridlock {
   }
 
   /** The setup screen. AS FEW WORDS AS POSSIBLE (Matt, 2026-10-14: "There are WAY too many words.
-   *  This is the same comment you force me to make 10 times per day."): the title, the points, the two
-   *  looks, the four difficulties (shape + name), Play, Levels and How to play. No tagline, no field
-   *  labels, no level ranges, no "worth N points" line. */
+   *  This is the same comment you force me to make 10 times per day."). Laid out like Arrow Maze's
+   *  (2026-10-28, Matt: "Improve the setup screen"): the picture (the next level's own board in the
+   *  chosen look; tapping it plays) with How to play as the "?" beside it, the title and points, a card
+   *  of [the two looks, the four difficulties (shape, name and a thin progress bar, no words), Levels
+   *  (an icon) beside Play level N], and a footer card of [the points leader, Leaderboard ›]. */
   _homeHTML() {
     const s = this.settings;
     const band = s.band, n = s.next[band];
@@ -298,19 +345,30 @@ class Gridlock {
     const resume = !done && hasProgress(band, n);
     let pts = 0;
     try { pts = glPoints(loadStats().games.gridlock); } catch { pts = 0; }
-    const segs = GL_TIERS.map((k) => `
+    const segs = GL_TIERS.map((k) => {
+      const first = GL_BAND_START[k], end = bandEnd(k);
+      const pct = Math.round(100 * Math.min(1, (s.next[k] - first) / (end - first + 1)));
+      return `
       <button type="button" class="gl-seg${k === band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === band}">
         <span class="gl-seg-top">${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b></span>
-      </button>`).join('');
+        <span class="gl-seg-bar" aria-hidden="true"><i style="width:${pct}%"></i></span>
+      </button>`;
+    }).join('');
     const looks = LOOKS.map((k) => `
       <button type="button" class="gl-look${k === s.look ? ' is-selected' : ''}" data-act="look" data-look="${k}" role="radio" aria-checked="${k === s.look}">
         ${lookThumb(k)}<b>${t('look_' + k)}</b>${k === s.look ? '<span class="gl-check" aria-hidden="true">&#10003;</span>' : ''}
       </button>`).join('');
+    const label = done ? (band === 'expert' ? t('all_done') : t('band_done_play', { name: t('tier_' + band) })) : t(resume ? 'continue_level' : 'play_level', { n });
     const play = done
-      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" disabled>${band === 'expert' ? t('all_done') : t('band_done_play', { name: t('tier_' + band) })}</button>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play">${t(resume ? 'continue_level' : 'play_level', { n })}</button>`;
+      ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block gl-play" disabled>${label}</button>`
+      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block gl-play" data-act="play">${label}</button>`;
+    const pic = boardPreviewSVG(s.look, Math.min(n, bandEnd(band)));
     return `
       <div class="gl-home">
+        <div class="gl-herorow">
+          ${done ? `<div class="gl-hero">${pic}</div>` : `<button type="button" class="gl-hero" data-act="play" aria-label="${label}">${pic}</button>`}
+          <button type="button" class="gl-howq" data-act="help" aria-label="${t('how_title')}" title="${t('how_title')}">?</button>
+        </div>
         <div class="gl-head">
           <h1>${t('title')}</h1>
           <p class="gl-pts"><b>${pts}</b> ${t('pts_word')}</p>
@@ -318,13 +376,64 @@ class Gridlock {
         <div class="gh-card gl-menu-card">
           <div class="gl-looks" role="radiogroup" aria-label="${t('look_label')}">${looks}</div>
           <div class="gl-segs" role="radiogroup" aria-label="${t('diff_label')}">${segs}</div>
-          ${play}
+          <div class="gl-playrow">
+            <button type="button" class="gh-btn gl-lvbtn" data-act="levels" aria-label="${t('levels_btn')}" title="${t('levels_btn')}">${ICON_GRID}</button>
+            ${play}
+          </div>
         </div>
-        <div class="gl-home-foot">
-          <button type="button" class="gh-btn gh-btn--ghost" data-act="levels">${t('levels_btn')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost" data-act="help">${t('how_title')}</button>
-        </div>
+        <div class="gl-lead">${this._leadHTML()}</div>
       </div>`;
+  }
+
+  /** The footer: the points leader (ties all named, emoji + profile name, never "You") and Leaderboard ›.
+   *  Read from the server-built board in the background, at most once a minute; "-" until known. This
+   *  phone's own person counts its own fresh store too. */
+  _leadHTML() {
+    if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
+    const rows = (this.lead && this.lead.rows) || [];
+    let mine = 0;
+    try { mine = glPoints(loadStats().games.gridlock); } catch { mine = 0; }
+    const all = rows.map((r) => (r.me ? { ...r, pts: Math.max(r.pts, mine) } : r));
+    if (!all.some((r) => r.me) && mine > 0) {
+      let p = {};
+      try { p = loadProfile() || {}; } catch { p = {}; }
+      all.push({ me: true, name: p.name || '', emoji: p.emoji || '', pts: mine });
+    }
+    const top = all.reduce((m, r) => Math.max(m, r.pts || 0), 0);
+    const lead = top > 0 ? all.filter((r) => r.pts === top) : [];
+    const names = lead.map((r) => `${esc(r.emoji)} ${esc(r.name)}`.trim()).filter(Boolean).join(' &amp; ');
+    return `
+      <div class="gl-rl-who">
+        <span class="gl-rl-label">&#127942; ${t('leader_label')}</span>
+        <span class="gl-rl-row"><span class="gl-rl-name">${names || '-'}</span><b class="gl-rl-score">${lead.length ? top : '-'}</b></span>
+      </div>
+      <button type="button" class="gl-rl-all" data-act="board">${t('leaderboard')}</button>`;
+  }
+  async _loadLead() {
+    if (this.leadBusy) return;
+    this.leadBusy = true;
+    let rows = [];
+    try {
+      const [net, hidden, prof] = await Promise.all([import('../../js/stats-net.js'), import('../../js/hidden-players.js'), import('../../js/profile-store.js')]);
+      const people = await net.readPeople();
+      if (people) {
+        const p = prof.loadProfile() || {};
+        rows = people.list.filter((g) => g.key === people.meKey || !hidden.isHiddenName(g.name)).map((g) => {
+          const me = g.key === people.meKey;
+          return { me, name: me ? (p.name || g.name || '') : g.name, emoji: me ? (p.emoji || g.emoji || '') : g.emoji, pts: glPoints((g.games || {}).gridlock) };
+        });
+      }
+    } catch (err) { console.warn('[gridlock] points leader not read', err); }
+    this.leadBusy = false;
+    this.lead = { at: Date.now(), rows };
+    const box = this.root && this.screen === 'home' && this.root.querySelector('.gl-lead');
+    if (box) box.innerHTML = this._leadHTML();
+  }
+  async _openLeaderboard() {
+    try {
+      const m = await import('../../js/leaderboard-ui.js');
+      await m.openLeaderboard({ game: 'gridlock' });
+    } catch (err) { console.error('[gridlock] leaderboard', err); }
   }
 
   /** The level list for the selected difficulty, PAGE levels a page (pages, never a scroll): every
@@ -676,11 +785,10 @@ class Gridlock {
     for (let k = 0; k < N * N; k++) html += `<div class="gl-cell" data-c="${k}"></div>`;
     for (const w of this.pz.walls) html += `<div class="gl-wall" data-w="${w}" aria-hidden="true"></div>`;
     html += '<div class="gl-ghost" hidden></div>';
-    let k = 0;
+    const colors = pieceColors(this.pz, look, this.n);
     this.pz.pieces.forEach((p, i) => {
       const red = i === 0;
-      const pal = look === 'cars' ? CAR_COLORS : WOOD_TONES;
-      const color = red ? RED : pal[(k++ + this.n * 3) % pal.length];
+      const color = colors[i];
       const what = red ? t('piece_red') : t('piece_other');
       html += `<div class="gl-piece${red ? ' is-red' : ''}${p.h ? ' is-h' : ' is-v'}" data-i="${i}" tabindex="0" role="button"
         aria-label="${t('piece_aria', { what, dir: t(p.h ? 'dir_h' : 'dir_v') })}" style="--gl-c:${color}">

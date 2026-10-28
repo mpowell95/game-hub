@@ -59,6 +59,8 @@ export default {
     page_fwd10: 'Forward 10 pages',
     hint_half: 'Hint used: half points, no crown',
     hint_crown: 'Hint used: no crown',
+    leader_label: 'Points leader',
+    leaderboard: 'Leaderboard',
   },
   es: {
     title: 'Atasco',
@@ -118,5 +120,7 @@ export default {
     page_fwd10: '10 páginas adelante',
     hint_half: 'Con pista: mitad de puntos, sin corona',
     hint_crown: 'Con pista: sin corona',
+    leader_label: 'Líder en puntos',
+    leaderboard: 'Clasificación',
   },
 };
