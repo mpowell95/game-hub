@@ -1,6 +1,6 @@
 # Spelling Bee: fair-play rules and the long-term board (spec, 2026-10-28)
 
-Status: **DRAFT for Matt's approval. Nothing below is built** except section 1.
+Status: **FINAL pending Matt's go (2026-10-28). Nothing below is built** except section 1.
 Decisions are Matt's words from the 2026-10-27/28 session; open questions are in section 9.
 
 ## 1. Already live (v1304)
@@ -13,6 +13,7 @@ Decisions are Matt's words from the 2026-10-27/28 session; open questions are in
   Spelling Bee** (that is when it notes the void). His save and his `beeDaily`
   rows are untouched.
 - Not yet: other people's in-game boards still show his score on those days (section 3).
+- Known gap (section 9, item 7): v1304 also counts a past puzzle played later; fixed in the build.
 
 ## 2. What each person sees on a voided day
 
@@ -45,7 +46,7 @@ Replaces the current Spelling Bee board on the hub Leaderboard (the one that sho
   the two together.
 - **Each row:** place medal (1-3), emoji, name, the number (total points or words), and under it:
   🥇/🥈/🥉 counts (days finished 1st/2nd/3rd), 🧠 Genius days, 🐝 Queen Bee days, 📅 days played.
-- **Daily places:** per day per language, **by points**; ties share the place; a voided day is
+- **Daily places:** per day per language, **by points**, words found on the puzzle's own day only; ties share the place; a voided day is
   always last with 0 and earns no place and no Genius.
 - **Source:** the daily board rows (`beeDaily/`, from 2026-10-26), built on the server into one small
   package (`boards/v1/bee`), so no phone downloads every day's rows. Rebuilt when a row changes (at
@@ -59,13 +60,14 @@ Runs on the server each time a player's guess log is saved (debounced), for **ev
 Spanish**. Reads that player's log for that puzzle (`beeLog/<puzzle>/<CODE>`). Timing uses each entry's `t` (the
 phone's clock at the guess); the server time `s` only stamps when a batch was uploaded.
 
-**Strong: any one voids the day.**
-1. **Sorted run:** 6+ accepted words in a row, all the same length, in alphabetical order. A refused or
-   already-found guess restarts the count. (Review 2026-10-28: see section 9, item 6.)
+**Strong: voids the day on its own.**
+1. ~~Sorted run~~ moved to SUPPORTING (section 9, item 6).
 2. **No-miss burst:** 10+ accepted words in a row (bonus words count as accepted), no refused or
    already-found guess between, averaging under 6 s each.
 
-**Supporting: both together void the day.**
+**Supporting: any two together void the day.**
+- **Sorted run:** 6+ accepted words in a row, all the same length, in alphabetical order. A refused or
+  already-found guess restarts the count.
 3. **Leave and burst:** back from leaving the app, then 5+ accepted words within 60 s (misses allowed).
 4. ~~Copy typo~~ **dropped**: honest players do it too (Lili 6 times on Oct 28, Natalia 2 on Oct 27).
 5. **Speed:** Genius within 10 minutes of time in the game.
@@ -120,36 +122,30 @@ the thresholds.
 - Other phones: his row shows 0 / last; everyone else's place moves up; ties correct.
 - Long-term board: totals and daily places recomputed by hand for 3 days of real data, Points and
   Words, All/EN/ES; voided days last with 0.
+- Own day only: a past puzzle played later adds nothing anywhere (board, My Stats, stats count).
 - Undo: a flagged day returns in full on every surface.
 - Push: one alert per flagged day, never repeated.
 
-## 9. Open questions for Matt
+## 9. Decisions (Matt, 2026-10-28)
 
-1. ~~Placings toggle~~ Answered: placings always by points.
-2. ~~Missing log~~ Answered: alert only.
-3. ~~"sk"~~ Answered: hidden (device `a49fcaf8`, `js/hidden-players.js`), data kept.
-4. **Other games:** you said "we do this for all games (rank 1, 2, 3...)". Daily 1st/2nd/3rd only exists
-   for a game with one shared puzzle a day. Spelling Bee only for now, or another game too?
-5. **My Stats > Spelling Bee:** show the same numbers as the long-term board (points, words, places,
-   Genius, Queen Bee, days played) instead of today's won/played?
-
-**Found in review (2026-10-28), proposals marked:**
-
-6. **Sorted run is not safe on its own.** Hints lists what is left by first letter and length, so a
-   player working through Hints naturally goes alphabetically within a length. Proposal: sorted run
-   becomes SUPPORTING; the no-miss burst stays strong (Oct 28 is still caught by the burst alone).
-7. **Past puzzles are a loophole.** Anyone can read Yesterday's Answers, then play yesterday from the
-   calendar and reach Queen Bee. Today that already earns a Genius win on the hub Leaderboard. Proposal:
-   only words found on the puzzle's own day (by the word's time) count toward points, words, places,
-   Genius and Queen Bee; playing it later still counts as played (or not at all: Matt's call).
-8. **Silence leak to close:** on his phone, the other language's section and past days' boards come from
-   the server, not from his live screen. Rule: a void is never applied to rows with the viewer's own code.
-9. **Replaced puzzles:** Oct 26 English has two puzzles (one was swapped mid-day); MattyIce has words on
-   both. Proposal: per person per day, the better of the two rows counts.
-10. **In-game board order:** it sorts by words; places are by points, so it could show someone first who
-    is not credited first. Proposal: sort it by points too (words still shown).
-11. **Other Spelling Bee standings:** By Game's top 3 and the You tab must use the new board's order.
-12. **Manual voids:** make the three code-list days undoable from the admin page too?
+1. Daily places: always by points.
+2. Missing log: alert only, never void.
+3. "sk" (65CNF): hidden (device `a49fcaf8`), data kept. Done, v1307.
+4. Daily 1st/2nd/3rd: Spelling Bee only.
+5. My Stats > Spelling Bee shows the long-term board's numbers (points, words, places, Genius, Queen Bee,
+   days played) instead of won/played.
+6. Sorted run is SUPPORTING, not strong (Hints lists words by first letter and length, so honest play can
+   be alphabetical). Strong = the no-miss burst only. *(Proposal; no objection.)*
+7. **A puzzle counts only on its own day** (Matt: "you have to do it on the correct day"). Words found
+   after the puzzle's day count for NOTHING: not played, not points, words, places, Genius or Queen Bee.
+   Applies to the long-term board, My Stats and the stats count shipped in v1304 (which today counts a
+   past puzzle played later; fix in the build). A word's day comes from its own time (`times`, from
+   2026-10-27); rows without word times (Oct 26) count as found on the day.
+8. A void never changes rows with the viewer's own code, on any screen. *(Proposal; no objection.)*
+9. Replaced puzzles: per person per day, the better of the two rows counts. *(Proposal; no objection.)*
+10. In-game daily board sorts by points (words still shown). *(Proposal; no objection.)*
+11. By Game's top 3 and the You tab use the new board's order. *(Proposal; no objection.)*
+12. Manual voids: not undoable from the admin page (Matt: "doesn't matter").
 
 ## 10. Limits (said plainly)
 
