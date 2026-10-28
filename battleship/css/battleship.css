@@ -450,6 +450,14 @@
   display: inline-flex; align-items: center; gap: 4px;
 }
 .bs-shotcount .bs-ico { width: 15px; height: 15px; }
+.bs-shotsleft {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 16px;
+  border-radius: 999px; border: 2px solid var(--bs-deck-ink); color: var(--bs-deck-ink);
+}
+.bs-shotsleft b { font-size: 1.6rem; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.bs-shotsleft-dots { display: inline-flex; gap: 4px; }
+.bs-shotsleft-dots i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.bs-shotsleft-dots i.is-used { background: transparent; box-shadow: inset 0 0 0 2px currentColor; opacity: .5; }
 
 .bs-boardpanel { width: 100%; display: grid; gap: 3px; justify-items: center; }
 .bs-boardpanel-h { font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--bs-muted); }
