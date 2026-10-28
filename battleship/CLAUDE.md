@@ -333,6 +333,10 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   `mp.js` `fireSalvoShot` / `fireVolley` / `volleyLeft`; state carries `chVol` (shots owed) and `chVHit`,
   so a log cut mid-volley replays. A volley is written as ONE `appendLog` batch and shown on the other
   phone as one volley (`_chNext`). Tap an aimed square to take it back.
+- **ONE BONUS SHOT PER HIT (Matt, 2026-10-28: "you get ONE bonus shot. Not 3 or 5")**: matches since store
+  `salvo: 2` (bot games `state.salvoRule: 2`): a turn opens with N; a volley with H hits earns a volley of H
+  (`chNext`); no hit passes the turn. `salvo: true` = rule 1 (any hit = full volley), kept for the first day's
+  matches. `mp.js` `SALVO_RULES` / `salvoRule`; `_chStale` refuses an mp.js without rule 2.
 - **Older matches keep their stored rule** (THE LAW: the rule travels with the match): no `salvo` = a hit
   shoots again and a turn is N MISSES (`fireShot`, `chLeft`); no `shots` = 1.
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot

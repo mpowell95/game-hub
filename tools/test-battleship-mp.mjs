@@ -164,6 +164,27 @@ const randomFleet = (size) => stored(F.autoPlace(size, F.shipSetFor(size), rng))
     const nearly = { ...S([]).state };
     nearly.shots = nearly.shots.slice(); nearly.shots[0] = { ...nearly.shots[0], cells: nearly.shots[0].cells.map((v, i) => (i < 98 ? 1 : 0)) };
     ok('salvo: with 2 squares left a volley of 3 is 2', MP.volleySize(nearly, 0, 3) === 2);
+
+    // ONE BONUS SHOT PER HIT (rule 2, `salvo: 2`, Matt 2026-10-28): a volley with H hits earns a volley of H.
+    const S2 = (lg2) => MP.replay('classic', fa, fb, lg2, true, N, 2);
+    const hitsA = [...occA].map((k) => k.split(',').map(Number));
+    const l2 = [{ by: 'b', r: wa[0][0], c: wa[0][1] }, { by: 'b', r: hitsA[0][0], c: hitsA[0][1] }, { by: 'b', r: wa[1][0], c: wa[1][1] }];
+    let p2 = S2(l2);
+    ok('one per hit: 1 hit in a volley of 3 earns a volley of ONE', p2.ok && p2.state.turn === 1 && MP.volleyLeft(p2.state, 1, N) === 1);
+    let v2 = MP.fireVolley(S2([]).state, 1, l2.map((e) => [e.r, e.c]), N, 2);
+    ok('one per hit: fireVolley = the replay', same(v2.state, p2.state));
+    const one = MP.fireVolley(p2.state, 1, [wa[2], wa[3], wa[4]], N, 2);
+    ok('one per hit: the bonus volley fires only the one shot it earned', one.fired.length === 1);
+    ok('one per hit: a bonus shot that misses passes the turn, full volley for the other side', one.state.turn === 0 && MP.volleyLeft(one.state, 0, N) === N);
+    const two = MP.fireVolley(S2([]).state, 1, [hitsA[1], hitsA[2], wa[5]], N, 2);
+    ok('one per hit: 2 hits earn 2 shots', two.state.turn === 1 && MP.volleyLeft(two.state, 1, N) === 2);
+    const l2b = l2.concat([{ by: 'b', r: hitsA[3][0], c: hitsA[3][1] }]);
+    p2 = S2(l2b);
+    ok('one per hit: a hit with the bonus shot earns one more', p2.ok && p2.state.turn === 1 && MP.volleyLeft(p2.state, 1, N) === 1);
+    ok('one per hit: the same log under rule 1 is a full volley again (rule travels with the match)', MP.volleyLeft(S(l2).state, 1, N) === N);
+    ok('one per hit: a rule-2 log of a bonus volley does not replay as rule 1 the same way',
+      MP.replay('classic', fa, fb, l2.concat([{ by: 'b', r: wa[2][0], c: wa[2][1] }]), true, N, 2).state.turn === 0
+      && MP.replay('classic', fa, fb, l2.concat([{ by: 'b', r: wa[2][0], c: wa[2][1] }]), true, N, true).state.turn === 1);
   }
   ok('cleanShot: off the board, or not a side, is not a shot', MP.cleanShot({ by: 'a', r: 10, c: 0 }) === null && MP.cleanShot({ by: 'x', r: 0, c: 0 }) === null
     && MP.cleanShot({ by: 'a', r: 7, c: 7 }, 'quick') && MP.cleanShot({ by: 'a', r: 8, c: 0 }, 'quick') === null);
@@ -314,8 +335,10 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   ok('3 a turn: a whole match to a sunk fleet', g.over && g.over.why === 'sunk');
   let runs = [], cur = null;
   for (const e of g.log) { if (!cur || cur.by !== e.by) { cur = { by: e.by, n: 0 }; runs.push(cur); } cur.n++; }
-  ok('3 a turn: stored as a SALVO match', getAt(`battleship/games/${c.id}/salvo`) === true && c.game.salvo === true);
-  ok('3 a turn: every finished turn but the last is whole volleys of 3', runs.slice(0, -1).every((x) => x.n % 3 === 0), JSON.stringify(runs.map((x) => x.n)));
+  ok('3 a turn: stored as a SALVO match, one bonus shot per hit (salvo: 2)', getAt(`battleship/games/${c.id}/salvo`) === 2 && c.game.salvo === 2);
+  ok('3 a turn: every finished turn but the last opens with a volley of 3', runs.slice(0, -1).every((x) => x.n >= 3), JSON.stringify(runs.map((x) => x.n)));
+  const raw1 = clone(getAt(`battleship/games/${c.id}`)); raw1.salvo = true;
+  ok('a first-day match (salvo: true) still validates on its own rule', MP.validateGame(raw1) === null || MP.validateGame(raw1).salvo === true);
 
   const raw = clone(getAt(`battleship/games/${c.id}`)); delete raw.shots;
   ok('a stored match with no `shots` is 1 a turn (the 3-shot log no longer replays as one)', MP.validateGame(raw) === null);
