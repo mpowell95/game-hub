@@ -99,6 +99,91 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- the way back: top left, on the row UNDER the Hub button (never beside it; Gridlock's rule) --- */
+.ww-root .ww-row2 { flex: none; height: 56px; padding: 12px 0 0 12px; }
+.ww-root .ww-back {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ww-chip);
+  color: #fff;
+}
+.ww-root .ww-back svg { width: 22px; height: 22px; }
+
+/* --- SETUP: the points, the four difficulties, Play, How to play. Nothing else. --- */
+.ww-root .ww-setup {
+  flex: 1;
+  min-height: 0;
+  width: min(420px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.ww-root.is-immersive .ww-setup { padding-top: calc(var(--ww-top, 0px) + 56px); }
+.ww-root .ww-setup > :first-child { margin-top: auto; }
+.ww-root .ww-setup > :last-child { margin-bottom: auto; }
+.ww-root .ww-head { text-align: center; }
+.ww-root .ww-head h1 { margin: 0 0 4px; font-size: 32px; font-weight: 900; letter-spacing: -.2px; }
+.ww-root .ww-pts { margin: 0; font-size: 16px; font-weight: 700; }
+.ww-root .ww-pts b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.ww-root .ww-segs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ww-root .ww-seg {
+  position: relative;
+  min-height: 56px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--ww-wheel-bg);
+  color: var(--ww-ink);
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
+}
+.ww-root .ww-seg svg { width: 18px; height: 18px; flex: none; }
+.ww-root .ww-seg svg.lb-dshape-x2 { width: 30px; }
+.ww-root .ww-seg.is-selected { outline: 3px solid #ffce3a; outline-offset: 2px; }
+.ww-root .ww-check {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #ffce3a;
+  color: var(--ww-ink);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+.ww-root .ww-play { width: 100%; margin-top: 0; min-height: 60px; font-size: 22px; }
+.ww-root .ww-next:disabled { opacity: .65; box-shadow: none; cursor: default; }
+.ww-root .ww-link {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 22px;
+  background: var(--ww-chip);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+.ww-root .ww-shapechip { padding: 12px 16px; border-radius: 16px; display: grid; place-items: center; background: var(--ww-wheel-bg); }
+.ww-root .ww-msg svg.lb-dshape { width: 36px; height: 36px; }
+.ww-root .ww-msg svg.lb-dshape-x2 { width: 61px; }
+
 /* --- the crossword --- */
 .ww-root .ww-stage {
   flex: 1 1 0;

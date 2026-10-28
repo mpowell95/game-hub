@@ -133,13 +133,31 @@ const EXTRA_SCREENS = {
       },
     },
   ],
-  // Word Weaver (2026-10-28): the How to play sheet, then the level-done screen (every grid word found
-  // through the test seam). Needs word-weaver/data/ (generated) to hold at least one level.
+  // Word Weaver (2026-10-28): the default screen is the setup screen. Then its How to play sheet, the
+  // play screen on Expert (the biggest grids), How to play from there, and the level-done screen
+  // (every grid word found through the test seam). Needs word-weaver/data/ (generated).
   'word-weaver': [
     {
-      name: 'how to play',
+      name: 'how to play (setup)',
       async open(page) {
-        await page.waitForFunction(() => window.__wwTest, null, { timeout: 15000 });
+        await page.waitForSelector('.ww-setup', { timeout: 15000 });
+        await page.click('.ww-link');
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'play (Expert)',
+      async open(page) {
+        await page.click('.ww-modal .gh-modal__close');
+        await page.click('.ww-seg[data-band="expert"]');
+        await page.click('.ww-play');
+        await page.waitForSelector('.ww-wheel', { timeout: 15000 });
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: 'how to play (play)',
+      async open(page) {
         await page.click('.ww-help');
         await page.waitForTimeout(250);
       },
