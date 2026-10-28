@@ -37,6 +37,10 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
 - **Any adjacent swap is a move**, a line or not (Matt, 2026-10-24: "clearly allowed in the original").
 - **Extra moves: EVERY match of 4+ tiles gives one, no cap** (Matt, 2026-10-24: "Every 4+ should give
   me another turn"; a straight 4/5 or an L/T, `matchGroups`). A 5+ also heals the mover 5 (`FIVE_HEAL`).
+- **Nobody loses before their first turn** (Matt, 2026-10-28: "that should never be possible"; the uncapped chain
+  KO'd the receiver in ~1 in 90 hard openings): a side with `turns` 0, or bitten by a curse as its first turn starts,
+  stops at 1 HP (`damage`, event `floored`), and that hit ENDS the mover's turn (`afterMove`; else the hard computer
+  ran on 200+ moves). No new state field. No stored online match was affected (none existed).
 - **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
   one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
 - Specials pair damage with a board clear that charges the caster, as the reference's do (Flare: a
@@ -132,4 +136,4 @@ recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see
 `test-battlearena-mp.mjs` was FLAKY (about 1 run in 3) until 2026-10-28: its computer moves were random and a lucky
 chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
 for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
-matches use fixed seeds, and seed 1041 tests the first-turn knockout on purpose (the receiver gets it as a loss).
+matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now checks the receiver is left on 1 HP, on its turn.

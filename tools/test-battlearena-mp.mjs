@@ -148,8 +148,8 @@ MP.__setBootForTest(async () => (offline ? null : { db: {}, api }), { allowDev: 
  *  and how far its log has got, never Math.random, so a given seed plays the same match every run.
  *  It used to be random, and about 1 run in 3 failed: a lucky chain of 4+ matches (an extra move
  *  each, no cap) knocked out the other team in the challenger's FIRST turn, before the receiver
- *  could decline, resign or expire. That is a legal finish, tested on its own below; the lifecycle
- *  matches use seeds checked not to end early. The old 20-move cap also cut long turns short
+ *  could decline, resign or expire. The lifecycle matches use fixed seeds; since the same day the
+ *  engine stops a side that has not had a turn at 1 HP, so that cannot happen at all (seed 1041). The old 20-move cap also cut long turns short
  *  (the hard computer's longest first turn is 31 moves); 200 is only a runaway guard. */
 function turnEntries(g, side, level = 'hard') {
   let s = MP.buildState(g);
@@ -319,18 +319,19 @@ let id;
   setAt(`battlearena/games/${c5.id}/b/team`, TEAMS.b);
   ok('expire: a late move is refused', (await MP.appendLog(c5.id, g5.log.length, turnEntries(await MP.readGame(c5.id), 'b').slice(0, 1))).reason === 'expired');
 
-  // A KNOCKOUT IN THE CHALLENGER'S FIRST TURN (2026-10-28): legal (every 4+ match is an extra move,
-  // no cap; Matt, 2026-10-24) and about 1 in 90 first turns for the hard computer. Seed 1041 does it.
-  // The receiver must still get the match, as a finished loss, and nothing can call it off.
+  // NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible"). Seed 1041's
+  // opening chain used to knock out the receiver before they ever played (every 4+ match is an extra
+  // move, no cap). Now the engine stops a side that has not had a turn at 1 HP: the receiver gets the
+  // match as an ordinary open challenge, on its turn.
   use('A');
   const k1 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1041 });
   const kr = await playTurn(k1.id, 'a');
-  ok('first-turn knockout: the match ends, the challenger wins', kr.ok && kr.game.over && kr.game.over.winner === 'a' && kr.game.over.why === 'ko', JSON.stringify(kr.game && kr.game.over));
-  ok('first-turn knockout: the receiver still gets the match, as a loss', row('TQWX7', k1.id) && row('TQWX7', k1.id).over === true && row('TQWX7', k1.id).result === 'lost' && row('DREG5', k1.id).result === 'won');
+  ok('seed 1041\'s opening chain no longer ends the match: the receiver is on 1 HP, their turn', kr.ok && !kr.game.over && kr.game.turn === 'b' && kr.game.hp.b === 1, JSON.stringify({ over: kr.game && kr.game.over, hp: kr.game && kr.game.hp }));
+  ok('...delivered as an open challenge they can answer or decline', row('TQWX7', k1.id) && row('TQWX7', k1.id).yourTurn === true && row('TQWX7', k1.id).open === 'got');
   use('B');
-  ok('first-turn knockout: it cannot be declined after the fact', (await MP.cancelGame(k1.id)).reason === 'already-over');
+  ok('...and they can decline it', (await MP.cancelGame(k1.id)).ok);
 
-
+  // A log with a pass (no clock in challenges) is not a match.
   const raw = clone(getAt(`battlearena/games/${c4.id}`));
   raw.log['0099'] = { by: 'b', k: 'p' };
   ok('a challenge log never holds a pass (no move clock): refused whole', MP.validateGame(raw) === null);

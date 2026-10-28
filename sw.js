@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1312;
-const CACHE = 'game-hub-v1312';
+const CACHE = 'game-hub-v1313';
 
 const ASSETS = [
   './',
@@ -997,7 +997,7 @@ const REST_MANIFEST = {
   './eight-ball/js/mp.js': '6f0a0145b4',
   './eight-ball/js/mp-ui.js': 'b79597954d',
   './eight-ball/js/alert.js': '24d28eb007',
-  './battle-arena/js/engine.js': '8e390bbd63',
+  './battle-arena/js/engine.js': '2172554678',
   './battle-arena/js/monsters.js': '00cecd68bc',
   './battle-arena/js/online.js': 'e715141fd7',
   './battle-arena/js/mp.js': '1db4975ed5',

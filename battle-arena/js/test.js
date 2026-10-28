@@ -329,10 +329,47 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const s = setup(TEAM, THREE);
   s.sides[0].mons[0].energy = 6;
   s.sides[1].hp = 5;
+  s.sides[1].turns = 1;   // side 1 has had a turn (a side that has not cannot be knocked out, below)
   const r = apply(s, swap(4, 3, 4, 4));
   ok('HP 0 wins', r.state.winner === 0 && has(r.events, 'win', (e) => e.side === 0));
   ok('HP never goes below 0', r.state.sides[1].hp === 0);
   ok('no moves after the end', apply(r.state, swap(0, 0, 0, 1)).error === 'over');
+}
+// NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible").
+{
+  const s = setup(TEAM, THREE);
+  s.sides[0].mons[0].energy = 6;
+  s.sides[1].hp = 5;   // side 1 has not had a turn yet
+  const r = apply(s, swap(4, 3, 4, 4));
+  ok('a side that has not had a turn stops at 1 HP', r.state.winner == null && r.state.sides[1].hp === 1 && !has(r.events, 'win'));
+  ok('...and that hit ends the mover\'s turn at once (extra moves or not)', r.state.turn === 1 && has(r.events, 'damage', (e) => e.floored) && has(r.events, 'turn', (e) => e.side === 1));
+}
+{
+  // A curse biting at the START of a side's first turn cannot finish it either (it has not moved).
+  const s = setup([['hexowl', 'emberkit'], ['zapup', 'sproutle']], ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDLWS', 'LDDSDLF']);
+  s.sides[0].mons[0].energy = 4;
+  s.movesLeft = 1;
+  s.sides[1].hp = 9;   // 5 now -> 4, then the 5 at the start of their first turn would finish them
+  const r = apply(s, swap(4, 3, 4, 4));
+  ok('a curse at the start of a side\'s first turn stops at 1 HP', r.state.turn === 1 && r.state.winner == null && r.state.sides[1].hp === 1 && has(r.events, 'curseTick', (e) => e.side === 1));
+  const later = JSON.parse(JSON.stringify(r.state));
+  later.sides[1].turns = 2;   // ...but once they have played, a curse can knock them out
+  later.turn = 0; later.sides[1].curse = { tick: 5, left: 1 }; later.movesLeft = 1;
+  const r2 = apply(later, { type: 'pass' });
+  ok('...once they have played, it can', r2.state.winner === 0);
+}
+{
+  // The hard computer opening 3,000 matches: before this rule about 1 first turn in 90 was a knockout.
+  let ended = 0, longest = 0;
+  for (let seed = 1; seed <= 3000; seed++) {
+    let s = newMatch({ seed, teams: [['emberkit', 'zapup'], ['sproutle', 'gloomite']], first: 0 });
+    let g = 0;
+    for (; g < 500 && s.turn === 0 && s.winner == null; g++) s = apply(s, chooseMove(s, 'hard', seeded(seed))).state;
+    if (s.winner != null) ended++;
+    longest = Math.max(longest, g);
+  }
+  ok(`no match ends in the opener's first turn (3,000 hard openings, ${ended} ended)`, ended === 0);
+  ok(`...and no opening runs away (longest ${longest} moves)`, longest < 100);
 }
 
 // --- unlocks --------------------------------------------------------------------------------------------

@@ -227,9 +227,19 @@ function damage(s, ev, target, n, cause) {
   const side = s.sides[target];
   const absorbed = Math.min(side.shield, n);
   side.shield -= absorbed;
-  const hit = n - absorbed;
+  // NOBODY LOSES BEFORE THEIR FIRST TURN (Matt, 2026-10-28: "that should never be possible"). Every
+  // 4+ match is an extra move with no cap, so a lucky chain could knock out a full team in the
+  // opener's FIRST turn (about 1 in 90 for the hard computer): in a challenge, the person challenged
+  // lost without ever playing. A side that has not had a turn yet (`turns` 0), or whose first turn
+  // is only starting (a curse biting at its start), stops at 1 HP. Pure state, no new field, so
+  // replays and hashes only differ in exactly that case (no stored online match had it).
+  // And the hit that would have knocked them out ENDS the mover's turn (afterMove reads `floored`):
+  // without that, the uncapped extra moves let the hard computer run on for 200+ moves.
+  const unplayed = side.turns === 0 || (cause === 'curse' && side.turns === 1);
+  const floored = unplayed && n - absorbed >= side.hp;
+  const hit = floored ? Math.max(0, side.hp - 1) : n - absorbed;
   side.hp = Math.max(0, side.hp - hit);
-  ev.push({ t: 'damage', side: target, n: hit, absorbed, hp: side.hp, shield: side.shield, cause });
+  ev.push({ t: 'damage', side: target, n: hit, absorbed, hp: side.hp, shield: side.shield, cause, ...(floored ? { floored: true } : {}) });
   if (side.hp <= 0) {
     s.winner = 1 - target;
     ev.push({ t: 'win', side: s.winner });
@@ -552,6 +562,8 @@ function afterMove(s, ev, side) {
   if (s.winner != null) return;
   checkBerries(s, ev, side);
   ensureMove(s, ev);
+  // A knockout stopped at 1 HP (the other side has not had a turn) ends this turn at once.
+  if (ev.some((e) => e.t === 'damage' && e.floored && e.side !== side)) s.movesLeft = 0;
   if (s.movesLeft <= 0) {
     endTurn(s, ev);
     if (s.winner == null) ensureMove(s, ev);
