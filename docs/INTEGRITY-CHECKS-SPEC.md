@@ -50,7 +50,7 @@ can only prove a number IMPOSSIBLE (the game cannot produce it) or UNLIKELY (no 
 |---|---|---|
 | Arrow Maze | a level under 0.2 s an arrow (10+ arrows) | fastest real level 0.49 s an arrow (King of Games, Natalia close behind) |
 | Texas Hold'em | a bankroll play could not produce (`holdemSuspect`, already sorted last on the Leaderboard) | none |
-| Contexto | solved in 1 guess | **King of Games, once** (Contexto's fewest; the game keeps no date or word for it) |
+| ~~Contexto~~ | ~~solved in 1 guess~~ **DROPPED the same day**: `fewest` counts typed guesses only, and 8 hints walk any puzzle from a blank board to rank 2 (300, 150, 75, 37, 18, 9, 4, 2), so a hint-heavy honest solve trips it | King of Games, once: his 5 Oct 28 solves used 8 hints in total, all in ONE solve, so that is almost certainly the "1 guess" |
 | Darts (online) | 5 trebles or bullseyes in a row by one player in a match | best real run 2, over 1,461 darts in 18 matches |
 | Cup Pong (online) | 10 cups in a row without a miss | best real run 6, over 1,457 throws in 24 matches |
 | Battleship (online) | a winner hit 90%+ of their shots (12+ hits) | best accuracy in any record 47% |
@@ -95,7 +95,7 @@ the voids. The admin page shows raw numbers, as it always has.
 
 | | Strong hits | Alerts |
 |---|---|---|
-| Records | **0** | 1: King of Games, Contexto solved in 1 guess |
+| Records | **0** | 1: King of Games, Contexto solved in 1 guess (the dropped alert above) |
 | Darts / Cup Pong / Battleship / Hoops matches | | **0** |
 
 Also checked by hand (no rule): wins vs games add up for everyone (one old Nuts & Bolts difficulty split
@@ -108,7 +108,24 @@ Nothing impossible in any game. Computed from the snapshot: Arrow Maze 0.49 s an
 throws made, best run 6 (others 26-30%, run 5); Hoops 79-95% of shots in (others 73-90%). Highest in
 Cup Pong and Hoops, within reach of the others; no rule fires. The one alert is the 1-guess Contexto.
 
-## 6. What would make more checks possible (not built; Matt's call)
+## 6. The play log (2026-10-28, Matt: "You must begin logging all of these things so we can catch when he cheats")
+
+- **Every finished game in every game** (Monopoly Deal and Parchís excepted: their recorder is the
+  separate `game-stats-global.js`): each recorder in `js/game-stats.js` calls `notePlay`, which queues
+  the game, the recorder's name, its ARGUMENTS as JSON (score, time, moves, hints, difficulty, extras)
+  and the phone's time (`js/play-log-queue.js`, `gamehub.playlog.v1`, newest 3,000 kept).
+- **Contexto, every move**: open (new / resume / won / gave), every guess with its rank (`unknown` for a
+  word not in the list, `again` for a repeat), every hint with its word and rank, win, give up, leaving
+  the app and coming back. Puzzle key `en-31`.
+- Sent by `js/play-log.js` (started by the hub; 5 s after the last entry, on leaving the app, on each
+  sync) to **`playLog/<CODE>/<t>-<n>`** = `{t, s, g, f?, a?, e?, k?, w?, r?}` (`s` = server time),
+  verified by re-read, retried until sent. **Admin-read only** (Contexto guesses hold answers); a phone
+  writes only under its own claimed code. In the backup's `BRANCHES` (an anonymous backup is denied:
+  export it from the console).
+- Nothing reads it yet. Checks on it come after real logs exist, replayed per Matt's rule 5.
+- Before this, only Spelling Bee (`beeLog`) logged moves; nothing earlier can be recovered.
+
+## 7. What would make more checks possible (not built; Matt's call)
 
 A timed log like Spelling Bee's, per game, is the only way to catch outside help (a solver, a copied
 answer). Candidates, most useful first: **Contexto** (each guess and its time: a 1-guess solve or a

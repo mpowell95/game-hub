@@ -74,6 +74,9 @@ export const BRANCHES = [
   // integrityFlags/ + integrityAlerts/ (2026-10-28): every game's integrity checks (functions/integrity.js),
   // <statsId>/<game>/<rule> and <node>~<match>/<rule>~<side>. Server writes only, admin-read only.
   'integrityFlags', 'integrityAlerts',
+  // playLog/ (2026-10-28): every finished game in every game + Contexto's guesses, <CODE>/<t>-<n>
+  // (js/play-log.js). Admin-read only (Contexto's guesses hold answers), so an anonymous backup is denied.
+  'playLog',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',

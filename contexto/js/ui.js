@@ -8,7 +8,8 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
-import { recordContexto, contextoMedal, backfillContextoMedals } from '../../js/game-stats.js';
+import { recordContexto, contextoMedal, backfillContextoMedals, activeCode } from '../../js/game-stats.js';
+import { appendPlayLog } from '../../js/play-log-queue.js';
 import { loadModel, puzzleNumber, hintRank, band } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -152,6 +153,9 @@ class ContextoUI {
 
     this._onOnline = () => { if (this.screen === 'error') this._loadModel(); };
     window.addEventListener('online', this._onOnline);
+    // Leaving the app and coming back is logged too (another app, another tab).
+    this._onVis = () => { if (this.screen === 'play') this._log(document.visibilityState === 'hidden' ? 'hidden' : 'visible'); };
+    document.addEventListener('visibilitychange', this._onVis);
 
     this.renderShell();
     this._loadModel();
@@ -205,6 +209,7 @@ class ContextoUI {
     this.rec = this.save.games[this.key];
     this.rec.n = n;
     writeSave(this.save);
+    this._log('open', null, this.rec.done || (this.rec.guesses.length ? 'resume' : 'new'));
     this._msg = '';
     this._lastGuess = null;
     this.screen = 'play';
@@ -236,19 +241,26 @@ class ContextoUI {
 
   _persist() { writeSave(this.save); }
 
+  /** THE PLAY LOG (2026-10-28, js/play-log-queue.js): every guess, hint and give-up with its time and
+   *  rank, for playLog/<CODE> (admins only). Puzzle key 'en-31'. Never throws, never read back here. */
+  _log(e, w, r) {
+    appendPlayLog(activeCode(), { g: 'contexto', e, k: this.n ? `${this.lang}-${this.n}` : null, w: w == null ? null : w, r: r == null ? null : r });
+  }
+
   submitGuess(raw) {
     const text = String(raw || '').trim();
     if (!text || !this.model) return;
     const idx = this.model.lookup(text);
-    if (idx < 0) { this._msg = t('msg_unknown', { word: text }); this._refreshPlay(); return; }
+    if (idx < 0) { this._log('guess', text.slice(0, 40), 'unknown'); this._msg = t('msg_unknown', { word: text }); this._refreshPlay(); return; }
     const canon = this.model.words[idx];
-    if (this.rec.guesses.some((g) => g.w === canon)) { this._msg = t('msg_already', { word: canon }); this._refreshPlay(); return; }
+    if (this.rec.guesses.some((g) => g.w === canon)) { this._log('guess', canon, 'again'); this._msg = t('msg_already', { word: canon }); this._refreshPlay(); return; }
     const inflected = text.toLowerCase() !== canon;
     this.rec.guesses.push({ w: canon, hint: false });
     this._lastGuess = canon;
     this._msg = inflected ? t('msg_inflected', { input: text, word: canon }) : '';
     this._persist();
     const rank = this.model.rankOf(this.secret, idx);
+    this._log('guess', canon, rank);
     if (rank === 1) { this._finish('won'); return; }
     this._refreshPlay();
   }
@@ -260,6 +272,7 @@ class ContextoUI {
     const hr = hintRank(best, taken);
     if (hr == null) { this._msg = t('msg_hint_none'); this._refreshPlay(); return; }
     const w = this.model.wordAt(this.secret, hr);
+    this._log('hint', w, hr);
     this.rec.guesses.push({ w, hint: true });
     this._lastGuess = w;
     this._msg = '';
@@ -268,6 +281,7 @@ class ContextoUI {
   }
 
   _finish(kind) {
+    this._log(kind === 'won' ? 'win' : 'giveup');
     this.rec.done = kind === 'won' ? 'won' : 'gave';
     this._persist();
     if (!this.rec.recorded) {
@@ -690,6 +704,7 @@ class ContextoUI {
   destroy() {
     this._dead = true;
     window.removeEventListener('online', this._onOnline);
+    if (this._onVis) { document.removeEventListener('visibilitychange', this._onVis); this._onVis = null; }
     if (this._offViewport) { this._offViewport(); this._offViewport = null; }
     if (this._offLang) { this._offLang(); this._offLang = null; }
     this.container.innerHTML = '';

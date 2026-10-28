@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1322;
-const CACHE = 'game-hub-v1332';
+const IMPORTANT_SINCE = 1333;
+const CACHE = 'game-hub-v1333';
 
 const ASSETS = [
   './',
@@ -75,6 +75,8 @@ const ASSETS = [
   './js/admin-config.js',
   './js/admin-ui.js',
   './js/integrity.js',
+  './js/play-log-queue.js',
+  './js/play-log.js',
   // The read-time correction layer. SHELL because the leaderboard, My Stats and Skeeball all apply
   // it while painting - a device without it would show scores the rest of the family no longer does.
   './js/stats-corrections.js',
@@ -790,7 +792,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '44945e9e85',
+  './js/hub.js': '932b4a5677',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -808,7 +810,7 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'ecbbea6199',
+  './js/game-stats.js': 'a234dc9968',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': 'dd60a85fb5',
@@ -833,7 +835,9 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'd2db9dfed6',
   './js/admin-ui.js': '95d315fa91',
-  './js/integrity.js': '1c170bf9ce',
+  './js/integrity.js': '3f0bad24ca',
+  './js/play-log-queue.js': '0e505c4581',
+  './js/play-log.js': '92ecc7da20',
   './js/stats-corrections.js': '8fc4dfe2f7',
   './js/bee-fairplay.js': '578fe6bae3',
   './js/bee-board.js': '4f8c4124f7',
@@ -950,7 +954,7 @@ const REST_MANIFEST = {
   './contexto/': 'b0c9ee8e9d',
   './contexto/index.html': 'b0c9ee8e9d',
   './contexto/css/contexto.css': 'abcf107a31',
-  './contexto/js/ui.js': '171dfe37bb',
+  './contexto/js/ui.js': '38436b8209',
   './contexto/js/engine.js': 'f19c3f8978',
   './contexto/js/strings.js': 'e3ddf5db70',
   './contexto/data/en.json': '551bf113af',
