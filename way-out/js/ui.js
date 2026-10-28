@@ -16,7 +16,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
-import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
+import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -251,7 +251,7 @@ function defaultSrc(band, n) {
   // Expert level from 201 not already in progress on an older board. Admin only until released.
   // Expert moved on to generator 9 the same evening (harder: engine.js "GENERATOR 9").
   // Every Expert level, for everyone, on generator 10 (2026-10-28, engine.js "GENERATOR 10").
-  if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN };
+  if (hasB10(band)) return { k: 'N', band, n, g: B10_GEN, m: B10_COUNT };
   if (hasNews() && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (hasNews() && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   return isMore(band, n) ? { k: 'X', band, n, g: MORE_GEN } : { k: 'L', n, g: LADDER_GEN };
@@ -259,11 +259,15 @@ function defaultSrc(band, n) {
 /** The board a save's `src` names. */
 function boardOf(src) {
   if (src.k === 'X') return buildMore(src.band, src.n);
-  if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
+  if (src.k === 'N') return src.g === B10_GEN ? buildB10(src.n, src.m) : src.g === B9_GEN ? buildB9(src.band, src.n) : buildB8(src.band, src.n);
   return src.k === 'T' ? buildLevel(src.tier, src.level, src.gen) : buildLadder(src.n, src.g);
 }
 function validSrc(src, band, n) {
-  if (!src || typeof src !== 'object' || hasB10(band)) return defaultSrc(band, n);   // Expert: generator 10 only
+  if (hasB10(band)) {   // Expert: generator 10 only; a level in progress keeps the board it started on
+    return src && src.k === 'N' && src.band === band && src.n === n && src.g === B10_GEN && Number.isInteger(src.m)
+      && src.m >= 1 && src.m <= B10_COUNT ? { k: 'N', band, n, g: B10_GEN, m: src.m } : defaultSrc(band, n);
+  }
+  if (!src || typeof src !== 'object') return defaultSrc(band, n);
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B8_GEN && hasB8(band, n)) return { k: 'N', band, n, g: B8_GEN };
   if (src.k === 'N' && src.band === band && src.n === n && src.g === B9_GEN && hasB9(band, n)) return { k: 'N', band, n, g: B9_GEN };
   if (src.k === 'X' && src.band === band && src.n === n && src.g === MORE_GEN && isMore(band, n)) return { k: 'X', band, n, g: MORE_GEN };

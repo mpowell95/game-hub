@@ -562,6 +562,7 @@ export function hasB8(band, n) {
 // length). Level n is board n - 201; past the list the same mirrored wrap as generator 8, from 60%.
 // Generators 8 and 9's Expert boards are no longer played (old saves on them start over; ui.js readSave).
 export const B10_GEN = 10;
+export const B10_COUNT = B10.length;
 /** A packed generator-10 board back to arrows (tail first, head last). */
 export function unpackB10(s) {
   const bin = atob(s);
@@ -576,9 +577,11 @@ export function unpackB10(s) {
   }
   return arrows;
 }
-/** Expert level n on generator 10. */
-export function buildB10(n) {
-  const { i, t } = b8Slot('expert', n, { expert: B10 });
+/** Expert level n on generator 10, from the first `m` shipped boards (a save names its `m`: boards are
+ *  added in batches, and a level past the list wraps, so the same n can name a new board once more ship). */
+export function buildB10(n, m = B10.length) {
+  const list = Number.isInteger(m) && m >= 1 && m <= B10.length ? B10.slice(0, m) : B10;
+  const { i, t } = b8Slot('expert', n, { expert: list });
   const mx = (c) => { const x = c % B10_W, y = (c / B10_W) | 0; return ((t & 2) ? B10_H - 1 - y : y) * B10_W + ((t & 1) ? B10_W - 1 - x : x); };
   return { cols: B10_W, rows: B10_H, arrows: unpackB10(B10[i]).map((c) => c.map(mx)) };
 }
