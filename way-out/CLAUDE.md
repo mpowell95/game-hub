@@ -289,6 +289,21 @@ levels in five, ~52 arrows growing to ~70 by level 300, MIXED every fifth (`expe
 `src {k:'N', g:9}`, clock key `N9:expert:<n>` (generator 8 keeps `N:<band>:<n>`); g 8 Expert levels already
 played or in progress keep their boards.
 
+## Impossible test boards (2026-10-28, admin only, not yet published)
+
+Matt: *"an 'impossible' category ... 70+ arrows and there's exactly 1 way to solve it ... only one arrow can be
+moved at a time. And zero arrows ... from the same column or row facing the same direction"*, after filming
+Expert 251 (ten arrows in two rows freed one by one: "just tapping directly in order"); then *"Add an impossible
+or 2 or 3 as tests for me to play before you publish them for everyone"*. Points agreed in principle: **10**
+(slips 10, 6, 3, 1), not built yet. `tools/arrow-search.mjs` now counts **trains** (an arrow freed by the one
+in front pointing the same way in its row/column; 30% of generator 9's arrows were) and style `impossible`
+penalises them. `tools/build-arrow-impossible.mjs` keeps only boards with 70+ arrows, exactly one free arrow
+at every step and zero trains, into `js/impossible-tests.js` (GENERATED; 3 boards: 75, 70, 71 arrows;
+`test.js` re-checks all three without the search's code). The 🧪 at the picture row's left (`isAdminDevice()`)
+lists them as "Impossible N"; played like a replay (Expert penalties), results only in
+`gamehub.wayout.tests2.v1`. Matt's literal rule (no two arrows in one row/column facing the same way) is NOT
+enforced: the 16x22 grid has only 76 such lanes, and 70+ arrows would need nearly all of them.
+
 ## Test boards (2026-10-26, removed 2026-10-27)
 
 Admin-only 🧪 boards that proved generator 8's styles (Matt: *"WAY harder. And WAY better"*). Removed once

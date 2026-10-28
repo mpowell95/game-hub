@@ -56,7 +56,8 @@ const p0 = await pts();
 // Replay and the endless levels. (The admin test boards were removed 2026-10-27.)
 await page.reload();
 await page.waitForSelector('.wo-news');
-ok('player: the popup shows, with this person\'s count (1)', (await page.locator('.wo-news-chip b').innerText()).trim() === '1');
+ok('player: the popup shows, with this person\'s count (1); no test boards', (await page.locator('.wo-news-chip b').innerText()).trim() === '1'
+  && (await page.locator('.wo-testq').count()) === 0);
 await shot('0-news');
 await page.locator('.wo-news .gh-btn--primary').click();
 ok('player: Got it closes it and stamps it seen', (await page.locator('.wo-modal[hidden]').count()) === 1
@@ -68,6 +69,34 @@ await page.reload();
 await page.waitForSelector('.wo-home');
 await page.waitForTimeout(200);
 ok('the popup shows once only', (await page.locator('.wo-news').count()) === 0);
+// IMPOSSIBLE TEST BOARDS (2026-10-28, admin only): listed, one played to the end, its result kept on the
+// phone in its own key, nothing else touched.
+await page.locator('.wo-testq').click();
+await page.waitForSelector('.wo-rp-row[data-act="test"]');
+ok('tests: the Impossible boards are listed', (await page.locator('.wo-rp-row[data-act="test"]').count()) >= 3);
+await shot('8-tests');
+await page.locator('.wo-rp-row[data-n="1"]').click();
+await page.waitForFunction(() => window.__woTest);
+ok('tests: Impossible 1 on screen', /Impossible 1|Imposible 1/.test(await page.locator('.wo-level').innerText()));
+await shot('9-impossible-1');
+{
+  const keep0 = await snap();
+  for (let guard = 0; guard < 400; guard++) {
+    const s = await page.evaluate(() => (window.__woTest ? window.__woTest.state() : null));
+    if (!s || !s.left) break;
+    const id = await page.evaluate(() => window.__woTest.clearId());
+    if (id < 0) { await page.waitForTimeout(60); continue; }
+    const p = await page.evaluate((i) => window.__woTest.pointOf(i), id); await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(20);
+  }
+  await page.waitForSelector('.wo-rp-row[data-act="test"]', { timeout: 10000 });
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('gamehub.wayout.tests2.v1') || '{}'));
+  ok('tests: the finish is kept on the phone, and the list shows it', Array.isArray(kept['1']) && kept['1'].length === 1 && kept['1'][0].m === 0
+    && /♥♥♥/.test(await page.locator('.wo-rp-row[data-n="1"] .wo-rp-gain').innerText()));
+  ok('tests: no save, clock or level touched, no stats recorded', JSON.stringify(await snap()) === JSON.stringify(keep0)
+    && (await page.evaluate(async () => (await import('/js/game-stats.js')).loadStats().games.wayout.byDiff.medium.won)) === 2);
+  await page.locator('.wo-modal [data-act="close"]').click();
+}
 const rbtn = page.locator('.wo-replay');
 ok('setup: a Replay button with the count (1)', (await rbtn.count()) === 1 && (await rbtn.innerText()).trim() === '1');
 ok('setup: the paused level still offers New game | Resume', (await page.locator('[data-act="new-level"]').count()) === 1);
