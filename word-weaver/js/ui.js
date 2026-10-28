@@ -617,10 +617,17 @@ class WordWeaver {
     const k = c.r + ',' + c.c;
     this.st.revealed.push(k);
     this.st.hints += 1;
+    // A word whose every letter is now showing counts as found, as in Wordscapes (no swipe needed).
+    const shown = foundCells(this.level, this.st);
+    for (const r of this.st.revealed) shown.add(r);
+    for (const e of this.level.w) {
+      if (!this.st.found.includes(e[0]) && cellsOf(e).every((q) => shown.has(q.r + ',' + q.c))) this.st.found.push(e[0]);
+    }
     this._save();
     this._paintGrid();
     this._anim(this.cells.get(k), 'is-flash');
     this._paintTools();
+    if (isDone(this.level, this.st)) this._complete();
   }
 
   /** The last word is in: count the level FIRST, then let the letters land and show the done screen. */

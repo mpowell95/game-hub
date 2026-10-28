@@ -30,7 +30,7 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   letters: silent. **No sound, ever.**
 - **Hints are unlimited.** One tap reveals one letter: the first unrevealed cell (top to bottom, left to right)
   of the shortest unfound grid word (ties: earlier in `w`; cells a found word already shows are skipped). Each
-  reveal is one hint. **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = total stars (the stats agent's side).
+  reveal is one hint. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = total stars (the stats agent's side).
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter

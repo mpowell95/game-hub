@@ -240,6 +240,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `players-agg.js` | per-person aggregation of synced devices (no `headToHeadRows`; removed 2026-08-11) |
 | `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game; tabs By Player / By Game top 3 / You, last tab remembered) |
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
+| `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), per-level merge, total stars = its leaderboard number |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |
 | `difficulty-tiers.js` | READ-path mapping of difficulties onto tiers 1-4 |
