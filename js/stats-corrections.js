@@ -48,6 +48,7 @@ export const VOIDED_MATCHES = {
   // board (words, points) must leave that day out for him via voidedCodesFor.
   spellingbee: {
     enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily' },
+    eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', bucket: 'daily' },   // Oct 28 (Matt: "void today for him too")
   },
 };
 /** Codes whose day on one puzzle counts for nothing long-term (Spelling Bee). Not the day's own board. */
