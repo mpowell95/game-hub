@@ -645,6 +645,9 @@ no Default buttons.
   Deterrents, not cheat-proofing.
 - **Nothing on this page deletes or rewrites player data.** Every write verifies by re-read; a dev
   origin never writes the family's config.
+- **Layout (2026-10-28, Matt: "clunky and inefficient")**: paints at once from the cached config (people
+  sections fill in when `players/` lands); one section open at a time, its heading sticky; a save keeps the
+  scroll place; Games = Admin only first, Live folded; allow picker = picked people + "Add someone" fold.
 
 Full contract: `js/CLAUDE.md`, "The admin config".
 
