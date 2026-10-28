@@ -601,6 +601,26 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('[KNOWN-BUG PROBE] My Stats keeps its OWN, more permissive rule, so your own history stays',
     /return TABS\.filter\(\(tab\) => !tab\.devOnly \|\| dev \|\| isGameLive\(hubIdOf\(tab\.id\), !tab\.devOnly\)\);/.test(uiSrc),
     'unifying visibleTabs with isGameOnLauncher would hide a player\'s own record of a pulled game');
+  // NOT EVEN FOR MATT (2026-10-28): "Admin only games should not appear on the leaderboard. Not for
+  // me and not for anyone else." And the stats TABS must mark the SAME games admin-only as the hub,
+  // or the board shows them to every player (Archery, Battle Arena, Cup Baseball, Gridlock did).
+  {
+    const fnBody = uiSrc.slice(uiSrc.indexOf('export function isGameOnLauncher('), uiSrc.indexOf('\n}\n', uiSrc.indexOf('export function isGameOnLauncher(')));
+    ok('isGameOnLauncher has no dev-profile bypass', !/\bdev\b/.test(fnBody.replace(/\/\/.*$/gm, '')));
+    ok('the leaderboard\'s player page drops never-released admin-only games', /gsGameListHTML\(g\.games, \{ order: 'plays', board: true \}\)/.test(src));
+    const hub = readFileSync(new URL('./js/hub.js', __ROOT_URL), 'utf8');
+    const hubDev = new Set();
+    for (const m of hub.matchAll(/\n    id: '([^']+)'[\s\S]*?\n  \},/g)) if (/\n    devOnly: true,/.test(m[0])) hubDev.add(m[1]);
+    const hubIdMap = Object.fromEntries([...uiSrc.matchAll(/(\w+): '([a-z0-9-]+)'/g)].filter(([, k]) => /^[a-z0-9]+$/.test(k)).map(([, k, v]) => [k, v]));
+    const tabs = [...uiSrc.slice(uiSrc.indexOf('const TABS'), uiSrc.indexOf('\n];', uiSrc.indexOf('const TABS'))).matchAll(/\{ id: '([^']+)'[^}]*\}/g)];
+    const drift = [];
+    for (const [line, id] of tabs) {
+      if (/retired: true/.test(line)) continue;
+      const hid = hubIdMap[id] || id;
+      if (/devOnly: true/.test(line) !== hubDev.has(hid)) drift.push(`${id}(hub ${hid})`);
+    }
+    ok('stats TABS mark exactly the hub\'s admin-only games devOnly', tabs.length > 30 && hubDev.size > 0 && !drift.length, drift.join(', '));
+  }
   // WHERE THE LEADERBOARD OPENS, and where a board opens (2026-09-11, Matt).
   // REVERSED 2026-10-27 (Matt): it opens on the tab and sort it was left on; nothing saved = By Game.
   ok('the overlay opens on the remembered tab and sort',
