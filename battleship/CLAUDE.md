@@ -343,6 +343,9 @@ third tab, **Challenge** (Host / Join / Challenge). `battleship/js/mp.js` (Battl
   in bot sims; this gives ~52%. `_chStale` refuses an mp.js without rule 3.
 - **Shots left (Matt, 2026-10-28: "show the shots left on screen each turn")**: on your turn in a 3/5 salvo game
   a big count + dots (`.bs-shotsleft`) sits where FIRE goes, counting down as you aim; FIRE replaces it at 0.
+- **Screen height = `trueBottom()` (`js/tabbar-fix.js`), NEVER `visualViewport.height`** (2026-10-28, Matt: "Unplayable",
+  iPhone screenshot: battle screen in the top ~60%, boards at the 120px floor): iOS 26 can leave
+  `visualViewport.height` at about half the screen (WebKit bug 297779). `_fitScene`, `_fitBattleBoards`, `_bleedToEdges`.
 - **Older matches keep their stored rule** (THE LAW: the rule travels with the match): no `salvo` = a hit
   shoots again and a turn is N MISSES (`fireShot`, `chLeft`); no `shots` = 1.
 - The challenger places and sends; **the receiver places on first open and shoots first** (a shot

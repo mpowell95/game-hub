@@ -33,6 +33,9 @@ import { recordBattleship, recordHeadToHead, deviceId } from '../../js/game-stat
 import { makeT, myName } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onViewportResize } from '../../js/viewport.js';
+// The real screen height. NOT visualViewport.height: iOS 26 can leave it at about half the screen
+// (WebKit bug 297779), and Matt's battle screen shrank to the top 60% with tiny boards (2026-10-28).
+import { trueBottom } from '../../js/tabbar-fix.js';
 import { shipArtHtml } from './ship-art.js';
 import * as net from '../../js/net.js';
 import { onlineGate, onlineGateText } from '../../js/online-gate.js';
@@ -534,7 +537,7 @@ class BattleshipUI {
    *  as `_fitBattleBoards` does), so the page never scrolls; a card taller than that starts at the top. */
   _fitScene() {
     if (this._dead || !this.shell || this.view !== 'setup') return;
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const vh = trueBottom();
     this.shell.style.minHeight = '';
     const top = this.shell.getBoundingClientRect().top;
     let h = Math.max(0, vh - Math.max(0, top));
@@ -859,7 +862,7 @@ class BattleshipUI {
     const enemyBoard = enemyPanel && enemyPanel.querySelector('.bs-board');
     const ownBoard = ownPanel && ownPanel.querySelector('.bs-board');
     if (!enemyBoard || !ownBoard) return;
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const vh = trueBottom();
     const top = battle.getBoundingClientRect().top;
     let inFlow = 0;
     let consumed = 0;
@@ -929,7 +932,7 @@ class BattleshipUI {
     const target = Math.min(document.documentElement.clientWidth, 560);
     const extra = Math.max(0, Math.round((target - avail) / 2));
     const st = this.shell.getBoundingClientRect();
-    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const vh = trueBottom();
     const up = Math.max(0, Math.round(st.top));
     const down = Math.max(0, Math.round(vh - st.bottom));
     const px = (n) => (n ? `${n}px` : '');
