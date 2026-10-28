@@ -42,7 +42,19 @@ export const VOIDED_MATCHES = {
   darts: {
     muzgz01qh0z10nqo: { winner: '3VN33', loser: 'QZCC4' },
   },
+  // A Spelling Bee DAY (Matt, 2026-10-27: "Do not add today to the leaderboard for Moonis. Completely
+  // omit it for him... It's like nobody got first"). `puzzle` = the save/board key; his row is left off
+  // that day's board (places unchanged for everyone else) and his Genius win comes out of 'daily'.
+  spellingbee: {
+    enaciltuy: { winner: '3VN33', puzzle: 'a:ciltuy', bucket: 'daily' },
+  },
 };
+/** Codes whose row is left off one puzzle's board (Spelling Bee). */
+export function voidedCodesFor(gameId, puzzle) {
+  const out = new Set();
+  for (const v of Object.values(VOIDED_MATCHES[gameId] || {})) if (v.puzzle && v.puzzle === puzzle && v.winner) out.add(v.winner);
+  return out;
+}
 export function isVoidedMatch(gameId, matchId) {
   return !!(VOIDED_MATCHES[gameId] && Object.prototype.hasOwnProperty.call(VOIDED_MATCHES[gameId], matchId));
 }
@@ -52,24 +64,31 @@ export function voidedResultFor(gameId, matchId, code) {
   if (!v || !code) return null;
   return v.winner === code ? 'won' : v.loser === code ? 'lost' : null;
 }
-/** A game record with its noted, still-voided online results taken back out of `total` and the
- *  'mp' bucket. Never mutates its input; returns it unchanged when there is nothing to take out. */
+/** A game record with its noted, still-voided results taken back out of `total` and their bucket
+ *  ('mp', or the entry's own). Never mutates its input; returns it unchanged when there is nothing to take out. */
 export function correctVoidedResults(gameRec, gameId) {
   const g = gameRec || {};
   const vd = g.vd && typeof g.vd === 'object' ? g.vd : null;
   if (!vd) return g;
-  const n = { won: 0, lost: 0, draw: 0 };
-  for (const id of Object.keys(vd)) if (isVoidedMatch(gameId, id) && n[vd[id]] != null) n[vd[id]] += 1;
-  const played = n.won + n.lost + n.draw;
-  if (!played) return g;
-  const less = (b) => Object.assign({}, b || {}, {
-    played: Math.max(0, ((b || {}).played | 0) - played),
+  // Counted per bucket: online matches sit in 'mp', a Spelling Bee day in 'daily'.
+  const per = {};
+  const zero = () => ({ won: 0, lost: 0, draw: 0 });
+  const all = zero();
+  for (const id of Object.keys(vd)) {
+    if (!isVoidedMatch(gameId, id) || all[vd[id]] == null) continue;
+    const k = VOIDED_MATCHES[gameId][id].bucket || 'mp';
+    (per[k] || (per[k] = zero()))[vd[id]] += 1;
+    all[vd[id]] += 1;
+  }
+  if (!(all.won + all.lost + all.draw)) return g;
+  const less = (b, n) => Object.assign({}, b || {}, {
+    played: Math.max(0, ((b || {}).played | 0) - (n.won + n.lost + n.draw)),
     won: Math.max(0, ((b || {}).won | 0) - n.won),
     lost: Math.max(0, ((b || {}).lost | 0) - n.lost),
   });
   const byDiff = Object.assign({}, g.byDiff || {});
-  if (byDiff.mp) byDiff.mp = less(byDiff.mp);
-  return Object.assign({}, g, { total: less(g.total), byDiff });
+  for (const k of Object.keys(per)) if (byDiff[k]) byDiff[k] = less(byDiff[k], per[k]);
+  return Object.assign({}, g, { total: less(g.total, all), byDiff });
 }
 
 /** Correction for one board, or null. Pure over a plain corrections map: `{ <boardId>: {...} }`. */
@@ -232,4 +251,4 @@ export function snapshotOf(board, day) {
   };
 }
 
-export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };
+export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, voidedCodesFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf };
