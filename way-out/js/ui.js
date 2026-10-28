@@ -20,6 +20,7 @@ import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel,
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
+import { IMPOSSIBLE_TESTS, IMP_W, IMP_H } from './impossible-tests.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
@@ -184,6 +185,26 @@ function markNewsSeen() {
 // (2026-10-26 to 10-27) Admin-only TEST BOARDS lived here (Matt: "Remove the test levels" once they became
 // generator 8). Their results stay as stored in gamehub.wayout.tests.v1 on Matt's phones (rule 5); nothing
 // reads or writes that key now.
+// IMPOSSIBLE TEST BOARDS (2026-10-28, admin only; Matt: "Add an impossible or 2 or 3 as tests for me to
+// play before you publish them for everyone"): js/impossible-tests.js. Every finish kept on this phone
+// only, in its OWN key ({ "<n>": [{ t, m, h, d }] }); never the stats store.
+const TESTS2_KEY = 'gamehub.wayout.tests2.v1';
+function readTests() {
+  try { const v = JSON.parse(localStorage.getItem(TESTS2_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
+}
+function addTest(n, f) {
+  const all = readTests(), list = Array.isArray(all[n]) ? all[n] : [];
+  all[n] = list.concat([f]);
+  try { localStorage.setItem(TESTS2_KEY, JSON.stringify(all)); } catch (err) { console.error('[way-out] test result NOT saved', err); }
+  if (!(readTests()[n] || []).length) console.error('[way-out] test result did not read back', n);
+}
+/** The best finish of test board n: fewest slips, then fastest. */
+function bestTest(n) {
+  const list = readTests()[n];
+  if (!Array.isArray(list) || !list.length) return null;
+  return list.slice().sort((a, b) => (a.m + a.h) - (b.m + b.h) || a.t - b.t)[0];
+}
+const testName = (n) => `${t('tier_impossible')} ${n}`;
 function readJSON(key) {
   try {
     const v = JSON.parse(localStorage.getItem(key) || '{}');
@@ -725,6 +746,7 @@ class WayOut {
         <div class="wo-herorow">
           <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
           <button type="button" class="wo-howq" data-act="help" aria-label="${t('how_title')}" title="${t('how_title')}">?</button>
+          ${isAdminDevice() && IMPOSSIBLE_TESTS.length ? `<button type="button" class="wo-howq wo-testq" data-act="tests" aria-label="${t('tests_title')}" title="${t('tests_title')}">🧪</button>` : ''}
         </div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
@@ -797,7 +819,7 @@ class WayOut {
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
             <span class="wo-tierpill">${diffShapeSVG(TIER_NUM[tier])}${t('tier_' + tier)}</span>
-            <span class="wo-level">${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}</span>
+            <span class="wo-level">${this.replay && this.replay.test ? testName(this.level) : `${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}`}</span>
           </div>
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
@@ -860,6 +882,8 @@ class WayOut {
     else if (act === 'replays' && hasNews()) this._openReplays();
     else if (act === 'replay' && hasNews()) this._startReplay(this.settings.tier, +btn.dataset.l, +btn.dataset.g);
     else if (act === 'news-close') this._closeModal();
+    else if (act === 'tests' && isAdminDevice()) this._openTests();
+    else if (act === 'test' && isAdminDevice()) this._startTest(+btn.dataset.n);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
@@ -1029,6 +1053,48 @@ class WayOut {
     if (go) go.focus({ preventScroll: true });
   }
 
+  /** IMPOSSIBLE TEST BOARDS (admin only): the list, each with Matt's best finish on it. */
+  _openTests() {
+    const m = this.root.querySelector('.wo-modal');
+    m.innerHTML = `
+      <div class="gh-modal wo-dialog wo-replays" role="dialog" aria-modal="true" aria-labelledby="wo-ts-h">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="wo-ts-h">${t('tests_title')}</h2>
+        <ul class="wo-rp-list">${IMPOSSIBLE_TESTS.map((_, i) => {
+          const n = i + 1, b = bestTest(n);
+          return `
+          <li><button type="button" class="wo-rp-row" data-act="test" data-n="${n}">
+            <span class="wo-rp-n">${testName(n)}</span>
+            <b class="wo-rp-gain">${b ? `${woClock(b.t)} · ${'♥'.repeat(Math.max(0, LIVES - b.m))}${'♡'.repeat(Math.min(LIVES, b.m))}${b.h ? ` 💡${b.h}` : ''}` : '-'}</b>
+          </button></li>`;
+        }).join('')}
+        </ul>
+      </div>`;
+    if (m.hidden) this._opener = document.activeElement;
+    m.hidden = false;
+  }
+  /** Play Impossible test board n: like a replay, it keeps nothing but its result (TESTS2_KEY). */
+  _startTest(n) {
+    const arrows = IMPOSSIBLE_TESTS[n - 1];
+    if (!arrows) return;
+    const m = this.root.querySelector('.wo-modal');
+    if (m && !m.hidden) { m.hidden = true; m.innerHTML = ''; this._opener = null; }
+    this._stopLevel();
+    this.rush = null;
+    this.replay = { test: n };
+    this.tier = 'expert';   // Expert's time penalties; the pill reads Expert, the title "Impossible N"
+    this.level = n;
+    this._helpPaused = false;
+    this.src = { k: 'R', test: n };
+    this.gen = 0;
+    this.lvl = { cols: IMP_W, rows: IMP_H, arrows: arrows.map((c) => c.slice()) };
+    this._resetBoard(null);
+    this.clock = { n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
+    this.screen = 'play';
+    this.render();
+    this._clockRun();
+  }
+
   /** The list of this difficulty's levels with points to win back. */
   _openReplays() {
     const band = this.settings.tier, list = woMissed(this._myWayout(), band);
@@ -1089,6 +1155,7 @@ class WayOut {
 
   _restart() {
     if (!this.lvl || this.won) return;
+    if (this.replay && this.replay.test) { this._startTest(this.replay.test); return; }
     if (this.replay) { const { l, g } = this.replay; this._startReplay(this.tier, l, g); return; }
     resetSave(this.tier, this.level, this.src);
     this._stopLevel();
@@ -1452,6 +1519,16 @@ class WayOut {
    *  to the setup screen, with the list again if there is still something to win back. */
   _replayDone(motion) {
     this._clockPause();
+    if (this.replay.test) {
+      const c = this.clock, n = this.replay.test;
+      addTest(n, { t: Math.round(c.ms + c.pen), m: c.mistakes, h: c.hints, d: Date.now() });
+      this._paintClock();
+      this.winSub = woClock(c.ms + c.pen);
+      this.clock = null;
+      this._later(() => this._banner(), motion ? 650 : 100);
+      this._later(() => { this._toSetup(false); this._openTests(); }, motion ? 2300 : 1500);
+      return;
+    }
     const c = this.clock, { l, g } = this.replay;
     let up = null;
     try {
