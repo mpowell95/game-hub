@@ -68,3 +68,16 @@ Decisions where the brief was open:
 Verified with two headless phones (390x844) sharing an in-memory database: the Firebase SDK modules
 were routed to a stand-in, so nothing could reach Firebase. A full live match (incl. a clock run-out and
 chat both ways) and a full challenge were recorded on both phones and read frame by frame.
+
+
+## Own attacks, evolution scene, test mode (2026-10-28)
+
+Matt wanted to test Battle Arena against specific real players and named three things first: an unlock
+system ("I don't think we have any"), attack and evolve animations ("every attack looks the same: an energy
+ball that hits other players. This is where the game must stand out"), and testers knowing it is a test ("must
+be obvious and always clearly present"). The unlock system already existed (wins-based, derived, this
+device's store only); Matt chose to keep testers on the 6 starters with normal unlocks, so this added the
+"N more wins" count on locked tiles and a "New monster!" reveal. A mockup (Emberkit, Zapup, Gloomite +
+evolve) was approved ("those are sick"), then all 12 were built in `js/attacks.js`, each verified by
+replaying a synthetic special on the real battle screen and reading the frames. The projectile ball and the
+old flicker evolution are gone. Cross-device win counting for unlocks was proposed but not built.

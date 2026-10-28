@@ -543,16 +543,18 @@ export function decideEscoba({ code, id, before, after }) {
 //   - your turn coming back                 -> "your turn", with both teams' HP
 //   - the match ending by THEIR hand         -> they won (their move knocked you out) / you won (they resigned)
 // Your own writes (lastBy 'me') never notify you. A called-off row (over:false, `ended`) says nothing.
+// TEST MODE (2026-10-28): the title says "(TEST)" while Matt tests with real players; drop it at release
+// together with battle-arena/js/ui.js TEST_MODE.
 const BATTLE_TEXT = {
   en: {
-    title: 'Battle Arena',
+    title: 'Battle Arena (TEST)',
     challenge: (w) => `${w} challenged you to Battle Arena. Your turn!`,
     turn: (w, a, b) => `Your turn vs ${w}. HP: you ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} won the battle.`,
     youWon: (w) => `You won! ${w} resigned.`,
   },
   es: {
-    title: 'Arena de Batalla',
+    title: 'Arena de Batalla (PRUEBA)',
     challenge: (w) => `${w} te ha retado en la Arena de Batalla. ¡Te toca!`,
     turn: (w, a, b) => `Te toca contra ${w}. PV: tú ${a}, ${w} ${b}`,
     theyWon: (w) => `${w} ganó la batalla.`,
