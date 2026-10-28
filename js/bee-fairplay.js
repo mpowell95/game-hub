@@ -17,20 +17,45 @@ export const QUEEN = 9;
 // --- detection: did this player copy the answers? ------------------------------------------------
 //
 // Strong (any one voids the day): a SORTED RUN of 6+ right answers in a row, all the same length,
-// each alphabetically after the one before; or a NO-MISS BURST of 10+ right answers in a row averaging
-// under 6 s each. Supporting (both together void the day): LEAVE AND BURST, 5+ right answers within
-// 60 s of coming back to the app (misses allowed); and SPEED, Genius within 10 minutes of time in the
-// game. A wrong or already-found guess restarts a run. Timing is each entry's `t` (the phone's clock).
+// each alphabetically after the one before; a NO-MISS BURST of 10+ right answers in a row averaging
+// under 6 s each; or BEST WORDS FIRST (2026-10-28, Matt: "getting all of the best possible words in
+// order including all pangrams is simply not plausible"): the first 5 answers after opening or coming
+// back to the app, within 2 minutes, are all among the 6 highest-scoring answers not yet found, each
+// worth 7+ points. Supporting (any two together void the day): LEAVE AND BURST, 5+ right answers
+// within 60 s of coming back to the app (misses allowed); SPEED, Genius within 10 minutes of time in
+// the game; RIGHT VS WRONG, 2+ right answers per wrong guess up to Genius; and RE-TYPED, fewer
+// already-found guesses than 1 per 10 right answers up to Genius (honest players re-type words they
+// forgot they had; a copied list never repeats). Speed, right vs wrong and re-typed count only when
+// the log holds every word on the board; right vs wrong and re-typed only with 20+ right answers. A
+// wrong or already-found guess restarts a run. Timing is each entry's `t` (the phone's clock).
 
-export const RULES = { sortedRun: 6, burstWords: 10, burstAvgMs: 6000, leaveWords: 5, leaveMs: 60000, geniusMs: 10 * 60 * 1000, awayMs: 5 * 60 * 1000 };
+export const RULES = {
+  sortedRun: 6, burstWords: 10, burstAvgMs: 6000, bestWords: 5, bestOf: 6, bestMinPoints: 7, bestMs: 120000,
+  leaveWords: 5, leaveMs: 60000, geniusMs: 10 * 60 * 1000, awayMs: 5 * 60 * 1000, rightPerWrong: 2, retypeShare: 0.1, judgeRight: 20,
+};
 const isOk = (x) => x.r === 'ok' || x.r === 'bonus';
 
+/** A puzzle key's seven letters: 'e:abcdhu' or 'es:a:deiqru' -> Set. */
+function lettersOf(key) {
+  const p = String(key || '').split(':');
+  return new Set((p[p.length - 2] || '') + (p[p.length - 1] || ''));
+}
+/** The NYT score (spelling-bee/js/engine.js scoreWord) from the key alone. */
+export function scoreOf(word, letters) {
+  const w = String(word || '');
+  let pan = letters.size === 7;
+  for (const c of letters) if (!w.includes(c)) { pan = false; break; }
+  return (w.length === 4 ? 1 : w.length) + (pan ? 7 : 0);
+}
+
 /** entries: a player's beeLog for one puzzle ({key: {t, e, w, r}} or an array). `words`: that
- *  player's word count on the board; SPEED counts only when the log holds every one of them (a game
- *  begun before logging, or on another phone, would look fast: Lili, Oct 27). Returns
- *  { void, strong: [..], supporting: [..], sorted, burst: {n, avg}, leave, geniusMs } (ms of time in
- *  the game up to Genius, or null). */
-export function detectCopying(entries, { words = 0 } = {}) {
+ *  player's word count on the board; SPEED, RIGHT VS WRONG and RE-TYPED count only when the log holds
+ *  every one of them (a game begun before logging, or on another phone, would look fast: Lili, Oct
+ *  27). `puzzle`: { key, top } (top = the puzzle's highest answer scores, high first; functions/bee.js
+ *  PUZZLES); without it BEST WORDS FIRST is skipped. Returns { void, strong: [..], supporting: [..],
+ *  sorted, burst: {n, avg}, best, leave, geniusMs (ms of time in the game up to Genius, or null),
+ *  right, wrong, retyped (up to Genius, or null) }. */
+export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   const ev = (Array.isArray(entries) ? entries : Object.values(entries || {}))
     .filter((x) => x && Number.isFinite(x.t) && typeof x.e === 'string').sort((a, b) => a.t - b.t);
   const guesses = ev.filter((x) => x.e === 'guess');
@@ -69,10 +94,41 @@ export function detectCopying(entries, { words = 0 } = {}) {
     leave = Math.max(leave, n);
   }
 
+  // Best words first: from each open / return, the answers ('ok', not bonus words) before the player
+  // leaves again or 2 minutes pass. `best` = the most of them in a row, from the start, that rank among
+  // the 6 highest-scoring answers still unfound then (ties count) and score 7+.
+  let best = 0;
+  if (puzzle && Array.isArray(puzzle.top) && puzzle.top.length) {
+    const letters = lettersOf(puzzle.key);
+    for (const s of ev) {
+      if (s.e !== 'open' && s.e !== 'visible') continue;
+      const left = puzzle.top.slice();
+      const seen = new Set();
+      for (const x of guesses) {
+        if (x.t > s.t || x.r !== 'ok' || seen.has(x.w)) continue;
+        seen.add(x.w);
+        const i = left.indexOf(scoreOf(x.w, letters));
+        if (i >= 0) left.splice(i, 1);
+      }
+      if (left.length < RULES.bestOf) continue;
+      const bar = Math.max(left[RULES.bestOf - 1], RULES.bestMinPoints);
+      let n = 0;
+      for (const x of ev) {
+        if (x.t <= s.t) continue;
+        if (x.t - s.t > RULES.bestMs || x.e === 'hidden' || x.e === 'close') break;
+        if (x.e !== 'guess' || x.r !== 'ok' || seen.has(x.w)) continue;
+        seen.add(x.w);
+        if (scoreOf(x.w, letters) < bar) break;
+        n++;
+      }
+      best = Math.max(best, n);
+    }
+  }
+
   // Speed: time in the game (no gap after hiding or closing, none over 5 min) up to Genius ('win').
   const win = ev.find((x) => x.e === 'win');
   const logged = new Set(guesses.filter(isOk).map((x) => x.w)).size;
-  let geniusMs = null;
+  let geniusMs = null, right = null, wrong = null, retyped = null;
   if (win && logged >= words) {
     geniusMs = 0;
     for (let i = 1; i < ev.length && ev[i].t <= win.t; i++) {
@@ -80,24 +136,37 @@ export function detectCopying(entries, { words = 0 } = {}) {
       if (ev[i - 1].e === 'hidden' || ev[i - 1].e === 'close' || gap > RULES.awayMs) continue;
       geniusMs += gap;
     }
+    // Right vs wrong and re-typed, up to Genius.
+    const upTo = guesses.filter((x) => x.t <= win.t);
+    right = upTo.filter(isOk).length;
+    retyped = upTo.filter((x) => x.r === 'already_found').length;
+    wrong = upTo.length - right - retyped;
   }
 
   const strong = [];
   if (sorted >= RULES.sortedRun) strong.push('sorted');
   if (burst.n >= RULES.burstWords) strong.push('burst');
+  if (best >= RULES.bestWords) strong.push('best');
   const supporting = [];
   if (leave >= RULES.leaveWords) supporting.push('leave');
   if (geniusMs != null && geniusMs < RULES.geniusMs) supporting.push('speed');
-  return { void: strong.length > 0 || supporting.length >= 2, strong, supporting, sorted, burst, leave, geniusMs };
+  const judged = right != null && right >= RULES.judgeRight;
+  if (judged && right >= RULES.rightPerWrong * wrong) supporting.push('ratio');
+  if (judged && retyped < RULES.retypeShare * right) supporting.push('retype');
+  return { void: strong.length > 0 || supporting.length >= 2, strong, supporting, sorted, burst, best, leave, geniusMs, right, wrong, retyped };
 }
 
-/** The flag line for Matt: "Sorted run 7, Burst 16 at 4.0 s, Back+5 in 60 s, Genius in 7.5 min". */
+/** The flag line for Matt: "Sorted run 7, Burst 16 at 4.0 s, Best 6 first, Back+5 in 60 s, Genius
+ *  in 7.5 min, Right 46 / wrong 17, Re-typed 3". */
 export function flagSummary(d) {
   const parts = [];
   if (d.strong.includes('sorted')) parts.push(`Sorted run ${d.sorted}`);
   if (d.strong.includes('burst')) parts.push(`Burst ${d.burst.n} at ${(d.burst.avg / 1000).toFixed(1)} s`);
+  if (d.strong.includes('best')) parts.push(`Best ${d.best} first`);
   if (d.supporting.includes('leave')) parts.push(`Back+${d.leave} in 60 s`);
   if (d.supporting.includes('speed')) parts.push(`Genius in ${(d.geniusMs / 60000).toFixed(1)} min`);
+  if (d.supporting.includes('ratio')) parts.push(`Right ${d.right} / wrong ${d.wrong}`);
+  if (d.supporting.includes('retype')) parts.push(`Re-typed ${d.retyped}`);
   return parts.join(', ');
 }
 

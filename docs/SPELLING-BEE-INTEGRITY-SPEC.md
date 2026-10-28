@@ -72,11 +72,24 @@ phone's clock at the guess); the server time `s` only stamps when a batch was up
    before, with no wrong or already-found guess in between (one restarts the count). Honest high so far: 3.
 2. **No-miss burst:** 10+ accepted words in a row (bonus words count as accepted), no refused or
    already-found guess between, averaging under 6 s each.
+7. **Best words first** (added 2026-10-28, Matt: "coming back to the app and getting all of the best
+   possible words in order including all pangrams is simply not plausible"): after opening or coming back
+   to the app, within 2 minutes and before leaving again, the first 5 answers are all among the 6
+   highest-scoring answers not yet found (ties count), each worth 7+ points. King of Games, Oct 28: 6.
+   The server knows each puzzle's 15 highest answer scores (`bee-puzzles.json` `top`).
 
-**Supporting: both together void the day.**
+**Supporting: any two together void the day.**
 3. **Leave and burst:** back from leaving the app, then 5+ accepted words within 60 s (misses allowed).
 4. ~~Copy typo~~ **dropped**: honest players do it too (Lili 6 times on Oct 28, Natalia 2 on Oct 27).
 5. **Speed:** Genius within 10 minutes of time in the game.
+8. **Right vs wrong** (added 2026-10-28): 2+ right answers per wrong guess up to Genius (King of Games
+   46 / 17; every other Genius game 0.8 to 1.3).
+9. **Re-typed** (added 2026-10-28, Matt: "an important fact"): fewer already-found guesses than 1 per
+   10 right answers up to Genius (King of Games 3 of 46; others 9 to 71).
+
+Speed, right vs wrong and re-typed count only when the log holds every word on the board; the last two
+only with Genius and 20+ right answers. Replayed on every log 2026-10-28: only King of Games, Oct 28
+(all 7 checks).
 
 **Flag only (alert Matt, never void):**
 6. **Missing log:** the daily board shows more words than the log has accepted guesses, 30+ minutes

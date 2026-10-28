@@ -28,9 +28,10 @@ for (const f of seen) {
   mkdirSync(dirname(to), { recursive: true });
   writeFileSync(to, readFileSync(f));
 }
-// Spelling Bee's puzzle map (2026-10-28, functions/bee.js): board key -> {lang, day, key} for every
-// puzzle in both word lists, replaced ones included, so the server knows which day and language a
-// beeDaily/beeLog node belongs to without loading the word lists.
+// Spelling Bee's puzzle map (2026-10-28, functions/bee.js): board key -> {lang, day, key, top} for
+// every puzzle in both word lists, replaced ones included, so the server knows which day and language
+// a beeDaily/beeLog node belongs to without loading the word lists. `top`: the 15 highest answer
+// scores, high first (js/bee-fairplay.js "best words first").
 {
   const E = await import('../spelling-bee/js/engine.js');
   const map = {};
@@ -41,7 +42,10 @@ for (const f of seen) {
       const day = E.dayKey(E.dateOfDay(d.epoch, n));
       const all = [E.puzzleAt(d, n)];
       if (d.retired && d.retired[n]) all.push(E.puzzleOf(d.retired[n], lang));
-      for (const pz of all) map[bk(pz.key)] = { lang, day, key: pz.key };
+      for (const pz of all) {
+        const top = E.answersFor(d, pz).map((w) => E.scoreWord(w, pz)).sort((a, b) => b - a).slice(0, 15);
+        map[bk(pz.key)] = { lang, day, key: pz.key, top };
+      }
     }
   }
   writeFileSync(resolve(OUT, 'bee-puzzles.json'), JSON.stringify(map));
