@@ -12,8 +12,9 @@
 //   * boggle/data/words.txt (ENABLE, public domain): a SCOWL word must also be here, which drops
 //     proper nouns, abbreviations and odd spellings.
 //   * BONUS words (`extra`: accepted and scored, never in hints or ranks) = ENABLE words that are ALSO
-//     in SCOWL size 70 and said at least MIN_SAID times in FrequencyWords en 2018 (Hermit Dave,
-//     OpenSubtitles, CC BY-SA 4.0), not a first name, AND on the hand-checked BONUS_KEEP list. Until 2026-10-26 it was every ENABLE word, and Matt found CRATCH,
+//     in SCOWL size 70, not a first name, AND on the hand-checked BONUS_KEEP list. (The candidates read
+//     for BONUS_KEEP were picked by how often FrequencyWords en 2018 (Hermit Dave, OpenSubtitles, CC BY-SA
+//     4.0) says them: MIN_SAID+ first, 10-49 on 2026-10-28; the count no longer gates a kept word.) Until 2026-10-26 it was every ENABLE word, and Matt found CRATCH,
 //     CRANCH, HANT, ANNA, CARL ("Why are you allowing so many names?... words that I'm pretty sure
 //     aren't words"). Words a player already found keep counting (spelling-bee/js/ui.js `_kept`).
 //   * NAMES: a word in either first-name list (dominictarr/random-name, smashew/NameDatabases, both
@@ -56,6 +57,9 @@ const MIN_SAID = 50;
 // these real, recognisable words were kept. Place names (COLORADO), foreign words (VIER), surnames,
 // archaic forms (AFORE) and odd Scrabble words were left out. A candidate NOT on this list is not a bonus
 // word, so a re-run with newer sources never lets new junk in unseen: read the new ones, add the good.
+// 2026-10-28 (after Spanish refused GONADA; Matt: "do what you think is best"): a hand-checked word no longer
+// also needs MIN_SAID (FUNGO, said 7 times, was refused), and the 824 SCOWL-70 words said 10-49 times were
+// read; the recognisable ones are the block added at the end (slurs, archaic and Scrabble words left out).
 const BONUS_KEEP = new Set(`
   accelerant actin aikido airboat airframe albedo alchemical alginate alopecia amygdala anabolic angiogram
   apnea arcana armoire arnica attaboy auteur axeman backbeat bambino bechamel bedouin bellflower belvedere
@@ -76,7 +80,16 @@ const BONUS_KEEP = new Set(`
   rehydrate relatable remora retractor revenant riddler ringtail roulade tach taipan tantric tarnation
   taverna telluride tetherball tiffin tiki tinhorn titrate torero trattoria trebuchet tuff tupelo turndown
   unburied unclench undead unelected untethered untuck unturned valerian veiny venetian wahoo warfarin
-  wendigo wheelman whirly witchy woodruff yenta yippie youngling ziggurat zirconia ziti`.split(/\s+/).filter(Boolean));
+  wendigo wheelman whirly witchy woodruff yenta yippie youngling ziggurat zirconia ziti
+  adenoma adoptee aglet aldehyde allocator alveoli atlatl avocet backbend ballade beanball bialy biotic boreal
+  brio bubbler bulgur calendula caracal certiorari chador chilidog chitter cichlid cioppino citrine clubby coati
+  coatrack collegial comparator corkboard cordwood cuke curette danceable datable deadeye deadfall examinee
+  fader fennec freeform fungo germy gluteal googol grippy groaner growly halvah headachy hepcat hiatal hoopoe
+  illiquid incapacitation jitter kayaker keloid kelpie koan latke leaker lethality liger liminal loupe luffa
+  menhir minyan muon mudra myelin nitrile nudnik octillion oiler orangy orrery orthotic overeater panettone
+  pantaloon peacoat peplum perlite phyllo piercer pomelo precut propylene puffery qualia ragtop rebook recode
+  recoded redbud redlined repro retune rewrap rocketeer tahini tamari tamarin tannic tartlet taurine techy
+  tefillin tempeh terraform trinary tuatara unglue unlink untaxed updo varicella wildling wobbler`.split(/\s+/).filter(Boolean));
 const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt';
 const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
   'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
@@ -141,7 +154,7 @@ async function main() {
   const words = [...level.keys()].filter((w) => level.get(w) <= LEVELS[LEVELS.length - 1] && fits(w)).sort();
   const answerSet = new Set(words);
   const extra = [...level.keys()]
-    .filter((w) => !answerSet.has(w) && level.get(w) <= BONUS_LEVEL && (said.get(w) || 0) >= MIN_SAID && !names.has(w) && BONUS_KEEP.has(w) && fits(w))
+    .filter((w) => !answerSet.has(w) && level.get(w) <= BONUS_LEVEL && !names.has(w) && BONUS_KEEP.has(w) && fits(w))
     .sort();
   const masks = words.map(maskOf);
 
