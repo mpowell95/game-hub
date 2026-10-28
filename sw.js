@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1300;
-const CACHE = 'game-hub-v1301';
+const CACHE = 'game-hub-v1302';
 
 const ASSETS = [
   './',
@@ -104,6 +104,7 @@ const ASSETS = [
   './js/leaderboard-rank.js',
   './js/arrow-maze-time.js',
   './js/gridlock-points.js',
+  './js/word-weaver-points.js',
   './js/gridlock-v1map.js',
   './js/difficulty-tiers.js',
   './js/net.js',
@@ -783,7 +784,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '4c938374ec',
+  './js/hub.js': '0d0b23f08b',
   './js/name-gate.js': 'dffbdf06a1',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -796,15 +797,15 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': 'ba4e290b37',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'a76fbb44f8',
+  './js/strings.js': 'afc6fd83a0',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '3c9804e43b',
+  './js/game-stats.js': '1bac66283b',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
-  './js/game-stats-ui.js': '3817dde1cd',
+  './js/game-stats-ui.js': '7a698db6f4',
   './js/stats-net.js': '1a6dfaeb0b',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '22d5aec601',
@@ -828,13 +829,14 @@ const REST_MANIFEST = {
   './js/admin-ui.js': '776a749fed',
   './js/stats-corrections.js': '43ae6ab52d',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '494725a0a5',
-  './js/game-art.js': 'ba73866754',
+  './js/players-agg.js': 'f7b99b83ea',
+  './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': '8a870d0456',
-  './js/leaderboard-ui.js': '4c0653e94e',
+  './js/leaderboard-ui.js': 'd053864221',
   './js/leaderboard-rank.js': '7d0aed67b8',
   './js/arrow-maze-time.js': '5c84bf56fc',
   './js/gridlock-points.js': '8a4fcce246',
+  './js/word-weaver-points.js': '11bf719345',
   './js/gridlock-v1map.js': 'f83ca3500e',
   './js/difficulty-tiers.js': 'b238c3023b',
   './js/net.js': 'd65b57c6b3',

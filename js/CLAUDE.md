@@ -60,7 +60,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `favorites.js` | `gamehub.favorites.v1`, HUB ids (never stats keys); a preference |
 | `layout.js` | `gamehub.layout.v1` (`comfortable`/`compact`), stamps `.gh-compact` at load; a preference; the hub re-renders on `onLayoutChange` (never under a mounted game) |
 | `new-badge.js` | pure dates, no storage/DOM |
-| `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
+| `game-stats.js` | the only door to stats storage (`loadStats`/`persist`); per-player keys; sub-counters (`grid`,`cc`,`es`,`nb`,`tt`,`db`,`bg`,`yz`,`dm`,`hc`,`sk`,`ah`,`wo`,`gl`,`ww`…); `tt/db/bg/yz/dm/sk` store `tied`; bests Math.max-only; rate gate `tooFast`; pending queue; activity log |
 | `game-stats-global.js` | `window.__ghStats` for Monopoly Deal/Parchís; BD copy is verbatim-after-header (15-line header + marker), `tools/test-recorder-contract.mjs` |
 | `firebase-boot.js` | the ONE boot of the named `'stats'` app (`getStatsApp()`, returns `uid`); `forceWebSockets()` before `getDatabase`; reconnect on return after 20 s away; `api.get` timed, slow reads in `gamehub.perf.v1` (`perfReport()`, mirrored `players/<id>/perf`) |
 | `stats-net.js` | `players/<statsId>` mirror, `usernames/`, `syncHealth()`, `writesAllowed()`, `applyDeviceReset()`; `readPlayersOnce()` reuses the page's last `players/` read for 60 s (own sync clears it; callers get copies); pass `{fresh: true}` where a write follows the read (admin, code-owner lookup) |
@@ -70,7 +70,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `game-stats-ui.js` | top-left back (`gs-up`: game page -> list -> close, 2026-10-15) beside the X; owns `gameListHTML`, `hubIdOf`, `unitKeyOf`, `gameChoices`, `isGameOnLauncher`, `visibleTabs` (more permissive, on purpose) |
 | `leaderboard-ui.js` | read-only on data; owns `GAME_META`, `gamehub.lb.sort.v1`; `openLeaderboard({game})` opens on that board and backing out of it closes (a game's own Leaderboard button, 2026-10-15); `{onPlay, canPlay}` (the launcher only) adds Play to a game's board (2026-10-20) |
 | `leaderboard-rank.js` | wins = stored `won`; rating exports dormant, keep; tier comparators |
-| `arrow-maze-time.js`, `gridlock-points.js` | pure point/ladder maths; network-first; `way-out/CLAUDE.md`, `gridlock/CLAUDE.md`. Gridlock keys are `L<n>` (Firebase arrays numeric keys) |
+| `arrow-maze-time.js`, `gridlock-points.js`, `word-weaver-points.js` | pure point/ladder/star maths; network-first; `way-out/CLAUDE.md`, `gridlock/CLAUDE.md`, `word-weaver/CLAUDE.md`. Gridlock and Word Weaver keys are `L<n>` (Firebase arrays numeric keys) |
 | `gridlock-v1map.js` | GENERATED; never hand-edit |
 | `difficulty-tiers.js` | READ path only; separate from `normDiff()` (write path) on purpose |
 | `net.js` | rooms, lockstep log, recovery, N-seat roster, online gate. **Yahtzee uses it with no consumer write-up here (open gap)** |

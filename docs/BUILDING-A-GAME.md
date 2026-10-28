@@ -270,7 +270,7 @@ When restructuring an old game, migrate it toward the reference for each axis in
    (they are held back: network-first, no hash), so players get no update mid-build. Only adding or
    removing a file, or touching shared files (`js/`, `css/`, tile art), changes sw.js. The validator
    prints a NOTE if sw.js changed when only held-back files did.
-7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb`/`gf`/`bb`/`sd`/`bz`/`ah`/`cp`/`wo`/`gl` —
+7. **If the game stores a per-game sub-counter** (`grid`/`cc`/`es`/`nb`/`br`/`tt`/`db`/`bg`/`yz`/`dm`/`hc`/`bs`/`sk`/`pb`/`gf`/`bb`/`sd`/`bz`/`ah`/`cp`/`wo`/`gl`/`ww` —
    anything richer than `total`/`byDiff`), it needs **three** edits, not one, and missing the
    third is a THE LAW rule 1 bug that is invisible on a single device:
    - `js/game-stats.js` — an `ensureXx()` + its call in `normalize()`, plus the `recordXx()` writer.
