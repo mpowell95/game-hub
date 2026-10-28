@@ -133,6 +133,27 @@ const EXTRA_SCREENS = {
       },
     },
   ],
+  // Word Weaver (2026-10-28): the How to play sheet, then the level-done screen (every grid word found
+  // through the test seam). Needs word-weaver/data/ (generated) to hold at least one level.
+  'word-weaver': [
+    {
+      name: 'how to play',
+      async open(page) {
+        await page.waitForFunction(() => window.__wwTest, null, { timeout: 15000 });
+        await page.click('.ww-help');
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'level done',
+      async open(page) {
+        await page.click('.ww-modal .gh-modal__close');
+        await page.evaluate(() => { const w = window.__wwTest; for (const e of w.level.w) w.submit(e[0]); });
+        await page.waitForSelector('.ww-done', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+  ],
   // Chinchón: the Challenge pane (2026-10-18), the fourth choice on the setup switch. With this
   // run's profile (no player code) it is the New challenge button and "No matches"; the lists with
   // rows cut themselves to fit (chinchon/js/ch-ui.js fitList).
