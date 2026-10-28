@@ -1,0 +1,324 @@
+/* word-weaver/css/word-weaver.css - every rule descendant-scoped under .ww-root.
+ *
+ * The SKY (a dusk gradient behind a crossword and a letter wheel) is the game's look in light AND dark,
+ * like Gridlock's car park. Only the sheets (How to play, extra words) follow the hub's theme, through
+ * css/ui.css's --gh-* tokens. Matches docs/mockups/wordscapes.html. */
+.ww-root {
+  --ww-sky1: #2c4a7a;
+  --ww-sky2: #c9795c;
+  --ww-sky3: #f3c58f;
+  --ww-tile: #ffffff;
+  --ww-ink: #1d2230;
+  --ww-slot: rgba(255, 255, 255, .28);
+  --ww-slot-line: rgba(255, 255, 255, .55);
+  --ww-wheel-bg: rgba(255, 255, 255, .88);
+  --ww-path: #f2b705;
+  --ww-chip: rgba(0, 0, 0, .34);
+  --ww-wheel: 224px;
+  box-sizing: border-box;
+  /* position: fixed with top/left/width set inline by _positionRoot() in ui.js (the Arrow Maze /
+   * Gridlock technique: `.hub-game` has no defined height). inset: 0 is the fallback. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--ww-sky1) 0%, var(--ww-sky2) 62%, var(--ww-sky3) 100%);
+  color: #fff;
+  font-family: var(--gh-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.ww-root * {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ww-root button { cursor: pointer; touch-action: manipulation; font: inherit; color: inherit; }
+.ww-root button svg, .ww-root button span, .ww-root button b { pointer-events: none; }
+/* The standalone page has no css/hub.css, so css/ui.css's --gh-* tokens would stay light under
+   .gh-dark. Give them the hub's own dark values here (in the hub these are the same numbers). */
+:root.gh-dark .ww-root {
+  --gh-bg: var(--hub-bg, #0e1420);
+  --gh-surface: var(--hub-surface, #1b2333);
+  --gh-surface-2: var(--hub-surface-2, #2b3547);
+  --gh-ink: var(--hub-ink, #e9eef6);
+  --gh-muted: var(--hub-muted, #9db0c9);
+}
+
+/* --- top row: ? , extra-words star, level number (right); the hub's Hub button owns the left --- */
+.ww-root .ww-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 44px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 0 12px;
+}
+.ww-root.is-immersive .ww-top { padding: var(--ww-top, 6px) 12px 0 var(--ww-inset, 12px); }
+.ww-root .ww-help, .ww-root .ww-chip {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ww-chip);
+  color: #fff;
+}
+.ww-root .ww-help { font-size: 22px; font-weight: 800; line-height: 1; }
+.ww-root .ww-chip svg { width: 24px; height: 24px; }
+.ww-root .ww-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--ww-path);
+  color: var(--ww-ink);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.ww-root .ww-badge[hidden] { display: none; }
+.ww-root .ww-lvl {
+  min-width: 34px;
+  padding-right: 4px;
+  text-align: right;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the crossword --- */
+.ww-root .ww-stage {
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 8px 12px;
+  overflow: hidden;
+}
+.ww-root .ww-grid {
+  --ww-cell: 36px;
+  --ww-gap: 4px;
+  --ww-fs: 20px;
+  display: grid;
+  grid-template-columns: repeat(var(--ww-cols, 1), var(--ww-cell));
+  grid-template-rows: repeat(var(--ww-rows, 1), var(--ww-cell));
+  gap: var(--ww-gap);
+}
+.ww-root .ww-c {
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--ww-cell) * .17);
+  font-size: var(--ww-fs);
+  font-weight: 800;
+  line-height: 1;
+}
+.ww-root .ww-c.is-e { background: var(--ww-slot); border: 1.5px solid var(--ww-slot-line); }
+.ww-root .ww-c.is-f { background: var(--ww-tile); color: var(--ww-ink); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
+.ww-root .ww-c.is-h { background: var(--ww-tile); color: var(--ww-ink); opacity: .55; }
+.ww-root .ww-c.is-flash { animation: ww-pop .55s ease-out; }
+@keyframes ww-pop {
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
+  40% { transform: scale(1.18); box-shadow: 0 0 0 3px var(--ww-path), 0 2px 0 rgba(0, 0, 0, .25); }
+}
+.ww-root .ww-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+}
+.ww-root .ww-msg svg { width: 56px; height: 56px; color: var(--ww-path); }
+
+/* --- the pill, the wheel, shuffle and hint --- */
+.ww-root .ww-lower {
+  flex: none;
+  position: relative;
+  height: calc(var(--ww-wheel) + 68px + env(safe-area-inset-bottom, 0px));
+}
+.ww-root .ww-pillrow { height: 44px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; }
+.ww-root .ww-pill {
+  min-width: 56px;
+  padding: 4px 16px;
+  border-radius: 10px;
+  background: var(--ww-tile);
+  color: var(--ww-ink);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-align: center;
+  line-height: 1.25;
+  opacity: 0;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
+}
+.ww-root .ww-pill.is-on { opacity: 1; }
+.ww-root .ww-pill.is-shake { animation: ww-shake .42s ease-in-out; }
+@keyframes ww-shake {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-9px); }
+  36% { transform: translateX(8px); }
+  54% { transform: translateX(-6px); }
+  72% { transform: translateX(4px); }
+}
+.ww-root .ww-chip.is-bump { animation: ww-bump .4s ease-out; }
+@keyframes ww-bump { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.3); } }
+.ww-root .ww-chip.is-wiggle { animation: ww-wiggle .45s ease-in-out; }
+@keyframes ww-wiggle {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-14deg); }
+  45% { transform: rotate(12deg); }
+  70% { transform: rotate(-8deg); }
+}
+.ww-root .ww-dock {
+  position: relative;
+  height: calc(var(--ww-wheel) + 16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.ww-root .ww-wheelbox { width: var(--ww-wheel); height: var(--ww-wheel); }
+.ww-root .ww-wheel { display: block; width: 100%; height: 100%; touch-action: none; }
+.ww-root .ww-disc { fill: var(--ww-wheel-bg); }
+.ww-root .ww-trail {
+  fill: none;
+  stroke: var(--ww-path);
+  stroke-width: 12;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  pointer-events: none;
+}
+.ww-root .ww-trail.is-on { opacity: 1; }
+.ww-root .ww-ltr { pointer-events: none; transition: transform .34s cubic-bezier(.3, .7, .3, 1); }
+.ww-root .ww-wheel.is-still .ww-ltr { transition: none; }
+.ww-root .ww-lc { fill: transparent; }
+.ww-root .ww-ltr.is-on .ww-lc { fill: var(--ww-path); }
+.ww-root .ww-lt {
+  fill: var(--ww-ink);
+  font-size: 40px;
+  font-weight: 800;
+  text-anchor: middle;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.ww-root .ww-side {
+  position: absolute;
+  bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ww-chip);
+  color: #fff;
+}
+.ww-root .ww-side svg { width: 24px; height: 24px; }
+.ww-root .ww-side.ww-l { left: 12px; }
+.ww-root .ww-side.ww-r { right: 12px; }
+.ww-root .ww-side:disabled { opacity: .4; cursor: default; }
+
+/* --- level done: the grid stays; the pill and wheel give way to this --- */
+.ww-root .ww-done {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  text-align: center;
+}
+.ww-root .ww-done h2 { margin: 0; font-size: 34px; font-weight: 900; }
+.ww-root .ww-stars { display: flex; gap: 8px; }
+.ww-root .ww-star { width: 46px; height: 46px; }
+.ww-root .ww-star path { fill: none; stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; opacity: .85; }
+.ww-root .ww-star.is-on path { fill: var(--ww-path); stroke: #8a6600; stroke-width: 1.2; opacity: 1; }
+.ww-root .ww-bonus {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ww-chip);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.ww-root .ww-bonus svg { width: 22px; height: 22px; }
+.ww-root .ww-next {
+  min-width: 190px;
+  min-height: 54px;
+  margin-top: 6px;
+  padding: 0 40px;
+  border: 0;
+  border-radius: 28px;
+  background: var(--ww-path);
+  color: var(--ww-ink);
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .22);
+}
+
+/* --- sheets: How to play and the extra words (css/ui.css's .gh-overlay / .gh-modal) -----------
+ * In the hub the floating back button stays above the overlay, so the sheet is pushed below it. */
+.ww-root .ww-modal[hidden] { display: none; }
+.ww-root.is-immersive .ww-modal { padding-top: calc(var(--ww-top, 0px) + 56px); }
+.ww-root .ww-dialog { display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.ww-root .ww-dialog .gh-modal__title { margin: 0 44px 0; }
+.ww-root .ww-dialog p { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.ww-root .ww-h-star { display: inline-block; vertical-align: -3px; margin-right: 6px; color: var(--ww-path); }
+.ww-root .ww-h-star svg { width: 24px; height: 24px; }
+.ww-root .ww-words {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.ww-root .ww-words li {
+  padding: 5px 12px;
+  border-radius: 14px;
+  background: var(--gh-surface-2, #eef2f8);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+/* Short phones: the done block and the pill tighten rather than scroll. */
+@media (max-height: 700px) {
+  .ww-root .ww-done { gap: 6px; }
+  .ww-root .ww-done h2 { font-size: 28px; }
+  .ww-root .ww-star { width: 40px; height: 40px; }
+  .ww-root .ww-next { min-height: 50px; }
+  .ww-root .ww-pillrow { height: 40px; margin-bottom: 6px; }
+}
+
+/* Reduced motion: letters land where they go with no flight; the garnish goes, the game stays. */
+@media (prefers-reduced-motion: reduce) {
+  .ww-root .ww-ltr { transition: none; }
+  .ww-root .ww-c.is-flash, .ww-root .ww-pill.is-shake, .ww-root .ww-chip.is-bump, .ww-root .ww-chip.is-wiggle { animation: none; }
+}

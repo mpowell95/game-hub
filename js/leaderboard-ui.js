@@ -61,6 +61,7 @@ import { TIERS, diffShapeSVG, TIER_COLOR } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
+import { wwStars, wwCleared, wwThreeStars } from './word-weaver-points.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -179,6 +180,8 @@ const GAME_META = [
   { id: 'wayout', labelKey: 'game_title_wayout' },
   // Gridlock (2026-10-14): admin only at first; the row ships with the game, as Arrow Maze's did.
   { id: 'gridlock', labelKey: 'game_title_gridlock' },
+  // Word Weaver (2026-10-28, stats id 'wordweaver'): admin only at first; the row ships with the game.
+  { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
@@ -916,6 +919,9 @@ function gameMetricAt(g, id, tier) {
   if (id === 'wayout') return woPoints(g.games.wayout, tier == null ? null : WO_TIERS[tier - 1]);
   // Gridlock ranks on POINTS for distinct levels cleared (js/gridlock-points.js), the same shape.
   if (id === 'gridlock') return glPoints(g.games.gridlock, tier == null ? null : GL_TIERS[tier - 1]);
+  // Word Weaver ranks on TOTAL STARS over distinct levels completed (js/word-weaver-points.js). One
+  // ladder, no difficulty: there is no number at a tier.
+  if (id === 'wordweaver') return tier == null ? wwStars(g.games.wordweaver) : null;
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -998,6 +1004,7 @@ function boardTierOf(g, id) {
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
   if ((id === 'wayout' || id === 'gridlock') && _tier == null) return null;
+  if (id === 'wordweaver') return null;                      // one ladder, no difficulty
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -1129,6 +1136,8 @@ const UNIT_TO_SORT_LABEL = {
   lb_unit_meters: 'lb_sort_meters',
   // Skeeball and Brick Breaker rank on points; without this row their sort menus said "Wins".
   lb_unit_points: 'lb_sort_points',
+  // Word Weaver ranks on stars.
+  lb_unit_stars: 'lb_sort_stars',
   // Golf ranks on a best round, not on wins or points.
   lb_unit_golf_best: 'lb_sort_golf_best',
   // Minesweeper ranks on a best time, not on how many boards were cleared.
@@ -1723,7 +1732,7 @@ function gameStanding(list, id) {
 function gapKind(id) {
   if (id === 'contexto') return null;
   return ({
-    lb_unit_ms_best: 'time', lb_unit_golf_best: 'golf', lb_unit_meters: 'meters', lb_unit_points: 'points',
+    lb_unit_ms_best: 'time', lb_unit_golf_best: 'golf', lb_unit_meters: 'meters', lb_unit_points: 'points', lb_unit_stars: 'stars',
     lb_unit_obstacles: 'obstacles', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank',
   })[lbUnitKeyOf(id)] || 'wins';
 }
@@ -1952,6 +1961,11 @@ const TEXTURE = {
   gridlock: [
     { labelKey: 'lb_tex_gl_cleared', get: (g) => glCleared(g.games.gridlock) },
     { labelKey: 'lb_tex_gl_three', get: (g) => glThreeStars(g.games.gridlock) },
+  ],
+  // Word Weaver (2026-10-28): distinct levels completed, and how many with three stars (no hint).
+  wordweaver: [
+    { labelKey: 'lb_tex_ww_cleared', get: (g) => wwCleared(g.games.wordweaver) },
+    { labelKey: 'lb_tex_ww_three', get: (g) => wwThreeStars(g.games.wordweaver) },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
@@ -2416,7 +2430,7 @@ function playerDetail(list, key) {
     ${sendMsgHTML(g)}
   </div>
   ${catGridHTML(g)}`;
-  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays' });
+  return head + messageHTML(g) + `<h4 class="lb-h4">${esc(t('lb_pd_games_h'))}</h4>` + gsGameListHTML(g.games, { order: 'plays', board: true });
 }
 
 // --- shared shell -------------------------------------------------------------

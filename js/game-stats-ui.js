@@ -24,8 +24,11 @@ import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
+import { wwStars, wwCleared, wwThreeStars, wwExtra } from './word-weaver-points.js';
 
 const t = makeT(STRINGS);
+/** t() with an English fallback, for a key newer than a cached js/strings.js (js/CLAUDE.md, Language support). */
+const tf = (key, en) => { const v = t(key); return v === key ? en : v; };
 
 // Tab labels resolve through js/strings.js's game_title_* keys — the SAME keys the leaderboard
 // uses, so the two overlays can never disagree on a game's name (Matt, 2026-07-23: titles
@@ -42,7 +45,12 @@ const TABS = [
   { id: 'contexto', labelKey: 'game_title_contexto' },
   { id: 'murdoku', labelKey: 'game_title_murdoku' },
   { id: 'wayout', labelKey: 'game_title_wayout' },
-  { id: 'gridlock', labelKey: 'game_title_gridlock' },
+  // devOnly matches js/hub.js (Matt, 2026-10-28: admin-only games off the leaderboard, for everyone).
+  // tools/test-leaderboard-rank.mjs fails if this list and the hub's devOnly list drift apart.
+  { id: 'gridlock', labelKey: 'game_title_gridlock', devOnly: true },
+  // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
+  // sub-counter has its own screen (wordWeaverScreen).
+  { id: 'wordweaver', labelKey: 'game_title_wordweaver', devOnly: true },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -76,21 +84,23 @@ const TABS = [
   // Flick Soccer (2026-10-11): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'flicksoccer', labelKey: 'game_title_flicksoccer' },
-  // Archery (2026-10-14): admin only at first, NOT devOnly here (Darts' reasoning above).
+  // Archery (2026-10-14): admin only, so devOnly here too (2026-10-28: without it the leaderboard
+  // showed it to every player). Releasing it from the admin page still shows it (visibleTabs and
+  // isGameOnLauncher resolve the admin switch); the release commit drops this flag with the hub's.
   // total/byDiff only, so the generic screen draws it.
-  { id: 'archery', labelKey: 'game_title_archery' },
+  { id: 'archery', labelKey: 'game_title_archery', devOnly: true },
   // Pool (2026-10-22, eight-ball/): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'eightball', labelKey: 'game_title_eightball' },
   // Cup Baseball (2026-10-23, cup-baseball/): admin only at first, NOT devOnly here (Darts' reasoning
-  // above). total/byDiff only, so the generic screen draws it.
-  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball' },
+  // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
+  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball', devOnly: true },
   // Spelling Bee (2026-10-23, spelling-bee/): admin only at first, NOT devOnly here (Darts' reasoning
   // above). total/byDiff only (a win = a puzzle taken to Genius), so the generic screen draws it.
   { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
   // Battle Arena (2026-10-24, battle-arena/): admin only at first, NOT devOnly here (Darts' reasoning
-  // above). total/byDiff only, so the generic screen draws it.
-  { id: 'battlearena', labelKey: 'game_title_battlearena' },
+  // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
+  { id: 'battlearena', labelKey: 'game_title_battlearena', devOnly: true },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.
@@ -112,9 +122,10 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
   cupbaseball: 'cup-baseball', spellingbee: 'spelling-bee', battlearena: 'battle-arena',
+  wordweaver: 'word-weaver',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_stars', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -144,7 +155,8 @@ function visibleTabs() {
  *  the same question the hub card asks, rather than keeping a third copy of "which games are
  *  released". Matt: *"hide admin only games from the leaderboard too."* `js/hub.js` computes
  *  `isGameLive(g.id, !g.devOnly) || dev`; this is that, with `hubIdOf` in front and TABS supplying
- *  the same `devOnly` default the hub registry does.
+ *  the same `devOnly` default the hub registry does, but WITHOUT `|| dev` since 2026-10-28 (Matt:
+ *  admin-only games off the leaderboard "not for me and not for anyone else").
  *
  *  **It is NOT visibleTabs() above, and the difference is the point.** That one passes any tab that
  *  is not `devOnly`, so a game hidden by an admin OVERRIDE still has its My Stats screen - which is
@@ -152,13 +164,12 @@ function visibleTabs() {
  *  rule 1: the leaderboard is the bragging wall and may hide an unreleased game; My Stats is that
  *  person's own ledger and must not). Do not "unify" the two: the asymmetry is load-bearing. */
 export function isGameOnLauncher(statsId) {
-  let dev = false;
-  try { const p = loadProfile(); dev = !!(p && isDevProfile(p.name)); } catch { /* stay hidden */ }
   const tab = TABS.find((x) => x.id === statsId);
   // A RETIRED build is never on the launcher, for anyone, dev included: there is no card to tap.
   // Checked before the dev bypass for that reason.
   if (tab && tab.retired) return false;
-  if (dev) return true;
+  // NO dev bypass on the board (Matt, 2026-10-28: "Admin only games should not appear on the
+  // leaderboard. Not for me and not for anyone else"). The leaderboard is its only caller.
   return isGameLive(hubIdOf(statsId), !(tab && tab.devOnly));
 }
 
@@ -431,6 +442,25 @@ function wayoutScreen(rec) {
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_wo_cleared')}</th><th scope="col">${t('lb_sort_points')}</th><th scope="col">${t('gs_wo_timed')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>${rushTable}`;
+}
+
+/** Word Weaver (2026-10-28): total stars, levels completed, three-star levels and extra words found.
+ *  Every level number comes from the per-level map (js/word-weaver-points.js), so a level finished on
+ *  two phones counts once; total.won (one per first completion) gates the empty state too. New keys
+ *  fall back to English for the one visit js/strings.js may be older than this file. */
+function wordWeaverScreen(rec) {
+  const ww = (rec && rec.ww) || {};
+  const done = ((rec && rec.total) || {}).won | 0;
+  if (!done && !Object.keys(ww.lv || {}).length && !wwExtra(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
+  return `
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>
+      <div class="gs-tally"><b>${wwCleared(rec)}</b><span>${tf('lb_tex_ww_cleared', 'Levels completed')}</span></div>
+    </div>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${wwThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
+      <div class="gs-tally"><b>${wwExtra(rec)}</b><span>${tf('gs_ww_extra', 'Extra words')}</span></div>
+    </div>`;
 }
 
 /** Gridlock (2026-10-14): points, distinct levels cleared, three-star and no-hint levels, per
@@ -1356,6 +1386,8 @@ function headlineOf(id, rec) {
   // Arrow Maze: points for levels cleared (the ladder, 2026-10-14), the leaderboard's own number.
   if (id === 'wayout') return { n: woPoints(rec), unitKey: unitKeyOf(id) };
   if (id === 'gridlock') return { n: glPoints(rec), unitKey: unitKeyOf(id) };
+  // Word Weaver: total stars over distinct levels completed, the leaderboard's own number.
+  if (id === 'wordweaver') return { n: wwStars(rec), unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.
@@ -1378,7 +1410,12 @@ export function gameListHTML(games, opts) {
   // games first; My Stats keeps the A-Z order it has always had.
   const plays = (id) => (((g[id] || {}).total || {}).played) | 0;
   const byPlays = !!(opts && opts.order === 'plays');
+  // `board: true` (the leaderboard's player page): a never-released admin-only game is off it even
+  // for Matt (2026-10-28). A game PULLED BACK by an admin override is not devOnly, so it stays
+  // (THE LAW rule 1, the note above isGameOnLauncher).
+  const board = !!(opts && opts.board);
   const rows = visibleTabs()
+    .filter((tab) => !(board && tab.devOnly && !isGameLive(hubIdOf(tab.id), false)))
     .filter((tab) => hasPlays(tab.id, g[tab.id] || {}))
     .sort((a, b) => (byPlays ? plays(b.id) - plays(a.id) : 0) || t(a.labelKey).localeCompare(t(b.labelKey)))
     .map((tab) => {
@@ -1649,6 +1686,7 @@ function screenFor(id, st) {
   if (id === 'murdoku') return murdokuScreen(rec);
   if (id === 'wayout') return wayoutScreen(rec);
   if (id === 'gridlock') return gridlockScreen(rec);
+  if (id === 'wordweaver') return wordWeaverScreen(rec);
   if (id === 'escoba') return escobaScreen(rec);
   if (id === 'ballrun') return ballRunScreen(rec);
   if (id === 'tictactoe') return ticTacToeScreen(rec);

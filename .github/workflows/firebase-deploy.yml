@@ -21,6 +21,7 @@ on:
       - 'js/arrow-maze-time.js'
       - 'js/gridlock-points.js'
       - 'js/gridlock-v1map.js'
+      - 'js/word-weaver-points.js'
       - 'js/stats-corrections.js'
       - 'js/admin-config.js'
       - 'js/hidden-players.js'
