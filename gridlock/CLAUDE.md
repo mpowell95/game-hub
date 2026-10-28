@@ -66,8 +66,8 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
   (5 x 5, pager underneath, never a scroll). A cleared level shows its best stars and its crown and
   can be replayed for more stars; the next level wears the `#ffce3a` outline; later ones are locked,
   because a difficulty is played in order. Replaying never adds points (they count distinct levels).
-- Hard and Expert levels (2001 on) may contain fixed **walls** (metal plates on wood, a striped
-  barrier in the car park).
+- Hard and Expert levels (2001 on) may contain fixed **walls** (metal plates on wood, a plain
+  black block in the car park; the red-and-white stripes went 2026-10-28, Matt did not like them).
 - The Levels screen has a pager of 40 pages per difficulty: `‹ ›` one page, `« »` ten.
 
 ## The play screen's controls (Matt, 2026-10-14)
