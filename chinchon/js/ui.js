@@ -812,6 +812,10 @@ class ChinchonUI {
   }
 
   startGame() {
+    // A new game over a solo match that was SET ASIDE (a challenge or a live room took the screen,
+    // `_takeArmed`) and so is not on the table: throwing its save away is quitting it, a LOSS
+    // (2026-10-29, second pass). A match on the table was settled by the menu's own route.
+    if (!this.mp && !this.game) this._recordSavedQuitLoss();
     // The in-game menu's "new game" restarts with the same settings without
     // going through showSetup() (see _menuAction) -- clear any prior solo
     // save directly here too, so a fresh match never gets shadowed by a save
@@ -841,7 +845,9 @@ class ChinchonUI {
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);
     this.game = new Game({ players, config, startDealerIndex: startDealer });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
-    this._moved = false;
+    // Quitting is a loss once the hand is DEALT (2026-10-29, second pass, Matt): the deal starts at
+    // once, so a re-deal is no longer free. Before, only after the player's first decision.
+    this._moved = true;
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
     this._matchEnded = false; this._closeMenu();
@@ -2002,7 +2008,10 @@ class ChinchonUI {
       case 'rule-place': this.syncSetupInputs(); this._setup.config.placeOnEnding = a.dataset.v; this._saveSetup(); this.renderSetup(); break;
       case 'rule-toggle': this.syncSetupInputs(); this._setup.config[a.dataset.field] = !this._setup.config[a.dataset.field]; this._saveSetup(); this.renderSetup(); break;
       case 'rule-step': this.syncSetupInputs(); this._stepRule(a.dataset.field, +a.dataset.d); this._saveSetup(); this.renderSetup(); break;
-      case 'start': this.startGame(); break;
+      case 'start':
+        // Over a set-aside solo match: two taps, the button saying it counts as a loss.
+        if (this._savedQuitPending() && a.dataset.armed !== '1') { a.dataset.armed = '1'; a.textContent = t('menu_confirm_loss'); break; }
+        this.startGame(); break;
       case 'help': this._openHelp(); break;
       case 'menu-help': this._closeMenu(); this._openHelp(); break;
       case 'close-help': this._closeHelp(); break;
@@ -2161,6 +2170,32 @@ class ChinchonUI {
     if (this.mp) return this._mpLeaveCosts();
     return !this.ch && !!this.game && !this.el.game.hidden && !this._matchEnded
       && !this._statsCommitted && !this.game.winner && !!this._moved;
+  }
+
+  /** The solo match waiting in the save while nothing is on the table (set aside by a challenge or a
+   *  live room): its loss, or null. Every saved match was dealt (2026-10-29, second pass). */
+  _savedQuitPending() {
+    if (this.mp || this.ch || this.game) return null;
+    const save = this._soloLoadSave();
+    const snap = save && save.snap;
+    if (!snap || !Array.isArray(snap.players) || snap.players.length < 2) return null;
+    const c = save.counts || {};
+    const n = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+    return { difficulty: soloDiff(snap.players, snap.config), closed: n(c.closes), chinchons: n(c.chinchons), minusTen: n(c.minusTens) };
+  }
+
+  /** Record that set-aside match's loss once (the save is cleared first), in both stats places. */
+  _recordSavedQuitLoss() {
+    const q = this._savedQuitPending();
+    if (!q) return;
+    this._soloClearSave();
+    this.stats.games += 1;
+    this.stats.losses += 1;
+    this.stats.closes += q.closed;
+    this.stats.chinchons += q.chinchons;
+    this.stats.minusTen = (this.stats.minusTen | 0) + q.minusTen;
+    saveJSON(STORE_STATS, this.stats);
+    recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons });
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
@@ -3126,7 +3161,7 @@ class ChinchonUI {
       const counts = save.counts || {};
       this._matchCloses = n(counts.closes); this._matchChinchons = n(counts.chinchons); this._matchMinusTens = n(counts.minusTens);
       this._statsCommitted = false;
-      this._moved = typeof save.moved === 'boolean' ? save.moved : (snap.round | 0) > 1;
+      this._moved = true;   // a saved match was dealt: quitting it is a loss (2026-10-29, second pass)
       this._matchEnded = false; this._closeMenu();
       this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
       this._ccCompact = false;

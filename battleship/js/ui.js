@@ -648,6 +648,7 @@ class BattleshipUI {
   }
 
   startGame() {
+    this._recordSavedQuitLoss();   // a set-aside solo battle replaced by a new one (2026-10-29, second pass)
     const starter = this._resolveStarter();
     this._soloStarterSeat = starter === 'you' ? 0 : 1;
     this._chStopList();
@@ -2226,8 +2227,30 @@ class BattleshipUI {
   _quitCostsLoss() {
     const s = this.state;
     if (this.mp) return this._mpLeaveCosts();
-    return !this.ch && this.view === 'battle' && !!s && !s.over && !this._statsCommitted
-      && (s.shotCount[this._localSeat()] | 0) > 0;
+    // Once the BATTLE is on screen (2026-10-29, second pass, Matt): quitting after the bot's opening
+    // volley was free. Placing ships is still not a move.
+    return !this.ch && this.view === 'battle' && !!s && !s.over && !this._statsCommitted;
+  }
+
+  /** A solo battle waiting in the save while nothing is on the table (a challenge or a notification
+   *  set it aside, `_chTakeArmed`): starting a NEW solo battle throws it away, which is quitting it.
+   *  True when one is waiting. (A live room or a challenge leaves it alone: it resumes later.) */
+  _savedQuitPending() {
+    return !this.mp && !this.ch && !(this.view === 'battle' && this.state) && !!loadGame();
+  }
+
+  /** Record that set-aside battle's loss once (the save cleared first), with its shots so far. */
+  _recordSavedQuitLoss() {
+    if (!this._savedQuitPending()) return;
+    const saved = loadGame();
+    clearGame();
+    const s = saved.state;
+    const myShots = s.shotCount[0] | 0;
+    const oppGrid = s.shots[1];
+    let hits = 0;
+    for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
+    const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
+    try { recordBattleship(saved.difficulty, false, extras); } catch { /* never block the new game */ }
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), with the shots fired so far. */
@@ -2875,7 +2898,8 @@ class BattleshipUI {
   _mpHostStartMatch() {
     const room = this._mpLobbyRoom;
     if (!room || !room.guest || this.mp || this._mpBusy) return;
-    clearGame();
+    // A solo battle in the save is KEPT (2026-10-29, second pass): it used to be cleared here for
+    // free, a quit with no loss. A live match never writes the solo save; the battle resumes later.
     this.mp = this._mpNewState('host', this._mpPendingCode, room.guest, this._setup.size, this._setup.bonusShotOnHit);
     this._lobby = null;
     this._mpStartNextGame();
@@ -2917,7 +2941,7 @@ class BattleshipUI {
 
   _mpGuestStartMatch(room) {
     if (this.mp || this._dead || !room || !room.round) return;
-    clearGame();
+    // The solo save is kept, as for the host (2026-10-29, second pass).
     const cfg = room.config || {};
     this.mp = this._mpNewState('guest', this._mpJoinedCode, room.host, cfg.sizeKey, cfg.bonusShotOnHit);
     this._lobby = null;
@@ -4057,6 +4081,8 @@ class BattleshipUI {
     } else if (action === 'mode-solo') {
       this._mode = 'solo'; this._mpError = ''; this._mpJoinCode = ''; this._chPick = null; this._chChoose = null; this._chNote = ''; this._chGen++; this.renderSetup();
     } else if (action === 'start') {
+      // Over a set-aside solo battle: two taps, the button saying it counts as a loss.
+      if (this._savedQuitPending() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quit_loss'); return; }
       this.startGame();
     } else if (action === 'select-ship') {
       this._selectShip(btn.dataset.ship);
