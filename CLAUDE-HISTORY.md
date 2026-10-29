@@ -1449,3 +1449,10 @@ rules; it is never an answer. All 269 blocked words were read; the filter had al
 (infierno, concha, folleto, coñac, idiota). `SLURS` (marica, maricón, bollera, nazi, cholo...) and
 `NO_ADULT` (pedófilo) stay out. CONCHA went into NAME_WORDS. 97 bonus words were added; words, puzzles
 and retired are identical.
+
+## 2026-10-29: RAPE, RAPED, RAPING, PEDOPHILE count
+
+Matt: "just because these words have bad meanings doesn't mean they aren't words. They would all count in
+scrabble." They were added to English `ADULT_KEEP`, and Spanish `NO_ADULT` was removed (PEDOFILO is a bonus
+word, though no puzzle has its letters yet). Only slurs stay out. Rule for future sessions: a word's meaning
+never keeps it out; only slurs do.

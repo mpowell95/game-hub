@@ -25,7 +25,7 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 "Obviously all words should count")**: `words` = the answers, SCOWL size ≤60 English + American ∩ ENABLE
 (22,045; hints and ranks count only these); `extra` = 376 HAND-CHECKED words (2026-10-26, Matt: CRATCH, CRANCH, ANNA, CARL "aren't words"/"so many names": ENABLE ∩ SCOWL 70, no first names, read one by one into `BONUS_KEEP`; 2026-10-28 +123 incl. FUNGO, AGLET, and a kept word no longer needs the subtitle count). English stays hand-checked on purpose: 7 days of `beeLog` showed no real word refused (Spanish did, GONADA), accepted
 and scored as a BONUS word (italic in the found list, toast "Bonus word!", the How to Play line "Italic = bonus, not in hints"), never counted. No S, ≤7 distinct letters, bad words
-out of both, EXCEPT `ADULT_KEEP` (2026-10-29, Matt, refused VAGINA: "Words like this and profanity should count"): ~80 hand-checked adult words and profanity are BONUS words (never answers, so never in hints or Yesterday's Answers); slurs and RAPE/PEDOPHILE stay out. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
+out of both, EXCEPT `ADULT_KEEP` (2026-10-29, Matt, refused VAGINA: "Words like this and profanity should count"): ~80 hand-checked adult words and profanity are BONUS words (never answers, so never in hints or Yesterday's Answers); slurs stay out (RAPE, PEDOPHILE count: Matt, "they would all count in scrabble"). Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
 every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
 Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 24, 26, 28 (33, 23, 28 words)
 swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); anyone with words on one sees it
@@ -37,7 +37,7 @@ lemmatization-lists (conjugations count), ~46 a puzzle; bonus = EVERY other dict
 letter** (Ana: "Ñ is different from n... for the rest do not use accents"): words are stored without accents and with
 ñ, typing á gives a, ñ stays ñ; 13 puzzles have Ñ in the hive. Board keys write Ñ as `0` (ASCII rule). Keys
 `es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,493 puzzles. The first build folded Ñ to N;
-its day 0 (`o:aeimnt`) is `retired`, still playable. Names out of the answers (`NOT_ANSWERS`), vulgar families out of the answers (`BLOCK_RE`); since 2026-10-29 every blocked word is a BONUS word (as English), except `SLURS` and `NO_ADULT`.
+its day 0 (`o:aeimnt`) is `retired`, still playable. Names out of the answers (`NOT_ANSWERS`), vulgar families out of the answers (`BLOCK_RE`); since 2026-10-29 every blocked word is a BONUS word (as English), except `SLURS`.
 Credits: `data/CREDITS.md`. `bee.json` and `bee-es.json` stay LAZY in `sw.js`.
 
 ## Screens

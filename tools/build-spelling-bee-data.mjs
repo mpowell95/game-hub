@@ -102,13 +102,15 @@ const REPLACE = { 2: 'o:hilprw', 4: 'u:dfgino', 6: 'e:ijlnuv' };
 // ADULT WORDS AND PROFANITY (2026-10-29, Matt, refused VAGINA: "Words like this and profanity should count"):
 // BONUS words only, never answers (hints, ranks and Yesterday's Answers never show them), HAND-CHECKED like
 // BONUS_KEEP, and they skip the bad-word, name (DICK, WILLY) and ENABLE/SCOWL filters. Slurs stay out (never add
-// one here), and so do RAPE, RAPED, RAPING, PEDOPHILE, JAILBAIT.
+// one here). RAPE, RAPED, RAPING, PEDOPHILE added the same day (Matt: "just because these words have bad meanings
+// doesn't mean they aren't words. They would all count in scrabble").
 const ADULT_KEEP = new Set(`
   anal bareback bimbo bitch bitchy blowjob bondage boner boob boobie booby bugger bullcrap butt butthead
   butthole clit cocaine cock crap crapper crappy cunt dammit damn damned damnit dick dickhead dildo domination
   douchebag erotic eunuch fecal fellatio fingering fuck fucked fucker fuckhead fuckin fucking fuckup gangbang
   goddam goddamn grope handjob hardcore harlot hell heroin hooker horny humping jizz kinky lynch nipple nude
-  nudity nympho orgy panty pecker pegging penial penile playboy porn porno prick queef rectum rimming titty
+  nudity nympho orgy panty pecker pedophile pegging penial penile playboy porn porno prick queef rape raped raping
+  rectum rimming titty
   trollop turd twat vagina vibrator voyeur vulva wank wanker wench`.split(/\s+/).filter(Boolean));
 
 // Slurs and vulgarities LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
