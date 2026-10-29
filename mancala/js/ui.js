@@ -136,6 +136,7 @@ function saveGame(ui) {
       mode: ui.mode,
       level: ui.level,
       movesMade: ui.movesMade,
+      hm: !!ui._humanMoved,   // 2026-10-29: the human has sown this game (quitting now is a loss)
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -157,6 +158,8 @@ function loadGame() {
       mode: raw.mode === 'friend' ? 'friend' : 'bot',
       level: lvl >= 1 && lvl <= 3 ? lvl : 2,
       movesMade: Math.max(0, Math.round(Number(raw.movesMade)) || 0),
+      // A save from before `hm`: two moves in means the human has almost surely sown once.
+      hm: raw.hm === true || (raw.hm === undefined && (Math.round(Number(raw.movesMade)) || 0) >= 2),
     };
   } catch { return null; }
 }
@@ -340,6 +343,39 @@ class MancalaUI {
 
   inProgress() {
     return this.view === 'game' && !!this.state && !this.state.over && this.movesMade > 0;
+  }
+
+  /** Quitting a game against the computer (Restart, Setup) once the human has sown is a LOSS
+   *  (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
+   *  settings"). Leaving the hub is not quitting: the autosave resumes it. Two players on one phone
+   *  and multiplayer are untouched. */
+  _quitCostsLoss() {
+    return !this.mp && this.mode === 'bot' && this.view === 'game' && !!this.state && !this.state.over
+      && !this._statsCommitted && !!this._humanMoved;
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    try { recordResult('mancala', LEVEL_KEY[this.level], false); } catch { /* never block leaving */ }
+    clearGame();
+  }
+
+  /** A quit that costs a loss needs a second tap, the button saying so; anything else acts at once. */
+  _confirmQuit(btn, action) {
+    if (!this._quitCostsLoss()) { action(); return; }
+    if (btn.dataset.armed === '1') { this._resetQuitConfirm(); action(); return; }
+    this._resetQuitConfirm();
+    btn.dataset.armed = '1';
+    btn.dataset.label = btn.textContent;
+    btn.textContent = t('quit_loss');
+    this._quitTimer = setTimeout(() => this._resetQuitConfirm(), 3500);
+  }
+
+  _resetQuitConfirm() {
+    clearTimeout(this._quitTimer);
+    this.container.querySelectorAll('[data-armed="1"]').forEach((b) => { b.textContent = b.dataset.label; b.dataset.armed = ''; });
   }
 
   later(fn, ms) {
@@ -590,6 +626,7 @@ class MancalaUI {
     this.view = 'game';
     this.busy = false;
     this.movesMade = 0;
+    this._humanMoved = false;
     this.renderGame();
     saveGame(this);
     // Say who opens. Without this the alternation is invisible: the opponent's
@@ -615,6 +652,7 @@ class MancalaUI {
     this.view = 'game';
     this.busy = false;
     this.movesMade = saved.movesMade;
+    this._humanMoved = saved.hm;
     this.renderGame();
     // If we left while the bot was on move, it picks up where it left off.
     if (this.mode === 'bot' && this.state.turn === P2) this.botTurn();
@@ -893,6 +931,7 @@ class MancalaUI {
     const { state: next, events } = result;
     this.busy = true;
     this.movesMade += 1;
+    if (!this.mp && this.mode === 'bot' && this.state.turn === P1) this._humanMoved = true;
     for (const el of this.pitEls) { if (el && !isStore(Number(el.dataset.pit))) { el.classList.remove('is-live'); el.disabled = true; } }
 
     // Running per-pit counts so numbers tick as stones land.
@@ -1841,11 +1880,9 @@ class MancalaUI {
       this.closeOverlays();
       this.startGame(this.mode);
     } else if (action === 'restart') {
-      this.closeOverlays();
-      this.startGame(this.mode);
+      this._confirmQuit(btn, () => { this._recordQuitLoss(); this.closeOverlays(); this.startGame(this.mode); });
     } else if (action === 'newgame') {
-      this.closeOverlays();
-      this.renderSetup();
+      this._confirmQuit(btn, () => { this._recordQuitLoss(); this.closeOverlays(); this.renderSetup(); });
     } else if (action === 'help') {
       this.openHelp();
     } else if (action === 'ht-close') {

@@ -269,3 +269,7 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". A turn's clock starts at the other side's last decision (a hand that ends and restarts with the same player times from there); `countResult(id, won, extras, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.
+
+## Quitting and easier settings (2026-10-29)
+
+Solo: the menu's New game / Quit to setup after the player's first decision = ONE loss, in `chinchon-stats` too (`moved` in the save). A table records at its EASIEST computer, one step lower for a short match (under 100 points or under 10 rounds; `soloDiff`, `isShortMatch`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

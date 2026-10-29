@@ -755,7 +755,7 @@ class TicTacToeUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = this._quitCostsLoss() ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -763,12 +763,28 @@ class TicTacToeUI {
   resetConfirms() {
     clearTimeout(this._confirmTimer);
     if (!this.shell) return;
-    const b = this.shell.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') {
+    this.shell.querySelectorAll('[data-armed="1"]').forEach((b) => {
       b.textContent = b.dataset.label;
       b.dataset.armed = '';
       b.classList.remove('is-confirm');
-    }
+    });
+  }
+
+  /** Quitting a solo game (Restart, New game) once the human has placed a mark is a LOSS (2026-10-29,
+   *  docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier settings"). Leaving
+   *  the hub mid-game is not quitting: the autosave resumes it. Multiplayer is untouched. */
+  _quitCostsLoss() {
+    const s = this.state;
+    if (this.mp || !s || s.over || this._statsCommitted || this.view !== 'game') return false;
+    const me = this._myMark();
+    return s.variant === 'ultimate' ? s.boards.some((b) => b.includes(me)) : s.board.includes(me);
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    try { recordTicTacToe(this.state.variant, this._setup.difficulty, false); } catch { /* never block leaving */ }
   }
 
   /** Record the finished game exactly once on THIS device.
@@ -1594,13 +1610,13 @@ class TicTacToeUI {
     } else if (action === 'restart') {
       // Same-settings restart, mid-game (Task 4). Counts as a new completed
       // game for Alternate-mode purposes, same as Connect Four's menu-restart.
-      this.confirmDestructive(btn, () => this.startGame());
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'rematch') {
       this.closeOverlays();
       this.startGame();
     } else if (action === 'change-settings') {
-      this.closeOverlays();
-      this.renderSetup();
+      const go = () => { this._recordQuitLoss(); this.closeOverlays(); this.renderSetup(); };
+      if (this._quitCostsLoss()) this.confirmDestructive(btn, go); else go();
     } else if (action === 'help') {
       this.openHelp();
     } else if (action === 'close-overlay') {

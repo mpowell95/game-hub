@@ -445,3 +445,7 @@ the same shape of block for the same reason.
 All of it comes out of SPACING and the decorative bot avatar, in that order: the column's gap and
 padding, the title panel's padding, the avatar 84px -> 64px. Nothing is hidden, no text goes under
 11px, and `.dm-segbtn` keeps 44px - it is the tap target and it is the floor the numbers stop at.
+
+## Quitting and easier settings (2026-10-29)
+
+A match thrown away after the player's first play or draw (`moved` in the save) is ONE loss: Restart, the round card's restart and New match over a saved match ask twice. A race to 150 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

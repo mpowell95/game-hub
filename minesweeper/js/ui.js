@@ -362,7 +362,11 @@ class MinesweeperUI {
       const act = ev.target.closest('[data-act]');
       if (!act) return;
       if (act.dataset.act === 'play') this.startOrResume();
-      else if (act.dataset.act === 'newsel') this.newGame(this.settings.level);
+      else if (act.dataset.act === 'newsel') {
+        // Over a paused board: two taps, the button saying it counts as a loss (2026-10-29).
+        if (this._quitBoard(this.settings.level) && act.dataset.armed !== '1') { act.dataset.armed = '1'; act.textContent = t('quit_loss'); return; }
+        this.newGame(this.settings.level);
+      }
       else if (act.dataset.act === 'howto') this.renderHowTo();
       else if (act.dataset.act === 'board') this._openLeaderboard();
     };
@@ -443,6 +447,7 @@ class MinesweeperUI {
   newGame(level) {
     this._clearTimers();
     const lv = level || (this.game && this.game.level) || this.settings.level;
+    this._recordQuitLoss(lv);   // a started board thrown away is a loss (2026-10-29)
     clearSave(lv);
     this.game = E.createGame(lv, { noGuess: this._noGuessOn(lv) });
     this.mode = 'dig';
@@ -1031,6 +1036,29 @@ class MinesweeperUI {
     if (ov) ov.remove();
     const g = this.game;
     if (this.screen === 'play' && g && g.generated && !g.dead && !g.won) this._startTimer();
+  }
+
+  /** QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+   *  and easier settings"): a board that has had its first tap and is not finished, thrown away for a
+   *  new one (the face's New board, or New game on setup over that level's paused board), records as
+   *  a loss, as if it had been lost there. Pausing it (the level button, leaving the hub) is not
+   *  quitting: the board waits in its level's slot. Returns the board a new game would throw away. */
+  _quitBoard(level) {
+    const g = this.game;
+    if (g && g.level === level && g.generated && !g.dead && !g.won && !g._quit) return { g, timeMs: this.elapsedMs | 0 };
+    if (g && g.level === level && this.screen === 'play') return null;
+    const saved = loadSave(level);
+    return saved && !saved.state._quit ? { g: saved.state, timeMs: saved.state.elapsedMs | 0 } : null;
+  }
+
+  _recordQuitLoss(level) {
+    const q = this._quitBoard(level);
+    if (!q) return;
+    q.g._quit = true;   // once: this board can never record again
+    clearSave(level);
+    try {
+      recordMinesweeper(level, false, { timeMs: q.timeMs, cleared: E.clearedPct(q.g), flagsRight: E.correctFlags(q.g), mines: q.g.mines, noGuess: !!q.g.noGuess });
+    } catch (err) { console.error('[minesweeper] quit loss', err); }
   }
 
   /** The face is the classic "new game" button, and it used to throw a board away with no

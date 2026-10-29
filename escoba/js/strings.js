@@ -152,6 +152,8 @@ export const STRINGS = {
     menu_newgame_samesettings: 'New game (same settings)',
     menu_quit_setup: 'Quit to setup',
     menu_confirm_lost: 'Tap again: this game will be lost',
+    menu_confirm_loss: 'Tap again: counts as a loss',
+    quit_loss: 'Counts as a loss',
 
     // MP error/opponent modals + status toasts
     mp_conn_error_title: 'Connection error',
@@ -323,6 +325,8 @@ export const STRINGS = {
     menu_newgame_samesettings: 'Nueva partida (mismos ajustes)',
     menu_quit_setup: 'Salir a los ajustes',
     menu_confirm_lost: 'Toca otra vez: esta partida se perderá',
+    menu_confirm_loss: 'Toca otra vez: cuenta como derrota',
+    quit_loss: 'Cuenta como derrota',
 
     mp_conn_error_title: 'Error de conexión',
     mp_conn_error_sub: 'La partida no pudo mantenerse sincronizada',

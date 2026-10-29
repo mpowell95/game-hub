@@ -22,7 +22,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, oneTierDown } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -31,6 +31,14 @@ const STATS_ID = 'eightball';
 const SETTINGS_KEY = 'gamehub.eightball.v1';
 /** v2 (2026-10-22, the modes): a different match shape. The v1 key is left where it was, unread. */
 const SAVE_KEY = 'gamehub.eightball.save.v2';
+
+// QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+// quitting and easier settings"). A one-rack match (Matt's call: "Pool 1 rack") counts one step down;
+// 2 and 3 racks count at the difficulty. A match against the computer the player has shot in
+// (`m.ps`, set at their first shot), thrown away for a new one, is a LOSS.
+export function statsDiff(diff, racks) {
+  return racks === 1 ? oneTierDown(diff, ['easy', 'medium', 'hard']) : diff;
+}
 const OPPS = ['cpu', 'pass'];
 const OPTS = ['call', 'bank', 'obst'];
 /** GamePigeon's controls (Matt, 2026-10-22, replacing the slingshot, which ran out of screen with
@@ -528,6 +536,7 @@ class PoolUI {
   }
 
   _newMatch() {
+    this._recordQuitLoss();   // a match against the computer thrown away after the player's first shot
     const s = this.settings;
     const n = seatsOf(s.game);
     const breaker = s.nextBreaker % n;
@@ -535,6 +544,41 @@ class PoolUI {
     writeJSON(SETTINGS_KEY, s);
     const seed = (Math.floor(Math.random() * 0x7fffffff) + 1) >>> 0;
     this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.game, s.racks, breaker, seed, s.opts) });
+  }
+
+  /** The match against the computer a new match would throw away (the live one, or the saved one
+   *  from setup) once the player has shot in it, or null. */
+  _quitPending() {
+    if (this.match && this.mode === 'cpu') {
+      const m = this.match;
+      return m.winner == null && !m.recorded && m.ps ? { diff: this.diff, m } : null;
+    }
+    if (this.match) return null;
+    const sv = this._savedMatch();
+    return sv && sv.mode === 'cpu' && !sv.match.recorded && sv.match.ps
+      ? { diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', m: sv.match } : null;
+  }
+
+  /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    q.m.recorded = true;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    try {
+      const st = recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false);
+      if (!st) console.warn('[eight-ball] quit loss not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[eight-ball] recording the quit loss failed', err); }
+  }
+
+  /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
+  _quitGate(btn, go) {
+    if (!this._quitPending() || (btn && btn.dataset.armed === '1')) { if (btn) btn.dataset.armed = ''; go(); return; }
+    btn.dataset.armed = '1';
+    const label = btn.querySelector('[data-l]') || btn;
+    label.textContent = t('quit_loss');
+    clearTimeout(this._quitTimer);
+    this._quitTimer = setTimeout(() => { btn.dataset.armed = ''; this._relabel(); }, 3500);
   }
 
   _continue() {
@@ -785,6 +829,7 @@ class PoolUI {
       shot.x = x; shot.y = y;
     }
     if (Number.isInteger(raw.c) && raw.c >= 0) shot.c = raw.c;
+    if (this.mode === 'cpu' && m.turn === 0 && !opts.replay) m.ps = 1;   // the player has shot (quitting is now a loss)
     this._save(shot);   // the position the shot was taken from, and the shot
     const ev = begin(m, shot);
     if (!ev) { this._startTurn(false); return; }
@@ -897,7 +942,7 @@ class PoolUI {
     if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = recordResult(STATS_ID, this.diff, m.winner === 0);
+      const st = recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0);
       if (!st) console.warn('[eight-ball] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the result failed', err); }
   }
@@ -998,7 +1043,7 @@ class PoolUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') this._newMatch();
+    if (act === 'play') this._quitGate(b, () => this._newMatch());
     else if (act === 'multi') this._openOnline();
     else if (act === 'mpHome') this._openOnline();
     else if (act === 'skip') this._mpSkip();

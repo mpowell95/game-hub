@@ -298,3 +298,7 @@ based Cutthroat goes in this stage). Flick Soccer's challenges are the model; no
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit: root `CLAUDE.md`, "Cancel, decline, resign, expire". **Cutthroat: the idle player loses and the winner is `resignWinner` on the table as the turn began** (`timeoutWinner`; rows carry `tw`); `over.by` = the idle seat; "{name} timed out". One count per person: `countResult(id, won, finishedAt)`. `tools/test-eightball-mp.mjs` times one out.
+
+## Quitting and easier settings (2026-10-29)
+
+Play over a saved match vs the computer the player has shot in (`m.ps`) = ONE loss, asked twice; Quit keeps the save. A one-rack match records one step down (`statsDiff`, Matt's call). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

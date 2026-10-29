@@ -41,6 +41,7 @@ export const STRINGS = {
     paused: 'Paused',
     resume: 'Resume',
     newGame: 'New game',
+    quitLoss: 'Counts as a loss.',
     backSetup: 'Back to setup screen',
     backMp: 'Back to multiplayer',
     // --- the setup screen, restructured 2026-09-22 ------------------------------------------
@@ -172,6 +173,7 @@ export const STRINGS = {
     paused: 'En pausa',
     resume: 'Continuar',
     newGame: 'Partida nueva',
+    quitLoss: 'Cuenta como derrota.',
     backSetup: 'Volver a la pantalla de inicio',
     backMp: 'Volver a multijugador',
     vsCpu: 'Jugar contra la máquina',

@@ -214,6 +214,7 @@ function saveGame(ui) {
     if (!ui.game || ui.game.phase === 'over' || ui.view !== 'game') { clearGame(); return; }
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 1, at: Date.now(), seats: ui.seats, difficulty: ui.difficulty, snap: ui.game.snapshot(),
+      moved: !!ui._moved,   // 2026-10-29: the player has played or drawn (quitting now is a loss)
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -222,16 +223,30 @@ function loadGame() {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (!raw || raw.v !== 1) return null;
-    if (Date.now() - Number(raw.at || 0) > MAX_SAVE_AGE_MS) return null;
     if (!Array.isArray(raw.seats) || raw.seats.length < 2 || raw.seats.length > 4) return null;
     if (!raw.snap || !Array.isArray(raw.snap.players) || raw.snap.players.length !== raw.seats.length) return null;
     if (raw.snap.phase === 'over') return null;
     if (!DIFF_KEYS.some(([k]) => k === raw.difficulty)) return null;
+    // Too old to resume: the hand is over. Once the player had moved in it, that is a LOSS
+    // (2026-10-29): waiting out the 30 minutes must not be a way to make a losing hand vanish.
+    if (Date.now() - Number(raw.at || 0) > MAX_SAVE_AGE_MS) {
+      if (savedMoved(raw)) { try { recordResult('uno', raw.difficulty, false); } catch { /* never block the mount */ } }
+      clearGame();
+      return null;
+    }
     return raw;
   } catch { return null; }
 }
 
 function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+
+/** Has the player acted in this saved hand? Its own flag; a save from before it counts a hand that
+ *  is not the dealt seven as moved. */
+function savedMoved(raw) {
+  if (typeof raw.moved === 'boolean') return raw.moved;
+  const h = raw.snap && raw.snap.players && raw.snap.players[HUMAN] && raw.snap.players[HUMAN].hand;
+  return Array.isArray(h) && h.length !== 7;
+}
 
 class UnoUI {
   constructor(container) {
@@ -384,6 +399,8 @@ class UnoUI {
     this._saveSettings();
     clearGame();
     this.closeOverlays();
+    this._moved = false;
+    this._statsCommitted = false;
     this._pendingWildId = null;
     for (const tm of this.timers) clearTimeout(tm);
     this.timers = [];
@@ -415,6 +432,8 @@ class UnoUI {
     this.seats = saved.seats;
     this.players = saved.seats.length;
     this.difficulty = saved.difficulty;
+    this._moved = savedMoved(saved);
+    this._statsCommitted = false;
     // Silent restore: nothing flies for cards that were already there.
     this._dealPending = false;
     this._lastPendingDraw = saved.snap.pendingDraw || 0;
@@ -928,7 +947,10 @@ class UnoUI {
     const g = this.game;
     if (!g || g.phase !== 'over' || this.container.querySelector('[data-role="end"]')) return;
     const won = g.winner === HUMAN;
-    try { recordResult('uno', this.difficulty, won); } catch { /* never block the result */ }
+    if (!this._statsCommitted) {
+      this._statsCommitted = true;
+      try { recordResult('uno', this.difficulty, won); } catch { /* never block the result */ }
+    }
     clearGame();
     const winnerSeat = this.seats[g.winner];
     const overlay = document.createElement('div');
@@ -1011,19 +1033,33 @@ class UnoUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = this._quitCostsLoss() ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
 
   resetConfirms() {
     clearTimeout(this._confirmTimer);
-    const b = this.container.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') {
+    this.container.querySelectorAll('[data-armed="1"]').forEach((b) => {
       b.textContent = b.dataset.label;
       b.dataset.armed = '';
       b.classList.remove('is-confirm');
-    }
+    });
+  }
+
+  /** Quitting a hand (Restart, New game) once the player has played or drawn is a LOSS (2026-10-29,
+   *  docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier settings"). Leaving
+   *  the hub is not quitting: the save resumes it (a save past 30 minutes records the loss on load). */
+  _quitCostsLoss() {
+    return !!(this.game && this.view === 'game' && this.game.phase !== 'over' && this._moved && !this._statsCommitted);
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    try { recordResult('uno', this.difficulty, false); } catch { /* never block leaving */ }
+    clearGame();
   }
 
   // --- events ------------------------------------------------------------------
@@ -1065,13 +1101,17 @@ class UnoUI {
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();
     } else if (action === 'restart') {
-      this.confirmDestructive(btn, () => this.startGame());
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'newgame') {
-      this.closeOverlays();
-      clearGame();
-      for (const tm of this.timers) clearTimeout(tm);
-      this.timers = [];
-      this.renderSetup();
+      const go = () => {
+        this._recordQuitLoss();
+        this.closeOverlays();
+        clearGame();
+        for (const tm of this.timers) clearTimeout(tm);
+        this.timers = [];
+        this.renderSetup();
+      };
+      if (this._quitCostsLoss()) this.confirmDestructive(btn, go); else go();
     } else if (action === 'help') {
       this.openHelp();
     } else if (action === 'menu') {
@@ -1083,6 +1123,7 @@ class UnoUI {
     } else if (action === 'draw-pile') {
       if (this.busy || this._dealing || !this.game || this.game.currentPlayer !== HUMAN) return;
       this.game.draw(HUMAN);
+      this._moved = true;
       this._afterStateChange();
     } else if (action === 'choose-color') {
       this._onChooseColor(btn.dataset.color);
@@ -1113,6 +1154,7 @@ class UnoUI {
     const visual = src ? src.cloneNode(true) : null;
     if (visual && rect && rect.width) this._landing.add(cardId);
     g.play(HUMAN, cardId, color);
+    this._moved = true;
     this._afterStateChange();
     if (visual && rect && rect.width) this._flyToDiscard(visual, rect, cardId);
   }
@@ -1129,6 +1171,7 @@ class UnoUI {
       this._playHuman(id, color);
     } else if (g.phase === 'chooseColor' && g.pendingWild && g.pendingWild.playerIndex === HUMAN) {
       g.chooseColor(HUMAN, color);
+      this._moved = true;
       this._afterStateChange();
     }
   }

@@ -143,3 +143,7 @@ matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now che
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Cleaned moves drop `at`, so `validateGame` keeps `ats` for the turn clock; `forceEnd(winner, 'timeout')`; "Timed out" (`timedOut`). Live-room `mp` counts carry no id.
+
+## Quitting and easier settings (2026-10-29)
+
+The menu's New match / Home after the player's first move (`pm` in the save) = ONE loss, asked twice (`recorded`). Leaving the hub is not quitting (the save resumes). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

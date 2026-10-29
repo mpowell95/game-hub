@@ -419,3 +419,7 @@ Rules that came out of it (all in force):
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Cleaned shots drop `at`, so `validateGame` keeps `ats`; bonus volleys stay inside one turn; `countResult(id, won, extras, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.
+
+## Quitting and easier settings (2026-10-29)
+
+Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move) = ONE loss (`_statsCommitted`; the armed button says "Counts as a loss"). Board size and salvos are not easier settings. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -2180,7 +2180,7 @@ class BattleshipUI {
    *  so the confirming tap just armed it again. */
   _armedBtn(cls, action, labelKey) {
     const armed = this._armed === action;
-    const label = esc(t(armed ? 'tap_again_confirm' : labelKey));
+    const label = esc(t(armed ? (this._quitCostsLoss() ? 'quit_loss' : 'tap_again_confirm') : labelKey));
     const icon = action === 'restart' ? ICON_RESTART : action === 'ch-resign' ? ICON_FLAG : ICON_CLOSE;
     return `<button type="button" class="${cls} ${armed ? 'is-confirm' : ''}" data-action="${action}" data-armable="1"
       aria-label="${label}" title="${label}">${icon}</button>`;
@@ -2192,8 +2192,9 @@ class BattleshipUI {
     this.resetConfirms();
     this._armed = key;
     btn.classList.add('is-confirm');
-    btn.setAttribute('aria-label', t('tap_again_confirm'));
-    btn.setAttribute('title', t('tap_again_confirm'));
+    const armedLabel = t(this._quitCostsLoss() ? 'quit_loss' : 'tap_again_confirm');
+    btn.setAttribute('aria-label', armedLabel);
+    btn.setAttribute('title', armedLabel);
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
 
@@ -2212,6 +2213,30 @@ class BattleshipUI {
   }
 
   // --- stats + finish ------------------------------------------------------------------------
+
+  /** Quitting a battle against the bot (Restart, Exit) once the player has fired is a LOSS
+   *  (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
+   *  settings"). Placing ships is not a move. Leaving the hub is not quitting: the save resumes it.
+   *  Live rooms and challenges are untouched. */
+  _quitCostsLoss() {
+    const s = this.state;
+    return !this.mp && !this.ch && this.view === 'battle' && !!s && !s.over && !this._statsCommitted
+      && (s.shotCount[this._localSeat()] | 0) > 0;
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`), with the shots fired so far. */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    const s = this.state;
+    const myShots = s.shotCount[this._localSeat()] | 0;
+    const oppGrid = s.shots[this._remoteSeat()];
+    let hits = 0;
+    for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
+    const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
+    try { recordBattleship(this._setup.difficulty, false, extras); } catch { /* never block leaving */ }
+    clearGame();
+  }
 
   _commitStats() {
     if (this._statsCommitted) return;
@@ -3965,9 +3990,9 @@ class BattleshipUI {
     } else if (action === 'fire-confirm') {
       this._confirmFire();
     } else if (action === 'restart') {
-      this.confirmDestructive(btn, () => this.startGame());
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'exit-battle') {
-      this.confirmDestructive(btn, () => { this.closeOverlays(); this.renderSetup(); });
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.closeOverlays(); this.renderSetup(); });
     } else if (action === 'rematch') {
       this.closeOverlays(); this.startGame();
     } else if (action === 'change-settings') {

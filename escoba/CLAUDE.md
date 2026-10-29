@@ -254,3 +254,7 @@ JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs No
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `countResult(id, won, escobas, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.
+
+## Quitting and easier settings (2026-10-29)
+
+Solo: the menu's New game / Quit to setup, and New game over a resumable match, after the player's first card = ONE loss (`moved` in the save; "Tap again: counts as a loss"). A table records at its EASIEST computer (`soloDiff`; it was the first computer's). Capture hints are not an easier setting (they show only what the rules allow). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

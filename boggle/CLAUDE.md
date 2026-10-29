@@ -168,3 +168,7 @@ DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
 `node boggle/js/test.js` · `node tools/test-boggle-mp.mjs` · `node tools/test-boggle-es.mjs` · `node
 tools/tune-boggle-es.mjs [--ai]`.
+
+## Quitting and easier settings (2026-10-29)
+
+Give up after the first word entered (`moved` in the save) = ONE loss, asked twice. The 2-minute timer records one step down (`statsDiff`: the computer's share does not depend on the clock). Known gap: the clock still pauses while away. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

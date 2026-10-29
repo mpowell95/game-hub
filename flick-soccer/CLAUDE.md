@@ -419,3 +419,7 @@ A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `withTimeout` also on `readFresh` (the writers' read); `countResult(id, won, finishedAt)`; "Timed out" (`mp_timed_out`).
+
+## Quitting and easier settings (2026-10-29)
+
+Play (or Pass & play) over a saved match vs the computer the player has flicked in = ONE loss, asked twice (`playerShot`, `recorded`); Quit keeps the save. First to 1 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -333,3 +333,98 @@ never got the win. **Matt's decision: "7 days, then forfeit".**
   the clock, a mid-turn dart, the timeout on both phones, a late dart refused, Resign refused, counted
   once, an unanswered challenge still expires), `tools/test-eightball-mp.mjs` (Cutthroat),
   `tools/test-skee-challenge.mjs`, every game's `tools/test-*-mp.mjs`.
+
+## Holes closed 2026-10-29: quitting and easier settings
+
+Matt: one player will use every hole to top the leaderboard. His decisions, built exactly: **E1** quitting a
+game against the computer after your first move is a LOSS; **E2** easier settings count, but not at the top
+tier; **E3** Monopoly Deal and Parchís get the ESM recorders' rate gate and play log. Every change chooses
+only what a NEW result records (its bucket, or a loss that used to vanish); no stored number moves (THE LAW
+2-5). Proof: `node tools/test-quit-loss.mjs` (100 checks; `--browser` adds 16 in a real page).
+
+**E1: the rule.** "First move" = the player's own first move of that game (a card, a disc, a dart, a throw, a
+roll, a word, a tap on the board), never the deal or the computer's opening. Before it a quit records nothing.
+After it, exactly ONE result per game: each game's own one-shot flag (`_statsCommitted`, `recorded`,
+`_statsRecorded`, `state.rec`, `_resultRecorded`) is set before the loss is written through the game's own
+recorder at the difficulty bucket the finished game would use. Pass and play, live rooms and challenges are
+untouched. A quit that costs a loss asks twice and the armed button or the sheet says **"Counts as a loss"**
+(EN/ES in each `strings.js`; hub: `hub_confirm_loss`, "Leave? Counts as a loss.").
+- **Games that SAVE and resume**: leaving (destroy, the hub's back, closing the app) is not quitting. Only an
+  explicit discard records the loss: Restart / New game / Menu / Quit to setup, or a new game started over a
+  moved-in save from the setup screen (Dominoes, Escoba, Darts, Flick Soccer, Pool, Archery, Parchís).
+- **Games with NO resume** (Yahtzee, Cup Pong, Cup Baseball, Air Hockey, Connect 4 Hoops, Monopoly Deal):
+  leaving after the first move is the loss. Closing the app runs no `destroy()`, so the game ARMS its loss in
+  `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`: recorder name + the LOSS call's arguments, score
+  so far, refreshed as it changes) and DROPS it in the same breath as its real result. `destroy()` and every
+  quit route TAKE it (`takeQuitLoss`: marker removed BEFORE the write, so never twice); the game's next mount
+  takes a marker its dead page left; the hub settles markers over 30 minutes old (`settleQuitLosses`, before
+  the stats sync; a game open in another tab keeps its fresher marker). A marker is taken only under the
+  stats store it was armed in. The play log notes `quitLoss`. Each such game exports `quitCostsLoss()`;
+  `js/hub.js requestLeave` uses it for the leave confirm.
+
+| Game | Quit route closed | Note |
+|---|---|---|
+| Connect Four | Restart, Quit to setup | Undo / Show best moves used to make a game count for NOTHING (undo a lost position, escape): now such a game can no longer be a WIN or draw, but a loss still counts; an undo after the end keeps the game recorded (`recorded` in the save) |
+| Tic Tac Toe, Dots and Boxes, Filler | Restart, New game / Menu (now two taps when it costs) | Dots and Boxes' Undo: same rule as Connect Four |
+| Mancala | Restart, Setup (two taps when it costs); vs computer only | `hm` in the save |
+| Dominoes | Restart, the round card's restart, New match over a saved match | `moved` in the save |
+| Uno | Restart, New game; **a hand past its 30-minute save is a loss on load** (it used to vanish) | `moved` in the save |
+| Escoba, Chinchón | menu New game / Quit to setup, New game over a resumable save (Escoba) | `moved` in the save |
+| Battleship | Restart, Exit | first move = first shot (placing ships is not) |
+| Boggle | Give up (two taps) | first move = first word entered |
+| Darts, Flick Soccer, Pool, Archery | Play (or Pass & play) over a moved-in saved match vs the computer | Quit keeps the save (Continue), so it is not a quit; Pool marks `m.ps` at the first shot |
+| Battle Arena | menu New match / Home | `pm` in the save |
+| Yahtzee, Cup Pong, Cup Baseball, Air Hockey, Connect 4 Hoops | every route, leaving included (marker) | |
+| Minesweeper (solo) | the face's New board on a started board, New game over a level's paused board | **a loss at that level** (it protected a win rate); pausing a board is not quitting |
+| Monopoly Deal | New Game, both Quits, the hub, a closed page (classic marker) | its own `bd-stats` too |
+| Parchís | a new game over a rolled-in saved game vs the computer (a prompt says so) | BUILT FILE patched, see below |
+| Hold'em | already: Give up / Leave record a loss (2026-09-28) | left alone |
+| Baseball (admin only) | already: a career game forfeit is a loss | left alone |
+| Contexto, Golf, Sudoku, Murdoku, Nuts & Bolts, Arrow Maze, Gridlock, Word Weaver, Snake, Ball Run, Brick Breaker, Hill Climb, Skeeball, Spelling Bee | none needed | no loss axis a quit avoids (solves, bests, a give-up that is already a loss), or already handled (Skeeball `_abandonRack`) |
+
+**E2 (a): the easiest computer.** Escoba and Chinchón recorded at the FIRST computer's tier, Parchís at the
+HARDEST: one Hard and one Easy computer filed a win as Hard. Now `easiestDiff` (Escoba, Chinchón) and
+`parchisStatsDiff` take the easiest. Uno, Dominoes, Yahtzee, Monopoly Deal and Pool's Cutthroat have one
+difficulty for every computer; Hold'em's table sets one skill for all (left alone).
+
+**E2 (b): shortened matches one step down** (`oneTierDown` on the game's own ladder; the lowest stays the lowest):
+
+| Game | Counts one step down | Standard (unchanged) |
+|---|---|---|
+| Chinchón | under 100 points, or under 10 rounds (1 hand) | 100 points / 10 rounds or more |
+| Dominoes | race to 150 | 300, 500 |
+| Flick Soccer | first to 1 | first to 2, 3 |
+| Pool | 1 rack (Matt's call, and the default) | 2, 3 racks |
+| Darts | 201, 101 | 301, Cricket (all variants) |
+| Cup Pong | unlimited reracks | 0-3 reracks |
+| Boggle | the 2-minute timer (the computer's share of the board does not depend on the clock) | 1, 1.5 minutes |
+
+Decided NOT easier, left alone: Escoba's capture hints and Dominoes' +N badges (they show what the rules
+allow, which the computer always sees; Connect Four's solver hints already cannot win), Battleship's board
+size and salvo, Dots and Boxes' and Tic Tac Toe's variants (Pro solves small boards exactly), Cup Baseball's
+innings (3 is already the shortest and the default), Connect 4 Hoops' one-shot rule, Escoba's 21/31 points,
+Mancala's speed, every "computer speed" setting. No setup screen gained words (the tier shapes already there).
+
+**E3: Monopoly Deal and Parchís** (`js/game-stats-global.js`, copied verbatim into
+`business-deal/js/game-stats-global.js` after its header): the same 30 results per game per minute on the same
+`gamehub.rate.v1` record (refused before the store is read, counted in `blocked`), the same play log queue
+(`gamehub.playlog.v1`, `{c, id, t, g, f, a}`, sent by the hub's `js/play-log.js` on the next hub page), a
+queued Monopoly Deal backlog drained past the gate (`record(queued)`), and the classic quit marker
+(`armQuit` / `dropQuit` / `takeQuit`, the same `gamehub.quitLoss.v1`). Naming untouched (`business`).
+
+**What an honest player sees**: nothing until they quit a game they have moved in; then the button asks twice
+and says it counts as a loss. A short or easier match still counts, one tier lower. Leaving the app never
+costs anything in a game that saves.
+
+**Left open / honest limits**:
+- **Parchís is a BUILT file** (`../Parchís/` is not in this repo): the patch is in `parchis/index.html`
+  (`onRollTap` sets `cfg.hm`; `onPlay` prompts and records; `parchisStatsDiff`); port it to the source or the
+  next rebuild drops it (`tools/test-quit-loss.mjs` Q3/Q4 fail when it does).
+- Boggle's clock still pauses while the app is away (by design, "favoring the player"): a screenshot of the
+  board, solved away from the game, is not prevented.
+- A no-resume game open in TWO tabs, one of them idle over 30 minutes, can have its marker settled by the hub
+  while it is still played: that game then counts its loss AND its result. Rare; not prevented.
+- A loss the HUB settles for Monopoly Deal is not added to Monopoly Deal's own legacy `bd-stats` screen (the
+  unified stats have it).
+- Saves written before 2026-10-29 carry no "moved" flag: each game reads a conservative stand-in (a later
+  round, a hand that is not the dealt one, two moves in), so an in-flight game at the deploy can be off by one move.

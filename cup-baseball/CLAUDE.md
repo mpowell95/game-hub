@@ -56,3 +56,7 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 
 `node cup-baseball/js/test.js` (rules + a perfect throw lands in each cup); `--cpu` for the rates;
 `node tools/test-game-conventions.mjs`.
+
+## Quitting and easier settings (2026-10-29)
+
+No resume: vs the computer, leaving after the player's first throw is ONE loss (`gamehub.quitLoss.v1`, taken in `destroy()` / `init()`); New game / Change settings ask twice. Innings unchanged (3 is the shortest and the default). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

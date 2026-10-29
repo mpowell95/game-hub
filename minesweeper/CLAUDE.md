@@ -385,3 +385,7 @@ no colour at all.
 
 **Its leaderboard board is its own (2026-10-15):** tabs All / Easy / Med / Hard / Expert, best time
 or best % per person. `js/CLAUDE.md`, "Minesweeper's own board, and no \"YOU\"".
+
+## Quitting and easier settings (2026-10-29)
+
+A started board thrown away (the face's New board, or New game over a level's paused board) is ONE loss at that level (it protected a win rate); the question says "Counts as a loss." Pausing a board (level button, the hub) is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

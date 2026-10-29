@@ -54,6 +54,7 @@ export const STRINGS = {
     restart_game: 'Restart',
     new_game: 'New game',
     tap_again_confirm: 'Tap again to confirm',
+    quit_loss: 'Counts as a loss',
     // end of game
     game_over: 'Game over',
     you_win: 'You win!',
@@ -123,6 +124,7 @@ export const STRINGS = {
     restart_game: 'Reiniciar',
     new_game: 'Nueva partida',
     tap_again_confirm: 'Toca otra vez para confirmar',
+    quit_loss: 'Cuenta como derrota',
     game_over: 'Fin de la partida',
     you_win: '¡Ganaste!',
     opp_wins: '{name} gana',

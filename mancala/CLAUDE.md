@@ -266,3 +266,7 @@ The logo (a little mancala board) is the single biggest item and takes the bigge
 about 56. `.mc-primary` and `.mc-secondary` stop at 11px of padding on a 16px label, which is 44px
 - they are the tap targets, and that is the floor these numbers stop at rather than the smallest
 that would fit.
+
+## Quitting and easier settings (2026-10-29)
+
+Vs the computer only: Restart / Setup after the player's first sowing (`hm` in the save) = ONE loss, asked twice ("Counts as a loss"). Two players on one phone and MP untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

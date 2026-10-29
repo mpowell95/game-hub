@@ -1133,6 +1133,13 @@ class Hub {
    *  Dynamically imported since 2026-09-01: it runs after the first render, so its 100+ KB graph
    *  has no business blocking that render. A failure to LOAD is now a rejection, not a throw. */
   _syncStats() {
+    // A game against the computer that died with its page after the player's first move (app closed,
+    // no destroy()) left its loss armed: record it before the sync carries the store up (2026-10-29,
+    // js/game-stats.js armQuitLoss). 30 minutes old at least, so a game open in another tab keeps its own.
+    if (!this._quitSettled) {
+      this._quitSettled = true;
+      import('./game-stats.js').then((m) => m.settleQuitLosses(30 * 60 * 1000)).catch(() => {});
+    }
     import('./stats-net.js')
       .then((m) => m.syncMyStats())
       .catch((err) => console.error('[hub] stats sync could not start', err));
@@ -2818,7 +2825,15 @@ class Hub {
     const m = this.current && this.current.module;
     let inProgress = false;
     try { inProgress = !!(m && typeof m.isInProgress === 'function' && m.isInProgress()); } catch { /* ignore */ }
-    if (inProgress) { this.el.confirm.hidden = false; return; }
+    if (inProgress) {
+      // A game with no resume whose quit now counts as a loss says so (2026-10-29): `quitCostsLoss()`.
+      let loss = false;
+      try { loss = !!(m && typeof m.quitCostsLoss === 'function' && m.quitCostsLoss()); } catch { /* ignore */ }
+      const msg = this.el.confirm.querySelector('.hub-confirm-msg');
+      if (msg) msg.textContent = loss ? tf('hub_confirm_loss', 'Leave? Counts as a loss.') : t('hub_confirm_msg');
+      this.el.confirm.hidden = false;
+      return;
+    }
     this.showLauncher();
   }
 

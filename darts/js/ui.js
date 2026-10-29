@@ -15,7 +15,7 @@ import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, s
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, oneTierDown } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -37,6 +37,19 @@ const POINTS = ['on', 'off'];
 // it is the computer's turn: its pause before each dart, the flight, the gaps, the hand-over. Normal
 // is the pace the game shipped with. Where it lands is decided the same way at every speed.
 const PACES = { slow: 0.6, normal: 1, fast: 3 };
+
+// QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+// quitting and easier settings"). 201 and 101 are shorter races than 301, so a win there counts one
+// step down; Cricket stays as it is. A match against the computer that the player has thrown in, thrown
+// away for a new one, is a LOSS.
+const DIFFS_LADDER = ['easy', 'medium', 'hard'];
+export function statsDiff(diff, kind) {
+  return kind === '201' || kind === '101' ? oneTierDown(diff, DIFFS_LADDER) : diff;
+}
+/** Has seat 0 (the player) thrown in this match? */
+export function playerThrew(m) {
+  return !!m && ((m.turn === 0 && Array.isArray(m.darts) && m.darts.length > 0) || (m.turns | 0) >= (m.starter === 0 ? 1 : 2));
+}
 /** The match kind (engine.js KINDS) the setup screen's Game, Order and Points choices make. */
 const kindFrom = (s) => (s.game === 'cricket'
   ? 'cricket' + (s.order === 'order' ? '-order' : '') + (s.points === 'off' ? '-np' : '')
@@ -496,6 +509,7 @@ class DartsUI {
   }
 
   _newMatch() {
+    this._recordQuitLoss();   // a match against the computer thrown away after the player's first dart
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -519,6 +533,41 @@ class DartsUI {
 
   /** Pass & play, from the Multiplayer screen: two people, this phone, the chosen game. */
   _passPlay() { this.settings.mode = 'pass'; this._newMatch(); }
+
+  /** The match against the computer a new match would throw away (the live one, or the saved one
+   *  from setup) once the player has thrown in it, or null. */
+  _quitPending() {
+    if (this.match && this.mode === 'cpu') {
+      const m = this.match;
+      return m.winner == null && !m.recorded && playerThrew(m) ? { diff: this.diff, m } : null;
+    }
+    if (this.match) return null;
+    const sv = this._savedMatch();
+    return sv && sv.mode === 'cpu' && !sv.match.recorded && playerThrew(sv.match)
+      ? { diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', m: sv.match } : null;
+  }
+
+  /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    q.m.recorded = true;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    try {
+      const st = recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false);
+      if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[darts] recording the quit loss failed', err); }
+  }
+
+  /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
+  _quitGate(btn, go) {
+    if (!this._quitPending() || (btn && btn.dataset.armed === '1')) { if (btn) btn.dataset.armed = ''; go(); return; }
+    btn.dataset.armed = '1';
+    const label = btn.querySelector('[data-l]') || btn;
+    label.textContent = t('quit_loss');
+    clearTimeout(this._quitTimer);
+    this._quitTimer = setTimeout(() => { btn.dataset.armed = ''; this._relabel(); }, 3500);
+  }
 
   /** The game the setup screen has chosen (an online challenge is sent as this). */
   _kind() { return kindFrom(this.settings); }
@@ -869,7 +918,7 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = recordResult('darts', this.diff, m.winner === DRAW ? null : m.winner === 0);
+        const st = recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0);
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
@@ -952,7 +1001,7 @@ class DartsUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') { this.settings.mode = 'cpu'; this._newMatch(); }
+    if (act === 'play') this._quitGate(b, () => { this.settings.mode = 'cpu'; this._newMatch(); });
     else if (act === 'multi') this._openOnline();
     else if (act === 'practice') { this.screen = 'practice'; this._showOnly('practice'); }
     else if (act === 'practiceClose') this._showSetup();
