@@ -48,10 +48,12 @@ export function moveRng(seed, stones) {
 }
 const VARY_OPENING_STONES = 10;
 // The gap between the best and second-best move at depth 5 and 9 in the opening is typically 3 to 20
-// points of the window heuristic (measured 2026-10-29). 10 mixes only moves that close. Strength
-// check, 100 games Medium, varied (margin 12) vs not varied: 45W 42L 13D (no weaker); margins 4 and
-// 8 over 80 games: 46-26-8 and 40-32-8.
+// points of the window heuristic (measured 2026-10-29). Strength checks (varied vs not varied, same
+// tier, colours alternating): Medium margin 12, 100 games: 45W 42L 13D; margin 8, 80 games: 40-32-8;
+// Hard margin 10, 16 games: 4-8-4 (small, and not clearly even), so Hard and Expert use the smaller
+// 5 and only mix moves a hair apart.
 export const NEAR_EQUAL_MARGIN = 10;
+const HARD_NEAR_EQUAL_MARGIN = 5;
 let activeMargin = NEAR_EQUAL_MARGIN;   // set per call from the AI instance (chooseMove)
 
 /** Pick a column from [{col, score}]: among the best, plus (in the opening, away from any forced
@@ -829,7 +831,8 @@ export class AI {
     // function of (seed, stones on the board). Without one (tests, old callers) it uses `rng`.
     this.seed = Number.isFinite(options.seed) ? (options.seed >>> 0) : null;
     this._explicitRng = !!options.rng;
-    this.nearEqualMargin = Number.isFinite(options.nearEqualMargin) ? options.nearEqualMargin : NEAR_EQUAL_MARGIN;
+    this.nearEqualMargin = Number.isFinite(options.nearEqualMargin) ? options.nearEqualMargin
+      : (difficulty === Difficulty.HARD || difficulty === Difficulty.EXPERT) ? HARD_NEAR_EQUAL_MARGIN : NEAR_EQUAL_MARGIN;
     this.expertBudgetMs = options.expertBudgetMs ?? DEFAULT_EXPERT_BUDGET_MS;
   }
 
