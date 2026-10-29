@@ -2031,6 +2031,11 @@ export function recordWayOut(tier, f = {}) {
   if (tracked) {
     if (!isObj(g.wo.leg)) g.wo.leg = {};
     if (!isObj(g.wo.leg[d])) g.wo.leg[d] = { w: ((g.byDiff[d] || {}).won) | 0, n: g.wo.ptsN[d] | 0, p: g.wo.pts[d] | 0, e: ln };
+    // When this record first cleared the level (2026-10-29, js/arrow-maze-time.js woCapCl): the
+    // server's time when the game knows it (`f.at`), written once.
+    if (!isObj(g.wo.ct)) g.wo.ct = {};
+    if (!isObj(g.wo.ct[d])) g.wo.ct[d] = {};
+    if (!(Number(g.wo.ct[d]['L' + ln]) > 0)) g.wo.ct[d]['L' + ln] = Math.floor(Number(f.at)) > 0 ? Math.floor(Number(f.at)) : Date.now();
   }
   bumpTotals(g, d, true);
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
@@ -2042,7 +2047,10 @@ export function recordWayOut(tier, f = {}) {
     // scored too; `s` keeps the number scored when it is more than this attempt's own m + h, and `p`
     // the slips from before this attempt, which a replay of it can never win back.
     const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)));
-    const prior = Math.max(0, Math.floor(Number(f.prior) || 0));
+    // HINTS CARRY OVER (Matt, 2026-10-29): the clearing try's own hints count as slips a replay can
+    // never win back (only its lost hearts can be), so a level first cleared with hints keeps those
+    // points even after a clean Replay.
+    const prior = Math.max(0, Math.floor(Number(f.prior) || 0), h);
     g.wo.timed[d] += 1;
     g.wo.mistakes += m;
     g.wo.hints += h;
@@ -2113,7 +2121,7 @@ export function recordWayOutReplay(tier, f = {}) {
  *  (2026-10-29). Kept as `wo.sl[band]['L<n>']`, the most ever seen (max only), so the person's other
  *  storages see a level that was learned with hints (js/arrow-maze-time.js, "SLIPS STAY WITH THE
  *  LEVEL"). Not a play, so not rate-gated. Returns true once stored. */
-export function noteWayOutSlips(band, n, slips) {
+export function noteWayOutSlips(band, n, slips, at) {
   const d = normDiff(band), L = Math.floor(Number(n) || 0), s = Math.max(0, Math.floor(Number(slips) || 0));
   if (!WO_TIERS.includes(d) || !(L >= 1) || L > 1e6 || !(s > 0)) return false;
   notePlay('wayout', 'noteWayOutSlips', arguments);
@@ -2123,8 +2131,13 @@ export function noteWayOutSlips(band, n, slips) {
   if (!isObj(g.wo.sl)) g.wo.sl = {};
   if (!isObj(g.wo.sl[d])) g.wo.sl[d] = {};
   const k = 'L' + L;
-  if ((Math.floor(Number(g.wo.sl[d][k]) || 0)) >= s) return true;
-  g.wo.sl[d][k] = s;
+  // When the first slip on this level was stored (2026-10-29, woCapCl): written once.
+  if (!isObj(g.wo.sf)) g.wo.sf = {};
+  if (!isObj(g.wo.sf[d])) g.wo.sf[d] = {};
+  const stamp = !(Number(g.wo.sf[d][k]) > 0);
+  if (stamp) g.wo.sf[d][k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();
+  if (!stamp && (Math.floor(Number(g.wo.sl[d][k]) || 0)) >= s) return true;
+  g.wo.sl[d][k] = Math.max(s, Math.floor(Number(g.wo.sl[d][k]) || 0));
   st.updatedAt = new Date().toISOString();
   return persist(st);
 }
@@ -2152,9 +2165,12 @@ export function recordWayOutRush(mode, run = {}) {
     m: Math.max(0, run.mistakes | 0), d, w: woWeekKey(d) };
   if (Number.isFinite(+run.seed)) e.sd = +run.seed;
   if (run.left) e.left = 1;
+  // `late` (2026-10-29): the run ended after its week was over by the server's clock (a phone clock
+  // set back), or with the phone's clock known to be wrong. Kept, never counted (way-out/js/ui.js).
+  if (run.late) e.late = 1;
   Object.assign(e, woRushExtras(run));   // the tuning data (bt, ba, bc, mx, mb, pk, gn, pn, res, rv)
   r.runs[mode] = r.runs[mode].concat([e]);
-  if (!e.left) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
+  if (!e.left && !e.late) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

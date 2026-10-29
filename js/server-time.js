@@ -76,6 +76,15 @@ export function bestNow() {
   return s == null ? Date.now() : s;
 }
 
+/** True when the phone's clock is known to have been set BACK since the server last measured it (a
+ *  cached gap newer than the phone's own time): its time cannot be trusted and no server time stands in. */
+export function clockSuspect() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    return !!(v && Number.isFinite(v.at) && Date.now() < v.at) && liveNow() == null;
+  } catch { return false; }
+}
+
 export function onLive(cb) {
   startServerTime();
   _subs.add(cb);

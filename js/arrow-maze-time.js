@@ -246,6 +246,46 @@ export function woPoints(rec, band = null) {
 // board, so hints could learn an Expert board's one order for free and a clean replay took full
 // points. The game keeps them in its own key; each record also keeps the most slips seen on each level
 // (`wo.sl[band]['L<n>']`, max only) so the person's other storages see them too.
+// SLIPS FROM ANOTHER STORAGE, AT READ TIME (2026-10-29, second pass). A clear on one storage was
+// scored with the other storages' slips only as far as ITS last read of them reached (none offline, a
+// stale one otherwise), so hints taken in Safari and a clean clear in the Home Screen app still paid
+// full points. Each record now also stamps WHEN (the server's time where known): `wo.sf[band]['L<n>']`
+// = its first slip on that level, `wo.ct[band]['L<n>']` = its first clear of it (both written once).
+// A person's level is then worth, per record that cleared it, no more than its slips earn, counting
+// the most slips any OTHER of their records stored on that level BEFORE that clear (woCapCl, in
+// js/players-agg.js, so the phone's board and the server's agree). Read time only: nothing stored
+// moves, and a record without the stamps (everything before this) is never capped.
+const stampOf = (m, n) => {
+  const v = m && typeof m === 'object' ? Number(m['L' + n]) : NaN;
+  return Number.isFinite(v) && v > 0 ? v : null;
+};
+/** One band of ONE person: `recs` = [{ cl, ct, sl, sf }] (each record's level set, clear stamps,
+ *  slips and slip stamps for that band). Returns the person's level set: best per level, each
+ *  record's clear capped by the slips other records stamped before it. */
+export function woCapCl(recs, band) {
+  const map = new Map();
+  const list = (recs || []).filter((r) => r && typeof r === 'object');
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
+    for (const [n, v0] of woClMap(r.cl)) {
+      let v = v0;
+      const ct = stampOf(r.ct, n);
+      if (ct != null) {
+        let slips = 0;
+        for (let j = 0; j < list.length; j++) {
+          if (j === i) continue;
+          const q = list[j], sf = stampOf(q.sf, n);
+          if (sf == null || !(sf < ct)) continue;
+          slips = Math.max(slips, Math.max(0, Math.floor(Number(((q.sl || {})['L' + n])) || 0)));
+        }
+        if (slips > 0) v = Math.min(v, woEarnedPoints(band, slips));
+      }
+      map.set(n, Math.max(map.get(n) || 0, v));
+    }
+  }
+  return clFromMap(map);
+}
+
 /** The slips stored for level n of a band on a record (0 when none). */
 export function woSlipsOf(rec, band, n) {
   const sl = (((rec && rec.wo) || {}).sl || {})[band];
@@ -383,7 +423,7 @@ export function woWeekEnd(ms = Date.now()) {
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A list of runs in array or Firebase-object form; anything that is not a run is left out. A run is
- *  { s, b, ms, m, d, w, sd?, left? }: s = arrows cleared, b = boards cleared, ms = how long it
+ *  { s, b, ms, m, d, w, sd?, left?, late? }: s = arrows cleared, b = boards cleared, ms = how long it
  *  lasted, m = mistakes, d = when it ended (epoch ms), w = its week, sd = the boards' seed, left = 1
  *  when it was lost by leaving the app (kept, never counted). */
 export function woRushRuns(raw) {
@@ -396,6 +436,7 @@ export function woRushRuns(raw) {
     const e = { s, b: Math.max(0, r.b | 0), ms: Math.max(0, Math.floor(+r.ms) || 0), m: Math.max(0, r.m | 0), d, w: r.w };
     if (Number.isFinite(+r.sd)) e.sd = +r.sd;
     if (r.left) e.left = 1;
+    if (r.late) e.late = 1;   // ended after its week was over (2026-10-29): kept, never counted
     Object.assign(e, woRushExtras(r));
     out.push(e);
   }

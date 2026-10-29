@@ -15,11 +15,12 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, noteWayOutSlips, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
-import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woSlipsOf, woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildB11, hasB11, B11_GEN, B11_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isAdminDevice } from '../../js/admin-config.js';
+import { bestNow, serverNow, clockSuspect } from '../../js/server-time.js';
 import * as IMPT from './impossible-tests.js';
 const { IMPOSSIBLE_TESTS, IMP_W, IMP_H } = IMPT;
 
@@ -229,6 +230,9 @@ function readRushSave(mode) {
   const n = (v) => Math.max(0, Math.floor(+v) || 0);
   return { seed: +s.seed >>> 0, i: n(s.i), arrows: n(s.arrows), boards: n(s.boards), mistakes: n(s.mistakes),
     bank: n(s.bank), playMs: n(s.playMs), d: +s.d, live: !!s.live, end: s.end === 'time' || s.end === 'left' ? s.end : '',
+    // `sv` (2026-10-29): 0 = `d` is the phone's own time (no server time was known). Absent (older
+    // saves) reads as before.
+    sv: s.sv === 0 ? 0 : 1,
     a0: n(s.a0), p0: n(s.p0), x: woRushExtras(s) };
 }
 function writeRushSave(mode, run) {
@@ -1515,7 +1519,7 @@ class WayOut {
     const s = this._slipsNow();
     if (this.replay) { writeReplaySlips(this.tier, this.level, s); return; }
     try {
-      if (!noteWayOutSlips(this.tier, this.level, s)) console.error('[way-out] slips NOT stored', { tier: this.tier, level: this.level, s });
+      if (!noteWayOutSlips(this.tier, this.level, s, bestNow())) console.error('[way-out] slips NOT stored', { tier: this.tier, level: this.level, s });
     } catch (err) { console.error('[way-out] noteWayOutSlips threw - slips NOT stored', err); }
   }
   /** The most slips this person's OTHER storages stored on a level (from the combined read). */
@@ -1596,10 +1600,20 @@ class WayOut {
     const c = this.clock || { ms: 0, pen: 0, mistakes: 0, hints: 0, partial: true };
     // Scored with every slip on this level: this try's, the tries New game threw away, and the most
     // any of this person's other storages saw (2026-10-29). `prior` is what a replay cannot win back.
+    // TWO TABS (2026-10-29): this tab's carry and in-memory count are blind to another tab on the same
+    // storage, so the carry key and this storage's own stored slips (`wo.sl`) are read again here; any
+    // stored slips past what this tab knows of came from elsewhere and count as before this try.
     const other = this._otherSlips(this.tier, this.level);
-    const slips = Math.max((this._carry | 0) + (c.mistakes | 0) + (c.hints | 0), other);
+    this._carry = Math.max(this._carry | 0, readCarry(this.tier, this.level, this.src));
+    const mine = (this._carry | 0) + (c.mistakes | 0) + (c.hints | 0);
+    let stored = 0;
+    try { stored = woSlipsOf(loadStats().games.wayout, this.tier, this.level); } catch { stored = 0; }
+    const elsewhere = stored > mine ? stored : 0;
+    const slips = Math.max(mine, other, elsewhere);
+    // `prior` (what a replay can never win back): earlier tries, other storages and tabs, and this
+    // try's own HINTS (Matt, 2026-10-29: a level cleared with hints keeps their cost).
     const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial,
-      n: this.level, slips, prior: Math.max(this._carry | 0, other),
+      n: this.level, slips, prior: Math.max((this._carry | 0) + (c.hints | 0), other, elsewhere), at: bestNow(),
       // The log's `l` names the BOARD with `g`: for a ladder board it is that generator's own number
       // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
       level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
@@ -1750,7 +1764,7 @@ class WayOut {
   _rushLeaderHTML(mode) {
     const st = this.rushStanding;
     if (!st || Date.now() - st.at > 60000) this._loadRushStanding();
-    const week = woWeekKey(), mine = woRushBest(this._myWayout(), mode);
+    const week = woWeekKey(bestNow()), mine = woRushBest(this._myWayout(), mode);
     const rows = ((st && st.rows) || []).map((r) => {
       let v = r.best[mode] && r.best[mode][week];
       if (r.me && mine != null) v = Math.max(v == null ? -1 : v, mine);
@@ -1872,7 +1886,7 @@ class WayOut {
   /** Back into a run saved between boards: its cleared board (veiled), its clock, the Ready screen. */
   _resumeRush(mode) {
     const s = readRushSave(mode);
-    if (!s || s.live || woWeekKey(s.d) !== woWeekKey()) { this.render(); return; }
+    if (!s || s.live || woWeekKey(s.d) !== woWeekKey(bestNow())) { this.render(); return; }
     this._stopLevel();
     this.tier = mode;
     this.clock = null;
@@ -1895,11 +1909,15 @@ class WayOut {
   _settleRushSave(mode, force) {
     const s = readRushSave(mode);
     if (!s || this.rush && this.rush.mode === mode && !this.rush.over) return;
-    if (!force && !s.live && woWeekKey(s.d) === woWeekKey()) return;
+    const now = bestNow();
+    if (!force && !s.live && woWeekKey(s.d) === woWeekKey(now)) return;
     const left = s.end ? s.end === 'left' : s.live;
+    // A save stamped with the phone's own time only, settled after that week ended, cannot prove its
+    // week: kept, never counted (2026-10-29).
+    const late = s.sv === 0 && woWeekEnd(s.d) <= now;
     let st = null;
     try {
-      st = recordWayOutRush(mode, { rv: 2, ...s.x, arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d });
+      st = recordWayOutRush(mode, { rv: 2, ...s.x, arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d, ...(late ? { late: 1 } : {}) });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the saved run was NOT recorded', err); }
     if (st) writeRushSave(mode, null);
     else console.error('[way-out] the saved Rush run was NOT recorded; kept', mode, s);
@@ -2123,7 +2141,8 @@ class WayOut {
   _rushSave(live, end) {
     const r = this.rush;
     writeRushSave(r.mode, { seed: r.seed, i: r.i, arrows: r.arrows, boards: r.boards, mistakes: r.mistakes,
-      bank: Math.max(0, Math.round(r.bank)), playMs: Math.round(r.playMs), d: Date.now(), live: live ? 1 : 0, ...(end ? { end } : {}),
+      // `d` from the SERVER's clock where known (2026-10-29): the week a waiting run counts in.
+      bank: Math.max(0, Math.round(r.bank)), playMs: Math.round(r.playMs), d: bestNow(), sv: serverNow() != null ? 1 : 0, live: live ? 1 : 0, ...(end ? { end } : {}),
       a0: r.a0, p0: Math.round(r.p0), ...this._rushExtras(r) });
   }
   _rushPrebuild() {
@@ -2146,7 +2165,11 @@ class WayOut {
     this.failed = true;   // no more taps
     let st = null;
     try {
-      st = recordWayOutRush(r.mode, { ...this._rushExtras(r), arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left' });
+      // The run's week is the SERVER's (2026-10-29, js/server-time.js): a phone clock set back used to
+      // file a run in a past, finished week. With the phone's clock known to be wrong and no server time
+      // to stand in, the run is kept and not counted (`late`).
+      const late = serverNow() == null && clockSuspect();
+      st = recordWayOutRush(r.mode, { ...this._rushExtras(r), arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left', at: bestNow(), ...(late ? { late: 1 } : {}) });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the run was NOT recorded', err); }
     if (!st) console.error('[way-out] the Rush run was NOT recorded', { mode: r.mode, arrows: r.arrows });
     // Recorded: its save slot (if any) is done with. Not recorded: kept, to be recorded next time.

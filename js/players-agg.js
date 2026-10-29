@@ -12,7 +12,7 @@
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woClMerge, woLegacyAdd } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest } from './word-weaver-points.js';
 
@@ -410,10 +410,30 @@ export function aggregatePlayers(all, corrections) {
         // record with Arrow Maze wins takes part, `wo` or not (its wins are legacy clears).
         if (!dst.wo.lg) dst.wo.lg = {};
         if (!dst.wo.cl) dst.wo.cl = {};
+        // Each record's level set is gathered with its clear and slip stamps and the person's set is
+        // built once every record is in (woCapCl, 2026-10-29: a clear is capped by the slips the
+        // person's OTHER records stored on that level before it). `sl` merges per level, max only.
+        const sw = src.wo || {};
         for (const tier of WO_TIERS) {
           dst.wo.lg[tier] = woLegacyAdd(dst.wo.lg[tier], src, tier);
-          const c = ((src.wo || {}).cl || {})[tier];
-          if (typeof c === 'string' && c) dst.wo.cl[tier] = woClMerge(dst.wo.cl[tier], c);
+          const c = (sw.cl || {})[tier];
+          const pick = (k) => { const m = (sw[k] || {})[tier]; return m && typeof m === 'object' && !Array.isArray(m) ? m : null; };
+          if (typeof c === 'string' && c) {
+            const per = (grp._wo || (grp._wo = {}))[tier] || (grp._wo[tier] = []);
+            per.push({ cl: c, ct: pick('ct'), sl: pick('sl'), sf: pick('sf') });
+          } else if (pick('sl')) {
+            const per = (grp._wo || (grp._wo = {}))[tier] || (grp._wo[tier] = []);
+            per.push({ cl: '', ct: null, sl: pick('sl'), sf: pick('sf') });
+          }
+          const sl = pick('sl');
+          if (sl) {
+            if (!dst.wo.sl) dst.wo.sl = {};
+            const into = dst.wo.sl[tier] || (dst.wo.sl[tier] = {});
+            for (const k of Object.keys(sl)) {
+              const v = Math.max(0, Math.floor(Number(sl[k]) || 0));
+              if (/^L\d{1,7}$/.test(k) && v > 0) into[k] = Math.max(into[k] | 0, v);
+            }
+          }
         }
         if (src.wo) {
           dst.wo.mistakes += src.wo.mistakes | 0;
@@ -845,6 +865,11 @@ export function aggregatePlayers(all, corrections) {
   for (const grp of groups.values()) {
     if (grp._mp) { dedupeChallenges(grp); delete grp._mp; }
     if (grp._nb) { dedupeNutsBolts(grp); delete grp._nb; }
+    if (grp._wo) {
+      const wo = grp.games.wayout.wo;
+      if (wo) for (const tier of Object.keys(grp._wo)) { const c = woCapCl(grp._wo[tier], tier); if (c) wo.cl[tier] = c; }
+      delete grp._wo;
+    }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }
     const nb = grp.games.nutsbolts.nb;

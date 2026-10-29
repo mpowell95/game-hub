@@ -188,8 +188,9 @@ const ui = src('way-out/js/ui.js');
 ok('C4 New game carries the thrown-away try\'s slips; it resets only the clock',
   /if \(c && c\.n === level && c\.key === srcKey\(src\)\) addCarry\(tier, level, src, \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\)\);/.test(ui));
 ok('C4 every hint and lost heart is stored at once', (ui.match(/this\._noteSlip\(\);/g) || []).length === 2);
-ok('C4 the clear is scored with max(carried + this try, other storages)',
-  /const slips = Math\.max\(\(this\._carry \| 0\) \+ \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\), other\);/.test(ui) && /woEarnedPoints\(this\.tier, slips\)/.test(ui));
+ok('C4 the clear is scored with max(carried + this try, other storages, this storage\'s stored slips from another tab)',
+  /const mine = \(this\._carry \| 0\) \+ \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\);/.test(ui) && /const slips = Math\.max\(mine, other, elsewhere\);/.test(ui)
+  && /this\._carry = Math\.max\(this\._carry \| 0, readCarry\(this\.tier, this\.level, this\.src\)\);/.test(ui) && /woEarnedPoints\(this\.tier, slips\)/.test(ui));
 ok('C4 a replay\'s slips ride its Restart and leaving until a replay of it is cleared',
   /this\._replayCarry = readReplaySlips\(band, miss\.n\);/.test(ui) && /slips: this\._slipsNow\(\) \}\);/.test(ui) && /else clearReplaySlips\(this\.tier, this\.level\);/.test(ui));
 
