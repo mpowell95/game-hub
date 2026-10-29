@@ -9,6 +9,7 @@
 
 import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding, inOvertime, dartsPerTurn } from './engine.js';
 import { isAdmin } from '../../js/challenge/hooks.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
 import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, stuckAxis, boardPoint, norm, HAND_Z, REST_AXIS } from './flight.js';
 import { STRINGS } from './strings.js';
@@ -575,7 +576,9 @@ class DartsUI {
     if (!m || !isCricket(m.kind)) return false;
     const mine = this.mode === 'mp' ? !!this.mp && m.turn === this.mp.mySeat : this.mode === 'self' || m.turn === 0;
     if (!mine) return false;
-    try { const p = profile(); return !!(p && p.name && isAdmin(p.name)); } catch { return false; }
+    // Matt's DEVICE (2026-10-29): `admins/<uid>` in the database, which no rename can fake. The name
+    // alone was a hash anyone could match by naming themselves MattyIce (offline the registry let it).
+    try { const p = profile(); return isAdminDevice() && !!(p && p.name && isAdmin(p.name)); } catch { return false; }
   }
 
   /** What each plaque shows: the score, or in Cricket with no points (2026-10-05) the numbers closed,

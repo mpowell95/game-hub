@@ -10,14 +10,16 @@
 //      minutes after its last update, and the player HAS a log for that puzzle (an older build sends
 //      none). Once per player per puzzle (beeAlerts/).
 // And the long-term board: boards/v1/bee = JSON string of js/bee-fairplay.js buildBeeBoard(), rebuilt
-// when a board row changes (at most every 2 min), after a flag, and on Matt's undo.
+// when a board row changes (at most every 2 min), after a flag, and on Matt's undo. Since 2026-10-29
+// each row counts what its LOG proves was found on the day by the server's clock (boards/v1/beeOwn,
+// ownDayNumbers), not the phone's own-day fields, whenever the log holds every word or the post is late.
 //
 // THE LAW: nothing here changes a save, a beeDaily row or a beeLog entry. Flags and alerts are new
 // nodes; the board is derived. A flag is never removed by this code (Matt's undo sits beside it).
 import './shared-env.js';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { detectCopying, flagSummary, buildBeeBoard } from './shared/js/bee-fairplay.js';
+import { detectCopying, flagSummary, buildBeeBoard, ownEntry, isLatePost } from './shared/js/bee-fairplay.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 
 export const PUZZLES = JSON.parse(readFileSync(new URL('./shared/bee-puzzles.json', import.meta.url), 'utf8'));
@@ -100,14 +102,48 @@ export async function scanRecent(db, now = Date.now()) {
   return { flags, alerts };
 }
 
+/** Puzzles whose words can still arrive on time (the day before yesterday to tomorrow, UTC): their
+ *  own-day numbers are recomputed on every rebuild, since the log keeps growing after a row's post. */
+export function ownDayPuzzles(now = Date.now()) {
+  const days = new Set([ymd(now - 2 * DAY), ymd(now - DAY), ymd(now), ymd(now + DAY)]);
+  return new Set(Object.keys(PUZZLES).filter((k) => days.has(PUZZLES[k].day)));
+}
+
+/** boards/v1/beeOwn (2026-10-29): per row, what its log proves was found on the puzzle's day by the
+ *  server's clock (js/bee-fairplay.js ownEntry). Recent puzzles every time; an older puzzle only for a
+ *  LATE post (a phone set back to a past day) whose entry is missing or older than the post. Returns
+ *  { own: the whole map as it should be, patch: paths that changed }. */
+export async function ownDayNumbers(db, daily, current, now = Date.now()) {
+  const recent = ownDayPuzzles(now);
+  const own = JSON.parse(JSON.stringify(current && typeof current === 'object' ? current : {}));
+  const patch = {};
+  for (const [bk, rows] of Object.entries(daily && typeof daily === 'object' ? daily : {})) {
+    const pz = PUZZLES[bk];
+    if (!pz || !rows || typeof rows !== 'object') continue;
+    for (const [code, row] of Object.entries(rows)) {
+      if (!row || typeof row !== 'object') continue;
+      const had = (own[bk] || {})[code] || null;
+      const stale = !had || Number(had.at) !== Number(row.at);
+      if (!recent.has(bk) && !(isLatePost(pz.day, row.at) && stale)) continue;
+      const e = ownEntry(row, await valOf(db, `beeLog/${bk}/${code}`), pz);
+      if (JSON.stringify(e) === JSON.stringify(had)) continue;
+      if (!own[bk]) own[bk] = {};
+      if (e) own[bk][code] = e; else delete own[bk][code];
+      patch[`beeOwn/${bk}/${code}`] = e;
+    }
+  }
+  return { own, patch };
+}
+
 /** Rebuild boards/v1/bee (a JSON string). Written only when it changed. */
-export async function rebuildBee(db) {
-  const [daily, flagsNode, cfg] = await Promise.all([valOf(db, 'beeDaily'), valOf(db, 'beeFlags'), valOf(db, 'adminConfig/v1')]);
-  const board = buildBeeBoard(daily || {}, PUZZLES, flagsNode || {}, cfg || {});
+export async function rebuildBee(db, now = Date.now()) {
+  const [daily, flagsNode, cfg, ownNode] = await Promise.all([valOf(db, 'beeDaily'), valOf(db, 'beeFlags'), valOf(db, 'adminConfig/v1'), valOf(db, 'boards/v1/beeOwn')]);
+  const { own, patch: ownPatch } = await ownDayNumbers(db, daily || {}, ownNode || {}, now);
+  const board = buildBeeBoard(daily || {}, PUZZLES, flagsNode || {}, cfg || {}, own);
   const json = JSON.stringify(board);
   const sum = createHash('sha256').update(json).digest('hex').slice(0, 16);
   const meta = (await valOf(db, 'boards/v1/beeMeta')) || {};
-  const patch = { 'beeMeta/builtAt': Date.now(), 'beeMeta/dirty': null };
+  const patch = { 'beeMeta/builtAt': Date.now(), 'beeMeta/dirty': null, ...ownPatch };
   if (meta.sum !== sum) { patch.bee = json; patch['beeMeta/sum'] = sum; patch['beeMeta/bytes'] = json.length; }
   await db.ref('boards/v1').update(patch);
   return { changed: meta.sum !== sum, bytes: json.length, people: Object.keys(board.people).length };

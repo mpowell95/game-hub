@@ -170,6 +170,101 @@ export function flagSummary(d) {
   return parts.join(', ');
 }
 
+// --- whose clock: own-day words from the log, on the SERVER's clock (2026-10-29) -------------------
+//
+// The phone's `dw`/`dp`/`dr` come from its own clock: a phone set back to a puzzle's day could post that
+// day's words later (after seeing its answers), a phone set ahead could read today's answers as
+// "yesterday's". The log has both clocks: `t` (the phone's, at the guess), `s` (the server's, at upload),
+// and since 2026-10-29 `z` (the phone's time-zone offset, minutes, Date#getTimezoneOffset). A word
+// counts for its puzzle's day only when
+//   1. `t` falls on the puzzle's day: local by `z`; without `z`, anywhere on Earth (UTC+14 to UTC-12);
+//   2. it reached the server within 24 h after `t`, and `t` is not over 1 h AHEAD of the server;
+//   3. it reached the server by the end of that day (same clock as 1) plus 10 minutes. Yesterday's
+//      Answers opens at midnight, so a word sent after it (phone set back to the day before) is out.
+//      Honest cost: words played OFFLINE and sent after the next midnight count on the phone only.
+// A ROW posted more than a day after the puzzle's day ended everywhere (`isLatePost`) counts only
+// what its log proves (a phone set back to a past day to post it); with no log, nothing.
+
+export const OWN_DAY = {
+  graceMs: 10 * 60 * 1000, uploadMs: 24 * 60 * 60 * 1000, aheadMs: 60 * 60 * 1000,
+  lateMs: (36 + 24) * 60 * 60 * 1000,   // from the day's UTC midnight: its end at UTC-12, plus a day
+};
+const HOUR = 60 * 60 * 1000;
+const dayStart = (day) => Date.parse(`${day}T00:00:00Z`);
+const PCTS = [0, 2, 5, 8, 15, 25, 40, 50, 70, 100];   // spelling-bee/js/engine.js RANKS
+
+/** [start, end) of `day` ('YYYY-MM-DD') in ms: local by `z` (minutes, getTimezoneOffset), or the
+ *  widest span the date covers anywhere when `z` is unknown. */
+export function dayWindow(day, z) {
+  const d0 = dayStart(day);
+  if (Number.isFinite(z) && Math.abs(z) <= 14 * 60) return [d0 + z * 60000, d0 + 24 * HOUR + z * 60000];
+  return [d0 - 14 * HOUR, d0 + 36 * HOUR];
+}
+
+/** One accepted log entry {t, s, z?}: does it count for the puzzle's own day? */
+export function countsOnDay(x, day) {
+  if (!x || !Number.isFinite(x.t) || !Number.isFinite(x.s) || !day) return false;
+  const [lo, hi] = dayWindow(day, x.z);
+  if (x.t < lo || x.t >= hi) return false;
+  if (x.s - x.t > OWN_DAY.uploadMs || x.t - x.s > OWN_DAY.aheadMs) return false;
+  return x.s <= hi + OWN_DAY.graceMs;
+}
+
+/** A board row's `at` (server time of its last post) more than a day after the puzzle's day ended. */
+export function isLatePost(day, at) {
+  return !!day && Number.isFinite(Number(at)) && Number(at) > dayStart(day) + OWN_DAY.lateMs;
+}
+
+/** Rank index from points (engine.js rankIndex): Queen Bee needs every answer. */
+export function rankOf(points, max, all) {
+  let i = 0;
+  for (let k = 0; k < PCTS.length; k++) if (points >= (PCTS[k] === 100 ? max : Math.round((PCTS[k] / 100) * max))) i = k;
+  return i === QUEEN && !all ? GENIUS : i;
+}
+
+/** The own-day numbers a log proves. puzzle: { key, day, max, n } (n = answers in the puzzle).
+ *  Returns { w, p, r, logged } (`logged` = distinct accepted words in the log, on any day). */
+export function ownDayFromLog(entries, puzzle) {
+  const ev = (Array.isArray(entries) ? entries : Object.values(entries || {}))
+    .filter((x) => x && x.e === 'guess' && isOk(x) && typeof x.w === 'string' && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+  const letters = lettersOf(puzzle && puzzle.key);
+  const seen = new Set();
+  let w = 0, p = 0, answers = 0;
+  for (const x of ev) {
+    if (seen.has(x.w)) continue;
+    seen.add(x.w);   // a word counts at its FIRST acceptance only
+    if (!countsOnDay(x, puzzle.day)) continue;
+    w++; p += scoreOf(x.w, letters);
+    if (x.r === 'ok') answers++;
+  }
+  const max = Number(puzzle && puzzle.max) || 0;
+  const r = max > 0 ? rankOf(p, max, Number(puzzle.n) > 0 && answers >= Number(puzzle.n)) : 0;
+  return { w, p, r, logged: seen.size };
+}
+
+/** What the server stores per row (boards/v1/beeOwn/<boardKey>/<CODE>), or null = trust the row's own
+ *  numbers (current behaviour: no log and on time, or a log that is missing words). `use: 1` = the board
+ *  uses {w, p, r}. `at` = the row's `at` it was computed for. */
+export function ownEntry(row, log, puzzle) {
+  if (!row || !puzzle) return null;
+  const late = isLatePost(puzzle.day, row.at);
+  const hasLog = !!log && typeof log === 'object' && Object.keys(log).length > 0;
+  if (!hasLog) return late ? { w: 0, p: 0, r: 0, at: Number(row.at) || 0, use: 1 } : null;
+  const o = ownDayFromLog(log, puzzle);
+  const full = o.logged >= (Number(row.words) | 0);
+  if (!late && !full) return null;
+  return { w: o.w, p: o.p, r: o.r, at: Number(row.at) || 0, use: 1 };
+}
+
+/** The numbers a row counts with: the server's own-day entry when it applies to this very post, else
+ *  the phone's own-day fields, else the whole row; a late post with no entry counts nothing. */
+export function countedRow(row, own, day) {
+  if (own && own.use && Number(own.at) === Number(row.at)) return { words: own.w | 0, points: own.p | 0, rank: own.r | 0 };
+  if (isLatePost(day, row.at)) return { words: 0, points: 0, rank: 0 };
+  const d = Number.isFinite(row.dw);
+  return { words: (d ? row.dw : row.words) | 0, points: (d ? row.dp : row.points) | 0, rank: (d ? row.dr : row.rank) | 0 };
+}
+
 // --- the long-term board --------------------------------------------------------------------------
 //
 // Built from the daily board rows (beeDaily/<boardKey>/<CODE>). A row counts only what was found on
@@ -188,10 +283,11 @@ export function voidedAt(puzzleKey, boardKey, flags, cfg) {
 
 /**
  * daily: the whole beeDaily node. puzzles: { <boardKey>: { lang, day, key } } (functions/shared's
- * generated map). flags: the whole beeFlags node. cfg: the admin config.
+ * generated map). flags: the whole beeFlags node. cfg: the admin config. own: boards/v1/beeOwn (the
+ * server's own-day numbers per row, `ownEntry`; absent = every row's own numbers, as before).
  * Returns { v: 1, people: {CODE: {n, e}}, days: [{d, l, r: [[code, points, words, rank, place|0, void 0|1]]}] }.
  */
-export function buildBeeBoard(daily, puzzles, flags, cfg) {
+export function buildBeeBoard(daily, puzzles, flags, cfg, own) {
   const people = {};
   const nameAt = {};
   const best = new Map();   // `${lang}|${day}` -> Map(code -> row)
@@ -201,13 +297,13 @@ export function buildBeeBoard(daily, puzzles, flags, cfg) {
     const off = voidedAt(pz.key, bk, (flags || {})[bk], cfg);
     for (const [code, r] of Object.entries(rows)) {
       if (!r || typeof r !== 'object' || isHiddenName(r.name)) continue;
-      const own = Number.isFinite(r.dw);
-      const words = (own ? r.dw : r.words) | 0;
-      if (!(words > 0)) continue;   // nothing found on the puzzle's own day
+      const c = countedRow(r, ((own || {})[bk] || {})[code], pz.day);
+      const words = c.words;
+      if (!(words > 0)) continue;   // nothing found on the puzzle's own day (or a late post the log does not back)
       const at = Number(r.at) || 0;
       if (!nameAt[code] || at >= nameAt[code]) { nameAt[code] = at; people[code] = { n: String(r.name || code), e: String(r.emoji || '') }; }
       const v = off.has(code);
-      const row = v ? { code, points: 0, words: 0, rank: 0, v: 1 } : { code, points: (own ? r.dp : r.points) | 0, words, rank: (own ? r.dr : r.rank) | 0, v: 0 };
+      const row = v ? { code, points: 0, words: 0, rank: 0, v: 1 } : { code, points: c.points, words, rank: c.rank, v: 0 };
       const k = `${pz.lang}|${pz.day}`;
       if (!best.has(k)) best.set(k, new Map());
       const m = best.get(k);

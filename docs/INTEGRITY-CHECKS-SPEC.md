@@ -201,6 +201,66 @@ read-time. Tests: `node tools/test-hint-holes.mjs` (48), `tools/test-arrow-maze-
   keep counting as they did (they cannot be told apart). *Honest player:* every point earned before today
   stays; a level cleared again on a second phone simply earns nothing new.
 
+## Holes closed 2026-10-29: Spelling Bee's clock, Skeeball challenges, and names
+
+Matt: "All holes like this MUST be fixed." Four holes, each with its fix and what an honest player sees.
+
+**1. Spelling Bee: the phone clock decided the puzzle day.** A phone set a day ahead opened Yesterday's
+Answers on the REAL today's puzzle; setting it back typed them in. A phone set to a past day posted that
+day late, and the board trusted the phone's own-day numbers (`dw`/`dp`/`dr`).
+- Fix: `js/server-time.js` (Firebase's `.info/serverTimeOffset`, anchored to `performance.now()` per
+  connection; the last gap cached for offline). "Today" and each word's time use it. Yesterday's
+  Answers opens only when this page's LIVE server time says that day is over (`engine.js
+  answersShown`; no connection = "No connection", a later day = "Not yet"). The log carries the phone's
+  time zone (`z`). On the server (`js/bee-fairplay.js countsOnDay`, `ownDayFromLog`, `ownEntry`), a word
+  counts for its puzzle only when its phone time falls on that day (local by `z`; without `z`, anywhere
+  on Earth), it reached the server within 24 h of that time and not over 1 h before it, AND by that
+  day's midnight plus 10 minutes (else the phone set back after Yesterday's Answers opened still
+  worked). When the log holds every word, the board counts what the log proves, not the phone's
+  numbers (`boards/v1/beeOwn`, also read by the in-game board). A row posted over a day after the
+  puzzle's day ended everywhere (`isLatePost`) counts only what its log proves; with no log, nothing.
+  Stored rows and logs are untouched; the phone stops posting such late rows.
+- Honest player: nothing changes on the day. Words played OFFLINE and sent after the next midnight
+  count on that phone, not on the boards. Yesterday's Answers needs a connection. A past puzzle played
+  later still counts what was found on its day.
+- Left open: changing the phone's TIME ZONE moves "today" by up to a day (the game's day is local
+  midnight by design). The zone is now in every log entry, so it can be seen and a rule added.
+
+**2. Skeeball challenges: one attempt existed only per storage.** Safari and the Home Screen app (or two
+phones) could each play the same game and send the better score.
+- Fix: `skeeball/js/challenge.js claimLeg` writes a write-once server marker
+  (`skeeChallenges/games/<id>/<side>/started/<leg>` = `{at: server time, k: this storage's id}`) before the
+  first ball; rules: write-once, server time, by that side's claimed code. Another storage finds it and
+  cannot start the game ("Started on another device."); a game cannot start offline ("No connection.").
+  A started game with no score 30 minutes after its marker counts 0 on every phone (derived on read,
+  stored by the next write, `START_GRACE_MS`).
+- Honest player: one extra round trip before the first ball. A rack left for over 30 minutes mid-game
+  (a phone call) counts 0.
+- Left open: someone with dev tools can delete a marker (the node is writable by any signed-in device).
+
+**3. Skeeball: a challenge rack unlocked the machine for good.** The challenged person plays the
+challenger's machine even when it is locked for them, and `recordSkeeball` unlocked any machine played.
+- Fix: `recordSkeeball(board, {challenge: true})` records the rack and never writes `sk.unlocked`; a
+  challenge rack runs no objective unlock; objectives open the next machine only from a machine the
+  player owns (earned or open to everyone, `_ownsMachine`).
+- Honest player: unlocks are earned exactly as before; challenge scores still count. Nothing earned
+  before is taken away (rule 2).
+
+**4. Names: the registry check failed open offline.** A phone with no signal could take "MattyIce" and
+merge into Matt's row (and his name-gated extras); anyone could take "Matt" or "Lill", which the
+leaderboard folds into MattyIce and Lili.
+- Fix: a new or changed name is saved only after the check succeeds online (first-run gate: "Connect
+  to the internet to choose a name.", the gate stays up; profile page: the old name stays, "No
+  connection. Name not changed."). Typing on the profile page no longer saves the name before the
+  check. An alias name (`NAME_ALIAS`) can be taken only by the code that owns its target. Darts' Cricket
+  aim help, Skeeball's and Golf's dev bypass (every machine and course open), and "Everyone" in
+  Messages now need Matt's admin DEVICE (`isAdminDevice()`, the `admins/<uid>` allowlist) as well as the
+  name.
+- Honest player: choosing or changing a name needs a connection. Matt on his own devices is unchanged.
+- Left open: `usernames/` is writable by any signed-in device (dev tools). Names already taken offline
+  before this are not undone. Launcher visibility of admin-only games stays on the dev name (no
+  scoring advantage: those plays go to the test area).
+
 ## 7. What would make more checks possible (not built; Matt's call)
 
 A timed log like Spelling Bee's, per game, is the only way to catch outside help (a solver, a copied

@@ -115,7 +115,7 @@ function legsTable(g, side) {
 export function openChallenges(ui, { focus = null, open = null, pickFor = null, seed = null, seedGame = null } = {}) {
   const el = document.createElement('div');
   el.className = 'gh-overlay sk-ch-veil';
-  const state = { rows: null, players: null, recs: null, board: null, caption: '', count: 1, all: false, scoring: 'games', busy: false, view: null };
+  const state = { rows: null, players: null, recs: null, board: null, caption: '', count: 1, all: false, scoring: 'games', busy: false, view: null, err: '' };
   let stopWatch = () => {};
   let closed = false;
 
@@ -286,10 +286,18 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
         return viewTerms(them, onlineGateText(res.reason) || (res.reason === 'denied' ? t('ch_err_off') : res.reason === 'dev-origin-blocked'
           ? t('ch_err_dev') : t('ch_err_start')));
       }
+      // The first game is claimed on the server before its first ball (2026-10-29, CH.claimLeg).
+      const claim = await CH.claimLeg(res.game.id, 'a', 0);
+      if (closed) return;
+      if (!claim.ok) { state.err = claimText(claim.reason); return viewMatch(res.game.id); }
       close();
       ui._startChallengeLeg({ id: res.game.id, side: 'a', leg: 0, game: res.game });
     });
   };
+
+  /** Why a game could not be started (CH.claimLeg), in the fewest words. */
+  const claimText = (reason) => (reason === 'offline' ? t('ch_err_offline')
+    : reason === 'started-elsewhere' ? t('ch_started_elsewhere') : t('ch_err_start'));
 
   // --- one match: where it stands, and the next game to play ---
   const viewMatch = async (id, fallbackRow = null) => {
@@ -302,11 +310,17 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const side = CH.sideOf(g, CH.myCode());
     if (!side) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
     CH.markSeen(id, raw.updated);
+    // A game started and never sent counts 0 after 30 minutes on every phone (derived on read): store it.
+    if (raw.timedOut && raw.timedOut.length) CH.settleTimedOut(id).catch(() => {});
+    const err = state.err; state.err = '';
     // QUICK CHAT (2026-10-14): this page is one challenge on screen, so its chat is up while it is.
     ui._chatMount({ id, side, game: g });
     const them = side === 'a' ? g.b : g.a;
     const expired = CH.isExpired(g);
-    const next = expired ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
+    // A game another phone or browser has started is not offered here (2026-10-29: one attempt).
+    const elsewhere = (i) => !CH.legPlayed(id, side, i) && CH.startedElsewhere(g, side, i);
+    const firstOpen = CH.scoresOf(g, side).findIndex((x) => x == null);
+    const next = expired || (firstOpen >= 0 && elsewhere(firstOpen)) ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
     const res = CH.resultFor(g, side);
     const who = them.name || t('ch_someone');
     const calledOff = CH.isCalledOff(g);
@@ -323,6 +337,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     } else if (g.over && g.over.why === 'resign') status = g.over.winner === side ? t('ch_they_resigned', { name: who }) : t('ch_you_resigned');
     else if (g.over && g.over.why === 'timeout') status = t('ch_timed_out');
     else if (!g.over && expired) status = t('ch_expired_long');
+    else if (!g.over && next < 0 && g.stage === side && firstOpen >= 0 && elsewhere(firstOpen)) status = t('ch_started_elsewhere');
     else if (!g.over && next < 0) status = g.stage === side ? t('ch_queued') : t('ch_waiting_on', { name: who });
     // CANCEL / DECLINE / RESIGN (2026-10-13): a live, unexpired challenge can always be left. Before
     // the other person has played a game it is called off (counts for nobody); after, a resignation.
@@ -338,6 +353,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       <p class="sk-ch-caption" data-role="cap"></p>
       ${legsTable(g, side)}
       ${status ? note(status) : ''}
+      <p class="sk-ch-err" role="alert" data-role="goerr"${err ? '' : ' hidden'}>${esc(err)}</p>
       ${play}
       ${endKind ? `<p class="sk-ch-err" role="alert" data-role="enderr" hidden></p>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="end">${esc(t(`ch_end_${endKind}`))}</button>` : ''}
@@ -364,7 +380,23 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const cap = el.querySelector('[data-role="cap"]');
     if (cap && g.caption) cap.textContent = `“${g.caption}”`;
     const go = el.querySelector('[data-act="go"]');
-    if (go) go.addEventListener('click', () => { close(); ui._startChallengeLeg({ id, side, leg: next, game: g }); });
+    if (go) go.addEventListener('click', async () => {
+      if (state.busy) return;
+      state.busy = true;
+      go.disabled = true;
+      // Claimed on the server first (2026-10-29): another storage cannot start it, and never offline.
+      const claim = CH.legPlayed(id, side, next) ? { ok: true } : await CH.claimLeg(id, side, next);
+      state.busy = false;
+      if (closed || state.view !== 'match') return;
+      if (!claim.ok) {
+        if (claim.reason === 'started-elsewhere' || claim.reason === 'not-your-turn' || claim.reason === 'already-played') { state.err = claimText(claim.reason); viewMatch(id); return; }
+        go.disabled = false;
+        const e = el.querySelector('[data-role="goerr"]'); if (e) { e.hidden = false; e.textContent = claimText(claim.reason); }
+        return;
+      }
+      close();
+      ui._startChallengeLeg({ id, side, leg: next, game: g });
+    });
     const again = el.querySelector('[data-act="again"]');
     if (again) again.addEventListener('click', () => viewTerms({ code: them.code, name: them.name, emoji: them.emoji }));
   };

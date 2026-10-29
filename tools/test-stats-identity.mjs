@@ -264,5 +264,40 @@ console.log('\n-- G: aggregation keeps them apart, and still combines a real per
   eq('two codes whose CURRENT names match are still one person', agg.aggregatePlayers(renamed).length, 1);
 }
 
+console.log('\n-- B4 (2026-10-29): names are checked online before they are taken --');
+{
+  const net = await import(pathToFileURL(join(ROOT, 'js', 'stats-net.js')).href);
+  const M = 'QZXX9', OTHER = 'KGKGK', LI = 'LLLL7';   // made-up codes (never Matt's real one)
+  const tree = { usernames: { mattyice: { code: M, at: 1 }, lili: { code: LI, at: 1 } } };
+  const api = {
+    ref: (db, p) => ({ p }),
+    get: async (r) => { const v = r.p.split('/').reduce((o, k) => (o == null ? undefined : o[decodeURIComponent(k)]), tree); return { val: () => (v === undefined ? null : v), exists: () => v != null }; },
+  };
+  net.__setNetBootForTest(async () => ({ db: {}, api }));
+  eq('a claimed name is taken for another code', await net.usernameStatus('MattyIce', OTHER), 'taken');
+  eq('...and mine for its owner', await net.usernameStatus('mattyice ', M), 'mine');
+  eq('alias "Matt" (folds into mattyice) is taken for anyone but mattyice\'s code', await net.usernameStatus('Matt', OTHER), 'taken');
+  eq('...free for the code that owns mattyice', await net.usernameStatus('matt', M), 'free');
+  eq('alias "Lill" is taken for anyone but lili\'s code', await net.usernameStatus('Lill', OTHER), 'taken');
+  eq('...free for lili\'s code', await net.usernameStatus('LILL', LI), 'free');
+  eq('an ordinary new name is free', await net.usernameStatus('Somebody New', OTHER), 'free');
+  net.__setNetBootForTest(async () => null);
+  eq('no database: offline (callers keep the old name)', await net.usernameStatus('MattyIce', OTHER), 'offline');
+  net.__setNetBootForTest(null);
+  eq('aliasTarget names each alias and nothing else', [agg.aliasTarget('Matt'), agg.aliasTarget(' lill '), agg.aliasTarget('MattyIce'), agg.aliasTarget('Ana')], ['mattyice', 'lili', null, null]);
+  const { readFileSync } = await import('node:fs');
+  const gate = readFileSync(join(ROOT, 'js', 'name-gate.js'), 'utf8');
+  ok('name gate: nothing is saved unless the check said free or mine (taken refuses, offline asks to connect)', /if \(status !== 'free' && status !== 'mine' && status !== 'taken'\) \{ busy\(false\); say\(t\('hub_fr_msg_need_net'\)\); return; \}/.test(gate)
+    && gate.indexOf("say(t('hub_fr_msg_need_net'))") < gate.indexOf('saveProfile(Object.assign({}, cur, { name, playerId: code }))'));
+  const pf = readFileSync(join(ROOT, 'profile', 'index.html'), 'utf8');
+  ok('profile page: typing a name no longer saves it', !/youName\.addEventListener\('input', \(\) => \{ state\.name = /.test(pf));
+  ok('profile page: a new name is saved only when free or mine', /if \(status === 'free' \|\| status === 'mine'\) \{[\s\S]{0,120}state\.name = name; commitNow\(\)/.test(pf) && /pf_msg_need_net/.test(pf));
+  const dt = readFileSync(join(ROOT, 'darts', 'js', 'ui.js'), 'utf8');
+  ok('darts: the aim help needs the admin DEVICE, not only the name', /return isAdminDevice\(\) && !!\(p && p\.name && isAdmin\(p\.name\)\)/.test(dt));
+  const sk = readFileSync(join(ROOT, 'skeeball', 'js', 'ui.js'), 'utf8');
+  const gf = readFileSync(join(ROOT, 'golf', 'js', 'ui.js'), 'utf8');
+  ok('skeeball and golf: the dev bypass needs the admin DEVICE too', /devAll = isAdminDevice\(\) && isDevProfile\(/.test(sk) && /return isAdminDevice\(\) && !!\(p && isDevProfile\(p\.name\)\)/.test(gf));
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);
