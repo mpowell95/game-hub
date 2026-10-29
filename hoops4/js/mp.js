@@ -31,7 +31,8 @@ import { COLS, ROWS } from './game.js';
 import { replayResult, sameResult } from './replay.js';
 import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowCallOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
+import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
 export const OUTBOX_KEY = 'gamehub.hoops4.outbox.v1';
 export const MAX_OUTBOX = 20;
@@ -128,6 +129,11 @@ export function seriesAfter(game) {
     b: (before.b | 0) + (w === 'b' ? 1 : 0),
   };
   const target = seriesTarget(len);
+  // A game 1 called off after the sender shot (2026-10-29) is a loss for the caller AND ends the
+  // series: they called the whole challenge off, so the other side takes it and nobody owes a game 2.
+  if (game && game.over && CALL_OFF_LOSS.includes(game.over.via)) {
+    return { len, no: Math.max(1, game.seriesNo | 0 || 1), wins, target, done: true, winner: w === 'a' || w === 'b' ? w : null };
+  }
   const champion = wins.a >= target ? 'a' : wins.b >= target ? 'b' : null;
   // A DRAW COSTS THE SERIES A GAME AND GIVES NOBODY ANYTHING, so a series of drawn boards has to
   // end rather than run for ever. `no` is this game's number; once it reaches `len` we are done
@@ -209,8 +215,11 @@ function writesAllowed(what) {
   return false;
 }
 
+// TEST SEAM (2026-10-29): tools/test-challenge-clock.mjs hands in an in-memory database.
+let bootFn = getStatsApp;
+export function __setBootForTest(fn) { bootFn = fn || getStatsApp; }
 async function ready() {
-  try { return await getStatsApp(); } catch { return null; }
+  try { return await bootFn(); } catch { return null; }
 }
 
 // --- validation -------------------------------------------------------------------------------
@@ -269,6 +278,8 @@ export function validateGame(raw) {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b' && w !== null && w !== undefined) return null;
     over = { winner: w == null ? null : w, why: String(raw.over.why || 'four'), at: ms(raw.over.at) };
+    // A cancel or decline that cost its caller the match (2026-10-29) is a resignation saying how.
+    if (over.why === 'resign' && CALL_OFF_LOSS.includes(raw.over.via)) over.via = raw.over.via;
     // THE RESULT MUST BE THE MOVES' RESULT (integrity check, 2026-10-28, docs/INTEGRITY-CHECKS-SPEC.md).
     // Every other challenge game replays its log against `over`; this one took any stored winner, so a
     // hand-written `over` counted as a win on both phones. Only a resignation is free-form. Checked
@@ -402,7 +413,7 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
  *  receiver has no move in the log (a later game of a series was already agreed to, so it is never
  *  open); waiting = open and it is the receiver's turn; expires = when a waiting challenge lapses
  *  (0 = never: a match made before 2026-10-13, or one not yet delivered). */
-export function lifeOf(game, now = Date.now()) {
+export function lifeOf(game, now = decideNow()) {
   if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
   // A later game of a series was already agreed to, so it is never open (but it can time out).
@@ -411,18 +422,26 @@ export function lifeOf(game, now = Date.now()) {
   const expires = expiresAt(game.lapse, waiting, game.updated);
   // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
   // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
-  const turnAt = open ? 0 : turnStartOf(game.moves, game.turn, game.updated);
+  const turnAt = open ? 0 : turnStartOf(game.moves, game.turn, game.updated, null, now);   // safe times, capped at now (2026-10-29)
   return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
 }
 /** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
  *  every read (nothing is written), so both phones agree and a late shot is refused. */
-export function withTimeout(game, now = Date.now()) {
+export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout('hoops', game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
-  const life = lifeOf(game, now);
-  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other: (s) => (s === 'a' ? 'b' : 'a') }, now);
-  if (over) game.over = over;
+  // Decided on the SERVER's clock (js/challenge-clock.js); a timeout decided without live server time
+  // is shown but never counted (countFinished asks timeoutUnsure). 2026-10-29, second pass.
+  const c = now == null ? clockNow() : { now, live: true };
+  const life = lifeOf(game, c.now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other: (s) => (s === 'a' ? 'b' : 'a') }, c.now);
+  if (over) { game.over = over; noteTimeout('hoops', game.id, c.live); }
   return game;
 }
+/** Has the SENDER shot yet? From then on a cancel or a decline counts as a loss for whoever does it
+ *  (Matt, 2026-10-29, js/challenge-life.js callOffCosts). */
+export function senderPlayed(game) { return !!game && game.moves.some((m) => m.by !== recipientOf(game)); }
+export function cancelCosts(game) { return callOffCosts(senderPlayed(game)); }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
 
@@ -558,6 +577,8 @@ export function rowsToCount(rows, ledger) {
  *  started counting after it finished, 2026-10-29, js/game-stats.js mayCountChallenge). The match id
  *  rides with the count, so a person's two devices count it once (js/players-agg.js). */
 export function countFinished(id, won, finishedAt = Date.now()) {
+  // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
+  if (timeoutUnsure('hoops', id)) return false;
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
   try { withChallengeMatch('hoops4', id, () => recordResult('hoops4', 'mp', !!won)); } catch (err) { console.error('[hoops4] recordResult failed', err); }
@@ -569,11 +590,23 @@ export function recordFinished(rows) {
   // Start this storage's "counting since" clock at its FIRST launcher paint, not at its first finished
   // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
   countingSince(LEDGER_KEY);
-  const todo = rowsToCount(rows, readLedger());
+  const all = rowsToCount(rows, readLedger());
+  // A TIMEOUT seen on a row is counted only once the match itself confirms it on live server time
+  // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
+  const ledger = readLedger();
+  queueConfirm('hoops', (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && r.why === TIMEOUT && RESULTS.includes(r.result) && !ledger.has(r.id)), readGame, (r, g) => {
+    const res = resultOf(g, sideOf(g, myCode()));
+    if (!RESULTS.includes(res) || !countFinished(r.id, res === 'won', g.over.at)) return false;
+    addUnseen([r.id]);
+    return true;
+  });
+  const todo = all.filter((r) => r.why !== TIMEOUT);
   for (const r of todo) countFinished(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
+/** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
+export const timeoutsSettled = () => confirmsSettled('hoops');
 
 /**
  * A RESULT THIS DEVICE NEVER SAW (2026-09-24). Matt: "there isn't a You Lost screen or anything.
@@ -629,7 +662,7 @@ export async function watchGame(id, cb) {
 }
 
 /** One index row, normalised - shared by the one-off read and the live watch. */
-function rowsFromIndex(val, now = Date.now()) {
+function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
@@ -646,6 +679,7 @@ function rowsFromIndex(val, now = Date.now()) {
       yourTurn: !ended && !late && !!r.yourTurn,
       over: !!r.over || !!ended || !!late,
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      pl: !ended && rowCallOffCosts(r),        // calling it off now costs a loss (2026-10-29)
       oneShot: !!r.oneShot,
       series: Math.max(1, ms(r.series) || 1),
       seriesNo: Math.max(1, ms(r.seriesNo) || 1),
@@ -831,6 +865,8 @@ function rowFor(game, side) {
     turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),           // this row's owner sent the challenge (2026-10-13)
+    pl: senderPlayed(game),                     // the sender has shot: calling off costs a loss (2026-10-29)
+    ...(game.over && game.over.via ? { via: game.over.via } : {}),   // a costly call-off ended the series
     oneShot: !!game.oneShot,
     // Enough to write "Game 2 of 3" on the list without reading the match itself.
     series: game.series | 0 || 1,
@@ -851,6 +887,20 @@ function rowFor(game, side) {
 async function writeRows(api, db, game, only = null) {
   if (only !== 'b') await api.update(api.ref(db, `hoops/index/${game.a.code}/${game.id}`), rowFor(game, 'a'));
   if (only !== 'a') await api.update(api.ref(db, `hoops/index/${game.b.code}/${game.id}`), rowFor(game, 'b'));
+}
+/** A retry that finds its move already landed rewrites every row that disagrees with the MATCH
+ *  (2026-10-29, second pass, js/challenge-life.js rowStale): the rows' write may be what failed. A
+ *  derived timeout is never written; a challenge not yet delivered gets no receiver row. */
+async function repairRows(api, db, game, writer) {
+  if (!game || (game.over && game.over.why === TIMEOUT)) return;
+  for (const s of ['a', 'b']) {
+    const ref = api.ref(db, `hoops/index/${game[s].code}/${game.id}`);
+    const snap = await api.get(ref);
+    const cur = snap && snap.exists() ? snap.val() : null;
+    if (!cur && s !== writer && !game.over && game.turn === writer && lifeOf(game).open) continue;
+    const want = rowFor(game, s);
+    if (rowStale(cur, want)) await api.update(ref, want);
+  }
 }
 
 /**
@@ -881,7 +931,6 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
   if (!writesAllowed('createGame')) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
 
   const mine = meLabel();
-  const now = Date.now();
   const id = mintGameId();
   // SIDE 'a' SHOOTS FIRST AND IS RED. `first` is what lets game 2 of a series start with the
   // OTHER person: it puts them on side 'a' instead, so "you challenged, you go first" stays true
@@ -895,7 +944,7 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
   const doc = {
     // `by` (2026-09-23, OPTIONAL - validateGame ignores it): who made this match. Read only by the
     // push-notification function (functions/decide.js) so it never notifies a match's own maker.
-    v: 1, id, by: me, created: now, updated: now, oneShot: !!oneShot, lapse: true,
+    v: 1, id, by: me, created: 0, updated: 0, oneShot: !!oneShot, lapse: true,
     series: len,
     seriesNo: Math.min(len, Math.max(1, seriesNo | 0 || 1)),
     seriesWins: { a: Math.max(0, (seriesWins && seriesWins.a) | 0), b: Math.max(0, (seriesWins && seriesWins.b) | 0) },
@@ -909,6 +958,7 @@ export async function createGame({ them, oneShot = false, series = 1, caption = 
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
+    doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time (2026-10-29)
     await api.set(api.ref(db, `hoops/games/${id}`), doc);
     // VERIFY BY FRESH RE-READ before either index points at it (rule 6). An index row pointing at
     // a match that is not there opens an empty board, which reads as data loss.
@@ -954,16 +1004,29 @@ export async function pushMove(id, { col, shots = 1, passed = false, over = null
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
     const side = sideOf(fresh, me);
     if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
+    // ALREADY LANDED (2026-10-29, second pass): a retry of a move whose write landed while the rows'
+    // did not (the outbox, after an error) used to be refused as not-your-turn and dropped, so the
+    // other person never heard. The match's newest move is this one and the turn has passed: put
+    // right any row that disagrees with the match, and say it was sent.
+    const lastMove = fresh.moves[fresh.moves.length - 1];
+    const isThis = lastMove && lastMove.by === side && (Number.isInteger(col) && col >= 0 && col < COLS
+      ? !lastMove.miss && lastMove.col === col && lastMove.shots === Math.max(1, ms(shots) || 1) : passed && lastMove.miss);
+    if (isThis && (fresh.over ? fresh.over.why !== TIMEOUT : fresh.turn !== side)) {
+      await repairRows(api, db, fresh, side);
+      markSeen(id, fresh.updated);
+      return { ok: true, game: fresh };
+    }
     if (fresh.over) return { ok: false, reason: 'already-over', retryable: false };
     if (fresh.turn !== side) return { ok: false, reason: 'not-your-turn', retryable: false };
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no shot can revive it.
     if (lifeOf(fresh).expired) return { ok: false, reason: 'expired', retryable: false };
 
-    const now = Date.now();
+    const now = stampFor(api);      // the SERVER stamps every move (rules refuse any other time)
     const other = side === 'a' ? 'b' : 'a';
     const patch = { updated: now };
     const landed = Number.isInteger(col) && col >= 0 && col < COLS;
@@ -1051,33 +1114,41 @@ export async function cancelGame(id) {
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
     const side = sideOf(fresh, me);
     if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
     let back = fresh;
+    let lost = false;
+    const other = side === 'a' ? 'b' : 'a';
     if (fresh.over) {
       // Already called off (a retry after the rows did not land): write them again. Any real result
-      // stands exactly as it is.
-      if (!isCalledOff(fresh)) return { ok: false, reason: 'already-over', retryable: false };
+      // stands exactly as it is. A call-off that cost this side the match is a resignation by it.
+      lost = fresh.over.why === 'resign' && fresh.over.winner === other;
+      if (!isCalledOff(fresh) && !lost) return { ok: false, reason: 'already-over', retryable: false };
     } else {
       if (!lifeOf(fresh).open) return { ok: false, reason: 'accepted', retryable: false };
-      const now = Date.now();
+      const now = stampFor(api);
       const why = side === recipientOf(fresh) ? 'declined' : 'cancelled';
-      await api.update(api.ref(db, `hoops/games/${id}`), { over: { winner: 'none', why, at: now }, updated: now });
+      // Once the sender has shot, calling it off is a LOSS for whoever does it (Matt, 2026-10-29):
+      // stored as their resignation, `via` saying how (it also ends a series). Before that, for nobody.
+      lost = cancelCosts(fresh);
+      const over = lost ? { winner: other, why: 'resign', via: why, at: now } : { winner: 'none', why, at: now };
+      await api.update(api.ref(db, `hoops/games/${id}`), { over, updated: now });
       back = await readGame(id);
-      // validateGame voids a cancel that raced the receiver's first shot: then the match plays on.
       if (!back) return { ok: false, reason: 'did-not-land', retryable: true };
-      if (!isCalledOff(back)) return { ok: false, reason: back.over ? 'already-over' : 'accepted', retryable: false };
+      if (lost) { if (!back.over || back.over.why !== 'resign' || back.over.winner !== other) return { ok: false, reason: 'did-not-land', retryable: true }; }
+      // validateGame voids a cancel that raced the receiver's first shot: then the match plays on.
+      else if (!isCalledOff(back)) return { ok: false, reason: back.over ? 'already-over' : 'accepted', retryable: false };
     }
     back.id = id;
     // A challenge that never reached them (the maker had not shot yet) gets no row: they are not told
-    // about a match they never saw.
-    const other = side === 'a' ? 'b' : 'a';
+    // about a match they never saw. A loss is their WIN: they are told.
     const r = await api.get(api.ref(db, `hoops/index/${back[other].code}/${id}`));
-    await writeRows(api, db, back, r && r.exists() ? null : side);
+    await writeRows(api, db, back, lost || (r && r.exists()) ? null : side);
     markSeen(id, back.updated);
-    return { ok: true, game: back, cancelled: true };
+    return lost ? { ok: true, game: back, lost: true } : { ok: true, game: back, cancelled: true };
   } catch (err) {
     console.error('[hoops4] could not call the challenge off', err);
     return { ok: false, reason: reasonOf(err), retryable: retryableOf(err) };
@@ -1092,16 +1163,18 @@ export async function resignGame(id) {
     const boot = await ready();
     if (!boot) return { ok: false, reason: 'offline', retryable: true };
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
     const side = sideOf(fresh, me);
     if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
     if (fresh.over && fresh.over.why === TIMEOUT) return { ok: false, reason: 'already-over', retryable: false };   // timed out: already decided
-    if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
+    if (fresh.over) { await repairRows(api, db, fresh, side); return { ok: true, game: fresh, cancelled: isCalledOff(fresh) }; }
     // A challenge its receiver has not answered is CALLED OFF instead (2026-10-13): nobody is handed
-    // a win for a match that was never played. The result says { cancelled: true }.
+    // a win for a match that was never played (until the sender has shot: then it is their loss,
+    // 2026-10-29). The result says { cancelled: true } or { lost: true }.
     if (lifeOf(fresh).open) return cancelGame(id);
-    const now = Date.now();
+    const now = stampFor(api);
     await api.update(api.ref(db, `hoops/games/${id}`), {
       over: { winner: side === 'a' ? 'b' : 'a', why: 'resign', at: now }, updated: now,
     });

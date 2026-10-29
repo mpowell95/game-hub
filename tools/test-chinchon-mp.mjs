@@ -277,16 +277,23 @@ ok('...ending once somebody is over 50, lowest wins', end50 && (end50.over.why =
     getAt(`chinchon/index/MATTA/${cx}`).open === 'sent' && getAt(`chinchon/index/ANABB/${cx}`).open === 'got'
     && getAt(`chinchon/index/ANABB/${cx}`).expires === getAt(`chinchon/games/${cx}`).updated + ANSWER_MS);
   use('A');
+  // CANCEL AFTER THE SENDER'S FIRST TURN = A LOSS for the sender (Matt, 2026-10-29, second pass).
+  ok('the confirm words know it will cost a loss (the row and the match agree)', MP.cancelCosts(await MP.readGame(cx)) === true && getAt(`chinchon/index/MATTA/${cx}`).pl === true);
   r = await MP.cancelGame(cx);
-  ok('the sender cancels it', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled');
+  ok('the sender cancels after his first turn: a LOSS for him, stored as his resignation', r.ok && r.lost && !r.cancelled && r.game.over.winner === 'b' && r.game.over.why === 'resign' && getAt(`chinchon/games/${cx}`).over.via === 'cancelled', JSON.stringify(r && r.game && r.game.over));
   const mr = getAt(`chinchon/index/MATTA/${cx}`), ar = getAt(`chinchon/index/ANABB/${cx}`);
-  ok('...both rows say cancelled, stored over:false so no push function fires', mr.ended === 'cancelled' && ar.ended === 'cancelled'
-    && mr.over === false && ar.over === false && ar.yourTurn === false && !('result' in ar));
+  ok('...both rows say finished: she won, he lost (the push reads it as his resignation)', mr.over === true && mr.result === 'lost' && ar.over === true && ar.result === 'won' && ar.why === 'resign');
   use('B');
   const rowsB = await MP.readMyGames();
   const rb = rowsB.find((x) => x.id === cx);
-  ok('...Ana\'s list reads it as finished, no result', rb && rb.over && rb.ended === 'cancelled' && rb.result === null && !rb.yourTurn);
-  ok('...nothing is counted for it', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
+  ok('...Ana\'s list reads it as a win', rb && rb.over && !rb.ended && rb.result === 'won' && !rb.yourTurn);
+  ok('...counted for her once', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 1 && MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
+  use('A');
+  { const z = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+    ok('nothing played yet: cancelling costs nothing', MP.cancelCosts(await MP.readGame(z.id)) === false);
+    const zr = await MP.cancelGame(z.id);
+    ok('the sender cancels before playing: nobody wins, stored over:false (no push)', zr.ok && zr.cancelled && zr.game.over.winner === 'none' && getAt(`chinchon/index/MATTA/${z.id}`).ended === 'cancelled' && getAt(`chinchon/index/MATTA/${z.id}`).over === false); }
+  use('B');
   ok('...and no move can be made in it', !(await MP.appendLog(cx, 2, [{ by: 'b', k: 'draw', src: 'stock' }])).ok);
   ok('the match document is kept, log and all', Object.keys(getAt(`chinchon/games/${cx}/log`)).length >= 2);
 
@@ -296,8 +303,8 @@ ok('...ending once somebody is over 50, lowest wins', end50 && (end50.over.why =
   await playTurn(dx, 'a');
   use('B');
   r = await MP.resignGame(dx);
-  ok('the receiver giving up an unanswered challenge DECLINES it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined');
-  ok('...Matt\'s row says declined', getAt(`chinchon/index/MATTA/${dx}`).ended === 'declined');
+  ok('the receiver declining after the sender\'s first turn: a LOSS for her (Matt wins)', r.ok && r.lost && r.game.over.why === 'resign' && r.game.over.winner === 'a' && getAt(`chinchon/games/${dx}`).over.via === 'declined');
+  ok('...Matt\'s row says he won', getAt(`chinchon/index/MATTA/${dx}`).result === 'won' && getAt(`chinchon/index/MATTA/${dx}`).over === true);
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });

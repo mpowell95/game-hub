@@ -934,7 +934,9 @@ class CupPong {
   mpResign() {
     // Nobody has answered it yet: the same button CANCELS (or DECLINES) it, counting for nobody.
     const kind = this.mpEndKind();
-    const q = kind === 'resign' ? t('quitQ') : t(kind === 'cancel' ? 'cancelChQ' : 'declineChQ');
+    // After the sender's first throw, calling it off is a loss for whoever does it (2026-10-29).
+    const loss = kind !== 'resign' && this.mp && this.mp.game && typeof this.MP.cancelCosts === 'function' && this.MP.cancelCosts(this.mp.game);
+    const q = kind === 'resign' ? t('quitQ') : t((kind === 'cancel' ? 'cancelChQ' : 'declineChQ') + (loss ? 'Loss' : ''));
     const yes = kind === 'resign' ? t('quitMatch') : t(kind === 'cancel' ? 'cancelCh' : 'declineCh');
     const el = document.createElement('div');
     el.className = 'gh-overlay';

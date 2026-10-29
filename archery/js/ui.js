@@ -1283,7 +1283,9 @@ class ArcheryUI {
     const kind = !life.open ? 'resign' : mp.side === this.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
     const set = (sel, key) => { const el = this.host.querySelector(sel); if (el) el.textContent = t(key); };
     set('[data-act="resign"] span', kind === 'resign' ? 'mp_resign' : `mp_${kind}_ch`);
-    set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q`);
+    // After the sender's first end, calling it off is a loss for whoever does it (2026-10-29).
+    const loss = kind !== 'resign' && typeof this.MP.cancelCosts === 'function' && this.MP.cancelCosts(mp.game);
+    set('[data-ov="resign"] h2', kind === 'resign' ? 'mp_resign_q' : `mp_${kind}_q${loss ? '_loss' : ''}`);
     set('[data-act="resignYes"] span', kind === 'resign' ? 'mp_resign_yes' : `mp_${kind}_ch`);
     set('[data-ov="resign"] [data-act="menu"] span', kind === 'resign' ? 'mp_cancel' : 'mp_keep');
   }

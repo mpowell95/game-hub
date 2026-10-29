@@ -3364,7 +3364,9 @@ class ChinchonUI {
     const life = MP.lifeOf(ch.game);
     const kind = ch.finished || ch.game.over ? null : !life.open ? 'resign' : ch.side === MP.recipientOf(ch.game) ? 'decline' : 'cancel';
     const confirming = this._menuConfirm === 'chend';
-    const endBtn = kind ? `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-chend">${esc(t('ch_' + kind))}${confirming ? '?' : ''}</button>` : '';
+    // After the sender's first turn, calling it off is a loss for whoever does it (2026-10-29).
+    const loss = (kind === 'cancel' || kind === 'decline') && typeof MP.cancelCosts === 'function' && MP.cancelCosts(ch.game);
+    const endBtn = kind ? `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-chend">${esc(t('ch_' + kind))}${confirming ? (loss ? '? ' + esc(t('ch_counts_loss')) : '?') : ''}</button>` : '';
     this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
       <div class="cc-sheet cc-menu-sheet">
         <h2 class="cc-sheet-title">${t('menu_title')}</h2>

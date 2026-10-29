@@ -33,7 +33,8 @@ import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/player
 import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { Match } from './match.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
+import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
 const NODE = 'cuppong';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -236,6 +237,8 @@ export function validateGame(raw) {
     const w = raw.over.winner;
     if (w !== 'a' && w !== 'b') return null;
     over = { winner: w, why: String(raw.over.why || ''), at: ms(raw.over.at) };
+    // A cancel or decline that cost its caller the match (2026-10-29) is a resignation saying how.
+    if (over.why === 'resign' && CALL_OFF_LOSS.includes(raw.over.via)) over.via = raw.over.via;
     // A result the log did not produce is only allowed for a resignation.
     if (over.why !== 'resign' && (!m.over || m.winner !== w)) return null;
   } else if (m.over) {
@@ -283,7 +286,7 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
  *  receiver has no entry in the log (a later game of a series was already agreed to, so it is never
  *  open); waiting = open and it is the receiver's turn; expires = when a waiting challenge lapses
  *  (0 = never: a match made before 2026-10-13, or one not yet delivered). */
-export function lifeOf(game, now = Date.now()) {
+export function lifeOf(game, now = decideNow()) {
   if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
   // A later game of a series was already agreed to, so it is never open (but it can time out).
@@ -292,18 +295,26 @@ export function lifeOf(game, now = Date.now()) {
   const expires = expiresAt(game.lapse, waiting, game.updated);
   // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
   // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
-  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated);
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated, null, now);   // safe times, capped at now (2026-10-29)
   return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
 }
 /** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
  *  every read (nothing is written), so both phones agree and a late move is refused. */
-export function withTimeout(game, now = Date.now()) {
+export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout(NODE, game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
-  const life = lifeOf(game, now);
-  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other }, now);
-  if (over) { game.over = over; game.turn = null; }
+  // Decided on the SERVER's clock (js/challenge-clock.js); a timeout decided without live server time
+  // is shown but never counted (countResult asks timeoutUnsure). 2026-10-29, second pass.
+  const c = now == null ? clockNow() : { now, live: true };
+  const life = lifeOf(game, c.now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other }, c.now);
+  if (over) { game.over = over; game.turn = null; noteTimeout(NODE, game.id, c.live); }
   return game;
 }
+/** Has the SENDER played anything yet? From then on a cancel or a decline counts as a loss for
+ *  whoever does it (Matt, 2026-10-29, js/challenge-life.js callOffCosts). */
+export function senderPlayed(game) { return !!game && game.log.some((e) => e.by !== recipientOf(game)); }
+export function cancelCosts(game) { return callOffCosts(senderPlayed(game)); }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
 export function themOf(game, code) { const s = sideOf(game, code); return (s === 'a' ? game.b : game.a) || { code: null, name: '', emoji: '🙂' }; }
@@ -388,6 +399,8 @@ export function markCounted(id) {
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). */
 export function countResult(id, won, finishedAt = Date.now()) {
+  // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
+  if (timeoutUnsure(NODE, id)) return false;
   // A storage that never counted these challenges counts only what finished after it started
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
@@ -401,11 +414,22 @@ export function recordFinished(rows) {
   // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
   countingSince(LEDGER_KEY);
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  const fresh = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id));
+  // A TIMEOUT seen on a row is counted only once the match itself confirms it on live server time
+  // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
+  queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
+    const res = resultOf(g, sideOf(g, myCode()));
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at)) return false;
+    addUnseen([r.id]);
+    return true;
+  });
+  const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
+/** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
+export const timeoutsSettled = () => confirmsSettled(NODE);
 export const UNSEEN_KEY = 'gamehub.cuppong.unseenResults.v1';
 export function readUnseen() {
   try { const raw = JSON.parse(localStorage.getItem(UNSEEN_KEY) || '[]'); return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : []; }
@@ -428,7 +452,7 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
-function rowsFromIndex(val, now = Date.now()) {
+function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
@@ -445,6 +469,7 @@ function rowsFromIndex(val, now = Date.now()) {
       mine: ms(r.mine), theirs: ms(r.theirs),
       series: SERIES_LENGTHS.includes(+r.series) ? +r.series : 1, seriesNo: Math.max(1, ms(r.seriesNo) || 1),
       seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id, su: r.su === true,
+      via: r.via === 'cancelled' || r.via === 'declined' ? r.via : '',   // a costly call-off ended the series
     };
   }).filter((r) => ID_RE.test(r.id) && r.with));
 }
@@ -476,7 +501,7 @@ export function owedSeriesRows(rows) {
   const out = [];
   for (const g of groups.values()) {
     const last = g.reduce((x, y) => ((y.seriesNo | 0) > (x.seriesNo | 0) ? y : x));
-    if (!last.over || last.ended || (last.result !== 'won' && last.result !== 'lost')) continue;
+    if (!last.over || last.ended || last.via || (last.result !== 'won' && last.result !== 'lost')) continue;
     const won = g.filter((r) => r.result === 'won').length, lost = g.filter((r) => r.result === 'lost').length;
     const target = seriesTarget(last.series);
     if (won >= target || lost >= target || (last.seriesNo | 0) >= last.series) continue;
@@ -583,17 +608,33 @@ function rowFor(game, side, writer) {
     turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),           // this row's owner sent the challenge (2026-10-13)
+    pl: senderPlayed(game),                     // the sender has played: calling off costs a loss (2026-10-29)
     mine: game.cups[side], theirs: game.cups[other(side)],
     lastBy: writer === side ? 'me' : 'them',
     series: game.series || 1, seriesNo: game.seriesNo || 1, seriesOf: game.seriesOf || game.id,
     ...(game.rules && game.rules.su ? { su: true } : {}),
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
+    ...(game.over && game.over.via ? { via: game.over.via } : {}),   // a costly cancel/decline: the series ends (2026-10-29)
     ...(ended ? { why: ended } : {}),
   };
 }
 async function writeRows(api, db, game, writer, only = null) {
   if (only !== 'b') await api.update(api.ref(db, `${NODE}/index/${game.a.code}/${game.id}`), rowFor(game, 'a', writer));
   if (only !== 'a') await api.update(api.ref(db, `${NODE}/index/${game.b.code}/${game.id}`), rowFor(game, 'b', writer));
+}
+/** A retry that finds its write already landed rewrites every row that disagrees with the MATCH
+ *  (2026-10-29, second pass, js/challenge-life.js rowStale): the rows' write may be what failed. A
+ *  derived timeout is never written; a challenge not yet delivered gets no receiver row. */
+async function repairRows(api, db, game, writer) {
+  if (!game || (game.over && game.over.why === TIMEOUT)) return;
+  for (const s of ['a', 'b']) {
+    const ref = api.ref(db, `${NODE}/index/${game[s].code}/${game.id}`);
+    const snap = await api.get(ref);
+    const cur = snap && snap.exists() ? snap.val() : null;
+    if (!cur && s !== writer && !game.over && game.turn === writer && lifeOf(game).open) continue;
+    const want = rowFor(game, s, writer);
+    if (rowStale(cur, want)) await api.update(ref, want);
+  }
 }
 
 /** How many games one side must win to take a series of `len`. 1 -> 1, 3 -> 2, 5 -> 3. */
@@ -608,6 +649,11 @@ export function seriesAfter(game) {
   const w = game && game.over ? game.over.winner : null;
   const wins = { a: (before.a | 0) + (w === 'a' ? 1 : 0), b: (before.b | 0) + (w === 'b' ? 1 : 0) };
   const target = seriesTarget(len);
+  // A game 1 called off after the sender threw (2026-10-29) is a loss for the caller AND ends the
+  // series: they called the whole challenge off, so the other side takes it and nobody owes a game 2.
+  if (game && game.over && CALL_OFF_LOSS.includes(game.over.via)) {
+    return { len, no: Math.max(1, game.seriesNo | 0 || 1), wins, target, done: true, winner: w === 'a' || w === 'b' ? w : null };
+  }
   const champion = wins.a >= target ? 'a' : wins.b >= target ? 'b' : null;
   const no = Math.max(1, (game && game.seriesNo) | 0 || 1);
   const done = !!champion || no >= len;
@@ -638,11 +684,10 @@ export async function createGame({ them, rules, series = 1, seriesNo = 1, series
   if (!codeMayPlayOnline(to, 'cuppong', String(them.name || ''))) return fail('them-not-approved');
   if (!writesAllowed('createGame')) return fail('dev-origin-blocked');
   const mine = meLabel();
-  const now = Date.now();
   const id = mintGameId();
   const r = cleanRules(rules);
   const doc = {
-    v: 1, id, by: me, created: now, updated: now, lapse: true,
+    v: 1, id, by: me, created: 0, updated: 0, lapse: true,
     rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, io: true, gb: true, i3: true, ...(r.su ? { su: true } : {}) },
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
@@ -661,6 +706,7 @@ export async function createGame({ them, rules, series = 1, seriesNo = 1, series
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time (2026-10-29)
     await api.set(api.ref(db, `${NODE}/games/${id}`), doc);
     const back = await api.get(api.ref(db, `${NODE}/games/${id}`));
     const game = back && back.exists() ? validateGame(back.val()) : null;
@@ -693,6 +739,7 @@ export async function appendLog(id, base, entries) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
@@ -712,7 +759,9 @@ export async function appendLog(id, base, entries) {
     while (start < have && (fresh.log[start].by !== side || fresh.log[start].k === 'x')) start++;
     let skip = 0;
     while (skip < list.length && start + skip < have && same(fresh.log[start + skip], list[skip])) skip++;
-    if (skip === list.length) return { ok: true, game: fresh };  // all landed already, whatever came after
+    // All landed already (whatever came after): the rows' write may be what failed last time, so put
+    // right any row that disagrees with the match (2026-10-29, second pass).
+    if (skip === list.length) { await repairRows(api, db, fresh, side); return { ok: true, game: fresh }; }
     if (start + skip !== have) return fail('moved-on');      // the log is not where we left it
     const todo = list.slice(skip);
     const turnBefore = fresh.turn;
@@ -724,7 +773,7 @@ export async function appendLog(id, base, entries) {
     const probe = { ...fresh, log: fresh.log.concat(todo) };
     const m = freshMatch(fresh.rules);
     for (const e of probe.log) if (!applyEntry(m, e)) return fail('rules-refused');
-    const now = Date.now();
+    const now = stampFor(api);      // the SERVER stamps every throw (rules refuse any other time)
     const patch = { updated: now };
     todo.forEach((e, i) => { patch[`log/${String(have + i).padStart(4, '0')}`] = { ...e, at: now }; });
     if (m.over) patch.over = { winner: m.winner, why: m.how || 'cups', at: now };
@@ -788,30 +837,39 @@ export async function cancelGame(id) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
     let back = fresh;
+    let lost = false;
     if (fresh.over) {
       // Already called off (a retry after the rows did not land): write them again. Any real result
-      // stands exactly as it is.
-      if (!isCalledOff(fresh)) return fail('already-over');
+      // stands exactly as it is. A call-off that cost this side the match is a resignation by it.
+      lost = fresh.over.why === 'resign' && fresh.over.winner === other(side);
+      if (!isCalledOff(fresh) && !lost) return fail('already-over');
     } else {
       if (!lifeOf(fresh).open) return fail('accepted');
-      const now = Date.now();
+      const now = stampFor(api);
       const why = side === recipientOf(fresh) ? 'declined' : 'cancelled';
-      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: 'none', why, at: now }, updated: now });
+      // Once the sender has thrown, calling it off is a LOSS for whoever does it (Matt, 2026-10-29):
+      // stored as their resignation, `via` saying how. Before that it counts for nobody.
+      lost = cancelCosts(fresh);
+      const over = lost ? { winner: other(side), why: 'resign', via: why, at: now } : { winner: 'none', why, at: now };
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over, updated: now });
       back = await readGame(id);
-      // validateGame voids a cancel that raced the receiver's first throw: then the match plays on.
       if (!back) return fail('did-not-land', true);
-      if (!isCalledOff(back)) return back.over ? fail('already-over') : fail('accepted');
+      if (lost) { if (!back.over || back.over.why !== 'resign' || back.over.winner !== other(side)) return fail('did-not-land', true); }
+      // validateGame voids a cancel that raced the receiver's first throw: then the match plays on.
+      else if (!isCalledOff(back)) return back.over ? fail('already-over') : fail('accepted');
     }
     back.id = id;
     const r = await api.get(api.ref(db, `${NODE}/index/${back[other(side)].code}/${id}`));
-    await writeRows(api, db, back, side, r && r.exists() ? null : side);
+    // A loss is the other person's WIN: their row is written even if the challenge never reached them.
+    await writeRows(api, db, back, side, lost || (r && r.exists()) ? null : side);
     markSeen(id, back.updated);
-    return { ok: true, game: back, cancelled: true };
+    return lost ? { ok: true, game: back, lost: true } : { ok: true, game: back, cancelled: true };
   } catch (err) {
     console.error('[cup-pong] could not call the challenge off', err);
     const reason = reasonOf(err);
@@ -830,14 +888,16 @@ export async function resignGame(id) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const fresh = await readGame(id);
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
     if (fresh.over && fresh.over.why === TIMEOUT) return fail('already-over');   // timed out: already decided
-    if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
+    if (fresh.over) { await repairRows(api, db, fresh, side); return { ok: true, game: fresh, cancelled: isCalledOff(fresh) }; }
+    // Unanswered: called off instead (counts for nobody until the sender has thrown; then a loss).
     if (lifeOf(fresh).open) return cancelGame(id);
-    const now = Date.now();
+    const now = stampFor(api);
     await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: other(side), why: 'resign', at: now }, updated: now });
     const back = await readGame(id);
     if (!back || !back.over) return fail('did-not-land', true);

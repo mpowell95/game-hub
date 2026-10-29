@@ -289,13 +289,23 @@ ok('a whole match to 11 plays to its end over several hands, both phones identic
     getAt(`escoba/index/MATTA/${cx}`).open === 'sent' && getAt(`escoba/index/ANABB/${cx}`).open === 'got'
     && getAt(`escoba/index/ANABB/${cx}`).expires === getAt(`escoba/games/${cx}`).updated + ANSWER_MS);
   use('A');
+  // CANCEL AFTER THE SENDER'S FIRST TURN = A LOSS for the sender (Matt, 2026-10-29, second pass).
+  ok('the confirm words know it will cost a loss (the row and the match agree)', MP.cancelCosts(await MP.readGame(cx)) === true && getAt(`escoba/index/MATTA/${cx}`).pl === true);
   r = await MP.cancelGame(cx);
-  ok('the sender cancels it', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled');
-  const ar = getAt(`escoba/index/ANABB/${cx}`);
-  ok('...both rows say cancelled, stored over:false so no push function fires', ar.ended === 'cancelled' && ar.over === false && ar.yourTurn === false && !('result' in ar));
+  ok('the sender cancels after his first turn: a LOSS for him, stored as his resignation', r.ok && r.lost && !r.cancelled && r.game.over.winner === 'b' && r.game.over.why === 'resign' && getAt(`escoba/games/${cx}`).over.via === 'cancelled', JSON.stringify(r && r.game && r.game.over));
+  const mr = getAt(`escoba/index/MATTA/${cx}`), ar = getAt(`escoba/index/ANABB/${cx}`);
+  ok('...both rows say finished: she won, he lost (the push reads it as his resignation)', mr.over === true && mr.result === 'lost' && ar.over === true && ar.result === 'won' && ar.why === 'resign');
   use('B');
-  const rb = (await MP.readMyGames()).find((x) => x.id === cx);
-  ok('...Ana\'s list reads it as finished, no result, and nothing is counted', rb && rb.over && rb.ended === 'cancelled' && rb.result === null && MP.recordFinished([rb]) === 0);
+  const rowsB = await MP.readMyGames();
+  const rb = rowsB.find((x) => x.id === cx);
+  ok('...Ana\'s list reads it as a win', rb && rb.over && !rb.ended && rb.result === 'won' && !rb.yourTurn);
+  ok('...counted for her once', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 1 && MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
+  use('A');
+  { const z = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+    ok('nothing played yet: cancelling costs nothing', MP.cancelCosts(await MP.readGame(z.id)) === false);
+    const zr = await MP.cancelGame(z.id);
+    ok('the sender cancels before playing: nobody wins, stored over:false (no push)', zr.ok && zr.cancelled && zr.game.over.winner === 'none' && getAt(`escoba/index/MATTA/${z.id}`).ended === 'cancelled' && getAt(`escoba/index/MATTA/${z.id}`).over === false); }
+  use('B');
   ok('...no play can be made into it', !(await MP.appendLog(cx, 1, [{ by: 'b', c: 'o1' }])).ok);
 
   use('A');
@@ -304,8 +314,8 @@ ok('a whole match to 11 plays to its end over several hands, both phones identic
   await playOne(dx);
   use('B');
   r = await MP.resignGame(dx);
-  ok('the receiver giving up an unanswered challenge DECLINES it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined');
-  ok('...Matt\'s row says declined', getAt(`escoba/index/MATTA/${dx}`).ended === 'declined');
+  ok('the receiver declining after the sender\'s first turn: a LOSS for her (Matt wins)', r.ok && r.lost && r.game.over.why === 'resign' && r.game.over.winner === 'a' && getAt(`escoba/games/${dx}`).over.via === 'declined');
+  ok('...Matt\'s row says he won', getAt(`escoba/index/MATTA/${dx}`).result === 'won' && getAt(`escoba/index/MATTA/${dx}`).over === true);
 
   use('A');
   r = await MP.createGame({ them: ANA, len: '11' });
@@ -349,7 +359,7 @@ ok('a whole match to 11 plays to its end over several hands, both phones identic
 {
   use('A');
   const rec = MP.recordsFrom(await MP.readMyGames(), 'MATTA');
-  ok('records: one opponent, called-off and expired matches in no record', rec.opponents.length === 1 && rec.opponents[0].played === 3, JSON.stringify(rec.opponents));
+  ok('records: one opponent, called-off and expired matches in no record (a cancel or decline after the sender played is a loss since 2026-10-29)', rec.opponents.length === 1 && rec.opponents[0].played === 5, JSON.stringify(rec.opponents));
 
   let r = await MP.createGame({ them: ANA, len: '11' });
   const g0 = await MP.readGame(r.id);

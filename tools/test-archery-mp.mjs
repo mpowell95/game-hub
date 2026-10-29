@@ -130,19 +130,26 @@ ok('a malformed arrow is refused', MP.validateGame(junk) === null);
 use('A');
 res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
 const c1 = res.id;
-await MP.appendLog(c1, 0, three('a'));
+// Nothing shot yet: a cancel counts for nobody.
 res = await MP.cancelGame(c1);
-ok('the sender can cancel before Ana shoots: it counts for nobody', res.ok && res.cancelled && getAt(`archery/games/${c1}/over/why`) === 'cancelled');
-ok('a called-off row is stored over:false with ended', getAt(`archery/index/ANABB/${c1}`).over === false && getAt(`archery/index/ANABB/${c1}`).ended === 'cancelled');
+ok('the sender can cancel before shooting: it counts for nobody', res.ok && res.cancelled && getAt(`archery/games/${c1}/over/why`) === 'cancelled');
+ok('a called-off row is stored over:false with ended', getAt(`archery/index/MATTA/${c1}`).over === false && getAt(`archery/index/MATTA/${c1}`).ended === 'cancelled');
 rows = await MP.readMyGames();
 ok('...and reads back as finished with no result', rows.find((r) => r.id === c1).over && rows.find((r) => r.id === c1).result === null);
+// After his first end, a cancel is HIS LOSS (Matt, 2026-10-29, second pass).
+res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+const c1b = res.id;
+await MP.appendLog(c1b, 0, three('a'));
+ok('the confirm words know it will cost a loss', MP.cancelCosts(await MP.readGame(c1b)) === true && getAt(`archery/index/MATTA/${c1b}`).pl === true);
+res = await MP.cancelGame(c1b);
+ok('the sender cancels after shooting: a loss for him, Ana wins', res.ok && res.lost && getAt(`archery/games/${c1b}/over/why`) === 'resign' && getAt(`archery/games/${c1b}/over/via`) === 'cancelled' && getAt(`archery/index/ANABB/${c1b}`).result === 'won');
 
 res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
 const c2 = res.id;
 await MP.appendLog(c2, 0, three('a'));
 use('B');
 res = await MP.resignGame(c2);
-ok('Ana "resigning" an unanswered challenge declines it instead', res.ok && res.cancelled && getAt(`archery/games/${c2}/over/why`) === 'declined');
+ok('Ana declining after Matt shot: a loss for her, Matt wins', res.ok && res.lost && getAt(`archery/games/${c2}/over/via`) === 'declined' && getAt(`archery/games/${c2}/over/winner`) === 'a');
 
 use('A');
 res = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });

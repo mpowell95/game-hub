@@ -260,9 +260,15 @@ check('the rack start token is still initialised', /this\._startToken = 0;/.test
   check('write: a challenge is made', r.ok && id1);
   await CH.postLeg(id1, 'a', 0, 120);
   check('write: game 1 in, delivered', !!getAt(`skeeChallenges/index/${B}/${id1}`) && getAt(`skeeChallenges/index/${B}/${id1}`).open === 'got');
+  // After his first game a cancel is HIS LOSS (Matt, 2026-10-29, second pass): no free do-over.
+  check('write: cancelling now costs a loss', CH.cancelCosts(await CH.readChallenge(id1)) === true);
   r = await CH.cancelChallenge(id1);
-  check('write: the challenger cancels it', r.ok && r.cancelled && r.game.over.why === 'cancelled'
-    && getAt(`skeeChallenges/index/${B}/${id1}`).ended === 'cancelled' && getAt(`skeeChallenges/index/${A}/${id1}`).ended === 'cancelled');
+  check('write: the challenger cancels after playing = his resignation, Anita wins', r.ok && r.lost && !r.cancelled && r.game.over.why === 'resign' && r.game.over.winner === 'b'
+    && getAt(`skeeChallenges/games/${id1}/over/via`) === 'cancelled' && getAt(`skeeChallenges/index/${B}/${id1}`).ended === 'resign' && getAt(`skeeChallenges/index/${B}/${id1}`).result === 'won');
+  { const z = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg()] });
+    check('write: nothing played yet, cancelling costs nothing', CH.cancelCosts(z.game) === false);
+    const zr = await CH.cancelChallenge(z.game.id);
+    check('write: the challenger cancels before playing: nobody wins', zr.ok && zr.cancelled && zr.game.over.why === 'cancelled' && getAt(`skeeChallenges/index/${A}/${z.game.id}`).ended === 'cancelled'); }
   as(B, 'Anita');
   check('write: no score gets in after', (await CH.postLeg(id1, 'b', 0, 90)).reason === 'already-over');
 
@@ -272,7 +278,7 @@ check('the rack start token is still initialised', /this\._startToken = 0;/.test
   await CH.postLeg(id2, 'a', 0, 120);
   as(B, 'Anita');
   r = await CH.resignChallenge(id2);
-  check('write: giving up an unanswered challenge DECLINES it', r.ok && r.cancelled && r.game.over.why === 'declined');
+  check('write: declining after his first game is a loss for her (Matt wins)', r.ok && r.lost && r.game.over.why === 'resign' && r.game.over.winner === 'a' && getAt(`skeeChallenges/games/${id2}/over/via`) === 'declined');
 
   as(A, 'Matt');
   r = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg(), leg(), leg()] });

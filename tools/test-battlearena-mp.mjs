@@ -287,9 +287,11 @@ let id;
   await playTurn(c2.id, 'a');
   use('B');
   const dec = await MP.cancelGame(c2.id);
-  ok('decline: the receiver calls it off before moving', dec.ok && dec.game.over.why === 'declined' && row('TQWX7', c2.id).ended === 'declined');
+  // After the sender's first turn a decline is a LOSS for the one declining (Matt, 2026-10-29, second pass).
+  ok('decline after the sender\'s turn: a loss for the receiver, stored as her resignation', dec.ok && dec.lost && dec.game.over.why === 'resign' && dec.game.over.winner === 'a'
+    && getAt(`battlearena/games/${c2.id}/over/via`) === 'declined' && row('TQWX7', c2.id).result === 'lost' && row('DREG5', c2.id).result === 'won');
   const rows = await MP.readMyGames();
-  ok('a declined match reads as finished with no result', rows.find((r) => r.id === c2.id).over && rows.find((r) => r.id === c2.id).result === null);
+  ok('a costly decline reads as finished, lost', rows.find((r) => r.id === c2.id).over && rows.find((r) => r.id === c2.id).result === 'lost');
 
   use('A');
   const c3 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1003 });
@@ -297,7 +299,7 @@ let id;
   use('B');
   await MP.draftTeam(c3.id, TEAMS.b);
   const resOpen = await MP.resignGame(c3.id);
-  ok('resign on an unanswered challenge calls it off instead (nobody is handed a win)', resOpen.ok && resOpen.cancelled);
+  ok('resign on an unanswered challenge the sender has played in: a loss (a decline that costs it)', resOpen.ok && resOpen.lost && !resOpen.cancelled);
 
   use('A');
   const c4 = await MP.createGame({ them: B_THEM, team: TEAMS.a, seed: 1004 });
