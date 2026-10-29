@@ -45,6 +45,7 @@ import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
+import { isHiddenName } from './shared/js/hidden-players.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote } from './integrity.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
@@ -356,10 +357,15 @@ export const roomsCleanup = onSchedule({ schedule: 'every 30 minutes', region: O
 // and the missing-log check run every 5 minutes; a copied day is flagged once and every admin is told.
 export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
   const db = getDatabase();
-  const { flags, alerts } = await scanRecent(db);
+  // Every logged day once an hour, the recent ones every 5 minutes (2026-10-29: only 3 days were checked).
+  const meta0 = (await db.ref('boards/v1/beeMeta').get()).val() || {};
+  const all = !meta0.fullScanAt || Date.now() - meta0.fullScanAt > 60 * 60 * 1000;
+  const { flags, alerts } = await scanRecent(db, Date.now(), { all });
+  if (all) await db.ref('boards/v1/beeMeta/fullScanAt').set(Date.now());
   const codes = (flags.length || alerts.length) ? await adminCodes(db) : new Set();
   for (const [bk, code, f] of flags) {
     logger.info('bee flagged', { bk, code, summary: f.summary });
+    if (isHiddenName(f.name)) continue;   // a test account: flagged, no push
     for (const c of codes) await sendTo(db, c, beeNote('flag', bk, f), `bee-flag-${bk}-${code}`, { game: 'spelling-bee' });
   }
   for (const [bk, code, a] of alerts) {

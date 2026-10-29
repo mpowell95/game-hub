@@ -508,6 +508,7 @@ class SpellingBee {
     if (!this.puzzle || this._busy) return;
     if (this.open) { this.open = false; this._paintFound(); }
     if (this.input.length >= MAX_LEN + 1) return;
+    if (!this.input) this._typeAt = Date.now();   // the log's `k`: first letter to Enter
     this.input += ch;
     this._paintInput();
   }
@@ -516,6 +517,7 @@ class SpellingBee {
     if (this._settle) { this._settle(); return; }   // the shown word is already on its way out
     if (this._busy || !this.input) return;
     this.input = this.input.slice(0, -1);
+    this._log('del', { w: this.input });
     this._paintInput();
   }
 
@@ -533,7 +535,7 @@ class SpellingBee {
     this._checkDay();
     const word = this.input;
     const why = checkWord(word, this.puzzle, this.answerSet, this.found, this.extraSet);
-    this._log('guess', { w: word, r: why || (this.answerSet.has(word) ? 'ok' : 'bonus') });
+    this._log('guess', { w: word, r: why || (this.answerSet.has(word) ? 'ok' : 'bonus'), k: this._typeAt ? Date.now() - this._typeAt : undefined });
     if (why) { this._reject(why); return; }
     const before = this.rank();
     this.found.add(word);
@@ -627,7 +629,7 @@ class SpellingBee {
 
   _openOverlay(kind, html) {
     const was = this._overlay ? this._overlay.dataset.kind : null;   // a refresh or a month flip is not a new open
-    this._closeOverlay();
+    this._closeOverlay(kind === was);
     const ov = document.createElement('div');
     ov.className = 'gh-overlay sb-overlay';
     ov.dataset.kind = kind;
@@ -643,8 +645,9 @@ class SpellingBee {
     if (c) { try { c.focus({ preventScroll: true }); } catch { /* ignore */ } }
   }
 
-  _closeOverlay() {
+  _closeOverlay(refresh = false) {
     if (!this._overlay) return;
+    if (!refresh) this._log('shut', { r: this._overlay.dataset.kind });   // a sheet closed (log.js)
     this._overlay.remove();
     this._overlay = null;
   }

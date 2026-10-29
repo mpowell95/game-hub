@@ -79,17 +79,24 @@ phone's clock at the guess); the server time `s` only stamps when a batch was up
    The server knows each puzzle's 15 highest answer scores (`bee-puzzles.json` `top`).
 
 **Supporting: any two together void the day.**
-3. **Leave and burst:** back from leaving the app, then 5+ accepted words within 60 s (misses allowed).
+3. **Leave and burst:** back from leaving the app OR reopening it, then 5+ accepted words within 60 s (misses allowed;
+   reopening was skipped until 2026-10-29).
 4. ~~Copy typo~~ **dropped**: honest players do it too (Lili 6 times on Oct 28, Natalia 2 on Oct 27).
 5. **Speed:** Genius within 10 minutes of first opening the puzzle, clock time, nothing skipped (2026-10-29,
    Matt: "you SHOULD NOT SKIP ANYTHING"; until then it summed only open time and dropped breaks over 5 min).
-8. **Right vs wrong** (added 2026-10-28): 2+ right answers per wrong guess up to Genius (King of Games
+8. **Right vs wrong** (added 2026-10-28): 2+ right answers per wrong guess, EVERY guess in the log (until 2026-10-29
+   only up to Genius, and only with Genius) (King of Games
    46 / 17; every other Genius game 0.8 to 1.3).
 9. **Re-typed** (added 2026-10-28, Matt: "an important fact"): fewer already-found guesses than 1 per
-   10 right answers up to Genius (King of Games 3 of 46; others 9 to 71).
+   10 right answers, every guess in the log (King of Games 3 of 46; others 9 to 71).
 
-Speed, right vs wrong and re-typed count only when the log holds every word on the board; the last two
-only with Genius and 20+ right answers. Replayed on every log 2026-10-28: only King of Games, Oct 28
+Speed, right vs wrong and re-typed count only when the log holds every word on the board (a game begun
+before logging would look fast: Lili, Oct 27); the last two only with 20+ right answers.
+**Nothing skipped (2026-10-29, Matt: "you SHOULD NOT SKIP ANYTHING")**: the server checks EVERY puzzle since
+logging began (Oct 27) once an hour, not only yesterday/today/tomorrow; every code with a log, board row
+or not; test accounts too (no push). The log keeps every queued entry (no 3,000 cap) and also records
+Delete (`del`, what was left), each sheet closing (`shut`), and each guess's typing time (`k`, first letter
+to Enter). Replayed on every log under these rules: still only King of Games, Oct 28. Replayed on every log 2026-10-28: only King of Games, Oct 28
 (all 7 checks).
 
 **Flag only (alert Matt, never void):**

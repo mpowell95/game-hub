@@ -22,10 +22,10 @@ export const QUEEN = 9;
 // order including all pangrams is simply not plausible"): the first 5 answers after opening or coming
 // back to the app, within 2 minutes, are all among the 6 highest-scoring answers not yet found, each
 // worth 7+ points. Supporting (any two together void the day): LEAVE AND BURST, 5+ right answers
-// within 60 s of coming back to the app (misses allowed); SPEED, Genius within 10 minutes of first
+// within 60 s of coming back to or reopening the app (misses allowed); SPEED, Genius within 10 minutes of first
 // opening the puzzle, clock time with NOTHING skipped (2026-10-29, Matt: "you SHOULD NOT SKIP
-// ANYTHING"; it used to drop breaks); RIGHT VS WRONG, 2+ right answers per wrong guess up to Genius; and RE-TYPED, fewer
-// already-found guesses than 1 per 10 right answers up to Genius (honest players re-type words they
+// ANYTHING"; it used to drop breaks); RIGHT VS WRONG, 2+ right answers per wrong guess; and RE-TYPED, fewer
+// already-found guesses than 1 per 10 right answers (both over every guess in the log; honest players re-type words they
 // forgot they had; a copied list never repeats). Speed, right vs wrong and re-typed count only when
 // the log holds every word on the board; right vs wrong and re-typed only with 20+ right answers. A
 // wrong or already-found guess restarts a run. Timing is each entry's `t` (the phone's clock).
@@ -55,7 +55,7 @@ export function scoreOf(word, letters) {
  *  27). `puzzle`: { key, top } (top = the puzzle's highest answer scores, high first; functions/bee.js
  *  PUZZLES); without it BEST WORDS FIRST is skipped. Returns { void, strong: [..], supporting: [..],
  *  sorted, burst: {n, avg}, best, leave, geniusMs (ms from the first logged event to Genius, or null),
- *  right, wrong, retyped (up to Genius, or null) }. */
+ *  right, wrong, retyped (every guess in the log, or null) }. */
 export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   const ev = (Array.isArray(entries) ? entries : Object.values(entries || {}))
     .filter((x) => x && Number.isFinite(x.t) && typeof x.e === 'string').sort((a, b) => a.t - b.t);
@@ -89,7 +89,7 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   // Leave and burst.
   let leave = 0;
   for (const v of ev) {
-    if (v.e !== 'visible') continue;
+    if (v.e !== 'visible' && v.e !== 'open') continue;   // back to the app, or reopened (2026-10-29: 'open' was skipped)
     let n = 0;
     for (const x of guesses) if (x.t > v.t && x.t - v.t <= RULES.leaveMs && isOk(x)) n++;
     leave = Math.max(leave, n);
@@ -133,11 +133,13 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   let geniusMs = null, right = null, wrong = null, retyped = null;
   if (win && logged >= words) {
     geniusMs = win.t - ev[0].t;
-    // Right vs wrong and re-typed, up to Genius.
-    const upTo = guesses.filter((x) => x.t <= win.t);
-    right = upTo.filter(isOk).length;
-    retyped = upTo.filter((x) => x.r === 'already_found').length;
-    wrong = upTo.length - right - retyped;
+  }
+  // Right vs wrong and re-typed: EVERY guess in the log, Genius or not (2026-10-29, Matt: "you SHOULD
+  // NOT SKIP ANYTHING"; it used to stop at Genius and need Genius). Needs the whole game in the log.
+  if (logged >= words) {
+    right = guesses.filter(isOk).length;
+    retyped = guesses.filter((x) => x.r === 'already_found').length;
+    wrong = guesses.length - right - retyped;
   }
 
   const strong = [];

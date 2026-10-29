@@ -55,7 +55,9 @@ ok('copier: back and burst = 5+ in 60 s', dc.leave >= 5);
 ok('copier: voided, both strong rules', dc.void && dc.strong.includes('sorted') && dc.strong.includes('burst'));
 ok('copier: the line for Matt names the rules', /Sorted run 7/.test(flagSummary(dc)) && /Burst 12 at 4\.2 s/.test(flagSummary(dc)));
 const dh = detectCopying(honest);
-ok('honest: nothing fires', !dh.void && dh.sorted <= 1 && dh.burst.n <= 1 && dh.leave === 0);
+ok('honest: nothing fires', !dh.void && dh.sorted <= 1 && dh.burst.n <= 1 && dh.leave < 5);
+// Back and burst counts after REOPENING the app too (2026-10-29: 'open' was skipped).
+ok('back and burst after reopening the app', detectCopying([ev(0, 'open'), ...['a1', 'a2', 'a3', 'a4', 'a5'].map((w, i) => g(5 + i * 5, w))]).leave === 5);
 // Speed skips NOTHING (2026-10-29, Matt): a 30-minute break before Genius counts in full.
 const breakGame = [ev(0, 'open'), g(5, 'dead'), ev(10, 'hidden'), ev(1810, 'visible'), g(1815, 'deed'), ev(1820, 'win')];
 ok('speed: clock time from opening to Genius, breaks included', detectCopying(breakGame, { words: 2 }).geniusMs === 1820 * 1000);
@@ -104,10 +106,10 @@ ok('re-typed: 1 of 20 right answers, flagged', gr.supporting.includes('retype') 
 ok('re-typed: 2 of 20 (1 in 10) is not', !detectCopying(game(20, 30, 2)).supporting.includes('retype'));
 ok('right vs wrong + re-typed together void the day', gr.void && /Right 20 \/ wrong 10/.test(flagSummary(gr)) && /Re-typed 1/.test(flagSummary(gr)));
 ok('one of them alone does not', !detectCopying(game(20, 10, 5)).void && !detectCopying(game(20, 30, 0)).void);
-ok('both need Genius in the log', detectCopying(game(20, 10, 0).slice(0, -1)).right === null);
+ok('right vs wrong and re-typed do NOT need Genius (2026-10-29, nothing skipped)', detectCopying(game(20, 10, 0).slice(0, -1)).right === 20);
 ok('both need 20+ right answers (a short Genius is not judged)', detectCopying(game(19, 0, 0)).supporting.length === 0 || !detectCopying(game(19, 0, 0)).supporting.some((r) => r === 'ratio' || r === 'retype'));
 ok('both need every board word in the log', detectCopying(game(20, 10, 0), { words: 25 }).right === null);
-ok('counted only up to Genius', detectCopying([...game(20, 10, 0), g(99999, 'nope', 'not_in_list'), g(99999, 'nope', 'not_in_list')]).wrong === 10);
+ok('every guess counts, after Genius too (2026-10-29, nothing skipped)', detectCopying([...game(20, 10, 0), g(99999, 'nope', 'not_in_list'), g(99999, 'nope', 'not_in_list')]).wrong === 12);
 
 // --- buildBeeBoard / beeTotals: own day, voids, replaced puzzles, places -----------------------
 const puzzles = { 'e-abcdhu': { lang: 'en', day: '2026-10-28', key: 'e:abcdhu' }, 'a-chlnrt': { lang: 'en', day: '2026-10-26', key: 'a:chlnrt' }, 'u-dfgino': { lang: 'en', day: '2026-10-26', key: 'u:dfgino' }, 'es-a-deiqru': { lang: 'es', day: '2026-10-27', key: 'es:a:deiqru' } };
