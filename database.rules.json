@@ -143,6 +143,7 @@
             "w": { ".validate": "newData.isString() && newData.val().length <= 30" },
             "r": { ".validate": "newData.isString() && newData.val().length <= 20" },
             "z": { ".validate": "newData.isNumber() && newData.val() >= -900 && newData.val() <= 900" },
+            "k": { ".validate": "newData.isNumber() && newData.val() >= 0" },
             "$other": { ".validate": false }
           }
         }

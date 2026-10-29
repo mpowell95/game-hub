@@ -36,12 +36,24 @@ export function recentPuzzles(now = Date.now()) {
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
 
-/** Detection for one player on one puzzle. Returns the flag written (once), or null. */
-export async function checkPlayer(db, bk, code, row) {
-  if (!PUZZLES[bk] || !row || isHiddenName(row.name)) return null;
+/** Logging began 2026-10-27; every puzzle from then to tomorrow is checked (2026-10-29, Matt: "you
+ *  SHOULD NOT SKIP ANYTHING"; only yesterday, today and tomorrow were, so a log sent late, or a day
+ *  checked under an older rule, was never looked at again). */
+export const LOG_SINCE = '2026-10-27';
+export function loggedPuzzles(now = Date.now()) {
+  const last = ymd(now + DAY);
+  return Object.keys(PUZZLES).filter((k) => PUZZLES[k].day >= LOG_SINCE && PUZZLES[k].day <= last);
+}
+
+/** Detection for one player on one puzzle. `row` may be missing (a log with no board row is checked
+ *  too); test accounts are checked like anyone (the push skips them). `log` = that player's log when
+ *  the caller already has it. Returns the flag written (once), or null. */
+export async function checkPlayer(db, bk, code, row, log) {
+  if (!PUZZLES[bk]) return null;
   if (await valOf(db, `beeFlags/${bk}/${code}`)) return null;   // already flagged
-  const log = await valOf(db, `beeLog/${bk}/${code}`);
+  if (log === undefined) log = await valOf(db, `beeLog/${bk}/${code}`);
   if (!log) return null;
+  row = row && typeof row === 'object' ? row : {};
   const d = detectCopying(log, { words: row.words | 0, puzzle: PUZZLES[bk] });
   if (!d.void) return null;
   const flag = {
@@ -86,15 +98,18 @@ export function beeNote(kind, bk, info) {
   };
 }
 
-/** One pass: detection + missing log over recent puzzles. Returns {flags: [[bk, code, flag]], alerts}. */
-export async function scanRecent(db, now = Date.now()) {
+/** One pass: detection over every logged puzzle (`all`) or the recent ones, for every code with a
+ *  board row OR a log; missing-log alerts for board rows. Returns {flags: [[bk, code, flag]], alerts}. */
+export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
   const flags = [], alerts = [];
-  for (const bk of recentPuzzles(now)) {
-    const rows = await valOf(db, `beeDaily/${bk}`);
-    if (!rows || typeof rows !== 'object') continue;
-    for (const [code, row] of Object.entries(rows)) {
-      const f = await checkPlayer(db, bk, code, row);
+  for (const bk of all ? loggedPuzzles(now) : recentPuzzles(now)) {
+    const rows = (await valOf(db, `beeDaily/${bk}`)) || {};
+    const logs = (await valOf(db, `beeLog/${bk}`)) || {};
+    for (const code of new Set([...Object.keys(rows), ...Object.keys(logs)])) {
+      const row = rows[code];
+      const f = await checkPlayer(db, bk, code, row, logs[code] || null);
       if (f) flags.push([bk, code, f]);
+      if (!row || typeof row !== 'object') continue;
       const a = await checkLog(db, bk, code, row, now);
       if (a) alerts.push([bk, code, a]);
     }
