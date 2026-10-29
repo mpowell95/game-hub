@@ -24,6 +24,7 @@ import { createReactions } from '../../js/mp-reactions-ui.js';
 import { makeT } from '../../js/i18n.js';
 import { setTheme, resolvedTheme } from '../../js/theme.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
@@ -69,6 +70,7 @@ const STORE_MP_SAVE = 'gamehub.chinchon.mp.v1';
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
+const STATS_ID = 'chinchon';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // Multiplayer results record under their OWN difficulty bucket rather than inheriting whatever AI
 // tier the setup screen last showed (2026-09-09). This is the repo-wide convention - MP_DIFFICULTY
@@ -256,7 +258,11 @@ class ChinchonUI {
     // Solo restore is synchronous/local (no room to rejoin), so it runs first;
     // if it claims the mount (a fresh, valid solo save existed) the MP restore
     // is skipped -- the two keys are separate and never both apply to one mount.
-    if (!this._trySoloRestore()) this._tryRestoreMP();
+    if (!this._trySoloRestore()) {
+      // No live match to rejoin: a live game that died with its page left its armed loss (js/live-leave.js).
+      if (!this._mpLoadSave()) LL.settleLeave(STATS_ID);
+      this._tryRestoreMP();
+    }
     // A tapped launcher bubble or notification names a challenge match; the hub's Multiplayer
     // screen can hand over a person to challenge instead (chinchon/js/alert.js takeOpen).
     this._takeArmed();
@@ -1186,6 +1192,9 @@ class ChinchonUI {
   _commitStats() {
     if (this._statsCommitted) return;
     this._statsCommitted = true;
+    // A live match already decided by a leave on this phone (js/live-leave.js) counts once, as that.
+    if (this.mp && LL.alreadyCounted(this._mpKey())) return;
+    if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
     const human = this._human();
     this.stats.games += 1;
     if (this.game.winner && this.game.winner.id === human.id) this.stats.wins += 1; else this.stats.losses += 1;
@@ -2149,13 +2158,14 @@ class ChinchonUI {
    *  LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
    *  settings"). Leaving the hub is not quitting: the solo save resumes it. Rooms and challenges untouched. */
   _quitCostsLoss() {
-    return !this.mp && !this.ch && !!this.game && !this.el.game.hidden && !this._matchEnded
+    if (this.mp) return this._mpLeaveCosts();
+    return !this.ch && !!this.game && !this.el.game.hidden && !this._matchEnded
       && !this._statsCommitted && !this.game.winner && !!this._moved;
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
   _recordQuitLoss() {
-    if (!this._quitCostsLoss()) return;
+    if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
     this._soloClearSave();
     this.stats.games += 1;
@@ -2397,6 +2407,10 @@ class ChinchonUI {
       const seq = ++mp.appliedSeq;
       const hash = stateHash(this.game);
       net.appendMove(mp.code, mp.seat, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
+      // Your first decision arms the leave (js/live-leave.js): leaving from now on is your loss.
+      if (!this._statsCommitted && this._mpInMatch()) {
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps);
+      }
       return;
     }
     const expectedSeq = mp.pendingSeq, expectedHash = mp.pendingHash;
@@ -2530,15 +2544,28 @@ class ChinchonUI {
     this._renderMpErrorModal();
   }
 
-  _mpEndDueToOpponentLeft() {
+  _mpEndDueToOpponentLeft(res) {
     if (this._dead || this._matchEnded) return;
+    const leaver = this._mpLeaverName();
     if (this.game) this.game.abort();
     this._matchEnded = true;
     this._chartView = false;
     this._mpClearSave();
+    LL.hideClaim(this.root);
     net.stopHeartbeat();
     this.render();
-    this._renderMpOpponentLeftModal();
+    this._renderMpOpponentLeftModal(res === 'won' ? LL.lt('ll_left_win', { name: leaver })
+      : res === 'lost' ? LL.lt('ll_lost', { name: leaver }) : null);
+  }
+
+  /** The name of the seat that wrote a forfeit (the leaver, or the claimer), for the end sheet. */
+  _mpLeaverName() {
+    const mp = this.mp, room = mp && mp.lastRoomSnapshot;
+    const f = LL.forfeitsOf(room, 1)[0];
+    if (!f) return '?';
+    const seat = f.claim ? null : Number(f.seat);
+    const p = seat != null ? (mp.opps || []).find((o) => o && o.seat === seat) : (mp.opps || [])[0];
+    return (p && p.name) || '?';
   }
 
   _renderMpErrorModal() {
@@ -2552,11 +2579,12 @@ class ChinchonUI {
     this.el.modal.hidden = false;
   }
 
-  _renderMpOpponentLeftModal() {
+  _renderMpOpponentLeftModal(titleText) {
     const standings = this.game.players.slice().sort((a, b) => b.totalScore - a.totalScore);
     const rows = standings.map((p, i) => `<li><span class="cc-rank">${i + 1}</span><span>${p.avatar} ${esc(p.name)}</span><span class="num">${p.totalScore}</span></li>`).join('');
     this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
-      <h2 class="cc-sheet-title">${t('mp_opponent_left_title')}</h2>
+      ${titleText ? `<button class="cc-sheet-x" data-action="mp-error-ok" aria-label="${t('close_word')}">✕</button>` : ''}
+      <h2 class="cc-sheet-title">${titleText ? esc(titleText) : t('mp_opponent_left_title')}</h2>
       <p class="cc-sheet-sub">${t('mp_final_standings_sub')}</p>
       <ol class="cc-standings">${rows}</ol>
       <div class="cc-sheet-actions">
@@ -2598,7 +2626,15 @@ class ChinchonUI {
     if (room.status === 'ended' && room.result == null && !mp.opponentLeft && !this._matchEnded) {
       mp.opponentLeft = true;
       this._setMpStatus('mp_status_opponent_left');
-      this._mpEndDueToOpponentLeft();
+      // A leave that decided the match (js/live-leave.js): at 2 seats the leaver's forfeit is this
+      // phone's win; a claim against this seat is its loss. At 3-4 seats only the leaver records.
+      let res = 'none';
+      if (!this._statsCommitted && this._mpInMatch()) {
+        res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
+          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps });
+        if (res !== 'none') { this._statsCommitted = true; this._mpBumpLocalStats(res === 'won'); }
+      }
+      this._mpEndDueToOpponentLeft(res);
       return;
     }
 
@@ -2617,6 +2653,7 @@ class ChinchonUI {
       if (anyStale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
       else if (!anyStale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
+    if (this._mpCanClaim()) LL.showClaim(this.root, () => this._mpClaim()); else LL.hideClaim(this.root);
 
     // Recovery, seat-addressed (js/net.js's recovery/requests + recovery/answers).
     // The host answers each pleading seat independently and dedupes per seat; a
@@ -2817,7 +2854,17 @@ class ChinchonUI {
   /** The in-game menu's leave action: unlike destroy() (backgrounding, room
    *  left untouched), this is an explicit abandon -- ends the room too. */
   _mpLeaveToSetup() {
+    // Leaving the match (2026-10-29, js/live-leave.js): after your own first decision it is your
+    // loss, and the room ends with your forfeit (at 2 seats the other phone records its win). With
+    // another seat gone 90 s it costs nothing: at 2 seats it claims the win instead, at 3-4 the
+    // forfeit is theirs.
+    if (this._mpCanClaim()) { this._mpClaim(); return; }
+    const costs = this._mpLeaveCosts();
+    const gone = this._mpInMatch() && !this._statsCommitted ? this._mpGoneSeats() : [];
     const mp = this.mp;
+    if (mp && costs) { this._statsCommitted = true; if (LL.forfeitNow(STATS_ID)) this._mpBumpLocalStats(false); }
+    else if (mp && this._mpInMatch()) LL.disarmLeave(STATS_ID);
+    LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this.mp = null;
     this._mpSeat = null;
@@ -2825,9 +2872,84 @@ class ChinchonUI {
     // Mid-match, ANY seat leaving ends the room for the whole table -- see the
     // N-SEAT ROOMS note in js/net.js. The engine cannot drop a seat from a live
     // match without every other device diverging on the very next deal.
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.seat).catch(() => {});
+    if (mp && mp.code && costs) LL.leaveWithForfeit(net, mp.code, mp.seat, mp.seat, 1).catch(() => {});
+    else if (mp && mp.code && gone.length) LL.leaveWithForfeit(net, mp.code, mp.seat, gone[0], 1, true).catch(() => {});
+    else if (mp && mp.code) net.leaveRoom(mp.code, mp.seat).catch(() => {});
     else net.disconnect();
     this.showSetup();
+  }
+
+  // --- leaving a live match (2026-10-29, js/live-leave.js) ---------------------------------------
+  // One match per room (writeResult ends it), so the game number in the key is always 1.
+  _mpKey() { return this.mp ? LL.liveKey(STATS_ID, this.mp.code, 1) : null; }
+  _mpInMatch() { return !!(this.mp && this.game && !this._matchEnded && !this.game.winner); }
+  _mpSeatRec(room, i) {
+    const seats = (room && room.seats) || {};
+    return seats[i] || (i === 0 ? room.host : i === 1 ? room.guest : null);
+  }
+  /** Seats (not ours) silent for CLAIM_MS. */
+  _mpGoneSeats() {
+    const mp = this.mp, room = mp && mp.lastRoomSnapshot;
+    if (!room) return [];
+    const out = [];
+    for (let i = 0; i < this._mpSeatCount(room); i++) {
+      if (i === mp.seat) continue;
+      const r = this._mpSeatRec(room, i);
+      if (r && LL.awayMs(r) >= LL.CLAIM_MS) out.push(i);
+    }
+    return out;
+  }
+  /** Has seat `i` made a decision in this match? (The log is per round; past round 1 everyone has.) */
+  _mpSeatMoved(i) {
+    const room = this.mp && this.mp.lastRoomSnapshot;
+    if (!room) return false;
+    if (room.round && (room.round.n | 0) > 1) return true;
+    return Object.values(room.moves || {}).some((m) => m && Number(m.by) === i);
+  }
+  _mpCanClaim() {
+    const room = this.mp && this.mp.lastRoomSnapshot;
+    if (!this._mpInMatch() || this._statsCommitted || !room || this._mpSeatCount(room) !== 2) return false;
+    const other = 1 - this.mp.seat;
+    return this._mpGoneSeats().includes(other) && this._mpSeatMoved(other);
+  }
+  _mpLeaveCosts() { return this._mpInMatch() && !this._statsCommitted && !this._mpGoneSeats().length && LL.leaveCosts(STATS_ID, this._mpKey()); }
+  _mpExtras() { return { closed: this._matchCloses || 0, minusTen: this._matchMinusTens || 0, chinchons: this._matchChinchons || 0 }; }
+  /** chinchon-stats (this game's own counters) for a match decided by a leave on this page. */
+  _mpBumpLocalStats(won) {
+    this.stats.games += 1;
+    if (won) this.stats.wins += 1; else this.stats.losses += 1;
+    this.stats.closes += this._matchCloses || 0;
+    this.stats.chinchons += this._matchChinchons || 0;
+    this.stats.minusTen = (this.stats.minusTen | 0) + (this._matchMinusTens || 0);
+    saveJSON(STORE_STATS, this.stats);
+  }
+  /** Two seats, the other gone 90 s after deciding: this phone records its win and ends the room with
+   *  their forfeit (their phone records the loss when it comes back, or its armed marker does). */
+  _mpClaim() {
+    if (!this._mpCanClaim()) return;
+    const mp = this.mp;
+    this._statsCommitted = true;
+    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps)) this._mpBumpLocalStats(true);
+    LL.hideClaim(this.root);
+    if (this.game) this.game.abort();
+    this._matchEnded = true;
+    this._chartView = false;
+    this._mpClearSave();
+    LL.leaveWithForfeit(net, mp.code, mp.seat, 1 - mp.seat, 1, true).catch(() => {});
+    this.render();
+    this._renderMpOpponentLeftModal(LL.lt('ll_claimed'));
+  }
+
+  /** A rejoin found the match decided while this phone was away: say how, once. */
+  _renderLeaveResultModal(title) {
+    this.el.modal.innerHTML = `<div class="cc-scrim"></div><div class="cc-sheet">
+      <button class="cc-sheet-x" data-action="mp-error-ok" aria-label="${t('close_word')}">✕</button>
+      <h2 class="cc-sheet-title">${esc(title)}</h2>
+      <div class="cc-sheet-actions">
+        <button class="cc-btn cc-btn-primary" data-action="mp-error-ok">${t('back_to_setup_btn')}</button>
+      </div>
+    </div>`;
+    this.el.modal.hidden = false;
   }
 
   async _mpForceUpdate() {
@@ -2886,6 +3008,24 @@ class ChinchonUI {
     // wrote. Accepting both means a match live across the deploy still resumes.
     const seat = save.seat != null ? (save.seat | 0) : (save.role === 'guest' ? 1 : save.role === 'host' ? 0 : null);
     if (!code || seat == null || !save.snap) return;
+    // Was the match decided by a leave while this phone was away? (js/live-leave.js)
+    const count = Array.isArray(save.snap.players) ? save.snap.players.length : 2;
+    const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
+      mySeat: seat, role: seat, seats: count, fn: 'recordChinchon',
+      winArgs: [MP_DIFFICULTY, true, { closed: 0, minusTen: 0, chinchons: 0 }],
+      oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
+    if (this._dead) return;
+    if (!chk.go) {
+      this._mpClearSave();
+      net.disconnect();
+      if (chk.res === 'won' || chk.res === 'lost') {
+        if (this.stats) { this.stats.games += 1; if (chk.res === 'won') this.stats.wins += 1; else this.stats.losses += 1; saveJSON(STORE_STATS, this.stats); }
+        const opp = (this._mpOpponentsFrom(chk.room || {}, seat, count) || [])[0];
+        const name = (opp && opp.name) || '?';
+        this._renderLeaveResultModal(chk.res === 'won' ? LL.lt('ll_left_win', { name }) : LL.lt('ll_lost', { name }));
+      }
+      return;
+    }
     try {
       if (seat !== 0) {
         const res = await net.joinSeat(code, this._myIdentity());
@@ -3438,6 +3578,8 @@ class ChinchonUI {
     this._resolvePlace([]);     // unblock any awaiting placement prompt
     this._resolveModal();       // unblock any awaiting round modal
     net.disconnect();
+    if (this.mp) LL.detachLeave(STATS_ID);   // the match stays armed: closing is not leaving
+    LL.hideClaim(this.root);
     this.mp = null;
     this._chLeave();               // moves not yet sent stay in the outbox
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
@@ -3509,4 +3651,10 @@ export function isInProgress() {
 /** The hub hands an open Chinchón a notified match (js/hub.js `_openPushedGameNow`). */
 export function openArmed() { if (instance) instance._takeArmed(); }
 
-export default { init, destroy, isInProgress, openArmed };
+/** A live match's leave costs a loss (js/live-leave.js); the hub's leave confirm says so. */
+export function quitCostsLoss() { return !!(instance && instance.mp && instance._mpLeaveCosts()); }
+
+/** The hub's leave was confirmed: resign the live match in play (destroy() alone only detaches). */
+export function leaveMatch() { if (instance && instance.mp) instance._mpLeaveToSetup(); }
+
+export default { init, destroy, isInProgress, openArmed, quitCostsLoss, leaveMatch };
