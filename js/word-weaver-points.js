@@ -15,6 +15,9 @@
 // WHAT IS STORED (the `ww` sub-counter, js/game-stats.js `recordWordWeaver`):
 //   ww.lv['L<n>'] = { s, h, t }   level n: s = stars 1-3, h = hints used, t = when it was first
 //                                 completed (ms).
+//   ww.es['L<n>'] = { s, h, t }   the SPANISH ladder's level n (2026-10-29, word-weaver/data/es/): a separate
+//                                 map, so Spanish level 12 is never English level 12. Points, stars and
+//                                 levels completed count BOTH ladders.
 //   ww.x = n                      lifetime extra words found (a counter; it only goes up).
 // Keys are 'L13', never a bare number: Firebase turns an object with mostly numeric keys into an
 // ARRAY. Each field only improves (THE LAW rule 2: stars Math.max, hints Math.min, the earliest
@@ -76,9 +79,10 @@ export function wwBest(a, b) {
   return out;
 }
 
-/** A record's completed levels as { n: { s, h?, t? } }, n a number >= 1. `rec` is `games.wordweaver`. */
-export function wwLevels(rec) {
-  const lv = (rec && rec.ww && rec.ww.lv) || {};
+/** A record's completed levels of ONE ladder as { n: { s, h?, t? } }, n a number >= 1. `rec` is
+ *  `games.wordweaver`; `lang` 'en' (ww.lv, the default) or 'es' (ww.es). */
+export function wwLevels(rec, lang = 'en') {
+  const lv = (rec && rec.ww && (lang === 'es' ? rec.ww.es : rec.ww.lv)) || {};
   const out = {};
   if (!lv || typeof lv !== 'object') return out;
   for (const k of Object.keys(lv)) {
@@ -90,31 +94,30 @@ export function wwLevels(rec) {
   return out;
 }
 
-/** Total stars over distinct levels (one band, or all). */
-export function wwStars(rec, band = null) {
-  const lv = wwLevels(rec);
-  let s = 0;
-  for (const k of Object.keys(lv)) if (!band || wwBandOf(+k) === band) s += lv[k].s;
-  return s;
-}
-/** Points (one band, or all): stars x the band's multiplier, over distinct levels. The leaderboard's number. */
-export function wwPoints(rec, band = null) {
-  const lv = wwLevels(rec);
-  let p = 0;
-  for (const k of Object.keys(lv)) {
-    const b = wwBandOf(+k);
-    if (!band || b === band) p += lv[k].s * WW_MULT[b];
+/** Every completed level of BOTH ladders, [n, entry] (one band, or all). */
+function allLevels(rec, band) {
+  const out = [];
+  for (const lang of ['en', 'es']) {
+    const lv = wwLevels(rec, lang);
+    for (const k of Object.keys(lv)) if (!band || wwBandOf(+k) === band) out.push([+k, lv[k]]);
   }
-  return p;
+  return out;
 }
-/** Levels completed (one band, or all). */
+/** Total stars over distinct levels, both ladders (one band, or all). */
+export function wwStars(rec, band = null) {
+  return allLevels(rec, band).reduce((s, [, e]) => s + e.s, 0);
+}
+/** Points (one band, or all): stars x the band's multiplier, over distinct levels of both ladders. The leaderboard's number. */
+export function wwPoints(rec, band = null) {
+  return allLevels(rec, band).reduce((p, [n, e]) => p + e.s * WW_MULT[wwBandOf(n)], 0);
+}
+/** Levels completed, both ladders (one band, or all). */
 export function wwCleared(rec, band = null) {
-  return Object.keys(wwLevels(rec)).filter((k) => !band || wwBandOf(+k) === band).length;
+  return allLevels(rec, band).length;
 }
-/** Levels completed with three stars, i.e. no hint (one band, or all). */
+/** Levels completed with three stars, i.e. no hint, both ladders (one band, or all). */
 export function wwThreeStars(rec, band = null) {
-  const lv = wwLevels(rec);
-  return Object.keys(lv).filter((k) => lv[k].s === 3 && (!band || wwBandOf(+k) === band)).length;
+  return allLevels(rec, band).filter(([, e]) => e.s === 3).length;
 }
 /** Lifetime extra words found. */
 export function wwExtra(rec) {

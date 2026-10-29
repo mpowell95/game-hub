@@ -62,7 +62,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 const args = process.argv.slice(2);
@@ -72,8 +72,8 @@ const COUNT = Number(arg('--levels', 2000));
 const FRESH = args.includes('--fresh');
 const REPLACE_FROM = Number(arg('--replace-from', 0)) || 0;
 const OUT = path.join(ROOT, 'word-weaver/data');
-const CHUNK = 250;
-const SEED = 20261028;
+export const CHUNK = 250;
+export const SEED = 20261028;
 
 const SCOWL_TGZ = 'https://registry.npmjs.org/wordlist-english/-/wordlist-english-1.2.1.tgz';
 const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en';
@@ -87,7 +87,7 @@ const EXTRA_LEVEL = 60;
 const MIN_SAID_GRID = 200;
 // Hard and Expert grid lists (see the header). `words` = grid words from the band's first level to
 // its last; `max3`/`max4` = most three-/four-letter grid words; `minLen` = shortest grid word.
-const BAND = {
+export const BAND = {
   hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
   expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
 };
@@ -167,7 +167,7 @@ async function cached(url, file) {
 }
 
 // Small seeded PRNG (Spelling Bee's).
-function rng(seed) {
+export function rng(seed) {
   let s = seed >>> 0;
   return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
@@ -179,7 +179,7 @@ const fitsIn = (wc, lc) => { for (let i = 0; i < 26; i++) if (wc[i] > lc[i]) ret
 
 // --- the ramp ----------------------------------------------------------------------------------
 /** Wheel size for level n (the RNG mixes neighbouring sizes). */
-function wheelSize(n, r) {
+export function wheelSize(n, r) {
   if (n <= 2) return 3;
   if (n <= 10) return 4;
   const ramp = (a, b, p0, p1) => p0 + (p1 - p0) * Math.min(1, Math.max(0, (n - a) / (b - a)));
@@ -191,7 +191,7 @@ function wheelSize(n, r) {
   return r() < ramp(501, 2000, 0.6, 0.7) ? 7 : 6;
 }
 /** Grid words wanted for level n with a wheel of `size` letters. */
-function targetWords(n, size, r) {
+export function targetWords(n, size, r) {
   const jitter = r() < 0.3 ? -1 : r() < 0.5 ? 1 : 0;
   const t = (lo, hi, a, b) => Math.round(lo + (hi - lo) * Math.min(1, Math.max(0, (n - a) / (b - a))));
   if (size === 3) return 3;
@@ -201,7 +201,7 @@ function targetWords(n, size, r) {
   return Math.max(7, t(7, 14, 301, 1800) + jitter + (r() < 0.25 ? 1 : 0));
 }
 /** The biggest grid allowed: [rows, cols]. */
-function maxDims(n, size) {
+export function maxDims(n, size) {
   if (size <= 3) return [5, 5];
   if (size === 4) return [6, 6];
   if (size === 5) return [7, 7];
@@ -213,7 +213,7 @@ function maxDims(n, size) {
 const K = (r, c) => (r + 64) * 256 + (c + 64);
 
 /** Try to lay out `target` of `pool`'s words (base first) inside maxR x maxC. Returns the placed words. */
-function layout(base, pool, target, maxR, maxC, r, opts = {}) {
+export function layout(base, pool, target, maxR, maxC, r, opts = {}) {
   const cells = new Map();   // key -> { ch, a, d }
   let minR = 0, maxRr = 0, minC = 0, maxCc = 0;
   const placed = [];
@@ -287,7 +287,7 @@ function layout(base, pool, target, maxR, maxC, r, opts = {}) {
 
 /** Every rule a level's grid must keep; returns a list of problems (empty = good). Same checks as
  *  word-weaver/js/data-test.js. */
-function gridProblems(words, rows, cols) {
+export function gridProblems(words, rows, cols) {
   const bad = [];
   const cells = new Map();
   for (const [w, r0, c0, d] of words) {
@@ -506,4 +506,5 @@ async function main() {
   }
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+// tools/build-word-weaver-es.mjs imports the ramp and the crossword layout above; main runs only when called.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((err) => { console.error(err); process.exit(1); });

@@ -132,6 +132,23 @@
 .ww-root .ww-head h1 { margin: 0 0 4px; font-size: 32px; font-weight: 900; letter-spacing: -.2px; }
 .ww-root .ww-pts { margin: 0; font-size: 16px; font-weight: 700; }
 .ww-root .ww-pts b { font-size: 24px; font-variant-numeric: tabular-nums; }
+/* The puzzle language (2026-10-29): EN / ES, two letters, a 44px tap target. */
+.ww-root .ww-lang {
+  margin-top: 10px;
+  min-width: 56px;
+  height: 44px;
+  padding: 0 12px;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  background: var(--ww-chip);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  touch-action: manipulation;
+  cursor: pointer;
+}
 .ww-root .ww-segs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ww-root .ww-seg {
   position: relative;

@@ -43,7 +43,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, '');
 const args = process.argv.slice(2);
@@ -52,20 +52,20 @@ const CACHE = arg('--cache', path.join(os.tmpdir(), 'spelling-bee-es-cache'));
 const DAYS = Number(arg('--days', 2000));
 const EPOCH = '2026-10-26';
 const TOP = 20000;
-const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt';
-const LEM_URL = 'https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-es.txt';
-const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
+export const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt';
+export const LEM_URL = 'https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-es.txt';
+export const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
   'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
-const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/es';
+export const BAD_URL = 'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/es';
 
 // Vulgarities and slurs LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
-const BLOCK = `puta puto putas putos mierda cabron cabrona joder jodido jodida polla culo verga pendejo pendeja
+export const BLOCK = `puta puto putas putos mierda cabron cabrona joder jodido jodida polla culo verga pendejo pendeja
 pinche chingar chingada marica maricon follar zorra cono tetas teta pene vagina nazi cocaina heroina droga
 drogas mamada paja pajero perra perro`.split(/\s+/).filter((w) => w !== 'perro');
 // LDNOOBW es over-catches ordinary words; these stay in (contexto's allow-list does the same).
-const ALLOW = new Set(['martillo']);
+export const ALLOW = new Set(['martillo']);
 // Accepted (bonus) but never answers: names and loanwords that both dictionaries happen to carry.
-const NOT_ANSWERS = new Set(`maria mariana martin martina rita atenea boom rain tate bane irene elena
+export const NOT_ANSWERS = new Set(`maria mariana martin martina rita atenea boom rain tate bane irene elena
 diana alicia adela amelia andrea angela aurora carmen cecilia celia clara cora dora elisa ema emilia
 eva flora gloria ina iria julia laura lola lucia luna marina marta mercedes nina nora olga paloma paula
 pilar regina rina rocio rosa rosario teresa victoria alberto antonio benito carlos david felipe
@@ -73,7 +73,7 @@ gabriel ignacio juan julio lorenzo manuel mario pablo pedro ramon roberto ramiro
 lidia noemi raquel miriam karina nadia natalia yolanda irma lorena teo tito adan eden`.split(/\s+/).filter((w) => w !== 'tito'));
 // Families of vulgar words.
 // On a name list but ordinary Spanish words (hand-checked 2026-10-28): accepted as bonus words.
-const NAME_WORDS = new Set(`adore adorne alameda aleen aleta alexia alia alie alla alli amparo angelica arda
+export const NAME_WORDS = new Set(`adore adorne alameda aleen aleta alexia alia alie alla alli amparo angelica arda
 atlante aurea aurora aviva azucena beata bobina bobine brear brinda bula calandra camelia camella candida
 carena carie chandal clara clemente codee concha concordia crin dale dalia diana dominica dora dore doro eden edita
 elida emerita farra felicita filia fleta flora fonda gema germana gloria grata iluminada jacinto julio kelvin
@@ -81,28 +81,28 @@ lavada leda lian lien lira loan loma lucio luna magnolia malva mana mariano mari
 nereida ninfa nona opalina paloma petunia pilar randa refugia rema reta roda rubi tiara tilda trinidad
 valencia veda veta victoria`.split(/\s+/));
 // COMMON words (header) that English also has but are ordinary Spanish (hand-checked 2026-10-28).
-const SPANISH_TOO = new Set(`adorable banana banjo bilateral bipolar buffet bulldog cocktail corrector dandy derby
+export const SPANISH_TOO = new Set(`adorable banana banjo bilateral bipolar buffet bulldog cocktail corrector dandy derby
 dharma dingo futon ghetto gigolo glaucoma graffiti henna inflexible inventor irregular irreparable irritable
 jockey judo kamikaze karate kayak kimono kiwi koala lamentable lemur mahatma mozzarella nylon papilla poker
 quark rally reactor reggae retina reunion rumba tarot terrier tortilla venerable yeti yoga yuan zeppelin`.split(/\s+/));
 // COMMON words left out (hand-checked 2026-10-28): rude, slang, places, brands, names the lists missed.
-const SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy pedofilo culito picha cagon pajero
+export const SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy pedofilo culito picha cagon pajero
 ninfomana drogata huevon macarra yonqui papi chachi cholo chapera paco online apache yankee yoda brando wichita
 bora genova etiopia touche duce olimpo renard chechenia abba cardio valhalla thai colombo kame caprica fane buro
 paulino vichy provo pullman ruanda maitre tintin polaroid trafalgar macon lando belcebu trullo albin rocha
 cocker airbag titi letonia figaro egeo mahdi pepito dojo donut cucu`.split(/\s+/));
-const BLOCK_RE = /coñ|^put[aoe]|mierd|^jod[aeoi]|cabron|foll[aeo]|ching|^polla$|pendej|maric/;
+export const BLOCK_RE = /coñ|^put[aoe]|mierd|^jod[aeoi]|cabron|foll[aeo]|ching|^polla$|pendej|maric/;
 // Blocked words that stay out even as bonus words (2026-10-29): slurs only (Matt: words with bad meanings are
 // still words; PEDOFILO counts).
-const SLURS = new Set(`marica maricon amaricado amaricada marimarica bollera nazi cholo`.split(/\s+/));
+export const SLURS = new Set(`marica maricon amaricado amaricada marimarica bollera nazi cholo`.split(/\s+/));
 // SKIP's rude words, bonus since 2026-10-29 (SKIP's places, brands and names stay out).
-const ADULT_SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy culito picha cagon pajero
+export const ADULT_SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy culito picha cagon pajero
 ninfomana drogata huevon pedofilo`.split(/\s+/));
 const FIRST_BUILD_DAY0 = 'o:aeimnt';   // the folded build's day 0 (see the header)
 
 // Accents off, ñ kept (engine.js `fold` does the same to what a player types).
-const fold = (w) => w.toLowerCase().replace(/ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'ñ');
-const flat = (w) => fold(w).replace(/ñ/g, 'n');   // Boggle's form, to match its list
+export const fold = (w) => w.toLowerCase().replace(/ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0001/g, 'ñ');
+export const flat = (w) => fold(w).replace(/ñ/g, 'n');   // Boggle's form, to match its list
 const WORD = /^[a-zñ]+$/;
 const idx = (c) => (c === 'ñ' ? 26 : c.charCodeAt(0) - 97);
 const chr = (k) => (k === 26 ? 'ñ' : String.fromCharCode(97 + k));
@@ -225,4 +225,5 @@ async function main() {
   console.log(`words ${words.length}, extra ${playable.length}, pangram sets ${sets.length}, fair ${candidates.length}, puzzles ${puzzles.length}, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+// Word Weaver's Spanish generator (tools/build-word-weaver-es.mjs) imports the lists above; main runs only when called.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((err) => { console.error(err); process.exit(1); });

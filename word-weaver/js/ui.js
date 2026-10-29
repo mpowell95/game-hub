@@ -12,7 +12,7 @@
 // every accepted word and every hint, so leaving is lossless.
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone page themes too
 import { onViewportResize } from '../../js/viewport.js';
-import { makeT, onLangChange } from '../../js/i18n.js';
+import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWordWeaver, loadStats } from '../../js/game-stats.js';
 import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwPoints } from '../../js/word-weaver-points.js';
@@ -24,6 +24,16 @@ const t = makeT(STRINGS);
 // solve every level from the console (the way Gridlock's does not).
 const DEV_HOST = (() => { try { return /^(localhost|127\.0\.0\.1)$/.test(location.hostname); } catch { return false; } })();
 const DATA = new URL('../data/', import.meta.url);
+// The SPANISH ladder (2026-10-29, Matt: "Yes, build Spanish puzzles"): its own levels (tools/build-word-weaver-es.mjs),
+// its own save and its own stats map (`ww.es`), so English progress never moves. The puzzle language is this phone's
+// EN/ES button on the setup screen, else the hub's language (Spelling Bee's rule); the screens keep the hub's language.
+const DATA_ES = new URL('../data/es/', import.meta.url);
+const LANG_KEY = 'gamehub.wordweaver.lang.v1';
+const dataOf = (lang) => (lang === 'es' ? DATA_ES : DATA);
+function wordLang() {
+  try { const v = localStorage.getItem(LANG_KEY); if (v === 'en' || v === 'es') return v; } catch { /* the hub's */ }
+  return getLang() === 'es' ? 'es' : 'en';
+}
 
 // --- persistence ---------------------------------------------------------------------------------
 // SETTINGS `gamehub.wordweaver.v1` = { band }: the difficulty picked on the setup screen.
@@ -34,11 +44,13 @@ const DATA = new URL('../data/', import.meta.url);
 //   difficulty its level falls in, then never written or deleted (THE LAW rules 3 and 5).
 // BEST `gamehub.wordweaver.best.v1` (the first build's furthest level) is no longer read or written; it stays
 //   as stored (rule 5). Where a player stands is now their stats store's `ww.lv` (the levels completed).
-// PENDING: [{ n, hints, extra }] completions the recorder refused (its rate gate); retried on every open,
-//          removed only after the recorder took them. They count as completed.
+// SAVE es `gamehub.wordweaver.es.save.v1` (2026-10-29): the SPANISH ladder's attempts, the v2 shape (no migration).
+// PENDING: [{ n, hints, extra, lang? }] completions the recorder refused (its rate gate); retried on every open,
+//          removed only after the recorder took them. They count as completed. `lang: 'es'` = a Spanish level.
 const SETTINGS_KEY = 'gamehub.wordweaver.v1';
 const OLD_SAVE_KEY = 'gamehub.wordweaver.save.v1';
 const SAVE_KEY = 'gamehub.wordweaver.save.v2';
+const SAVE_KEY_ES = 'gamehub.wordweaver.es.save.v1';
 const PENDING_KEY = 'gamehub.wordweaver.pending.v1';
 const SAVE_V = 1;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
@@ -67,7 +79,8 @@ function saveBand(band) {
 
 /** The attempts, one per difficulty. The first build's single save is carried across ONCE, into the
  *  difficulty its level falls in, with its words, hints and cells exactly as stored. */
-function loadSaves() {
+function loadSaves(lang = 'en') {
+  if (lang === 'es') return readObj(SAVE_KEY_ES) || {};
   const cur = readObj(SAVE_KEY);
   if (cur && cur.migrated) return cur;
   const all = cur || {};
@@ -86,29 +99,29 @@ function loadSaves() {
   if (!ok || !back || back.migrated !== 1) console.error('[word-weaver] the first build\'s save was not carried across; it is untouched and will be read again');
   return all;
 }
-/** The saved attempt of a difficulty, or null. */
-function attemptOf(band) {
-  const a = loadSaves()[band], n = a ? Math.floor(Number(a.n)) : 0;
+/** The saved attempt of a difficulty (in one language's ladder), or null. */
+function attemptOf(band, lang = 'en') {
+  const a = loadSaves(lang)[band], n = a ? Math.floor(Number(a.n)) : 0;
   return a && a.v === SAVE_V && n >= 1 && wwBandOf(n) === band ? a : null;
 }
-function writeAttempt(band, attempt) {
-  const all = loadSaves();
+function writeAttempt(band, attempt, lang = 'en') {
+  const all = loadSaves(lang);
   all[band] = attempt;
-  return writeJSON(SAVE_KEY, all, 'level progress');
+  return writeJSON(lang === 'es' ? SAVE_KEY_ES : SAVE_KEY, all, 'level progress');
 }
 
-/** Every level this phone has completed: its stats store plus completions the recorder has not taken yet. */
-function completedLevels() {
+/** Every level of one ladder this phone has completed: its stats store plus completions the recorder has not taken yet. */
+function completedLevels(lang = 'en') {
   const done = new Set();
-  try { for (const k of Object.keys(wwLevels(loadStats().games.wordweaver))) done.add(+k); } catch { /* none */ }
-  for (const e of readPending()) done.add(Math.floor(e.n));
+  try { for (const k of Object.keys(wwLevels(loadStats().games.wordweaver, lang))) done.add(+k); } catch { /* none */ }
+  for (const e of readPending()) if ((e.lang === 'es' ? 'es' : 'en') === lang) done.add(Math.floor(e.n));
   return done;
 }
 /** Where a difficulty stands: the attempt in progress, else its lowest level not yet completed.
  *  { n, finished } (finished: every level of the band is done; n is then past its end). */
-function bandNext(band, total) {
-  const done = completedLevels(), end = wwBandEnd(band, total);
-  const a = attemptOf(band);
+function bandNext(band, total, lang = 'en') {
+  const done = completedLevels(lang), end = wwBandEnd(band, total);
+  const a = attemptOf(band, lang);
   if (a && !done.has(Math.floor(a.n)) && a.n <= end) return { n: Math.floor(a.n), finished: false };
   let n = WW_BAND_START[band];
   while (n <= end && done.has(n)) n++;
@@ -128,7 +141,7 @@ function flushPending() {
   const left = [];
   for (const e of list) {
     let ok = null;
-    try { ok = recordWordWeaver(Math.floor(e.n), { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0) }); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
+    try { ok = recordWordWeaver(Math.floor(e.n), { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0), ...(e.lang === 'es' ? { lang: 'es' } : {}) }); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
     if (!ok) left.push(e);
   }
   if (left.length !== list.length) writeJSON(PENDING_KEY, left, 'queued levels');
@@ -157,6 +170,7 @@ class WordWeaver {
     this.timers = [];
     this.view = 'setup';         // setup | play | done | bandDone | soon | fail
     this.band = loadBand();
+    this.lang = wordLang();      // the puzzle language: 'en' | 'es'
     this.count = null;           // how many levels exist (data/index.json), once read
     this.level = null;
     this.st = freshState();
@@ -194,11 +208,26 @@ class WordWeaver {
     this.band = loadBand();
     this._render();
     // The setup screen's Play button needs to know how many levels exist: repaint when that is known.
-    loadIndex(DATA).then((idx) => {
-      if (this.dead) return;
+    this._loadCount();
+  }
+
+  /** How many levels the current language's ladder has (its index.json); the setup screen repaints when known. */
+  _loadCount() {
+    const lang = this.lang;
+    loadIndex(dataOf(lang)).then((idx) => {
+      if (this.dead || lang !== this.lang) return;
       this.count = idx ? idx.count : null;
       if (this.view === 'setup') this._render();
     });
+  }
+
+  /** The setup screen's EN/ES button: the other ladder (its own levels, save and progress). */
+  _switchLang() {
+    this.lang = this.lang === 'es' ? 'en' : 'es';
+    try { localStorage.setItem(LANG_KEY, this.lang); } catch (err) { console.error('[word-weaver] language choice not saved', err); }
+    this.count = null;
+    this._render();
+    this._loadCount();
   }
 
   destroy() {
@@ -263,17 +292,18 @@ class WordWeaver {
     const seq = ++this.seq;
     this.n = n;
     this.band = wwBandOf(n);
-    const lv = await loadLevel(n, DATA);
+    const lang = this.lang;
+    const lv = await loadLevel(n, dataOf(lang));
     if (this.dead || seq !== this.seq) return;
     if (!lv) {
-      const idx = await loadIndex(DATA);
+      const idx = await loadIndex(dataOf(lang));
       if (this.dead || seq !== this.seq) return;
       this.level = null;
       this.view = idx && n > idx.count ? 'soon' : 'fail';
       this._render();
       return;
     }
-    const a = attemptOf(this.band);
+    const a = attemptOf(this.band, lang);
     this.level = lv;
     this.st = cleanState(lv, a && Math.floor(a.n) === n ? a : null);
     this.order = shuffled(lv.l.length, null);
@@ -287,20 +317,20 @@ class WordWeaver {
   _save() {
     if (!this.level) return false;
     const s = this.st;
-    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, revealed: s.revealed, recorded: s.recorded });
+    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, revealed: s.revealed, recorded: s.recorded }, this.lang);
   }
 
   /** Count the level, once. The recorder runs FIRST (before any animation); the `recorded` flag is set only
    *  after it returned. A refusal is queued (PENDING_KEY) rather than lost. */
   _record() {
     if (this.st.recorded) return true;
-    const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length };
+    const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = recordWordWeaver(info.n, { hints: info.hints, extra: info.extra }); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, ...(info.lang ? { lang: info.lang } : {}) }); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();
-      if (!list.some((e) => Math.floor(e.n) === info.n)) { list.push(info); writeJSON(PENDING_KEY, list, 'queued levels'); }
+      if (!list.some((e) => Math.floor(e.n) === info.n && (e.lang === 'es') === (info.lang === 'es'))) { list.push(info); writeJSON(PENDING_KEY, list, 'queued levels'); }
     }
     this.st.recorded = true;
     this._save();
@@ -365,7 +395,7 @@ class WordWeaver {
    *  difficulties (shape + name), Play with the level number, How to play. Nothing else. */
   _setupHTML() {
     const band = this.band, total = this.count == null ? Infinity : this.count;
-    const nx = bandNext(band, total);
+    const nx = bandNext(band, total, this.lang);
     let pts = 0;
     try { pts = wwPoints(loadStats().games.wordweaver); } catch { pts = 0; }
     const segs = WW_TIERS.map((k) => `
@@ -382,6 +412,7 @@ class WordWeaver {
         <div class="ww-head">
           <h1>${t('title')}</h1>
           <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}</p>
+          <button type="button" class="ww-lang" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
         </div>
         <div class="ww-segs" role="radiogroup" aria-label="${t('diff_aria')}">${segs}</div>
         ${play}
@@ -747,15 +778,15 @@ class WordWeaver {
     this._record();
     const band = this.band;
     // The finished level's words and hints live in the stats store now (the recorder ran first); the attempt is spent.
-    if (!writeAttempt(band, null)) console.error('[word-weaver] the finished attempt was not cleared; the next level still opens');
-    const nx = bandNext(band, this.count == null ? Infinity : this.count);
+    if (!writeAttempt(band, null, this.lang)) console.error('[word-weaver] the finished attempt was not cleared; the next level still opens');
+    const nx = bandNext(band, this.count == null ? Infinity : this.count, this.lang);
     if (nx.finished) { this.seq++; this.view = 'bandDone'; this._render(); return; }
     this._open(nx.n);
   }
 
   /** The setup screen's Play: the picked difficulty's attempt in progress, else its next level. */
   _play() {
-    const nx = bandNext(this.band, this.count == null ? Infinity : this.count);
+    const nx = bandNext(this.band, this.count == null ? Infinity : this.count, this.lang);
     if (nx.finished) return;
     saveBand(this.band);
     this._open(nx.n);
@@ -788,6 +819,7 @@ class WordWeaver {
     else if (act === 'next') this._next();
     else if (act === 'retry') this._open(this.n);
     else if (act === 'play') this._play();
+    else if (act === 'lang') this._switchLang();
     else if (act === 'menu') this._toSetup();
     else if (act === 'band') { if (WW_TIERS.includes(btn.dataset.band) && btn.dataset.band !== this.band) { this.band = btn.dataset.band; saveBand(this.band); this._render(); } }
   }
@@ -819,7 +851,7 @@ class WordWeaver {
     if (k === 'Escape') { this.sel = []; this._paintWheel(false); return; }
     if (k === 'Enter' && !onControl) { ev.preventDefault(); this._submitSel(); return; }
     if (k === ' ' && !onControl) { ev.preventDefault(); this._shuffle(); return; }
-    if (k.length === 1 && /[a-z]/i.test(k)) {
+    if (k.length === 1 && /[a-zñ]/i.test(k)) {
       const ch = k.toUpperCase();
       const i = this.level.l.split('').findIndex((c, j) => c === ch && !this.sel.includes(j));
       if (i >= 0) { ev.preventDefault(); this.sel.push(i); this._paintWheel(false); }
