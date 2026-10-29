@@ -42,6 +42,7 @@ import { onlineGate, onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 import * as CH from './mp.js';
 import { takeOpen } from './alert.js';
 
@@ -70,6 +71,7 @@ const MP_SAVE_KEY = 'gamehub.battleship.mp.v1';
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
+const STATS_ID = 'battleship';
 // How long any lobby round trip (create room / join room / restore) may take before this game
 // gives up and shows the offline error. See _withNetTimeout for why this has to exist at all.
 const MP_NET_TIMEOUT_MS = 12 * 1000;
@@ -273,6 +275,8 @@ class BattleshipUI {
       net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this.mp) LL.detachLeave(STATS_ID);   // the match stays armed: closing is not leaving
+    LL.hideClaim(this.root);
     this.mp = null;
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
     if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
@@ -394,6 +398,7 @@ class BattleshipUI {
       this._tryRestoreMP(mpSave);
       return;
     }
+    LL.settleLeave(STATS_ID);   // a live game that died with its page, never rejoined: its armed loss
     const saved = loadGame();
     if (saved) this.resumeGame(saved); else this.renderSetup();
   }
@@ -2220,13 +2225,14 @@ class BattleshipUI {
    *  Live rooms and challenges are untouched. */
   _quitCostsLoss() {
     const s = this.state;
-    return !this.mp && !this.ch && this.view === 'battle' && !!s && !s.over && !this._statsCommitted
+    if (this.mp) return this._mpLeaveCosts();
+    return !this.ch && this.view === 'battle' && !!s && !s.over && !this._statsCommitted
       && (s.shotCount[this._localSeat()] | 0) > 0;
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), with the shots fired so far. */
   _recordQuitLoss() {
-    if (!this._quitCostsLoss()) return;
+    if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
     const s = this.state;
     const myShots = s.shotCount[this._localSeat()] | 0;
@@ -2260,6 +2266,9 @@ class BattleshipUI {
       try { CH.countResult(this.ch.id, won, extras, (ov && ov.at) || Date.now()); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
       return;
     }
+    // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
+    if (this.mp && LL.alreadyCounted(this._mpKey())) return;
+    if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
     try { recordBattleship(difficulty, won, extras); } catch { /* never block the result */ }
     const opp = this.mp && this.mp.opp;
     if (opp) { try { recordHeadToHead('battleship', opp, won); } catch { /* never block the result */ } }
@@ -2500,7 +2509,20 @@ class BattleshipUI {
     const seq = ++mp.appliedSeq;
     net.appendMove(mp.code, mp.role, seq, { t: 's', k: 's', g: mp.gameNum, seat: this._localSeat(), r, c }, stateHash(this.state))
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
+    // The first shot arms the leave (js/live-leave.js): leaving from now on is this player's loss.
+    if (!this._statsCommitted) LL.armLeave(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp]);
     this.renderBattle();
+  }
+
+  /** This player's shots, hits and ships sunk so far (the recorder's extras for a leave). */
+  _mpExtras() {
+    const s = this.state;
+    if (!s) return { shots: 0, hits: 0, sunk: 0, accuracy: 0 };
+    const myShots = s.shotCount[this._localSeat()] | 0;
+    const oppGrid = s.shots[this._remoteSeat()];
+    let hits = 0;
+    for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
+    return { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
   }
 
   /** Defender's half: resolve against the LOCAL, never-transmitted fleet, apply the answer to the
@@ -2760,7 +2782,15 @@ class BattleshipUI {
 
     if (room.status === 'ended' && !mp.opponentLeft) {
       mp.opponentLeft = true;
-      this._mpEndDueToOpponentLeft();
+      // A leave that decided the game in play (js/live-leave.js): this phone's win, or its loss when
+      // the other player claimed it. Anything else ends the room with nothing recorded, as before.
+      let res = 'none';
+      if (this._mpInGame() && !this._statsCommitted) {
+        res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
+          fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp] });
+        if (res !== 'none') this._statsCommitted = true;
+      }
+      this._mpEndDueToOpponentLeft(res);
       return;
     }
 
@@ -2770,6 +2800,7 @@ class BattleshipUI {
       if (stale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
       else if (!stale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
+    if (this._mpCanClaim()) LL.showClaim(this.root, () => this._mpClaim()); else LL.hideClaim(this.root);
 
     if (room.recovery) {
       if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
@@ -2905,16 +2936,54 @@ class BattleshipUI {
   }
 
   _mpLeaveToSetup() {
+    // Leaving the game in play (js/live-leave.js): after your own first move it is your loss, and the
+    // room ends with your forfeit so the other phone records its win. The other player gone 90 s
+    // after moving: leaving claims the win instead.
+    if (this._mpCanClaim()) { this._mpClaim(); return; }
+    const costs = this._mpLeaveCosts();
     if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
+    LL.hideClaim(this.root);
     const mp = this.mp;
+    if (mp && costs) { this._statsCommitted = true; LL.forfeitNow(STATS_ID); }
+    else if (mp && this._mpInGame()) LL.disarmLeave(STATS_ID);
     this.mp = null;
     this._mpClearSave();
     this._lobby = null; this._mode = 'solo';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
     this._mpStatusMsg = '';
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    if (mp && mp.code && costs) LL.leaveWithForfeit(net, mp.code, mp.role, mp.role, mp.gameNum).catch(() => {});
+    else if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
     else net.disconnect();
     this.renderSetup();
+  }
+
+  // --- leaving a live game (2026-10-29, js/live-leave.js) ----------------------------------------
+  _mpKey() { return this.mp ? LL.liveKey(STATS_ID, this.mp.code, this.mp.gameNum) : null; }
+  _mpOppRoleOf(mp) { return mp.role === 'host' ? 'guest' : 'host'; }
+  _mpInGame() { return !!(this.mp && this.state && !(this.state.over) && this.view === 'battle'); }
+  _mpOppAwayMs() { const r = this.mp && this.mp.lastRoomSnapshot; return r ? LL.awayMs(r[this._mpOppRoleOf(this.mp)]) : 0; }
+  /** Has the other player fired in the game in play? (`startRound` clears the log per game.) */
+  _mpOppMoved() {
+    const r = this.mp && this.mp.lastRoomSnapshot, by = this.mp && this._mpOppRoleOf(this.mp);
+    return !!(r && Object.values(r.moves || {}).some((m) => m && m.by === by && m.move && m.move.k === 's'));
+  }
+  _mpCanClaim() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() >= LL.CLAIM_MS && this._mpOppMoved(); }
+  _mpLeaveCosts() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() < LL.CLAIM_MS && LL.leaveCosts(STATS_ID, this._mpKey()); }
+
+  /** The other player has been gone 90 s after moving: this phone records its win and ends the room
+   *  with their forfeit (their phone records the loss when it comes back, or its armed marker does). */
+  _mpClaim() {
+    if (!this._mpCanClaim()) return;
+    const mp = this.mp;
+    this._statsCommitted = true;
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp]);
+    if (this._reactions) this._reactions.setActive(false);
+    LL.hideClaim(this.root);
+    this.mp = null;
+    this._mpClearSave();
+    this._mpStatusMsg = '';
+    LL.leaveWithForfeit(net, mp.code, mp.role, this._mpOppRoleOf(mp), mp.gameNum, true).catch(() => {});
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', LL.lt('ll_claimed'));
   }
 
   async _mpEndDueToError() {
@@ -2929,27 +2998,31 @@ class BattleshipUI {
     this._mpEndModal('mp_error_title', 'mp_error_sub');
   }
 
-  _mpEndDueToOpponentLeft() {
+  _mpEndDueToOpponentLeft(res) {
     if (this._dead || !this.mp) return;
+    const name = (this.mp.opp && this.mp.opp.name) || '?';
     this.mp = null;
     this._mpClearSave();
     this._mpStatusMsg = '';
+    LL.hideClaim(this.root);
     net.stopHeartbeat();
-    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub');
+    const title = res === 'won' ? LL.lt('ll_left_win', { name }) : res === 'lost' ? LL.lt('ll_lost', { name }) : null;
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', title);
   }
 
-  _mpEndModal(titleKey, subKey) {
+  _mpEndModal(titleKey, subKey, titleText) {
     this.closeOverlays();
+    const title = titleText || t(titleKey);
     const overlay = document.createElement('div');
     overlay.className = 'bs-overlay';
     overlay.dataset.role = 'mp-end';
     overlay.innerHTML = `
       <div class="bs-scrim"></div>
-      <div class="bs-card" role="dialog" aria-modal="true" aria-label="${t(titleKey)}">
+      <div class="bs-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <button type="button" class="bs-x" data-action="mp-end-ok" aria-label="${t('close')}">&times;</button>
-        <span class="bs-card-emoji">📡</span>
-        <h3 class="bs-card-title">${t(titleKey)}</h3>
-        <p class="bs-card-sub">${t(subKey)}</p>
+        <span class="bs-card-emoji">${titleText ? '🏳️' : '📡'}</span>
+        <h3 class="bs-card-title">${esc(title)}</h3>
+        ${titleText ? '' : `<p class="bs-card-sub">${t(subKey)}</p>`}
         <div class="bs-card-actions">
           <button type="button" class="bs-btn bs-btn-primary" data-action="mp-end-ok">${t('mp_back_to_setup')}</button>
         </div>
@@ -3001,6 +3074,24 @@ class BattleshipUI {
    *  than dropping the player back on a blank setup screen. Runs once, right after mount(). */
   async _tryRestoreMP(save) {
     const { code, role } = save;
+    if (save.midGame) {
+      // Was the game decided by a leave while this phone was away? (js/live-leave.js)
+      const other = role === 'host' ? 'guest' : 'host';
+      const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
+        n: save.gameNum, mySeat: role, role, fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, { shots: 0, hits: 0, sunk: 0, accuracy: 0 }],
+        oppsOf: (room) => [room[other]] });
+      if (this._dead) return;
+      if (!chk.go) {
+        this._mpClearSave();
+        net.disconnect();
+        const o = chk.room && chk.room[other];
+        const name = (o && o.name) || '?';
+        if (chk.res === 'won' || chk.res === 'lost') {
+          this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', chk.res === 'won' ? LL.lt('ll_left_win', { name }) : LL.lt('ll_lost', { name }));
+        }
+        return;
+      }
+    }
     try {
       if (role === 'guest') {
         const res = await this._withNetTimeout(net.joinRoom(code, this._myIdentity()));
@@ -4068,4 +4159,10 @@ export function openArmed() {
   try { o = takeOpen(); } catch { o = null; }
   if (o) instance._chTakeArmed(o);
 }
-export default { init, destroy, isInProgress, openArmed };
+/** A live game's leave costs a loss (js/live-leave.js); the hub's leave confirm says so. */
+export function quitCostsLoss() { return !!(instance && instance.mp && instance._mpLeaveCosts()); }
+
+/** The hub's leave was confirmed: resign the live game in play (destroy() alone only detaches). */
+export function leaveMatch() { if (instance && instance.mp) instance._mpLeaveToSetup(); }
+
+export default { init, destroy, isInProgress, openArmed, quitCostsLoss, leaveMatch };
