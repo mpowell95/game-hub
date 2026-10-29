@@ -368,10 +368,9 @@ function segHTML(name, options, value) {
 
 // --- games --------------------------------------------------------------------------------------
 
-// Games whose admin row also carries a WHO CAN SEE IT picker (2026-09-24, the Course Creator; Pool
-// 2026-10-23, Matt: "release this for Anita Bonita only. We're going to test play"; Battle Arena
-// 2026-10-28, Matt: "make it available to test against specific players").
-const ALLOW_PICKER = new Set(['course-creator', 'eight-ball', 'battle-arena']);
+// Every hidden game's admin row carries a WHO CAN SEE IT picker (2026-10-29, Matt: "Why can't I add people to word
+// weaver, gridlock, or cup baseball?"). It was a per-game list (Course Creator 2026-09-24, Pool 2026-10-23, Battle
+// Arena 2026-10-28), so each new admin-only game came without one; the hub already honours `allow/<CODE>` for any id.
 
 /** One row per PERSON with a player code, A-Z by name: {code, name, emoji}. */
 function codedPeople() {
@@ -556,7 +555,7 @@ function gameRowHTML(cfg, g, live) {
     </div>
   </div>`;
   // Only while it is hidden: a live game is already everyone's, so a picker there would be a lie.
-  return ALLOW_PICKER.has(g.id) && !live ? row + allowPickerHTML(cfg, g) : row;
+  return live ? row : row + allowPickerHTML(cfg, g);
 }
 
 // --- skeeball machines ---------------------------------------------------------------------------

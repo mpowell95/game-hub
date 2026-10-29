@@ -672,7 +672,7 @@ no Default buttons.
   record and count at launch (Matt's choice). `tools/test-admin-only-plays.mjs`. `visibleTabs()` keeps its own, more permissive
   rule on purpose; do not unify them.
 - `hideFrom: ['<CODE>']` on a `GAMES` entry hides a game from named players (never Matt/dev).
-  `games/<id>/allow/<CODE>` opens a hidden game to named players (`ALLOW_PICKER`); it hides the
+  `games/<id>/allow/<CODE>` opens a hidden game to named players (the picker under EVERY hidden game's row, since 2026-10-29); it hides the
   tile, not the URL.
 - **Every admin-only game needs a `GAME_META` row**; `tools/players-agg.test.mjs`'s `OFF_THE_BOARD` must
   stay empty (a missing row zeroes every win, how Yahtzee shipped).
