@@ -456,6 +456,38 @@ export async function readMyGames() {
     return rowsFromIndex(await readPath(boot, `${NODE}/index/${me}`));
   } catch (err) { console.warn('[cup-pong] could not read your matches', err); return []; }
 }
+/**
+ * PURE. The series games still owed a next game, from your index rows alone (2026-10-29: the hub's
+ * Multiplayer screen dropped "Start game 2", because game 1 is finished and game 2 not made yet).
+ * One row per series whose newest game is over with a result and the series not decided:
+ * { id: 'next:<last game id>', with, name, emoji, updated, yourTurn, over: false, owed: true,
+ *   series, seriesNo: <the next game's number>, su }. `yourTurn` = you LOST the last game
+ * (seriesStarter: the loser starts the next one).
+ */
+export function owedSeriesRows(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.series > 1);
+  const groups = new Map();
+  for (const r of list) {
+    const k = r.seriesOf || r.id;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    const last = g.reduce((x, y) => ((y.seriesNo | 0) > (x.seriesNo | 0) ? y : x));
+    if (!last.over || last.ended || (last.result !== 'won' && last.result !== 'lost')) continue;
+    const won = g.filter((r) => r.result === 'won').length, lost = g.filter((r) => r.result === 'lost').length;
+    const target = seriesTarget(last.series);
+    if (won >= target || lost >= target || (last.seriesNo | 0) >= last.series) continue;
+    out.push({
+      id: `next:${last.id}`, with: last.with, name: last.name, emoji: last.emoji, updated: ms(last.updated),
+      yourTurn: last.result === 'lost', over: false, owed: true,
+      series: last.series, seriesNo: (last.seriesNo | 0) + 1, su: last.su === true,
+    });
+  }
+  return out;
+}
+
 /** READ-ONLY live listener on your own index. Returns an unsubscribe that is always safe to call. */
 export async function watchMyGames(cb) {
   const me = myCode();

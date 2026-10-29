@@ -76,6 +76,9 @@ export const SOURCES = {
   cuppong: {
     load: () => import('../cup-pong/js/mp.js'),
     read: (M) => M.readMyGames(),
+    // A series between games: game N is over, game N+1 not made yet (2026-10-29). Without this the
+    // series vanished from the screen while Cup Pong's own list said "Start game 2".
+    owed: (M, raw) => (typeof M.owedSeriesRows === 'function' ? M.owedSeriesRows(raw) : []),
     watch: (M, cb) => M.watchMyGames(cb),
     action: logGameAction,
     end: logGameEnd,
@@ -200,6 +203,8 @@ export function normalizeRow(game, r, expired = false) {
     updated: ms(r.updated), state, ended,
     open: state === 'yours' || state === 'theirs' ? (r.open === 'sent' || r.open === 'got' ? r.open : '') : '',
     sent: !!r.sent,
+    // A series owed its next game (SOURCES[g].owed): no match yet, so no ⋯ and no bell.
+    owed: !!r.owed && (state === 'yours' || state === 'theirs'),
     // When a live match stops waiting on somebody (js/challenge-life.js; Skeeball: every turn). 0 = never.
     expires: state === 'yours' || state === 'theirs' ? ms(r.expires) : 0,
     result: state === 'done' && RESULTS.includes(r.result) ? r.result : null,
@@ -290,8 +295,12 @@ export async function loadAll(gameIds, now = Date.now()) {
 
 function toRows(g, M, raw, now = Date.now()) {
   const src = SOURCES[g];
-  return (Array.isArray(raw) ? raw : [])
+  const list = Array.isArray(raw) ? raw : [];
+  let owed = [];
+  try { owed = src.owed ? src.owed(M, list) : []; } catch (err) { console.warn('[challenges] owed series', g, err); }
+  return list
     .map((r) => normalizeRow(g, r, src.expired ? src.expired(M, r, now) : false))
+    .concat((Array.isArray(owed) ? owed : []).map((r) => normalizeRow(g, r)))
     .filter(Boolean);
 }
 

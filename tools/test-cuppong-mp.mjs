@@ -297,6 +297,27 @@ const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
   ok('cleanEntry keeps a throw at full precision', x.p === 0.123456789012 && x.a === -0.0987654321);
 }
 
+// --- a series between games: the hub's Multiplayer screen must still list it (2026-10-29) ---------
+{
+  const R = (o) => ({ with: 'KINGG', name: 'King', emoji: '🤴', updated: 5, series: 5, su: false, ...o });
+  const g1 = R({ id: 'g1', seriesOf: 'g1', seriesNo: 1, over: true, result: 'lost' });
+  let o = MP.owedSeriesRows([g1]);
+  ok('lost game 1 of 5: owed game 2, my move', o.length === 1 && o[0].id === 'next:g1' && o[0].yourTurn && o[0].seriesNo === 2 && !o[0].over);
+  o = MP.owedSeriesRows([{ ...g1, result: 'won' }]);
+  ok('won game 1 of 5: owed game 2, their move', o.length === 1 && !o[0].yourTurn);
+  const g2 = R({ id: 'g2', seriesOf: 'g1', seriesNo: 2, over: false, yourTurn: true });
+  ok('game 2 made: nothing owed', MP.owedSeriesRows([g1, g2]).length === 0);
+  const won3 = ['a', 'b', 'c'].map((id, i) => R({ id, seriesOf: 'a', seriesNo: i + 1, over: true, result: 'won' }));
+  ok('series decided (3 of 5 won): nothing owed', MP.owedSeriesRows(won3).length === 0);
+  ok('a called-off game 1 owes no game 2', MP.owedSeriesRows([{ ...g1, result: null, ended: 'cancelled' }]).length === 0);
+  ok('a single game owes nothing', MP.owedSeriesRows([{ ...g1, series: 1 }]).length === 0);
+  const C = await import('../js/challenges.js');
+  const rows = [C.normalizeRow('cuppong', g1)].concat(MP.owedSeriesRows([g1]).map((r) => C.normalizeRow('cuppong', r)));
+  const sum = C.summarize(rows);
+  ok('hub screen: owed game 2 under Your turn, game 1 still finished, counted once',
+    sum.yours.length === 1 && sum.yours[0].owed && sum.yours[0].info.seriesNo === 2 && sum.finished.length === 1 && sum.total.played === 1);
+}
+
 ok('database.rules.json has the cuppong branch', !!(rules.rules && rules.rules.cuppong));
 ok('the backup reads the cuppong branch', /['"]cuppong['"]/.test(readFileSync('backups/rtdb-backup.mjs', 'utf8')));
 ok('mp.js deletes nothing', !/\.remove\(|set\([^)]*,\s*null\)/.test(readFileSync('cup-pong/js/mp.js', 'utf8')));
