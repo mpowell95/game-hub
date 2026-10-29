@@ -149,6 +149,7 @@
   touch-action: manipulation;
   cursor: pointer;
 }
+.ww-root .ww-lang--top { margin-top: 0; min-width: 48px; padding: 0 8px; border-width: 1.5px; font-size: 15px; }
 .ww-root .ww-segs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .ww-root .ww-seg {
   position: relative;
