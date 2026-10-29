@@ -369,8 +369,9 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
     for (const c of codes) await sendTo(db, c, beeNote('flag', bk, f), `bee-flag-${bk}-${code}`, { game: 'spelling-bee' });
   }
   for (const [bk, code, a] of alerts) {
-    logger.info('bee log gap', { bk, code, words: a.words, logged: a.logged });
-    for (const c of codes) await sendTo(db, c, beeNote('log', bk, a), `bee-log-${bk}-${code}`, { game: 'spelling-bee' });
+    const kind = a.zone ? 'zone' : 'log';
+    logger.info(a.zone ? 'bee zone change' : 'bee log gap', { bk, code, words: a.words, logged: a.logged, zone: a.zone });
+    for (const c of codes) await sendTo(db, c, beeNote(kind, bk, a), `bee-${kind}-${bk}-${code}`, { game: 'spelling-bee' });
   }
   const meta = (await db.ref('boards/v1/beeMeta').get()).val() || {};
   if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) {

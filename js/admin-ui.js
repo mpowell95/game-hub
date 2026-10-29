@@ -479,8 +479,11 @@ function beeSectionHTML(cfg) {
   rows.sort((a, b) => b.at - a.at);
   const gaps = [];
   for (const [bk, byCode] of Object.entries((_bee && _bee.alerts) || {})) {
-    for (const [code, a] of Object.entries(byCode || {})) {
-      gaps.push({ at: Number(a.at) || 0, html: `<div class="adm-row"><span class="adm-name">${who(code, a.name)} · ${esc(date(a.at))} ${lang(bk)}</span><span class="adm-note">${a.words | 0} / ${a.logged | 0}</span></div>` });
+    for (const [key, a] of Object.entries(byCode || {})) {
+      // `<CODE>~zone` (2026-10-29): the phone's time zone moved during that puzzle (functions/bee.js checkZone).
+      const code = String(key).split('~')[0];
+      const note = a && a.zone ? `UTC ${String(a.zone).split(',').map((z) => { const h = -Number(z) / 60; return (h >= 0 ? '+' : '') + h; }).join(' / ')}` : `${a.words | 0} / ${a.logged | 0}`;
+      gaps.push({ at: Number(a.at) || 0, html: `<div class="adm-row"><span class="adm-name">${who(code, a.name)} · ${esc(date(a.at))} ${lang(bk)}</span><span class="adm-note">${esc(note)}</span></div>` });
     }
   }
   gaps.sort((a, b) => b.at - a.at);

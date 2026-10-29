@@ -135,7 +135,7 @@
         ".read": "auth != null",
         "$code": {
           "$k": {
-            ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
+            ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || (data.child('t').val() === newData.child('t').val() && data.child('e').val() === newData.child('e').val()))",
             ".validate": "$puzzle.matches(/^(es-)?[a-z0]-[a-z0]{6}$/) && $k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'e', 's'])",
             "t": { ".validate": "newData.isNumber()" },
             "s": { ".validate": "newData.val() === now" },

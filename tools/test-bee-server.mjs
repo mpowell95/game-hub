@@ -6,6 +6,7 @@
 //   node tools/test-bee-server.mjs
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 execFileSync(process.execPath, ['tools/sync-functions-shared.mjs'], { cwd: ROOT, stdio: 'ignore' });
@@ -218,6 +219,37 @@ ok('the push says who, when, which rules', n1.title === 'Spelling Bee' && n1.bod
   ok('ownEntry: a late post with a log keeps what the log proves (an honest replay of a past day)', F.ownEntry({ words: 9, at: D0 + 80 * H }, honestLog, PZD).w === 2);
   ok('countedRow: an entry for an older post is ignored (the row moved on)', F.countedRow({ words: 9, points: 30, rank: 4, at: 5 }, { w: 1, p: 1, r: 0, at: 4, use: 1 }, D).words === 9);
   ok('countedRow: a late post with no entry counts nothing', F.countedRow({ words: 9, points: 30, rank: 4, at: D0 + 80 * H }, null, D).words === 0);
+
+  // The TIME-ZONE trick (2026-10-29, second pass): a phone moved to UTC+14 is a day ahead, so its
+  // Yesterday's Answers is the Americas' today. Seeing them is stamped by the server (`answers`).
+  {
+    const NY = 300;   // New York in November: getTimezoneOffset() = 300 (local = UTC-5)
+    const atNY = (h) => D0 + h * H + NY * 60000;
+    const zoneLog = lg([{ t: atNY(9), s: atNY(9) + 2000, z: NY, w: 'eeee' },
+      { t: atNY(10), s: atNY(10) + 500, z: -840, e: 'answers', r: 'day 0' },
+      { t: atNY(10.1), s: atNY(10.1) + 2000, z: NY, w: 'abcdhue' }, { t: atNY(10.2), s: atNY(10.2) + 2000, z: NY, w: 'beee' }]);
+    ok('answersSeenAt: the server time the answers were seen', F.answersSeenAt(zoneLog) === atNY(10) + 500 && F.answersSeenAt(honestLog) === null);
+    const oz = F.ownDayFromLog(zoneLog, PZD);
+    ok('a word sent after this code saw the puzzle\'s answers counts for nothing (on the day, its own zone)', oz.w === 1 && oz.p === 1);
+    ok('ownEntry: a log with an answers view decides the row even with words missing from it',
+      (() => { const e = F.ownEntry({ words: 9, dw: 9, dp: 60, at: atNY(11) }, zoneLog, PZD); return e && e.w === 1 && e.p === 1 && e.use === 1 && e.r === F.rankOf(1, PZD.max, false); })());
+    ok('zoneShifts: UTC-5 then UTC+14 in one puzzle\'s log', F.zoneShifts(zoneLog).join() === '-840,300');
+    ok('zoneShifts: one zone, or a daylight-saving hour, is nothing',
+      F.zoneShifts(honestLog).length === 0 && F.zoneShifts(lg([{ t: 1, s: 1, z: -60, w: 'a' }, { t: 2, s: 2, z: -120, w: 'b' }])).length === 0);
+    const bkZ = Object.keys(B.PUZZLES).find((k) => B.PUZZLES[k].day === D && B.PUZZLES[k].lang === 'en');
+    const dbz = fakeDb({ beeLog: { [bkZ]: { ZONE1: zoneLog } } });
+    const z1 = await B.checkZone(dbz, bkZ, 'ZONE1', { name: 'Zoner' }, zoneLog, 5);
+    const z2 = await B.checkZone(dbz, bkZ, 'ZONE1', { name: 'Zoner' }, zoneLog, 6);
+    ok('server: a zone change is an ALERT, written once, beside the log-gap alerts (never a flag)',
+      z1 && z1.zone === '-840,300' && z2 === null && dbz.tree.beeAlerts[bkZ]['ZONE1~zone'].zone === '-840,300' && !dbz.tree.beeFlags);
+    ok('server: the zone push says who and which zones', B.beeNote('zone', bkZ, { name: 'Zoner', zone: '-840,300' }).text('en').body.endsWith('time zone changed (-840,300)'));
+    const ui = readFileSync(new URL('../spelling-bee/js/ui.js', import.meta.url), 'utf8');
+    ok('phone: Yesterday\'s Answers logs `answers` under THAT puzzle and shows only once the server has it',
+      /const sent = await logConfirmed\(p\.key, 'answers'/.test(ui) && /if \(!sent\) \{ this\._toast\(t\('need_net'\), 'is-bad'\); return; \}/.test(ui)
+      && ui.indexOf("logConfirmed(p.key, 'answers'") < ui.indexOf("this._openOverlay('yesterday'"));
+    const rules = JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules.beeLog.$puzzle.$code.$k['.write'];
+    ok('rules: a log entry\'s kind can never be rewritten', /data\.child\('e'\)\.val\(\) === newData\.child\('e'\)\.val\(\)/.test(rules));
+  }
 
   // The whole path: the server (fake database) and the long-term board.
   const bkD = Object.keys(B.PUZZLES).find((k) => B.PUZZLES[k].day === D && B.PUZZLES[k].lang === 'en');
