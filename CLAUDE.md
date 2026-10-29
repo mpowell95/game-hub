@@ -89,6 +89,12 @@ and why it is taking this long, before the next tool call. Then carry on.
 
 ## Mockups are sketches, not pitches
 
+**Feedback on a mockup changes the MOCKUP, never the live game (Matt, 2026-10-29).** While Matt is reviewing a
+mockup, every comment on it ("that space should be used for X", "remove that", "I don't like Y") is an edit to the
+mockup: update it and send it again. Build and ship only when he says so in words ("build it", "make it live",
+"ship it"). This overrides "Asking for a change means LIVE" for anything shown in a mockup. (The Contexto
+medal key shipped from a mockup comment that day; Matt kept it.)
+
 A mockup is the thing itself and its numbers. No lede, no framing, no "why", nothing written to
 persuade. Reasoning goes in the repo doc or commit message. Applies to every artifact, mockup,
 plan page and diagram.
