@@ -28,7 +28,7 @@ for (const f of seen) {
   mkdirSync(dirname(to), { recursive: true });
   writeFileSync(to, readFileSync(f));
 }
-// Spelling Bee's puzzle map (2026-10-28, functions/bee.js): board key -> {lang, day, key, top} for
+// Spelling Bee's puzzle map (2026-10-28, functions/bee.js): board key -> {lang, day, key, top, max, n} for
 // every puzzle in both word lists, replaced ones included, so the server knows which day and language
 // a beeDaily/beeLog node belongs to without loading the word lists. `top`: the 15 highest answer
 // scores, high first (js/bee-fairplay.js "best words first").
@@ -43,8 +43,11 @@ for (const f of seen) {
       const all = [E.puzzleAt(d, n)];
       if (d.retired && d.retired[n]) all.push(E.puzzleOf(d.retired[n], lang));
       for (const pz of all) {
-        const top = E.answersFor(d, pz).map((w) => E.scoreWord(w, pz)).sort((a, b) => b - a).slice(0, 15);
-        map[bk(pz.key)] = { lang, day, key: pz.key, top };
+        const ans = E.answersFor(d, pz);
+        const top = ans.map((w) => E.scoreWord(w, pz)).sort((a, b) => b - a).slice(0, 15);
+        // max + n (2026-10-29): the puzzle's total points and answer count, for the rank of the words a
+        // log proves were found on the day (js/bee-fairplay.js ownDayFromLog).
+        map[bk(pz.key)] = { lang, day, key: pz.key, top, max: E.totalPoints(ans, pz), n: ans.length };
       }
     }
   }

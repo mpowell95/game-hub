@@ -119,7 +119,8 @@ const EXTRA_SCREENS = {
       name: k,
       async open(page) {
         await page.waitForFunction(() => window.__sbTest, null, { timeout: 15000 });
-        await page.evaluate(() => window.__sbTest.ui._closeOverlay());
+        // Yesterday's Answers waits for the server's clock (2026-10-29); headless = a measured gap of 0.
+        await page.evaluate(() => { window.__sbTest.ui._closeOverlay(); if (window.__sbTest.liveTime) window.__sbTest.liveTime(0); });
         await page.click(`.sb-hud [data-act="${k}"]`);
         await page.waitForTimeout(250);
       },
