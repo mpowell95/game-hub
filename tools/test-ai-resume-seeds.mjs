@@ -24,6 +24,15 @@ const SEEDS = Array.from({ length: 40 }, (_, i) => (i + 1) * 7919);
   const u = src('mancala/js/ui.js');
   ok('mancala: the seed is saved, loaded and used', /aiSeed: ui\.aiSeed/.test(u) && /aiSeed: Number\.isInteger\(raw\.aiSeed\)/.test(u)
     && /this\.aiSeed = saved\.aiSeed/.test(u) && /seededRand\(this\.aiSeed, this\.state\)/.test(u));
+  // Intermediate and Pro (2026-10-29, second pass): a NODE budget, not the wall clock, so the same
+  // position gets the same move every time, however busy or slow the phone is.
+  let s2 = G.newGame(G.P1);
+  for (const pit of [2, 9, 4]) { const r = G.applyMove(s2, pit); if (r) s2 = r.state; }
+  const a = src('mancala/js/ai.js');
+  ok('mancala: Intermediate and Pro stop on a node budget, never the clock', !/Date\.now\(\)/.test(a) && /PRO_NODES/.test(a) && /INTERMEDIATE_NODES/.test(a));
+  const p1 = A.chooseMove(s2, 3), p2 = A.chooseMove(s2, 3);
+  const i1 = A.chooseMove(s2, 2), i2 = A.chooseMove(s2, 2);
+  ok('mancala: Pro and Intermediate pick the same pit for the same position, twice', p1 === p2 && i1 === i2 && p1 != null && i1 != null);
 }
 
 // ---- Escoba (Easy is the only tier that rolls dice) -----------------------------------------------------
