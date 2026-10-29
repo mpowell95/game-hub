@@ -12,7 +12,7 @@
 import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woClMerge, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest } from './word-weaver-points.js';
 
@@ -147,6 +147,33 @@ function dedupeChallenges(grp) {
   }
 }
 
+/** Has this Arrow Maze record cleared anything (so its clears count, even with no `wo` yet)? */
+const woHasWins = (game) => !!game && WO_TIERS.some((t) => (((game.byDiff || {})[t] || {}).won | 0) > 0);
+
+/** Sudoku's NO-HINT solves per tier for ONE record (2026-10-29, Matt: a hint solve is a win "but
+ *  ranked below" every no-hint solve). `sd.clean[tier]` counts the solves with zero hints recorded
+ *  since hint use was tracked per solve. Wins from before that (`sd.pre.won`, snapshotted at the
+ *  first tracked solve; the whole byDiff when there is no snapshot yet) are no-hint ONLY when
+ *  proven: that record's lifetime hints were 0 then (`sd.pre.hints`, else `sd.hints`), so none of
+ *  them can have used one. Otherwise they stay wins and rank with the hint solves. Never more than
+ *  the tier's stored wins. */
+export function sdNoHintOf(game) {
+  const g = game || {};
+  const sd = g.sd || {}, bd = g.byDiff || {};
+  const pre = sd.pre && typeof sd.pre === 'object' && !Array.isArray(sd.pre) ? sd.pre : null;
+  const legacyHints = pre ? Number(pre.hints) : Number(sd.hints);
+  const proven = Number.isFinite(legacyHints) && legacyHints === 0;
+  const clean = sd.clean && typeof sd.clean === 'object' ? sd.clean : {};
+  const out = {};
+  for (const k of DIFFS) {
+    const won = Math.max(0, ((bd[k] || {}).won) | 0);
+    const legacy = proven ? Math.max(0, (pre ? ((pre.won || {})[k]) : won) | 0) : 0;
+    const n = Math.min(won, Math.max(0, clean[k] | 0) + legacy);
+    if (n > 0) out[k] = n;
+  }
+  return out;
+}
+
 /** Aggregate the players/ map (deviceId -> record) into an UNSORTED list of one-per-person groups.
  *  Each group's `games[g]` is in the CANONICAL stats shape ({ total, byDiff, +grid/cc/es/nb }) so the
  *  same object doubles as a valid `st.games` for the Stats screens. Group also carries roll-ups:
@@ -256,6 +283,21 @@ export function aggregatePlayers(all, corrections) {
           const val = sbt[k] | 0;
           if (val > 0) dst.sd.bestTimeMs[k] = cur > 0 ? Math.min(cur, val) : val;
         }
+        // NO-HINT SOLVES per tier (2026-10-29): worked out PER RECORD before adding, because the
+        // legacy proof (that record's own lifetime hints were 0) is lost once two records' hints add.
+        if (!dst.sd.noHint) dst.sd.noHint = {};
+        const nh = sdNoHintOf(src);
+        for (const k of Object.keys(nh)) dst.sd.noHint[k] = (dst.sd.noHint[k] | 0) + nh[k];
+      } else if (g === 'murdoku' && src.mu) {
+        // Murdoku's no-hint solves (2026-10-29, js/game-stats.js recordMurdoku): counters, so they
+        // add. Solves recorded before it have no hint record and are in neither count.
+        if (!dst.mu) dst.mu = { clean: {}, hinted: {}, hints: 0 };
+        dst.mu.hints += Math.max(0, src.mu.hints | 0);
+        for (const key of ['clean', 'hinted']) {
+          const m = src.mu[key];
+          if (!m || typeof m !== 'object') continue;
+          for (const k of Object.keys(m)) dst.mu[key][k] = (dst.mu[key][k] | 0) + Math.max(0, m[k] | 0);
+        }
       } else if (g === 'minesweeper' && src.ms) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without this branch every
         // Minesweeper counter reads ZERO the moment a person's second device syncs, while each
@@ -290,36 +332,49 @@ export function aggregatePlayers(all, corrections) {
         for (const k of Object.keys(mbc)) {
           dst.ms.bestClearedPct[k] = Math.max(dst.ms.bestClearedPct[k] | 0, mbc[k] | 0);
         }
-      } else if (g === 'wayout' && src.wo) {
+      } else if (g === 'wayout' && (src.wo || woHasWins(src))) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Arrow Maze's
         // timed counts read as nothing the moment a second device syncs (THE LAW rule 1). Counters
         // add. Finish logs cannot be added across devices (each phone's is its own sequence), so per
         // difficulty the person keeps the log of the device with the most timed finishes there. A
         // record from before `log` existed offers its `recent` list instead.
         if (!dst.wo) dst.wo = { timed: {}, mistakes: 0, hints: 0, log: {}, _n: {} };
-        dst.wo.mistakes += src.wo.mistakes | 0;
-        dst.wo.hints += src.wo.hints | 0;
-        if (!dst.wo.pts) dst.wo.pts = {};
-        if (!dst.wo.ptsN) dst.wo.ptsN = {};
+        // ONE LEVEL, ONE SCORE PER PERSON (2026-10-29, js/arrow-maze-time.js woPoints): each record's
+        // legacy clears add into `lg[band]` (with the level numbers they cover), and the level sets
+        // `cl[band]` unite, best per level, so a level cleared on two storages counts once. Every
+        // record with Arrow Maze wins takes part, `wo` or not (its wins are legacy clears).
+        if (!dst.wo.lg) dst.wo.lg = {};
+        if (!dst.wo.cl) dst.wo.cl = {};
         for (const tier of WO_TIERS) {
-          const n = ((src.wo.timed || {})[tier]) | 0;
-          dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
-          // Points earned with hints and lost lives counted (2026-10-17): counters, so they add.
-          dst.wo.pts[tier] = (dst.wo.pts[tier] | 0) + (((src.wo.pts || {})[tier]) | 0);
-          dst.wo.ptsN[tier] = (dst.wo.ptsN[tier] | 0) + (((src.wo.ptsN || {})[tier]) | 0);
-          const log = woList(((src.wo.log || src.wo.recent) || {})[tier]);
-          if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.log[tier] = log; }
+          dst.wo.lg[tier] = woLegacyAdd(dst.wo.lg[tier], src, tier);
+          const c = ((src.wo || {}).cl || {})[tier];
+          if (typeof c === 'string' && c) dst.wo.cl[tier] = woClMerge(dst.wo.cl[tier], c);
         }
-        // RUSH (2026-10-14): each week's best is the best on ANY of the person's devices (Math.max,
-        // never a sum); the run lists are each phone's own sequence, so the person keeps the longest.
-        if (src.wo.rush && typeof src.wo.rush === 'object') {
-          if (!dst.wo.rush) dst.wo.rush = { runs: {}, best: {} };
-          for (const m of RUSH_MODES) {
-            const best = woRushBestMap((src.wo.rush.best || {})[m]);
-            const into = dst.wo.rush.best[m] || (dst.wo.rush.best[m] = {});
-            for (const [w, v] of Object.entries(best)) into[w] = Math.max(into[w] ?? -1, v);
-            const runs = woRushRuns((src.wo.rush.runs || {})[m]);
-            if (runs.length > (dst.wo.rush.runs[m] || []).length) dst.wo.rush.runs[m] = runs;
+        if (src.wo) {
+          dst.wo.mistakes += src.wo.mistakes | 0;
+          dst.wo.hints += src.wo.hints | 0;
+          if (!dst.wo.pts) dst.wo.pts = {};
+          if (!dst.wo.ptsN) dst.wo.ptsN = {};
+          for (const tier of WO_TIERS) {
+            const n = ((src.wo.timed || {})[tier]) | 0;
+            dst.wo.timed[tier] = (dst.wo.timed[tier] | 0) + n;
+            // Points earned with hints and lost lives counted (2026-10-17): counters, so they add.
+            dst.wo.pts[tier] = (dst.wo.pts[tier] | 0) + (((src.wo.pts || {})[tier]) | 0);
+            dst.wo.ptsN[tier] = (dst.wo.ptsN[tier] | 0) + (((src.wo.ptsN || {})[tier]) | 0);
+            const log = woList(((src.wo.log || src.wo.recent) || {})[tier]);
+            if (n > (dst.wo._n[tier] | 0)) { dst.wo._n[tier] = n; dst.wo.log[tier] = log; }
+          }
+          // RUSH (2026-10-14): each week's best is the best on ANY of the person's devices (Math.max,
+          // never a sum); the run lists are each phone's own sequence, so the person keeps the longest.
+          if (src.wo.rush && typeof src.wo.rush === 'object') {
+            if (!dst.wo.rush) dst.wo.rush = { runs: {}, best: {} };
+            for (const m of RUSH_MODES) {
+              const best = woRushBestMap((src.wo.rush.best || {})[m]);
+              const into = dst.wo.rush.best[m] || (dst.wo.rush.best[m] = {});
+              for (const [w, v] of Object.entries(best)) into[w] = Math.max(into[w] ?? -1, v);
+              const runs = woRushRuns((src.wo.rush.runs || {})[m]);
+              if (runs.length > (dst.wo.rush.runs[m] || []).length) dst.wo.rush.runs[m] = runs;
+            }
           }
         }
       } else if (g === 'gridlock' && src.gl) {

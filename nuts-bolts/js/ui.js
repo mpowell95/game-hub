@@ -123,7 +123,20 @@ function ensureStylesheet() {
 
 function freshState() {
   const levels = { ...DEFAULT_LEVELS };
-  return { version: 2, currentDifficulty: 'easy', levels, rampFrom: deriveRampFrom(levels, null), board: null, settings: {} };
+  return { version: 2, currentDifficulty: 'easy', levels, rampFrom: deriveRampFrom(levels, null), board: null, settings: {}, won: {} };
+}
+
+// `won` (2026-10-29, additive field): per tier, the highest level whose solve has been RECORDED.
+// A level counts once: Restart after a win, or reopening the game on a solved level before tapping
+// Next level, used to record the same board again, for unlimited wins at the top tier. Only ever
+// goes up. Absent in every save written before it (nothing recorded through it yet).
+function readWon(stored) {
+  const out = {};
+  for (const tier of TIER_ORDER) {
+    const v = stored && typeof stored === 'object' ? Number(stored[tier]) : NaN;
+    if (Number.isInteger(v) && v >= 1) out[tier] = v;
+  }
+  return out;
 }
 
 // `rampFrom` (2026-10-05, additive field, see generator.js "THE RAMP"): per tier,
@@ -171,7 +184,7 @@ function loadSaved() {
       const currentDifficulty = TIER_ORDER.includes(parsed.currentDifficulty) ? parsed.currentDifficulty : 'easy';
       const board = parsed.board && typeof parsed.board === 'object' ? parsed.board : null;
       const rampFrom = deriveRampFrom(levels, parsed.rampFrom);
-      return { fresh: false, data: { version: 2, currentDifficulty, levels, rampFrom, board, settings: {} } };
+      return { fresh: false, data: { version: 2, currentDifficulty, levels, rampFrom, board, settings: {}, won: readWon(parsed.won) } };
     }
 
     return { fresh: true, data: freshState() };
@@ -183,10 +196,13 @@ function loadSaved() {
 function saveState(ui) {
   try {
     const board = ui.game && ui.game.moves > 0 && !ui.game.isWon() ? ui.game.toSaved() : null;
-    const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, rampFrom: ui.rampFrom, board, settings: {} };
+    const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, rampFrom: ui.rampFrom, board, settings: {}, won: ui.won || {} };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
+    return true;
+  } catch (err) {
     // Storage can fail (quota, private mode); the game continues in-memory.
+    console.error('[nuts-bolts] progress NOT saved', err);
+    return false;
   }
 }
 
@@ -200,6 +216,15 @@ class NutsBoltsUI {
     this.levels = saved.data.levels;
     this.rampFrom = saved.data.rampFrom;
     this.currentDifficulty = saved.data.currentDifficulty;
+    this.won = readWon(saved.data.won);
+    // A tier whose current level is already recorded (closed on the win card) starts on the next
+    // level; its kept-aside board, if any, would be that solved level again and is not resumed.
+    for (const tier of TIER_ORDER) {
+      if ((this.won[tier] | 0) >= (this.levels[tier] | 0)) {
+        this.levels[tier] = this.won[tier] + 1;
+        if (saved.data.board && saved.data.board.difficulty === tier) saved.data.board = null;
+      }
+    }
     this.showHelpOnStart = saved.fresh;
     this._winRecorded = false;
 
@@ -386,7 +411,12 @@ class NutsBoltsUI {
     const resumingInMemory = this.game && this.currentDifficulty === tier;
     const resumingFromDisk = !resumingInMemory && this.savedBoard && this.savedBoard.difficulty === tier;
     this.currentDifficulty = tier;
-    if (resumingFromDisk) {
+    // A level already solved and recorded (the game was closed on the win card, or a solved board
+    // was restarted) moves on to the next one: that board can never record again, so a replay of it
+    // kept aside is not resumed either (it is not progress; the level counter only goes up).
+    let fresh = false;
+    if (!resumingInMemory && (this.won[tier] | 0) >= this.levels[tier]) { this.levels[tier] = this.won[tier] + 1; fresh = true; }
+    if (resumingFromDisk && !fresh) {
       this.game = new NutsBoltsGame(tier, this.levels[tier], this.savedBoard);
       this._winRecorded = false;
     } else if (!resumingInMemory) {
@@ -814,13 +844,21 @@ class NutsBoltsUI {
   }
 
   showWin() {
-    // Record the solve exactly once per level instance. `_winRecorded` resets wherever a new
-    // board is started (constructor / restart / next-level), so undoing past the winning move
-    // and re-solving the same board cannot double-count. Never break the game over stats.
-    if (!this._winRecorded) {
+    // Record the solve exactly once per LEVEL (2026-10-29): `_winRecorded` covers this board on
+    // screen (undo past the winning move and re-solve), and `won[tier]`, saved at once, covers the
+    // level for good: Restart after a win, or reopening on the solved level, records nothing again.
+    // Never break the game over stats.
+    const tier = this.currentDifficulty, level = this.game.level;
+    if (!this._winRecorded && (this.won[tier] | 0) < level) {
       this._winRecorded = true;
-      try { recordNutsBolts(this.game.level, this.game.moves, this.currentDifficulty); } catch { /* ignore */ }
+      try {
+        if (recordNutsBolts(level, this.game.moves, tier)) {
+          this.won[tier] = level;
+          this.persist();
+        } else console.error('[nuts-bolts] the solve was NOT recorded (refused)', { tier, level });
+      } catch (err) { console.error('[nuts-bolts] recordNutsBolts threw - the solve was NOT recorded', err); }
     }
+    this._winRecorded = true;
     const name = this.profile && this.profile.name;
     const title = t('win_title', { n: this.game.level });
     const detail = name ? t('win_detail_named', { name: esc(name), moves: pluralMoves(this.game.moves) }) : t('win_detail', { moves: pluralMoves(this.game.moves) });

@@ -123,20 +123,39 @@ if (bid >= 0) {
   st = await page.evaluate(() => window.__woTest.state());
   ok('replay: a mistake costs a heart', st.lives === 2);
   ok('replay: a mistake writes nothing (save, clock, next level unchanged)', JSON.stringify(await snap()) === JSON.stringify(before));
-  // Restart: a clean attempt, three hearts again.
+  // Restart: three hearts again, but the slip stays with the replay (2026-10-29: a replay's slips
+  // ride its Restart and Try again, so learning the board and restarting clean pays nothing).
   await page.locator('[data-act="restart"]').click();
   await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3);
-  ok('replay: Restart starts it clean', (await page.evaluate(() => window.__woTest.state())).lives === 3);
+  ok('replay: Restart gives three hearts again', (await page.evaluate(() => window.__woTest.state())).lives === 3);
+}
+const clearAll = async () => {
+  for (let guard = 0; guard < 400; guard++) {
+    const s = await page.evaluate(() => (window.__woTest ? window.__woTest.state() : null));
+    if (!s || !s.left) break;
+    const id = await page.evaluate(() => window.__woTest.clearId());
+    if (id < 0) { await page.waitForTimeout(60); continue; }
+    await tapId(id);
+    await page.waitForTimeout(25);
+  }
+};
+if (bid >= 0) {
+  // Cleared with no further slip: scored with the one carried across Restart, so +0.
+  await clearAll();
+  await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
+  const sub0 = await page.locator('.wo-banner b').innerText();
+  ok('replay: a slip carried across Restart is scored (+0 pts)', /\+0/.test(sub0), sub0);
+  await page.waitForSelector('.wo-rp-row', { timeout: 8000 });
+  ok('replay: +0, and the level is still listed', (await pts()) === p0 && (await page.locator('.wo-rp-row').count()) === 1);
+  const g0 = await page.evaluate(async () => (await import('/js/game-stats.js')).loadStats().games.wayout);
+  ok('replay: that replay is stored raw, scored with the carried slip', g0.wo.replay.medium.length === 1 && g0.wo.replay.medium[0].u === 0 && g0.wo.replay.medium[0].s === 1);
+  ok('replay: its carried slips are cleared once it is recorded', (await page.evaluate(() => localStorage.getItem('gamehub.wayout.slips.v1') || '{}')) === '{}');
+  // A new replay of it starts from no slips.
+  await page.locator('.wo-rp-row').click();
+  await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3);
 }
 // Clear it with no slips.
-for (let guard = 0; guard < 400; guard++) {
-  const s = await page.evaluate(() => (window.__woTest ? window.__woTest.state() : null));
-  if (!s || !s.left) break;
-  const id = await page.evaluate(() => window.__woTest.clearId());
-  if (id < 0) { await page.waitForTimeout(60); continue; }
-  await tapId(id);
-  await page.waitForTimeout(25);
-}
+await clearAll();
 await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
 const sub = await page.locator('.wo-banner b').innerText();
 ok('replay: the banner shows +1 pts', /\+1/.test(sub), sub);
@@ -146,7 +165,8 @@ ok('replay: +1 point, no more', (await pts()) === p0 + 1, `${p0} -> ${await pts(
 ok('replay: the band\'s save, clock and next level are byte-identical', JSON.stringify(await snap()) === JSON.stringify(before));
 ok('replay: nothing left to replay, so no button and no list', (await page.locator('.wo-replay').count()) === 0 && (await page.locator('.wo-modal:not([hidden])').count()) === 0);
 const g = await page.evaluate(async () => (await import('/js/game-stats.js')).loadStats().games.wayout);
-ok('replay: stored raw, not a level cleared', g.wo.replay.medium.length === 1 && g.wo.replay.medium[0].u === 1 && g.byDiff.medium.won === 2 && g.wo.ptsN.medium === 2);
+const last = g.wo.replay.medium[g.wo.replay.medium.length - 1];
+ok('replay: stored raw, not a level cleared', g.wo.replay.medium.length === (bid >= 0 ? 2 : 1) && last.u === 1 && g.byDiff.medium.won === 2 && g.wo.ptsN.medium === 2);
 await shot('5-setup-after');
 
 // MORE LEVELS: Easy goes on past 50.

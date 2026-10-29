@@ -146,6 +146,61 @@ Cup Pong and Hoops, within reach of the others; no rule fires. The one alert is 
 - **Not closable in an app with no server answers**: a second player code (a made-up profile) or another
   person can still look an answer up; the far-jump alert is what catches the result.
 
+## Holes closed 2026-10-29: Sudoku, Murdoku, Nuts & Bolts, Arrow Maze
+
+Every fix writes new fields only (THE LAW rule 2) and changes no stored number; the rankings are
+read-time. Tests: `node tools/test-hint-holes.mjs` (48), `tools/test-arrow-maze-replay.mjs` (browser).
+
+- **C1 Sudoku and Murdoku: hint solves.** Pressing Hint on every square solved an Expert puzzle and
+  counted a full Expert win (Murdoku's hint shows the exact square, unlimited). **Matt's decision: "Win,
+  but ranked below".** Every hint solve still counts and shows as a win; on the game's board EVERY row
+  with a no-hint solve ranks above every row without one. Among those, difficulty outranks score on
+  the no-hint solves (an Expert no-hint solve beats 50 Easy ones), then the usual tier-first rule over
+  all wins breaks a tie; the rest rank by that usual rule (`js/leaderboard-ui.js` `compareNoHint`,
+  `compareAllWins`). A no-hint row shows its no-hint count with "no hints" under it.
+  Stored: Sudoku `sd.clean[tier]` (no-hint solves) and `sd.pre` (a snapshot, at the first tracked solve,
+  of lifetime hints and wins per tier); Murdoku `recordMurdoku(tier, { hints })` (same total/byDiff as
+  `recordResult` did) + `mu.clean[tier]` / `mu.hinted[tier]` / `mu.hints`, the hints counted per case in
+  its save. Merged per record in `js/players-agg.js` (`sd.noHint`, `sdNoHintOf`; `mu`).
+  **Legacy wins** (before 2026-10-29) have unknown hint use. A Sudoku record's legacy wins count as
+  no-hint ONLY when proven: its lifetime `sd.hints` was 0 then (so no solve can have used one). Murdoku
+  stored nothing, so its legacy wins, and a case saved before hints were counted, rank with the hint
+  solves. **They still count and show as wins everywhere** (THE LAW rule 1); only the order changes.
+  *Honest player:* nothing lost; a player who never used a hint keeps every win at the top.
+- **C2 Murdoku "Learn to play".** The guided case shows the answer after every move and recorded a real
+  Easy win, replayable for ever. Now it records nothing at all (`_recordOnce` returns on `guided`).
+  *Honest player:* the lesson no longer counts; every real case does.
+- **C3 Nuts & Bolts: replaying a solved board.** After a win, Restart reset the same board and the
+  record guard, so one board gave unlimited top-tier wins; reopening on the win card did the same. The
+  save now keeps `won[tier]` (the highest level recorded, only goes up): a level records once, and a
+  tier whose current level is recorded opens on the next level. *Honest player:* the same one win per
+  level as always; reopening after a win starts the next level instead of the solved one.
+- **C4 Arrow Maze: New game wiped the slips.** New game put hints and hearts lost back to 0 on the SAME
+  board, so free hints learned an Expert board's one order and a clean try took full points. Now New
+  game resets only the clock: the thrown-away try's slips are carried (`gamehub.wayout.slips.v1`, per
+  band, level and board, only added to), the clear is scored with every slip on the level, and each
+  record keeps the most slips per level (`wo.sl[band]['L<n>']`, max only) so the person's other
+  storages see them (a clear takes the max of its own and theirs, from the combined read). The log
+  keeps `s` (slips scored, when more than its own m + h) and `p` (slips from before the clearing try).
+  **Replay (decided here):** Matt's Replay is kept as designed: a perfect replay wins back what the
+  clearing try lost. But a replay never wins back `p` (slips from tries New game threw away or from
+  another storage), and a replay's own slips ride its Restart, Try again and leaving until a replay of
+  that level is cleared, so learning by hints and restarting a replay clean pays nothing. *Honest
+  player:* a level messed up and replayed perfectly still gets full points, as before; New game is still
+  there, it just no longer erases slips.
+- **C5 Arrow Maze: points doubled across storages.** Points were per-band clear COUNTS added across a
+  person's records, so Safari next to the Home Screen app (or cleared data) climbed the ladder again
+  from its band's first level and earned the same levels twice. Every clear now writes which level it
+  was: `wo.cl[band]` = "<first level>:<one digit per level>" (the best points on each level), and
+  `wo.leg[band]` snapshots the record's legacy part at its first tracked clear. A person's points are
+  the legacy clears counted exactly as before (no level set exists for them: nothing invented) plus
+  each level in the UNION of their level sets once, at its best, unless one of their records' legacy
+  clears already covers that level number (legacy = the band's levels up to the record's first tracked
+  level, or its latest logged level). `js/arrow-maze-time.js` `woPoints`, merged in `players-agg.js`
+  (`wo.lg`, `wo.cl`); the server board runs the same code. Legacy clears on two storages before today
+  keep counting as they did (they cannot be told apart). *Honest player:* every point earned before today
+  stays; a level cleared again on a second phone simply earns nothing new.
+
 ## 7. What would make more checks possible (not built; Matt's call)
 
 A timed log like Spelling Bee's, per game, is the only way to catch outside help (a solver, a copied

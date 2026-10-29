@@ -166,6 +166,24 @@ mistake.
   have no time but still count as solved (rule 4). The win banner shows the time.
 - Tests: `tools/test-arrow-maze-time.mjs`, `tools/players-agg.test.mjs`.
 
+## Slips stay with the level; one level, one score (2026-10-29)
+
+Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29". Tests: `tools/test-hint-holes.mjs`,
+`tools/test-arrow-maze-replay.mjs`.
+- **New game resets only the clock** (Matt's rule: slips ride Restart and Try again; now New game too).
+  The thrown-away try's slips are carried in `gamehub.wayout.slips.v1` (`<band>:<n>:<board>` = `{a}`,
+  only added to); the clear is scored with carried + this try, or the most `wo.sl[band]['L<n>']` any of
+  the person's OTHER records holds (`noteWayOutSlips`, max only, written at every slip; read from the
+  combined read), whichever is more. Log `s` = slips scored when more than m + h; `p` = slips from
+  before the clearing try.
+- **Replay** (kept as Matt designed: a perfect replay wins back the clearing try's slips) never wins back
+  `p` (`woMissed` caps at `woEarnedPoints(p)`), and a replay's own slips ride its Restart, Try again and
+  leaving (`R:<band>:<n>`) until a replay of that level is cleared.
+- **Points count each level once per person**: `wo.cl[band]` ("<first>:<digit per level>", best
+  points), `wo.leg[band]` (the legacy snapshot at the first tracked clear); `woPoints` = legacy as before
+  + the union of level sets not covered by a legacy clear. Merged as `wo.lg` / `wo.cl` in
+  `js/players-agg.js`; a void zeroes `cl` and `leg` too.
+
 ## QA pass (2026-10-11): rules that came out of it
 
 `_toSetup()` / `_stopLevel()` cancel every timer and frame of the level first; `hintArrow(lvl, gone,
@@ -208,7 +226,7 @@ unless a filter is picked (then that difficulty's own points).
 
 **Hints and lost lives cost points (2026-10-17)**, Matt's table: Expert 6, 4, 2, 1; Hard 4, 3, 2, 1;
 Medium 2, 1; Easy 1 (`WO_SLIP_POINTS`, `woEarnedPoints`); a slip = a hint or a heart lost on that level,
-across Restart / Try again (New game resets). **From that day only**: a timed level adds what it earned
+across Restart / Try again and, since 2026-10-29, New game (which resets only the clock). **From that day only**: a timed level adds what it earned
 to `wo.pts[band]` and counts in `wo.ptsN[band]` (counters, added across phones in `js/players-agg.js`);
 every other cleared level keeps full points (`woPoints`). Matt: *"Let's wait on going back and
 recalculating... once we have enough data we can use averages."* The win banner shows `time · +N pts`.
@@ -262,7 +280,7 @@ it admin only too"*).
   kept full points and are never listed. Setup: a **↻ N** button at the left of the Play row opens the
   list (Level N, +points to win); none = no button. A replay: same board (`l`, `g`), 3 hearts, its own
   clock from 0:00, **keeps NOTHING on the phone** (no save, no clock key, `ladder2` untouched; Restart and
-  Try again start it clean), then back to setup (the list again if more remain).
+  Try again give three hearts, but since 2026-10-29 its slips ride them, see "Slips stay with the level"), then back to setup (the list again if more remain).
 - **Recorder `recordWayOutReplay`** (`js/game-stats.js`): not a level cleared (totals, byDiff, timed,
   ptsN, log untouched); a better result adds ONLY the difference to `wo.pts[band]`, so a level never
   passes its full points and players-agg / the server board need no change. Every replay raw in

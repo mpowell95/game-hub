@@ -205,6 +205,13 @@
 //                                                   // its zero is the "never set" sentinel (the same
 //                                                   // convention as battleship's fewestShotsWin) --
 //                                                   // never a real elapsed time. See recordSudoku
+//         sd.clean: { <tier>: n }, sd.pre: { hints, won: { <tier>: n } }
+//                                                   // (2026-10-29) no-hint solves since hint use was
+//                                                   // tracked per solve; pre = the record before
+//                                                   // that, snapshotted once (players-agg sdNoHintOf)
+//       murdoku: { total, byDiff, mu: { clean: { <tier>: n }, hinted: { <tier>: n }, hints } }
+//                                                   // (2026-10-29) recordMurdoku; before it
+//                                                   // recordResult, total/byDiff only
 //       wayout: {
 //         total, byDiff,                           // byDiff keyed easy|medium|hard|expert; one
 //                                                   // play+won per level cleared (recordWayOut)
@@ -219,6 +226,13 @@
 //                                                   // Levels cleared before the timer, or resumed
 //                                                   // from a save made before it, count in
 //                                                   // total/byDiff only.
+//         wo.cl: { <tier>: '<first level>:<digit per level>' }, wo.leg: { <tier>: { w, n, p, e } },
+//         wo.sl: { <tier>: { L<n>: slips } }      // (2026-10-29) which levels were cleared and their
+//                                                   // best points; the legacy part at the first such
+//                                                   // clear; the most slips seen per level (max only).
+//                                                   // js/arrow-maze-time.js, "ONE LEVEL, ONE SCORE".
+//                                                   // log/replay entries may carry s (slips scored)
+//                                                   // and p (slips from before the clearing try).
 //         wo.replay: { <tier>: [{t, a, r, m, h, l, g, d, u}] }
 //                                                   // (2026-10-26) every REPLAY of a level that
 //                                                   // missed points, raw; u = points it added to
@@ -274,7 +288,7 @@
 // per-game screens read the richer `grid`/`cc` dimensions. All additions are strictly additive.
 
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed, woClSet, woClMap, woShownLevel } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest, wwStarsFor, wwBandOf } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
@@ -1796,13 +1810,25 @@ export function recordSudoku(tier, extras = {}) {
   const timeMs = Math.max(0, extras.timeMs | 0);
   const mistakes = Math.max(0, extras.mistakes | 0);
   const hints = Math.max(0, extras.hints | 0);
+  const t = SD_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
+  // NO-HINT SOLVES (2026-10-29, Matt: hint solves are wins "but ranked below"). The first solve
+  // recorded on this build snapshots what the record held BEFORE hint use was tracked per solve
+  // (`sd.pre`: lifetime hints and wins per tier; written once, never changed), then every solve
+  // with zero hints adds one to `sd.clean[tier]`. Legacy wins count as no-hint only when proven:
+  // `pre.hints` 0 means none of them used a hint (js/players-agg.js sdNoHintOf). Additive only.
+  if (!g.sd.pre || typeof g.sd.pre !== 'object' || Array.isArray(g.sd.pre)) {
+    const won = {};
+    for (const k of SD_TIERS) won[k] = ((g.byDiff[k] || {}).won) | 0;
+    g.sd.pre = { hints: g.sd.hints | 0, won };
+  }
+  if (!g.sd.clean || typeof g.sd.clean !== 'object' || Array.isArray(g.sd.clean)) g.sd.clean = {};
+  if (t && hints === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
   g.total.played += 1;
   g.total.won += 1;
   g.sd.solved += 1;
   if (mistakes === 0 && hints === 0) g.sd.perfect += 1;
   g.sd.hints += hints;
   g.sd.mistakes += mistakes;
-  const t = SD_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
   if (t) {
     if (!g.byDiff[t]) g.byDiff[t] = bucket();
     g.byDiff[t].played += 1; g.byDiff[t].won += 1;
@@ -1812,6 +1838,30 @@ export function recordSudoku(tier, extras = {}) {
       g.sd.bestTimeMs[t] = cur > 0 ? Math.min(cur, timeMs) : timeMs;
     }
   }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Murdoku: one solved case (2026-10-29; it was `recordResult('murdoku', tier, true)`, and still
+ *  counts exactly that in total/byDiff). Also feeds the `mu` sub-counter: `clean[tier]` = solves with
+ *  NO hint, `hinted[tier]` = solves that used one, `hints` = hints used in solved cases. `hints` is
+ *  the count from the case's save, or null when unknown (a case started before hints were saved):
+ *  an unknown solve is a win in neither sub-count, so it ranks with hint solves (never fabricated).
+ *  Hint solves are wins, ranked below every no-hint solve (Matt, 2026-10-29). Additive only. */
+export function recordMurdoku(tier, { hints } = {}) {
+  if (tooFast('murdoku')) return null;
+  notePlay('murdoku', 'recordMurdoku', arguments);
+  const st = loadStats();
+  const g = st.games.murdoku;
+  const d = normDiff(tier);
+  bumpTotals(g, d, true);
+  if (!g.mu || typeof g.mu !== 'object' || Array.isArray(g.mu)) g.mu = { clean: {}, hinted: {}, hints: 0 };
+  for (const k of ['clean', 'hinted']) if (!g.mu[k] || typeof g.mu[k] !== 'object' || Array.isArray(g.mu[k])) g.mu[k] = {};
+  if (!Number.isFinite(g.mu.hints)) g.mu.hints = 0;
+  const h = Number.isInteger(hints) && hints >= 0 ? hints : null;
+  if (h === 0) g.mu.clean[d] = (g.mu.clean[d] | 0) + 1;
+  else if (h > 0) { g.mu.hinted[d] = (g.mu.hinted[d] | 0) + 1; g.mu.hints += h; }
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -1941,15 +1991,32 @@ export function recordWayOut(tier, f = {}) {
   const g = st.games.wayout;
   ensureWo(g);
   const d = normDiff(tier);
+  // ONE LEVEL, ONE SCORE PER PERSON (2026-10-29, js/arrow-maze-time.js): which level this was (today's
+  // number in its band, `f.n`) goes into the band's level set `wo.cl`; the first such clear on this
+  // record snapshots what came before (`wo.leg[band]`, written once), which keeps counting as it did.
+  const ln = Math.floor(Number(f.n) || 0);
+  const tracked = WO_TIERS.includes(d) && ln >= 1 && ln <= 1e6;
+  if (tracked) {
+    if (!isObj(g.wo.leg)) g.wo.leg = {};
+    if (!isObj(g.wo.leg[d])) g.wo.leg[d] = { w: ((g.byDiff[d] || {}).won) | 0, n: g.wo.ptsN[d] | 0, p: g.wo.pts[d] | 0, e: ln };
+  }
   bumpTotals(g, d, true);
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
   const a = Math.max(0, f.arrows | 0), r = Math.max(0, f.rounds | 0);
+  let earned = woEarnedPoints(d, 0);   // an untimed level keeps its full points (nothing invented)
   if (f.timed && WO_TIERS.includes(d) && t > 0 && a > 0 && r > 0) {
     const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
+    // Slips carried from earlier attempts of this level (New game, another storage: 2026-10-29) are
+    // scored too; `s` keeps the number scored when it is more than this attempt's own m + h, and `p`
+    // the slips from before this attempt, which a replay of it can never win back.
+    const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)));
+    const prior = Math.max(0, Math.floor(Number(f.prior) || 0));
     g.wo.timed[d] += 1;
     g.wo.mistakes += m;
     g.wo.hints += h;
     const e = { t, a, r, m, h };
+    if (slips > m + h) e.s = slips;
+    if (prior > 0) e.p = prior;
     // Since the ladder (2026-10-14): which ladder level it was, on which board generator, and when.
     // Additive fields; kept so time can come back into the score once there is enough of it (Matt).
     if ((f.level | 0) > 0) e.l = f.level | 0;
@@ -1958,8 +2025,13 @@ export function recordWayOut(tier, f = {}) {
     g.wo.log[d] = g.wo.log[d].concat([e]);
     // Hints and lost lives cost points from 2026-10-17 (woEarnedPoints): a timed level's slips are
     // known, so it is scored with them. An untimed one keeps its full points (nothing invented).
-    g.wo.pts[d] += woEarnedPoints(d, m + h);
+    earned = woEarnedPoints(d, slips);
+    g.wo.pts[d] += earned;
     g.wo.ptsN[d] += 1;
+  }
+  if (tracked) {
+    if (!isObj(g.wo.cl)) g.wo.cl = {};
+    g.wo.cl[d] = woClSet(g.wo.cl[d], ln, earned);
   }
   st.updatedAt = new Date().toISOString();
   persist(st);
@@ -1986,13 +2058,43 @@ export function recordWayOutReplay(tier, f = {}) {
   ensureWo(g);
   const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
   const miss = woMissed(g, d).find((x) => x.l === l && x.g === gen);
-  const up = miss ? Math.max(0, woEarnedPoints(d, m + h) - miss.best) : 0;
+  // Slips of earlier tries of this replay, and slips from before the level's clearing attempt (the
+  // log's `p`), are scored too (2026-10-29): a replay never pays past them.
+  const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)), miss ? miss.p : 0);
+  const earned = woEarnedPoints(d, slips);
+  const up = miss ? Math.max(0, earned - miss.best) : 0;
   if (!g.wo.replay) g.wo.replay = {};
-  g.wo.replay[d] = woReplayList(g.wo.replay[d]).concat([{ t, a, r, m, h, l, g: gen, d: Date.now(), u: up }]);
+  const e = { t, a, r, m, h, l, g: gen, d: Date.now(), u: up };
+  if (slips > m + h) e.s = slips;
+  g.wo.replay[d] = woReplayList(g.wo.replay[d]).concat([e]);
   g.wo.pts[d] += up;
+  // The level set (2026-10-29): a level in it improves there; a legacy level's gain is legacy points.
+  const n = woShownLevel(d, l, gen);
+  if (isObj(g.wo.cl) && woClMap(g.wo.cl[d]).has(n)) g.wo.cl[d] = woClSet(g.wo.cl[d], n, earned);
+  else if (isObj(g.wo.leg) && isObj(g.wo.leg[d])) g.wo.leg[d].p = (Math.max(0, Math.floor(Number(g.wo.leg[d].p) || 0))) + up;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return up;
+}
+
+/** Arrow Maze: the slips (hints and hearts lost) stored for level `n` of `band` reached `slips`
+ *  (2026-10-29). Kept as `wo.sl[band]['L<n>']`, the most ever seen (max only), so the person's other
+ *  storages see a level that was learned with hints (js/arrow-maze-time.js, "SLIPS STAY WITH THE
+ *  LEVEL"). Not a play, so not rate-gated. Returns true once stored. */
+export function noteWayOutSlips(band, n, slips) {
+  const d = normDiff(band), L = Math.floor(Number(n) || 0), s = Math.max(0, Math.floor(Number(slips) || 0));
+  if (!WO_TIERS.includes(d) || !(L >= 1) || L > 1e6 || !(s > 0)) return false;
+  notePlay('wayout', 'noteWayOutSlips', arguments);
+  const st = loadStats();
+  const g = st.games.wayout;
+  ensureWo(g);
+  if (!isObj(g.wo.sl)) g.wo.sl = {};
+  if (!isObj(g.wo.sl[d])) g.wo.sl[d] = {};
+  const k = 'L' + L;
+  if ((Math.floor(Number(g.wo.sl[d][k]) || 0)) >= s) return true;
+  g.wo.sl[d][k] = s;
+  st.updatedAt = new Date().toISOString();
+  return persist(st);
 }
 
 /** Arrow Maze RUSH: one run ended (2026-10-14). Its own branch, `wo.rush`, created on the first run;

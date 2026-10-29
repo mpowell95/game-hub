@@ -113,3 +113,13 @@ into Expert at one flat difficulty. Build brief: `docs/NUTS-BOLTS-RAMP-HANDOFF.m
   and checks the ramp never eases, `rampFrom` 317 plays the plateau, and no tier passes the next.
   The migration was checked against the real pre-ramp `saveState()` from git (levels, board and
   tier unchanged; `rampFrom` = current level).
+
+## One win per level (2026-10-29)
+
+After a win, Restart reset the same board and the record guard, so one board gave unlimited top-tier
+wins (and reopening on the win card replayed it too). `gamehub.nutsbolts.v1` gained ONE additive field,
+`won: { <tier>: highest level recorded }` (only goes up; absent in older saves). `showWin()` records only
+a level above it and saves it at once; a tier whose current level is already recorded opens on the next
+level (its kept-aside replay is not resumed). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed
+2026-10-29". Checked on a pre-change save (Expert 317): one win, Restart + re-solve records nothing,
+reopening starts 318.
