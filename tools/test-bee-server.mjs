@@ -56,6 +56,9 @@ ok('copier: voided, both strong rules', dc.void && dc.strong.includes('sorted') 
 ok('copier: the line for Matt names the rules', /Sorted run 7/.test(flagSummary(dc)) && /Burst 12 at 4\.2 s/.test(flagSummary(dc)));
 const dh = detectCopying(honest);
 ok('honest: nothing fires', !dh.void && dh.sorted <= 1 && dh.burst.n <= 1 && dh.leave === 0);
+// Speed skips NOTHING (2026-10-29, Matt): a 30-minute break before Genius counts in full.
+const breakGame = [ev(0, 'open'), g(5, 'dead'), ev(10, 'hidden'), ev(1810, 'visible'), g(1815, 'deed'), ev(1820, 'win')];
+ok('speed: clock time from opening to Genius, breaks included', detectCopying(breakGame, { words: 2 }).geniusMs === 1820 * 1000);
 ok('speed needs the whole game in the log', detectCopying(copier, { words: 99 }).geniusMs === null && detectCopying(copier, { words: 3 }).geniusMs !== null);
 // Supporting rules alone: both needed.
 const fastOnly = [ev(0, 'open'), ...Array.from({ length: 9 }, (_, i) => [g(i * 20 + 5, `x${i}`), g(i * 20 + 10, 'no', 'not_in_list')]).flat(), ev(200, 'win')];

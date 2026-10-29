@@ -81,7 +81,8 @@ phone's clock at the guess); the server time `s` only stamps when a batch was up
 **Supporting: any two together void the day.**
 3. **Leave and burst:** back from leaving the app, then 5+ accepted words within 60 s (misses allowed).
 4. ~~Copy typo~~ **dropped**: honest players do it too (Lili 6 times on Oct 28, Natalia 2 on Oct 27).
-5. **Speed:** Genius within 10 minutes of time in the game.
+5. **Speed:** Genius within 10 minutes of first opening the puzzle, clock time, nothing skipped (2026-10-29,
+   Matt: "you SHOULD NOT SKIP ANYTHING"; until then it summed only open time and dropped breaks over 5 min).
 8. **Right vs wrong** (added 2026-10-28): 2+ right answers per wrong guess up to Genius (King of Games
    46 / 17; every other Genius game 0.8 to 1.3).
 9. **Re-typed** (added 2026-10-28, Matt: "an important fact"): fewer already-found guesses than 1 per
@@ -100,7 +101,7 @@ only with Genius and 20+ right answers. Replayed on every log 2026-10-28: only K
 
 | Game | Sorted run (6+) | No-miss burst (10+, <6 s) | Leave and burst (5+) | Genius in <10 min | Voided? |
 |---|---|---|---|---|---|
-| King of Games, EN Oct 28 | **7** | **16 at 4.0 s** | **5** | **Yes (7.5 min)** | **Yes** |
+| King of Games, EN Oct 28 | **7** | **16 at 4.0 s** | **5** | **Yes (7.7 min, nothing skipped)** | **Yes** |
 | MattyIce, EN Oct 28 | 2 | 6 at 4.8 s | 0 | No | No |
 | MattyIce, EN Oct 27 | 1 | 0 | 2 | No | No |
 | Ana, ES Oct 28 | 3 | 4 at 4.9 s | 0 | No | No |
