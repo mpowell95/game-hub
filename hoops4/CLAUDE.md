@@ -418,3 +418,7 @@ Open items: see the root TODO.md, "Connect 4 Hoops".
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Game 2+ of a series can time out; counting goes through `countFinished(id, won, finishedAt)` (ui.js `finish()` and `recordFinished`); history word "Timed out" (`histTimedOut`). Live-room `mp` counts carry no id.
+
+## Quitting and easier settings (2026-10-29)
+
+No resume: vs the computer, leaving after the player's first shot (New game, asked twice; Back to setup, whose sheet says so; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Pass and play and online untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

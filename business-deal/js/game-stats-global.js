@@ -82,9 +82,62 @@
     g._leg = true;
   }
 
-  function record(gameId, difficulty, won) {
+  // THE RATE GATE (2026-10-29): the same 30 results per game per minute as game-stats.js's
+  // tooFast(), on the same `gamehub.rate.v1` record, refused BEFORE the store is read, each refusal
+  // counted in `blocked` (it rides the stats mirror as `rate`). Keep in step with tooFast().
+  var RATE_KEY = 'gamehub.rate.v1';
+  var RATE_WINDOW_MS = 60000;
+  var RATE_MAX = 30;
+  function tooFast(gameId, now) {
+    var rec = readJSON(RATE_KEY);
+    if (!rec || typeof rec !== 'object') rec = { seen: {}, blocked: {} };
+    if (!rec.seen || typeof rec.seen !== 'object') rec.seen = {};
+    if (!rec.blocked || typeof rec.blocked !== 'object') rec.blocked = {};
+    var stamps = Array.isArray(rec.seen[gameId]) ? rec.seen[gameId] : [];
+    var recent = [];
+    for (var i = 0; i < stamps.length; i++) if (isFinite(stamps[i]) && now - stamps[i] < RATE_WINDOW_MS) recent.push(stamps[i]);
+    if (recent.length >= RATE_MAX) {
+      var b = rec.blocked[gameId] || { n: 0, firstAt: now };
+      b.n = (b.n | 0) + 1; b.lastAt = now; b.firstAt = b.firstAt || now;
+      rec.blocked[gameId] = b;
+      rec.seen[gameId] = recent;
+      try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch (e) { /* nothing to do */ }
+      console.warn('[game-stats-global] "' + gameId + '" result REFUSED: ' + RATE_MAX + '+ results in ' + (RATE_WINDOW_MS / 1000) + 's is faster than anyone can play. Nothing was recorded.');
+      return true;
+    }
+    recent.push(now);
+    rec.seen[gameId] = recent;
+    try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch (e) { /* a full disk must not block a real play */ }
+    return false;
+  }
+
+  // THE PLAY LOG (2026-10-29): every accepted result, queued exactly as js/play-log-queue.js's
+  // appendPlayLog does (`gamehub.playlog.v1`, newest 3,000 kept), for js/play-log.js to send from the
+  // next hub page. Evidence only, never read back. Keep in step with appendPlayLog().
+  var PLAYLOG_KEY = 'gamehub.playlog.v1';
+  var PLAYLOG_MAX = 3000;
+  var playSeq = 0;
+  function notePlay(gameId, fn, args) {
+    try {
+      var code = activeCode();
+      if (!code) return;
+      var q = readJSON(PLAYLOG_KEY);
+      if (!Array.isArray(q)) q = [];
+      var t = Date.now();
+      var a = [];
+      for (var i = 0; i < args.length; i++) a.push(args[i] === undefined ? null : args[i]);
+      q.push({ c: code, id: t + '-' + (playSeq++ % 10000), t: t, g: String(gameId).slice(0, 24), f: String(fn).slice(0, 40), a: JSON.stringify(a).slice(0, 1600) });
+      localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
+    } catch (e) { console.error('[game-stats-global] play not logged', e); }
+  }
+
+  function record(gameId, difficulty, won, drained) {
     try {
       if (GAMES.indexOf(gameId) < 0) return;
+      // A queued backlog (drainPending) is not a burst of play: it skips the gate, like
+      // game-stats.js's drainPendingResults, and is logged as 'record(queued)'.
+      if (!drained && tooFast(gameId, Date.now())) return;
+      notePlay(gameId, drained ? 'record(queued)' : 'record', [gameId, difficulty, won]);
       var key = activeStatsKey();
       var st = normalize(readJSON(key));
       if (key !== STATS_KEY) latchLegacyGuards(st);
@@ -137,13 +190,47 @@
       if (!Array.isArray(q) || !q.length) return;
       for (var i = 0; i < q.length; i++) {
         var e = q[i];
-        if (e) record(e.game, e.diff, e.won);
+        if (e) record(e.game, e.diff, e.won, true);
       }
       localStorage.removeItem(PENDING_STATS_KEY);
       console.warn('[game-stats-global] drained ' + q.length + ' pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable');
     } catch (e) { /* never break the game */ }
   }
 
-  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record };
+  // QUITTING A GAME AGAINST THE COMPUTER (2026-10-29): a game with no resume (Monopoly Deal) ARMS its
+  // loss once the player has moved, in the same `gamehub.quitLoss.v1` marker game-stats.js uses
+  // (armQuitLoss): { f: 'recordResult', a: [gameId, difficulty, false], c, k, t }. The real result
+  // DROPS it; a quit TAKES it (records the loss once); a page that died mid-game leaves it for the
+  // next load of the game, or the hub after 30 minutes (js/game-stats.js settleQuitLosses).
+  var QUIT_KEY = 'gamehub.quitLoss.v1';
+  function readQuit() { var q = readJSON(QUIT_KEY); return q && typeof q === 'object' && !Array.isArray(q) ? q : {}; }
+  function writeQuit(q) { try { localStorage.setItem(QUIT_KEY, JSON.stringify(q)); } catch (e) { console.error('[game-stats-global] quit-loss marker not saved', e); } }
+  function armQuit(gameId, difficulty) {
+    if (GAMES.indexOf(gameId) < 0) return;
+    var q = readQuit();
+    q[gameId] = { f: 'recordResult', a: [gameId, difficulty, false], c: activeCode(), k: activeStatsKey(), t: Date.now() };
+    writeQuit(q);
+  }
+  function dropQuit(gameId) {
+    var q = readQuit();
+    if (!q[gameId]) return;
+    delete q[gameId];
+    writeQuit(q);
+  }
+  function quitArmed(gameId) { return !!readQuit()[gameId]; }
+  /** Record the armed loss once. True when it was recorded (the marker is dropped first). */
+  function takeQuit(gameId) {
+    var q = readQuit();
+    var m = q[gameId];
+    if (!m || (m.k && m.k !== activeStatsKey())) return false;
+    delete q[gameId];
+    writeQuit(q);
+    notePlay(gameId, 'quitLoss', ['recordResult', m.t]);
+    var a = Array.isArray(m.a) ? m.a : [];
+    record(gameId, a[1], false);
+    return true;
+  }
+
+  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record, armQuit: armQuit, dropQuit: dropQuit, quitArmed: quitArmed, takeQuit: takeQuit };
   drainPending();
 })();

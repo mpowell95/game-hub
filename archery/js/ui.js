@@ -426,6 +426,7 @@ class ArcheryUI {
 
   // --- starting ------------------------------------------------------------------------------------
   _newMatch(mode = 'cpu') {
+    if (mode === 'cpu') this._recordQuitLoss();   // only a new match vs the computer replaces the save
     const s = this.settings;
     let starter = 0;
     if (mode === 'cpu') {
@@ -438,6 +439,41 @@ class ArcheryUI {
     this._begin({ mode, diff: s.difficulty, match: newMatch(seed, starter) });
   }
   _passPlay() { this._newMatch('pass'); }
+
+  // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+  // and easier settings"): the saved match against the computer, once the player has shot an arrow in
+  // it, thrown away for a new one, records as a loss. Quit keeps the save (Continue), so it is not a quit.
+  _quitPending() {
+    if (this.match && this.mode === 'cpu') {
+      const m = this.match;
+      return m.winner == null && !m.recorded && m.shots[0].length > 0 ? { diff: this.diff, m } : null;
+    }
+    if (this.match) return null;
+    const sv = this._savedMatch();
+    return sv && !sv.match.recorded && sv.match.shots[0].length > 0 ? { diff: sv.diff, m: sv.match } : null;
+  }
+
+  /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    q.m.recorded = true;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    try {
+      const st = recordResult('archery', q.diff, false);
+      if (!st) console.warn('[archery] quit loss not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[archery] recording the quit loss failed', err); }
+  }
+
+  /** Play over such a saved match asks twice, the button saying it counts as a loss. */
+  _quitGate(btn, go) {
+    if (!this._quitPending() || (btn && btn.dataset.armed === '1')) { if (btn) btn.dataset.armed = ''; go(); return; }
+    btn.dataset.armed = '1';
+    const label = btn.querySelector('[data-l]') || btn;
+    label.textContent = t('quit_loss');
+    clearTimeout(this._quitTimer);
+    this._quitTimer = setTimeout(() => { btn.dataset.armed = ''; this._relabel(); }, 3500);
+  }
   _continue() {
     const sv = this._savedMatch();
     if (!sv) { this._newMatch('cpu'); return; }
@@ -977,7 +1013,7 @@ class ArcheryUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') this._newMatch('cpu');
+    if (act === 'play') this._quitGate(b, () => this._newMatch('cpu'));
     else if (act === 'multi') this._openOnline();
     else if (act === 'practice') this._practiceStart();
     else if (act === 'continue') this._continue();

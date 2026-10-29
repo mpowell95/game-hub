@@ -423,3 +423,7 @@ A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down
 ## The computer's plan is seeded (2026-10-29)
 
 `aiSeed` (per match, in `gamehub.flicksoccer.save.v1`): `planShot` takes `seededRng(seed, bodies, seat)`, so quit and Continue before the computer shoots plans the SAME shot. (The shot itself was already saved before it rolls.) `tools/test-ai-resume-seeds.mjs`.
+
+## Quitting and easier settings (2026-10-29)
+
+Play (or Pass & play) over a saved match vs the computer the player has flicked in = ONE loss, asked twice (`playerShot`, `recorded`); Quit keeps the save. First to 1 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

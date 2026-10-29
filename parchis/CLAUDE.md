@@ -48,3 +48,7 @@ Parchís: launch-out `href:` — Spanish Parchís vs AI. Single-file build from 
 ## No zoom (2026-10-15)
 
 `parchis/index.html` carries `maximum-scale=1, user-scalable=no` and `<script src="../js/no-zoom.js"></script>` (root CLAUDE.md, scroll and touch rules). **It is a BUILT file: add the same two lines to the `../Parchís/` source**, or the next rebuild drops them (`tools/test-game-conventions.mjs` will then fail).
+
+## Quitting and easier settings (2026-10-29)
+
+**Patched in the BUILT `index.html`; port to `../Parchís/src/game.js` before the next rebuild**: a vs-computer game records at its EASIEST computer (`parchisStatsDiff`; it was the hardest), and a new game over a saved one the player has rolled in (`cfg.hm`) asks "Counts as a loss." and records ONE loss (`cfg.rec` guards the end). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

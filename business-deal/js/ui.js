@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v34';
+  const APP_VERSION = 'v37';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -319,7 +319,10 @@
    * ========================================================================*/
   class HumanAgent {
     constructor(ui) { this.ui = ui; this.name = 'You'; }
-    chooseMove(view, legal) { return this.ui.promptMove(view, legal); }
+    chooseMove(view, legal) {
+      // The player's own move: from now on, quitting this game counts as a loss (2026-10-29).
+      return this.ui.promptMove(view, legal).then((m) => { this.ui._armQuitLoss(); return m; });
+    }
     // MD-4: when the human is the one who'd pay (defender, and the action has a
     // known cash amount - rent/debt/birthday), show the normal pay screen with
     // Just Say No as an option there instead of a standalone yes/no prompt with
@@ -372,6 +375,26 @@
       this.$('pass-btn').addEventListener('click', () => this._passClicked());
       this.$('quit-btn').addEventListener('click', () => this._quitDialog());
       this.$('settings-btn').addEventListener('click', () => this._openSettings());
+      // A game this page lost mid-play (closed, or left with no Quit) is that game's loss, once.
+      try { if (window.__ghStats && window.__ghStats.takeQuit && window.__ghStats.takeQuit('business')) this._bumpBdStats(false); } catch (e) {}
+    }
+
+    /* ---- quitting is a loss (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+     *  quitting and easier settings"). This game has no resume, so once the player has made a move,
+     *  leaving the game (New Game, either Quit, the hub, closing the page) records a loss, once
+     *  (`_resultRecorded`). The marker (__ghStats.armQuit) is what catches a closed page. ---------- */
+    _quitCostsLoss() { return !!(this._qArmed && this.game && !this.game.winner && !this._resultRecorded); }
+    _armQuitLoss() {
+      if (this._qArmed || this._resultRecorded || !this.game || this.game.winner) return;
+      this._qArmed = true;
+      try { if (window.__ghStats && window.__ghStats.armQuit) window.__ghStats.armQuit('business', this.difficulty); } catch (e) {}
+    }
+    _takeQuitLoss() {
+      if (!this._quitCostsLoss()) return;
+      this._resultRecorded = true;
+      this._qArmed = false;
+      try { if (window.__ghStats && window.__ghStats.dropQuit) window.__ghStats.dropQuit('business'); } catch (e) {}
+      this._recordResult(false);
     }
 
     /** Return to the Game Hub launcher (root-relative — mirrors how the hub links
@@ -401,10 +424,10 @@
           PACES.map(k => `<button class="count-btn pace${k === this.pace ? ' sel' : ''}" data-p="${k}" type="button">${PACE_LABEL[k]}</button>`).join('') +
         '</div></div>' +
         '<div class="menu-list">' +
-          this._menuItem('set-new', '🔄', 'New Game', 'Restart with the same opponents') +
+          this._menuItem('set-new', '🔄', 'New Game', this._quitCostsLoss() ? 'Counts as a loss' : 'Restart with the same opponents') +
           this._menuItem('set-stats', '📊', 'Stats', 'All-time wins, losses and win rate') +
-          this._menuItem('set-setup', '↩️', 'Quit to New Game screen', 'Change opponents or difficulty') +
-          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', 'Leave Monopoly Deal') +
+          this._menuItem('set-setup', '↩️', 'Quit to New Game screen', this._quitCostsLoss() ? 'Counts as a loss' : 'Change opponents or difficulty') +
+          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', this._quitCostsLoss() ? 'Counts as a loss' : 'Leave Monopoly Deal') +
           this._menuItem('set-credits', '🎉', 'Credits', '') +
         '</div>' +
         '<button class="cta ghost-cta" id="set-close">Close</button>');
@@ -412,10 +435,10 @@
         this._setPace(b.dataset.p);
         sheet.querySelectorAll('.count-btn[data-p]').forEach(x => x.classList.toggle('sel', x === b));
       }));
-      sheet.querySelector('#set-new').addEventListener('click', () => this._restartGame());
+      sheet.querySelector('#set-new').addEventListener('click', () => { this._takeQuitLoss(); this._restartGame(); });
       sheet.querySelector('#set-stats').addEventListener('click', () => this.showStats('settings'));
-      sheet.querySelector('#set-setup').addEventListener('click', () => this.showSetup());
-      sheet.querySelector('#set-hub').addEventListener('click', () => this._toHub());
+      sheet.querySelector('#set-setup').addEventListener('click', () => { this._takeQuitLoss(); this.showSetup(); });
+      sheet.querySelector('#set-hub').addEventListener('click', () => { this._takeQuitLoss(); this._toHub(); });
       sheet.querySelector('#set-credits').addEventListener('click', () => this._showCredits());
       sheet.querySelector('#set-close').addEventListener('click', () => this._closeOverlay());
       this._scrimCloses();
@@ -423,14 +446,14 @@
 
     _quitDialog() {
       const sheet = this._sheet(
-        '<h3>Where do you wanna go?</h3><p>Your current game will be lost</p>' +
+        '<h3>Where do you wanna go?</h3><p>' + (this._quitCostsLoss() ? 'Counts as a loss.' : 'Your current game will be lost') + '</p>' +
         '<div class="menu-list">' +
           this._menuItem('q-setup', '↩️', 'New Game screen', 'Pick opponents and difficulty') +
           this._menuItem('q-hub', '🏠', 'Game Hub', 'Leave Monopoly Deal') +
         '</div>' +
         '<button class="cta ghost-cta" id="q-cancel">Keep playing</button>');
-      sheet.querySelector('#q-setup').addEventListener('click', () => this.showSetup());
-      sheet.querySelector('#q-hub').addEventListener('click', () => this._toHub());
+      sheet.querySelector('#q-setup').addEventListener('click', () => { this._takeQuitLoss(); this.showSetup(); });
+      sheet.querySelector('#q-hub').addEventListener('click', () => { this._takeQuitLoss(); this._toHub(); });
       sheet.querySelector('#q-cancel').addEventListener('click', () => this._closeOverlay());
       this._scrimCloses();
     }
@@ -548,7 +571,9 @@
       this._owners = null; this._flights = null; this._landing = new Set();
       this._handEls = new Map(); this.$('hand').innerHTML = '';
       this.$('bd-flight').innerHTML = '';
+      this._takeQuitLoss();           // any other route into a new game over a moved-in one: a loss
       this._resultRecorded = false;   // record this game's win/loss once
+      this._qArmed = false;
       this.difficulty = difficulty || 'normal';
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
 
@@ -2011,7 +2036,11 @@
       const w = this.game.winner;
       const root = this.$('winner');
       const sets = this.game.completeColors(w).map(c => CM[c].label).join(', ');
-      if (!this._resultRecorded) { this._recordResult(w.id === 0); this._resultRecorded = true; }
+      if (!this._resultRecorded) {
+        try { if (window.__ghStats && window.__ghStats.dropQuit) window.__ghStats.dropQuit('business'); } catch (e) {}
+        this._qArmed = false;
+        this._recordResult(w.id === 0); this._resultRecorded = true;
+      }
       const s = this._loadStats();
       root.innerHTML =
         '<div class="scrim"></div><div class="win-card">' +
@@ -2060,6 +2089,9 @@
           _queuePendingStat('business', this.difficulty, humanWon);
         }
       } catch (e) {}
+      this._bumpBdStats(humanWon);
+    }
+    _bumpBdStats(humanWon) {
       const s = this._loadStats();
       s.played++; if (humanWon) s.won++; else s.lost++;
       try { localStorage.setItem('bd-stats', JSON.stringify(s)); } catch (e) {}

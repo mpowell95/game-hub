@@ -421,3 +421,7 @@ suite — rather than leaving verification to a session's own scratch scripts ag
 `FakeRoom`-backed lockstep test (matching the seven reference games' own suite) would also let
 the recovery/divergence path finally be exercised, which the real-Firebase pass above could not
 force.
+
+## Quitting and easier settings (2026-10-29)
+
+No resume, so leaving a solo game after the player's first roll is ONE loss (hub back, any unmount, a closed app): armed in `gamehub.quitLoss.v1` at each roll, dropped by the real result, taken in `destroy()` and at `init()`; `quitCostsLoss()` makes the hub's confirm say so. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -193,3 +193,7 @@ Hard-vs-Easy/Medium harness (>=65% / >=55%).
 ## The computer's dice are seeded (2026-10-29)
 
 `aiSeed` (per match, in `gamehub.uno.save.v1`): `chooseAction` and wild colours take `seededRng(seed, positionKey)`, the deal takes `seededRng(seed, 'deal')`, a restore seeds the engine's reshuffle from the save. `tools/test-ai-resume-seeds.mjs`.
+
+## Quitting and easier settings (2026-10-29)
+
+Restart / New game after the player's first play or draw (`moved` in the save) = ONE loss, asked twice; a hand found past its 30-minute save is that loss on load (it used to vanish). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

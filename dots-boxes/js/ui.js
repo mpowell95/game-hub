@@ -945,8 +945,9 @@ class DotsBoxesUI {
     const won = humanScore === aiScore ? null : humanScore > aiScore;
     const difficulty = this.mp ? MP_DIFFICULTY : this._setup.difficulty;
     const extras = { boxes: humanScore, bestChain: this._humanBestChainThisGame };
-    // A solo game where Undo was used records nothing (Matt, 2026-10-27; the end card says so).
-    if (!this.mp && this._undone) return;
+    // A solo game where Undo was used cannot count as a win or a tie (Matt, 2026-10-27; the end card
+    // says so). A LOSS still counts (2026-10-29): before, one Undo made a lost game vanish.
+    if (!this.mp && this._undone && won !== false) return;
     try { recordDotsBoxes(difficulty, won, extras); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // has no `this.mp` and is untouched. Never allowed to block the ordinary result from being
@@ -972,7 +973,7 @@ class DotsBoxesUI {
     const series = this.mp ? `<p class="db-card-series">${esc(this._seriesLine())}</p>` : '';
     const sub = this.mp
       ? `${humanScore}-${aiScore} · ${t(SIZE_META[this._boardSizeKey()].labelKey)}`
-      : `${humanScore}-${aiScore} · ${t(SIZE_META[this._setup.size].labelKey)} · ${t(DIFF_LABEL_KEY[this._setup.difficulty])}${this._undone ? ` · ${t('not_counted')}` : ''}`;
+      : `${humanScore}-${aiScore} · ${t(SIZE_META[this._setup.size].labelKey)} · ${t(DIFF_LABEL_KEY[this._setup.difficulty])}${this._undone && won !== false ? ` · ${t('not_counted')}` : ''}`;
     const overlay = document.createElement('div');
     overlay.className = 'db-overlay';
     overlay.dataset.role = 'end';
@@ -1081,7 +1082,7 @@ class DotsBoxesUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = this._quitCostsLoss() ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -1094,6 +1095,27 @@ class DotsBoxesUI {
       b.dataset.armed = '';
       b.classList.remove('is-confirm');
     });
+  }
+
+  /** Quitting a solo game (Restart, Menu) once the human has drawn an edge is a LOSS (2026-10-29,
+   *  docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier settings"). Leaving
+   *  the hub mid-game is not quitting: the autosave resumes it. Multiplayer is untouched. */
+  _quitCostsLoss() {
+    if (this.mp || this.view !== 'game' || !this.state || isOver(this.state) || this._statsCommitted) return false;
+    if (this._undone) return true;
+    if (Array.isArray(this._moves)) return this._moves.some((m) => m[0] === this.humanSeat);
+    // A save from before the move list: the opening turn is one edge (nothing to capture yet).
+    return this.state.drawnEdges >= (this.humanSeat === 0 ? 1 : 2);
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    const sc = score(this.state);
+    const boxes = this.humanSeat === 0 ? sc.p0 : sc.p1;
+    try { recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame }); } catch { /* never block leaving */ }
+    clearGame();
   }
 
   // --- undo (solo only) -------------------------------------------------------
@@ -1167,12 +1189,12 @@ class DotsBoxesUI {
       this.closeOverlays();
       this.startGame();
     } else if (action === 'restart') {
-      this.confirmDestructive(btn, () => this.startGame());
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'undo') {
       this.undo();
     } else if (action === 'change-settings') {
-      this.closeOverlays();
-      this.renderSetup();
+      const go = () => { this._recordQuitLoss(); this.closeOverlays(); this.renderSetup(); };
+      if (this._quitCostsLoss()) this.confirmDestructive(btn, go); else go();
     } else if (action === 'help') {
       this.openHelp();
     } else if (action === 'close-overlay') {

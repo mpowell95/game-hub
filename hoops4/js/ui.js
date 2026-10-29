@@ -6,7 +6,7 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
 import { GAME_ART } from '../../js/game-art.js';
@@ -1029,7 +1029,22 @@ class Hoops4 {
   }
 
   // --- the match --------------------------------------------------------------------------------
+  // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+  // and easier settings"). A match against the computer has no resume: once the player has shot,
+  // leaving it (New game, Back to setup, the hub's back, a closed app) records a loss. Armed in
+  // js/game-stats.js at the player's shots, dropped by the real result, taken by a quit.
+  cpuDiff() { return ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium'; }
+  quitCostsLoss() {
+    return !this.mp && !!this.match && this.match.vsCpu && !this.match.over && !this.recorded && quitLossArmed('hoops4');
+  }
+  takeQuit() {
+    if (!this.quitCostsLoss()) return;
+    this.recorded = true;
+    takeQuitLoss('hoops4');
+  }
+
   async start(opts = {}) {
+    this.takeQuit();   // a match the player has shot in, replaced by a new one, is a loss
     // A fresh solo match clears any multiplayer state; startLive/startAsync pass keepMp so their
     // own setup survives. Without that, "Play again" after a live match would silently keep
     // appending to a room nobody is in.
@@ -1224,7 +1239,11 @@ class Hoops4 {
     const nw = el.querySelector('[data-role="new"]');
     // A live ball is abandoned, not banked: nothing is recorded until a match ENDS, so a
     // restart loses a board and no history (THE LAW rule 2).
-    if (nw) this.on(nw, 'click', () => { if (el.parentNode) el.parentNode.removeChild(el); this.start(); });
+    if (nw) this.on(nw, 'click', () => {
+      // Two taps when it counts as a loss, the button saying so.
+      if (this.quitCostsLoss() && nw.dataset.armed !== '1') { nw.dataset.armed = '1'; nw.textContent = t('quitLoss'); return; }
+      if (el.parentNode) el.parentNode.removeChild(el); this.start();
+    });
     this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
       if (el.parentNode) el.parentNode.removeChild(el);
       this.leaveMatch();
@@ -1277,6 +1296,7 @@ class Hoops4 {
     const isAsync = !!(this.mp && this.mp.kind === 'async');
     const midGame = !!(this.match && !this.match.over && this.match.moves.length > 0);
     const go = () => {
+      this.takeQuit();
       this.teardownEngine();
       if (isAsync) this.showMultiplayer(); else this.renderSetup();
     };
@@ -1286,7 +1306,7 @@ class Hoops4 {
     el.innerHTML = `
       <div class="gh-modal h4-sheet-in" role="dialog" aria-modal="true" aria-label="${t('leaveQ')}">
         <h2 class="gh-modal__title">${t('leaveQ')}</h2>
-        <p class="h4-sheet-body">${t('leaveLost')}</p>
+        <p class="h4-sheet-body">${this.quitCostsLoss() ? t('quitLoss') : t('leaveLost')}</p>
         <div class="gh-modal__actions">
           <button type="button" class="gh-btn gh-btn--block h4-leave-no">${t('leaveNo')}</button>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-leave-yes">${t('leaveYes')}</button>
@@ -1448,6 +1468,9 @@ class Hoops4 {
     if (this.busy || !this.engine || !this.match || this.match.over) return;
     if (!this.isMyShot()) return;
     this.busy = true;
+    if (!this.mp && this.match.vsCpu && this.match.turn === this.myPlayer && !this.recorded) {
+      armQuitLoss('hoops4', 'recordResult', ['hoops4', this.cpuDiff(), false]);
+    }
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
     const seed = (Math.random() * 0x7fffffff) | 0;
@@ -1663,7 +1686,7 @@ class Hoops4 {
           // Seen right here, so the away-from-the-board Game Over popup never repeats it.
           try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
         } else if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
-        else if (m.vsCpu) recordResult('hoops4', ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium', r.won);
+        else if (m.vsCpu) { dropQuitLoss('hoops4'); recordResult('hoops4', this.cpuDiff(), r.won); }
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
     const r = m.result();
@@ -1753,6 +1776,7 @@ class Hoops4 {
   }
 
   destroy() {
+    this.takeQuit();   // leaving a match against the computer mid-play: no resume, so it is a loss
     this.disposed = true;
     try { if (window.__h4Test === this) delete window.__h4Test; } catch {}
     clearTimeout(this._toastT);
@@ -1765,6 +1789,7 @@ class Hoops4 {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
+  takeQuitLoss('hoops4');   // a match whose page closed mid-play (no destroy ran) is that match's loss
   instance = new Hoops4(container);
   instance.mount();
   return instance;
@@ -1796,4 +1821,7 @@ function ballSVG(fill, dark) {
     + `<path d="M1 10h18M10 1v18M4 3.5c3 3 3 10 0 13M16 3.5c-3 3-3 10 0 13" fill="none" stroke="${seam}" stroke-width="1.3"/></svg>`;
 }
 
-export default { init, destroy, isInProgress };
+/** The hub's leave confirm says "Counts as a loss" when this is true. */
+export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
+
+export default { init, destroy, isInProgress, quitCostsLoss };

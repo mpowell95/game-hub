@@ -389,3 +389,7 @@ or best % per person. `js/CLAUDE.md`, "Minesweeper's own board, and no \"YOU\"".
 ## The new-board confirm does not pause the clock (2026-10-29)
 
 `_askNewGame()` leaves the clock running: the board stays visible under the dim, and a stopped clock was free study time. Leaving to the menu or How to play hides the board, so those still stop it.
+
+## Quitting and easier settings (2026-10-29)
+
+A started board thrown away (the face's New board, or New game over a level's paused board) is ONE loss at that level (it protected a win rate); the question says "Counts as a loss." Pausing a board (level button, the hub) is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

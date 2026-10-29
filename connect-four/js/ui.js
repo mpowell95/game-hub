@@ -61,6 +61,8 @@ function saveC4Game(ui) {
       // The game's AI seed (2026-10-29): the computer's choice among equally good moves comes from
       // it, so a resume plays on exactly as the game would have, and a NEW game plays differently.
       aiSeed: ui.aiSeed,
+      recorded: !!ui.game._statsRecorded,   // 2026-10-29: undone after its result was recorded
+      moved: ui._moved,   // 2026-10-29: the human has moved this game (an undo cannot clear it): quitting now is a loss
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -89,6 +91,8 @@ function loadC4Game() {
       humanHasMoved: !!raw.humanHasMoved,
       // A save from before the seed existed gets a fresh one (nothing was promised about its replies).
       aiSeed: Number.isInteger(raw.aiSeed) && raw.aiSeed >= 0 && raw.aiSeed <= 0xFFFFFFFF ? raw.aiSeed : newAiSeed(),
+      moved: !!raw.moved || !!raw.humanHasMoved,
+      recorded: !!raw.recorded,
     };
   } catch { return null; }
 }
@@ -186,7 +190,7 @@ class ConnectFourUI {
     this.hintReqId = 0;
     // C4-2/C4-3: one shared disqualification flag, reset per game (startGame()).
     // Set by a confirmed undo or by confirming "Show best moves" - either taints
-    // the same flag, so the game records no W/L when it ends (see the
+    // the same flag, so the game can only record a LOSS when it ends (see the
     // recordConnect4 call). Never re-prompts again once true for this game.
     this._statsDisqualified = false;
     this.worker = null;
@@ -482,10 +486,10 @@ class ConnectFourUI {
     root.querySelector('[data-role="menu-resume"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-scrim"]').addEventListener('click', () => this.closeMenu());
     root.querySelector('[data-role="menu-undo"]').addEventListener('click', () => { this.closeMenu(); this.requestUndo(); });
-    restartBtn.addEventListener('click', () => this.confirmDestructive(restartBtn, () => { this.closeMenu(); this.startGame(); }));
+    restartBtn.addEventListener('click', () => this.confirmDestructive(restartBtn, () => { this._recordQuitLoss(); this.closeMenu(); this.startGame(); }));
     // Quitting to setup abandons the current game (unlike hub navigation): clear the
     // save so a later mount doesn't silently resume a game the player explicitly left.
-    quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { clearC4Game(); this.game = null; this.closeMenu(); this.showSetup(); }));
+    quitBtn.addEventListener('click', () => this.confirmDestructive(quitBtn, () => { this._recordQuitLoss(); clearC4Game(); this.game = null; this.closeMenu(); this.showSetup(); }));
     this.el.hintToggle.addEventListener('change', () => this.onHintToggle());
     root.querySelector('[data-role="stats-confirm-cancel"]').addEventListener('click', () => this.cancelStatsConfirm());
     root.querySelector('[data-role="stats-confirm-cancel-btn"]').addEventListener('click', () => this.cancelStatsConfirm());
@@ -516,7 +520,9 @@ class ConnectFourUI {
     this._statsDisqualified = saved.statsDisqualified;
     this.humanHasMoved = saved.humanHasMoved;
     this.aiSeed = saved.aiSeed;
+    this._moved = saved.moved;
     this.game = saved.game;
+    if (saved.recorded) this.game._statsRecorded = true;
     this.busy = false;
     this.hoverCol = -1;
     this.clearHover();
@@ -631,6 +637,7 @@ class ConnectFourUI {
     this.busy = false;
     this.hoverCol = -1;
     this.humanHasMoved = false;
+    this._moved = false;
     // C4-2/C4-3: fresh game, fresh flag - except "Show best moves" persists
     // across rematches, and per THE LAW rule 2 (Matt's stated simplest rule),
     // hints on at ANY point in the game disqualifies it, including already
@@ -728,7 +735,7 @@ class ConnectFourUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = this._quitCostsLoss() ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
@@ -845,7 +852,7 @@ class ConnectFourUI {
     const player = this.game.currentPlayer;
     const row = this.game.board.heights[col]; // landing row (before the move)
     this.game.play(col);
-    if (player === this.humanPlayer) this.humanHasMoved = true;
+    if (player === this.humanPlayer) { this.humanHasMoved = true; this._moved = true; }
     // Flip the turn label the instant the disc starts dropping (avoids a stale
     // "Computer is thinking…" while the AI's disc is already visibly falling).
     if (!this.game.isOver()) this.updateStatus();
@@ -966,7 +973,8 @@ class ConnectFourUI {
     this.el.status.textContent = msg;
     // C4-2/C4-3: say so on the result banner itself when this game won't be
     // recorded - a silent skip would just look like the stats are broken.
-    this.el.resultMsg.textContent = msg + (this._statsDisqualified ? t('not_counted') : '');
+    const lostGame = this.game.status === WIN && this.game.winner !== this.humanPlayer;
+    this.el.resultMsg.textContent = msg + (this._statsDisqualified && !lostGame ? t('not_counted') : '');
     this.el.result.hidden = false;
     this.updateUndoState(); // can still take back the final move
     // Bring the Rematch / Change-settings actions into view on tall layouts.
@@ -977,12 +985,12 @@ class ConnectFourUI {
     // (never the hazing's forced level). firstMove tracks WHO MOVED FIRST (humanPlayer === PLAYER_ONE).
     // A draw records as played-only (won = null), which the stats grid leaves out (W/L only).
     // C4-2/C4-3: a confirmed undo or "show best moves" this game taints
-    // _statsDisqualified - skip recordConnect4 entirely so the game leaves no
-    // W/L trace (not even a loss), same as never having recorded it.
+    // _statsDisqualified - it can no longer count as a win or a draw. A LOSS still counts
+    // (2026-10-29): before, undoing a lost position made the whole game vanish, a free escape.
     if (this.game && !this.game._statsRecorded) {
       this.game._statsRecorded = true;
-      if (!this._statsDisqualified) {
-        const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
+      const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
+      if (!this._statsDisqualified || won === false) {
         const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
         recordConnect4(this.difficulty, firstMove, won);
       }
@@ -991,6 +999,21 @@ class ConnectFourUI {
     if (this.challengeLive) {
       this.onChallengeGameEnd(this.game.status === WIN && this.game.winner === this.humanPlayer);
     }
+  }
+
+  /** Quitting (Restart, Quit to setup) once the human has moved this game is a LOSS (2026-10-29,
+   *  docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier settings"). Leaving
+   *  the game (destroy) is not quitting: the save resumes it. */
+  _quitCostsLoss() {
+    return !!(this.game && !this.game.isOver() && !this.game._statsRecorded && this._moved && !this.challengeLive);
+  }
+
+  /** Record the quit as a loss, once (the game's own `_statsRecorded` guard). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this.game._statsRecorded = true;
+    const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
+    recordConnect4(this.difficulty, firstMove, false);
   }
 
   /** Count the completed game for the hazing and, once past it, award the Connect Four
@@ -1060,8 +1083,10 @@ class ConnectFourUI {
     do { len--; } while (len > 0 && ((fp ^ (len % 2)) !== this.humanPlayer));
     const kept = hist.slice(0, len);
 
+    const recorded = !!this.game._statsRecorded;   // an undo after the end never records the game twice
     this.game = new Game(fp);
     for (const c of kept) this.game.play(c);
+    if (recorded) this.game._statsRecorded = true;
     this.humanHasMoved = kept.some((_, i) => (fp ^ (i % 2)) === this.humanPlayer);
     this.busy = false;
     this.clearHover();

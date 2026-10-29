@@ -191,3 +191,7 @@ root-side.
 ## No zoom (2026-10-15)
 
 `index.html` loads `../js/no-zoom.js` (root CLAUDE.md, scroll and touch rules); it is in this folder's own `sw.js` ASSETS (CACHE bumped to v36).
+
+## Quitting and easier settings (2026-10-29)
+
+No resume: after the player's first move, New Game / either Quit / the hub record ONE loss (`_takeQuitLoss`, `_resultRecorded`; the menus say "Counts as a loss"); a page closed mid-game leaves `__ghStats.armQuit`'s marker, taken at the next open. `game-stats-global.js` gained the 30-a-minute rate gate and the play log (canonical file copied verbatim). **Bump `sw.js` CACHE (and `APP_VERSION`) at deploy.** Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

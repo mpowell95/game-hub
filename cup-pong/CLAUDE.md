@@ -282,3 +282,7 @@ side (`mp.side`), never the local-frame `'a'`.
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Game 2+ of a series is never open but can time out; `countResult(id, won, finishedAt)`; "Timed out" (`timedOut`).
+
+## Quitting and easier settings (2026-10-29)
+
+No resume: vs the computer, leaving after the player's first throw (New game / Change settings, asked twice; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss axis). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

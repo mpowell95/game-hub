@@ -68,8 +68,8 @@ it should not make any sound ever."*
   `streak` is the one field a loss sets to 0 (live state; the earned part is `bestStreak`, and
   `players-agg` does not add it up). All three sub-counter surfaces are wired: `ensureAh` +
   recorder, `airHockeyScreen` in My Stats, the `ah` branch in `js/players-agg.js`
-  (`tools/players-agg.test.mjs` has its case). **A match left before 7 records nothing** (quit, Back,
-  hub back): it was neither won nor lost. A refused write logs loudly (rule 6).
+  (`tools/players-agg.test.mjs` has its case). **A match left before 7 is a LOSS once the player has
+  touched their mallet** (2026-10-29, below); before that it records nothing. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
   (no `devOnly` since the 2026-10-26 release)
   plus `HUB_ID` `airhockey -> air-hockey`, `GAME_META` in `js/leaderboard-ui.js`, and
@@ -288,3 +288,7 @@ the three levels in order against a new player, speed cap, swipe-to-shot, stuck 
 A chat button during an ONLINE match (`_mountChat` in `js/ui.js`, torn down in `_teardownOnline`; never in the lobby or vs the computer). Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js` (`watchRoomReactions`), lazy-imported.
 - **Where it sits and why:** in the score row, in the 44px slot the Pause button holds in a vs-computer match (Pause is hidden online; `CHAT_PLACE`, `right: 12px`, `top` = row top + 2px). Measured with a 59px top inset: 390x844 at [334, 61, 44, 44], 320x568 at [264, 61, 44, 44]. It is outside `.ah-stage`, which is where every pointer handler of this game is bound, so a tap on the button or the panel never moves the mallet (checked: 0 stage pointerdowns from a tap on either, 3 from a tap on the table).
 - **Transport:** `rooms/<CODE>/reactions/<role>` (`role` is `'host'` or `'guest'`) through `net.sendReaction`, one slot per seat, overwritten by that seat's newest line; read back with `watchRoomReactions`. Nothing is stored beyond the room's own life.
+
+## Quitting and easier settings (2026-10-29)
+
+No resume: once the player has touched their mallet, leaving a match vs the computer (Quit, asked twice; the hub's back; a closed app) is ONE loss at the score so far, armed in `gamehub.quitLoss.v1` (refreshed at each goal), dropped by the real result, taken in `destroy()` / `init()`. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -71,7 +71,8 @@ function readSave() {
   if (!s || s.v !== 1 || !s.state || !Array.isArray(s.state.board) || s.state.board.length !== E.N) return null;
   if (!Array.isArray(s.state.sides) || s.state.sides.length !== 2) return null;
   if (s.state.sides.some((sd) => !Array.isArray(sd.mons) || sd.mons.some((m) => !BY_ID[m.id]))) return null;
-  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state };
+  // `pm` (2026-10-29): the player has moved (quitting is now a loss); a save from before it: past turn 2.
+  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state, pm: typeof s.pm === 'boolean' ? s.pm : (s.state.turnNo | 0) > 2 };
 }
 
 /** Is a match handed over to this game's next mount (alert.js armOpen / armChallenge)? */
@@ -544,6 +545,7 @@ class BattleArena {
     this.link = null;
     this.state = this.canon = state;
     this.recorded = false;
+    this.pm = false;
     this.save();
     this.renderBattle();
   }
@@ -553,6 +555,7 @@ class BattleArena {
     this.link = null;
     this.state = this.canon = save.state;
     this.recorded = false;
+    this.pm = !!save.pm;
     this.renderBattle();
   }
 
@@ -584,7 +587,7 @@ class BattleArena {
 
   save() {
     if (!this.state || this.link) return;            // the one save slot is the match vs the computer
-    writeJSON(SAVE_KEY, { v: 1, diff: this.diff, state: this.state });
+    writeJSON(SAVE_KEY, { v: 1, diff: this.diff, state: this.state, pm: !!this.pm });
   }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch {} }
 
@@ -873,6 +876,7 @@ class BattleArena {
       if (res.error === 'no-match') await this.badSwap(a, b);
       return;
     }
+    if (!this.link) this.pm = true;
     await this.commit(res, true);
   }
 
@@ -1008,7 +1012,7 @@ class BattleArena {
     const m = s.sides[sd].mons[mi];
     if (sd === ME && s.turn === ME && !this.busy && E.evolveOptions(s).includes(mi)) {
       const res = this.step({ type: 'evolve', mon: mi, side: ME });
-      if (res.ok) { this.poke(); this.select(null); this.hideEvolve(); this.commit(res, true); }
+      if (res.ok) { if (!this.link) this.pm = true; this.poke(); this.select(null); this.hideEvolve(); this.commit(res, true); }
       return;
     }
     if (this.busy) return;
@@ -1817,10 +1821,29 @@ class BattleArena {
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('[data-role="resume"]'), 'click', close);
     this.on(el.querySelector('[data-role="help"]'), 'click', () => { close(); this.showHelp(); });
-    // Leaving a match abandons it: nothing is recorded until a match ENDS (THE LAW rule 2), and
-    // the save (a match in progress, not history) is dropped.
-    this.on(el.querySelector('[data-role="new"]'), 'click', () => { close(); this.clearSave(); this.state = null; this.renderDraft(); });
-    this.on(el.querySelector('[data-role="home"]'), 'click', () => { close(); this.clearSave(); this.state = null; this.renderHome(); });
+    // Leaving a match abandons it and the save is dropped. Once the player has moved it is a LOSS
+    // (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
+    // settings"): two taps, the button saying so. Leaving the hub is not quitting: the save resumes it.
+    const quit = (btn, go) => {
+      if (this.quitCostsLoss() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quitLoss'); return; }
+      close(); this.recordQuitLoss(); this.clearSave(); this.state = null; go();
+    };
+    this.on(el.querySelector('[data-role="new"]'), 'click', (e) => quit(e.currentTarget, () => this.renderDraft()));
+    this.on(el.querySelector('[data-role="home"]'), 'click', (e) => quit(e.currentTarget, () => this.renderHome()));
+  }
+
+  quitCostsLoss() {
+    return !this.link && !!this.state && this.state.winner == null && !this.recorded && !!this.pm;
+  }
+
+  /** Record the quit as a loss, once (`recorded`). */
+  recordQuitLoss() {
+    if (!this.quitCostsLoss()) return;
+    this.recorded = true;
+    try {
+      const st = recordResult('battlearena', this.diff, false);
+      if (!st) console.warn('[battle-arena] quit loss not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[battle-arena] quit loss not recorded', err); }
   }
 
   /** The menu in an online match: Resume, what the link allows (Resign / Cancel / Decline / Claim

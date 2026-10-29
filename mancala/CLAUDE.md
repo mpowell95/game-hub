@@ -270,3 +270,7 @@ that would fit.
 ## The computer's dice are seeded (2026-10-29)
 
 `aiSeed` (per game, in `gamehub.mancala.game.v1`): Beginner's random choices come from `seededRand(seed, state)`, so quit and resume replays the same choice. Timed searches (Intermediate, Pro) are not seeded. `tools/test-ai-resume-seeds.mjs`.
+
+## Quitting and easier settings (2026-10-29)
+
+Vs the computer only: Restart / Setup after the player's first sowing (`hm` in the save) = ONE loss, asked twice ("Counts as a loss"). Two players on one phone and MP untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

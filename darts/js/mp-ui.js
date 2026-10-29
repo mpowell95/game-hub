@@ -103,7 +103,10 @@ export async function home(ui, MP) {
     <div class="dt-mp-list"><p class="dt-mp-note">${esc(t('mp_loading'))}</p></div>
     <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="history">${esc(t('mp_history'))}</button>`);
   body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
-  body.querySelector('[data-mp="pass"]').addEventListener('click', () => ui._passPlay());
+  body.querySelector('[data-mp="pass"]').addEventListener('click', (e) => {
+    // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
+    if (ui._quitGate) ui._quitGate(e.currentTarget, () => ui._passPlay()); else ui._passPlay();
+  });
   body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
   pushRow(body.querySelector('.dt-mp-push'), () => fitList(cardOf(body), body.querySelector('.dt-mp-list')));
   const rows = await MP.readMyGames();

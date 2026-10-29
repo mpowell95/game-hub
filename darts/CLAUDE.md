@@ -230,3 +230,7 @@ the STORED side (`mp.side`), right whichever seat the left plaque is.
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Rows carry `turnAt`; `withTimeout` on every read; `countResult(id, won, finishedAt)`; a timeout shows "Timed out" (`mp_timed_out`). `tools/test-darts-mp.mjs` plays one.
+
+## Quitting and easier settings (2026-10-29)
+
+Play (or Pass & play) over a saved match vs the computer the player has thrown in = ONE loss, asked twice (`playerThrew`, the match's `recorded`); Quit keeps the save. 201 and 101 record one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

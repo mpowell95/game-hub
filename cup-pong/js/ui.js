@@ -7,7 +7,7 @@
 // isInProgress() for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -46,6 +46,15 @@ const readSettings = () => {
   } catch { return { diff: 'medium', gentlemans: true, reracks: 2, nextFirst: 'a' }; }
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
+
+// QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+// quitting and easier settings"). Unlimited reracks count one step down. A match against the computer
+// has no resume, so once the player has thrown, leaving it (New game, Change settings, the hub's back,
+// a closed app) is a LOSS: armed in js/game-stats.js at each of the player's throws, dropped by the
+// real result, taken by a quit.
+export function statsDiff(diff, reracks) {
+  return reracks === 'inf' ? oneTierDown(diff, DIFFS) : diff;
+}
 
 /** css/ui.css's primitives first (idempotent, matched by resolved href too, the same guard
  *  skeeball and hoops4 use), then this game's own sheet. Module stylesheets are never removed on
@@ -365,6 +374,7 @@ class CupPong {
 
   // --- a match vs the computer -----------------------------------------------------------------
   newMatch() {
+    this.takeQuit();   // a match thrown in and not finished, replaced by a new one, is a loss
     this.clearTimers();
     const first = this.settings.nextFirst;
     this.match = new Match({ first, gentlemans: this.settings.gentlemans, reracks: this.settings.reracks === 'inf' ? Infinity : this.settings.reracks });
@@ -470,6 +480,9 @@ class CupPong {
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
     const shooter = m.shooter;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
+    if (ev.length && shooter === 'a' && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
+      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a]);
+    }
     if (ev.length && shooter === 'a' && this.lastShot) {
       this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
     }
@@ -1309,7 +1322,8 @@ class CupPong {
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
-      try { recordCupPong(this.settings.diff, won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
+      dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
+      try { recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
@@ -1563,14 +1577,34 @@ class CupPong {
     if (this.mp) {
       this.on(el.querySelector('[data-role="mphome"]'), 'click', () => { el.remove(); this.openMultiplayer(); });
       this.on(el.querySelector('[data-role="resign"]'), 'click', () => { el.remove(); this.mpResign(); });
-    } else this.on(el.querySelector('[data-role="new"]'), 'click', () => {
+    } else this.on(el.querySelector('[data-role="new"]'), 'click', (e) => this.quitGate(e.currentTarget, () => {
+      this.takeQuit();
       el.remove();
       this.clearTimers();
       this.throwState = null;
       if (this.mode === 'solo') this.newRack(); else this.newMatch();
       if (!this.disposed) this.startLoop();
-    });
-    this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
+    }));
+    this.on(el.querySelector('[data-role="setup"]'), 'click', (e) => this.quitGate(e.currentTarget, () => { this.takeQuit(); el.remove(); this.renderSetup(); }));
+  }
+
+  /** A match against the computer the player has thrown in, not finished: leaving it is a loss. */
+  quitCostsLoss() {
+    return this.mode === 'cpu' && !this.mp && !!this.match && !this.match.over && !this.recorded && quitLossArmed('cuppong');
+  }
+
+  /** Record that loss, once (`recorded`, and the marker is dropped before the write). */
+  takeQuit() {
+    if (!this.quitCostsLoss()) return;
+    this.recorded = true;
+    takeQuitLoss('cuppong');
+  }
+
+  /** A button that would quit such a match asks twice, saying it counts as a loss. */
+  quitGate(btn, go) {
+    if (!this.quitCostsLoss() || btn.dataset.armed === '1') { go(); return; }
+    btn.dataset.armed = '1';
+    btn.textContent = t('quitLoss');
   }
 
   teardownEngine() {
@@ -1595,6 +1629,7 @@ class CupPong {
   }
 
   destroy() {
+    this.takeQuit();   // leaving a thrown-in match against the computer: no resume, so it is a loss
     this.disposed = true;
     try { if (window.__cpTest === this) delete window.__cpTest; } catch {}
     clearTimeout(this._toastT);
@@ -1607,6 +1642,8 @@ class CupPong {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
+  // A match against the computer whose page closed mid-game (no destroy ran) is that match's loss.
+  takeQuitLoss('cuppong');
   instance = new CupPong(container);
   instance.mount();
   return instance;
@@ -1621,6 +1658,9 @@ export function destroy() {
  *  computer, or a solo rack, is not persisted, so leaving one that has started really does abandon
  *  it and the hub should say so. A challenge (stage 5) will live in Firebase, so leaving one will
  *  lose nothing and this must answer false for it. */
+/** The hub's leave confirm says "Counts as a loss" when this is true. */
+export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
+
 export function isInProgress() {
   if (!instance) return false;
   if (instance.mode === 'solo') return instance.throws > 0 && instance.rack.length > 0;
@@ -1628,4 +1668,4 @@ export function isInProgress() {
   return !!(m && !m.over && m.throwsTaken > 0);
 }
 
-export default { init, destroy, isInProgress };
+export default { init, destroy, isInProgress, quitCostsLoss };

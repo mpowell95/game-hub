@@ -302,7 +302,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/boards10.js`, `way-out/js/boards11.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
-(`players-agg.test`, `test-mp-dedupe`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
+(`players-agg.test`, `test-mp-dedupe`, `test-quit-loss`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
 `test-stats-corrections`, `test-rate-guard`, `test-activity`, `test-admin-config`); cross-game
 (`test-game-conventions`, `check-no-scroll`, `test-mp-lockstep`); per-feature `test-*.mjs`.
 
@@ -409,6 +409,13 @@ game is saved cache-first like any other. **A session that sees a `devOnly` game
 the switch alone keeps it fast: the hub posts `LIVE_HELD` and `sw.js` serves those games cache-first,
 refreshing all their files behind on each hub load (before 2026-10-26 they were network-first on every
 open: Darts took ~4 s from Play to the match).
+
+### Quitting a game against the computer is a loss (2026-10-29)
+
+After the player's first move, an explicit discard (Restart, New game, Quit) records ONE loss through the game's own
+recorder and one-shot flag, asked twice ("Counts as a loss"); leaving a game that saves is not quitting; a game with
+no resume arms `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`) and exports `quitCostsLoss()`. Tables of
+computers record at the EASIEST one; shortened matches one tier lower. Per game: `docs/INTEGRITY-CHECKS-SPEC.md`.
 
 ## Archived games (2026-09-28)
 

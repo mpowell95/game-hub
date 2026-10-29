@@ -2992,7 +2992,13 @@
     }
   }
   function doRoll() { G.ui = "rolling"; var dd = rollForMode(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); }); }
-  function onRollTap() { if (G.ui !== "awaitRoll" || isAI(G.state.turn)) return; doRoll(); }
+  function onRollTap() {
+    if (G.ui !== "awaitRoll" || isAI(G.state.turn)) return;
+    // 2026-10-29 (hub-side patch, port to ../Parchis/src/game.js): the player has rolled, so starting
+    // a new game over this one vs the computer is a LOSS (docs/INTEGRITY-CHECKS-SPEC.md).
+    if (G.cfg && G.cfg.vsMode === "cpu") G.cfg.hm = true;
+    doRoll();
+  }
 
   function afterRoll(dd) {
     G.rollDice = dd.map(function (v) { return { v: v, used: false }; });
@@ -3312,7 +3318,30 @@
       onExit: function () { window.location.href = "../"; } // back to the game hub
     });
   }
-  function onPlay(setup) { startNewGame(buildCfg(setup)); }
+  function onPlay(setup) {
+    // 2026-10-29 (hub-side patch, port to ../Parchis/src/game.js): a saved game vs the computer the
+    // player has rolled in, replaced by a new one, is a LOSS, and the prompt says so first.
+    var sv = loadSaved();
+    var pending = !!(sv && sv.cfg && sv.cfg.vsMode === "cpu" && sv.cfg.hm && !sv.cfg.rec && Engine.currentPhase(sv.state) !== "gameover");
+    if (!pending) { startNewGame(buildCfg(setup)); return; }
+    var es = window.ParchisI18n.getLang() === "es";
+    HUD.prompt(es ? "\u00bfPartida nueva?" : "New game?", es ? "Cuenta como derrota." : "Counts as a loss.", [
+      { label: es ? "Jugar" : "Play", onClick: function () {
+        try { if (window.__ghStats) window.__ghStats.record("parchis", parchisStatsDiff(sv.cfg), false); } catch (e) {}
+        startNewGame(buildCfg(setup));
+      } },
+      { label: es ? "Volver" : "Back", kind: "ghost", onClick: showTitle }
+    ]);
+  }
+  /** The bucket a game vs the computer records at: the EASIEST computer's skill. */
+  function parchisStatsDiff(cfg) {
+    var rank = { beginner: 1, intermediate: 2, pro: 3, expert: 4 }, low = 99, diff = "intermediate";
+    var humans = cfg.humans || [cfg.anchor];
+    (cfg.active || []).forEach(function (c) {
+      if (humans.indexOf(c) === -1) { var t = (cfg.skills && cfg.skills[c]) || "intermediate"; if ((rank[t] || 99) < low) { low = rank[t] || 99; diff = t; } }
+    });
+    return diff;
+  }
 
   function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), speed: Speed.get(), sound: false }; }
   function onSettingsSaved(s) {
@@ -3424,11 +3453,10 @@
     try {
       if (window.__ghStats && G.cfg.vsMode === "cpu") {
         var humans = G.cfg.humans || [G.cfg.anchor];
-        var rank = { beginner: 1, intermediate: 2, pro: 3, expert: 4 }, best = 0, diff = "intermediate";
-        G.cfg.active.forEach(function (c) {
-          if (humans.indexOf(c) === -1) { var t = (G.cfg.skills && G.cfg.skills[c]) || "intermediate"; if ((rank[t] || 0) > best) { best = rank[t] || 0; diff = t; } }
-        });
-        window.__ghStats.record("parchis", diff, winners[0] === G.cfg.anchor);
+        // The EASIEST computer at the table (2026-10-29, Matt; it was the hardest). Hub-side patch:
+        // port to ../Parchis/src/game.js (parchisStatsDiff).
+        G.cfg.rec = true;
+        window.__ghStats.record("parchis", parchisStatsDiff(G.cfg), winners[0] === G.cfg.anchor);
       }
     } catch (e) {}
   }
