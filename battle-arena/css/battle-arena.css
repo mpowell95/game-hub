@@ -3,21 +3,23 @@
  * EVERY RULE IS DESCENDANT-SCOPED UNDER .ba-root. A module stylesheet is never removed once
  * injected, so a collision would be permanent for that session (Mancala's discipline).
  *
- * Home, draft and the overlays follow the hub theme (.gh-dark) through this file's --bas-*
- * tokens, mapped onto css/ui.css's --gh-* so the .gh-* primitives pick them up even standalone.
- * The BATTLE keeps its own Boiler Room look (dark steel, warm pipes) in both themes: in-game art.
+ * EVERY SCREEN wears the arena's look in both themes (2026-10-29, Matt: home and Online were
+ * "lackluster"): the Boiler Room wall behind home (art.js lobbyBG), dimmed behind the draft, Online
+ * and Monsters; steel tiles; one big yellow action button (.ba-bigbtn), steel ones (.ba-steelbtn).
+ * The --bas-* tokens are dark always, mapped onto css/ui.css's --gh-* so the .gh-* primitives
+ * (overlays, the segmented control) follow.
  *
  * Animation is transform / opacity / filter only. NOTHING HERE SCROLLS:
  * `node tools/check-no-scroll.mjs battle-arena` is the safety net.
  */
 
 .ba-root {
-  --bas-ink: #1d2430;
-  --bas-muted: #5b6675;
-  --bas-surface: #ffffff;
-  --bas-surface-2: #eef1f6;
-  --bas-bg: #f1ece4;
-  --bas-line: rgba(29, 36, 48, .14);
+  --bas-ink: #f4efe6;
+  --bas-muted: #b9ae9f;
+  --bas-surface: #262b33;
+  --bas-surface-2: #333943;
+  --bas-bg: #1a110c;
+  --bas-line: rgba(244, 239, 230, .16);
 
   --ba-steel: #23272e;
   --ba-steel-2: #2e333c;
@@ -33,6 +35,8 @@
   --gh-ink: var(--bas-ink);
   --gh-muted: var(--bas-muted);
   --gh-bg: var(--bas-bg);
+  --gh-border: var(--bas-line);
+  --gh-border-strong: rgba(244, 239, 230, .3);
 
   position: fixed;
   inset: 0;
@@ -51,47 +55,95 @@
   -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
 }
-:root.gh-dark .ba-root {
-  --bas-ink: #e8edf5;
-  --bas-muted: #9aa7b8;
-  --bas-surface: #1a212c;
-  --bas-surface-2: #242d3a;
-  --bas-bg: #12161d;
-  --bas-line: rgba(232, 237, 245, .14);
-}
 .ba-root svg { display: block; }
 .ba-root .ba-card-art svg, .ba-root .ba-mon-art svg, .ba-root .ba-result-mon svg, .ba-root .ba-banner-art svg, .ba-root .ba-home-mon svg { overflow: visible; }
 .ba-root .ba-face-left svg { transform: scaleX(-1); }
 .ba-root .gh-overlay { overscroll-behavior: contain; }
 .ba-root .gh-btn { touch-action: manipulation; }
 
-/* --- home ------------------------------------------------------------------------------------ */
-.ba-root .ba-home {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: calc(max(env(safe-area-inset-top, 0px), 54px) + 30px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+/* --- the arena behind every screen outside a match (art.js lobbyBG) --------------------------- */
+.ba-root .ba-lobby-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: #1a110c; }
+.ba-root .ba-lobby-bg svg { width: 100%; height: 100%; }
+.ba-root .ba-lobby-bg.is-dim::after { content: ''; position: absolute; inset: 0; background: linear-gradient(rgba(16, 10, 7, .74), rgba(16, 10, 7, .9)); }
+
+/* --- the buttons: ONE big yellow action per screen, steel for the rest ------------------------- */
+.ba-root .ba-bigbtn, .ba-root .ba-steelbtn {
+  appearance: none; position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin: 0; cursor: pointer; touch-action: manipulation; font-family: inherit; line-height: 1; white-space: nowrap;
+  transition: transform .08s ease-out, box-shadow .08s ease-out;
 }
-.ba-root .ba-home-art { display: flex; gap: 6px; }
-.ba-root .ba-home-mon svg { width: 116px; height: 116px; }
+.ba-root .ba-bigbtn {
+  width: 100%; min-height: 60px; padding: 0 20px 4px; border: 3px solid #1f1a14; border-radius: 18px;
+  background: linear-gradient(#ffe36e, #ffc21a 55%, #f29a05);
+  box-shadow: inset 0 -6px 0 rgba(150, 72, 0, .5), inset 0 3px 0 rgba(255, 255, 255, .6), 0 4px 0 #1f1a14, 0 10px 20px rgba(0, 0, 0, .45);
+  color: #2a1700; font-size: 26px; font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: .04em;
+}
+.ba-root .ba-bigbtn svg { width: 28px; height: 28px; flex: 0 0 auto; pointer-events: none; }
+.ba-root .ba-bigbtn span { pointer-events: none; }
+.ba-root .ba-bigbtn:active:not(:disabled) { transform: translateY(3px); box-shadow: inset 0 -4px 0 rgba(150, 72, 0, .5), inset 0 3px 0 rgba(255, 255, 255, .6), 0 1px 0 #1f1a14, 0 4px 10px rgba(0, 0, 0, .4); }
+.ba-root .ba-bigbtn:disabled { cursor: default; filter: grayscale(1) brightness(.6); }
+.ba-root .ba-steelbtn {
+  min-height: 52px; padding: 0 12px 3px; border: 2px solid #0f0c0a; border-radius: 16px;
+  background: linear-gradient(#5a6472, #3d4550 58%, #30363f);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 255, 255, .2), 0 3px 0 #0f0c0a, 0 8px 14px rgba(0, 0, 0, .35);
+  color: #f4efe6; font-size: 17px; font-weight: 800;
+}
+.ba-root .ba-steelbtn svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--ba-hl); pointer-events: none; }
+.ba-root .ba-steelbtn span:not([class]) { min-width: 0; overflow: hidden; pointer-events: none; }
+.ba-root .ba-steelbtn:active { transform: translateY(2px); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .35), inset 0 2px 0 rgba(255, 255, 255, .2), 0 1px 0 #0f0c0a; }
+/* Monsters unlocked so far: a light pill on the button's corner (the Online badge is the red one). */
+.ba-root .ba-count-n {
+  position: absolute; top: -9px; right: -6px; height: 22px; padding: 0 7px; border-radius: 11px; pointer-events: none;
+  background: #f4efe6; color: #1d2430; font-size: 12px; font-weight: 900; font-style: normal; line-height: 22px; box-shadow: 0 0 0 2px #0f0c0a;
+}
+
+/* --- home ------------------------------------------------------------------------------------ */
+.ba-root .ba-home { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; --ba-hm: min(150px, 18vh, 38vw); }
+.ba-root .ba-home-hero {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  padding: calc(max(env(safe-area-inset-top, 0px), 54px) + 36px) 16px 0;
+}
+/* The logo: a small white first line over a huge outlined yellow last word ("BATTLE / ARENA"). */
+.ba-root .ba-title {
+  margin: 0; max-width: 100%; display: flex; flex-direction: column; align-items: center; text-align: center;
+  font-weight: 900; font-style: italic; text-transform: uppercase; line-height: .92; white-space: nowrap;
+}
+.ba-root .ba-title span { display: block; max-width: 100%; overflow: hidden; padding: 0 6px 6px; }
+.ba-root .ba-title-a { font-size: 30px; letter-spacing: .2em; color: #fff; text-shadow: 2px 0 0 #1f1a14, -2px 0 0 #1f1a14, 0 2px 0 #1f1a14, 0 -2px 0 #1f1a14, 0 4px 0 #1f1a14; }
+.ba-root .ba-title-b {
+  font-size: 64px; letter-spacing: .02em; color: var(--ba-hl);
+  text-shadow: 3px 0 0 #1f1a14, -3px 0 0 #1f1a14, 0 3px 0 #1f1a14, 0 -3px 0 #1f1a14, 2px 2px 0 #1f1a14, -2px 2px 0 #1f1a14, 2px -2px 0 #1f1a14, -2px -2px 0 #1f1a14, 0 7px 0 #1f1a14, 0 10px 18px rgba(0, 0, 0, .6);
+}
+.ba-root .ba-home-art { display: flex; align-items: flex-end; justify-content: center; gap: 4px; margin-bottom: calc(var(--ba-hm) * -.1); }
+.ba-root .ba-home-mon svg { width: var(--ba-hm); height: var(--ba-hm); }
 .ba-root .ba-home-mon:first-child { animation: ba-bob 2.4s ease-in-out infinite; }
 .ba-root .ba-home-mon:last-child { animation: ba-bob 2.4s ease-in-out -1.2s infinite; }
 @keyframes ba-bob { 50% { transform: translateY(-5px); } }
-.ba-root .ba-title { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
-.ba-root .ba-home-card {
-  width: min(100%, 360px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  background: var(--bas-surface);
+.ba-root .ba-vs {
+  align-self: center; margin-top: calc(var(--ba-hm) * .25); font-size: 34px; font-weight: 900; font-style: italic; color: #fff; transform: rotate(-8deg);
+  text-shadow: 3px 0 0 #E0532F, -3px 0 0 #E0532F, 0 3px 0 #E0532F, 0 -3px 0 #E0532F, 0 5px 0 #1f1a14, 0 0 18px rgba(255, 138, 42, .9);
 }
-.ba-root .ba-home-card .gh-seg__item { gap: 6px; }
-.ba-root .ba-home-card .lb-dshape { width: 14px; height: 14px; }
-:root.gh-dark .ba-root .lb-dshape-t3 { fill: #e8edf5; }
+/* The menu stands on the arena floor (the battle's hazard edge + planks). */
+.ba-root .ba-home-menu {
+  position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 28px 16px calc(6px + env(safe-area-inset-bottom, 0px));
+  background:
+    repeating-linear-gradient(-45deg, #f2b705 0 12px, #1f1a14 12px 24px) top / 100% 14px no-repeat,
+    linear-gradient(rgba(0, 0, 0, .4), rgba(0, 0, 0, 0) 30px) 0 14px / 100% 30px no-repeat,
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .18) 0 2px, rgba(0, 0, 0, 0) 2px 97px),
+    linear-gradient(#5a3a2c, #2a1a12);
+  border-top: 2px solid #1f1a14;
+}
+.ba-root .ba-home-menu > * { width: min(100%, 380px); }
+.ba-root .ba-home-menu > .ba-link { width: auto; color: #e9dccb; }
+.ba-root .ba-home-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+/* The difficulty: a dark track, the chosen one lit (a lighter fill AND dark text, never hue alone). */
+.ba-root .ba-seg { display: flex; padding: 4px; border: 2px solid #0f0c0a; background: rgba(0, 0, 0, .5); }
+.ba-root .ba-seg .gh-seg__item { flex: 1 1 0; gap: 6px; min-height: 40px; padding: 0 8px; color: #e9dccb; font-size: 15px; font-weight: 800; }
+.ba-root .ba-seg .gh-seg__item[aria-pressed="true"] { background: #f4efe6; color: #1d2430; }
+.ba-root .lb-dshape { width: 14px; height: 14px; }
+.ba-root .lb-dshape-t3 { fill: #f4efe6; }
+.ba-root .ba-seg [aria-pressed="true"] .lb-dshape-t3 { fill: #1d2430; }
 .ba-root .ba-link {
   appearance: none;
   border: 0;
@@ -108,6 +160,8 @@
 
 /* --- draft ------------------------------------------------------------------------------------ */
 .ba-root .ba-draft {
+  position: relative;
+  z-index: 1;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -164,9 +218,9 @@
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  background: var(--bas-surface);
-  border: 2px solid transparent;
-  box-shadow: 0 1px 2px rgba(16, 30, 54, .08);
+  background: linear-gradient(#3d444f, #2a2f37);
+  border: 2px solid #0f0c0a;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .12), inset 0 -3px 0 rgba(0, 0, 0, .3), 0 2px 0 rgba(0, 0, 0, .45);
   cursor: pointer;
   touch-action: manipulation;
   overflow: hidden;
@@ -201,17 +255,25 @@
   line-height: 20px;
   text-align: center;
 }
-.ba-root .ba-pick.is-locked .ba-pick-art { filter: grayscale(1) brightness(.55); opacity: .55; }
+/* LOCKED (Matt, 2026-10-29): a black silhouette with a faint rim, a lock and the wins still to go. */
+.ba-root .ba-pick.is-locked { background: linear-gradient(#262a31, #1b1e23); }
+.ba-root .ba-pick.is-locked .ba-pick-art svg, .ba-root .ba-card.is-locked .ba-card-art svg { filter: brightness(0) drop-shadow(0 0 1.5px rgba(255, 255, 255, .45)); }
 .ba-root .ba-pick.is-locked .ba-pick-name { color: var(--bas-muted); }
 .ba-root .ba-draft-actions { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
-.ba-root .ba-draft-actions .gh-btn { min-height: 50px; font-size: 17px; }
+.ba-root .ba-draft-actions .ba-bigbtn, .ba-root .ba-draft-actions .ba-steelbtn { min-height: 56px; }
+.ba-root .ba-draft-actions .ba-bigbtn { font-size: 22px; }
+/* Screen titles (Online, Monsters, Challenge...): the logo's italic capitals. */
+.ba-root .ba-online-title { font-style: italic; text-transform: uppercase; letter-spacing: .03em; text-shadow: 0 3px 0 #000; }
+/* Monsters (2026-10-29): the draft's grid with names; the count of unlocked ones top right. */
+.ba-root .ba-dex-n { display: grid; place-items: center; font-size: 14px; font-weight: 900; color: var(--ba-hl); white-space: nowrap; }
+.ba-root .ba-dex .ba-pick-name { padding: 0 4px 6px; font-size: 13px; }
 
 /* Reference look: no names in the grid (tap = the card), each monster on a hexagon; the two
  * picks in big teal-ringed hexagons. */
 .ba-root .ba-pick-art { position: relative; }
 .ba-root .ba-pick-art::before {
   content: ''; position: absolute; left: 50%; top: 50%; width: min(86%, 92px); aspect-ratio: .9; transform: translate(-50%, -50%);
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: var(--bas-surface-2);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: rgba(255, 255, 255, .08);
 }
 .ba-root .ba-pick.is-on .ba-pick-art::before { background: #3fc8d8; }
 .ba-root .ba-pick-art svg { position: relative; }
@@ -227,28 +289,49 @@
 .ba-root .ba-slot-art svg { width: 70px; height: 70px; }
 .ba-root .ba-slot-gem { top: 14px; right: 10px; z-index: 1; }
 
-/* --- the monster card ------------------------------------------------------------------------- */
-.ba-root .ba-card { text-align: center; padding: 18px 18px 20px; width: min(360px, 100%); }
-.ba-root .ba-card-tabs { width: calc(100% - 52px); margin: 0 52px 6px 0; }
-.ba-root .ba-card-art { display: grid; place-items: center; }
-.ba-root .ba-card-art svg { width: 150px; height: 150px; }
-.ba-root .ba-card-name { margin: 0; font-size: 22px; font-weight: 900; white-space: nowrap; overflow: hidden; }
-.ba-root .ba-card-stats { display: flex; justify-content: center; gap: 18px; margin: 6px 0 10px; }
+/* --- the monster card (redesigned 2026-10-29): a steel card, the monster in its element's glow, its
+ * special, then both forms side by side (the pressed one lit: a brighter frame AND the other dimmed). */
+.ba-root .ba-card {
+  text-align: center; padding: 16px 16px 18px; width: min(360px, 100%); color: #f4efe6;
+  background: linear-gradient(#353b45, #1f232a); border: 3px solid #0f0c0a; border-radius: 22px;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .14), 0 16px 40px rgba(0, 0, 0, .6);
+}
+.ba-root .ba-card-art { position: relative; display: grid; place-items: center; }
+.ba-root .ba-card-art::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; border-radius: 50%; transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, var(--ba-el, #ffce3a), rgba(0, 0, 0, 0)); opacity: .55;
+}
+.ba-root .ba-card.is-locked .ba-card-art::before { background: radial-gradient(closest-side, rgba(255, 255, 255, .2), rgba(0, 0, 0, 0)); }
+.ba-root .ba-card-art svg { position: relative; width: 156px; height: 156px; overflow: visible; }
+.ba-root .ba-card-name {
+  margin: 2px 0 0; font-size: 26px; font-weight: 900; font-style: italic; text-transform: uppercase; white-space: nowrap; overflow: hidden; padding: 0 4px 4px;
+  text-shadow: 2px 0 0 #000, -2px 0 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 0 4px 0 #000;
+}
+.ba-root .ba-card-stats { display: flex; justify-content: center; gap: 18px; margin: 2px 0 10px; }
 .ba-root .ba-card-stat { display: flex; align-items: center; gap: 6px; font-size: 18px; }
-.ba-root .ba-card-stat svg { width: 22px; height: 22px; }
+.ba-root .ba-card-stat svg { width: 24px; height: 24px; }
 .ba-root .ba-card-sp {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--bas-surface-2);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .35);
+  border: 1px solid rgba(255, 255, 255, .08);
 }
 .ba-root .ba-card-spname, .ba-root .ba-card-fx { display: block; white-space: nowrap; overflow: hidden; }
-.ba-root .ba-card-spname { font-size: 15px; }
-.ba-root .ba-card-fx { font-size: 15px; color: var(--bas-muted); }
-.ba-root .ba-card .gh-btn { margin-top: 14px; min-height: 48px; }
-.ba-root .ba-card-lock { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 14px 0 0; color: var(--bas-muted); font-weight: 700; }
+.ba-root .ba-card-spname { font-size: 15px; color: #7fc8ff; font-style: italic; text-transform: uppercase; letter-spacing: .03em; }
+.ba-root .ba-card-fx { font-size: 15px; color: #e9dccb; }
+.ba-root .ba-card-forms { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 12px; }
+.ba-root .ba-form {
+  appearance: none; width: 78px; height: 78px; padding: 6px; border-radius: 16px; cursor: pointer; touch-action: manipulation;
+  border: 2px solid rgba(255, 255, 255, .12); background: rgba(0, 0, 0, .3); opacity: .7; transition: opacity .15s, border-color .15s;
+}
+.ba-root .ba-form svg { width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ba-root .ba-form[aria-pressed="true"] { opacity: 1; border: 3px solid var(--ba-hl); background: rgba(255, 255, 255, .08); box-shadow: 0 0 14px rgba(255, 206, 58, .45); }
+.ba-root .ba-card-arrow svg { width: 24px; height: 24px; color: var(--bas-muted); }
+.ba-root .ba-card .ba-bigbtn { margin-top: 14px; min-height: 54px; font-size: 22px; }
+.ba-root .ba-card-lock { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 12px 0 0; color: #e9dccb; font-size: 17px; font-weight: 800; }
 .ba-root .ba-card-lock svg { width: 18px; height: 18px; }
 
 /* --- how to play -------------------------------------------------------------------------------- */
@@ -584,7 +667,8 @@
 @media (prefers-reduced-motion: reduce) {
   .ba-root .ba-home-mon:first-child, .ba-root .ba-home-mon:last-child, .ba-root .ba-mon-bob, .ba-root .ba-result-mon,
   .ba-root .ba-evo-rays, .ba-root .ba-furnace, .ba-root .ba-furnace-2, .ba-root .ba-fuse, .ba-root .ba-evo-pill,
-  .ba-root .ba-team.is-turn .ba-avatar, .ba-root .ba-mon.is-full .ba-mon-art::before, .ba-root .ba-clock.is-low { animation: none; }
+  .ba-root .ba-team.is-turn .ba-avatar, .ba-root .ba-mon.is-full .ba-mon-art::before, .ba-root .ba-clock.is-low, .ba-root .ba-ol-empty-art svg { animation: none; }
+  .ba-root .ba-bigbtn, .ba-root .ba-steelbtn, .ba-root .ba-form { transition: none; }
   .ba-root .ba-hpbar i, .ba-root .ba-bar-fill, .ba-root .ba-gem { transition: none; }
 }
 
@@ -602,7 +686,7 @@
 /* --- online (2026-10-24): the online home, picker, join/host lobby; the chat slot and away pill on
  * the battle screen. Fewest words; nothing scrolls (online-ui.js fitList cuts the lists). */
 .ba-root .ba-online-btn { position: relative; }
-.ba-root .ba-badge-n { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #E0532F; color: #fff; font-size: 13px; font-weight: 900; line-height: 22px; box-shadow: 0 0 0 2px var(--bas-surface); }
+.ba-root .ba-badge-n { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #E0532F; color: #fff; font-size: 13px; font-weight: 900; line-height: 22px; font-style: normal; box-shadow: 0 0 0 2px #0f0c0a; pointer-events: none; }
 .ba-root .ba-badge-n[hidden] { display: none; }
 .ba-root .ba-online { overflow: hidden; }
 .ba-root .ba-online-title { flex: 1 1 auto; margin: 0; text-align: center; font-size: 22px; font-weight: 900; color: var(--bas-ink); }
@@ -652,7 +736,11 @@
 .ba-root .ba-presence[hidden] { display: none; }
 .ba-root .ba-clock.is-them b { color: #f0c49a; }
 .ba-root .ba-result-why { margin: 8px 0 0; text-align: center; font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px #000; }
-.ba-root .ba-ol-pair .gh-btn { background: var(--bas-surface); border: 1px solid var(--bas-line); color: var(--bas-ink); }
+.ba-root .ba-online > .ba-bigbtn { flex: 0 0 auto; }
+/* No matches: a sleepy monster over the line, so the empty screen is not just a sentence. */
+.ba-root .ba-ol-empty { display: flex; flex-direction: column; align-items: center; margin-top: 22px; }
+.ba-root .ba-ol-empty-art svg { width: 120px; height: 120px; opacity: .6; overflow: visible; animation: ba-bob 3s ease-in-out infinite; }
+.ba-root .ba-ol-row { background: linear-gradient(#353b45, #262b33); border-color: #0f0c0a; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .1), 0 2px 0 rgba(0, 0, 0, .45); }
 /* A challenge the other person has not opened: their team is not picked yet, so no monsters there. */
 .ba-root .ba-battle.is-foe-unknown .ba-mon[data-side="1"] .ba-mon-art,
 .ba-root .ba-battle.is-foe-unknown .ba-mon[data-side="1"] .ba-bar { visibility: hidden; }

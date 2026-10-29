@@ -18,10 +18,16 @@ import { STRINGS } from './strings.js';
 import * as MP from './mp.js';
 import { LiveRoom, readRoomSave, clearRoomSave, countLive, CLAIM_MS, STALE_MS } from './live.js';
 import { seatOfSide, sideOfSeat } from './online.js';
+import { lobbyBG, monsterSVG } from './art.js';
 
 const t = makeT(STRINGS);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON = {
+  swords: '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><path d="M2.5 2.5h4l9 9-4 4-9-9z"/><path d="M21.5 2.5h-4l-9 9 4 4 9-9z" opacity=".75"/></g><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M10.5 17.5l7-7M16 16l4.5 4.5M13.5 17.5l-7-7M8 16l-4.5 4.5"/></g></svg>',
+  host: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill="currentColor"/></svg>',
+  join: '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M3 12h11M10 8l4 4-4 4"/></g></svg>',
+};
 const NODE = MP.NODE;
 const myEmoji = () => { try { return (loadProfile() || {}).emoji || '🙂'; } catch { return '🙂'; } };
 
@@ -57,6 +63,7 @@ export async function open(ui, { armed = false } = {}) {
 function frame(ui, name, title, body) {
   ui.newScreen(name);
   ui.root.innerHTML = `
+    ${lobbyBG(true)}
     <div class="ba-draft ba-online">
       <div class="ba-draft-top">
         <button type="button" class="ba-iconbtn" data-role="back" aria-label="${esc(t('back'))}">${BACK}</button>
@@ -106,10 +113,10 @@ function rowHTML(r) {
 export async function home(ui, note = '') {
   ui.leaveOnline();
   const box = frame(ui, 'online', esc(t('online')), `
-    <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="new">${esc(t('challenge'))}</button>
+    <button type="button" class="ba-bigbtn" data-role="new">${ICON.swords}<span>${esc(t('challenge'))}</span></button>
     <div class="ba-ol-pair">
-      <button type="button" class="gh-btn gh-btn--ghost" data-role="host">${esc(t('host'))}</button>
-      <button type="button" class="gh-btn gh-btn--ghost" data-role="join">${esc(t('join'))}</button>
+      <button type="button" class="ba-steelbtn" data-role="host">${ICON.host}<span>${esc(t('host'))}</span></button>
+      <button type="button" class="ba-steelbtn" data-role="join">${ICON.join}<span>${esc(t('join'))}</span></button>
     </div>
     <p class="ba-ol-note ba-ol-err" aria-live="polite"${note ? '' : ' hidden'}>${esc(note)}</p>
     <div class="ba-ol-push" hidden></div>
@@ -130,7 +137,7 @@ export async function home(ui, note = '') {
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
   list.innerHTML = (mine.length ? `<h3 class="ba-ol-h">${esc(t('yourTurn'))} <span>${mine.length}</span></h3>${mine.slice(0, 8).map(rowHTML).join('')}` : '')
     + (theirs.length ? `<h3 class="ba-ol-h">${esc(t('theirTurnH'))} <span>${theirs.length}</span></h3>${theirs.slice(0, 8).map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<p class="ba-ol-note">${esc(t('noMatches'))}</p>`);
+    + (live.length ? '' : `<div class="ba-ol-empty"><div class="ba-ol-empty-art" aria-hidden="true">${monsterSVG('gloomite')}</div><p class="ba-ol-note">${esc(t('noMatches'))}</p></div>`);
   fitList(box, list, Math.max(0, mine.length - 8) + Math.max(0, theirs.length - 8));
   showUnseen(ui, rows);
 }

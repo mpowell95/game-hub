@@ -81,3 +81,22 @@ device's store only); Matt chose to keep testers on the 6 starters with normal u
 evolve) was approved ("those are sick"), then all 12 were built in `js/attacks.js`, each verified by
 replaying a synthetic special on the real battle screen and reading the frames. The projectile ball and the
 old flicker evolution are gone. Cross-device win counting for unlocks was proposed but not built.
+
+
+## 2026-10-29: the arena look outside a match, and the Monsters screen
+
+Matt sent screenshots of the home and Online screens: "Make these screens better. They're lackluster.
+And we need a monsters thing so you can view all of them and their abilities and evolved versions. You
+should only be able to see silhouettes of the [locked] monsters and the number of wins needed to unlock them."
+
+- Home, draft, Online (every `online-ui.js` frame), Monsters and the overlays now wear the battle's Boiler
+  Room look in both themes (they followed the hub theme before, so light mode was beige). Home: a two-line
+  logo (first words white, last word huge yellow), two random unlocked monsters facing off with "VS" on the
+  hazard-edged floor, the menu standing on the floor: difficulty, PLAY, Online + Monsters (unlocked count pill).
+- Monsters: the draft's 4x3 grid with names. Locked tiles show a black silhouette (`filter: brightness(0)`
+  plus a faint white rim), a lock and the wins still to go; no name, no element badge (the aria-label says
+  "Locked, N more wins"). The card: big art in its element's glow, name, element + charge, special, and the
+  normal and evolved forms side by side as the toggle (pictures instead of the "Normal / Evolved" words).
+- The draft's locked monsters used to be grey but fully drawn, and their card showed everything; now both
+  are silhouettes, matching Monsters. A monster seen in a battle (an opponent's) still shows in full.
+- `tools/check-no-scroll.mjs` measures "monsters + card" (evolved form). 56 screens, 0 scroll.

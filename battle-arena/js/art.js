@@ -440,3 +440,9 @@ export function arenaSVG() {
     <rect width="390" height="480" fill="#ff7a2a" opacity=".06"/>
   </svg>`;
 }
+
+/** The arena behind every screen outside a match (2026-10-29): the battle's own wall. Home stands
+ *  its monsters on it; the other screens dim it (`.ba-lobby-bg.is-dim`). */
+export function lobbyBG(dim = false) {
+  return `<div class="ba-lobby-bg${dim ? ' is-dim' : ''}" aria-hidden="true">${arenaSVG()}</div>`;
+}
