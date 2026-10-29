@@ -149,3 +149,8 @@ matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now che
 ## Quitting and easier settings (2026-10-29)
 
 The menu's New match / Home after the player's first move (`pm` in the save) = ONE loss, asked twice (`recorded`). Leaving the hub is not quitting (the save resumes). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live rooms: the leave is now ARMED at your first move too (`js/live-leave.js`), so a phone that never comes back loses (before, only a rejoin replayed the claim); `countLive` checks the shared ledger, and a rejoin whose loss was already settled resigns. Vs the computer: quitting is a loss from the board shown (`pm` true at start); a new match over a set-aside save records it first (`settleSavedMatch`: the loss, or the win its last move owed), Fight asks twice.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

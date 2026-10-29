@@ -180,3 +180,9 @@ Give up after the first word entered (`moved` in the save) = ONE loss, asked twi
 ## Solo: time away counts (2026-10-29, second pass)
 
 The known gap above is closed: hidden mid-round, the moment and time left are stamped (and saved, `away`); back, or resumed from that save, whatever the ticks did not charge is charged, topped up by the server's clock. A round whose time ran out while away ends and records on return. Leaving through the hub still pauses. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first word of the round = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per round (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
+- A claim cannot see whether the other found a word (words are private). Solo: giving up is a loss once the board is SHOWN (before the first word too).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

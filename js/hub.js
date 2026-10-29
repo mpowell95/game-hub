@@ -1335,6 +1335,10 @@ class Hub {
       el.addEventListener('click', () => { this.el.confirm.hidden = true; }));
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
       this.el.confirm.hidden = true;
+      // A LIVE ROOM left on purpose (2026-10-29, js/live-leave.js): the game resigns the match it is
+      // in before it is unmounted (destroy() alone only detaches, so a closed app can still rejoin).
+      const m = this.current && this.current.module;
+      try { if (m && typeof m.leaveMatch === 'function') m.leaveMatch(); } catch (e) { console.warn('leaveMatch() failed', e); }
       this.showLauncher();
     });
     // Delegate from .hub-main so it catches the grid cards.

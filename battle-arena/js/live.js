@@ -27,6 +27,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat } from './online.js';
 import * as E from './engine.js';
 import NET from '../../js/net.js';
+import * as LL from '../../js/live-leave.js';
 
 export const ROOM_KEY = 'gamehub.battlearena.room.v1';
 const LIVE_LEDGER = 'gamehub.battlearena.liveCounted.v1';
@@ -43,13 +44,17 @@ export function readRoomSave() {
 }
 export function clearRoomSave() { try { localStorage.removeItem(ROOM_KEY); } catch { /* private mode */ } }
 
-/** Record a finished live match on this phone, once (THE LAW rule 2). */
-export function countLive(key, won, opp) {
+/** Record a finished live match on this phone, once (THE LAW rule 2). `llKey` (2026-10-29): the same
+ *  match in js/live-leave.js's ledger, so a loss already settled from an armed leave is not counted
+ *  again, and a counted match drops its armed leave. */
+export function countLive(key, won, opp, llKey) {
   const done = readJSON(localStorage, LIVE_LEDGER);
   const list = Array.isArray(done) ? done.filter((x) => typeof x === 'string') : [];
   if (list.includes(key)) return false;
   list.push(key);
   writeJSON(localStorage, LIVE_LEDGER, list.slice(-200));
+  if (llKey && LL.alreadyCounted(llKey)) return false;
+  if (llKey) LL.endedNormally(GAME, llKey);
   try { recordResult(GAME, 'mp', !!won); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   if (opp && opp.deviceId) { try { recordHeadToHead(GAME, { deviceId: opp.deviceId, name: opp.name || '' }, !!won); } catch { /* never block the result */ } }
   return true;
@@ -188,6 +193,9 @@ export class LiveRoom {
         if (!this.applyStored(m)) break;
         done.push(m.entry);
       }
+      // This phone's armed leave was settled as a loss while it was away (js/live-leave.js, the hub
+      // after 30 minutes): the match is lost here, so say so in the room (the other side wins).
+      if (!this.over && LL.alreadyCounted(this.llKey())) this.resign();
       if (this.cb.onStart) this.cb.onStart(this.canon, done);
       return;
     }
@@ -249,6 +257,10 @@ export class LiveRoom {
     else { this.canon = res.state; if (res.state.winner != null) this.over = true; }
     this.applied = seq + 1;
     const h = entry.k === 'r' ? null : stateHash(this.canon);
+    // Your own first move arms the leave (js/live-leave.js): a phone that never comes back loses.
+    if (entry.k !== 'r' && !this.over && entry.by === sideOfSeat(this.seat)) {
+      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : []);
+    }
     this.sending = this.sending.then(async () => {
       for (let tries = 0; tries < 8 && !this.dead; tries++) {
         try { await this.net.appendMove(this.code, this.seat, seq, entry, h); return; }
@@ -267,6 +279,8 @@ export class LiveRoom {
 
   /** The other player's record for head-to-head, and this match's ledger key. */
   resultKey() { return `${this.code}:${this.match ? this.match.seed : 0}`; }
+  /** This match's key in js/live-leave.js's ledger. */
+  llKey() { return LL.liveKey(GAME, this.code, this.match ? this.match.seed : 0); }
 
   /** Leave the room for good (after the match, or the lobby). The save goes with it. */
   async leave() {
@@ -277,10 +291,13 @@ export class LiveRoom {
   }
 
   /** Stop listening without leaving (the game was closed: the next mount rejoins). */
-  detach() { this.dead = true; try { this.net.disconnect(); } catch { /* gone */ } }
+  detach() { this.dead = true; LL.detachLeave(GAME); try { this.net.disconnect(); } catch { /* gone */ } }
 
   end(why) {
     if (this.dead) return;
+    // The room went away with the match on: an armed leave from this phone stands (it never came
+    // back in time); ended by an older build's plain leave: nothing is recorded, as before.
+    if (why === 'gone' && this.started) LL.settleLeave(GAME); else LL.disarmLeave(GAME);
     this.over = true;
     clearRoomSave();
     if (this.cb.onEnded) this.cb.onEnded(why);

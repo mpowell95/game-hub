@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v37';
+  const APP_VERSION = 'v38';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -385,7 +385,10 @@
      *  (`_resultRecorded`). The marker (__ghStats.armQuit) is what catches a closed page. ---------- */
     _quitCostsLoss() { return !!(this._qArmed && this.game && !this.game.winner && !this._resultRecorded); }
     _armQuitLoss() {
-      if (this._qArmed || this._resultRecorded || !this.game || this.game.winner) return;
+      if (this._resultRecorded || !this.game || this.game.winner) return;
+      // Already armed: keep the marker fresh while the game is played (2026-10-29, second pass), so
+      // the hub's 30-minute settle never takes a game that is still going.
+      if (this._qArmed) { try { if (window.__ghStats && window.__ghStats.touchQuit) window.__ghStats.touchQuit('business'); } catch (e) {} return; }
       this._qArmed = true;
       try { if (window.__ghStats && window.__ghStats.armQuit) window.__ghStats.armQuit('business', this.difficulty); } catch (e) {}
     }
@@ -591,12 +594,16 @@
         });
       }
       this.game = new Game({ verbose: false, players });
+      // DEALT: quitting is a loss from here (2026-10-29, second pass, Matt). It waited for the
+      // player's first move, so a bad hand could be re-dealt for free.
+      this._armQuitLoss();
       this.meta = players.map((p, i) => ({
         avatar: i === 0 ? ((prof && prof.emoji) || '🧑') : aiAvatar(i - 1),
         tint: i === 0 ? '#0f59c8' : OPP_TINTS[(i - 1) % OPP_TINTS.length],
       }));
 
       this.game.onTurnStart = async (pl) => {
+        this._armQuitLoss();   // refreshes the armed marker every turn (see _armQuitLoss)
         this._bubbles = {}; this._seenLogs = this.game.logs.length; this.render();
         if (pl.id === 0) {
           const m = this._lastLog().match(/draws (\d+)/);
@@ -2037,9 +2044,14 @@
       const root = this.$('winner');
       const sets = this.game.completeColors(w).map(c => CM[c].label).join(', ');
       if (!this._resultRecorded) {
+        // A marker this page armed that was taken elsewhere (a page frozen 30+ minutes, the hub
+        // settled it): this game already counted as a loss, so it records nothing more.
+        let lost = false;
+        try { lost = !!(this._qArmed && window.__ghStats && window.__ghStats.quitLost && window.__ghStats.quitLost('business')); } catch (e) {}
         try { if (window.__ghStats && window.__ghStats.dropQuit) window.__ghStats.dropQuit('business'); } catch (e) {}
         this._qArmed = false;
-        this._recordResult(w.id === 0); this._resultRecorded = true;
+        if (!lost) this._recordResult(w.id === 0);
+        this._resultRecorded = true;
       }
       const s = this._loadStats();
       root.innerHTML =

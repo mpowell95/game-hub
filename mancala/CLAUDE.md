@@ -274,3 +274,10 @@ that would fit.
 ## Quitting and easier settings (2026-10-29)
 
 Vs the computer only: Restart / Setup after the player's first sowing (`hm` in the save) = ONE loss, asked twice ("Counts as a loss"). Two players on one phone and MP untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first sowing = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per game of the series (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
+- Vs the computer: quitting is a loss once any sowing has happened (`hm`) (it was the player's own first move).
+- **The computer is deterministic**: Intermediate and Pro stop on a NODE budget (`PRO_NODES` 640,000, `INTERMEDIATE_NODES` 400,000), not the clock, so a resumed position gets the same move on every phone (this supersedes "Timed searches are not seeded" above). Measured: new Pro vs the old timed one 11-12-1 over 24 games; ~300 ms a move, longest 622 ms on the test machine (slower on an old phone). `tools/test-ai-resume-seeds.mjs`.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

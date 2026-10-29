@@ -247,3 +247,9 @@ stats unchanged, next game recorded); `test-dotsboxes-stats.mjs` needs jsdom, ab
 ## Quitting and easier settings (2026-10-29)
 
 Solo Restart / Menu after the player's first edge = ONE loss (`_statsCommitted`; both ask twice, "Counts as a loss"). An Undo game no longer counts as a win or tie, but a LOSS still counts. Leaving the hub is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first edge = your loss (`'mp'` + head-to-head, boxes and best chain so far) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per game of the series (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
+- Vs the computer: quitting is a loss once any edge is drawn (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

@@ -425,3 +425,8 @@ Open items: see the root TODO.md, "Connect 4 Hoops".
 ## Quitting and easier settings (2026-10-29)
 
 No resume: vs the computer, leaving after the player's first shot (New game, asked twice; Back to setup, whose sheet says so; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Pass and play and online untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): after your first shot, leaving (Menu, the hub, any unmount) = your loss and their win; a closed app arms it; 90 s silent = "Claim win". Vs the computer: ANY shot (its opening too) arms the quit loss; `quitLossLost` stops a second result.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

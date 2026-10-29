@@ -306,3 +306,8 @@ based Cutthroat goes in this stage). Flick Soccer's challenges are the model; no
 ## Quitting and easier settings (2026-10-29)
 
 Play over a saved match vs the computer the player has shot in (`m.ps`) = ONE loss, asked twice; Quit keeps the save. A one-rack match records one step down (`statsDiff`, Matt's call). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once the first shot of the match, the computer's break included (`m.ps`) (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

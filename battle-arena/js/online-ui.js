@@ -502,7 +502,7 @@ class LiveLink {
     return items;
   }
 
-  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp); }
+  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp, this.room.llKey()); }
 
   done() { this.left = true; this.room.leave(); this.dead = true; home(this.ui); }
   resync() { if (this.room.canon) this.ui.startOnline(this, this.room.canon); }

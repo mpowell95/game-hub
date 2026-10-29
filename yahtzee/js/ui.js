@@ -40,10 +40,11 @@ import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
-import { deviceId, recordYahtzee, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import { deviceId, recordYahtzee, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
 import { howToHtml, createHowTo } from './howto.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 
 const t = makeT(STRINGS);
 
@@ -346,6 +347,9 @@ function applyRollResult(values){
 // call this function at all (mpApplyNextEntry mutates state directly).
 async function doRoll(){
   if(state.phase==='gameOver' || state.rollsUsed>=3) return;
+  // The FIRST roll of the game, whoever makes it, arms the quit loss (2026-10-29, second pass, Matt):
+  // quitting after the computer's opening roll used to be free.
+  if(!state.mp) armSoloQuitLoss();
   const values = state.dice.map(d => d.held ? d.value : 1+Math.floor(Math.random()*6));
   const heldMaskBefore = applyRollResult(values);
   if(state.mp) mpAfterLocalMove({ t:'roll', dice: values });
@@ -461,7 +465,12 @@ function commitSelection(){
 function commitStatsOnce(){
   if(!state || state.statsCommitted) return;
   state.statsCommitted = true;
+  const lost = !state.mp && quitLossLost('yahtzee');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
   if(!state.mp) dropQuitLoss('yahtzee');   // the real result replaces the armed quit loss
+  if(lost) return;
+  // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
+  if(state.mp && LL.alreadyCounted(mpKey())) return;
+  if(state.mp) LL.endedNormally('yahtzee', mpKey());
   const me = state.players[localSeat()], opp = state.players[remoteSeat()];
   const myTotal = totalScore(me), oppTotal = totalScore(opp);
   const won = myTotal===oppTotal ? null : (myTotal>oppTotal);
@@ -740,6 +749,53 @@ function mpAfterLocalMove(move){
   net.appendMove(mp.code, mp.role, seq, move, hash).catch(()=>{
     if(state && state.mp) state.mp.statusMsg = t('err_reconnecting');
   });
+  // Your first roll arms the leave (js/live-leave.js), refreshed with the score as it changes.
+  if(!state.statsCommitted && state.phase!=='gameOver') mpArmLeave();
+}
+
+// --- LEAVING A LIVE ROOM (2026-10-29, js/live-leave.js) ---------------------------------------------
+// One game per room, so the key's game number is 1. After your first roll, leaving (Leave, the hub,
+// any unmount: this game has no rejoin) is YOUR loss and the room ends with your forfeit, so the other
+// phone records its win. A closed app leaves the loss armed; the other player may "Claim win" after
+// 90 s of silence. No head-to-head (this game never wrote any).
+function mpKey(){ return (state && state.mp) ? LL.liveKey('yahtzee', state.mp.code, 1) : null; }
+function mpMine(){
+  const me = state.players[localSeat()];
+  return { yahtzees: (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[localSeat()]||0), score: totalScore(me) };
+}
+function mpArmLeave(){ LL.armLeave('yahtzee', mpKey(), 'recordYahtzee', ['mp', false, mpMine()], []); }
+function mpInGame(){ return !!(state && state.mp && !state.mp.ended && !state.statsCommitted && state.phase!=='gameOver'); }
+function mpOppRole(){ return state.mp.role==='host' ? 'guest' : 'host'; }
+function mpOppAwayMs(){ const r = state && state.mp && state.mp.lastRoom; return r ? LL.awayMs(r[mpOppRole()]) : 0; }
+function mpOppMoved(){
+  const r = state && state.mp && state.mp.lastRoom, by = state && state.mp && mpOppRole();
+  return !!(r && Object.values(r.moves||{}).some(m => m && m.by===by));
+}
+function mpCanClaim(){ return mpInGame() && mpOppAwayMs() >= LL.CLAIM_MS && mpOppMoved(); }
+function mpLeaveCosts(){ return mpInGame() && mpOppAwayMs() < LL.CLAIM_MS && LL.leaveCosts('yahtzee', mpKey()); }
+/** Leave the room: your forfeit when it costs, a claim when the other is gone, else a plain leave. */
+function mpLeaveRoom(){
+  const mp = state && state.mp;
+  if(!mp || !mp.code) return;
+  if(mpCanClaim()){ mpClaim(); return; }
+  if(mpLeaveCosts()){
+    state.statsCommitted = true;
+    LL.forfeitNow('yahtzee');
+    LL.leaveWithForfeit(net, mp.code, mp.role, mp.role, 1).catch(()=>{});
+    return;
+  }
+  if(mpInGame()) LL.disarmLeave('yahtzee');
+  net.leaveRoom(mp.code, mp.role).catch(()=>{});
+}
+function mpClaim(){
+  if(!mpCanClaim()) return;
+  const mp = state.mp;
+  state.statsCommitted = true;
+  mp.ended = true;
+  LL.recordLeaveWin('yahtzee', mpKey(), 'recordYahtzee', ['mp', true, mpMine()], []);
+  LL.leaveWithForfeit(net, mp.code, mp.role, mpOppRole(), 1, true).catch(()=>{});
+  if(root) LL.hideClaim(root);
+  renderMpEndOverlay('', LL.lt('ll_claimed'));
 }
 
 async function mpTryDeliverNextMove(){
@@ -871,11 +927,20 @@ function mpRoomCallback(room){
 function mpOnRoomUpdate(room){
   const mp = state && state.mp;
   if(!mp || !room) return;
+  mp.lastRoom = room;
   if(room.status==='ended' && !mp.opponentLeft){
     mp.opponentLeft = true;
-    mpEndDueToOpponentLeft();
+    // A leave that decided the game (js/live-leave.js): this phone's win, or its loss on a claim.
+    let res = 'none';
+    if(mpInGame()){
+      res = LL.onRoomEnded(room, { statsId: 'yahtzee', key: mpKey(), n: 1, mySeat: mp.role,
+        fn: 'recordYahtzee', winArgs: ['mp', true, mpMine()], opps: [] });
+      if(res!=='none') state.statsCommitted = true;
+    }
+    mpEndDueToOpponentLeft(res);
     return;
   }
+  if(root){ if(mpCanClaim()) LL.showClaim(root, mpClaim); else LL.hideClaim(root); }
   const roundN = room.round ? (room.round.n|0) : 0;
   if(roundN === 1){
     const entries = Object.values(room.moves||{});
@@ -910,11 +975,15 @@ function applyMpRecovery(recovery){
   mpTryDeliverNextMove();
 }
 
-function mpEndDueToOpponentLeft(){
+function mpEndDueToOpponentLeft(res){
   if(!state || !state.mp) return;
   state.mp.ended = true;
   net.disconnect();
-  renderMpEndOverlay(t('opp_left'));
+  if(root) LL.hideClaim(root);
+  const name = (state.mp.opp && state.mp.opp.name) || '?';
+  if(res==='won') renderMpEndOverlay('', LL.lt('ll_left_win', { name }));
+  else if(res==='lost') renderMpEndOverlay('', LL.lt('ll_lost', { name }));
+  else renderMpEndOverlay(t('opp_left'));
 }
 function mpEndDueToError(){
   if(!state || !state.mp) return;
@@ -922,13 +991,13 @@ function mpEndDueToError(){
   net.leaveRoom(state.mp.code, state.mp.role).catch(()=>{});
   renderMpEndOverlay(t('conn_lost'));
 }
-function renderMpEndOverlay(message){
+function renderMpEndOverlay(message, title){
   const overlay = $('overlay');
   if(!overlay) return;
   overlay.innerHTML = `
     <div class="yz-overlay-card">
-      <div class="yz-overlay-title">${t('conn_ended')}</div>
-      <div class="yz-overlay-scores">${esc(message)}</div>
+      <div class="yz-overlay-title">${title ? esc(title) : t('conn_ended')}</div>
+      ${message ? `<div class="yz-overlay-scores">${esc(message)}</div>` : ''}
       <button class="yz-play-btn yz-on" id="mpBackToSetupBtn"><span class="yz-label">${t('btn_back')}</span></button>
     </div>`;
   overlay.classList.add('yz-show');
@@ -1600,7 +1669,11 @@ function onRootClick(e){
     return;
   }
   if(e.target.closest('#mpLeaveBtn')){
-    if(state.mp && state.mp.code) net.leaveRoom(state.mp.code, state.mp.role).catch(()=>{});
+    const lb = e.target.closest('#mpLeaveBtn');
+    // After your first roll, Leave takes two taps and says it counts as a loss (js/live-leave.js).
+    if(mpLeaveCosts() && lb.dataset.armed!=='1'){ lb.dataset.armed = '1'; lb.textContent = LL.lt('ll_leave_loss'); return; }
+    if(mpCanClaim()){ mpClaim(); return; }
+    if(state.mp && state.mp.code) mpLeaveRoom();
     returnToSetup();
     return;
   }
@@ -1643,6 +1716,7 @@ export function init(container){
   destroyed = false;
   // A solo game left armed by a page that closed mid-game (no destroy ran) is that game's loss.
   takeQuitLoss('yahtzee');
+  LL.settleLeave('yahtzee');   // a live game whose page closed mid-game (no rejoin here): its armed loss
 
   ensureCss();
   // The how-to sheet lives on the PERSISTENT root, not inside #screenHost: screenHost's innerHTML
@@ -1715,7 +1789,7 @@ export function destroy(){
   // MP: leaving always ends the room cleanly for both sides (no autosave/
   // rejoin window in this game — see the module header for why).
   if(state && state.mp && state.mp.code){
-    net.leaveRoom(state.mp.code, state.mp.role).catch(()=>{});
+    if(state.mp.ended) net.disconnect(); else mpLeaveRoom();   // your forfeit after your first roll
   } else if(lobby && mpPendingCode){
     net.leaveRoom(mpPendingCode, lobby==='host'?'host':'guest').catch(()=>{});
   } else {
@@ -1744,6 +1818,7 @@ export function destroy(){
 
 /** The hub's leave confirm says "Counts as a loss" when this is true. */
 export function quitCostsLoss(){
+  if(!destroyed && state && state.mp) return mpLeaveCosts();
   return !destroyed && !!state && !state.mp && !state.statsCommitted && state.phase!=='gameOver' && quitLossArmed('yahtzee');
 }
 

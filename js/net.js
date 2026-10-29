@@ -488,9 +488,33 @@ export function stopHeartbeat() {
  *  the room for EVERY seat, N-seat rooms included -- see the N-SEAT ROOMS note
  *  at the top of this file for why a mid-match departure deliberately ends the
  *  match for the whole table, and vacateSeat() for the lobby-only counterpart. */
-export async function leaveRoom(code, role) {
-  try { if (await init()) await _api.update(roomRef(code), { status: 'ended', updated: Date.now() }); }
+export async function leaveRoom(code, role, forfeit) {
+  // `forfeit` (2026-10-29, js/live-leave.js): a leave that decides the match is written in the SAME
+  // update as the end, at `forfeit/<seat>` = { seat, n, at, claim? }, so no peer can see the room
+  // ended without it. Omit it and the write is byte-identical to before.
+  try {
+    if (await init()) {
+      const patch = { status: 'ended', updated: Date.now() };
+      if (forfeit && forfeit.seat != null) patch[`forfeit/${String(forfeit.seat).replace(/[.#$/[\]]/g, '_')}`] = forfeit;
+      await _api.update(roomRef(code), patch);
+    }
+  }
   finally { disconnect(); }
+}
+
+/** Read a room once, ended or not (2026-10-29, js/live-leave.js: a rejoin checks whether the match
+ *  was decided by a leave while this phone was away). `{ room }` (null = no such room) or
+ *  `{ error: 'offline' }`. Raced against a timeout: an RTDB read on a dead connection never settles. */
+export async function readRoom(code) {
+  if (!(await init())) return { error: 'offline' };
+  const CODE = String(code || '').trim().toUpperCase();
+  try {
+    const snap = await Promise.race([
+      _api.get(roomRef(CODE)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+    ]);
+    return { room: snap.val() };
+  } catch { return { error: 'offline' }; }
 }
 
 /** Synchronous teardown: unsubscribe onValue, clear the heartbeat, reset
@@ -503,5 +527,5 @@ export function disconnect() {
 export default {
   init, createRoom, joinRoom, joinSeat, vacateSeat, startRound, appendMove, writeResult, reportRoundResult,
   sendReaction, writeRecovery, requestRecovery, clearRecovery,
-  onRoom, heartbeat, stopHeartbeat, leaveRoom, disconnect,
+  onRoom, heartbeat, stopHeartbeat, leaveRoom, readRoom, disconnect,
 };

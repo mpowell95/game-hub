@@ -446,11 +446,12 @@ class ArcheryUI {
   _quitPending() {
     if (this.match && this.mode === 'cpu') {
       const m = this.match;
-      return m.winner == null && !m.recorded && m.shots[0].length > 0 ? { diff: this.diff, m } : null;
+      // Once anybody has shot, the computer included (2026-10-29, second pass, Matt).
+      return m.winner == null && !m.recorded && m.shots.some((s) => s && s.length > 0) ? { diff: this.diff, m } : null;
     }
     if (this.match) return null;
     const sv = this._savedMatch();
-    return sv && !sv.match.recorded && sv.match.shots[0].length > 0 ? { diff: sv.diff, m: sv.match } : null;
+    return sv && !sv.match.recorded && sv.match.shots.some((s) => s && s.length > 0) ? { diff: sv.diff, m: sv.match } : null;
   }
 
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */

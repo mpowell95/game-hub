@@ -427,3 +427,8 @@ A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down
 ## Quitting and easier settings (2026-10-29)
 
 Play (or Pass & play) over a saved match vs the computer the player has flicked in = ONE loss, asked twice (`playerShot`, `recorded`); Quit keeps the save. First to 1 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once ANY flick, the computer's included (`playerShot`) (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
