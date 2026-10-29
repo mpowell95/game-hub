@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1335;
-const CACHE = 'game-hub-v1335';
+const IMPORTANT_SINCE = 1336;
+const CACHE = 'game-hub-v1336';
 
 const ASSETS = [
   './',
@@ -805,12 +805,12 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'e5b116c4b3',
+  './js/strings.js': '2aea363ec2',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '9857643c12',
+  './js/game-stats.js': '4494134720',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd56d2b6377',
   './js/game-stats-ui.js': 'dd60a85fb5',
@@ -838,16 +838,16 @@ const REST_MANIFEST = {
   './js/integrity.js': 'ac8e1c56dd',
   './js/play-log-queue.js': '0e505c4581',
   './js/play-log.js': '92ecc7da20',
-  './js/stats-corrections.js': '8fc4dfe2f7',
+  './js/stats-corrections.js': 'b3cd32106d',
   './js/bee-fairplay.js': '578fe6bae3',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '4308815a47',
+  './js/players-agg.js': '4c52d295b4',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'b01f97d074',
-  './js/leaderboard-ui.js': '668a4ead6b',
+  './js/leaderboard-ui.js': '1ca3f5717a',
   './js/leaderboard-rank.js': '4fe1b42b0f',
-  './js/arrow-maze-time.js': '5c84bf56fc',
+  './js/arrow-maze-time.js': '8a9abfb66a',
   './js/gridlock-points.js': '8a4fcce246',
   './js/word-weaver-points.js': '8cdb10dc45',
   './js/gridlock-v1map.js': 'f83ca3500e',
@@ -974,13 +974,13 @@ const REST_MANIFEST = {
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
   './murdoku/css/murdoku.css': 'ec84773045',
-  './murdoku/js/ui.js': '49446a4207',
+  './murdoku/js/ui.js': 'a956193b39',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '48873b9523',
-  './way-out/js/ui.js': '4a0d5502e2',
+  './way-out/js/ui.js': 'b9d21949d8',
   './way-out/js/engine.js': '475f0bb4eb',
   './way-out/js/strings.js': '17497f2cfa',
   './way-out/js/boards8.js': '56f9933468',
@@ -1036,7 +1036,7 @@ const REST_MANIFEST = {
   './sudoku/js/solver.js': 'c12fe83ae8',
   './sudoku/js/strings.js': 'ba44b32363',
   './nuts-bolts/css/nuts-bolts.css': '1015089346',
-  './nuts-bolts/js/ui.js': 'adb14b4d29',
+  './nuts-bolts/js/ui.js': 'bd896c12ea',
   './nuts-bolts/js/game.js': '5fc7b00493',
   './nuts-bolts/js/generator.js': '1ac4f71b79',
   './nuts-bolts/js/strings.js': 'd7ba835b23',
