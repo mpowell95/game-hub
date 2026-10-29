@@ -333,3 +333,31 @@ never got the win. **Matt's decision: "7 days, then forfeit".**
   the clock, a mid-turn dart, the timeout on both phones, a late dart refused, Resign refused, counted
   once, an unanswered challenge still expires), `tools/test-eightball-mp.mjs` (Cutthroat),
   `tools/test-skee-challenge.mjs`, every game's `tools/test-*-mp.mjs`.
+
+## Holes closed 2026-10-29: quit/resume and replay holes in single-player and vs-computer games
+
+Found by the "King of Games" hunt. Each fix keeps the honest player's game exactly as it was; none of
+them voids or rewrites a stored result (they change what a game lets you do, going forward).
+
+| Game | Hole | Fix | What an honest player sees |
+|---|---|---|---|
+| Golf | Force-quit mid-flight undid a bad shot (the save was written only at rest) | The shot's inputs (club, aim, power, miss) are saved BEFORE the ball leaves (`pending` on the `save` field, `golf/js/save.js`); a resume replays that same shot to its settle (`_replayPending`), so the stroke counts and the ball lands where the engine put it. The pin of a multi-pin hole is saved too (`pinIdx`), so a resume plays the same cup. A malformed `pending` drops only that field, never the round | Nothing, unless the app dies mid-shot: it reopens with the shot taken |
+| Flick Soccer | (checked) already saved the shot before the roll (`shot`, 2026-10-11) | Unchanged | Same |
+| Minesweeper | The new-board confirm stopped the clock but left the board visible under the dim: free study time | The clock keeps running while the confirm is up. Leaving to the menu or How to play hides the board, so those still stop it. Backgrounding the app (board not on screen) still pauses | The seconds spent deciding on "New board?" count |
+| Boggle | Round time came from the wall clock (a phone clock moved back lengthened a round); `remainingSec` was saved only after a scored word; MP end time came from the host's wall clock | Solo and MP count `performance.now()`; the wall clock can only take time away (a suspended page is charged). The remaining time is saved on every tick (exact ms). MP: each phone reads the wall clock once on receiving the round, capped at the whole round and at its own last saved tick on a rejoin (`entryRemainingMs`), then counts its own monotonic clock. MP no longer writes the solo save slot | A clock that is simply correct; resuming returns the time you had |
+| Connect Four | The computer replayed identically, so a game learned with Undo / Show best moves could be replayed in a fresh game for a recorded win | A random seed per game, saved with the game (`aiSeed`); the computer's choice among equally good moves comes from (seed, stones on the board). In the first 10 stones it also varies among moves within a few heuristic points of the best (10 Medium, 5 Hard and Expert). Expert's exact solver picks randomly among moves of exactly equal value. No forced result is ever changed | A computer that does not open the same way every game; Medium strength measured unchanged (100 games varied vs not: 45-42-13); Hard only on a small sample (16 games at margin 10 went 4-8-4, so Hard now uses 5; re-measure before widening) |
+| Chinchón (solo) | Draw, look, force-quit, reopen and choose the discard pile instead (the autosave was turn-end only) | The solo save is written the moment a draw happens (`snapshot({ midTurn: true })`) and the resume re-enters that turn at the discard, with the drawn card in hand and no second draw offered. Live-room and challenge play are untouched | Reopening mid-turn puts the drawn card in your hand |
+| Mancala, Escoba, Uno, Flick Soccer, Pool | The computer's random choices were re-rolled by quit and resume | Each game's seed is saved with the game (Pool uses the match's own `seed`); the computer's random stream is a pure function of (seed, position), so a resume replays the same choice. Online play does not use these paths. Tiers that are timed searches (Mancala Intermediate / Pro) vary only with the clock and are not seeded | Nothing |
+| Hold'em | Suspicion: shoving every hand beats the Easy / Medium computers | Measured, not changed (below) | Nothing |
+
+### Hold'em shove, measured (3000 tournaments per row, the shover goes all in every hand; ROI is per 1 buy-in at the game's own prizes: heads-up 1.5x, otherwise 65/35)
+
+| Computers | Bots | Shover wins | Fair share | ROI |
+|---|---|---|---|---|
+| Easy | 1 / 2 / 4 / 7 | 45.1% / 29.8% / 15.8% / 9.1% | 50 / 33 / 20 / 12.5% | -32% / -22% / -30% / -38% |
+| Medium | 1 / 2 / 4 / 7 | 45.5% / 28.3% / 13.4% / 7.9% | same | -32% / -27% / -39% / -47% |
+| Hard | 1 / 2 / 4 / 7 | 45.6% / 29.0% / 15.7% / 8.6% | same | -32% / -25% / -29% / -38% |
+
+Easy and Medium are no softer to a shove than Hard, and shoving loses money everywhere, so no cap was
+added. `holdem/js/test.js` now fails if any skill at 2, 4 or 7 computers is beaten by it (win rate under
+1.25x fair share, ROI under 0).

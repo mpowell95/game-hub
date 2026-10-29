@@ -298,3 +298,7 @@ based Cutthroat goes in this stage). Flick Soccer's challenges are the model; no
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit: root `CLAUDE.md`, "Cancel, decline, resign, expire". **Cutthroat: the idle player loses and the winner is `resignWinner` on the table as the turn began** (`timeoutWinner`; rows carry `tw`); `over.by` = the idle seat; "{name} timed out". One count per person: `countResult(id, won, finishedAt)`. `tools/test-eightball-mp.mjs` times one out.
+
+## The computer's plan is seeded (2026-10-29)
+
+`planShot` takes `seededRng(match, seat)`: the match's own `seed` + the position, so quit and Continue before the computer shoots plans the SAME shot. `tools/test-ai-resume-seeds.mjs`.

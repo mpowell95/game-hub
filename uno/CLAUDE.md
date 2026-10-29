@@ -189,3 +189,7 @@ Covers deck composition, +2 stacking, penalty lump vs draw-until-playable, reshu
 Skip at 2p vs flip at 3+, every first-card rule **re-proven relative to a non-zero `startPlayer`**
 (the regression guard for the opener bug), win detection, 60 AI-vs-AI games, and the 500-game
 Hard-vs-Easy/Medium harness (>=65% / >=55%).
+
+## The computer's dice are seeded (2026-10-29)
+
+`aiSeed` (per match, in `gamehub.uno.save.v1`): `chooseAction` and wild colours take `seededRng(seed, positionKey)`, the deal takes `seededRng(seed, 'deal')`, a restore seeds the engine's reshuffle from the save. `tools/test-ai-resume-seeds.mjs`.

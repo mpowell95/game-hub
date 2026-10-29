@@ -16,7 +16,7 @@ import {
   aimContact, rayStop, canPlace, nearestPlace, onEight, needCall, targetsOf, cloneBalls, ballsOf,
   seatsOf, CUE, R, W, H, DT, HEAD_Y, POCKETS, RACK_OPTIONS, MODES, TABLE_NOW, TB, useTable, tableOf,
 } from './engine.js';
-import { planShot, DIFFS } from './ai.js';
+import { planShot, seededRng, DIFFS } from './ai.js';
 import { createRenderer, ballSVG, ballPaint, LOOKS } from './render.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -714,7 +714,7 @@ class PoolUI {
       this.phase = 'aim';
     } else {
       this.phase = 'cpu';
-      this.cpu = { gen: planShot(m, m.turn, this.diff), started: this.clock, shot: null };
+      this.cpu = { gen: planShot(m, m.turn, this.diff, seededRng(m, m.turn)), started: this.clock, shot: null };
     }
     this._status();
     this._paintOk();

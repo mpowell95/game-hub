@@ -41,7 +41,7 @@ import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
-import { roundEndsAt, wonFor, bothResultsIn } from './mp-round.js';
+import { roundEndsAt, entryRemainingMs, wonFor, bothResultsIn } from './mp-round.js';
 import STRINGS from './strings.js';
 
 // MULTIPLAYER (2026-07-28). Two human devices race the SAME shaken board over
@@ -163,6 +163,7 @@ function boardFromFaces(faces) {
  *  hub navigation specifically; destroy() runs regardless of the reason. */
 function saveGame(ui) {
   try {
+    if (ui.mp) return; // MP never writes the solo slot (the comment at destroy() always said so)
     if (ui.view !== 'game' || !ui._board || ui._roundOver) { clearGame(); return; }
     const faces = ui._board.grid.map((row) => row.map((tile) => tile.face));
     localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -170,6 +171,9 @@ function saveGame(ui) {
       faces,
       found: [...ui._found.keys()], // insertion order = discovery order; scores are recomputed on load, never trusted from storage
       remainingSec: ui._remainingSec,
+      // Exact, from the monotonic clock (2026-10-29): remainingSec is a CEILING and resuming on it
+      // would hand back up to a second every time. loadGame prefers this when present.
+      remainingMs: Math.max(0, Math.round(ui._endsAt - performance.now())),
       timerMinutes: ui._setup.timerMinutes,
       difficulty: ui._setup.difficulty,
       // The round's OWN language, not whatever the setup screen says now:
@@ -200,7 +204,10 @@ function loadGame() {
     const remainingSec = Math.round(Number(raw.remainingSec));
     if (!Number.isFinite(remainingSec) || remainingSec <= 0 || remainingSec > Math.max(...TIMERS) * 60) return null;
     if (!TIMERS.includes(raw.timerMinutes) || !DIFFICULTIES.includes(raw.difficulty)) return null;
+    const rms = Number(raw.remainingMs);
+    const remainingMs = Number.isFinite(rms) && rms > 0 && rms <= Math.max(...TIMERS) * 60000 && Math.ceil(rms / 1000) === remainingSec ? Math.round(rms) : null;
     return {
+      remainingMs,
       faces: raw.faces, found, remainingSec, timerMinutes: raw.timerMinutes, difficulty: raw.difficulty,
       // A save written before the Spanish list shipped carries no wordLang and
       // is English by definition -- it must still resume, so this defaults
@@ -817,6 +824,11 @@ class BoggleUI {
   async _mpApplyRoundRecord(round) {
     const mp = this.mp;
     if (!mp || !round) return;
+    // THE ROUND RUNS ON THIS PHONE'S OWN MONOTONIC CLOCK (2026-10-29). The wall clock is read ONCE,
+    // here, to work out how much of the round is already gone (a rejoin); after that every tick
+    // counts `performance.now()`, so moving the phone's clock mid-round changes nothing.
+    const arrivedPerf = performance.now();
+    const arrivedWall = Date.now();
     mp.gameNum = round.n;
     mp.startedAt = round.dealer;
     const cfg = (this._mpLobbyRoom && this._mpLobbyRoom.config) || null;
@@ -854,8 +866,12 @@ class BoggleUI {
     this._tracing = false;
     this._traceMoved = false;
     this.view = 'game';
-    this._endsAt = roundEndsAt(mp.startedAt, mp.timerMinutes);
-    this._remainingSec = Math.ceil(Math.max(0, this._endsAt - Date.now()) / 1000);
+    // Remaining at arrival: never more than the whole round (a clock set back cannot add time) and,
+    // on a rejoin, never more than the last tick this phone saved for this same round.
+    const capMs = (mp.capRound === round.n) ? mp.capMs : null;
+    mp.capRound = 0; mp.capMs = null;
+    this._endsAt = arrivedPerf + entryRemainingMs(mp.startedAt, mp.timerMinutes, arrivedWall, capMs);
+    this._remainingSec = Math.ceil(Math.max(0, this._endsAt - performance.now()) / 1000);
     this._mpSaveSnapshot();
     if (this._remainingSec <= 0) { this.finish(); return; } // rejoined after the round already ended
     this.renderGame();
@@ -1077,6 +1093,9 @@ class BoggleUI {
         series: { wins: mp.series.wins | 0, losses: mp.series.losses | 0, ties: mp.series.ties | 0 },
         timerMinutes: mp.timerMinutes,
         wordLang: mp.wordLang,
+        // The last tick's remaining time for THIS round (2026-10-29): a rejoin can never have more.
+        roundN: mp.gameNum | 0,
+        remainingMs: (!this._roundOver && this._endsAt) ? Math.max(0, Math.round(this._endsAt - performance.now())) : null,
         at: Date.now(),
       });
     } catch { /* private mode / quota */ }
@@ -1119,6 +1138,8 @@ class BoggleUI {
         ties: (save.series && save.series.ties) | 0,
       },
       startedAt: 0, timerMinutes: TIMERS.includes(save.timerMinutes) ? save.timerMinutes : 1.5,
+      capRound: save.roundN | 0,
+      capMs: Number.isFinite(save.remainingMs) && save.remainingMs >= 0 ? save.remainingMs : null,
       // A best guess only: _mpApplyRoundRecord re-reads the room's own config
       // below and overwrites it, which is the authoritative answer. This value
       // matters solely for the window before the room record lands.
@@ -1215,7 +1236,7 @@ class BoggleUI {
     this._traceMoved = false;
     this.view = 'game';
     this._remainingSec = this._setup.timerMinutes * 60;
-    this._endsAt = Date.now() + this._remainingSec * 1000;
+    this._endsAt = performance.now() + this._remainingSec * 1000;
     this.renderGame();
     this.startTimer();
   }
@@ -1224,10 +1245,11 @@ class BoggleUI {
    *  no "resume?" dialog. The solver's full word list is NOT saved; it is
    *  cheap to recompute deterministically from the saved board letters once
    *  the dictionary trie is loaded again (same lazy/cached load startGame()
-   *  uses). The clock is the deliberate special case: `remainingSec` (a
-   *  duration, not a timestamp) is saved, and `_endsAt` is recomputed fresh
-   *  from `Date.now()` here -- so time spent away from the game never counts
-   *  down. That is intentional, favoring the player. */
+   *  uses). The clock is the deliberate special case: the remaining time (a
+   *  duration, not a timestamp) is saved on every tick, and `_endsAt` is
+   *  rebuilt from `performance.now()` here -- the phone's wall clock is never
+   *  consulted, so moving it cannot lengthen a round. Time spent away from
+   *  the game never counts down (the board is not on screen). */
   async resumeGame(save) {
     this._restoring = true;
     this.view = 'loading';
@@ -1262,7 +1284,7 @@ class BoggleUI {
     this._traceMoved = false;
     this.view = 'game';
     this._remainingSec = save.remainingSec;
-    this._endsAt = Date.now() + this._remainingSec * 1000;
+    this._endsAt = performance.now() + (save.remainingMs != null ? save.remainingMs : this._remainingSec * 1000);
     this.renderGame();
     this.startTimer();
   }
@@ -1271,6 +1293,8 @@ class BoggleUI {
 
   startTimer() {
     this.stopTimer();
+    this._lastPerf = performance.now();
+    this._lastWall = Date.now();
     this._timerId = setInterval(() => this.tick(), 1000);
   }
 
@@ -1283,10 +1307,21 @@ class BoggleUI {
    *  displayed time drift from the real deadline. */
   tick() {
     if (this._dead) return;
-    const remainingMs = Math.max(0, this._endsAt - Date.now());
+    // MONOTONIC, AND THE WALL CLOCK CAN ONLY TAKE TIME AWAY (2026-10-29). Some phones stop
+    // `performance.now()` while the page is suspended; when the wall clock saw MORE time pass than
+    // the monotonic one did (a suspended page), the difference is charged. A wall clock moved BACK
+    // never adds anything. Moving it forward only costs the player.
+    const p = performance.now(), w = Date.now();
+    const extra = (w - this._lastWall) - (p - this._lastPerf);
+    this._lastPerf = p; this._lastWall = w;
+    if (extra > 250) this._endsAt -= extra;
+    const remainingMs = Math.max(0, this._endsAt - p);
     this._remainingSec = Math.ceil(remainingMs / 1000);
     if (remainingMs <= 0) { this.finish(); return; }
     this._updateTimerDisplay();
+    // The remaining time is saved EVERY tick (2026-10-29): it used to be saved only after a scored
+    // word, so thinking for 50 s, force-quitting and reopening brought the time back.
+    if (this.mp) this._mpSaveSnapshot(); else saveGame(this);
   }
 
   /** A direct textContent patch, not a full renderGame() -- ticking once a

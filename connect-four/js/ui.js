@@ -58,6 +58,9 @@ function saveC4Game(ui) {
       showBestMoves: ui.showBestMoves,
       statsDisqualified: ui._statsDisqualified,
       humanHasMoved: ui.humanHasMoved,
+      // The game's AI seed (2026-10-29): the computer's choice among equally good moves comes from
+      // it, so a resume plays on exactly as the game would have, and a NEW game plays differently.
+      aiSeed: ui.aiSeed,
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -84,8 +87,19 @@ function loadC4Game() {
       showBestMoves: !!raw.showBestMoves,
       statsDisqualified: !!raw.statsDisqualified,
       humanHasMoved: !!raw.humanHasMoved,
+      // A save from before the seed existed gets a fresh one (nothing was promised about its replies).
+      aiSeed: Number.isInteger(raw.aiSeed) && raw.aiSeed >= 0 && raw.aiSeed <= 0xFFFFFFFF ? raw.aiSeed : newAiSeed(),
     };
   } catch { return null; }
+}
+
+/** A fresh random 32-bit seed for one game's AI variation. */
+function newAiSeed() {
+  try {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0];
+  } catch { return Math.floor(Math.random() * 4294967296); }
 }
 
 function clearC4Game() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
@@ -167,6 +181,7 @@ class ConnectFourUI {
     this.ghostEl = null;
     this.hiCells = [];
     this.humanHasMoved = false;
+    this.aiSeed = newAiSeed();
     this.showBestMoves = false;
     this.hintReqId = 0;
     // C4-2/C4-3: one shared disqualification flag, reset per game (startGame()).
@@ -239,6 +254,7 @@ class ConnectFourUI {
       firstPlayer: this.game.firstPlayer,
       difficulty: this.effectiveDifficulty(),
       budgetMs: EXPERT_BUDGET_MS,
+      seed: this.aiSeed,
     };
     if (this.worker) {
       try { return (await this.postToWorker(params)).col; }
@@ -280,7 +296,7 @@ class ConnectFourUI {
     const { AI } = await import('./ai.js');
     const game = new Game(params.firstPlayer);
     for (const c of params.history) game.play(c);
-    const ai = new AI(params.difficulty, { expertBudgetMs: params.budgetMs });
+    const ai = new AI(params.difficulty, { expertBudgetMs: params.budgetMs, seed: params.seed });
     await new Promise((r) => setTimeout(r, 16)); // let "thinking…" paint first
     return ai.chooseMove(game);
   }
@@ -499,6 +515,7 @@ class ConnectFourUI {
     this.showBestMoves = saved.showBestMoves;
     this._statsDisqualified = saved.statsDisqualified;
     this.humanHasMoved = saved.humanHasMoved;
+    this.aiSeed = saved.aiSeed;
     this.game = saved.game;
     this.busy = false;
     this.hoverCol = -1;
@@ -610,6 +627,7 @@ class ConnectFourUI {
     }
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
+    this.aiSeed = newAiSeed();   // each game gets its own variation of the computer's equal choices
     this.busy = false;
     this.hoverCol = -1;
     this.humanHasMoved = false;

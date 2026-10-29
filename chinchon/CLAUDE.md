@@ -269,3 +269,7 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". A turn's clock starts at the other side's last decision (a hand that ends and restarts with the same player times from there); `countResult(id, won, extras, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.
+
+## A solo draw is saved at once (2026-10-29)
+
+The `'draw'` event writes the solo save (`snapshot({ midTurn: true })`, `_turnDrawn` in `game.js`); resume re-enters THAT turn at the discard (`_resumeAfterDraw`), with the drawn card in hand and no second draw. Plain `snapshot()` (MP, turn ends) is unchanged. `test.js` M2d.

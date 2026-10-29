@@ -33,6 +33,40 @@ const HARD_DEPTH = 9;
 // central columns participate in more winning lines.
 const COLUMN_ORDER = [3, 2, 4, 1, 5, 0, 6];
 
+// ---------------------------------------------------------------------------
+// Per-game variation (2026-10-29). A game with Undo or Show best moves records nothing, but it
+// teaches a winning line, and a deterministic computer replays that line in a fresh game. Each game
+// now carries a random SEED (saved with the game); the computer picks among EQUALLY GOOD moves with
+// an rng derived from (seed, stones on the board), so one game is self-consistent (resume, undo and
+// replay choose the same move) while a new game plays differently. In the opening it also varies
+// among moves whose search scores are within NEAR_EQUAL_MARGIN of the best (a heuristic score that
+// close is noise, not strength). Never a forced result: a win or loss the search sees is untouched.
+// ---------------------------------------------------------------------------
+/** The rng for ONE move: same seed + same stone count = same stream. */
+export function moveRng(seed, stones) {
+  return mulberry32(((Number(seed) >>> 0) ^ Math.imul((stones | 0) + 1, 0x9E3779B1)) >>> 0);
+}
+const VARY_OPENING_STONES = 10;
+// The gap between the best and second-best move at depth 5 and 9 in the opening is typically 3 to 20
+// points of the window heuristic (measured 2026-10-29). Strength checks (varied vs not varied, same
+// tier, colours alternating): Medium margin 12, 100 games: 45W 42L 13D; margin 8, 80 games: 40-32-8;
+// Hard margin 10, 16 games: 4-8-4 (small, and not clearly even), so Hard and Expert use the smaller
+// 5 and only mix moves a hair apart.
+export const NEAR_EQUAL_MARGIN = 10;
+const HARD_NEAR_EQUAL_MARGIN = 5;
+let activeMargin = NEAR_EQUAL_MARGIN;   // set per call from the AI instance (chooseMove)
+
+/** Pick a column from [{col, score}]: among the best, plus (in the opening, away from any forced
+ *  result) among the near-equal. */
+function pickVaried(scored, rng, stones) {
+  let best = -Infinity;
+  for (const s of scored) if (s.score > best) best = s.score;
+  const quiet = Math.abs(best) < WIN_BASE / 2;
+  const margin = (quiet && stones < VARY_OPENING_STONES) ? activeMargin : 0;
+  const pool = scored.filter((s) => s.score >= best - margin && (margin === 0 || Math.abs(s.score) < WIN_BASE / 2));
+  return pool[Math.floor(rng() * pool.length)].col;
+}
+
 // Terminal score base for the heuristic search. A win is worth WIN_BASE minus
 // the number of stones on the board, so a faster win (fewer stones) scores
 // higher and a slower loss scores less-negative — exactly the spec's tie-break.
@@ -435,20 +469,25 @@ const OPENING_BOOK = new Map([
  * its mover, so the solver's invariant holds and its value is exact. Honors the
  * current `searchDeadline`; returns the TIMEOUT sentinel if it can't finish.
  */
-function exactBestMove(position, mask, nbMoves, next) {
+function exactBestMove(position, mask, nbMoves, next, rng) {
   let bestCol = -1;
   let bestScore = -Infinity;
+  let tied = [];
   try {
     for (const c of COLUMN_ORDER) {
       const move = next & COLUMN_MASK[c];
       if (!move) continue;
       const score = -expertSolve(position ^ mask, mask | move, nbMoves + 1);
-      if (score > bestScore) { bestScore = score; bestCol = c; }
+      if (score > bestScore) { bestScore = score; bestCol = c; tied = [c]; }
+      else if (score === bestScore) tied.push(c);
     }
   } catch (e) {
     if (e === TIMEOUT) return TIMEOUT;
     throw e;
   }
+  // Equal exact value = equally good (same result, same length): a seeded pick among them keeps
+  // the strength and stops one memorised game replaying move for move. No rng = the first, as before.
+  if (rng && tied.length > 1) return tied[Math.floor(rng() * tied.length)];
   return bestCol;
 }
 
@@ -458,7 +497,7 @@ function exactBestMove(position, mask, nbMoves, next) {
  * finish in time (the wide-open opening). Pass budgetMs = Infinity for an
  * unbounded exact solve (used by tests).
  */
-function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS) {
+function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS, rng = null) {
   const mask = board.pieces[PLAYER_ONE] | board.pieces[PLAYER_TWO];
   const position = board.pieces[player];
   const nbMoves = board.moveCount;
@@ -484,7 +523,7 @@ function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS) {
   searchDeadline = unbounded ? Infinity : start + Math.floor(budgetMs * EXACT_BUDGET_FRACTION);
   let result;
   try {
-    result = exactBestMove(position, mask, nbMoves, next);
+    result = exactBestMove(position, mask, nbMoves, next, rng);
   } finally {
     searchDeadline = Infinity;
   }
@@ -493,7 +532,7 @@ function chooseExpert(board, player, budgetMs = DEFAULT_EXPERT_BUDGET_MS) {
   // Opening: the exact solve can't finish in time. Spend the remaining budget on
   // a bounded iterative-deepening heuristic search (very strong, just not proven
   // perfect this early). Perfect play resumes automatically as the board fills.
-  return chooseSearchTimed(board, player, start + budgetMs);
+  return chooseSearchTimed(board, player, start + budgetMs, rng);
 }
 
 // Pass 1's own time slice (2026-07-23 rework), independent of the caller's
@@ -693,21 +732,26 @@ function searchHeuristic(board, player, depth, alpha, beta) {
  * random pick among equally-scored top moves. May throw TIMEOUT if a deadline
  * is active and reached — callers that allow timeouts should search on a clone.
  */
-function bestMoveAtDepth(board, player, depth, rng) {
+function scoreMovesAtDepth(board, player, depth) {
   const moves = orderedLegal(board);
-  let bestScore = -Infinity;
-  let bestMoves = [];
+  const out = [];
   for (const c of moves) {
     board.play(c, player);
     let val;
     if (board.isWin(player)) val = WIN_BASE - board.moveCount;
     else val = -searchHeuristic(board, player ^ 1, depth - 1, -Infinity, Infinity);
     board.undo(c, player);
-
-    if (val > bestScore) { bestScore = val; bestMoves = [c]; }
-    else if (val === bestScore) bestMoves.push(c);
+    out.push({ col: c, score: val });
   }
-  return { col: bestMoves[Math.floor(rng() * bestMoves.length)], score: bestScore };
+  return out;
+}
+
+function bestMoveAtDepth(board, player, depth, rng) {
+  const scored = scoreMovesAtDepth(board, player, depth);
+  const col = pickVaried(scored, rng, board.moveCount);
+  let bestScore = -Infinity;
+  for (const s of scored) if (s.score > bestScore) bestScore = s.score;
+  return { col, score: bestScore };
 }
 
 /** Fixed-depth move choice (Medium / Hard). No deadline is active for these. */
@@ -723,8 +767,12 @@ function chooseSearch(board, player, depth, rng) {
  * so Expert's opening play is exactly as strong as what the hint panel shows -
  * one evaluation backbone, not two.
  */
-function chooseSearchTimed(board, player, deadline) {
+function chooseSearchTimed(board, player, deadline, rng = null) {
   const scores = evaluateColumnsBounded(board, player, deadline);
+  if (rng) {
+    // Scores come back in column order; the pick works on the whole list.
+    return pickVaried(COLUMN_ORDER.map((c) => scores.find((s) => s.col === c)).filter(Boolean), rng, board.moveCount);
+  }
   let bestCol = scores[0].col, bestScore = -Infinity;
   for (const c of COLUMN_ORDER) {
     const found = scores.find((s) => s.col === c);
@@ -779,6 +827,12 @@ export class AI {
   constructor(difficulty = Difficulty.MEDIUM, options = {}) {
     this.difficulty = difficulty;
     this.rng = options.rng || Math.random;
+    // A per-game seed (2026-10-29): the computer's choice among equally good moves is a pure
+    // function of (seed, stones on the board). Without one (tests, old callers) it uses `rng`.
+    this.seed = Number.isFinite(options.seed) ? (options.seed >>> 0) : null;
+    this._explicitRng = !!options.rng;
+    this.nearEqualMargin = Number.isFinite(options.nearEqualMargin) ? options.nearEqualMargin
+      : (difficulty === Difficulty.HARD || difficulty === Difficulty.EXPERT) ? HARD_NEAR_EQUAL_MARGIN : NEAR_EQUAL_MARGIN;
     this.expertBudgetMs = options.expertBudgetMs ?? DEFAULT_EXPERT_BUDGET_MS;
   }
 
@@ -786,11 +840,15 @@ export class AI {
   chooseMove(game) {
     if (game.isOver()) throw new Error('chooseMove: game is already over');
     const { board, currentPlayer } = game;
+    activeMargin = this.nearEqualMargin;
+    const rng = (this.seed !== null && !this._explicitRng) ? moveRng(this.seed, board.moveCount) : this.rng;
     switch (this.difficulty) {
-      case Difficulty.EASY:   return chooseEasy(board, currentPlayer, this.rng);
-      case Difficulty.MEDIUM: return chooseSearch(board, currentPlayer, MEDIUM_DEPTH, this.rng);
-      case Difficulty.HARD:   return chooseSearch(board, currentPlayer, HARD_DEPTH, this.rng);
-      case Difficulty.EXPERT: return chooseExpert(board, currentPlayer, this.expertBudgetMs);
+      case Difficulty.EASY:   return chooseEasy(board, currentPlayer, rng);
+      case Difficulty.MEDIUM: return chooseSearch(board, currentPlayer, MEDIUM_DEPTH, rng);
+      case Difficulty.HARD:   return chooseSearch(board, currentPlayer, HARD_DEPTH, rng);
+      // Expert varies only when it has a seed (or an explicit rng): the exact solver's own
+      // ties stay deterministic for the tests that call it bare.
+      case Difficulty.EXPERT: return chooseExpert(board, currentPlayer, this.expertBudgetMs, (this.seed !== null || this._explicitRng) ? rng : null);
       default: throw new Error(`Unknown difficulty: ${this.difficulty}`);
     }
   }
@@ -926,6 +984,45 @@ export class AI {
       check(`expert never loses to easy (${games} games)`, losses === 0 && games === 2);
     }
 
+    // 7. Per-game variation (2026-10-29): a memorised game must not replay. Same seed + same
+    //    position = the same move (resume and undo stay consistent); different seeds spread the
+    //    computer's replies in the opening; Expert's seeded pick keeps its exact value.
+    {
+      const g = new Game(PLAYER_ONE);
+      g.play(3);
+      const pick = (d, seed) => new AI(d, { seed }).chooseMove(g);
+      for (const d of [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD]) {
+        check(`${d}: the same seed gives the same move`, pick(d, 4242) === pick(d, 4242));
+      }
+      const seen = (d) => { const s = new Set(); for (let i = 1; i <= 40; i++) s.add(pick(d, i * 7919)); return s.size; };
+      check('medium: different seeds vary the opening reply', seen(Difficulty.MEDIUM) >= 2);
+      check('easy: different seeds vary the opening reply', seen(Difficulty.EASY) >= 2);
+      // Expert: the chosen move is always an exact-value best move, whatever the seed.
+      const rng = mulberry32(2026);
+      let allBest = true, positions = 0;
+      for (let k = 0; k < 6; k++) {
+        const gp = buildSearchPosition(30, rng);
+        if (!gp) continue;
+        positions++;
+        const b = gp.board, mask = b.pieces[0] | b.pieces[1], me = gp.currentPlayer;
+        const next = nonLosingCells(b.pieces[me], mask);
+        let best = -Infinity;
+        const val = new Map();
+        for (const c of COLUMN_ORDER) {
+          const mv = next & COLUMN_MASK[c];
+          if (!mv) continue;
+          const v = -expertSolve(b.pieces[me] ^ mask, mask | mv, b.moveCount + 1);
+          val.set(c, v); if (v > best) best = v;
+        }
+        for (let i = 1; i <= 8; i++) {
+          const col = new AI(Difficulty.EXPERT, { seed: i * 104729, expertBudgetMs: Infinity }).chooseMove(gp);
+          if (val.has(col) && val.get(col) !== best) allBest = false;
+          if (!val.has(col) && next !== 0n) allBest = false;
+        }
+      }
+      check(`expert (seeded) always plays a best-value move (${positions} positions x 8 seeds)`, allBest && positions > 0);
+    }
+
     const passed = results.filter(r => r.pass).length;
     console.log(`AI.test(): ${passed}/${results.length} passed`);
     return passed === results.length;
@@ -934,8 +1031,8 @@ export class AI {
 
 // --- Test helpers (module-private) ------------------------------------------
 
-/** Small deterministic RNG for reproducible tests. */
-function mulberry32(a) {
+/** Small deterministic RNG (tests, and the per-game move rng). */
+export function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -1000,6 +1097,7 @@ export const _internals = {
   nonLosingCells,
   evaluate,
   evaluateColumnsBounded,
+  scoreMovesAtDepth,
   getNodeCount: () => nodeCount,
   resetNodeCount: () => { nodeCount = 0; },
   BOARD_MASK: () => BOARD_MASK,

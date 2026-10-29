@@ -266,3 +266,7 @@ The logo (a little mancala board) is the single biggest item and takes the bigge
 about 56. `.mc-primary` and `.mc-secondary` stop at 11px of padding on a 16px label, which is 44px
 - they are the tap targets, and that is the floor these numbers stop at rather than the smallest
 that would fit.
+
+## The computer's dice are seeded (2026-10-29)
+
+`aiSeed` (per game, in `gamehub.mancala.game.v1`): Beginner's random choices come from `seededRand(seed, state)`, so quit and resume replays the same choice. Timed searches (Intermediate, Pro) are not seeded. `tools/test-ai-resume-seeds.mjs`.

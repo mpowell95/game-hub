@@ -5,7 +5,7 @@
 //   new Worker(new URL('./worker.js', import.meta.url), { type: 'module' })
 //
 // Protocol — main thread posts:
-//   { id, kind: 'move', history, firstPlayer, difficulty, budgetMs }
+//   { id, kind: 'move', history, firstPlayer, difficulty, budgetMs, seed }   (seed: per-game AI variation, 2026-10-29)
 //   { id, kind: 'eval', history, firstPlayer, budgetMs }
 //   { id, kind: 'newgame' }
 // worker replies:
@@ -26,7 +26,7 @@ import { Game } from './game.js';
 import { AI, evaluateColumns, clearTranspositionTable } from './ai.js';
 
 self.onmessage = (e) => {
-  const { id, kind, history, firstPlayer, difficulty, budgetMs } = e.data;
+  const { id, kind, history, firstPlayer, difficulty, budgetMs, seed } = e.data;
   try {
     if (kind === 'newgame') {
       clearTranspositionTable();
@@ -42,7 +42,7 @@ self.onmessage = (e) => {
         exact: evals.exact, reachedDepth: evals.reachedDepth,
       });
     } else {
-      const ai = new AI(difficulty, { expertBudgetMs: budgetMs });
+      const ai = new AI(difficulty, { expertBudgetMs: budgetMs, seed });
       self.postMessage({ id, col: ai.chooseMove(game) });
     }
   } catch (err) {
