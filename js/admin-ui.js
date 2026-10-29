@@ -45,6 +45,7 @@ import {
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, HAND_VOIDS } from './integrity.js';
+import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
@@ -460,10 +461,11 @@ function beeSectionHTML(cfg) {
   for (const [bk, byCode] of Object.entries((_bee && _bee.flags) || {})) {
     for (const [code, f] of Object.entries(byCode || {})) {
       const undone = resolveBeeUndone(cfg, bk, code);
+      const stands = flagStands(f);   // a flag resting on a retired rule counts for nothing (2026-10-29): no button
       rows.push({ at: Number(f.at) || 0, html: `<div class="adm-row adm-bee" data-bee="${esc(bk)}|${esc(code)}">
-        <span class="adm-name">${who(code, f.name)} · ${esc(date(f.at))} ${lang(bk)}${undone ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
+        <span class="adm-name">${who(code, f.name)} · ${esc(date(f.at))} ${lang(bk)}${undone || !stands ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
         <span class="adm-note">${esc(f.summary || '')}</span>
-        <button type="button" class="gh-btn gh-btn--sm" data-beeundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>
+        ${stands ? `<button type="button" class="gh-btn gh-btn--sm" data-beeundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>` : ''}
       </div>` });
     }
   }

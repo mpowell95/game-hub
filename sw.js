@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1339;
-const CACHE = 'game-hub-v1347';
+const IMPORTANT_SINCE = 1348;
+const CACHE = 'game-hub-v1348';
 
 const ASSETS = [
   './',
@@ -835,13 +835,13 @@ const REST_MANIFEST = {
   './js/push.js': '59adfa5053',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'd2db9dfed6',
-  './js/admin-ui.js': '95d315fa91',
+  './js/admin-ui.js': '53b3cb6e9d',
   './js/integrity.js': 'ac8e1c56dd',
   './js/play-log-queue.js': '0e505c4581',
   './js/play-log.js': '92ecc7da20',
   './js/server-time.js': '02fcf83e0b',
   './js/stats-corrections.js': 'b3cd32106d',
-  './js/bee-fairplay.js': '4ea0503a75',
+  './js/bee-fairplay.js': 'e68f7faf2e',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'a8fb379418',
@@ -969,7 +969,7 @@ const REST_MANIFEST = {
   './spelling-bee/js/ui.js': '2e6876ee4a',
   './spelling-bee/js/engine.js': '87146a700c',
   './spelling-bee/js/strings.js': '8c7a39edd6',
-  './spelling-bee/js/board.js': '040a96d1f3',
+  './spelling-bee/js/board.js': 'c9807ff550',
   './spelling-bee/js/log.js': '65a8607a4c',
   './spelling-bee/data/bee.json': 'beaa2059b3',
   './spelling-bee/data/bee-es.json': 'ac2796f02d',

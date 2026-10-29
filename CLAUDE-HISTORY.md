@@ -1456,3 +1456,14 @@ Matt: "just because these words have bad meanings doesn't mean they aren't words
 scrabble." They were added to English `ADULT_KEEP`, and Spanish `NO_ADULT` was removed (PEDOFILO is a bonus
 word, though no puzzle has its letters yet). Only slurs stay out. Rule for future sessions: a word's meaning
 never keeps it out; only slurs do.
+
+## 2026-10-29: Spelling Bee voided Ana by mistake; right vs wrong retired
+
+Matt, sitting next to Ana as she played Spanish (Oct 29, `es:t:acinou`): her row showed 0 words, 0 pts. Her
+`beeDaily` row was intact (46 words, 179 pts); `beeWatch` had flagged her on two SUPPORTING rules: Back+9 in
+60 s (since #1315 a first `open` counts as a return) and right vs wrong (30 / 12 = 2.5, over the threshold of 2).
+She is a fluent native speaker. INTEGRITY-CHECKS rule 4 says a check honest players trip is dropped, so right vs
+wrong is retired (`js/bee-fairplay.js`) and `flagStands` makes the board, the server's long-term board and the
+admin page ignore a stored flag left without enough live reasons. Nothing was written to Firebase: her flag
+stays stored. Of the 2 real flags, only hers changes (King of Games Oct 28 stays void). Her logs could not be
+replayed from a session (beeLog is admin-read), so "Back+N" alone is unchanged.

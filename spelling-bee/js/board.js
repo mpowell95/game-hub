@@ -16,7 +16,7 @@ import { isHiddenName } from '../../js/hidden-players.js';
 import { watchPath } from '../../js/live-read.js';
 import { voidedCodesFor } from '../../js/stats-corrections.js';
 import { isBeeUndone } from '../../js/admin-config.js';
-import { countedRow } from '../../js/bee-fairplay.js';
+import { countedRow, flagStands } from '../../js/bee-fairplay.js';
 
 const POSTED_KEY = 'gamehub.spellingbee.posted.v1';   // { "<puzzle>": words last verified on the board }
 
@@ -113,11 +113,11 @@ export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '
 }
 
 /** Codes voided on one puzzle: the code list (js/stats-corrections.js) plus the server's flags
- *  (`beeFlags/<puzzle>`), minus any Matt has undone on the admin page. */
+ *  (`beeFlags/<puzzle>`) that still stand (`flagStands`), minus any Matt has undone on the admin page. */
 export function voidedOn(puzzleKey, flags) {
   const k = boardKey(puzzleKey);
   const out = voidedCodesFor('spellingbee', puzzleKey);
-  for (const code of Object.keys(flags && typeof flags === 'object' ? flags : {})) out.add(code);
+  for (const [code, f] of Object.entries(flags && typeof flags === 'object' ? flags : {})) if (flagStands(f)) out.add(code);
   for (const code of [...out]) if (isBeeUndone(k, code)) out.delete(code);
   return out;
 }
