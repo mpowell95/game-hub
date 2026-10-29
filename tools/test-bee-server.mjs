@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 execFileSync(process.execPath, ['tools/sync-functions-shared.mjs'], { cwd: ROOT, stdio: 'ignore' });
 
-const { detectCopying, flagSummary, buildBeeBoard, beeTotals } = await import('../js/bee-fairplay.js');
+const { detectCopying, flagSummary, buildBeeBoard, beeTotals, flagStands, voidedAt } = await import('../js/bee-fairplay.js');
 const B = await import('../functions/bee.js');
 
 let pass = 0, fail = 0;
@@ -100,11 +100,12 @@ const game = (rightN, wrongN, retypeN) => {
   return out;
 };
 const gr = detectCopying(game(20, 10, 1));
-ok('right vs wrong: 20 right, 10 wrong = 2 per wrong, flagged', gr.supporting.includes('ratio') && gr.right === 20 && gr.wrong === 10);
-ok('right vs wrong: 20 right, 11 wrong, not flagged', !detectCopying(game(20, 11, 5)).supporting.includes('ratio'));
+ok('right vs wrong is RETIRED (2026-10-29, Ana 30 / 12 honestly): counted, never a reason', !gr.supporting.includes('ratio') && gr.right === 20 && gr.wrong === 10);
 ok('re-typed: 1 of 20 right answers, flagged', gr.supporting.includes('retype') && gr.retyped === 1);
 ok('re-typed: 2 of 20 (1 in 10) is not', !detectCopying(game(20, 30, 2)).supporting.includes('retype'));
-ok('right vs wrong + re-typed together void the day', gr.void && /Right 20 \/ wrong 10/.test(flagSummary(gr)) && /Re-typed 1/.test(flagSummary(gr)));
+ok('re-typed alone does not void the day (right vs wrong retired)', !gr.void && /Re-typed 1/.test(flagSummary(gr)));
+ok('a stored flag on leave + ratio no longer stands (Ana, Oct 29); leave + retype and any strong one do', !flagStands({ rules: ['leave', 'ratio'] }) && flagStands({ rules: ['leave', 'retype'] }) && flagStands({ rules: ['ratio', 'best'] }) && flagStands({ summary: 'old' }) && !flagStands(null));
+ok('the long-term board leaves a fallen flag out of the voids', !voidedAt('es:t:acinou', 'es-t-acinou', { K99MB: { rules: ['leave', 'ratio'] } }, {}).has('K99MB') && voidedAt('es:t:acinou', 'es-t-acinou', { K99MB: { rules: ['leave', 'speed'] } }, {}).has('K99MB'));
 ok('one of them alone does not', !detectCopying(game(20, 10, 5)).void && !detectCopying(game(20, 30, 0)).void);
 ok('right vs wrong and re-typed do NOT need Genius (2026-10-29, nothing skipped)', detectCopying(game(20, 10, 0).slice(0, -1)).right === 20);
 ok('both need 20+ right answers (a short Genius is not judged)', detectCopying(game(19, 0, 0)).supporting.length === 0 || !detectCopying(game(19, 0, 0)).supporting.some((r) => r === 'ratio' || r === 'retype'));

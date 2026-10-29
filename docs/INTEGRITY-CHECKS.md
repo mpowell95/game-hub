@@ -39,7 +39,8 @@ what each game records, and what a timed log would add). Spelling Bee is the wor
 | Tests | `tools/test-bee-fairplay.mjs`, `tools/test-bee-server.mjs` (fake database) |
 
 The 7 Spelling Bee checks: sorted run, no-miss burst, best words first (strong); back and burst,
-Genius under 10 minutes, right vs wrong, re-typed (supporting). The ideas that carry to other games:
+Genius under 10 minutes, re-typed (supporting); right vs wrong was retired 2026-10-29 (an honest
+fluent player, Ana, reached 2.5). The ideas that carry to other games:
 **too fast for a person, too accurate (no misses), the best moves first, perfect order, no ordinary
 human slips (re-typing, retries), and bursts right after leaving the app.**
 

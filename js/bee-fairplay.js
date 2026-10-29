@@ -150,7 +150,8 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   if (leave >= RULES.leaveWords) supporting.push('leave');
   if (geniusMs != null && geniusMs < RULES.geniusMs) supporting.push('speed');
   const judged = right != null && right >= RULES.judgeRight;
-  if (judged && right >= RULES.rightPerWrong * wrong) supporting.push('ratio');
+  // RIGHT VS WRONG is RETIRED (2026-10-29): Ana, playing honestly next to Matt, got 30 right / 12 wrong (2.5) and was
+  // voided with it (+ Back+9). docs/INTEGRITY-CHECKS.md rule 4: a check honest players trip is dropped. right/wrong stay counted.
   if (judged && retyped < RULES.retypeShare * right) supporting.push('retype');
   return { void: strong.length > 0 || supporting.length >= 2, strong, supporting, sorted, burst, best, leave, geniusMs, right, wrong, retyped };
 }
@@ -271,11 +272,23 @@ export function countedRow(row, own, day) {
 // Oct 26). Nothing on the day = not played. A voided row = played, 0, no place, no Genius. Places are
 // by POINTS per day per language, ties sharing (1, 1, 3). A replaced puzzle: the better row counts.
 
-/** `voidedAt(puzzleKey, boardKey, flags, cfg)` -> Set of codes: the code list + the server's flags,
- *  minus Matt's undo. */
+const STRONG_RULES = new Set(['sorted', 'burst', 'best']);
+const RETIRED_RULES = new Set(['ratio']);   // see detectCopying
+/** Does a stored beeFlags entry still void under today's rules? A flag is written once and never re-checked, so
+ *  one resting on a RETIRED rule (Ana, Oct 29: leave + ratio) stops counting at read time. Nothing is deleted. A
+ *  flag without a rules list stands. */
+export function flagStands(f) {
+  if (!f || typeof f !== 'object') return false;
+  if (!f.rules || typeof f.rules !== 'object') return true;
+  const live = Object.values(f.rules).filter((r) => !RETIRED_RULES.has(r));
+  return live.some((r) => STRONG_RULES.has(r)) || live.length >= 2;
+}
+
+/** `voidedAt(puzzleKey, boardKey, flags, cfg)` -> Set of codes: the code list + the server's flags that still
+ *  stand (`flagStands`), minus Matt's undo. */
 export function voidedAt(puzzleKey, boardKey, flags, cfg) {
   const out = voidedCodesFor('spellingbee', puzzleKey);
-  for (const c of Object.keys(flags && typeof flags === 'object' ? flags : {})) out.add(c);
+  for (const [c, f] of Object.entries(flags && typeof flags === 'object' ? flags : {})) if (flagStands(f)) out.add(c);
   for (const c of [...out]) if (resolveBeeUndone(cfg, boardKey, c)) out.delete(c);
   return out;
 }

@@ -84,7 +84,10 @@ phone's clock at the guess); the server time `s` only stamps when a batch was up
 4. ~~Copy typo~~ **dropped**: honest players do it too (Lili 6 times on Oct 28, Natalia 2 on Oct 27).
 5. **Speed:** Genius within 10 minutes of first opening the puzzle, clock time, nothing skipped (2026-10-29,
    Matt: "you SHOULD NOT SKIP ANYTHING"; until then it summed only open time and dropped breaks over 5 min).
-8. **Right vs wrong** (added 2026-10-28): 2+ right answers per wrong guess, EVERY guess in the log (until 2026-10-29
+8. ~~Right vs wrong~~ **RETIRED 2026-10-29**: Ana, playing honestly beside Matt, got 30 right / 12 wrong (2.5) on
+   Spanish Oct 29 and was voided (with Back+9). Still counted and shown in the flag line; never a reason. A stored flag
+   that no longer has enough live reasons counts for nothing at read time (`flagStands`); nothing is deleted. Was
+   (added 2026-10-28): 2+ right answers per wrong guess, EVERY guess in the log (until 2026-10-29
    only up to Genius, and only with Genius) (King of Games
    46 / 17; every other Genius game 0.8 to 1.3).
 9. **Re-typed** (added 2026-10-28, Matt: "an important fact"): fewer already-found guesses than 1 per
