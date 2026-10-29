@@ -299,13 +299,18 @@ function messageHTML(g) {
  *  screen. It is icon-only, so the label lives in `aria-label`/`title` rather than being dropped -
  *  and it is still 44x44, the UX floor's tap-target minimum (docs/BUILDING-A-GAME.md, Part 0);
  *  "smaller" here means smaller than a full-width bar, never smaller than a thumb. */
+// NO PLAYER CODES IN THE PAGE (2026-10-29): a code is the whole identity ("link by code" on a new
+// phone becomes that person), and the button carried it in `data-code` for anyone to read off the
+// leaderboard. It carries an opaque index into this list instead; the tap reads the code from here.
+const _msgTo = [];
 function sendMsgHTML(g) {
   if (!g || g.key === _meKey) return '';
   const code = (typeof g.playerId === 'string' ? g.playerId : '').trim().toUpperCase();
   if (!code) return '';
   const label = esc(t('lb_send_message'));
-  return `<button type="button" class="lb-msgbtn" data-role="lb-msg"
-            data-code="${esc(code)}" data-name="${esc(rankName(g))}" data-emoji="${esc(g.emoji || '🙂')}"
+  if (_msgTo.length > 1000) _msgTo.length = 0;
+  const mi = _msgTo.push({ code, name: rankName(g), emoji: g.emoji || '🙂' }) - 1;
+  return `<button type="button" class="lb-msgbtn" data-role="lb-msg" data-mi="${mi}"
             aria-label="${label}" title="${label}"
     ><span aria-hidden="true">💬</span><span class="lb-msgbtn-t">${esc(tx('lb_msg_short', 'Message'))}</span></button>`;
 }
@@ -2783,7 +2788,9 @@ function onClick(e) {
   // every device and must not pull that module's chain just to render a button.
   const msg = e.target.closest('[data-role="lb-msg"]');
   if (msg) {
-    const { code, name, emoji } = msg.dataset;
+    const to = _msgTo[Number(msg.dataset.mi)];
+    if (!to) return;
+    const { code, name, emoji } = to;
     import('./messages-ui.js')
       .then((m) => m.openMessages({ to: code, toName: name, toEmoji: emoji }))
       .catch((err) => console.error('[leaderboard] messages failed to load', err));
