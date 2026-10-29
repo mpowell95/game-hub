@@ -264,7 +264,8 @@
 //                                                   // level's band (2026-10-29); 'ladder' = plays
 //                                                   // before the bands (kept as stored, counted in
 //                                                   // All). One play+won per level completed
-//         ww: { lv: { L<n>: { s, h, t } }, x } },  // (2026-10-28) per level n, written ONCE at its
+//         ww: { lv: { L<n>: { s, h, t } }, x,     // (2026-10-28) per level n, written ONCE at its
+//               es: { L<n>: { s, h, t } } } },     // es = the SPANISH ladder (2026-10-29), same shape
 //                                                   // first completion (no replays): s = stars 1-3
 //                                                   // (0 hints 3, 1 hint 2, 2+ hints 1), h = hints
 //                                                   // used, t = when (ms). Only improves (wwBest).
@@ -579,6 +580,8 @@ function ensureWw(g) {
   if (!g.ww || typeof g.ww !== 'object' || Array.isArray(g.ww)) g.ww = { lv: {}, x: 0 };
   if (!g.ww.lv || typeof g.ww.lv !== 'object' || Array.isArray(g.ww.lv)) g.ww.lv = {};
   if (!Number.isFinite(g.ww.x) || g.ww.x < 0) g.ww.x = 0;
+  // The Spanish ladder's map (2026-10-29) exists only once a Spanish level is completed.
+  if (g.ww.es !== undefined && (!g.ww.es || typeof g.ww.es !== 'object' || Array.isArray(g.ww.es))) g.ww.es = {};
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -2212,8 +2215,10 @@ export function recordGridlockHint(level) {
  *  that level) is added to the lifetime counter `ww.x`.
  *
  *  `level` must be a positive integer; otherwise the play and the extras are recorded but no level
- *  entry is written (rule 4: never invent a level). Returns the store, or null when rate-gated. */
-export function recordWordWeaver(level, { hints, extra } = {}) {
+ *  entry is written (rule 4: never invent a level). `lang: 'es'` (2026-10-29) = a level of the SPANISH
+ *  ladder, written to `ww.es` instead (its own numbers; same band, same play/win buckets). Returns the
+ *  store, or null when rate-gated. */
+export function recordWordWeaver(level, { hints, extra, lang } = {}) {
   if (tooFast('wordweaver')) return null;
   notePlay('wordweaver', 'recordWordWeaver', arguments);
   const st = loadStats();
@@ -2227,7 +2232,8 @@ export function recordWordWeaver(level, { hints, extra } = {}) {
   g.ww.x += x;
   if (n >= 1 && n === Number(level)) {
     const k = 'L' + n;
-    g.ww.lv[k] = wwBest(g.ww.lv[k], { s: wwStarsFor(h), h, t: Date.now() });
+    const map = lang === 'es' ? (g.ww.es || (g.ww.es = {})) : g.ww.lv;
+    map[k] = wwBest(map[k], { s: wwStarsFor(h), h, t: Date.now() });
   }
   st.updatedAt = new Date().toISOString();
   persist(st);

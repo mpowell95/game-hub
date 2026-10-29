@@ -1475,3 +1475,15 @@ The admin page drew the picker only for a hand list (`ALLOW_PICKER`: Course Crea
 one game per request, so every newer admin-only game came without one. The hub already honours
 `adminConfig/v1/games/<id>/allow/<CODE>` for any id (`js/hub.js`), so the list is gone: every hidden game's
 row has the picker. A session still never writes the admin config; Matt taps the person.
+
+## 2026-10-29: Word Weaver gets Spanish puzzles
+
+Matt asked whether Word Weaver has Spanish (only its screens did), then "Yes, build Spanish puzzles", the same
+day he opened it to Ana. A second ladder, not a translation: `word-weaver/data/es/` from
+`tools/build-word-weaver-es.mjs`, which IMPORTS English's ramp, bands and crossword layout
+(`tools/build-word-weaver-data.mjs` now exports them; its own output re-verified byte-identical) and Spelling Bee's
+Spanish lists (`tools/build-spelling-bee-es.mjs` exports them; `bee-es.json` re-verified identical). Progress is kept
+apart so no English number moves: `ww.es` beside `ww.lv` (merged per level in players-agg, counted in points),
+`gamehub.wordweaver.es.save.v1`, pending entries with `lang: 'es'`. Quality pass by reading the grid words:
+subtitles drop the tilde, so ANO ranked as if it were AÑO; English loans (SET, TOP, STOP, JET) came in through
+the subtitle list. Grid words now need the dictionary (or a conjugation of it), plus a hand-read `GRID_BLOCK`.

@@ -479,7 +479,7 @@ function wayoutScreen(rec) {
 function wordWeaverScreen(rec) {
   const ww = (rec && rec.ww) || {};
   const done = ((rec && rec.total) || {}).won | 0;
-  if (!done && !Object.keys(ww.lv || {}).length && !wwExtra(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
+  if (!done && !Object.keys(ww.lv || {}).length && !Object.keys(ww.es || {}).length && !wwExtra(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
   const rows = SD_DIFFS.filter(([k]) => WW_TIERS.includes(k)).map(([k, labelKey]) =>
     `<tr><th scope="row">${t(labelKey)}</th><td>${wwCleared(rec, k)}</td><td>${wwStars(rec, k)}</td><td>${wwPoints(rec, k)}</td><td>${wwThreeStars(rec, k)}</td></tr>`).join('');
   return `

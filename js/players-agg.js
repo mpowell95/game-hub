@@ -420,6 +420,13 @@ export function aggregatePlayers(all, corrections) {
           const best = wwBest(dst.ww.lv[k], lv[k]);
           if (best) dst.ww.lv[k] = best;
         }
+        // The Spanish ladder (2026-10-29), merged the same way into its own map.
+        const es = (src.ww.es && typeof src.ww.es === 'object' && !Array.isArray(src.ww.es)) ? src.ww.es : {};
+        for (const k of Object.keys(es)) {
+          if (!/^L\d+$/.test(k)) continue;
+          const best = wwBest((dst.ww.es || {})[k], es[k]);
+          if (best) (dst.ww.es || (dst.ww.es = {}))[k] = best;
+        }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto
         // counter reads ZERO once a second device syncs (THE LAW rule 1). Counters add; `fewest`

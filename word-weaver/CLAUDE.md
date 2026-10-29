@@ -15,8 +15,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 | Folder / hub id / stats id | `word-weaver/` / `word-weaver` / `wordweaver` |
 | Entry | module `../word-weaver/js/ui.js`, **immersive**, prefix `.ww-root` / `.ww-` |
 | Admin only | `devOnly: true`, `added: '2026-10-28'`, no `released` (the New pill's only input; Matt releases it from the admin page) |
-| Recorder | `recordWordWeaver(level, { hints, extra })` in `js/game-stats.js`; points in `js/word-weaver-points.js` (the stats side, not this folder) |
-| Settings key | `gamehub.wordweaver.v1` `{ band }`; save `gamehub.wordweaver.save.v2` (`.save.v1` read once, `.best.v1` no longer read) |
+| Recorder | `recordWordWeaver(level, { hints, extra, lang })` in `js/game-stats.js` (`lang: 'es'` = the Spanish ladder, `ww.es`); points in `js/word-weaver-points.js` (the stats side, not this folder) |
+| Settings key | `gamehub.wordweaver.v1` `{ band }` (shared by both languages); save `gamehub.wordweaver.save.v2` (`.save.v1` read once, `.best.v1` no longer read); Spanish save `gamehub.wordweaver.es.save.v1`; puzzle language `gamehub.wordweaver.lang.v1` |
 | `isInProgress()` | always `false`: every accepted word and hint is saved, leaving is lossless |
 
 ## Rules
@@ -47,6 +47,20 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - Layout never scrolls: wheel 184-250px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).
+
+## Spanish puzzles (2026-10-29, Matt: "Yes, build Spanish puzzles")
+
+- A SECOND LADDER, not a translation: `data/es/` (same format, 2,000 levels, same bands), `tools/build-word-weaver-es.mjs`
+  (English's ramp and layout + Spelling Bee's Spanish word lists). No accents; Ñ is a letter (wheel, grid, keyboard).
+- The setup screen's **EN/ES button** (two letters, under the points) picks the ladder, per phone
+  (`gamehub.wordweaver.lang.v1`); nothing saved = the hub's language. The screens keep the hub's language.
+- Spanish progress never touches English: its own save (`gamehub.wordweaver.es.save.v1`), its own stats map (`ww.es`,
+  `js/word-weaver-points.js`; Spanish level 12 is not English level 12), pending entries carry `lang: 'es'`. Points,
+  stars and levels completed count BOTH ladders.
+- Grid words: common dictionary words and conjugations, no names, no vulgar words (`GRID_BLOCK` = hand-read oddities:
+  ANO, which subtitles say for AÑO; English loans like SET, TOP). Extras: every dictionary word, adult words included,
+  slurs out. English Word Weaver still keeps adult words out of its extras (unchanged).
+- `node word-weaver/js/data-test-es.js` checks every Spanish level and pins them (APPEND-ONLY once shipped).
 
 ## Data (GENERATED, never hand-edited)
 

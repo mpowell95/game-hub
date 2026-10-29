@@ -32,6 +32,7 @@ export default {
     level_aria: 'Level {n}',
     wheel_aria: 'Letters',
     stars_aria: '{n} of 3 stars',
+    lang_aria: 'Puzzle language',
   },
   es: {
     title: 'Tejepalabras',
@@ -63,5 +64,6 @@ export default {
     level_aria: 'Nivel {n}',
     wheel_aria: 'Letras',
     stars_aria: '{n} de 3 estrellas',
+    lang_aria: 'Idioma de las palabras',
   },
 };

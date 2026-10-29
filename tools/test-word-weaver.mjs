@@ -136,6 +136,32 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('...and old levels show under their band: points 3x1 + 2x1 + 2x4 = 13', P.wwPoints(m2) === 13 && P.wwCleared(m2, 'easy') === 2 && P.wwPoints(m2, 'expert') === 8);
 }
 
+// --- the SPANISH ladder (2026-10-29): its own map, ww.es; points count both ladders ---
+{
+  const one = (lvEn, lvEs, x = 0) => ({ total: { played: 0, won: 0, lost: 0 }, byDiff: {}, ww: { lv: lvEn, ...(lvEs ? { es: lvEs } : {}), x } });
+  const r = one({ L1: { s: 3, h: 0, t: 1 } }, { L1: { s: 2, h: 1, t: 2 }, L1501: { s: 3, h: 0, t: 3 } });
+  ok('es: Spanish level 1 is not English level 1 (two levels)', P.wwCleared(r) === 3 && Object.keys(P.wwLevels(r)).join() === '1' && Object.keys(P.wwLevels(r, 'es')).sort().join() === '1,1501');
+  ok('es: points count both ladders: 3x1 + 2x1 + 3x4 = 17', P.wwPoints(r) === 17 && P.wwPoints(r, 'expert') === 12 && P.wwStars(r) === 8 && P.wwThreeStars(r) === 2);
+  ok('es: a record with no Spanish map reads exactly as before', P.wwPoints(one({ L1: { s: 3, h: 0, t: 1 } })) === 3);
+  store.clear();
+  G.recordWordWeaver(7, { hints: 1, extra: 2, lang: 'es' });
+  let gs = G.loadStats().games.wordweaver;
+  ok('es: the recorder writes ww.es.L7, not ww.lv.L7', gs.ww.es && gs.ww.es.L7 && gs.ww.es.L7.s === 2 && !gs.ww.lv.L7);
+  ok('es: same play/win bucket and extra counter', gs.byDiff.easy.won === 1 && gs.ww.x === 2);
+  G.recordWordWeaver(7, { hints: 0 });
+  gs = G.loadStats().games.wordweaver;
+  ok('es: English level 7 after Spanish level 7 leaves the Spanish entry alone', gs.ww.lv.L7.s === 3 && gs.ww.es.L7.s === 2 && P.wwCleared(gs) === 2);
+  G.recordWordWeaver(7, { hints: 5, lang: 'es' });
+  ok('es: a worse Spanish result never lowers it (rule 2)', G.loadStats().games.wordweaver.ww.es.L7.s === 2);
+  const pA = { games: { wordweaver: one({}, { L3: { s: 1, h: 3, t: 9 } }) } };
+  const pB = { games: { wordweaver: one({ L3: { s: 3, h: 0, t: 1 } }, { L3: { s: 3, h: 0, t: 5 }, L4: { s: 2, h: 1, t: 6 } }) } };
+  const mm = A.aggregatePlayers({
+    dA: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: pA, updatedAt: 2 },
+    dB: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: pB, updatedAt: 1 },
+  })[0].games.wordweaver;
+  ok('es: merge takes the best of each Spanish level, beside the English map', mm.ww.es.L3.s === 3 && mm.ww.es.L3.t === 5 && mm.ww.es.L4 && mm.ww.lv.L3.s === 3 && P.wwCleared(mm) === 3);
+}
+
 // --- the leaderboard ranks by total stars (static checks: the overlay needs a DOM) ---
 {
   const lb = readFileSync(new URL('js/leaderboard-ui.js', ROOT), 'utf8');
