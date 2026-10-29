@@ -462,7 +462,7 @@ costs anything in a game that saves.
 
 Matt's decisions, built as asked. Every change only chooses whether a NEW result is written (a loss that
 used to vanish, a win the other player had earned); no stored number moves (THE LAW 2-5), and a game counts
-once. Proof: `node tools/test-live-leave.mjs` (164 checks), `node tools/test-quit-loss.mjs` (150 checks,
+once. Proof: `node tools/test-live-leave.mjs` (164 checks; `--browser` adds 11: Tic Tac Toe online on two real pages over a fake database), `node tools/test-quit-loss.mjs` (150 checks,
 Q6 is this pass), `node tools/test-ai-resume-seeds.mjs` (18).
 
 **G1: leaving a live room (`js/live-leave.js`, shared by every live-room game).** Before, leaving mid-game

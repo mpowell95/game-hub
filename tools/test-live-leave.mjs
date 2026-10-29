@@ -12,6 +12,9 @@
 //   L4  wiring: every live-room game arms on its own move, records once, ends the room with the forfeit,
 //       offers Claim win, detaches on destroy (or forfeits where it has no rejoin), and the hub resigns
 //       on a confirmed leave. Strings in EN and ES, no em dashes.
+//   L5  (--browser, needs `node server.mjs`): Tic Tac Toe on two real pages (two browser contexts) over a
+//       fake database held in this process: Leave after a move (one loss, one win, head-to-head both
+//       ways, the forfeit in the room), Leave before a move (nothing), Claim win after 90 s of silence.
 //
 // Node only, no deps, never the real database (a fake net object), a made-up player code.
 
@@ -228,5 +231,156 @@ ok('L4 strings: EN and ES have the same keys', JSON.stringify(Object.keys(S.en).
 ok('L4 strings: no em dash, no empty string', [...Object.values(S.en), ...Object.values(S.es)].every((v) => v && !v.includes('—')));
 ok('L4 strings: the fewest words ("Claim win")', S.en.ll_claim === 'Claim win' && S.en.ll_claim.split(' ').length <= 2);
 
+if (process.argv.includes('--browser')) await browserPart();
+else console.log('(skip) L5 browser checks: run with --browser and `node server.mjs` up');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
+
+// --- L5 (--browser): two real pages, one fake room ----------------------------------------------------
+// Two browser CONTEXTS (two phones: separate storage) play Tic Tac Toe online over a fake Realtime
+// Database held in this node process: js/firebase-boot.js is served as a stand-in (route) whose api reads
+// and writes this process's tree; js/online-gate.js is served with its test-automation refusal lifted.
+// Nothing reaches the real database. Made-up codes, gamehub.devAllowSync.v1 = '0'.
+async function browserPart() {
+  const { createRequire } = await import('node:module');
+  let chromium;
+  try { ({ chromium } = await import('playwright-core')); } catch { ({ chromium } = createRequire(import.meta.url)('playwright')); }
+  const BASE = process.env.BB_BASE || 'http://localhost:8123';
+  const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+  const tree = {};
+  const split = (p) => String(p || '').split('/').filter(Boolean);
+  const getAt = (p) => { let n = tree; for (const k of split(p)) { if (n == null || typeof n !== 'object') return null; n = n[k]; } return n === undefined ? null : n; };
+  const setAt = (p, v) => {
+    const ks = split(p); if (!ks.length) return;
+    let n = tree;
+    for (const k of ks.slice(0, -1)) { if (n[k] == null || typeof n[k] !== 'object') n[k] = {}; n = n[k]; }
+    if (v === null || v === undefined) delete n[ks[ks.length - 1]]; else n[ks[ks.length - 1]] = JSON.parse(JSON.stringify(v));
+  };
+  const fdb = (op, path, json) => {
+    const v = json == null ? null : JSON.parse(json);
+    if (op === 'get') return JSON.stringify(getAt(path));
+    if (op === 'set') { setAt(path, v); return 'null'; }
+    if (op === 'update') { for (const [k, x] of Object.entries(v || {})) setAt(`${path}/${k}`, x); return 'null'; }
+    return 'null';
+  };
+  const FAKE_BOOT = `
+    const call = (op, path, data) => window.__fdb(op, path, data === undefined ? null : JSON.stringify(data)).then((r) => JSON.parse(r));
+    const snap = (v) => ({ val: () => v, exists: () => v != null });
+    const api = {
+      ref: (db, path) => ({ path: String(path || '').replace(/^\\/+|\\/+$/g, '') }),
+      child: (r, p) => ({ path: r.path + '/' + p }),
+      get: async (r) => snap(await call('get', r.path)),
+      set: async (r, v) => { await call('set', r.path, v); },
+      update: async (r, patch) => { await call('update', r.path, patch); },
+      remove: async (r) => { await call('set', r.path, null); },
+      onValue: (r, cb) => { let last, alive = true; const tick = async () => { if (!alive) return; const v = await call('get', r.path); const s = JSON.stringify(v); if (s !== last) { last = s; try { cb(snap(v)); } catch (e) { console.error(e); } } setTimeout(tick, 120); }; tick(); return () => { alive = false; }; },
+      off() {}, query: (r) => r, orderByChild: () => null, equalTo: () => null, limitToLast: () => null, startAt: () => null, endAt: () => null,
+      runTransaction: async (r, fn) => { const cur = await call('get', r.path); const next = fn(cur); if (next === undefined) return { committed: false, snapshot: snap(cur) }; await call('set', r.path, next); return { committed: true, snapshot: snap(next) }; },
+      serverTimestamp: () => Date.now(), increment: (n) => n,
+      onDisconnect: () => ({ set: async () => {}, remove: async () => {}, update: async () => {}, cancel: async () => {} }),
+    };
+    export function getStatsApp() { return Promise.resolve({ db: {}, api, auth: { currentUser: { uid: 'fake' } } }); }
+    export function perfReport() { return null; }
+    export default { getStatsApp };`;
+  const phone = async (code, name) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await ctx.exposeFunction('__fdb', fdb);
+    await ctx.route('**/js/firebase-boot.js', (r) => r.fulfill({ contentType: 'application/javascript', body: FAKE_BOOT }));
+    await ctx.route('**/js/online-gate.js', async (r) => {
+      const res = await r.fetch();
+      const body = (await res.text()).replace("if (isAutomation()) return 'not-approved';", '').replace('if (admin || isOnlineAllowed(c)) return null;', 'return null;');
+      await r.fulfill({ response: res, body });
+    });
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', (e) => errs.push(e.message));
+    await page.goto(`${BASE}/tic-tac-toe/`);
+    await page.evaluate(([code, name]) => {
+      localStorage.clear();
+      localStorage.setItem('gamehub.devAllowSync.v1', '0');
+      localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name, emoji: '🙂', playerId: code, opponents: [] }));
+      localStorage.setItem('gamehub.tictactoe.v1', JSON.stringify({ variant: 'classic', difficulty: 'beginner', firstMode: 'you' }));
+    }, [code, name]);
+    await page.goto(`${BASE}/tic-tac-toe/`);
+    await page.waitForTimeout(600);
+    return { ctx, page, errs };
+  };
+  const mpTotal = (page) => page.evaluate(() => {
+    const keys = Object.keys(localStorage).filter((k) => k === 'gamehub.stats' || k.startsWith('gamehub.stats.p.'));
+    let out = { played: 0, won: 0, lost: 0, h2hW: 0, h2hL: 0 };
+    for (const k of keys) {
+      const s = JSON.parse(localStorage.getItem(k) || 'null');
+      const g = s && s.games && s.games.tictactoe;
+      const b = g && g.byDiff && g.byDiff.mp;
+      if (b) { out.played += b.played | 0; out.won += b.won | 0; out.lost += b.lost | 0; }
+      for (const row of Object.values((s && s.h2h && s.h2h.tictactoe) || {})) { out.h2hW += row.w | 0; out.h2hL += row.l | 0; }
+    }
+    return out;
+  });
+  const startMatch = async (A, B) => {
+    for (const k of Object.keys(tree)) delete tree[k];
+    await A.page.click('[data-action="set-mode"][data-v="host"]');
+    await A.page.click('[data-action="mp-host"]');
+    let code = null;
+    for (let i = 0; i < 50 && !code; i++) { await A.page.waitForTimeout(100); code = Object.keys(tree.rooms || {})[0] || null; }
+    await B.page.click('[data-action="set-mode"][data-v="join"]');
+    await B.page.fill('[data-role="mp-code-input"]', code);
+    await B.page.dispatchEvent('[data-role="mp-code-input"]', 'input');
+    await A.page.waitForSelector('[data-action="mp-start"]:not([disabled])', { timeout: 8000 });
+    await A.page.click('[data-action="mp-start"]');
+    await B.page.waitForSelector('.ttt-cell, [data-action="cell"]', { timeout: 8000 });
+    await A.page.waitForSelector('[data-action="cell"]', { timeout: 8000 });
+    return code;
+  };
+  try {
+    const A = await phone('TQWAX', 'zzta');
+    const B = await phone('TQWBX', 'zztb');
+    // 1. Leave after your first move: your loss, their win.
+    const code = await startMatch(A, B);
+    await A.page.click('[data-action="cell"][data-cell="4"]');
+    await A.page.waitForTimeout(700);
+    ok('L5 the first move arms the leave on the mover\'s phone', await A.page.evaluate(() => !!JSON.parse(localStorage.getItem('gamehub.quitLoss.v1') || '{}')['tictactoe@live']));
+    await A.page.click('[data-action="mp-leave"]');
+    const armed = await A.page.textContent('[data-action="mp-leave"]');
+    ok('L5 Leave takes two taps once it costs, and says so', /loss/i.test(armed || ''), armed);
+    await A.page.click('[data-action="mp-leave"]');
+    await B.page.waitForTimeout(1500);
+    const a1 = await mpTotal(A.page), b1 = await mpTotal(B.page);
+    ok('L5 the leaver: exactly one online loss, and a head-to-head loss', a1.played === 1 && a1.lost === 1 && a1.h2hL === 1, JSON.stringify(a1));
+    ok('L5 the other phone: exactly one online win, and a head-to-head win', b1.played === 1 && b1.won === 1 && b1.h2hW === 1, JSON.stringify(b1));
+    ok('L5 the room ended with the leaver\'s forfeit in the same write', tree.rooms[code].status === 'ended' && tree.rooms[code].forfeit && tree.rooms[code].forfeit.host);
+    const title = await B.page.textContent('[data-role="mp-end"] .ttt-card-title').catch(() => '');
+    ok('L5 the other phone says who left and that it won', /zzta/.test(title || '') && /win|ganas/i.test(title || ''), title);
+    // 2. Leave BEFORE your first move: nothing for anyone.
+    await B.page.click('[data-action="mp-end-ok"]').catch(() => {});
+    await A.page.goto(`${BASE}/tic-tac-toe/`); await B.page.goto(`${BASE}/tic-tac-toe/`);
+    await A.page.waitForTimeout(500); await B.page.waitForTimeout(500);
+    await startMatch(A, B);
+    await B.page.click('[data-action="mp-leave"]');   // B never moved (A opens)
+    await A.page.waitForTimeout(1500);
+    const a2 = await mpTotal(A.page), b2 = await mpTotal(B.page);
+    ok('L5 a leave before your first move records nothing for either phone', a2.played === 1 && b2.played === 1, JSON.stringify([a2, b2]));
+    // 3. Claim win: the other phone moved, then went silent 90 s.
+    await A.page.goto(`${BASE}/tic-tac-toe/`); await B.page.goto(`${BASE}/tic-tac-toe/`);
+    await A.page.waitForTimeout(500); await B.page.waitForTimeout(500);
+    const code3 = await startMatch(A, B);
+    await A.page.click('[data-action="cell"][data-cell="0"]');
+    await B.page.waitForTimeout(800);
+    await B.page.click('[data-action="cell"][data-cell="4"]');
+    await A.page.waitForTimeout(800);
+    await B.ctx.close();                                   // B's app is closed: no destroy, its leave stays armed
+    tree.rooms[code3].guest.lastSeen = Date.now() - 100000; // ...and it has been silent 100 s
+    if (tree.rooms[code3].seats) delete tree.rooms[code3].seats;
+    await A.page.waitForSelector('.gh-live-claim', { timeout: 15000 });
+    ok('L5 after 90 s of silence the other phone sees "Claim win"', (await A.page.textContent('.gh-live-claim')) === 'Claim win');
+    await A.page.click('.gh-live-claim');
+    await A.page.waitForTimeout(700);
+    const a3 = await mpTotal(A.page);
+    ok('L5 the claim is a win, once', a3.played === 2 && a3.won === 1 && a3.lost === 1, JSON.stringify(a3));
+    ok('L5 the claim is written against the absent seat', tree.rooms[code3].forfeit && tree.rooms[code3].forfeit.guest && tree.rooms[code3].forfeit.guest.claim === true);
+    ok('L5 no page errors', A.errs.length === 0 && B.errs.length === 0, JSON.stringify([...A.errs, ...B.errs].slice(0, 3)));
+  } finally {
+    await browser.close();
+  }
+}
