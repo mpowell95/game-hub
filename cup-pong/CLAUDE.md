@@ -71,7 +71,8 @@ turn's first throw:
   `islandUsed[side]` is `[ball1, ball2]` (two calls a game; an old save's single flag reads as both
   used). Allowed in overtime, not in a rebuttal. **ONLY THE CALLED CUP COUNTS** (2026-10-06): a called
   ball in any other cup is a MISS (`wrongCup`, "Not the island, no cup"), behind `islandOnly`
-  (default on), challenges carry `rules.io`.
+  (default on), challenges carry `rules.io`. **Not on the last cup or the last two (Matt, 2026-10-29)**: only with 3+ cups
+  standing, owed cups not counted (`islandThree`, default on; challenges carry `rules.i3`, older ones replay without it).
 - **Make your own** (`showCustomRack` in `ui.js`): all 28 `AREA` cells on a hex grid; drag or tap a
   cup then a spot; snaps to the nearest free cell; **Done** (`match.rerackCustom(cells)`, which
   re-checks `isCell` + `validRack`, keeps ids). Challenge log: `{k:'r', key:'custom', cells:[{c,r}...]}`.
@@ -177,7 +178,7 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
 - **This phone is always side `'a'` locally** (`buildLocal`, `toLocal`/`toStored`).
 - **The island's second cup is OWED** (`async: true` counts `owed[side]`; taken at the defender's
   next turn, `askOwed`); owed cups that are every cup left clear the rack at once.
-- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `lapse`); an older
+- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `i3`, `lapse`); an older
   challenge replays as it was played.
 - **Results**: `recordResult('cuppong', 'mp', won)` once per phone (`gamehub.cuppong.counted.v1`); a
   match ended while away shows a GAME OVER popup (`gamehub.cuppong.unseenResults.v1`) and the 'over'
