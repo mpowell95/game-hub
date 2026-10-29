@@ -374,7 +374,7 @@ console.log('\n-- who is allowed on the board: no test accounts, no nameless dev
 {
   const src = readFileSync(new URL('./js/leaderboard-ui.js', __ROOT_URL), 'utf8');
   ok('[KNOWN-BUG PROBE] a player card opened from a game board drills into THAT game',
-    /if \(card\) \{ _player = card\.dataset\.pkey; _playerGame = _game \|\| null;/.test(src),
+    /if \(card\) \{ const pk = _pkeys\[Number\(card\.dataset\.pi\)\]; if \(pk == null\) return; _player = pk; _playerGame = _game \|\| null;/.test(src),
     'landing on the every-game list answers a question the viewer already answered by picking a board');
   ok('...and backing out of it returns to the board, not to a list they never chose',
     /lb-pgame-back[\s\S]{0,220}?if \(_game\) \{ _player = null; _playerGame = null; \}/.test(src));

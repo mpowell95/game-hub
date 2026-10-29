@@ -9,10 +9,10 @@
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
-import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woClMerge, woLegacyAdd } from './arrow-maze-time.js';
+import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest, wwHintBest } from './word-weaver-points.js';
 
@@ -170,6 +170,61 @@ function dedupeChallenges(grp, outcomes = null) {
   }
 }
 
+/** Nuts & Bolts: ONE WIN PER LEVEL PER PERSON (2026-10-29). A fresh storage (Safari beside the Home
+ *  Screen app, cleared data) starts every tier at level 1 again, so the same easy Expert levels were
+ *  won again and the person's devices added up. Since then each solve also names its level
+ *  (`nb.lv[tier]`, js/game-stats.js recordNutsBolts) and the record keeps how far its older, untracked
+ *  wins reach (`nb.leg[tier]`; a record with no snapshot reaches its best level at that tier, else its
+ *  win count). Per person and tier, a tracked level counts once, and not at all when one of their
+ *  records' untracked wins already reaches it. Every extra copy is taken back out of that tier's
+ *  played/won, `total` and `nb.solved`. Read time only; untracked wins count exactly as before. */
+function rangesCount(rs) { let n = 0; for (const [a, b] of rs) n += b - a + 1; return n; }
+function rangesMinus(u, c) {
+  let n = 0;
+  for (const [a, b] of u) {
+    let cur = a;
+    for (const [x, y] of c) {
+      if (y < cur) continue;
+      if (x > b) break;
+      if (x > cur) n += Math.min(b, x - 1) - cur + 1;
+      cur = Math.max(cur, y + 1);
+      if (cur > b) break;
+    }
+    if (cur <= b) n += b - cur + 1;
+  }
+  return n;
+}
+function nbCollect(grp, src) {
+  const nb = src.nb || {};
+  const per = grp._nb || (grp._nb = {});
+  for (const t of NB_TIERS) {
+    const lv = nbParseRanges(((nb.lv || {})[t]));
+    const leg = nb.leg && typeof nb.leg === 'object' ? Number(nb.leg[t]) : NaN;
+    const best = (((nb.bestByTier || {})[t]) | 0);
+    const top = Number.isFinite(leg) ? Math.max(0, leg | 0) : (best > 0 ? best : ((((src.byDiff || {})[t] || {}).won) | 0));
+    if (!lv.length && !top) continue;
+    (per[t] || (per[t] = [])).push({ lv, top });
+  }
+}
+function dedupeNutsBolts(grp) {
+  const dst = grp.games.nutsbolts;
+  for (const t of Object.keys(grp._nb)) {
+    const recs = grp._nb[t];
+    let sum = 0;
+    const all = [];
+    for (const r of recs) { sum += rangesCount(r.lv); all.push(...r.lv); }
+    if (!sum) continue;
+    const union = nbParseRanges(all.map(([a, b]) => `${a}-${b}`).join(','));
+    const cover = nbParseRanges(recs.filter((r) => r.top > 0).map((r) => `1-${r.top}`).join(','));
+    const extra = sum - rangesMinus(union, cover);
+    if (extra <= 0) continue;
+    const less = (b) => { if (!b) return; b.played = Math.max(0, (b.played | 0) - extra); b.won = Math.max(0, (b.won | 0) - extra); };
+    less(dst.byDiff[t]);
+    less(dst.total);
+    if (dst.nb) dst.nb.solved = Math.max(0, (dst.nb.solved | 0) - extra);
+  }
+}
+
 /** Has this Arrow Maze record cleared anything (so its clears count, even with no `wo` yet)? */
 const woHasWins = (game) => !!game && WO_TIERS.some((t) => (((game.byDiff || {})[t] || {}).won | 0) > 0);
 
@@ -284,10 +339,13 @@ export function aggregatePlayers(all, corrections) {
       } else if (g === 'escoba' && src.es) {
         if (!dst.es) dst.es = { escobas: 0 };
         dst.es.escobas += src.es.escobas | 0;
-      } else if (g === 'nutsbolts' && src.nb) {
-        if (!dst.nb) dst.nb = { solved: 0, moves: 0, bestLevel: 0 };
-        dst.nb.solved += src.nb.solved | 0; dst.nb.moves += src.nb.moves | 0;
-        dst.nb.bestLevel = Math.max(dst.nb.bestLevel, src.nb.bestLevel | 0);
+      } else if (g === 'nutsbolts' && (src.nb || src.byDiff)) {
+        nbCollect(grp, src);
+        if (src.nb) {
+          if (!dst.nb) dst.nb = { solved: 0, moves: 0, bestLevel: 0 };
+          dst.nb.solved += src.nb.solved | 0; dst.nb.moves += src.nb.moves | 0;
+          dst.nb.bestLevel = Math.max(dst.nb.bestLevel, src.nb.bestLevel | 0);
+        }
       } else if (g === 'sudoku' && src.sd) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without this branch
         // every Sudoku counter reads ZERO the moment a person's second device syncs, while each
@@ -368,10 +426,30 @@ export function aggregatePlayers(all, corrections) {
         // record with Arrow Maze wins takes part, `wo` or not (its wins are legacy clears).
         if (!dst.wo.lg) dst.wo.lg = {};
         if (!dst.wo.cl) dst.wo.cl = {};
+        // Each record's level set is gathered with its clear and slip stamps and the person's set is
+        // built once every record is in (woCapCl, 2026-10-29: a clear is capped by the slips the
+        // person's OTHER records stored on that level before it). `sl` merges per level, max only.
+        const sw = src.wo || {};
         for (const tier of WO_TIERS) {
           dst.wo.lg[tier] = woLegacyAdd(dst.wo.lg[tier], src, tier);
-          const c = ((src.wo || {}).cl || {})[tier];
-          if (typeof c === 'string' && c) dst.wo.cl[tier] = woClMerge(dst.wo.cl[tier], c);
+          const c = (sw.cl || {})[tier];
+          const pick = (k) => { const m = (sw[k] || {})[tier]; return m && typeof m === 'object' && !Array.isArray(m) ? m : null; };
+          if (typeof c === 'string' && c) {
+            const per = (grp._wo || (grp._wo = {}))[tier] || (grp._wo[tier] = []);
+            per.push({ cl: c, ct: pick('ct'), sl: pick('sl'), sf: pick('sf') });
+          } else if (pick('sl')) {
+            const per = (grp._wo || (grp._wo = {}))[tier] || (grp._wo[tier] = []);
+            per.push({ cl: '', ct: null, sl: pick('sl'), sf: pick('sf') });
+          }
+          const sl = pick('sl');
+          if (sl) {
+            if (!dst.wo.sl) dst.wo.sl = {};
+            const into = dst.wo.sl[tier] || (dst.wo.sl[tier] = {});
+            for (const k of Object.keys(sl)) {
+              const v = Math.max(0, Math.floor(Number(sl[k]) || 0));
+              if (/^L\d{1,7}$/.test(k) && v > 0) into[k] = Math.max(into[k] | 0, v);
+            }
+          }
         }
         if (src.wo) {
           dst.wo.mistakes += src.wo.mistakes | 0;
@@ -811,6 +889,12 @@ export function aggregatePlayers(all, corrections) {
   const list = [];
   for (const grp of groups.values()) {
     if (grp._mp) { dedupeChallenges(grp, corrections && corrections.mpOutcomes); delete grp._mp; }
+    if (grp._nb) { dedupeNutsBolts(grp); delete grp._nb; }
+    if (grp._wo) {
+      const wo = grp.games.wayout.wo;
+      if (wo) for (const tier of Object.keys(grp._wo)) { const c = woCapCl(grp._wo[tier], tier); if (c) wo.cl[tier] = c; }
+      delete grp._wo;
+    }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }
     const nb = grp.games.nutsbolts.nb;

@@ -193,7 +193,20 @@ function loadSaved() {
   }
 }
 
+/** Two tabs share one storage (2026-10-29): each tab's `won` was blind to the other's, so the same
+ *  level solved in both recorded twice. The stored `won` is merged in (max per tier) before every
+ *  record check and every save, so it only goes up whichever tab writes last. */
+function mergeStoredWon(ui) {
+  let stored = {};
+  try { stored = readWon((JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {}).won); } catch { /* none */ }
+  const won = { ...(ui.won || {}) };
+  for (const tier of TIER_ORDER) if ((stored[tier] | 0) > (won[tier] | 0)) won[tier] = stored[tier];
+  ui.won = won;
+  return won;
+}
+
 function saveState(ui) {
+  mergeStoredWon(ui);
   try {
     const board = ui.game && ui.game.moves > 0 && !ui.game.isWon() ? ui.game.toSaved() : null;
     const data = { version: 2, currentDifficulty: ui.currentDifficulty, levels: ui.levels, rampFrom: ui.rampFrom, board, settings: {}, won: ui.won || {} };
@@ -849,6 +862,7 @@ class NutsBoltsUI {
     // level for good: Restart after a win, or reopening on the solved level, records nothing again.
     // Never break the game over stats.
     const tier = this.currentDifficulty, level = this.game.level;
+    mergeStoredWon(this);   // another tab may have recorded this level already
     if (!this._winRecorded && (this.won[tier] | 0) < level) {
       this._winRecorded = true;
       try {

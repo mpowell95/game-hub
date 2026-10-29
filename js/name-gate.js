@@ -30,6 +30,7 @@ import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode,
 import { statsOwner } from './game-stats.js';
 import { usernameStatus, usernameOwner, claimUsername, lookupCodeOwner, syncMyStats } from './stats-net.js';
 import { getLang, setLang, makeT } from './i18n.js';
+import { liveNow, whenLive } from './server-time.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -193,8 +194,13 @@ function mountGate(done) {
       // instead of asking for a code they were never shown. Older claims still need the code.
       let claim = null;
       try { claim = await usernameOwner(name); } catch { claim = null; }
+      // The claim's age by the SERVER's clock (2026-10-29): the phone's own clock set back made any old
+      // claim look fresh, so "That's me" handed over any name's code. No server time = no offer.
+      let now = liveNow();
+      if (now == null) { try { now = await whenLive(2500); } catch { now = null; } }
       busy(false);
-      if (claim && claim.at && Date.now() - claim.at < ME_WINDOW_MS) {
+      const age = claim && Number(claim.at) > 0 && now != null ? now - Number(claim.at) : -1;
+      if (age >= 0 && age < ME_WINDOW_MS) {
         say(t('hub_fr_msg_is_you'));
         meCode = claim.code;
         meRow.hidden = false;

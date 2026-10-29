@@ -76,6 +76,15 @@ export function bestNow() {
   return s == null ? Date.now() : s;
 }
 
+/** True when the phone's clock is known to have been set BACK since the server last measured it (a
+ *  cached gap newer than the phone's own time): its time cannot be trusted and no server time stands in. */
+export function clockSuspect() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || 'null');
+    return !!(v && Number.isFinite(v.at) && Date.now() < v.at) && liveNow() == null;
+  } catch { return false; }
+}
+
 export function onLive(cb) {
   startServerTime();
   _subs.add(cb);
@@ -90,6 +99,49 @@ export function whenLive(ms = 4000) {
     const t = setTimeout(() => { if (off) off(); res(null); }, ms);
     off = onLive((v) => { clearTimeout(t); off(); res(v); });
   });
+}
+
+// --- TIME AWAY (2026-10-29) ----------------------------------------------------------------------
+// A timed solo board left on screen while the app is in the background (the app switcher, a
+// screenshot) could be studied for free: the clock paused on visibilitychange. A game now stamps the
+// moment it is hidden (`awayStamp`, also written into its save, so a page killed in the background
+// is charged at its next open) and charges the time away when it is back (`measureAway`): the
+// phone's wall clock (never negative) and, on the same page, performance.now(); then, once the
+// SERVER's time is known (a fresh connection on return, or this page's live time for a stamp from
+// an earlier page), `onServer(ms away)` is called so the game can top up what the phone's clock hid
+// (a clock set back while away). Report only: nothing here is stored but the stamp in the game's save.
+const PAGE = Math.random().toString(36).slice(2, 10);
+
+/** `{ w: phone ms, p: perf ms, pg: this page, s: server ms or null }`: JSON-safe. */
+export function awayStamp() {
+  return { w: Date.now(), p: perfNow(), pg: PAGE, s: serverNow() };
+}
+
+/** The time away since `stamp`, to charge now (ms, >= 0). `onServer(ms)`, if given, is called at most
+ *  once, later, with the server-measured time away (the caller charges any part it has not yet). */
+export function measureAway(stamp, onServer, timeoutMs = 180000) {
+  if (!stamp || typeof stamp !== 'object') return 0;
+  const back = perfNow(), wNow = Date.now();
+  const same = stamp.pg === PAGE && Number.isFinite(stamp.p);
+  let ms = Number.isFinite(stamp.w) ? Math.max(0, wNow - stamp.w) : 0;
+  if (same) ms = Math.max(ms, back - stamp.p);
+  if (typeof onServer === 'function' && Number.isFinite(stamp.s)) {
+    const use = (live) => {
+      if (live == null) return;
+      const away = (live - (perfNow() - back)) - stamp.s;
+      if (away > 0) { try { onServer(away); } catch (err) { console.error('[server-time] away', err); } }
+    };
+    // Another page's stamp: this page's live time is already independent of the phone's clock. The
+    // same page: its anchor may predate the time away, so wait for the reconnect's fresh one.
+    const now = same ? null : liveNow();
+    if (now != null) Promise.resolve().then(() => use(liveNow()));
+    else {
+      let off = null;
+      const t = setTimeout(() => { if (off) off(); }, timeoutMs);
+      off = onLive((v) => { clearTimeout(t); off(); use(v); });
+    }
+  }
+  return Math.round(ms);
 }
 
 /** Tests only: pretend a connection measured `offset` (null = never connected). */

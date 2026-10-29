@@ -159,7 +159,7 @@ ok('Rush: time played reads m:ss / h:mm:ss', T.woRushTime(602000) === '10:02' &&
 
 // --- REPLAY (2026-10-26): win back the points a level missed; only the difference, never twice ---
 store.clear();
-G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 1, hints: 1, timed: true, level: 201, gen: 6 }); // 2 of 6
+G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 2, hints: 0, timed: true, level: 201, gen: 6 }); // 2 of 6 (two hearts: a replay can win them back)
 G.recordWayOut('expert', { timeMs: 80000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, timed: true, level: 202, gen: 6 }); // 6 of 6
 G.recordWayOut('medium', { timeMs: 30000, penaltyMs: 0, arrows: 40, rounds: 14, mistakes: 1, hints: 0, timed: true, level: 61, gen: 6 }); // 1 of 2
 G.recordWayOut('easy', { timeMs: 20000, penaltyMs: 0, arrows: 12, rounds: 4, mistakes: 2, hints: 0, timed: true, level: 3, gen: 6 }); // 1 of 1
@@ -197,6 +197,18 @@ ok('replay: refused without a board, a time or a known difficulty',
 G.recordWayOutReplay('medium', { timeMs: 20000, penaltyMs: 0, arrows: 40, rounds: 14, mistakes: 0, hints: 0, level: 61, gen: 6 });
 g = G.loadStats().games.wayout;
 ok('replay: Medium 1 of 2 tops up by 1', T.woPoints(g, 'medium') === 2 && T.woMissed(g, 'medium').length === 0);
+// HINTS CARRY OVER (Matt, 2026-10-29): a level first cleared with a hint keeps the hint's cost.
+{
+  store.clear();
+  G.recordWayOut('expert', { timeMs: 90000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 1, hints: 1, timed: true, level: 205, gen: 6 }); // 2 of 6
+  let h = G.loadStats().games.wayout;
+  const m = T.woMissed(h, 'expert')[0];
+  ok('hints carry over: the clearing try\'s hint is in `p`; a perfect replay can reach only 4 (one slip), not 6',
+    h.wo.log.expert[0].p === 1 && m && m.full === 4 && m.gain === 2);
+  const up = G.recordWayOutReplay('expert', { timeMs: 60000, penaltyMs: 0, arrows: 90, rounds: 25, mistakes: 0, hints: 0, level: 205, gen: 6 });
+  h = G.loadStats().games.wayout;
+  ok('...a clean replay adds 2 (to 4) and the level leaves the list', up === 2 && T.woPoints(h, 'expert') === 4 && T.woMissed(h, 'expert').length === 0);
+}
 ok('replay: lists in Firebase object form read back', T.woReplayList({ 1: g.wo.replay.expert[1], 0: g.wo.replay.expert[0] }).map((x) => x.u).join() === '2,0');
 
 // --- MORE LEVELS (2026-10-26): Easy 51 is an Easy level, worth Easy's points ---

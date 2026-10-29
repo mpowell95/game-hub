@@ -283,29 +283,53 @@ export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.
   ['contexto-far-jump', 'solved with no hints straight from far away (closest guess before the answer, limit)']]);
 
 // --- CONTEXTO, from the play log (2026-10-28; ALERTS only, never a void) ------------------------------
-// Judged on the server when a win is logged (functions/integrity.js contextoWinCheck). `puzzle` = every
-// playLog entry this player code has for that puzzle key, `near` = the code's entries within a minute of
-// the win (where the recorder's own entry, with the hints it counted, sits). The phones already count a
-// hint, give-up or solve from another phone (contexto/js/ui.js _remote); these catch what slipped past
-// (a phone offline at the time) and the patterns a looked-up answer leaves.
+// Judged on the server when a win is logged, and again when its recorder entry lands (functions/integrity.js
+// contextoWinCheck). `puzzle` = every playLog entry this player code has for that puzzle key (with `id`,
+// its key, when known), `near` = the code's entries around the win (where the recorder's own entry, with
+// the hints it counted, sits). The phones already count a hint, give-up or solve from another phone
+// (contexto/js/ui.js _remote); these catch what slipped past (a phone offline at the time, `unchecked` in
+// the recorder's extras) and the patterns a looked-up answer leaves.
+// ORDER (2026-10-29): "before the win" was the phone's time `t`, so a second phone with its clock set
+// forward hid its give-up. An entry now counts as earlier when EITHER clock says so: the server's
+// receipt `s` or the phone's `t` (a phone can move only its own). Hints taken anywhere on that puzzle
+// count, whenever they were sent (no honest phone takes a hint on a puzzle after solving it).
+// Never provable from the log alone (two phones of one code are not told apart), so these stay alerts.
 export const CONTEXTO_FAR = 300;    // the "close" band: an honest solve almost always passes through it
+const sameEntry = (x, win) => x === win || (x.id != null && win.id != null ? x.id === win.id
+  : (Number(x.t) === Number(win.t) && x.e === win.e && x.k === win.k));
 export function checkContextoWin(puzzle, near, win) {
   const out = [];
   if (!win || win.e !== 'win') return out;
-  const before = (puzzle || []).filter((x) => x && Number(x.t) < Number(win.t));
-  if (before.some((x) => x.e === 'win' || x.e === 'giveup')) out.push({ rule: 'contexto-solved-elsewhere', v: 'yes', lim: '' });
-  const hints = before.filter((x) => x.e === 'hint').length;
-  const rec = (near || []).filter((x) => x && x.f === 'recordContexto' && Number(x.t) >= Number(win.t) - 1000)
+  const others = (puzzle || []).filter((x) => x && typeof x === 'object' && !sameEntry(x, win));
+  const ws = Number(win.s), wt = Number(win.t);
+  const earlier = (x) => Number(x.t) < wt || (x.s != null && win.s != null && Number.isFinite(Number(x.s)) && Number.isFinite(ws) && Number(x.s) < ws);
+  const before = others.filter(earlier);
+  const rec = (near || []).filter((x) => x && x.f === 'recordContexto' && Number(x.t) >= wt - 1000)
     .sort((a, b) => a.t - b.t)[0];
   let counted = null;
   try { counted = rec ? (JSON.parse(rec.a)[2] || {}).hints | 0 : null; } catch { counted = null; }
+  if (before.some((x) => x.e === 'win' || x.e === 'giveup')) out.push({ rule: 'contexto-solved-elsewhere', v: 'yes', lim: '' });
+  const hints = others.filter((x) => x.e === 'hint').length;
   if (counted != null && hints > counted) out.push({ rule: 'contexto-hints-not-counted', v: counted, lim: hints });
   if (hints === 0) {
-    const ranks = before.filter((x) => x.e === 'guess').map((x) => Number(x.r)).filter((r) => Number.isFinite(r) && r > 1);
+    // This phone's own guesses before the win: its own clock orders them.
+    const ranks = others.filter((x) => Number(x.t) < wt && x.e === 'guess').map((x) => Number(x.r)).filter((r) => Number.isFinite(r) && r > 1);
     const best = ranks.length ? Math.min(...ranks) : null;
     if (best == null || best > CONTEXTO_FAR) out.push({ rule: 'contexto-far-jump', v: best == null ? 'first guess' : best, lim: CONTEXTO_FAR });
   }
   return out;
+}
+
+/** The win a recorder entry belongs to (2026-10-29): a `recordContexto` entry whose extras carry the
+ *  puzzle key `k` and `won`; its win is the latest win on that puzzle logged at or before it. Pure. */
+export function contextoWinForRecord(puzzle, rec) {
+  let args = null;
+  try { args = JSON.parse(rec && rec.a); } catch { args = null; }
+  if (!Array.isArray(args) || args[1] !== true || !args[2] || !args[2].k) return null;
+  const k = String(args[2].k);
+  const wins = (puzzle || []).filter((x) => x && x.e === 'win' && x.k === k && Number(x.t) <= Number(rec.t) + 1000)
+    .sort((a, b) => Number(b.t) - Number(a.t));
+  return wins[0] || null;
 }
 
 export const RULE_BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
@@ -389,4 +413,4 @@ export const GAME_NAMES = {
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
+export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };

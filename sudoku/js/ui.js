@@ -38,10 +38,40 @@ function saveSettings(patch) {
 function loadSave() {
   try { return SudokuGame.fromSave(JSON.parse(localStorage.getItem(SAVE_KEY) || 'null')); } catch { return null; }
 }
-function writeSave(game) {
+/** Write the board, if the save slot is still THIS puzzle's (2026-10-29). Two tabs share one
+ *  storage: each tab's in-memory guards were blind to the other (a hint in tab A, the solve in tab B
+ *  with 0 hints; the same puzzle solved in both). So every write first reads the slot: the same
+ *  puzzle takes the larger hint and mistake counts (they only go up), and a slot that another tab
+ *  cleared (solved), or filled with another puzzle, is not overwritten: returns false and the
+ *  caller leaves the board. `claim` = this tab starts the puzzle (the slot is taken over). */
+function writeSave(game, claim = false) {
+  const id = game.puzzleId();
+  if (!claim) {
+    const cur = loadSave();
+    if (!cur || cur.puzzleId() !== id || isDone(id)) return false;
+    game.hints = Math.max(game.hints, cur.hints | 0);
+    game.mistakes = Math.max(game.mistakes, cur.mistakes | 0);
+  }
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.toSave())); } catch (err) { console.error('[sudoku] save', err); }
+  return true;
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+
+/** Puzzles already recorded on this storage (2026-10-29): `{ <puzzle id>: time }`, the newest 300.
+ *  A puzzle records once, whatever route brings it back (a stale tab, a restored save). A guard,
+ *  not history: the solve itself lives in gamehub.stats. */
+const DONE_KEY = 'gamehub.sudoku.done.v1';
+function readDone() {
+  try { const v = JSON.parse(localStorage.getItem(DONE_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
+}
+function isDone(id) { return Object.prototype.hasOwnProperty.call(readDone(), id); }
+function markDone(id) {
+  const d = readDone();
+  d[id] = Date.now();
+  const keys = Object.keys(d);
+  if (keys.length > 300) keys.sort((a, b) => d[a] - d[b]).slice(0, keys.length - 300).forEach((k) => delete d[k]);
+  try { localStorage.setItem(DONE_KEY, JSON.stringify(d)); } catch (err) { console.error('[sudoku] done ledger', err); }
+}
 
 function fmtTime(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -164,7 +194,17 @@ class SudokuUI {
     clearSave();
     const r = generate(this.selectedTier, undefined);
     const game = new SudokuGame({ tier: this.selectedTier, puzzle: r.puzzle, solution: r.solution });
+    writeSave(game, true);   // this tab owns the slot now
     this._enterGame(game);
+  }
+
+  /** Another tab finished this puzzle or started another one: this board is stale. Leave it
+   *  without writing anything (2026-10-29). */
+  _leaveStale() {
+    this._pauseTimer();
+    clearInterval(this._timerInterval);
+    this.game = null;
+    this.renderMenu();
   }
 
   /** Sudoku's rules (fill every row/col/box with 1-9) are already known - the ONE thing worth a
@@ -393,12 +433,13 @@ class SudokuUI {
   _handleAction(action) {
     switch (action) {
       case 'back':
-        if (this.game && !this.game.isSolved()) { writeSave(this.game); }
+        if (this.game && !this.game.isSolved()) { writeSave(this.game); }   // a stale board is just left
         this._pauseTimer();
         this.renderMenu();
         break;
       case 'undo':
-        if (this.game.undo()) { writeSave(this.game); this._paintAll(); }
+        if (this.game.isSolved()) break;   // a solved puzzle stays solved (2026-10-29)
+        if (this.game.undo()) { if (!writeSave(this.game)) { this._leaveStale(); return; } this._paintAll(); }
         break;
       case 'erase':
         this._doErase();
@@ -447,19 +488,19 @@ class SudokuUI {
     if (g.isGiven(this.selected)) return;
     this._maybeResumeTimer();
     if (this.notesMode) {
-      if (g.toggleNote(this.selected, d)) { writeSave(g); this._paintCell(this.selected); }
+      if (g.toggleNote(this.selected, d)) { if (!writeSave(g)) { this._leaveStale(); return; } this._paintCell(this.selected); }
       return;
     }
     const result = g.place(this.selected, d);
     if (!result.changed) return;
-    writeSave(g);
+    if (!writeSave(g)) { this._leaveStale(); return; }
     this._paintAll();
     if (result.solved) this._showWin(true);
   }
 
   _doErase() {
     if (this.selected < 0 || !this.game || this.game.isSolved()) return;
-    if (this.game.erase(this.selected)) { writeSave(this.game); this._paintAll(); }
+    if (this.game.erase(this.selected)) { if (!writeSave(this.game)) { this._leaveStale(); return; } this._paintAll(); }
   }
 
   _doHint() {
@@ -467,7 +508,7 @@ class SudokuUI {
     this._maybeResumeTimer();
     const i = this.game.hint(this.selected);
     if (i < 0) return;
-    writeSave(this.game);
+    if (!writeSave(this.game)) { this._leaveStale(); return; }
     this._select(i);
     this._paintAll();
     if (this.game.isSolved()) this._showWin(true);
@@ -542,7 +583,15 @@ class SudokuUI {
       this._winRecorded = true;
       this._pauseTimer();
       const g = this.game;
-      try { recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints }); } catch (err) { console.error('[sudoku] recordSudoku', err); }
+      // Once per puzzle, on any route (2026-10-29): the caller's writeSave just proved the slot is
+      // still this puzzle's (and took the larger hint/mistake counts from it); the ledger refuses a
+      // puzzle this storage already recorded.
+      const id = g.puzzleId();
+      if (isDone(id)) { clearSave(); this._leaveStale(); return; }
+      try {
+        recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints });
+        markDone(id);
+      } catch (err) { console.error('[sudoku] recordSudoku', err); }
       clearSave();
     }
     clearInterval(this._timerInterval);

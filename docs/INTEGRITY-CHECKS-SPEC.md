@@ -531,10 +531,52 @@ costs anything in a game that saves.
   (`onRollTap` sets `cfg.hm`; `onPlay` prompts and records; `parchisStatsDiff`); port it to the source or the
   next rebuild drops it (`tools/test-quit-loss.mjs` Q3/Q4 fail when it does).
 - Boggle's clock still pauses while the app is away (by design, "favoring the player"): a screenshot of the
-  board, solved away from the game, is not prevented.
+  board, solved away from the game, is not prevented. (Closed the same day, second pass I4: time away now counts in a solo round.)
 - A no-resume game open in TWO tabs, one of them idle over 30 minutes, can have its marker settled by the hub
   while it is still played: that game then counts its loss AND its result. Rare; not prevented.
 - A loss the HUB settles for Monopoly Deal is not added to Monopoly Deal's own legacy `bd-stats` screen (the
   unified stats have it).
 - Saves written before 2026-10-29 carry no "moved" flag: each game reads a conservative stand-in (a later
   round, a hand that is not the dealt one, two moves in), so an in-flight game at the deploy can be off by one move.
+
+## Holes closed 2026-10-29 (second pass): puzzles, clocks, and names
+
+Twelve holes a reviewer found after the first pass. Every fix decides only what a NEW play records or how a
+stored number is READ; no stored number is lowered (THE LAW 1-5), and every cap is a read-time derivation from
+fields that did not exist before today (so a record without them reads exactly as before). Proof: `node
+tools/test-puzzle-holes.mjs` (38 pure and source checks; `--browser` adds 6 in real tabs), `tools/test-integrity.mjs`
+(Contexto), `tools/test-bee-server.mjs` (Spelling Bee). **Real data**: every person's derived numbers (Arrow Maze
+points per band, Nuts & Bolts wins per tier, Sudoku and Murdoku no-hint counts, Skeeball, Word Weaver, Gridlock)
+compared between the code before and after on a fresh snapshot (93 records, 58 people) and on the 02:25 backup (89
+records, 55 people): **0 differences**. None of the new fields exist in real data yet, so nothing moves until new
+plays write them. Integrity replay: 0 strong hits on both.
+
+| # | Hole | Fix | What an honest player sees |
+|---|---|---|---|
+| I1 | Sudoku: solve, close the win card, Undo, re-enter the digit: another win, for ever | Undo refuses a solved puzzle (`game.js`); every solved puzzle's id (a hash of its givens and answer) goes into `gamehub.sudoku.done.v1` (newest 300, a guard), and a puzzle in it never records again, whatever route brings it back | Undo does nothing once a puzzle is solved |
+| I2 | Sudoku's mistakes counter flags each wrong digit, and Murdoku's full board marks every broken clue: both are help | **Matt's decision**: each counts like a hint. A Sudoku solve with any mistake is a win but not a no-hint solve (`sd.clean`); each full wrong Murdoku board adds one to the case's hint count. New solves only, nothing re-bucketed | A solve with a mistake or a board check still counts, ranked below no-hint solves |
+| I3 | Two tabs on ONE storage defeat in-memory guards | Sudoku and Murdoku re-read the save slot before every write and at the win: the same puzzle takes the larger hint (and mistake) count; a slot another tab finished, emptied or filled with another puzzle is never overwritten and the stale board goes back to the menu. Nuts & Bolts merges the stored `won` before the record check and every save. Minesweeper plays and saves a board only while its level's slot still holds it unfinished (same mines) | Nothing, unless two tabs play one puzzle: the older one returns to the menu |
+| I4 | Minesweeper's clock stopped while the app was hidden, but the board shows in the app switcher and in screenshots; Boggle's solo round the same when the page was killed in the background | Hidden with a started board (Minesweeper) or a live solo round (Boggle): the moment is stamped (`js/server-time.js awayStamp`, also into the save); back, or on resume from that save, the time away is charged: phone time (never negative) and `performance.now()` on the same page, topped up by the SERVER's time once known (`measureAway`), so a clock set back while away hides nothing. Leaving through the menu, How to play or the hub still pauses (the board is not on screen) | Time spent in another app with the board up counts. A Boggle round left in the background past its end finishes (and records) on return |
+| I5 | Contexto: the other phones' log was cut at this phone's own finish time `t` (a second phone with its clock set forward hid its give-up or hints); the server check used phone time too | The phone keeps its finishing entry's id, sends the log first, and counts every other entry the SERVER received before it (`s`); its own entry is excluded by id (`logSummary(entries, key, { exclude })`). The recorder names the puzzle (`k`) and marks a solve no other phone could be read for (`unchecked`, offline). The server judges on the recorder entry too (it now lands after the win), counts an entry as earlier when EITHER clock says so, and counts hints from any phone whenever sent. Alerts only: the log cannot tell two phones of one code apart, so nothing is provable (the spec's strong-vs-alert rule) | Nothing |
+| I6 | Arrow Maze: (a) another storage's slips were checked only against the phone's last read, and the points ignored `wo.sl`; (b) two tabs; (c) a clean Replay won back a hint; (d) Rush weeks from the phone's clock | (a) each record stamps its first slip (`wo.sf`) and first clear (`wo.ct`) of a level, with the server's time where known; `js/players-agg.js` builds a person's level set with `woCapCl`: each record's clear is capped by the slips their OTHER records stamped on that level BEFORE it (phone board and server board alike); `wo.sl` merges per person, max only. (b) at the clear the carry key and this storage's own `wo.sl` are re-read. (c) **Matt's decision**: the clearing try's hints go into `p`, which no Replay wins back (lost hearts still can be). (d) Rush runs and saves are stamped with the server's time; a run with the phone's clock known wrong and no server time, or a save stamped by the phone alone settled after its week, is kept as `late` and never counted | A level learned with hints on one storage and cleared clean on another earns the hinted points. A new phone replaying levels already cleared changes nothing (its slips come after the clear). A level first cleared with a hint shows its hint cost after a perfect Replay |
+| I7 | Spelling Bee: a phone in UTC+14 is a day ahead, so its Yesterday's Answers is the Americas' today | Two options were weighed: show answers only once the day is over everywhere (12:00 UTC the next day: Spain would wait until early afternoon), or stamp the viewing. **Chosen: the stamp** (no cost to honest players, who never play a puzzle after reading its answers). Opening Yesterday's Answers logs `answers` under THAT puzzle and shows them only once the server has it (`logConfirmed`); on the server no word for that puzzle sent at or after that moment counts, and a log holding a view always decides the row (`answersSeenAt`). A time zone that moves more than an hour within a puzzle's log is an ALERT to Matt (`zoneShifts`, `beeAlerts/<puzzle>/<CODE>~zone`, the admin page's log gaps list), never a void. Rules: a log entry's kind can no longer be rewritten | Yesterday's Answers takes one round trip to open |
+| I8 | Name gate: "That's me" compared the claim's server time with the phone's clock; a phone set back passed any old claim | The claim's age by `liveNow()`, 0 to 24 h; no live server time, no offer | Nothing |
+| I9 | Word Weaver (admin only) merged a level's hints with Math.min across records; Gridlock (admin only) stamped crowns and hints with the phone's clock | Already closed on main by PR #1328 (`wwHintBest` over `ww.hint`/`ww.esHint`: the most hints any record took caps the level); this pass kept that fix. Gridlock's hint and crown times come from the server's clock where known | A level replayed with hints on a second storage reads with those hints (admin only) |
+| I10 | Skeeball: challenge racks still filled the machine's record that objectives read, so they pre-earned the next machine once that machine was owned | The rack is recorded and shown as before (rule 1); beside it `sk.chg` (its share of the global goal counters) and `sk.chk[machine]` (the machine's record before its first challenge rack, plus every other rack since). Objectives read `goalStore()`: the record without challenge racks | Objectives move only with racks on owned machines |
+| I11 | Nuts & Bolts: a fresh storage started Expert at level 1 and farmed easy Expert wins | Checked: the first pass counted once per level per STORAGE only. Now each solve names its level (`nb.lv[tier]`, a range string) and the record snapshots how far its untracked wins reach (`nb.leg`); `js/players-agg.js` counts each level once per person per tier and not at all when a record's untracked wins already cover it, taking extra copies out of that tier, `total` and `nb.solved` at read time | Nothing, unless levels are solved again on a new storage: those add no wins |
+| I12 | The leaderboard put every player's code in `data-code` (Send message) and `data-pkey` (each card) | Both carry an opaque index into the in-memory rows; the tap reads the code from memory. Send message checked in a real page: it still opens that person's thread | Nothing |
+
+**Left open, honestly:**
+- Two STORAGES (Safari beside the Home Screen app) cannot share a Sudoku, Murdoku or Minesweeper board: each deals
+  its own random puzzle, so only two tabs of one storage could, and those are closed. Nuts & Bolts and Arrow Maze
+  across storages are handled by the per-person merge.
+- Codes are still in memory and in the board package (dev tools can read them), and on the Messages and
+  pick-a-person screens. "Link by code" still takes over an identity with a known code.
+- Arrow Maze's slip stamp is the FIRST slip: slips added on that storage after the other storage's clear can over-cap
+  a level a person was playing on two storages at once (rare, read time only).
+- Word Weaver: a person's second storage replaying a level with hints lowers that level's stars at read time (admin
+  only; nothing stored changes).
+- Spelling Bee: another player code (a made-up profile) can still read answers; a `beeLog` entry can be re-sent with
+  a later server time by someone with dev tools.
+- A phone offline with no server time ever measured (a fresh storage) still trusts its own clock for Rush weeks and
+  crowns.

@@ -75,6 +75,12 @@ function writeSaveObj(o) {
   } catch (err) { console.error('[murdoku] save', err); return false; }
 }
 
+/** One case's identity: two tabs (or a stale save) are the same case only if tier, seed and
+ *  answer all match. */
+function caseId(p) {
+  return p ? `${p.tier}:${p.seed}:${Array.isArray(p.solution) ? p.solution.join(',') : ''}` : '';
+}
+
 function fmtTime(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -358,7 +364,7 @@ class MurdokuUI {
     this.guided = !!s.guided; this.hint = null;
     this.hints = Number.isInteger(s.hints) && s.hints >= 0 ? s.hints : null;
     if (!s.guided) this.selectedTier = s.puzzle.tier;
-    this._save();
+    this._save(true);   // this tab owns the save slot now
     if (this.guided) this._autoHint();
     this.renderPlay();
   }
@@ -625,7 +631,7 @@ class MurdokuUI {
     }
     // Every tap that shows a hint counts (2026-10-29): a solve with any hint ranks below every
     // no-hint solve on the leaderboard. Saved at once, so leaving cannot lose the count.
-    if (this.hint && this.hints !== null) { this.hints += 1; this._save(); }
+    if (this.hint && this.hints !== null) { this.hints += 1; if (!this._save()) { this._leaveStale(); return; } }
     if (this.hint && this.hint.k !== 'wrong') { this.sel = this.hint.p; this.mode = 'place'; }
     this._paint(); this._fit();
   }
@@ -912,8 +918,11 @@ class MurdokuUI {
     this.notice = '';
     const chk = checkBoard(this.puz, this.pos);
     if (chk.solved) { this.hint = null; this._win(); return; }
+    // A full board that is wrong marks every broken clue: that check is help, so it counts like a
+    // hint (Matt, 2026-10-29), once per full wrong board. Cases solved before then are untouched.
+    if (chk.full && !this.guided && this.hints !== null) this.hints += 1;
     if (this.guided) this._autoHint(); else this.hint = null;
-    this._save();
+    if (!this._save()) { this._leaveStale(); return; }
     this._paint();
     this._fit();
   }
@@ -921,6 +930,10 @@ class MurdokuUI {
   // --- winning -------------------------------------------------------------------------------
 
   _win() {
+    // The save slot must still be THIS case, unfinished (2026-10-29): another tab on this storage
+    // may have solved it (it would record twice) or replaced it. _save() also takes the larger hint
+    // count from the slot, so a hint taken in another tab counts here.
+    if (!this._save()) { this._leaveStale(); return; }
     this.solved = true;
     this.sel = -1;
     this._pauseTimer();
@@ -950,10 +963,29 @@ class MurdokuUI {
     }
   }
 
-  _save() {
-    if (!this.puz) return;
+  /** Write the case. Unless `claim` (this tab starts or resumes it), the slot is read first
+   *  (2026-10-29: two tabs share one storage and each one's in-memory counts were blind to the
+   *  other): the same unfinished case takes the larger hint count (an unknown count stays unknown);
+   *  a slot another tab finished, emptied or filled with another case is NOT overwritten, and the
+   *  call returns false so the caller leaves this stale board. */
+  _save(claim = false) {
+    if (!this.puz) return false;
+    if (!claim) {
+      const cur = readSave();
+      if (!cur || caseId(cur.puzzle) !== caseId(this.puz) || (cur.solved && !this.solved)) return false;
+      if (cur.hints === null) this.hints = null;
+      else if (this.hints !== null) this.hints = Math.max(this.hints, cur.hints);
+      if (cur.recorded) this.recorded = true;
+    }
     const elapsed = this._elapsed();
-    writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded, guided: this.guided, hints: this.hints });
+    return writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded, guided: this.guided, hints: this.hints });
+  }
+
+  /** Another tab finished or replaced this case: leave the board without writing. */
+  _leaveStale() {
+    this._pauseTimer();
+    this.puz = null; this.hint = null;
+    this.renderSetup();
   }
 
   // --- overlays ------------------------------------------------------------------------------
