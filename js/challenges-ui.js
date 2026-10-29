@@ -292,6 +292,11 @@ const endHint = (r) => (r.open === 'sent' ? 'cancel' : r.open === 'got' ? 'decli
 const NUDGE_GAP_MS = 6 * 60 * 60 * 1000;
 const BELL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.6 2H4.4z" fill="var(--bell-fill, none)" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
+// NO OTHER PLAYER'S CODE IN THE PAGE (2026-10-29): rows carry an index into these lists, never a code.
+const _nudgeTo = [];
+const _oppKeys = [];
+const idxOf = (list, v) => { if (list.length > 2000) list.length = 0; return list.push(v) - 1; };
+
 /** A live match. Your turn: two lines and a Play pill. Their turn: ONE short line (Matt: "They're too
  *  tall"), the time left at the end. `showName: false` (a person's own page) names the game instead. */
 function liveRowHTML(r, gameName, { showName = true } = {}) {
@@ -313,7 +318,7 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
   const sent = Date.now() - nudgedAt(r.game, r.id) < NUDGE_GAP_MS;
   const bell = NUDGE_NODES[r.game] && r.with && !r.owed
     ? `<button type="button" class="cx-bell${sent ? ' is-sent' : ''}" data-nudge-game="${esc(r.game)}" data-nudge-id="${esc(r.id)}"
-        data-nudge-to="${esc(r.with)}" data-nudge-name="${esc(who)}" aria-label="${esc(t(sent ? 'cx_remind_sent_aria' : 'cx_remind_aria', { name: who }))}">${BELL}</button>`
+        data-nudge-to="${idxOf(_nudgeTo, r.with)}" data-nudge-name="${esc(who)}" aria-label="${esc(t(sent ? 'cx_remind_sent_aria' : 'cx_remind_aria', { name: who }))}">${BELL}</button>`
     : '';
   return `<li class="cx-live is-slim"><button type="button" class="cx-open" data-game="${esc(r.game)}" data-id="${esc(r.id)}">
       ${thumb(r.game)}
@@ -430,7 +435,9 @@ export async function openChallenges(opts = {}) {
   async function remind(btn) {
     if (btn.disabled) return;
     btn.disabled = true;
-    const { nudgeGame: game, nudgeId: id, nudgeTo: to, nudgeName: name } = btn.dataset;
+    const { nudgeGame: game, nudgeId: id, nudgeName: name } = btn.dataset;
+    const to = _nudgeTo[Number(btn.dataset.nudgeTo)];
+    if (!to) { btn.disabled = false; return; }
     const res = await sendNudge({ toCode: to, game, id });
     const text = res.ok ? t('cx_remind_sent', { name }) : res.reason === 'too-soon' ? t('cx_remind_soon', { name }) : t('cx_remind_fail');
     S.flash = { text, until: Date.now() + FLASH_MS };
@@ -519,25 +526,27 @@ export async function openChallenges(opts = {}) {
     const vs = new Map(records().people.filter((p) => p.code).map((p) => [p.code, p.byGame[game]]));
     const people = S.people;
     let picked = null;
+    let shown = [];
     const list = sheet.querySelector('[data-role="people"]');
     const go = sheet.querySelector('[data-role="go"]');
     const paint = (q) => {
       const k = String(q || '').trim().toLowerCase();
       const show = people.filter((p) => !k || String(p.name).toLowerCase().includes(k));
-      list.innerHTML = show.length ? show.map((p) => {
+      shown = show;
+      list.innerHTML = show.length ? show.map((p, i) => {
         const r = vs.get(p.code);
-        return `<button type="button" class="cx-person" data-code="${esc(p.code)}" aria-pressed="${picked && picked.code === p.code}">
+        return `<button type="button" class="cx-person" data-pi="${i}" aria-pressed="${picked === p}">
           <span class="cx-le" aria-hidden="true">${esc(p.emoji)}</span><span class="cx-ln">${esc(p.name)}</span>
           ${r && r.played ? `<span class="cx-lr is-dim">${esc(wl(r))}</span>` : ''}
-          <span class="cx-tick" aria-hidden="true">${picked && picked.code === p.code ? '✓' : ''}</span></button>`;
+          <span class="cx-tick" aria-hidden="true">${picked === p ? '✓' : ''}</span></button>`;
       }).join('') : `<p class="cx-note">${esc(t('cx_no_people'))}</p>`;
     };
     paint('');
     const search = sheet.querySelector('.cx-search');
     search.addEventListener('input', (e) => paint(e.target.value));
     list.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-code]');
-      const p = b && people.find((x) => x.code === b.dataset.code);
+      const b = e.target.closest('[data-pi]');
+      const p = b && shown[Number(b.dataset.pi)];
       if (!p) return;
       picked = p;
       go.disabled = false;
@@ -557,7 +566,7 @@ export async function openChallenges(opts = {}) {
     const body = !all.total.played && !people.length && !sum.finished.length
       ? (S.live ? `<p class="cx-note">${esc(t('cx_no_records'))}</p>` : `<p class="cx-note">${esc(t('cx_loading'))}</p>`)
       : `${statsHTML(all.total)}
-        ${people.length ? `<h3 class="cx-h">${esc(t('cx_people'))}</h3><div class="cx-card">${people.map((o) => `<button type="button" class="cx-lrow" data-opp="${esc(o.key)}">
+        ${people.length ? `<h3 class="cx-h">${esc(t('cx_people'))}</h3><div class="cx-card">${(_oppKeys.length = 0, people).map((o) => `<button type="button" class="cx-lrow" data-opp="${_oppKeys.push(o.key) - 1}">
             <span class="cx-le" aria-hidden="true">${esc(o.emoji)}</span><span class="cx-ln">${esc(o.name || t('cx_someone'))}</span>
             <span class="cx-lr">${esc(wl(o))}</span><span class="cx-chev" aria-hidden="true">&rsaquo;</span></button>`).join('')}</div>` : ''}
         ${byGameHTML(all.byGame, nameOf)}
@@ -565,7 +574,7 @@ export async function openChallenges(opts = {}) {
           <div class="cx-card">${sum.finished.slice(0, 10).map((r) => resultRowHTML(r, nameOf)).join('')}</div>` : ''}`;
     shell(card, { title: t('cx_records'), back: () => renderHome(), body: flashHTML() + body });
     if (!current(gen)) return;
-    for (const b of card.querySelectorAll('[data-opp]')) b.addEventListener('click', () => renderOpponent(b.dataset.opp));
+    for (const b of card.querySelectorAll('[data-opp]')) b.addEventListener('click', () => { const k = _oppKeys[Number(b.dataset.opp)]; if (k != null) renderOpponent(k); });
     bindRows(card);
   }
 
