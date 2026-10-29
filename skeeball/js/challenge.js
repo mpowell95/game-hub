@@ -40,7 +40,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 // than copied (root CLAUDE.md, "USE WHAT EXISTS"). mp.js is pure at load: no side effects.
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult } from '../../js/challenge-life.js';
+import { isNoResult, TIMEOUT, FORFEIT_FROM, forfeitAt } from '../../js/challenge-life.js';
 
 export { asCode, myCode, meLabel, opponentsFrom };
 
@@ -147,9 +147,47 @@ export function nextLeg(game, side, played = () => false) {
   return -1;
 }
 
-/** Has this unanswered challenge run out of time? Only a delivered one has a clock. */
+/** Has this unanswered challenge run out of time? Only a delivered one has a clock. An ANSWERED one
+ *  whose turn ran past its 3 days on or after 2026-10-29 does not expire: it is forfeited after 7
+ *  (forfeitDeadline below). */
 export function isExpired(x, now = Date.now()) {
-  return !!x && !x.over && ms(x.expires) > 0 && now >= ms(x.expires);
+  if (!x || x.over || forfeitDeadline(x)) return false;
+  return ms(x.expires) > 0 && now >= ms(x.expires);
+}
+
+// --- 7 DAYS, THEN FORFEIT (Matt's decision, 2026-10-29, js/challenge-life.js) ---------------------
+// Every turn here had 3 days, and a turn that ran out EXPIRED the whole challenge for nobody, even
+// after both had played: the player behind could let it lapse and nobody won. Now, once the
+// challenged player has a score in (answered), the player whose turn it is has 7 days from the
+// hand-over (`expires` - EXPIRE_MS) and then LOSES. A turn whose 3 days ran out before 2026-10-29
+// expired under the old rule and stays expired; one handed over earlier but still running is timed
+// from 2026-10-29. Derived on read, never written.
+/** Has the challenged player answered? A match (a/b with scores) or an index row (played counts). */
+function answeredOf(x) {
+  if (x && x.a && x.b && typeof x.a === 'object') return !isOpen(x);
+  if (x && (x.played != null || x.theirPlayed != null)) return x.sent ? ms(x.theirPlayed) > 0 : ms(x.played) > 0;
+  return false;
+}
+/** When the player on turn forfeits, or 0 when the 7-day rule does not apply to it. A row read by
+ *  rowsFromIndex carries it already (`ff`, its `expires` IS the deadline). */
+export function forfeitDeadline(x) {
+  if (!x || x.over) return 0;
+  if (x.ff === true) return ms(x.expires);
+  const exp = ms(x.expires);
+  if (!exp || exp < FORFEIT_FROM || !answeredOf(x)) return 0;
+  return forfeitAt(exp - EXPIRE_MS);
+}
+/** PURE. Has the player on turn sat on it for 7 days? */
+export function isTimedOut(x, now = Date.now()) {
+  const d = forfeitDeadline(x);
+  return d > 0 && now >= d;
+}
+/** A match whose player on turn timed out is OVER: they lose (why 'timeout'). */
+export function withTimeout(g, now = Date.now()) {
+  if (!g || g.over || (g.stage !== 'a' && g.stage !== 'b') || !isTimedOut(g, now)) return g;
+  g.over = { winner: other(g.stage), why: TIMEOUT, at: forfeitDeadline(g) };
+  g.stage = 'over';
+  return g;
 }
 
 // --- cancel, decline, resign (2026-10-13, js/challenge-life.js) -----------------------------------
@@ -318,14 +356,31 @@ export function rowFor(game, side) {
 }
 
 /** One index map, normalised and sorted: your turn first, then waiting on them, then done. */
-export function rowsFromIndex(val) {
+export function rowsFromIndex(val, now = Date.now()) {
   if (!val || typeof val !== 'object') return [];
   const rows = [];
   for (const id of Object.keys(val)) {
     const r = val[id] || {};
     const code = asCode(r.with);
     if (!ID_RE.test(id) || !code) continue;
+    // 7 days on one player's turn in an answered challenge: they lost (forfeitDeadline).
+    const dl = ENDED.includes(r.ended) ? 0 : forfeitDeadline(r);
+    const late = dl > 0 && now >= dl;
+    if (late) {
+      rows.push({
+        id, with: code, name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
+        n: Math.max(1, ms(r.n) || 1), all: !!r.all, scoring: SCORINGS.includes(r.scoring) ? r.scoring : 'games',
+        board: BOARD_RE.test(String(r.board || '')) ? String(r.board) : '', boardName: String(r.boardName || ''),
+        sent: !!r.sent, updated: dl, expires: 0, ended: '', open: '', yourTurn: false, over: true,
+        played: ms(r.played), theirPlayed: ms(r.theirPlayed),
+        mine: r.mine == null ? null : score(r.mine), theirs: r.theirs == null ? null : score(r.theirs),
+        myWins: ms(r.myWins), theirWins: ms(r.theirWins),
+        result: r.yourTurn ? 'lost' : 'won', why: TIMEOUT,
+      });
+      continue;
+    }
     rows.push({
+      ...(dl ? { ff: true } : {}),
       id,
       with: code,
       name: String(r.name || ''),
@@ -337,7 +392,8 @@ export function rowsFromIndex(val) {
       boardName: String(r.boardName || ''),
       sent: !!r.sent,
       updated: ms(r.updated),
-      expires: ms(r.expires),
+      // Answered under the 7-day rule (`ff`): the deadline is the forfeit, not the 3-day expiry.
+      expires: dl || ms(r.expires),
       // Cancelled, declined or resigned (2026-10-13): stored over:false so no push fires (rowFor);
       // read back here as finished.
       ended: ENDED.includes(r.ended) ? r.ended : '',
@@ -489,7 +545,7 @@ export async function readChallenge(id) {
     const g = validateChallenge(snap.val());
     if (!g) { console.error(`[skeeball] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     g.id = id;
-    return g;
+    return withTimeout(g);
   } catch (err) {
     console.warn('[skeeball] could not read that challenge', err);
     return null;

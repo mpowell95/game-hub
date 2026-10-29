@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats } from './stats-corrections.js';
+import { correctStats, isVoidedMatch } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwBest } from './word-weaver-points.js';
@@ -114,6 +114,39 @@ export function identityKey(profileLike, fallbackId) {
   return { key: 'device:' + fallbackId, playerId: null };
 }
 
+/** ONE CHALLENGE MATCH, COUNTED ONCE PER PERSON (2026-10-29). Each challenge game counts a finished
+ *  match once per phone storage, so the same person on two devices (or Safari and the Home Screen app)
+ *  had it twice. `grp._mp[game][matchId]` lists what each of their devices added for it ('w' won,
+ *  'l' lost, 'd' played only); every copy past the first is taken back out of `byDiff.mp` and `total`
+ *  (and Battleship's `bs`). Read time only: no record is changed. A match in VOIDED_MATCHES is left to
+ *  its own `vd` correction. Counts that carry no id (live rooms, anything before 2026-10-29) are untouched. */
+function dedupeChallenges(grp) {
+  for (const g of Object.keys(grp._mp)) {
+    const dst = grp.games[g];
+    if (!dst) continue;
+    const per = grp._mp[g];
+    let played = 0, won = 0, lost = 0;
+    for (const mid of Object.keys(per)) {
+      const copies = per[mid];
+      if (copies.length < 2 || isVoidedMatch(g, mid)) continue;
+      // Keep the copy that counted the most (a win over a voided win), take out the rest.
+      const order = { w: 0, l: 1, d: 2 };
+      const extra = copies.slice().sort((x, y) => order[x] - order[y]).slice(1);
+      for (const v of extra) { played++; if (v === 'w') won++; else if (v === 'l') lost++; }
+    }
+    if (!played) continue;
+    const less = (b) => {
+      if (!b) return;
+      b.played = Math.max(0, (b.played | 0) - played);
+      b.won = Math.max(0, (b.won | 0) - won);
+      b.lost = Math.max(0, (b.lost | 0) - lost);
+    };
+    less(dst.byDiff.mp);
+    less(dst.total);
+    if (g === 'battleship') less(dst.bs);
+  }
+}
+
 /** Aggregate the players/ map (deviceId -> record) into an UNSORTED list of one-per-person groups.
  *  Each group's `games[g]` is in the CANONICAL stats shape ({ total, byDiff, +grid/cc/es/nb }) so the
  *  same object doubles as a valid `st.games` for the Stats screens. Group also carries roll-ups:
@@ -174,6 +207,20 @@ export function aggregatePlayers(all, corrections) {
       for (const k of Object.keys(bd)) {
         const b = bd[k] || {}; const d = dst.byDiff[k] || (dst.byDiff[k] = { played: 0, won: 0, lost: 0 });
         d.played += b.played | 0; d.won += b.won | 0; d.lost += b.lost | 0;
+      }
+      // Which challenge matches this device's 'mp' counts were (2026-10-29, js/game-stats.js
+      // withChallengeMatch): gathered per person, so a match counted on two of their devices is
+      // taken back out once per extra copy below. An integrity void (correctStats) already took this
+      // record's wins away, so its copies count as played only.
+      if (src.mpIds && typeof src.mpIds === 'object' && !Array.isArray(src.mpIds)) {
+        const ivd = !!(corrections && corrections.integrity && corrections.integrity[id] && corrections.integrity[id][g] === true);
+        const per = (grp._mp || (grp._mp = {}))[g] || (grp._mp[g] = {});
+        for (const mid of Object.keys(src.mpIds)) {
+          let v = src.mpIds[mid];
+          if (v !== 'w' && v !== 'l' && v !== 'd') continue;
+          if (ivd && v === 'w') v = 'd';
+          (per[mid] || (per[mid] = [])).push(v);
+        }
       }
       if (g === 'connect4' && src.grid) {
         if (!dst.grid) dst.grid = emptyGrid();
@@ -669,6 +716,7 @@ export function aggregatePlayers(all, corrections) {
   }
   const list = [];
   for (const grp of groups.values()) {
+    if (grp._mp) { dedupeChallenges(grp); delete grp._mp; }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }
     const nb = grp.games.nutsbolts.nb;

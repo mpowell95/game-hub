@@ -151,6 +151,30 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   ok('a finished row carries no open or deadline', (() => { const r = n('darts', { id: 'x5', with: 'ANABB', over: true, result: 'won', open: 'got', expires: 9 }); return r.open === '' && r.expires === 0; })());
   ok('a Skeeball resignation reads as resigned', n('skeeball', { id: 'x6', with: 'ANABB', over: true, result: 'won', ended: 'resign' }).resigned === true);
 
+  // 7 DAYS, THEN FORFEIT (Matt, 2026-10-29): the shared rule, pure.
+  const L = await import('../js/challenge-life.js');
+  const DAY = 864e5, FROM = Date.UTC(2026, 9, 29);
+  ok('FORFEIT_MS is 7 days, counted from 2026-10-29 at the earliest', L.FORFEIT_MS === 7 * DAY && L.forfeitAt(FROM - 20 * DAY) === FROM + 7 * DAY && L.forfeitAt(FROM + DAY) === FROM + 8 * DAY);
+  ok('a turn begins at the other side\'s last entry; its own mid-turn entries do not restart it',
+    L.turnStartOf([{ by: 'a', at: 5 }, { by: 'b', at: 9 }, { by: 'a', at: 20 }, { by: 'a', at: 30 }], 'a', 1) === 9
+    && L.turnStartOf([], 'b', 7) === 7 && L.turnStartOf([{ by: 'a' }], 'b', 3) === 3 && L.turnStartOf([{ by: 'a' }], 'b', 3, [11]) === 11);
+  const oth = (s) => (s === 'a' ? 'b' : 'a');
+  ok('an answered match 7 days on a turn: that side loses', (() => { const o = L.timeoutOver({ over: null, open: false, turn: 'a', turnAt: FROM, other: oth }, FROM + 7 * DAY); return o && o.winner === 'b' && o.why === 'timeout' && o.at === FROM + 7 * DAY; })());
+  ok('...not a minute before, never while open, never once over',
+    !L.timeoutOver({ open: false, turn: 'a', turnAt: FROM, other: oth }, FROM + 7 * DAY - 6e4)
+    && !L.timeoutOver({ open: true, turn: 'a', turnAt: FROM, other: oth }, FROM + 30 * DAY)
+    && !L.timeoutOver({ over: { winner: 'a' }, open: false, turn: 'a', turnAt: FROM, other: oth }, FROM + 30 * DAY));
+  const late = FROM + 9 * DAY;
+  ok('a row: answered and 7 days on my turn = I lost; on theirs = I won',
+    L.rowTimeout({ open: '', yourTurn: true, turnAt: FROM }, late).result === 'lost' && L.rowTimeout({ open: '', yourTurn: false, updated: FROM }, late).result === 'won');
+  ok('a row never times out while open, called off, over, or from before `open` existed',
+    !L.rowTimeout({ open: 'got', yourTurn: true, turnAt: FROM }, late) && !L.rowTimeout({ open: '', ended: 'cancelled', turnAt: FROM }, late)
+    && !L.rowTimeout({ open: '', over: true, turnAt: FROM }, late) && !L.rowTimeout({ yourTurn: true, turnAt: FROM }, late));
+  ok('a timed-out row reads as done, with its result, and says so', (() => { const r = n('darts', { id: 'x7', with: 'ANABB', over: true, result: 'won', why: 'timeout' }); return r.state === 'done' && r.result === 'won' && r.timedOut && !r.resigned; })());
+  ok('every challenge game spells "Timed out" in both languages', ['./darts/js/strings.js', './cup-pong/js/strings.js', './flick-soccer/js/strings.js', './archery/js/strings.js',
+    './battle-arena/js/strings.js', './battleship/js/strings.js', './chinchon/js/strings.js', './escoba/js/strings.js', './eight-ball/js/strings.js', './hoops4/js/strings.js',
+    './skeeball/js/strings.js', './js/challenges-strings.js'].every((f) => { const s = readFileSync(new URL(f, __ROOT_URL), 'utf8'); return /[Tt]imed out/.test(s) && /[Tt]iempo agotado/.test(s); }));
+
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
   for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js']]) {

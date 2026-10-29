@@ -3026,7 +3026,7 @@ class EscobaUI {
     if (this.MP.isCalledOff(g) || this.MP.lifeOf(g).expired) { if (!this._matchEnded) this._chOpenHome(this._chEndText(g)); return; }
     if (g.log.length < ch.log.length) {
       // Our own play is still on its way. Only a resignation can arrive meanwhile.
-      if (g.over && g.over.why === 'resign') { ch.game = g; this._chEndedWhileOpen(); }
+      if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { ch.game = g; this._chEndedWhileOpen(); }
       return;
     }
     const same = (x, y) => x.by === y.by && x.c === y.c && x.k === y.k;
@@ -3034,7 +3034,8 @@ class EscobaUI {
     ch.game = g;
     ch.log = g.log.slice();
     this._chDeliver();
-    if (g.over && g.over.why === 'resign' && ch.applied >= ch.log.length) this._chEndedWhileOpen();
+    // Resigned, or 7 days on someone's turn (js/challenge-life.js, 2026-10-29).
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && ch.applied >= ch.log.length) this._chEndedWhileOpen();
   }
 
   /** The match ended without the engine deciding it (a resignation) while it was on screen. */
@@ -3084,7 +3085,8 @@ class EscobaUI {
     if (!o) return;
     ch.counted = true;
     const won = o.winner === 'draw' ? null : o.winner === ch.side;
-    try { this.MP.countResult(ch.id, won, o.escobas[ch.side]); } catch (err) { console.error('[escoba] could not count the challenge', err); }
+    const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
+    try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now()); } catch (err) { console.error('[escoba] could not count the challenge', err); }
     try { this.MP.markResultSeen(ch.id); } catch { /* the popup shows once more */ }
   }
 
@@ -3098,7 +3100,7 @@ class EscobaUI {
       .sort((x, y) => (y.win - x.win) || (y.pts - x.pts));
     const loser = o.winner === 'a' ? 'b' : 'a';
     const title = o.winner === 'draw' ? t('ch_draw') : `${who[o.winner].avatar} ${t('wins_headline', { name: who[o.winner].name })}`;
-    const sub = o.why === 'resign' ? t('ch_resigned', { name: who[loser].name })
+    const sub = o.why === 'timeout' ? t('ch_timed_out') : o.why === 'resign' ? t('ch_resigned', { name: who[loser].name })
       : o.why === 'whitewash' ? t('ch_whitewash', { name: who[loser].name }) : '';
     this.el.modal.innerHTML = this.CH.resultHTML({
       title, sub, players,
@@ -3124,7 +3126,7 @@ class EscobaUI {
     const players = [mine, theirs].sort((x, y) => (y.win - x.win) || (y.pts - x.pts));
     const title = r.result === 'draw' ? t('ch_draw')
       : r.result === 'won' ? `${me.emoji} ${t('wins_headline', { name: me.name })}` : `${r.emoji} ${t('wins_headline', { name: r.name })}`;
-    const sub = r.why === 'resign' ? t('ch_resigned', { name: r.result === 'won' ? r.name : me.name })
+    const sub = r.why === 'timeout' ? t('ch_timed_out') : r.why === 'resign' ? t('ch_resigned', { name: r.result === 'won' ? r.name : me.name })
       : r.why === 'whitewash' ? t('ch_whitewash', { name: r.result === 'won' ? r.name : me.name }) : '';
     this._chUnseenIds = ended.map((x) => x.id);
     this.el.modal.innerHTML = this.CH.resultHTML({

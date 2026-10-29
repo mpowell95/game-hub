@@ -415,3 +415,7 @@ at 320px (the team chip, avatar and score are what that space is for).
 A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down in `_mpLeave`; never in vs-computer or two players on one phone). It is also up on the line-up card (`_mpPick`), the first thing the challenged player sees. Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported.
 - **Where it sits and why:** on the top row, left of the Menu button, which is the default spot (`CHAT_PLACE`, `right: 64px`, `top: var(--fs-top)`). Measured with a 59px top inset: 390x844 at [282, 59, 44, 44], 320x568 at [212, 59, 44, 44]; no control overlaps it. Bubbles start at `--fs-top + 122px`, under the scoreboard and the status line, so a line never covers the score or whose turn it is.
 - **Node:** `flicksoccer/chat/<matchId>/<key>`, beside `flicksoccer/games/<id>`. It sends with the STORED side (`mp.side`; `'b'` on the line-up card).
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `withTimeout` also on `readFresh` (the writers' read); `countResult(id, won, finishedAt)`; "Timed out" (`mp_timed_out`).

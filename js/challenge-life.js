@@ -60,3 +60,64 @@ export function rowOpen(r) {
 export function expiresAt(lapse, waiting, since) {
   return lapse && waiting && ms(since) > 0 ? ms(since) + ANSWER_MS : 0;
 }
+
+// --- 7 DAYS, THEN FORFEIT (Matt's decision, 2026-10-29) ---------------------------------------------
+// Expiry above ends only an UNANSWERED challenge. Once it has been answered the only way out used to be
+// Resign, so a player who was losing could simply stop moving and the winner never got the win. Now:
+// once a match is ANSWERED (past its open stage), the player whose turn it is has FORFEIT_MS (7 days)
+// from the moment the turn became theirs. Past that they LOSE and the other side wins, why 'timeout'.
+// Like expiry, NOTHING is written to decide it: every phone works it out from the same stored time (the
+// match's own log, or the index row's `turnAt`), a late move is refused, and each phone counts it once
+// through its game's own ledger like any other result. Matches idle before FORFEIT_FROM get their
+// 7 days counted from FORFEIT_FROM, so nothing changes result before players could react.
+
+/** How long a player may sit on their turn in an answered challenge: 7 days. */
+export const FORFEIT_MS = 7 * 24 * 60 * 60 * 1000;
+/** The rule's first day: a turn that began earlier is timed from here (2026-10-29, UTC midnight). */
+export const FORFEIT_FROM = Date.UTC(2026, 9, 29);
+/** The derived `over.why` and row `why` of a forfeit. */
+export const TIMEOUT = 'timeout';
+/** A result the log did not produce: a resignation or a forfeit. */
+export const isForcedEnd = (why) => why === 'resign' || why === TIMEOUT;
+
+/** PURE. When a turn that began at `turnAt` is forfeited. */
+export function forfeitAt(turnAt) { return Math.max(ms(turnAt), FORFEIT_FROM) + FORFEIT_MS; }
+
+/** PURE. When the current turn of a two-sided log began: the `at` of the last entry made by a side
+ *  NOT on turn (it ended their turn), else `fallback` (the match's `updated`). `ats` is the entries'
+ *  times when the cleaned log does not keep them (Battle Arena, Battleship). */
+export function turnStartOf(log, turn, fallback = 0, ats = null) {
+  const list = Array.isArray(log) ? log : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i];
+    const at = ms(Array.isArray(ats) ? ats[i] : e && e.at);
+    if (e && e.by !== turn && at > 0) return at;
+  }
+  return ms(fallback);
+}
+
+/**
+ * PURE. Has an ANSWERED, unfinished match timed out? `turn` is the side on turn, `turnAt` when that
+ * turn began, `other(turn)` the winner. Returns { winner, why: 'timeout', at } or null.
+ */
+export function timeoutOver({ over, open, turn, turnAt, other }, now = Date.now()) {
+  if (over || open || turn == null || turn === '') return null;
+  const at = forfeitAt(turnAt);
+  if (now < at) return null;
+  return { winner: other(turn), why: TIMEOUT, at };
+}
+
+/**
+ * PURE. A stored index row's forfeit, from the row alone: null, or { result: 'won' | 'lost', at } for
+ * the row's owner. Only an ANSWERED row (written since 2026-10-13, so it carries `open: ''`) can time
+ * out; an older row without `open` is left to the match itself. `turnAt` is written on rows from
+ * 2026-10-29; before that the row's `updated` (when the turn last passed) stands in.
+ */
+export function rowTimeout(r, now = Date.now()) {
+  if (!r || typeof r !== 'object' || r.over || r.result === 'cancelled') return null;
+  if (typeof r.ended === 'string' && r.ended) return null;
+  if (!Object.prototype.hasOwnProperty.call(r, 'open') || r.open) return null;
+  const at = forfeitAt(ms(r.turnAt) || ms(r.updated));
+  if (now < at) return null;
+  return { result: r.yourTurn ? 'lost' : 'won', at };
+}

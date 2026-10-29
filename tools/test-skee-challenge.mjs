@@ -99,8 +99,23 @@ check('the challenged row: their turn, the format and totals carried', !rb.sent 
 const rows = CH.rowsFromIndex({ aaaaaa11: rb, bbbbbb22: { ...ra, updated: 9 }, BAD: { with: B }, dddddd44: { with: 'nope' } });
 check('an index lists valid rows only, your turn first', rows.length === 2 && rows[0].id === 'aaaaaa11');
 const late = Date.now() + 2e6;
-const grp = CH.groupRows(CH.rowsFromIndex({ aaaaaa11: rb, bbbbbb22: ra }), late);
+// UNANSWERED (the challenged player has no score yet): past its 3 days it is EXPIRED, for both people.
+const fresh1 = CH.validateChallenge(withScores(doc({ legs: [leg(), leg(), leg()], stage: 'b', expires: Date.now() + 1e6 }), { 0: 300 }, {}));
+const grp = CH.groupRows(CH.rowsFromIndex({ aaaaaa11: CH.rowFor(fresh1, 'b'), bbbbbb22: CH.rowFor(fresh1, 'a') }), late);
 check('past its 3 days an unanswered challenge is EXPIRED, for both people', grp.toPlay.length === 0 && grp.done.length === 2);
+// ANSWERED (2026-10-29, "7 days, then forfeit"): its 3 days no longer end it for nobody; 7 days on
+// a turn and the player on turn LOSES. The match above (`mid`): the challenged player is on turn.
+const grp2 = CH.groupRows(CH.rowsFromIndex({ aaaaaa11: rb, bbbbbb22: ra }), late);
+check('an ANSWERED challenge past its 3 days is still live (7 days now)', grp2.toPlay.length === 1 && grp2.sent.length === 1 && grp2.done.length === 0);
+const turnAt = Date.now() + 1e6 - CH.EXPIRE_MS;
+const after7 = Math.max(turnAt, Date.UTC(2026, 9, 29)) + 7 * 864e5 + 1;
+const tr = CH.rowsFromIndex({ aaaaaa11: rb, bbbbbb22: ra }, after7);
+const trB = tr.find((r) => r.id === 'aaaaaa11'), trA = tr.find((r) => r.id === 'bbbbbb22');
+check('7 days on their turn: the idle player LOST, the other WON, why timeout', trB.over && trB.result === 'lost' && trA.over && trA.result === 'won' && trB.why === 'timeout');
+const gm = CH.withTimeout(CH.validateChallenge(withScores(doc({ legs: [leg(), leg(), leg()], stage: 'b', expires: Date.now() + 1e6 }), { 0: 300, 1: 200, 2: 100 }, { 0: 350 })), after7);
+check('...the match itself says the same (winner a, timeout), so a late score is refused', gm.over && gm.over.winner === 'a' && gm.over.why === 'timeout' && gm.stage === 'over');
+const old = CH.validateChallenge(withScores(doc({ legs: [leg(), leg(), leg()], stage: 'b', expires: Date.UTC(2026, 9, 27) }), { 0: 300 }, { 0: 350 }));
+check('an answered challenge that expired BEFORE 2026-10-29 stays expired (nothing changes result)', CH.isExpired(old, after7) && !CH.isTimedOut(old, after7));
 check('the challenger\'s own unfinished games never expire (no clock until delivery)', !CH.isExpired({ over: false, expires: 0 }, late));
 
 // --- one attempt, and leaving counts ---------------------------------------------------------------

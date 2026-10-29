@@ -156,3 +156,65 @@ best). Each needs a rules branch, the backup, a writer verified by re-read, and 
 from real logs before anything voids (rule 5). Also possible: a server replay of every challenge log
 (Pool, Flick Soccer, Archery, Chinchón, Escoba, Battle Arena are deterministic), and per-move server
 timestamps (every `at` today is the phone's clock).
+
+## Holes closed 2026-10-29: online challenges
+
+**Hole 1: one online win counted once per phone STORAGE, not once per player.** Every challenge game
+(Darts, Cup Pong, Flick Soccer, Pool, Battleship, Connect 4 Hoops, Chinchón, Escoba, Archery, Battle
+Arena) counts a finished match through a per-storage `counted` ledger, called on every launcher paint.
+The same player code in Safari and in the iPhone Home Screen app (two storages), or on two phones,
+counted the same match on each, and `js/players-agg.js` sums a person's devices: each win counted 2+
+times. A storage with no ledger (fresh install, cleared site data) re-counted the player's whole
+finished history.
+- **Fix, part 1 (no double count)**: a challenge count now notes WHICH match it was, in the same write
+  as the count (`js/game-stats.js` `withChallengeMatch`: `games.<id>.mpIds[<matchId>] = 'w' | 'l' | 'd'`,
+  additive, never removed). `js/players-agg.js` (the phone's and the server's board, `functions/boards.js`)
+  takes every extra copy of one id across ONE person's devices back out of `byDiff.mp` and `total`
+  (Battleship's `bs` too), exactly as recorded (won, lost, or played only). Read time only; raw records
+  untouched; the ids never ride into the board package. A match voided in `VOIDED_MATCHES` is left to its
+  own `vd` correction; an integrity-voided device's copy counts as played only.
+- **Fix, part 2 (no re-count of history)**: the first time a storage with no ledger asks, it stamps
+  "counting since now" (`<ledgerKey>.since`, `countingSince` / `mayCountChallenge`) and counts only
+  matches that FINISHED after it (the index row's `updated`, or the match's `over.at` on the game
+  screen; 10 minutes' grace for two phones' clocks). A storage that already had a ledger never gets a
+  stamp and behaves as before.
+- **Mixed buckets**: Hoops, Chinchón, Escoba, Battleship and Battle Arena also file LIVE-ROOM games in
+  `'mp'`; those carry no id and count exactly as before.
+- **What an honest player sees**: nothing changes on screen. A match is counted once, by whichever
+  storage was alive when it finished. Counts from before 2026-10-29 carry no id and cannot be
+  de-duplicated (left as they are). One edge: a first-ever challenge in a game, finished before
+  2026-10-29 and never opened since on any storage, is not counted by a storage that first opens
+  after the deploy (it had nothing counted to lose either way; the old build, still loaded on that
+  first open, usually counts it first).
+- Proof: `tools/test-mp-dedupe.mjs` (two storages, one match, counted once on the merged board, for all
+  ten games; a fresh storage does not re-count; records without ids aggregate as before; a queued older
+  result never takes the id; a refused count notes none); `tools/test-boards.mjs`, `tools/players-agg.test.mjs`.
+
+**Hole 2: a losing player could stall a challenge forever.** Expiry ended only an UNANSWERED challenge;
+after the first move only Resign ended a match, so the player behind could stop moving and the winner
+never got the win. **Matt's decision: "7 days, then forfeit".**
+- **Fix**: once a match is answered (the receiver has moved, or it is game 2+ of a series), the player
+  whose turn it is has `FORFEIT_MS` (7 days) from when the turn became theirs (`js/challenge-life.js`
+  `turnStartOf`: the time of the other side's last move; a move made mid-turn does not restart the
+  clock, so nobody can stall one dart or one shot at a time). Past it they LOSE, why `'timeout'`.
+  Derived on every read like expiry (each game's `withTimeout` in `readGame` / `watchGame`, `rowTimeout`
+  on index rows, which now carry `turnAt`): nothing is written to decide it, a late move is refused
+  (`already-over`), Resign cannot change it, each phone counts it once through its own ledger. Turns that
+  began before 2026-10-29 are timed from 2026-10-29 (`FORFEIT_FROM`), so nothing changes result before
+  players could react. The 24-72 h reminder push is unchanged.
+- **Pool's Cutthroat (3 players)**: the idle player loses, and the winner is decided exactly as if they
+  had resigned (`resignWinner`: of the other two, the one with most of their own balls on the table,
+  ties to whoever shoots next), on the table as it was when the turn began; every row carries `tw`
+  (would I win a timeout) so the lists agree with the match. A Cutthroat row from before 2026-10-29 has
+  no `tw` and is left to the match itself (opening it decides it).
+- **Skeeball challenges**: every turn already had 3 days, after which the whole challenge EXPIRED for
+  nobody, even when answered. Now an answered challenge whose 3 days ran out on or after 2026-10-29 does
+  not expire: the player on turn has 7 days from the hand-over, then loses. One that expired before
+  2026-10-29 stays expired. Unanswered ones still expire after 3 days.
+- **What an honest player sees**: nothing for 7 days. Then the match shows as finished with a result and
+  the short word "Timed out" / "Tiempo agotado" (every game's lists and history, the Game Over popup, the
+  Multiplayer screen's Records).
+- Proof: `tools/test-challenges.mjs` (the shared rule, pure), `tools/test-darts-mp.mjs` (a whole match:
+  the clock, a mid-turn dart, the timeout on both phones, a late dart refused, Resign refused, counted
+  once, an unanswered challenge still expires), `tools/test-eightball-mp.mjs` (Cutthroat),
+  `tools/test-skee-challenge.mjs`, every game's `tools/test-*-mp.mjs`.

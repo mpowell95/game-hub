@@ -229,7 +229,7 @@ async function history(game, MP) {
   const { opponents, finished } = MP.recordsFrom(rows, MP.myCode());
   const list = body.querySelector('.cp-mp-list');
   if (!finished.length) { list.innerHTML = `<p class="cp-mp-note">${t('noHistory')}</p>`; return; }
-  const word = (r) => (r.result === 'won' ? (r.resigned === 'them' ? t('wonTheyQuit') : t('won'))
+  const word = (r) => (r.timedOut ? t('timedOut') : r.result === 'won' ? (r.resigned === 'them' ? t('wonTheyQuit') : t('won'))
     : r.result === 'lost' ? (r.resigned === 'me' ? t('youQuit') : t('lost')) : t('finished'));
   const mark = (r) => (r.result === 'won' ? '✓' : r.result === 'lost' ? '✗' : '=');
   list.innerHTML = `<h2 class="cp-mp-h">${t('records')}</h2>` + opponents.map((o) => `
@@ -260,7 +260,7 @@ export function showUnseen(game, MP, rows) {
       <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
       <p class="cp-card-kicker">${t('gameOver')}</p>
       <h2 class="cp-card-title">${r.result === 'won' ? t('youWin') : t('youLose')}</h2>
-      <p class="cp-card-line">${esc(r.emoji)} ${esc(t(r.result === 'won' ? 'youWonVs' : 'youLostVs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(r.result === 'won' ? t('wonTheyQuit') : t('youQuit'))}` : ''}</p>
+      <p class="cp-card-line">${esc(r.emoji)} ${esc(t(r.result === 'won' ? 'youWonVs' : 'youLostVs', { name: r.name }))}${r.why === 'timeout' ? ` · ${esc(t('timedOut'))}` : r.why === 'resign' ? ` · ${esc(r.result === 'won' ? t('wonTheyQuit') : t('youQuit'))}` : ''}</p>
       ${ended.length > 1 ? `<p class="cp-card-line">${t('moreN', { n: ended.length - 1 })}</p>` : ''}
       <div class="gh-modal__actions">
         <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="ok">${t('ok')}</button>

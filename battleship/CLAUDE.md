@@ -415,3 +415,7 @@ Rules that came out of it (all in force):
   (`this._armed`, `_armedBtn`), not the button, since the battle re-renders. Armed pulse is a glow.
 - Hover outline is `@media (hover: hover)` only. Tap targets 44px (invisible `::after` ring).
 - `.bs-actions` has a **fixed 44px height** (FIRE otherwise resizes both boards when aiming).
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Cleaned shots drop `at`, so `validateGame` keeps `ats`; bonus volleys stay inside one turn; `countResult(id, won, extras, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.

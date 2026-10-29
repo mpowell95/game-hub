@@ -333,8 +333,9 @@ function resultRowHTML(r, gameName, { showName = true } = {}) {
       : r.state === 'expired' ? (r.game === 'skeeball' ? 'cx_res_expired' : `cx_res_expired_${r.sent ? 'them' : 'me'}`)
         : '';
   const mark = r.result === 'won' ? '✓' : r.result === 'lost' ? '✗' : r.result === 'draw' ? '=' : '·';
-  const quit = r.resigned && (r.result === 'won' || r.result === 'lost')
-    ? t(r.result === 'won' ? 'cx_quit_them' : 'cx_quit_me') : '';
+  const quit = r.timedOut && (r.result === 'won' || r.result === 'lost') ? t('cx_timed_out')
+    : r.resigned && (r.result === 'won' || r.result === 'lost')
+      ? t(r.result === 'won' ? 'cx_quit_them' : 'cx_quit_me') : '';
   const main = showName ? `<span class="cx-name-emoji" aria-hidden="true">${esc(r.emoji)}</span>${esc(name)}` : esc(gameName(r.game));
   const small = [ended ? t(ended, { name }) : '', showName ? gameName(r.game) : '', quit].filter(Boolean).join(' · ');
   return `<button type="button" class="cx-lrow" data-game="${esc(r.game)}" data-id="${esc(r.id)}">

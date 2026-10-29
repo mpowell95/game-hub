@@ -29,9 +29,9 @@ import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { replayResult, sameResult } from './replay.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 
 export const OUTBOX_KEY = 'gamehub.hoops4.outbox.v1';
 export const MAX_OUTBOX = 20;
@@ -403,12 +403,25 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
  *  open); waiting = open and it is the receiver's turn; expires = when a waiting challenge lapses
  *  (0 = never: a match made before 2026-10-13, or one not yet delivered). */
 export function lifeOf(game, now = Date.now()) {
-  if (!game || game.over || (game.seriesNo || 1) > 1) return { open: false, waiting: false, expires: 0, expired: false };
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
-  const open = !game.moves.some((m) => m.by === to);
+  // A later game of a series was already agreed to, so it is never open (but it can time out).
+  const open = (game.seriesNo || 1) > 1 ? false : !game.moves.some((m) => m.by === to);
   const waiting = open && game.turn === to;
   const expires = expiresAt(game.lapse, waiting, game.updated);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+  // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
+  // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
+  const turnAt = open ? 0 : turnStartOf(game.moves, game.turn, game.updated);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
+}
+/** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
+ *  every read (nothing is written), so both phones agree and a late shot is refused. */
+export function withTimeout(game, now = Date.now()) {
+  if (!game || game.over) return game;
+  const life = lifeOf(game, now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other: (s) => (s === 'a' ? 'b' : 'a') }, now);
+  if (over) game.over = over;
+  return game;
 }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
@@ -538,16 +551,26 @@ export function markCounted(id) {
 export function rowsToCount(rows, ledger) {
   if (!Array.isArray(rows)) return [];
   return rows.filter((r) => r && r.id && r.over && RESULTS.includes(r.result)
-    && ms(r.updated) >= LEDGER_SINCE && !(ledger && ledger.has(r.id)));
+    && ms(r.updated) >= LEDGER_SINCE && !(ledger && ledger.has(r.id)) && mayCountChallenge(LEDGER_KEY, r.updated));
+}
+
+/** Count one finished match on this device, once: false when it already was (or when this storage
+ *  started counting after it finished, 2026-10-29, js/game-stats.js mayCountChallenge). The match id
+ *  rides with the count, so a person's two devices count it once (js/players-agg.js). */
+export function countFinished(id, won, finishedAt = Date.now()) {
+  if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
+  if (!markCounted(id)) return false;
+  try { withChallengeMatch('hoops4', id, () => recordResult('hoops4', 'mp', !!won)); } catch (err) { console.error('[hoops4] recordResult failed', err); }
+  return true;
 }
 
 /** Count every finished match this device has not counted yet. A draw is recorded as not won. */
 export function recordFinished(rows) {
+  // Start this storage's "counting since" clock at its FIRST launcher paint, not at its first finished
+  // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
+  countingSince(LEDGER_KEY);
   const todo = rowsToCount(rows, readLedger());
-  for (const r of todo) {
-    if (!markCounted(r.id)) continue;
-    try { recordResult('hoops4', 'mp', r.result === 'won'); } catch (err) { console.error('[hoops4] recordResult failed', err); }
-  }
+  for (const r of todo) countFinished(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -598,7 +621,7 @@ export async function watchGame(id, cb) {
     const stop = api.onValue(api.ref(db, `hoops/games/${id}`), (snap) => {
       try {
         const g = validateGame(snap && snap.exists() ? snap.val() : null);
-        if (g) { g.id = id; cb(g); }
+        if (g) { g.id = id; cb(withTimeout(g)); }
       } catch (err) { console.warn('[hoops4] match watch callback', err); }
     }, () => { /* denied or dropped: the board keeps what it has */ });
     return () => { try { stop(); } catch { /* already detached */ } };
@@ -612,14 +635,16 @@ function rowsFromIndex(val, now = Date.now()) {
     const r = val[id] || {};
     // Cancelled, declined or expired (js/challenge-life.js): finished, with no result for anybody.
     const ended = rowEnding(r, now);
+    // Answered, and 7 days on one player's turn (js/challenge-life.js): they lost, why 'timeout'.
+    const late = ended ? null : rowTimeout(r, now);
     return {
       id,
       with: asCode(r.with),
       name: String(r.name || ''),
       emoji: String(r.emoji || '\u{1F642}'),
-      updated: ms(r.updated),
-      yourTurn: !ended && !!r.yourTurn,
-      over: !!r.over || !!ended,
+      updated: late ? late.at : ms(r.updated),
+      yourTurn: !ended && !late && !!r.yourTurn,
+      over: !!r.over || !!ended || !!late,
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       oneShot: !!r.oneShot,
       series: Math.max(1, ms(r.series) || 1),
@@ -627,8 +652,8 @@ function rowsFromIndex(val, now = Date.now()) {
       seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id,
       // OPTIONAL, and ABSENT on every finished row written before the history screen existed
       // (2026-09-22). `recordsFrom` works out an old row's result from its match instead.
-      result: !ended && RESULTS.includes(r.result) ? r.result : null,
-      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with));
 }
@@ -681,7 +706,7 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[hoops4] hoops/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return game;
+    return withTimeout(game);
   } catch (err) {
     console.warn('[hoops4] could not read that game', err);
     return null;
@@ -759,6 +784,7 @@ function rowFor(game, side) {
     // Written on EVERY row write, so an answered challenge clears what its unanswered rows said.
     open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
     expires: life.expires,
+    turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),           // this row's owner sent the challenge (2026-10-13)
     oneShot: !!game.oneShot,
@@ -1026,6 +1052,7 @@ export async function resignGame(id) {
     if (!fresh) return { ok: false, reason: 'not-found', retryable: true };
     const side = sideOf(fresh, me);
     if (!side) return { ok: false, reason: 'not-your-game', retryable: false };
+    if (fresh.over && fresh.over.why === TIMEOUT) return { ok: false, reason: 'already-over', retryable: false };   // timed out: already decided
     if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
     // A challenge its receiver has not answered is CALLED OFF instead (2026-10-13): nobody is handed
     // a win for a match that was never played. The result says { cancelled: true }.
@@ -1161,7 +1188,7 @@ export function recordsFrom(rows, code) {
     }
     const resigned = why === 'resign' && (result === 'won' || result === 'lost')
       ? (result === 'won' ? 'them' : 'me') : null;
-    finished.push({ ...r, with: them, result: result || null, resigned, updated: ms(r.updated) });
+    finished.push({ ...r, with: them, result: result || null, resigned, timedOut: why === TIMEOUT, updated: ms(r.updated) });
   }
   finished.sort((x, y) => y.updated - x.updated);
   const by = new Map();

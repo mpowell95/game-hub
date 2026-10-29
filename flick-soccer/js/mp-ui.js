@@ -251,7 +251,7 @@ async function history(ui, MP) {
   const { opponents, finished } = MP.recordsFrom(rows, MP.myCode());
   const list = body.querySelector('.fs-mp-list');
   if (!finished.length) { list.innerHTML = `<p class="fs-mp-note">${esc(t('mp_no_history'))}</p>`; return; }
-  const word = (r) => (r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
+  const word = (r) => (r.timedOut ? t('mp_timed_out') : r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
   // Win and loss are told apart by a mark (check, cross), never by colour alone.
   const mark = (r) => (r.result === 'won' ? '✓' : '✗');
   const opp = opponents.slice(0, 3), fin = finished.slice(0, 10);
@@ -285,7 +285,7 @@ export function showUnseen(ui, MP, rows) {
       <button type="button" class="fs-x" data-mp="close" aria-label="${esc(t('aria_close'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></button>
       <p class="fs-res-ava" aria-hidden="true">${esc(r.emoji)}</p>
       <h2 class="fs-h2">${esc(won ? t('win_you') : t('lose_you'))}</h2>
-      <p class="fs-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ''}</p>
+      <p class="fs-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name }))}${r.why === 'timeout' ? ` · ${esc(t('mp_timed_out'))}` : r.why === 'resign' ? ` · ${esc(won ? t('mp_they_resigned', { name: r.name }) : t('mp_you_resigned'))}` : ''}</p>
       ${ended.length > 1 ? `<p class="fs-res-line">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;

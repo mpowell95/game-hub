@@ -203,3 +203,7 @@ The sixth challenge game. Darts' design, copied (`darts/CLAUDE.md`, "Online chal
 
 Open items: see the root TODO.md, "Archery".
 - No sound, and none is ever to be added unless Matt asks (root `CLAUDE.md`).
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `countResult(id, won, finishedAt)`; "Timed out" (`mp_timed_out`).

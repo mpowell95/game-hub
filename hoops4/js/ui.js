@@ -1658,7 +1658,8 @@ class Hoops4 {
           const g = this.mp.game || {};
           const won = g.over && (g.over.winner === 'a' || g.over.winner === 'b')
             ? g.over.winner === this.mp.side : m.winner === this.myPlayer;
-          if (this.mp.MP.markCounted(this.mp.id)) recordResult('hoops4', 'mp', won);
+          // Its finish time keeps a fresh storage honest; the id rides with the count (2026-10-29).
+          this.mp.MP.countFinished(this.mp.id, won, (g.over && g.over.at) || Date.now());
           // Seen right here, so the away-from-the-board Game Over popup never repeats it.
           try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
         } else if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);

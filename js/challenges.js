@@ -204,6 +204,8 @@ export function normalizeRow(game, r, expired = false) {
     expires: state === 'yours' || state === 'theirs' ? ms(r.expires) : 0,
     result: state === 'done' && RESULTS.includes(r.result) ? r.result : null,
     resigned: state === 'done' && (r.why === 'resign' || r.ended === 'resign'),
+    // 7 days on their turn in an answered match (2026-10-29, js/challenge-life.js rowTimeout).
+    timedOut: state === 'done' && r.why === 'timeout',
     info: {
       series: ms(r.series) > 1 ? ms(r.series) : 0,
       seriesNo: Math.max(1, ms(r.seriesNo) || 1),

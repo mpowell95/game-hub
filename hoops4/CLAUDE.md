@@ -414,3 +414,7 @@ Open items: see the root TODO.md, "Connect 4 Hoops".
   the backup script's list, `mp.js` has no delete, `pushMove` never calls `createGame`), the chat field
   (pre-chat document opens identically; garbage dropped), history maths. The Firebase write path and
   `js/mp-ui.js` are NOT covered, and the suite header says so.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Game 2+ of a series can time out; counting goes through `countFinished(id, won, finishedAt)` (ui.js `finish()` and `recordFinished`); history word "Timed out" (`histTimedOut`). Live-room `mp` counts carry no id.

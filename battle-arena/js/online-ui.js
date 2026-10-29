@@ -160,7 +160,7 @@ function showUnseen(ui, rows) {
   el.innerHTML = `<div class="gh-modal ba-pause" role="dialog" aria-modal="true" aria-label="${esc(t('teamWins', { name: winner }))}">
       <button type="button" class="gh-modal__close" data-role="ok" aria-label="${esc(t('close'))}">&times;</button>
       <p class="ba-ol-big">${esc(r.emoji)} ${esc(t('teamWins', { name: winner }))}</p>
-      ${r.why === 'resign' ? `<p class="ba-ol-note">${esc(t('resigned', { name: r.result === 'won' ? (r.name || '?') : myName() }))}</p>` : ''}
+      ${r.why === 'timeout' ? `<p class="ba-ol-note">${esc(t('timedOut'))}</p>` : r.why === 'resign' ? `<p class="ba-ol-note">${esc(t('resigned', { name: r.result === 'won' ? (r.name || '?') : myName() }))}</p>` : ''}
       <div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="ok">${esc(t('ok'))}</button></div>
     </div>`;
   ui.root.appendChild(el);
@@ -258,7 +258,8 @@ export async function openChallenge(ui, id, given = null) {
   }
   MP.markShown(id, game.log.length);
   ui.startOnline(link, canon, queue);
-  if (game.over && game.over.why === 'resign') ui.forceEnd(seatOfSide(game.over.winner));
+  // Resigned, or 7 days on someone's turn (js/challenge-life.js): a result the log did not produce.
+  if (game.over && (game.over.why === 'resign' || game.over.why === 'timeout')) ui.forceEnd(seatOfSide(game.over.winner), game.over.why);
   link.watch();
   if (link.pending) link.flush();
 }
@@ -304,7 +305,7 @@ class ChallengeLink {
       }
       MP.markShown(this.id, g.log.length);
     }
-    if (g.over && g.over.why === 'resign' && g.log.length <= this.known) this.ui.forceEnd(seatOfSide(g.over.winner));
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && g.log.length <= this.known) this.ui.forceEnd(seatOfSide(g.over.winner), g.over.why);
   }
 
   /** Our move (stored-frame entry): sent at once, one at a time, kept in the outbox until it lands. */
@@ -359,7 +360,8 @@ class ChallengeLink {
   }
 
   finish(canon, won) {
-    MP.countResult(this.id, won);
+    const ov = this.game && this.game.over;
+    MP.countResult(this.id, won, (ov && ov.at) || Date.now());   // the finish time keeps a fresh storage honest
     MP.markResultSeen(this.id);
   }
 

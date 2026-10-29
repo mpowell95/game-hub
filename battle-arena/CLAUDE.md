@@ -139,3 +139,7 @@ recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see
 chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
 for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
 matches use fixed seeds. Seed 1041's opening used to KO the receiver; it now checks the receiver keeps 40+ HP, on its turn.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Cleaned moves drop `at`, so `validateGame` keeps `ats` for the turn clock; `forceEnd(winner, 'timeout')`; "Timed out" (`timedOut`). Live-room `mp` counts carry no id.

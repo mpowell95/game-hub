@@ -167,7 +167,7 @@ export function showUnseen(ui, MP, rows) {
   const draw = r.result === 'draw';
   const winner = r.result === 'won' ? me : r.name || '?';
   const title = draw ? t('ch_draw') : t('match_title_plain', { winner });
-  const why = r.why === 'resign' ? t('ch_resigned', { name: r.result === 'won' ? (r.name || '?') : me }) : '';
+  const why = r.why === 'timeout' ? t('ch_timed_out') : r.why === 'resign' ? t('ch_resigned', { name: r.result === 'won' ? (r.name || '?') : me }) : '';
   const el = document.createElement('div');
   el.className = 'cc-modal cc-ch-unseen';
   el.innerHTML = `<div class="cc-scrim" data-ch="ok"></div><div class="cc-sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">

@@ -250,3 +250,7 @@ JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs No
 
 - **The length screen chooses the deck too** (2026-10-27): Spanish / American on the challenge length screen
   (`mp-ui.js`, `ch-deck`, the setup card's own `deckMode`). Before, the deck came silently from setup.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `countResult(id, won, escobas, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.

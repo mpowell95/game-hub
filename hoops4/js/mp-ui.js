@@ -495,7 +495,7 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
         <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name || o.code)}</span>
         <span class="h4-mp-state h4-hist-line">${esc(t('histLine', { w: o.won, l: o.lost, d: o.draw }))}</span>
       </div>`;
-    const word = (r) => (r.resigned === 'me' ? t('histResigned')
+    const word = (r) => (r.timedOut ? t('histTimedOut') : r.resigned === 'me' ? t('histResigned')
       : r.resigned === 'them' ? t('histTheyResigned')
         : r.result === 'won' ? t('histWon') : r.result === 'lost' ? t('histLost')
           : r.result === 'draw' ? t('histDraw') : t('histUnknown'));

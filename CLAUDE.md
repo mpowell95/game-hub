@@ -301,7 +301,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/boards10.js`, `way-out/js/boards11.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
-(`players-agg.test`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
+(`players-agg.test`, `test-mp-dedupe`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
 `test-stats-corrections`, `test-rate-guard`, `test-activity`, `test-admin-config`); cross-game
 (`test-game-conventions`, `check-no-scroll`, `test-mp-lockstep`); per-feature `test-*.mjs`.
 
@@ -623,6 +623,14 @@ verified by re-read, deleting nothing.
   `open`, `expires`, `sent`.
 - The "Challenge cancelled." line stays up 6 s across repaints (`FLASH_MS`, 2026-10-20): the cancel's own
   index write repainted the list and wiped it, so Matt saw no confirmation.
+- **7 days, then forfeit (Matt, 2026-10-29)**: once answered, the player on turn has `FORFEIT_MS` (7 days) from
+  when the turn became theirs (`turnStartOf`; a mid-turn move does not restart it), then LOSES (`why: 'timeout'`,
+  "Timed out"). Derived like expiry (`withTimeout` on every match read, `rowTimeout` + the row's `turnAt`), never
+  written; turns begun earlier count from 2026-10-29. Pool's Cutthroat: winner as if the idle player resigned (rows
+  carry `tw`). Skeeball: an answered challenge no longer expires at 3 days. `docs/INTEGRITY-CHECKS-SPEC.md`.
+- **One challenge result per PERSON (2026-10-29)**: a challenge count notes its match id (`withChallengeMatch`,
+  `games.<id>.mpIds`) and `js/players-agg.js` takes every extra copy across a person's devices out of `mp`; a storage
+  with no ledger counts only matches finished after it started (`mayCountChallenge`). `tools/test-mp-dedupe.mjs`.
 - Tests: `tools/test-challenges.mjs` plus each game's `test-*-mp.mjs` / `tools/test-skee-challenge.mjs`.
 
 ## Skeeball challenges (2026-09-24)
