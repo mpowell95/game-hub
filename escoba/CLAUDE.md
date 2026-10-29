@@ -250,3 +250,7 @@ JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs No
 
 - **The length screen chooses the deck too** (2026-10-27): Spanish / American on the challenge length screen
   (`mp-ui.js`, `ch-deck`, the setup card's own `deckMode`). Before, the deck came silently from setup.
+
+## The computer's dice are seeded (2026-10-29)
+
+`aiSeed` (per match, in `escoba-save`): Easy's random play comes from `seededRand(seed, view)`, so quit and resume replays the same play. Not used online or in challenges. `tools/test-ai-resume-seeds.mjs`.

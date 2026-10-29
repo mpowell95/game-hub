@@ -301,3 +301,7 @@ in the MP save.
 stand-in (only `js/firebase-boot.js` swapped); **real Firebase on real phones is not yet proven.**
 Related suites: `tools/players-agg.test.mjs`, `tools/test-rate-guard.mjs`, `tools/test-admin-config.mjs`,
 `tools/test-leaderboard-rank.mjs`, `tools/test-stats-corrections.mjs`.
+
+## Shoving was re-measured at every skill (2026-10-29)
+
+All-in-every-hand against 1, 2, 4 and 7 Easy, Medium or Hard computers (3000 tournaments each): wins 45% heads-up and under fair share everywhere, ROI -22% to -47% at the game's own prizes. Easy and Medium are NOT softer to it than Hard, so no cap was added. `test.js` fails if any skill at 2, 4 or 7 computers is beaten by it. Numbers: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29".

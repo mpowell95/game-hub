@@ -1035,13 +1035,17 @@ class MinesweeperUI {
 
   /** The face is the classic "new game" button, and it used to throw a board away with no
    *  question (Matt, 2026-10-11: "I was doing well on a medium round and lost everything"). A
-   *  board that has been started now asks first, with the clock paused while it asks; an
-   *  untouched or finished board still restarts at once, because there is nothing to lose. */
+   *  board that has been started now asks first; an untouched or finished board still restarts at
+   *  once, because there is nothing to lose.
+   *
+   *  THE CLOCK KEEPS RUNNING WHILE IT ASKS (2026-10-29). The board stays visible under the dim, so a
+   *  paused clock was free study time: look, tap Keep playing, then play fast. The ask costs the
+   *  seconds it takes, like any other pause to think. (Leaving to the menu or How to play hides the
+   *  board entirely, so those still bank and stop the clock.) */
   _askNewGame() {
     const g = this.game;
     if (!g || !g.generated || g.dead || g.won) { this.newGame(); return; }
     if (this.root.querySelector('.ms-ov')) return;
-    this._stopTimer();
     this._persist();
     const ov = document.createElement('div');
     ov.className = 'ms-ov';

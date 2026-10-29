@@ -201,6 +201,28 @@ function planHard(game, playerIndex, canPlay, rng, memory) {
   return best || { card: canPlay[0] };
 }
 
+/** A random stream that is a pure function of (match seed, a string describing the position): the
+ *  same position in the same match always draws the same numbers, so killing the app before the
+ *  computer plays and resuming cannot re-roll its choice (2026-10-29). A new match has a new seed. */
+export function seededRng(seed, key) {
+  let h = 2166136261 ^ (Number(seed) >>> 0);
+  const k = String(key);
+  for (let i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The position key for one computer decision: its hand, the top of the pile and the draw pile size. */
+export function positionKey(game, playerIndex) {
+  const top = game.discard[game.discard.length - 1];
+  return `${playerIndex}|${game.players[playerIndex].hand.map((c) => c.id).join(',')}|${top ? top.id : ''}|${game.deck.length}|${game.pendingDraw || 0}`;
+}
+
 /** @param memory optional per-game side channel: `{ byPlayer: { [seat]: { [color]: true } } }`
  *  of colours each seat has forced with a wild. Read-only, Hard-only, and purely a tie-break
  *  in wild-colour selection; omit it entirely and play is unchanged apart from that tweak. */

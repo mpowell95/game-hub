@@ -26,6 +26,18 @@ export function remainingMs(startedAt, timerMinutes, now = Date.now()) {
   return Math.max(0, roundEndsAt(startedAt, timerMinutes) - now);
 }
 
+/** Milliseconds of the round still to play at the moment this phone first sees it (2026-10-29).
+ *  `wallNow` is read from the phone's wall clock ONCE; the caller adds it to `performance.now()` and
+ *  from then on counts the monotonic clock only. Never more than the whole round, so a phone whose
+ *  clock is set back cannot gain time, and never more than `capMs` (the last tick this phone saved
+ *  for the same round) so a kill-and-rejoin with the clock set back cannot either. */
+export function entryRemainingMs(startedAt, timerMinutes, wallNow, capMs = null) {
+  const dur = Math.round((Number(timerMinutes) || 0) * 60000);
+  let r = Math.min(dur, roundEndsAt(startedAt, timerMinutes) - wallNow);
+  if (Number.isFinite(capMs)) r = Math.min(r, capMs);
+  return Math.max(0, r);
+}
+
 /** true/false/null (won/lost/tied) for MY score against the OPPONENT's score.
  *  Exactly the same three-way comparison solo play already uses in
  *  ui.js#finish() (`humanScore === aiScore ? null : humanScore > aiScore`),
@@ -50,4 +62,4 @@ export function bothResultsIn(hostResult, guestResult, n) {
   return !!(hostResult && guestResult && hostResult.n === n && guestResult.n === n);
 }
 
-export default { roundEndsAt, remainingMs, wonFor, bothResultsIn };
+export default { roundEndsAt, remainingMs, entryRemainingMs, wonFor, bothResultsIn };

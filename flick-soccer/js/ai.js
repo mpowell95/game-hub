@@ -113,6 +113,23 @@ function judge(b, seat, lv) {
   return s;
 }
 
+/** A random stream that is a pure function of (match seed, the position): the same position in the
+ *  same match always plans the same shot, so killing the app before the computer shoots and resuming
+ *  cannot re-roll its plan (2026-10-29). A new match has a new seed. */
+export function seededRng(seed, bodies, seat) {
+  let h = 2166136261 ^ (Number(seed) >>> 0);
+  let key = String(seat) + '|';
+  for (const b of bodies) key += Math.round(b.x * 10) + ',' + Math.round(b.y * 10) + ';';
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Generator: yields between candidates, returns the chosen { i, dx, dy, power } (noise applied). */
 export function* planShot(bodies, seat, diff, rng = Math.random) {
   const lv = LEVEL[diff] || LEVEL.medium;

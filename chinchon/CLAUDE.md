@@ -265,3 +265,7 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
   `chinchon` rules branch are live (rules 2026-10-18, function by the workflow 2026-10-21).
 - Tests: `node tools/test-chinchon-mp.mjs`; `tools/check-no-scroll.mjs chinchon` measures the
   challenge home. **Not played on two real phones yet.**
+
+## A solo draw is saved at once (2026-10-29)
+
+The `'draw'` event writes the solo save (`snapshot({ midTurn: true })`, `_turnDrawn` in `game.js`); resume re-enters THAT turn at the discard (`_resumeAfterDraw`), with the drawn card in hand and no second draw. Plain `snapshot()` (MP, turn ends) is unchanged. `test.js` M2d.

@@ -316,6 +316,36 @@ ok('newGame keeps the buy-in on the public config', newGame(seat(3), { buyin: 50
   for (let g = 0; g < N; g++) { if (playOne(false)) fair++; if (playOne(true)) rigged++; }
   ok('all in every hand no longer beats a Hard computer (heads-up, under 62%)', fair / N < 0.62, { won: fair, of: N });
   ok('rigged: all in every hand loses to a Hard computer (under 20%)', rigged / N < 0.2, { won: rigged, of: N });
+  // 2026-10-29: EVERY skill, every table size. Does all-in-every-hand make money against Easy (1),
+  // Medium (2) or Hard (3) at 3, 5 and 8 seats? The prize is what the game pays (payout(): heads-up
+  // 1.5x, otherwise 65/35 of the pot), so ROI below is per 1 buy-in; > 0 would be the exploit.
+  // Measured (3000 games each, shover vs bots): win rate 45%/45%/46% heads-up and 7-10% at 8 seats,
+  // ROI -22% to -47%: nobody's shove beats the field, Easy and Medium are NOT softer to it than Hard.
+  {
+    const shoveGame = (skill, bots) => {
+      const s = newGame([{ name: 'hero', bot: 0 }, ...Array.from({ length: bots }, (_, i) => ({ name: 'cpu' + i, bot: skill }))], { chips: 10000, scale: 10 });
+      for (let guard = 0; !s.over && guard < 600; guard++) {
+        startHand(s);
+        for (let m = 0; s.hand && !s.hand.result && s.hand.toAct >= 0 && m < 400; m++) {
+          const i = s.hand.toAct;
+          act(s, i, s.players[i].bot ? decide(s, s.players[i].bot) : shove(s));
+        }
+        if (s.players[0].out) break;
+      }
+      const place = s.winner === 0 ? 1 : (s.players[0].place || (bots + 1));
+      return { won: s.winner === 0, back: payout(place, bots + 1, 100) / 100 };
+    };
+    const M = 300;
+    for (const skill of [1, 2, 3]) {
+      for (const bots of [2, 4, 7]) {
+        let wins = 0, back = 0;
+        for (let g = 0; g < M; g++) { const r = shoveGame(skill, bots); if (r.won) wins++; back += r.back; }
+        const winRate = wins / M, roi = back / M - 1, fair = 1 / (bots + 1);
+        ok(`all in every hand does not beat ${bots} skill-${skill} computers (win rate under ${(fair * 1.25 * 100).toFixed(0)}%)`, winRate < fair * 1.25, { winRate, fair });
+        ok(`all in every hand loses money against ${bots} skill-${skill} computers (ROI under 0)`, roi < 0, { roi });
+      }
+    }
+  }
   // A rigged deal is still one real deck: 52 different cards between the hands and what is left.
   let deckOk = true;
   for (let t = 0; t < 200 && deckOk; t++) {

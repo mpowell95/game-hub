@@ -140,3 +140,7 @@ label in either language on either row).
   inherent depth-parity oscillation in the eval function, not a bug; see the AI.test() case 5
   comment in `ai.js`) doesn't read as hopeless against an AI that isn't actually perfect at that
   difficulty.
+
+## The computer varies per game (2026-10-29)
+
+`aiSeed` (random per game, saved in `gamehub.connect4.save.v1`, sent to the worker as `seed`): the computer's choice among equally good moves is a function of (seed, stones), so one game is self-consistent (resume, undo) and a memorised game does not replay. Opening only (under 10 stones) it also mixes moves within `NEAR_EQUAL_MARGIN` (10) heuristic points of the best; Expert's exact solver picks among moves of exactly equal value. Never touch a forced win/loss; strength was measured unchanged (`ai.js` comment).

@@ -294,3 +294,7 @@ based Cutthroat goes in this stage). Flick Soccer's challenges are the model; no
   identical to the bit, Ben's chat line pops on Matt's phone under Ben's name, Ben resigns and both
   others land on the result. Proven in one engine (V8) only; an iPhone against an Android phone is
   the real check.
+
+## The computer's plan is seeded (2026-10-29)
+
+`planShot` takes `seededRng(match, seat)`: the match's own `seed` + the position, so quit and Continue before the computer shoots plans the SAME shot. `tools/test-ai-resume-seeds.mjs`.

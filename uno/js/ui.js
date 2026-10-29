@@ -14,7 +14,7 @@
 // it lands, and a card leaving the stock turns face up as it arrives. See uno/CLAUDE.md.
 
 import { UnoGame, COLORS } from './game.js';
-import { chooseAction, pickWildColor } from './ai.js';
+import { chooseAction, pickWildColor, seededRng, positionKey } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { recordResult } from '../../js/game-stats.js';
@@ -214,6 +214,7 @@ function saveGame(ui) {
     if (!ui.game || ui.game.phase === 'over' || ui.view !== 'game') { clearGame(); return; }
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: 1, at: Date.now(), seats: ui.seats, difficulty: ui.difficulty, snap: ui.game.snapshot(),
+      aiSeed: ui._aiSeed,   // the computer's random choices come from this + the position (2026-10-29)
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -229,6 +230,12 @@ function loadGame() {
     if (!DIFF_KEYS.some(([k]) => k === raw.difficulty)) return null;
     return raw;
   } catch { return null; }
+}
+
+/** A fresh random 32-bit seed for one match's computer choices. */
+function newAiSeed() {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
+  catch { return Math.floor(Math.random() * 4294967296); }
 }
 
 function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
@@ -393,7 +400,8 @@ class UnoUI {
     this._landing.clear();
     this._turnUpIds.clear();
     this.seats = this._buildSeats(this.players);
-    this.game = new UnoGame({ playerCount: this.players, startPlayer, onEvent: (type, p) => this._onEngineEvent(type, p) });
+    this._aiSeed = newAiSeed();
+    this.game = new UnoGame({ playerCount: this.players, startPlayer, rng: seededRng(this._aiSeed, 'deal'), onEvent: (type, p) => this._onEngineEvent(type, p) });
     this._seenCounts = {};
     this.game.players.forEach((p, i) => { this._seenCounts[i] = p.hand.length; }); // the deal flies them itself
     this.view = 'game';
@@ -424,7 +432,11 @@ class UnoUI {
     this._turnUpIds.clear();
     this._seenCounts = {};
     saved.snap.players.forEach((p, i) => { this._seenCounts[i] = p.hand.length; });
-    this.game = UnoGame.fromSnapshot(saved.snap, { onEvent: (type, p) => this._onEngineEvent(type, p) });
+    this._aiSeed = Number.isInteger(saved.aiSeed) && saved.aiSeed >= 0 && saved.aiSeed <= 0xFFFFFFFF ? saved.aiSeed : newAiSeed();
+    // The engine's own shuffle (a reshuffled discard) is keyed to the pile sizes at the restore, so the
+    // same save always reshuffles the same way.
+    const snapRng = seededRng(this._aiSeed, `resume|${saved.snap.deck ? saved.snap.deck.length : 0}|${saved.snap.discard ? saved.snap.discard.length : 0}`);
+    this.game = UnoGame.fromSnapshot(saved.snap, { rng: snapRng, onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
     this._afterStateChange();
     this._refitSoon();
@@ -463,7 +475,7 @@ class UnoUI {
         this.renderGame();
         this.later(() => {
           if (this.game !== g || g.phase !== 'chooseColor') return;
-          g.chooseColor(owner, pickWildColor(g.players[owner].hand, Math.random, null));
+          g.chooseColor(owner, pickWildColor(g.players[owner].hand, seededRng(this._aiSeed, 'wild|' + positionKey(g, owner)), null));
           this._afterStateChange();
         }, this._aiMs(AI_THINK_MS));
         return;
@@ -492,7 +504,7 @@ class UnoUI {
     const g = this.game;
     if (!g || g.phase !== 'playing') return;
     const pi = g.currentPlayer;
-    const action = chooseAction(g, pi, this.difficulty, Math.random);
+    const action = chooseAction(g, pi, this.difficulty, seededRng(this._aiSeed, positionKey(g, pi)));
     if (action.type === 'draw') {
       g.draw(pi);
       this._afterStateChange();

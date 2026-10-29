@@ -385,3 +385,7 @@ no colour at all.
 
 **Its leaderboard board is its own (2026-10-15):** tabs All / Easy / Med / Hard / Expert, best time
 or best % per person. `js/CLAUDE.md`, "Minesweeper's own board, and no \"YOU\"".
+
+## The new-board confirm does not pause the clock (2026-10-29)
+
+`_askNewGame()` leaves the clock running: the board stays visible under the dim, and a stopped clock was free study time. Leaving to the menu or How to play hides the board, so those still stop it.

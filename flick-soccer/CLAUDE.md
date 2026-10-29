@@ -415,3 +415,7 @@ at 320px (the team chip, avatar and score are what that space is for).
 A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down in `_mpLeave`; never in vs-computer or two players on one phone). It is also up on the line-up card (`_mpPick`), the first thing the challenged player sees. Panel and bubbles are `js/match-chat-ui.js`, the data is `js/match-chat.js`, lazy-imported.
 - **Where it sits and why:** on the top row, left of the Menu button, which is the default spot (`CHAT_PLACE`, `right: 64px`, `top: var(--fs-top)`). Measured with a 59px top inset: 390x844 at [282, 59, 44, 44], 320x568 at [212, 59, 44, 44]; no control overlaps it. Bubbles start at `--fs-top + 122px`, under the scoreboard and the status line, so a line never covers the score or whose turn it is.
 - **Node:** `flicksoccer/chat/<matchId>/<key>`, beside `flicksoccer/games/<id>`. It sends with the STORED side (`mp.side`; `'b'` on the line-up card).
+
+## The computer's plan is seeded (2026-10-29)
+
+`aiSeed` (per match, in `gamehub.flicksoccer.save.v1`): `planShot` takes `seededRng(seed, bodies, seat)`, so quit and Continue before the computer shoots plans the SAME shot. (The shot itself was already saved before it rolls.) `tools/test-ai-resume-seeds.mjs`.
