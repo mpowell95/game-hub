@@ -57,13 +57,13 @@ const A = await import('../js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} } });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} } });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} } });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} } });
+  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -144,7 +144,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} } });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('cuppong', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);
@@ -186,6 +186,23 @@ ok('skeeball/js/ui.js never writes an unlock from the admin release (THE LAW rul
 const adm = readFileSync(new URL('./js/admin-ui.js', __ROOT_URL), 'utf8');
 ok('the admin page offers all three machine states',
   /adm_mode_open/.test(adm) && /adm_mode_unlockable/.test(adm) && /adm_mode_testing/.test(adm));
+// The admin page's Keep (2026-10-29): a checked mark per flag, read by nothing but the admin page.
+eq('reviewed: nothing marked = not reviewed', A.resolveReviewed(null, 'bee', 'a-bcdefg', 'K99MB'), false);
+eq('reviewed: a mark reads back', A.resolveReviewed({ reviewed: { bee: { 'a-bcdefg': { K99MB: true } } } }, 'bee', 'a-bcdefg', 'K99MB'), true);
+eq('reviewed: only a real true counts', A.resolveReviewed({ reviewed: { iv: { dev1: { snake: 'yes' } } } }, 'iv', 'dev1', 'snake'), false);
+eq('reviewed: kinds do not mix', A.resolveReviewed({ reviewed: { bee: { x: { y: true } } } }, 'iv', 'x', 'y'), false);
+{
+  const r = await A.setReviewed('nope', 'a', 'b', true);
+  eq('setReviewed refuses an unknown kind before any write', r.ok, false);
+  const r2 = await A.setReviewed('bee', 'a/b', 'c', true);
+  eq('setReviewed refuses a key Firebase cannot store', r2.ok, false);
+}
+ok('the admin page writes Keep through setReviewed and hides what is reviewed',
+  /setReviewed\('bee', b\.bk, b\.code, true\)/.test(adm) && /setReviewed\('iv', f\.id, f\.gid, true\)/.test(adm) && /resolveReviewed\(cfg, 'bee'/.test(adm));
+ok('a decision on Now also marks the flag checked', /const andReview = /.test(adm) && /andReview\(\(\) => setIntegrityVoided/.test(adm));
+ok('no game or board reads the reviewed marks (admin page only)',
+  !/resolveReviewed|reviewed\//.test(readFileSync(new URL('./js/players-agg.js', __ROOT_URL), 'utf8') + readFileSync(new URL('./js/stats-corrections.js', __ROOT_URL), 'utf8') + readFileSync(new URL('./js/integrity.js', __ROOT_URL), 'utf8')));
+ok('the admin page no longer erases golf stats (Matt, 2026-10-29)', !/golfreset|delete raw\.games/.test(adm));
 const hub = readFileSync(new URL('./js/hub.js', __ROOT_URL), 'utf8');
 ok('js/hub.js resolves card visibility through isGameLive with !g.devOnly as the default',
   /isGameLive\(g\.id,\s*!g\.devOnly\)/.test(hub));

@@ -256,7 +256,10 @@ console.log('\n--- wiring ---');
   ok('shared: js/integrity.js is copied to the server', /'js\/integrity\.js'/.test(read('tools/sync-functions-shared.mjs')));
   ok('hub: a tap on the push opens the admin page, on an admin device only', /if \(id === 'admin'\) \{ this\._clearPushOpen\(\); if \(isAdminDevice\(\)\) this\.openAdmin\(\); return; \}/.test(read('js/hub.js')));
   const ui = read('js/admin-ui.js');
-  ok('admin page: a section, read from both nodes, one button per row (Void an alert, Undo a void)', /sec\('integrity'/.test(ui) && /get\('integrityFlags'\), get\('integrityAlerts'\)/.test(ui) && /setIntegrityVoided\(id, gid, voided\)/.test(ui) && /data-ivset="\$\{voided \? 'count' : 'void'\}"/.test(ui));
+  // The admin page rebuilt (2026-10-29): flags on Now and on each game's page, one button each (Void an alert, Undo a void).
+  ok('admin page: reads both nodes, one button per flag (Void an alert, Undo a void)', /readNodes\(\['integrityFlags', 'integrityAlerts'\]\)/.test(ui)
+    && /f\.voided \? btn\(tx\('adm_undo', 'Undo'\), andReview\(\(\) => setIntegrityVoided\(f\.id, f\.gid, false\)/.test(ui)
+    && /btn\(tx\('adm_void', 'Void'\), andReview\(\(\) => setIntegrityVoided\(f\.id, f\.gid, true\)/.test(ui));
   ok('hoops: validateGame checks the stored result against the moves', /if \(over\.why !== 'resign' && !sameResult\(replayResult\(moves\), over\.winner\)\) return null;/.test(read('hoops4/js/mp.js')));
 }
 

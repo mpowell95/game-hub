@@ -113,7 +113,8 @@ export function normalizeConfig(raw) {
   const integ = (src.integrity && typeof src.integrity === 'object') ? src.integrity : {};
   const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
   const integVoid = (integ.void && typeof integ.void === 'object') ? integ.void : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid } };
+  const reviewed = (src.reviewed && typeof src.reviewed === 'object') ? src.reviewed : {};
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -339,6 +340,15 @@ export function resolveBeeUndone(cfg, boardKey, code) {
 export function resolveIntegrityUndone(cfg, statsIdOf, gameId) {
   const u = normalizeConfig(cfg).integrity.undo[statsIdOf];
   return !!(u && typeof u === 'object' && u[gameId] === true);
+}
+
+/** Has Matt marked this flag checked on the admin page's Now tab (Keep, 2026-10-29)?
+ *  `reviewed/<kind>/<a>/<b>` = true. kind: 'bee' (<boardKey>/<CODE>), 'iv' (<statsId>/<gameId>), 'ma' (an
+ *  integrityAlerts <key>/<ruleKey>). A note for the admin page ONLY: no game, board or rule reads it. */
+export function resolveReviewed(cfg, kind, a, b) {
+  const k = normalizeConfig(cfg).reviewed[kind];
+  const row = k && typeof k === 'object' ? k[a] : null;
+  return !!(row && typeof row === 'object' && row[b] === true);
 }
 
 export function readCachedConfig() {
@@ -738,6 +748,13 @@ export function setIntegrityVoided(statsIdOf, gameId, voided) {
 /** Kept for the first admin page build (2026-10-28): Undo (`on` true) / Void again. */
 export function setIntegrityUndone(statsIdOf, gameId, on) { return setIntegrityVoided(statsIdOf, gameId, !on); }
 
+/** Mark a Now-tab flag checked (`on` true) or not (null clears it). Verified by re-read. */
+export function setReviewed(kind, a, b, on) {
+  const ok = (k) => typeof k === 'string' && k.length > 0 && k.length <= 200 && !/[.#$\[\]\/]/.test(k);
+  if (!/^(bee|iv|ma)$/.test(String(kind)) || !ok(a) || !ok(b)) return Promise.resolve(fail(`not a flag: ${kind} ${a} ${b}`));
+  return writeNode(`reviewed/${kind}/${a}`, { [b]: on ? true : null }, (cfg) => resolveReviewed(cfg, kind, a, b) === !!on, { stamp: false });
+}
+
 export function setOnlineAllowed(code, on) {
   const c = codeOf(code);
   if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
@@ -746,7 +763,7 @@ export function setOnlineAllowed(code, on) {
 }
 
 export default {
-  ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed,
+  ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed, resolveReviewed, setReviewed,
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,

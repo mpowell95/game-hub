@@ -1511,3 +1511,18 @@ report, the retired challenge), `onlineGate` refuses, and the launcher shows eve
 `HIDDEN_DEVICE_PREFIX` (hidden, nothing deleted). `tools/test-automation-guard.mjs` proves it without touching the
 database (a session's attempt to prove it against the real database was, rightly, refused by the session's own
 safety check). `tools/validate-sw-assets.mjs` did not flag the new shell file missing from ASSETS; the test does.
+
+
+## The admin page rebuilt as its own page (2026-10-29)
+
+Matt: *"it's fucking terrible as it is now. It's impossible for me to do anything quickly."* Measured first (headless,
+393x852, test1): ten accordion sections; everything open = 21,561 px (33 screens); Games with Live open 3,842 px for 41
+identical Live/Admin-only rows; 259 name chips (37 people x 7 hidden games); Player scores 5,192 px for 33 buttons;
+closed headings said nothing, so seeing whether anything needed him took 10 taps. Every earlier pass had rearranged
+inside the same frame. Two mockup rounds (canvas `Admin page mockup`); Matt rejected the first's chip pickers and person
+page ("horrific", "thoughtless"), asked why voids were not under each game, approved the second ("I like it").
+Built: full-screen page, four tabs (Now, Games, People, Sent) + gear; one row style; voids on each game's page and on a
+player's page in that game; Keep marks a flag checked in `adminConfig/v1/reviewed`; the leftover "Reset golf stats"
+(the one button that erased earned history) removed at his request. Not built: a per-play void (a play log exists only
+since Oct 28, and a best or fewest-guesses can't be recomputed without every play). The play-log rows read
+`playLog/<CODE>` (admin-read), so they were not seen working headlessly with the test profile.
