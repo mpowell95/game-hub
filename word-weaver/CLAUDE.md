@@ -52,8 +52,11 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 
 - A SECOND LADDER, not a translation: `data/es/` (same format, 2,000 levels, same bands), `tools/build-word-weaver-es.mjs`
   (English's ramp and layout + Spelling Bee's Spanish word lists). No accents; Ñ is a letter (wheel, grid, keyboard).
-- The setup screen's **EN/ES button** (two letters, under the points) picks the ladder, per phone
-  (`gamehub.wordweaver.lang.v1`); nothing saved = the hub's language. The screens keep the hub's language.
+- The **EN/ES button** (two letters) picks the ladder, per phone (`gamehub.wordweaver.lang.v1`); nothing saved = the
+  hub's language. The screens keep the hub's language. It is on the setup screen (under the points) AND, like Spelling
+  Bee's, on the play screen's top row (Matt, 2026-10-29): mid-level, the level is left as saved and the other ladder opens
+  at its place in the same difficulty; switching back resumes it. `_open(n, lang)` changes nothing about the level on
+  screen until the new one has loaded (a word typed meanwhile saves under the old level and language).
 - Spanish progress never touches English: its own save (`gamehub.wordweaver.es.save.v1`), its own stats map (`ww.es`,
   `js/word-weaver-points.js`; Spanish level 12 is not English level 12), pending entries carry `lang: 'es'`. Points,
   stars and levels completed count BOTH ladders.

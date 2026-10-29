@@ -221,12 +221,34 @@ class WordWeaver {
     });
   }
 
-  /** The setup screen's EN/ES button: the other ladder (its own levels, save and progress). */
+  /** The EN/ES button (setup screen, and the play screen's top row like Spelling Bee's, 2026-10-29): the other
+   *  ladder, with its own levels, save and progress. In a level, every word is already saved, so the level is
+   *  left as it is and the other ladder opens at its place in the same difficulty. */
   _switchLang() {
-    this.lang = this.lang === 'es' ? 'en' : 'es';
-    try { localStorage.setItem(LANG_KEY, this.lang); } catch (err) { console.error('[word-weaver] language choice not saved', err); }
+    const lang = this.lang === 'es' ? 'en' : 'es';
+    try { localStorage.setItem(LANG_KEY, lang); } catch (err) { console.error('[word-weaver] language choice not saved', err); }
+    if (this.view === 'setup') {
+      this.lang = lang;
+      this.count = null;
+      this._render();
+      this._loadCount();
+      return;
+    }
+    const nx = bandNext(this.band, Infinity, lang);
+    if (nx.finished) { this.seq++; this._leaveLevel(lang); this.view = 'bandDone'; this._render(); return; }
+    this._open(nx.n, lang);
+  }
+
+  /** Stop everything the level on screen had running and make `lang` the puzzle language. */
+  _leaveLevel(lang) {
+    for (const id of this.timers) clearTimeout(id);
+    this.timers = [];
+    this.drag = null;
+    this.finishing = false;
+    this.pillTimer = 0;
+    this._closeModal();
+    this.lang = lang;
     this.count = null;
-    this._render();
     this._loadCount();
   }
 
@@ -288,21 +310,27 @@ class WordWeaver {
 
   /** Load level n and show it: the saved state if the save is for this level, else a fresh one. Past the
    *  last level is the "More levels soon" state; an unreadable level is "Can't load" with a retry. */
-  async _open(n) {
+  async _open(n, lang = this.lang) {
     const seq = ++this.seq;
-    this.n = n;
-    this.band = wwBandOf(n);
-    const lang = this.lang;
+    // Nothing about the level on screen changes until the new one has loaded (2026-10-29): while it loads, the
+    // old level is still playable and saves under ITS number and language (the in-game EN/ES switch).
     const lv = await loadLevel(n, dataOf(lang));
     if (this.dead || seq !== this.seq) return;
+    const commit = () => {
+      if (lang !== this.lang) this._leaveLevel(lang);
+      this.n = n;
+      this.band = wwBandOf(n);
+    };
     if (!lv) {
       const idx = await loadIndex(dataOf(lang));
       if (this.dead || seq !== this.seq) return;
+      commit();
       this.level = null;
       this.view = idx && n > idx.count ? 'soon' : 'fail';
       this._render();
       return;
     }
+    commit();
     const a = attemptOf(this.band, lang);
     this.level = lv;
     this.st = cleanState(lv, a && Math.floor(a.n) === n ? a : null);
@@ -355,7 +383,8 @@ class WordWeaver {
       try { delete window.__wwTest; } catch { /* no window */ }
       return;
     }
-    let top = `<button type="button" class="ww-help" data-act="help" aria-label="${t('help_aria')}">?</button>`;
+    let top = `<button type="button" class="ww-lang ww-lang--top" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>`
+      + `<button type="button" class="ww-help" data-act="help" aria-label="${t('help_aria')}">?</button>`;
     if (played) {
       top += `<button type="button" class="ww-chip" data-act="extras" aria-label="">${ICON_STAR}<span class="ww-badge" hidden></span></button>`
         + `<span class="ww-lvl" aria-label="${t('level_aria', { n: this.n })}">${this.n}</span>`;
