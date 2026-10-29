@@ -71,7 +71,7 @@ Matt, 2026-09-03: the board number is the player's **best round on a named cours
 
 ## Who can play it right now
 
-Nobody but a dev profile (Matt: *"The default should be testing mode. So only I can see or play it."*). Courses: use **`courseTestingOverride`, NOT `isCourseTesting`** (TRUE when nothing is written; hid all courses). `COURSE_ADMIN_ONLY_BY_DEFAULT` `{coralkeys: true}` HIDES a course from all but dev (an unopened course shows locked); it sits under the config override. To release Coral Keys: delete its line there, set `coralkeys: true` in `COURSE_OPEN_BY_DEFAULT`.
+Nobody but a dev profile (Matt: *"The default should be testing mode. So only I can see or play it."*). **A dev profile counts only on an admin device** (`_isDev`, `isAdminDevice()`, 2026-10-29: the name alone opened every course to anyone who typed it). Courses: use **`courseTestingOverride`, NOT `isCourseTesting`** (TRUE when nothing is written; hid all courses). `COURSE_ADMIN_ONLY_BY_DEFAULT` `{coralkeys: true}` HIDES a course from all but dev (an unopened course shows locked); it sits under the config override. To release Coral Keys: delete its line there, set `coralkeys: true` in `COURSE_OPEN_BY_DEFAULT`.
 
 ## The hole-data format
 

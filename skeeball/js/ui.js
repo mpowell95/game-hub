@@ -27,7 +27,7 @@ import { syncMyStats, readPlayersOnce, readPeople } from '../../js/stats-net.js'
 import { aggregatePlayers } from '../../js/players-agg.js';
 import { appWideBest, isUnlocked, dayKey } from '../../js/arcade-scores.js';
 import { correctBoard, correctionFor } from '../../js/stats-corrections.js';
-import { isBoardReleased, isBoardTesting, corrections, myBoardCorrections } from '../../js/admin-config.js';
+import { isBoardReleased, isBoardTesting, corrections, myBoardCorrections, isAdminDevice } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 import { loadProfile } from '../../js/profile-store.js';
 // CHALLENGES (2026-09-24): "beat my score" against another player. challenge.js is the data,
@@ -897,7 +897,9 @@ export class SkeeballUI {
     // other player still meets the real lock. A bypass-opened slide is marked TEST so it cannot
     // be mistaken for an earned unlock.
     let devAll = false;
-    try { devAll = isDevProfile((loadProfile()?.name || '').trim()); } catch { devAll = false; }
+    // A dev NAME on an admin DEVICE (2026-10-29): a name is only a hash anyone can type; `admins/<uid>`
+    // cannot be faked. Racks on a machine open only this way would otherwise unlock it for good.
+    try { devAll = isAdminDevice() && isDevProfile((loadProfile()?.name || '').trim()); } catch { devAll = false; }
 
     // RELEASED BY THE ADMIN PAGE (2026-08-24): Matt can open a machine for everybody from inside
     // the app (js/admin-config.js), without anyone earning it and without a deploy. Like the dev

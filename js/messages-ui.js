@@ -584,8 +584,11 @@ async function renderPicker(card) {
 
 /** Matt only, and looked up the same way js/hub.js gates the Admin button. */
 async function amIAdmin(name) {
-  try { const m = await import('./challenge/hooks.js'); return !!(name && m.isAdmin(name)); }
-  catch { return false; }
+  try {
+    // The admin DEVICE too (2026-10-29): a name is a hash anyone can match by typing it.
+    const [m, a] = await Promise.all([import('./challenge/hooks.js'), import('./admin-config.js')]);
+    return !!(name && m.isAdmin(name)) && a.isAdminDevice();
+  } catch { return false; }
 }
 
 // --- one conversation ------------------------------------------------------------------------------

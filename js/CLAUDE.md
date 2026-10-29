@@ -74,7 +74,8 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `gridlock-v1map.js` | GENERATED; never hand-edit |
 | `difficulty-tiers.js` | READ path only; separate from `normDiff()` (write path) on purpose |
 | `net.js` | rooms, lockstep log, recovery, N-seat roster, online gate. **Yahtzee uses it with no consumer write-up here (open gap)** |
-| `name-gate.js` | undismissable; every entry point calls it before `init()`; a name claimed <24 h ago offers "That's me" (links to that code; iPhone Home Screen app, 2026-10-25) |
+| `name-gate.js` | undismissable; every entry point calls it before `init()`; a name claimed <24 h ago offers "That's me" (links to that code; iPhone Home Screen app, 2026-10-25); **a new name is saved only on `usernameStatus` 'free'/'mine' (2026-10-29): offline = "connect to choose a name", never accepted** (the profile page keeps the old name the same way) |
+| `server-time.js` | the SERVER's clock (2026-10-29): `liveNow()` (this page's connection, `performance.now()`-anchored, null until connected), `serverNow()` (+ cached gap), `bestNow()` (+ phone clock). Anything a changed phone clock must not decide (Spelling Bee's day and answers) |
 | `device-report.js` | `gatherDeviceReport()` load-bearing (bug reports); `uploadDeviceReport()` dormant, keep |
 | `install-state.js` | dependency-free on purpose; checks both `display-mode` and `navigator.standalone` |
 | `error-log.js` | `gamehub.errorlog.v1`, installed at LOAD so it catches a failing game import |
@@ -475,7 +476,8 @@ A record joins its code always, its name only if that is the code's current name
 
 ### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
 
-`NAME_ALIAS` (`matt → mattyice`, `lill → lili`), `DISPLAY_NAME` (`lili → 'Lili'`). A server rename never
+`NAME_ALIAS` (`matt → mattyice`, `lill → lili`), `DISPLAY_NAME` (`lili → 'Lili'`). **An alias name is RESERVED
+(2026-10-29, `aliasTarget` + `usernameStatus`): only the code owning its target may take it.** A server rename never
 sticks (devices re-mirror); durable fixes are an alias here, a rename ON the device, or linking devices
 to one code. Every alias needs a test in `tools/players-agg.test.mjs` (a wrong alias merges two people).
 

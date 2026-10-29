@@ -22,8 +22,13 @@ import { hubReadReport } from './hub-messages.js';
 let _db = null, _api = null;
 
 /** Ensure the shared named Firebase app + anonymous auth are ready. Returns true only when usable. */
+// TEST SEAM (2026-10-29): tools/test-stats-identity.mjs hands in an in-memory database for the name
+// registry checks. No screen calls it.
+let _bootForTest = null;
+export function __setNetBootForTest(fn) { _bootForTest = fn || null; _db = null; _api = null; }
+
 export async function init() {
-  const r = await getStatsApp();
+  const r = _bootForTest ? await _bootForTest() : await getStatsApp();
   if (!r) return false;
   _db = r.db; _api = r.api;
   return true;
@@ -489,12 +494,22 @@ const uname = (name) => (typeof name === 'string' ? name : '').trim().toLowerCas
 // RTDB keys cannot contain . $ # [ ] / — encodeURIComponent handles / # [ ], plus we escape . and $.
 const encodeKey = (s) => encodeURIComponent(s).replace(/\./g, '%2E').replace(/\$/g, '%24');
 
-/** Ownership of `name`: 'free' | 'mine' | 'taken' | 'offline'. */
+/** Ownership of `name`: 'free' | 'mine' | 'taken' | 'offline'. Callers save a NEW name only on 'free'
+ *  or 'mine' (2026-10-29): 'offline' keeps the old name, so nobody can take a claimed name offline. */
 export async function usernameStatus(name, myCode) {
   const key = uname(name);
   if (!key) return 'free';
   if (!(await init())) return 'offline';
   try {
+    // AN ALIAS NAME IS RESERVED (2026-10-29): js/players-agg.js folds "matt" into "mattyice" and "lill"
+    // into "lili" on every board, so whoever took one would merge into that person's row. Only the
+    // code that owns the target name may take its alias. Target unclaimed = nobody may.
+    const { aliasTarget } = await import('./players-agg.js');
+    const target = aliasTarget(key);
+    if (target && target !== key) {
+      const tv = (await _api.get(_api.ref(_db, 'usernames/' + encodeKey(target)))).val();
+      if (!(tv && tv.code && myCode && String(tv.code).toUpperCase() === String(myCode).toUpperCase())) return 'taken';
+    }
     const s = await _api.get(_api.ref(_db, 'usernames/' + encodeKey(key)));
     const v = s.val();
     if (!v || !v.code) return 'free';

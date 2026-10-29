@@ -183,8 +183,8 @@ not unify them. Machine names are proper nouns, untranslated.
   `sk.colorSweeps`, three edits done), 30+ in a game, 1,000 points.
 - **Unlock is GOALS-BASED**: `{ board, goals: true }`, applied by `_earnedUnlocks` (after each rack) and
   `_ensureGoalUnlocks` (once per mount, retroactive, cross-device). `unlocksEarned()` stays score-only.
-- Locked slide shows a CSS-cropped greyed sliver (`.sk-lock-peek`). **Dev bypass**: a dev profile sees
-  every machine OPEN with a `TEST` chip; display only, never writes `sk.unlocked`.
+- Locked slide shows a CSS-cropped greyed sliver (`.sk-lock-peek`). **Dev bypass**: a dev profile ON AN ADMIN DEVICE
+  (`isAdminDevice()`, 2026-10-29: a name alone is a hash anyone can type) sees every machine OPEN with a `TEST` chip.
 - Ping-pong ball 0.28X (`ball.ratio` waived), cups 0.5625X, lattice t 1.63X / s 1.075X. Scoring on cup
   boards requires falling below the RIM plane (`needH`); a jammed ball resolves as the trough's zero
   (`st.cupBoard`). Renderer: collars take cup colour, value on `_cupPlate`; the classic's bottom-slot
@@ -557,9 +557,13 @@ map, per-game outbox; reuses `hoops4/js/mp.js` player-code helpers and `opponent
   (2) saved after every ball (`_saveChallengeProgress`); (3) finalised on `_rackOver`, `_abandonRack`
   (BEFORE its nothing-thrown return: Play-then-leave counts 0), or `CH.finalizeStale()` on next mount. The
   server refuses a second score (`already-played`); the outbox is keyed challenge + SIDE + game (`not-yours`
-  retryable); the pause card offers no New game during a challenge; accepted: a second device unaware of
-  the first could start the same game, first score to land stands.
-- Racks are ordinary racks (`recordSkeeball` unchanged); challenge adds nothing to `gamehub.stats`
+  retryable); the pause card offers no New game during a challenge. **Since 2026-10-29 also on the SERVER**:
+  `claimLeg` writes a write-once marker `games/<id>/<side>/started/<leg>` = `{at, k}` before the first ball (another
+  storage cannot start it, "Started on another device."; never offline); no score 30 min after the marker = 0 on every
+  phone (`START_GRACE_MS`, derived on read, stored by the next write, `settleTimedOut`).
+- Racks are ordinary racks, **but `recordSkeeball(..., {challenge: true})` never writes `sk.unlocked`, a challenge rack
+  runs no objective unlock, and objectives open the next machine only from one the player owns (`_ownsMachine`)**
+  (2026-10-29: a challenge on a locked machine used to unlock it for good); challenge adds nothing else to `gamehub.stats`
   (counting wins = a new sub-counter and item 7). **Machines offered = `challengeBoards`: every machine
   the CHALLENGER can play, never one in Testing** (Matt's choice 2026-09-24); the other person plays it
   even if locked, and playing never writes `sk.unlocked`. Writes verified by fresh re-read; a dev origin

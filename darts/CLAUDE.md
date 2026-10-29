@@ -95,7 +95,8 @@ within 9 degrees either side of a bottom number he still needs (`assistTargets`:
 number, any order every unclosed one) is moved just inside that number's edge keeping its ring (one in
 the frame beside it comes back to the outer single). Bull, off-board darts, 20 and 18, x01, the
 computer, the second seat in pass and play and everyone else are untouched. `_aimHelp()` in `ui.js` is
-gated on `isAdmin(profile name)` and his seat (online `mySeat`; else seat 0). **Online it applies to his
+gated on `isAdminDevice()` AND `isAdmin(profile name)` (2026-10-29: the name alone could be typed by anyone) and his
+seat (online `mySeat`; else seat 0). **Online it applies to his
 darts only**: the moved point is what is thrown and logged, so `validateGame` replays it normally.
 
 ## How the dart FLIES (2026-10-01, `js/flight.js`)
