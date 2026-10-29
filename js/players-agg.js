@@ -127,7 +127,7 @@ export function identityKey(profileLike, fallbackId) {
  *  'l' lost, 'd' played only); every copy past the first is taken back out of `byDiff.mp` and `total`
  *  (and Battleship's `bs`). Read time only: no record is changed. A match in VOIDED_MATCHES is left to
  *  its own `vd` correction. Counts that carry no id (live rooms, anything before 2026-10-29) are untouched. */
-function dedupeChallenges(grp) {
+function dedupeChallenges(grp, outcomes = null) {
   for (const g of Object.keys(grp._mp)) {
     const dst = grp.games[g];
     if (!dst) continue;
@@ -136,9 +136,25 @@ function dedupeChallenges(grp) {
     for (const mid of Object.keys(per)) {
       const copies = per[mid];
       if (copies.length < 2 || isVoidedMatch(g, mid)) continue;
-      // Keep the copy that counted the most (a win over a voided win), take out the rest.
-      const order = { w: 0, l: 1, d: 2 };
-      const extra = copies.slice().sort((x, y) => order[x] - order[y]).slice(1);
+      // WHICH COPY STAYS when a person's devices DISAGREE about one match (2026-10-29, second pass).
+      // The first pass kept a win over anything, so one device that counted a forged win (a phone
+      // clock set forward "timed out" the opponent) beat the loss the real match gave on another.
+      // Now: the match's real outcome for this person decides when the caller knows it
+      // (`corrections.mpOutcomes[game][matchId][CODE]`); otherwise the LEAST favourable copy stays
+      // (a loss, then played-only, then a win). A phone only ever counts a loss from a match that
+      // says this person lost, and nobody forges a loss against themselves, so a loss that
+      // contradicts a win is the copy to believe; a win that contradicts a draw/void is kept as
+      // played. Devices that AGREE are untouched (any copy is the same). Nothing stored changes.
+      // Disagreement is judged on what each device RECORDED: a win an integrity void turned into
+      // played-only on one device is the same answer as the other device's win (that win is kept).
+      const known = outcomes && grp.playerId && outcomes[g] && outcomes[g][mid] ? outcomes[g][mid][grp.playerId] : null;
+      const disagree = new Set(copies.map((c) => c.raw)).size > 1;
+      const sorted = copies.slice().sort(disagree
+        ? (x, y) => ({ l: 0, d: 1, w: 2 })[x.raw] - ({ l: 0, d: 1, w: 2 })[y.raw]
+        : (x, y) => ({ w: 0, l: 1, d: 2 })[x.v] - ({ w: 0, l: 1, d: 2 })[y.v]);
+      const hit = (known === 'w' || known === 'l' || known === 'd') ? sorted.findIndex((c) => c.raw === known) : -1;
+      const keep = hit >= 0 ? hit : 0;
+      const extra = sorted.filter((_, i) => i !== keep).map((c) => c.v);
       for (const v of extra) { played++; if (v === 'w') won++; else if (v === 'l') lost++; }
     }
     if (!played) continue;
@@ -250,10 +266,10 @@ export function aggregatePlayers(all, corrections) {
         const ivd = !!(corrections && corrections.integrity && corrections.integrity[id] && corrections.integrity[id][g] === true);
         const per = (grp._mp || (grp._mp = {}))[g] || (grp._mp[g] = {});
         for (const mid of Object.keys(src.mpIds)) {
-          let v = src.mpIds[mid];
-          if (v !== 'w' && v !== 'l' && v !== 'd') continue;
-          if (ivd && v === 'w') v = 'd';
-          (per[mid] || (per[mid] = [])).push(v);
+          const raw = src.mpIds[mid];
+          if (raw !== 'w' && raw !== 'l' && raw !== 'd') continue;
+          // `v` is what this copy still adds; `raw` what the device recorded (disagreement is judged on it).
+          (per[mid] || (per[mid] = [])).push({ v: ivd && raw === 'w' ? 'd' : raw, raw });
         }
       }
       if (g === 'connect4' && src.grid) {
@@ -785,7 +801,7 @@ export function aggregatePlayers(all, corrections) {
   }
   const list = [];
   for (const grp of groups.values()) {
-    if (grp._mp) { dedupeChallenges(grp); delete grp._mp; }
+    if (grp._mp) { dedupeChallenges(grp, corrections && corrections.mpOutcomes); delete grp._mp; }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }
     const nb = grp.games.nutsbolts.nb;
