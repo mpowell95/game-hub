@@ -54,6 +54,7 @@ export const SOURCES = {
   hoops4: {
     load: () => import('../hoops4/js/mp.js'),
     read: (M) => M.readMyGames(),
+    owed: (M, raw) => (typeof M.readOwedSeries === 'function' ? M.readOwedSeries(raw) : []),
     watch: (M, cb) => M.watchMyGames(cb),
     action: logGameAction,
     end: logGameEnd,
@@ -283,7 +284,7 @@ export async function loadAll(gameIds, now = Date.now()) {
     try {
       const M = await SOURCES[g].load();
       const raw = await SOURCES[g].read(M);
-      return toRows(g, M, raw, now);
+      return await toRows(g, M, raw, now);
     } catch (err) {
       console.warn('[challenges] could not read', g, err);
       failed.push(g);
@@ -293,11 +294,11 @@ export async function loadAll(gameIds, now = Date.now()) {
   return { rows: parts.flat(), failed };
 }
 
-function toRows(g, M, raw, now = Date.now()) {
+async function toRows(g, M, raw, now = Date.now()) {
   const src = SOURCES[g];
   const list = Array.isArray(raw) ? raw : [];
   let owed = [];
-  try { owed = src.owed ? src.owed(M, list) : []; } catch (err) { console.warn('[challenges] owed series', g, err); }
+  try { owed = src.owed ? await src.owed(M, list) : []; } catch (err) { console.warn('[challenges] owed series', g, err); }
   return list
     .map((r) => normalizeRow(g, r, src.expired ? src.expired(M, r, now) : false))
     .concat((Array.isArray(owed) ? owed : []).map((r) => normalizeRow(g, r)))
@@ -315,8 +316,13 @@ export async function watchAll(gameIds, cb) {
   await Promise.all(ids.map(async (g) => {
     try {
       const M = await SOURCES[g].load();
-      const stop = await SOURCES[g].watch(M, (raw) => {
-        per[g] = toRows(g, M, raw);
+      let seq = 0;
+      const stop = await SOURCES[g].watch(M, async (raw) => {
+        // toRows may read (a series owed its next game): only the newest list is kept.
+        const mine = ++seq;
+        const rows = await toRows(g, M, raw);
+        if (mine !== seq) return;
+        per[g] = rows;
         if (!stopped) {
           try { cb(ids.flatMap((x) => per[x] || []), Object.keys(per)); } catch (err) { console.warn('[challenges] watch', err); }
         }

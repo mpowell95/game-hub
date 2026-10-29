@@ -316,6 +316,9 @@ name or simulate the inset (~59px).** The probe asks `elementFromPoint` whether 
   read, nothing rewritten). Owed series games appear in "Your turn" (`owedSeries`, mp-ui.js); ONE
   person gets **Start game N** (whoever LOST the last game; draw: side 'b'). A finished match opened
   from History offers "Next game" only when no later game exists.
+- **The hub's Multiplayer screen lists them too (2026-10-29)**: `readOwedSeries` (pure halves `owedCandidates`,
+  `owedRowFor`; reads only series its rows do not show as decided, at most 8) gives `next:<id>` rows; `alert.js`
+  counts yours in `myTurnCount`; `armOpen('next:<id>')` -> `maybeCeremony` kind `'next'` re-reads and calls `nextInSeries`.
 
 ### A series, and the terms of a challenge (2026-09-22)
 

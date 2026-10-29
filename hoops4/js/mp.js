@@ -694,6 +694,50 @@ export async function readMyGames() {
   }
 }
 
+/**
+ * The series games still owed a next game, for the hub's Multiplayer screen (2026-10-29: between
+ * games the series dropped off it, while this game's own list said "Start game N"). The same rule as
+ * mp-ui.js `owedSeries`: the newest game of a series is over and `seriesAfter` says the series is not
+ * done; whoever LOST it starts the next one (a draw: the side that was 'b'). Rows whose own results
+ * already decide the series are skipped unread; the rest are read (a get, never a listener), at most 8.
+ * Returns [{ id: 'next:<last game id>', with, name, emoji, updated, yourTurn, over: false, owed: true,
+ *   series, seriesNo: <the next game's number>, oneShot }].
+ */
+export async function readOwedSeries(rows) {
+  const me = myCode();
+  const out = [];
+  for (const r of owedCandidates(rows).slice(0, 8)) {
+    const o = owedRowFor(r, await readGame(r.id), me);
+    if (o) out.push(o);
+  }
+  return out;
+}
+/** PURE. The finished newest games of series that their rows alone do not show as decided. */
+export function owedCandidates(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.series > 1);
+  return list.filter((r) => r.over && !r.ended && (r.seriesNo | 0) < r.series
+    && !list.some((x) => x.seriesOf === r.seriesOf && (x.seriesNo | 0) > (r.seriesNo | 0))
+    && (() => {
+      const g = list.filter((x) => x.seriesOf === r.seriesOf);
+      const t = seriesTarget(r.series);
+      return g.filter((x) => x.result === 'won').length < t && g.filter((x) => x.result === 'lost').length < t;
+    })());
+}
+/** PURE. The owed row for one candidate and its match, or null (series done, not yours, unread). */
+export function owedRowFor(r, g, me) {
+  if (!r || !g || !g.over) return null;
+  const st = seriesAfter(g);
+  const side = sideOf(g, me);
+  if (st.done || !side) return null;
+  const w = g.over.winner;
+  const starter = w === 'a' ? 'b' : w === 'b' ? 'a' : 'b';
+  return {
+    id: `next:${r.id}`, with: r.with, name: r.name, emoji: r.emoji, updated: ms(r.updated),
+    yourTurn: side === starter, over: false, owed: true,
+    series: st.len, seriesNo: st.no + 1, oneShot: !!r.oneShot,
+  };
+}
+
 /** One match, validated. null when it is missing, unreadable or does not validate. */
 export async function readGame(id) {
   if (!ID_RE.test(String(id || ''))) return null;

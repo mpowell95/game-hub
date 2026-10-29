@@ -610,8 +610,8 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **A pick from the Multiplayer screen (`armChallenge`) opens the game's challenge-options screen, never past it**
   (Matt, 2026-10-27: Battleship skipped Board and Shots; "fix every other game that's like this": Darts' game and
   Escoba's deck were also setup-only). Every option a challenge carries is choosable on that screen.
-- **A series between games is listed** via an optional `owed(M, rows)` on its `SOURCES` entry (Cup Pong, 2026-10-29;
-  Hoops has series too and no `owed` yet, so its between-games series still drops off this screen).
+- **A series between games is listed** via an optional `owed(M, rows)` (may be async) on its `SOURCES` entry (Cup Pong
+  and Hoops, 2026-10-29): a `next:<id>` row, no ⋯ or bell; the game's `armOpen('next:<id>')` starts the next game.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

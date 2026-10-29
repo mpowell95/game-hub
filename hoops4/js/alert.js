@@ -21,7 +21,7 @@
 // 2's stated exemption, the same class as launcher favourites) - losing it shows a bubble twice,
 // which is the harmless direction. It never writes to `hoops/`, so no match state is at risk.
 import { readMyGames, myCode, watchMyGames, readSeen, markSeen, armTurn, readGame, sideOf, SEEN_KEY,
-  recordFinished, readUnseen, markResultSeen } from './mp.js';
+  recordFinished, readUnseen, markResultSeen, readOwedSeries } from './mp.js';
 
 // The seen map moved to mp.js (2026-09-23) so that mp.js's own writes can stamp it - see there.
 // Re-exported so callers (js/hub.js, the tests) keep one import site.
@@ -101,6 +101,12 @@ async function rearmUnshot(rows) {
 // The rows behind the alert the launcher is currently showing, so `markSeen` has an `updated` to
 // record and the ceremony has something to open. Set by check(), read by take().
 let lastRows = [];
+// Series owed a next game (mp.js readOwedSeries), refreshed with every read of the list: the hub's
+// "Your turn" count includes the ones you start.
+let lastOwed = [];
+async function refreshOwed(rows) {
+  try { lastOwed = await readOwedSeries(rows); } catch (err) { console.warn('[hoops4] owed series', err); }
+}
 
 /**
  * THE LAUNCHER'S ONE QUESTION, asked once per paint. Resolves to an alert or null, and never
@@ -113,6 +119,7 @@ export async function check() {
     lastRows = Array.isArray(rows) ? rows : [];
     await rearmUnshot(lastRows);
     try { recordFinished(lastRows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
+    await refreshOwed(lastRows);
     return decideAlert(lastRows, readSeen(), readUnseen());
   } catch (err) {
     console.warn('[hoops4] could not check for challenges', err);
@@ -132,6 +139,7 @@ export async function watch(cb) {
       lastRows = Array.isArray(rows) ? rows : [];
       try { await rearmUnshot(lastRows); } catch { /* the plain decision below still stands */ }
       try { recordFinished(lastRows); } catch { /* counted on the next open instead */ }
+      await refreshOwed(lastRows);
       try { cb(decideAlert(lastRows, readSeen(), readUnseen())); } catch (err) { console.warn('[hoops4] alert watch', err); }
     });
   } catch { return () => {}; }
@@ -143,7 +151,9 @@ export function rowFor(id) {
 }
 
 /** How many matches are waiting on you, from the last read: the hub's Challenges button badge. */
-export function myTurnCount() { return lastRows.filter((r) => r && !r.over && r.yourTurn).length; }
+export function myTurnCount() {
+  return lastRows.filter((r) => r && !r.over && r.yourTurn).length + lastOwed.filter((r) => r.yourTurn).length;
+}
 
 // --- the ceremony handoff ----------------------------------------------------------------------
 // ARMED, NEVER BACKFILLED - the same shape as skeeball's key ceremony. The launcher arms this when
@@ -167,7 +177,9 @@ export function armCeremony(alert) {
 export function armOpen(id) {
   try {
     if (!id) return;
-    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'open', id: String(id), name: '', emoji: '', count: 0 }));
+    // 'next:<id>' from the hub's Multiplayer screen: a series owed its next game (readOwedSeries).
+    const v = String(id), next = v.startsWith('next:');
+    sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: next ? 'next' : 'open', id: next ? v.slice(5) : v, name: '', emoji: '', count: 0 }));
   } catch { /* no session storage: the game opens on its setup screen, as before */ }
 }
 
@@ -188,7 +200,7 @@ export function takeCeremony() {
     sessionStorage.removeItem(ARM_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw);
-    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn' && a.kind !== 'open' && a.kind !== 'pick')) return null;
+    if (!a || (a.kind !== 'challenge' && a.kind !== 'turn' && a.kind !== 'open' && a.kind !== 'next' && a.kind !== 'pick')) return null;
     if (a.kind === 'pick' && !a.code) return null;
     return { kind: a.kind, id: String(a.id || ''), name: String(a.name || ''),
       emoji: String(a.emoji || '🙂'), count: a.count | 0, ...(a.kind === 'pick' ? { code: String(a.code) } : {}) };

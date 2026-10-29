@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1339;
-const CACHE = 'game-hub-v1340';
+const CACHE = 'game-hub-v1341';
 
 const ASSETS = [
   './',
@@ -827,7 +827,7 @@ const REST_MANIFEST = {
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5661b55a36',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': '84f80968fd',
+  './js/challenges.js': 'f2c146fbf7',
   './js/challenges-ui.js': '0033c2a662',
   './js/challenge-life.js': 'b3e2aa8926',
   './js/challenges-strings.js': '3b7b38de5a',
@@ -1145,17 +1145,17 @@ const REST_MANIFEST = {
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': '533fd79845',
   './hoops4/css/hoops4.css': '38efeef410',
-  './hoops4/js/ui.js': 'f893a18e63',
+  './hoops4/js/ui.js': 'feee0e3eb5',
   './hoops4/js/boarddef.js': 'd1214c250c',
   './hoops4/js/machine.js': '657e6330a1',
   './hoops4/js/physics.js': 'a5793407ee',
   './hoops4/js/render.js': '267329ba3c',
   './hoops4/js/game.js': '2e0010da15',
   './hoops4/js/cpu.js': 'f1b8a3e68b',
-  './hoops4/js/mp.js': 'e428d5e9c6',
+  './hoops4/js/mp.js': '9bbfc8f24c',
   './hoops4/js/replay.js': 'a5a39bdf6d',
   './hoops4/js/mp-ui.js': '62b69407e0',
-  './hoops4/js/alert.js': '18ae0c4d78',
+  './hoops4/js/alert.js': '18b6a02ae3',
   './hoops4/js/strings.js': 'cc8b7aa019',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '3289090081',
