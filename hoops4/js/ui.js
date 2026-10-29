@@ -146,6 +146,21 @@ class Hoops4 {
       } catch (err) { console.error('[hoops4] could not open the challenge', err); }
       return;
     }
+    // FROM THE HUB'S MULTIPLAYER SCREEN (2026-10-29): a series owed its next game. Re-checked from
+    // a fresh read, so game N+1 is never made twice; not yours to start = the multiplayer sheet.
+    if (armed.kind === 'next') {
+      try {
+        const MP = await import('./mp.js');
+        const owed = (await MP.readOwedSeries(await MP.readMyGames())).find((r) => r.id === `next:${armed.id}`);
+        const game = owed && owed.yourTurn ? await MP.readGame(armed.id) : null;
+        const res = game ? await MP.nextInSeries(game) : null;
+        if (this.disposed) return;
+        if (res && res.ok) { this.startAsync(res.game); return; }
+        const mod = await import('./mp-ui.js');
+        if (!this.disposed) mod.openMultiplayer(this);
+      } catch (err) { console.error('[hoops4] could not start the next game', err); }
+      return;
+    }
     // FROM A NOTIFICATION (2026-09-24): straight onto that match's board, no card. A match that
     // has already ended opens as its read-only review, which shows the Game Over card.
     if (armed.kind === 'open') {

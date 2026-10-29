@@ -817,5 +817,27 @@ check('a player code is normalised and validated',
   check('createGame stamps lapse on every new challenge', /oneShot: !!oneShot, lapse: true/.test(src2));
 }
 
+// --- a series between games: the hub's Multiplayer screen must still list it (2026-10-29) ---------
+{
+  const R = (o) => ({ with: 'KINGG', name: 'King', emoji: '🤴', updated: 5, series: 3, ...o });
+  const g1 = R({ id: 'g1', seriesOf: 'g1', seriesNo: 1, over: true, result: 'lost' });
+  check('owedCandidates: game 1 of 3 over is a candidate', MP.owedCandidates([g1]).length === 1);
+  check('owedCandidates: game 2 made, none', MP.owedCandidates([g1, R({ id: 'g2', seriesOf: 'g1', seriesNo: 2, over: false })]).length === 0);
+  check('owedCandidates: 2 of 3 won by rows, none (no read)', MP.owedCandidates([
+    R({ id: 'a1', seriesOf: 'a1', seriesNo: 1, over: true, result: 'won' }),
+    R({ id: 'a2', seriesOf: 'a1', seriesNo: 2, over: true, result: 'won' })]).length === 0);
+  check('owedCandidates: called off, none', MP.owedCandidates([{ ...g1, ended: 'cancelled', result: null }]).length === 0);
+  check('owedCandidates: single game, none', MP.owedCandidates([{ ...g1, series: 1 }]).length === 0);
+  const game = (winner) => ({ id: 'g1', a: { code: 'MEMEM' }, b: { code: 'KNGXX' }, series: 3, seriesNo: 1,
+    seriesWins: { a: 0, b: 0 }, over: { winner } });
+  let o = MP.owedRowFor(g1, game('b'), 'MEMEM');
+  check('owedRowFor: lost game 1, my move, game 2', o && o.id === 'next:g1' && o.yourTurn && o.seriesNo === 2 && o.owed && !o.over);
+  o = MP.owedRowFor(g1, game('a'), 'MEMEM');
+  check('owedRowFor: won game 1, their move', o && !o.yourTurn);
+  check('owedRowFor: a draw, side b starts', MP.owedRowFor(g1, game(null), 'KNGXX').yourTurn && !MP.owedRowFor(g1, game(null), 'MEMEM').yourTurn);
+  check('owedRowFor: series done, null', MP.owedRowFor(g1, { ...game('b'), seriesWins: { a: 0, b: 1 } }, 'MEMEM') === null);
+  check('owedRowFor: unreadable match, null', MP.owedRowFor(g1, null, 'MEMEM') === null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
