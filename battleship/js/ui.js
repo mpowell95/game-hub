@@ -2231,7 +2231,8 @@ class BattleshipUI {
     if (this.ch) {
       // Counted once per match on this phone, through mp.js's ledger (the launcher's list read may
       // have counted it already, without these extras). Challenges write no head-to-head.
-      try { CH.countResult(this.ch.id, won, extras); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
+      const ov = this.ch.game && this.ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
+      try { CH.countResult(this.ch.id, won, extras, (ov && ov.at) || Date.now()); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
       return;
     }
     try { recordBattleship(difficulty, won, extras); } catch { /* never block the result */ }
@@ -3266,7 +3267,7 @@ class BattleshipUI {
         <button type="button" class="bs-x" data-action="ch-unseen-ok" data-ids="${esc(all)}" aria-label="${esc(t('close'))}">&times;</button>
         <span class="bs-card-emoji">${esc(won ? '🏆' : r.emoji)}</span>
         <h3 class="bs-card-title">${esc(title)}</h3>
-        ${r.why === 'resign' ? `<p class="bs-card-sub">${esc(t('ch_resigned', { name: won ? (r.name || '?') : myName() }))}</p>` : ''}
+        ${r.why === 'timeout' ? `<p class="bs-card-sub">${esc(t('ch_timed_out'))}</p>` : r.why === 'resign' ? `<p class="bs-card-sub">${esc(t('ch_resigned', { name: won ? (r.name || '?') : myName() }))}</p>` : ''}
         <div class="bs-card-actions"><button type="button" class="bs-btn bs-btn-primary" data-action="ch-unseen-ok" data-ids="${esc(all)}">${esc(t('ch_ok'))}</button></div>
       </div>`;
     this.root.appendChild(overlay);
@@ -3414,7 +3415,8 @@ class BattleshipUI {
   /** A resignation is not in the log: once every shot is shown, end the match the way it ended. */
   _chMaybeForceEnd() {
     const g = this.ch && this.ch.game;
-    if (!g || !g.over || g.over.why !== 'resign' || !this.state || this.state.over) return;
+    // Resigned, or 7 days on someone's turn (js/challenge-life.js): a result the log did not produce.
+    if (!g || !g.over || (g.over.why !== 'resign' && g.over.why !== 'timeout') || !this.state || this.state.over) return;
     this.state = { ...this.state, over: true, winner: CH.seatOfSide(g.over.winner) };
     this._afterStateChange();
   }

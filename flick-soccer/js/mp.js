@@ -32,11 +32,11 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, flick, runToRest, settle, cleanForms, cleanPairs, GOAL_OPTIONS, DISCS } from './engine.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 
 const NODE = 'flicksoccer';
 const STATS_ID = 'flicksoccer';
@@ -256,12 +256,24 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
  *  the receiver's turn; expires = when a waiting challenge lapses (0 = never: a match made before
  *  2026-10-13). The receiver kicks off, so a challenge waits on them from the moment it is made. */
 export function lifeOf(game, now = Date.now()) {
-  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false };
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
   const open = !game.log.some((e) => e.by === to);
   const waiting = open && game.turn === to;
   const expires = expiresAt(game.lapse, waiting, game.updated);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+  // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
+  // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
+}
+/** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
+ *  every read (nothing is written), so both phones agree and a late move is refused. */
+export function withTimeout(game, now = Date.now()) {
+  if (!game || game.over) return game;
+  const life = lifeOf(game, now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other }, now);
+  if (over) { game.over = over; game.turn = null; }
+  return game;
 }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
@@ -348,10 +360,13 @@ export function markCounted(id) {
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). Online
  *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention"). A
  *  VOIDED match (js/stats-corrections.js) is never counted, and is not marked counted either. */
-export function countResult(id, won) {
+export function countResult(id, won, finishedAt = Date.now()) {
   if (isVoidedMatch(STATS_ID, id)) return false;
+  // A storage that never counted these challenges counts only what finished after it started
+  // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
+  if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { recordResult(STATS_ID, 'mp', !!won); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => recordResult(STATS_ID, 'mp', !!won)); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }
   return true;
 }
 /** A voided match this phone HAD counted: noted once, so the stats screens take it back out. */
@@ -369,8 +384,8 @@ export function noteVoided() {
 export function recordFinished(rows) {
   try { noteVoided(); } catch (err) { console.warn('[flick-soccer] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id));
-  for (const r of todo) countResult(r.id, r.result === 'won');
+  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -403,11 +418,13 @@ function rowsFromIndex(val, now = Date.now()) {
     // Cancelled, declined or expired (js/challenge-life.js): finished, with no result for anybody.
     // That includes this game's first form of a called-off challenge (over, result 'cancelled').
     const ended = rowEnding(r, now);
+    // Answered, and 7 days on one player's turn (js/challenge-life.js): they lost, why 'timeout'.
+    const late = ended ? null : rowTimeout(r, now);
     return {
       id, with: asCode(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      updated: ms(r.updated), yourTurn: !ended && !!r.yourTurn, over: !!r.over || !!ended,
-      result: !ended && RESULTS.includes(r.result) ? r.result : null,
-      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
+      result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       mine: ms(r.mine), theirs: ms(r.theirs), goals: GOAL_OPTIONS.includes(+r.goals) ? +r.goals : 2,
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       cancelled: ended === 'cancelled' || ended === 'declined',
@@ -449,7 +466,7 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[flick-soccer] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return game;
+    return withTimeout(game);
   } catch (err) { console.warn('[flick-soccer] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -459,7 +476,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(g); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
       catch (err) { console.warn('[flick-soccer] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -511,7 +528,7 @@ async function readFresh(api, db, id) {
   const game = validateGame(snap.val());
   if (!game) { console.error(`[flick-soccer] ${NODE}/games/${id} did not validate; refusing to write to it.`); return { game: null, why: 'invalid-match' }; }
   game.id = id;
-  return { game, why: null };
+  return { game: withTimeout(game), why: null };
 }
 /** Has the other person been handed this match yet? Side 'a' (the challenger) delivers it the moment
  *  its first turn ends; until then only the challenger's own row exists. */
@@ -534,6 +551,7 @@ function rowFor(game, side, writer) {
     // Written on EVERY row write, so an answered challenge clears what its unanswered rows said.
     open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
     expires: life.expires,
+    turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),           // this row's owner sent the challenge (2026-10-13)
     mine: game.scores[side], theirs: game.scores[other(side)],
@@ -668,11 +686,11 @@ export async function appendLog(id, base, entries) {
       // The flicks landed but this phone never heard (the verify, or the index rows after it, did not
       // finish). Write the rows again: the same values, so a row already right is unchanged, and the
       // other person is told even when the first attempt dropped between the log and their row.
-      await writeRows(api, db, fresh, side, delivered(fresh, side) ? null : side);
+      if (!(fresh.over && fresh.over.why === TIMEOUT)) await writeRows(api, db, fresh, side, delivered(fresh, side) ? null : side);   // a derived timeout is never written
       if (fresh.over || fresh.turn !== side) markSeen(id, fresh.updated);
       return { ok: true, game: fresh };
     }
-    if (fresh.over) return fail('already-over');
+    if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no flick can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
     // Check the rules accept them before anything is written.
@@ -770,6 +788,7 @@ export async function resignGame(id) {
     const mineResign = (g) => g.over && g.over.why === 'resign' && g.over.winner === other(side);
     // Already over. If it was this resignation (a retry after the rows did not land), write the rows
     // again so the other person is told; any other ending is left exactly as it is.
+    if (fresh.over && fresh.over.why === TIMEOUT) return fail('already-over');   // timed out: already decided
     if (fresh.over && !mineResign(fresh)) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
     if (!fresh.over && lifeOf(fresh).open) return cancelGame(id);
     let back = fresh;
@@ -843,7 +862,7 @@ export function recordsFrom(rows, code) {
   const me = asCode(code);
   // A cancelled, declined or expired challenge was never played: it is in no record (js/challenge-life.js).
   const finished = (Array.isArray(rows) ? rows : []).filter((r) => r && r.over && !r.ended && asCode(r.with) && asCode(r.with) !== me)
-    .map((r) => ({ ...r, resigned: r.why === 'resign' ? (r.result === 'won' ? 'them' : 'me') : null }))
+    .map((r) => ({ ...r, resigned: r.why === 'resign' ? (r.result === 'won' ? 'them' : 'me') : null, timedOut: r.why === TIMEOUT }))
     .sort((x, y) => ms(y.updated) - ms(x.updated));
   const by = new Map();
   for (const r of finished) {

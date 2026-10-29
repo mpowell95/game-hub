@@ -188,7 +188,7 @@ async function history(ui, MP) {
   const { opponents, finished } = MP.recordsFrom(rows, MP.myCode());
   const list = body.querySelector('.ar-mp-list');
   if (!finished.length) { list.innerHTML = `<p class="ar-mp-note">${esc(t('mp_no_history'))}</p>`; return; }
-  const word = (r) => (r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
+  const word = (r) => (r.timedOut ? t('mp_timed_out') : r.result === 'won' ? (r.resigned === 'them' ? t('mp_won_quit') : t('mp_won')) : (r.resigned === 'me' ? t('mp_you_quit') : t('mp_lost')));
   // Won and lost are told apart by a mark (check, cross), never by colour alone.
   const mark = (r) => (r.result === 'won' ? '✓' : '✗');
   const opp = opponents.slice(0, 3), fin = finished.slice(0, 10);
@@ -221,7 +221,7 @@ export function showUnseen(ui, MP, rows) {
       <button type="button" class="ar-x" data-mp="close" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
       <p class="ar-res-ava" aria-hidden="true">${esc(r.emoji)}</p>
       <h2 class="ar-h2">${esc(t('win_name', { name: won ? myName() : r.name }))}</h2>
-      <p class="ar-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name, me: myName() }))}${r.why === 'resign' ? ` · ${esc(t('mp_they_resigned', { name: won ? r.name : myName() }))}` : ` · ${esc(t('result_line', { a: r.mine, b: r.theirs }))}`}</p>
+      <p class="ar-res-line">${esc(t(won ? 'mp_you_won_vs' : 'mp_you_lost_vs', { name: r.name, me: myName() }))}${r.why === 'timeout' ? ` · ${esc(t('mp_timed_out'))}` : r.why === 'resign' ? ` · ${esc(t('mp_they_resigned', { name: won ? r.name : myName() }))}` : ` · ${esc(t('result_line', { a: r.mine, b: r.theirs }))}`}</p>
       ${ended.length > 1 ? `<p class="ar-res-line">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;

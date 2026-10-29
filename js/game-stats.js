@@ -289,6 +289,8 @@ const STATS_KEY = 'gamehub.stats';
 // archive/<game>/CLAUDE.md.
 const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
+// The challenge match being counted right now (withChallengeMatch, 2026-10-29); null otherwise.
+let _mpMatch = null;
 const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
@@ -1048,6 +1050,59 @@ function bumpTotals(g, d, won) {
   g.total.played += 1; g.byDiff[d].played += 1;
   if (won === true) { g.total.won += 1; g.byDiff[d].won += 1; }
   else if (won === false) { g.total.lost += 1; g.byDiff[d].lost += 1; }
+  // A CHALLENGE result (withChallengeMatch below) notes WHICH match this 'mp' count was, in the
+  // same write as the count itself, so the two can never disagree (2026-10-29).
+  if (_mpMatch && !_mpMatch.noted && d === 'mp') {
+    if (!g.mpIds || typeof g.mpIds !== 'object' || Array.isArray(g.mpIds)) g.mpIds = {};
+    if (!g.mpIds[_mpMatch.id]) g.mpIds[_mpMatch.id] = won === true ? 'w' : won === false ? 'l' : 'd';
+    _mpMatch.noted = true;
+  }
+}
+
+// --- WHICH challenge match an 'mp' count was (2026-10-29) -------------------------------------------
+// Every challenge game counts a finished match once per phone STORAGE (its own `counted` ledger). The
+// same player in Safari and in the Home Screen app, or on two phones, counted the same match on each,
+// and js/players-agg.js sums a person's devices: one online win showed as two. Now the count also notes
+// the match id, `games.<id>.mpIds[<matchId>] = 'w' | 'l' | 'd'` (exactly what was added: won, lost, or
+// played only), and players-agg.js takes every extra copy of one id across a person's devices back out
+// of `byDiff.mp` and `total` at read time. ADDITIVE: an id is never removed (THE LAW rules 2 and 5);
+// the raw counters are never touched. Live-room games in the same 'mp' bucket carry no id and count as
+// before. Counts from before 2026-10-29 carry no id either, so they cannot be de-duplicated.
+const MP_ID_RE = /^[A-Za-z0-9_-]{4,40}$/;
+/** Run `record` (the game's own recorder, called with difficulty 'mp') noting `matchId` with the count
+ *  it adds. Returns whatever `record` returns. A refused or failed record notes nothing. */
+export function withChallengeMatch(gameId, matchId, record) {
+  const id = String(matchId == null ? '' : matchId);
+  if (!MP_ID_RE.test(id) || GAMES.indexOf(gameId) < 0) return record();
+  const prev = _mpMatch;
+  _mpMatch = { id, noted: false };
+  try { return record(); } finally { _mpMatch = prev; }
+}
+
+// --- a storage that never counted a game's challenges does not count their HISTORY (2026-10-29) ----
+// Each game's `counted` ledger lives in ONE storage. A fresh one (a new install, the Home Screen app
+// beside Safari, cleared site data) used to count every finished match in the player's index again.
+// The first time a storage with no ledger for a game asks, it stamps "counting since now" under
+// `<ledgerKey>.since`, and from then on counts only matches that FINISHED after that (less a grace for
+// two phones' clocks). A storage that already had a ledger never gets a stamp and behaves as before.
+export const COUNT_GRACE_MS = 10 * 60 * 1000;
+/** When this storage started counting that game's challenges: 0 = it counted before this rule. */
+export function countingSince(ledgerKey, now = Date.now()) {
+  const k = String(ledgerKey) + '.since';
+  try {
+    const s = +localStorage.getItem(k);
+    if (Number.isFinite(s) && s > 0) return s;
+    if (localStorage.getItem(ledgerKey) != null) return 0;
+    localStorage.setItem(k, String(now));
+    return now;
+  } catch { return now; }
+}
+/** May this storage count a match that finished at `finishedAt` (ms)? */
+export function mayCountChallenge(ledgerKey, finishedAt, now = Date.now()) {
+  const since = countingSince(ledgerKey, now);
+  if (!since) return true;
+  const at = Number.isFinite(+finishedAt) ? +finishedAt : 0;
+  return at > 0 && at >= since - COUNT_GRACE_MS;
 }
 
 /** Fold a legacy store into a game's totals ONCE (guarded by game._leg). Additive; returns true
@@ -1186,6 +1241,12 @@ function persistOrQueue(st, entry) {
 function drainPendingResults(st) {
   const q = readJSON(PENDING_KEY);
   if (!Array.isArray(q) || !q.length) return false;
+  // A queued result is an OLDER play: it must not take the id of the challenge being counted now.
+  const held = _mpMatch;
+  _mpMatch = null;
+  try { return drainQueued(st, q); } finally { _mpMatch = held; }
+}
+function drainQueued(st, q) {
   let applied = 0;
   for (const e of q) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;

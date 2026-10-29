@@ -35,10 +35,10 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordChinchon, noteVoidedResult } from '../../js/game-stats.js';
+import { recordChinchon, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
 
 const NODE = 'chinchon';
@@ -351,12 +351,24 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
  *  waiting = open and it is the receiver's turn (it has been delivered); expires = when a waiting
  *  challenge lapses (0 = never). */
 export function lifeOf(game, now = Date.now()) {
-  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false };
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
   const open = !game.log.some((e) => e.by === to);
   const waiting = open && game.turn === to;
   const expires = expiresAt(game.lapse, waiting, game.updated);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+  // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
+  // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
+}
+/** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
+ *  every read (nothing is written), so both phones agree and a late move is refused. */
+export function withTimeout(game, now = Date.now()) {
+  if (!game || game.over) return game;
+  const life = lifeOf(game, now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other }, now);
+  if (over) { game.over = over; game.turn = null; }
+  return game;
 }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
@@ -445,13 +457,16 @@ export function markCounted(id) {
  *  results go in the 'mp' bucket, the same bucket a live room's match uses (ui.js MP_DIFFICULTY).
  *  `won`: true, false, or null for a draw. `extras`: this side's { closed, minusTen, chinchons }.
  *  Never recordHeadToHead: the Multiplayer screen's Records reads challenges from the index. */
-export function countResult(id, won, extras = {}) {
+export function countResult(id, won, extras = {}, finishedAt = Date.now()) {
   if (isVoidedMatch('chinchon', id)) return false;
+  // A storage that never counted these challenges counts only what finished after it started
+  // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
+  if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
   try {
-    recordChinchon('mp', won == null ? null : !!won, {
+    withChallengeMatch('chinchon', id, () => recordChinchon('mp', won == null ? null : !!won, {
       closed: extras.closed | 0, minusTen: extras.minusTen | 0, chinchons: extras.chinchons | 0,
-    });
+    }));
   } catch (err) { console.error('[chinchon] recordChinchon failed', err); }
   return true;
 }
@@ -472,8 +487,8 @@ export function noteVoided() {
 export function recordFinished(rows) {
   try { noteVoided(); } catch (err) { console.warn('[chinchon] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch('chinchon', r.id));
-  for (const r of todo) countResult(r.id, wonOf(r.result), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 });
+  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch('chinchon', r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  for (const r of todo) countResult(r.id, wonOf(r.result), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 }, r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -506,11 +521,13 @@ export function rowsFromIndex(val, now = Date.now()) {
     const r = val[id] || {};
     // Cancelled, declined or expired (js/challenge-life.js): finished, with no result for anybody.
     const ended = rowEnding(r, now);
+    // Answered, and 7 days on one player's turn (js/challenge-life.js): they lost, why 'timeout'.
+    const late = ended ? null : rowTimeout(r, now);
     return {
       id, with: asCode(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      updated: ms(r.updated), yourTurn: !ended && !!r.yourTurn, over: !!r.over || !!ended,
-      result: !ended && RESULTS.includes(r.result) ? r.result : null,
-      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
+      result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       mine: n0(r.mine), theirs: n0(r.theirs), kind: LENS.includes(r.kind) ? r.kind : 'hand', round: ms(r.round) || 1,
       cl: n0(r.cl), cn: n0(r.cn), m10: n0(r.m10),
@@ -550,7 +567,7 @@ export async function readGame(id) {
     const game = await validateGame(snap.val());
     if (!game) { console.error(`[chinchon] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return game;
+    return withTimeout(game);
   } catch (err) { console.warn('[chinchon] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change (in order:
@@ -564,7 +581,7 @@ export async function watchGame(id, cb) {
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
       const mine = ++seq;
       validateGame(snap && snap.exists() ? snap.val() : null).then((g) => {
-        if (g && mine === seq) { g.id = id; cb(g); }
+        if (g && mine === seq) { g.id = id; cb(withTimeout(g)); }
       }).catch((err) => console.warn('[chinchon] match watch', err));
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -622,6 +639,7 @@ function rowFor(game, side, writer) {
     // Written on EVERY row write, so an answered challenge clears what its unanswered rows said.
     open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
     expires: life.expires,
+    turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),           // this row's owner sent the challenge
     mine: game.scores[side], theirs: game.scores[other(side)],
@@ -712,7 +730,7 @@ export async function appendLog(id, base, entries) {
     const todo = list.slice(skip);
     const turnBefore = fresh.turn;
     if (!todo.length) return { ok: true, game: fresh };
-    if (fresh.over) return fail('already-over');
+    if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no move can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
     // The rules must accept them before anything is written.
@@ -802,6 +820,7 @@ export async function resignGame(id) {
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
+    if (fresh.over && fresh.over.why === TIMEOUT) return fail('already-over');   // timed out: already decided
     if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
     if (lifeOf(fresh).open) return cancelGame(id);
     const now = Date.now();

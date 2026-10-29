@@ -813,7 +813,7 @@ class FlickSoccerUI {
       `<span class="fs-res-team">${teamChip(0)}<b>${m.scores[0]}</b></span><span aria-hidden="true">&ndash;</span><span class="fs-res-team"><b>${m.scores[1]}</b>${teamChip(1)}</span>`;
     this.root.querySelector('[data-role="resLine"]').setAttribute('aria-label', t('result_line', { a: m.scores[0], b: m.scores[1] }));
     if (mp && mp.resigned) {
-      this.root.querySelector('[data-role="resLine"]').textContent = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
+      this.root.querySelector('[data-role="resLine"]').textContent = mp.timedOut ? t('mp_timed_out') : iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
     }
   }
 
@@ -1122,7 +1122,7 @@ class FlickSoccerUI {
     }
     this.MP.markShown(mp.id, g.log.length);
     if (g.over && (this.MP.isCalledOff(g) || !g.log.length)) { this._mpCalledOff(this._mpEndText(g, mp.side)); return; }
-    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this.phase = 'aim'; this._status(); return; }
     this.phase = 'waiting';
     this._status();
@@ -1178,7 +1178,7 @@ class FlickSoccerUI {
     if (mp.game.pick && !g.pick && !g.over) { this._mpBegin(g); return; }   // they chose: both line-ups now
     mp.game = g;
     if (g.over && (this.MP.isCalledOff(g) || !g.log.length) && !mp.finished) { this._mpCalledOff(this._mpEndText(g, mp.side)); return; }
-    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && !mp.finished && mp.applied >= g.log.length) {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
     }
@@ -1259,7 +1259,9 @@ class FlickSoccerUI {
     mp.resigned = !!resigned;
     const m = this.match;
     if (resigned) m.winner = won ? mp.mySeat : mp.mySeat ^ 1;
-    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    const ov = mp.game && mp.game.over;
+    mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';

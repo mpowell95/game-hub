@@ -930,7 +930,7 @@ class PoolUI {
     this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'to_menu');
     const line = this.root.querySelector('[data-role="resLine"]');
     const quit = mp && mp.resigned && mp.game.over && Number.isInteger(mp.game.over.by) ? mp.game.p[mp.game.over.by] : null;
-    line.textContent = quit ? t('mp_x_resigned', { name: quit.name || '?' }) : m.racks > 1 ? m.scores.join(' – ') : '';
+    line.textContent = quit ? t(mp.game.over.why === 'timeout' ? 'mp_x_timed_out' : 'mp_x_resigned', { name: quit.name || '?' }) : m.racks > 1 ? m.scores.join(' – ') : '';
     line.hidden = !line.textContent;
   }
 
@@ -1252,7 +1252,7 @@ class PoolUI {
     }
     this.MP.markShown(mp.id, g.log.length);
     if (g.over && (this.MP.isCalledOff(g) || !g.log.length)) { this._mpCalledOff(this._mpEndText(g, mp.seat)); return; }
-    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.seat, true); return; }
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { this._mpFinish(g.over.winner === mp.seat, true); return; }
     if (m.turn === mp.seat) {
       this.phase = 'aim';
       this.placing = !!m.inHand && !this._aids().freeHand;
@@ -1308,7 +1308,7 @@ class PoolUI {
     if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
     mp.game = g;
     if (g.over && (this.MP.isCalledOff(g) || !g.log.length) && !mp.finished) { this._mpCalledOff(this._mpEndText(g, mp.seat)); return; }
-    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length && this.phase !== 'moving') {
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && !mp.finished && mp.applied >= g.log.length && this.phase !== 'moving') {
       this._mpFinish(g.over.winner === mp.seat, true);
       return;
     }
@@ -1379,7 +1379,8 @@ class PoolUI {
     mp.resigned = !!resigned;
     const m = this.match;
     if (resigned) m.winner = mp.game.over.winner;
-    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it
+    const ov = mp.game && mp.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone, whoever ended it
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';

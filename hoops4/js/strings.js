@@ -142,7 +142,7 @@ export const STRINGS = {
     mpHistory: 'History', histRecords: 'Records', histGames: 'Finished games',
     histNone: 'No finished games yet.',
     histWon: 'Won', histLost: 'Lost', histDraw: 'Draw', histResigned: 'Resigned',
-    histTheyResigned: 'Won, they resigned', histUnknown: 'Finished',
+    histTheyResigned: 'Won, they resigned', histUnknown: 'Finished', histTimedOut: 'Timed out',
     histLine: 'W {w} · L {l} · D {d}',
   },
   es: {
@@ -258,7 +258,7 @@ export const STRINGS = {
     mpHistory: 'Historial', histRecords: 'Récords', histGames: 'Partidas terminadas',
     histNone: 'Aún no hay partidas terminadas.',
     histWon: 'Ganada', histLost: 'Perdida', histDraw: 'Empate', histResigned: 'Te rendiste',
-    histTheyResigned: 'Ganada, se rindió', histUnknown: 'Terminada',
+    histTheyResigned: 'Ganada, se rindió', histUnknown: 'Terminada', histTimedOut: 'Tiempo agotado',
     histLine: 'G {w} · P {l} · E {d}',
   },
 };

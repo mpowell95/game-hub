@@ -225,3 +225,7 @@ the STORED side (`mp.side`), right whichever seat the left plaque is.
 - **The challenge card chooses the game** (2026-10-27): Game 301/201/101/Cricket, and Cricket's Order / Points, on
   `mp-ui.js` `confirm` (the setup card's own settings via `ui._saveSettings`). Before, a challenge from the
   Multiplayer screen could only be whatever game the setup card last had.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Rows carry `turnAt`; `withTimeout` on every read; `countResult(id, won, finishedAt)`; a timeout shows "Timed out" (`mp_timed_out`). `tools/test-darts-mp.mjs` plays one.

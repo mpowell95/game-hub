@@ -278,3 +278,7 @@ directly UNDER the Menu button (`CHAT_PLACE`, `right: 12px`, `top` = menu top + 
 second line runs wide; it lands on the far wall, never the flick pad. Node `cuppong/chat/<matchId>/
 <key>` (sibling of `games/<id>`, so `watchGame`/`validateGame` never see chat); sends with the STORED
 side (`mp.side`), never the local-frame `'a'`.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". Game 2+ of a series is never open but can time out; `countResult(id, won, finishedAt)`; "Timed out" (`timedOut`).

@@ -32,10 +32,10 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed } from './online.js';
 
 export const NODE = 'battlearena';
@@ -126,11 +126,13 @@ export function validateGame(raw) {
   const keys = Object.keys(src).sort();
   if (keys.length > MAX_LOG) return null;
   const log = [];
+  const ats = [];                                     // each move's time: the 7-day forfeit clock (2026-10-29)
   for (const k of keys) {
     const e = cleanMove(src[k]);
     if (!e) return null;
     if (e.by === 'b' && !teamB) return null;          // side b cannot move before it has a team
     log.push(e);
+    ats.push(ms(src[k].at));
   }
   const rep = replay(seed, { a: teamA, b: teamB }, log);
   if (!rep.ok) return null;
@@ -164,6 +166,7 @@ export function validateGame(raw) {
     b: who(raw.b, teamB),
     turn: over ? null : sideOfSeat(st.turn),
     log,
+    ats,
     over,
     hp: { a: st.sides[0].hp, b: st.sides[1].hp },
     turnNo: st.turnNo,
@@ -186,12 +189,24 @@ export function recipientOf(game) { return game ? recipientOfRaw(game.a.code, ga
 /** PURE. { open, waiting, expires, expired }: open = not over and the receiver has made no MOVE
  *  (picking a team is not an answer); waiting = open and it is the receiver's turn. */
 export function lifeOf(game, now = Date.now()) {
-  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false };
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const to = recipientOf(game);
   const open = !game.log.some((e) => e.by === to);
   const waiting = open && game.turn === to;
   const expires = expiresAt(game.lapse, waiting, game.updated);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+  // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
+  // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated, game.ats);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
+}
+/** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
+ *  every read (nothing is written), so both phones agree and a late move is refused. */
+export function withTimeout(game, now = Date.now()) {
+  if (!game || game.over) return game;
+  const life = lifeOf(game, now);
+  const over = timeoutOver({ over: game.over, open: life.open, turn: game.turn, turnAt: life.turnAt, other }, now);
+  if (over) { game.over = over; game.turn = null; }
+  return game;
 }
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
 export function themOf(game, code) { const s = sideOf(game, code); return (s === 'a' ? game.b : game.a) || { code: null, name: '', emoji: '🙂' }; }
@@ -274,10 +289,13 @@ export function markCounted(id) {
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2). Online results go in the
  *  'mp' bucket; challenges never write head-to-head (js/mp-records.js reads them from the index). */
-export function countResult(id, won) {
+export function countResult(id, won, finishedAt = Date.now()) {
   if (isVoidedMatch(STATS_ID, id)) return false;
+  // A storage that never counted these challenges counts only what finished after it started
+  // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
+  if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { recordResult(STATS_ID, 'mp', !!won); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => recordResult(STATS_ID, 'mp', !!won)); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   return true;
 }
 export function noteVoided() {
@@ -294,8 +312,8 @@ export function noteVoided() {
 export function recordFinished(rows) {
   try { noteVoided(); } catch (err) { console.warn('[battle-arena] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id));
-  for (const r of todo) countResult(r.id, r.result === 'won');
+  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -326,11 +344,13 @@ export function rowsFromIndex(val, now = Date.now()) {
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
     const ended = rowEnding(r, now);
+    // Answered, and 7 days on one player's turn (js/challenge-life.js): they lost, why 'timeout'.
+    const late = ended ? null : rowTimeout(r, now);
     return {
       id, with: asCode(r.with), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      updated: ms(r.updated), yourTurn: !ended && !!r.yourTurn, over: !!r.over || !!ended,
-      result: !ended && RESULTS.includes(r.result) ? r.result : null,
-      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
+      result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       mine: ms(r.mine), theirs: ms(r.theirs),
     };
@@ -368,7 +388,7 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[battle-arena] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return game;
+    return withTimeout(game);
   } catch (err) { console.warn('[battle-arena] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -378,7 +398,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(g); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
       catch (err) { console.warn('[battle-arena] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -433,6 +453,7 @@ function rowFor(game, side, writer) {
     over: !!game.over && !ended,
     open: life.open ? (side === recipientOf(game) ? 'got' : 'sent') : '',
     expires: life.expires,
+    turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
     ended,
     sent: side !== recipientOf(game),
     mine: game.hp[side], theirs: game.hp[other(side)],
@@ -512,7 +533,7 @@ export async function draftTeam(id, team) {
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
     if (fresh[side].team) return fresh[side].team.join() === t.join() ? { ok: true, game: fresh } : fail('already-drafted');
-    if (fresh.over) return fail('already-over');
+    if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     if (lifeOf(fresh).expired) return fail('expired');
     await api.set(api.ref(db, `${NODE}/games/${id}/${side}/team`), t);
     const back = await readGame(id);
@@ -559,7 +580,7 @@ export async function appendLog(id, base, entries) {
     const todo = list.slice(skip);
     const turnBefore = fresh.turn;
     if (!todo.length) return { ok: true, game: fresh };
-    if (fresh.over) return fail('already-over');
+    if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no move can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
     const rep = replay(fresh.seed, { a: fresh.a.team, b: fresh.b.team }, fresh.log.concat(todo));
@@ -639,6 +660,7 @@ export async function resignGame(id) {
     if (!fresh) return fail('not-found', true);
     const side = sideOf(fresh, me);
     if (!side) return fail('not-your-game');
+    if (fresh.over && fresh.over.why === TIMEOUT) return fail('already-over');   // timed out: already decided
     if (fresh.over) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
     if (lifeOf(fresh).open) return cancelGame(id);
     const now = Date.now();

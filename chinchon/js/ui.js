@@ -3154,7 +3154,8 @@ class ChinchonUI {
         caughtUp();
         MP.markShown(ch.id, ch.log.length);
         // A resigned match stops where it was given up: nobody is asked for another move.
-        if (ch.game.over && ch.game.over.why === 'resign') { ui._chFinishResign(ch.game); return never(); }
+        // So does one timed out (7 days on a turn, js/challenge-life.js, 2026-10-29).
+        if (ch.game.over && (ch.game.over.why === 'resign' || ch.game.over.why === 'timeout')) { ui._chFinishResign(ch.game); return never(); }
         if (seat === ch.seat) {
           if (ch.waiting) { ch.waiting = false; ui.render(); }
           let v = await (kind === 'draw' ? ui.promptDraw() : kind === 'discard' ? ui.promptDiscard() : ui.promptClose());
@@ -3191,7 +3192,7 @@ class ChinchonUI {
     ch.game = g;
     if (g.log.length > ch.log.length) ch.log.push(...g.log.slice(ch.log.length));
     if (MP.isCalledOff(g) && !ch.finished) { this._chEndedNoResult(this._chEndText(g, ch.side)); return; }
-    if (g.over && g.over.why === 'resign' && !ch.finished && ch.cursor >= g.log.length) { this._chFinishResign(g); return; }
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && !ch.finished && ch.cursor >= g.log.length) { this._chFinishResign(g); return; }
     if (ch.wake) { const w = ch.wake; ch.wake = null; w(); }
   }
 
@@ -3259,9 +3260,10 @@ class ChinchonUI {
     const MP = this._chMods.MP;
     const w = MP.winnerOfEngine(this.game);
     ch.draw = w === 'draw';
+    const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
     MP.countResult(ch.id, w === 'draw' ? null : w === ch.side, {
       closed: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTen: this._matchMinusTens || 0,
-    });
+    }, (ov && ov.at) || Date.now());
     MP.markResultSeen(ch.id);
     MP.markShown(ch.id, ch.log.length);
     if (ch.replay) { ch.replay = false; this._buildPiles(); this.render(); }
@@ -3275,7 +3277,7 @@ class ChinchonUI {
     ch.finished = true;
     const MP = this._chMods.MP;
     const won = g.over.winner === ch.side;
-    MP.countResult(ch.id, won);
+    MP.countResult(ch.id, won, {}, g.over.at || Date.now());
     MP.markResultSeen(ch.id);
     MP.markSeen(ch.id, g.updated);
     if (ch.replay) { ch.replay = false; this._buildPiles(); }
@@ -3286,7 +3288,7 @@ class ChinchonUI {
     this.el.modal.innerHTML = `<div class="cc-scrim" data-action="ch-close-result"></div><div class="cc-sheet">
       <button class="cc-sheet-x" data-action="ch-close-result" aria-label="${t('close_word')}">✕</button>
       <h2 class="cc-sheet-title">${winner.avatar} ${t('match_title_plain', { winner: esc(winner.name) })}</h2>
-      <p class="cc-sheet-sub">${esc(t('ch_resigned', { name: loser.name }))}</p>
+      <p class="cc-sheet-sub">${esc(g.over.why === 'timeout' ? t('ch_timed_out') : t('ch_resigned', { name: loser.name }))}</p>
       <p class="cc-ch-score">${esc(`${meP.name} ${meP.totalScore} · ${themP.name} ${themP.totalScore}`)}</p>
       <div class="cc-sheet-actions"><button class="cc-btn cc-btn-primary" data-action="ch-rematch">${t('ch_rematch')}</button></div>
     </div>`;

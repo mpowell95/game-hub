@@ -595,12 +595,21 @@ check('a player code is normalised and validated',
     { id: 'A4', over: true, result: 'won', updated: S - 1000 },     // finished before the ledger
     { id: 'A5', over: false, result: null, updated: S + 40 },       // still being played
   ];
+  // A storage that already counted (its ledger key exists) behaves as it always did.
+  const led = { [MPm.LEDGER_KEY]: '[]' };
+  globalThis.localStorage = { getItem: (k) => (k in led ? led[k] : null), setItem: (k, v) => { led[k] = String(v); }, removeItem: (k) => { delete led[k]; } };
   const todo = MPm.rowsToCount(rows, new Set()).map((r) => r.id).join(',');
   check('only finished rows with a result, from after the ledger started, are counted', todo === 'A1,A2', todo);
   check('a row already in the ledger is never counted again', MPm.rowsToCount(rows, new Set(['A1', 'A2'])).length === 0);
+  // A FRESH storage (no ledger yet, 2026-10-29) never re-counts history: only what finishes after it.
+  const fresh = {};
+  globalThis.localStorage = { getItem: (k) => (k in fresh ? fresh[k] : null), setItem: (k, v) => { fresh[k] = String(v); }, removeItem: (k) => { delete fresh[k]; } };
+  check('a fresh storage counts none of the finished history', MPm.rowsToCount(rows, new Set()).length === 0);
+  check('...but does count a match that finishes after it started', MPm.rowsToCount([{ id: 'A6', over: true, result: 'won', updated: Date.now() + 1000 }], new Set()).length === 1);
+  delete globalThis.localStorage;
   const ui = readFileSync(new URL('./hoops4/js/ui.js', __ROOT_URL), 'utf8');
   check('finish() counts an async match through the ledger, from the STORED winner',
-    /markCounted\(this\.mp\.id\)/.test(ui) && /g\.over\.winner === this\.mp\.side/.test(ui));
+    /countFinished\(this\.mp\.id, won/.test(ui) && /g\.over\.winner === this\.mp\.side/.test(ui));
   const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', __ROOT_URL), 'utf8');
   check('every active game row has a Quit that resigns (and asks first)',
     /data-quit=/.test(mpui) && /MP\.resignGame\(id\)/.test(mpui) && /mpQuitQ/.test(mpui));

@@ -25,11 +25,11 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS, TABLE_NOW, RULES_NOW } from './engine.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 
 const NODE = 'eightball';
 const STATS_ID = 'eightball';
@@ -313,11 +313,36 @@ export function themLabel(game, code) {
 /** PURE. { open, waiting, expires, expired }: open = not over and nobody it was sent to has shot yet;
  *  waiting = open and it is one of their turns; expires = when it lapses (3 days unanswered). */
 export function lifeOf(game, now = Date.now()) {
-  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false };
+  if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const open = !game.log.some((e) => e.by !== 0);
   const waiting = open && game.turn !== 0;
   const expires = expiresAt(game.lapse, waiting, game.updated);
-  return { open, waiting, expires, expired: expires > 0 && now >= expires };
+  // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
+  // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated);
+  return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
+}
+/** Who wins if the player on turn times out: decided exactly like a resignation by them
+ *  (`resignWinner`), on the table AS IT WAS when their turn began, so the index rows written at that
+ *  moment (`tw`) and every later read agree. With two players: the other one. With three (Cutthroat,
+ *  Matt's "7 days, then forfeit", 2026-10-29): the idle player loses, and of the other two the one
+ *  with the most of their own balls still on the table wins, ties to whoever shoots next. */
+export function timeoutWinner(game) {
+  if (!game || game.over || !Number.isInteger(game.turn)) return null;
+  if (game.n !== 3) return (game.turn + 1) % game.n;
+  let start = game.log.length;
+  while (start > 0 && game.log[start - 1].by === game.turn) start--;
+  return resignWinner(buildMatch(game, start), game.turn);
+}
+/** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
+ *  every read (nothing is written), so every phone agrees and a late shot is refused. */
+export function withTimeout(game, now = Date.now()) {
+  if (!game || game.over) return game;
+  const life = lifeOf(game, now);
+  const quitter = game.turn;
+  const over = timeoutOver({ over: game.over, open: life.open, turn: quitter, turnAt: life.turnAt, other: () => timeoutWinner(game) }, now);
+  if (over) { game.over = { ...over, by: quitter }; game.turn = null; }
+  return game;
 }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
@@ -400,10 +425,13 @@ export function markCounted(id) {
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice), in the 'mp'
  *  bucket. A VOIDED match (js/stats-corrections.js) is never counted. */
-export function countResult(id, won) {
+export function countResult(id, won, finishedAt = Date.now()) {
   if (isVoidedMatch(STATS_ID, id)) return false;
+  // A storage that never counted these challenges counts only what finished after it started
+  // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
+  if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { recordResult(STATS_ID, 'mp', !!won); } catch (err) { console.error('[eight-ball] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => recordResult(STATS_ID, 'mp', !!won)); } catch (err) { console.error('[eight-ball] recordResult failed', err); }
   return true;
 }
 export function noteVoided() {
@@ -420,8 +448,8 @@ export function noteVoided() {
 export function recordFinished(rows) {
   try { noteVoided(); } catch (err) { console.warn('[eight-ball] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id));
-  for (const r of todo) countResult(r.id, r.result === 'won');
+  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -452,11 +480,16 @@ function rowsFromIndex(val, now = Date.now()) {
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
     const ended = rowEnding(r, now);
+    // Answered, and 7 days on one player's turn (js/challenge-life.js): they lost, why 'timeout'.
+    // Three players: who wins is on the row (`tw`, written when the turn began); a row without it
+    // (before 2026-10-29) is left to the match itself unless it is this player who sat on the turn.
+    let late = ended ? null : rowTimeout(r, now);
+    if (late && +r.n === 3 && !r.yourTurn) late = typeof r.tw === 'boolean' ? { ...late, result: r.tw ? 'won' : 'lost' } : null;
     return {
       id, with: asCode(r.with), with2: asCode(r.with2), name: String(r.name || ''), emoji: String(r.emoji || '🙂'),
-      updated: ms(r.updated), yourTurn: !ended && !!r.yourTurn, over: !!r.over || !!ended,
-      result: !ended && RESULTS.includes(r.result) ? r.result : null,
-      why: ended || (typeof r.why === 'string' ? r.why : ''),
+      updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
+      result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
+      why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       mine: ms(r.mine), theirs: ms(r.theirs),
       mode: MODES.includes(r.mode) ? r.mode : '8', racks: RACK_OPTIONS.includes(+r.racks) ? +r.racks : 1,
       n: +r.n === 3 ? 3 : 2,
@@ -497,7 +530,7 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[eight-ball] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return game;
+    return withTimeout(game);
   } catch (err) { console.warn('[eight-ball] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -507,7 +540,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(g); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
       catch (err) { console.warn('[eight-ball] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -552,13 +585,13 @@ async function readFresh(api, db, id) {
   const game = validateGame(snap.val());
   if (!game) { console.error(`[eight-ball] ${NODE}/games/${id} did not validate; refusing to write to it.`); return { game: null, why: 'invalid-match' }; }
   game.id = id;
-  return { game, why: null };
+  return { game: withTimeout(game), why: null };
 }
 
 /** The index row one player gets: the match from seat `seat`. With three players `with` is the next
  *  seat (fixed, so records group by one person) and `with2` the other; `name` names both. `lastBy`
  *  says whose write this is from that row's point of view (what a push function would read). */
-export function rowFor(game, seat, writer) {
+export function rowFor(game, seat, writer, tw = game.n === 3 ? timeoutWinner(game) : null) {
   const others = [];
   for (let k = 1; k < game.n; k++) others.push((seat + k) % game.n);
   const life = lifeOf(game);
@@ -575,6 +608,9 @@ export function rowFor(game, seat, writer) {
     over: !!game.over && !ended,
     open: life.open ? (seat === 0 ? 'sent' : 'got') : '',
     expires: life.expires,
+    turnAt: life.turnAt,                        // when the turn began: 7 days, then forfeit (2026-10-29)
+    // Three players: would this seat win if the player on turn timed out (timeoutWinner)?
+    ...(game.n === 3 && !game.over && !life.open && Number.isInteger(tw) ? { tw: tw === seat } : {}),
     ended,
     sent: seat === 0,
     mine: game.scores[seat] || 0, theirs,
@@ -585,7 +621,8 @@ export function rowFor(game, seat, writer) {
   };
 }
 async function writeRows(api, db, game, writer) {
-  for (let s = 0; s < game.n; s++) await api.update(api.ref(db, `${NODE}/index/${game.p[s].code}/${game.id}`), rowFor(game, s, writer));
+  const tw = game.n === 3 ? timeoutWinner(game) : null;     // one replay for every row
+  for (let s = 0; s < game.n; s++) await api.update(api.ref(db, `${NODE}/index/${game.p[s].code}/${game.id}`), rowFor(game, s, writer, tw));
 }
 
 /**
@@ -664,11 +701,11 @@ export async function appendLog(id, base, entries) {
     if (base + skip !== have) return fail('moved-on');
     const todo = list.slice(skip);
     if (!todo.length) {
-      await writeRows(api, db, fresh, seat);
+      if (!(fresh.over && fresh.over.why === TIMEOUT)) await writeRows(api, db, fresh, seat);   // a derived timeout is never written
       if (fresh.over || fresh.turn !== seat) markSeen(id, fresh.updated);
       return { ok: true, game: fresh };
     }
-    if (fresh.over) return fail('already-over');
+    if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     if (lifeOf(fresh).expired) return fail('expired');
     const m = freshMatch(fresh);
     const all = fresh.log.concat(todo);
@@ -746,6 +783,7 @@ export async function resignGame(id) {
     const seat = seatOf(fresh, me);
     if (seat < 0) return fail('not-your-game');
     const mineResign = (g) => g.over && g.over.why === 'resign' && g.over.by === seat;
+    if (fresh.over && fresh.over.why === TIMEOUT) return fail('already-over');   // timed out: already decided
     if (fresh.over && !mineResign(fresh)) return { ok: true, game: fresh, cancelled: isCalledOff(fresh) };
     if (!fresh.over && lifeOf(fresh).open) return cancelGame(id);
     let back = fresh;
@@ -804,7 +842,7 @@ export async function drainOutbox(onlyId = null, exceptId = null) {
 export function recordsFrom(rows, code) {
   const me = asCode(code);
   const finished = (Array.isArray(rows) ? rows : []).filter((r) => r && r.over && !r.ended && asCode(r.with) && asCode(r.with) !== me)
-    .map((r) => ({ ...r, resigned: r.why === 'resign' ? 'yes' : null }))
+    .map((r) => ({ ...r, resigned: r.why === 'resign' ? 'yes' : null, timedOut: r.why === TIMEOUT }))
     .sort((x, y) => ms(y.updated) - ms(x.updated));
   const by = new Map();
   for (const r of finished) {

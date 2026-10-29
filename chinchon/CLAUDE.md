@@ -265,3 +265,7 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
   `chinchon` rules branch are live (rules 2026-10-18, function by the workflow 2026-10-21).
 - Tests: `node tools/test-chinchon-mp.mjs`; `tools/check-no-scroll.mjs chinchon` measures the
   challenge home. **Not played on two real phones yet.**
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". A turn's clock starts at the other side's last decision (a hand that ends and restarts with the same player times from there); `countResult(id, won, extras, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.

@@ -898,7 +898,7 @@ class DartsUI {
     // Turns the winner took: their own visits to the oche. A draw ends on the second player's turn.
     const visits = !draw && m.winner === m.starter ? Math.floor(m.turns / 2) + 1 : Math.floor((m.turns + 1) / 2);
     let line = inOvertime(m) ? t('ot_line') : t((draw ? 'draw_line' : 'result_line') + (visits === 1 ? '1' : ''), { n: visits });
-    if (mp && mp.resigned) line = iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
+    if (mp && mp.resigned) line = mp.timedOut ? t('mp_timed_out') : iWon ? t('mp_they_resigned', { name: mp.them.name }) : t('mp_you_resigned');
     this.root.querySelector('[data-role="resLine"]').textContent = line;
     this.root.querySelector('[data-role="againLabel"]').textContent = t(mp ? 'mp_again' : 'play_again');
     this.root.querySelector('[data-role="toSetupLabel"]').textContent = t(mp ? 'mp_back' : 'menu');
@@ -1113,7 +1113,8 @@ class DartsUI {
     // appendLog) or put the bubble away.
     if (this.MP.isCalledOff(g)) { this._mpEndedNoResult(this._mpEndText(g, mp.side)); return; }
     if (m.winner != null) { this._finish(); return; }
-    if (g.over && g.over.why === 'resign') { this._mpFinish(g.over.winner === mp.side, true); return; }
+    // Resigned, or 7 days on someone's turn (js/challenge-life.js): a result the log did not produce.
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { this._mpFinish(g.over.winner === mp.side, true); return; }
     if (m.turn === mp.mySeat) { this._nextDart(); return; }
     this._mpWaiting();
   }
@@ -1132,7 +1133,7 @@ class DartsUI {
     mp.game = g;
     // Called off by the other person while this phone had it open (2026-10-13).
     if (this.MP.isCalledOff(g) && !mp.finished) { this._mpEndedNoResult(this._mpEndText(g, mp.side)); return; }
-    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && !mp.finished && mp.applied >= g.log.length) {
       this._mpFinish(g.over.winner === mp.side, true);
       return;
     }
@@ -1187,8 +1188,11 @@ class DartsUI {
     if (!mp || mp.finished) return;
     mp.finished = true;
     mp.resigned = !!resigned;
+    const ov = mp.game && mp.game.over;
+    mp.timedOut = !!(resigned && ov && ov.why === 'timeout');
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
-    this.MP.countResult(mp.id, won);                   // once per phone, whoever ended it (null: a draw)
+    // once per phone, whoever ended it (null: a draw); the finish time keeps a fresh storage honest
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());
     this.MP.markResultSeen(mp.id);
     this._say(this._winSay());
     this.screen = 'result';

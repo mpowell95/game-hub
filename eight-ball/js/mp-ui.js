@@ -233,7 +233,7 @@ async function history(ui, MP) {
   const { opponents, finished } = MP.recordsFrom(rows, MP.myCode());
   const list = body.querySelector('.ep-mp-list');
   if (!finished.length) { list.innerHTML = `<p class="ep-mp-note">${esc(t('mp_no_history'))}</p>`; return; }
-  const word = (r) => (r.result === 'won' ? t('mp_won') : t('mp_lost')) + (r.resigned ? ` (${t('mp_resigned_word')})` : '');
+  const word = (r) => (r.result === 'won' ? t('mp_won') : t('mp_lost')) + (r.timedOut ? ` (${t('mp_timed_out_word')})` : r.resigned ? ` (${t('mp_resigned_word')})` : '');
   // Win and loss are told apart by a mark (check, cross), never by colour alone.
   const mark = (r) => (r.result === 'won' ? '✓' : '✗');
   const opp = opponents.slice(0, 3), fin = finished.slice(0, 10);
@@ -267,7 +267,7 @@ export function showUnseen(ui, MP, rows) {
       <button type="button" class="ep-x" data-mp="close" aria-label="${esc(t('aria_close'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg></button>
       <p class="ep-res-ava" aria-hidden="true">${esc(won ? (MP.meLabel() || {}).emoji : r.emoji)}</p>
       <h2 class="ep-h2">${esc(won ? t('win_name', { name: me || '?' }) : t('mp_game_over'))}</h2>
-      <p class="ep-res-line ep-res-small">${esc([t('mode_' + r.mode), r.name].join(' · '))}${r.why === 'resign' ? ` · ${esc(t('mp_resigned_word'))}` : ''}</p>
+      <p class="ep-res-line ep-res-small">${esc([t('mode_' + r.mode), r.name].join(' · '))}${r.why === 'timeout' ? ` · ${esc(t('mp_timed_out_word'))}` : r.why === 'resign' ? ` · ${esc(t('mp_resigned_word'))}` : ''}</p>
       ${ended.length > 1 ? `<p class="ep-res-line ep-res-small">${esc(t('mp_more', { n: ended.length - 1 }))}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-mp="ok">${esc(t('mp_ok'))}</button>
     </div>`;

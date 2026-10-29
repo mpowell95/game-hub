@@ -154,7 +154,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       line = `${esc(t(r.ended === 'declined' ? 'ch_row_declined' : 'ch_row_cancelled'))} · ${fmt}`;
     } else if (r.over) {
       const head = r.result === 'won' ? t('ch_row_won') : r.result === 'lost' ? t('ch_row_lost') : t('ch_row_draw');
-      line = `${esc(head)} · ${fmt}`;
+      line = `${esc(head)} · ${r.why === 'timeout' ? `${esc(t('ch_timed_out'))} · ` : ''}${fmt}`;
       side = multi && r.scoring !== 'total' ? `${r.myWins} : ${r.theirWins}` : `${num(r.mine)} : ${num(r.theirs)}`;
     } else if (CH.isExpired(r)) {
       line = `${esc(t('ch_expired'))} · ${fmt}`;
@@ -305,7 +305,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     // QUICK CHAT (2026-10-14): this page is one challenge on screen, so its chat is up while it is.
     ui._chatMount({ id, side, game: g });
     const them = side === 'a' ? g.b : g.a;
-    const expired = CH.isExpired({ over: g.over, expires: g.expires });
+    const expired = CH.isExpired(g);
     const next = expired ? -1 : CH.nextLeg(g, side, (i) => CH.legPlayed(id, side, i));
     const res = CH.resultFor(g, side);
     const who = them.name || t('ch_someone');
@@ -321,6 +321,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       const mine = (why === 'cancelled') === (side === 'a');
       status = t(mine ? `ch_you_${why}` : `ch_they_${why}`, { name: who });
     } else if (g.over && g.over.why === 'resign') status = g.over.winner === side ? t('ch_they_resigned', { name: who }) : t('ch_you_resigned');
+    else if (g.over && g.over.why === 'timeout') status = t('ch_timed_out');
     else if (!g.over && expired) status = t('ch_expired_long');
     else if (!g.over && next < 0) status = g.stage === side ? t('ch_queued') : t('ch_waiting_on', { name: who });
     // CANCEL / DECLINE / RESIGN (2026-10-13): a live, unexpired challenge can always be left. Before

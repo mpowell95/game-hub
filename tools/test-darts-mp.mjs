@@ -391,6 +391,53 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
   ok('the X puts it away for this turn', al && al.kind === 'turn' && !(await one()));
 }
 
+// 7 DAYS, THEN FORFEIT (Matt, 2026-10-29, js/challenge-life.js): an ANSWERED match whose player on
+// turn sits on it for 7 days is lost by them. Derived on every read, nothing written, a late dart refused.
+{
+  const { FORFEIT_MS } = await import('../js/challenge-life.js');
+  const realNow = Date.now;
+  use('A');
+  let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const tid = r.id;
+  await MP.appendLog(tid, 0, [dart('a'), dart('a'), dart('a')]);
+  use('B');
+  r = await MP.appendLog(tid, 3, [dart('b'), dart('b'), dart('b')]);      // answered; Matt's turn
+  const turnAt = r.game.log[5].at;
+  ok('the rows carry when the turn began', getAt(`darts/index/MATTA/${tid}`).turnAt === turnAt && getAt(`darts/index/ANABB/${tid}`).turnAt === turnAt);
+  use('A');
+  ok('6 days on: still his turn', (await MP.readGame(tid)).over === null && MP.lifeOf(await MP.readGame(tid), turnAt + 6 * 864e5).forfeits === Math.max(turnAt, Date.UTC(2026, 9, 29)) + FORFEIT_MS);
+  // One dart mid-turn does not restart the clock (a player cannot stall a dart at a time).
+  await MP.appendLog(tid, 6, [dart('a')]);
+  ok('a dart mid-turn does not move the turn clock', MP.lifeOf(await MP.readGame(tid)).turnAt === turnAt);
+  try {
+    Date.now = () => Math.max(turnAt, Date.UTC(2026, 9, 29)) + FORFEIT_MS + 1000;
+    const g2 = await MP.readGame(tid);
+    ok('7 days on his turn: Matt loses, why timeout', g2.over && g2.over.winner === 'b' && g2.over.why === 'timeout' && g2.turn === null);
+    ok('a late dart is refused', (await MP.appendLog(tid, 7, [dart('a')])).ok === false && Object.keys(getAt(`darts/games/${tid}/log`)).length === 7);
+    ok('Resign cannot turn a timeout into a different result', (await MP.resignGame(tid)).ok === false && !getAt(`darts/games/${tid}`).over);
+    const mine = (await MP.readMyGames()).find((x) => x.id === tid);
+    ok('his list: finished, lost, timed out', mine.over && mine.result === 'lost' && mine.why === 'timeout' && !mine.yourTurn);
+    use('B');
+    const hers = (await MP.readMyGames()).find((x) => x.id === tid);
+    ok('her list: finished, won, timed out', hers.over && hers.result === 'won' && hers.why === 'timeout');
+    const before = JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp.won | 0;
+    ok('counted once on her phone, as a win', MP.recordFinished([hers]) === 1 && MP.recordFinished([hers]) === 0
+      && JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp.won === before + 1);
+    ok('...noted with its match id (one count per person across devices)', JSON.parse(stores.B.get('gamehub.stats')).games.darts.mpIds[tid] === 'w');
+    ok('the history says timed out', MP.recordsFrom([hers], 'ANABB').finished[0].timedOut === true);
+  } finally { Date.now = realNow; }
+  // An UNANSWERED challenge never times out: it expires (3 days) for nobody, as before.
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const uid = r.id;
+  await MP.appendLog(uid, 0, [dart('a'), dart('a'), dart('a')]);
+  try {
+    Date.now = () => realNow() + 30 * 864e5;
+    const gu = await MP.readGame(uid);
+    ok('an unanswered challenge is never a timeout (it expires for nobody)', !gu.over && MP.lifeOf(gu).expired);
+  } finally { Date.now = realNow; }
+}
+
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
 ok('`darts` is in database.rules.json, signed-in read and write', rules.rules.darts && rules.rules.darts['.read'] === 'auth != null' && rules.rules.darts['.write'] === 'auth != null');

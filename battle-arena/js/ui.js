@@ -909,9 +909,10 @@ class BattleArena {
   }
 
   /** A match decided outside the board (a resignation): `canonWinner` in the stored frame. */
-  forceEnd(canonWinner) {
+  forceEnd(canonWinner, why = 'resign') {
     if (!this.canon || this.canon.winner != null) return;
-    this.canon = { ...this.canon, winner: canonWinner, resigned: 1 - canonWinner };
+    // why 'timeout': 7 days on a turn in a challenge (js/challenge-life.js, 2026-10-29).
+    this.canon = { ...this.canon, winner: canonWinner, resigned: 1 - canonWinner, ...(why === 'timeout' ? { timedOut: true } : {}) };
     this.state = this.view(this.canon);
     this.inbox = [];
     if (this.screen !== 'battle') return;
@@ -1677,7 +1678,7 @@ class BattleArena {
           <b class="ba-result-big">${escapeHTML(t(w === ME ? 'victory' : 'defeat'))}</b>
         </div>
         <div class="ba-result-strip"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span class="ba-result-title">${escapeHTML(title)}</span></div>
-        ${this.canon && this.canon.resigned != null ? `<p class="ba-result-why">${escapeHTML(t('resigned', { name: this.names[l] }))}</p>` : ''}
+        ${this.canon && this.canon.resigned != null ? `<p class="ba-result-why">${escapeHTML(this.canon.timedOut ? t('timedOut') : t('resigned', { name: this.names[l] }))}</p>` : ''}
         <div class="ba-result-lose">
           <span class="ba-result-luck">${escapeHTML(t('betterLuck', { name: this.names[l] }))}</span>
           <div class="ba-result-losers"><span class="ba-result-av">${escapeHTML(this.avatars[l])}</span>${s.sides[l].mons.map((m, i) => `<div class="ba-result-hex${l === ME ? ' ba-face-left' : ''}"><span class="ba-result-emo">${i ? '😥' : '😭'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>

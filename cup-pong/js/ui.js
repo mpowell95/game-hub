@@ -659,7 +659,8 @@ class CupPong {
     this.MP.markSeen(mp.id, g.updated);
     if (this.MP.isCalledOff(g)) { this.mpEndedNoResult(this.mpEndText(g, mp.side)); return; }
     if (this.match.over) { this.finish(); return; }
-    if (g.over && g.over.why === 'resign') { this.mpFinish(g.over.winner === mp.side, true); return; }
+    // Resigned, or 7 days on someone's turn (js/challenge-life.js): a result the log did not produce.
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { this.mpFinish(g.over.winner === mp.side, true); return; }
     this.mpResume();
   }
 
@@ -782,7 +783,7 @@ class CupPong {
     mp.game = g;
     // Called off by the other person while this phone had it open (2026-10-13).
     if (this.MP.isCalledOff(g) && !mp.finished) { this.mpEndedNoResult(this.mpEndText(g, mp.side)); return; }
-    if (g.over && g.over.why === 'resign' && !mp.finished && mp.applied >= g.log.length) {
+    if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout') && !mp.finished && mp.applied >= g.log.length) {
       this.mpFinish(g.over.winner === mp.side, true);
       return;
     }
@@ -863,7 +864,8 @@ class CupPong {
     this.busy = true;
     this.waiting = false;
     const MP = this.MP;
-    MP.countResult(mp.id, won);                        // once per phone, whoever ended it
+    const ov = mp.game && mp.game.over;
+    MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone, whoever ended it
     MP.markResultSeen(mp.id);
     this.paintHud();
     this.paintOptions();
@@ -875,7 +877,8 @@ class CupPong {
     if (!mp) return;
     const el = document.createElement('div');
     el.className = 'gh-overlay';
-    const line = resigned ? (won ? t('theyResigned', { name: mp.themName }) : t('youResigned'))
+    const timedOut = resigned && mp.game && mp.game.over && mp.game.over.why === 'timeout';
+    const line = timedOut ? t('timedOut') : resigned ? (won ? t('theyResigned', { name: mp.themName }) : t('youResigned'))
       : t('cupsVs', { a: this.match.racks.a.length, b: this.match.racks.b.length, name: mp.themName });
     // A SERIES: the running score, then the next game (only for whoever lost this one) or the result.
     const g = { ...mp.game, over: mp.game.over || { winner: won ? mp.side : (mp.side === 'a' ? 'b' : 'a') } };

@@ -586,3 +586,7 @@ it; gone on the gallery, list and ordinary racks. Panel `js/match-chat-ui.js`, d
   challenge card it DOCKS 4px left of the card's close X (`_chatDockTo`; 320x568 [204,52]); card titles
   leave room (`sk-ch-title--chat`, `.sk-ch-over .sk-over-title`).
 - Node: `skeeChallenges/chat/<challengeId>/<key>` (`CH.NODE`), sent with the STORED side from `CH.sideOf`.
+
+## Challenges: 7 days, then forfeit (2026-10-29)
+
+- 7 days, then forfeit: an ANSWERED challenge whose 3 days ran out on or after 2026-10-29 no longer expires: the player on turn has 7 days from the hand-over, then loses (`forfeitDeadline`, `isTimedOut`, `withTimeout` in `readChallenge`; rows `ff`; "Timed out"). Unanswered ones still expire at 3 days; one expired before stays expired. Skeeball challenges record no stats, so no id is noted.

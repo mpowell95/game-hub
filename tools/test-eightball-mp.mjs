@@ -171,6 +171,35 @@ ok('...his row says lost, one of the others won', getAt(`eightball/index/BENCC/$
   && ['MATTA', 'ANABB'].filter((c) => getAt(`eightball/index/${c}/${rx.id}`).result === 'won').length === 1);
 ok('...a resignation by someone who is not the winner validates', MP.validateGame(clone(getAt(`eightball/games/${rx.id}`))) !== null);
 
+// --- 7 days, then forfeit (2026-10-29, js/challenge-life.js), three players -----------------------
+{
+  const { FORFEIT_MS } = await import('../js/challenge-life.js');
+  use('A');
+  const tx = await MP.createGame({ them: [them('B'), them('C')], mode: 'ct' });
+  use('B');
+  let tg = await MP.readGame(tx.id);
+  const br = await MP.appendLog(tx.id, 0, [shotFor(tg)]);
+  tg = br.game;
+  const idle = tg.turn;
+  const rowsNow = ['MATTA', 'ANABB', 'BENCC'].map((c) => getAt(`eightball/index/${c}/${tx.id}`));
+  ok('Cutthroat rows say who would win a timeout (one of the two not on turn)', rowsNow.filter((r) => r.tw === true).length === 1
+    && rowsNow[idle].tw === false && rowsNow.every((r) => r.turnAt > 0), JSON.stringify(rowsNow.map((r) => [r.tw, r.turnAt])));
+  const realNow = Date.now;
+  try {
+    Date.now = () => Math.max(rowsNow[0].turnAt, Date.UTC(2026, 9, 29)) + FORFEIT_MS + 1000;
+    const g7 = await MP.readGame(tx.id);
+    ok('7 days on a Cutthroat turn: the idle player is out, why timeout', g7.over && g7.over.why === 'timeout' && g7.over.by === idle && g7.over.winner !== idle);
+    ok('...the winner is the one their rows named', rowsNow[g7.over.winner].tw === true);
+    const read = {};
+    for (const c of ['MATTA', 'ANABB', 'BENCC']) { use(phoneOf[c]); read[c] = (await MP.readMyGames()).find((r) => r.id === tx.id); }
+    const codes = ['MATTA', 'ANABB', 'BENCC'];
+    ok('...every list agrees: one won, two lost, timed out', codes.every((c, s) => read[c].over && read[c].why === 'timeout' && read[c].result === (s === g7.over.winner ? 'won' : 'lost')),
+      JSON.stringify(codes.map((c) => read[c].result)));
+    use(phoneOf[codes[idle]]);
+    ok('...and the idle player\'s late shot is refused', (await MP.appendLog(tx.id, 1, [shotFor(tg)])).ok === false);
+  } finally { Date.now = realNow; }
+}
+
 // --- the outbox -----------------------------------------------------------------------------------
 use('A');
 const ox = await MP.createGame({ them: [them('B')], mode: '8' });
