@@ -1,419 +1,289 @@
-// js/admin-ui.js - the ADMIN CONTROL PAGE: the screen half of js/admin-config.js (which is the data
-// half, and carries the reasoning behind every switch). Matt-only, opened from the launcher's Admin
-// button; js/hub.js renders that button for nobody else and imports this file lazily, so no other
-// device ever downloads it.
+// js/admin-ui.js - the ADMIN PAGE: the screen half of js/admin-config.js (which is the data half, and
+// carries the reasoning behind every switch). Matt-only, opened from the launcher's Admin button;
+// js/hub.js renders that button for nobody else and imports this file lazily, so no other device ever
+// downloads it.
 //
-// WHAT IT CONTROLS
-//   Games      - every hub tile: Live for everyone, or Admin only. The `devOnly` decision, taken
-//                out of a commit-and-deploy cycle.
-//   Skeeball   - each machine in three states: Open (everyone plays it now), Unlockable (live,
-//                earned the normal way), Testing (nobody but a dev profile). Read-time only, and
-//                none of them can un-earn a machine somebody already unlocked (THE LAW rule 2).
-//   Scores     - per player, per machine: where they stand against that machine's objectives, and
-//                a void for scores thrown while a board was broken. The void is an overlay applied
-//                when numbers are DISPLAYED (js/stats-corrections.js); nothing is ever deleted.
-//   This device - update check, bug inbox, device id, the dev-write opt-in, re-show announcements.
+// ITS OWN PAGE, NOT A POPUP (rebuilt 2026-10-29 from Matt's approved mockup, after "it's fucking
+// terrible as it is now. It's impossible for me to do anything quickly"). The old page was ten
+// accordion sections of full-width rows: 33 screens with everything open, 259 name chips for seven
+// hidden games, and closed headings that said nothing. Now: a full-screen page with four tabs and
+// one row style everywhere (name left, value right, a tap goes deeper, like iPhone Settings).
 //
-// WRITTEN FOR ONE READER. Matt, 2026-08-24: *"It's for me. I know what all the heading mean. I
-// don't need 5 paragraphs explaining what live or admin only means."* So: no explanatory prose, no
-// Default buttons (an override that matches the code default is the same thing, and the concept was
-// only ever visible here), and every section is a COLLAPSED accordion so the page is four headings
-// until he taps one - the score tools used to be a full screen of scrolling away.
+//   Now      - only what needs Matt: Spelling Bee and integrity flags (Keep / Void / Undo) and new
+//              accounts that cannot play online yet (No / Allow). Keep marks a flag checked
+//              (adminConfig/v1/reviewed, read by nothing but this page), so the list empties.
+//   Games    - every game in one grid, admin-only first. A game's page: who sees it, its testers,
+//              its machines (Skeeball), what is flagged or voided in it, its players. A player's
+//              page in that game holds that game's voids and the plays logged since Oct 28.
+//   People   - everyone with a code. A person's page: online play, the hidden games they test,
+//              every game they have a void in, what they play most.
+//   Sent     - popups and Game Hub messages, who has seen or read each.
+//   The gear - this phone: bug reports, update check, popups again, device id.
 //
-// THE LAW (root CLAUDE.md): this screen writes nothing but `adminConfig/v1` (through
-// admin-config.js) and two local preference keys. There is deliberately NO control here that
-// deletes, resets or rewrites any player's stats, profile or history.
+// THE LAW (root CLAUDE.md): this page writes nothing but `adminConfig/v1` (through admin-config.js,
+// every write verified by re-read) and local preference keys. Every void is an overlay applied when
+// numbers are DISPLAYED; nothing here deletes, resets or rewrites any player's stats, profile or
+// history. (The old page's "Reset golf stats" button, a leftover from Golf's release that erased this
+// phone's golf record, was removed with the rebuild at Matt's request.)
 //
-// BUILT ON css/ui.css's `.gh-*` primitives, like js/bug-report-ui.js.
+// Data: the whole of players/ (the admin page is the one screen that still needs the raw records, to
+// void per device), beeFlags + beeAlerts, integrityFlags + integrityAlerts, and, only when a player's
+// game page asks, the last 400 entries of that player's playLog/<CODE>.
 
 import { GAMES } from './hub.js';
 import { BOARDS, DEFAULT_BOARD, boardById } from '../skeeball/js/boards.js';
-import { readGoals } from '../skeeball/js/goals.js';
-import SK_STRINGS from '../skeeball/js/strings.js';
-import { statsId, statsKey, holdemBalance, holdemSuspect } from './game-stats.js';
+import { statsId, holdemBalance, GAMES as STATS_GAMES } from './game-stats.js';
+import { hubIdOf } from './game-stats-ui.js';
 import { dayKey } from './arcade-scores.js';
-import { aggregatePlayers, buildIdentity } from './players-agg.js';
+import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { ANNOUNCEMENTS, textFor } from './announce.js';
 import { HUB_MESSAGES, hubText, readStatusFor } from './hub-messages.js';
 import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 import {
   readCachedConfig, refreshAdminConfig, resolveGameLive, resolveBoardMode, setGameLive,
-  resolveGameAllowed, gameAllowList, setGameAllowed,
-  setBoardMode, resolveBoardCorrections, setSkeeballCorrection, corrections,
-  resolveHoldemCorrection, setHoldemCorrection, resolveOnlineAllowed, setOnlineAllowed,
-  resolveBeeUndone, setBeeUndone, setIntegrityVoided,
+  resolveGameAllowed, gameAllowList, setGameAllowed, setBoardMode, resolveBoardCorrections,
+  setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
+  resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
+  setIntegrityVoided, resolveReviewed, setReviewed,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
-import { hitText, gameName, isVoided, HAND_VOIDS } from './integrity.js';
+import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
-const skT = makeT(SK_STRINGS);          // the goal labels belong to Skeeball's own dictionary
+/** t() with an English fallback: js/strings.js is cache-first, so a new key can be missing for one visit. */
+const tx = (key, en, p) => {
+  const v = t(key, p);
+  return v && v !== key ? v : String(en).replace(/\{(\w+)\}/g, (m, k) => (p && p[k] != null ? p[k] : m));
+};
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const obj = (v) => (v && typeof v === 'object' ? v : {});
+const fmt = (n) => (Math.floor(+n || 0)).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US');
+const locale = () => (getLang() === 'es' ? 'es-ES' : 'en-US');
+const shortDate = (ms) => { try { return ms ? new Date(ms).toLocaleDateString(locale(), { month: 'short', day: 'numeric' }) : ''; } catch { return ''; } };
+const ymdDate = (ymd) => { const [y, m, d] = String(ymd || '').split('-').map(Number); return y ? shortDate(new Date(y, m - 1, d).getTime()) : ''; };
+const when = (ms) => { try { return new Date(ms).toLocaleString(locale(), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+function seen(ms) {
+  if (!ms) return '';
+  const d = new Date(ms), now = new Date();
+  const same = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  const w = same(d, now) ? tx('adm_today', 'today') : same(d, y) ? tx('adm_yesterday', 'yesterday') : shortDate(ms);
+  return tx('adm_seen', 'seen {when}', { when: w });
+}
 
 /** A GAMES entry's title in the active language (the registry holds either a string or {en,es}). */
 function titleText(g) {
   const v = g.title;
   return typeof v === 'string' ? v : (v && (v[getLang()] || v.en)) || g.id;
 }
+const hubGame = (hubId) => GAMES.find((g) => g.id === hubId) || null;
+/** The stats id behind a hub tile, or null (Course Creator records nothing). */
+const statsOf = (hubId) => STATS_GAMES.find((s) => hubIdOf(s) === hubId) || null;
+const titleOfStats = (sid) => { const g = hubGame(hubIdOf(sid)); return g ? titleText(g) : gameName(sid); };
+const isLiveGame = (cfg, g) => resolveGameLive(cfg, g.id, !g.devOnly);
 
-/** Which accordion sections are open. A per-device preference, nothing more (rule 2's carve-out). */
-const OPEN_KEY = 'gamehub.adminOpen.v1';
-function openSections() {
-  try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); } catch { return new Set(); }
-}
-function rememberSection(id, open) {
-  const s = openSections();
-  if (open) s.add(id); else s.delete(id);
-  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...s])); } catch { /* memory only */ }
-}
+// --- icons ----------------------------------------------------------------------------------------
+const svg = (d, size = 18, w = 2.4) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  back: svg('<path d="M15 18l-6-6 6-6"/>', 24),
+  chev: svg('<path d="M9 6l6 6-6 6"/>'),
+  check: svg('<path d="M5 12l5 5 9-10"/>', 22, 2.8),
+  plus: svg('<path d="M12 5v14M5 12h14"/>', 22),
+  minus: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>', 22, 2.2),
+  search: svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'),
+  gear: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', 24, 2),
+  now: svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>', 26, 2),
+  games: svg('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>', 26, 2),
+  people: svg('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 0 1 0 8"/><path d="M22 21c0-3-2-5-5-5.5"/>', 26, 2),
+  sent: svg('<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/>', 26, 2),
+};
 
 // --- css ----------------------------------------------------------------------------------------
-
 function ensureCss() {
-  if (!document.querySelector('link[data-gh-ui-css="1"]')) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = new URL('../css/ui.css', import.meta.url).href;
-    link.setAttribute('data-gh-ui-css', '1');
-    document.head.appendChild(link);
-  }
   if (document.getElementById('adm-css')) return;
   const style = document.createElement('style');
   style.id = 'adm-css';
   style.textContent = `
-  .adm-overlay { z-index: 300; padding: max(var(--gh-sp-4), env(safe-area-inset-top)) var(--gh-sp-4)
-                 max(var(--gh-sp-4), env(safe-area-inset-bottom)); align-content: center; }
-  /* The modal itself does NOT scroll: the list inside it does, so the title and the status line
-     stay put and the status line can never be pushed off the bottom edge. */
-  .adm-modal { width: min(560px, 100%); max-height: 90vh; display: flex; flex-direction: column;
-               overflow: hidden; }
-  .adm-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-                -webkit-overflow-scrolling: touch;
-                margin: 0 calc(var(--gh-sp-4) * -1); padding: 0 var(--gh-sp-4); }
-  /* --- accordion: four headings until one is tapped --- */
-  .adm-sec { border-top: 1px solid var(--gh-border); }
-  .adm-allow { padding: 0 0 var(--gh-sp-3); }
-  .adm-allow__list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .adm-allow__p { min-height: 44px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 14px;
-                  border: 1px solid var(--gh-border); background: var(--gh-surface, transparent); color: inherit;
-                  touch-action: manipulation; cursor: pointer; }
-  .adm-allow__p[aria-pressed="true"] { border: 2px solid #ffce3a; background: rgba(255,206,58,.18); font-weight: 700; }
-  .adm-code { font-size: 11px; font-weight: 400; opacity: .7; letter-spacing: .04em; }
-  .adm-sub { margin-top: var(--gh-sp-2, 8px); }
-  .adm-sub > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer;
-                       font-size: var(--gh-fs-sm); font-weight: 800; color: var(--gh-muted); }
-  .adm-grp { min-height: 32px; display: flex; align-items: center;
-             font-size: var(--gh-fs-sm); font-weight: 800; color: var(--gh-muted); }
-  .adm-sec:last-of-type { border-bottom: 1px solid var(--gh-border); }
-  /* The headings carried gh-sp-4 top AND bottom on top of a 44px min-height, so five collapsed
-     sections filled the sheet with gaps. The 44px target is untouched; only the padding went. */
-  .adm-sec > summary { display: flex; align-items: center; gap: var(--gh-sp-2); padding: var(--gh-sp-1) 0;
-                       font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink);
-                       cursor: pointer; list-style: none; min-height: 44px; }
-  .adm-sec > summary::-webkit-details-marker { display: none; }
-  /* An open section's heading stays pinned while its list scrolls under it (2026-10-28, Matt:
-     "clunky"), so closing it, or seeing which one this is, never means scrolling back up. */
-  .adm-sec[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--gh-surface); }
-  .adm-sec > summary::after { content: '\\203A'; margin-left: auto; font-size: 22px; line-height: 1;
-                              color: var(--gh-muted); transform: rotate(90deg); transition: transform .15s; }
-  .adm-sec[open] > summary::after { transform: rotate(-90deg); }
-  .adm-secbody { padding-bottom: var(--gh-sp-3); }
-  /* ONE ROW PER THING (2026-09-01). Matt: "Look how much space is used for all this stuff." The
-     row used to be flex-wrap:wrap with a 200px flex-basis on the name, which on a phone is a
-     guaranteed wrap: the name took a line, the control took another, and 22 games cost ~130px
-     each. nowrap puts them side by side and the row is the height of the control alone. The
-     control keeps its full 44px tap target (docs/BUILDING-A-GAME.md's floor - which the old
-     40px seg was quietly under); the height comes off the LAYOUT, never off the target. */
-  .adm-row { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--gh-sp-2);
-             padding: var(--gh-sp-2) 0; border-top: 1px solid var(--gh-border); }
-  .adm-row:first-child { border-top: 0; }
-  .adm-row-main { flex: 1 1 auto; min-width: 0; }
-  .adm-ctl { flex: 0 0 auto; display: flex; align-items: center; gap: var(--gh-sp-2); margin-left: auto; }
-  /* Skeeball is the one section that still stacks: three labels plus a name like "HOT SHOT: BRICK
-     CITY" genuinely do not fit one 329px row, and truncating either half is worse than a line. */
-  .adm-row--stack { flex-wrap: wrap; }
-  /* Spelling Bee flags: name (and button) on line 1, the rules that fired on line 2. */
-  .adm-bee { flex-wrap: wrap; row-gap: 2px; }
-  .adm-bee .adm-name { flex: 1 1 auto; min-width: 0; }
-  .adm-bee .adm-note { flex: 1 0 100%; order: 3; }
-  .adm-row--stack .adm-row-main { flex: 1 1 100%; }
-  .adm-ctl--wide { flex: 1 1 100%; margin-left: 0; }
-  .adm-ctl--wide .gh-seg { flex: 1 1 100%; }
-  .adm-ctl--wide .gh-seg__item { flex: 1 1 0; }
-  .adm-seg { padding: 3px; }
-  .adm-seg .gh-seg__item { font-size: var(--gh-fs-xs); padding: 0 var(--gh-sp-3); min-height: 44px; }
-  /* THE SELECTED SIDE HAS TO BE VISIBLE. .gh-seg paints the track --gh-surface-2 and the pressed
-     item --gh-surface, which in DARK are all but the same colour - so the whole page read as a
-     row of dead controls (Matt, looking at exactly that: "why don't I have admin controls?").
-     Scoped to .adm-seg rather than fixing .gh-seg globally, which would restyle every game's
-     setup screen in the same commit. Border + weight, so it is never colour alone. */
-  .adm-seg .gh-seg__item[aria-pressed="true"] { background: var(--gh-ink); color: var(--gh-surface);
-             font-weight: 800; box-shadow: none; }
-  .adm-name { font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-ink);
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .adm-note { margin-top: 2px; font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.4; }
-  /* ONE BAR, TWO LINES. See announceSectionHTML for why the third bucket went away; this is the
-     "at a glance" half - a bar is read without reading, which three versions of text rows were not.
-     It is a MAGNITUDE, not a category, so the number beside it carries the meaning, not the hue. */
-  .adm-annhow { margin: 0 0 var(--gh-sp-3); font-size: var(--gh-fs-xs); color: var(--gh-muted); line-height: 1.45; }
-  .adm-ann { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
-  .adm-ann:first-of-type { border-top: 0; padding-top: 0; }
-  .adm-annhead { display: flex; align-items: baseline; gap: var(--gh-sp-2); }
-  .adm-annttl { flex: 1 1 auto; min-width: 0; font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink); }
-  .adm-anncount { flex: none; font-size: var(--gh-fs-sm); font-weight: 700; color: var(--gh-muted); }
-  .adm-annbar { height: 8px; margin: 6px 0 var(--gh-sp-2); border-radius: 999px;
-                background: var(--gh-surface-2); border: 1px solid var(--gh-border); overflow: hidden; }
-  .adm-annbar > span { display: block; height: 100%; background: #ffce3a; }
-  .adm-annlbl { display: block; margin-top: var(--gh-sp-2); font-size: var(--gh-fs-xs); font-weight: 800;
-                text-transform: uppercase; letter-spacing: .04em; color: var(--gh-muted); }
-  .adm-annlbl b { font-size: var(--gh-fs-sm); color: var(--gh-ink); }
-  .adm-annlist { margin: 2px 0 0; padding: 0 0 0 var(--gh-sp-3); list-style: none;
-                 font-size: var(--gh-fs-sm); line-height: 1.7; }
-  .adm-annempty { margin: 2px 0 0 var(--gh-sp-3); font-size: var(--gh-fs-sm); color: var(--gh-muted); }
-  .adm-annfold > summary { list-style: none; cursor: pointer; min-height: 34px;
-                           display: flex; align-items: center; gap: 6px; }
-  .adm-annfold > summary::-webkit-details-marker { display: none; }
-  .adm-annfold > summary .adm-annlbl { margin-top: 0; }
-  .adm-annfold > summary::after { content: '\\203a'; margin-left: auto; color: var(--gh-muted); font-size: 18px; }
-  .adm-annfold[open] > summary::after { content: '\\2039'; }
-  .adm-annfold .adm-annlist { color: var(--gh-muted); }
-  .adm-voided { font-weight: 700; color: var(--gh-cb-teal); }
-  /* --- players --- */
-  .adm-player { padding: var(--gh-sp-3) 0; border-top: 1px solid var(--gh-border); }
-  .adm-player:first-child { border-top: 0; }
-  .adm-phead { font-size: var(--gh-fs-md); font-weight: 800; color: var(--gh-ink); }
-  .adm-plife { margin-top: 2px; font-size: var(--gh-fs-xs); font-weight: 700; color: var(--gh-muted);
-               font-variant-numeric: tabular-nums; }
-  .adm-mach { margin-top: var(--gh-sp-3); padding-left: var(--gh-sp-3);
-              border-left: 3px solid var(--gh-border); }
-  .adm-mname { font-size: var(--gh-fs-sm); font-weight: 800; color: var(--gh-ink); }
-  .adm-mnums { margin-top: 1px; font-size: var(--gh-fs-xs); color: var(--gh-muted);
-               font-variant-numeric: tabular-nums; }
-  /* One line per objective: label, progress, and a tick that is a SHAPE, not a colour (Matt is
-     red/green colorblind - root CLAUDE.md's accessibility rule). */
-  .adm-goals { list-style: none; margin: var(--gh-sp-2) 0 0; padding: 0; display: grid; gap: 2px; }
-  .adm-goals li { display: flex; align-items: baseline; gap: var(--gh-sp-2); font-size: var(--gh-fs-xs);
-                  color: var(--gh-muted); font-variant-numeric: tabular-nums; }
-  .adm-goals b { margin-left: auto; font-weight: 800; color: var(--gh-ink); }
-  .adm-goals li.is-met { color: var(--gh-ink); }
-  .adm-goals li.is-met::before { content: '\\2713'; font-weight: 900; }
-  .adm-goals li::before { content: '\\25CB'; font-size: 10px; }
-  .adm-mact { display: flex; flex-wrap: wrap; gap: var(--gh-sp-2); margin-top: var(--gh-sp-2); }
-  .adm-actions { display: flex; flex-wrap: wrap; gap: var(--gh-sp-2); }
-  .adm-msg { flex: 0 0 auto; margin: var(--gh-sp-3) 0 0; min-height: 1.2em; font-size: var(--gh-fs-sm);
-             font-weight: 600; line-height: 1.4; }
-  .adm-msg.is-err { color: var(--gh-cb-vermilion); }
-  .adm-note.is-err { color: var(--gh-cb-vermilion); font-weight: 700; }
-  .adm-msg.is-ok { color: var(--gh-cb-teal); }
-  .adm-id { font-family: var(--gh-font-mono); font-size: var(--gh-fs-xs); word-break: break-all; }
-  /* A save locks the page against a second tap but dims only the thing tapped: dimming the whole
-     card on every tap made each switch feel like a page load. */
-  .adm-busy { pointer-events: none; }
-  .adm-pending { opacity: .55; }`;
+  html.adm-open, html.adm-open body { overflow: hidden; }
+  .adm-page { --a-bg:#f2f4f8; --a-card:#fff; --a-ink:#111826; --a-mut:#5b6678; --a-line:rgba(16,36,58,.12);
+    --a-blue:#1462c8; --a-red:#b93d14; --a-bar:#fafbfd; --a-chev:#a3adbb; --a-on:#7a5200; --a-field:#e6e9ef; --a-sheet:#f6f7fa;
+    position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; background: var(--a-bg); color: var(--a-ink);
+    font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  html.gh-dark .adm-page { --a-bg:#0d1422; --a-card:#182132; --a-ink:#eef2f8; --a-mut:#8a97ab; --a-line:rgba(190,214,244,.12);
+    --a-blue:#5aa2ff; --a-red:#ff8a65; --a-bar:#111a2a; --a-chev:#56637a; --a-on:#ffce3a; --a-field:#1f2a3d; --a-sheet:#121a29; }
+  .adm-page button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+  .adm-nav { flex: none; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .adm-nb { display: inline-flex; align-items: center; gap: 1px; height: 44px; margin-left: -9px; padding: 0 8px 0 0; background: none; border: 0; color: var(--a-blue) !important; font-size: 17px !important; font-weight: 500; max-width: 70%; }
+  .adm-nb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .adm-ni { width: 44px; height: 44px; margin-right: -10px; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--a-blue) !important; }
+  .adm-lt { flex: none; margin: 0 16px 2px; font-size: 32px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; }
+  .adm-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 16px 24px; }
+  .adm-gh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 20px 14px 7px; font-size: 13px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--a-mut); }
+  .adm-gh b { font-weight: 700; color: var(--a-ink); opacity: .8; }
+  .adm-gh .adm-ga { margin-left: auto; font-size: 15px; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--a-blue); background: none; border: 0; padding: 0; min-height: 32px; }
+  .adm-grp { background: var(--a-card); border-radius: 12px; overflow: hidden; }
+  .adm-grp.first { margin-top: 10px; }
+  .adm-r { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; width: 100%; box-sizing: border-box; padding: 0 14px; background: none; border: 0; text-align: left; }
+  .adm-r + .adm-r::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 1px solid var(--a-line); }
+  .adm-r.i + .adm-r.i::before { left: 54px; }
+  .adm-em { width: 28px; font-size: 22px; line-height: 1; text-align: center; flex: none; }
+  .adm-tx { flex: 1; min-width: 0; padding: 10px 0; }
+  .adm-t { font-size: 16px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .adm-s { font-size: 13px; line-height: 1.3; color: var(--a-mut); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .adm-s.wrap { white-space: normal; }
+  .adm-v { flex: none; max-width: 55%; font-size: 16px; color: var(--a-mut); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .adm-v.x { color: var(--a-red); }
+  .adm-cv { flex: none; display: flex; color: var(--a-chev); margin-right: -4px; }
+  .adm-ck { flex: none; display: flex; color: var(--a-blue); width: 22px; }
+  .adm-a { flex: none; min-height: 44px; min-width: 44px; padding: 0 6px; background: none; border: 0; font-size: 16px !important; font-weight: 600; color: var(--a-blue) !important; }
+  .adm-a.x { color: var(--a-red) !important; }
+  .adm-link { color: var(--a-blue); }
+  .adm-danger { color: var(--a-red); }
+  .adm-code { flex: none; font: 500 13px ui-monospace, Menlo, monospace; color: var(--a-mut); letter-spacing: .03em; }
+  .adm-pl { flex: none; width: 28px; display: flex; justify-content: center; color: var(--a-blue); }
+  .adm-rm { flex: none; width: 28px; display: flex; justify-content: center; color: var(--a-red); background: none; border: 0; min-height: 44px; padding: 0; }
+  .adm-sw { flex: none; width: 51px; height: 31px; border-radius: 16px; border: 0; padding: 2px; box-sizing: border-box; background: #8e98a8; display: flex; justify-content: flex-start; }
+  html.gh-dark .adm-sw { background: #39465c; }
+  .adm-sw::after { content: ""; width: 27px; height: 27px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  .adm-sw[aria-pressed="true"] { background: #1769d4 !important; justify-content: flex-end; }
+  .adm-empty { margin: 10px 14px; font-size: 15px; color: var(--a-mut); }
+  .adm-search { display: flex; align-items: center; gap: 8px; min-height: 40px; margin-top: 8px; padding: 0 10px; border-radius: 10px; background: var(--a-field); color: var(--a-mut); }
+  .adm-search input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--a-ink); font: 400 17px -apple-system, system-ui, sans-serif; user-select: text; -webkit-user-select: text; }
+  .adm-search input::placeholder { color: var(--a-mut); }
+  .adm-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .adm-tile { position: relative; height: 44px; box-sizing: border-box; border-radius: 10px; background: var(--a-card); border: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 5px; font-size: 12.5px !important; font-weight: 500; line-height: 1.15; }
+  .adm-tile.hid { background: transparent; border: 1.5px dashed #c99a00; }
+  html.gh-dark .adm-tile.hid { border-color: #ffce3a; }
+  .adm-bdg { position: absolute; top: -6px; right: -4px; height: 18px; min-width: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #ffce3a; color: #14110a; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .adm-bdg.f { background: #E0532F; color: #fff; border-radius: 4px; }
+  .adm-hero { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 16px 4px; }
+  .adm-av { width: 76px; height: 76px; border-radius: 38px; background: var(--a-card); display: flex; align-items: center; justify-content: center; font-size: 42px; line-height: 1; }
+  .adm-hn { margin: 4px 0 0; font-size: 24px; font-weight: 800; text-align: center; }
+  .adm-hs { font-size: 14px; color: var(--a-mut); }
+  .adm-hs code { font: 500 14px ui-monospace, Menlo, monospace; letter-spacing: .03em; }
+  .adm-tabbar { flex: none; display: flex; padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--a-bar); border-top: 1px solid var(--a-line); }
+  .adm-tab { flex: 1; position: relative; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px !important; font-weight: 600; color: var(--a-mut) !important; background: none; border: 0; padding: 0; }
+  .adm-tab[aria-current="page"] { color: var(--a-on) !important; font-weight: 800; }
+  .adm-tab[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: #ffce3a; }
+  .adm-tab .adm-bdg { top: 3px; left: calc(50% + 6px); right: auto; background: #E0532F; color: #fff; }
+  .adm-toast { position: absolute; left: 16px; right: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 3; padding: 12px 14px; border-radius: 12px;
+    background: #1f2a3d; color: #eef2f8; font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.4); pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity .15s, transform .15s; }
+  .adm-toast.on { opacity: 1; transform: none; }
+  .adm-toast.err { background: #7a2410; }
+  .adm-dim { position: absolute; inset: 0; z-index: 4; background: rgba(3,7,14,.55); }
+  .adm-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: calc(100% - env(safe-area-inset-top, 0px) - 20px); display: flex; flex-direction: column;
+    background: var(--a-sheet); border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .adm-sheet.tall { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+  .adm-sh { flex: none; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+  .adm-sh b { font-size: 17px; }
+  .adm-sh button { min-height: 44px; background: none; border: 0; color: var(--a-blue) !important; font-size: 17px !important; font-weight: 700; padding: 0; }
+  .adm-sbody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 20px; }
+  .adm-sbody .adm-search { margin: 0 0 10px; }
+  .adm-pending { opacity: .5; }
+  .adm-busy .adm-main, .adm-busy .adm-sbody { pointer-events: none; }`;
   document.head.appendChild(style);
 }
 
-// --- overlay ------------------------------------------------------------------------------------
+// --- state ----------------------------------------------------------------------------------------
 
 let _host = null;
 let _onKey = null;
 let _busy = false;
-/** Every synced device record, for the Scores section. {} when offline - the section then says so.
- *  null while the first read is still on its way: the page paints at once from the cached config
- *  (Games and Skeeball need nothing else) and the people-shaped sections fill in when it lands. */
+/** Every synced device record. null while the first read is on its way, {} offline. */
 let _players = null;
 let _offline = false;
+let _bee = {};
+let _integ = {};
+let _agg = null;            // per render: aggregatePlayers with every display correction applied
+let _aggRaw = null;         // per render: the same without them (what is on the phones)
+let _ident = null;
+let _acts = [];             // per render: every tappable thing's closure, by data-a index
+const TAB_KEY = 'gamehub.adminTab.v1';
+let _tab = 'now';
+let _stack = [];            // pushed views inside the current tab
+let _sheet = null;          // { k: 'tools' } | { k: 'pick', hub }
+let _edit = false;          // testers list in remove mode
+let _toastTimer = 0;
+let _tapped = null;         // the element of the last tap, dimmed while its write runs
+const _filters = new Map(); // search box selector -> what is typed, kept across repaints
+const _scroll = new Map();  // view key -> scrollTop
+const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
+
 const loading = () => _players === null;
-const loadingHTML = () => `<p class="adm-note">${esc(t('adm_loading'))}</p>`;
+const act = (fn) => { _acts.push(fn); return `data-a="${_acts.length - 1}"`; };
 
+async function readNodes(paths) {
+  try {
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot) return {};
+    const get = async (p) => { try { const s = await boot.api.get(boot.api.ref(boot.db, p)); return s && s.exists() ? s.val() : {}; } catch { return {}; } };
+    const vals = await Promise.all(paths.map(get));
+    return Object.fromEntries(paths.map((p, i) => [p, vals[i]]));
+  } catch { return {}; }
+}
 /** Spelling Bee's server flags and missing-log alerts (functions/bee.js). {flags, alerts}, {} offline. */
-let _bee = null;
 async function readBee() {
-  try {
-    const { getStatsApp } = await import('./firebase-boot.js');
-    const boot = await getStatsApp();
-    if (!boot) return {};
-    const get = async (p) => { try { const s = await boot.api.get(boot.api.ref(boot.db, p)); return s && s.exists() ? s.val() : {}; } catch { return {}; } };
-    const [flags, alerts] = await Promise.all([get('beeFlags'), get('beeAlerts')]);
-    return { flags, alerts };
-  } catch { return {}; }
+  const r = await readNodes(['beeFlags', 'beeAlerts']);
+  return { flags: r.beeFlags || {}, alerts: r.beeAlerts || {} };
 }
-
 /** Every game's integrity flags and match alerts (functions/integrity.js). {flags, alerts}, {} offline. */
-let _integ = null;
 async function readIntegrity() {
+  const r = await readNodes(['integrityFlags', 'integrityAlerts']);
+  return { flags: r.integrityFlags || {}, alerts: r.integrityAlerts || {} };
+}
+async function readPlayers() {
+  try { return await (await import('./stats-net.js')).readPlayersOnce({ fresh: true }); } catch { return {}; }
+}
+/** The last 400 play-log entries of one code (admin-read), newest first. Only what a player's game page asks for. */
+async function readPlays(code) {
+  _plays.set(code, 'loading');
+  render();
   try {
     const { getStatsApp } = await import('./firebase-boot.js');
     const boot = await getStatsApp();
-    if (!boot) return {};
-    const get = async (p) => { try { const s = await boot.api.get(boot.api.ref(boot.db, p)); return s && s.exists() ? s.val() : {}; } catch { return {}; } };
-    const [flags, alerts] = await Promise.all([get('integrityFlags'), get('integrityAlerts')]);
-    return { flags, alerts };
-  } catch { return {}; }
+    if (!boot) throw new Error('offline');
+    const { api, db } = boot;
+    const snap = await api.get(api.query(api.ref(db, `playLog/${code}`), api.orderByKey(), api.limitToLast(400)));
+    const rows = [];
+    if (snap && snap.exists()) snap.forEach((c) => { rows.push(Object.assign({ id: c.key }, c.val())); });
+    rows.sort((a, b) => (+b.t || 0) - (+a.t || 0));
+    _plays.set(code, rows);
+  } catch (err) {
+    console.error('[admin] play log read failed', err);
+    _plays.set(code, 'error');
+  }
+  render();
 }
 
-async function readPlayers() {
-  try {
-    const net = await import('./stats-net.js');
-    return await net.readPlayersOnce({ fresh: true });
-  } catch { return {}; }
+// --- people ---------------------------------------------------------------------------------------
+
+function allCorrections(cfg) {
+  return Object.assign({}, corrections(), { integrity: activeVoids((_integ && _integ.flags) || {}, cfg) });
 }
-
-function closeOverlay() {
-  if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
-  if (_host) { _host.remove(); _host = null; }
+/** Device ids per person key. */
+function idsOf(key) {
+  const out = [];
+  for (const id of Object.keys(_players || {})) if (_ident.keyFor(((_players[id] || {}).profile) || {}, id) === key) out.push(id);
+  return out;
 }
-
-/** Open the admin control page. js/hub.js gates the button on isAdmin(); this is a screen, not a lock. */
-export async function openAdmin() {
-  ensureCss();
-  closeOverlay();
-  const host = document.createElement('div');
-  host.className = 'gh-overlay adm-overlay';
-  host.innerHTML = `<div class="gh-modal adm-modal" role="dialog" aria-modal="true" aria-label="${esc(t('adm_title'))}"></div>`;
-  document.body.appendChild(host);
-  _host = host;
-  host.addEventListener('click', (e) => { if (e.target === host && !_busy) closeOverlay(); });
-  _onKey = (e) => { if (e.key === 'Escape' && !_busy) closeOverlay(); };
-  document.addEventListener('keydown', _onKey);
-
-  const card = host.querySelector('.gh-modal');
-  // OPEN AT ONCE (2026-10-28). It used to sit on "Loading..." until the whole of players/ (~1 MB)
-  // had arrived, even to flip one game. Paint now from the cached config; repaint when both land.
-  _players = null;
-  _offline = false;
-  render(card);
-
-  const [fresh, players, bee, integ] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee(), readIntegrity()]);
-  _players = players || {};
-  _bee = bee || {};
-  _integ = integ || {};
-  _offline = !fresh;
-  if (!_host || _busy) return;             // a save in flight repaints when it finishes
-  render(card);
-}
-
-function render(card) {
-  const cfg = readCachedConfig();
-  const open = openSections();
-  // KEEP THE PLACE. Every save repaints the card, which used to throw the list back to the top, so
-  // flipping a game near the bottom meant scrolling all the way down again for the next one.
-  const prev = card.querySelector('.adm-scroll');
-  const top = prev ? prev.scrollTop : 0;
-  const ORDER = ['online', 'games', 'bee', 'integrity', 'machines', 'scores', 'poker', 'announce', 'hubmsgs', 'device'];
-  const openSec = ORDER.find((id) => open.has(id));     // one at a time, even from an older saved set
-  const sec = (id, title, body) => `<details class="adm-sec" data-sec="${id}"${id === openSec ? ' open' : ''}>
-      <summary>${esc(title)}</summary>
-      <div class="adm-secbody">${body}</div>
-    </details>`;
-  card.innerHTML = `
-    <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('adm_close'))}">&times;</button>
-    <h2 class="gh-modal__title">🛠️ ${esc(t('adm_title'))}</h2>
-    <div class="adm-scroll">
-      ${sec('online', t('adm_online_title'), onlineSectionHTML(cfg))}
-      ${sec('games', t('adm_games_title'), gamesSectionHTML(cfg))}
-      ${sec('bee', t('adm_bee_title'), beeSectionHTML(cfg))}
-      ${sec('integrity', t('adm_iv_title'), integritySectionHTML(cfg))}
-      ${sec('machines', t('adm_skeeball_title'), skeeballSectionHTML(cfg))}
-      ${sec('scores', t('adm_sc_title'), scoresSectionHTML(cfg))}
-      ${sec('poker', t('adm_hb_title'), pokerSectionHTML(cfg))}
-      ${sec('announce', t('adm_ann_title'), announceSectionHTML())}
-      ${sec('hubmsgs', t('adm_hm_title'), hubMessagesSectionHTML())}
-      ${sec('device', t('adm_device_title'), deviceSectionHTML())}
-    </div>
-    <p class="adm-msg${_offline ? ' is-err' : ''}" data-role="msg">${_offline ? esc(t('adm_offline')) : ''}</p>`;
-  card.querySelector('[data-role="close"]').addEventListener('click', () => closeOverlay());
-  const scroll = card.querySelector('.adm-scroll');
-  scroll.scrollTop = top;
-  // ONE SECTION OPEN AT A TIME: opening one closes the rest and brings its heading to the top, so
-  // the page never turns into every list at once. The sub-folds inside a section keep their own state.
-  // Driven from the TAP, not from `toggle`: a browser also fires `toggle` for a section painted
-  // open, and that would yank the list on every repaint.
-  const secs = [...card.querySelectorAll('.adm-sec')];
-  secs.forEach((d) => {
-    d.addEventListener('toggle', () => rememberSection(d.dataset.sec, d.open));
-    d.querySelector(':scope > summary').addEventListener('click', () => {
-      if (d.open) return;                                   // this tap closes it
-      for (const o of secs) if (o !== d && o.open) o.open = false;
-      requestAnimationFrame(() => {
-        scroll.scrollTop += d.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
-      });
-    });
-  });
-  card.querySelectorAll('details[data-sub]').forEach((d) =>
-    d.addEventListener('toggle', () => rememberSection(d.dataset.sub, d.open)));
-  wire(card);
-}
-
-/** The one status line. `kind` is 'ok' | 'err' | ''. */
-function say(card, text, kind) {
-  const el = card.querySelector('[data-role="msg"]');
-  if (!el) return;
-  el.textContent = text || '';
-  el.classList.toggle('is-err', kind === 'err');
-  el.classList.toggle('is-ok', kind === 'ok');
-}
-
-function segHTML(name, options, value) {
-  return `<div class="gh-seg adm-seg" role="group" aria-label="${esc(name)}">`
-    + options.map((o) => `<button type="button" class="gh-seg__item" role="button"
-         aria-pressed="${o.value === value ? 'true' : 'false'}" data-set="${esc(String(o.value))}"
-         >${esc(o.label)}</button>`).join('')
-    + `</div>`;
-}
-
-// --- games --------------------------------------------------------------------------------------
-
-// Every hidden game's admin row carries a WHO CAN SEE IT picker (2026-10-29, Matt: "Why can't I add people to word
-// weaver, gridlock, or cup baseball?"). It was a per-game list (Course Creator 2026-09-24, Pool 2026-10-23, Battle
-// Arena 2026-10-28), so each new admin-only game came without one; the hub already honours `allow/<CODE>` for any id.
-
-/** One row per PERSON with a player code, A-Z by name: {code, name, emoji}. */
+const personByKey = (key) => (_agg || []).find((g) => g.key === key) || null;
+const rawByKey = (key) => (_aggRaw || []).find((g) => g.key === key) || null;
+/** One row per PERSON with a player code, A-Z: the leaderboard's people. */
 function codedPeople() {
   const out = new Map();
-  for (const g of aggregatePlayers(_players || {})) {
+  for (const g of _agg || []) {
     const code = (g.playerId || '').trim().toUpperCase();
     if (!code || isHiddenName(g.name)) continue;
-    if (!out.has(code)) out.set(code, { code, name: g.name || code, emoji: g.emoji || '' });
+    if (!out.has(code)) out.set(code, g);
   }
-  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...out.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 }
-
-function allowPickerHTML(cfg, g) {
-  if (loading()) return loadingHTML();
-  const people = codedPeople();
-  const allowed = new Set(gameAllowList(cfg, g.id));
-  // a code picked earlier whose person has no synced record any more still shows, so it can be removed
-  for (const c of allowed) if (!people.some((p) => p.code === c)) people.push({ code: c, name: c, emoji: '' });
-  people.sort((a, b) => a.name.localeCompare(b.name));
-  const chip = (p) => {
-    const on = resolveGameAllowed(cfg, g.id, p.code);
-    return `<button type="button" class="adm-allow__p" data-allow-code="${esc(p.code)}" aria-pressed="${on}"
-      >${on ? '✓ ' : ''}${p.emoji ? esc(p.emoji) + ' ' : ''}${esc(p.name)}</button>`;
-  };
-  // The people picked, in full; everyone else behind one fold (it was the whole family, every time).
-  const picked = people.filter((p) => resolveGameAllowed(cfg, g.id, p.code));
-  const rest = people.filter((p) => !resolveGameAllowed(cfg, g.id, p.code));
-  const sub = `allow-${g.id}`;
-  return `<div class="adm-allow" data-allow-game="${esc(g.id)}">
-      <div class="adm-grp">${esc(t('adm_allow_title', { n: picked.length }))}</div>
-      ${picked.length ? `<div class="adm-allow__list">${picked.map(chip).join('')}</div>` : ''}
-      ${rest.length ? `<details class="adm-sub" data-sub="${esc(sub)}"${openSections().has(sub) ? ' open' : ''}>
-        <summary>${esc(t('adm_allow_add', { n: rest.length }))}</summary>
-        <div class="adm-allow__list">${rest.map(chip).join('')}</div>
-      </details>` : ''}
-      ${people.length ? '' : `<span class="adm-note">${esc(t('adm_allow_none'))}</span>`}
-    </div>`;
-}
-
-// --- online play (2026-10-08) ----------------------------------------------------------------------
-
-/** One row per PLAYER CODE (not per person: two codes of one person are two accounts, and a made-up
- *  second account is exactly what this section exists to catch), newest first: {code, name, emoji, at}. */
+/** One row per PLAYER CODE, newest record's name (two codes of one person are two accounts). */
 function codesSeen() {
   const out = new Map();
   for (const rec of Object.values(_players || {})) {
@@ -421,438 +291,769 @@ function codesSeen() {
     const code = String(p.playerId || '').trim().toUpperCase();
     if (!code) continue;
     const at = Number(rec.updatedAt) || 0;
+    const games = obj((rec.stats || {}).games);
+    let plays = 0; const played = new Set();
+    for (const [gid, g] of Object.entries(games)) { const n = +(obj(obj(g).total).played) || 0; if (n) { plays += n; played.add(gid); } }
     const cur = out.get(code);
-    if (!cur || at >= cur.at) out.set(code, { code, name: String(p.name || '').trim() || code, emoji: p.emoji || '', at });
-  }
-  return [...out.values()].sort((a, b) => b.at - a.at);
-}
-
-/** Who may play online. Not yet allowed first (that is what Matt opens this for), then everyone
- *  allowed, folded. One tap flips a code; js/online-gate.js reads the answer. */
-function onlineSectionHTML(cfg) {
-  if (loading()) return loadingHTML();
-  const rows = codesSeen();
-  const chip = (p) => {
-    const on = resolveOnlineAllowed(cfg, p.code);
-    return `<button type="button" class="adm-allow__p" data-online-code="${esc(p.code)}" aria-pressed="${on}"
-      >${on ? '✓ ' : ''}${p.emoji ? esc(p.emoji) + ' ' : ''}${esc(p.name)} <span class="adm-code">${esc(p.code)}</span></button>`;
-  };
-  const waiting = rows.filter((p) => !resolveOnlineAllowed(cfg, p.code));
-  const allowed = rows.filter((p) => resolveOnlineAllowed(cfg, p.code));
-  return `<div class="adm-grp">${esc(t('adm_online_waiting', { n: waiting.length }))}</div>
-    <div class="adm-allow__list">${waiting.map(chip).join('') || `<span class="adm-note">${esc(t('adm_online_none'))}</span>`}</div>
-    <details class="adm-sub" data-sub="online-allowed"${openSections().has('online-allowed') ? ' open' : ''}><summary>${esc(t('adm_online_allowed', { n: allowed.length }))}</summary>
-      <div class="adm-allow__list">${allowed.map(chip).join('')}</div>
-    </details>`;
-}
-
-// --- Spelling Bee flags (2026-10-28, docs/SPELLING-BEE-INTEGRITY-SPEC.md section 6) ---------------
-/** One row per voided day, newest first: the server's flags (Undo / Void again) and the days voided by
- *  hand in js/stats-corrections.js (read only). Under them, folded, the missing-log alerts. */
-function beeSectionHTML(cfg) {
-  if (loading()) return loadingHTML();
-  const names = new Map(codesSeen().map((p) => [p.code, p]));
-  const who = (code, fallback) => { const p = names.get(code); return `${p && p.emoji ? esc(p.emoji) + ' ' : ''}${esc((p && p.name) || fallback || code)}`; };
-  const lang = (bk) => (String(bk).startsWith('es-') ? 'ES' : 'EN');
-  const date = (ms) => { try { return new Date(ms).toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }); } catch { return ''; } };
-  const day = (ymd) => { const [y, m, d] = String(ymd).split('-').map(Number); return y ? date(new Date(y, m - 1, d).getTime()) : ''; };
-  const rows = [];
-  for (const [bk, byCode] of Object.entries((_bee && _bee.flags) || {})) {
-    for (const [code, f] of Object.entries(byCode || {})) {
-      const undone = resolveBeeUndone(cfg, bk, code);
-      const stands = flagStands(f);   // a flag resting on a retired rule counts for nothing (2026-10-29): no button
-      rows.push({ at: Number(f.at) || 0, html: `<div class="adm-row adm-bee" data-bee="${esc(bk)}|${esc(code)}">
-        <span class="adm-name">${who(code, f.name)} · ${esc(date(f.at))} ${lang(bk)}${undone || !stands ? ` · ${esc(t('adm_bee_counts'))}` : ''}</span>
-        <span class="adm-note">${esc(f.summary || '')}</span>
-        ${stands ? `<button type="button" class="gh-btn gh-btn--sm" data-beeundo="${undone ? 'redo' : 'undo'}">${esc(t(undone ? 'adm_bee_redo' : 'adm_bee_undo'))}</button>` : ''}
-      </div>` });
+    if (!cur) out.set(code, { code, name: String(p.name || '').trim() || code, emoji: p.emoji || '', at, plays, games: played });
+    else {
+      cur.plays += plays; for (const x of played) cur.games.add(x);
+      if (at >= cur.at) Object.assign(cur, { name: String(p.name || '').trim() || code, emoji: p.emoji || cur.emoji, at });
     }
   }
-  for (const v of Object.values(VOIDED_MATCHES.spellingbee || {})) {
-    const bk = String(v.puzzle || '').replace(/:/g, '-').replace(/ñ/g, '0');
-    const [y, m, d] = String(v.day || '').split('-').map(Number);
-    rows.push({ at: y ? new Date(y, m - 1, d).getTime() : 0, html: `<div class="adm-row adm-bee">
-      <span class="adm-name">${who(v.winner)} · ${esc(day(v.day))} ${lang(bk)}</span>
-      <span class="adm-note">${esc(t('adm_bee_manual'))}</span>
-    </div>` });
-  }
-  rows.sort((a, b) => b.at - a.at);
-  const gaps = [];
-  for (const [bk, byCode] of Object.entries((_bee && _bee.alerts) || {})) {
-    for (const [code, a] of Object.entries(byCode || {})) {
-      gaps.push({ at: Number(a.at) || 0, html: `<div class="adm-row"><span class="adm-name">${who(code, a.name)} · ${esc(date(a.at))} ${lang(bk)}</span><span class="adm-note">${a.words | 0} / ${a.logged | 0}</span></div>` });
+  return out;
+}
+const whoHTML = (emoji, name) => `<span class="adm-em">${esc(emoji || '🙂')}</span>`;
+const personOfCode = (code) => (_agg || []).find((g) => (g.playerId || '').toUpperCase() === code) || null;
+const playsIn = (g, sid) => +(obj(obj(obj(g && g.games)[sid]).total).played) || 0;
+
+// --- the flags ------------------------------------------------------------------------------------
+
+const langOf = (bk) => (String(bk).startsWith('es-') ? 'ES' : 'EN');
+/** Every Spelling Bee flag: {bk, code, f, stands, voided, at}. */
+function beeFlags(cfg) {
+  const out = [];
+  for (const [bk, byCode] of Object.entries(obj(_bee.flags))) {
+    for (const [code, f] of Object.entries(obj(byCode))) {
+      const stands = flagStands(f);
+      out.push({ bk, code, f: obj(f), stands, voided: stands && !resolveBeeUndone(cfg, bk, code), at: Number(obj(f).at) || 0 });
     }
   }
-  gaps.sort((a, b) => b.at - a.at);
-  return (rows.map((r) => r.html).join('') || `<p class="adm-note">${esc(t('adm_bee_none'))}</p>`)
-    + (gaps.length ? `<details class="adm-sub" data-sub="bee-gaps"${openSections().has('bee-gaps') ? ' open' : ''}><summary>${esc(t('adm_bee_gaps', { n: gaps.length }))}</summary>${gaps.map((g) => g.html).join('')}</details>` : '');
+  return out.sort((a, b) => b.at - a.at);
 }
-
-// --- Integrity checks, every other game (2026-10-28, docs/INTEGRITY-CHECKS-SPEC.md) ------------------
-/** One row per flagged game on one device's record, newest first, each with ONE button: Void when it
- *  counts (an alert), Undo when it is voided (a strong flag, Matt's Void, or HAND_VOIDS). Under them,
- *  folded, the online-match alerts. */
-function integritySectionHTML(cfg) {
-  if (loading()) return loadingHTML();
-  const date = (ms) => { try { return new Date(ms).toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }); } catch { return ''; } };
-  const flags = (_integ && _integ.flags) || {};
-  const rows = [];
+/** Every integrity flag on a record's game: {id, gid, list, voided, at, hand}. */
+function integFlags(cfg) {
+  const flags = obj(_integ.flags);
   const keys = new Set();
-  for (const [id, games] of Object.entries(flags)) for (const gid of Object.keys(games || {})) keys.add(`${id}|${gid}`);
+  for (const [id, games] of Object.entries(flags)) for (const gid of Object.keys(obj(games))) keys.add(`${id}|${gid}`);
   for (const [id, games] of Object.entries(HAND_VOIDS)) for (const gid of Object.keys(games)) keys.add(`${id}|${gid}`);
+  for (const [id, games] of Object.entries(obj(obj(cfg.integrity).void))) for (const gid of Object.keys(obj(games))) keys.add(`${id}|${gid}`);
+  const out = [];
   for (const key of keys) {
     const [id, gid] = key.split('|');
-    const list = Object.entries((flags[id] || {})[gid] || {}).map(([rule, f]) => ({ rule, ...(f || {}) }));
-    const rec = ((_players || {})[id] || {}).profile || {};
-    const f0 = list[0] || {};
-    const voided = isVoided(flags, cfg, id, gid);
+    const list = Object.entries(obj(obj(flags[id])[gid])).map(([rule, f]) => Object.assign({ rule }, obj(f)));
     const at = Math.max(0, ...list.map((f) => Number(f.when) || 0));
-    const what = list.length ? list.map((f) => hitText(f)).join('; ') : String((HAND_VOIDS[id] || {})[gid] || '');
-    rows.push({ at, html: `<div class="adm-row adm-bee" data-iv="${esc(id)}|${esc(gid)}">
-        <span class="adm-name">${esc(f0.name || rec.name || f0.code || id)} · ${esc(gameName(gid))}${at ? ` · ${esc(date(at))}` : ''} · ${esc(t(voided ? 'adm_iv_voided' : 'adm_bee_counts'))}</span>
-        <span class="adm-note">${esc(what)}</span>
-        <button type="button" class="gh-btn gh-btn--sm" data-ivset="${voided ? 'count' : 'void'}">${esc(t(voided ? 'adm_bee_undo' : 'adm_iv_void'))}</button>
-      </div>` });
+    const hand = !!obj(HAND_VOIDS[id])[gid];
+    out.push({ id, gid, list, voided: isVoided(flags, cfg, id, gid), at, hand });
   }
-  rows.sort((a, b) => b.at - a.at);
-  const matches = [];
-  for (const [key, byRule] of Object.entries((_integ && _integ.alerts) || {})) {
-    const node = String(key).split('~')[0];
-    for (const [rk, a] of Object.entries(byRule || {})) {
-      const rule = String(rk).split('~')[0];
-      matches.push({ at: Number((a || {}).when) || 0, html: `<div class="adm-row"><span class="adm-name">${esc((a && a.name) || '')} · ${esc(gameName(node))} · ${esc(date((a || {}).when))}</span><span class="adm-note">${esc(hitText({ rule, v: (a || {}).v, lim: (a || {}).lim }))}</span></div>` });
+  return out.sort((a, b) => b.at - a.at);
+}
+const nodeGame = (node) => (node === 'hoops' ? 'hoops4' : node);
+/** The online-match alerts: {key, rk, a, gid, at}. */
+function matchAlerts() {
+  const out = [];
+  for (const [key, byRule] of Object.entries(obj(_integ.alerts))) {
+    for (const [rk, a] of Object.entries(obj(byRule))) out.push({ key, rk, a: obj(a), gid: nodeGame(String(key).split('~')[0]), at: Number(obj(a).when) || 0 });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+function recName(id, fallback) {
+  const rec = obj(obj((_players || {})[id]).profile);
+  return rec.name || fallback || id;
+}
+function recEmoji(id) { return obj(obj((_players || {})[id]).profile).emoji || ''; }
+
+/** Write, then mark the flag checked: a decision made is a flag dealt with. */
+const andReview = (write, kind, a, b) => async () => {
+  const r = await write();
+  if (!r || !r.ok) return r;
+  return setReviewed(kind, a, b, true);
+};
+
+/** Everything on the Now tab: [{group, rowHTML}] built from the flags Matt has not checked yet. */
+function nowRows(cfg) {
+  const rows = { flags: [], online: [] };
+  const codes = codesSeen();
+  for (const b of beeFlags(cfg)) {
+    if (!b.stands || resolveReviewed(cfg, 'bee', b.bk, b.code)) continue;
+    const p = codes.get(b.code) || {};
+    rows.flags.push(row({
+      icon: whoHTML(p.emoji), title: p.name || b.f.name || b.code,
+      sub: `${titleOfStats('spellingbee')} · ${shortDate(b.at)} ${langOf(b.bk)} · ${b.voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')}`,
+      sub2: b.f.summary || '',
+      acts: [
+        btn(tx('adm_keep', 'Keep'), () => setReviewed('bee', b.bk, b.code, true)),
+        b.voided ? btn(tx('adm_undo', 'Undo'), andReview(() => setBeeUndone(b.bk, b.code, true), 'bee', b.bk, b.code))
+          : btn(tx('adm_void', 'Void'), andReview(() => setBeeUndone(b.bk, b.code, false), 'bee', b.bk, b.code), 'x'),
+      ],
+    }));
+  }
+  for (const f of integFlags(cfg)) {
+    if (f.hand || !f.list.length || resolveReviewed(cfg, 'iv', f.id, f.gid)) continue;
+    const f0 = f.list[0];
+    rows.flags.push(row({
+      icon: whoHTML(recEmoji(f.id)), title: recName(f.id, f0.name),
+      sub: `${titleOfStats(f.gid)}${f.at ? ` · ${shortDate(f.at)}` : ''} · ${f.voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')}`,
+      sub2: f.list.map((x) => hitText(x)).join('; '),
+      acts: [
+        btn(tx('adm_keep', 'Keep'), () => setReviewed('iv', f.id, f.gid, true)),
+        f.voided ? btn(tx('adm_undo', 'Undo'), andReview(() => setIntegrityVoided(f.id, f.gid, false), 'iv', f.id, f.gid))
+          : btn(tx('adm_void', 'Void'), andReview(() => setIntegrityVoided(f.id, f.gid, true), 'iv', f.id, f.gid), 'x'),
+      ],
+    }));
+  }
+  for (const m of matchAlerts()) {
+    if (resolveReviewed(cfg, 'ma', m.key, m.rk)) continue;
+    rows.flags.push(row({
+      icon: whoHTML(''), title: m.a.name || '',
+      sub: `${titleOfStats(m.gid)}${m.at ? ` · ${shortDate(m.at)}` : ''}`,
+      sub2: hitText({ rule: String(m.rk).split('~')[0], v: m.a.v, lim: m.a.lim }),
+      acts: [btn(tx('adm_keep', 'Keep'), () => setReviewed('ma', m.key, m.rk, true))],
+    }));
+  }
+  const newest = [...codes.values()].sort((a, b) => b.at - a.at);
+  for (const p of newest) {
+    if (resolveOnlineAllowed(cfg, p.code) || onlineOverride(cfg, p.code) !== null) continue;
+    rows.online.push(row({
+      icon: whoHTML(p.emoji), title: p.name,
+      sub: [tx('adm_n_plays', '{n} plays', { n: fmt(p.plays) }), p.games.size === 1 ? tx('adm_1_game', '1 game') : p.games.size ? tx('adm_n_games', '{n} games', { n: p.games.size }) : '', seen(p.at)].filter(Boolean).join(' · '),
+      acts: [
+        btn(tx('adm_no', 'No'), () => setOnlineAllowed(p.code, false), 'x'),
+        btn(tx('adm_allow', 'Allow'), () => setOnlineAllowed(p.code, true)),
+      ],
+    }));
+  }
+  return rows;
+}
+const nowCount = (cfg) => { if (loading()) return 0; const r = nowRows(cfg); return r.flags.length + r.online.length; };
+
+// --- row builders -----------------------------------------------------------------------------------
+
+/** A text button that runs a verified write. */
+function btn(label, write, cls = '') {
+  return `<button type="button" class="adm-a ${cls}" ${act(() => save(write))}>${esc(label)}</button>`;
+}
+/** The one row: [icon] title / sub / sub2 [value] [actions] [chevron]. `go` makes the whole row a button. */
+function row({ icon = '', title = '', titleHTML = '', sub = '', sub2 = '', value = '', vcls = '', acts = [], go = null, tap = null, check = null, cls = '', q = '', extra = '' }) {
+  const fn = go || tap;
+  const tag = fn ? 'button' : 'div';
+  const a = fn ? act(fn) : '';
+  return `<${tag}${tag === 'button' ? ' type="button"' : ''} class="adm-r${icon ? ' i' : ''} ${cls}" ${a}${q ? ` data-q="${esc(q.toLowerCase())}"` : ''}${check !== null ? ` aria-pressed="${!!check}"` : ''}>
+    ${extra}${icon}<div class="adm-tx"><div class="adm-t">${titleHTML || esc(title)}</div>${sub ? `<div class="adm-s">${esc(sub)}</div>` : ''}${sub2 ? `<div class="adm-s">${esc(sub2)}</div>` : ''}</div>
+    ${value !== '' ? `<span class="adm-v ${vcls}">${esc(value)}</span>` : ''}${acts.join('')}
+    ${check !== null ? `<span class="adm-ck">${check ? I.check : ''}</span>` : ''}${go ? `<span class="adm-cv">${I.chev}</span>` : ''}
+  </${tag}>`;
+}
+const gh = (label, right = '', action = '') => `<div class="adm-gh"><span>${esc(label)}${right !== '' ? ` <b>${esc(right)}</b>` : ''}</span>${action}</div>`;
+const grp = (rows, first = false) => (rows.length ? `<div class="adm-grp${first ? ' first' : ''}">${rows.join('')}</div>` : '');
+const link = (label, tap, acts = []) => row({ titleHTML: `<span class="adm-link">${esc(label)}</span>`, tap, acts });
+const more = (label, go) => row({ titleHTML: `<span class="adm-link">${esc(label)}</span>`, go });
+
+// --- navigation --------------------------------------------------------------------------------------
+
+const TABS = [
+  { id: 'now', icon: I.now, label: () => tx('adm_tab_now', 'Now') },
+  { id: 'games', icon: I.games, label: () => tx('adm_tab_games', 'Games') },
+  { id: 'people', icon: I.people, label: () => tx('adm_tab_people', 'People') },
+  { id: 'sent', icon: I.sent, label: () => tx('adm_tab_sent', 'Sent') },
+];
+const viewKey = (v) => JSON.stringify(v || { tab: _tab });
+function push(v) { _scroll.set(viewKey(top()), scrollTop()); _stack.push(v); _edit = false; render({ fresh: true }); }
+function back() {
+  if (_sheet) { _sheet = null; render(); return; }
+  if (_stack.length) { _stack.pop(); _edit = false; render(); return; }
+  closeAdmin();
+}
+const top = () => (_stack.length ? _stack[_stack.length - 1] : null);
+const scrollTop = () => { const m = _host && _host.querySelector('.adm-main'); return m ? m.scrollTop : 0; };
+function setTab(id) {
+  if (id === _tab && !_stack.length) return;
+  _scroll.set(viewKey(top()), scrollTop());
+  _tab = id; _stack = []; _edit = false;
+  try { localStorage.setItem(TAB_KEY, id); } catch { /* memory only */ }
+  render();
+}
+
+function closeAdmin() {
+  if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
+  if (_host) { _host.remove(); _host = null; }
+  document.documentElement.classList.remove('adm-open');
+}
+
+/** Open the admin page. js/hub.js gates the button on isAdmin(); this is a screen, not a lock. */
+export async function openAdmin() {
+  ensureCss();
+  closeAdmin();
+  const host = document.createElement('div');
+  host.className = 'adm-page';
+  host.setAttribute('role', 'dialog');
+  host.setAttribute('aria-modal', 'true');
+  host.setAttribute('aria-label', tx('adm_title', 'Admin controls'));
+  document.body.appendChild(host);
+  document.documentElement.classList.add('adm-open');
+  _host = host;
+  try { const s = localStorage.getItem(TAB_KEY); if (TABS.some((x) => x.id === s)) _tab = s; } catch { /* default */ }
+  _stack = []; _sheet = null; _edit = false;
+  host.addEventListener('click', onClick);
+  host.addEventListener('input', onInput);
+  _onKey = (e) => { if (e.key === 'Escape' && !_busy) back(); };
+  document.addEventListener('keydown', _onKey);
+  // Paint at once from the cached config; the people-shaped parts fill in when the reads land.
+  _players = null; _offline = false;
+  render();
+  const [fresh, players, bee, integ] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee(), readIntegrity()]);
+  _players = players || {};
+  _bee = bee || {};
+  _integ = integ || {};
+  _offline = !fresh;
+  if (!_host || _busy) return;           // a save in flight repaints when it finishes
+  render();
+  if (_offline) toast(tx('adm_offline', 'Offline: last known settings. Changes need a connection.'), true);
+}
+
+function onClick(e) {
+  const el = e.target.closest('[data-a]');
+  if (!el || !_host || !_host.contains(el)) return;
+  if (_busy) return;
+  const fn = _acts[+el.dataset.a];
+  if (fn) { e.preventDefault(); _tapped = el; fn(el); }
+}
+function onInput(e) {
+  const box = e.target.closest('[data-filter]');
+  if (!box) return;
+  _filters.set(box.dataset.filter, String(e.target.value || ''));
+  applyFilter(box.dataset.filter);
+}
+function applyFilter(sel) {
+  const q = String(_filters.get(sel) || '').trim().toLowerCase();
+  const root = _host && _host.querySelector(sel);
+  if (!root) return;
+  root.querySelectorAll('[data-q]').forEach((r) => { r.style.display = !q || r.dataset.q.includes(q) ? '' : 'none'; });
+}
+
+/** Run one verified write: the tapped row dims, the page repaints from the re-read, a toast says how it went. */
+async function save(write, el) {
+  if (_busy) return;
+  _busy = true;
+  _host.classList.add('adm-busy');
+  const rowEl = _tapped && _tapped.closest ? _tapped.closest('.adm-r') : null;
+  if (rowEl) rowEl.classList.add('adm-pending');
+  let res;
+  try { res = await write(); } catch (err) { res = { ok: false, error: String((err && err.message) || err) }; }
+  _busy = false;
+  if (!_host) return;
+  _host.classList.remove('adm-busy');
+  render();
+  if (res && res.ok) toast(tx('adm_saved', 'Saved.'));
+  else toast(tx('adm_save_failed', "Didn't save: {why}", { why: (res && res.error) || '?' }), true);
+}
+
+function toast(text, err = false) {
+  const el = _host && _host.querySelector('.adm-toast');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('err', !!err);
+  el.classList.add('on');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { if (el) el.classList.remove('on'); }, err ? 6000 : 1800);
+}
+
+// --- render -----------------------------------------------------------------------------------------
+
+function render({ fresh = false } = {}) {
+  if (!_host) return;
+  const cfg = readCachedConfig();
+  const v = top();
+  const oldKey = _host.dataset.view;
+  const keep = !fresh && oldKey === viewKey(v) ? scrollTop() : null;
+  _acts = [];
+  _ident = _players ? buildIdentity(_players) : null;
+  _agg = _players ? aggregatePlayers(_players, allCorrections(cfg)) : [];
+  _aggRaw = _players ? aggregatePlayers(_players) : [];
+  const view = renderView(cfg, v);
+  const backLabel = !_stack.length ? tx('adm_back_hub', 'Game Hub')
+    : _stack.length === 1 ? (TABS.find((x) => x.id === _tab) || TABS[0]).label() : (_stack[_stack.length - 2].title || '');
+  if (v) v.title = view.title;
+  const count = nowCount(cfg);
+  const toastEl = _host.querySelector('.adm-toast');
+  const toastState = toastEl ? { text: toastEl.textContent, cls: toastEl.className } : null;
+  _host.innerHTML = `
+    <div class="adm-nav">
+      <button type="button" class="adm-nb" ${act(() => back())} aria-label="${esc(backLabel)}">${I.back}<span>${esc(backLabel)}</span></button>
+      ${!_stack.length ? `<button type="button" class="adm-ni" ${act(() => { _sheet = { k: 'tools' }; render(); })} aria-label="${esc(tx('adm_this_phone', 'This phone'))}">${I.gear}</button>` : ''}
+    </div>
+    ${view.hero || `<h1 class="adm-lt">${esc(view.title)}</h1>`}
+    <div class="adm-main">${view.body}</div>
+    <nav class="adm-tabbar">${TABS.map((x) => `<button type="button" class="adm-tab" ${act(() => setTab(x.id))}${x.id === _tab ? ' aria-current="page"' : ''}>${x.icon}${esc(x.label())}${x.id === 'now' && count ? `<span class="adm-bdg">${count}</span>` : ''}</button>`).join('')}</nav>
+    <div class="adm-toast" role="status" aria-live="polite"></div>
+    ${_sheet ? renderSheet(cfg) : ''}`;
+  _host.dataset.view = viewKey(v);
+  _host.querySelectorAll('[data-filter]').forEach((box) => {
+    const inp = box.querySelector('input');
+    if (inp && _filters.has(box.dataset.filter)) { inp.value = _filters.get(box.dataset.filter); applyFilter(box.dataset.filter); }
+  });
+  if (toastState) { const el = _host.querySelector('.adm-toast'); el.textContent = toastState.text; el.className = toastState.cls; }
+  const main = _host.querySelector('.adm-main');
+  main.scrollTop = keep != null ? keep : (fresh ? 0 : (_scroll.get(viewKey(v)) || 0));
+}
+
+function renderView(cfg, v) {
+  if (!v) {
+    if (_tab === 'games') return gamesTab(cfg);
+    if (_tab === 'people') return peopleTab(cfg);
+    if (_tab === 'sent') return sentTab();
+    return nowTab(cfg);
+  }
+  switch (v.k) {
+    case 'game': return gamePage(cfg, v.hub);
+    case 'who': return whoPage(cfg, v.hub);
+    case 'machine': return machinePage(cfg, v.board);
+    case 'players': return playersPage(cfg, v.sid);
+    case 'gplayer': return gamePlayerPage(cfg, v.sid, v.key);
+    case 'person': return personPage(cfg, v.key);
+    case 'testerfor': return testerForPage(cfg, v.key);
+    case 'allgames': return allGamesPage(cfg, v.key);
+    case 'ann': return annPage(v.id);
+    case 'hm': return hmPage(v.id);
+    default: return nowTab(cfg);
+  }
+}
+const waitBody = () => `<p class="adm-empty">${esc(tx('adm_loading', 'Loading...'))}</p>`;
+
+// --- Now ----------------------------------------------------------------------------------------------
+
+function nowTab(cfg) {
+  const title = tx('adm_tab_now', 'Now');
+  if (loading()) return { title, body: waitBody() };
+  const r = nowRows(cfg);
+  if (!r.flags.length && !r.online.length) return { title, body: `<p class="adm-empty">${esc(tx('adm_now_empty', 'Nothing needs you.'))}</p>` };
+  return { title, body: (r.flags.length ? gh(tx('adm_flags', 'Flags'), r.flags.length) + grp(r.flags) : '')
+    + (r.online.length ? gh(tx('adm_play_online_q', 'Play online?'), r.online.length) + grp(r.online) : '') };
+}
+
+// --- Games --------------------------------------------------------------------------------------------
+
+/** Open flags per stats id (what Now lists), for the tiles' badges. */
+function openFlagsBySid(cfg) {
+  const n = {};
+  if (loading()) return n;
+  const add = (sid) => { n[sid] = (n[sid] || 0) + 1; };
+  for (const b of beeFlags(cfg)) if (b.stands && !resolveReviewed(cfg, 'bee', b.bk, b.code)) add('spellingbee');
+  for (const f of integFlags(cfg)) if (!f.hand && f.list.length && !resolveReviewed(cfg, 'iv', f.id, f.gid)) add(f.gid);
+  for (const m of matchAlerts()) if (!resolveReviewed(cfg, 'ma', m.key, m.rk)) add(m.gid);
+  return n;
+}
+function gamesTab(cfg) {
+  const all = GAMES.slice().sort((a, b) => titleText(a).localeCompare(titleText(b)));
+  const flags = openFlagsBySid(cfg);
+  const tile = (g, hid) => {
+    const sid = statsOf(g.id);
+    const testers = hid ? gameAllowList(cfg, g.id).length : 0;
+    const f = sid ? flags[sid] || 0 : 0;
+    return `<button type="button" class="adm-tile${hid ? ' hid' : ''}" ${act(() => push({ k: 'game', hub: g.id }))}>${esc(titleText(g))}${
+      f ? `<span class="adm-bdg f" aria-label="${f} flags">${f}</span>` : testers ? `<span class="adm-bdg" aria-label="${testers} testers">${testers}</span>` : ''}</button>`;
+  };
+  const hidden = all.filter((g) => !isLiveGame(cfg, g));
+  const live = all.filter((g) => isLiveGame(cfg, g));
+  return { title: tx('adm_tab_games', 'Games'), body:
+    (hidden.length ? gh(tx('adm_testing', 'Admin only'), hidden.length) + `<div class="adm-grid">${hidden.map((g) => tile(g, true)).join('')}</div>` : '')
+    + gh(tx('adm_live', 'Live'), live.length) + `<div class="adm-grid">${live.map((g) => tile(g, false)).join('')}</div>` };
+}
+
+function whoValue(cfg, g) { return isLiveGame(cfg, g) ? tx('adm_everyone', 'Everyone') : tx('adm_testers_opt', 'Admin and testers'); }
+
+function gamePage(cfg, hubId) {
+  const g = hubGame(hubId);
+  if (!g) return { title: hubId, body: '' };
+  const sid = statsOf(hubId);
+  const live = isLiveGame(cfg, g);
+  let body = grp([row({ title: (tx('adm_who', 'Who sees it')), value: whoValue(cfg, g), go: () => push({ k: 'who', hub: hubId }) })], true);
+  if (!live) body += testersHTML(cfg, g);
+  if (hubId === 'skeeball') {
+    body += gh(tx('adm_machines', 'Machines'), BOARDS.length) + grp(BOARDS.map((b) => {
+      if (b.id === DEFAULT_BOARD) return row({ title: (b.name), value: tx('adm_machine_first', 'Always open') });
+      const mode = resolveBoardMode(cfg, b.id, !!b.adminOnly);
+      return row({ title: (b.name), value: modeLabel(mode), go: () => push({ k: 'machine', board: b.id }) });
+    }));
+  }
+  if (!sid) return { title: titleText(g), body };
+  if (loading()) return { title: titleText(g), body: body + waitBody() };
+  const flagged = flaggedRows(cfg, sid);
+  if (flagged.length) body += gh(tx('adm_flagged', 'Flagged'), flagged.length) + grp(flagged);
+  const alerts = alertRows(cfg, sid);
+  if (alerts.length) body += gh(tx('adm_alerts', 'Alerts'), alerts.length) + grp(alerts);
+  const players = (_agg || []).filter((p) => playsIn(p, sid) > 0 && !isHiddenName(p.name)).sort((a, b) => playsIn(b, sid) - playsIn(a, sid));
+  if (players.length) {
+    body += gh(tx('adm_players', 'Players'), players.length)
+      + grp(players.slice(0, 6).map((p) => playerInGameRow(cfg, p, sid))
+        .concat(players.length > 6 ? [more(tx('adm_all_players', 'All {n} players', { n: players.length }), () => push({ k: 'players', sid }))] : []));
+  }
+  return { title: titleText(g), body };
+}
+const modeLabel = (m) => (m === 'open' ? tx('adm_mode_open', 'Open') : m === 'testing' ? tx('adm_mode_testing', 'Testing') : tx('adm_mode_unlockable', 'Unlockable'));
+
+function playerInGameRow(cfg, p, sid) {
+  const g = obj(obj(p.games)[sid]);
+  const played = playsIn(p, sid), won = +(obj(g.total).won) || 0;
+  const sub = SOLO.has(sid) ? tx('adm_played', '{p} played', { p: fmt(played) }) : tx('adm_played_won', '{p} played · {w} won', { p: fmt(played), w: fmt(won) });
+  const v = voidsOf(cfg, p.key)[sid];
+  return row({ icon: whoHTML(p.emoji), title: (p.name), sub, value: v ? v.label : '', vcls: 'x', go: () => push({ k: 'gplayer', sid, key: p.key }) });
+}
+function playersPage(cfg, sid) {
+  const title = tx('adm_players', 'Players');
+  if (loading()) return { title, body: waitBody() };
+  const players = (_agg || []).filter((p) => playsIn(p, sid) > 0 && !isHiddenName(p.name)).sort((a, b) => playsIn(b, sid) - playsIn(a, sid));
+  return { title: `${titleOfStats(sid)}: ${title}`, body: grp(players.map((p) => playerInGameRow(cfg, p, sid)), true) };
+}
+
+/** The Testers group of a hidden game: picked people, Edit to remove, Add testers to pick. */
+function testersHTML(cfg, g) {
+  const codes = gameAllowList(cfg, g.id);
+  const people = codesSeen();
+  const rows = codes.map((c) => {
+    const p = people.get(c) || { name: c, emoji: '' };
+    return row({ icon: whoHTML(p.emoji), title: (p.name), value: '', acts: [`<span class="adm-code">${esc(c)}</span>`],
+      extra: _edit ? `<button type="button" class="adm-rm" ${act(() => save(() => setGameAllowed(g.id, c, false)))} aria-label="${esc(tx('adm_remove', 'Remove'))}">${I.minus}</button>` : '' });
+  });
+  rows.push(row({ icon: `<span class="adm-pl">${I.plus}</span>`, titleHTML: `<span class="adm-link">${esc(tx('adm_add_testers', 'Add testers'))}</span>`, go: () => { _filters.delete('#adm-pick'); _sheet = { k: 'pick', hub: g.id }; render(); } }));
+  const edit = codes.length ? `<button type="button" class="adm-ga" ${act(() => { _edit = !_edit; render(); })}>${esc(_edit ? tx('adm_done', 'Done') : tx('adm_edit', 'Edit'))}</button>` : '';
+  return gh(tx('adm_testers', 'Testers'), codes.length, edit) + grp(rows);
+}
+
+function whoPage(cfg, hubId) {
+  const g = hubGame(hubId);
+  const live = g ? isLiveGame(cfg, g) : true;
+  return { title: tx('adm_who', 'Who sees it'), body: grp([
+    row({ title: tx('adm_everyone', 'Everyone'), check: live, tap: () => (live ? back() : save(() => setGameLive(hubId, true))) }),
+    row({ title: tx('adm_testers_opt', 'Admin and testers'), check: !live, tap: () => (!live ? back() : save(() => setGameLive(hubId, false))) }),
+  ], true) };
+}
+function machinePage(cfg, boardId) {
+  const b = boardById(boardId);
+  const mode = resolveBoardMode(cfg, boardId, !!(b && b.adminOnly));
+  const opt = (m) => row({ title: modeLabel(m), check: mode === m, tap: () => (mode === m ? back() : save(() => setBoardMode(boardId, m))) });
+  return { title: b ? b.name : boardId, body: grp(['open', 'unlockable', 'testing'].map(opt), true) };
+}
+
+/** Everything voided or flagged in one game, each with its one action. */
+function flaggedRows(cfg, sid) {
+  const rows = [];
+  const codes = codesSeen();
+  if (sid === 'spellingbee') {
+    for (const b of beeFlags(cfg)) {
+      const p = codes.get(b.code) || {};
+      rows.push(row({ icon: whoHTML(p.emoji), title: (p.name || b.f.name || b.code),
+        sub: `${shortDate(b.at)} ${langOf(b.bk)} · ${b.voided ? tx('adm_voided', 'Voided') : b.stands ? tx('adm_counts', 'Counts') : tx('adm_retired', 'Counts · rule retired')}`,
+        sub2: b.f.summary || '',
+        acts: !b.stands ? [] : [b.voided ? btn(tx('adm_undo', 'Undo'), () => setBeeUndone(b.bk, b.code, true)) : btn(tx('adm_void', 'Void'), () => setBeeUndone(b.bk, b.code, false), 'x')] }));
+    }
+    for (const v of Object.values(VOIDED_MATCHES.spellingbee || {})) {
+      const p = codes.get(v.winner) || {};
+      rows.push(row({ icon: whoHTML(p.emoji), title: (p.name || v.winner), sub: `${ymdDate(v.day)} · ${tx('adm_voided', 'Voided')} · ${tx('adm_bee_manual', 'by hand')}` }));
     }
   }
-  matches.sort((a, b) => b.at - a.at);
-  return (rows.map((r) => r.html).join('') || `<p class="adm-note">${esc(t('adm_bee_none'))}</p>`)
-    + (matches.length ? `<details class="adm-sub" data-sub="iv-matches"${openSections().has('iv-matches') ? ' open' : ''}><summary>${esc(t('adm_iv_matches', { n: matches.length }))}</summary>${matches.map((g) => g.html).join('')}</details>` : '');
+  for (const f of integFlags(cfg)) {
+    if (f.gid !== sid) continue;
+    rows.push(row({ icon: whoHTML(recEmoji(f.id)), title: (recName(f.id, (f.list[0] || {}).name)),
+      sub: `${f.at ? `${shortDate(f.at)} · ` : ''}${f.voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')}${f.hand ? ` · ${tx('adm_bee_manual', 'by hand')}` : ''}`,
+      sub2: f.list.length ? f.list.map((x) => hitText(x)).join('; ') : String(obj(HAND_VOIDS[f.id])[sid] || ''),
+      acts: [f.voided ? btn(tx('adm_undo', 'Undo'), () => setIntegrityVoided(f.id, sid, false)) : btn(tx('adm_void', 'Void'), () => setIntegrityVoided(f.id, sid, true), 'x')] }));
+  }
+  if (sid === 'skeeball') {
+    for (const p of _agg || []) {
+      const ids = idsOf(p.key);
+      for (const b of BOARDS) {
+        const voidIds = ids.filter((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, b.id));
+        if (!voidIds.length) continue;
+        const raw = obj(obj(obj(obj(obj(rawByKey(p.key)).games).skeeball).sk).boards)[b.id] || {};
+        rows.push(row({ icon: whoHTML(p.emoji), title: (p.name), sub: `${b.name} · ${tx('adm_raw', 'raw {plays} plays, {points} pts', { plays: fmt(raw.plays), points: fmt(raw.points) })}`,
+          acts: [btn(tx('adm_undo', 'Undo'), skeeVoid(p.key, b.id, true))] }));
+      }
+    }
+  }
+  if (sid === 'holdem') {
+    for (const p of _agg || []) {
+      if (!idsOf(p.key).some((id) => resolveHoldemCorrection(cfg, id))) continue;
+      const raw = obj(obj(obj(rawByKey(p.key)).games).holdem).hb;
+      rows.push(row({ icon: whoHTML(p.emoji), title: (p.name), sub: `${tx('adm_bankroll', 'Bankroll')} · ${tx('adm_raw_bank', 'raw {bank}', { bank: '$' + fmt(holdemBalance(raw || {})) })}`,
+        acts: [btn(tx('adm_undo', 'Undo'), holdemVoid(p.key, true))] }));
+    }
+  }
+  return rows;
+}
+function alertRows(cfg, sid) {
+  const rows = [];
+  for (const m of matchAlerts()) {
+    if (m.gid !== sid) continue;
+    rows.push(row({ icon: whoHTML(''), title: (m.a.name || ''), sub: shortDate(m.at), sub2: hitText({ rule: String(m.rk).split('~')[0], v: m.a.v, lim: m.a.lim }) }));
+  }
+  if (sid === 'spellingbee') {
+    const codes = codesSeen();
+    for (const [bk, byCode] of Object.entries(obj(_bee.alerts))) {
+      for (const [code, a] of Object.entries(obj(byCode))) {
+        const p = codes.get(code) || {};
+        rows.push(row({ icon: whoHTML(p.emoji), title: (p.name || obj(a).name || code),
+          sub: `${shortDate(obj(a).at)} ${langOf(bk)} · ${tx('adm_log_gap', 'log gap')} ${(obj(a).words | 0)} / ${(obj(a).logged | 0)}` }));
+      }
+    }
+  }
+  return rows;
 }
 
-/** ADMIN ONLY FIRST, LIVE FOLDED (2026-10-28). Forty-odd identical rows, nearly all Live, meant
- *  scrolling the whole list to find the handful that are not. Those few now lead, A-Z; every Live
- *  game is one tap away under its own fold. Flipping a game moves it to the other group. */
-function gamesSectionHTML(cfg) {
-  const all = GAMES.slice().sort((a, b) => titleText(a).localeCompare(titleText(b)));
-  const isLive = (g) => resolveGameLive(cfg, g.id, !g.devOnly);
-  const hidden = all.filter((g) => !isLive(g));
-  const live = all.filter(isLive);
-  return `<div class="adm-grp">${esc(t('adm_games_hidden', { n: hidden.length }))}</div>
-    ${hidden.map((g) => gameRowHTML(cfg, g, false)).join('')}
-    <details class="adm-sub" data-sub="games-live"${openSections().has('games-live') ? ' open' : ''}>
-      <summary>${esc(t('adm_games_live', { n: live.length }))}</summary>
-      ${live.map((g) => gameRowHTML(cfg, g, true)).join('')}
-    </details>`;
-}
+/** Skeeball: void one machine for a person on EVERY device they play on (a void on one record would be
+ *  undone by their other phone's next sync), or undo it. */
+const skeeVoid = (key, boardId, undo) => async () => {
+  let last = { ok: true };
+  for (const id of idsOf(key)) {
+    const raw = obj(obj(obj(obj(obj((_players[id] || {}).stats).games).skeeball).sk).boards);
+    if (!undo && !raw[boardId]) continue;
+    if (undo && !correctionFor(resolveBoardCorrections(readCachedConfig(), id) || {}, boardId)) continue;
+    last = await setSkeeballCorrection(id, boardId, undo ? null : snapshotOf(raw[boardId], dayKey(Date.now())), undo ? '' : 'broken board');
+    if (!last.ok) return last;
+  }
+  return last;
+};
+/** Hold'em: void a person's bankroll on every device that holds a ledger, or undo it. */
+const holdemVoid = (key, undo) => async () => {
+  let last = { ok: true };
+  for (const id of idsOf(key)) {
+    const hb = obj(obj(obj((_players[id] || {}).stats).games).holdem).hb;
+    if (undo ? !resolveHoldemCorrection(readCachedConfig(), id) : !hb) continue;
+    last = await setHoldemCorrection(id, undo ? null : holdemSnapshotOf(hb), undo ? '' : 'admin void');
+    if (!last.ok) return last;
+  }
+  return last;
+};
+/** Integrity: void one game on every record of a person that has played it, or undo every void on it. */
+const gameVoid = (key, sid, voided) => async () => {
+  let last = { ok: true };
+  const flags = obj(_integ.flags);
+  for (const id of idsOf(key)) {
+    const g = obj(obj(obj((_players[id] || {}).stats).games)[sid]);
+    const has = (+(obj(g.total).played) || 0) > 0;
+    const now = isVoided(flags, readCachedConfig(), id, sid);
+    if (voided ? (!has || now) : !now) continue;
+    last = await setIntegrityVoided(id, sid, voided);
+    if (!last.ok) return last;
+  }
+  return last;
+};
 
-function gameRowHTML(cfg, g, live) {
-  const row = `<div class="adm-row" data-game="${esc(g.id)}">
-    <div class="adm-row-main"><div class="adm-name">${esc(titleText(g))}</div></div>
-    <div class="adm-ctl">
-      ${segHTML(titleText(g), [
-        { value: 'live', label: t('adm_live') },
-        { value: 'test', label: t('adm_testing') },
-      ], live ? 'live' : 'test')}
-    </div>
-  </div>`;
-  // Only while it is hidden: a live game is already everyone's, so a picker there would be a lie.
-  return live ? row : row + allowPickerHTML(cfg, g);
-}
-
-// --- skeeball machines ---------------------------------------------------------------------------
-
-function skeeballSectionHTML(cfg) {
-  return BOARDS.map((b) => {
-    const first = b.id === DEFAULT_BOARD;
-    const mode = resolveBoardMode(cfg, b.id, !!b.adminOnly);
-    // Machine names are proper nouns and are never routed through t() (boards.js's standing rule).
-    return `<div class="adm-row adm-row--stack" data-board="${esc(b.id)}">
-      <div class="adm-row-main">
-        <div class="adm-name">${esc(b.name)}</div>
-        ${first ? `<div class="adm-note">${esc(t('adm_machine_first'))}</div>` : ''}
-      </div>
-      ${first ? '' : `<div class="adm-ctl adm-ctl--wide">
-        ${segHTML(b.name, [
-          { value: 'open', label: t('adm_mode_open') },
-          { value: 'unlockable', label: t('adm_mode_unlockable') },
-          { value: 'testing', label: t('adm_mode_testing') },
-        ], mode)}
-      </div>`}
-    </div>`;
-  }).join('');
-}
-
-// --- announcements: who has actually seen each popup ---------------------------------------------
-
-/**
- * Per announcement, per PERSON: has any of their devices dismissed it yet.
- *
- * Matt, releasing golf: *"i want a way to see who has seen the popup too."* The seen-list is a
- * local preference on each phone; `js/stats-net.js` now mirrors it to `players/<id>/announce` on
- * the beats it already syncs on, and this reads that back.
- *
- * Grouped by PERSON, like the scores section and for the same reason: a popup is shown once per
- * DEVICE, so somebody with two phones has genuinely seen it once they dismiss it on either. Their
- * second phone still owes them the popup, which is why the row names how many of their devices
- * have reported it rather than just ticking them off.
- *
- * A device that has not synced since this shipped reports nothing, and "nothing" is NOT "not seen"
- * - it is missing data, and it says so. Same honesty rule as read-install-state.mjs's
- * "(not seen yet)".
- */
-function announceSectionHTML() {
-  if (loading()) return loadingHTML();
-  const all = _players || {};
-  const ids = Object.keys(all);
-  if (!ids.length) return `<p class="adm-note">${esc(t('adm_ann_none'))}</p>`;
-  const ident = buildIdentity(all);
-  const people = new Map();
+/** Every game a person has a void in: { <sid>: { label } }. */
+function voidsOf(cfg, key) {
+  const out = {};
+  const ids = idsOf(key);
+  const flags = obj(_integ.flags);
+  const machines = BOARDS.filter((b) => ids.some((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, b.id))).length;
+  if (machines) out.skeeball = { label: machines === 1 ? tx('adm_1_machine', '1 machine') : tx('adm_n_machines', '{n} machines', { n: machines }) };
+  if (ids.some((id) => resolveHoldemCorrection(cfg, id))) out.holdem = { label: tx('adm_bankroll', 'Bankroll') };
+  const p = personByKey(key);
+  const code = p && (p.playerId || '').toUpperCase();
+  if (code) {
+    // one per DAY and language: a day voided by the server AND by hand is still one day
+    const days = new Set();
+    for (const b of beeFlags(cfg)) if (b.code === code && b.voided) days.add(`${dayKey(b.at)}|${langOf(b.bk)}`);
+    for (const v of Object.values(VOIDED_MATCHES.spellingbee || {})) {
+      if (v.winner === code) days.add(`${v.day}|${langOf(String(v.puzzle || '').replace(/:/g, '-'))}`);
+    }
+    if (days.size) out.spellingbee = { label: days.size === 1 ? tx('adm_1_day', '1 day') : tx('adm_n_days', '{n} days', { n: days.size }) };
+  }
   for (const id of ids) {
+    const games = new Set([...Object.keys(obj(flags[id])), ...Object.keys(obj(HAND_VOIDS[id])), ...Object.keys(obj(obj(obj(cfg.integrity).void)[id]))]);
+    for (const gid of games) if (!out[gid] && isVoided(flags, cfg, id, gid)) out[gid] = { label: tx('adm_voided', 'Voided') };
+  }
+  return out;
+}
+
+/** A person's page in one game: their numbers, that game's voids for them, and the plays logged since Oct 28. */
+function gamePlayerPage(cfg, sid, key) {
+  const p = personByKey(key);
+  if (!p) return { title: titleOfStats(sid), body: waitBody() };
+  const g = obj(obj(p.games)[sid]);
+  const tot = obj(g.total);
+  let body = grp([
+    row({ title: (tx('adm_played_l', 'Played')), value: fmt(tot.played) }),
+    ...(SOLO.has(sid) ? [] : [row({ title: (tx('adm_won_l', 'Won')), value: fmt(tot.won) })]),
+    ...(sid === 'skeeball' ? [] : Object.entries(obj(g.byDiff)).filter(([, d]) => (+obj(d).played || 0) > 0)
+      .map(([k, d]) => row({ title: diffLabel(k), value: SOLO.has(sid) ? fmt(d.played) : `${fmt(d.won)} / ${fmt(d.played)}` }))),
+  ], true);
+  if (sid === 'skeeball') {
+    const ids = idsOf(key);
+    const shown = obj(obj(g.sk).boards);
+    const raw = obj(obj(obj(obj(obj(rawByKey(key)).games).skeeball).sk).boards);
+    const rows = BOARDS.filter((b) => (raw[b.id] || {}).plays).map((b) => {
+      const isVoid = ids.some((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, b.id));
+      const s = shown[b.id] || {}, r = raw[b.id] || {};
+      return row({ title: (b.name),
+        sub: isVoid ? `${tx('adm_voided', 'Voided')} · ${tx('adm_raw', 'raw {plays} plays, {points} pts', { plays: fmt(r.plays), points: fmt(r.points) })}`
+          : tx('adm_sk_line', '{plays} plays · best {best} · {points} pts', { plays: fmt(s.plays), best: fmt(s.best), points: fmt(s.points) }),
+        acts: [isVoid ? btn(tx('adm_undo', 'Undo'), skeeVoid(key, b.id, true)) : btn(tx('adm_void', 'Void'), skeeVoid(key, b.id, false), 'x')] });
+    });
+    if (rows.length) body += gh(tx('adm_machines', 'Machines')) + grp(rows);
+  }
+  if (sid === 'holdem') {
+    const raw = obj(obj(obj(rawByKey(key)).games).holdem).hb;
+    if (raw && ((raw.entries | 0) || (raw.grants | 0))) {
+      const voided = idsOf(key).some((id) => resolveHoldemCorrection(cfg, id));
+      const hb = obj(g.hb);
+      body += gh(tx('adm_bankroll', 'Bankroll')) + grp([row({ title: '$' + fmt(holdemBalance(hb)),
+        sub: voided ? `${tx('adm_voided', 'Voided')} · ${tx('adm_raw_bank', 'raw {bank}', { bank: '$' + fmt(holdemBalance(raw)) })}` : '',
+        acts: [voided ? btn(tx('adm_undo', 'Undo'), holdemVoid(key, true)) : btn(tx('adm_void', 'Void'), holdemVoid(key, false), 'x')] })]);
+    }
+  }
+  if (sid === 'spellingbee') {
+    const code = (p.playerId || '').toUpperCase();
+    const rows = beeFlags(cfg).filter((b) => b.code === code).map((b) => row({
+      title: (`${shortDate(b.at)} ${langOf(b.bk)}`), sub: b.voided ? tx('adm_voided', 'Voided') : b.stands ? tx('adm_counts', 'Counts') : tx('adm_retired', 'Counts · rule retired'), sub2: b.f.summary || '',
+      acts: !b.stands ? [] : [b.voided ? btn(tx('adm_undo', 'Undo'), () => setBeeUndone(b.bk, b.code, true)) : btn(tx('adm_void', 'Void'), () => setBeeUndone(b.bk, b.code, false), 'x')] }));
+    if (rows.length) body += gh(tx('adm_flagged', 'Flagged'), rows.length) + grp(rows);
+  } else if (sid !== 'skeeball' && sid !== 'holdem') {
+    const flags = obj(_integ.flags);
+    const voided = idsOf(key).some((id) => isVoided(flags, cfg, id, sid));
+    body += gh(tx('adm_whole_game', 'Whole game')) + grp([row({
+      title: (voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')),
+      acts: [voided ? btn(tx('adm_undo', 'Undo'), gameVoid(key, sid, false)) : btn(tx('adm_void', 'Void'), gameVoid(key, sid, true), 'x')] })]);
+  }
+  body += playsHTML(p, sid);
+  return { title: p.name, body };
+}
+
+/** A difficulty bucket's name: the stored id, readable (ids stay canonical; only the label changes). */
+function diffLabel(k) {
+  const fixed = { mp: tx('adm_d_mp', 'Online'), ai: tx('adm_d_ai', 'vs computer'), en: 'EN', es: 'ES' };
+  return fixed[k] || String(k).replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/** One play-log entry's recorder arguments, in a few words: [true, {guesses: 1}] -> "won · guesses 1". */
+function argsText(a) {
+  let v;
+  try { v = JSON.parse(a); } catch { return String(a || ''); }
+  const part = (x) => {
+    if (x === true) return tx('adm_won_w', 'won');
+    if (x === false) return tx('adm_lost_w', 'lost');
+    if (x == null) return '';
+    if (typeof x === 'object') return Object.entries(x).filter(([, y]) => y != null && y !== '' && typeof y !== 'object').map(([k, y]) => `${k} ${y}`).join(' · ');
+    return String(x);
+  };
+  return (Array.isArray(v) ? v : [v]).map(part).filter(Boolean).join(' · ').slice(0, 120);
+}
+function playsHTML(p, sid) {
+  const code = (p.playerId || '').toUpperCase();
+  if (!code) return '';
+  const got = _plays.get(code);
+  const head = gh(tx('adm_plays', 'Plays'), tx('adm_since_log', 'since Oct 28'));
+  if (!got) return head + grp([more(tx('adm_show_plays', 'Show plays'), () => readPlays(code))]);
+  if (got === 'loading') return head + waitBody();
+  if (got === 'error') return head + grp([more(tx('adm_retry', 'Try again'), () => readPlays(code))]);
+  const mine = got.filter((x) => x.g === sid && x.f);
+  if (!mine.length) return head + `<p class="adm-empty">${esc(tx('adm_no_plays', 'No plays logged.'))}</p>`;
+  return head + grp(mine.slice(0, 60).map((x) => row({ title: (when(+x.t)), sub: argsText(x.a) })));
+}
+
+// --- People -------------------------------------------------------------------------------------------
+
+function peopleTab() {
+  const title = tx('adm_tab_people', 'People');
+  if (loading()) return { title, body: waitBody() };
+  const people = codedPeople();
+  return { title, body: `<label class="adm-search" data-filter="#adm-people">${I.search}<input type="search" placeholder="${esc(tx('adm_search_people', 'Name or code'))}" aria-label="${esc(tx('adm_search_people', 'Name or code'))}"></label>`
+    + gh(tx('adm_everyone', 'Everyone'), people.length)
+    + `<div class="adm-grp" id="adm-people">${people.map((p) => row({ icon: whoHTML(p.emoji), title: (p.name), acts: [`<span class="adm-code">${esc(p.playerId)}</span>`],
+      q: `${p.name} ${p.playerId}`, go: () => push({ k: 'person', key: p.key }) })).join('')}</div>` };
+}
+
+function personPage(cfg, key) {
+  const p = personByKey(key);
+  if (!p) return { title: '', body: waitBody() };
+  const code = (p.playerId || '').toUpperCase();
+  const online = code ? resolveOnlineAllowed(cfg, code) : false;
+  const hidden = GAMES.filter((g) => !isLiveGame(cfg, g));
+  const tests = code ? hidden.filter((g) => resolveGameAllowed(cfg, g.id, code)).map((g) => titleText(g)) : [];
+  const hero = `<div class="adm-hero"><div class="adm-av">${esc(p.emoji || '🙂')}</div><h1 class="adm-hn">${esc(p.name)}</h1>
+    <div class="adm-hs">${code ? `<code>${esc(code)}</code> · ` : ''}${esc(p.devices === 1 ? tx('adm_1_device', '1 device') : tx('adm_n_devices', '{n} devices', { n: p.devices }))}${p.updatedAt ? ` · ${esc(seen(p.updatedAt))}` : ''}</div></div>`;
+  let body = grp([
+    ...(code ? [row({ title: (tx('adm_plays_online', 'Plays online')),
+      acts: [`<button type="button" class="adm-sw" aria-pressed="${online}" aria-label="${esc(tx('adm_plays_online', 'Plays online'))}" ${act(() => save(() => setOnlineAllowed(code, !online)))}></button>`] })] : []),
+    ...(code && hidden.length ? [row({ title: (tx('adm_tester_for', 'Tester for')), value: tests.length ? tests.join(', ') : tx('adm_none', 'None'), go: () => push({ k: 'testerfor', key }) })] : []),
+  ], true);
+  const voids = voidsOf(cfg, key);
+  const vk = Object.keys(voids);
+  if (vk.length) {
+    body += gh(tx('adm_voided', 'Voided'), vk.length) + grp(vk.map((sid) => row({ title: (titleOfStats(sid)), value: voids[sid].label, vcls: 'x', go: () => push({ k: 'gplayer', sid, key }) })));
+  }
+  const played = Object.keys(obj(p.games)).filter((sid) => playsIn(p, sid) > 0).sort((a, b) => playsIn(p, b) - playsIn(p, a));
+  if (played.length) {
+    body += gh(tx('adm_most_played', 'Most played'), (played.length === 1 ? tx('adm_1_game', '1 game') : tx('adm_n_games', '{n} games', { n: played.length })))
+      + grp(played.slice(0, 5).map((sid) => row({ title: (titleOfStats(sid)), value: fmt(playsIn(p, sid)), go: () => push({ k: 'gplayer', sid, key }) }))
+        .concat(played.length > 5 ? [more(tx('adm_all_games', 'All {n} games', { n: played.length }), () => push({ k: 'allgames', key }))] : []));
+  }
+  return { title: p.name, hero, body };
+}
+function testerForPage(cfg, key) {
+  const p = personByKey(key);
+  const code = p ? (p.playerId || '').toUpperCase() : '';
+  const hidden = GAMES.filter((g) => !isLiveGame(cfg, g)).sort((a, b) => titleText(a).localeCompare(titleText(b)));
+  return { title: tx('adm_tester_for', 'Tester for'), body: grp(hidden.map((g) => {
+    const on = resolveGameAllowed(cfg, g.id, code);
+    return row({ title: titleText(g), check: on, tap: () => save(() => setGameAllowed(g.id, code, !on)) });
+  }), true) };
+}
+function allGamesPage(cfg, key) {
+  const p = personByKey(key);
+  if (!p) return { title: '', body: waitBody() };
+  const played = Object.keys(obj(p.games)).filter((sid) => playsIn(p, sid) > 0).sort((a, b) => playsIn(p, b) - playsIn(p, a));
+  return { title: tx('adm_all_games', 'All {n} games', { n: played.length }), body: grp(played.map((sid) => row({ title: (titleOfStats(sid)), value: fmt(playsIn(p, sid)), go: () => push({ k: 'gplayer', sid, key }) })), true) };
+}
+
+// --- Sent ---------------------------------------------------------------------------------------------
+
+/** Per announcement, per PERSON: has any of their devices dismissed it. A phone that has not reported
+ *  folds into Not yet (it shows up once that phone next opens the app). */
+function annPeople() {
+  const all = _players || {};
+  const people = new Map();
+  for (const id of Object.keys(all)) {
     const rec = all[id] || {};
     const prof = rec.profile || {};
-    // The same people the leaderboard renders, and for the same reasons (js/hidden-players.js).
-    // Matt, the day this shipped: *"the announcement page has like 100 'unnamed player's."* Those
-    // are pre-gate devices that recorded plays before js/name-gate.js made a nameless device
-    // impossible to create - real history, still synced, still on its owner's My Stats, and
-    // nothing here deletes any of it. They just cannot answer the question this screen asks: a
-    // popup shown to a device whose owner has no name is not a person anyone can go and tell.
     if (isHiddenDeviceId(id) || isHiddenName(prof.name)) continue;
-    const key = ident.keyFor(prof, id);
-    if (!people.has(key)) people.set(key, { name: '', devices: 0, reported: 0, seen: new Set() });
+    const key = _ident.keyFor(prof, id);
+    if (!people.has(key)) people.set(key, { name: '', emoji: '', seen: new Set() });
     const p = people.get(key);
-    const nm = (prof.name || '').trim();
-    if (nm && !p.name) p.name = nm;
-    p.devices++;
+    if ((prof.name || '').trim() && !p.name) { p.name = prof.name.trim(); p.emoji = prof.emoji || ''; }
     const ann = rec.announce;
-    if (ann && Array.isArray(ann.seen)) {
-      p.reported++;
-      for (const sid of ann.seen) p.seen.add(sid);
-    }
+    if (ann && Array.isArray(ann.seen)) for (const s of ann.seen) p.seen.add(s);
   }
-  const rows = [...people.values()].sort((a, b) =>
-    (a.name || '\uffff').localeCompare(b.name || '\uffff'));
+  return [...people.values()].sort((a, b) => (a.name || '￿').localeCompare(b.name || '￿'));
+}
+function sentTab() {
+  const title = tx('adm_tab_sent', 'Sent');
+  if (loading()) return { title, body: waitBody() };
+  const people = annPeople();
   const lang = getLang();
-  // ONE NAME PER LINE. Matt: *"just say Seen: and list players who have seen it. One name above
-  // another. It's impossible to read as a paragraph, idk why you'd choose that format."* He is
-  // right - a comma-run of names is prose, and nobody reads prose to find out whether their sister
-  // is on a list. A stacked list is scanned. The count on the heading is what keeps it short.
-  const names = (list) => `<ul class="adm-annlist">${
-    list.map((p) => `<li>${esc(p.name || t('adm_sc_unnamed'))}</li>`).join('')}</ul>`;
-
-  // TWO STATES AND A BAR, after three goes at this. What made the earlier versions unreadable was
-  // not the layout, it was the TAXONOMY: a third bucket ("no answer yet" - a phone that has not
-  // reported since the mirror shipped) that Matt could neither act on nor decode. Matt: *"What
-  // does this mean? SEEN IT / NOT YET / NO ANSWER YET?"* and *"think harder instead of just moving
-  // words around."* He was right. That bucket is an artefact of WHEN the tracking shipped, it is
-  // most of the list on day one, it shrinks to nothing on its own, and either way the action is
-  // identical to "not yet": wait for them to open the app.
-  //
-  // So it folds into Not yet, and the ONE sentence at the top of the section says so, in plain
-  // words, once - instead of a label per row that needs a glossary. That sentence is what keeps
-  // this honest: it is exactly the caveat that made the first two-bucket version tell a lie ("Only
-  // Unai has seen it?" about a notice from August that most people HAD seen), and unlike a bucket
-  // name it can actually explain itself.
-  //
-  // The BAR is the "at a glance" part. Three attempts at rows of text all failed the same way: you
-  // had to read to learn the answer. A bar is read without reading. It is a MAGNITUDE, not a
-  // category, so the colourblind rule is satisfied by the number beside it rather than by a shape.
-  const bar = (n, all) => {
-    const pct = all ? Math.round((n / all) * 100) : 0;
-    return `<div class="adm-annbar" role="img" aria-label="${esc(t('adm_ann_seenof', { n, all }))}">
-        <span style="width:${pct}%"></span>
-      </div>`;
-  };
-  return `<p class="adm-annhow">${esc(t('adm_ann_how'))}</p>` + ANNOUNCEMENTS.map((a) => {
-    const title = textFor(a.title, lang) || a.id;
-    const yes = rows.filter((p) => p.seen.has(a.id));
-    const no = rows.filter((p) => !p.seen.has(a.id));
-    return `<div class="adm-ann">
-      <div class="adm-annhead">
-        <span class="adm-annttl">${esc(title)}</span>
-        <span class="adm-anncount">${esc(t('adm_ann_seenof', { n: yes.length, all: rows.length }))}</span>
-      </div>
-      ${bar(yes.length, rows.length)}
-      <div class="adm-annlbl">${esc(t('adm_ann_seen'))} <b>${yes.length}</b></div>
-      ${yes.length ? names(yes) : `<p class="adm-annempty">${esc(t('adm_ann_nobody'))}</p>`}
-      ${no.length ? `<details class="adm-annfold">
-        <summary><span class="adm-annlbl">${esc(t('adm_ann_notyet'))} <b>${no.length}</b></span></summary>
-        ${names(no)}
-      </details>` : ''}
-    </div>`;
-  }).join('');
+  const anns = ANNOUNCEMENTS.map((a) => row({ title: (textFor(a.title, lang) || a.id),
+    value: tx('adm_n_of', '{n} of {all}', { n: people.filter((p) => p.seen.has(a.id)).length, all: people.length }), go: () => push({ k: 'ann', id: a.id }) }));
+  const msgs = HUB_MESSAGES.slice().sort((a, b) => b.atMs - a.atMs).map((m) => row({ title: (hubText(m, lang)),
+    value: tx('adm_n_of', '{n} of {all}', { n: (m.to || []).filter((c) => readStatusFor(_players, m.id, c).read).length, all: (m.to || []).length }),
+    go: () => push({ k: 'hm', id: m.id }) }));
+  return { title, body: (anns.length ? gh(tx('adm_popups_seen', 'Popups · seen')) + grp(anns) : '')
+    + (msgs.length ? gh(tx('adm_hubmsgs_read', 'Game Hub messages · read')) + grp(msgs) : '') };
+}
+function annPage(id) {
+  const a = ANNOUNCEMENTS.find((x) => x.id === id);
+  const title = a ? (textFor(a.title, getLang()) || a.id) : id;
+  if (loading()) return { title, body: waitBody() };
+  const people = annPeople();
+  const yes = people.filter((p) => p.seen.has(id)), no = people.filter((p) => !p.seen.has(id));
+  const list = (l) => l.map((p) => row({ icon: whoHTML(p.emoji), title: (p.name || tx('adm_sc_unnamed', 'Unnamed player')) }));
+  return { title, body: gh(tx('adm_ann_seen', 'Seen it'), yes.length) + (yes.length ? grp(list(yes)) : `<p class="adm-empty">${esc(tx('adm_ann_nobody', 'Nobody yet.'))}</p>`)
+    + (no.length ? gh(tx('adm_ann_notyet', 'Not yet'), no.length) + grp(list(no)) : '') };
+}
+function hmPage(id) {
+  const m = HUB_MESSAGES.find((x) => x.id === id);
+  if (!m) return { title: id, body: '' };
+  const codes = codesSeen();
+  return { title: hubText(m, getLang()), body: grp((m.to || []).map((c) => {
+    const st = readStatusFor(_players, m.id, c);
+    const p = codes.get(String(c).toUpperCase()) || { name: c, emoji: '' };
+    return row({ icon: whoHTML(p.emoji), title: (p.name), value: !st.read ? tx('adm_ann_notyet', 'Not yet') : st.at ? tx('adm_hm_read', 'Read {when}', { when: when(st.at) }) : tx('adm_hm_read_any', 'Read') });
+  }), true) };
 }
 
-// --- Game Hub messages: has each recipient read it (2026-10-14) ----------------------------------
-
-/**
- * Matt: "Make sure there's a way for me to tell if he's read it." Per message in
- * js/hub-messages.js, newest first: each recipient, and when they first opened it. The time comes
- * from `players/<id>/hubMsgs`, which a phone reports the moment the message is opened (and on every
- * sync after). A phone that has not reported is "Not yet" - which may also mean it has not been
- * online since; the same honest fold as the announcements above.
- */
-function hubMessagesSectionHTML() {
-  if (loading()) return loadingHTML();
-  const people = new Map(codedPeople().map((p) => [p.code, p.name]));
-  const lang = getLang();
-  const when = (ms) => new Date(ms).toLocaleString(lang === 'es' ? 'es-ES' : 'en-GB',
-    { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
-  const list = HUB_MESSAGES.slice().sort((a, b) => b.atMs - a.atMs);
-  if (!list.length) return `<p class="adm-note">${esc(t('adm_ann_none'))}</p>`;
-  return list.map((m) => {
-    const rows = (m.to || []).map((code) => {
-      const st = readStatusFor(_players, m.id, code);
-      const word = !st.read ? t('adm_ann_notyet') : st.at ? t('adm_hm_read', { when: when(st.at) }) : t('adm_hm_read_any');
-      return `<li>${esc(people.get(String(code).toUpperCase()) || code)}: <b>${esc(word)}</b></li>`;
-    }).join('');
-    return `<div class="adm-ann">
-      <div class="adm-annhead"><span class="adm-annttl">${esc(hubText(m, lang))}</span></div>
-      <ul class="adm-annlist">${rows}</ul>
-    </div>`;
-  }).join('');
-}
-
-// --- scores: one block per PLAYER, their objectives, and the void ---------------------------------
-
-/**
- * One entry per person: their combined Skeeball record (corrections applied - what everyone
- * currently sees), the raw one, and the device-record ids behind them.
- *
- * Grouped by PERSON, not by device: Matt thinks in people, and a void has to reach every device a
- * person plays on or their other phone simply re-supplies the numbers on its next sync.
- */
-function playerBlocks(cfg) {
-  const all = _players || {};
-  const ident = buildIdentity(all);
-  const idsByKey = new Map();
-  for (const id of Object.keys(all)) {
-    const key = ident.keyFor((all[id] || {}).profile || {}, id);
-    if (!idsByKey.has(key)) idsByKey.set(key, []);
-    idsByKey.get(key).push(id);
-  }
-  const shown = new Map(aggregatePlayers(all, corrections()).map((g) => [g.key, g]));
-  const raw = new Map(aggregatePlayers(all).map((g) => [g.key, g]));
-  const out = [];
-  for (const [key, ids] of idsByKey) {
-    const s = shown.get(key), r = raw.get(key);
-    if (!s || !r) continue;
-    const skShown = ((s.games || {}).skeeball || {}).sk || {};
-    const skRaw = ((r.games || {}).skeeball || {}).sk || {};
-    const boards = Object.keys(skRaw.boards || {}).filter((id) => (skRaw.boards[id] || {}).plays | 0);
-    if (!boards.length) continue;
-    out.push({ key, ids, name: (s.name || '').trim() || t('adm_sc_unnamed'), skShown, skRaw, boards });
-  }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/** Is any of this person's device records voided on this machine? */
-function voidedOn(cfg, ids, boardId) {
-  return ids.some((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, boardId));
-}
-
-function goalsHTML(boardId, sk) {
-  let goals = [];
-  try { goals = readGoals(boardId, sk) || []; } catch { goals = []; }
-  if (!goals.length) return '';
-  return `<ul class="adm-goals">${goals.map((g) =>
-    `<li class="${g.met ? 'is-met' : ''}">${esc(skT(g.labelKey))}<b>${g.now | 0} / ${g.target | 0}</b></li>`).join('')}</ul>`;
-}
-
-function scoresSectionHTML(cfg) {
-  if (loading()) return loadingHTML();
-  const blocks = playerBlocks(cfg);
-  if (!blocks.length) return `<p class="adm-note">${esc(t('adm_sc_empty'))}</p>`;
-  return blocks.map((p) => {
-    const machines = p.boards.map((boardId) => {
-      const bRaw = (p.skRaw.boards || {})[boardId] || {};
-      const bShown = (p.skShown.boards || {})[boardId] || {};
-      const isVoid = voidedOn(cfg, p.ids, boardId);
-      const nums = t('adm_sc_nums', { plays: bShown.plays | 0, best: bShown.best | 0, points: bShown.points | 0 });
-      const rawNums = isVoid
-        ? `<div class="adm-note">${esc(t('adm_sc_was', { plays: bRaw.plays | 0, best: bRaw.best | 0, points: bRaw.points | 0 }))}</div>`
-        : '';
-      const b = boardById(boardId);
-      return `<div class="adm-mach" data-score="${esc(p.key)}" data-board="${esc(boardId)}">
-        <div class="adm-mname">${esc(b ? b.name : boardId)}</div>
-        <div class="adm-mnums">${esc(nums)}</div>
-        ${rawNums}
-        ${goalsHTML(boardId, p.skShown)}
-        <div class="adm-mact">
-          ${isVoid ? `<button type="button" class="gh-btn gh-btn--sm" data-unvoid="1">${esc(t('adm_sc_undo'))}</button>` : ''}
-          <button type="button" class="gh-btn gh-btn--sm${isVoid ? '' : ' gh-btn--danger'}" data-void="1">${
-            esc(isVoid ? t('adm_sc_revoid') : t('adm_sc_void'))}</button>
-        </div>
-      </div>`;
-    }).join('');
-    const life = t('adm_sc_life', {
-      best: p.skShown.bestGame | 0, points: p.skShown.points | 0,
-      hundreds: p.skShown.hundreds | 0, plays: p.skShown.played | 0,
-    });
-    return `<div class="adm-player">
-      <div class="adm-phead">${esc(p.name)}</div>
-      <div class="adm-plife">${esc(life)}</div>
-      ${machines}
-    </div>`;
-  }).join('');
-}
-
-// --- poker bankrolls: the cheat deterrent's other half (2026-09-28) --------------------------------
-
-/**
- * One entry per PERSON who has played Texas Hold'em for money: their bankroll as everyone sees it
- * (voids applied), the raw one, whether holdemSuspect() calls the ledger impossible, and the device
- * records behind it. Grouped by person for the same reason as the scores section: a void that
- * reached one phone would be undone by the other phone's next sync.
- */
-function pokerBlocks(cfg) {
-  const all = _players || {};
-  const ident = buildIdentity(all);
-  const idsByKey = new Map();
-  for (const id of Object.keys(all)) {
-    const key = ident.keyFor((all[id] || {}).profile || {}, id);
-    if (!idsByKey.has(key)) idsByKey.set(key, []);
-    idsByKey.get(key).push(id);
-  }
-  const shown = new Map(aggregatePlayers(all, corrections()).map((g) => [g.key, g]));
-  const raw = new Map(aggregatePlayers(all).map((g) => [g.key, g]));
-  const out = [];
-  for (const [key, ids] of idsByKey) {
-    const s = shown.get(key), r = raw.get(key);
-    if (!s || !r) continue;
-    const hbRaw = ((r.games || {}).holdem || {}).hb;
-    if (!hbRaw || !((hbRaw.entries | 0) || (hbRaw.grants | 0))) continue;
-    const hb = ((s.games || {}).holdem || {}).hb || hbRaw;
-    const voided = ids.some((id) => resolveHoldemCorrection(cfg, id));
-    out.push({ key, ids, name: (s.name || '').trim() || t('adm_sc_unnamed'), hb, hbRaw, why: holdemSuspect(hb), voided });
-  }
-  // Anything flagged first, then the biggest bankrolls: the rows worth a look lead.
-  return out.sort((a, b) => (!!b.why - !!a.why) || (holdemBalance(b.hb) - holdemBalance(a.hb)) || a.name.localeCompare(b.name));
-}
-
-function pokerSectionHTML(cfg) {
-  if (loading()) return loadingHTML();
-  const blocks = pokerBlocks(cfg);
-  if (!blocks.length) return `<p class="adm-note">${esc(t('adm_hb_empty'))}</p>`;
-  const cash = (n) => '$' + Math.max(0, Math.floor(+n || 0)).toLocaleString();
-  return blocks.map((p) => `<div class="adm-player" data-poker="${esc(p.key)}">
-      <div class="adm-phead">${esc(p.name)}</div>
-      <div class="adm-plife">${esc(t('adm_hb_line', { bank: cash(holdemBalance(p.hb)), entries: p.hb.entries | 0, cashes: p.hb.cashes | 0, best: cash(p.hb.best) }))}</div>
-      ${p.why ? `<div class="adm-note is-err">\u26a0 ${esc(t('adm_hb_flag', { why: p.why.replace(/-/g, ' ') }))}</div>` : ''}
-      ${p.voided ? `<div class="adm-note">${esc(t('adm_hb_was', { bank: cash(holdemBalance(p.hbRaw)) }))}</div>` : ''}
-      <div class="adm-mact">
-        ${p.voided ? `<button type="button" class="gh-btn gh-btn--sm" data-hbundo="1">${esc(t('adm_hb_undo'))}</button>` : ''}
-        <button type="button" class="gh-btn gh-btn--sm${p.voided ? '' : ' gh-btn--danger'}" data-hbvoid="1">${esc(t(p.voided ? 'adm_hb_revoid' : 'adm_hb_void'))}</button>
-      </div>
-    </div>`).join('');
-}
-
-// --- this device ----------------------------------------------------------------------------------
+// --- sheets: this phone, and the tester picker ---------------------------------------------------------
 
 const ANNOUNCE_KEY = 'gamehub.announce.v1';
 const DEV_SYNC_OK = 'gamehub.devAllowSync.v1';
-
-function devWritesOn() {
-  try { return localStorage.getItem(DEV_SYNC_OK) === '1'; } catch { return false; }
-}
+function devWritesOn() { try { return localStorage.getItem(DEV_SYNC_OK) === '1'; } catch { return false; } }
 function isDevOrigin() {
   try {
     const h = String(location.hostname || '').toLowerCase();
@@ -860,214 +1061,46 @@ function isDevOrigin() {
   } catch { return false; }
 }
 
-// --- messages -------------------------------------------------------------------------------------
-// READ-ONLY, and that is a property of js/messages.js, not of this button: that module has no admin
-// write path at all, so nothing reachable from here can edit or remove anything anybody said.
-
-/** UNRENDERED since 2026-09-01 - kept, not deleted, the same way js/leaderboard-ui.js keeps a
- *  helper whose screen changed under it. Its one button (read every conversation) moved to the
- *  Messages screen itself, beside the bug inbox, when Matt asked for the bug reports to live
- *  there: an admin view OF the messages belongs with the messages, and a second route to it from
- *  here was a whole accordion heading spent on a duplicate. The `msgs` handler below still fires
- *  if the section is ever put back. */
-function messagesSectionHTML() {
-  return `<div class="adm-actions">
-      <button type="button" class="gh-btn gh-btn--sm" data-role="msgs">${esc(t('adm_msgs_btn'))}</button>
-    </div>`;
-}
-
-function deviceSectionHTML() {
+function renderSheet(cfg) {
+  const close = act(() => { _sheet = null; render(); });
+  if (_sheet.k === 'pick') {
+    const g = hubGame(_sheet.hub);
+    const people = codedPeople();
+    const rows = people.map((p) => {
+      const on = resolveGameAllowed(cfg, g.id, p.playerId);
+      return row({ icon: whoHTML(p.emoji), title: p.name, check: on, q: `${p.name} ${p.playerId}`, tap: () => save(() => setGameAllowed(g.id, p.playerId, !on)) });
+    });
+    return `<div class="adm-dim" ${close}></div><div class="adm-sheet tall" role="dialog" aria-label="${esc(tx('adm_add_testers', 'Add testers'))}">
+      <div class="adm-sh"><span style="width:44px"></span><b>${esc(tx('adm_add_testers', 'Add testers'))}</b><button type="button" ${close}>${esc(tx('adm_done', 'Done'))}</button></div>
+      <div class="adm-sbody"><label class="adm-search" data-filter="#adm-pick">${I.search}<input type="search" placeholder="${esc(tx('adm_search', 'Search'))}" aria-label="${esc(tx('adm_search', 'Search'))}"></label>
+      ${loading() ? waitBody() : `<div class="adm-grp" id="adm-pick">${rows.join('')}</div>`}</div></div>`;
+  }
   let id = '';
   try { id = statsId() || ''; } catch { id = ''; }
-  return `<div class="adm-actions">
-      <button type="button" class="gh-btn gh-btn--sm" data-role="update">${esc(t('adm_update'))}</button>
-      <button type="button" class="gh-btn gh-btn--sm" data-role="inbox">${esc(t('adm_inbox'))}</button>
-      <button type="button" class="gh-btn gh-btn--sm" data-role="announce">${esc(t('adm_announce_reset'))}</button>
-      <button type="button" class="gh-btn gh-btn--sm" data-role="copyid">${esc(t('adm_copy_id'))}</button>
-      <button type="button" class="gh-btn gh-btn--sm" data-role="golfreset">${esc(t('adm_golfreset'))}</button>
-      ${isDevOrigin() ? `<button type="button" class="gh-btn gh-btn--sm" data-role="devwrites">${
-        esc(t(devWritesOn() ? 'adm_devwrites_off' : 'adm_devwrites_on'))}</button>` : ''}
-    </div>
-    <p class="adm-note adm-id">${esc(id || '?')}</p>`;
-}
-
-// --- wiring ----------------------------------------------------------------------------------------
-
-function wire(card) {
-  const scroll = card.querySelector('.adm-scroll');
-
-  scroll.addEventListener('click', async (e) => {
-    if (_busy) return;
-    const seg = e.target.closest('.gh-seg__item');
-    const gameRow = e.target.closest('[data-game]');
-    const scoreRow = e.target.closest('[data-score]');
-    const boardRow = scoreRow ? null : e.target.closest('[data-board]');
-
-    let run = null;
-    const pokerRow = e.target.closest('[data-poker]');
-    const allowBtn = e.target.closest('[data-allow-code]');
-    const allowBox = allowBtn && allowBtn.closest('[data-allow-game]');
-    if (pokerRow && (e.target.closest('[data-hbvoid]') || e.target.closest('[data-hbundo]'))) {
-      const undo = !!e.target.closest('[data-hbundo]');
-      const block = pokerBlocks(readCachedConfig()).find((p) => p.key === pokerRow.dataset.poker);
-      if (!block) return;
-      // EVERY device of this person that holds a ledger, for the reason given at pokerBlocks.
-      run = async () => {
-        let last = { ok: true };
-        const cfgNow = readCachedConfig();
-        for (const id of block.ids) {
-          const hb = ((((_players[id] || {}).stats || {}).games || {}).holdem || {}).hb;
-          if (undo ? !resolveHoldemCorrection(cfgNow, id) : !hb) continue;
-          last = await setHoldemCorrection(id, undo ? null : holdemSnapshotOf(hb), undo ? '' : 'admin void');
-          if (!last.ok) return last;
-        }
-        return last;
-      };
-    } else if (e.target.closest('[data-beeundo]') && e.target.closest('[data-bee]')) {
-      const [bk, code] = e.target.closest('[data-bee]').dataset.bee.split('|');
-      const on = e.target.closest('[data-beeundo]').dataset.beeundo === 'undo';
-      run = () => setBeeUndone(bk, code, on);
-    } else if (e.target.closest('[data-ivset]') && e.target.closest('[data-iv]')) {
-      const [id, gid] = e.target.closest('[data-iv]').dataset.iv.split('|');
-      const voided = e.target.closest('[data-ivset]').dataset.ivset === 'void';
-      run = () => setIntegrityVoided(id, gid, voided);
-    } else if (e.target.closest('[data-online-code]')) {
-      const b = e.target.closest('[data-online-code]');
-      const on = b.getAttribute('aria-pressed') !== 'true';
-      run = () => setOnlineAllowed(b.dataset.onlineCode, on);
-    } else if (allowBtn && allowBox) {
-      const on = allowBtn.getAttribute('aria-pressed') !== 'true';
-      run = () => setGameAllowed(allowBox.dataset.allowGame, allowBtn.dataset.allowCode, on);
-    } else if (seg && gameRow) {
-      run = () => setGameLive(gameRow.dataset.game, seg.dataset.set === 'live');
-    } else if (seg && boardRow) {
-      run = () => setBoardMode(boardRow.dataset.board, seg.dataset.set);
-    } else if (scoreRow && (e.target.closest('[data-void]') || e.target.closest('[data-unvoid]'))) {
-      const undo = !!e.target.closest('[data-unvoid]');
-      const board = scoreRow.dataset.board;
-      const block = playerBlocks(readCachedConfig()).find((p) => p.key === scoreRow.dataset.score);
-      if (!block) return;
-      // EVERY device this person plays on, not just one: a void that reached a single record would
-      // be undone by their other phone's next sync (its own numbers are still whole).
-      run = async () => {
-        let last = { ok: true };
-        for (const id of block.ids) {
-          const raw = (((((_players[id] || {}).stats || {}).games || {}).skeeball || {}).sk || {}).boards || {};
-          if (!undo && !raw[board]) continue;                 // this device never played it
-          last = await setSkeeballCorrection(id, board, undo ? null : snapshotOf(raw[board], dayKey(Date.now())),
-            undo ? '' : 'broken board');
-          if (!last.ok) return last;
-        }
-        return last;
-      };
-    }
-    if (!run) return;
-
-    // SHOW THE TAP AT ONCE: the pressed side moves now, only the thing tapped dims, and the repaint
-    // after the verified write shows the truth (a failed write puts it back).
-    if (seg) seg.parentElement.querySelectorAll('.gh-seg__item').forEach((b) =>
-      b.setAttribute('aria-pressed', b === seg ? 'true' : 'false'));
-    const pending = e.target.closest('.adm-allow__p, [data-online-code], .adm-row, .adm-mach, .adm-player');
-    if (pending) pending.classList.add('adm-pending');
-    const done = seg && (gameRow || boardRow)
-      ? `${(gameRow || boardRow).querySelector('.adm-name').textContent}: ${seg.textContent.trim()}`
-      : t('adm_saved');
-    _busy = true;
-    card.classList.add('adm-busy');
-    say(card, t('adm_saving'), '');
-    let res;
-    try { res = await run(); } catch (err) { res = { ok: false, error: String((err && err.message) || err) }; }
-    _busy = false;
-    card.classList.remove('adm-busy');
-    if (!_host) return;
-    render(card);
-    say(card, res && res.ok ? done : t('adm_save_failed', { why: (res && res.error) || '?' }),
-      res && res.ok ? 'ok' : 'err');
-  });
-
-  const on = (role, fn) => {
-    const el = card.querySelector(`[data-role="${role}"]`);
-    if (el) el.addEventListener('click', fn);
-  };
-  on('update', async () => {
-    say(card, t('adm_updating'), '');
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((r) => r.update()));
-      location.reload();
-    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
-  on('inbox', async () => {
-    try {
-      const m = await import('./bug-report-ui.js');
-      closeOverlay();
-      await m.openBugInbox();
-    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
-  on('msgs', async () => {
-    try {
-      const m = await import('./messages-ui.js');
-      closeOverlay();
-      await m.openMessages({ admin: true });
-    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
-  on('announce', () => {
-    try { localStorage.removeItem(ANNOUNCE_KEY); say(card, t('adm_announce_done'), 'ok'); }
-    catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
-  on('copyid', async () => {
-    let id = '';
-    try { id = statsId() || ''; } catch { id = ''; }
-    try { await navigator.clipboard.writeText(id); say(card, t('adm_copied'), 'ok'); }
-    catch { say(card, id, ''); }
-  });
-  // CLEAR THIS DEVICE'S GOLF STATS. Matt, on the day golf released: *"remove all my test play stats
-  // or hide them or whatever, then make it live."* Measured first - exactly ONE device record in the
-  // whole database had non-zero golf data (his own, 13 rounds of testing); every other golf key was
-  // the all-zero skeleton `ensureGf` writes on first sync.
-  //
-  // THE DEVICE IS THE ONLY PLACE WORTH CLEARING, and that is not a shortcut. `syncMyStats()` mirrors
-  // this device's WHOLE local store to `players/<id>` on every hub load, and an `update()` on that
-  // key replaces the subtree - so deleting the server copy alone is undone by the next open, while
-  // clearing here fixes both halves with no Firebase write at all and nothing that can half-land.
-  // The same lesson is written up for Skeeball in the root CLAUDE.md ("it is not durable alone").
-  //
-  // TWO TAPS, and it names what it is about to do. This is the one button in this app that removes
-  // earned history, so it arms first and only the second tap writes - the same shape the bug
-  // inbox's delete uses. It is scoped to GOLF and to THIS DEVICE: no other game is touched, and
-  // nobody else's record is reachable from here.
-  let golfArmed = false;
-  on('golfreset', () => {
-    // `on()` hands the handler the click EVENT, not the element, so look the button up here.
-    const btn = card.querySelector('[data-role="golfreset"]');
-    if (!golfArmed) {
-      golfArmed = true;
-      if (btn) btn.textContent = t('adm_golfreset_arm');
-      say(card, t('adm_golfreset_warn'), '');
-      setTimeout(() => { golfArmed = false; if (btn) btn.textContent = t('adm_golfreset'); }, 6000);
-      return;
-    }
-    golfArmed = false;
-    if (btn) btn.textContent = t('adm_golfreset');
-    try {
-      const key = statsKey();
-      const raw = JSON.parse(localStorage.getItem(key) || 'null');
-      const had = !!(raw && raw.games && raw.games.golf);
-      if (raw && raw.games) delete raw.games.golf;
-      localStorage.setItem(key, JSON.stringify(raw || { version: 1, games: {} }));
-      // VERIFY BY FRESH RE-READ (THE LAW rule 6): a resolved write is not proof it landed.
-      const back = JSON.parse(localStorage.getItem(key) || 'null');
-      const gone = !(back && back.games && back.games.golf);
-      say(card, gone ? t(had ? 'adm_golfreset_done' : 'adm_golfreset_none') : t('adm_save_failed', { why: 'still there' }), gone ? 'ok' : 'err');
-    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
-  on('devwrites', () => {
-    try {
-      if (devWritesOn()) localStorage.removeItem(DEV_SYNC_OK); else localStorage.setItem(DEV_SYNC_OK, '1');
-      render(card);
-      say(card, t(devWritesOn() ? 'adm_devwrites_now_on' : 'adm_devwrites_now_off'), 'ok');
-    } catch (err) { say(card, t('adm_save_failed', { why: String((err && err.message) || err) }), 'err'); }
-  });
+  const rows = [
+    row({ title: tx('adm_inbox', 'Bug reports'), go: async () => {
+      try { const m = await import('./bug-report-ui.js'); closeAdmin(); await m.openBugInbox(); } catch (err) { toast(String((err && err.message) || err), true); }
+    } }),
+    link(tx('adm_update', 'Check for update'), async () => {
+      toast(tx('adm_updating', 'Checking...'));
+      try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map((r) => r.update())); location.reload(); }
+      catch (err) { toast(String((err && err.message) || err), true); }
+    }),
+    link(tx('adm_popups_again', 'Show popups again'), () => {
+      try { localStorage.removeItem(ANNOUNCE_KEY); toast(tx('adm_announce_done', 'Announcements will show again on this device.')); } catch (err) { toast(String(err), true); }
+    }),
+    link(tx('adm_copy_id', 'Copy device id'), async () => {
+      try { await navigator.clipboard.writeText(id); toast(tx('adm_copied', 'Copied.')); } catch { toast(id); }
+    }, [`<span class="adm-code">${esc(id ? id.slice(0, 8) + '…' : '?')}</span>`]),
+  ];
+  if (isDevOrigin()) {
+    rows.push(link(devWritesOn() ? tx('adm_devwrites_off', 'Block writes from this dev server') : tx('adm_devwrites_on', 'Allow writes from this dev server'), () => {
+      try { if (devWritesOn()) localStorage.removeItem(DEV_SYNC_OK); else localStorage.setItem(DEV_SYNC_OK, '1'); render(); } catch (err) { toast(String(err), true); }
+    }));
+  }
+  return `<div class="adm-dim" ${close}></div><div class="adm-sheet" role="dialog" aria-label="${esc(tx('adm_this_phone', 'This phone'))}">
+    <div class="adm-sh"><b>${esc(tx('adm_this_phone', 'This phone'))}</b><button type="button" ${close}>${esc(tx('adm_done', 'Done'))}</button></div>
+    <div class="adm-sbody">${grp(rows)}</div></div>`;
 }
 
 export default { openAdmin };

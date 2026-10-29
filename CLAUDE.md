@@ -695,9 +695,12 @@ no Default buttons.
 - **Spelling Bee flags (2026-10-28)**: server-flagged copied days with Undo / Void again (`bee/undo`), hand voids, log gaps.
 - **Integrity checks (2026-10-28)**: every flagged game per record, ONE button: Void (an alert) / Undo (a void)
   (`integrity/void`, `integrity/undo`; Undo wins). Code hand voids: `js/integrity.js` `HAND_VOIDS`.
-- **Layout (2026-10-28, Matt: "clunky and inefficient")**: paints at once from the cached config (people
-  sections fill in when `players/` lands); one section open at a time, its heading sticky; a save keeps the
-  scroll place; Games = Admin only first, Live folded; allow picker = picked people + "Add someone" fold.
+- **Its own full-screen page (rebuilt 2026-10-29 from Matt's approved mockup; the accordion was 33 screens long)**:
+  tabs Now / Games / People / Sent + a gear (this phone). ONE row style (iPhone Settings). Now = only unchecked flags
+  (Keep / Void / Undo) and new accounts (No / Allow); **Keep = `adminConfig/v1/reviewed/<bee|iv|ma>/<a>/<b>`, read by
+  nothing but this page**. Voids live on each GAME's page and a player's page in that game; a person's page links there.
+  Plays since Oct 28 come from `playLog/<CODE>` (last 400, on tap). No per-play void exists (bests can't be un-merged).
+  "Reset golf stats" removed (Matt, 2026-10-29). Designed for Matt's iPhone 16 Pro only (402x874).
 
 Full contract: `js/CLAUDE.md`, "The admin config".
 

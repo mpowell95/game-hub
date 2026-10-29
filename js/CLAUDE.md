@@ -566,6 +566,8 @@ and is gated by `writesAllowed()`. Documents are built with `newCareerDoc()`; th
 - **Adding a switch:** resolver + reader, `setX()` on `writeOverride()`, admin-ui section,
   `tools/test-admin-config.mjs` case incl. a wiring check.
 - **Writable only by `admins/` uids (2026-10-14).** Matt: *"NOBODY should have that power other than me."*
+- `reviewed/<bee|iv|ma>/<a>/<b>` = true (2026-10-29): the admin page's Keep (a flag checked). Admin page ONLY; no
+  game, board or rule may read it (`tools/test-admin-config.mjs` checks).
 
 ## Score corrections: "that machine was broken" (2026-08-24)
 
