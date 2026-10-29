@@ -89,8 +89,10 @@ export class Match {
     this.lastCupBack = lastCupBack !== false;
     this.fireBallsBack = fireBallsBack !== false;
     this.islandOnly = islandOnly !== false;
-    // No island on the last cup or the last two (Matt, 2026-10-29): only with 3+ cups standing, owed
-    // cups not counted. Frozen per challenge as `rules.i3`; older challenges replay without it.
+    // No island on the last cup or the last two (Matt, 2026-10-29): only OFFERED with 3+ cups standing,
+    // owed cups not counted, in every match, challenges begun earlier included (Matt: "he just called
+    // island on the last cup"). A REPLAY accepts a call made anyway (`callIsland(id, true)`): a phone
+    // on an older build may have made one, and refusing it would refuse the whole match.
     this.islandThree = islandThree !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
@@ -245,10 +247,11 @@ export class Match {
   }
 
   islands() { return islandsOf(this.target()); }
-  canIsland() {
+  /** `replay`: accepting a stored call, where the 3-cup rule is not applied (see the constructor). */
+  canIsland(replay = false) {
     return !this.straight && !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && this.ball !== 2 && !this.islandUsed[this.shooter][this.ball] && !this.called
       && !this.lastCup && this.queue.length > 0 && this.islands().length > 0
-      && (!this.islandThree || this.target().length - (this.owed[this.defender] | 0) >= 3);
+      && (replay || !this.islandThree || this.target().length - (this.owed[this.defender] | 0) >= 3);
   }
   /**
    * A BONUS THROW, granted by Matt to put right a turn the rules got wrong (2026-09-30: "give me an
@@ -262,8 +265,8 @@ export class Match {
     this.bonus[side] = (this.bonus[side] | 0) + 1;
     return [{ type: 'extra', side }];
   }
-  callIsland(id) {
-    if (!this.canIsland() || !this.islands().includes(id)) return [];
+  callIsland(id, replay = false) {
+    if (!this.canIsland(replay) || !this.islands().includes(id)) return [];
     this.islandUsed[this.shooter][this.ball] = true;
     this.called = id;
     return [{ type: 'islandCalled', side: this.shooter, id }];

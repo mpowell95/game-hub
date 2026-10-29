@@ -57,7 +57,13 @@ ok('the challenger can create a match', res.ok, JSON.stringify(res));
 const id = res.id;
 ok('a new challenge is made under "only the called island counts" (io)', res.game.rules.io === true && MP.freshMatch(res.game.rules).islandOnly === true);
 ok('a new challenge is made under "island only with 3+ cups" (i3)', res.game.rules.i3 === true && MP.freshMatch(res.game.rules).islandThree === true);
-ok('an older challenge without i3 replays without it', MP.freshMatch({ gent: true, rr: 2 }).islandThree === false);
+ok('a challenge begun before i3 gets the 3-cup rule too (Matt: Moonis called island on the last cup)', MP.freshMatch({ gent: true, rr: 2 }).islandThree === true);
+{
+  const m = MP.freshMatch({ gent: true, rr: 2 });
+  m.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
+  ok('...not offered at 2 cups, but a stored call (an older phone) still replays', !m.canIsland()
+    && MP.applyEntry(m, { by: 'a', k: 'i', id: 'k9' }) !== null);
+}
 ok('an older challenge without io replays without it', MP.freshMatch({ gent: true, rr: 2 }).islandOnly === false);
 ok('created: only the challenger has a row until the first turn is over',
   !!getAt(`cuppong/index/MATTA/${id}`) && !getAt(`cuppong/index/ANABB/${id}`));
