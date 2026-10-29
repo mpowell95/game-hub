@@ -25,7 +25,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS, TABLE_NOW, RULES_NOW } from './engine.js';
@@ -446,6 +446,9 @@ export function noteVoided() {
 }
 /** Count every finished row not yet counted here, and queue it for the Game Over popup. */
 export function recordFinished(rows) {
+  // Start this storage's "counting since" clock at its FIRST launcher paint, not at its first finished
+  // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
+  countingSince(LEDGER_KEY);
   try { noteVoided(); } catch (err) { console.warn('[eight-ball] noteVoided', err); }
   const ledger = readLedger();
   const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id) && mayCountChallenge(LEDGER_KEY, r.updated));

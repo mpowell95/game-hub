@@ -29,7 +29,7 @@ import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { replayResult, sameResult } from './replay.js';
-import { recordResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
+import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
 
@@ -566,6 +566,9 @@ export function countFinished(id, won, finishedAt = Date.now()) {
 
 /** Count every finished match this device has not counted yet. A draw is recorded as not won. */
 export function recordFinished(rows) {
+  // Start this storage's "counting since" clock at its FIRST launcher paint, not at its first finished
+  // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
+  countingSince(LEDGER_KEY);
   const todo = rowsToCount(rows, readLedger());
   for (const r of todo) countFinished(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));

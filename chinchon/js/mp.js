@@ -35,7 +35,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordChinchon, noteVoidedResult, withChallengeMatch, mayCountChallenge } from '../../js/game-stats.js';
+import { recordChinchon, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
@@ -485,6 +485,9 @@ export function noteVoided() {
 /** Count every finished row not yet counted here (with the extras its row carries), and queue it
  *  for the Game Over popup. */
 export function recordFinished(rows) {
+  // Start this storage's "counting since" clock at its FIRST launcher paint, not at its first finished
+  // match: a new player's first win, finished while the app was closed, must still count (2026-10-29).
+  countingSince(LEDGER_KEY);
   try { noteVoided(); } catch (err) { console.warn('[chinchon] noteVoided', err); }
   const ledger = readLedger();
   const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch('chinchon', r.id) && mayCountChallenge(LEDGER_KEY, r.updated));

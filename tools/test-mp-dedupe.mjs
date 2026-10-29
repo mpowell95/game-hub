@@ -142,5 +142,17 @@ for (const [name, path, statsId] of GAMES) {
   ok(`${name}: a fresh storage does not re-count history`, M.recordFinished([row(`${id}x`, 'won', now - 3 * 864e5)]) === 0);
 }
 
+// A NEW player: the storage's first launcher paint (no rows yet) starts its clock, so a first win that
+// finished while the app was closed, hours later, still counts (the clock does not start at the finish).
+{
+  use('NEWBIE');
+  DARTS.recordFinished([]);                                   // first paint, nothing finished yet
+  ok('the first launcher paint, with no finished match, starts the storage\'s counting clock',
+    Number(localStorage.getItem(DARTS.LEDGER_KEY + '.since')) > 0);
+  const later = Date.now() + 5 * 3600e3;                      // the match ends 5 h later, app closed
+  const n = DARTS.recordFinished([row('newbie1first', 'won', later)]);
+  ok('a new player\'s first win, finished while the app was closed, is counted', n === 1);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
