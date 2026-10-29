@@ -400,6 +400,7 @@ export function lifeOf(game, now = decideNow()) {
 /** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
  *  every read (nothing is written), so both phones agree and a late move is refused. */
 export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout(NODE, game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
   // Decided on the SERVER's clock (js/challenge-clock.js); a timeout decided without live server time
   // is shown but never counted (countResult asks timeoutUnsure). 2026-10-29, second pass.

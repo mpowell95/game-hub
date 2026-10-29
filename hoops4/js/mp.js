@@ -215,8 +215,11 @@ function writesAllowed(what) {
   return false;
 }
 
+// TEST SEAM (2026-10-29): tools/test-challenge-clock.mjs hands in an in-memory database.
+let bootFn = getStatsApp;
+export function __setBootForTest(fn) { bootFn = fn || getStatsApp; }
 async function ready() {
-  try { return await getStatsApp(); } catch { return null; }
+  try { return await bootFn(); } catch { return null; }
 }
 
 // --- validation -------------------------------------------------------------------------------
@@ -425,6 +428,7 @@ export function lifeOf(game, now = decideNow()) {
 /** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
  *  every read (nothing is written), so both phones agree and a late shot is refused. */
 export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout('hoops', game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
   // Decided on the SERVER's clock (js/challenge-clock.js); a timeout decided without live server time
   // is shown but never counted (countFinished asks timeoutUnsure). 2026-10-29, second pass.

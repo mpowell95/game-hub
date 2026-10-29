@@ -244,6 +244,7 @@ export function lifeOf(game, now = decideNow()) {
  *  SERVER's clock (js/challenge-clock.js); one decided without live server time is shown but never
  *  counted (countResult asks timeoutUnsure). */
 export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout(NODE, game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
   const c = now == null ? clockNow() : { now, live: true };
   const life = lifeOf(game, c.now);

@@ -715,15 +715,17 @@ export async function postLeg(id, side, leg, sc) {
     // RETRYABLE, deliberately: on a phone two players share, the outbox can hold the OTHER
     // player's score while this one is signed in. It must wait for them, never be dropped.
     if (sideOf(fresh, me) !== side) return { ok: false, reason: 'not-yours', retryable: true };
+    if (!Number.isInteger(leg) || leg < 0 || leg >= fresh.legs.length) return { ok: false, reason: 'bad-leg', retryable: false };
+    // ALREADY LANDED (2026-10-29, second pass): this very score is in (one attempt per game, so it is
+    // ours) but the rows' write may be what failed: rewrite them from the match, and say it was sent.
+    if (scoresOf(fresh, side)[leg] === s && !fresh.timedOut.some((x) => x.side === side && x.leg === leg)) {
+      await writeRows(api, db, fresh); markSeen(id, fresh.updated); return { ok: true, game: fresh };
+    }
     if (fresh.over) return { ok: false, reason: 'already-over', retryable: false };
     if (fresh.stage !== side) return { ok: false, reason: 'not-your-turn', retryable: false };
-    if (!Number.isInteger(leg) || leg < 0 || leg >= fresh.legs.length) return { ok: false, reason: 'bad-leg', retryable: false };
     if (scoresOf(fresh, side)[leg] != null) {
       // Too late (2026-10-29): the game counted 0 on every phone 30 minutes after it started. Store it.
       if (fresh.timedOut.some((x) => x.side === side && x.leg === leg)) { await settleTimedOut(id, fresh); return { ok: false, reason: 'timed-out', retryable: false }; }
-      // ALREADY LANDED (2026-10-29, second pass): this very score is in (one attempt per game, so it is
-      // ours) but the rows' write may be what failed: rewrite them from the match, and say it was sent.
-      if (scoresOf(fresh, side)[leg] === s) { await writeRows(api, db, fresh); markSeen(id, fresh.updated); return { ok: true, game: fresh }; }
       return { ok: false, reason: 'already-played', retryable: false };
     }
 
