@@ -1440,3 +1440,12 @@ should count." The LDNOOBW bad-word list and BLOCK dropped them from both lists.
 typed, never answers, so hints, ranks, totals and Yesterday's Answers are unchanged and nothing appears unasked.
 Slurs stay blocked, and so do RAPE, RAPED, RAPING, PEDOPHILE, JAILBAIT. Spanish untouched. Only `extra` in
 `bee.json` changed (verified: words, puzzles, retired identical).
+
+## 2026-10-29: Spanish Spelling Bee accepts profanity too
+
+Matt said yes to doing Spanish as well. `tools/build-spelling-bee-es.mjs`: every word the bad-word filters
+(LDNOOBW es, BLOCK, BLOCK_RE) and SKIP's rude words had blocked is now a BONUS word under the usual bonus
+rules; it is never an answer. All 269 blocked words were read; the filter had also caught ordinary words
+(infierno, concha, folleto, coñac, idiota). `SLURS` (marica, maricón, bollera, nazi, cholo...) and
+`NO_ADULT` (pedófilo) stay out. CONCHA went into NAME_WORDS. 97 bonus words were added; words, puzzles
+and retired are identical.

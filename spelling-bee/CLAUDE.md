@@ -37,7 +37,7 @@ lemmatization-lists (conjugations count), ~46 a puzzle; bonus = EVERY other dict
 letter** (Ana: "Ñ is different from n... for the rest do not use accents"): words are stored without accents and with
 ñ, typing á gives a, ñ stays ñ; 13 puzzles have Ñ in the hive. Board keys write Ñ as `0` (ASCII rule). Keys
 `es:<c>:<outer>` (save and board never meet English). Epoch 2026-10-26, 1,493 puzzles. The first build folded Ñ to N;
-its day 0 (`o:aeimnt`) is `retired`, still playable. Names out of the answers (`NOT_ANSWERS`), vulgar families out (`BLOCK_RE`).
+its day 0 (`o:aeimnt`) is `retired`, still playable. Names out of the answers (`NOT_ANSWERS`), vulgar families out of the answers (`BLOCK_RE`); since 2026-10-29 every blocked word is a BONUS word (as English), except `SLURS` and `NO_ADULT`.
 Credits: `data/CREDITS.md`. `bee.json` and `bee-es.json` stay LAZY in `sw.js`.
 
 ## Screens
