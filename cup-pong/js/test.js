@@ -303,6 +303,22 @@ ok('the whole rack area is on the table',
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); ev = m.throwResult({ made: 'k0' });
   ok('an older challenge (no islandOnly) replays as played: the other cup counted', types(ev).includes('made') && ids(m, 'b').join() === 'k1,k9');
+  {
+    // No island on the last cup or the last two (Matt, 2026-10-29); older challenges replay without it.
+    const lone = (n, opts = {}) => {
+      const mm = new Match({ first: 'a', ...opts });
+      mm.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k1', c: 0, r: 0 }, { id: 'k2', c: 4, r: 0 }, { id: 'k3', c: -2, r: 4 }].slice(0, n);
+      mm.startTurn();
+      return mm;
+    };
+    ok('island: 3 lone cups can be called', lone(3).canIsland());
+    ok('island: not with 2 cups left', !lone(2).canIsland());
+    ok('island: not on the last cup', !lone(1).canIsland());
+    ok('island: an old challenge (islandThree off) still could with 2', lone(2, { islandThree: false }).canIsland());
+    const ow = lone(3, { async: true }); ow.owed.b = 1;
+    ok('island: owed cups do not count as standing', !ow.canIsland());
+    ok('islandThree survives a save', Match.fromJSON(new Match().toJSON()).islandThree && !Match.fromJSON(new Match({ islandThree: false }).toJSON()).islandThree);
+  }
   ok('islandOnly survives a save', Match.fromJSON(new Match().toJSON()).islandOnly && !Match.fromJSON(new Match({ islandOnly: false }).toJSON()).islandOnly);
   m = new Match({ first: 'a' });
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
@@ -313,18 +329,18 @@ ok('the whole rack area is on the table',
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k1', c: -1, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.throwResult(miss);
   ok('island can be called for the second ball alone', m.canIsland() && m.callIsland('k9').length === 1);
-  m = new Match({ first: 'a' });
+  m = new Match({ first: 'a', islandThree: false });   // 2 cups: an older challenge's rule
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss); m.startTurn(); m.startTurn();
   ok('island is once per game PER BALL: ball 1\'s call is spent even on a miss', m.islandUsed.a[0] && !m.islandUsed.a[1]);
-  m = new Match({ first: 'a' });
+  m = new Match({ first: 'a', islandThree: false });   // 2 cups: an older challenge's rule
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9'); m.throwResult(miss);
   ok('each ball is its own player: ball 2 can still call island after ball 1 did (Matt)', m.ball === 1 && m.canIsland());
   m.callIsland('k9'); m.throwResult(miss);
   m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
   ok('...and once both balls have called, neither can again', !m.canIsland() && m.islandUsed.a.every(Boolean));
-  m = new Match({ first: 'a' });
+  m = new Match({ first: 'a', islandThree: false });   // 2 cups: an older challenge's rule
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.throwResult(miss); m.callIsland('k9'); m.throwResult(miss);
   m.startTurn(); m.throwResult(miss); m.throwResult(miss); m.startTurn();
@@ -343,7 +359,7 @@ ok('the whole rack area is on the table',
   ok('challenge: the owing side can do nothing until it pays', m.mustPickOwed() && m.throwResult(miss).length === 0 && !m.canRerack());
   ev = m.pickOwed('k1');
   ok('challenge: the owed cup comes off its OWN rack', types(ev)[0] === 'owedPicked' && ids(m, 'b').join() === 'k0' && !m.mustPickOwed());
-  m = new Match({ first: 'a', async: true });
+  m = new Match({ first: 'a', async: true, islandThree: false });   // 2 cups: an older challenge's rule
   m.racks.b = [{ id: 'k0', c: -3, r: 0 }, { id: 'k9', c: 0, r: 3 }]; m.startTurn();
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9' });

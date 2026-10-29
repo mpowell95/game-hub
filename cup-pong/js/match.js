@@ -79,7 +79,7 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true, gentBack = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true, gentBack = true, islandThree = true } = {}) {
     this.async = !!async;
     this.straight = !!straight;
     if (this.straight) { gentlemans = false; reracks = 0; }
@@ -89,6 +89,9 @@ export class Match {
     this.lastCupBack = lastCupBack !== false;
     this.fireBallsBack = fireBallsBack !== false;
     this.islandOnly = islandOnly !== false;
+    // No island on the last cup or the last two (Matt, 2026-10-29): only with 3+ cups standing, owed
+    // cups not counted. Frozen per challenge as `rules.i3`; older challenges replay without it.
+    this.islandThree = islandThree !== false;
     this.bounce = !!bounce;
     this.owed = { a: 0, b: 0 };         // challenge only: cups a side still has to take off its own rack
     this.bonus = { a: 0, b: 0 };        // granted bonus throws waiting for that side's next turn (grantExtra)
@@ -244,7 +247,8 @@ export class Match {
   islands() { return islandsOf(this.target()); }
   canIsland() {
     return !this.straight && !this.over && !this.mustPickOwed() && this.phase !== 'rebuttal' && this.ball !== null && this.ball !== 2 && !this.islandUsed[this.shooter][this.ball] && !this.called
-      && !this.lastCup && this.queue.length > 0 && this.islands().length > 0;
+      && !this.lastCup && this.queue.length > 0 && this.islands().length > 0
+      && (!this.islandThree || this.target().length - (this.owed[this.defender] | 0) >= 3);
   }
   /**
    * A BONUS THROW, granted by Matt to put right a turn the rules got wrong (2026-09-30: "give me an
@@ -454,7 +458,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, gentBack: this.gentBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, islandThree: this.islandThree, gentBack: this.gentBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -470,7 +474,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, gentBack: o.gentBack !== false, straight: o.straight === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, islandThree: o.islandThree !== false, gentBack: o.gentBack !== false, straight: o.straight === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };
