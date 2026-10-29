@@ -80,6 +80,7 @@ them; both "Perf" records deleted 2026-10-23 at Matt's request). Use the test ad
 player, "Smokey"; Matt: "let test automations play anything and always ignore their scores")**: when `navigator.webdriver`
 is true, every Firebase writer refuses (no override), online play is refused, and the launcher shows every game.
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
+**How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 

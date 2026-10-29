@@ -16,6 +16,24 @@
 
 Everything below is that sentence, made specific.
 
+## 0. Test safely: never on the family's database (2026-10-29)
+
+A session's test browser on the LIVE site once became a player ("Smokey", 2026-10-28), and a perf test once
+recorded results under Matt's code (2026-10-22). So:
+
+- **Test on `node server.mjs` (localhost), never on `mpowell95.github.io`.** A dev origin never writes; leave
+  `gamehub.devAllowSync.v1` at `'0'` (never `'1'`).
+- **Profile: test1, code `DREG5`**, or a made-up `zzz…` name. Never MattyIce / `QZCC4`.
+- **Test automation cannot write anyway** (`js/automation.js`): in any WebDriver browser (Playwright sets
+  `navigator.webdriver`, the browser every session uses) every Firebase writer refuses with no override, online play
+  is refused, and the launcher shows EVERY game, admin-only ones too. So a test reaches any game without the admin
+  page, and nothing it plays is ever saved anywhere but that browser.
+- **Prove a write path with fakes** (the `tools/test-*.mjs` suites stub `localStorage`/Firebase), never by writing
+  to the real database. Prove the block with `node tools/test-automation-guard.mjs`. A new Firebase writer must ask
+  `writesAllowed` or `automationBlocks`; that test scans for one that does not.
+- **Reading real data is fine** (reports, checks): anonymous reads via `backups/rtdb-backup.mjs` `readPath`; read
+  `beeLog/<puzzle>` one puzzle at a time (the root is refused). Never run a `--write` tool on your own judgement.
+
 ## 1. Before the first line of code
 
 - **`ls reference/<game>/`** and open every image with `Read`. A session can read PNGs. Do it.
