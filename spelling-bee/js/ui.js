@@ -749,10 +749,10 @@ class SpellingBee {
       if (i === 0 || r.points !== rows[i - 1].points || r.words !== rows[i - 1].words) place = i + 1;
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
       const crest = r.rank >= GENIUS ? crestOf(r.rank) : '';
-      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
+      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name || t('anon_player')}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
         <span class="sb-bd-pos${place <= 3 ? ' is-top' : ''}">${place}</span>
         <span class="sb-bd-av" aria-hidden="true">${esc(r.emoji)}</span>
-        <span class="sb-bd-mid"><span class="sb-bd-name">${esc(r.name)}</span>
+        <span class="sb-bd-mid"><span class="sb-bd-name">${esc(r.name || t('anon_player'))}</span>
           <span class="sb-bd-line"><span class="sb-bd-bar"><b style="width:${pct}%"></b></span><span class="sb-bd-crest" aria-hidden="true">${crest}</span></span></span>
         <span class="sb-bd-n"><span><b>${r.words}</b> <small>${esc(r.words === 1 ? t('word_1') : t('words_col'))}</small></span>
           <span class="sb-bd-pts"><b>${r.points}</b> <small>${esc(r.points === 1 ? t('point_1') : t('points_col'))}</small></span></span></li>`;

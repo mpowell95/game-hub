@@ -2003,7 +2003,7 @@ class EscobaUI {
       case 'ch-open-home': this.syncSetupInputs(); this._saveSetup(); this._chOpenHome(); break;
       case 'ch-back': this._chBack(); break;
       case 'ch-new': this._chOpenPick(); break;
-      case 'ch-pick': this._chPickPerson(a.dataset.code); break;
+      case 'ch-pick': this._chPickPerson(a.dataset.oi); break;
       case 'ch-len': this._chSend(a.dataset.v); break;
       case 'ch-deck': this._setup.deckMode = a.dataset.v === 'american' ? 'american' : 'spanish'; this._setup.deckModeChosen = true; this._saveSetup(); this._chScreen('len', {}); break;
       case 'ch-open': this._chOpenMatch(a.dataset.id); break;
@@ -2952,8 +2952,8 @@ class EscobaUI {
     }
   }
 
-  _chPickPerson(code) {
-    const them = (this._chv.opps || []).find((o) => o.code === code);
+  _chPickPerson(oi) {
+    const them = (this._chv.opps || [])[Number(oi)];
     if (them) this._chOpenLen(them, 'pick');
   }
 

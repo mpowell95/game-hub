@@ -1526,3 +1526,14 @@ player's page in that game; Keep marks a flag checked in `adminConfig/v1/reviewe
 (the one button that erased earned history) removed at his request. Not built: a per-play void (a play log exists only
 since Oct 28, and a best or fewest-guesses can't be recomputed without every play). The play-log rows read
 `playLog/<CODE>` (admin-read), so they were not seen working headlessly with the test profile.
+
+## No other player's code in the page (2026-10-29)
+
+Matt: "make sure codes aren't viewable by anyone else besides Admin"; "screens only" (database, rules, stored data and
+how codes key things untouched). The leaderboard had moved to opaque indexes earlier that day; this pass did the rest:
+Messages rows (`data-code`, plus `name || code` fallbacks), the Multiplayer screen (pick sheet, Records `data-opp` =
+`code:XXXXX`, bell `data-nudge-to`), nine games' pick-a-person rows (`data-code`), Hold'em's Bankrolls (`data-k` = identity
+key), Hoops (code printed under each name, `name || code` fallbacks), Spelling Bee's board (`name || code`). Left: Admin,
+the retired PIN-gated Challenge Control (`js/challenge/challenge-ui.js` Insights prints codes; admin-only), the profile page's
+own code, room join codes, `js/bee-fairplay.js` (shared with the server; its `name || code` is data, every screen now
+substitutes "Player"). Proven by `tools/test-no-codes.mjs` and `tools/test-no-codes-browser.mjs`.

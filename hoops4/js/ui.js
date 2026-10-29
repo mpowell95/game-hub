@@ -969,7 +969,7 @@ class Hoops4 {
       if (mp.kind === 'live') return { name: (mp.them && mp.them.name) || this.themName(), emoji: (mp.them && mp.them.emoji) || '' };
       const g = mp.game || {};
       const o = mp.side === 'a' ? g.b : g.a;
-      return { name: (o && (o.name || o.code)) || this.themName(), emoji: (o && o.emoji) || '' };
+      return { name: (o && o.name) || this.themName(), emoji: (o && o.emoji) || '' };
     };
     const failText = (reason) => (reason === 'denied' || reason === 'dev-origin-blocked'
       ? t('mpUnavailable') : t('chatNotSent'));
@@ -1385,7 +1385,7 @@ class Hoops4 {
     if (mp && mp.kind === 'async') {
       const g = mp.game || {};
       const other = mp.side === 'a' ? g.b : g.a;
-      return (other && (other.name || other.code)) || t('theirTurn');
+      return (other && other.name) || t('theirTurn');
     }
     if (this.match && this.match.vsCpu) {
       return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));   // see cpuPick

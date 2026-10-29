@@ -721,5 +721,6 @@ Full contract: `js/CLAUDE.md`, "The admin config".
   **Exception (Matt, 2026-10-18): the Multiplayer screen's heading and button say "Your turn".**
 - **No em dashes** in user-facing game or profile copy.
 - **ALWAYS use an Oxford comma** (Matt, 2026-10-28, in caps): in game copy, docs, and every message to Matt.
+- **No other player's code in the page, outside Admin (Matt, 2026-10-29: "codes aren't viewable by anyone else besides Admin")**: a code is the whole identity. Rows carry an index into an in-memory list, never `data-code`; a nameless person reads "Player"/"Jugador" (`anon_player`). The viewer's own code stays on the profile page. `node tools/test-no-codes.mjs`.
 - **Every "you win / you lose" popup gets a close (X) top-right.**
 - Text size, tap targets, safe areas, motion: `docs/BUILDING-A-GAME.md`, "Part 0 — The UX floor".

@@ -21,6 +21,8 @@ import * as MP from './mp.js';
 import { onlineGateText } from '../../js/online-gate.js';
 
 const t = makeT(STRINGS);
+/** A person with no name is never shown by code (2026-10-29). */
+const someone = () => { const v = t('mpSomeone'); return v === 'mpSomeone' ? 'Player' : v; };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -366,7 +368,6 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
       <div class="h4-mp-games">${list.map((o, i) => `
         <button type="button" class="h4-mp-game" data-who="${i}">
           <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name)}</span>
-          <span class="h4-mp-state">${esc(o.code)}</span>
         </button>`).join('')}</div>` : note(t('mpNoOne')), 'home');
     for (const b of el.querySelectorAll('[data-who]')) {
       ui.on(b, 'click', () => viewTerms(state.opponents[+b.dataset.who]));
@@ -493,7 +494,7 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
     };
     const recRow = (o) => `
       <div class="h4-mp-game h4-hist-rec">
-        <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name || o.code)}</span>
+        <span class="h4-mp-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name || someone())}</span>
         <span class="h4-mp-state h4-hist-line">${esc(t('histLine', { w: o.won, l: o.lost, d: o.draw }))}</span>
       </div>`;
     const word = (r) => (r.timedOut ? t('histTimedOut') : r.resigned === 'me' ? t('histResigned')

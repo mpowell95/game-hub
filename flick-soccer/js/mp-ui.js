@@ -176,7 +176,7 @@ async function picker(ui, MP) {
     const k = String(q || '').trim().toLowerCase();
     const all = opps.filter((o) => !k || o.name.toLowerCase().includes(k));
     list.innerHTML = all.length ? all.slice(0, SHOW).map((o) => `
-      <button type="button" class="fs-mrow" data-code="${esc(o.code)}">
+      <button type="button" class="fs-mrow" data-oi="${opps.indexOf(o)}">
         <span class="fs-mrow-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="fs-mrow-text"><span class="fs-mrow-name">${esc(o.name)}</span></span>
         <span class="fs-mrow-chev" aria-hidden="true">›</span>
@@ -187,7 +187,7 @@ async function picker(ui, MP) {
   body.querySelector('.fs-mp-search').addEventListener('input', (e) => paint(e.target.value));
   list.addEventListener('click', (e) => {
     const b = e.target.closest('.fs-mrow');
-    const o = b && opps.find((x) => x.code === b.dataset.code);
+    const o = b && opps[Number(b.dataset.oi)];
     if (o) confirm(ui, MP, o);
   });
 }
