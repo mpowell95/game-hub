@@ -242,3 +242,7 @@ Read `docs/BUILDING-A-GAME.md` Part 0 before touching UI. **`onViewportResize(cb
 ## Superseded (only in CLAUDE-HISTORY.md)
 Oasis Sands "NOT built" (it is built); "Holes 1-3 NOT re-cut"; the hole-3 swap block (Matt declared that record disposable 2026-09-16); the 221-degree arc; per-club tempo; signed distance loss and `blockSpray`; the 18 % roll; the scaled putt range; old `BREAK_K`/`PUTT_GAMMA` 2.0/`LIES.green.roll` 0.036; the putt-ladder clip; the charge ring; the skip button; `wedge`/`boomerang`; `frontTrees` as a wall; pre-2026-09-10 distances measured against the reference.
 
+
+## A shot in the air is saved (2026-10-29)
+
+`_fire` saves the shot's inputs (`pending`: club, aim, power, miss; `save.js` validates, a bad one drops only itself) BEFORE the ball leaves; `_resumeSaved` replays it to its settle (`_replayPending`), so a force-quit mid-flight cannot undo a bad shot. `pinIdx` is saved too (a resume plays the same cup). Never save `pending` after `_settleShot` has run.

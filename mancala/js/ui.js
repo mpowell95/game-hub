@@ -16,7 +16,7 @@ import {
   pitsOf, storeOf, ownerOf, isStore,
   newGame, legalMoves, applyMove,
 } from './game.js';
-import { chooseMove } from './ai.js';
+import { chooseMove, seededRand } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -136,6 +136,7 @@ function saveGame(ui) {
       mode: ui.mode,
       level: ui.level,
       movesMade: ui.movesMade,
+      aiSeed: ui.aiSeed,   // the computer's random choices come from this + the position (2026-10-29)
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -157,8 +158,15 @@ function loadGame() {
       mode: raw.mode === 'friend' ? 'friend' : 'bot',
       level: lvl >= 1 && lvl <= 3 ? lvl : 2,
       movesMade: Math.max(0, Math.round(Number(raw.movesMade)) || 0),
+      aiSeed: Number.isInteger(raw.aiSeed) && raw.aiSeed >= 0 && raw.aiSeed <= 0xFFFFFFFF ? raw.aiSeed : newAiSeed(),
     };
   } catch { return null; }
+}
+
+/** A fresh random 32-bit seed for one game's computer choices. */
+function newAiSeed() {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
+  catch { return Math.floor(Math.random() * 4294967296); }
 }
 
 function clearGame() { try { localStorage.removeItem(GAME_KEY); } catch { /* ignore */ } }
@@ -238,6 +246,7 @@ class MancalaUI {
     this.state = null;
     this.busy = false;
     this.movesMade = 0;
+    this.aiSeed = newAiSeed();
     this.gen = 0;             // bumped on every teardown; async sequences bail out
     this.timers = [];
     this.anims = new Set();
@@ -580,6 +589,7 @@ class MancalaUI {
     this.persistSettings();
     clearGame();                 // a new game replaces any saved one
     this.state = newGame(starter);
+    this.aiSeed = newAiSeed();   // each game's computer choices differ; a resume of THIS game replays them
     // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
     // (finish()'s `if (!this._statsCommitted)` would otherwise silently skip every game after the
     // first one played in a session -- Play again/Restart/New game all call startGame() again on
@@ -615,6 +625,7 @@ class MancalaUI {
     this.view = 'game';
     this.busy = false;
     this.movesMade = saved.movesMade;
+    this.aiSeed = saved.aiSeed;
     this.renderGame();
     // If we left while the bot was on move, it picks up where it left off.
     if (this.mode === 'bot' && this.state.turn === P2) this.botTurn();
@@ -1050,7 +1061,7 @@ class MancalaUI {
     this.later(() => { if (gen === this.gen && this.busy) this.showThinking(true); }, 220);
     this.later(() => {
       if (gen !== this.gen) return;
-      const pit = chooseMove(this.state, this.level);
+      const pit = chooseMove(this.state, this.level, seededRand(this.aiSeed, this.state));
       this.showThinking(false);
       if (pit == null) { this.busy = false; this.refresh(); return; }
       this.playMove(pit);

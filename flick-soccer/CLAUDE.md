@@ -419,3 +419,7 @@ A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `withTimeout` also on `readFresh` (the writers' read); `countResult(id, won, finishedAt)`; "Timed out" (`mp_timed_out`).
+
+## The computer's plan is seeded (2026-10-29)
+
+`aiSeed` (per match, in `gamehub.flicksoccer.save.v1`): `planShot` takes `seededRng(seed, bodies, seat)`, so quit and Continue before the computer shoots plans the SAME shot. (The shot itself was already saved before it rolls.) `tools/test-ai-resume-seeds.mjs`.

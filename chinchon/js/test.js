@@ -283,6 +283,49 @@ for (const [seed, n] of [[7, 3], [77, 6], [777, 9]]) {
     resumed, canonical);
 }
 
+// M2d (2026-10-29) — a SOLO save taken right after a draw commits the draw. Before it, a quit after
+// drawing reopened at the start of the turn with the card back on the stock and the stock / discard
+// choice open again (draw, look, force-quit, take the discard pile instead). The resume must replay the
+// exact same draws and discards as an uninterrupted round and must NOT offer the draw a second time.
+async function playLog(seed, n) {
+  const order = shuffle(makeDeck(DEF), lcg(seed)).map((c) => c.id);
+  const mk = () => new Game({ players: hardAgents(), config: { ...DEF, presetDeck: order, maxResets: 0 } });
+  const log = (arr) => (type, payload) => {
+    if (type === 'draw' || type === 'discard') arr.push(`${type}:${payload.playerId}:${payload.card.id}`);
+  };
+  const canon = [];
+  const gc = mk();
+  gc.onEvent = async (type, payload) => { log(canon)(type, payload); if (type === 'roundScored') gc.abort(); };
+  await gc.playMatch();
+
+  const before = [];
+  let draws = 0, snap = null, plain = null;
+  const g = mk();
+  g.onEvent = async (type, payload) => {
+    log(before)(type, payload);
+    if (type === 'roundScored') g.abort();
+    if (type === 'draw') {
+      draws++;
+      if (draws === n) {
+        snap = JSON.parse(JSON.stringify(g.snapshot({ midTurn: true })));
+        plain = JSON.parse(JSON.stringify(g.snapshot()));
+        g.abort();
+      }
+    }
+  };
+  await g.playMatch();
+  assert(`M2d: snapshot taken at draw ${n} (seed ${seed})`, !!snap && snap.midTurn === true && snap.midRound === true);
+  assert(`M2d: a plain snapshot() is unchanged (no midTurn field, MP safe) (seed ${seed})`, plain && !('midTurn' in plain));
+  const mkAgents = () => { const m = {}; for (const sp of snap.players) m[sp.id] = new AIAgent({ difficulty: 'hard' }); return m; };
+  const g2 = Game.fromSnapshot(JSON.parse(JSON.stringify(snap)), mkAgents());
+  const after = [];
+  g2.onEvent = async (type, payload) => { log(after)(type, payload); if (type === 'roundScored') g2.abort(); };
+  await g2.playMatch();
+  assert(`M2d: the resumed turn does not draw again (seed ${seed})`, !after.length || !after[0].startsWith('draw:'));
+  eq(`M2d: draw-anchored resume replays the exact same draws and discards (seed ${seed})`, before.concat(after), canon);
+}
+for (const [seed, n] of [[7, 1], [77, 4], [777, 7], [31, 5]]) await playLog(seed, n);
+
 // --- T4.3 — hash stability: identical state -> identical hash; one card moved -> different hash.
 {
   const mkGame = (hand0) => {

@@ -281,5 +281,16 @@ function syntheticSolved() {
   ok('dict: isValidWord rejects a word absent from the very first letter', !isValidWord(trie, 'DOGGY'.slice(0, 3) + 'X'.repeat(2)));
 }
 
+// 2026-10-29: the round clock is monotonic and saved every tick (source probes).
+{
+  const fs = await import('node:fs');
+  const ui = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const tick = ui.slice(ui.indexOf('  tick() {'), ui.indexOf('_updateTimerDisplay() {'));
+  ok('clock: tick counts performance.now(), not Date.now() against an end time', /performance\.now\(\)/.test(tick) && !/_endsAt - Date\.now\(\)/.test(ui));
+  ok('clock: no end time is built from Date.now()', !/_endsAt = Date\.now\(\)/.test(ui) && !/_endsAt = roundEndsAt/.test(ui));
+  ok('clock: the remaining time is saved on every tick', /saveGame\(this\)/.test(tick));
+  ok('clock: MP never writes the solo save slot', /function saveGame\(ui\) \{\s*try \{\s*if \(ui\.mp\) return;/.test(ui));
+}
+
 console.log(`\nBoggle tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

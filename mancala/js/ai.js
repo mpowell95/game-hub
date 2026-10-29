@@ -92,14 +92,16 @@ function bestAtDepth(state, depth, ctx) {
  * Pick a pit for the current player. `level` is 1..3.
  * Deterministic apart from Beginner's deliberate wobble.
  */
-export function chooseMove(state, level) {
+export function chooseMove(state, level, rand = Math.random) {
   const moves = legalMoves(state);
   if (moves.length === 0) return null;
   if (moves.length === 1) return moves[0];
 
   // Beginner: 40% of turns pick at random, otherwise a very shallow search.
+  // `rand` is seeded by the UI (see `seededRand`), so a quit and resume on the same position
+  // makes the SAME choice instead of re-rolling it (2026-10-29).
   if (level <= 1) {
-    if (Math.random() < 0.4) return moves[Math.floor(Math.random() * moves.length)];
+    if (rand() < 0.4) return moves[Math.floor(rand() * moves.length)];
     const r = bestAtDepth(state, 2, {});
     return r ? r.move : moves[0];
   }
@@ -125,4 +127,20 @@ export function chooseMove(state, level) {
   return fallback ? fallback.move : moves[0];
 }
 
-export default { chooseMove };
+/** A random source that is a pure function of (game seed, position): the same position in the same
+ *  game always draws the same numbers, so killing the app before the computer moves and resuming
+ *  cannot re-roll its choice. A NEW game has a new seed. */
+export function seededRand(seed, state) {
+  let h = 2166136261 ^ (Number(seed) >>> 0);
+  const key = `${state.turn}|${state.pits.join(',')}`;
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export default { chooseMove, seededRand };

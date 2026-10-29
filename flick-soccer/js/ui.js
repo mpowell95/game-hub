@@ -13,7 +13,7 @@ import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
   ballPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
-import { planShot, DIFFS } from './ai.js';
+import { planShot, seededRng, DIFFS } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
 import { roundShot } from './mp.js';
 import { STRINGS } from './strings.js';
@@ -28,6 +28,12 @@ const t = makeT(STRINGS);
 const STATS_ID = 'flicksoccer';
 const SETTINGS_KEY = 'gamehub.flicksoccer.v1';
 const SAVE_KEY = 'gamehub.flicksoccer.save.v1';
+
+/** A fresh random 32-bit seed for one match's computer plans. */
+function newAiSeed() {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
+  catch { return Math.floor(Math.random() * 4294967296); }
+}
 const MODES = ['cpu', 'pass'];
 const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the SAFE zone round the disc: letting go
@@ -549,13 +555,16 @@ class FlickSoccerUI {
       settle(m, runToRest(m.b).scorer);
       replayed = true;
     }
-    this._begin({ mode: sv.mode, diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', match: m });
+    this._begin({ mode: sv.mode, diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', match: m, aiSeed: sv.aiSeed });
     if (replayed && m.winner != null) this._finish();
   }
 
   _begin(g) {
     this.mode = g.mode;
     this.diff = g.diff;
+    // The computer's planning noise comes from this seed + the position (2026-10-29), saved with the
+    // match: a quit before it shoots and a Continue plans the SAME shot, not a fresh roll.
+    this.aiSeed = Number.isInteger(g.aiSeed) && g.aiSeed >= 0 && g.aiSeed <= 0xFFFFFFFF ? g.aiSeed : newAiSeed();
     this.match = g.match;
     freeze(this.match.b);
     this.seats = g.seats || this._seatsFor(g.mode, g.diff);
@@ -580,7 +589,7 @@ class FlickSoccerUI {
     if (m.winner != null) { try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ } return; }
     // Only a position at rest is a position (a rolling shot is played out first: _settleNow).
     if (!atRest(m.b) || this.phase === 'goal') return;
-    writeJSON(SAVE_KEY, shot ? { mode: this.mode, diff: this.diff, match: m, shot } : { mode: this.mode, diff: this.diff, match: m });
+    writeJSON(SAVE_KEY, shot ? { mode: this.mode, diff: this.diff, match: m, shot, aiSeed: this.aiSeed } : { mode: this.mode, diff: this.diff, match: m, aiSeed: this.aiSeed });
   }
 
   _saveSettings() { writeJSON(SETTINGS_KEY, this.settings); }
@@ -646,7 +655,7 @@ class FlickSoccerUI {
       this.phase = 'aim';
     } else {
       this.phase = 'cpu';
-      this.cpu = { gen: planShot(m.b, m.turn, this.diff), started: this.clock, shot: null };
+      this.cpu = { gen: planShot(m.b, m.turn, this.diff, seededRng(this.aiSeed, m.b, m.turn)), started: this.clock, shot: null };
     }
     this._status();
   }

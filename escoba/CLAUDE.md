@@ -254,3 +254,7 @@ JSON-serialized kill-and-resume round-trip (up to 3 resumes per match). Needs No
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `countResult(id, won, escobas, finishedAt)`; "Timed out" (`ch_timed_out`). Live-room `mp` counts carry no id.
+
+## The computer's dice are seeded (2026-10-29)
+
+`aiSeed` (per match, in `escoba-save`): Easy's random play comes from `seededRand(seed, view)`, so quit and resume replays the same play. Not used online or in challenges. `tools/test-ai-resume-seeds.mjs`.

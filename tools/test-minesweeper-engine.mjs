@@ -440,6 +440,16 @@ console.log('\n--- round trip: deserialize(serialize(state)) reproduces an ident
 }
 
 // =================================================================================================
+console.log('\n--- the new-board confirm must not pause the clock (2026-10-29) ---');
+{
+  const fs = await import('node:fs');
+  const ui = fs.readFileSync(new URL('../minesweeper/js/ui.js', import.meta.url), 'utf8');
+  const body = ui.slice(ui.indexOf('  _askNewGame() {'), ui.indexOf('async _openLeaderboard'));
+  ok('_askNewGame exists', body.length > 100);
+  ok('_askNewGame does not stop the timer (the board stays visible under the dim)', !/_stopTimer\(/.test(body));
+}
+
+// =================================================================================================
 console.log(failures.length ? `\n${failures.length} FAILURE(S):` : `\nALL PASS (${passed} assertions)`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); }
 process.exit(failures.length ? 1 : 0);

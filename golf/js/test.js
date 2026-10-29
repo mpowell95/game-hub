@@ -2613,7 +2613,9 @@ console.log('\n-- 19. the playtest of 2026-09-08: the side of the miss, the shap
     bent.side < 10 * 0.6, 'the lateral term is linear in p - the ball is flying a straight offset line');
   const uiSrc = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
   ok('[KNOWN-BUG PROBE] ...and ui.js hands the miss in as `mishitDeg`, not folded into `aimRad`',
-    /resolveShot\(\{[\s\S]{0,220}?aimRad: this\.aimRad,[\s\S]{0,220}?mishitDeg: m\.deg/.test(uiSrc),
+    // (2026-10-29: the shot is a stored spec first, so the invariant is the same two facts in two hops)
+    /spec = \{ type: 'flight'[^}]*?aimRad: this\.aimRad,[^}]*?mishitDeg: m\.deg/.test(uiSrc)
+      && /resolveShot\(\{[\s\S]{0,220}?aimRad: spec\.aimRad,[\s\S]{0,220}?mishitDeg: spec\.mishitDeg/.test(uiSrc),
     'the mishit is back in aimRad, which flies the ball straight and defeats flightPoint');
 
   // The endpoint is unchanged, which is what keeps every dispersion number in this file honest:
@@ -3020,6 +3022,27 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   // own auto-pick, which is a playable state rather than a wrong one.
   ok('a missing club is tolerated, not fatal', (() => { const r = v({ clubId: undefined }); return !!r && r.clubId === null; })());
 
+  // 2026-10-29: A SHOT IN THE AIR IS SAVED (a quit mid-flight used to undo a bad shot).
+  {
+    const flight = { type: 'flight', clubId: '7iron', aimRad: 0.02, power: 0.9, mishitDeg: 3, distanceMul: 0.95 };
+    const putt = { type: 'putt', aimRad: 0.1, power: 0.4, rangeFt: 60 };
+    ok('a pending flight shot round-trips', (() => { const r = v({ pending: flight, pinIdx: 1 }); return !!r && JSON.stringify(r.pending) === JSON.stringify(flight) && r.pinIdx === 1; })());
+    ok('a pending putt round-trips', (() => { const r = v({ pending: putt }); return !!r && JSON.stringify(r.pending) === JSON.stringify(putt); })());
+    ok('a malformed pending drops only the shot, never the round', (() => {
+      const r = v({ pending: { type: 'flight', clubId: 7, aimRad: NaN, power: 'x' } });
+      return !!r && r.pending === undefined && r.shotN === 2;
+    })());
+    ok('a save with no pending field still validates (older saves)', (() => { const r = v({}); return !!r && !('pending' in r); })());
+    // The replay is the SAME shot: the engine has no randomness, so inputs in = same landing out.
+    const hole = PINE_VALLEY.holes[0];
+    const a = SH.resolveShot({ hole, from: hole.tee, aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 4, distanceMul: 0.9 });
+    const b = SH.resolveShot({ hole, from: hole.tee, aimRad: 0, club: CLUBS[0], power: 1, mishitDeg: 4, distanceMul: 0.9 });
+    ok('resolveShot is deterministic (a replay lands where the original would)', JSON.stringify(a.rest) === JSON.stringify(b.rest) && a.flightMs === b.flightMs);
+    const uiText = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+    ok('_fire saves the shot before the ball leaves', /this\.pendingShot = spec;\s*this\._saveRound\(\);\s*this\.anim = this\._buildShotAnim/.test(uiText));
+    ok('_resumeSaved replays a pending shot', /sv\.pending && this\._replayPending\(sv\.pending\)/.test(uiText));
+  }
+
   // WHICH HOLE A RESUME LANDS ON. A save taken with the result card up has that hole SCORED, and
   // replaying it with the ball sitting in the cup would be the wrong restore.
   const at = (pos, scores) => SV.validateSave(Object.assign(good(), { pos, scores }), RD.COURSES, RD.ROUNDS);
@@ -3040,7 +3063,7 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   // THAT. Without a re-save at the end, resuming silently rewinds the file on disk to the tee and a
   // second kill hands back a round the player has already partly replayed. Found by driving it.
   ok('[KNOWN-BUG PROBE] resuming re-saves, so it cannot rewind the file to the tee',
-    /this\._aimCamera\(true\);\n    this\._paintHud\(\);\n[\s\S]{0,600}?this\._saveRound\(\);\n    return true;/.test(uiS));
+    /this\._aimCamera\(true\);\n    this\._paintHud\(\);\n[\s\S]{0,1600}?this\._saveRound\(\);\n    return true;/.test(uiS));
   // THE CLEAR IS ON THE WRITE, NOT ON THE ROUND'S END. js/game-stats.js's drain/clear split is the
   // reference and the reason: the two look equivalent and differ in exactly the failing case.
   ok('the save is cleared only after the round is verified on disk',

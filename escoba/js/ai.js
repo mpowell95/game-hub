@@ -40,14 +40,32 @@ function legalMoves(hand, table) {
   return moves;
 }
 
+/** A random source that is a pure function of (match seed, position): the same hand on the same
+ *  table in the same match always draws the same numbers, so killing the app before the computer
+ *  plays and resuming cannot re-roll its choice (2026-10-29). A new match has a new seed. */
+export function seededRand(seed, view) {
+  let h = 2166136261 ^ (Number(seed) >>> 0);
+  const key = view.hand.map((c) => c.id).join(',') + '|' + view.table.map((c) => c.id).join(',');
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class AIAgent {
-  constructor({ difficulty = 'normal' } = {}) {
+  constructor({ difficulty = 'normal', seed = null } = {}) {
     this.difficulty = difficulty;
+    // Without a seed (tests, challenge replays) Easy keeps using Math.random.
+    this.seed = Number.isFinite(seed) ? (seed >>> 0) : null;
   }
 
   chooseMove(view) {
     const moves = legalMoves(view.hand, view.table);
-    const pick = this.difficulty === 'easy' ? this.pickEasy(moves)
+    const pick = this.difficulty === 'easy' ? this.pickEasy(moves, view)
       : this.pickSmart(moves, view, this.difficulty === 'hard');
     return {
       cardId: pick.card.id,
@@ -55,8 +73,9 @@ export class AIAgent {
     };
   }
 
-  pickEasy(moves) {
-    return moves[Math.floor(Math.random() * moves.length)];
+  pickEasy(moves, view) {
+    const rand = (this.seed !== null && view) ? seededRand(this.seed, view) : Math.random;
+    return moves[Math.floor(rand() * moves.length)];
   }
 
   /**
@@ -139,4 +158,4 @@ export class AIAgent {
   }
 }
 
-export default { AIAgent };
+export default { AIAgent, seededRand };

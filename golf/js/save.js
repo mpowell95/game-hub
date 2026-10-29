@@ -63,8 +63,25 @@ export function validateSave(raw, courses, rounds) {
     if (!Array.isArray(raw.ball) || raw.ball.length !== 2 || !raw.ball.every(isNum)) return null;
     if (!isNum(raw.aimRad)) return null;
 
+    // OPTIONAL, ADDITIVE (2026-10-29): the shot that was in the air when the save was written, as
+    // its inputs. Anything malformed drops ONLY this field (the round survives; a resume then
+    // behaves as before this field existed) - never the whole save.
+    let pending = null;
+    const pd = raw.pending;
+    if (pd && typeof pd === 'object' && isNum(pd.aimRad) && isNum(pd.power) && pd.power >= 0 && pd.power <= 2) {
+      if (pd.type === 'putt' && isNum(pd.rangeFt) && pd.rangeFt > 0 && pd.rangeFt < 1000) {
+        pending = { type: 'putt', aimRad: pd.aimRad, power: pd.power, rangeFt: pd.rangeFt };
+      } else if (pd.type === 'flight' && typeof pd.clubId === 'string' && isNum(pd.mishitDeg) && isNum(pd.distanceMul)
+        && pd.distanceMul >= 0 && pd.distanceMul <= 3) {
+        pending = { type: 'flight', clubId: pd.clubId, aimRad: pd.aimRad, power: pd.power, mishitDeg: pd.mishitDeg, distanceMul: pd.distanceMul };
+      }
+    }
+    const pinIdx = isIntIn(raw.pinIdx, 0, 20) ? raw.pinIdx : undefined;
+
     return {
       v: SAVE_V,
+      ...(pending ? { pending } : {}),
+      ...(pinIdx !== undefined ? { pinIdx } : {}),
       course,
       round,
       holeIdxs: idxs.slice(),

@@ -17,7 +17,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // never exchanging a single move -- that is exactly, and only, what this file
 // covers.
 
-import { roundEndsAt, remainingMs, wonFor, bothResultsIn } from '../boggle/js/mp-round.js';
+import { roundEndsAt, remainingMs, entryRemainingMs, wonFor, bothResultsIn } from '../boggle/js/mp-round.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => { cond ? pass++ : (fail++, console.error('  FAIL:', name)); };
@@ -44,6 +44,18 @@ const ok = (name, cond) => { cond ? pass++ : (fail++, console.error('  FAIL:', n
   // as "over", not crash the mounting side.
   ok('roundEndsAt: missing startedAt does not throw or NaN', Number.isFinite(roundEndsAt(undefined, 1.5)));
   ok('remainingMs: missing timerMinutes clamps to 0, not NaN/negative', remainingMs(startedAt, undefined, startedAt) === 0);
+}
+
+// === entryRemainingMs (2026-10-29): the round counts on each phone's own monotonic clock =======
+{
+  const t0 = 1_700_000_000_000;
+  ok('entryRemainingMs: a round just started is the whole round', entryRemainingMs(t0, 1.5, t0 + 400) === 90000 - 400);
+  ok('entryRemainingMs: a phone clock set BACK cannot add time (capped at the whole round)', entryRemainingMs(t0, 1.5, t0 - 3_600_000) === 90000);
+  ok('entryRemainingMs: a rejoin halfway reads half', entryRemainingMs(t0, 1, t0 + 30000) === 30000);
+  ok('entryRemainingMs: a rejoin with the clock set back is capped by the last saved tick', entryRemainingMs(t0, 1, t0 - 999999, 12000) === 12000);
+  ok('entryRemainingMs: the cap never adds time', entryRemainingMs(t0, 1, t0 + 50000, 40000) === 10000);
+  ok('entryRemainingMs: past the end is 0', entryRemainingMs(t0, 1, t0 + 999999) === 0);
+  ok('entryRemainingMs: garbage never NaNs', Number.isFinite(entryRemainingMs(undefined, undefined, 5, NaN)));
 }
 
 // === wonFor ====================================================================

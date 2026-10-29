@@ -85,6 +85,8 @@ export class Game {
     this._resumeMidRound = false;
     this._resumeNextTurn = null;
     this._resumeNextRound = false;   // restored from a round-BOUNDARY snapshot: continue with the next round
+    this._turnDrawn = false;         // the player to act has drawn and not yet discarded (solo draw-save, 2026-10-29)
+    this._resumeAfterDraw = false;   // restored from such a snapshot: that player's turn resumes at the discard
   }
 
   /**
@@ -122,6 +124,8 @@ export class Game {
     // writes at 'roundScored'): playMatch() must continue with the next round,
     // never initMatch() (which would zero every score - see playMatch()).
     g._resumeNextRound = !snap.midRound;
+    g._turnDrawn = false;
+    g._resumeAfterDraw = !!snap.midRound && !!snap.midTurn;
     g.players = snap.players.map((sp) => ({
       id: sp.id, name: sp.name, avatar: sp.avatar, isHuman: sp.isHuman, difficulty: sp.difficulty,
       agent: agentsById[sp.id],
@@ -148,11 +152,17 @@ export class Game {
    * Escoba's identical constraint (see escoba/js/game.js's "UI intentionally
    * never snapshots the very first deal of a round").
    */
-  snapshot() {
+  snapshot(opts) {
+    // `opts.midTurn` (2026-10-29, SOLO only, taken right after a draw): the drawn card is committed,
+    // so the save names the player who drew as the one to act and resumes at their discard. Without
+    // it, a quit after drawing reopened at the START of the turn with the card back on the stock and
+    // the choice (stock or discard pile) open again. Default snapshots (MP, turn ends) are unchanged.
+    const midTurn = !!(opts && opts.midTurn && this._turnDrawn && this._midRound);
     return {
       v: 1,
       midRound: this._midRound,
-      nextTurn: this._nextTurn,
+      ...(midTurn ? { midTurn: true } : {}),
+      nextTurn: midTurn ? this.currentPlayerIndex : this._nextTurn,
       config: this.config,
       stock: this.stock,
       discard: this.discard,
@@ -419,31 +429,44 @@ export class Game {
 
   async playTurn(player) {
     this._throwIfAborted();
-    this.phase = 'draw';
-    player.hasDrawn = false;
-    await this.emit('turnStart', { playerId: player.id });
-    this._throwIfAborted();
+    // Resuming a solo save taken right after this player's draw: the card is already in the hand
+    // (and gone from the stock / discard pile), so the draw is NOT offered again.
+    const resumed = this._resumeAfterDraw && player.hasDrawn;
+    this._resumeAfterDraw = false;
+    if (resumed) {
+      this._turnDrawn = true;
+      this.phase = 'draw';
+      await this.emit('turnStart', { playerId: player.id });
+      this._throwIfAborted();
+    } else {
+      this.phase = 'draw';
+      player.hasDrawn = false;
+      await this.emit('turnStart', { playerId: player.id });
+      this._throwIfAborted();
 
-    // Ensure the stock has a card to offer; reset or end the round if not.
-    if (this.stock.length === 0 && !this.tryResetStock()) {
-      this.whoClosed = null;
-      this.closeType = 'exhaustion';
-      return true;
+      // Ensure the stock has a card to offer; reset or end the round if not.
+      if (this.stock.length === 0 && !this.tryResetStock()) {
+        this.whoClosed = null;
+        this.closeType = 'exhaustion';
+        return true;
+      }
+
+      // 1) DRAW — stock or discard.
+      const src = await player.agent.chooseDraw(this.getView(player.id));
+      this._throwIfAborted();
+      const drawn = this.drawFrom(src === 'discard' ? 'discard' : 'stock', player);
+      player.hasDrawn = true;
+      this._turnDrawn = true;
+      await this.emit('draw', { playerId: player.id, source: drawn.source, card: drawn.card });
+      this._throwIfAborted();
     }
-
-    // 1) DRAW — stock or discard.
-    const src = await player.agent.chooseDraw(this.getView(player.id));
-    this._throwIfAborted();
-    const drawn = this.drawFrom(src === 'discard' ? 'discard' : 'stock', player);
-    player.hasDrawn = true;
-    await this.emit('draw', { playerId: player.id, source: drawn.source, card: drawn.card });
-    this._throwIfAborted();
 
     // 2) DISCARD — mandatory.
     this.phase = 'discard';
     const discardId = await player.agent.chooseDiscard(this.getView(player.id));
     this._throwIfAborted();
     const discarded = this.discardCard(player, discardId);
+    this._turnDrawn = false;
     await this.emit('discard', { playerId: player.id, card: discarded });
     this._throwIfAborted();
 

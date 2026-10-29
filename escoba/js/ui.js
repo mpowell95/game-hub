@@ -60,6 +60,12 @@ const BROOM_MS = 1500, BROOM_TO_FLYOUT_MS = 480, BROOM_TO_BANNER_MS = 720;
 const FLY_PLAY_MS = 300, FLY_DEAL_MS = 300, FLY_DEAL_GAP_MS = 70, HAND_SLIDE_MS = 220;
 const STORE_SETTINGS = 'escoba-settings';
 const STORE_SAVE = 'escoba-save';
+
+/** A fresh random 32-bit seed for one match's computer choices (2026-10-29). */
+function newAiSeed() {
+  try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
+  catch { return Math.floor(Math.random() * 4294967296); }
+}
 const SAVE_SCHEMA_V = 1;
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
@@ -266,6 +272,7 @@ class EscobaUI {
       const payload = {
         v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobasNow(), assist: this._matchAssist,
         snap: this.game.snapshot(),
+        aiSeed: this._aiSeed,   // the computer's random choices come from this + the position (2026-10-29)
       };
       // Additive MP field: absent in solo, so the solo save shape is unchanged.
       // `role` is written alongside `seat` purely so a save taken by the previous (2-seat)
@@ -762,12 +769,13 @@ class EscobaUI {
     this._saveSetup();
     this._clearSave();   // an explicit (re)start replaces any resumable match
     const s = this._setup;
+    this._aiSeed = newAiSeed();
     const players = [makePlayer({ id: 0, name: s.humanName || t('you'), avatar: s.humanAvatar, isHuman: true, agent: this.humanAgent })];
     for (let i = 0; i < s.count - 1; i++) {
       const diff = s.aiDifficulty[i] || 'normal';
       players.push(makePlayer({
         id: i + 1, name: s.aiNames[i], avatar: s.aiAvatars[i], difficulty: diff,
-        agent: new AIAgent({ difficulty: diff }),
+        agent: new AIAgent({ difficulty: diff, seed: this._aiSeed }),
       }));
     }
     this._resolvePending(null);
@@ -789,8 +797,9 @@ class EscobaUI {
     if (!save) return;
     if (this.game) this.game.abort();   // same zombie-loop guard as startGame()
     const agentsById = {};
+    this._aiSeed = Number.isInteger(save.aiSeed) && save.aiSeed >= 0 && save.aiSeed <= 0xFFFFFFFF ? save.aiSeed : newAiSeed();
     for (const sp of save.snap.players) {
-      agentsById[sp.id] = sp.isHuman ? this.humanAgent : new AIAgent({ difficulty: sp.difficulty });
+      agentsById[sp.id] = sp.isHuman ? this.humanAgent : new AIAgent({ difficulty: sp.difficulty, seed: this._aiSeed });
     }
     this._resolvePending(null);
     this.game = Game.fromSnapshot(save.snap, agentsById);

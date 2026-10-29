@@ -1130,7 +1130,15 @@ class GolfGame {
     // cup each time it is entered; a hole with one, or none, is unchanged. The hole object is the
     // course's own, so the pick is written onto it - every reader of `hole.pin` (the cup, the
     // HUD's distance, the camera, the renderer's flag) then agrees for the rest of the hole.
-    if (Array.isArray(hole.pins) && hole.pins.length > 1) hole.pin = [...hole.pins[Math.floor(Math.random() * hole.pins.length)]];
+    // The pick is kept (`pinIdx`, saved) so a quit and resume plays the SAME cup (2026-10-29).
+    this.pinIdx = null;
+    if (Array.isArray(hole.pins) && hole.pins.length > 1) {
+      const want = this._resumePinIdx;
+      this._resumePinIdx = null;
+      this.pinIdx = Number.isInteger(want) && want >= 0 && want < hole.pins.length ? want : Math.floor(Math.random() * hole.pins.length);
+      hole.pin = [...hole.pins[this.pinIdx]];
+    }
+    this.pendingShot = null;
     // A hole that fails validation must fail LOUDLY rather than half-render: a malformed green
     // silently flattens the break, and that gets diagnosed as "putting feels wrong" for a week.
     const errs = validateHole(hole);
@@ -1608,6 +1616,7 @@ class GolfGame {
     // NO SEED. A struck ball carries no randomness at all since 2026-09-10 (see swing.js's `mishit`):
     // where it goes is the power and the needle stop, and nothing else.
     const m = mishit(barPosOf(pos), power, zone, clubZone, GREEN_FLOOR[clubTier(this._activeClub())] || 0);
+    let spec;
 
     // THE SHOT RESOLVES ON THE CLUB IN HAND, NOT ON THE LIE. They agree everywhere except the
     // fairway and the tee, which is exactly the case this split exists for.
@@ -1616,13 +1625,11 @@ class GolfGame {
       // `m.deg * 0.25` could not miss a cup that captures at a fixed 0.30 yds, and the green band
       // carried no pace error at all, so every putt inside 30 ft went in.
       const pm = puttMishit(barPosOf(pos), zone, this._activeClub());
-      const res = simulatePutt({
-        hole: this.hole, from: this.ball, aimRad: this.aimRad + pm.deg * DEG,
+      spec = {
+        type: 'putt', aimRad: this.aimRad + pm.deg * DEG,
         power: Math.max(0, Math.min(1, power * pm.paceMul)),
         rangeFt: puttRangeFt(this._activeClub()),
-      });
-      const pathLen = res.path && res.path.length > 1 ? distYd(res.path[0], res.path[res.path.length - 1]) : 0;
-      this.anim = { type: 'putt', t0: performance.now() + WINDUP_MS, dur: res.ms, res, from: [...this.ball], follow: pathLen * FT_PER_YD > PUTT_FOLLOW_FT };
+      };
     } else {
       const club = this._activeClub();
       // THE MISS IS A CURVE, NOT A ROTATED LAUNCH LINE (2026-09-08). Matt: *"Do off target balls
@@ -1637,9 +1644,31 @@ class GolfGame {
       // way, so nothing calibrated against dispersion shifts. What changes is the SHAPE of the
       // flight - and, because `treeHit` samples the same curve, which trees a sliced ball is
       // actually behind.
+      spec = { type: 'flight', clubId: club.id, aimRad: this.aimRad, power, mishitDeg: m.deg, distanceMul: m.distanceMul };
+    }
+    // THE STROKE IS SAVED BEFORE THE BALL LEAVES (2026-10-29). Until now the save was written only at
+    // rest, so force-quitting mid-flight on a bad shot reopened with the ball before the shot and no
+    // stroke taken: a free mulligan. The shot's inputs go into the save; resolveShot / simulatePutt
+    // are pure (no randomness), so a resume replays the SAME shot and settles it the normal way.
+    this.pendingShot = spec;
+    this._saveRound();
+    this.anim = this._buildShotAnim(spec, performance.now() + WINDUP_MS);
+    // The hub readout is set when the ball STOPS, never here - see _settleShot.
+  }
+
+  /** The animation (and the resolved shot) for a stored shot spec, struck from `this.ball`.
+   *  Used by `_fire` and by `_resumeSaved` to replay a shot that was in the air when the app died. */
+  _buildShotAnim(spec, t0) {
+    if (spec.type === 'putt') {
+      const res = simulatePutt({ hole: this.hole, from: this.ball, aimRad: spec.aimRad, power: spec.power, rangeFt: spec.rangeFt });
+      const pathLen = res.path && res.path.length > 1 ? distYd(res.path[0], res.path[res.path.length - 1]) : 0;
+      return { type: 'putt', t0, dur: res.ms, res, from: [...this.ball], follow: pathLen * FT_PER_YD > PUTT_FOLLOW_FT };
+    }
+    {
+      const club = clubById(spec.clubId) || this._activeClub();
       const res = resolveShot({
-        hole: this.hole, from: this.ball, aimRad: this.aimRad,
-        club, power, mishitDeg: m.deg, distanceMul: m.distanceMul,
+        hole: this.hole, from: this.ball, aimRad: spec.aimRad,
+        club, power: spec.power, mishitDeg: spec.mishitDeg, distanceMul: spec.distanceMul,
       });
       // A BLOCKED SHOT IS ANIMATED AS THE SHOT IT WAS (2026-09-16): the real arc up to where it
       // met the tree, then a fall. It used to be drawn as a complete, smaller arc ending at the
@@ -1647,9 +1676,24 @@ class GolfGame {
       // a shot that "starts its descent well before the tree" (Matt, with a recording of Red
       // Mesa 7) and the tree looked innocent.
       const fly = res.flightMs;
-      this.anim = { type: 'flight', t0: performance.now() + WINDUP_MS, dur: fly + (res.blocked ? BLOCKED_FALL_MS : 0), fly, res, club, from: [...this.ball] };
+      return { type: 'flight', t0, dur: fly + (res.blocked ? BLOCKED_FALL_MS : 0), fly, res, club, from: [...this.ball] };
     }
-    // The hub readout is set when the ball STOPS, never here - see _settleShot.
+  }
+
+  /** Replay the shot a resumed save says was in the air, straight to its settle. */
+  _replayPending(spec) {
+    try {
+      this.anim = this._buildShotAnim(spec, performance.now() - 1e7);
+      this.pendingShot = null;
+      this._settleShot();
+      this._aimCamera(true);
+      this._paintHud();
+      return true;
+    } catch (e) {
+      console.error('[golf] replaying the saved shot FAILED', e);
+      this.anim = null;
+      return false;
+    }
   }
 
   /** Tap to skip: the reference's 7.5 s drive with no way past it is the main thing worth
@@ -1932,6 +1976,8 @@ class GolfGame {
       ball: [this.ball[0], this.ball[1]],
       aimRad: this.aimRad,
       clubId: this._activeClub().id,
+      ...(this.pendingShot ? { pending: this.pendingShot } : {}),
+      ...(Number.isInteger(this.pinIdx) ? { pinIdx: this.pinIdx } : {}),
       at: Date.now(),
     });
     return this.saveOk;
@@ -1985,6 +2031,7 @@ class GolfGame {
     // actually changed are put back over the top of it. The order matters: the club is set before
     // `_syncTempo`, because the swing's tempo is per club and a putter restored at driver tempo
     // would move the needle under the player's thumb on their very first tap back.
+    this._resumePinIdx = sv.pinIdx;
     this._enterHole();
     this.ball = [sv.ball[0], sv.ball[1]];
     this.shotN = sv.shotN;
@@ -2002,6 +2049,10 @@ class GolfGame {
     this.intro = null;
     this._aimCamera(true);
     this._paintHud();
+    // A SHOT WAS IN THE AIR WHEN THE APP DIED (2026-10-29): replay it to its settle. The stroke
+    // counts and the ball lands where the engine put it; nothing is re-chosen. `_settleShot`
+    // saves the resting state itself (or the water beat / hole result does).
+    if (sv.pending && this._replayPending(sv.pending)) return true;
     // RE-SAVE, AND THIS LINE IS NOT OPTIONAL. `_enterHole` above puts the ball on the TEE and saves
     // that, so without this the file on disk says "hole 1, shot 1, at the tee" the moment a round
     // is resumed - and a second kill would hand the player back a round they had already replayed
@@ -2082,6 +2133,7 @@ class GolfGame {
   _settleShot() {
     const a = this.anim;
     this.anim = null;
+    this.pendingShot = null;
     // A look-around DURING the shot ends with the shot. Holding it would leave the next address
     // framed on wherever the player was watching from, which is not where their ball is now.
     if (this.previewDx || this.previewDy) {

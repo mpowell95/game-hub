@@ -168,3 +168,7 @@ DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
 `node boggle/js/test.js` · `node tools/test-boggle-mp.mjs` · `node tools/test-boggle-es.mjs` · `node
 tools/tune-boggle-es.mjs [--ai]`.
+
+## The round clock is monotonic, and saved every tick (2026-10-29)
+
+Solo and MP count `performance.now()`; a wall clock moved back adds nothing (a suspended page is charged by it). `remainingSec`/`remainingMs` are saved on EVERY tick (solo save and the MP snapshot), so quit-and-reopen returns the time you had. MP reads the wall clock once when the round arrives (`entryRemainingMs` in `mp-round.js`: never more than the whole round, never more than the last saved tick of the same round) and then runs on its own clock. `saveGame` returns for MP (the solo slot is never written by an MP round). Supersedes "`_endsAt` is recomputed as `Date.now() + remainingSec * 1000`" above.

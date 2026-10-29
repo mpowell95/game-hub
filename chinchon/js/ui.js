@@ -964,6 +964,10 @@ class ChinchonUI {
         const from = this._drawSource(payload.source);
         if (p && p.isHuman) { this._newCardId = payload.card.id; this._newFlown = !!from; }
         if (p && p.isHuman && from) this._arriving = new Set([payload.card.id]);
+        // SOLO: the draw is committed the moment it happens (2026-10-29). Saved BEFORE any await so a
+        // quit right after seeing the card resumes with it in the hand, not with the stock / discard
+        // choice open again.
+        if (!this.mp && !this.ch) this._soloSaveSnapshot({ midTurn: true });
         try { this.render(); } finally { this._arriving = null; }
         const flown = from ? this._flyDraw(p, payload, from) : Promise.resolve();
         if (this.mp) await this._mpAfterDecision(p, { t: 'draw', src: payload.source });
@@ -2910,12 +2914,12 @@ class ChinchonUI {
    *  forcing round-granularity, so it saves every turn boundary too -- a match
    *  abandoned mid-round now restores mid-round instead of only at the last round
    *  boundary. */
-  _soloSaveSnapshot() {
+  _soloSaveSnapshot(opts) {
     if (!this.game || this.mp) return;
     try {
       // `counts` (2026-10-23, additive): this match's closes so far, so a resumed match still
       // records them at its end (a restore used to start them at 0).
-      saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot(),
+      saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot(opts),
         counts: { closes: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTens: this._matchMinusTens || 0 } });
     } catch { /* private mode / quota */ }
   }
