@@ -7,6 +7,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import * as LL from '../../js/live-leave.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
 import { GAME_ART } from '../../js/game-art.js';
@@ -788,6 +789,7 @@ class Hoops4 {
     // NEVER the move log, whose entries this loop walks strictly by `seq`. A chat line in `moves`
     // would stall the lockstep at the first gap it made.
     if (this._chat) this._chat.onReactions(room.reactions, this.mp.role);
+    this.mp.lastRoom = room;
     const log = room.moves || {};
     // STRICTLY IN ORDER, and only once. Out-of-order or duplicated application is how two boards
     // stop being the same board, which is the failure every lockstep invariant in js/CLAUDE.md
@@ -799,7 +801,48 @@ class Hoops4 {
       if (entry.by === this.mp.role) continue;        // this device already applied its own shot
       this._applyRemote(entry.move);
     }
-    if (room.status === 'ended' && this.match && !this.match.over) this.toast(t('mpLost'));
+    if (room.status === 'ended' && this.match && !this.match.over && !this.mp.decided) {
+      // A leave that decided the match (js/live-leave.js): this phone's win, or its loss on a claim.
+      let res = 'none';
+      if (this._liveInPlay()) {
+        res = LL.onRoomEnded(room, { statsId: 'hoops4', key: this._liveKey(), n: 1, mySeat: this.mp.role,
+          fn: 'recordResult', winArgs: ['hoops4', 'mp', true], opps: [] });
+      }
+      this.mp.decided = true;
+      if (res !== 'none') this.recorded = true;
+      LL.hideClaim(this.root);
+      const name = this.themName();
+      this.toast(res === 'won' ? LL.lt('ll_left_win', { name }) : res === 'lost' ? LL.lt('ll_lost', { name }) : t('mpLost'));
+      return;
+    }
+    if (this._liveCanClaim()) LL.showClaim(this.root, () => this._liveClaim()); else LL.hideClaim(this.root);
+  }
+
+  // --- leaving a live room (2026-10-29, js/live-leave.js) ----------------------------------------
+  // One match per room (key game number 1). After your first shot, leaving (Menu > leave, the hub,
+  // any unmount: no rejoin here) is YOUR loss and the room ends with your forfeit, so the other phone
+  // records its win. A closed app leaves the loss armed; after 90 s of silence the other phone may
+  // "Claim win". No head-to-head (live Hoops never wrote any).
+  _liveKey() { const mp = this.mp; return mp && mp.kind === 'live' ? LL.liveKey('hoops4', mp.code, 1) : null; }
+  _liveInPlay() { return !!(this.mp && this.mp.kind === 'live' && !this.mp.decided && this.match && !this.match.over && !this.recorded); }
+  _liveOppRole() { return this.mp.role === 'host' ? 'guest' : 'host'; }
+  _liveOppAway() { const r = this.mp && this.mp.lastRoom; return r ? LL.awayMs(r[this._liveOppRole()]) : 0; }
+  _liveOppMoved() {
+    const r = this.mp && this.mp.lastRoom, by = this.mp && this._liveOppRole();
+    return !!(r && Object.values(r.moves || {}).some((e) => e && e.by === by));
+  }
+  _liveCanClaim() { return this._liveInPlay() && this._liveOppAway() >= LL.CLAIM_MS && this._liveOppMoved(); }
+  _liveCosts() { return this._liveInPlay() && this._liveOppAway() < LL.CLAIM_MS && LL.leaveCosts('hoops4', this._liveKey()); }
+  _liveClaim() {
+    if (!this._liveCanClaim()) return;
+    const mp = this.mp;
+    mp.decided = true;
+    this.recorded = true;
+    LL.recordLeaveWin('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', true], []);
+    LL.hideClaim(this.root);
+    if (this._roomStop) { try { this._roomStop(); } catch {} this._roomStop = null; }
+    LL.leaveWithForfeit(this.net, mp.code, mp.role, this._liveOppRole(), 1, true).catch(() => {});
+    this.toast(LL.lt('ll_claimed'));
   }
 
   /** Apply the other player's shot to this board, and paint exactly what a local one paints. */
@@ -1050,6 +1093,7 @@ class Hoops4 {
   // js/game-stats.js at the player's shots, dropped by the real result, taken by a quit.
   cpuDiff() { return ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium'; }
   quitCostsLoss() {
+    if (this.mp && this.mp.kind === 'live') return this._liveCosts();
     return !this.mp && !!this.match && this.match.vsCpu && !this.match.over && !this.recorded && quitLossArmed('hoops4');
   }
   takeQuit() {
@@ -1588,6 +1632,7 @@ class Hoops4 {
     this.busy = false;
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
+    if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], []);
 
     if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
     this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
@@ -1700,7 +1745,9 @@ class Hoops4 {
           this.mp.MP.countFinished(this.mp.id, won, (g.over && g.over.at) || Date.now());
           // Seen right here, so the away-from-the-board Game Over popup never repeats it.
           try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
-        } else if (this.mp) recordResult('hoops4', 'mp', m.winner === this.myPlayer);
+        } else if (this.mp && LL.alreadyCounted(this._liveKey())) {
+          // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
+        } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); recordResult('hoops4', 'mp', m.winner === this.myPlayer); }
         else if (m.vsCpu) { dropQuitLoss('hoops4'); recordResult('hoops4', this.cpuDiff(), r.won); }
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
@@ -1760,8 +1807,18 @@ class Hoops4 {
   _stopRoom() {
     if (this._roomStop) { try { this._roomStop(); } catch {} this._roomStop = null; }
     const mp = this.mp;
-    if (this.net && mp && mp.kind === 'live' && mp.code) {
-      try { this.net.leaveRoom(mp.code, mp.role); } catch {}
+    LL.hideClaim(this.root);
+    if (this.net && mp && mp.kind === 'live' && mp.code && !mp.decided) {
+      if (this._liveCanClaim()) this._liveClaim();
+      else if (this._liveCosts()) {
+        mp.decided = true;
+        this.recorded = true;
+        LL.forfeitNow('hoops4');
+        LL.leaveWithForfeit(this.net, mp.code, mp.role, mp.role, 1).catch(() => {});
+      } else {
+        if (this._liveInPlay()) LL.disarmLeave('hoops4');
+        try { this.net.leaveRoom(mp.code, mp.role); } catch {}
+      }
     }
     if (this.net) { try { this.net.stopHeartbeat(); } catch {} }
   }
@@ -1805,6 +1862,7 @@ class Hoops4 {
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
   takeQuitLoss('hoops4');   // a match whose page closed mid-play (no destroy ran) is that match's loss
+  LL.settleLeave('hoops4');  // the same for a live room (js/live-leave.js; no rejoin here)
   instance = new Hoops4(container);
   instance.mount();
   return instance;
