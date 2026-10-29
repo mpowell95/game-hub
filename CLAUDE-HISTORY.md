@@ -1487,3 +1487,14 @@ apart so no English number moves: `ww.es` beside `ww.lv` (merged per level in pl
 `gamehub.wordweaver.es.save.v1`, pending entries with `lang: 'es'`. Quality pass by reading the grid words:
 subtitles drop the tilde, so ANO ranked as if it were AÑO; English loans (SET, TOP, STOP, JET) came in through
 the subtitle list. Grid words now need the dictionary (or a conjugation of it), plus a hand-read `GRID_BLOCK`.
+
+## 2026-10-29: Spelling Bee checks re-evaluated ("You can't void everybody")
+
+By midday the server had voided three of the day's players: Ana (Spanish, beside Matt), Lili (Spanish), King of Games
+(English). Matt: "You can't void everybody. Undo today's voids and reevaluate the checks so this doesn't happen." The
+reasons were Back+N in 60 s (all three; since #1315 the first open counts as a return), right vs wrong (Ana), a no-miss
+burst (Lili, 23 at 5.1 s: a fluent player) and re-typed (King of Games, 2). New rules (`verdict`, `js/bee-fairplay.js`):
+strong = sorted run, best words first; supporting = burst, speed, re-typed with ALL THREE needed; leave and right vs
+wrong retired. Stored flags are re-judged from their saved numbers (`flagStands`), so the three voids lifted without
+any Firebase write (a session cannot write `adminConfig/` anyway). King of Games' Oct 28 flag still stands (sorted run
+7); his hand voids are untouched. The logs themselves are admin-read, so no full replay was possible from a session.
