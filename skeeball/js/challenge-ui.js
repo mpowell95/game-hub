@@ -363,7 +363,9 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     const end = el.querySelector('[data-act="end"]');
     if (end) end.addEventListener('click', async () => {
       // Two taps: the first says what the second will do.
-      if (!end.dataset.armed) { end.dataset.armed = '1'; end.textContent = t(`ch_end_sure_${endKind}`, { name: who }); return; }
+      // After the challenger's first game, calling it off is a loss for whoever does it (2026-10-29).
+      const loss = endKind !== 'resign' && typeof CH.cancelCosts === 'function' && CH.cancelCosts(g);
+      if (!end.dataset.armed) { end.dataset.armed = '1'; end.textContent = t(`ch_end_sure_${endKind}${loss ? '_loss' : ''}`, { name: who }); return; }
       if (state.busy) return;
       state.busy = true;
       end.disabled = true;
