@@ -55,16 +55,66 @@
     "challenge":      { ".read": "auth != null", ".write": "auth != null" },
     "deviceReports":  { ".read": "auth != null", ".write": "auth != null" },
     "flight":         { ".read": "auth != null", ".write": "auth != null" },
-    "cuppong":        { ".read": "auth != null", ".write": "auth != null" },
-    "darts":          { ".read": "auth != null", ".write": "auth != null" },
-    "flicksoccer":    { ".read": "auth != null", ".write": "auth != null" },
-    "eightball":      { ".read": "auth != null", ".write": "auth != null" },
-    "archery":        { ".read": "auth != null", ".write": "auth != null" },
-    "chinchon":       { ".read": "auth != null", ".write": "auth != null" },
-    "escoba":         { ".read": "auth != null", ".write": "auth != null" },
-    "battlearena":    { ".read": "auth != null", ".write": "auth != null" },
-    "battleship":     { ".read": "auth != null", ".write": "auth != null" },
-    "hoops":          { ".read": "auth != null", ".write": "auth != null" },
+    "cuppong": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "darts": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "flicksoccer": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "eightball": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "archery": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "chinchon": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "escoba": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "battlearena": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "battleship": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
+    "hoops": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "moves": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
     "players":        { ".read": "auth != null", ".write": "auth != null" },
     "directory":      { ".read": "auth != null", ".write": false },
     "boards":         { "v1": { "lb": { ".read": "auth != null" }, "bee": { ".read": "auth != null" }, "beeOwn": { ".read": "auth != null" } }, ".write": false },
@@ -160,7 +210,10 @@
     "selfies":        { ".read": "auth != null", ".write": "auth != null" },
     "skeeballThrows": { ".read": "auth != null", ".write": false },
     "skeeChallenges": { ".read": "auth != null", ".write": "auth != null",
-      "games": { "$id": { "$side": { "started": { "$leg": {
+      "games": { "$id": {
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "$side": { "started": { "$leg": {
         ".validate": "$leg.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['at', 'k']) && newData.child('k').isString() && newData.child('k').val().length <= 40 && ((data.exists() && newData.child('at').val() === data.child('at').val() && newData.child('k').val() === data.child('k').val()) || (!data.exists() && newData.child('at').val() === now && ($side === 'a' || $side === 'b') && root.child('msgAuth').child(auth.uid).val() === root.child('skeeChallenges').child('games').child($id).child($side).child('code').val()))"
       } } } } } },
     "usernames":      { ".read": "auth != null", ".write": "auth != null" }
