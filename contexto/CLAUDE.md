@@ -260,3 +260,7 @@ test for `js/ui.js` itself — same gap most of this repo's non-immersive puzzle
 own CLAUDE.md states the same limit) — beyond `tools/check-no-scroll.mjs`'s two extra-screen entries (how
 to play, previous games) and a manual Playwright pass (typing real guesses, a hint, give up,
 previous games, reload-resume, both hosts, both phone heights, light/dark, EN/ES).
+
+## The other phones by the server's clock (2026-10-29, second pass)
+
+`_finish` keeps its log entry's id (`rec.doneId`); `_recordFinished` sends the log, then counts every other entry the SERVER received before it (`logSummary(..., { exclude })`), never the phone-time cut-off. The recorder carries `k` and `unchecked` (no other phone could be read); the server judges on that entry too (alerts only). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

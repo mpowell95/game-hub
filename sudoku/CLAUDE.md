@@ -328,3 +328,7 @@ probe (start a puzzle, tap an empty cell, tap a digit, confirm it landed) and th
 sync of `sd.bestTimeMs` against a live Firebase project — the zero-sentinel guard is proven by the
 `players-agg.js` merge logic and by `tools/players-agg.test.mjs`'s structural probe, not by an
 end-to-end sync test.
+
+## Solved stays solved; mistakes count like hints; two tabs (2026-10-29, second pass)
+
+Undo refuses a solved puzzle; a recorded puzzle's id (hash of givens + answer) goes in `gamehub.sudoku.done.v1` (newest 300, a guard) and never records again. A solve with any mistake is a win but not a no-hint solve (Matt). Every write re-reads the save slot: the same puzzle takes the larger hint and mistake counts; a slot another tab finished or replaced is never overwritten (the stale board returns to the menu). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

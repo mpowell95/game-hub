@@ -123,3 +123,7 @@ a level above it and saves it at once; a tier whose current level is already rec
 level (its kept-aside replay is not resumed). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed
 2026-10-29". Checked on a pre-change save (Expert 317): one win, Restart + re-solve records nothing,
 reopening starts 318.
+
+## One win per level per PERSON; two tabs (2026-10-29, second pass)
+
+Each solve names its level (`nb.lv[tier]`, a range string) and the record snapshots how far its untracked wins reach (`nb.leg`); `js/players-agg.js` counts a level once per person per tier (a fresh storage replaying Expert 1, 2, 3 adds nothing). The stored `won` is merged before the record check and every save (`mergeStoredWon`), so two tabs cannot both record a level. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

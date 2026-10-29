@@ -594,3 +594,7 @@ it; gone on the gallery, list and ordinary racks. Panel `js/match-chat-ui.js`, d
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit: an ANSWERED challenge whose 3 days ran out on or after 2026-10-29 no longer expires: the player on turn has 7 days from the hand-over, then loses (`forfeitDeadline`, `isTimedOut`, `withTimeout` in `readChallenge`; rows `ff`; "Timed out"). Unanswered ones still expire at 3 days; one expired before stays expired. Skeeball challenges record no stats, so no id is noted.
+
+## Challenge racks feed no objective (2026-10-29, second pass)
+
+A challenge rack is recorded and shown like any rack, and beside it `sk.chg` (its share of the global goal counters) and `sk.chk[machine]` (that machine's record before its first challenge rack, plus every other rack since). Objectives read `goals.js goalStore()`, the record without challenge racks, so they cannot pre-earn the next machine. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

@@ -106,3 +106,7 @@ chunk `floor((n-1)/250)`), written by `tools/build-word-weaver-data.mjs`. Level 
 
 `node word-weaver/js/test.js`, `node tools/test-game-conventions.mjs`, `node tools/check-no-scroll.mjs word-weaver`
 (setup, How to play, Expert play, level done; needs data in `data/`), `node tools/test-i18n-strings.mjs`.
+
+## The most hints across records (2026-10-29, second pass)
+
+A person's level reads the MOST hints any of their records used, stars capped by them (`wwMerge`, both ladders); `wwBest` still guards each record's own entry. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

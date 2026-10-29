@@ -176,3 +176,7 @@ Solo and MP count `performance.now()`; a wall clock moved back adds nothing (a s
 ## Quitting and easier settings (2026-10-29)
 
 Give up after the first word entered (`moved` in the save) = ONE loss, asked twice. The 2-minute timer records one step down (`statsDiff`: the computer's share does not depend on the clock). Known gap: the clock still pauses while away. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Solo: time away counts (2026-10-29, second pass)
+
+The known gap above is closed: hidden mid-round, the moment and time left are stamped (and saved, `away`); back, or resumed from that save, whatever the ticks did not charge is charged, topped up by the server's clock. A round whose time ran out while away ends and records on return. Leaving through the hub still pauses. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

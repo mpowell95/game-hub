@@ -393,3 +393,7 @@ or best % per person. `js/CLAUDE.md`, "Minesweeper's own board, and no \"YOU\"".
 ## Quitting and easier settings (2026-10-29)
 
 A started board thrown away (the face's New board, or New game over a level's paused board) is ONE loss at that level (it protected a win rate); the question says "Counts as a loss." Pausing a board (level button, the hub) is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Time away counts; two tabs (2026-10-29, second pass)
+
+Hidden with a started board on screen: the clock is banked and the moment stamped (also into the level's save as `away`); back, or resumed from that save, the time away is charged (`js/server-time.js measureAway`, topped up by the server's clock). The menu and How to play still pause. A board is played and saved only while its level's slot still holds it unfinished (`slotHolds`), so a mine dug in one tab ends it in the other. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

@@ -256,7 +256,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`tools/read-install-state.mjs --screens`) |
 | `bug-report.js` / `bug-report-ui.js` | Report a bug, offline outbox, Matt's replies (`bugReplies/<deviceId>/`), soft delete |
 | `messages.js` / `messages-ui.js` | player-to-player Messages (see "Messages") |
-| `server-time.js` | the server's clock (`.info/serverTimeOffset`): `liveNow`/`serverNow`/`bestNow`; a phone clock never decides a puzzle day or when answers show (2026-10-29) |
+| `server-time.js` | the server's clock (`.info/serverTimeOffset`): `liveNow`/`serverNow`/`bestNow`; a phone clock never decides a puzzle day or when answers show (2026-10-29); `awayStamp`/`measureAway`: time a board sat on screen in the background counts |
 | `live-read.js` | `watchPath`/`readPath`: a watched Firebase path is downloaded once, and a read of it answers from the watch (each challenge game's index, 2026-10-22) |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Multiplayer screen (was Challenges; reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |

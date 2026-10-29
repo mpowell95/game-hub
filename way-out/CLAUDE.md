@@ -477,3 +477,7 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   too. The footers' leaders still come from `_loadRushRows`.
 - Tuning (10 s / 0.5 s / 3 s, board steps) is a first guess; every run is stored raw so it can be set
   from real runs.
+
+## Other storages' slips at read time; hints carry over; Rush by the server's clock (2026-10-29, second pass)
+
+Each record stamps its first slip (`wo.sf`) and first clear (`wo.ct`) per level (server time where known); `woCapCl` caps a clear by the slips the person's OTHER records stamped before it (players-agg, so phone and server boards agree; no stamps = never capped). The clear re-reads the carry key and this storage's own `wo.sl` (two tabs). The clearing try's hints go into `p` (Matt: a Replay never wins a hint back). Rush runs and saves use the server's time; a run with a clock known wrong is kept as `late`, never counted. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

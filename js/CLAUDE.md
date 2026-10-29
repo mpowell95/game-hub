@@ -627,3 +627,12 @@ Hub: `tools/test-messages.mjs`, `tools/test-match-chat.mjs`, `tools/test-bug-rep
 `tools/test-career-sync.mjs`, `tools/test-i18n-strings.mjs`, `tools/test-new-badge.mjs`, `tools/test-arcade-scores.mjs`.
 Conventions: `tools/test-game-conventions.mjs`. Run only what covers your change; never `tools/run-all-tests.mjs`
 unless Matt asks.
+
+### Holes closed 2026-10-29, second pass: the shared parts
+
+`js/server-time.js` gained `awayStamp`/`measureAway` (time a board spent on screen in the background: phone time,
+`performance.now()` on the same page, then the server's clock) and `clockSuspect` (the phone set back since the last
+measurement). `js/players-agg.js`: Arrow Maze level sets capped per record (`woCapCl`), `wo.sl` merged; Nuts & Bolts
+counted once per level per person (`dedupeNutsBolts`); Word Weaver merged with `wwMerge` (most hints). The leaderboard
+writes no player code into the page (`_msgTo`, `_pkeys`: opaque indexes). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`,
+"Holes closed 2026-10-29 (second pass)".
