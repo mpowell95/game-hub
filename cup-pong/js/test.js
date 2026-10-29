@@ -315,6 +315,8 @@ ok('the whole rack area is on the table',
     ok('island: not with 2 cups left', !lone(2).canIsland());
     ok('island: not on the last cup', !lone(1).canIsland());
     ok('island: an old challenge (islandThree off) still could with 2', lone(2, { islandThree: false }).canIsland());
+    ok('island: a stored call at 2 cups still replays (an older phone made it)', lone(2).callIsland('k0', true).length === 1);
+    ok('island: on the last cup it is never offered', lone(1).callIsland('k0').length === 0);
     const ow = lone(3, { async: true }); ow.owed.b = 1;
     ok('island: owed cups do not count as standing', !ow.canIsland());
     ok('islandThree survives a save', Match.fromJSON(new Match().toJSON()).islandThree && !Match.fromJSON(new Match({ islandThree: false }).toJSON()).islandThree);
