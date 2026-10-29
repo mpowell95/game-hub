@@ -79,6 +79,24 @@ export function wwBest(a, b) {
   return out;
 }
 
+/** ONE LEVEL ACROSS A PERSON'S RECORDS (2026-10-29): hints learn a level, so the MOST hints any record
+ *  used on it count (Math.max), and its stars are capped by them. `wwBest` (fewest hints) let hints
+ *  taken on one storage and a clean completion on another (Safari next to the Home Screen app) earn
+ *  3 stars. Read time only (js/players-agg.js): each record keeps what it stored. A record whose hints
+ *  are unknown (no `h`) caps nothing. Both ladders (ww.lv and ww.es) merge this way. */
+export function wwMerge(a, b) {
+  const x = entry(a), y = entry(b);
+  if (!x) return y;
+  if (!y) return x;
+  const out = { s: Math.max(x.s, y.s) };
+  if (x.h != null || y.h != null) {
+    out.h = Math.max(x.h ?? 0, y.h ?? 0);
+    out.s = Math.min(out.s, wwStarsFor(out.h));
+  }
+  if (x.t || y.t) out.t = Math.min(x.t || Infinity, y.t || Infinity);
+  return out;
+}
+
 /** A record's completed levels of ONE ladder as { n: { s, h?, t? } }, n a number >= 1. `rec` is
  *  `games.wordweaver`; `lang` 'en' (ww.lv, the default) or 'es' (ww.es). */
 export function wwLevels(rec, lang = 'en') {

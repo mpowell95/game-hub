@@ -118,10 +118,10 @@ const rows = A.aggregatePlayers({
 });
 ok('two phones are one person', rows.length === 1);
 const m = rows[0].games.wordweaver;
-ok('merge: level 2 on both phones counts ONCE, with the best of each field', m.ww.lv.L2.s === 3 && m.ww.lv.L2.h === 0 && m.ww.lv.L2.t === 2);
+ok('merge: level 2 on both phones counts ONCE: the MOST hints either used (1), stars capped by them (2), the earliest time (2026-10-29)', m.ww.lv.L2.s === 2 && m.ww.lv.L2.h === 1 && m.ww.lv.L2.t === 2);
 ok('merge: levels only one phone finished are there', m.ww.lv.L1 && m.ww.lv.L5 && m.ww.lv.L5.s === 1);
 ok('merge: extra words add', m.ww.x === 12);
-ok('merge: 3 distinct levels, 3 + 3 + 1 = 7 stars', P.wwCleared(m) === 3 && P.wwStars(m) === 7 && P.wwThreeStars(m) === 2);
+ok('merge: 3 distinct levels, 3 + 2 + 1 = 6 stars (hints on one phone cap a clean finish on the other)', P.wwCleared(m) === 3 && P.wwStars(m) === 6 && P.wwThreeStars(m) === 1);
 ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
 
 // Plays from before the bands (byDiff 'ladder', rule 5) still count beside band plays.
@@ -159,7 +159,7 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
     dA: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: pA, updatedAt: 2 },
     dB: { profile: { name: 'Pat', playerId: 'PAT11' }, stats: pB, updatedAt: 1 },
   })[0].games.wordweaver;
-  ok('es: merge takes the best of each Spanish level, beside the English map', mm.ww.es.L3.s === 3 && mm.ww.es.L3.t === 5 && mm.ww.es.L4 && mm.ww.lv.L3.s === 3 && P.wwCleared(mm) === 3);
+  ok('es: a Spanish level merges the same way (3 hints on one phone: 1 star), beside the English map', mm.ww.es.L3.s === 1 && mm.ww.es.L3.h === 3 && mm.ww.es.L3.t === 5 && mm.ww.es.L4 && mm.ww.lv.L3.s === 3 && P.wwCleared(mm) === 3);
 }
 
 // --- the leaderboard ranks by total stars (static checks: the overlay needs a DOM) ---

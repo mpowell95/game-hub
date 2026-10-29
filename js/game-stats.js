@@ -2199,7 +2199,9 @@ export function recordGridlock(band, f = {}) {
     const s = Math.max(1, Math.min(3, Math.floor(Number(f.stars) || 1)));
     const c = h === 0 && !(Number(g.gl.hint['L' + n]) > 0) ? 1 : 0;
     const e = { m, s, c };
-    if (c) e.t = Date.now();
+    // The crown's time decides it against a hint on another phone (gridlock-points glCrowned), so it
+    // is the SERVER's time when the game knows it (`f.at`, 2026-10-29), not the phone's alone.
+    if (c) e.t = Math.floor(Number(f.at)) > 0 ? Math.floor(Number(f.at)) : Date.now();
     g.gl.lv2['L' + n] = glBest(g.gl.lv2['L' + n], e);
   }
   st.updatedAt = new Date().toISOString();
@@ -2211,7 +2213,7 @@ export function recordGridlock(band, f = {}) {
  *  THE LAW rule 2's direction for this field: the earliest hint is the fact). Not a play, so not
  *  rate-gated. From then on that level earns half its points and no crown, unless it had already been
  *  solved with no hint before (js/gridlock-points.js glCrowned). */
-export function recordGridlockHint(level) {
+export function recordGridlockHint(level, at) {
   notePlay('gridlock', 'recordGridlockHint', arguments);
   const n = Math.floor(Number(level) || 0);
   if (n < 1) return null;
@@ -2220,7 +2222,7 @@ export function recordGridlockHint(level) {
   ensureGl(g);
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
-  g.gl.hint[k] = Date.now();
+  g.gl.hint[k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();   // the server's time where known (2026-10-29)
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

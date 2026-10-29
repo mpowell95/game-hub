@@ -22,6 +22,7 @@ import { LEVELS } from './levels.js';
 import { pieceArt, RED, WOOD_TONES, CAR_COLORS } from './art.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { bestNow } from '../../js/server-time.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.gridlock.v1';     // { look, band } (+ the first build's `next`, kept as stored, unread)
@@ -688,7 +689,7 @@ class Gridlock {
     // Remembered per LEVEL in the stats store (and synced), not just in this attempt: leaving the
     // level and coming back must not forget it (Matt, 2026-10-14). From now on this level earns half
     // its points and no crown, unless it was already solved with no hint.
-    recordGridlockHint(this.n);
+    recordGridlockHint(this.n, bestNow());
     this._save();
     this._paintHint();
     this._paintHud();
@@ -722,7 +723,7 @@ class Gridlock {
     const stars = glStars(moves, this.fewest);
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
-    const res = recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints });
+    const res = recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();

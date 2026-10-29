@@ -14,7 +14,7 @@ import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest } from './word-weaver-points.js';
+import { wwMerge } from './word-weaver-points.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver']);  // solo: win-only (no loss axis) or score-based
 
@@ -489,20 +489,21 @@ export function aggregatePlayers(all, corrections) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it Word Weaver's
         // levels and stars read as nothing the moment a second device syncs (THE LAW rule 1). A level
         // finished on two phones is ONE level: per level the best of each field (most stars, fewest
-        // hints, the EARLIEST time), never a sum (js/word-weaver-points.js wwBest). Extra words add.
+        // hints, the EARLIEST time), never a sum (js/word-weaver-points.js wwMerge: since 2026-10-29 the MOST
+        // hints any record used, stars capped by them). Extra words add.
         if (!dst.ww) dst.ww = { lv: {}, x: 0 };
         dst.ww.x += Math.max(0, Math.floor(Number(src.ww.x) || 0));
         const lv = (src.ww.lv && typeof src.ww.lv === 'object') ? src.ww.lv : {};
         for (const k of Object.keys(lv)) {
           if (!/^L\d+$/.test(k)) continue;
-          const best = wwBest(dst.ww.lv[k], lv[k]);
+          const best = wwMerge(dst.ww.lv[k], lv[k]);
           if (best) dst.ww.lv[k] = best;
         }
         // The Spanish ladder (2026-10-29), merged the same way into its own map.
         const es = (src.ww.es && typeof src.ww.es === 'object' && !Array.isArray(src.ww.es)) ? src.ww.es : {};
         for (const k of Object.keys(es)) {
           if (!/^L\d+$/.test(k)) continue;
-          const best = wwBest((dst.ww.es || {})[k], es[k]);
+          const best = wwMerge((dst.ww.es || {})[k], es[k]);
           if (best) (dst.ww.es || (dst.ww.es = {}))[k] = best;
         }
       } else if (g === 'contexto' && src.ct) {
