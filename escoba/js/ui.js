@@ -3199,8 +3199,12 @@ class EscobaUI {
   _chRenderMenu() {
     const kind = this._chEndKind();
     const confirming = this._menuConfirm === 'chend';
+    // After the sender's first play, calling it off is a loss for whoever does it (2026-10-29).
+    const ch = this.ch;
+    const loss = (kind === 'cancel' || kind === 'decline') && typeof this.MP.cancelCosts === 'function'
+      && (this.MP.cancelCosts(ch.game) || ch.log.some((e) => e.by !== this.MP.recipientOf(ch.game)));
     const endBtn = kind ? `<button class="eb-btn eb-btn-ghost ${confirming ? 'eb-confirm' : ''}" data-action="menu-chend">${
-      esc(confirming ? t(`ch_confirm_${kind}`) : t(`ch_${kind}`))}</button>` : '';
+      esc(confirming ? t(`ch_confirm_${kind}${loss ? '_loss' : ''}`) : t(`ch_${kind}`))}</button>` : '';
     this.el.menu.innerHTML = `<div class="eb-scrim" data-action="close-menu"></div>
       <div class="eb-sheet eb-menu-sheet">
         <h2 class="eb-sheet-title">${esc(t('menu_title'))}</h2>
