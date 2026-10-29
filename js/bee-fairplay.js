@@ -22,8 +22,9 @@ export const QUEEN = 9;
 // order including all pangrams is simply not plausible"): the first 5 answers after opening or coming
 // back to the app, within 2 minutes, are all among the 6 highest-scoring answers not yet found, each
 // worth 7+ points. Supporting (any two together void the day): LEAVE AND BURST, 5+ right answers
-// within 60 s of coming back to the app (misses allowed); SPEED, Genius within 10 minutes of time in
-// the game; RIGHT VS WRONG, 2+ right answers per wrong guess up to Genius; and RE-TYPED, fewer
+// within 60 s of coming back to the app (misses allowed); SPEED, Genius within 10 minutes of first
+// opening the puzzle, clock time with NOTHING skipped (2026-10-29, Matt: "you SHOULD NOT SKIP
+// ANYTHING"; it used to drop breaks); RIGHT VS WRONG, 2+ right answers per wrong guess up to Genius; and RE-TYPED, fewer
 // already-found guesses than 1 per 10 right answers up to Genius (honest players re-type words they
 // forgot they had; a copied list never repeats). Speed, right vs wrong and re-typed count only when
 // the log holds every word on the board; right vs wrong and re-typed only with 20+ right answers. A
@@ -31,7 +32,7 @@ export const QUEEN = 9;
 
 export const RULES = {
   sortedRun: 6, burstWords: 10, burstAvgMs: 6000, bestWords: 5, bestOf: 6, bestMinPoints: 7, bestMs: 120000,
-  leaveWords: 5, leaveMs: 60000, geniusMs: 10 * 60 * 1000, awayMs: 5 * 60 * 1000, rightPerWrong: 2, retypeShare: 0.1, judgeRight: 20,
+  leaveWords: 5, leaveMs: 60000, geniusMs: 10 * 60 * 1000, rightPerWrong: 2, retypeShare: 0.1, judgeRight: 20,
 };
 const isOk = (x) => x.r === 'ok' || x.r === 'bonus';
 
@@ -53,7 +54,7 @@ export function scoreOf(word, letters) {
  *  every one of them (a game begun before logging, or on another phone, would look fast: Lili, Oct
  *  27). `puzzle`: { key, top } (top = the puzzle's highest answer scores, high first; functions/bee.js
  *  PUZZLES); without it BEST WORDS FIRST is skipped. Returns { void, strong: [..], supporting: [..],
- *  sorted, burst: {n, avg}, best, leave, geniusMs (ms of time in the game up to Genius, or null),
+ *  sorted, burst: {n, avg}, best, leave, geniusMs (ms from the first logged event to Genius, or null),
  *  right, wrong, retyped (up to Genius, or null) }. */
 export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
   const ev = (Array.isArray(entries) ? entries : Object.values(entries || {}))
@@ -125,17 +126,13 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
     }
   }
 
-  // Speed: time in the game (no gap after hiding or closing, none over 5 min) up to Genius ('win').
+  // Speed: clock time from the first logged event (opening the puzzle) to Genius ('win'). Nothing is
+  // skipped: breaks, hidden and closed time all count.
   const win = ev.find((x) => x.e === 'win');
   const logged = new Set(guesses.filter(isOk).map((x) => x.w)).size;
   let geniusMs = null, right = null, wrong = null, retyped = null;
   if (win && logged >= words) {
-    geniusMs = 0;
-    for (let i = 1; i < ev.length && ev[i].t <= win.t; i++) {
-      const gap = ev[i].t - ev[i - 1].t;
-      if (ev[i - 1].e === 'hidden' || ev[i - 1].e === 'close' || gap > RULES.awayMs) continue;
-      geniusMs += gap;
-    }
+    geniusMs = win.t - ev[0].t;
     // Right vs wrong and re-typed, up to Genius.
     const upTo = guesses.filter((x) => x.t <= win.t);
     right = upTo.filter(isOk).length;
