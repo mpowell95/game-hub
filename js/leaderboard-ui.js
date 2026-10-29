@@ -626,6 +626,8 @@ function boardView(list, id) {
       // Cup Pong's reracks go on their own line under "played": on one line the column grew wide
       // enough to run over the name and the tier pill (2026-10-28).
       sub2: (g) => {
+        // Sudoku / Murdoku: the number above is no-hint solves (2026-10-29).
+        if (noHintTierOf(g, id)) return tx('lb_nohint', 'no hints');
         const cr = id === 'cuppong' ? cpReracksOf(g) : null;
         return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
       },
@@ -974,6 +976,8 @@ function gameMetricAt(g, id, tier) {
   // Word Weaver ranks on POINTS: stars x the band's multiplier (1/2/3/4), over distinct levels
   // completed (js/word-weaver-points.js, Matt 2026-10-29); at a tier, that band's own points.
   if (id === 'wordweaver') return wwPoints(g.games.wordweaver, tier == null ? null : WW_TIERS[tier - 1]);
+  // Sudoku / Murdoku: a row with a no-hint solve is ranked and shown by its no-hint solves (2026-10-29).
+  if (NOHINT_GAMES.has(id) && noHintTierOf(g, id)) return noHintAt(g, id, tier);
   return winsAtTier(g, [id], tier);
 }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -1080,6 +1084,55 @@ function compareBoardRow(a, b, id) {
     boardMetricOf(a, id), boardMetricOf(b, id), id);
 }
 
+// --- NO-HINT SOLVES RANK FIRST: Sudoku and Murdoku (2026-10-29) --------------------------------
+// Matt: a solve that used hints is still a WIN, "but ranked below" (Pressing Hint on every square
+// solved an Expert Sudoku and counted as a full Expert win). So, the way Contexto ranks golds first:
+// every row with a no-hint solve ranks above every row without one; among those, difficulty
+// outranks score on the NO-HINT solves (an Expert no-hint solve beats 50 Easy ones), then the usual
+// tier-first rule over ALL wins breaks a tie; every other row is ranked by that usual rule. A row
+// with a no-hint solve has its no-hint count as its number (gameMetricAt), with "no hints" under it. No-hint counts come from players-agg.js (Sudoku
+// `sd.noHint`, worked out per record; Murdoku `mu.clean`). Wins from before hints were tracked per
+// solve count as no-hint only when proven (sdNoHintOf); otherwise they rank with the hint solves,
+// still counted and shown as wins (THE LAW rule 1). Read-time only: nothing stored changes.
+const NOHINT_GAMES = new Set(['sudoku', 'murdoku']);
+function noHintMap(g, id) {
+  const gm = ((g && g.games) || {})[id] || {};
+  const m = id === 'sudoku' ? (gm.sd || {}).noHint : (gm.mu || {}).clean;
+  return m && typeof m === 'object' ? m : {};
+}
+/** No-hint solves at `tier` (null = every tier), never more than the stored wins there. */
+function noHintAt(g, id, tier) {
+  const m = noHintMap(g, id), bd = (((g && g.games) || {})[id] || {}).byDiff || {};
+  let n = 0;
+  for (const k of Object.keys(m)) {
+    if (tier != null && tierOf(k) !== tier) continue;
+    n += Math.min(Math.max(0, m[k] | 0), Math.max(0, ((bd[k] || {}).won) | 0));
+  }
+  return n;
+}
+/** The tier a row's no-hint solves rank at: the selected filter's, else the hardest with one. 0 = none. */
+function noHintTierOf(g, id) {
+  if (!NOHINT_GAMES.has(id)) return 0;
+  if (_tier != null) return noHintAt(g, id, _tier) > 0 ? _tier : 0;
+  for (let tier = 4; tier >= 1; tier--) if (noHintAt(g, id, tier) > 0) return tier;
+  return 0;
+}
+/** No-hint rows first, tier-first on their no-hint solves; 0 when that does not separate the pair. */
+function compareNoHint(a, b, id) {
+  const ta = noHintTierOf(a, id), tb = noHintTierOf(b, id);
+  if (!ta && !tb) return 0;
+  if (ta !== tb) return tb - ta;
+  return noHintAt(b, id, tb) - noHintAt(a, id, ta);
+}
+/** The usual tier-first order over ALL wins (hint solves included), for a pair the no-hint rule
+ *  does not separate. */
+function compareAllWins(a, b, id) {
+  const tierOfRow = (g) => (_tier != null ? _tier
+    : boardRankTier((tier) => winsAtTier(g, [id], tier), id, (tier) => playsAtTier(g, [id], tier)));
+  const ta = tierOfRow(a), tb = tierOfRow(b);
+  return compareTierFirst(ta || 0, tb || 0, winsAtTier(a, [id], ta), winsAtTier(b, [id], tb), id);
+}
+
 /** THE BOARD'S ORDER, AS ONE FUNCTION - which is what stops the rows and their rank badges
  *  disagreeing (2026-09-08). `sortRows` orders the list with it, `gameDetail` numbers the badges
  *  with it, and By Game picks its leader row with it, so #1 on the board, the "1" chip and the
@@ -1107,6 +1160,8 @@ function boardMetricCmp(id) {
   // Contexto: medals, then the LOWER average guesses (Matt, 2026-09-29). Only a pair equal on
   // both is tied, so the rank badges agree with the order (see the note above).
   if (id === 'contexto') return (a, b) => compareContexto(ctOf(a), ctOf(b));
+  // Sudoku / Murdoku: no-hint solves first (2026-10-29), then every win.
+  if (NOHINT_GAMES.has(id)) return (a, b) => compareNoHint(a, b, id) || compareAllWins(a, b, id);
   // Cup Pong: equal wins, FEWER RERACKS ranks higher (Matt, 2026-10-28; counted from that day).
   if (id === 'cuppong') return (a, b) => compareBoardRow(a, b, id) || (cpReracksOf(a).r - cpReracksOf(b).r);
   return (a, b) => compareBoardRow(a, b, id);
@@ -1825,6 +1880,8 @@ function youValText(id, v) {
 function gapText(me, rec, id, b = (x) => x) {
   const k = gapKind(id);
   if (!k || !me || !rec || me.key === rec.key) return '';
+  // A no-hint record over a hint-only row: no difference in one unit to give (2026-10-29).
+  if (!noHintTierOf(rec, id) !== !noHintTierOf(me, id)) return '';
   const tier = boardTierOf(rec, id);
   const r = gameMetricAt(rec, id, tier);
   const m = gameMetricAt(me, id, tier);

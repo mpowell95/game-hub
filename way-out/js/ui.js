@@ -14,7 +14,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWayOut, recordWayOutReplay, recordWayOutRush, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
+import { recordWayOut, recordWayOutReplay, recordWayOutRush, noteWayOutSlips, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
 import { woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildB11, hasB11, B11_GEN, B11_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
@@ -379,6 +379,61 @@ function clearSave(band) {
   map[band] = null;
   writeJSON(LSAVES2_KEY, map, 'save');
 }
+// SLIPS STAY WITH THE LEVEL (2026-10-29, js/arrow-maze-time.js): New game used to start a level's
+// hints and lost hearts over on the same board, so hints could learn an Expert board's one order and
+// a clean second try took full points. New game now resets only the clock: the slips of the try it
+// throws away are CARRIED, kept here per (band, level, board) and only ever added to. A replay's
+// slips ride across its Restart, Try again and leaving the same way, until a replay of that level is
+// cleared (`R:<band>:<n>`). Device-local guard, never history; each record also keeps the most slips
+// per level (`wo.sl`, noteWayOutSlips) so the person's other storages see them.
+const SLIPS_KEY = 'gamehub.wayout.slips.v1';
+const slipInt = (v) => Math.max(0, Math.floor(Number(v) || 0));
+function readCarry(band, n, src) {
+  const e = readJSON(SLIPS_KEY)[`${band}:${n}:${srcKey(src)}`];
+  return slipInt(e && e.a);
+}
+function addCarry(band, n, src, add) {
+  if (!(slipInt(add) > 0)) return;
+  const map = readJSON(SLIPS_KEY), k = `${band}:${n}:${srcKey(src)}`;
+  map[k] = { a: slipInt(map[k] && map[k].a) + slipInt(add) };
+  writeJSON(SLIPS_KEY, map, 'slips');
+}
+/** The most slips per level stored by this person's OTHER records (`wo.sl`), from a players/ read:
+ *  { <band>: { L<n>: slips } }. Grouped by the same identity rule as the leaderboard. */
+function otherSlipsOf(recs, buildIdentity, prof, myId) {
+  const out = {};
+  try {
+    const all = Object.assign({}, recs || {});
+    all[myId] = { profile: { name: (prof && prof.name) || '', playerId: (prof && prof.playerId) || '' }, stats: {} };
+    const ident = buildIdentity(all), myKey = ident.keyFor(all[myId].profile, myId);
+    for (const id of Object.keys(recs || {})) {
+      if (id === myId || ident.keyFor(((recs[id] || {}).profile) || {}, id) !== myKey) continue;
+      const sl = (((((recs[id] || {}).stats || {}).games || {}).wayout || {}).wo || {}).sl;
+      if (!sl || typeof sl !== 'object') continue;
+      for (const band of Object.keys(sl)) {
+        const m = sl[band];
+        if (!m || typeof m !== 'object') continue;
+        const into = out[band] || (out[band] = {});
+        for (const k of Object.keys(m)) into[k] = Math.max(into[k] | 0, slipInt(m[k]));
+      }
+    }
+  } catch (err) { console.warn('[way-out] other storages\' slips not read', err); }
+  return out;
+}
+function readReplaySlips(band, n) { return slipInt(readJSON(SLIPS_KEY)[`R:${band}:${n}`]); }
+function writeReplaySlips(band, n, v) {
+  const map = readJSON(SLIPS_KEY), k = `R:${band}:${n}`;
+  if (slipInt(v) <= slipInt(map[k])) return;
+  map[k] = slipInt(v);
+  writeJSON(SLIPS_KEY, map, 'slips');
+}
+function clearReplaySlips(band, n) {
+  const map = readJSON(SLIPS_KEY), k = `R:${band}:${n}`;
+  if (!(k in map)) return;
+  delete map[k];
+  writeJSON(SLIPS_KEY, map, 'slips');
+}
+
 function loadClock(band) {
   const c = readJSON(LCLOCKS2_KEY)[band];
   if (!c || typeof c !== 'object') return null;
@@ -1000,6 +1055,7 @@ class WayOut {
     this.clock = c && c.n === level && c.key === key ? c
       : { n: level, key, ms: 0, pen: 0, mistakes: 0, hints: 0, partial: !!(saved && (saved.gone.length || saved.red.length || saved.lives < LIVES)) };
     writeClock(tier, this.clock);
+    this._carry = readCarry(tier, level, this.src);
     this.screen = 'play';
     this.render();
     this._clockRun();
@@ -1158,6 +1214,7 @@ class WayOut {
     this.lvl = hasB10(band) ? buildB10(miss.n) : g === B11_GEN && hasB11(band, l) ? buildB11(l) : g === B9_GEN && hasB9(band, l) ? buildB9(band, l) : g === B8_GEN && hasB8(band, l) ? buildB8(band, l) : g === MORE_GEN ? buildMore(band, l) : buildLadder(l, g === 5 ? 5 : LADDER_GEN);
     this._resetBoard(null);
     this.clock = { n: miss.n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
+    this._replayCarry = readReplaySlips(band, miss.n);
     this.screen = 'play';
     this.render();
     this._clockRun();
@@ -1169,6 +1226,9 @@ class WayOut {
   _newLevel(tier, level) {
     const s = readSave(tier, level, 1e6);
     const src = s ? s.src : defaultSrc(tier, level);
+    // Only the clock starts over (2026-10-29): this try's slips are carried to the next one.
+    const c = loadClock(tier);
+    if (c && c.n === level && c.key === srcKey(src)) addCarry(tier, level, src, (c.mistakes | 0) + (c.hints | 0));
     resetSave(tier, level, src);
     writeClock(tier, { n: level, key: srcKey(src), ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false });
     this._startLevel(tier, level);
@@ -1437,8 +1497,31 @@ class WayOut {
     this.hintId = id;
     this.hintT0 = performance.now();
     if (this.clock) this.clock.hints += 1;
+    this._noteSlip();
     this._penalty(woHintMs(this.tier));
     this._kick();
+  }
+
+  /** Slips on this level so far: this try's own, plus those carried from earlier tries. */
+  _slipsNow() {
+    const c = this.clock, own = c ? (c.mistakes | 0) + (c.hints | 0) : 0;
+    if (this.replay) return this.replay.test ? own : (this._replayCarry | 0) + own;
+    return (this._carry | 0) + own;
+  }
+  /** A slip happened: keep the level's running count where New game, Restart and leaving cannot
+   *  reach it (2026-10-29). Rush and the test boards keep nothing. */
+  _noteSlip() {
+    if (this.rush || !this.tier || (this.replay && this.replay.test)) return;
+    const s = this._slipsNow();
+    if (this.replay) { writeReplaySlips(this.tier, this.level, s); return; }
+    try {
+      if (!noteWayOutSlips(this.tier, this.level, s)) console.error('[way-out] slips NOT stored', { tier: this.tier, level: this.level, s });
+    } catch (err) { console.error('[way-out] noteWayOutSlips threw - slips NOT stored', err); }
+  }
+  /** The most slips this person's OTHER storages stored on a level (from the combined read). */
+  _otherSlips(band, n) {
+    const m = this._otherSl && this._otherSl[band];
+    return m ? Math.max(0, Math.floor(Number(m['L' + n]) || 0)) : 0;
   }
 
   _kick() {
@@ -1476,6 +1559,7 @@ class WayOut {
     this.red[id] = true;
     this.lives = Math.max(0, this.lives - 1);
     if (this.clock) this.clock.mistakes += 1;
+    this._noteSlip();
     // The first heart lost costs the tier's base time, the second double (Matt, 2026-10-13). The
     // third ends the attempt; the clock keeps running into the retry, which is its own cost.
     if (this.lives > 0) this._penalty(woMistakeMs(this.tier, LIVES - this.lives));
@@ -1510,7 +1594,12 @@ class WayOut {
     // at the last arrow; its time (penalties in) is recorded with the finish.
     this._clockPause();
     const c = this.clock || { ms: 0, pen: 0, mistakes: 0, hints: 0, partial: true };
+    // Scored with every slip on this level: this try's, the tries New game threw away, and the most
+    // any of this person's other storages saw (2026-10-29). `prior` is what a replay cannot win back.
+    const other = this._otherSlips(this.tier, this.level);
+    const slips = Math.max((this._carry | 0) + (c.mistakes | 0) + (c.hints | 0), other);
     const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial,
+      n: this.level, slips, prior: Math.max(this._carry | 0, other),
       // The log's `l` names the BOARD with `g`: for a ladder board it is that generator's own number
       // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
       level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
@@ -1522,7 +1611,7 @@ class WayOut {
     this._paintClock();
     // Shown under the win word: the level's time, penalties in, and what the level earned (hints and
     // lost lives cost points since 2026-10-17; an untimed level keeps its full points).
-    const earned = c.partial ? woLevelPoints(this.level, this.tier) : woEarnedPoints(this.tier, (c.mistakes | 0) + (c.hints | 0));
+    const earned = c.partial ? woLevelPoints(this.level, this.tier) : woEarnedPoints(this.tier, slips);
     this.winSub = `${woClock(c.ms + c.pen)} · ${t('lv_pts', { n: earned })}`;
     writeClock(this.tier, null);
     this.clock = null;
@@ -1554,9 +1643,10 @@ class WayOut {
     let up = null;
     try {
       up = recordWayOutReplay(this.tier, { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds,
-        mistakes: c.mistakes, hints: c.hints, level: l, gen: g });
+        mistakes: c.mistakes, hints: c.hints, level: l, gen: g, slips: this._slipsNow() });
     } catch (err) { console.error('[way-out] recordWayOutReplay threw - the replay was NOT recorded', err); }
     if (up == null) console.error('[way-out] the replay was NOT recorded', { tier: this.tier, l, g });
+    else clearReplaySlips(this.tier, this.level);   // that replay's slips are in its record now
     this._paintClock();
     this.winSub = `${woClock(c.ms + c.pen)} · ${t('lv_pts', { n: up | 0 })}`;
     this.clock = null;
@@ -2107,9 +2197,11 @@ class WayOut {
       const net = await import('../../js/stats-net.js');
       const people = await net.readPeople();
       if (people) {
-        const [{ aggregateForViewer }, { isHiddenName }, { loadProfile }] = await Promise.all([
+        const [{ aggregateForViewer, buildIdentity }, { isHiddenName }, { loadProfile }] = await Promise.all([
           import('../../js/players-agg.js'), import('../../js/hidden-players.js'), import('../../js/profile-store.js')]);
-        const me = aggregateForViewer(await net.readPlayersForMe(), loadProfile() || {}, statsId(), loadStoredStats());
+        const forMe = await net.readPlayersForMe();
+        this._otherSl = otherSlipsOf(forMe, buildIdentity, loadProfile() || {}, statsId());
+        const me = aggregateForViewer(forMe, loadProfile() || {}, statsId(), loadStoredStats());
         const row = (g, mine) => ({
           name: g.name, emoji: g.emoji, me: mine, pts: woPoints(g.games.wayout),
           best: Object.fromEntries(RUSH_MODES.map((m) => [m, woRushBestMap(((((g.games.wayout || {}).wo || {}).rush || {}).best || {})[m])])),
@@ -2135,6 +2227,7 @@ class WayOut {
       // aggregateForViewer), so it is found even with no player code.
       const myKey = buildIdentity(merged).keyFor(merged[myId].profile, myId);
       const isMe = (g) => g.key === myKey;
+      this._otherSl = otherSlipsOf(all || {}, buildIdentity, prof, myId);
       // Test accounts are hidden as on the leaderboard, except from themselves.
       rows = aggregatePlayers(merged).filter((g) => isMe(g) || !isHiddenName(g.name)).map((g) => ({
         name: g.name, emoji: g.emoji, me: isMe(g), pts: woPoints(g.games.wayout),
