@@ -640,3 +640,7 @@ measurement). `js/players-agg.js`: Arrow Maze level sets capped per record (`woC
 counted once per level per person (`dedupeNutsBolts`); Word Weaver's cross-storage hints are `wwHintBest` (main's own fix). The leaderboard
 writes no player code into the page (`_msgTo`, `_pkeys`: opaque indexes). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`,
 "Holes closed 2026-10-29 (second pass)".
+
+### No other player's code in the DOM outside Admin (2026-10-29)
+
+Messages (`_who`), the Multiplayer screen (pick sheet, Records, bell: `idxOf`), every game's pick-a-person sheet (`data-oi` = index into `opps`), Hold'em's Bankrolls and Hoops carry an index, never a code or identity key; a nameless person shows "Player" (`anon_player`). Keys in memory and Firebase are unchanged. Exempt: `js/admin-ui.js`, the retired PIN-gated `js/challenge/` Insights, the profile page's own code, room join codes. `tools/test-no-codes.mjs` (static) and `tools/test-no-codes-browser.mjs`.
