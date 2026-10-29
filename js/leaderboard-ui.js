@@ -1730,6 +1730,7 @@ function metaLine(games, runs) {
 // Player card passes catInlineHTML(g) there, which is how the difficulty breakdown rides a line
 // that already exists instead of costing the card a row. Every game board omits it and is
 // byte-identical to before.
+const _pkeys = [];
 function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
   const me = g.key === _meKey ? ' is-me' : '';
   const podium = (/lb-medalchip is-r([123])/.exec(chip || '') || [])[1];
@@ -1738,7 +1739,10 @@ function playerCardHTML(g, chip, big, subText, tilesHtml, subHtml, tierHtml) {
   // handoff, so the card reads name / what they played on one line and the breakdown below it.
   const footer = tilesHtml ? `<div class="lb-pfoot">${tilesHtml}</div>` : '';
   const sub = subHtml || esc(subText || '');
-  return `<button type="button" class="lb-pcard${me}${pod}" data-pkey="${esc(g.key)}"${me ? ' aria-current="true"' : ''}>
+  // The identity key ("code:XXXXX") stays in memory; the card carries an opaque index (2026-10-29).
+  if (_pkeys.length > 2000) _pkeys.length = 0;
+  const pi = _pkeys.push(g.key) - 1;
+  return `<button type="button" class="lb-pcard${me}${pod}" data-pi="${pi}"${me ? ' aria-current="true"' : ''}>
     <div class="lb-pcard-row">
       ${chip}
       ${avatarHTML(g)}
@@ -2819,14 +2823,14 @@ function onClick(e) {
     _seg = next; persistView(); _game = null; _player = null; _playerGame = null; _tier = null; _view = ''; _machine = 'all'; rerender();
     return;
   }
-  const card = e.target.closest('.lb-pcard[data-pkey]');
+  const card = e.target.closest('.lb-pcard[data-pi]');
   // A NAME TAPPED ON A GAME'S BOARD OPENS THAT GAME (2026-09-02). Matt: "I'm viewing skeeball only
   // stats, I click on a name, it shows me everything, I have to scroll to skeeball and click again.
   // That middle step shouldn't be there." Drilling in from a game's board carried `_game` the whole
   // way and then ignored it, landing on the player's every-game list - a screen the viewer had
   // already answered the question of by choosing a board. From By Player there is no game in hand,
   // so that path is unchanged and still opens the list.
-  if (card) { _player = card.dataset.pkey; _playerGame = _game || null; rerender(); return; }
+  if (card) { const pk = _pkeys[Number(card.dataset.pi)]; if (pk == null) return; _player = pk; _playerGame = _game || null; rerender(); return; }
   // Player detail's own game list (shared gs-grow rows) vs. the top-level By Game list (lb-grow) -
   // only one of the two is ever on screen at once, but check player context first to be explicit.
   const gsRow = e.target.closest('.gs-grow[data-game]');
