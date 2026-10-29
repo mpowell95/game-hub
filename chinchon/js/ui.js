@@ -3243,7 +3243,7 @@ class ChinchonUI {
       case 'new': this._chGo('pick'); return true;
       case 'back': this._chGo(this._chView === 'len' && !this._chFromHub ? 'pick' : 'home'); return true;
       case 'pick': {
-        const o = (this._chPeople || []).find((x) => x.code === el.dataset.code);
+        const o = (this._chPeople || [])[Number(el.dataset.oi)];
         if (o) this._chGo('len', o);
         return true;
       }

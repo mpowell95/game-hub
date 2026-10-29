@@ -128,7 +128,7 @@ export async function picker(ui, MP, box) {
     const k = String(q || '').trim().toLowerCase();
     const all = opps.filter((o) => !k || o.name.toLowerCase().includes(k));
     list.innerHTML = all.length ? all.slice(0, SHOW).map((o) => `
-      <button type="button" class="cc-ch-row" data-ch="pick" data-code="${esc(o.code)}">
+      <button type="button" class="cc-ch-row" data-ch="pick" data-oi="${opps.indexOf(o)}">
         <span class="cc-ch-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="cc-ch-text"><span class="cc-ch-name">${esc(o.name)}</span></span>
         <span class="cc-ch-chev" aria-hidden="true">›</span>

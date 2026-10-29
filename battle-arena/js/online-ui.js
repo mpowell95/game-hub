@@ -189,7 +189,7 @@ async function picker(ui) {
     const k = String(q || '').trim().toLowerCase();
     const all = opps.filter((o) => !k || o.name.toLowerCase().includes(k));
     list.innerHTML = all.length ? all.slice(0, SHOW).map((o) => `
-      <button type="button" class="ba-ol-row" data-code="${esc(o.code)}">
+      <button type="button" class="ba-ol-row" data-oi="${opps.indexOf(o)}">
         <span class="ba-ol-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="ba-ol-text"><span class="ba-ol-name">${esc(o.name)}</span></span>
         <span class="ba-ol-chev" aria-hidden="true">›</span>
@@ -200,7 +200,7 @@ async function picker(ui) {
   ui.on(box.querySelector('.ba-ol-search'), 'input', (e) => paint(e.target.value));
   ui.on(list, 'click', (e) => {
     const b = e.target.closest('.ba-ol-row');
-    const o = b && opps.find((x) => x.code === b.dataset.code);
+    const o = b && opps[Number(b.dataset.oi)];
     if (o) pickTeamFor(ui, o);
   });
 }

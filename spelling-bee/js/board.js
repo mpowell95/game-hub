@@ -80,7 +80,7 @@ export function rowsOf(v) {
   const rows = [];
   for (const [code, r] of Object.entries(v && typeof v === 'object' ? v : {})) {
     if (!r || typeof r !== 'object' || !(r.words > 0) || isHiddenName(r.name)) continue;
-    const row = { code, name: String(r.name || code), emoji: String(r.emoji || ''), words: r.words | 0, points: r.points | 0, rank: r.rank | 0 };
+    const row = { code, name: String(r.name || ''),   // never the code: it is the whole identity (2026-10-29) emoji: String(r.emoji || ''), words: r.words | 0, points: r.points | 0, rank: r.rank | 0 };
     if (Number.isFinite(Number(r.at))) row.at = Number(r.at);   // server time of the post (late posts, 2026-10-29)
     if (Number.isFinite(r.dw)) { row.dw = r.dw | 0; row.dp = r.dp | 0; row.dr = r.dr | 0; }
     rows.push(row);

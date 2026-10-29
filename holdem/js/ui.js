@@ -547,8 +547,10 @@ class Game {
         if (a.review !== b.review) return a.review ? 1 : -1;
         return sort === 'won' ? (b.won - a.won) || (b.bank - a.bank) : (b.bank - a.bank) || (b.won - a.won);
       });
+      // No player code in the page (2026-10-29): a row carries its place in this list, never its identity key.
+      this._bankKeys = rows.map((r) => r.key);
       list = `<ol class="pk-bklist">${rows.map((r, i) => `
-          <li class="pk-bkrow${r.me ? ' is-me' : ''}${(picked ? picked.key : 'me') === r.key ? ' is-picked' : ''}" data-me="${r.me ? 1 : 0}" role="button" tabindex="0" data-act="bank-pick" data-k="${esc(r.key)}" aria-pressed="${(picked ? picked.key : 'me') === r.key}">
+          <li class="pk-bkrow${r.me ? ' is-me' : ''}${(picked ? picked.key : 'me') === r.key ? ' is-picked' : ''}" data-me="${r.me ? 1 : 0}" role="button" tabindex="0" data-act="bank-pick" data-k="${r.me ? 'me' : i}" aria-pressed="${(picked ? picked.key : 'me') === r.key}">
             <span class="pk-bkrank">${r.review ? '-' : i + 1}</span>
             <span class="pk-lav">${esc(r.emoji || '\u{1F642}')}</span>
             <span class="pk-bkname">${esc(r.me ? myName || r.name : r.name)}</span>
@@ -1228,10 +1230,10 @@ class Game {
       case 'bank-sort': this.bankSort = b.dataset.v === 'won' ? 'won' : 'bank'; return this.render();
       case 'bank-retry': this._loadBankList(); return undefined;
       case 'bank-pick': {
-        const k = b.dataset.k;
+        const k = b.dataset.k === 'me' ? 'me' : (this._bankKeys || [])[Number(b.dataset.k)];
         this.bankPick = !k || k === 'me' || k === this.bankPick ? null : k;
         this.render();
-        const back = this.el.querySelector(`[data-act="bank-pick"][data-k="${CSS.escape(this.bankPick || 'me')}"].pk-bkrow`);
+        const back = this.el.querySelector(`[data-act="bank-pick"][data-k="${this.bankPick ? (this._bankKeys || []).indexOf(this.bankPick) : 'me'}"].pk-bkrow`);
         if (back && e.type === 'keydown') back.focus();
         return undefined;
       }

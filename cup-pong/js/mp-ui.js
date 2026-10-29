@@ -149,7 +149,7 @@ async function picker(game, MP) {
     const k = String(q || '').trim().toLowerCase();
     const show = opps.filter((o) => !k || o.name.toLowerCase().includes(k));
     list.innerHTML = show.length ? show.map((o) => `
-      <button type="button" class="cp-mrow" data-code="${esc(o.code)}">
+      <button type="button" class="cp-mrow" data-oi="${opps.indexOf(o)}">
         <span class="cp-trow-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="cp-mrow-text"><span class="cp-mrow-name">${esc(o.name)}</span></span>
         <span class="cp-row-chev" aria-hidden="true">›</span>
@@ -159,7 +159,7 @@ async function picker(game, MP) {
   game.on(body.querySelector('.cp-mp-search'), 'input', (e) => paint(e.target.value));
   game.on(list, 'click', (e) => {
     const b = e.target.closest('.cp-mrow');
-    const o = b && opps.find((x) => x.code === b.dataset.code);
+    const o = b && opps[Number(b.dataset.oi)];
     if (o) terms(game, MP, o);
   });
 }

@@ -42,7 +42,7 @@ const matchRow = (r) => `<button type="button" class="eb-ch-row${r.yourTurn ? ' 
     ${r.yourTurn ? `<span class="eb-ch-pill"><span aria-hidden="true">▶</span> ${esc(t('ch_play'))}</span>` : '<span class="eb-ch-wait" aria-hidden="true">⏳</span>'}
   </button>`;
 
-const personRow = (o) => `<button type="button" class="eb-ch-row" data-action="ch-pick" data-code="${esc(o.code)}">
+const personRow = (o, src) => `<button type="button" class="eb-ch-row" data-action="ch-pick" data-oi="${src.indexOf(o)}">
     <span class="eb-ch-face" aria-hidden="true">${esc(o.emoji)}</span>
     <span class="eb-ch-text"><span class="eb-ch-name">${esc(o.name)}</span></span>
     <span class="eb-ch-chev" aria-hidden="true">›</span>
@@ -91,7 +91,7 @@ function peopleHTML(v) {
   const k = String(v.q || '').trim().toLowerCase();
   const all = v.opps.filter((o) => !k || o.name.toLowerCase().includes(k));
   if (!all.length) return `<p class="eb-ch-note">${esc(t('ch_nobody'))}</p>`;
-  return all.slice(0, PEOPLE_SHOWN).map(personRow).join('')
+  return all.slice(0, PEOPLE_SHOWN).map((o) => personRow(o, v.opps)).join('')
     + (all.length > PEOPLE_SHOWN ? `<p class="eb-ch-note eb-ch-more">${esc(t('ch_more', { n: all.length - PEOPLE_SHOWN }))}</p>` : '');
 }
 

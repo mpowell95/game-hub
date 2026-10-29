@@ -3381,7 +3381,7 @@ class BattleshipUI {
     const all = p.opps.filter((o) => !k || String(o.name).toLowerCase().includes(k));
     if (!all.length) return `<p class="bs-ch-note">${esc(t('ch_nobody'))}</p>`;
     const SHOW = 5;
-    return all.slice(0, SHOW).map((o) => `<button type="button" class="bs-ch-row" data-action="ch-pick" data-code="${esc(o.code)}">
+    return all.slice(0, SHOW).map((o) => `<button type="button" class="bs-ch-row" data-action="ch-pick" data-oi="${p.opps.indexOf(o)}">
         <span class="bs-ch-face" aria-hidden="true">${esc(o.emoji)}</span>
         <span class="bs-ch-text"><span class="bs-ch-name">${esc(o.name)}</span></span>
         <span class="bs-ch-chev" aria-hidden="true">›</span>
@@ -4140,7 +4140,7 @@ class BattleshipUI {
     } else if (action === 'ch-new') {
       this._chNewPicker();
     } else if (action === 'ch-pick') {
-      const o = this._chPick && (this._chPick.opps || []).find((x) => x.code === btn.dataset.code);
+      const o = this._chPick && (this._chPick.opps || [])[Number(btn.dataset.oi)];
       if (o) this._chChooseFor(o);
     } else if (action === 'ch-pick-back') {
       this._chPick = null; this.renderSetup();
