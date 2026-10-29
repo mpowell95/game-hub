@@ -32,6 +32,7 @@ import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.tictactoe.v1';
@@ -52,6 +53,7 @@ const AI_THINK_MS = 450;
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
+const STATS_ID = 'tictactoe';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // The difficulty bucket a MULTIPLAYER result records under. A real human
 // opponent has no AI tier, and inheriting whatever tier the local setup screen
@@ -208,6 +210,8 @@ class TicTacToeUI {
       net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this.mp) LL.detachLeave(STATS_ID);   // the match stays armed: closing is not leaving
+    LL.hideClaim(this.root);
     this.mp = null;
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
     if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
@@ -350,6 +354,7 @@ class TicTacToeUI {
       this._tryRestoreMP(mpSave);
       return;
     }
+    LL.settleLeave(STATS_ID);   // a live game that died with its page, never rejoined: its armed loss
     const saved = loadGame();
     if (saved) this.resumeGame(saved); else this.renderSetup();
   }
@@ -775,14 +780,15 @@ class TicTacToeUI {
    *  the hub mid-game is not quitting: the autosave resumes it. Multiplayer is untouched. */
   _quitCostsLoss() {
     const s = this.state;
-    if (this.mp || !s || s.over || this._statsCommitted || this.view !== 'game') return false;
+    if (this.mp) return this._mpLeaveCosts();
+    if (!s || s.over || this._statsCommitted || this.view !== 'game') return false;
     const me = this._myMark();
     return s.variant === 'ultimate' ? s.boards.some((b) => b.includes(me)) : s.board.includes(me);
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
-    if (!this._quitCostsLoss()) return;
+    if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
     try { recordTicTacToe(this.state.variant, this._setup.difficulty, false); } catch { /* never block leaving */ }
   }
@@ -800,6 +806,8 @@ class TicTacToeUI {
     if (this._statsCommitted) return;
     this._statsCommitted = true;
     const s = this.state;
+    // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
+    if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     // `won` resolves through _myMark(), which resolves through _localSeat():
     // a guest MUST NOT record the host's result as its own (THE LAW rule 2 --
     // a loss written as a win is not additive-safe). null = draw.
@@ -811,6 +819,7 @@ class TicTacToeUI {
     // block the ordinary result from being recorded.
     const opp = this.mp && this.mp.opp;
     if (opp) { try { recordHeadToHead('tictactoe', opp, won); } catch { /* never block the result */ } }
+    if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
   }
 
   finish() {
@@ -923,6 +932,9 @@ class TicTacToeUI {
     const hash = stateHash(this.state);
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(move), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
+    if (!this.state.over && !this._statsCommitted) {
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, false], [mp.opp]);
+    }
   }
 
   /** Drain every deliverable entry from the cached log. Re-entrant by design:
@@ -1155,7 +1167,15 @@ class TicTacToeUI {
     // room.
     if (room.status === 'ended' && !mp.opponentLeft) {
       mp.opponentLeft = true;
-      this._mpEndDueToOpponentLeft();
+      // A leave that decided the game in play (js/live-leave.js): this phone's win, or its loss when
+      // the other player claimed it. Anything else ends the room with nothing recorded, as before.
+      let res = 'none';
+      if (this._mpInGame() && !this._statsCommitted) {
+        res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
+          fn: 'recordTicTacToe', winArgs: [mp.variant, MP_DIFFICULTY, true], opps: [mp.opp] });
+        if (res !== 'none') this._statsCommitted = true;
+      }
+      this._mpEndDueToOpponentLeft(res);
       return;
     }
 
@@ -1165,6 +1185,7 @@ class TicTacToeUI {
       if (stale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
       else if (!stale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
+    if (this._mpCanClaim()) LL.showClaim(this.root, () => this._mpClaim()); else LL.hideClaim(this.root);
 
     if (room.recovery) {
       if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
@@ -1292,17 +1313,55 @@ class TicTacToeUI {
   /** Explicit abandon (the in-game Leave button), unlike destroy()'s
    *  backgrounding: this ends the room for the opponent too. */
   _mpLeaveToSetup() {
+    // Leaving the game in play (js/live-leave.js): after your own first move it is your loss, and the
+    // room ends with your forfeit so the other phone records its win. The other player gone 90 s
+    // after moving: leaving claims the win instead.
+    if (this._mpCanClaim()) { this._mpClaim(); return; }
+    const costs = this._mpLeaveCosts();
     if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
+    LL.hideClaim(this.root);
     const mp = this.mp;
+    if (mp && costs) { this._statsCommitted = true; LL.forfeitNow(STATS_ID); }
+    else if (mp && this._mpInGame()) LL.disarmLeave(STATS_ID);
     this.mp = null;
     this._mpClearSave();
     this._lobby = null; this._mode = 'solo';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
     this._mpStatusMsg = '';
     this.marks = [X, O];
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    if (mp && mp.code && costs) LL.leaveWithForfeit(net, mp.code, mp.role, mp.role, mp.gameNum).catch(() => {});
+    else if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
     else net.disconnect();
     this.renderSetup();
+  }
+
+  // --- leaving a live game (2026-10-29, js/live-leave.js) ----------------------------------------
+  _mpKey() { return this.mp ? LL.liveKey(STATS_ID, this.mp.code, this.mp.gameNum) : null; }
+  _mpOppRoleOf(mp) { return mp.role === 'host' ? 'guest' : 'host'; }
+  _mpInGame() { return !!(this.mp && this.state && !this.state.over && this.view === 'game'); }
+  _mpOppAwayMs() { const r = this.mp && this.mp.lastRoomSnapshot; return r ? LL.awayMs(r[this._mpOppRoleOf(this.mp)]) : 0; }
+  /** Has the other player moved in the game in play? (`startRound` clears the log per game.) */
+  _mpOppMoved() {
+    const r = this.mp && this.mp.lastRoomSnapshot, by = this.mp && this._mpOppRoleOf(this.mp);
+    return !!(r && Object.values(r.moves || {}).some((m) => m && m.by === by));
+  }
+  _mpCanClaim() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() >= LL.CLAIM_MS && this._mpOppMoved(); }
+  _mpLeaveCosts() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() < LL.CLAIM_MS && LL.leaveCosts(STATS_ID, this._mpKey()); }
+
+  /** The other player has been gone 90 s after moving: this phone records its win and ends the room
+   *  with their forfeit (their phone records the loss when it comes back, or its armed marker does). */
+  _mpClaim() {
+    if (!this._mpCanClaim()) return;
+    const mp = this.mp;
+    this._statsCommitted = true;
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, true], [mp.opp]);
+    if (this._reactions) this._reactions.setActive(false);
+    LL.hideClaim(this.root);
+    this.mp = null;
+    this._mpClearSave();
+    this._mpStatusMsg = '';
+    LL.leaveWithForfeit(net, mp.code, mp.role, this._mpOppRoleOf(mp), mp.gameNum, true).catch(() => {});
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', LL.lt('ll_claimed'));
   }
 
   async _mpEndDueToError() {
@@ -1317,32 +1376,36 @@ class TicTacToeUI {
     this._mpEndModal('mp_error_title', 'mp_error_sub');
   }
 
-  _mpEndDueToOpponentLeft() {
+  _mpEndDueToOpponentLeft(res) {
     if (this._dead || !this.mp) return;
+    const name = (this.mp.opp && this.mp.opp.name) || '?';
     this.mp = null;
     this._mpClearSave();
     this._mpStatusMsg = '';
+    LL.hideClaim(this.root);
     net.stopHeartbeat();
-    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub');
+    const title = res === 'won' ? LL.lt('ll_left_win', { name }) : res === 'lost' ? LL.lt('ll_lost', { name }) : null;
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', title);
   }
 
   /** Terminal MP overlay. An abandoned or desynced game is deliberately NOT
    *  recorded as a result: it was not played to a conclusion, and inventing a
    *  win or a loss for it would be fabricating history. Whatever games in the
    *  series DID conclude were already recorded, each at its own end. */
-  _mpEndModal(titleKey, subKey) {
+  _mpEndModal(titleKey, subKey, titleText) {
     this.closeOverlays();
+    const title = titleText || t(titleKey);
     this.marks = [X, O];
     const overlay = document.createElement('div');
     overlay.className = 'ttt-overlay';
     overlay.dataset.role = 'mp-end';
     overlay.innerHTML = `
       <div class="ttt-scrim"></div>
-      <div class="ttt-card" role="dialog" aria-modal="true" aria-label="${t(titleKey)}">
+      <div class="ttt-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <button type="button" class="ttt-x" data-action="mp-end-ok" aria-label="${t('close')}">&times;</button>
-        <span class="ttt-card-emoji">📡</span>
-        <h3 class="ttt-card-title">${t(titleKey)}</h3>
-        <p class="ttt-card-sub">${t(subKey)}</p>
+        <span class="ttt-card-emoji">${titleText ? '🏳️' : '📡'}</span>
+        <h3 class="ttt-card-title">${esc(title)}</h3>
+        ${titleText ? '' : `<p class="ttt-card-sub">${t(subKey)}</p>`}
         <div class="ttt-card-actions">
           <button type="button" class="ttt-btn ttt-btn-primary" data-action="mp-end-ok">${t('mp_back_to_setup')}</button>
         </div>
@@ -1409,6 +1472,24 @@ class TicTacToeUI {
    *  setup screen. Runs once, right after mount(). */
   async _tryRestoreMP(save) {
     const { code, role } = save;
+    if (save.midGame) {
+      // Was the game decided by a leave while this phone was away? (js/live-leave.js)
+      const other = role === 'host' ? 'guest' : 'host';
+      const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
+        n: save.gameNum, mySeat: role, role, fn: 'recordTicTacToe', winArgs: [save.variant, MP_DIFFICULTY, true],
+        oppsOf: (room) => [room[other]] });
+      if (this._dead) return;
+      if (!chk.go) {
+        this._mpClearSave();
+        net.disconnect();
+        const o = chk.room && chk.room[other];
+        const name = (o && o.name) || '?';
+        if (chk.res === 'won' || chk.res === 'lost') {
+          this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', chk.res === 'won' ? LL.lt('ll_left_win', { name }) : LL.lt('ll_lost', { name }));
+        }
+        return;
+      }
+    }
     try {
       if (role === 'guest') {
         const res = await net.joinRoom(code, this._myIdentity());
@@ -1633,8 +1714,8 @@ class TicTacToeUI {
       this.closeOverlays();
       this._mpStartNextGame();
     } else if (action === 'mp-leave') {
-      this.closeOverlays();
-      this._mpLeaveToSetup();
+      const go = () => { this.closeOverlays(); this._mpLeaveToSetup(); };
+      if (this._mpLeaveCosts()) this.confirmDestructive(btn, go); else go();
     } else if (action === 'mp-end-ok') {
       this.closeOverlays();
       this.renderSetup();
@@ -1661,4 +1742,10 @@ export function isInProgress() {
   return !!(instance && instance.isInProgress());
 }
 
-export default { init, destroy, isInProgress };
+/** A live game's leave costs a loss (js/live-leave.js); the hub's leave confirm says so. */
+export function quitCostsLoss() { return !!(instance && instance.mp && instance._mpLeaveCosts()); }
+
+/** The hub's leave was confirmed: resign the live game in play (destroy() alone only detaches). */
+export function leaveMatch() { if (instance && instance.mp) instance._mpLeaveToSetup(); }
+
+export default { init, destroy, isInProgress, quitCostsLoss, leaveMatch };

@@ -3203,8 +3203,23 @@ const QUIT_KEY = 'gamehub.quitLoss.v1';
 const QUIT_RECORDERS = () => ({
   recordResult, recordYahtzee, recordAirHockey, recordBattleship, recordBoggle, recordCupPong,
   recordChinchon, recordEscoba, recordConnect4, recordTicTacToe, recordDotsBoxes, recordDominoes,
-  recordMinesweeper, recordContexto, recordBaseball,
+  recordMinesweeper, recordContexto, recordBaseball, recordLiveResult,
 });
+// Markers THIS page armed and still believes armed. While any is live, their time is refreshed every
+// minute (second pass, 2026-10-29): the hub settles only a marker 30+ minutes old, so a game still
+// running in another tab or window is never settled under it. A page frozen that long (app in the
+// background) can come back to find its marker taken: `quitLossLost()` then says so, and the game must
+// not record its real result too (it already counted as a loss).
+const _armedHere = new Set();
+let _quitTick = null;
+const QUIT_TICK_MS = 60 * 1000;
+function quitTick() {
+  if (!_armedHere.size) { if (_quitTick) { clearInterval(_quitTick); _quitTick = null; } return; }
+  const q = readQuit();
+  let changed = false;
+  for (const id of _armedHere) if (q[id]) { q[id].t = Date.now(); changed = true; }
+  if (changed) writeQuit(q);
+}
 
 function readQuit() {
   const q = readJSON(QUIT_KEY);
@@ -3221,10 +3236,42 @@ export function armQuitLoss(gameId, fn, args) {
   const q = readQuit();
   q[gameId] = { f: fn, a: Array.from(args || []), c: activeCode(), k: statsKey(), t: Date.now() };
   writeQuit(q);
+  keepFresh(gameId);
 }
+function keepFresh(gameId) {
+  _armedHere.add(gameId);
+  if (!_quitTick && typeof setInterval === 'function') {
+    _quitTick = setInterval(quitTick, QUIT_TICK_MS);
+    if (_quitTick && typeof _quitTick.unref === 'function') _quitTick.unref();   // node tests never wait on it
+  }
+}
+
+/** Refresh an armed marker's time without changing it (the game is still being played, or a page
+ *  picked the game back up), and keep it fresh from this page from now on. False = nothing armed. */
+export function touchQuitLoss(gameId) {
+  const q = readQuit();
+  if (!q[gameId]) return false;
+  q[gameId].t = Date.now();
+  writeQuit(q);
+  keepFresh(gameId);
+  return true;
+}
+
+/** This page stops keeping `gameId`'s marker fresh (the game was put away, not finished: a live room
+ *  detached on destroy). The marker stays; it settles like any page that died. */
+export function releaseQuitLoss(gameId) { _armedHere.delete(gameId); }
+
+/** The armed marker for `gameId` ({ f, a, c, k, t }), or null. */
+export function quitLossInfo(gameId) { return readQuit()[gameId] || null; }
+
+/** True when THIS page armed `gameId`'s loss and somebody else has since recorded it (the hub settled
+ *  a marker this page left unrefreshed for 30 minutes). The game then records NOTHING more for that
+ *  game: it already counted as a loss (one result per game). */
+export function quitLossLost(gameId) { return _armedHere.has(gameId) && !readQuit()[gameId]; }
 
 /** The game recorded its real result (or the armed loss no longer applies): forget the marker. */
 export function dropQuitLoss(gameId) {
+  _armedHere.delete(gameId);
   const q = readQuit();
   if (!q[gameId]) return;
   delete q[gameId];
@@ -3240,6 +3287,7 @@ export function takeQuitLoss(gameId) {
   const m = q[gameId];
   if (!m) return false;
   if (m.k && m.k !== statsKey()) return false;   // armed under another player's store: theirs to take
+  _armedHere.delete(gameId);
   delete q[gameId];
   writeQuit(q);                                  // dropped BEFORE the write, so it can never count twice
   notePlay(gameId, 'quitLoss', [m.f, m.t]);      // the play log says this loss was a quit
@@ -3259,6 +3307,39 @@ export function settleQuitLosses(olderThanMs = 0) {
     if (!m || !(now - (+m.t || 0) >= olderThanMs)) continue;
     takeQuitLoss(id);
   }
+}
+
+// --- LEAVING A LIVE ROOM (second pass, 2026-10-29) -------------------------------------------------
+//
+// A live-room result decided by a LEAVE (the leaver's loss, the other side's win, a "Claim win") is
+// recorded through the game's own recorder ('mp' bucket) plus head-to-head, at most ONCE per match per
+// storage: `gamehub.liveCounted.v1` lists the matches already counted (`<game>:<room>:<game number>`).
+// A match that ended normally is listed too (js/live-leave.js `done`), so a leave arriving after the
+// end adds nothing. Additive only; the list keeps the last 300.
+const LIVE_LEDGER = 'gamehub.liveCounted.v1';
+export function liveCounted(key) {
+  const l = readJSON(LIVE_LEDGER);
+  return Array.isArray(l) && l.includes(String(key));
+}
+export function markLiveCounted(key) {
+  const l = readJSON(LIVE_LEDGER);
+  const list = Array.isArray(l) ? l.filter((x) => typeof x === 'string') : [];
+  if (list.includes(String(key))) return;
+  list.push(String(key));
+  try { localStorage.setItem(LIVE_LEDGER, JSON.stringify(list.slice(-300))); } catch (err) { console.error('[game-stats] live ledger not saved', err); }
+}
+/** One live-room result decided by a leave: `<fn>(...args)` (the game's own recorder, 'mp' bucket),
+ *  then head-to-head against each of `opps` ({ deviceId, name }). Once per `key`. True when recorded. */
+export function recordLiveResult(key, statsId, fn, args, opps, won) {
+  if (!key || liveCounted(key)) return false;
+  const rec = QUIT_RECORDERS()[fn];
+  if (!rec || fn === 'recordLiveResult') return false;
+  markLiveCounted(key);                           // listed BEFORE the write, so it can never count twice
+  try { rec(...(Array.isArray(args) ? args : [])); } catch (err) { console.error('[game-stats] live result not recorded', err); return false; }
+  for (const o of Array.isArray(opps) ? opps : []) {
+    if (o && o.deviceId) { try { recordHeadToHead(statsId, { deviceId: o.deviceId, name: o.name || '' }, !!won); } catch { /* never block the result */ } }
+  }
+  return true;
 }
 
 export { GAMES, ARCHIVED_GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };

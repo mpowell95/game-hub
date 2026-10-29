@@ -28,6 +28,7 @@ import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 import { howToHtml, createHowTo } from './howto.js';
 
 const t = makeT(STRINGS);
@@ -40,6 +41,7 @@ const MP_SAVE_KEY = 'gamehub.mancala.mp.v1';
 const MP_CODE_LEN = 4;
 const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 const MP_STALE_MS = 60 * 1000;
+const STATS_ID = 'mancala';
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 // The difficulty bucket a MULTIPLAYER result records under -- settled by Tic Tac Toe
 // (js/CLAUDE.md, "The third consumer: Tic Tac Toe"; HANDOFF-MP-WEB-SESSION.md touchpoint 5).
@@ -307,6 +309,7 @@ class MancalaUI {
       this.renderSetup();
       this._tryRestoreMP(mpSave);
     } else {
+      LL.settleLeave(STATS_ID);   // a live game that died with its page, never rejoined: its armed loss
       const inProgress = loadGame();
       if (inProgress) this.resumeGame(inProgress); else this.renderSetup();
     }
@@ -337,6 +340,8 @@ class MancalaUI {
       net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this.mp) LL.detachLeave(STATS_ID);   // the match stays armed: closing is not leaving
+    LL.hideClaim(this.container);
     this.mp = null;
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
     if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
@@ -359,13 +364,14 @@ class MancalaUI {
    *  settings"). Leaving the hub is not quitting: the autosave resumes it. Two players on one phone
    *  and multiplayer are untouched. */
   _quitCostsLoss() {
-    return !this.mp && this.mode === 'bot' && this.view === 'game' && !!this.state && !this.state.over
+    if (this.mp) return this._mpLeaveCosts();
+    return this.mode === 'bot' && this.view === 'game' && !!this.state && !this.state.over
       && !this._statsCommitted && !!this._humanMoved;
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
-    if (!this._quitCostsLoss()) return;
+    if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
     try { recordResult('mancala', LEVEL_KEY[this.level], false); } catch { /* never block leaving */ }
     clearGame();
@@ -1153,7 +1159,10 @@ class MancalaUI {
       : (s.winner === P1 ? true : s.winner === P2 ? false : null);
     if (!this._statsCommitted) {
       this._statsCommitted = true;
-      if (this.mp) {
+      if (this.mp && LL.alreadyCounted(this._mpKey())) {
+        // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
+      } else if (this.mp) {
+        LL.endedNormally(STATS_ID, this._mpKey());
         try { recordResult('mancala', MP_DIFFICULTY, won); } catch { /* never block the result */ }
         // Multiplayer only: capture WHO this was against while the room state is still live.
         // Never allowed to block the ordinary result from being recorded.
@@ -1346,6 +1355,9 @@ class MancalaUI {
     const hash = stateHash(result.state);
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(pit), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
+    if (!result.state.over && !this._statsCommitted) {
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, false], [mp.opp]);
+    }
   }
 
   /** Drain every deliverable entry from the cached log, ONE AT A TIME.
@@ -1558,7 +1570,15 @@ class MancalaUI {
     // status:'ended' means exactly one thing: the other device abandoned the room.
     if (room.status === 'ended' && !mp.opponentLeft) {
       mp.opponentLeft = true;
-      this._mpEndDueToOpponentLeft();
+      // A leave that decided the game in play (js/live-leave.js): this phone's win, or its loss when
+      // the other player claimed it. Anything else ends the room with nothing recorded, as before.
+      let res = 'none';
+      if (this._mpInGame() && !this._statsCommitted) {
+        res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
+          fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true], opps: [mp.opp] });
+        if (res !== 'none') this._statsCommitted = true;
+      }
+      this._mpEndDueToOpponentLeft(res);
       return;
     }
 
@@ -1568,6 +1588,7 @@ class MancalaUI {
       if (stale && this._mpStatusMsg !== 'mp_status_opponent_disconnected') this._setMpStatus('mp_status_opponent_disconnected');
       else if (!stale && this._mpStatusMsg === 'mp_status_opponent_disconnected') this._clearMpStatus();
     }
+    if (this._mpCanClaim()) LL.showClaim(this.container, () => this._mpClaim()); else LL.hideClaim(this.container);
 
     if (room.recovery) {
       if (mp.role === 'host' && room.recovery.requested != null && room.recovery.requested !== mp.lastRecoveryHandled) {
@@ -1687,16 +1708,54 @@ class MancalaUI {
   /** Explicit abandon (the in-game/end-card Leave button), unlike destroy()'s
    *  backgrounding: this ends the room for the opponent too. */
   _mpLeaveToSetup() {
+    // Leaving the game in play (js/live-leave.js): after your own first move it is your loss, and the
+    // room ends with your forfeit so the other phone records its win. The other player gone 90 s
+    // after moving: leaving claims the win instead.
+    if (this._mpCanClaim()) { this._mpClaim(); return; }
+    const costs = this._mpLeaveCosts();
     if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
+    LL.hideClaim(this.container);
     const mp = this.mp;
+    if (mp && costs) { this._statsCommitted = true; LL.forfeitNow(STATS_ID); }
+    else if (mp && this._mpInGame()) LL.disarmLeave(STATS_ID);
     this.mp = null;
     this._mpClearSave();
     this._lobby = null; this._mode = 'solo';
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
     this._mpStatusMsg = '';
-    if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
+    if (mp && mp.code && costs) LL.leaveWithForfeit(net, mp.code, mp.role, mp.role, mp.gameNum).catch(() => {});
+    else if (mp && mp.code) net.leaveRoom(mp.code, mp.role).catch(() => {});
     else net.disconnect();
     this.renderSetup();
+  }
+
+  // --- leaving a live game (2026-10-29, js/live-leave.js) ----------------------------------------
+  _mpKey() { return this.mp ? LL.liveKey(STATS_ID, this.mp.code, this.mp.gameNum) : null; }
+  _mpOppRoleOf(mp) { return mp.role === 'host' ? 'guest' : 'host'; }
+  _mpInGame() { return !!(this.mp && this.state && !(this.state.over) && this.view === 'game'); }
+  _mpOppAwayMs() { const r = this.mp && this.mp.lastRoomSnapshot; return r ? LL.awayMs(r[this._mpOppRoleOf(this.mp)]) : 0; }
+  /** Has the other player moved in the game in play? (`startRound` clears the log per game.) */
+  _mpOppMoved() {
+    const r = this.mp && this.mp.lastRoomSnapshot, by = this.mp && this._mpOppRoleOf(this.mp);
+    return !!(r && Object.values(r.moves || {}).some((m) => m && m.by === by));
+  }
+  _mpCanClaim() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() >= LL.CLAIM_MS && this._mpOppMoved(); }
+  _mpLeaveCosts() { return this._mpInGame() && !this._statsCommitted && this._mpOppAwayMs() < LL.CLAIM_MS && LL.leaveCosts(STATS_ID, this._mpKey()); }
+
+  /** The other player has been gone 90 s after moving: this phone records its win and ends the room
+   *  with their forfeit (their phone records the loss when it comes back, or its armed marker does). */
+  _mpClaim() {
+    if (!this._mpCanClaim()) return;
+    const mp = this.mp;
+    this._statsCommitted = true;
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, true], [mp.opp]);
+    if (this._reactions) this._reactions.setActive(false);
+    LL.hideClaim(this.container);
+    this.mp = null;
+    this._mpClearSave();
+    this._mpStatusMsg = '';
+    LL.leaveWithForfeit(net, mp.code, mp.role, this._mpOppRoleOf(mp), mp.gameNum, true).catch(() => {});
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', LL.lt('ll_claimed'));
   }
 
   async _mpEndDueToError() {
@@ -1711,30 +1770,34 @@ class MancalaUI {
     this._mpEndModal('mp_error_title', 'mp_error_sub');
   }
 
-  _mpEndDueToOpponentLeft() {
+  _mpEndDueToOpponentLeft(res) {
     if (this._dead || !this.mp) return;
+    const name = (this.mp.opp && this.mp.opp.name) || '?';
     this.mp = null;
     this._mpClearSave();
     this._mpStatusMsg = '';
+    LL.hideClaim(this.container);
     net.stopHeartbeat();
-    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub');
+    const title = res === 'won' ? LL.lt('ll_left_win', { name }) : res === 'lost' ? LL.lt('ll_lost', { name }) : null;
+    this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', title);
   }
 
   /** Terminal MP overlay. An abandoned or desynced game is deliberately NOT recorded as a
    *  result: it was not played to a conclusion, and inventing a win or a loss for it would be
    *  fabricating history. */
-  _mpEndModal(titleKey, subKey) {
+  _mpEndModal(titleKey, subKey, titleText) {
     this.closeOverlays();
+    const title = titleText || t(titleKey);
     const overlay = document.createElement('div');
     overlay.className = 'mc-overlay';
     overlay.dataset.role = 'mp-end';
     overlay.innerHTML = `
       <div class="mc-scrim"></div>
-      <div class="mc-card" role="dialog" aria-modal="true" aria-label="${t(titleKey)}">
+      <div class="mc-card" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <button type="button" class="mc-x" data-action="mp-end-ok" aria-label="${t('close')}">&times;</button>
-        <span class="mc-card-emoji">📡</span>
-        <h3 class="mc-card-title">${t(titleKey)}</h3>
-        <p class="mc-card-score">${t(subKey)}</p>
+        <span class="mc-card-emoji">${titleText ? '🏳️' : '📡'}</span>
+        <h3 class="mc-card-title">${esc(title)}</h3>
+        ${titleText ? '' : `<p class="mc-card-score">${t(subKey)}</p>`}
         <div class="mc-card-actions">
           <button type="button" class="mc-primary" data-action="mp-end-ok">${t('mp_back_to_setup')}</button>
         </div>
@@ -1800,6 +1863,24 @@ class MancalaUI {
    *  separate await path needed. */
   async _tryRestoreMP(save) {
     const { code, role } = save;
+    if (save.state && !save.state.over) {
+      // Was the game decided by a leave while this phone was away? (js/live-leave.js)
+      const other = role === 'host' ? 'guest' : 'host';
+      const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
+        n: save.gameNum, mySeat: role, role, fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true],
+        oppsOf: (room) => [room[other]] });
+      if (this._dead) return;
+      if (!chk.go) {
+        this._mpClearSave();
+        net.disconnect();
+        const o = chk.room && chk.room[other];
+        const name = (o && o.name) || '?';
+        if (chk.res === 'won' || chk.res === 'lost') {
+          this._mpEndModal('mp_opponent_left_title', 'mp_opponent_left_sub', chk.res === 'won' ? LL.lt('ll_left_win', { name }) : LL.lt('ll_lost', { name }));
+        }
+        return;
+      }
+    }
     try {
       if (role === 'guest') {
         const res = await net.joinRoom(code, this._myIdentity());
@@ -1920,8 +2001,8 @@ class MancalaUI {
       this.closeOverlays();
       this._mpStartNextGame();
     } else if (action === 'mp-leave') {
-      this.closeOverlays();
-      this._mpLeaveToSetup();
+      const go = () => { this.closeOverlays(); this._mpLeaveToSetup(); };
+      if (this._mpLeaveCosts()) this._confirmQuit(btn, go); else go();
     } else if (action === 'mp-update-required') {
       this._mpForceUpdate();
     } else if (action === 'mp-end-ok') {
@@ -1955,4 +2036,10 @@ export function isInProgress() {
   return !!(instance && instance.mp);
 }
 
-export default { init, destroy, isInProgress };
+/** A live game's leave costs a loss (js/live-leave.js); the hub's leave confirm says so. */
+export function quitCostsLoss() { return !!(instance && instance.mp && instance._mpLeaveCosts()); }
+
+/** The hub's leave was confirmed: resign the live game in play (destroy() alone only detaches). */
+export function leaveMatch() { if (instance && instance.mp) instance._mpLeaveToSetup(); }
+
+export default { init, destroy, isInProgress, quitCostsLoss, leaveMatch };
