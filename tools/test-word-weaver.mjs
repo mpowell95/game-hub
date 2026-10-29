@@ -179,6 +179,44 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('strings: stars unit EN/ES', S.en.lb_unit_stars === 'stars' && S.es.lb_unit_stars === 'estrellas' && S.en.lb_yval({ k: 'stars', v: '1', n: 1 }) === '1 star');
 }
 
+// --- hints recorded at tap time (Matt, 2026-10-29: "Close the hint gap") ---
+{
+  const lvAt = (rec, n) => P.wwLevels(rec)[n];
+  // A save wiped after 2 hints, the level then finished "clean": it reads as 1 star, not 3.
+  const wiped = { ww: { lv: { L7: { s: 3, h: 0, t: 200 } }, hint: { L7: { c: 2, t: 100 } }, x: 0 } };
+  ok('hint cap: 2 hints recorded before a "clean" finish = 1 star', lvAt(wiped, 7).s === 1 && P.wwStars(wiped) === 1);
+  ok('hint cap: the stored entry itself is untouched (read-time only)', wiped.ww.lv.L7.s === 3);
+  // A hint on a second phone AFTER a clean finish on the first changes nothing.
+  const later = { ww: { lv: { L7: { s: 3, h: 0, t: 100 } }, hint: { L7: { c: 4, t: 500 } } } };
+  ok('hint cap: a hint after the completion does not lower it', lvAt(later, 7).s === 3);
+  ok('hint cap: 1 hint before = 2 stars', lvAt({ ww: { lv: { L3: { s: 3, t: 9 } }, hint: { L3: { c: 1, t: 5 } } } }, 3).s === 2);
+  ok('hint cap: Spanish hints cap only the Spanish ladder', P.wwLevels({ ww: { lv: { L2: { s: 3, t: 9 } }, es: { L2: { s: 3, t: 9 } }, esHint: { L2: { c: 3, t: 1 } } } }, 'es')[2].s === 1
+    && P.wwLevels({ ww: { lv: { L2: { s: 3, t: 9 } }, esHint: { L2: { c: 3, t: 1 } } } })[2].s === 3);
+  ok('hint merge: most hints, earliest first hint', JSON.stringify(P.wwHintBest({ c: 1, t: 50 }, { c: 3, t: 90 })) === JSON.stringify({ c: 3, t: 50 }));
+  ok('hint merge: junk ignored', P.wwHintBest(null, { c: 0 }) === null && JSON.stringify(P.wwHintBest('x', { c: 2, t: 4 })) === JSON.stringify({ c: 2, t: 4 }));
+
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaverHint(11, 1);
+  G.recordWordWeaverHint(11, 2);
+  G.recordWordWeaverHint(11, 1);                     // a lower count never lowers it
+  G.recordWordWeaverHint(12, 1, 'es');
+  const ww = G.loadStats().games.wordweaver.ww;
+  ok('recorder: the hint count only grows, the first time is kept', ww.hint.L11.c === 2 && ww.hint.L11.t > 0);
+  ok('recorder: Spanish hints go to esHint', ww.esHint && ww.esHint.L12.c === 1 && !ww.hint.L12);
+  ok('recorder: a bad level writes nothing', G.recordWordWeaverHint(0, 1) === null && G.recordWordWeaverHint(2.5, 1) === null);
+  G.recordWordWeaver(11, { hints: 0, extra: 0 });   // the save was wiped: the game thinks 0 hints
+  ok('recorder + cap: the wiped-save replay scores 1 star', P.wwLevels(G.loadStats().games.wordweaver)[11].s === 1);
+
+  // Two phones: hints on one, the level finished on the other later = capped once merged.
+  const rec = (playerId, ww) => ({ profile: { playerId, name: 'Hinter' }, stats: { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ww } } }, updatedAt: 100 });
+  const g = A.aggregatePlayers({
+    d1: rec('HH111', { lv: {}, x: 0, hint: { L5: { c: 2, t: 10 } } }),
+    d2: rec('HH111', { lv: { L5: { s: 3, h: 0, t: 20 } }, x: 0 }),
+  })[0].games.wordweaver;
+  ok('merge: hint maps survive the combine and cap the other phone\'s finish', g.ww.hint.L5.c === 2 && P.wwLevels(g)[5].s === 1);
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');

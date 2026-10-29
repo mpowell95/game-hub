@@ -35,17 +35,21 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   Next on the done screen continues in the same band.
 - Swipe (pointer events, `touch-action: none`): lift submits; sliding back onto the previous letter un-selects
   it. **Or TAP (Matt, 2026-10-29)**: a touch that stays on one letter adds it (nothing entered); tapping the last picked
-  letter again takes it off; the yellow check in the wheel's middle (shown while letters are picked) enters the word.
+  letter again takes it off; the check in the wheel's middle enters the word: small, INK with a white tick (gold means only a
+  picked letter; Matt, 2026-10-29: the gold check "is distracting"), shown and tappable only from 3 letters.
   Taps and a swipe join (tapped letters stay, the swipe carries on). Grid word: its letters fly from the pill into the grid. Found again: that word flashes. Extra word (the
   level's `x`): the star chip bumps and counts; found again: it wiggles. Anything else: the pill shakes. Under 3
   letters: silent. **No sound, ever.**
 - **Hints are unlimited.** One tap reveals one letter: the first unrevealed cell (top to bottom, left to right)
   of the shortest unfound grid word (ties: earlier in `w`; cells a found word already shows are skipped). Each
-  reveal is one hint. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side).
+  reveal is one hint, **recorded at once in the synced stats store** (`recordWordWeaverHint`, `ww.hint`/`ww.esHint`;
+  Matt, 2026-10-29: "Close the hint gap"): reopening a level takes the larger of the save's and the store's count, and a
+  level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side).
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter
   submits, Space shuffles.
+- **Bigger wheel letters (Matt, 2026-10-29)**: 54 units of the 240 box (was 40), ring 80, picked disc 31, touch radius 33.
 - **Bigger grid letters (Matt, 2026-10-29)**: letter = 72% of the tile (was 58%), tiles up to 64px (was 54), the wheel
   shrinks to 200px while tiles are under 44px.
 - Layout never scrolls: wheel 184-250px (a letter's touch area stays over 44px), grid cells measured to fit above it

@@ -14,8 +14,8 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWordWeaver, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwPoints } from '../../js/word-weaver-points.js';
+import { recordWordWeaver, recordWordWeaverHint, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints } from '../../js/word-weaver-points.js';
 import { loadIndex, loadLevel, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -160,10 +160,14 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 // The wheel is drawn in a 240 x 240 box (the mockup's numbers): letters sit on a ring of radius 78,
 // 27 across the visible disc of a letter, 31 as the touch radius (62 of 240 units: 58px on a 224px wheel).
-const RING = 78, LETTER_R = 27, HIT_R = 31, DISC_R = 116;
+// Bigger letters (Matt, 2026-10-29: "Improve the letters... make it larger"): ring 80, letter 54 units (was 40), the
+// picked disc 31, touch radius 33 (seven letters stay 69 units apart, so touch areas never overlap).
+const RING = 80, LETTER_R = 31, HIT_R = 33, DISC_R = 116;
 // TAP TO SELECT (Matt, 2026-10-29: "allow for selecting letters in addition to swiping"): the centre's check enters
 // the tapped word; it sits inside the ring's free middle (letters start 47 units out).
-const GO_R = 24, GO_HIT = 34;
+// The check is quiet (Matt, 2026-10-29: the gold check "is distracting"): small, ink with a white tick, so gold only ever
+// means a picked letter; it shows (and works) only once a word is long enough to enter (3 letters).
+const GO_R = 19, GO_HIT = 30, GO_MIN = 3;
 
 // --- the game ------------------------------------------------------------------------------------
 
@@ -337,6 +341,11 @@ class WordWeaver {
     const a = attemptOf(this.band, lang);
     this.level = lv;
     this.st = cleanState(lv, a && Math.floor(a.n) === n ? a : null);
+    // Hints recorded in the stats store (2026-10-29) outlive this save: a wiped save never resets them.
+    try {
+      const h = wwHints(loadStats().games.wordweaver, lang)[n];
+      if (h && h.c > this.st.hints) this.st.hints = h.c;
+    } catch { /* no store: the save's count stands */ }
     this.order = shuffled(lv.l.length, null);
     this.finishing = false;
     this.view = isDone(lv, this.st) ? 'done' : 'play';
@@ -468,7 +477,7 @@ class WordWeaver {
             <circle class="ww-disc" r="${DISC_R}"/>
             <polyline class="ww-trail" points=""/>
             ${ltrs}
-            <g class="ww-go" aria-hidden="true"><circle r="${GO_R}"/><path d="M-10 1l7 7 13-15"/></g>
+            <g class="ww-go" aria-hidden="true"><circle r="${GO_R}"/><path d="M-7.5 .5l5 5 10-11"/></g>
           </svg>
         </div>
         <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
@@ -616,7 +625,7 @@ class WordWeaver {
     trail.setAttribute('points', pts.join(' '));
     trail.classList.toggle('is-on', this.sel.length > 0);
     const go = svg.querySelector('.ww-go');
-    if (go) go.classList.toggle('is-on', !this.drag && this.sel.length > 0);
+    if (go) go.classList.toggle('is-on', !this.drag && this.sel.length >= GO_MIN);
     this._paintPill();
   }
 
@@ -682,7 +691,7 @@ class WordWeaver {
     if (!svg || !this.root.contains(svg)) return;
     const hit = this._letterAt(ev.clientX, ev.clientY);
     const picked = this.sel.slice();             // tapped (or typed) before this touch
-    if (hit < 0 && picked.length && Math.hypot(this._lastPt[0], this._lastPt[1]) <= GO_HIT) {
+    if (hit < 0 && picked.length >= GO_MIN && Math.hypot(this._lastPt[0], this._lastPt[1]) <= GO_HIT) {
       ev.preventDefault();
       this._submitSel();
       return;
@@ -801,6 +810,10 @@ class WordWeaver {
     const k = c.r + ',' + c.c;
     this.st.revealed.push(k);
     this.st.hints += 1;
+    // Recorded at once in the synced stats store, not only in this save (Matt, 2026-10-29: "Close the hint gap").
+    try {
+      if (!recordWordWeaverHint(this.n, this.st.hints, this.lang === 'es' ? 'es' : undefined)) console.error('[word-weaver] hint NOT recorded in the stats store', this.n);
+    } catch (err) { console.error('[word-weaver] hint NOT recorded in the stats store', err); }
     // A word whose every letter is now showing counts as found, as in Wordscapes (no swipe needed).
     const shown = foundCells(this.level, this.st);
     for (const r of this.st.revealed) shown.add(r);
