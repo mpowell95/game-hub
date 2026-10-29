@@ -83,17 +83,47 @@ export const isForcedEnd = (why) => why === 'resign' || why === TIMEOUT;
 /** PURE. When a turn that began at `turnAt` is forfeited. */
 export function forfeitAt(turnAt) { return Math.max(ms(turnAt), FORFEIT_FROM) + FORFEIT_MS; }
 
-/** PURE. When the current turn of a two-sided log began: the `at` of the last entry made by a side
- *  NOT on turn (it ended their turn), else `fallback` (the match's `updated`). `ats` is the entries'
- *  times when the cleaned log does not keep them (Battle Arena, Battleship). */
-export function turnStartOf(log, turn, fallback = 0, ats = null) {
+/**
+ * PURE. Each entry's time, made safe to decide anything with (2026-10-29, second pass): a time may
+ * never run BACKWARDS (an entry is lifted to the one before it, so a move stamped with a phone clock
+ * set back cannot pretend the turn began days earlier) and never lies in the FUTURE (capped at `cap`,
+ * the server's now, when given). A missing time is 0 ("unknown"). Since 2026-10-29 every new entry
+ * is stamped by the SERVER (Firebase serverTimestamp, enforced in database.rules.json), so this only
+ * matters for times written before that, by an older build or a changed phone clock.
+ */
+export function safeTimes(log, ats = null, cap = 0) {
   const list = Array.isArray(log) ? log : [];
+  const out = [];
+  let prev = 0;
+  for (let i = 0; i < list.length; i++) {
+    const raw = ms(Array.isArray(ats) ? ats[i] : list[i] && list[i].at);
+    let t = raw > 0 ? Math.max(raw, prev) : 0;
+    if (t && cap > 0 && t > cap) t = cap;
+    if (t) prev = t;
+    out.push(t);
+  }
+  return out;
+}
+
+/** PURE. When the current turn of a two-sided log began: the time of the last entry made by a side
+ *  NOT on turn (it ended their turn), else `fallback` (the match's `updated`). `ats` is the entries'
+ *  times when the cleaned log does not keep them (Battle Arena, Battleship). Times go through
+ *  `safeTimes` (never backwards, never past `cap`); when the entry that ended the last turn has no
+ *  time, the later of the previous known time and `fallback` stands in (the generous direction: a
+ *  player on turn is never timed from earlier than the turn really began). */
+export function turnStartOf(log, turn, fallback = 0, ats = null, cap = 0) {
+  const list = Array.isArray(log) ? log : [];
+  const times = safeTimes(list, ats, cap);
+  const fb = cap > 0 ? Math.min(ms(fallback), cap) : ms(fallback);
   for (let i = list.length - 1; i >= 0; i--) {
     const e = list[i];
-    const at = ms(Array.isArray(ats) ? ats[i] : e && e.at);
-    if (e && e.by !== turn && at > 0) return at;
+    if (!e || e.by === turn) continue;
+    if (times[i] > 0) return times[i];
+    let known = 0;
+    for (let j = i - 1; j >= 0; j--) if (times[j] > 0) { known = times[j]; break; }
+    return Math.max(known, fb);
   }
-  return ms(fallback);
+  return fb;
 }
 
 /**
@@ -120,4 +150,47 @@ export function rowTimeout(r, now = Date.now()) {
   const at = forfeitAt(ms(r.turnAt) || ms(r.updated));
   if (now < at) return null;
   return { result: r.yourTurn ? 'lost' : 'won', at };
+}
+
+// --- CALLING OFF AFTER THE SENDER HAS PLAYED IS A LOSS (Matt's decision, 2026-10-29) ----------------
+// A free cancel was a do-over: the sender could throw a bad first turn, cancel and send it again, and
+// the receiver could decline after seeing a strong first turn. Now, once the SENDER has played anything
+// in the match, a cancel (by the sender) or a decline (by the receiver) counts as a LOSS for whoever
+// does it: the other side wins, exactly like a resignation. It is STORED as a resignation
+// (`over: { winner, why: 'resign', via: 'cancelled' | 'declined', at }`), so every validator, list,
+// record and deployed push function already reads it right ("You won! <name> resigned."). Before the
+// sender has played anything, cancel and decline still count for nobody (the shape above). Each game's
+// own cancelGame decides it from the match itself; the row's `pl` (sender has played) only chooses the
+// words on a confirm screen.
+
+/** The `over.via` of a called-off challenge that cost its caller the match. */
+export const CALL_OFF_LOSS = ['cancelled', 'declined'];
+
+/** PURE. Does calling off an open challenge whose sender `senderPlayed` cost the caller a loss? */
+export function callOffCosts(senderPlayed) { return !!senderPlayed; }
+
+/**
+ * PURE. The same answer from an index row alone (the Multiplayer screen's confirm words). Rows from
+ * 2026-10-29 carry `pl` (the sender has played). An older row: a challenge that reached its receiver
+ * ('got', or a 'sent' row no longer on the sender's turn) was delivered after the sender's first turn.
+ */
+export function rowCallOffCosts(r) {
+  if (!r || typeof r !== 'object') return false;
+  if (typeof r.pl === 'boolean') return r.pl;
+  return r.open === 'got' || (r.open === 'sent' && !r.yourTurn);
+}
+
+// --- A LOST INDEX WRITE (2026-10-29, second pass) ----------------------------------------------------
+// A move writes the match, THEN the index rows. When the rows' write failed after the match landed, the
+// retry found the move already there and returned ok without the rows, so the other person never saw
+// "your turn" (and their row later read as a timeout). The retry now rewrites any row that disagrees
+// with the MATCH: the match decides, the row follows.
+
+/** PURE. Does a stored index row disagree with the row the match says it should be? Only what a
+ *  reader acts on is compared (whose turn, finished, called off); a missing row disagrees. */
+export function rowStale(stored, want) {
+  if (!stored || typeof stored !== 'object') return true;
+  if (!want || typeof want !== 'object') return false;
+  return !!stored.yourTurn !== !!want.yourTurn || !!stored.over !== !!want.over
+    || String(stored.ended || '') !== String(want.ended || '') || String(stored.result || '') !== String(want.result || '');
 }

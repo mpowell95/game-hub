@@ -233,14 +233,21 @@ localStorage.removeItem(MP.OUTBOX_KEY);
   ok('cancel: delivered rows say sent / got with a 3-day deadline',
     getAt(`cuppong/index/MATTA/${cx}`).open === 'sent' && getAt(`cuppong/index/ANABB/${cx}`).open === 'got'
     && getAt(`cuppong/index/ANABB/${cx}`).expires === getAt(`cuppong/games/${cx}`).updated + ANSWER_MS);
+  // Since 2026-10-29 (second pass) a cancel or decline after the sender has thrown is a LOSS for whoever does it.
+  ok('cancel: costs a loss once the sender has thrown (row and match agree)', MP.cancelCosts(await MP.readGame(cx)) && getAt(`cuppong/index/MATTA/${cx}`).pl === true);
   r = await MP.cancelGame(cx);
-  ok('cancel: the sender calls it off', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled');
-  ok('cancel: rows say cancelled, stored with over:false (no push fires)', getAt(`cuppong/index/ANABB/${cx}`).ended === 'cancelled'
-    && getAt(`cuppong/index/ANABB/${cx}`).over === false && getAt(`cuppong/index/ANABB/${cx}`).yourTurn === false);
+  ok('cancel: the sender calls it off after throwing = his resignation, Ana wins', r.ok && r.lost && !r.cancelled && r.game.over.winner === 'b' && r.game.over.why === 'resign' && getAt(`cuppong/games/${cx}/over/via`) === 'cancelled');
+  ok('cancel: rows say finished, Ana won', getAt(`cuppong/index/ANABB/${cx}`).over === true && getAt(`cuppong/index/ANABB/${cx}`).result === 'won' && getAt(`cuppong/index/MATTA/${cx}`).result === 'lost');
   use('B');
   const rb = (await MP.readMyGames()).find((x) => x.id === cx);
-  ok('cancel: Ana\'s list reads it finished, no result, nothing counted', rb.over && rb.ended === 'cancelled' && rb.result === null && MP.recordFinished([rb]) === 0);
+  ok('cancel: Ana\'s list reads it as her win, counted once', rb.over && !rb.ended && rb.result === 'won' && MP.recordFinished([rb]) === 1 && MP.recordFinished([rb]) === 0);
   ok('cancel: no throw gets in after', !(await MP.appendLog(cx, 2, [t('b', null)])).ok);
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
+  const zx = r.id;
+  ok('cancel before any throw: costs nothing', !MP.cancelCosts(await MP.readGame(zx)));
+  r = await MP.cancelGame(zx);
+  ok('cancel before any throw: called off for nobody, stored over:false (no push fires)', r.ok && r.cancelled && r.game.over.winner === 'none' && getAt(`cuppong/index/MATTA/${zx}`).ended === 'cancelled' && getAt(`cuppong/index/MATTA/${zx}`).over === false);
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });
@@ -248,7 +255,7 @@ localStorage.removeItem(MP.OUTBOX_KEY);
   await MP.appendLog(dx, 0, [t('a', null), t('a', null)]);
   use('B');
   r = await MP.resignGame(dx);
-  ok('decline: quitting an unanswered challenge declines it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined');
+  ok('decline after the sender threw: a loss for Ana, Matt wins', r.ok && r.lost && r.game.over.why === 'resign' && r.game.over.winner === 'a' && getAt(`cuppong/games/${dx}/over/via`) === 'declined');
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 0 } });

@@ -349,6 +349,10 @@ class ChallengeLink {
     const life = MP.lifeOf(this.game);
     if (life.open) {
       const mine = this.side === MP.recipientOf(this.game);
+      // After the sender's first turn, calling it off is a loss for whoever does it (2026-10-29): asked first.
+      if (typeof MP.cancelCosts === 'function' && MP.cancelCosts(this.game)) {
+        return [{ label: t(mine ? 'declineCh' : 'cancelCh'), act: () => confirmResign(this.ui, () => this.callOff(), t(mine ? 'declineQLoss' : 'cancelQLoss'), t(mine ? 'declineCh' : 'cancelCh')) }];
+      }
       return [{ label: t(mine ? 'declineCh' : 'cancelCh'), act: () => this.callOff() }];
     }
     return [{ label: t('resign'), act: () => confirmResign(this.ui, () => this.resign()) }];
@@ -356,6 +360,7 @@ class ChallengeLink {
 
   async callOff() {
     const res = await MP.cancelGame(this.id);
+    if (res.ok && res.lost) { this.ui.forceEnd(1 - this.seat); return; }   // it cost a loss (2026-10-29)
     home(this.ui, res.ok ? t('calledOff') : reasonText(res.reason));
   }
 
@@ -513,14 +518,14 @@ class LiveLink {
 }
 
 /** "Resign?" with Resign and Cancel. */
-function confirmResign(ui, yes) {
+function confirmResign(ui, yes, q = t('resignQ'), yesText = t('resign')) {
   const el = document.createElement('div');
   el.className = 'gh-overlay ba-overlay';
-  el.innerHTML = `<div class="gh-modal ba-pause" role="dialog" aria-modal="true" aria-label="${esc(t('resignQ'))}">
+  el.innerHTML = `<div class="gh-modal ba-pause" role="dialog" aria-modal="true" aria-label="${esc(q)}">
       <button type="button" class="gh-modal__close" data-role="no" aria-label="${esc(t('close'))}">&times;</button>
-      <p class="ba-ol-big">${esc(t('resignQ'))}</p>
+      <p class="ba-ol-big">${esc(q)}</p>
       <div class="gh-modal__actions">
-        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t('resign'))}</button>
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(yesText)}</button>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${esc(t('cancel'))}</button>
       </div></div>`;
   ui.root.appendChild(el);

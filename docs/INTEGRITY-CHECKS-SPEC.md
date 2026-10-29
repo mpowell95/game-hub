@@ -334,6 +334,88 @@ never got the win. **Matt's decision: "7 days, then forfeit".**
   once, an unanswered challenge still expires), `tools/test-eightball-mp.mjs` (Cutthroat),
   `tools/test-skee-challenge.mjs`, every game's `tools/test-*-mp.mjs`.
 
+## Holes closed 2026-10-29 (second pass): challenge clocks and cancels
+
+A review of the first pass proved five holes with in-memory scripts (a phone clock set back, set forward,
+and a fresh storage opened with the date set back). All ten challenge games (Darts, Cup Pong, Flick
+Soccer, Pool, Battleship, Connect 4 Hoops, Chinchón, Escoba, Archery, Battle Arena) and Skeeball's
+challenges. Nothing stored was rewritten or deleted; every rule below is applied on write (new moves) or
+derived on read. Proof: `tools/test-challenge-clock.mjs` (101 checks) plus every game's `test-*-mp.mjs`.
+
+**F1. Backdated moves made the opponent forfeit at once.** Every move's `at` and the match's `updated`
+were the phone's clock, and "7 days, then forfeit" timed a turn from them.
+- Fix: every new move, `created`, `updated` and result time is written as Firebase's `serverTimestamp()`
+  (`js/challenge-clock.js stampFor`): the SERVER fills it in. `database.rules.json` now refuses, for each
+  challenge node's `games/$id`, a new `log/$k` (Hoops `moves/$k`) entry whose `at` is not the server's time,
+  and a changed `created` / `updated` that is not (Skeeball: `created` / `updated`). Old entries are never
+  re-validated (`data.exists() ||`). **The rules allow 2 minutes either way**, so a phone still on the
+  previous build (phone-clock stamps, correct clock) can finish its turn; days of backdating are refused.
+- On read, `js/challenge-life.js safeTimes` makes each entry's time never earlier than the one before it
+  and never later than now, so a forged time already stored (an older build, or a write in those 2 minutes)
+  cannot start a turn's clock early; an entry with no time falls back to the later of the last known time
+  and `updated` (`turnStartOf`, the generous direction).
+- Skeeball has no move log: its hand-over deadline `expires` is phone-computed, so it is read as no earlier
+  than the server-stamped `updated` + 3 days (`skeeball/js/challenge.js safeExpires`); the hand-over itself
+  uses live server time.
+- Honest player: nothing changes. A phone whose clock is off by more than 2 minutes AND still on the old
+  build has a move refused until it updates (the new build never sends its own clock).
+
+**F2. A phone clock set forward booked a win.** Timeouts were decided with `Date.now()`, and a timed-out
+row was counted at once.
+- Fix: every game decides expiry and timeouts on `decideNow()` (this page's live server time, else the
+  last measured gap, else the phone). Each writer first waits up to 4 s for live server time
+  (`liveTime`), so a late move is refused on the server's clock. **A timeout is COUNTED only after the
+  match itself is re-read and the timeout confirmed on LIVE server time** (`queueConfirm`, run by each
+  game's `recordFinished`; `timeoutsSettled()` for tests). A timeout derived without live server time is
+  shown but never counted: each game's `countResult` refuses an id its last look marked unsure
+  (`noteTimeout` / `timeoutUnsure`), which covers the game screen's own count too. With no connection, a
+  timeout is shown and counted on a later open.
+- **When one person's devices disagree about a match** (`js/players-agg.js dedupeChallenges`): the first
+  pass kept a win over anything. Now the match's real outcome decides when the caller supplies it
+  (`corrections.mpOutcomes[game][matchId][CODE]`); otherwise the LEAST favourable copy stays (a loss, then
+  played-only, then a win). Why: a phone only counts a loss from a match that says this person lost, and
+  nobody forges a loss against themselves, so a loss that contradicts a win is the copy to believe; the
+  disputed win is not hidden from storage (`mpIds` and the raw counters are untouched), it is just not
+  shown twice or shown instead. Disagreement is judged on what each device RECORDED (a win an integrity void
+  made played-only is still the same answer as another device's win). Devices that agree are unchanged.
+- Left open: nothing supplies `mpOutcomes` yet. The server board (`functions/boards.js`) reads `players/`
+  only; giving it the real outcome would mean replaying each disputed match's log on the server.
+
+**F3. A fresh storage with the date set back re-counted history.** `countingSince` stamped the phone's
+date. Now the stamp is never before 2026-10-29 (`COUNT_FLOOR`, also applied on read to a stamp already
+stored), is the server's time when one is known (`js/challenge-clock.js` registers `serverNow` with
+`js/game-stats.js setTrustedClock`), and a stamp found in the server's future (a phone set forward) is
+brought back to it so no honest result is skipped. Anything counted since the floor carries its match id,
+so a re-count is taken out per person by `js/players-agg.js`.
+
+**F4. A free cancel was a do-over (Matt's decision).** The sender could throw a bad first turn, cancel and
+resend; the receiver could decline after seeing a strong first turn.
+- Fix: once the SENDER has played anything in the match, a cancel (by the sender) or a decline (by the
+  receiver) counts as a LOSS for whoever does it: the other side wins, exactly like a resignation. Before the
+  sender has played anything, it still counts for nobody. Shared rule `js/challenge-life.js callOffCosts`
+  (and `rowCallOffCosts` from a row's new `pl` field); each game's own `cancelGame` decides from the match
+  (`senderPlayed` / `cancelCosts`) and stores it as the caller's resignation, `over: { winner, why:
+  'resign', via: 'cancelled' | 'declined' }`, so every validator, list, record and the deployed push
+  functions read it unchanged (the winner is told "You won! <name> resigned."; the caller is told nothing).
+  A costly call-off writes the other person's row even if the challenge never reached them (it is their
+  win). In Cup Pong and Hoops it also ends a series (`seriesAfter`; no game 2 is owed).
+- Where it applies: Darts, Cup Pong, Hoops, Chinchón, Escoba, Archery, Battle Arena and Skeeball (the
+  sender moves first). In Flick Soccer, Battleship and Pool the receiver moves first, so while a challenge
+  is open the sender has played nothing and calling it off stays free.
+- The confirm says so in the fewest words: the Multiplayer screen ("{game} with {name}. Counts as a loss." /
+  "Cuenta como derrota.", via `endActionInfo`) and each game's own sheet ("Cancel this challenge? Counts as a
+  loss." and the Spanish).
+
+**F5. A lost index write.** `appendLog` wrote the log, then the rows; a retry that found the move already
+landed returned ok without the rows, so the receiver never saw "your turn" (and their stale row later read
+as a timeout).
+- Fix: an already-landed retry rewrites every row that disagrees with the MATCH (`rowStale`: whose turn,
+  finished, called off, result); the match decides, a derived timeout is never written, a challenge not yet
+  delivered gets no receiver row. Hoops' `pushMove` had no landed check at all (its retry was refused as
+  "not your turn" and dropped): it now recognises its own newest move and repairs the rows. Skeeball's
+  `postLeg` recognises its own landed score. Flick Soccer and Pool already rewrote the rows. A timeout
+  shown from a stale row is never counted (F2: the match is re-read first).
+
 ## Holes closed 2026-10-29: quit/resume and replay holes in single-player and vs-computer games
 
 Found by the "King of Games" hunt. Each fix keeps the honest player's game exactly as it was; none of

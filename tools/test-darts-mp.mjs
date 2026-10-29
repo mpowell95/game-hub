@@ -153,19 +153,28 @@ ok('...and it is called off, not lost', res.ok !== false && MP.isCalledOff(await
   ok('delivered: Matt\'s row says sent, Ana\'s says got, both with a deadline 3 days on',
     getAt(`darts/index/MATTA/${cx}`).open === 'sent' && getAt(`darts/index/ANABB/${cx}`).open === 'got'
     && getAt(`darts/index/ANABB/${cx}`).expires === getAt(`darts/games/${cx}`).updated + ANSWER_MS);
+  // CANCEL AFTER THE SENDER'S FIRST TURN = A LOSS for the sender (Matt, 2026-10-29, second pass).
+  ok('the confirm words know it will cost a loss (the row and the match agree)', MP.cancelCosts(await MP.readGame(cx)) === true && getAt(`darts/index/MATTA/${cx}`).pl === true);
   r = await MP.cancelGame(cx);
-  ok('the sender cancels it', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled', JSON.stringify(r));
+  ok('the sender cancels after his first turn: a LOSS for him, stored as his resignation', r.ok && r.lost && !r.cancelled && r.game.over.winner === 'b' && r.game.over.why === 'resign' && getAt(`darts/games/${cx}`).over.via === 'cancelled', JSON.stringify(r));
   const mr = getAt(`darts/index/MATTA/${cx}`), ar = getAt(`darts/index/ANABB/${cx}`);
-  ok('...both rows say cancelled, stored over:false so no push function fires', mr.ended === 'cancelled' && ar.ended === 'cancelled'
-    && mr.over === false && ar.over === false && ar.yourTurn === false && !('result' in ar), JSON.stringify(ar));
+  ok('...both rows say finished: she won, he lost (the push reads it as his resignation)', mr.over === true && mr.result === 'lost' && ar.over === true && ar.result === 'won' && ar.why === 'resign' && ar.lastBy === 'them', JSON.stringify(ar));
   use('B');
   const rowsB = await MP.readMyGames();
   const rb = rowsB.find((x) => x.id === cx);
-  ok('...Ana\'s list reads it as finished, no result', rb && rb.over && rb.ended === 'cancelled' && rb.result === null && !rb.yourTurn);
-  ok('...nothing is counted for it', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
-  ok('...and it is in nobody\'s record', !MP.recordsFrom(rowsB.filter((x) => x.id === cx), 'ANABB').finished.length);
+  ok('...Ana\'s list reads it as a win', rb && rb.over && !rb.ended && rb.result === 'won' && !rb.yourTurn);
+  ok('...counted for her once', MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 1 && MP.recordFinished(rowsB.filter((x) => x.id === cx)) === 0);
   ok('...and no dart can be thrown into it', !(await MP.appendLog(cx, 3, [dart('b')])).ok);
   ok('the match document is kept, log and all', Object.keys(getAt(`darts/games/${cx}/log`)).length === 3);
+  // Before the sender has thrown anything, a cancel still counts for nobody.
+  use('A');
+  r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const zx = r.id;
+  ok('nothing thrown yet: cancelling costs nothing', MP.cancelCosts(await MP.readGame(zx)) === false);
+  r = await MP.cancelGame(zx);
+  ok('the sender cancels before throwing: nobody wins', r.ok && r.cancelled && r.game.over.winner === 'none' && r.game.over.why === 'cancelled', JSON.stringify(r));
+  const zr = getAt(`darts/index/MATTA/${zx}`);
+  ok('...his row says cancelled, stored over:false so no push function fires; she never had one', zr.ended === 'cancelled' && zr.over === false && !('result' in zr) && !getAt(`darts/index/ANABB/${zx}`));
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
@@ -173,8 +182,8 @@ ok('...and it is called off, not lost', res.ok !== false && MP.isCalledOff(await
   await MP.appendLog(dx, 0, [dart('a'), dart('a'), dart('a')]);
   use('B');
   r = await MP.resignGame(dx);
-  ok('the receiver giving up an unanswered challenge DECLINES it (nobody wins)', r.ok && r.cancelled && r.game.over.why === 'declined' && r.game.over.winner === 'none');
-  ok('...Matt\'s row says declined', getAt(`darts/index/MATTA/${dx}`).ended === 'declined');
+  ok('the receiver declining after the sender\'s first turn: a LOSS for her (Matt wins)', r.ok && r.lost && r.game.over.why === 'resign' && r.game.over.winner === 'a' && getAt(`darts/games/${dx}`).over.via === 'declined');
+  ok('...Matt\'s row says he won', getAt(`darts/index/MATTA/${dx}`).result === 'won' && getAt(`darts/index/MATTA/${dx}`).over === true);
 
   use('A');
   r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
@@ -230,7 +239,9 @@ ok('...and it is called off, not lost', res.ok !== false && MP.isCalledOff(await
 const rec = MP.recordsFrom(await MP.readMyGames(), 'MATTA');
 // Two wins (the match and Ana's resignation). The challenge Matt gave up before delivering it is
 // CALLED OFF since 2026-10-13, not a loss, and the cancelled/declined/expired ones count for nobody.
-ok('records: one opponent, wins and losses per code', rec.opponents.length === 1 && rec.opponents[0].won === 2 && rec.opponents[0].lost === 0 && rec.opponents[0].played === 2, JSON.stringify(rec.opponents));
+// Since 2026-10-29 (second pass) a cancel or decline after the sender's first turn is a loss for whoever
+// does it: Ana's decline is a third win, Matt's two cancels after throwing are two losses.
+ok('records: one opponent, wins and losses per code', rec.opponents.length === 1 && rec.opponents[0].won === 3 && rec.opponents[0].lost === 2 && rec.opponents[0].played === 5, JSON.stringify(rec.opponents));
 
 // The outbox keeps darts until the server has them.
 use('A');
@@ -293,7 +304,7 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
   const rows = (await MP.readMyGames()).filter((x) => x.id === did);
   ok('...counted on her phone as a draw (played, neither won nor lost)', MP.recordFinished(rows) === 1);
   const st = JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp;
-  ok('...in her stats', st.played === 2 && st.lost === 1 && st.won === 0, JSON.stringify(st));
+  ok('...in her stats', st.played === 3 && st.lost === 1 && st.won === 1, JSON.stringify(st));
   const rd = MP.recordsFrom(await MP.readMyGames(), 'ANABB').opponents[0];
   ok('...and in the records', rd.draw === 1, JSON.stringify(rd));
   ok('a claimed draw the darts never produced is refused', MP.validateGame({ ...clone(getAt(`darts/games/${did}`)), log: { '0000': dart('a') } }) === null);
@@ -395,6 +406,7 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
 // turn sits on it for 7 days is lost by them. Derived on every read, nothing written, a late dart refused.
 {
   const { FORFEIT_MS } = await import('../js/challenge-life.js');
+  const ST = await import('../js/server-time.js');
   const realNow = Date.now;
   use('A');
   let r = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
@@ -421,8 +433,12 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
     const hers = (await MP.readMyGames()).find((x) => x.id === tid);
     ok('her list: finished, won, timed out', hers.over && hers.result === 'won' && hers.why === 'timeout');
     const before = JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp.won | 0;
-    ok('counted once on her phone, as a win', MP.recordFinished([hers]) === 1 && MP.recordFinished([hers]) === 0
-      && JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp.won === before + 1);
+    // A timeout counts only once the match confirms it on LIVE server time (2026-10-29, second pass).
+    ST.__setServerTimeForTest(0);
+    MP.recordFinished([hers]); await MP.timeoutsSettled(); MP.recordFinished([hers]); await MP.timeoutsSettled();
+    ok('counted once on her phone, as a win (after re-reading the match on live server time)',
+      JSON.parse(stores.B.get('gamehub.stats')).games.darts.byDiff.mp.won === before + 1);
+    ST.__setServerTimeForTest(null);
     ok('...noted with its match id (one count per person across devices)', JSON.parse(stores.B.get('gamehub.stats')).games.darts.mpIds[tid] === 'w');
     ok('the history says timed out', MP.recordsFrom([hers], 'ANABB').finished[0].timedOut === true);
   } finally { Date.now = realNow; }

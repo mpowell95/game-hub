@@ -1105,16 +1105,40 @@ export function withChallengeMatch(gameId, matchId, record) {
 // `<ledgerKey>.since`, and from then on counts only matches that FINISHED after that (less a grace for
 // two phones' clocks). A storage that already had a ledger never gets a stamp and behaves as before.
 export const COUNT_GRACE_MS = 10 * 60 * 1000;
+// SECOND PASS (2026-10-29): a fresh storage opened with the phone's date set BACK stamped an early
+// "counting since" and re-counted the history it was meant to skip. The stamp is now never earlier than
+// the day this rule began (COUNT_FLOOR; also applied on READ to a stamp already stored), and is taken
+// from the SERVER's clock when one is known (js/challenge-clock.js registers js/server-time.js
+// serverNow here; game-stats.js itself stays free of network imports, it is copied to the server). A
+// stamp found in the future of the server's clock (a phone set forward) is brought back to it, so an
+// honest result is never skipped for it. Everything since COUNT_FLOOR carries its match id
+// (withChallengeMatch), so a re-count within it is taken back out per person by js/players-agg.js.
+export const COUNT_FLOOR = Date.UTC(2026, 9, 29);
+let _trustedClock = null;
+/** Register the server's clock (a function returning ms, or null when unknown). */
+export function setTrustedClock(fn) { _trustedClock = typeof fn === 'function' ? fn : null; }
+function trustedNow() {
+  try { const v = _trustedClock ? +_trustedClock() : NaN; return Number.isFinite(v) && v > 0 ? v : null; } catch { return null; }
+}
 /** When this storage started counting that game's challenges: 0 = it counted before this rule. */
 export function countingSince(ledgerKey, now = Date.now()) {
   const k = String(ledgerKey) + '.since';
+  const server = trustedNow();
   try {
     const s = +localStorage.getItem(k);
-    if (Number.isFinite(s) && s > 0) return s;
+    if (Number.isFinite(s) && s > 0) {
+      if (server != null && s > server + COUNT_GRACE_MS) {
+        const fixed = Math.max(server, COUNT_FLOOR);
+        try { localStorage.setItem(k, String(fixed)); } catch { /* read as fixed below anyway */ }
+        return fixed;
+      }
+      return Math.max(s, COUNT_FLOOR);
+    }
     if (localStorage.getItem(ledgerKey) != null) return 0;
-    localStorage.setItem(k, String(now));
-    return now;
-  } catch { return now; }
+    const stamp = Math.max(server != null ? server : (Number.isFinite(+now) ? +now : Date.now()), COUNT_FLOOR);
+    localStorage.setItem(k, String(stamp));
+    return stamp;
+  } catch { return Math.max(server != null ? server : Date.now(), COUNT_FLOOR); }
 }
 /** May this storage count a match that finished at `finishedAt` (ms)? */
 export function mayCountChallenge(ledgerKey, finishedAt, now = Date.now()) {

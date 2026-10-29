@@ -29,7 +29,8 @@ import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, 
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS, TABLE_NOW, RULES_NOW } from './engine.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts } from '../../js/challenge-life.js';
+import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
 const NODE = 'eightball';
 const STATS_ID = 'eightball';
@@ -312,14 +313,14 @@ export function themLabel(game, code) {
 // --- before the challenge is answered (js/challenge-life.js) ---------------------------------------
 /** PURE. { open, waiting, expires, expired }: open = not over and nobody it was sent to has shot yet;
  *  waiting = open and it is one of their turns; expires = when it lapses (3 days unanswered). */
-export function lifeOf(game, now = Date.now()) {
+export function lifeOf(game, now = decideNow()) {
   if (!game || game.over) return { open: false, waiting: false, expires: 0, expired: false, turnAt: 0, forfeits: 0 };
   const open = !game.log.some((e) => e.by !== 0);
   const waiting = open && game.turn !== 0;
   const expires = expiresAt(game.lapse, waiting, game.updated);
   // ANSWERED: the side on turn has 7 days from when the turn became theirs (2026-10-29,
   // js/challenge-life.js), then forfeits. `turnAt` rides on the index rows so the lists agree.
-  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated);
+  const turnAt = open ? 0 : turnStartOf(game.log, game.turn, game.updated, null, now);   // safe times, capped at now (2026-10-29)
   return { open, waiting, expires, expired: expires > 0 && now >= expires, turnAt, forfeits: open ? 0 : forfeitAt(turnAt) };
 }
 /** Who wins if the player on turn times out: decided exactly like a resignation by them
@@ -336,14 +337,23 @@ export function timeoutWinner(game) {
 }
 /** A match whose player on turn sat on it for 7 days is OVER: they lose, why 'timeout'. Derived on
  *  every read (nothing is written), so every phone agrees and a late shot is refused. */
-export function withTimeout(game, now = Date.now()) {
+export function withTimeout(game, now) {
+  if (game && game.id) noteTimeout(NODE, game.id, true);   // a fresh look: forget an earlier unsure one
   if (!game || game.over) return game;
-  const life = lifeOf(game, now);
+  // Decided on the SERVER's clock (js/challenge-clock.js); a timeout decided without live server time
+  // is shown but never counted (countResult asks timeoutUnsure). 2026-10-29, second pass.
+  const c = now == null ? clockNow() : { now, live: true };
+  const life = lifeOf(game, c.now);
   const quitter = game.turn;
-  const over = timeoutOver({ over: game.over, open: life.open, turn: quitter, turnAt: life.turnAt, other: () => timeoutWinner(game) }, now);
-  if (over) { game.over = { ...over, by: quitter }; game.turn = null; }
+  const over = timeoutOver({ over: game.over, open: life.open, turn: quitter, turnAt: life.turnAt, other: () => timeoutWinner(game) }, c.now);
+  if (over) { game.over = { ...over, by: quitter }; game.turn = null; noteTimeout(NODE, game.id, c.live); }
   return game;
 }
+/** Has the SENDER (seat 0) shot yet? From then on a cancel or a decline counts as a loss for whoever
+ *  does it (Matt, 2026-10-29, js/challenge-life.js callOffCosts). The first receiver breaks, so while a
+ *  challenge is open the sender has never shot: calling it off stays free. */
+export function senderPlayed(game) { return !!game && game.log.some((e) => e.by === 0); }
+export function cancelCosts(game) { return callOffCosts(senderPlayed(game)); }
 /** Was this match called off (cancelled or declined) rather than played to a result? */
 export const isCalledOff = (game) => !!(game && game.over && game.over.winner === 'none');
 /** Did `seat` make the challenge (seat 0) or receive it? */
@@ -427,6 +437,8 @@ export function markCounted(id) {
  *  bucket. A VOIDED match (js/stats-corrections.js) is never counted. */
 export function countResult(id, won, finishedAt = Date.now()) {
   if (isVoidedMatch(STATS_ID, id)) return false;
+  // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
+  if (timeoutUnsure(NODE, id)) return false;
   // A storage that never counted these challenges counts only what finished after it started
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
@@ -451,11 +463,22 @@ export function recordFinished(rows) {
   countingSince(LEDGER_KEY);
   try { noteVoided(); } catch (err) { console.warn('[eight-ball] noteVoided', err); }
   const ledger = readLedger();
-  const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id) && mayCountChallenge(LEDGER_KEY, r.updated));
+  const fresh = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && RESULTS.includes(r.result) && !ledger.has(r.id) && !isVoidedMatch(STATS_ID, r.id));
+  // A TIMEOUT seen on a row is counted only once the match itself confirms it on live server time
+  // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
+  queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
+    const res = resultOf(g, seatOf(g, myCode()));
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at)) return false;
+    addUnseen([r.id]);
+    return true;
+  });
+  const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
+/** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
+export const timeoutsSettled = () => confirmsSettled(NODE);
 export const UNSEEN_KEY = 'gamehub.eightball.unseenResults.v1';
 export function readUnseen() {
   try { const raw = JSON.parse(localStorage.getItem(UNSEEN_KEY) || '[]'); return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : []; }
@@ -478,7 +501,7 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
-function rowsFromIndex(val, now = Date.now()) {
+function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
     const r = val[id] || {};
@@ -616,6 +639,7 @@ export function rowFor(game, seat, writer, tw = game.n === 3 ? timeoutWinner(gam
     ...(game.n === 3 && !game.over && !life.open && Number.isInteger(tw) ? { tw: tw === seat } : {}),
     ended,
     sent: seat === 0,
+    pl: senderPlayed(game),                     // the sender has shot: calling off costs a loss (2026-10-29)
     mine: game.scores[seat] || 0, theirs,
     mode: game.mode, racks: game.racks, n: game.n,
     lastBy: writer === seat ? 'me' : 'them',
@@ -647,14 +671,13 @@ export async function createGame({ them, mode = '8', racks = 1, opts = {}, aids 
   if (!allowed('createGame')) return fail('dev-origin-blocked');
   if (!RACK_OPTIONS.includes(+racks)) return fail('bad-racks');
   const mine = meLabel();
-  const now = Date.now();
   const id = mintGameId();
   const doc = {
     v: 1, id, mode: md, racks: +racks,
     opts: { call: !!(opts && opts.call), bank: !!(opts && opts.bank), obst: !!(opts && opts.obst) },
     aids: AID_IDS.includes(aids) ? aids : 'medium',
     seed: mintSeed(), tb: TABLE_NOW, rv: RULES_NOW,
-    by: me, created: now, updated: now, lapse: true,
+    by: me, created: 0, updated: 0, lapse: true,
     p: [{ code: me, name: mine.name, emoji: mine.emoji }, ...list.map((x, k) => ({ code: codes[k], name: String(x.name || ''), emoji: String(x.emoji || '🙂') }))],
     log: null, over: null,
   };
@@ -662,6 +685,7 @@ export async function createGame({ them, mode = '8', racks = 1, opts = {}, aids 
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    doc.created = stampFor(api); doc.updated = stampFor(api);   // the SERVER's time (2026-10-29)
     await api.set(api.ref(db, `${NODE}/games/${id}`), doc);
     const back = await api.get(api.ref(db, `${NODE}/games/${id}`));
     const game = back && back.exists() ? validateGame(back.val()) : null;
@@ -690,6 +714,7 @@ export async function appendLog(id, base, entries) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const { game: fresh, why } = await readFresh(api, db, id);
     if (!fresh) return fail(why);
     const seat = seatOf(fresh, me);
@@ -713,7 +738,7 @@ export async function appendLog(id, base, entries) {
     const m = freshMatch(fresh);
     const all = fresh.log.concat(todo);
     for (let i = 0; i < all.length; i++) { if (!applyEntry(m, all[i])) return fail('rules-refused'); fixAfter(m, fresh, i + 1); }
-    const now = Date.now();
+    const now = stampFor(api);      // the SERVER stamps every shot (rules refuse any other time)
     const patch = { updated: now };
     todo.forEach((e, i) => {
       const { at, ...rest } = e;
@@ -746,25 +771,33 @@ export async function cancelGame(id) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);
     const { game: fresh, why: bad } = await readFresh(api, db, id);
     if (!fresh) return fail(bad);
     const seat = seatOf(fresh, me);
     if (seat < 0) return fail('not-your-game');
     let back = fresh;
+    let lost = false;
     if (fresh.over) {
-      if (!isCalledOff(fresh)) return fail('already-over');
+      lost = fresh.over.why === 'resign' && fresh.over.by === seat;   // a costly call-off, retried
+      if (!isCalledOff(fresh) && !lost) return fail('already-over');
     } else {
       if (!lifeOf(fresh).open) return fail('accepted');
-      const now = Date.now();
+      const now = stampFor(api);
       const why = seat === 0 ? 'cancelled' : 'declined';
-      await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: 'none', why, by: seat, at: now }, updated: now });
+      // Once the sender has shot, calling it off is a LOSS for whoever does it (Matt, 2026-10-29):
+      // stored as their resignation (resignWinner wins), `via` saying how. Before that, for nobody.
+      lost = cancelCosts(fresh);
+      const over = lost ? { winner: resignWinner(buildMatch(fresh), seat), why: 'resign', by: seat, via: why, at: now } : { winner: 'none', why, by: seat, at: now };
+      await api.update(api.ref(db, `${NODE}/games/${id}`), { over, updated: now });
       back = (await readFresh(api, db, id)).game;
       if (!back) return fail('did-not-land', true);
-      if (!isCalledOff(back)) return back.over ? fail('already-over') : fail('accepted');
+      if (lost) { if (!back.over || back.over.why !== 'resign' || back.over.by !== seat) return fail('did-not-land', true); }
+      else if (!isCalledOff(back)) return back.over ? fail('already-over') : fail('accepted');
     }
     await writeRows(api, db, back, seat);
     markSeen(id, back.updated);
-    return { ok: true, game: back, cancelled: true };
+    return lost ? { ok: true, game: back, lost: true } : { ok: true, game: back, cancelled: true };
   } catch (err) {
     console.error('[eight-ball] could not call the challenge off', err);
     const reason = reasonOf(err);
@@ -781,6 +814,7 @@ export async function resignGame(id) {
     const boot = await ready();
     if (!boot) return fail('offline', true);
     const { db, api } = boot;
+    await liveTime(api);            // expiry and timeouts are decided on the server's clock (2026-10-29)
     const { game: fresh, why } = await readFresh(api, db, id);
     if (!fresh) return fail(why);
     const seat = seatOf(fresh, me);
@@ -791,7 +825,7 @@ export async function resignGame(id) {
     if (!fresh.over && lifeOf(fresh).open) return cancelGame(id);
     let back = fresh;
     if (!fresh.over) {
-      const now = Date.now();
+      const now = stampFor(api);
       const w = resignWinner(buildMatch(fresh), seat);
       await api.update(api.ref(db, `${NODE}/games/${id}`), { over: { winner: w, why: 'resign', by: seat, at: now }, updated: now });
       back = (await readFresh(api, db, id)).game;

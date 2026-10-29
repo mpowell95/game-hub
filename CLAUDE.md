@@ -260,6 +260,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `live-read.js` | `watchPath`/`readPath`: a watched Firebase path is downloaded once, and a read of it answers from the watch (each challenge game's index, 2026-10-22) |
 | `hub-messages.js` | messages FROM the Game Hub (`HUB_MESSAGES`, in code; see "Messages") |
 | `challenges.js` / `challenges-ui.js` / `challenge-life.js` | the Multiplayer screen (was Challenges; reads only) and the shared cancel/expire rules (`ANSWER_MS` 3 days) |
+| `challenge-clock.js` | every challenge game's server clock: `stampFor` (serverTimestamp writes), `decideNow`/`liveTime`, timeouts counted only once confirmed on live server time (`queueConfirm`) |
 | `mp-records.js` | the Multiplayer screen's Records for live-room games: `byDiff.mp` + `h2h`, read only |
 | `game-chat-history.js` | READ ONLY: your in-game quick chat with one person (challenge games), merged into that Messages conversation |
 | `match-chat.js` / `match-chat-ui.js` | in-match quick chat for EVERY online game, at `<node>/chat/<matchId>` (beside the match, never inside) |
@@ -625,6 +626,11 @@ None of this makes the hub cheat-proof; never describe it that way.
 
 Shared rules in `js/challenge-life.js`; writes in each game's `mp.js` (Skeeball `challenge.js`),
 verified by re-read, deleting nothing.
+
+- **Second pass (2026-10-29): the SERVER's clock, never the phone's.** Moves, `created`, `updated` are `serverTimestamp()`
+  (rules refuse anything else, 2 min slack); timeouts are decided on server time and COUNTED only after the match is
+  re-read on live server time (`js/challenge-clock.js`). **Once the sender has played, a cancel or decline is the caller's
+  LOSS** (stored as their resignation, `via`; "Counts as a loss."). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, second pass.
 
 - **OPEN until the receiver's first move** (later series games are never open). While open: the
   sender can **cancel**, the receiver can **decline**; counts for nobody (`over: { winner: 'none',
