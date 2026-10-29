@@ -36,7 +36,10 @@ async function logGameAction(M, id) {
   const life = M.lifeOf(g);
   if (life.expired) return null;
   if (!life.open) return 'resign';
-  return side === M.recipientOf(g) ? 'decline' : 'cancel';
+  // Once the sender has played, a cancel or a decline counts as a loss for whoever does it (Matt,
+  // 2026-10-29, js/challenge-life.js callOffCosts): the confirm screen says so.
+  const loss = typeof M.cancelCosts === 'function' && !!M.cancelCosts(g);
+  return { action: side === M.recipientOf(g) ? 'decline' : 'cancel', loss };
 }
 async function logGameEnd(M, id, action) {
   const res = action === 'resign' ? await M.resignGame(id) : await M.cancelGame(id);
@@ -44,7 +47,8 @@ async function logGameEnd(M, id, action) {
   // own Resign button does (Darts, Cup Pong, Flick Soccer). Left to the next list read instead, it
   // would also queue a "Game over" popup for your own resignation. Hoops has no countResult: its
   // own Quit leaves the count to recordFinished too, and so does this.
-  if (res && res.ok && action === 'resign' && !res.cancelled && typeof M.countResult === 'function') {
+  // A cancel or decline after the sender's first turn is a loss too (`lost`, 2026-10-29).
+  if (res && res.ok && ((action === 'resign' && !res.cancelled) || res.lost) && typeof M.countResult === 'function') {
     try { M.countResult(id, false); } catch (err) { console.error('[challenges] could not count the resignation', err); }
   }
   return res;
@@ -70,7 +74,7 @@ export const SOURCES = {
       const side = g && me ? M.sideOf(g, me) : null;
       if (!g || g.over || !side || M.isExpired(g)) return null;
       if (!M.isOpen(g)) return 'resign';
-      return side === 'b' ? 'decline' : 'cancel';
+      return { action: side === 'b' ? 'decline' : 'cancel', loss: typeof M.cancelCosts === 'function' && !!M.cancelCosts(g) };
     },
     end: (M, id, action) => (action === 'resign' ? M.resignChallenge(id) : M.cancelChallenge(id)),
   },
@@ -156,16 +160,29 @@ export const SOURCES = {
       const life = M.lifeOf(g);
       if (life.expired) return null;
       if (!life.open) return 'resign';
-      return seat === 0 ? 'cancel' : 'decline';
+      return { action: seat === 0 ? 'cancel' : 'decline', loss: typeof M.cancelCosts === 'function' && !!M.cancelCosts(g) };
     },
     end: logGameEnd,
   },
 };
 
+/** What may be done to a live match right now, and whether it costs a loss: { action: 'cancel' |
+ *  'decline' | 'resign', loss } or null. A resignation is always a loss; a cancel or decline is one
+ *  once the sender has played (2026-10-29). Never rejects. */
+export async function endActionInfo(game, id) {
+  try {
+    const src = SOURCES[game];
+    if (!src) return null;
+    const a = await src.action(await src.load(), id);
+    if (!a) return null;
+    if (typeof a === 'string') return { action: a, loss: a === 'resign' };
+    return { action: a.action, loss: a.action === 'resign' || !!a.loss };
+  } catch (err) { console.warn('[challenges] could not read that match', err); return null; }
+}
 /** What may be done to a live match right now ('cancel' | 'decline' | 'resign' | null). Never rejects. */
 export async function endAction(game, id) {
-  try { const src = SOURCES[game]; if (!src) return null; return await src.action(await src.load(), id); }
-  catch (err) { console.warn('[challenges] could not read that match', err); return null; }
+  const info = await endActionInfo(game, id);
+  return info ? info.action : null;
 }
 
 /** Cancel, decline or resign one match, through the GAME's own writer. Returns its result:

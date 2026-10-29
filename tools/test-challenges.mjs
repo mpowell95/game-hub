@@ -211,10 +211,22 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   ok('the sender is offered Cancel', (await C.endAction('darts', g1)) === 'cancel');
   asAna();
   ok('the receiver is offered Decline', (await C.endAction('darts', g1)) === 'decline');
+  ok('...and is told it would count as a loss (Matt\'s first turn is in)', (await C.endActionInfo('darts', g1)).loss === true);
   asMatt();
+  ok('the sender is told cancelling now counts as a loss', (await C.endActionInfo('darts', g1)).loss === true);
+  const lost0 = ((((JSON.parse(mem.get('gamehub.stats') || '{}').games || {}).darts || {}).byDiff || {}).mp || {}).lost || 0;
   r = await C.endMatch('darts', g1, 'cancel');
-  ok('Cancel through the hub calls it off', r.ok && r.cancelled && getAt(`darts/games/${g1}/over/why`) === 'cancelled');
+  ok('Cancel through the hub after his first turn: a loss for him, counted once', r.ok && r.lost && !r.cancelled && getAt(`darts/games/${g1}/over/why`) === 'resign'
+    && getAt(`darts/games/${g1}/over/winner`) === 'b' && JSON.parse(mem.get('gamehub.stats')).games.darts.byDiff.mp.lost === lost0 + 1);
   ok('...and then nothing more is offered', (await C.endAction('darts', g1)) === null);
+  r = await D.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
+  const g0 = r.id;
+  ok('nothing thrown yet: Cancel costs nothing', (await C.endActionInfo('darts', g0)).loss === false);
+  r = await C.endMatch('darts', g0, 'cancel');
+  ok('Cancel through the hub before any dart calls it off for nobody', r.ok && r.cancelled && getAt(`darts/games/${g0}/over/why`) === 'cancelled');
+  const ui0 = src('./js/challenges-ui.js'), str0 = src('./js/challenges-strings.js');
+  ok('the confirm screen says "Counts as a loss." (EN and ES) when it does', /cx_end_b_\$\{action\}\$\{costly \? '_loss' : ''\}/.test(ui0)
+    && (str0.match(/Counts as a loss\./g) || []).length === 2 && (str0.match(/Cuenta como derrota\./g) || []).length === 2);
   r = await D.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' } });
   const g2 = r.id;
   await D.appendLog(g2, 0, [{ by: 'a', ...miss }, { by: 'a', ...miss }, { by: 'a', ...miss }]);
@@ -236,7 +248,7 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   // Since 2026-10-18 it sits behind a ⋯ on every live row (Matt's Multiplayer screen), one word in its menu.
   ok('every live row has a ⋯ offering Cancel / Decline / Resign', /class="cx-more"/.test(ui) && /cx_end_\$\{hint\}/.test(ui)
     && (ui.match(/\$\{more\}<\/li>/g) || []).length === 2);
-  ok('...and it asks before it does anything (a confirm screen that re-reads the match)', /async function renderEnd/.test(ui) && /await endAction\(game, id\)/.test(ui) && /endMatch\(game, id, action\)/.test(ui));
+  ok('...and it asks before it does anything (a confirm screen that re-reads the match)', /async function renderEnd/.test(ui) && /await endAction(Info)?\(game, id\)/.test(ui) && /endMatch\(game, id, action\)/.test(ui));
 }
 
 // --- the Multiplayer screen's live-room records (2026-10-18, js/mp-records.js) ------------------

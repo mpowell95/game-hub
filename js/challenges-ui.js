@@ -23,7 +23,7 @@
 //   openChallenges({ games: [{id, name, test}], live: [{id, name, test}], onOpen(gameId, matchId),
 //                    onChallenge(gameId, them), onLaunch(gameId), onClose() })
 
-import { summarize, loadAll, watchAll, readOpponents, myCode, endAction, endMatch } from './challenges.js';
+import { summarize, loadAll, watchAll, readOpponents, myCode, endAction, endActionInfo, endMatch } from './challenges.js';
 import { loadLiveRecords, mergeRecords } from './mp-records.js';
 import { GAME_ART } from './game-art.js';
 import { makeT, getLang } from './i18n.js';
@@ -625,7 +625,10 @@ export async function openChallenges(opts = {}) {
     const row = (S.rows || []).find((r) => r.game === game && r.id === id) || { name: '', emoji: '🙂' };
     const name = row.name || t('cx_someone');
     shell(card, { title: name, emoji: row.emoji, back, body: `<p class="cx-note">${esc(t('cx_loading'))}</p>` });
-    const action = await endAction(game, id);
+    // endActionInfo: the action, and whether a cancel or decline costs a loss (2026-10-29).
+    const info = await endActionInfo(game, id);
+    const action = info ? info.action : null;
+    const costly = !!(info && info.loss && action !== 'resign');
     if (!current(gen)) return;
     if (!action) {
       shell(card, { title: name, emoji: row.emoji, back, body: `<p class="cx-note">${esc(t('cx_end_gone'))}</p>` });
@@ -635,7 +638,7 @@ export async function openChallenges(opts = {}) {
       shell(card, {
         title: name, emoji: row.emoji, back,
         body: `<p class="cx-confirm"><strong>${esc(t(`cx_end_q_${action}`))}</strong></p>
-          <p class="cx-confirm">${esc(t(`cx_end_b_${action}`, { game: nameOf(game), name }))}</p>
+          <p class="cx-confirm">${esc(t(`cx_end_b_${action}${costly ? '_loss' : ''}`, { game: nameOf(game), name }))}</p>
           ${err ? `<p class="cx-err" role="alert">${esc(err)}</p>` : ''}`,
         footer: `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(t(`cx_end_yes_${action}`))}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="no">${esc(t(action === 'resign' ? 'cx_end_keep_playing' : 'cx_end_keep'))}</button>`,
@@ -652,7 +655,9 @@ export async function openChallenges(opts = {}) {
         if (res && res.ok) {
           // A resign on a match that turned out to be unanswered was called off instead (mp.js).
           const why = res.cancelled ? String((res.game && res.game.over && res.game.over.why) || (action === 'decline' ? 'declined' : 'cancelled')) : '';
-          S.flash = { text: why ? t(why === 'declined' ? 'cx_end_done_decline' : 'cx_end_done_cancel') : t('cx_end_done_resign', { name }),
+          // A cancel or decline that cost a loss (2026-10-29) ends as a resignation: the other person wins.
+          const lostBy = !why && res.lost ? (action === 'decline' ? 'cx_end_done_decline_loss' : 'cx_end_done_cancel_loss') : '';
+          S.flash = { text: why ? t(why === 'declined' ? 'cx_end_done_decline' : 'cx_end_done_cancel') : t(lostBy || 'cx_end_done_resign', { name }),
             until: Date.now() + FLASH_MS };
           setTimeout(repaint, FLASH_MS + 50);
           // The list catches up from the game's own watch; until then, show it as ended here.
