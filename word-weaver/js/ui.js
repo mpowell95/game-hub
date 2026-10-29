@@ -586,7 +586,9 @@ class WordWeaver {
     if (!stage || !grid) return;
     const W = this.root.clientWidth, H = this.root.clientHeight;
     if (!W || !H) return;
-    let wheel = Math.floor(Math.max(150, Math.min(250, W - 136, H * 0.34)));
+    // A BIG wheel (Matt, 2026-10-29: "The circle... must be increased too. it's difficult when they're so small"): up to
+    // 300px, the shuffle and hint buttons sitting in its lower corners (W - 100), about a third of the height.
+    let wheel = Math.floor(Math.max(150, Math.min(300, W - 100, H * 0.36)));
     const [rows, cols] = this.box || this.level.g;
     const gap = cols >= 8 || rows >= 8 ? 3 : 4;
     const fit = (wpx) => {
@@ -597,9 +599,19 @@ class WordWeaver {
       return Math.floor(Math.min((sw - gap * (cols - 1)) / cols, (sh - gap * (rows - 1)) / rows, 64));
     };
     let cell = fit(wheel);
-    // Bigger grid letters (Matt, 2026-10-29): the wheel gives up room down to 200px while the cells are under 44px.
-    while (cell < 44 && wheel > 200) { wheel = Math.max(200, wheel - 10); cell = fit(wheel); }
-    while (cell < 34 && wheel > 184) { wheel = Math.max(184, wheel - 12); cell = fit(wheel); }
+    // Bigger grid letters (Matt, 2026-10-29): the wheel gives up room (down to 200px while cells are under 44px, 184px
+    // under 34px), but ONLY while that makes the cells bigger. A wide grid is limited by the screen's WIDTH, and
+    // shrinking the wheel for it gained nothing: on a 402px phone a 9-column grid stayed 40px with a 200px wheel.
+    const shrink = (floor, below, step) => {
+      while (cell < below && wheel > floor) {
+        const w2 = Math.max(floor, wheel - step), c2 = fit(w2);
+        if (c2 <= cell) break;
+        wheel = w2; cell = c2;
+      }
+    };
+    shrink(200, 44, 10);
+    shrink(184, 34, 12);
+    fit(wheel);
     cell = Math.max(18, cell);
     this.cell = cell;
     grid.style.setProperty('--ww-cell', cell + 'px');

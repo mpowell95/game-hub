@@ -52,7 +52,10 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - **Bigger wheel letters (Matt, 2026-10-29)**: 54 units of the 240 box (was 40), ring 80, picked disc 31, touch radius 33.
 - **Bigger grid letters (Matt, 2026-10-29)**: letter = 72% of the tile (was 58%), tiles up to 64px (was 54), the wheel
   shrinks to 200px while tiles are under 44px.
-- Layout never scrolls: wheel 184-250px (a letter's touch area stays over 44px), grid cells measured to fit above it
+- **A big wheel (Matt, 2026-10-29: "The circle... must be increased too")**: up to 300px (W - 100, ~36% of the height), shuffle
+  and hint in its lower corners. It shrinks for the grid ONLY while that makes the cells bigger: a wide grid is limited by the
+  screen's width, so on a 402px phone a 9x9 grid keeps 40px tiles with a 290px wheel (it was 200px for nothing).
+- Layout never scrolls: wheel 184-300px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).
 
