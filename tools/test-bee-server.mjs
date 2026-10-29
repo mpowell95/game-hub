@@ -52,7 +52,7 @@ const dc = detectCopying(copier);
 ok('copier: sorted run of 7 (4-letter words in order)', dc.sorted === 7);
 ok('copier: no-miss burst of 12 at 4.2 s', dc.burst.n === 12 && Math.round(dc.burst.avg) === 4182);
 ok('copier: back and burst = 5+ in 60 s', dc.leave >= 5);
-ok('copier: voided, both strong rules', dc.void && dc.strong.includes('sorted') && dc.strong.includes('burst'));
+ok('copier: voided by the sorted run (strong); the burst is supporting since 2026-10-29', dc.void && dc.strong.includes('sorted') && !dc.strong.includes('burst') && dc.supporting.includes('burst'));
 ok('copier: the line for Matt names the rules', /Sorted run 7/.test(flagSummary(dc)) && /Burst 12 at 4\.2 s/.test(flagSummary(dc)));
 const dh = detectCopying(honest);
 ok('honest: nothing fires', !dh.void && dh.sorted <= 1 && dh.burst.n <= 1 && dh.leave < 5);
@@ -104,8 +104,20 @@ ok('right vs wrong is RETIRED (2026-10-29, Ana 30 / 12 honestly): counted, never
 ok('re-typed: 1 of 20 right answers, flagged', gr.supporting.includes('retype') && gr.retyped === 1);
 ok('re-typed: 2 of 20 (1 in 10) is not', !detectCopying(game(20, 30, 2)).supporting.includes('retype'));
 ok('re-typed alone does not void the day (right vs wrong retired)', !gr.void && /Re-typed 1/.test(flagSummary(gr)));
-ok('a stored flag on leave + ratio no longer stands (Ana, Oct 29); leave + retype and any strong one do', !flagStands({ rules: ['leave', 'ratio'] }) && flagStands({ rules: ['leave', 'retype'] }) && flagStands({ rules: ['ratio', 'best'] }) && flagStands({ summary: 'old' }) && !flagStands(null));
-ok('the long-term board leaves a fallen flag out of the voids', !voidedAt('es:t:acinou', 'es-t-acinou', { K99MB: { rules: ['leave', 'ratio'] } }, {}).has('K99MB') && voidedAt('es:t:acinou', 'es-t-acinou', { K99MB: { rules: ['leave', 'speed'] } }, {}).has('K99MB'));
+// The four real flags on 2026-10-29 (beeFlags, their saved numbers), re-judged by today's rules (Matt: "You can't
+// void everybody. Undo today's voids and reevaluate the checks").
+const REAL = {
+  kogOct28: { rules: ['sorted', 'burst', 'leave', 'speed'], sorted: 7, burst: 16, burstAvgMs: 4000, best: 0, leave: 5, geniusMs: 456000, right: -1, wrong: -1, retyped: -1 },
+  ana: { rules: ['leave', 'ratio'], sorted: 2, burst: 4, burstAvgMs: 4249, best: 0, leave: 9, geniusMs: -1, right: 30, wrong: 12, retyped: 8 },
+  lili: { rules: ['burst', 'leave'], sorted: 2, burst: 23, burstAvgMs: 5100, best: 0, leave: 12, geniusMs: -1, right: -1, wrong: -1, retyped: -1 },
+  kogOct29: { rules: ['leave', 'retype'], sorted: 2, burst: 5, burstAvgMs: 4000, best: 0, leave: 6, geniusMs: -1, right: 40, wrong: 20, retyped: 2 },
+};
+ok('re-judged: King of Games Oct 28 still void (sorted run 7)', flagStands(REAL.kogOct28));
+ok('re-judged: Ana, Lili and King of Games Oct 29 count (leave retired, burst only supporting)', !flagStands(REAL.ana) && !flagStands(REAL.lili) && !flagStands(REAL.kogOct29));
+ok('a flag that saved no numbers stands; nothing is not a flag', flagStands({ summary: 'old' }) && !flagStands(null));
+ok('all three supporting together still void; any two do not', flagStands({ sorted: 0, burst: 12, burstAvgMs: 3000, best: 0, geniusMs: 300000, right: 30, retyped: 1 })
+  && !flagStands({ sorted: 0, burst: 12, burstAvgMs: 3000, best: 0, geniusMs: 300000, right: 30, retyped: 9 }));
+ok('the long-term board leaves a fallen flag out of the voids', !voidedAt('es:t:acinou', 'es-t-acinou', { S2BEP: REAL.lili }, {}).has('S2BEP') && voidedAt('e:abcdhu', 'e-abcdhu', { X: REAL.kogOct28 }, {}).has('X'));
 ok('one of them alone does not', !detectCopying(game(20, 10, 5)).void && !detectCopying(game(20, 30, 0)).void);
 ok('right vs wrong and re-typed do NOT need Genius (2026-10-29, nothing skipped)', detectCopying(game(20, 10, 0).slice(0, -1)).right === 20);
 ok('both need 20+ right answers (a short Genius is not judged)', detectCopying(game(19, 0, 0)).supporting.length === 0 || !detectCopying(game(19, 0, 0)).supporting.some((r) => r === 'ratio' || r === 'retype'));

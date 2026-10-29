@@ -16,6 +16,13 @@ export const QUEEN = 9;
 
 // --- detection: did this player copy the answers? ------------------------------------------------
 //
+// RE-EVALUATED 2026-10-29 (Matt: "You can't void everybody. Undo today's voids and reevaluate the checks"): that
+// day Ana (beside Matt), Lili and King of Games were voided on checks honest fluent players trip. Now: STRONG = sorted
+// run, best words first; SUPPORTING = burst, speed, re-typed, and a day is void only with ALL THREE; LEAVE AND BURST
+// and RIGHT VS WRONG are retired (still counted, never a reason). `verdict` is the one place that decides, for a log
+// (`detectCopying`) and for a stored flag (`flagStands`, from the numbers it saved), so every flag ever written is
+// judged by today's rules. The text below is the original design, kept for the record.
+//
 // Strong (any one voids the day): a SORTED RUN of 6+ right answers in a row, all the same length,
 // each alphabetically after the one before; a NO-MISS BURST of 10+ right answers in a row averaging
 // under 6 s each; or BEST WORDS FIRST (2026-10-28, Matt: "getting all of the best possible words in
@@ -142,26 +149,34 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
     wrong = guesses.length - right - retyped;
   }
 
+  const v = verdict({ sorted, burstN: burst.n, burstAvg: burst.avg, best, geniusMs, right, retyped });
+  return { ...v, sorted, burst, best, leave, geniusMs, right, wrong, retyped };
+}
+
+/** THE decision (2026-10-29), from a day's numbers: { void, strong, supporting }. STRONG (any one voids): a sorted
+ *  run, best words first. SUPPORTING (ALL THREE together void): a no-miss burst, Genius under 10 minutes, almost no
+ *  re-typing. Retired, never a reason (docs/INTEGRITY-CHECKS.md rule 4, honest players tripped them on 2026-10-29):
+ *  leave and burst (Ana Back+9, Lili Back+12, King of Games Back+6), right vs wrong (Ana 30 / 12); burst stopped being
+ *  strong (Lili, 23 at 5.1 s). `geniusMs`/`right`/`retyped` null = not judged. */
+export function verdict({ sorted = 0, burstN = 0, burstAvg = 0, best = 0, geniusMs = null, right = null, retyped = null } = {}) {
   const strong = [];
   if (sorted >= RULES.sortedRun) strong.push('sorted');
-  if (burst.n >= RULES.burstWords) strong.push('burst');
   if (best >= RULES.bestWords) strong.push('best');
   const supporting = [];
-  if (leave >= RULES.leaveWords) supporting.push('leave');
-  if (geniusMs != null && geniusMs < RULES.geniusMs) supporting.push('speed');
+  if (burstN >= RULES.burstWords && burstAvg < RULES.burstAvgMs) supporting.push('burst');
+  if (geniusMs != null && geniusMs >= 0 && geniusMs < RULES.geniusMs) supporting.push('speed');
   const judged = right != null && right >= RULES.judgeRight;
-  // RIGHT VS WRONG is RETIRED (2026-10-29): Ana, playing honestly next to Matt, got 30 right / 12 wrong (2.5) and was
-  // voided with it (+ Back+9). docs/INTEGRITY-CHECKS.md rule 4: a check honest players trip is dropped. right/wrong stay counted.
-  if (judged && retyped < RULES.retypeShare * right) supporting.push('retype');
-  return { void: strong.length > 0 || supporting.length >= 2, strong, supporting, sorted, burst, best, leave, geniusMs, right, wrong, retyped };
+  if (judged && retyped != null && retyped >= 0 && retyped < RULES.retypeShare * right) supporting.push('retype');
+  return { void: strong.length > 0 || supporting.length >= SUPPORTING_NEEDED, strong, supporting };
 }
+const SUPPORTING_NEEDED = 3;
 
 /** The flag line for Matt: "Sorted run 7, Burst 16 at 4.0 s, Best 6 first, Back+5 in 60 s, Genius
  *  in 7.5 min, Right 46 / wrong 17, Re-typed 3". */
 export function flagSummary(d) {
   const parts = [];
   if (d.strong.includes('sorted')) parts.push(`Sorted run ${d.sorted}`);
-  if (d.strong.includes('burst')) parts.push(`Burst ${d.burst.n} at ${(d.burst.avg / 1000).toFixed(1)} s`);
+  if (d.supporting.includes('burst')) parts.push(`Burst ${d.burst.n} at ${(d.burst.avg / 1000).toFixed(1)} s`);
   if (d.strong.includes('best')) parts.push(`Best ${d.best} first`);
   if (d.supporting.includes('leave')) parts.push(`Back+${d.leave} in 60 s`);
   if (d.supporting.includes('speed')) parts.push(`Genius in ${(d.geniusMs / 60000).toFixed(1)} min`);
@@ -272,16 +287,17 @@ export function countedRow(row, own, day) {
 // Oct 26). Nothing on the day = not played. A voided row = played, 0, no place, no Genius. Places are
 // by POINTS per day per language, ties sharing (1, 1, 3). A replaced puzzle: the better row counts.
 
-const STRONG_RULES = new Set(['sorted', 'burst', 'best']);
-const RETIRED_RULES = new Set(['ratio']);   // see detectCopying
-/** Does a stored beeFlags entry still void under today's rules? A flag is written once and never re-checked, so
- *  one resting on a RETIRED rule (Ana, Oct 29: leave + ratio) stops counting at read time. Nothing is deleted. A
- *  flag without a rules list stands. */
+/** Does a stored beeFlags entry still void under TODAY's rules (`verdict`)? A flag is written once and never
+ *  re-checked, so it is re-judged here from the numbers it saved (functions/bee.js checkPlayer: sorted, burst,
+ *  burstAvgMs, best, geniusMs, right, retyped; -1 = not judged). Nothing is deleted. A flag that saved no numbers
+ *  stands. */
 export function flagStands(f) {
   if (!f || typeof f !== 'object') return false;
-  if (!f.rules || typeof f.rules !== 'object') return true;
-  const live = Object.values(f.rules).filter((r) => !RETIRED_RULES.has(r));
-  return live.some((r) => STRONG_RULES.has(r)) || live.length >= 2;
+  const num = (x) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : null);
+  if (num(f.sorted) == null && num(f.burst) == null && num(f.best) == null) return true;
+  const neg = (x) => { const n = num(x); return n == null || n < 0 ? null : n; };
+  return verdict({ sorted: num(f.sorted) || 0, burstN: num(f.burst) || 0, burstAvg: num(f.burstAvgMs) ?? Infinity,
+    best: num(f.best) || 0, geniusMs: neg(f.geniusMs), right: neg(f.right), retyped: neg(f.retyped) }).void;
 }
 
 /** `voidedAt(puzzleKey, boardKey, flags, cfg)` -> Set of codes: the code list + the server's flags that still

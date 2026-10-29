@@ -63,6 +63,29 @@ Replaces the current Spelling Bee board on the hub Leaderboard (the one that sho
 
 ## 5. Automatic detection
 
+**RE-EVALUATED 2026-10-29 (Matt: "You can't void everybody. Undo today's voids and reevaluate the checks so this
+doesn't happen").** That day the server voided Ana (playing beside Matt; Back+9, right 30 / wrong 12), Lili (Burst 23 at
+5.1 s, Back+12) and King of Games (Back+6, Re-typed 2), all on checks fluent honest players trip. Now (`verdict` in
+`js/bee-fairplay.js`, one function for a log and for a stored flag):
+
+| | Check | Since 2026-10-29 |
+|---|---|---|
+| Strong (any one voids) | 1. Sorted run, 7. Best words first | unchanged |
+| Supporting (ALL THREE void) | 2. No-miss burst, 5. Speed, 9. Re-typed | was any two; burst was strong |
+| Retired (counted, never a reason) | 3. Leave and burst, 8. Right vs wrong | |
+
+Every stored flag is RE-JUDGED by these rules at read time from the numbers it saved (`flagStands`: the phone's board,
+the server's long-term board, the admin page). Nothing was written or deleted. The four real flags re-judged:
+
+| Day | Player | Saved reasons | Now |
+|---|---|---|---|
+| Oct 28 EN | King of Games | sorted 7, burst 16 at 4.0 s, Back+5, Genius 7.6 min | VOID (sorted run) |
+| Oct 29 ES | Ana | Back+9, right 30 / wrong 12 | counts |
+| Oct 29 ES | Lili | burst 23 at 5.1 s, Back+12 | counts |
+| Oct 29 EN | King of Games | Back+6, re-typed 2 | counts |
+
+King of Games' hand voids (Oct 26, 27, 28; `VOIDED_MATCHES`) are Matt's and unchanged. The original design follows.
+
 Runs on the server each time a player's guess log is saved (debounced), for **everyone, English and
 Spanish**. Reads that player's log for that puzzle (`beeLog/<puzzle>/<CODE>`). Timing uses each entry's `t` (the
 phone's clock at the guess); the server time `s` only stamps when a batch was uploaded.
