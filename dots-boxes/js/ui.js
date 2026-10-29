@@ -1112,9 +1112,9 @@ class DotsBoxesUI {
     if (this.mp) return this._mpLeaveCosts();
     if (this.view !== 'game' || !this.state || isOver(this.state) || this._statsCommitted) return false;
     if (this._undone) return true;
-    if (Array.isArray(this._moves)) return this._moves.some((m) => m[0] === this.humanSeat);
-    // A save from before the move list: the opening turn is one edge (nothing to capture yet).
-    return this.state.drawnEdges >= (this.humanSeat === 0 ? 1 : 2);
+    // Any edge, the computer's opening included (2026-10-29, second pass, Matt).
+    if (Array.isArray(this._moves)) return this._moves.length > 0;
+    return this.state.drawnEdges >= 1;
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */

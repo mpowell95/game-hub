@@ -161,12 +161,12 @@ const bg = load('boggle/js/ui.js', ['statsDiff'], { DIFFICULTIES: ['beginner', '
 ok('Q3 Boggle: the 2-minute timer is one step down; 1 and 1.5 are not', bg.statsDiff('pro', 2) === 'intermediate' && bg.statsDiff('pro', 1.5) === 'pro' && bg.statsDiff('pro', 1) === 'pro' && bg.statsDiff('beginner', 2) === 'beginner');
 const dt = load('darts/js/ui.js', ['statsDiff', 'playerThrew'], { DIFFS_LADDER: L3 });
 ok('Q3 Darts: 201 and 101 are one step down; 301 and Cricket are not', dt.statsDiff('hard', '201') === 'medium' && dt.statsDiff('hard', '101') === 'medium' && dt.statsDiff('hard', '301') === 'hard' && dt.statsDiff('hard', 'cricket') === 'hard');
-ok('Q3 Darts: the player has thrown only after their own first dart',
+ok('Q3 Darts (second pass): quitting costs once ANYBODY has thrown, the computer\'s opening dart included',
   !dt.playerThrew({ turn: 0, darts: [], turns: 0, starter: 0 }) && dt.playerThrew({ turn: 0, darts: [{}], turns: 0, starter: 0 })
-  && !dt.playerThrew({ turn: 0, darts: [], turns: 1, starter: 1 }) && dt.playerThrew({ turn: 1, darts: [], turns: 1, starter: 0 }));
+  && dt.playerThrew({ turn: 1, darts: [{}], turns: 0, starter: 1 }) && dt.playerThrew({ turn: 0, darts: [], turns: 1, starter: 1 }));
 const fs = load('flick-soccer/js/ui.js', ['statsDiff', 'playerShot']);
 ok('Q3 Flick Soccer: first to 1 is one step down; 2 and 3 are not', fs.statsDiff('hard', 1) === 'medium' && fs.statsDiff('hard', 2) === 'hard' && fs.statsDiff('hard', 3) === 'hard');
-ok('Q3 Flick Soccer: the computer\'s opening flick is not the player\'s move', !fs.playerShot({ shots: 1, starter: 1 }) && fs.playerShot({ shots: 1, starter: 0 }) && fs.playerShot({ shots: 2, starter: 1 }));
+ok('Q3 Flick Soccer (second pass): the computer\'s opening flick counts too', !fs.playerShot({ shots: 0, starter: 1 }) && fs.playerShot({ shots: 1, starter: 1 }) && fs.playerShot({ shots: 1, starter: 0 }));
 const ep = load('eight-ball/js/ui.js', ['statsDiff']);
 ok('Q3 Pool: one rack is one step down (Matt\'s call); 2 and 3 racks are not', ep.statsDiff('hard', 1) === 'medium' && ep.statsDiff('hard', 2) === 'hard' && ep.statsDiff('easy', 1) === 'easy');
 const cp = load('cup-pong/js/ui.js', ['statsDiff'], { DIFFS: L3 });
@@ -187,17 +187,17 @@ for (const g of ['tic-tac-toe', 'dots-boxes', 'filler']) {
 W('mancala/js/ui.js', /action === 'restart'\) \{\s*this\._confirmQuit\(btn, \(\) => \{ this\._recordQuitLoss\(\);/, 'Mancala: Restart asks twice and records the quit');
 W('mancala/js/ui.js', /this\.mode === 'bot' && this\.view === 'game'/, 'Mancala: two players on one phone never lose by quitting');
 W('dominoes/js/ui.js', /startMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Dominoes: every new match records a thrown-away one');
-W('uno/js/ui.js', /if \(savedMoved\(raw\)\) \{ try \{ recordResult\('uno', raw\.difficulty, false\)/, 'Uno: a hand left past its 30-minute save is a loss, not a vanishing');
+W('uno/js/ui.js', /if \(!DIFF_KEYS\.some\(\(\[k\]\) => k === raw\.difficulty\)\) return null;\s*\/\/ No age limit[^\n]*\n\s*return raw;/, 'Uno (second pass): no 30-minute expiry, an old hand resumes');
 W('escoba/js/ui.js', /this\._recordQuitLoss\(\);\s*if \(which === 'newgame'\) this\.startGame\(\);/, 'Escoba: the menu\'s New game / Quit record the quit');
 W('escoba/js/ui.js', /case 'start':[\s\S]{0,300}this\._recordQuitLoss\(\); this\.startGame\(\); break;/, 'Escoba: New game over a resumable match records it');
 W('chinchon/js/ui.js', /this\._recordQuitLoss\(\);\s*if \(which === 'newgame'\) this\.startGame\(\);/, 'Chinchon: the menu\'s New game / Quit record the quit');
-W('battleship/js/ui.js', /\(s\.shotCount\[this\._localSeat\(\)\] \| 0\) > 0/, 'Battleship: the first real move is the first shot (placing is not)');
+W('battleship/js/ui.js', /return !this\.ch && this\.view === 'battle' && !!s && !s\.over && !this\._statsCommitted;/, 'Battleship (second pass): the battle on screen arms it (placing still is not a move)');
 W('boggle/js/ui.js', /action === 'change-settings'\) \{[\s\S]{0,260}this\._recordQuitLoss\(\);/, 'Boggle: Give up records the loss');
 W('darts/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Darts: a new match over a thrown-in one records it');
 W('darts/js/mp-ui.js', /ui\._quitGate\(e\.currentTarget, \(\) => ui\._passPlay\(\)\)/, 'Darts: Pass & play asks first too');
 W('flick-soccer/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Flick Soccer: a new match over a flicked-in one records it');
 W('eight-ball/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Pool: a new match over a shot-in one records it');
-W('eight-ball/js/ui.js', /this\.mode === 'cpu' && m\.turn === 0 && !opts\.replay\) m\.ps = 1/, 'Pool: the player\'s first shot is what arms it');
+W('eight-ball/js/ui.js', /if \(this\.mode === 'cpu' && !opts\.replay\) m\.ps = 1;/, 'Pool (second pass): the first shot of the match arms it, the computer\'s break included');
 W('archery/js/ui.js', /if \(mode === 'cpu'\) this\._recordQuitLoss\(\);/, 'Archery: a new match vs the computer over a saved one records it');
 W('battle-arena/js/ui.js', /close\(\); this\.recordQuitLoss\(\); this\.clearSave\(\);/, 'Battle Arena: New match / Home record the quit');
 W('minesweeper/js/ui.js', /newGame\(level\) \{[\s\S]{0,200}this\._recordQuitLoss\(lv\);/, 'Minesweeper: a started board thrown away is a loss');
@@ -231,6 +231,97 @@ for (const [file, keys] of STR) {
     ok(`Q4 ${file}: "${k}" in EN and ES, no em dash`, n === 2 && !new RegExp(`${k}:\\s*['"][^'"]*—`).test(c));
   }
 }
+
+// --- Q6: the second pass (2026-10-29): hand-overs, loss once dealt, Uno, fresh markers -------------
+// G2: every new-game route checks the SAVE, so a solo match set aside by a challenge or a live room
+// cannot be thrown away for free.
+W('chinchon/js/ui.js', /startGame\(\) \{[\s\S]{0,400}if \(!this\.mp && !this\.game\) this\._recordSavedQuitLoss\(\);[\s\S]{0,400}if \(!this\.mp\) this\._soloClearSave\(\);/, 'G2 Chinchon: Start game over a set-aside solo match records its loss before clearing the save');
+W('chinchon/js/ui.js', /case 'start':[\s\S]{0,200}this\._savedQuitPending\(\) && a\.dataset\.armed !== '1'/, 'G2 Chinchon: that Start takes two taps, saying so');
+W('battleship/js/ui.js', /startGame\(\) \{\s*this\._recordSavedQuitLoss\(\);/, 'G2 Battleship: a new solo battle over a set-aside one records its loss');
+ok('G2 Battleship: a live room no longer clears the solo save for free', !/_mpHostStartMatch\(\) \{[\s\S]{0,200}clearGame\(\);/.test(src('battleship/js/ui.js')) && !/_mpGuestStartMatch\(room\) \{[\s\S]{0,120}clearGame\(\);/.test(src('battleship/js/ui.js')));
+W('battleship/js/ui.js', /action === 'start'\) \{[\s\S]{0,200}this\._savedQuitPending\(\) && btn\.dataset\.armed !== '1'/, 'G2 Battleship: Play over it takes two taps, saying so');
+W('battle-arena/js/ui.js', /startMatch\(team\) \{\s*this\.settleSavedMatch\(\);/, 'G2 Battle Arena: a new match settles a set-aside saved one first (loss, or the win its last move owed)');
+W('battle-arena/js/ui.js', /savedMatchPending\(\) && btn\.dataset\.armed !== '1'/, 'G2 Battle Arena: Fight over it takes two taps, saying so');
+W('escoba/js/ui.js', /_mpHostStart\(\) \{[\s\S]{0,700}this\._recordQuitLoss\(\);\s*const code = this\._mpPendingCode;/, 'G2 Escoba: a live room replacing a solo match in the one save slot records that match\'s loss (host)');
+W('escoba/js/ui.js', /_mpGuestStartMatch\(room\) \{[\s\S]{0,300}this\._recordQuitLoss\(\);/, 'G2 Escoba: ...and as a guest');
+// a set-aside Chinchon save, cut from the source and run
+{
+  const code = src('chinchon/js/ui.js');
+  const body = (name) => { const at = code.indexOf(`  ${name}() {`); let i = code.indexOf('{', at), d = 0; for (let j = i; j < code.length; j++) { if (code[j] === '{') d++; else if (code[j] === '}' && --d === 0) return code.slice(i, j + 1); } return ''; };
+  const calls = [];
+  const self = { mp: null, ch: null, game: null, stats: { games: 0, wins: 0, losses: 0, closes: 0, chinchons: 0, minusTen: 0 },
+    _soloLoadSave: () => ({ v: 1, snap: { players: [{ isHuman: true }, { difficulty: 'hard' }, { difficulty: 'easy' }], config: { victoryCondition: 'points', scoreLimit: 100 } }, counts: { closes: 2 } }),
+    _soloClearSave: () => calls.push('clear') };
+  const soloDiff = cc.soloDiff;
+  self._savedQuitPending = new Function('soloDiff', `return function () ${body('_savedQuitPending')}`)(soloDiff);
+  self._recordSavedQuitLoss = new Function('saveJSON', 'STORE_STATS', 'recordChinchon', `return function () ${body('_recordSavedQuitLoss')}`)(
+    () => calls.push('stats'), 'x', (d, w, x) => calls.push(['rec', d, w, x.closed]));
+  self._recordSavedQuitLoss();
+  ok('G2 Chinchon: the set-aside save\'s loss is recorded once, at its easiest computer, save cleared first',
+    calls[0] === 'clear' && calls.some((c) => Array.isArray(c) && c[1] === 'easy' && c[2] === false && c[3] === 2) && self.stats.losses === 1);
+  self.game = {};
+  ok('G2 Chinchon: nothing pending while a match is on the table (the menu settles that one)', self._savedQuitPending() === null);
+}
+
+// G3: once DEALT / the board SHOWN / the computer's first move, whichever comes first.
+W('chinchon/js/ui.js', /this\.game\.onEvent = \(type, payload\) => this\.onEvent\(type, payload\);\s*\/\/ Quitting is a loss once the hand is DEALT[\s\S]{0,200}this\._moved = true;/, 'G3 Chinchon: dealt = quitting costs');
+W('escoba/js/ui.js', /this\._bindGame\(\);\s*\/\/ Quitting is a loss once the hand is DEALT[\s\S]{0,200}this\._moved = true;/, 'G3 Escoba: dealt = quitting costs');
+W('escoba/js/ui.js', /function savedMoved\(save\) \{[\s\S]{0,250}return !!\(save && save\.snap\);/, 'G3 Escoba: every saved match was dealt');
+W('dominoes/js/ui.js', /function movedIn\(save\) \{\s*return !!\(save && save\.snap\);/, 'G3 Dominoes: every saved match was dealt');
+W('dominoes/js/ui.js', /clearSave\(\);\s*this\._moved = true;/, 'G3 Dominoes: dealt = quitting costs');
+W('uno/js/ui.js', /function savedMoved\(raw\) \{\s*return !!\(raw && raw\.snap\);/, 'G3 Uno: every saved hand was dealt');
+W('uno/js/ui.js', /this\.closeOverlays\(\);\s*this\._moved = true;/, 'G3 Uno: dealt = quitting costs');
+W('boggle/js/ui.js', /this\._found = new Map\(\);\s*\/\/ The board is SHOWN[\s\S]{0,200}this\._moved = true;/, 'G3 Boggle: the board shown = giving up is a loss (before the first word too)');
+W('yahtzee/js/ui.js', /async function doRoll\(\)\{[\s\S]{0,300}if\(!state\.mp\) armSoloQuitLoss\(\);/, 'G3 Yahtzee: the first roll, the computer\'s included');
+W('business-deal/js/ui.js', /this\.game = new Game\(\{ verbose: false, players \}\);[\s\S]{0,250}this\._armQuitLoss\(\);/, 'G3 Monopoly Deal: dealt = armed');
+W('parchis/index.html', /function doRoll\(\) \{[\s\S]{0,400}if \(G\.cfg && G\.cfg\.vsMode === "cpu"\) G\.cfg\.hm = true;/, 'G3 Parchis: the first roll of the game, the computer\'s included');
+W('cup-pong/js/ui.js', /if \(ev\.length && this\.mode === 'cpu' && !this\.mp && !this\.recorded && !m\.over\) \{\s*armQuitLoss\('cuppong'/, 'G3 Cup Pong: any throw arms it');
+W('cup-baseball/js/ui.js', /if \(this\.mode === 'cpu' && !this\.recorded && !g\.over\) armQuitLoss\('cupbaseball'/, 'G3 Cup Baseball: any throw arms it');
+W('hoops4/js/ui.js', /if \(!this\.mp && this\.match\.vsCpu && !this\.recorded\) \{\s*armQuitLoss\('hoops4'/, 'G3 Connect 4 Hoops: any shot arms it');
+W('air-hockey/js/ui.js', /this\.screen = 'game';\s*this\._showOnly\(null\);[\s\S]{0,250}this\._armQuit\(\);\s*this\._start\(\);/, 'G3 Air Hockey: the puck live = armed');
+W('archery/js/ui.js', /m\.shots\.some\(\(s\) => s && s\.length > 0\)/, 'G3 Archery: any arrow, the computer\'s included');
+W('connect-four/js/ui.js', /if \(player === this\.humanPlayer\) this\.humanHasMoved = true;[\s\S]{0,250}this\._moved = true;/, 'G3 Connect Four: any disc, the computer\'s opening included');
+W('mancala/js/ui.js', /if \(!this\.mp && this\.mode === 'bot'\) this\._humanMoved = true;/, 'G3 Mancala: any sowing vs the computer');
+W('tic-tac-toe/js/ui.js', /s\.board\.some\(Boolean\)/, 'G3 Tic Tac Toe: any mark');
+W('filler/js/ui.js', /return s\.moves >= 1;/, 'G3 Filler: any colour picked');
+W('dots-boxes/js/ui.js', /return this\._moves\.length > 0;/, 'G3 Dots and Boxes: any edge');
+W('battle-arena/js/ui.js', /this\.recorded = false;[\s\S]{0,300}this\.pm = true;\s*this\.save\(\);/, 'G3 Battle Arena: the board shown = armed');
+
+// G4: Uno's 30-minute expiry is gone; an old hand resumes.
+ok('G4 Uno: MAX_SAVE_AGE_MS no longer drives anything', !/Date\.now\(\) - Number\(raw\.at \|\| 0\) > MAX_SAVE_AGE_MS/.test(src('uno/js/ui.js')));
+
+// G5: a marker this page armed is kept fresh, and a game whose marker was settled elsewhere records nothing more.
+store.clear(); profile('TQWX7');
+G.armQuitLoss('cuppong', 'recordCupPong', ['medium', false, 0]);
+const q6 = JSON.parse(store.get('gamehub.quitLoss.v1')); q6.cuppong.t -= 40 * 60 * 1000; store.set('gamehub.quitLoss.v1', JSON.stringify(q6));
+ok('G5 touchQuitLoss refreshes an armed marker', G.touchQuitLoss('cuppong') === true && Date.now() - JSON.parse(store.get('gamehub.quitLoss.v1')).cuppong.t < 5000);
+G.settleQuitLosses(30 * 60 * 1000);
+ok('G5 ...so the hub\'s 30-minute settle leaves a game still being played', G.quitLossArmed('cuppong') && !stats());
+ok('G5 quitLossLost: false while this page\'s marker is there', G.quitLossLost('cuppong') === false);
+const q7 = JSON.parse(store.get('gamehub.quitLoss.v1')); q7.cuppong.t -= 40 * 60 * 1000; store.set('gamehub.quitLoss.v1', JSON.stringify(q7));
+G.settleQuitLosses(30 * 60 * 1000);   // a page frozen that long: the hub took it
+ok('G5 quitLossLost: true once the hub settled this page\'s marker (the game must record nothing more)', G.quitLossLost('cuppong') === true && stats().games.cuppong.total.lost === 1);
+G.dropQuitLoss('cuppong');
+ok('G5 quitLossLost: false again once the game has dropped it', G.quitLossLost('cuppong') === false);
+for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-pong', 'cuppong'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
+  ok(`G5 ${g}: its real result is skipped when the marker was settled elsewhere`, new RegExp(`quitLossLost\\('${id}'\\)`).test(src(`${g}/js/ui.js`)));
+}
+W('js/game-stats.js', /function keepFresh\(gameId\) \{[\s\S]{0,200}setInterval\(quitTick, QUIT_TICK_MS\)/, 'G5 game-stats: an armed marker is refreshed every minute while its page lives');
+store.clear(); profile('TQWX7');
+const ctx6 = { localStorage: globalThis.localStorage, console: { warn() {}, error() {}, log() {} }, Date, JSON, isFinite, setInterval: () => ({ unref() {} }), clearInterval() {} };
+ctx6.self = ctx6;
+vm.createContext(ctx6);
+vm.runInContext(src('js/game-stats-global.js'), ctx6);
+const GS6 = ctx6.__ghStats;
+GS6.armQuit('business', 'hard');
+const q8 = JSON.parse(store.get('gamehub.quitLoss.v1')); q8.business.t -= 40 * 60 * 1000; store.set('gamehub.quitLoss.v1', JSON.stringify(q8));
+ok('G5 Monopoly Deal: touchQuit refreshes the classic marker', GS6.touchQuit('business') === true && Date.now() - JSON.parse(store.get('gamehub.quitLoss.v1')).business.t < 5000);
+const q9 = JSON.parse(store.get('gamehub.quitLoss.v1')); q9.business.t -= 40 * 60 * 1000; store.set('gamehub.quitLoss.v1', JSON.stringify(q9));
+G.settleQuitLosses(30 * 60 * 1000);
+ok('G5 Monopoly Deal: quitLost says the hub took it (one loss, no second result)', GS6.quitLost('business') === true && stats().games.business.total.played === 1);
+W('business-deal/js/ui.js', /if \(this\._qArmed\) \{ try \{ if \(window\.__ghStats && window\.__ghStats\.touchQuit\) window\.__ghStats\.touchQuit\('business'\);/, 'G5 Monopoly Deal: the armed marker is touched on every arm call');
+W('business-deal/js/ui.js', /onTurnStart = async \(pl\) => \{\s*this\._armQuitLoss\(\);/, 'G5 Monopoly Deal: ...which runs every turn');
+W('business-deal/js/ui.js', /window\.__ghStats\.quitLost\('business'\)[\s\S]{0,250}if \(!lost\) this\._recordResult\(w\.id === 0\);/, 'G5 Monopoly Deal: a game whose marker was settled elsewhere records nothing more');
 
 // --- Q5: in a real page -------------------------------------------------------------------------------
 if (process.argv.includes('--browser')) await browserPart();

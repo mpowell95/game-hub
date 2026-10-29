@@ -7,7 +7,7 @@
 // isInProgress() for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -482,7 +482,9 @@ class CupPong {
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
     const shooter = m.shooter;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
-    if (ev.length && shooter === 'a' && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
+    // The first throw of the match, the computer's included, arms the quit loss (2026-10-29, second
+    // pass, Matt: quitting after the computer's opening throws was free).
+    if (ev.length && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
       armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a]);
     }
     if (ev.length && shooter === 'a' && this.lastShot) {
@@ -1339,8 +1341,9 @@ class CupPong {
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
+      const lost = quitLossLost('cuppong');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
-      try { recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
+      if (!lost) try { recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }

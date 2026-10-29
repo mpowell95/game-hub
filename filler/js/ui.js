@@ -921,7 +921,7 @@ class FillerUI {
     const s = this.state;
     if (this.mp) return this._mpLeaveCosts();
     if (this.view !== 'game' || !s || s.over || this._statsCommitted) return false;
-    return s.moves >= 2 || (s.moves === 1 && s.turn === P2);
+    return s.moves >= 1;   // any colour picked, the computer's opening included (2026-10-29, second pass)
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */

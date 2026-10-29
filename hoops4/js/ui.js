@@ -6,7 +6,7 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
 import * as LL from '../../js/live-leave.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -1527,7 +1527,8 @@ class Hoops4 {
     if (this.busy || !this.engine || !this.match || this.match.over) return;
     if (!this.isMyShot()) return;
     this.busy = true;
-    if (!this.mp && this.match.vsCpu && this.match.turn === this.myPlayer && !this.recorded) {
+    // Any shot, the computer's included (2026-10-29, second pass, Matt): quitting after its opening was free.
+    if (!this.mp && this.match.vsCpu && !this.recorded) {
       armQuitLoss('hoops4', 'recordResult', ['hoops4', this.cpuDiff(), false]);
     }
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
@@ -1748,7 +1749,11 @@ class Hoops4 {
         } else if (this.mp && LL.alreadyCounted(this._liveKey())) {
           // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
         } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); recordResult('hoops4', 'mp', m.winner === this.myPlayer); }
-        else if (m.vsCpu) { dropQuitLoss('hoops4'); recordResult('hoops4', this.cpuDiff(), r.won); }
+        else if (m.vsCpu) {
+          const lost = quitLossLost('hoops4');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
+          dropQuitLoss('hoops4');
+          if (!lost) recordResult('hoops4', this.cpuDiff(), r.won);
+        }
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
     const r = m.result();

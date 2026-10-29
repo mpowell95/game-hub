@@ -782,8 +782,8 @@ class TicTacToeUI {
     const s = this.state;
     if (this.mp) return this._mpLeaveCosts();
     if (!s || s.over || this._statsCommitted || this.view !== 'game') return false;
-    const me = this._myMark();
-    return s.variant === 'ultimate' ? s.boards.some((b) => b.includes(me)) : s.board.includes(me);
+    // Any mark on the board, the computer's opening included (2026-10-29, second pass, Matt).
+    return s.variant === 'ultimate' ? s.boards.some((b) => b.some(Boolean)) : s.board.some(Boolean);
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`). */

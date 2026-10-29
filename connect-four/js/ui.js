@@ -852,7 +852,10 @@ class ConnectFourUI {
     const player = this.game.currentPlayer;
     const row = this.game.board.heights[col]; // landing row (before the move)
     this.game.play(col);
-    if (player === this.humanPlayer) { this.humanHasMoved = true; this._moved = true; }
+    if (player === this.humanPlayer) this.humanHasMoved = true;
+    // ANY first move, the computer's opening included, makes quitting a loss (2026-10-29, second
+    // pass, Matt): restarting until the computer opened badly was free.
+    this._moved = true;
     // Flip the turn label the instant the disc starts dropping (avoids a stale
     // "Computer is thinking…" while the AI's disc is already visibly falling).
     if (!this.game.isOver()) this.updateStatus();

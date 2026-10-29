@@ -3282,12 +3282,15 @@ export function dropQuitLoss(gameId) {
 export function quitLossArmed(gameId) { return !!readQuit()[gameId]; }
 
 /** Record the armed loss for `gameId` now (the game is being quit), once. True when recorded. */
-export function takeQuitLoss(gameId) {
+export function takeQuitLoss(gameId) { return takeOne(gameId, false); }
+/** `bySettle`: the hub settling a marker its page did not take on purpose. A marker THIS page armed
+ *  and is still playing under stays listed in `_armedHere`, so `quitLossLost` can tell the game. */
+function takeOne(gameId, bySettle) {
   const q = readQuit();
   const m = q[gameId];
   if (!m) return false;
   if (m.k && m.k !== statsKey()) return false;   // armed under another player's store: theirs to take
-  _armedHere.delete(gameId);
+  if (!bySettle) _armedHere.delete(gameId);
   delete q[gameId];
   writeQuit(q);                                  // dropped BEFORE the write, so it can never count twice
   notePlay(gameId, 'quitLoss', [m.f, m.t]);      // the play log says this loss was a quit
@@ -3305,7 +3308,7 @@ export function settleQuitLosses(olderThanMs = 0) {
   for (const id of Object.keys(q)) {
     const m = q[id];
     if (!m || !(now - (+m.t || 0) >= olderThanMs)) continue;
-    takeQuitLoss(id);
+    takeOne(id, true);
   }
 }
 

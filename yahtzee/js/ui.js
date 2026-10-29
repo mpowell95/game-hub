@@ -40,7 +40,7 @@ import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
-import { deviceId, recordYahtzee, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import { deviceId, recordYahtzee, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
 import { howToHtml, createHowTo } from './howto.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import STRINGS from './strings.js';
@@ -347,6 +347,9 @@ function applyRollResult(values){
 // call this function at all (mpApplyNextEntry mutates state directly).
 async function doRoll(){
   if(state.phase==='gameOver' || state.rollsUsed>=3) return;
+  // The FIRST roll of the game, whoever makes it, arms the quit loss (2026-10-29, second pass, Matt):
+  // quitting after the computer's opening roll used to be free.
+  if(!state.mp) armSoloQuitLoss();
   const values = state.dice.map(d => d.held ? d.value : 1+Math.floor(Math.random()*6));
   const heldMaskBefore = applyRollResult(values);
   if(state.mp) mpAfterLocalMove({ t:'roll', dice: values });
@@ -462,7 +465,9 @@ function commitSelection(){
 function commitStatsOnce(){
   if(!state || state.statsCommitted) return;
   state.statsCommitted = true;
+  const lost = !state.mp && quitLossLost('yahtzee');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
   if(!state.mp) dropQuitLoss('yahtzee');   // the real result replaces the armed quit loss
+  if(lost) return;
   // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
   if(state.mp && LL.alreadyCounted(mpKey())) return;
   if(state.mp) LL.endedNormally('yahtzee', mpKey());

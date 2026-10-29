@@ -31,7 +31,7 @@ import * as LL from '../../js/live-leave.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
@@ -442,6 +442,9 @@ class AirHockeyUI {
     this._syncScore();
     this.screen = 'game';
     this._showOnly(null);
+    // The puck is live and the computer moves at once: quitting is a loss from the first frame
+    // (2026-10-29, second pass, Matt). It used to wait for the player's first touch.
+    this._armQuit();
     this._start();
   }
   _pause() {
@@ -479,12 +482,13 @@ class AirHockeyUI {
     // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
     try {
       const [gf, ga] = this.match.score;
+      const lost = !this.online && quitLossLost('airhockey');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       if (!this.online) { dropQuitLoss('airhockey'); this._qArmed = false; }   // the real result replaces the armed loss
       this._bestBefore = ahRecord().bestShot | 0;
       // Online: a round already decided by a leave on this phone (js/live-leave.js) counts once, as that.
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
-      const st = counted ? true : recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
+      const st = counted || lost ? true : recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
         { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest });
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }

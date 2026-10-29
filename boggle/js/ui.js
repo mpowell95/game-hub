@@ -1310,7 +1310,9 @@ class BoggleUI {
     clearGame(); // a new round replaces any saved one
     this._path = [];
     this._found = new Map();
-    this._moved = false;
+    // The board is SHOWN: giving up from now on is a loss (2026-10-29, second pass, Matt). It used to
+    // need the first word, so a bad board could be re-shaken for free.
+    this._moved = true;
     this._statsCommitted = false;
     this._feedback = null;
     this._roundOver = false;
@@ -1381,7 +1383,7 @@ class BoggleUI {
     this._board = boardFromFaces(save.faces);
     this._solved = solveBoard(this._board.grid, this._trieRoot);
     this._found = new Map(save.found);
-    this._moved = !!save.moved;
+    this._moved = true;   // a saved round's board was shown (2026-10-29, second pass)
     this._statsCommitted = false;
     this._path = [];
     this._feedback = null;

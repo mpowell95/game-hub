@@ -46,9 +46,11 @@ const DIFFS_LADDER = ['easy', 'medium', 'hard'];
 export function statsDiff(diff, kind) {
   return kind === '201' || kind === '101' ? oneTierDown(diff, DIFFS_LADDER) : diff;
 }
-/** Has seat 0 (the player) thrown in this match? */
+/** Has anybody thrown in this match? Quitting is a loss once the first dart flies, the computer's
+ *  included (2026-10-29, second pass, Matt): quitting after a strong opening from the computer used
+ *  to be free. (The name is kept: it was "has the PLAYER thrown" until then.) */
 export function playerThrew(m) {
-  return !!m && ((m.turn === 0 && Array.isArray(m.darts) && m.darts.length > 0) || (m.turns | 0) >= (m.starter === 0 ? 1 : 2));
+  return !!m && ((Array.isArray(m.darts) && m.darts.length > 0) || (m.turns | 0) >= 1);
 }
 /** The match kind (engine.js KINDS) the setup screen's Game, Order and Points choices make. */
 const kindFrom = (s) => (s.game === 'cricket'

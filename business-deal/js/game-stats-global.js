@@ -205,13 +205,47 @@
   var QUIT_KEY = 'gamehub.quitLoss.v1';
   function readQuit() { var q = readJSON(QUIT_KEY); return q && typeof q === 'object' && !Array.isArray(q) ? q : {}; }
   function writeQuit(q) { try { localStorage.setItem(QUIT_KEY, JSON.stringify(q)); } catch (e) { console.error('[game-stats-global] quit-loss marker not saved', e); } }
+  // KEPT FRESH WHILE PLAYED (2026-10-29, second pass): the hub settles a marker 30+ minutes old, so a
+  // long game open in another window could be settled as a loss and later record its real result
+  // too. A marker this page armed is refreshed every minute (and by `touchQuit` on every turn), and
+  // `quitLost` tells the game when its marker was taken anyway (a page frozen that long), so it
+  // records nothing more: that game already counted.
+  var armedHere = {};
+  var tick = null;
+  function quitTick() {
+    var ids = Object.keys(armedHere);
+    if (!ids.length) { if (tick) { clearInterval(tick); tick = null; } return; }
+    var q = readQuit(), changed = false;
+    for (var i = 0; i < ids.length; i++) if (q[ids[i]]) { q[ids[i]].t = Date.now(); changed = true; }
+    if (changed) writeQuit(q);
+  }
+  function keepFresh(gameId) {
+    armedHere[gameId] = true;
+    if (!tick && typeof setInterval === 'function') {
+      tick = setInterval(quitTick, 60 * 1000);
+      if (tick && typeof tick.unref === 'function') tick.unref();
+    }
+  }
   function armQuit(gameId, difficulty) {
     if (GAMES.indexOf(gameId) < 0) return;
     var q = readQuit();
     q[gameId] = { f: 'recordResult', a: [gameId, difficulty, false], c: activeCode(), k: activeStatsKey(), t: Date.now() };
     writeQuit(q);
+    keepFresh(gameId);
   }
+  /** The game is still being played: refresh its marker's time. */
+  function touchQuit(gameId) {
+    var q = readQuit();
+    if (!q[gameId]) return false;
+    q[gameId].t = Date.now();
+    writeQuit(q);
+    keepFresh(gameId);
+    return true;
+  }
+  /** This page armed `gameId`'s loss and someone else has since recorded it. */
+  function quitLost(gameId) { return !!armedHere[gameId] && !readQuit()[gameId]; }
   function dropQuit(gameId) {
+    delete armedHere[gameId];
     var q = readQuit();
     if (!q[gameId]) return;
     delete q[gameId];
@@ -223,6 +257,7 @@
     var q = readQuit();
     var m = q[gameId];
     if (!m || (m.k && m.k !== activeStatsKey())) return false;
+    delete armedHere[gameId];
     delete q[gameId];
     writeQuit(q);
     notePlay(gameId, 'quitLoss', ['recordResult', m.t]);
@@ -231,6 +266,6 @@
     return true;
   }
 
-  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record, armQuit: armQuit, dropQuit: dropQuit, quitArmed: quitArmed, takeQuit: takeQuit };
+  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record, armQuit: armQuit, dropQuit: dropQuit, quitArmed: quitArmed, takeQuit: takeQuit, touchQuit: touchQuit, quitLost: quitLost };
   drainPending();
 })();

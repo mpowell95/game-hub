@@ -2991,12 +2991,15 @@
       HUD.toast(t("turnOf", { name: nameOf(curColor()) }), { ms: ms(1100) });
     }
   }
-  function doRoll() { G.ui = "rolling"; var dd = rollForMode(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); }); }
+  function doRoll() {
+    // 2026-10-29 (hub-side patch, port to ../Parchis/src/game.js): the FIRST roll of the game, the
+    // computer's included (second pass, Matt), makes starting a new game over this one vs the
+    // computer a LOSS (docs/INTEGRITY-CHECKS-SPEC.md). It used to wait for the player's own roll.
+    if (G.cfg && G.cfg.vsMode === "cpu") G.cfg.hm = true;
+    G.ui = "rolling"; var dd = rollForMode(); HUD.rollDiceAnim(dd, function () { afterRoll(dd); });
+  }
   function onRollTap() {
     if (G.ui !== "awaitRoll" || isAI(G.state.turn)) return;
-    // 2026-10-29 (hub-side patch, port to ../Parchis/src/game.js): the player has rolled, so starting
-    // a new game over this one vs the computer is a LOSS (docs/INTEGRITY-CHECKS-SPEC.md).
-    if (G.cfg && G.cfg.vsMode === "cpu") G.cfg.hm = true;
     doRoll();
   }
 

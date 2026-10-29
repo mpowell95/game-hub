@@ -163,7 +163,8 @@ function loadGame() {
       movesMade: Math.max(0, Math.round(Number(raw.movesMade)) || 0),
       aiSeed: Number.isInteger(raw.aiSeed) && raw.aiSeed >= 0 && raw.aiSeed <= 0xFFFFFFFF ? raw.aiSeed : newAiSeed(),
       // A save from before `hm`: two moves in means the human has almost surely sown once.
-      hm: raw.hm === true || (raw.hm === undefined && (Math.round(Number(raw.movesMade)) || 0) >= 2),
+      // Since the second pass (2026-10-29) any sowing counts, the computer's included.
+      hm: raw.hm === true || (Math.round(Number(raw.movesMade)) || 0) >= 1,
     };
   } catch { return null; }
 }
@@ -948,7 +949,9 @@ class MancalaUI {
     const { state: next, events } = result;
     this.busy = true;
     this.movesMade += 1;
-    if (!this.mp && this.mode === 'bot' && this.state.turn === P1) this._humanMoved = true;
+    // Any sowing, the computer's included, makes quitting a loss (2026-10-29, second pass, Matt).
+    // (The field keeps its name: it was the human's own first sowing until then.)
+    if (!this.mp && this.mode === 'bot') this._humanMoved = true;
     for (const el of this.pitEls) { if (el && !isStore(Number(el.dataset.pit))) { el.classList.remove('is-live'); el.disabled = true; } }
 
     // Running per-pit counts so numbers tick as stones land.

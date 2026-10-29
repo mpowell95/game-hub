@@ -3476,13 +3476,9 @@ function soloDiff(players) {
 /** Has the player played a card in this saved match? Its own flag; a save from before it counts a later
  *  round, a hand short of the dealt three, or any capture as moved. */
 function savedMoved(save) {
-  if (!save || !save.snap) return false;
-  // Every saved match was dealt: quitting it is a loss (2026-10-29, second pass). `moved` is still
-  // written (true) and read by older builds.
-  if (save.snap) return true;
-  if (typeof save.moved === 'boolean') return save.moved;
-  const me = (save.snap.players || []).find((p) => p.isHuman);
-  return (save.snap.round | 0) > 1 || !!(me && ((me.hand && me.hand.length < 3) || (me.captured && me.captured.length)));
+  // Every saved match was DEALT: quitting it is a loss (2026-10-29, second pass, Matt). It used to
+  // need the player's first card. `moved` is still written (true); no reader needs it now.
+  return !!(save && save.snap);
 }
 
 // --- module contract --------------------------------------------------------
