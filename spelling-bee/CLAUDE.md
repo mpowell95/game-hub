@@ -70,6 +70,11 @@ win and the board row's `dw`/`dp`/`dr` (own-day words/points/rank) use only thos
 (`byPoints`), shows everyone else's own-day numbers (`shownRows`), and a VOIDED row (`voidedOn`: code list + server
 `beeFlags/<puzzle>/<CODE>` - Matt's admin undo `adminConfig/v1/bee/undo/<puzzle>/<CODE>`) as played, 0, last. **A void never
 touches the viewer's own row** (silence: the cheater's phone looks unchanged). `tools/test-bee-fairplay.mjs`.
+**Matt's settled view of fair play (2026-10-29, "what I've been telling you over and over... across multiple sessions"):
+(1) the STRONG checks (sorted run, best words first) are what catch real copying, and they did (King of Games, Oct 28);
+(2) NO "copied from another player" check: Matt, "irrelevant and unnecessary"; do not propose it again;
+(3) speed alone means nothing for fluent players (Lili, Ana): fast streaks stay one of three supporting checks that must
+ALL happen together. Do not re-propose weaker or extra checks; report the numbers and stop.**
 **The server (`functions/bee.js`, `beeWatch` every 5 min)**: runs `js/bee-fairplay.js` `detectCopying` on yesterday/today/tomorrow's logs every 5 min and on EVERY logged day hourly
 (**re-evaluated 2026-10-29, Matt: "You can't void everybody": strong = sorted run, best words first; supporting = burst, speed, re-typed, ALL THREE needed; leave and right vs wrong retired; every stored flag re-judged by `verdict`/`flagStands` from its saved numbers**; the original 7 checks, spec section 5: strong = sorted run, no-miss burst, best words first; any two supporting = back+5 in 60 s, Genius under 10 min from opening the puzzle (clock time, NOTHING skipped: Matt, 2026-10-29),
 re-typed under 1 in 10 (right vs wrong RETIRED 2026-10-29: Ana, honest beside Matt, 30 right / 12 wrong was voided; a stored flag resting on it stops counting at read time, `flagStands`, used by the board, the server's board and the admin page); the last two added 2026-10-28 with best words first, from King of Games' Oct 28 log); a flagged
