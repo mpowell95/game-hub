@@ -410,7 +410,7 @@ export const hoopsMatchCheck = onMatchOver('hoops');
 // (js/integrity.js checkContextoWin); an alert, never a void, goes to every admin.
 export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
   const v = event.data.val();
-  if (!v || v.g !== 'contexto' || v.e !== 'win') return;
+  if (!v || v.g !== 'contexto' || (v.e !== 'win' && v.f !== 'recordContexto')) return;
   const db = getDatabase();
   const written = await checkContextoLogWin(db, event.params.code, event.params.id, v);
   if (!written.length) return;

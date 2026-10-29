@@ -247,7 +247,7 @@ class ContextoUI {
   /** THE PLAY LOG (2026-10-28, js/play-log-queue.js): every guess, hint and give-up with its time and
    *  rank, for playLog/<CODE> (admins, and this player's own phones). Puzzle key 'en-31'. Never throws. */
   _log(e, w, r) {
-    appendPlayLog(activeCode(), { g: 'contexto', e, k: this._k(), w: w == null ? null : w, r: r == null ? null : r });
+    return appendPlayLog(activeCode(), { g: 'contexto', e, k: this._k(), w: w == null ? null : w, r: r == null ? null : r });
   }
   _k() { return this.n ? `${this.lang}-${this.n}` : null; }
 
@@ -255,8 +255,9 @@ class ContextoUI {
    *  like this MUST be fixed"). The save is per phone storage, so a hint or a give-up in Safari, or a
    *  solve on a second phone, used to be invisible here: hint in one place, then solve hint-free in
    *  another for a gold, or solve twice. The play log is per PLAYER CODE, so it is read back:
-   *  { hints, gave, won } before `before`, or null offline / no code (4 s at most). */
-  async _remote(k, before = Infinity) {
+   *  { hints, gave, won } (engine.js logSummary: `opts.exclude` = this phone's own finishing entry,
+   *  which is sent first so the server's time orders it), or null offline / no code (4 s at most). */
+  async _remote(k, opts = {}) {
     const code = activeCode();
     if (!code || !k) return null;
     try {
@@ -265,8 +266,10 @@ class ContextoUI {
         const boot = await getStatsApp();
         if (!boot || !(await ensureAuthClaim(boot))) return null;
         const { api, db } = boot;
+        if (opts.exclude) { try { await (await import('../../js/play-log.js')).flushPlayLog(); } catch { /* sent later */ } }
         const snap = await api.get(api.query(api.ref(db, `playLog/${code}`), api.orderByChild('k'), api.equalTo(k)));
-        return logSummary(Object.values((snap && snap.val()) || {}), k, before);
+        const val = (snap && snap.val()) || {};
+        return logSummary(Object.keys(val).map((id) => ({ ...val[id], id })), k, opts);
       })();
       return await Promise.race([work, new Promise((r) => setTimeout(() => r(null), 4000))]);
     } catch (err) { console.warn('[contexto] could not read this puzzle on other phones', err); return null; }
@@ -326,9 +329,10 @@ class ContextoUI {
   }
 
   _finish(kind) {
-    this._log(kind === 'won' ? 'win' : 'giveup');
+    const id = this._log(kind === 'won' ? 'win' : 'giveup');
     this.rec.done = kind === 'won' ? 'won' : 'gave';
     this.rec.doneAt = Date.now();
+    if (id) this.rec.doneId = id;   // this phone's own finishing entry (2026-10-29, `_recordFinished`)
     this._persist();
     this._overlay = 'result';
     this.renderShell();
@@ -343,7 +347,9 @@ class ContextoUI {
     if (rec.recorded || this._recording) return;
     this._recording = true;
     try {
-      const r = await this._remote(k, rec.doneAt || Date.now());
+      // Ordered by the SERVER's time, this phone's own finishing entry left out (2026-10-29); a puzzle
+      // finished before that id was kept falls back to the phone-time cut-off.
+      const r = await this._remote(k, rec.doneId ? { exclude: rec.doneId } : { before: rec.doneAt || Date.now() });
       if (rec.recorded) return;
       const guesses = rec.guesses.filter((g) => !g.hint).length;
       const hints = Math.max(rec.guesses.filter((g) => g.hint).length, rec.rh | 0, (r && r.hints) | 0);
@@ -353,7 +359,9 @@ class ContextoUI {
       }
       rec.recorded = true;
       this._persist();
-      try { recordContexto(lang, rec.done === 'won', { guesses, hints }); }
+      // `k` names the puzzle for the server's check; `unchecked`: no other phone could be read (offline),
+      // so the server judges it when the log arrives (an alert, js/integrity.js checkContextoWin).
+      try { recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(r ? {} : { unchecked: true }) }); }
       catch (err) { console.error('[contexto] recordContexto', err); }
     } finally { this._recording = false; }
   }

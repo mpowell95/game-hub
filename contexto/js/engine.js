@@ -158,12 +158,22 @@ export function hintRank(best, taken) {
 
 /** What this player did on ONE puzzle, from their play log entries (playLog/<CODE>, js/play-log.js),
  *  on every phone and browser they used (2026-10-28, integrity: a hint or a give-up in Safari must
- *  count in the Home Screen app too). Only entries before `before` (ms) count, so a solve never
- *  counts its own just-sent win. Returns { hints, gave, won }. Pure. */
-export function logSummary(entries, key, before = Infinity) {
+ *  count in the Home Screen app too). Returns { hints, gave, won }. Pure.
+ *  `opts.exclude` = this phone's own finishing entry's id (each entry carries `id`, its key): it is left
+ *  out, and only entries the SERVER received before it (`s`, the server's time) count; while it is not
+ *  yet on the server, every entry there counts (2026-10-29: the phone's time `t` decided this, so a
+ *  second phone with its clock set forward hid its give-up or its hints). A number (`before`, phone
+ *  ms) is the old cut-off, kept only for a puzzle finished before its finishing entry's id was kept. */
+export function logSummary(entries, key, opts = {}) {
+  const o = typeof opts === 'number' ? { before: opts } : (opts || {});
+  const all = (entries || []).filter((x) => x && typeof x === 'object');
+  const own = o.exclude ? all.find((x) => x.id === o.exclude) : null;
+  const ownS = own && own.s != null && Number.isFinite(Number(own.s)) ? Number(own.s) : Infinity;
   let hints = 0, gave = false, won = false;
-  for (const x of entries || []) {
-    if (!x || x.k !== key || !(Number(x.t) < before)) continue;
+  for (const x of all) {
+    if (x.k !== key || (o.exclude && x.id === o.exclude)) continue;
+    if (o.before != null && !(Number(x.t) < o.before)) continue;
+    if (x.s != null && Number.isFinite(Number(x.s)) && !(Number(x.s) < ownS)) continue;
     if (x.e === 'hint') hints += 1;
     else if (x.e === 'giveup') gave = true;
     else if (x.e === 'win') won = true;
