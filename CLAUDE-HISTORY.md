@@ -1467,3 +1467,11 @@ wrong is retired (`js/bee-fairplay.js`) and `flagStands` makes the board, the se
 admin page ignore a stored flag left without enough live reasons. Nothing was written to Firebase: her flag
 stays stored. Of the 2 real flags, only hers changes (King of Games Oct 28 stays void). Her logs could not be
 replayed from a session (beeLog is admin-read), so "Back+N" alone is unchanged.
+
+## 2026-10-29: every hidden game gets the "who can see it" picker
+
+Matt: "Why can't I add people to word weaver, gridlock, or cup baseball? I want to add Ana to word weaver."
+The admin page drew the picker only for a hand list (`ALLOW_PICKER`: Course Creator, Pool, Battle Arena), added
+one game per request, so every newer admin-only game came without one. The hub already honours
+`adminConfig/v1/games/<id>/allow/<CODE>` for any id (`js/hub.js`), so the list is gone: every hidden game's
+row has the picker. A session still never writes the admin config; Matt taps the person.
