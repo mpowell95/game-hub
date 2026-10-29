@@ -84,7 +84,11 @@ the server's long-term board, the admin page). Nothing was written or deleted. T
 | Oct 29 ES | Lili | burst 23 at 5.1 s, Back+12 | counts |
 | Oct 29 EN | King of Games | Back+6, re-typed 2 | counts |
 
-King of Games' hand voids (Oct 26, 27, 28; `VOIDED_MATCHES`) are Matt's and unchanged. The original design follows.
+King of Games' hand voids (Oct 26, 27, 28; `VOIDED_MATCHES`) are Matt's and unchanged.
+
+**Matt's settled decisions, same day:** the strong checks are what catch copying ("exactly what I've been telling you
+over and over"); a "copied from another player" order check was proposed and REJECTED ("irrelevant and unnecessary");
+speed alone never voids a fluent player. Do not propose new or weaker checks. The original design follows.
 
 Runs on the server each time a player's guess log is saved (debounced), for **everyone, English and
 Spanish**. Reads that player's log for that puzzle (`beeLog/<puzzle>/<CODE>`). Timing uses each entry's `t` (the
