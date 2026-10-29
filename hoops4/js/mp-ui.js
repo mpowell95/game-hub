@@ -260,7 +260,8 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
     // again from the match itself, so a row a turn behind can never turn a resignation into a cancel.
     const kind = row && row.open === 'sent' ? 'cancel' : row && row.open === 'got' ? 'decline' : 'resign';
     const q = kind === 'resign' ? t('mpQuitQ') : t(kind === 'cancel' ? 'mpCancelQ' : 'mpDeclineQ');
-    const body = kind === 'resign' ? t('mpQuitBody', { who }) : t('mpNobodyBody');
+    // After the sender's first shot a cancel or decline is a loss for whoever does it (2026-10-29).
+    const body = kind === 'resign' ? t('mpQuitBody', { who }) : t(row && row.pl ? 'mpLossBody' : 'mpNobodyBody');
     const yesText = kind === 'resign' ? t('mpQuitYes') : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh');
     const ov = document.createElement('div');
     ov.className = 'gh-overlay';

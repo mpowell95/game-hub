@@ -31,7 +31,7 @@ import { COLS, ROWS } from './game.js';
 import { replayResult, sameResult } from './replay.js';
 import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
+import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowCallOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
 export const OUTBOX_KEY = 'gamehub.hoops4.outbox.v1';
@@ -675,6 +675,7 @@ function rowsFromIndex(val, now = decideNow()) {
       yourTurn: !ended && !late && !!r.yourTurn,
       over: !!r.over || !!ended || !!late,
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      pl: !ended && rowCallOffCosts(r),        // calling it off now costs a loss (2026-10-29)
       oneShot: !!r.oneShot,
       series: Math.max(1, ms(r.series) || 1),
       seriesNo: Math.max(1, ms(r.seriesNo) || 1),

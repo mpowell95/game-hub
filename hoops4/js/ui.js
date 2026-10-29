@@ -1274,7 +1274,8 @@ class Hoops4 {
         const other = g ? (this.mp.side === 'a' ? g.b : g.a) : null;
         const who = (other && other.name) || '?';
         qb.textContent = kind === 'resign' ? t('mpQuitYes') + ': ' + t('mpQuitBody', { who })
-          : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh') + ': ' + t('mpNobodyBody');
+          // After the sender's first shot, calling it off is a loss for whoever does it (2026-10-29).
+          : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh') + ': ' + t(g && typeof this.mp.MP.cancelCosts === 'function' && this.mp.MP.cancelCosts(g) ? 'mpLossBody' : 'mpNobodyBody');
         return;
       }
       qb.disabled = true;
