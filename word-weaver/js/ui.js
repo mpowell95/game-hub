@@ -161,6 +161,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // The wheel is drawn in a 240 x 240 box (the mockup's numbers): letters sit on a ring of radius 78,
 // 27 across the visible disc of a letter, 31 as the touch radius (62 of 240 units: 58px on a 224px wheel).
 const RING = 78, LETTER_R = 27, HIT_R = 31, DISC_R = 116;
+// TAP TO SELECT (Matt, 2026-10-29: "allow for selecting letters in addition to swiping"): the centre's check enters
+// the tapped word; it sits inside the ring's free middle (letters start 47 units out).
+const GO_R = 24, GO_HIT = 34;
 
 // --- the game ------------------------------------------------------------------------------------
 
@@ -465,6 +468,7 @@ class WordWeaver {
             <circle class="ww-disc" r="${DISC_R}"/>
             <polyline class="ww-trail" points=""/>
             ${ltrs}
+            <g class="ww-go" aria-hidden="true"><circle r="${GO_R}"/><path d="M-10 1l7 7 13-15"/></g>
           </svg>
         </div>
         <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
@@ -581,15 +585,17 @@ class WordWeaver {
       const cs = getComputedStyle(stage);
       const sw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const sh = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      return Math.floor(Math.min((sw - gap * (cols - 1)) / cols, (sh - gap * (rows - 1)) / rows, 54));
+      return Math.floor(Math.min((sw - gap * (cols - 1)) / cols, (sh - gap * (rows - 1)) / rows, 64));
     };
     let cell = fit(wheel);
+    // Bigger grid letters (Matt, 2026-10-29): the wheel gives up room down to 200px while the cells are under 44px.
+    while (cell < 44 && wheel > 200) { wheel = Math.max(200, wheel - 10); cell = fit(wheel); }
     while (cell < 34 && wheel > 184) { wheel = Math.max(184, wheel - 12); cell = fit(wheel); }
     cell = Math.max(18, cell);
     this.cell = cell;
     grid.style.setProperty('--ww-cell', cell + 'px');
     grid.style.setProperty('--ww-gap', gap + 'px');
-    grid.style.setProperty('--ww-fs', Math.round(cell * 0.58) + 'px');
+    grid.style.setProperty('--ww-fs', Math.round(cell * 0.72) + 'px');   // 0.58 until 2026-10-29 (Matt: bigger letters)
   }
 
   // --- the wheel ----------------------------------------------------------------------------------
@@ -609,6 +615,8 @@ class WordWeaver {
     const trail = svg.querySelector('.ww-trail');
     trail.setAttribute('points', pts.join(' '));
     trail.classList.toggle('is-on', this.sel.length > 0);
+    const go = svg.querySelector('.ww-go');
+    if (go) go.classList.toggle('is-on', !this.drag && this.sel.length > 0);
     this._paintPill();
   }
 
@@ -663,16 +671,25 @@ class WordWeaver {
     return best;
   }
 
+  /** SWIPE or TAP (2026-10-29). A touch that slides onto a second letter is a swipe: lift enters the word. A touch
+   *  that stays on one letter is a tap: it adds that letter and nothing is entered; tapping the last picked letter
+   *  again takes it back off; the centre check (shown while letters are picked) enters the word. Taps and a swipe
+   *  join: letters tapped first stay, the swipe carries on from them. */
   _pointerDown(ev) {
     if (this.view !== 'play' || this.finishing || this.drag) return;
     if (ev.button != null && ev.button !== 0) return;
     const svg = ev.target.closest && ev.target.closest('.ww-wheel');
     if (!svg || !this.root.contains(svg)) return;
-    this.drag = { id: ev.pointerId, svg };
-    try { svg.setPointerCapture(ev.pointerId); } catch { /* capture is a nicety */ }
-    this.sel = [];
     const hit = this._letterAt(ev.clientX, ev.clientY);
-    if (hit >= 0) this.sel.push(hit);
+    const picked = this.sel.slice();             // tapped (or typed) before this touch
+    if (hit < 0 && picked.length && Math.hypot(this._lastPt[0], this._lastPt[1]) <= GO_HIT) {
+      ev.preventDefault();
+      this._submitSel();
+      return;
+    }
+    this.drag = { id: ev.pointerId, svg, moved: false, undo: hit >= 0 && hit === picked[picked.length - 1] };
+    try { svg.setPointerCapture(ev.pointerId); } catch { /* capture is a nicety */ }
+    if (hit >= 0 && !this.sel.includes(hit)) this.sel.push(hit);
     this.tail = null;
     this._paintWheel(false);
     ev.preventDefault();
@@ -683,6 +700,7 @@ class WordWeaver {
     const hit = this._letterAt(ev.clientX, ev.clientY);
     if (hit >= 0) {
       const n = this.sel.length;
+      if (hit !== this.sel[n - 1]) d.moved = true;   // onto another letter: a swipe
       if (n >= 2 && hit === this.sel[n - 2]) this.sel.pop();          // slid back onto the previous letter: un-select
       else if (!this.sel.includes(hit)) this.sel.push(hit);
     }
@@ -697,8 +715,11 @@ class WordWeaver {
     this.drag = null;
     try { d.svg.releasePointerCapture(ev.pointerId); } catch { /* fine */ }
     this.tail = null;
-    if (ev.type === 'pointerup') this._submitSel();
-    else { this.sel = []; this._paintWheel(false); }
+    if (ev.type !== 'pointerup') { this.sel = []; this._paintWheel(false); return; }
+    if (d.moved) { this._submitSel(); return; }
+    // A tap: its letter stays picked; the last picked letter tapped again comes back off.
+    if (d.undo) this.sel.pop();
+    this._paintWheel(false);
   }
 
   _submitSel() {

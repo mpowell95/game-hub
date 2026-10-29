@@ -34,7 +34,9 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   (Gridlock's rule, `docs/BUILDING-A-GAME.md` Part 0); the chips and level number stay on the Hub button's row.
   Next on the done screen continues in the same band.
 - Swipe (pointer events, `touch-action: none`): lift submits; sliding back onto the previous letter un-selects
-  it. Grid word: its letters fly from the pill into the grid. Found again: that word flashes. Extra word (the
+  it. **Or TAP (Matt, 2026-10-29)**: a touch that stays on one letter adds it (nothing entered); tapping the last picked
+  letter again takes it off; the yellow check in the wheel's middle (shown while letters are picked) enters the word.
+  Taps and a swipe join (tapped letters stay, the swipe carries on). Grid word: its letters fly from the pill into the grid. Found again: that word flashes. Extra word (the
   level's `x`): the star chip bumps and counts; found again: it wiggles. Anything else: the pill shakes. Under 3
   letters: silent. **No sound, ever.**
 - **Hints are unlimited.** One tap reveals one letter: the first unrevealed cell (top to bottom, left to right)
@@ -44,6 +46,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter
   submits, Space shuffles.
+- **Bigger grid letters (Matt, 2026-10-29)**: letter = 72% of the tile (was 58%), tiles up to 64px (was 54), the wheel
+  shrinks to 200px while tiles are under 44px.
 - Layout never scrolls: wheel 184-250px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).
