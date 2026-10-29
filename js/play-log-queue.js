@@ -44,7 +44,9 @@ export function appendPlayLog(code, entry) {
     q.push(x);
     writeQueue(q);
     for (const fn of listeners) { try { fn(); } catch { /* a listener never blocks a log */ } }
+    return x.id;   // its key in playLog/<CODE> (Contexto keeps its finishing entry's, 2026-10-29)
   } catch (err) { console.error('[play-log] not logged', err); }
+  return null;
 }
 
 /** A recorder's arguments as JSON (functions dropped, big values cut by appendPlayLog). */

@@ -31,6 +31,28 @@
 // machine pays 100; give a future 100-paying machine its own counter rather than sharing this one.
 
 import { loadStats } from '../../js/game-stats.js';
+import { mergeBoards } from '../../js/arcade-scores.js';
+
+// CHALLENGE RACKS FEED NO OBJECTIVE (2026-10-29, js/game-stats.js recordSkeeball): the store the goals
+// read is the recorded one WITHOUT challenge racks: the global counters minus `sk.chg`, and a machine
+// with challenge racks read as its record before the first of them (`sk.chk[id].pre`) plus every
+// other rack on it since. Read time only; the record itself (and every screen showing it) keeps them.
+const GOAL_GLOBALS = ['hundreds', 'fifties', 'tens', 'twenties', 'thirties', 'forties', 'colorSweeps', 'runaways'];
+export function goalStore(s) {
+  if (!s || typeof s !== 'object' || (!s.chg && !s.chk)) return s || {};
+  const out = { ...s, boards: { ...(s.boards || {}) } };
+  const chg = s.chg && typeof s.chg === 'object' ? s.chg : {};
+  for (const k of GOAL_GLOBALS) if (chg[k]) out[k] = Math.max(0, (s[k] | 0) - (chg[k] | 0));
+  for (const id of Object.keys(s.chk && typeof s.chk === 'object' ? s.chk : {})) {
+    const c = s.chk[id];
+    if (!c || typeof c !== 'object') continue;
+    const view = {};
+    mergeBoards(view, { [id]: c.pre || {} });
+    mergeBoards(view, { [id]: ((c.boards || {})[id]) || {} });
+    out.boards[id] = view[id];
+  }
+  return out;
+}
 
 export const GOAL_HUNDREDS = 5;
 export const GOAL_BEST = 360;
@@ -299,7 +321,7 @@ const GOALS = {
 /** The three goals for one machine, from the RECORDED store - what the unlock trusts. */
 export function readGoals(boardId, store) {
   const fn = GOALS[boardId] || GOALS.classic;
-  return fn(store || sk(), null);
+  return fn(goalStore(store || sk()), null);
 }
 
 /**
@@ -312,7 +334,7 @@ export function readGoals(boardId, store) {
  */
 export function readGoalsLive(boardId, rack, store) {
   const fn = GOALS[boardId] || GOALS.classic;
-  return fn(store || sk(), rack || null);
+  return fn(goalStore(store || sk()), rack || null);
 }
 
 /** Which goals went from unmet to met between two readings, and whether that completed the set.

@@ -19,7 +19,7 @@
 import './shared-env.js';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { detectCopying, flagSummary, buildBeeBoard, ownEntry, isLatePost } from './shared/js/bee-fairplay.js';
+import { detectCopying, flagSummary, buildBeeBoard, ownEntry, isLatePost, zoneShifts } from './shared/js/bee-fairplay.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 
 export const PUZZLES = JSON.parse(readFileSync(new URL('./shared/bee-puzzles.json', import.meta.url), 'utf8'));
@@ -80,16 +80,34 @@ export async function checkLog(db, bk, code, row, now = Date.now()) {
   return res && res.committed ? alert : null;
 }
 
-/** The pushes Matt gets. `kind` 'flag' or 'log'. */
+/** The phone's time zone moved during a puzzle (js/bee-fairplay.js zoneShifts; 2026-10-29), alert only:
+ *  a zone a day ahead shows Yesterday's Answers on the real today. Once per player per puzzle, at
+ *  beeAlerts/<puzzle>/<CODE>~zone. Returns the alert written, or null. */
+export async function checkZone(db, bk, code, row, log, now = Date.now()) {
+  if (!PUZZLES[bk] || !log) return null;
+  const zs = zoneShifts(log);
+  if (!zs.length) return null;
+  const name = String((row && row.name) || code).slice(0, 40);
+  if (isHiddenName(name)) return null;
+  if (await valOf(db, `beeAlerts/${bk}/${code}~zone`)) return null;
+  const alert = { zone: zs.join(','), name, at: now };
+  const res = await db.ref(`beeAlerts/${bk}/${code}~zone`).transaction((cur) => (cur ? undefined : alert));
+  return res && res.committed ? alert : null;
+}
+
+/** The pushes Matt gets. `kind` 'flag', 'log' or 'zone'. */
 export function beeNote(kind, bk, info) {
   const pz = PUZZLES[bk] || {};
   const [, m, d] = String(pz.day || '').split('-').map(Number);
   const MON = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], es: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'] };
   return {
-    kind: kind === 'flag' ? 'beeFlag' : 'beeLog',
+    kind: kind === 'flag' ? 'beeFlag' : kind === 'zone' ? 'beeZone' : 'beeLog',
     text: (lang) => {
       const date = m ? (lang === 'es' ? `${d} ${MON.es[m - 1]}` : `${MON.en[m - 1]} ${d}`) : '';
       const where = `${date} ${pz.lang === 'es' ? 'ES' : 'EN'}`.trim();
+      if (kind === 'zone') {
+        return { title: 'Spelling Bee', body: lang === 'es' ? `${info.name}, ${where}: cambió de zona horaria (${info.zone})` : `${info.name}, ${where}: time zone changed (${info.zone})` };
+      }
       if (kind === 'flag') {
         return { title: 'Spelling Bee', body: lang === 'es' ? `${info.name}: anulado, ${where}. ${info.summary}` : `${info.name} flagged, ${where}. ${info.summary}` };
       }
@@ -109,6 +127,8 @@ export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
       const row = rows[code];
       const f = await checkPlayer(db, bk, code, row, logs[code] || null);
       if (f) flags.push([bk, code, f]);
+      const z = await checkZone(db, bk, code, row, logs[code] || null, now);
+      if (z) alerts.push([bk, `${code}~zone`, z]);
       if (!row || typeof row !== 'object') continue;
       const a = await checkLog(db, bk, code, row, now);
       if (a) alerts.push([bk, code, a]);

@@ -173,6 +173,13 @@ function fakeDb(tree) {
     tree,
     ref: (p) => ({
       get: async () => ({ val: () => { const v = getAt(p); return v === undefined ? null : JSON.parse(JSON.stringify(v)); } }),
+      // Just enough of a query for the Contexto check (2026-10-29).
+      orderByChild: (c) => ({ equalTo: (x) => ({ get: async () => ({ val: () => {
+        const v = getAt(p) || {}; const o = {}; for (const k of Object.keys(v)) if (v[k] && v[k][c] === x) o[k] = v[k]; return JSON.parse(JSON.stringify(o));
+      } }) }) }),
+      orderByKey: () => ({ startAt: (a) => ({ endAt: (b) => ({ get: async () => ({ val: () => {
+        const v = getAt(p) || {}; const o = {}; for (const k of Object.keys(v)) if (k >= a && k <= b) o[k] = v[k]; return JSON.parse(JSON.stringify(o));
+      } }) }) }) }),
       transaction: async (fn) => { const cur = getAt(p); const next = fn(cur === undefined ? null : cur); if (next === undefined) return { committed: false }; setAt(p, next); return { committed: true }; },
     }),
   };
@@ -316,6 +323,46 @@ console.log('\n--- Contexto: hints and solves follow the player; alerts on a win
   ok('...counted with them: nothing', I.checkContextoWin([g(10, 'hint', 300), g(11, 'hint', 150), g(30, 'guess', 40), win], [rec(103, 2)], win).length === 0);
   ok('solved again after a solve or a give-up elsewhere: alert',
     ids(I.checkContextoWin([g(5, 'giveup'), g(30, 'guess', 20), win], [], win)) === 'contexto-solved-elsewhere');
+  // 2026-10-29 (second pass): the order is the server's receipt OR the phone's time, never the phone's alone.
+  const gs = (t, s, e, r) => ({ ...g(t, e, r), s });
+  const winS = { ...g(100, 'win'), s: 5000 };
+  ok('a give-up on a phone whose clock was set FORWARD (later t, earlier server time): alert',
+    ids(I.checkContextoWin([gs(900, 4000, 'giveup'), gs(40, 5000, 'guess', 20), winS], [], winS)) === 'contexto-solved-elsewhere');
+  ok('a solve elsewhere AFTER this one (both clocks later): no alert on this one',
+    I.checkContextoWin([gs(900, 9000, 'win'), gs(40, 5000, 'guess', 20), winS], [], winS).length === 0);
+  ok('hints sent later from a phone that was offline (later t and s) still count against a solve with none',
+    ids(I.checkContextoWin([gs(900, 9000, 'hint', 300), gs(40, 5000, 'guess', 20), winS], [rec(103, 0)], winS)) === 'contexto-hints-not-counted');
+  ok('the win itself is never "elsewhere" (by id)', I.checkContextoWin([{ ...g(40, 'guess', 20), id: 'a' }, { ...winS, id: 'w' }], [], { ...winS, id: 'w' }).length === 0);
+  {
+    const recK = (t, hints, k = 'en-9') => ({ t, f: 'recordContexto', g: 'contexto', a: JSON.stringify(['en', true, { guesses: 3, hints, k }]) });
+    ok('a recorder entry finds its win (the latest on that puzzle at or before it)',
+      I.contextoWinForRecord([g(10, 'win'), g(100, 'win'), g(5000, 'win')], recK(103, 0)).t === 100
+      && I.contextoWinForRecord([g(10, 'win')], { t: 50, f: 'recordContexto', a: JSON.stringify(['en', true, { hints: 0 }]) }) === null);
+    const db = fakeDb({ directory: { ZZQ9X: { name: 'Probe' } }, playLog: { ZZQ9X: {
+      '0000000000900-1': { ...gs(900, 4000, 'giveup') },
+      '0000000000020-1': { ...gs(20, 5000, 'guess', 40) },
+      '0000000000100-1': { ...g(100, 'win'), s: 5000 },
+    } } });
+    const w1 = await S.checkContextoLogWin(db, 'ZZQ9X', '0000000000104-1', recK(104, 0), 7);
+    const w2 = await S.checkContextoLogWin(db, 'ZZQ9X', '0000000000100-1', { ...g(100, 'win'), s: 5000 }, 8);
+    ok('server: judged on the RECORDER entry (its `k`), alerts written once, the win event after it adds nothing',
+      w1.map((h) => h.rule).join() === 'contexto-solved-elsewhere' && w2.length === 0
+      && !!db.tree.integrityAlerts['contexto~ZZQ9X~en-9']['contexto-solved-elsewhere~x']);
+  }
+  {
+    const L = [{ id: 'h1', k: 'en-9', e: 'hint', t: 10, s: 100 }, { id: 'g1', k: 'en-9', e: 'giveup', t: 9999, s: 150 },
+      { id: 'w1', k: 'en-9', e: 'win', t: 50, s: 200 }, { id: 'h2', k: 'en-9', e: 'hint', t: 20, s: 300 }];
+    const a = E.logSummary(L, 'en-9', { exclude: 'w1' });
+    const b = E.logSummary(L.filter((x) => x.id !== 'w1'), 'en-9', { exclude: 'w1' });
+    ok('phone: the other phones\' entries are cut by the SERVER time of this phone\'s own win (a forward clock no longer hides a give-up)',
+      a.gave && a.hints === 1 && !a.won);
+    ok('phone: own win not yet on the server: everything there counts', b.gave && b.hints === 2);
+  }
+  ok('phone: the finishing entry\'s id is kept, the log is sent before the check, the recorder names the puzzle and marks an unchecked (offline) solve', (() => {
+    const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');
+    return /if \(id\) this\.rec\.doneId = id;/.test(ui) && /\{ exclude: rec\.doneId \}/.test(ui) && /flushPlayLog\(\)/.test(ui)
+      && /\{ guesses, hints, k, \.\.\.\(r \? \{\} : \{ unchecked: true \}\) \}/.test(ui);
+  })());
   ok('the phone counts hints from the other phones (contexto/js/ui.js)', (() => {
     const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');
     return /api\.orderByChild\('k'\), api\.equalTo\(k\)/.test(ui) && /Math\.max\(rec\.guesses\.filter\(\(g\) => g\.hint\)\.length, rec\.rh \| 0, \(r && r\.hints\) \| 0\)/.test(ui)
@@ -350,6 +397,20 @@ if (dbArg > 0) {
     }
   }
   console.log(`  ${records} records, ${strong} strong hits; ${matches} finished matches, ${alerts} alerts`);
+  // Contexto alerts over the play log (2026-10-29), when the snapshot has it (an anonymous backup cannot
+  // read playLog: export it from the console).
+  if (d.playLog) {
+    let wins = 0, ctAlerts = 0;
+    for (const [code, log] of Object.entries(d.playLog)) {
+      const all = Object.entries(log || {}).map(([id, x]) => ({ ...x, id }));
+      for (const win of all.filter((x) => x.g === 'contexto' && x.e === 'win')) {
+        wins++;
+        const near = all.filter((x) => Math.abs(Number(x.t) - Number(win.t)) <= 60000);
+        for (const h of I.checkContextoWin(all.filter((x) => x.k === win.k), near, win)) { ctAlerts++; console.log(`  alert  Contexto ${code} ${win.k}: ${h.rule} (${h.v}, ${h.lim})`); }
+      }
+    }
+    console.log(`  Contexto: ${wins} logged wins, ${ctAlerts} alerts`);
+  } else console.log('  Contexto: no playLog in this snapshot (export it from the console to replay those alerts)');
   ok('no record in the snapshot breaks a strong rule', strong === 0);
 }
 

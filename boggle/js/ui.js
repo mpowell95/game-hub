@@ -42,6 +42,7 @@ import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { roundEndsAt, entryRemainingMs, wonFor, bothResultsIn } from './mp-round.js';
+import { awayStamp, measureAway } from '../../js/server-time.js';
 import STRINGS from './strings.js';
 
 // MULTIPLAYER (2026-07-28). Two human devices race the SAME shaken board over
@@ -181,6 +182,9 @@ function saveGame(ui) {
       // was scored against, or every word already found reads as invalid.
       wordLang: ui._setup.wordLang,
       moved: !!ui._moved,   // 2026-10-29: the player has entered a word (quitting now is a loss)
+      // The moment the app went to the background with this round on screen (2026-10-29): a round
+      // resumed from it is charged the time away (resumeGame).
+      ...(ui._away ? { away: ui._away } : {}),
     }));
   } catch { /* a full quota must never break the round */ }
 }
@@ -216,6 +220,7 @@ function loadGame() {
       // everything that CAN be carried).
       wordLang: WORD_LANGS.includes(raw.wordLang) ? raw.wordLang : 'en',
       moved: raw.moved === true || found.length > 0,
+      away: raw.away && typeof raw.away === 'object' && Number.isFinite(raw.away.w) && Number.isFinite(raw.away.rem) ? raw.away : null,
     };
   } catch { return null; }
 }
@@ -258,6 +263,24 @@ class BoggleUI {
     // navigate-away-again before the resume finishes would wipe the very
     // save it was trying to restore.
     this._restoring = false;
+    // TIME AWAY COUNTS IN A SOLO ROUND (2026-10-29). The board stays on screen in the app switcher
+    // and in a screenshot, so a page killed in the background, or a clock set back while away,
+    // handed back study time. Hidden mid-round: the moment and the time left are stamped (and saved);
+    // back: whatever the ticks did not already charge is charged, topped up by the server's clock
+    // once known (js/server-time.js measureAway). Leaving through the hub still pauses (destroy: the
+    // board is not on screen). Live rooms run on their own shared end time.
+    this._away = null;
+    this._onVisibility = () => {
+      const live = !this.mp && this.view === 'game' && this._board && !this._roundOver && !this._restoring;
+      if (document.hidden) {
+        if (live) { this._away = { ...awayStamp(), rem: Math.max(0, Math.round(this._endsAt - performance.now())) }; saveGame(this); }
+        return;
+      }
+      const a = this._away;
+      this._away = null;
+      if (a && live) this._chargeAway(a, a.rem - Math.max(0, this._endsAt - performance.now()));
+    };
+    document.addEventListener('visibilitychange', this._onVisibility);
 
     // Multiplayer session state, or null in solo -- `if (this.mp)` is the
     // whole mode test, same convention as tic-tac-toe/js/ui.js and
@@ -312,6 +335,7 @@ class BoggleUI {
 
   destroy() {
     this._dead = true;
+    document.removeEventListener('visibilitychange', this._onVisibility);
     // Belt and braces with the per-word checkpoint in onSubmitWord(): covers
     // backgrounding mid-word-entry too. Skipped while a resume is still
     // loading the dictionary -- nothing has changed yet, and touching the
@@ -1297,9 +1321,27 @@ class BoggleUI {
     this._traceMoved = false;
     this.view = 'game';
     this._remainingSec = save.remainingSec;
-    this._endsAt = performance.now() + (save.remainingMs != null ? save.remainingMs : this._remainingSec * 1000);
+    let rem = save.remainingMs != null ? save.remainingMs : this._remainingSec * 1000;
+    if (save.away) rem = Math.min(rem, save.away.rem);
+    this._endsAt = performance.now() + rem;
+    if (save.away) this._chargeAway(save.away, 0);
+    this._remainingSec = Math.ceil(Math.max(0, this._endsAt - performance.now()) / 1000);
     this.renderGame();
     this.startTimer();
+    if (this._remainingSec <= 0) this.tick();   // the time ran out while away: the round ends now
+  }
+
+  /** Charge a solo round's time away (see the constructor), `already` ms of it already charged. */
+  _chargeAway(a, already) {
+    const board = this._board;
+    let charged = Math.max(0, already | 0);
+    const now = measureAway(a, (srv) => {
+      if (this._dead || this._board !== board || this._roundOver) return;
+      if (srv > charged) { this._endsAt -= srv - charged; charged = srv; this.tick(); }
+    });
+    if (now > charged) { this._endsAt -= now - charged; charged = now; }
+    this._remainingSec = Math.ceil(Math.max(0, this._endsAt - performance.now()) / 1000);
+    if (this._remainingSec > 0) saveGame(this);   // at 0 the next tick ends the round (and records it)
   }
 
   // --- timer ----------------------------------------------------------------

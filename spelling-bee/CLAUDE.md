@@ -97,3 +97,7 @@ Español (`beeTabsHTML`), 🥇🥈🥉 · 🧠 · 🐝 · 📅 under each name; 
 
 `node spelling-bee/js/test.js` (engine + every puzzle in the data is fair); `node tools/check-no-scroll.mjs
 spelling-bee` (board, open list, each sheet); `window.__sbTest = { ui, answers, submit(word) }`.
+
+## Yesterday's Answers, stamped (2026-10-29, second pass)
+
+A phone in a zone a day ahead saw the Americas' today as "yesterday". Opening Yesterday's Answers now logs `answers` under THAT puzzle and shows them only once the server has it (`log.js logConfirmed`); no word for that puzzle sent after counts, and such a log always decides the row (`js/bee-fairplay.js answersSeenAt`). A zone moving more than an hour in one puzzle's log is an alert (`zoneShifts`, `beeAlerts/<puzzle>/<CODE>~zone`), never a void. Chosen over "answers once the day is over everywhere" (Spain would wait until early afternoon). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

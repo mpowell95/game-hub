@@ -21,7 +21,7 @@ import STRINGS from './strings.js';
 import { postProgress, watchDaily, watchFlags, watchOwn, needsPost, shownRows, voidedOn, byPoints } from './board.js';
 import { bestNow, liveNow, whenLive, onLive, __setServerTimeForTest } from '../../js/server-time.js';
 import { isLatePost } from '../../js/bee-fairplay.js';
-import { logAction, flushLog } from './log.js';
+import { logAction, flushLog, logConfirmed } from './log.js';
 import { myCode } from '../../js/messages.js';
 import { loadProfile } from '../../js/profile-store.js';
 
@@ -902,6 +902,12 @@ class SpellingBee {
     const why = answersShown(this.data.epoch, n, now == null ? NaN : now);
     if (why !== 'ok') { this._toast(t(why), 'is-bad'); return; }
     const p = puzzleAt(this.data, n - 1);
+    // The server stamps the moment this player saw those answers BEFORE they show (2026-10-29): a
+    // phone moved to a time zone a day ahead sees the Americas' today as "yesterday", and from then
+    // on no word for that puzzle counts (js/bee-fairplay.js answersSeenAt).
+    const sent = await logConfirmed(p.key, 'answers', { r: `day ${n - 1}` });
+    if (this.disposed || !this.data || n !== this.n) return;
+    if (!sent) { this._toast(t('need_net'), 'is-bad'); return; }
     const ans = answersFor(this.data, p);
     const save = loadSave();
     const r = save.games[p.key];

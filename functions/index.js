@@ -369,8 +369,9 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
     for (const c of codes) await sendTo(db, c, beeNote('flag', bk, f), `bee-flag-${bk}-${code}`, { game: 'spelling-bee' });
   }
   for (const [bk, code, a] of alerts) {
-    logger.info('bee log gap', { bk, code, words: a.words, logged: a.logged });
-    for (const c of codes) await sendTo(db, c, beeNote('log', bk, a), `bee-log-${bk}-${code}`, { game: 'spelling-bee' });
+    const kind = a.zone ? 'zone' : 'log';
+    logger.info(a.zone ? 'bee zone change' : 'bee log gap', { bk, code, words: a.words, logged: a.logged, zone: a.zone });
+    for (const c of codes) await sendTo(db, c, beeNote(kind, bk, a), `bee-${kind}-${bk}-${code}`, { game: 'spelling-bee' });
   }
   const meta = (await db.ref('boards/v1/beeMeta').get()).val() || {};
   if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) {
@@ -410,7 +411,7 @@ export const hoopsMatchCheck = onMatchOver('hoops');
 // (js/integrity.js checkContextoWin); an alert, never a void, goes to every admin.
 export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
   const v = event.data.val();
-  if (!v || v.g !== 'contexto' || v.e !== 'win') return;
+  if (!v || v.g !== 'contexto' || (v.e !== 'win' && v.f !== 'recordContexto')) return;
   const db = getDatabase();
   const written = await checkContextoLogWin(db, event.params.code, event.params.id, v);
   if (!written.length) return;

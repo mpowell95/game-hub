@@ -216,9 +216,39 @@ export function dayWindow(day, z) {
   return [d0 - 14 * HOUR, d0 + 36 * HOUR];
 }
 
-/** One accepted log entry {t, s, z?}: does it count for the puzzle's own day? */
-export function countsOnDay(x, day) {
+// YESTERDAY'S ANSWERS, SEEN (2026-10-29, second pass). The puzzle day is the phone's LOCAL date, so a
+// phone moved to UTC+14 is a day ahead of the Americas: its Yesterday's Answers is their today. The
+// game now logs every opening of Yesterday's Answers under the puzzle whose answers it shows
+// (`e: 'answers'`) and shows them only once that entry is on the server, so its server time `s` is
+// the moment this player code saw them. A word reaching the server at or after that moment never
+// counts for that puzzle, and a log holding such a view always decides the row (even with words
+// missing). Chosen over "wait until the day is over everywhere" (12:00 UTC the next day), which would
+// keep honest players in Spain from yesterday's answers until early afternoon: an honest player never
+// plays a puzzle after reading its answers, so this costs them nothing.
+/** The server time this player code first saw this puzzle's answers, or null. */
+export function answersSeenAt(entries) {
+  let at = null;
+  for (const x of (Array.isArray(entries) ? entries : Object.values(entries || {}))) {
+    if (x && x.e === 'answers' && Number.isFinite(x.s) && (at == null || x.s < at)) at = x.s;
+  }
+  return at;
+}
+
+/** Time zones (getTimezoneOffset minutes) seen in one player's log for one puzzle, when they differ
+ *  by more than an hour (a daylight-saving change is an hour): a phone's zone moved during the
+ *  puzzle (2026-10-29). An ALERT for Matt, never a void. [] when one zone (or none) was seen. */
+export function zoneShifts(entries) {
+  const zs = new Set();
+  for (const x of (Array.isArray(entries) ? entries : Object.values(entries || {}))) if (x && Number.isFinite(x.z)) zs.add(x.z);
+  const list = [...zs].sort((a, b) => a - b);
+  return list.length > 1 && list[list.length - 1] - list[0] > 60 ? list : [];
+}
+
+/** One accepted log entry {t, s, z?}: does it count for the puzzle's own day? `seenAt` = when this
+ *  code saw the puzzle's answers (answersSeenAt): nothing sent from then on counts. */
+export function countsOnDay(x, day, seenAt = null) {
   if (!x || !Number.isFinite(x.t) || !Number.isFinite(x.s) || !day) return false;
+  if (seenAt != null && x.s >= seenAt) return false;
   const [lo, hi] = dayWindow(day, x.z);
   if (x.t < lo || x.t >= hi) return false;
   if (x.s - x.t > OWN_DAY.uploadMs || x.t - x.s > OWN_DAY.aheadMs) return false;
@@ -243,12 +273,13 @@ export function ownDayFromLog(entries, puzzle) {
   const ev = (Array.isArray(entries) ? entries : Object.values(entries || {}))
     .filter((x) => x && x.e === 'guess' && isOk(x) && typeof x.w === 'string' && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
   const letters = lettersOf(puzzle && puzzle.key);
+  const seenAt = answersSeenAt(entries);
   const seen = new Set();
   let w = 0, p = 0, answers = 0;
   for (const x of ev) {
     if (seen.has(x.w)) continue;
     seen.add(x.w);   // a word counts at its FIRST acceptance only
-    if (!countsOnDay(x, puzzle.day)) continue;
+    if (!countsOnDay(x, puzzle.day, seenAt)) continue;
     w++; p += scoreOf(x.w, letters);
     if (x.r === 'ok') answers++;
   }
@@ -267,7 +298,7 @@ export function ownEntry(row, log, puzzle) {
   if (!hasLog) return late ? { w: 0, p: 0, r: 0, at: Number(row.at) || 0, use: 1 } : null;
   const o = ownDayFromLog(log, puzzle);
   const full = o.logged >= (Number(row.words) | 0);
-  if (!late && !full) return null;
+  if (!late && !full && answersSeenAt(log) == null) return null;
   return { w: o.w, p: o.p, r: o.r, at: Number(row.at) || 0, use: 1 };
 }
 

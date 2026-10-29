@@ -11,7 +11,7 @@
 // THE LAW: nothing here changes players/, a match, or a stats store. Flags and alerts are new nodes,
 // never removed by this code.
 import './shared-env.js';
-import { checkStats, checkMatch, checkContextoWin, hitText, gameName } from './shared/js/integrity.js';
+import { checkStats, checkMatch, checkContextoWin, contextoWinForRecord, hitText, gameName } from './shared/js/integrity.js';
 import { isHiddenDeviceId, isHiddenName } from './shared/js/hidden-players.js';
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
@@ -77,16 +77,27 @@ export function integrityNote(kind, info) {
   };
 }
 
-/** A Contexto win was logged (playLog/<code>/<id>): judge it once (checkContextoWin). Returns the alerts
- *  written. Each alert lives at integrityAlerts/contexto~<code>~<puzzle>/<rule>~x. */
-export async function checkContextoLogWin(db, code, id, win, now = Date.now()) {
-  if (!win || win.g !== 'contexto' || win.e !== 'win' || !win.k) return [];
+/** A Contexto win was logged (playLog/<code>/<id>), or (2026-10-29) its recorder entry, which names the
+ *  puzzle in its extras (`k`): judge it once (checkContextoWin). Since 2026-10-29 the phone sends its win
+ *  BEFORE it checks the other phones and records, so the recorder entry usually lands later: judging on
+ *  it sees the hints it counted. Returns the alerts written. Each alert lives at
+ *  integrityAlerts/contexto~<code>~<puzzle>/<rule>~x (written once, so judging twice is harmless). */
+export async function checkContextoLogWin(db, code, id, entry, now = Date.now()) {
+  if (!entry || entry.g !== 'contexto') return [];
+  const isRec = entry.f === 'recordContexto';
+  if (!isRec && (entry.e !== 'win' || !entry.k)) return [];
+  let k = entry.k;
+  if (isRec) { try { k = (JSON.parse(entry.a)[2] || {}).k; } catch { k = null; } }
+  if (!k) return [];
+  const pz = await db.ref(`playLog/${code}`).orderByChild('k').equalTo(String(k)).get();
+  const pv = pz.val() || {};
+  const puzzle = Object.keys(pv).map((key) => ({ ...pv[key], id: key }));
+  const win = isRec ? contextoWinForRecord(puzzle, entry) : { ...entry, id };
+  if (!win) return [];
   const t = Number(win.t) || 0;
-  const [pz, nr] = await Promise.all([
-    db.ref(`playLog/${code}`).orderByChild('k').equalTo(win.k).get(),
-    db.ref(`playLog/${code}`).orderByKey().startAt(`${t - 60000}`).endAt(`${t + 60000}~`).get(),
-  ]);
-  const puzzle = Object.values(pz.val() || {}), near = Object.values(nr.val() || {});
+  const nr = await db.ref(`playLog/${code}`).orderByKey().startAt(`${t - 60000}`).endAt(`${t + 60000}~`).get();
+  const near = Object.values(nr.val() || {});
+  if (isRec && !near.some((x) => x && x.f === 'recordContexto' && Number(x.t) === Number(entry.t))) near.push(entry);
   const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
   const written = [];
   for (const h of checkContextoWin(puzzle, near, win)) {

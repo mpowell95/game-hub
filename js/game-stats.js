@@ -1877,7 +1877,10 @@ export function recordSudoku(tier, extras = {}) {
     g.sd.pre = { hints: g.sd.hints | 0, won };
   }
   if (!g.sd.clean || typeof g.sd.clean !== 'object' || Array.isArray(g.sd.clean)) g.sd.clean = {};
-  if (t && hints === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
+  // A MISTAKE counts like a hint here (Matt, 2026-10-29): the mistakes counter flags each wrong digit
+  // the moment it is placed, so guessing and watching it is help. Solves recorded before that date
+  // keep the bucket they were given (never re-bucketed).
+  if (t && hints === 0 && mistakes === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
   g.total.played += 1;
   g.total.won += 1;
   g.sd.solved += 1;
@@ -2054,6 +2057,11 @@ export function recordWayOut(tier, f = {}) {
   if (tracked) {
     if (!isObj(g.wo.leg)) g.wo.leg = {};
     if (!isObj(g.wo.leg[d])) g.wo.leg[d] = { w: ((g.byDiff[d] || {}).won) | 0, n: g.wo.ptsN[d] | 0, p: g.wo.pts[d] | 0, e: ln };
+    // When this record first cleared the level (2026-10-29, js/arrow-maze-time.js woCapCl): the
+    // server's time when the game knows it (`f.at`), written once.
+    if (!isObj(g.wo.ct)) g.wo.ct = {};
+    if (!isObj(g.wo.ct[d])) g.wo.ct[d] = {};
+    if (!(Number(g.wo.ct[d]['L' + ln]) > 0)) g.wo.ct[d]['L' + ln] = Math.floor(Number(f.at)) > 0 ? Math.floor(Number(f.at)) : Date.now();
   }
   bumpTotals(g, d, true);
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
@@ -2065,7 +2073,10 @@ export function recordWayOut(tier, f = {}) {
     // scored too; `s` keeps the number scored when it is more than this attempt's own m + h, and `p`
     // the slips from before this attempt, which a replay of it can never win back.
     const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)));
-    const prior = Math.max(0, Math.floor(Number(f.prior) || 0));
+    // HINTS CARRY OVER (Matt, 2026-10-29): the clearing try's own hints count as slips a replay can
+    // never win back (only its lost hearts can be), so a level first cleared with hints keeps those
+    // points even after a clean Replay.
+    const prior = Math.max(0, Math.floor(Number(f.prior) || 0), h);
     g.wo.timed[d] += 1;
     g.wo.mistakes += m;
     g.wo.hints += h;
@@ -2136,7 +2147,7 @@ export function recordWayOutReplay(tier, f = {}) {
  *  (2026-10-29). Kept as `wo.sl[band]['L<n>']`, the most ever seen (max only), so the person's other
  *  storages see a level that was learned with hints (js/arrow-maze-time.js, "SLIPS STAY WITH THE
  *  LEVEL"). Not a play, so not rate-gated. Returns true once stored. */
-export function noteWayOutSlips(band, n, slips) {
+export function noteWayOutSlips(band, n, slips, at) {
   const d = normDiff(band), L = Math.floor(Number(n) || 0), s = Math.max(0, Math.floor(Number(slips) || 0));
   if (!WO_TIERS.includes(d) || !(L >= 1) || L > 1e6 || !(s > 0)) return false;
   notePlay('wayout', 'noteWayOutSlips', arguments);
@@ -2146,8 +2157,13 @@ export function noteWayOutSlips(band, n, slips) {
   if (!isObj(g.wo.sl)) g.wo.sl = {};
   if (!isObj(g.wo.sl[d])) g.wo.sl[d] = {};
   const k = 'L' + L;
-  if ((Math.floor(Number(g.wo.sl[d][k]) || 0)) >= s) return true;
-  g.wo.sl[d][k] = s;
+  // When the first slip on this level was stored (2026-10-29, woCapCl): written once.
+  if (!isObj(g.wo.sf)) g.wo.sf = {};
+  if (!isObj(g.wo.sf[d])) g.wo.sf[d] = {};
+  const stamp = !(Number(g.wo.sf[d][k]) > 0);
+  if (stamp) g.wo.sf[d][k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();
+  if (!stamp && (Math.floor(Number(g.wo.sl[d][k]) || 0)) >= s) return true;
+  g.wo.sl[d][k] = Math.max(s, Math.floor(Number(g.wo.sl[d][k]) || 0));
   st.updatedAt = new Date().toISOString();
   return persist(st);
 }
@@ -2175,9 +2191,12 @@ export function recordWayOutRush(mode, run = {}) {
     m: Math.max(0, run.mistakes | 0), d, w: woWeekKey(d) };
   if (Number.isFinite(+run.seed)) e.sd = +run.seed;
   if (run.left) e.left = 1;
+  // `late` (2026-10-29): the run ended after its week was over by the server's clock (a phone clock
+  // set back), or with the phone's clock known to be wrong. Kept, never counted (way-out/js/ui.js).
+  if (run.late) e.late = 1;
   Object.assign(e, woRushExtras(run));   // the tuning data (bt, ba, bc, mx, mb, pk, gn, pn, res, rv)
   r.runs[mode] = r.runs[mode].concat([e]);
-  if (!e.left) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
+  if (!e.left && !e.late) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -2206,7 +2225,9 @@ export function recordGridlock(band, f = {}) {
     const s = Math.max(1, Math.min(3, Math.floor(Number(f.stars) || 1)));
     const c = h === 0 && !(Number(g.gl.hint['L' + n]) > 0) ? 1 : 0;
     const e = { m, s, c };
-    if (c) e.t = Date.now();
+    // The crown's time decides it against a hint on another phone (gridlock-points glCrowned), so it
+    // is the SERVER's time when the game knows it (`f.at`, 2026-10-29), not the phone's alone.
+    if (c) e.t = Math.floor(Number(f.at)) > 0 ? Math.floor(Number(f.at)) : Date.now();
     g.gl.lv2['L' + n] = glBest(g.gl.lv2['L' + n], e);
   }
   st.updatedAt = new Date().toISOString();
@@ -2218,7 +2239,7 @@ export function recordGridlock(band, f = {}) {
  *  THE LAW rule 2's direction for this field: the earliest hint is the fact). Not a play, so not
  *  rate-gated. From then on that level earns half its points and no crown, unless it had already been
  *  solved with no hint before (js/gridlock-points.js glCrowned). */
-export function recordGridlockHint(level) {
+export function recordGridlockHint(level, at) {
   notePlay('gridlock', 'recordGridlockHint', arguments);
   const n = Math.floor(Number(level) || 0);
   if (n < 1) return null;
@@ -2227,7 +2248,7 @@ export function recordGridlockHint(level) {
   ensureGl(g);
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
-  g.gl.hint[k] = Date.now();
+  g.gl.hint[k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();   // the server's time where known (2026-10-29)
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -2289,12 +2310,56 @@ export function recordWordWeaver(level, { hints, extra, lang } = {}) {
   return st;
 }
 
+/** Nuts & Bolts level sets (2026-10-29): "a-b,c-d" ranges of level numbers, sorted, merged. A
+ *  string so Firebase never turns it into an array; levels are solved in order, so a whole ladder
+ *  is one range. */
+export function nbParseRanges(str) {
+  const out = [];
+  if (typeof str !== 'string' || !str) return out;
+  for (const part of str.split(',')) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part.trim());
+    if (!m) continue;
+    const a = Number(m[1]), b = m[2] ? Number(m[2]) : a;
+    if (a >= 1 && b >= a && b - a < 1e6) out.push([a, b]);
+  }
+  out.sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const r of out) {
+    const last = merged[merged.length - 1];
+    if (last && r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+    else merged.push([r[0], r[1]]);
+  }
+  return merged;
+}
+export function nbRangesStr(ranges) { return ranges.map(([a, b]) => (a === b ? String(a) : `${a}-${b}`)).join(','); }
+export function nbRangesHas(ranges, n) { return ranges.some(([a, b]) => n >= a && n <= b); }
+export function nbRangesAdd(str, n) { return nbRangesStr(nbParseRanges((str ? str + ',' : '') + n)); }
+
 export function recordNutsBolts(level, moves, tier) {
   if (tooFast('nutsbolts')) return null;
   notePlay('nutsbolts', 'recordNutsBolts', arguments);
   const st = loadStats();
   const g = st.games.nutsbolts;
   ensureNb(g);
+  // ONE WIN PER LEVEL PER PERSON (2026-10-29): which level this was, per tier (`nb.lv[tier]`, a range
+  // string, only added to), and once, at the first tracked solve, how far the record's untracked wins
+  // reach (`nb.leg[tier]` = the best level recorded at that tier, else its win count). A fresh storage
+  // re-solving Expert 1, 2, 3... adds wins here as always; js/players-agg.js counts each level once per
+  // person (dedupeNutsBolts). Additive only.
+  {
+    const lvTier = NB_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
+    if (!g.nb.leg || typeof g.nb.leg !== 'object' || Array.isArray(g.nb.leg)) {
+      const leg = {};
+      for (const k of NB_TIERS) {
+        const best = ((g.nb.bestByTier || {})[k]) | 0;
+        leg[k] = best > 0 ? best : (((g.byDiff[k] || {}).won) | 0);
+      }
+      g.nb.leg = leg;
+    }
+    if (!g.nb.lv || typeof g.nb.lv !== 'object' || Array.isArray(g.nb.lv)) g.nb.lv = {};
+    const lvl = level | 0;
+    if (lvTier && lvl >= 1) g.nb.lv[lvTier] = nbRangesAdd(g.nb.lv[lvTier], lvl);
+  }
   g.total.played += 1;
   g.total.won += 1;
   g.nb.solved += 1;
@@ -2791,6 +2856,32 @@ export function recordSkeeball(boardId, extras) {
     st.updatedAt = new Date().toISOString();
     persist(st);
     return st;
+  }
+  // CHALLENGE RACKS FEED NO OBJECTIVE (2026-10-29, second pass). A challenge rack is recorded and shown
+  // like any rack (rule 1), but objectives (skeeball/js/goals.js) read the machine's record, so racks
+  // thrown on the challenger's machine while it was still locked pre-earned its objectives and opened
+  // the NEXT machine the moment it was earned. Kept beside the record, additive only:
+  //   sk.chg            the challenge racks' share of the global goal counters (100s, sweeps, catches...)
+  //   sk.chk[machine]   from the first challenge rack on it: `pre` = that machine's record just before
+  //                     it, and `boards[machine]` = every NON-challenge rack on it since.
+  // goals.js goalStore() reads pre + own racks for such a machine, and the globals minus `chg`.
+  const chk = isObj(g.sk.chk) ? g.sk.chk[board] : null;
+  if (e.challenge) {
+    if (!isObj(g.sk.chg)) g.sk.chg = {};
+    const add = { hundreds: e.hundreds, fifties: e.fifties, tens: e.tens, twenties: e.twenties, thirties: e.thirties, forties: e.forties,
+      colorSweeps: e.colorSweep ? 1 : 0, runaways: e.runaways };
+    for (const k of Object.keys(add)) { const n = Math.max(0, add[k] | 0); if (n) g.sk.chg[k] = (g.sk.chg[k] | 0) + n; }
+    if (!isObj(g.sk.chk)) g.sk.chk = {};
+    if (!isObj(chk)) {
+      const b = (g.sk.boards || {})[board] || {};
+      const slots = {}; for (const id of Object.keys(b.slots || {})) if (b.slots[id]) slots[id] = true;
+      const hits = {}; for (const id of Object.keys(b.slotHits || {})) if (b.slotHits[id] | 0) hits[id] = b.slotHits[id] | 0;
+      g.sk.chk[board] = { pre: { plays: b.plays | 0, points: b.points | 0, best: b.best | 0, bestThrow: b.bestThrow | 0, slots, cleanRacks: b.cleanRacks | 0,
+        slotHits: hits, perfectRacks: b.perfectRacks | 0, fullRacks: b.fullRacks | 0 }, boards: {}, at: Date.now() };
+    }
+  } else if (isObj(chk)) {
+    recordBoardGame(chk, board, { score, bestThrow: e.bestThrow | 0, slotsHit: e.slotsHit, cleanRack: e.cleanRack,
+      slotCounts: e.slotCounts, perfectRack: e.perfectRack, fullRack: e.fullRack });
   }
   bumpTotals(g, board, true);
   g.sk.played += 1;

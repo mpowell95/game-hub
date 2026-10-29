@@ -251,3 +251,7 @@ middle of a drag now drops the drag, so a lost pointerup can never leave every b
 - Blocks are DOM elements moved by `transform` only; a drag follows the finger along the block's
   own line, clamped to where it can actually go, and snaps to the nearest cell on release (one move
   if it ended somewhere new). `touch-action: none` on the board, pointer capture on the block.
+
+## Crown and hint times from the server (2026-10-29, second pass)
+
+`recordGridlock(..., { at })` and `recordGridlockHint(n, at)` get `bestNow()` from the game, so a phone clock cannot put a crown before a hint on another phone. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.

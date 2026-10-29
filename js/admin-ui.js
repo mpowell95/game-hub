@@ -780,10 +780,15 @@ function alertRows(cfg, sid) {
   if (sid === 'spellingbee') {
     const codes = codesSeen();
     for (const [bk, byCode] of Object.entries(obj(_bee.alerts))) {
-      for (const [code, a] of Object.entries(obj(byCode))) {
+      for (const [key, a] of Object.entries(obj(byCode))) {
+        // `<CODE>~zone` (2026-10-29): the phone's time zone moved during that puzzle (functions/bee.js checkZone).
+        const code = String(key).split('~')[0];
         const p = codes.get(code) || {};
+        const note = obj(a).zone
+          ? `UTC ${String(obj(a).zone).split(',').map((z) => { const h = -Number(z) / 60; return (h >= 0 ? '+' : '') + h; }).join(' / ')}`
+          : `${tx('adm_log_gap', 'log gap')} ${(obj(a).words | 0)} / ${(obj(a).logged | 0)}`;
         rows.push(row({ icon: whoHTML(p.emoji), title: (p.name || obj(a).name || code),
-          sub: `${shortDate(obj(a).at)} ${langOf(bk)} · ${tx('adm_log_gap', 'log gap')} ${(obj(a).words | 0)} / ${(obj(a).logged | 0)}` }));
+          sub: `${shortDate(obj(a).at)} ${langOf(bk)} · ${note}` }));
       }
     }
   }

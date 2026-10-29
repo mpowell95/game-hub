@@ -7,6 +7,8 @@
 //   r  the result: ok, bonus, or the refusal           win, list, shuffle, lang, del (Delete pressed;
 //                                                      w = what was left), shut (a sheet closed; r = which)
 //   s  the server's clock when it arrived (a phone clock set wrong shows up against it)
+//      `answers` (2026-10-29): Yesterday's Answers opened, logged under the puzzle whose answers it
+//      shows, and sent BEFORE they show (logConfirmed): no word for that puzzle counts after its `s`
 //   k  guesses only: ms from the first letter typed to Enter (2026-10-29)
 //   z  the phone's time-zone offset in minutes (getTimezoneOffset; 2026-10-29): the server decides which
 //      day a guess fell on with it (js/bee-fairplay.js countsOnDay)
@@ -48,6 +50,24 @@ export function logAction(puzzleKey, e, extra) {
   q.push(entry);
   writeQueue(q);
   if (!timer) timer = setTimeout(() => { timer = null; flushLog(); }, 4000);
+  return entry.id;
+}
+
+/** Log an action and wait until the SERVER has it (2026-10-29: Yesterday's Answers shows only after
+ *  its `answers` entry is stamped by the server, js/bee-fairplay.js answersSeenAt). True once sent;
+ *  false if it could not be sent within `ms`. Where nothing can be sent (no player code, a dev origin)
+ *  there is no board to protect: true. */
+export async function logConfirmed(puzzleKey, e, extra, ms = 5000) {
+  const id = logAction(puzzleKey, e, extra);
+  if (!id) return false;
+  if (!myCode() || !writesAllowed('Spelling Bee log')) return true;
+  const end = Date.now() + ms;
+  for (;;) {
+    await flushLog();
+    if (!readQueue().some((x) => x && x.id === id)) return true;
+    if (Date.now() >= end) return false;
+    await new Promise((r) => setTimeout(r, 300));
+  }
 }
 
 /** Send what is queued. Safe to call any time; one send at a time. */
