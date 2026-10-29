@@ -436,6 +436,7 @@ export const STRINGS = {
 
     // --- Messages (js/messages-ui.js) ---
     msg_title: 'Messages',
+    anon_player: 'Player',
     msg_btn: '💬 Messages',
     msg_bar_btn: 'Messages',
     msg_btn_new: '💬 Messages ({n} new)',
@@ -1341,6 +1342,7 @@ export const STRINGS = {
 
     // --- Messages (js/messages-ui.js) ---
     msg_title: 'Mensajes',
+    anon_player: 'Jugador',
     msg_btn: '💬 Mensajes',
     msg_bar_btn: 'Mensajes',
     msg_btn_new: '💬 Mensajes ({n} nuevos)',

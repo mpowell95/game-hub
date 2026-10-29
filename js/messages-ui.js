@@ -29,6 +29,17 @@ const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// NO OTHER PLAYER'S CODE IN THE PAGE (2026-10-29, Matt: codes viewable by Admin only). A code is the whole
+// identity ("link by code" on a new phone becomes that person), so rows carry an opaque index into this
+// list (`data-wi`), never the code; a tap reads the person from here. A name-less row says "Player".
+const _who = [];
+function whoIx(r) {
+  if (_who.length > 2000) _who.length = 0;
+  return _who.push({ code: r.code, name: r.name || '', emoji: r.emoji || '🙂' }) - 1;
+}
+const whoAt = (el) => _who[Number(el && el.dataset && el.dataset.wi)] || null;
+function playerWord() { const v = t('anon_player'); return v === 'anon_player' ? 'Player' : v; }
+
 /** Re-export so js/hub.js and profile/index.html can paint a count without importing the data half. */
 export async function myUnreadMessages() { return unreadMessageCount(); }
 
@@ -89,9 +100,7 @@ export async function renderProfileMessages(host) {
   const open = (row) => openMessages(row ? { to: row.code, toName: row.name, toEmoji: row.emoji } : {});
   const draw = (inner) => {
     host.innerHTML = inner;
-    host.querySelectorAll('[data-code]').forEach((b) => b.addEventListener('click', () => open({
-      code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji,
-    })));
+    host.querySelectorAll('[data-wi]').forEach((b) => b.addEventListener('click', () => { const w = whoAt(b); if (w) open(w); }));
     const all = host.querySelector('[data-role="all"]');
     if (all) all.addEventListener('click', () => open(null));
   };
@@ -112,10 +121,10 @@ export async function renderProfileMessages(host) {
   const unread = rows.filter((r) => isUnread(r, me)).length;
   draw(`<ul class="msg-list">${rows.map((r) => `
       <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
-            data-code="${esc(r.code)}" data-name="${esc(r.name || r.code)}" data-emoji="${esc(r.emoji || '🙂')}">
+            data-wi="${whoIx(r)}">
         ${rowIconHTML(r)}
         <span class="msg-row-main">
-          <span class="msg-row-name">${esc(r.name || r.code)}</span>
+          <span class="msg-row-name">${esc(r.name || playerWord())}</span>
           <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
         </span>
         <span class="msg-row-when">${esc(whenText(r.at))}</span>
@@ -476,10 +485,10 @@ function paintList(card, rows, me, gen) {
   const body = rows.length
     ? `<ul class="msg-list">${rows.map((r) => `
         <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
-              data-code="${esc(r.code)}" data-name="${esc(r.name || r.code)}" data-emoji="${esc(r.emoji || '🙂')}">
+              data-wi="${whoIx(r)}">
           ${rowIconHTML(r)}
           <span class="msg-row-main">
-            <span class="msg-row-name">${esc(r.name || r.code)}</span>
+            <span class="msg-row-name">${esc(r.name || playerWord())}</span>
             <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
           </span>
           <span class="msg-row-when">${esc(whenText(r.at))}</span>
@@ -500,9 +509,12 @@ function paintList(card, rows, me, gen) {
   card.querySelector('[data-role="new"]').addEventListener('click', () => renderPicker(card));
   addAdminButtons(card, gen);
   addPushRow(card, gen);
-  card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => (b.dataset.code === HUB_CODE
-    ? renderHubThread(card)
-    : renderThread(card, { code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji }))));
+  card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => {
+    const w = whoAt(b);
+    if (!w) return;
+    if (w.code === HUB_CODE) renderHubThread(card);
+    else renderThread(card, w);
+  }));
 }
 
 /**
@@ -557,9 +569,9 @@ async function renderPicker(card) {
   const rest = contacts.filter((c) => !recentCodes.includes(c.code));
 
   const personRow = (c) => `<li><button type="button" class="msg-row msg-row--compact"
-      data-code="${esc(c.code)}" data-name="${esc(c.name)}" data-emoji="${esc(c.emoji)}">
+      data-wi="${whoIx(c)}">
     <span class="msg-row-emoji" aria-hidden="true">${esc(c.emoji)}</span>
-    <span class="msg-row-main"><span class="msg-row-name">${esc(c.name)}</span></span>
+    <span class="msg-row-main"><span class="msg-row-name">${esc(c.name || playerWord())}</span></span>
   </button></li>`;
   const group = (label, list) => (list.length
     ? `<p class="msg-group">${esc(label)}</p><ul class="msg-list">${list.map(personRow).join('')}</ul>` : '');
@@ -578,7 +590,8 @@ async function renderPicker(card) {
   card.querySelector('[data-role="back"]').addEventListener('click', () => renderList(card));
   card.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.all) return renderBroadcast(card, contacts);
-    renderThread(card, { code: b.dataset.code, name: b.dataset.name, emoji: b.dataset.emoji });
+    const w = whoAt(b);
+    if (w) renderThread(card, w);
   }));
 }
 
@@ -741,7 +754,7 @@ async function renderThread(card, who) {
   const gen = ++_view;
   _guardClose = null;
   const me = myCode();
-  const title = who.name || who.code;
+  const title = who.name || playerWord();
   // Leaving KILLS the subscription on the click itself, before renderList does any of its own
   // async work. Tearing it down inside renderList was not enough: the thread's watch could still
   // deliver in the gap and redraw the conversation over the list, and then keep it there.
