@@ -516,6 +516,8 @@ function isDevOrigin() {
   } catch { return false; }
 }
 function writesAllowed() {
+  // Test automation never writes (js/automation.js's rule, inlined: this file is copied to the server and imports nothing).
+  try { if (typeof navigator !== 'undefined' && navigator.webdriver === true) return false; } catch { /* not automation */ }
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   return false;

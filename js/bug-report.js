@@ -22,6 +22,7 @@ import { loadProfile } from './profile-store.js';
 import { deviceId, statsId } from './game-stats.js';
 import { recentErrors } from './error-log.js';
 import { installState, swCacheName } from './install-state.js';
+import { automationBlocks } from './automation.js';
 
 // --- limits -------------------------------------------------------------------------------------
 // Screenshots ride as base64 data URLs. RTDB is not a file store, so the caps stay conservative:
@@ -398,6 +399,8 @@ export async function buildBugReport({ description, gameId, gameTitle, screensho
  * nobody can report. Returns { ok:true, id } or { ok:false, reason, retryable }.
  */
 export async function submitBugReport(report) {
+  // Test automation never files a report (js/automation.js); not retryable, so it is not queued either.
+  if (automationBlocks('bug report')) return { ok: false, reason: 'test automation', retryable: false };
   const shots = (report && report._shots) || [];
   const record = Object.assign({}, report);
   delete record._shots;

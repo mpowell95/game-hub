@@ -18,6 +18,7 @@ import { getStatsApp, perfReport } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
 import { loadSeen } from './announce.js';
 import { hubReadReport } from './hub-messages.js';
+import { automationBlocks } from './automation.js';
 
 let _db = null, _api = null;
 
@@ -73,6 +74,7 @@ function isDevOrigin() {
 /** True when this page may write. Loud and recorded when it may not - a skipped write that says
  *  nothing is the exact shape of the bug THE LAW rule 6 exists for, even when the skip is wanted. */
 export function writesAllowed(what) {
+  if (automationBlocks(what)) return false;   // test automation never writes, whatever the origin (js/automation.js)
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   console.warn(`[stats-net] ${what} BLOCKED: this is a dev origin (${location.hostname}) and dev never writes to the family database. `

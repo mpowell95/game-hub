@@ -9,6 +9,7 @@
 // full C4 on top of these functions. See CHALLENGE-PLAN.md.
 
 import { PROGRESS_KEY } from './secrets.js';
+import { automationBlocks } from '../automation.js';
 
 const SDK = '10.12.2';
 
@@ -27,6 +28,7 @@ function isConfigured(c) { return !!(c && c.apiKey && c.databaseURL); }
 
 /** Initialize Firebase + anonymous auth once. Returns true only when usable. */
 export async function init() {
+  if (automationBlocks('retired challenge')) return false;   // js/automation.js: no reads or writes at all
   if (_tried) return _ok;
   _tried = true;
   try {

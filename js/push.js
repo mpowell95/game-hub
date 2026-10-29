@@ -23,6 +23,7 @@
 import { getStatsApp } from './firebase-boot.js';
 import { getLang } from './i18n.js';
 import { myCode, ensureAuthClaim } from './messages.js';
+import { automationBlocks } from './automation.js';
 
 // The PUBLIC half of the VAPID pair. functions/index.js holds the same string; the private half
 // is a Firebase secret (VAPID_PRIVATE_KEY) and is not in this repo.
@@ -41,6 +42,7 @@ function isDevOrigin() {
   } catch { return false; }
 }
 function writesAllowed(what) {
+  if (automationBlocks('push ' + what)) return false;   // js/automation.js
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   console.warn(`[push] ${what} BLOCKED: dev origin. To allow: localStorage.setItem('${DEV_SYNC_OK}', '1')`);

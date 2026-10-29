@@ -26,7 +26,7 @@
 // 'a49fcaf8' = "sk" (65CNF, from 2026-10-27): an automated browser posing as an iPhone (Chrome's
 // desktop brand data on an "iPhone", page height = screen height), most likely another Claude session
 // that skipped the test1 account. Matt, 2026-10-28: "if it's you, yes".
-export const HIDDEN_DEVICE_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev', 'a49fcaf8'];
+export const HIDDEN_DEVICE_PREFIX = ['4392d978', 'f8ad1b82', 'zzz-prev', 'a49fcaf8', 'aa4800fa'];   // aa4800fa = "Smokey", a session's test browser on the live site (2026-10-28)
 
 /** Exact test/QA names, alongside the prefixes in isHiddenName(). */
 export const HIDDEN_NAMES = new Set(['qa', 'dev', 'demo', 'preview', 'prueba']);

@@ -33,6 +33,7 @@ import { pendingAnnouncement, loadSeen, markSeen } from './announce.js';
 import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
 import { setGameShownCheck } from './online-gate.js';
 import STRINGS from './strings.js';
+import { isAutomation } from './automation.js';
 
 const t = makeT(STRINGS);
 // js/strings.js is cache-first, so a key added with a feature can be missing for one visit.
@@ -1167,7 +1168,8 @@ class Hub {
     const showKeepsake = active || admin;
     // In-development games (devOnly) render only for Matt and the tester. Everyone else,
     // including the challenge recipient, never sees the card at all.
-    const dev = !!(prof && isDevProfile(prof.name));
+    // Test automation sees every game, admin-only ones too (js/automation.js; it never writes anything).
+    const dev = !!(prof && isDevProfile(prof.name)) || isAutomation();
     // Games are listed FAVORITES FIRST, in the player's own CUSTOM ORDER (batch 4,
     // 2026-07-23 - the stored `ids` array IS the display order now), then the "All games"
     // group ALPHABETICALLY by display title (project rule, now scoped to non-favorites only).
