@@ -30,6 +30,9 @@ function asFinish(f) {
   if (Number.isFinite(Number(f.m))) out.m = Math.max(0, Math.round(Number(f.m)));
   if (Number.isFinite(Number(f.h))) out.h = Math.max(0, Math.round(Number(f.h)));
   for (const k of ['l', 'g', 'd']) if (Number(f[k]) > 0) out[k] = Math.round(Number(f[k]));
+  // (2026-10-29) s = the slips the finish was SCORED with when more than its own m + h (carried from
+  // earlier attempts); p = slips from before its attempt began, which a replay never wins back.
+  for (const k of ['s', 'p']) if (Number(f[k]) > 0) out[k] = Math.round(Number(f[k]));
   return out;
 }
 /** A finish list. Firebase hands arrays back as objects keyed 0..n, so it may arrive either way. */
@@ -110,19 +113,143 @@ export function woEarnedPoints(band, slips) {
   const n = Math.max(0, Math.floor(Number(slips) || 0));
   return row[Math.min(n, row.length - 1)];
 }
-/** A player's Arrow Maze points from their stats record (`games.wayout`): one band, or all four.
- *  Levels scored with their slips count what they earned; every other cleared level its full points. */
-export function woPoints(rec, band = null) {
+/** Points for a band's LEGACY clears (the counting used before 2026-10-29, unchanged): `won` levels
+ *  cleared, `ptsN` of them scored with their slips for `pts` points, the rest at full points. */
+function legacyPoints(b, won, ptsN, pts) {
+  const w = Math.max(0, Math.floor(Number(won) || 0));
+  const n = Math.min(w, Math.max(0, Math.floor(Number(ptsN) || 0)));
+  const earned = Math.max(0, Math.floor(Number(pts) || 0));
+  // A scored level earns between 1 and its full points; a count out of that range is clamped.
+  return woBandPoints(b, w - n) + (n ? Math.min(n * (WO_BAND_POINTS[b] || 0), Math.max(n, earned)) : 0);
+}
+
+// ONE LEVEL, ONE SCORE PER PERSON (2026-10-29). Points used to be read from per-band COUNTS added up
+// across a person's phones, so a second storage (Safari next to the Home Screen app, cleared site
+// data, a new phone) started the ladder again at its band's first level and earned the same levels
+// a second time. From this day every clear also writes WHICH level it was and what it earned:
+// `wo.cl[band]` = "<first level>:<one digit per level>" (the digit = the best points earned on that
+// level on this record, 0 = not cleared here), compact enough to sync. A person's points are then
+//   their LEGACY clears, counted exactly as before (no level set exists for them, so nothing is
+//   invented: woLegacyOf), plus
+//   each level in the UNION of their records' level sets, ONCE, at its best, unless one of their
+//   records' legacy clears already covers that level number (a legacy clear is "the band's first
+//   `won` levels", the same reading the points have always used; anchored at the first tracked level
+//   or the latest logged level when one is known).
+// `wo.leg[band]` = { w, n, p, e }: the record's won / ptsN / pts for the band at its FIRST tracked
+// clear (e = that level), written once; `p` grows only with replays of those legacy levels. A record
+// with no `leg[band]` is legacy throughout. js/players-agg.js merges a person into `wo.lg[band]`
+// ({ w, n, p, cv: legacy level ranges }) and `wo.cl[band]` (the union, best per level).
+const CL_RE = /^(\d{1,7}):([0-9]*)$/;
+const CL_SPAN = 100000;   // a level set never spans more than this (a corrupt level number is ignored)
+/** A level set as { s: first level, d: digits }, or null when absent or malformed. */
+function clParse(str) {
+  const m = typeof str === 'string' ? CL_RE.exec(str) : null;
+  if (!m || +m[1] < 1) return null;
+  return { s: +m[1], d: m[2] };
+}
+/** Level number -> best points, for one level set string. */
+export function woClMap(str) {
+  const out = new Map();
+  const c = clParse(str);
+  if (!c) return out;
+  for (let i = 0; i < c.d.length; i++) { const v = +c.d[i]; if (v > 0) out.set(c.s + i, v); }
+  return out;
+}
+/** Back to a string from a Map; '' when empty. Levels more than CL_SPAN above the lowest are left
+ *  out (only a corrupt level number could be that far away). */
+function clFromMap(map) {
+  let lo = Infinity, hi = 0;
+  for (const [n, v] of map) if (v > 0) { if (n < lo) lo = n; if (n > hi) hi = n; }
+  if (!(hi >= 1)) return '';
+  hi = Math.min(hi, lo + CL_SPAN - 1);
+  const d = [];
+  for (let n = lo; n <= hi; n++) d.push(String(Math.min(9, map.get(n) || 0)));
+  return `${lo}:${d.join('')}`;
+}
+/** The level set with level `n` at `pts` points, or better if it already holds more (max only). */
+export function woClSet(str, n, pts) {
+  const L = Math.floor(Number(n) || 0), v = Math.max(0, Math.min(9, Math.floor(Number(pts) || 0)));
+  const map = woClMap(str);
+  if (!(L >= 1) || !(v > 0)) return clFromMap(map);
+  const c = clParse(str);
+  if (c && c.d.length && (Math.max(L, c.s + c.d.length - 1) - Math.min(L, c.s)) >= CL_SPAN) return clFromMap(map);
+  map.set(L, Math.max(map.get(L) || 0, v));
+  return clFromMap(map);
+}
+/** Two level sets as one, best per level. */
+export function woClMerge(a, b) {
+  const map = woClMap(a);
+  for (const [n, v] of woClMap(b)) map.set(n, Math.max(map.get(n) || 0, v));
+  return clFromMap(map);
+}
+/** The LEGACY part of ONE record's band: { w, n, p, lo, hi } (lo..hi = the level numbers those
+ *  clears are read as; none when w is 0). */
+export function woLegacyOf(rec, band) {
   const byDiff = (rec && rec.byDiff) || {};
   const wo = (rec && rec.wo) || {};
+  const start = BAND_START[band] || 1;
+  const leg = wo.leg && typeof wo.leg === 'object' ? wo.leg[band] : null;
+  const int = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  if (leg && typeof leg === 'object' && int(leg.e) >= 1) {
+    const w = int(leg.w), e = int(leg.e);
+    return { w, n: int(leg.n), p: int(leg.p), lo: Math.max(start, e - w), hi: e - 1 };
+  }
+  const w = int((byDiff[band] || {}).won);
+  let last = 0;
+  for (const f of woList((wo.log || {})[band])) if (f.l > 0) last = Math.max(last, woShownLevel(band, f.l, f.g | 0));
+  // Anchored at the latest level in this record's finish log when it names one (its legacy clears
+  // are the `w` levels up to it), else the band's first `w` levels.
+  const hi = last >= start ? last : start + w - 1;
+  return { w, n: int((wo.ptsN || {})[band]), p: int((wo.pts || {})[band]), lo: last >= start ? Math.max(start, last - w + 1) : start, hi };
+}
+/** Merge one record's band into a person's `lg` entry (players-agg.js). */
+export function woLegacyAdd(lg, rec, band) {
+  const x = woLegacyOf(rec, band);
+  const out = lg || { w: 0, n: 0, p: 0, cv: [] };
+  out.w += x.w; out.n += x.n; out.p += x.p;
+  if (x.w > 0 && x.hi >= x.lo) {
+    const cv = out.cv.concat([[x.lo, x.hi]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const merged = [];
+    for (const r of cv) {
+      const top = merged[merged.length - 1];
+      if (top && r[0] <= top[1] + 1) top[1] = Math.max(top[1], r[1]); else merged.push([r[0], r[1]]);
+    }
+    out.cv = merged;
+  }
+  return out;
+}
+
+/** A player's Arrow Maze points from their stats record (`games.wayout`), one band or all four:
+ *  one device's record, or a person's merged record (players-agg.js). Legacy clears count as they
+ *  always did (scored levels what they earned, the rest full points); levels in the level sets
+ *  count once each, at their best, unless a legacy clear already covers that level. */
+export function woPoints(rec, band = null) {
+  const wo = (rec && rec.wo) || {};
   const one = (b) => {
-    const won = ((byDiff[b] || {}).won) | 0;
-    const n = Math.min(won, Math.max(0, ((wo.ptsN || {})[b]) | 0));
-    const earned = Math.max(0, Math.floor(Number((wo.pts || {})[b]) || 0));
-    // A scored level earns between 1 and its full points; a count out of that range is clamped.
-    return woBandPoints(b, won - n) + (n ? Math.min(n * (WO_BAND_POINTS[b] || 0), Math.max(n, earned)) : 0);
+    const lg = wo.lg && typeof wo.lg === 'object' ? wo.lg[b] : null;
+    let L, cover;
+    if (lg && typeof lg === 'object') { L = lg; cover = Array.isArray(lg.cv) ? lg.cv : []; }
+    else { L = woLegacyOf(rec, b); cover = L.w > 0 ? [[L.lo, L.hi]] : []; }
+    let pts = legacyPoints(b, L.w, L.n, L.p);
+    const full = WO_BAND_POINTS[b] || 0;
+    for (const [n, v] of woClMap((wo.cl || {})[b])) {
+      if (cover.some((r) => Array.isArray(r) && n >= r[0] && n <= r[1])) continue;
+      pts += Math.min(v, full);
+    }
+    return pts;
   };
   return band ? (WO_TIERS.includes(band) ? one(band) : 0) : WO_TIERS.reduce((n, b) => n + one(b), 0);
+}
+
+// SLIPS STAY WITH THE LEVEL (2026-10-29). A slip (a hint, or a heart lost) costs points across every
+// Restart, Try again AND New game of the level: New game used to start the slips over on the same
+// board, so hints could learn an Expert board's one order for free and a clean replay took full
+// points. The game keeps them in its own key; each record also keeps the most slips seen on each level
+// (`wo.sl[band]['L<n>']`, max only) so the person's other storages see them too.
+/** The slips stored for level n of a band on a record (0 when none). */
+export function woSlipsOf(rec, band, n) {
+  const sl = (((rec && rec.wo) || {}).sl || {})[band];
+  return sl && typeof sl === 'object' ? Math.max(0, Math.floor(Number(sl['L' + Math.floor(Number(n) || 0)]) || 0)) : 0;
 }
 
 // REPLAY (2026-10-26, Matt: "we need to let people see and replay the ones they messed up on ... if I
@@ -154,25 +281,31 @@ export function woReplayList(x) {
 export function woShownLevel(band, l, g) {
   return g === 5 && band === 'expert' && l >= 151 ? l - 151 + BAND_START.expert : l;
 }
-/** The levels of `band` on this record that earned less than their full points, best attempt first
- *  counted: [{ l, g, n (shown number), best, full, gain }], most points to win first, then by level. */
+/** The slips a finish was scored with: its own hints and hearts lost, or the carried `s`. */
+const slipsOf = (f) => Math.max((f.m | 0) + (f.h | 0), f.s | 0);
+/** The levels of `band` on this record that earned less than they still can, best attempt first
+ *  counted: [{ l, g, n (shown number), best, full, p, gain }], most points to win first, then by level.
+ *  `full` is what a perfect replay can reach: the level's points, or less when slips from before its
+ *  clearing attempt (`p`, 2026-10-29: hints used on a try thrown away by New game, or on another
+ *  storage) already cost them; a replay never wins those back. */
 export function woMissed(rec, band) {
-  const full = WO_BAND_POINTS[band];
+  const top = WO_BAND_POINTS[band];
   const wo = (rec && rec.wo) || {};
-  if (!full) return [];
+  if (!top) return [];
   const by = new Map();
   for (const f of woList((wo.log || {})[band])) {
     if (!(f.d >= WO_SLIP_SINCE) || !(f.l > 0) || !(f.g > 0)) continue;
-    const k = `${f.g}:${f.l}`, e = woEarnedPoints(band, (f.m | 0) + (f.h | 0));
+    const k = `${f.g}:${f.l}`, e = woEarnedPoints(band, slipsOf(f));
     const cur = by.get(k);
-    by.set(k, { l: f.l, g: f.g, best: cur ? Math.max(cur.best, e) : e });
+    by.set(k, { l: f.l, g: f.g, best: cur ? Math.max(cur.best, e) : e, p: Math.max(cur ? cur.p : 0, f.p | 0) });
   }
   for (const f of woReplayList((wo.replay || {})[band])) {
     const cur = by.get(`${f.g}:${f.l}`);
-    if (cur) cur.best = Math.max(cur.best, woEarnedPoints(band, f.m + f.h));
+    if (cur) cur.best = Math.max(cur.best, woEarnedPoints(band, slipsOf(f)));
   }
-  return [...by.values()].filter((x) => x.best < full)
-    .map((x) => ({ ...x, n: woShownLevel(band, x.l, x.g), full, gain: full - x.best }))
+  return [...by.values()].map((x) => ({ ...x, full: woEarnedPoints(band, x.p) }))
+    .filter((x) => x.best < x.full)
+    .map((x) => ({ ...x, n: woShownLevel(band, x.l, x.g), gain: x.full - x.best }))
     .sort((a, b) => b.gain - a.gain || a.n - b.n);
 }
 

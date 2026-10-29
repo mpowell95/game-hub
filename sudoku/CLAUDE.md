@@ -121,6 +121,13 @@ maths Nuts & Bolts and Pipes already use, which is why `js/leaderboard-ui.js`'s
 `gameMetricAt()` needs no Sudoku-specific branch (the default `winsAtTier` already answers the
 right question).
 
+**Hint solves rank below no-hint solves (2026-10-29, Matt: "Win, but ranked below").** Hints stay
+unlimited and a hint solve is a full win. `recordSudoku` adds `sd.clean[tier]` (no-hint solves) and,
+once, `sd.pre` (lifetime hints and wins per tier before tracking). Legacy wins are no-hint only when
+proven (`pre.hints` 0); `js/players-agg.js` `sdNoHintOf` works it out per record into `sd.noHint`, and
+the board ranks every no-hint row first (js/CLAUDE.md, "No-hint solves rank first").
+Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29".
+
 **There is deliberately no fastest-time record on the leaderboard.** A `TEXTURE` entry's `get`
 ranks higher-is-better everywhere else in this file; `bestTimeMs` would need its own inverted
 comparator, which is exactly the kind of one-off the shared aggregation layer is built to avoid.

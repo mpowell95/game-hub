@@ -243,7 +243,7 @@ const ZERO = {
   dominoes: { dm: ['won', 'points', 'bestRound'] },
   dotsboxes: { db: ['won', 'boxes', 'bestChain'] },
   contexto: { ct: ['fewest', 'noHint', 'silver', 'bronze', 'solved', 'guesses'] },
-  wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush'] },
+  wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush', 'cl', 'leg'] },
   brickblitz: { bz: ['bestScore', 'bestScoreByDiff', 'points', 'bestCombo'] },
   ballrun: { br: ['bestObstacles', 'bestObstaclesByDiff'], brOrbital: ['bestObstacles', 'bestObstaclesByDiff'] },
   nutsbolts: { nb: ['bestLevel', 'bestByTier'] },

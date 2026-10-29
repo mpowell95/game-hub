@@ -96,7 +96,7 @@ changes, all live the same day:
 - **The guided first case.** A device that has never had it (`learned` in `gamehub.murdoku.v1`,
   only ever set true) opens straight into an Easy "Guided case" with a four-step intro card, and
   the hint, WITH its square, is always on screen and re-computed after every move. "Learn to play"
-  on the setup screen replays it. `guided` rides the save; a guided solve records like any other.
+  on the setup screen replays it. `guided` rides the save; a guided solve records NOTHING (2026-10-29).
 
 **Every ⚠️ is explained in words (2026-09-30, same day).** Matt: *"It doesn't even explain what this
 alert symbol on the top right means."* Two changes: a tap that would break a placement rule (a
@@ -147,10 +147,16 @@ Space cost, measured: a hint bar is 1-2 lines. Expert with a hint up is still 42
 - Settings: `gamehub.murdoku.v1` (`{tier, learned}`), saved on selection.
 - Progress: `gamehub.murdoku.save.v1` (`{v, puzzle, pos, marks, elapsedMs, solved, recorded, guided}`),
   the whole puzzle stored as-is.
-- Stats: `recordResult('murdoku', tier, true)` once per solved case (the `recorded` flag guards
-  it). **No sub-counter** (total/byDiff only), so the three-edit sub-counter rule does not apply;
-  `js/game-stats-ui.js`'s `murdokuScreen` renders solved, total and per tier. In
+- Stats: `recordMurdoku(tier, { hints })` once per solved case (the `recorded` flag guards it); until
+  2026-10-29 `recordResult('murdoku', tier, true)`, and it still counts exactly that in total/byDiff.
+  **Sub-counter `mu`** (2026-10-29): `clean[tier]` no-hint solves, `hinted[tier]`, `hints`; merged in
+  `js/players-agg.js`. `js/game-stats-ui.js`'s `murdokuScreen` renders solved, total and per tier. In
   `js/players-agg.js`'s SOLO set (a solve is a run, not a win over anyone).
+- **Hint solves rank below no-hint solves (2026-10-29, Matt: "Win, but ranked below").** The save counts
+  every hint tap (`hints`; `null` = a case saved before that, unknown, ranks with hint solves). Solves
+  before that date stored nothing, so they rank with hint solves, still wins (THE LAW rule 1).
+- **The guided case ("Learn to play") records nothing (2026-10-29)**: it shows the answer after every
+  move. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29".
 
 ## The screens
 
@@ -203,7 +209,7 @@ all 24 screens.
 
 ### Save details
 
-`gamehub.murdoku.save.v1` = `{ v, puzzle, pos[], marks[], elapsedMs, solved, recorded }`, written
+`gamehub.murdoku.save.v1` = `{ v, puzzle, pos[], marks[], elapsedMs, solved, recorded, guided, hints }`, written
 after EVERY change. The whole puzzle is stored (not just a seed) so a later generator change can
 never invalidate a saved case. `readSave()` returns `null` for anything structurally wrong
 (`validPuzzle` plus range checks) and the game starts fresh rather than crashing.

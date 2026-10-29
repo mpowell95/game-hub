@@ -421,6 +421,17 @@ units), via `gameStanding` (the board's own order). You = records held, closest 
 RECORD'S tier), not played yet + Play; "You" is allowed on that tab ONLY. Each board ends with
 "<name> is 3rd. <gap>" (`standLineHTML`). Story: `CLAUDE-HISTORY.md`.
 
+### No-hint solves rank first: Sudoku, Murdoku (2026-10-29)
+
+Matt: a hint solve is a win "but ranked below". `NOHINT_GAMES` in `leaderboard-ui.js`: every row with a
+no-hint solve ranks above every row without one, tier-first on its no-hint solves, then tier-first over
+all wins (`boardMetricCmp` -> `compareNoHint` || `compareAllWins`); such a row's number IS its no-hint
+count (`gameMetricAt`) with "no hints" under it. Counts come from players-agg (`sd.noHint` worked out PER
+RECORD by `sdNoHintOf`, since the legacy proof, lifetime hints 0, dies once two records' hints add;
+`mu.clean`). **Arrow Maze (same day)**: points count each level once per person (`wo.lg`, `wo.cl`
+merged here; `js/arrow-maze-time.js` `woPoints`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed
+2026-10-29".
+
 ### The leaderboard's spacing (2026-10-11)
 
 Scale 4/8/12/16/24; menu controls 40px (Matt's override), back buttons 44px via `backBtnHTML`; name

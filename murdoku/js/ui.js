@@ -12,7 +12,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordMurdoku } from '../../js/game-stats.js';
 import {
   generate, checkBoard, personInfo, validPuzzle, nextHint, TIERS, TIER_N, ROOM_ICON, OBJ_ICON, isBlocker, SAVE_V,
 } from './engine.js';
@@ -21,7 +21,7 @@ import STRINGS from './strings.js';
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.murdoku.v1';
 const SAVE_KEY = 'gamehub.murdoku.save.v1';
-const STATS_ID = 'murdoku';
+const STATS_ID = 'murdoku';   // recordMurdoku records under this id (js/game-stats.js)
 const TIER_LABEL_KEY = { easy: 'tier_easy', medium: 'tier_medium', hard: 'tier_hard', expert: 'tier_expert' };
 const N_ROOM_TINTS = 7;   // engine: at most 7 rooms (expert); one tint each
 const BOARD_BORDER = 3;   // px, the outer wall of the floor plan; must match .mu-board's border
@@ -59,6 +59,8 @@ function readSave() {
       puzzle: s.puzzle, pos: s.pos.slice(), marks,
       elapsedMs: Number.isFinite(s.elapsedMs) && s.elapsedMs > 0 ? s.elapsedMs : 0,
       solved: !!s.solved, recorded: !!s.recorded, guided: !!s.guided,
+      // Hints used on this case (2026-10-29); null = a case saved before they were counted (unknown).
+      hints: Number.isInteger(s.hints) && s.hints >= 0 ? s.hints : null,
     };
   } catch { return null; }
 }
@@ -67,6 +69,7 @@ function writeSaveObj(o) {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       v: SAVE_V, puzzle: o.puzzle, pos: o.pos, marks: o.marks, elapsedMs: Math.round(o.elapsedMs),
       solved: !!o.solved, recorded: !!o.recorded, guided: !!o.guided,
+      ...(Number.isInteger(o.hints) && o.hints >= 0 ? { hints: o.hints } : {}),
     }));
     return true;
   } catch (err) { console.error('[murdoku] save', err); return false; }
@@ -235,6 +238,7 @@ class MurdokuUI {
     this.elapsedMs = 0; this.solved = false; this.recorded = false;
     this.sel = -1; this.mode = 'place';
     this.guided = false; this.hint = null; this.notice = '';
+    this.hints = 0;
     this.check = null;
     this._runStart = null; this._timerInterval = null;
     this._genTimer = null; this._building = false;
@@ -338,7 +342,7 @@ class MurdokuUI {
       try {
         const seed = Math.floor(Math.random() * 1e9);
         const puz = generate(guided ? 'easy' : this.selectedTier, seed);
-        this._enter({ puzzle: puz, pos: new Array(puz.n).fill(-1), marks: [], elapsedMs: 0, solved: false, recorded: false, guided });
+        this._enter({ puzzle: puz, pos: new Array(puz.n).fill(-1), marks: [], elapsedMs: 0, solved: false, recorded: false, guided, hints: 0 });
         if (guided) this._openGuidedIntro();
       } catch (err) {
         console.error('[murdoku] generate failed', err);
@@ -352,6 +356,7 @@ class MurdokuUI {
     this.elapsedMs = s.elapsedMs; this.solved = s.solved; this.recorded = s.recorded;
     this.sel = -1; this.mode = 'place';
     this.guided = !!s.guided; this.hint = null;
+    this.hints = Number.isInteger(s.hints) && s.hints >= 0 ? s.hints : null;
     if (!s.guided) this.selectedTier = s.puzzle.tier;
     this._save();
     if (this.guided) this._autoHint();
@@ -618,6 +623,9 @@ class MurdokuUI {
       const next = nextHint(this.puz, this.pos);
       this.hint = next ? { ...next, reveal: false } : null;
     }
+    // Every tap that shows a hint counts (2026-10-29): a solve with any hint ranks below every
+    // no-hint solve on the leaderboard. Saved at once, so leaving cannot lose the count.
+    if (this.hint && this.hints !== null) { this.hints += 1; this._save(); }
     if (this.hint && this.hint.k !== 'wrong') { this.sel = this.hint.p; this.mode = 'place'; }
     this._paint(); this._fit();
   }
@@ -917,7 +925,7 @@ class MurdokuUI {
     this.sel = -1;
     this._pauseTimer();
     this._save();
-    this._recordOnce({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: this.elapsedMs, solved: true, recorded: this.recorded, guided: this.guided }, this);
+    this._recordOnce({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: this.elapsedMs, solved: true, recorded: this.recorded, guided: this.guided, hints: this.hints }, this);
     this._paint();
     this._fit();
     this._openWin();
@@ -929,20 +937,23 @@ class MurdokuUI {
    *  after the call returned) - THE LAW rule 6. */
   _recordOnce(s, ui) {
     if (s.recorded) return;
+    // The guided case ("Learn to play", and every device's first case) shows the answer after every
+    // move: it is a lesson, never a win (2026-10-29). It records nothing at all.
+    if (s.guided) return;
     try {
-      recordResult(STATS_ID, s.puzzle.tier, true);
+      recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null });
       s.recorded = true;
       if (ui) ui.recorded = true;
       writeSaveObj(s);
     } catch (err) {
-      console.error('[murdoku] recordResult failed - the solve was NOT recorded', err);
+      console.error('[murdoku] recordMurdoku failed - the solve was NOT recorded', err);
     }
   }
 
   _save() {
     if (!this.puz) return;
     const elapsed = this._elapsed();
-    writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded, guided: this.guided });
+    writeSaveObj({ puzzle: this.puz, pos: this.pos, marks: [...this.marks], elapsedMs: elapsed, solved: this.solved, recorded: this.recorded, guided: this.guided, hints: this.hints });
   }
 
   // --- overlays ------------------------------------------------------------------------------
