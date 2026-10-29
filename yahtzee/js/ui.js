@@ -40,7 +40,7 @@ import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
-import { deviceId, recordYahtzee } from '../../js/game-stats.js';
+import { deviceId, recordYahtzee, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
 import { howToHtml, createHowTo } from './howto.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import STRINGS from './strings.js';
@@ -461,6 +461,7 @@ function commitSelection(){
 function commitStatsOnce(){
   if(!state || state.statsCommitted) return;
   state.statsCommitted = true;
+  if(!state.mp) dropQuitLoss('yahtzee');   // the real result replaces the armed quit loss
   const me = state.players[localSeat()], opp = state.players[remoteSeat()];
   const myTotal = totalScore(me), oppTotal = totalScore(opp);
   const won = myTotal===oppTotal ? null : (myTotal>oppTotal);
@@ -468,6 +469,17 @@ function commitStatsOnce(){
   const difficulty = state.mp ? 'mp' : MODE;
   try{ recordYahtzee(difficulty, won, { yahtzees, score: myTotal }); }
   catch(e){ /* never block the result */ }
+}
+
+// QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+// and easier settings"). This game has no resume, so once the player has rolled, leaving a solo game
+// (the hub's back, any unmount, or a closed app) records it as a loss at its score so far. Armed in
+// js/game-stats.js on each of the player's rolls; the real result drops it; destroy() takes it.
+function armSoloQuitLoss(){
+  if(!state || state.mp || state.statsCommitted || state.phase==='gameOver') return;
+  const me = state.players[0];
+  const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[0]||0);
+  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }]);
 }
 
 function endTurn(effects){
@@ -1578,6 +1590,7 @@ function onRootClick(e){
   if(!state) return;
   if(e.target.closest('#rollBtn')){
     if(!isHumanTurn() || state.rollsUsed>=3 || state.phase==='gameOver') return;
+    armSoloQuitLoss();
     doRoll();
     return;
   }
@@ -1628,6 +1641,8 @@ function ensureCss(){
 export function init(container){
   if(!destroyed) destroy();
   destroyed = false;
+  // A solo game left armed by a page that closed mid-game (no destroy ran) is that game's loss.
+  takeQuitLoss('yahtzee');
 
   ensureCss();
   // The how-to sheet lives on the PERSISTENT root, not inside #screenHost: screenHost's innerHTML
@@ -1685,6 +1700,11 @@ export function init(container){
 }
 
 export function destroy(){
+  // Leaving a solo game the player has rolled in: the armed loss is recorded, once.
+  if(state && !state.mp && !state.statsCommitted && state.phase!=='gameOver' && quitLossArmed('yahtzee')){
+    state.statsCommitted = true;
+    takeQuitLoss('yahtzee');
+  }
   destroyed = true;
   if(offViewport){ offViewport(); offViewport = null; } resizeHandler = null;
   pendingTimeouts.forEach(id => clearTimeout(id));
@@ -1722,6 +1742,11 @@ export function destroy(){
   delete window.__yzTest;
 }
 
+/** The hub's leave confirm says "Counts as a loss" when this is true. */
+export function quitCostsLoss(){
+  return !destroyed && !!state && !state.mp && !state.statsCommitted && state.phase!=='gameOver' && quitLossArmed('yahtzee');
+}
+
 export function isInProgress(){
   if(destroyed) return false;
   if(lobby) return true;             // mid-lobby: leaving abandons a room the other side may have joined
@@ -1729,4 +1754,4 @@ export function isInProgress(){
   return hasProgress() && !!state && state.phase !== 'gameOver';
 }
 
-export default { init, destroy, isInProgress };
+export default { init, destroy, isInProgress, quitCostsLoss };

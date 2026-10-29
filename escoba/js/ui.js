@@ -18,7 +18,7 @@ import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordEscoba, recordHeadToHead, deviceId } from '../../js/game-stats.js';
+import { loadStats, recordEscoba, recordHeadToHead, deviceId, easiestDiff } from '../../js/game-stats.js';
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -273,6 +273,7 @@ class EscobaUI {
         v: SAVE_SCHEMA_V, matchEscobas: this._matchEscobasNow(), assist: this._matchAssist,
         snap: this.game.snapshot(),
         aiSeed: this._aiSeed,   // the computer's random choices come from this + the position (2026-10-29)
+        moved: !!this._moved,   // 2026-10-29: the player has played a card (quitting now is a loss)
       };
       // Additive MP field: absent in solo, so the solo save shape is unchanged.
       // `role` is written alongside `seat` purely so a save taken by the previous (2-seat)
@@ -781,6 +782,7 @@ class EscobaUI {
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
+    this._moved = false;
     // Frozen for the life of this match (see _saveSnapshot/_resumeGame): a
     // setup-screen change to the toggle should never retroactively alter a
     // match already in progress, only future ones.
@@ -806,6 +808,7 @@ class EscobaUI {
     this._bindGame();
     this._seedMatchEscobas(save.matchEscobas);
     this._matchAssist = save.assist !== false;
+    this._moved = savedMoved(save);
     this._enterGameScreen();
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba resume error', err); });
   }
@@ -1084,8 +1087,9 @@ class EscobaUI {
     // MP records under its own bucket; solo keeps reading the opponent AI's tier. A remote
     // seat has no `difficulty` at all, so the old `opp0.difficulty || 'normal'` filed every
     // online match as an Intermediate win over the AI -- see MP_DIFFICULTY at the top.
-    const opp0 = this.game.players.find((x) => !x.isHuman);
-    const difficulty = this.mp ? MP_DIFFICULTY : ((opp0 && opp0.difficulty) || 'normal');
+    // A table of computers counts at the EASIEST one's tier (2026-10-29, Matt): before, the first
+    // computer's tier, so one Hard and one Easy computer filed a win as Hard.
+    const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players);
     recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
@@ -1706,6 +1710,7 @@ class EscobaUI {
       return;
     }
     const move = { cardId: card.id, captureIds: picked.map((c) => c.id) };
+    this._moved = true;
     this._resolvePending(move);
   }
 
@@ -1713,6 +1718,7 @@ class EscobaUI {
     const card = this._selCard();
     if (!card || !this._pending) return;
     if (this._optsFor(card).length) { this._shakeActionButton(); return; }   // capture is mandatory for this card
+    this._moved = true;
     this._resolvePending({ cardId: card.id, captureIds: [] });
   }
 
@@ -1959,7 +1965,10 @@ class EscobaUI {
       case 'close-modal': this._closeModal(); break;
       case 'open-howto': if (!this.el.setup.hidden) this.syncSetupInputs(); this._closeMenu(); this._openHowTo(); break;
       case 'close-howto': this._closeModal(); break;
-      case 'start': this.startGame(); break;
+      case 'start':
+        // New game while a moved-in match waits to resume: two taps, the button saying it is a loss.
+        if (this._quitPending() && a.dataset.armed !== '1') { a.dataset.armed = '1'; a.textContent = t('quit_loss'); break; }
+        this._recordQuitLoss(); this.startGame(); break;
       case 'resume-game': this._resumeGame(); break;
       // multiplayer lobby
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
@@ -2047,7 +2056,7 @@ class EscobaUI {
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="eb-btn eb-btn-ghost ${confirming ? 'eb-confirm' : ''}" data-action="menu-${which}">${
-        confirming ? esc(t('menu_confirm_lost')) : label}</button>`;
+        confirming ? esc(this._quitPending() ? t('menu_confirm_loss') : t('menu_confirm_lost')) : label}</button>`;
     };
     this.el.menu.innerHTML = `<div class="eb-scrim" data-action="close-menu"></div>
       <div class="eb-sheet eb-menu-sheet">
@@ -2079,8 +2088,34 @@ class EscobaUI {
     }
     this._closeMenu();
     if (this.mp) { this._mpLeaveToSetup(); return; }
+    this._recordQuitLoss();
     if (which === 'newgame') this.startGame();
     else { this._clearSave(); this.showSetup(); }
+  }
+
+  /** The solo match a quit would throw away (the live one, or from setup the resumable save), once
+   *  the player has played a card in it: quitting it is a LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md
+   *  "Holes closed 2026-10-29: quitting and easier settings"). Leaving the hub is not quitting: the
+   *  save resumes it. Online rooms and challenges are untouched. */
+  _quitPending() {
+    if (this.mp || this.ch) return null;
+    if (this.game && this.el && !this.el.game.hidden) {
+      if (this._matchEnded || this._statsCommitted || this.game.winner || !this._moved) return null;
+      return { difficulty: soloDiff(this.game.players), escobas: this._matchEscobasNow() };
+    }
+    const save = this._loadSave();
+    if (!save || save.mp || !savedMoved(save)) return null;
+    const me = save.snap.players.find((p) => p.isHuman);
+    return { difficulty: soloDiff(save.snap.players), escobas: Math.max(me ? me.matchEscobas | 0 : 0, save.matchEscobas | 0) };
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`, and the save is cleared first). */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    this._statsCommitted = true;
+    this._clearSave();
+    recordEscoba(q.difficulty, false, { escobas: q.escobas });
   }
 
   // --- multiplayer (M1 pilot) -------------------------------------------------
@@ -3299,6 +3334,22 @@ class EscobaUI {
     this.game = null;
     this.container.innerHTML = '';
   }
+}
+
+// --- quitting and easier settings (2026-10-29) ---------------------------------
+
+/** A solo table records at its EASIEST computer's tier. */
+function soloDiff(players) {
+  return easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), ['easy', 'normal', 'hard'], 'normal');
+}
+
+/** Has the player played a card in this saved match? Its own flag; a save from before it counts a later
+ *  round, a hand short of the dealt three, or any capture as moved. */
+function savedMoved(save) {
+  if (!save || !save.snap) return false;
+  if (typeof save.moved === 'boolean') return save.moved;
+  const me = (save.snap.players || []).find((p) => p.isHuman);
+  return (save.snap.round | 0) > 1 || !!(me && ((me.hand && me.hand.length < 3) || (me.captured && me.captured.length)));
 }
 
 // --- module contract --------------------------------------------------------

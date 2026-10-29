@@ -273,3 +273,7 @@ Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, sa
 ## A solo draw is saved at once (2026-10-29)
 
 The `'draw'` event writes the solo save (`snapshot({ midTurn: true })`, `_turnDrawn` in `game.js`); resume re-enters THAT turn at the discard (`_resumeAfterDraw`), with the drawn card in hand and no second draw. Plain `snapshot()` (MP, turn ends) is unchanged. `test.js` M2d.
+
+## Quitting and easier settings (2026-10-29)
+
+Solo: the menu's New game / Quit to setup after the player's first decision = ONE loss, in `chinchon-stats` too (`moved` in the save). A table records at its EASIEST computer, one step lower for a short match (under 100 points or under 10 rounds; `soloDiff`, `isShortMatch`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -239,7 +239,11 @@ Solo only (hidden in multiplayer: the lockstep log cannot take a move back). **U
 Each tap takes back the player's last drawn edge plus every computer move after it (one edge at a time, so a chain
 comes back box by box), rebuilt by replaying `_moves` (`[seat, type, r, c]` per edge) from an empty board
 (`replayMoves`). **One tap, no confirm (Matt, same day: "make it an undo button. That I press once")**; a game where
-it was used records nothing (`_undone`; the end card adds "Not counted").
+it was used cannot count as a win or tie (`_undone`; the end card adds "Not counted"); a loss still counts (2026-10-29).
 Both fields ride the solo save additively (`moves`, `undone`); an older save without `moves`, or one whose replay does
 not rebuild the saved board, simply has no Undo for that game. Probe: a Playwright run (undo, re-undo, reload, play out,
 stats unchanged, next game recorded); `test-dotsboxes-stats.mjs` needs jsdom, absent in the cloud container.
+
+## Quitting and easier settings (2026-10-29)
+
+Solo Restart / Menu after the player's first edge = ONE loss (`_statsCommitted`; both ask twice, "Counts as a loss"). An Undo game no longer counts as a win or tie, but a LOSS still counts. Leaving the hub is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

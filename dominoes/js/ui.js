@@ -16,7 +16,7 @@ import { tileHTML } from './tiles.js';
 import { openTutorial, CROWN_SVG } from './tutorial.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordDominoes } from '../../js/game-stats.js';
+import { recordDominoes, oneTierDown } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -29,6 +29,12 @@ const SAVE_KEY = 'gamehub.dominoes.save.v1';
 const DIFFS = [['easy', 'diff_easy'], ['medium', 'diff_medium'], ['hard', 'diff_hard']];
 const DIFF_SKILL = { 1: 'easy', 2: 'medium', 3: 'hard' };
 const TARGETS = [150, 300, 500];
+
+/** The bucket a match records at (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+ *  quitting and easier settings"): a race to 150, half the standard 300, counts one step down. */
+export function statsDiff(difficulty, target) {
+  return target < 300 ? oneTierDown(difficulty, ['easy', 'medium', 'hard']) : difficulty;
+}
 
 // One board unit is half a domino's short side (see board.js). 11px gives a 44x22 domino before
 // the fit-to-felt scale, which reads comfortably on a phone and shrinks gracefully from there.
@@ -105,6 +111,15 @@ const PANEL_ART = `<svg viewBox="0 0 200 120" preserveAspectRatio="xMidYMid slic
 </svg>`;
 
 // --- storage ----------------------------------------------------------------------------------
+
+/** Has the player made a move in this saved match? The save's own flag; a save from before it
+ *  counts a later round, or a hand that is not the dealt seven, as moved. */
+function movedIn(save) {
+  if (!save) return false;
+  if (typeof save.moved === 'boolean') return save.moved;
+  const s = save.snap || {};
+  return (s.round | 0) > 1 || !!(s.hands && s.hands[HUMAN] && s.hands[HUMAN].length !== (s.handSize || 7));
+}
 
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch { return null; }
@@ -246,8 +261,10 @@ class DominoesUI {
   // --- match lifecycle ----------------------------------------------------------------------
 
   startMatch() {
+    this._recordQuitLoss();   // a match left unfinished after the player's first move is a loss
     saveSettings(this.difficulty, this.target);
     clearSave();
+    this._moved = false;
     this.game = new DominoesGame({ target: this.target });
     this.game.startMatch();
     this._bestRound = 0;
@@ -266,6 +283,7 @@ class DominoesUI {
     this.game = DominoesGame.fromSnapshot(save.snap);
     this._bestRound = save.bestRound | 0;
     this._statsCommitted = !!save.statsCommitted;
+    this._moved = movedIn(save);
     this._shownScores = this.game.scores.slice();
     this.selected = null;
     this._freshId = null;
@@ -293,6 +311,7 @@ class DominoesUI {
       target: this.target,
       bestRound: this._bestRound,
       statsCommitted: this._statsCommitted,
+      moved: !!this._moved,   // 2026-10-29: the player has played or drawn (quitting now is a loss)
       ts: Date.now(),
     });
   }
@@ -548,6 +567,7 @@ class DominoesUI {
     const before = g.scores.slice();
     const res = g.play(seat, tileId, side);
     if (!res.ok) { this._advance(); return; }
+    if (seat === HUMAN) this._moved = true;
     this.selected = null;
     this._freshId = tileId;
     // Hand the felt over to the new turn NOW rather than at the end of the settle beat: the
@@ -666,7 +686,7 @@ class DominoesUI {
     try {
       // matchWinner is null on a genuine draw (both totals passed the target level), and
       // recordDominoes reads null as a tie rather than a loss.
-      recordDominoes(this.difficulty, g.matchWinner == null ? null : g.matchWinner === HUMAN, {
+      recordDominoes(statsDiff(this.difficulty, this.target), g.matchWinner == null ? null : g.matchWinner === HUMAN, {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
@@ -754,25 +774,56 @@ class DominoesUI {
     this._closeTutorial = openTutorial(host, t);
   }
 
-  /** Restart is destructive mid-match, so it arms first and fires on a second tap. */
+  /** Restart is destructive mid-match, so it arms first and fires on a second tap. Any route that
+   *  throws away a match the player has moved in (Restart, the round card's restart, New match on
+   *  setup) arms too, and says it counts as a loss. */
   confirmDestructive(btn, action) {
-    if (!this.game || this.game.phase !== 'playing') { action(); return; }
+    const costs = this._quitCostsLoss();
+    if (!costs && (!this.game || this.game.phase !== 'playing')) { action(); return; }
     if (btn.dataset.armed === '1') { this.resetConfirm(); action(); return; }
     this.resetConfirm();
     btn.dataset.armed = '1';
     btn.dataset.icon = btn.innerHTML;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = costs ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirm(), 3500);
   }
 
   resetConfirm() {
     clearTimeout(this._confirmTimer);
-    const b = this.container.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') {
+    this.container.querySelectorAll('[data-armed="1"]').forEach((b) => {
       b.innerHTML = b.dataset.icon;
       b.dataset.armed = '';
       b.classList.remove('is-confirm');
+    });
+  }
+
+  /** The unfinished match a new one would throw away: the live one, or (from setup) the save.
+   *  Quitting it after the player's first move is a LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md
+   *  "Holes closed 2026-10-29: quitting and easier settings"). Leaving the hub is not quitting. */
+  _quitPending() {
+    if (this.game && this.view === 'game') {
+      if (this.game.phase === 'matchOver' || this._statsCommitted || !this._moved) return null;
+      return { difficulty: this.difficulty, target: this.target, points: this.game.scores[HUMAN], rounds: this.game.round, bestRound: this._bestRound };
+    }
+    const save = loadSave();
+    if (!save || !save.snap || save.snap.phase === 'matchOver' || save.statsCommitted || !movedIn(save)) return null;
+    return { difficulty: save.difficulty || this.difficulty, target: save.target || this.target,
+      points: (save.snap.scores && save.snap.scores[HUMAN]) | 0, rounds: save.snap.round | 0, bestRound: save.bestRound | 0 };
+  }
+
+  _quitCostsLoss() { return !!this._quitPending(); }
+
+  /** Record the quit as a loss, once: `_statsCommitted` and the save both say so before the write. */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    this._statsCommitted = true;
+    clearSave();
+    try {
+      recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points });
+    } catch (e) {
+      console.error('[dominoes] stats write failed', e);
     }
   }
 
@@ -791,6 +842,8 @@ class DominoesUI {
       this.target = Number(btn.dataset.v) || 300;
       saveSettings(this.difficulty, this.target);
       this.renderSetup();
+    } else if (action === 'start' && this.view === 'setup' && this._quitCostsLoss()) {
+      this.confirmDestructive(btn, () => this.startMatch());
     } else if (action === 'start' || action === 'rematch') {
       this.startMatch();
     } else if (action === 'to-setup') {
@@ -809,7 +862,7 @@ class DominoesUI {
     } else if (action === 'restart') {
       this.confirmDestructive(btn, () => this.startMatch());
     } else if (action === 'restart-match') {
-      this.startMatch();
+      this.confirmDestructive(btn, () => this.startMatch());
     } else if (action === 'next-round') {
       this.nextRound();
     } else if (action === 'help') {
@@ -851,6 +904,7 @@ class DominoesUI {
     if (!g || g.phase !== 'playing' || g.turn !== HUMAN) return;
     const res = g.drawTile(HUMAN, tileId);
     if (!res.ok) return;
+    this._moved = true;
     this._persist();
     this._syncHands();
     if (res.canPlay) { this.closeBoneyard(); this._advance(); }

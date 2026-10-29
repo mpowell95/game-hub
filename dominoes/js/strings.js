@@ -28,6 +28,7 @@ export const STRINGS = {
     bot_thinking: 'Bot thinking',
     restart: 'Restart',
     tap_again_confirm: 'Tap again to restart',
+    quit_loss: 'Counts as a loss',
     // Turn feedback (transient pills, never a running log)
     you_passed: 'No move, you pass',
     bot_passed: 'Bot passes',
@@ -94,6 +95,7 @@ export const STRINGS = {
     bot_thinking: 'El bot piensa',
     restart: 'Reiniciar',
     tap_again_confirm: 'Toca otra vez para reiniciar',
+    quit_loss: 'Cuenta como derrota',
     you_passed: 'Sin jugada, pasas',
     bot_passed: 'El bot pasa',
     bot_drew: 'El bot roba',

@@ -1704,6 +1704,32 @@ export function rateReport() {
   return b;
 }
 
+// --- QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+// quitting and easier settings") ------------------------------------------------------------------
+// Matt's two rules for games against the computer: quitting after your first move is a LOSS (each game
+// records it through its own recorder, once, behind its own one-shot guard), and an easier setting still
+// counts, never at the top: a table of several computers records at the EASIEST one's difficulty, and a
+// shortened match (one hand, first to 1, unlimited reracks...) records ONE step down its own ladder.
+// Both only choose the bucket a NEW result goes into; nothing stored is ever re-bucketed (THE LAW 2-5).
+
+/** The easiest of `diffs` on `ladder` (the game's own ids, easiest first). Ids not on the ladder are
+ *  ignored; none on it = `fallback`. Pure. */
+export function easiestDiff(diffs, ladder, fallback) {
+  let best = -1;
+  for (const d of Array.isArray(diffs) ? diffs : []) {
+    const i = ladder.indexOf(d);
+    if (i >= 0 && (best < 0 || i < best)) best = i;
+  }
+  return best >= 0 ? ladder[best] : fallback;
+}
+
+/** One step down `ladder` (easiest first) for a shortened match; the lowest stays the lowest, an id
+ *  not on the ladder is returned unchanged. Pure. */
+export function oneTierDown(diff, ladder) {
+  const i = ladder.indexOf(diff);
+  return i > 0 ? ladder[i - 1] : diff;
+}
+
 export function recordResult(gameId, difficulty, won) {
   if (tooFast(gameId)) return null;
   notePlay(gameId, 'recordResult', arguments);
@@ -3151,6 +3177,82 @@ function applyHeadToHead(st, gameId, opponent, won) {
   if (name) row.name = name;                               // keep the freshest name seen
   if (won === true) row.w += 1;
   else if (won === false) row.l += 1;
+}
+
+// --- A GAME LEFT MID-PLAY WITH NO SAVE TO RESUME (2026-10-29) -----------------------------------
+//
+// Matt: quitting a game against the computer after your first move is a LOSS. A game that SAVES and
+// resumes needs nothing here (leaving is not quitting). A game with NO resume loses the game when it is
+// left, and destroy() records the loss; but closing the app or the tab runs no destroy(). So such a game
+// ARMS its loss here once the player has moved (the recorder's name and the arguments of the LOSS
+// call, refreshed as the score changes) and DROPS it in the same breath as recording its real result.
+// A loss still armed when the next page loads belongs to a game that died with the page, and is recorded
+// then, through the game's own recorder (sub-counters included), once.
+//
+//   localStorage['gamehub.quitLoss.v1'] = { <gameId>: { f: <recorder>, a: [args], c: <code>, k: <statsKey>, t } }
+//
+// A loss is recorded only under the store it was armed in (`k`): another player active on the phone
+// leaves it waiting for its owner. Never throws.
+const QUIT_KEY = 'gamehub.quitLoss.v1';
+const QUIT_RECORDERS = () => ({
+  recordResult, recordYahtzee, recordAirHockey, recordBattleship, recordBoggle, recordCupPong,
+  recordChinchon, recordEscoba, recordConnect4, recordTicTacToe, recordDotsBoxes, recordDominoes,
+  recordMinesweeper, recordContexto, recordBaseball,
+});
+
+function readQuit() {
+  const q = readJSON(QUIT_KEY);
+  return q && typeof q === 'object' && !Array.isArray(q) ? q : {};
+}
+function writeQuit(q) {
+  try { localStorage.setItem(QUIT_KEY, JSON.stringify(q)); } catch (err) { console.error('[game-stats] quit-loss marker not saved', err); }
+}
+
+/** The player has moved in a game with no resume: quitting it from now on is a loss, recorded as
+ *  `<fn>(...args)` (one of QUIT_RECORDERS). Call again to refresh the arguments (score so far). */
+export function armQuitLoss(gameId, fn, args) {
+  if (!QUIT_RECORDERS()[fn]) return;
+  const q = readQuit();
+  q[gameId] = { f: fn, a: Array.from(args || []), c: activeCode(), k: statsKey(), t: Date.now() };
+  writeQuit(q);
+}
+
+/** The game recorded its real result (or the armed loss no longer applies): forget the marker. */
+export function dropQuitLoss(gameId) {
+  const q = readQuit();
+  if (!q[gameId]) return;
+  delete q[gameId];
+  writeQuit(q);
+}
+
+/** Is a quit loss armed for this game? */
+export function quitLossArmed(gameId) { return !!readQuit()[gameId]; }
+
+/** Record the armed loss for `gameId` now (the game is being quit), once. True when recorded. */
+export function takeQuitLoss(gameId) {
+  const q = readQuit();
+  const m = q[gameId];
+  if (!m) return false;
+  if (m.k && m.k !== statsKey()) return false;   // armed under another player's store: theirs to take
+  delete q[gameId];
+  writeQuit(q);                                  // dropped BEFORE the write, so it can never count twice
+  notePlay(gameId, 'quitLoss', [m.f, m.t]);      // the play log says this loss was a quit
+  const fn = QUIT_RECORDERS()[m.f];
+  if (!fn) return false;
+  try { fn(...(Array.isArray(m.a) ? m.a : [])); return true; } catch (err) { console.error('[game-stats] quit loss not recorded', err); return false; }
+}
+
+/** Every loss left armed by a game that died with its page (app or tab closed mid-game). The hub calls
+ *  it at load with an age (a game open in another tab keeps its marker fresher than that); a game with
+ *  no resume calls `takeQuitLoss(own id)` at mount, where its previous page is certainly gone. */
+export function settleQuitLosses(olderThanMs = 0) {
+  const q = readQuit();
+  const now = Date.now();
+  for (const id of Object.keys(q)) {
+    const m = q[id];
+    if (!m || !(now - (+m.t || 0) >= olderThanMs)) continue;
+    takeQuitLoss(id);
+  }
 }
 
 export { GAMES, ARCHIVED_GAMES, STATS_KEY, DEVICE_KEY, OWNER_KEY, FORK_KEY, storeKeyFor };

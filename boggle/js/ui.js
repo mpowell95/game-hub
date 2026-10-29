@@ -34,7 +34,7 @@ import { loadDictionary, isValidWord, dictLang, DICT_LANGS } from './dict.js';
 import { shakePlayableBoard, solveBoard, qualityFor } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordBoggle, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
+import { recordBoggle, recordHeadToHead, loadStats, deviceId, oneTierDown } from '../../js/game-stats.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -180,6 +180,7 @@ function saveGame(ui) {
       // resuming has to rebuild the same board against the same dictionary it
       // was scored against, or every word already found reads as invalid.
       wordLang: ui._setup.wordLang,
+      moved: !!ui._moved,   // 2026-10-29: the player has entered a word (quitting now is a loss)
     }));
   } catch { /* a full quota must never break the round */ }
 }
@@ -214,11 +215,19 @@ function loadGame() {
       // rather than failing validation (THE LAW rule 3: carry forward
       // everything that CAN be carried).
       wordLang: WORD_LANGS.includes(raw.wordLang) ? raw.wordLang : 'en',
+      moved: raw.moved === true || found.length > 0,
     };
   } catch { return null; }
 }
 
 function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+
+/** The bucket a solo round records at (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed
+ *  2026-10-29: quitting and easier settings"): the computer's share of the board does not depend on
+ *  the clock, so the 2-minute timer (more time than the standard 1.5) counts one step down. */
+export function statsDiff(difficulty, timerMinutes) {
+  return timerMinutes > 1.5 ? oneTierDown(difficulty, DIFFICULTIES) : difficulty;
+}
 
 class BoggleUI {
   constructor(container) {
@@ -1202,6 +1211,8 @@ class BoggleUI {
     clearGame(); // a new round replaces any saved one
     this._path = [];
     this._found = new Map();
+    this._moved = false;
+    this._statsCommitted = false;
     this._feedback = null;
     this._roundOver = false;
     this._solveExpanded = false;
@@ -1271,6 +1282,8 @@ class BoggleUI {
     this._board = boardFromFaces(save.faces);
     this._solved = solveBoard(this._board.grid, this._trieRoot);
     this._found = new Map(save.found);
+    this._moved = !!save.moved;
+    this._statsCommitted = false;
     this._path = [];
     this._feedback = null;
     this._roundOver = false;
@@ -1515,6 +1528,7 @@ class BoggleUI {
     const word = wordForPath(this._board.grid, this._path);
     if (word.length < MIN_WORD_LEN) return;
     this._tapMode = false;
+    if (!this.mp) this._moved = true;
     if (this._found.has(word)) {
       this._feedback = { type: 'duplicate', word };
     } else if (!isValidWord(this._trieRoot, word)) {
@@ -1738,6 +1752,25 @@ class BoggleUI {
 
   // --- end of round ---------------------------------------------------------
 
+  /** Giving up a solo round once the player has entered a word is a LOSS (2026-10-29,
+   *  docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier settings"). Leaving
+   *  the hub is not giving up: the save resumes the round. Multiplayer is untouched. */
+  _quitCostsLoss() {
+    return !this.mp && this.view === 'game' && !!this._board && !this._roundOver && !this._statsCommitted && !!this._moved;
+  }
+
+  /** Record the give-up as a loss, once (`_statsCommitted`), with the words found so far. */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    this.stopTimer();
+    const words = [...this._found.entries()];
+    const score = words.reduce((s, [, v]) => s + v, 0);
+    const longestWord = words.reduce((best, [w]) => (w.length > best.len ? { word: w, len: w.length } : best), { word: '', len: 0 });
+    try { recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), false, { words: words.length, score, longestWord }); } catch { /* never block leaving */ }
+    clearGame();
+  }
+
   finish() {
     this.stopTimer();
     this._roundOver = true;
@@ -1763,7 +1796,10 @@ class BoggleUI {
     const aiScore = totalScore(aiWords);
     const won = humanScore === aiScore ? null : humanScore > aiScore;
     const extras = { words: humanWords.length, score: humanScore, longestWord };
-    try { recordBoggle(this._setup.difficulty, won, extras); } catch { /* never block the result */ }
+    if (!this._statsCommitted) {
+      this._statsCommitted = true;
+      try { recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), won, extras); } catch { /* never block the result */ }
+    }
     this._result = { humanWords, humanScore, aiWords, aiScore, won };
     this._path = [];
     this.renderGame();
@@ -1947,6 +1983,9 @@ class BoggleUI {
       this.closeOverlays();
       this.startGame();
     } else if (action === 'change-settings') {
+      // Give up after entering a word = a LOSS (2026-10-29): two taps, the button saying so.
+      if (this._quitCostsLoss() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quit_loss'); return; }
+      this._recordQuitLoss();
       this.closeOverlays();
       clearGame(); // "give up" (or leaving a load-error screen): explicit abandon, not a hub nav
       this.renderSetup();

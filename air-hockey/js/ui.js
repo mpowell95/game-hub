@@ -30,7 +30,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
@@ -431,6 +431,8 @@ class AirHockeyUI {
 
   // --- match lifecycle ---------------------------------------------------------------------------
   _play() {
+    this._quitNow();   // a match the player was in, replaced by a new one, is a loss
+    this._qArmed = false;
     resetMatch(this.match, 0);
     this.cpu = createCpu(this.settings.difficulty, 1, (Date.now() & 0xffff) + 1);
     this.difficulty = this.settings.difficulty;
@@ -443,6 +445,8 @@ class AirHockeyUI {
   }
   _pause() {
     if (this.screen !== 'game') return;
+    const qb = this.root.querySelector('[data-act="quit"]');
+    if (qb && qb.dataset.armed === '1') { qb.dataset.armed = ''; qb.innerHTML = `<span data-l="quit">${esc(t('quit'))}</span>`; }
     this.screen = 'paused';
     this._stop();
     this._showOnly('paused');
@@ -454,6 +458,7 @@ class AirHockeyUI {
     this._start();
   }
   _toMenu() {
+    this._quitNow();   // quitting a match against the computer the player has played in: a loss
     this._stop();
     this.screen = 'menu';
     this._syncOpp();
@@ -473,6 +478,7 @@ class AirHockeyUI {
     // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
     try {
       const [gf, ga] = this.match.score;
+      if (!this.online) { dropQuitLoss('airhockey'); this._qArmed = false; }   // the real result replaces the armed loss
       this._bestBefore = ahRecord().bestShot | 0;
       const st = recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
         { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest });
@@ -506,8 +512,28 @@ class AirHockeyUI {
     q('overNote').textContent = theyAsked ? t('rematch_asked', { name: on.oppName }) : '';
   }
 
+  // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+  // and easier settings"). A match against the computer has no resume: once the player has touched
+  // their mallet, leaving it (Quit, the hub's back, a closed app) records a loss at the score so far.
+  // Armed in js/game-stats.js (refreshed at every goal), dropped by the real result, taken by a quit.
+  _armQuit() {
+    if (this.online || (this.screen !== 'game' && this.screen !== 'paused') || this.match.phase === 'over') return;
+    const [gf, ga] = this.match.score;
+    armQuitLoss('airhockey', 'recordAirHockey', [this.difficulty, false, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]);
+    this._qArmed = true;
+  }
+  quitCostsLoss() {
+    return !!this._qArmed && !this.online && (this.screen === 'game' || this.screen === 'paused') && this.match.phase !== 'over';
+  }
+  _quitNow() {
+    if (!this.quitCostsLoss()) return;
+    this._qArmed = false;
+    takeQuitLoss('airhockey');
+  }
+
   _goal(scorer) {
     const [a, b] = this.match.score;
+    if (this._qArmed && this.match.phase !== 'over') this._armQuit();   // keep the loss at the score so far
     this._syncScore();
     this.liveEl.textContent = scorer === 0 ? t('say_goal_you', { a, b })
       : this.online ? t('say_goal_opp', { name: this.online.oppName, a, b }) : t('say_goal_cpu', { a, b });
@@ -587,7 +613,8 @@ class AirHockeyUI {
     else if (act === 'helpClose') { this.screen = 'menu'; this._showOnly('menu'); }
     else if (act === 'pause') { if (this.online) return; if (this.screen === 'game') this._pause(); else if (this.screen === 'paused') this._resume(); }
     else if (act === 'resume') this._resume();
-    else if (act === 'quit' || act === 'back') this._toMenu();
+    else if (act === 'quit' && this.quitCostsLoss() && b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = t('quit_loss'); }
+    else if (act === 'quit' || act === 'back') { b.dataset.armed = ''; this._toMenu(); }
   }
   _tablePoint(e) {
     const r = this.canvas.getBoundingClientRect();
@@ -600,6 +627,7 @@ class AirHockeyUI {
   }
   _pointerDown(e) {
     if (this.screen !== 'game') return;
+    if (!this._qArmed && !this.online) this._armQuit();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     // Touch anywhere in your half (with a little grace above the centre line) to grab the mallet.
     const p = this._tablePoint(e);
@@ -610,6 +638,7 @@ class AirHockeyUI {
   }
   _pointerMove(e) {
     if (this.screen !== 'game') return;
+    if (!this._qArmed && !this.online && e.pointerType === 'mouse') this._armQuit();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     if (e.pointerId === this.drag.id) this._aim(e, true);
   }
@@ -892,6 +921,7 @@ class AirHockeyUI {
   _leaveOnline() { this._teardownOnline(true); }
 
   destroy() {
+    this._quitNow();   // leaving a match against the computer mid-play: no resume, so it is a loss
     this._leaveOnline();
     this._cancelRoom();
     this._stop();
@@ -908,8 +938,11 @@ class AirHockeyUI {
 
 export function init(container) {
   if (instance) destroy();
+  takeQuitLoss('airhockey');   // a match whose page closed mid-play (no destroy ran) is that match's loss
   instance = new AirHockeyUI(container);
 }
+/** The hub's leave confirm says "Counts as a loss" when this is true. */
+export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
 export function destroy() {
   if (!instance) return;
   const i = instance;
@@ -920,4 +953,4 @@ export function destroy() {
 export function isInProgress() {
   return !!(instance && (instance.screen === 'game' || instance.screen === 'paused' || instance.screen === 'wait'));
 }
-export default { init, destroy, isInProgress };
+export default { init, destroy, isInProgress, quitCostsLoss };

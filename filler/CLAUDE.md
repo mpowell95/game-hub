@@ -217,3 +217,7 @@ after every one - confirmed red against the pre-fix code (stuck at `played=1`), 
   `MP_DELIVER_SETTLE_MS` pacing beat's real-world feel over actual latency, and the seed-based
   board-generation round trip over a real Firebase round-trip (proven correct offline against
   the real engine, never against a real room).
+
+## Quitting and easier settings (2026-10-29)
+
+Solo Restart / New game after the player's first colour (`state.moves`) = ONE loss (`_statsCommitted`; both ask twice). Leaving the hub is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

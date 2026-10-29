@@ -891,19 +891,36 @@ class FillerUI {
     this.resetConfirms();
     btn.dataset.armed = '1';
     btn.dataset.label = btn.textContent;
-    btn.textContent = t('tap_again_confirm');
+    btn.textContent = this._quitCostsLoss() ? t('quit_loss') : t('tap_again_confirm');
     btn.classList.add('is-confirm');
     this._confirmTimer = setTimeout(() => this.resetConfirms(), 3500);
   }
 
   resetConfirms() {
     clearTimeout(this._confirmTimer);
-    const b = this.container.querySelector('[data-role="restart"]');
-    if (b && b.dataset.armed === '1') {
+    this.container.querySelectorAll('[data-armed="1"]').forEach((b) => {
       b.textContent = b.dataset.label;
       b.dataset.armed = '';
       b.classList.remove('is-confirm');
-    }
+    });
+  }
+
+  /** Quitting a solo game (Restart, New game) once the human (P1) has picked a colour is a LOSS
+   *  (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
+   *  settings"). Moves alternate, so P1 has moved once two moves are in, or one with P2 to move.
+   *  Leaving the hub mid-game is not quitting: the autosave resumes it. Multiplayer is untouched. */
+  _quitCostsLoss() {
+    const s = this.state;
+    if (this.mp || this.view !== 'game' || !s || s.over || this._statsCommitted) return false;
+    return s.moves >= 2 || (s.moves === 1 && s.turn === P2);
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`). */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    try { recordResult('filler', LEVEL_KEY[this.level], false); } catch { /* never block leaving */ }
+    clearGame();
   }
 
   // ==========================================================================
@@ -1542,9 +1559,10 @@ class FillerUI {
     } else if (action === 'start' || action === 'rematch') {
       this.startGame();
     } else if (action === 'restart') {
-      this.confirmDestructive(btn, () => this.startGame());
+      this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'newgame') {
-      this.renderSetup();
+      const go = () => { this._recordQuitLoss(); this.renderSetup(); };
+      if (this._quitCostsLoss()) this.confirmDestructive(btn, go); else go();
     } else if (action === 'pick') {
       this.humanMove(Number(btn.dataset.color));
     } else if (action === 'help') {

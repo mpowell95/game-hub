@@ -207,3 +207,7 @@ Open items: see the root TODO.md, "Archery".
 ## Challenges: 7 days, then forfeit (2026-10-29)
 
 - 7 days, then forfeit; one count per person: root `CLAUDE.md`, "Cancel, decline, resign, expire". `countResult(id, won, finishedAt)`; "Timed out" (`mp_timed_out`).
+
+## Quitting and easier settings (2026-10-29)
+
+Play over a saved match vs the computer the player has shot in = ONE loss, asked twice (`recorded`); Quit keeps the save; pass and play never touches the save. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

@@ -234,3 +234,7 @@ implementation still lives here**: `tic-tac-toe/js/ui.js`'s `openHelp()`, whose 
 board outlines, one showing its own mini-grid with a marked cell, and an arrow curving to the
 board that cell sends the opponent to) is the concrete example the pattern doc describes in the
 abstract.
+
+## Quitting and easier settings (2026-10-29)
+
+Solo Restart / New game after the player's first mark = ONE loss (`_statsCommitted`; both ask twice, "Counts as a loss"). Leaving the hub is not quitting (the save resumes). MP untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

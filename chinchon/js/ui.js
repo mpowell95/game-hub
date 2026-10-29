@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordChinchon, recordHeadToHead, deviceId } from '../../js/game-stats.js';
+import { recordChinchon, recordHeadToHead, deviceId, easiestDiff, oneTierDown } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
@@ -835,6 +835,7 @@ class ChinchonUI {
     const config = Object.assign({}, DEFAULT_CONFIG, s.config);
     this.game = new Game({ players, config, startDealerIndex: startDealer });
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
+    this._moved = false;
     this._pending = null; this._selectedCardId = null; this._newCardId = null; this.activePlayerId = null;
     this._matchCloses = 0; this._matchChinchons = 0; this._matchMinusTens = 0; this._statsCommitted = false;
     this._matchEnded = false; this._closeMenu();
@@ -890,6 +891,7 @@ class ChinchonUI {
 
   _resolvePending(value) {
     if (!this._pending) return;
+    if (value != null) this._moved = true;   // the player's own decision (quitting from now on is a loss)
     const { resolve } = this._pending;
     this._pending = null; this._selectedCardId = null;
     this.render();
@@ -1196,10 +1198,8 @@ class ChinchonUI {
     // MP records under its own bucket; solo keeps reading the opponent AI's tier. See
     // MP_DIFFICULTY at the top of this file for why the old expression could not be right for an
     // online match: a remote seat carries no `difficulty`.
-    const opp0 = this.game.players.find((p) => !p.isHuman);
-    const difficulty = this.mp
-      ? MP_DIFFICULTY
-      : ((opp0 && opp0.difficulty) || (this._setup && this._setup.aiDifficulty && this._setup.aiDifficulty[0]) || 'normal');
+    // Solo (2026-10-29, Matt): the EASIEST computer's tier, one step lower for a shortened match.
+    const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players, this.game.config);
     const won = !!(this.game.winner && this.game.winner.id === human.id);
     recordChinchon(difficulty, won, {
       closed: this._matchCloses || 0,
@@ -2109,7 +2109,7 @@ class ChinchonUI {
     const btn = (which, label) => {
       const confirming = this._menuConfirm === which;
       return `<button class="cc-btn cc-btn-ghost ${confirming ? 'cc-confirm' : ''}" data-action="menu-${which}">${
-        confirming ? t('menu_confirm_tap_again') : label}</button>`;
+        confirming ? (this._quitCostsLoss() ? t('menu_confirm_loss') : t('menu_confirm_tap_again')) : label}</button>`;
     };
     this.el.menu.innerHTML = `<div class="cc-scrim" data-action="close-menu"></div>
       <div class="cc-sheet cc-menu-sheet">
@@ -2140,8 +2140,33 @@ class ChinchonUI {
     }
     this._closeMenu();
     if (this.mp) { this._mpLeaveToSetup(); return; }
+    this._recordQuitLoss();
     if (which === 'newgame') this.startGame();
     else this.showSetup();
+  }
+
+  /** Quitting a solo match (New game, Quit to setup) once the player has made a decision in it is a
+   *  LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting and easier
+   *  settings"). Leaving the hub is not quitting: the solo save resumes it. Rooms and challenges untouched. */
+  _quitCostsLoss() {
+    return !this.mp && !this.ch && !!this.game && !this.el.game.hidden && !this._matchEnded
+      && !this._statsCommitted && !this.game.winner && !!this._moved;
+  }
+
+  /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
+  _recordQuitLoss() {
+    if (!this._quitCostsLoss()) return;
+    this._statsCommitted = true;
+    this._soloClearSave();
+    this.stats.games += 1;
+    this.stats.losses += 1;
+    this.stats.closes += this._matchCloses || 0;
+    this.stats.chinchons += this._matchChinchons || 0;
+    this.stats.minusTen = (this.stats.minusTen | 0) + (this._matchMinusTens || 0);
+    saveJSON(STORE_STATS, this.stats);
+    recordChinchon(soloDiff(this.game.players, this.game.config), false, {
+      closed: this._matchCloses || 0, minusTen: this._matchMinusTens || 0, chinchons: this._matchChinchons || 0,
+    });
   }
 
   _stepRule(field, d) {
@@ -2920,7 +2945,8 @@ class ChinchonUI {
       // `counts` (2026-10-23, additive): this match's closes so far, so a resumed match still
       // records them at its end (a restore used to start them at 0).
       saveJSON(STORE_SOLO_SAVE, { v: 1, at: Date.now(), snap: this.game.snapshot(opts),
-        counts: { closes: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTens: this._matchMinusTens || 0 } });
+        counts: { closes: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTens: this._matchMinusTens || 0 },
+        moved: !!this._moved });   // 2026-10-29: the player has drawn (quitting now is a loss)
     } catch { /* private mode / quota */ }
   }
 
@@ -2960,6 +2986,7 @@ class ChinchonUI {
       const counts = save.counts || {};
       this._matchCloses = n(counts.closes); this._matchChinchons = n(counts.chinchons); this._matchMinusTens = n(counts.minusTens);
       this._statsCommitted = false;
+      this._moved = typeof save.moved === 'boolean' ? save.moved : (snap.round | 0) > 1;
       this._matchEnded = false; this._closeMenu();
       this.el.setup.hidden = true; this.el.header.hidden = true; this.el.game.hidden = false;
       this._ccCompact = false;
@@ -3426,6 +3453,26 @@ class ChinchonUI {
     this.game = null;
     this.container.innerHTML = '';
   }
+}
+
+// --- easier settings (2026-10-29) ----------------------------------------------
+
+const DIFF_LADDER = ['easy', 'normal', 'hard'];
+
+/** A shorter match than the standard 100 points (or 10 rounds) is decided by fewer hands. */
+export function isShortMatch(config) {
+  const c = config || {};
+  const shortPts = (+c.scoreLimit || 100) < 100;
+  const shortRounds = (+c.roundsLimit || 10) < 10;
+  if (c.victoryCondition === 'rounds') return shortRounds;
+  if (c.victoryCondition === 'roundsOrPoints') return shortPts || shortRounds;
+  return shortPts;
+}
+
+/** A solo table records at its EASIEST computer's tier, one step lower for a short match. */
+export function soloDiff(players, config) {
+  const d = easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), DIFF_LADDER, 'normal');
+  return isShortMatch(config) ? oneTierDown(d, DIFF_LADDER) : d;
 }
 
 // --- module contract --------------------------------------------------------

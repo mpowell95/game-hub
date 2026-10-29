@@ -20,7 +20,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, oneTierDown } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -34,6 +34,15 @@ function newAiSeed() {
   try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0]; }
   catch { return Math.floor(Math.random() * 4294967296); }
 }
+// QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
+// quitting and easier settings"). First to 1 is a shorter match than the standard first to 2, so a win
+// there counts one step down. A match against the computer the player has flicked in, thrown away
+// for a new one, is a LOSS.
+export function statsDiff(diff, goals) {
+  return goals === 1 ? oneTierDown(diff, ['easy', 'medium', 'hard']) : diff;
+}
+/** Has seat 0 (the player) flicked in this match? Turns alternate shot by shot. */
+export function playerShot(m) { return !!m && (m.shots | 0) >= (m.starter === 0 ? 1 : 2); }
 const MODES = ['cpu', 'pass'];
 const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the SAFE zone round the disc: letting go
@@ -529,6 +538,7 @@ class FlickSoccerUI {
   }
 
   _newMatch() {
+    this._recordQuitLoss();   // a match against the computer thrown away after the player's first flick
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -786,7 +796,7 @@ class FlickSoccerUI {
     if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = recordResult(STATS_ID, this.diff, m.winner === 0);
+      const st = recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0);
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -874,7 +884,7 @@ class FlickSoccerUI {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'play') { this.settings.mode = 'cpu'; this._newMatch(); }
+    if (act === 'play') this._quitGate(b, () => { this.settings.mode = 'cpu'; this._newMatch(); });
     else if (act === 'multi') this._openOnline();
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
@@ -939,6 +949,41 @@ class FlickSoccerUI {
 
   /** Pass & play, from the Multiplayer screen: two people, this phone. */
   _passPlay() { this.settings.mode = 'pass'; this._newMatch(); }
+
+  /** The match against the computer a new match would throw away (the live one, or the saved one
+   *  from setup) once the player has flicked in it, or null. */
+  _quitPending() {
+    if (this.match && this.mode === 'cpu') {
+      const m = this.match;
+      return m.winner == null && !m.recorded && playerShot(m) ? { diff: this.diff, m } : null;
+    }
+    if (this.match && this.screen !== 'setup') return null;
+    const sv = this._savedMatch();
+    return sv && sv.mode === 'cpu' && !sv.match.recorded && playerShot(sv.match)
+      ? { diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', m: sv.match } : null;
+  }
+
+  /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
+  _recordQuitLoss() {
+    const q = this._quitPending();
+    if (!q) return;
+    q.m.recorded = true;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    try {
+      const st = recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false);
+      if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
+  }
+
+  /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
+  _quitGate(btn, go) {
+    if (!this._quitPending() || (btn && btn.dataset.armed === '1')) { if (btn) btn.dataset.armed = ''; go(); return; }
+    btn.dataset.armed = '1';
+    const label = btn.querySelector('[data-l]') || btn;
+    label.textContent = t('quit_loss');
+    clearTimeout(this._quitTimer);
+    this._quitTimer = setTimeout(() => { btn.dataset.armed = ''; this._relabel(); }, 3500);
+  }
 
   /** The Multiplayer home. `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens
    *  straight onto "challenge them". */

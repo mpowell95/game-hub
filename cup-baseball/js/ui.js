@@ -8,7 +8,7 @@
 // nothing (there is no second profile to credit). Nothing is persisted mid-game: see isInProgress().
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, myName } from '../../js/i18n.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
@@ -297,6 +297,7 @@ class CupBaseball {
 
   // --- the game --------------------------------------------------------------------------------
   newGame() {
+    this.takeQuit();   // a game thrown in and not finished, replaced by a new one, is a loss
     this.clearTimers();
     this.throwState = null;
     this.recorded = false;
@@ -367,8 +368,13 @@ class CupBaseball {
   applyThrow(outcome, touched) {
     const g = this.game;
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
+    const batting = g.batting;
     const ev = g.throwResult(made ? hitOf(made) : 0, !!touched);
     this.throwState = null;
+    // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
+    // and easier settings"): no resume, so once the player has thrown against the computer, leaving
+    // the game (New game, Change settings, the hub's back, a closed app) records it as a loss.
+    if (this.mode === 'cpu' && batting === 'a' && !this.recorded && !g.over) armQuitLoss('cupbaseball', 'recordResult', ['cupbaseball', this.settings.diff, false]);
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = true;
     const hit = ev.find((e) => e.type === 'hit');
@@ -405,6 +411,7 @@ class CupBaseball {
     if (!this.recorded) {
       this.recorded = true;
       if (this.mode === 'cpu') {
+        dropQuitLoss('cupbaseball');   // the real result replaces the armed quit loss
         // ONCE per game: every write in the shared store is additive, so a second call inflates.
         try {
           const st = recordResult('cupbaseball', this.settings.diff, g.winner === 'a');
@@ -599,14 +606,34 @@ class CupBaseball {
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('[data-role="resume"]'), 'click', close);
     // A new game abandons this one; nothing is recorded until a game ENDS (THE LAW rule 2).
-    this.on(el.querySelector('[data-role="new"]'), 'click', () => {
+    this.on(el.querySelector('[data-role="new"]'), 'click', (e) => this.quitGate(e.currentTarget, () => {
+      this.takeQuit();
       el.remove();
       const pass = this.root.querySelector('.cb-pass');
       if (pass) pass.hidden = true;
       if (this.engine) this.newGame();
       if (!this.disposed) this.startLoop();
-    });
-    this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
+    }));
+    this.on(el.querySelector('[data-role="setup"]'), 'click', (e) => this.quitGate(e.currentTarget, () => { this.takeQuit(); el.remove(); this.renderSetup(); }));
+  }
+
+  /** A game against the computer the player has thrown in, not finished: leaving it is a loss. */
+  quitCostsLoss() {
+    return this.mode === 'cpu' && !!this.game && !this.game.over && !this.recorded && quitLossArmed('cupbaseball');
+  }
+
+  /** Record that loss, once (`recorded`, and the marker is dropped before the write). */
+  takeQuit() {
+    if (!this.quitCostsLoss()) return;
+    this.recorded = true;
+    takeQuitLoss('cupbaseball');
+  }
+
+  /** A button that would quit such a game asks twice, saying it counts as a loss. */
+  quitGate(btn, go) {
+    if (!this.quitCostsLoss() || btn.dataset.armed === '1') { go(); return; }
+    btn.dataset.armed = '1';
+    btn.textContent = t('quitLoss');
   }
 
   teardownEngine() {
@@ -626,6 +653,7 @@ class CupBaseball {
   }
 
   destroy() {
+    this.takeQuit();   // leaving a thrown-in game against the computer: no resume, so it is a loss
     this.disposed = true;
     try { if (window.__cbTest === this) delete window.__cbTest; } catch {}
     clearTimeout(this._toastT);
@@ -638,6 +666,7 @@ class CupBaseball {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
+  takeQuitLoss('cupbaseball');   // a game whose page closed mid-game (no destroy ran) is that game's loss
   instance = new CupBaseball(container);
   instance.mount();
   return instance;
@@ -656,4 +685,7 @@ export function isInProgress() {
   return !g.over && g.throws > 0;
 }
 
-export default { init, destroy, isInProgress };
+/** The hub's leave confirm says "Counts as a loss" when this is true. */
+export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
+
+export default { init, destroy, isInProgress, quitCostsLoss };
