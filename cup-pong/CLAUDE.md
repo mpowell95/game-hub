@@ -123,6 +123,9 @@ of the soft-throw sweep).
 - **The next game is a BUTTON only for whoever LOST** (`seriesStarter`), so phones never both create
   it; `nextInSeries` swaps the sides AND the score; whoever did not shoot first last game shoots
   first (`createGame({ first: 'them' })` writes both rows at once).
+- **Between games the hub's Multiplayer screen lists the series too (2026-10-29)**: `owedSeriesRows` (pure, from index rows)
+  makes a `next:<id>` row (Your turn if you lost, else Their turn; no ⋯ or bell); `armOpen('next:<id>')` -> `openNext`
+  re-reads and starts the next game. `myTurnCount` counts it.
 
 ## Solo: clear the rack in the fewest throws (2026-09-28)
 

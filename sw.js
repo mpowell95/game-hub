@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1339;
-const CACHE = 'game-hub-v1339';
+const CACHE = 'game-hub-v1340';
 
 const ASSETS = [
   './',
@@ -827,8 +827,8 @@ const REST_MANIFEST = {
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '5661b55a36',
   './js/hub-messages.js': 'c91ce9936a',
-  './js/challenges.js': '9699cf31a0',
-  './js/challenges-ui.js': '829753e12e',
+  './js/challenges.js': '84f80968fd',
+  './js/challenges-ui.js': '0033c2a662',
   './js/challenge-life.js': 'b3e2aa8926',
   './js/challenges-strings.js': '3b7b38de5a',
   './js/mp-records.js': '8c1ff025c7',
@@ -1132,16 +1132,16 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': '698942a954',
   './cup-pong/css/cup-pong.css': 'd71937af33',
-  './cup-pong/js/ui.js': '9ce1da7ae8',
+  './cup-pong/js/ui.js': '3f58503a0a',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': 'e23be8d550',
   './cup-pong/js/physics.js': '108758b93f',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': '56fd08f550',
   './cup-pong/js/match.js': '6163d2fe0e',
-  './cup-pong/js/mp.js': 'c7c374c450',
+  './cup-pong/js/mp.js': '08f3354065',
   './cup-pong/js/mp-ui.js': 'af8845b7fd',
-  './cup-pong/js/alert.js': 'd71546586b',
+  './cup-pong/js/alert.js': '698b22f3f3',
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': '533fd79845',
   './hoops4/css/hoops4.css': '38efeef410',

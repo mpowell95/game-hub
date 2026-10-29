@@ -6,7 +6,7 @@
 // you on the LAUNCHER"). It lives in the game folder, not js/, because it writes `gamehub.*` keys,
 // which no cache-first shell module may do.
 import { readMyGames, myCode, watchMyGames, readSeen, markSeen, SEEN_KEY, recordFinished, readUnseen,
-  markResultSeen } from './mp.js';
+  markResultSeen, owedSeriesRows } from './mp.js';
 
 export { readSeen, markSeen, SEEN_KEY, markResultSeen };
 
@@ -68,16 +68,22 @@ export async function watch(cb) {
 export function rowFor(id) { return lastRows.find((r) => r && r.id === id) || null; }
 
 /** How many matches are waiting on you, from the last read: the hub's Challenges button badge. */
-export function myTurnCount() { return lastRows.filter((r) => r && !r.over && r.yourTurn).length; }
+/** A series game you lost counts too: starting the next one is your move (owedSeriesRows). */
+export function myTurnCount() {
+  return lastRows.filter((r) => r && !r.over && r.yourTurn).length + owedSeriesRows(lastRows).filter((r) => r.yourTurn).length;
+}
 
 // The handoff to the game's next mount: which match to open (sessionStorage, taken once).
 const ARM_KEY = 'gamehub.cuppong.open.v1';
 export function armCeremony(alert) {
   try { if (alert && alert.id) sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: alert.kind, id: String(alert.id) })); } catch { /* opens on setup */ }
 }
-/** A tapped notification names its match (js/hub.js `_openPushedGame`). */
+/** A tapped notification names its match (js/hub.js `_openPushedGame`). The hub's Multiplayer screen
+ *  hands over 'next:<id>' for a series still owed a game (mp.js owedSeriesRows): kind 'next'. */
 export function armOpen(id) {
-  try { if (id) sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: 'open', id: String(id) })); } catch { /* opens on setup */ }
+  const s = String(id || '');
+  const next = s.startsWith('next:');
+  try { if (s) sessionStorage.setItem(ARM_KEY, JSON.stringify({ kind: next ? 'next' : 'open', id: next ? s.slice(5) : s })); } catch { /* opens on setup */ }
 }
 /** The hub's Challenges screen (js/challenges-ui.js, 2026-10-05): open straight onto "challenge
  *  <them>" with that person already picked. `them` is { code, name, emoji }. */

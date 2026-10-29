@@ -172,7 +172,9 @@ class CupPong {
     import('./alert.js').then((A) => {
       const o = A.takeOpen();
       if (!o || this.disposed) return;
-      if (o.kind === 'pick') this.openMultiplayer(o.them); else this.openMatch(o.id);
+      if (o.kind === 'pick') this.openMultiplayer(o.them);
+      else if (o.kind === 'next') this.openNext(o.id);
+      else this.openMatch(o.id);
     }).catch(() => {});
   }
 
@@ -983,6 +985,21 @@ class CupPong {
     if (this.disposed) return res;
     if (res.ok) this.start('mp', { game: res.game });
     return res;
+  }
+
+  /** The hub's Multiplayer screen tapped a series owed a next game (mp.js owedSeriesRows): start it
+   *  if it is still yours to start, re-checked from a fresh read so game 2 is never made twice;
+   *  otherwise the Multiplayer home, which says where the series stands. */
+  async openNext(id) {
+    const MP = await this.loadMP();
+    const rows = await MP.readMyGames();
+    if (this.disposed) return;
+    const owed = MP.owedSeriesRows(rows).find((r) => r.id === `next:${id}`);
+    const game = owed && owed.yourTurn ? await MP.readGame(id) : null;
+    if (this.disposed) return;
+    if (!game) { this.openMultiplayer(); return; }
+    const res = await this.startNextGame(game);
+    if (res && !res.ok && !this.disposed) { this.toast(t('sendFailed'), 2400); this.openMultiplayer(); }
   }
 
   async openMatch(id) {

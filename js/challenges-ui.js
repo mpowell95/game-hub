@@ -300,7 +300,7 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
   const label = showName
     ? `<span class="cx-name-emoji" aria-hidden="true">${esc(r.emoji)}</span>${esc(who)}`
     : esc(gameName(r.game));
-  const more = `<button type="button" class="cx-more" data-end-game="${esc(r.game)}" data-end-id="${esc(r.id)}"
+  const more = r.owed ? '' : `<button type="button" class="cx-more" data-end-game="${esc(r.game)}" data-end-id="${esc(r.id)}"
       data-hint="${endHint(r)}" aria-label="${esc(t(`cx_end_${endHint(r)}_aria`, { name: who }))}">⋯</button>`;
   if (yours) {
     const sub = showName ? subLine(r, gameName) : subLine(r, () => '');
@@ -311,7 +311,7 @@ function liveRowHTML(r, gameName, { showName = true } = {}) {
       </button>${more}</li>`;
   }
   const sent = Date.now() - nudgedAt(r.game, r.id) < NUDGE_GAP_MS;
-  const bell = NUDGE_NODES[r.game] && r.with
+  const bell = NUDGE_NODES[r.game] && r.with && !r.owed
     ? `<button type="button" class="cx-bell${sent ? ' is-sent' : ''}" data-nudge-game="${esc(r.game)}" data-nudge-id="${esc(r.id)}"
         data-nudge-to="${esc(r.with)}" data-nudge-name="${esc(who)}" aria-label="${esc(t(sent ? 'cx_remind_sent_aria' : 'cx_remind_aria', { name: who }))}">${BELL}</button>`
     : '';
