@@ -2215,6 +2215,7 @@ function sumGrid(grid, side) {
  *  home for - the lifetime figure is one tap away under All machines, and My Stats shows it
  *  unfiltered regardless. */
 function recordsHTML(list, id) {
+  if (id === 'contexto') return ctMedalKeyHTML();
   const all = TEXTURE[id];
   if (!all) return '';
   const byMachine = id === 'skeeball' && _machine && _machine !== 'all';
@@ -2237,6 +2238,19 @@ function recordsHTML(list, id) {
   // scroll, well below the filter button that set it.
   const heading = byMachine ? t('lb_records_h_machine', { name: skMachineMeta(_machine).name }) : t('lb_records_h');
   return `<h3 class="lb-h3">${esc(heading)}</h3><div class="lb-recs">${cells.join('')}</div>`;
+}
+
+/** Contexto's bottom block is the MEDAL KEY, not standing records (Matt, 2026-10-29: "Why would there
+ *  be a record for most silver or bronze medals? That space should be used to define what each medal
+ *  is"). Same grid as the records. Its TEXTURE specs are kept but no longer shown. */
+function ctMedalKeyHTML() {
+  const cell = (glyph, key, en) => `<div class="lb-rec"><b>${glyph}</b><span>${esc(tx(key, en))}</span></div>`;
+  return `<h3 class="lb-h3">${esc(tx('lb_ct_key_h', 'Medals'))}</h3><div class="lb-recs">`
+    + cell(CT_MEDAL_GLYPH.gold, 'lb_ct_key_gold', 'No hints')
+    + cell(CT_MEDAL_GLYPH.silver, 'lb_ct_key_silver', '1 hint')
+    + cell(CT_MEDAL_GLYPH.bronze, 'lb_ct_key_bronze', '2 hints')
+    + cell('\u2014', 'lb_ct_key_none', '3+ hints')
+    + '</div>';
 }
 
 // Tic Tac Toe's game page shows the Ultimate/Classic split instead of one wins number (Matt:
