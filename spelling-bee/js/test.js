@@ -82,7 +82,8 @@ ok('es: typing drops accents but keeps Ñ', fold('Canción') === 'cancion' && fo
 ok('es: Ñ is its own letter (niño counts, nino does not)', es.words.includes('niño') && !es.words.includes('nino') && !es.extra.includes('nino'));
 ok('es: some puzzles have Ñ in the hive', es.puzzles.some((q) => q.includes('ñ')));
 ok('es: the folded first build\'s day 0 stays playable (retired)', es.retired[0] === 'o:aeimnt');
-ok('es: no bad word is an answer or a bonus word', !['puta', 'mierda', 'joder', 'cabron'].some((w) => es.words.includes(w) || es.extra.includes(w)));
+ok('es: profanity is a bonus word, never an answer (puta, mierda, vagina, infierno)', ['puta', 'mierda', 'vagina', 'infierno'].every((w) => es.extra.includes(w) && !es.words.includes(w)));
+ok('es: slurs stay out of both lists', !['marica', 'maricon', 'bollera', 'nazi'].some((w) => es.words.includes(w) || es.extra.includes(w)));
 ok('es: names stay out of the answers', !['maria', 'martin', 'rita'].some((w) => es.words.includes(w)));
 
 ok('junk Matt found is no longer a bonus word (cratch, cranch, hant, anna, carl)', !['cratch', 'cranch', 'hant', 'anna', 'carl'].some((w) => data.extra.includes(w) || data.words.includes(w)));

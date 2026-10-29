@@ -25,7 +25,10 @@
 //     it doesn't matter... For the rest do not use accents"). Every word is written without accents and
 //     with its ñ ("nino" is not "niño"); a puzzle can have Ñ in the hive. Boggle's list folds ñ to n, so
 //     its words get their ñ back from the two spelled sources (`variants`).
-//   * LDNOOBW es (CC BY 4.0) plus BLOCK below: out of both lists.
+//   * LDNOOBW es (CC BY 4.0) plus BLOCK below: never answers. Since 2026-10-29 (Matt, after English refused
+//     VAGINA: "Words like this and profanity should count") they are BONUS words, by the bonus rules above,
+//     except SLURS and NO_ADULT. All 269 such words were read that day; the filter also caught ordinary
+//     words (infierno, concha, folleto, follaje, coñac), now bonus too.
 //   * RULES: 4+ letters, no S, at most 7 different letters (the NYT rules, as English).
 //
 // WHAT IS WRITTEN
@@ -72,7 +75,7 @@ lidia noemi raquel miriam karina nadia natalia yolanda irma lorena teo tito adan
 // On a name list but ordinary Spanish words (hand-checked 2026-10-28): accepted as bonus words.
 const NAME_WORDS = new Set(`adore adorne alameda aleen aleta alexia alia alie alla alli amparo angelica arda
 atlante aurea aurora aviva azucena beata bobina bobine brear brinda bula calandra camelia camella candida
-carena carie chandal clara clemente codee concordia crin dale dalia diana dominica dora dore doro eden edita
+carena carie chandal clara clemente codee concha concordia crin dale dalia diana dominica dora dore doro eden edita
 elida emerita farra felicita filia fleta flora fonda gema germana gloria grata iluminada jacinto julio kelvin
 lavada leda lian lien lira loan loma lucio luna magnolia malva mana mariano marina mella mica mora natividad
 nereida ninfa nona opalina paloma petunia pilar randa refugia rema reta roda rubi tiara tilda trinidad
@@ -89,6 +92,12 @@ bora genova etiopia touche duce olimpo renard chechenia abba cardio valhalla tha
 paulino vichy provo pullman ruanda maitre tintin polaroid trafalgar macon lando belcebu trullo albin rocha
 cocker airbag titi letonia figaro egeo mahdi pepito dojo donut cucu`.split(/\s+/));
 const BLOCK_RE = /coñ|^put[aoe]|mierd|^jod[aeoi]|cabron|foll[aeo]|ching|^polla$|pendej|maric/;
+// Blocked words that stay out even as bonus words (2026-10-29): slurs, and as in English, abuse.
+const SLURS = new Set(`marica maricon amaricado amaricada marimarica bollera nazi cholo`.split(/\s+/));
+const NO_ADULT = new Set(['pedofilo']);
+// SKIP's rude words, bonus since 2026-10-29 (SKIP's places, brands and names stay out).
+const ADULT_SKIP = new Set(`perra droga pene zorra cocaina vagina paja teta playboy culito picha cagon pajero
+ninfomana drogata huevon`.split(/\s+/));
 const FIRST_BUILD_DAY0 = 'o:aeimnt';   // the folded build's day 0 (see the header)
 
 // Accents off, ñ kept (engine.js `fold` does the same to what a player types).
@@ -151,7 +160,9 @@ async function main() {
   const fromA = [];
   for (const w of A) { const v = variants.get(w); if (v) fromA.push(...v); else fromA.push(w); }
 
-  const fits = (w) => w.length >= 4 && WORD.test(w) && !w.includes('s') && bits(maskOf(w)) <= 7 && !bad.has(w) && !BLOCK_RE.test(w);
+  const shape = (w) => w.length >= 4 && WORD.test(w) && !w.includes('s') && bits(maskOf(w)) <= 7;
+  const clean = (w) => !bad.has(w) && !BLOCK_RE.test(w);
+  const fits = (w) => shape(w) && clean(w);
   const accepted = [...new Set([...fromA, ...B])].filter(fits).sort();
   const words = accepted.filter((w) => L.has(w) && rank.has(w) && rank.get(w) < TOP && !NOT_ANSWERS.has(w));
   const answerSet = new Set(words);
@@ -161,7 +172,11 @@ async function main() {
   const english = new Set(`${en.words} ${en.extra}`.split(' '));
   const acceptedSet = new Set(accepted);
   const common = [...L].filter((w) => fits(w) && !acceptedSet.has(w) && rank.has(w) && !names.has(w) && !SKIP.has(w) && (!english.has(w) || SPANISH_TOO.has(w)));
-  const extra = [...accepted.filter((w) => !answerSet.has(w) && !isName(w)), ...common].sort();
+  // Adult words and profanity (header): the bonus rules without the bad-word filter, never answers.
+  const adultOk = (w) => shape(w) && !clean(w) && !SLURS.has(w) && !NO_ADULT.has(w) && !isName(w);
+  const adult = [...new Set([...fromA, ...B])].filter(adultOk)
+    .concat([...L].filter((w) => adultOk(w) && rank.has(w) && (!SKIP.has(w) || ADULT_SKIP.has(w))));
+  const extra = [...new Set([...accepted.filter((w) => !answerSet.has(w) && !isName(w)), ...common, ...adult])].sort();
 
   const masks = words.map(maskOf);
   const sets = [...new Set(masks.filter((m) => bits(m) === 7))].sort((a, b) => a - b);
