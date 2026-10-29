@@ -14,6 +14,7 @@ import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordMinesweeper } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
+import { awayStamp, measureAway } from '../../js/server-time.js';
 import E, { LEVELS, OPEN, FLAGGED, QUESTION } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -130,15 +131,34 @@ function loadSave(level) {
     if (!state || state.level !== level) return null;
     if (state.dead || state.won) return null;   // a finished board is not a resume
     if (!state.generated) return null;          // an untouched board is not worth resuming
-    return { state, mode: raw.mode === 'flag' ? 'flag' : 'dig' };
+    const away = raw.away && typeof raw.away === 'object' && Number.isFinite(raw.away.w) ? raw.away : null;
+    return { state, mode: raw.mode === 'flag' ? 'flag' : 'dig', away };
   } catch { return null; }
 }
-function writeSave(state, mode) {
+/** `away` (2026-10-29): the moment the app went to the background with this board on screen
+ *  (js/server-time.js awayStamp, plus `el`, the clock then). A board resumed from it is charged the
+ *  time away, so a page killed in the background is no free study time. */
+function writeSave(state, mode, away) {
   try {
     const map = readSaves();
-    map[state.level] = { v: 1, state: E.serialize(state), mode };
+    map[state.level] = { v: 1, state: E.serialize(state), mode, ...(away ? { away } : {}) };
     localStorage.setItem(SAVES_KEY, JSON.stringify(map));
   } catch (err) { console.error('[minesweeper] save', err); }
+}
+/** Two tabs on one storage (2026-10-29): the same paused board could be open in both, so a mine dug
+ *  in one (the board then shows every mine) could be cleared in the other. A board is only played,
+ *  and only saved, while its level's slot still holds it unfinished: same mines, same level. */
+function sameBoard(a, b) {
+  if (!a || !b || a.level !== b.level || !a.mine || !b.mine || a.mine.length !== b.mine.length) return false;
+  for (let i = 0; i < a.mine.length; i++) if (!!a.mine[i] !== !!b.mine[i]) return false;
+  return true;
+}
+function slotHolds(g) {
+  try {
+    const raw = readSaves()[g.level];
+    const st = raw && typeof raw === 'object' ? E.deserialize(raw.state) : null;
+    return st && st.generated && !st.dead && !st.won && sameBoard(st, g) ? st : null;
+  } catch { return null; }
 }
 function clearSave(level) {
   try {
@@ -193,11 +213,29 @@ class MinesweeperUI {
     this.root.className = 'ms-root';
     container.appendChild(this.root);
 
+    this._away = null;
     this._onVisibility = () => {
-      // The clock must not run while this tab is in the background: a best time earned with the
-      // phone in a pocket is not a best time. Resuming re-anchors, it never back-fills.
-      if (document.hidden) this._stopTimer();
-      else if (this.screen === 'play' && this.game && !this.game.dead && !this.game.won) this._startTimer();
+      // TIME AWAY COUNTS (2026-10-29). The board stays visible in the app switcher and in a
+      // screenshot, so a paused clock was free study time. Hidden with a started board on screen:
+      // the clock is banked and the moment stamped (also into the save, for a page killed in the
+      // background); back: the time away is charged, topped up by the server's clock once known
+      // (js/server-time.js measureAway). Leaving to the menu or How to play still pauses: the board
+      // is not on screen there.
+      const g = this.game;
+      if (document.hidden) {
+        this._stopTimer();
+        if (this.screen === 'play' && g && g.generated && !g.dead && !g.won) {
+          this._away = { ...awayStamp(), el: this.elapsedMs | 0 };
+          this._persist();
+        }
+        return;
+      }
+      if (this._away) {
+        const a = this._away;
+        this._away = null;
+        this._chargeAway(a);
+      }
+      if (this.screen === 'play' && g && !g.dead && !g.won && g.generated) this._startTimer();
     };
     document.addEventListener('visibilitychange', this._onVisibility);
 
@@ -431,9 +469,26 @@ class MinesweeperUI {
 
   /* ---- play --------------------------------------------------------------------------------- */
 
+  /** Charge the time a board spent on screen in the background (see _onVisibility). */
+  _chargeAway(a) {
+    const g = this.game;
+    if (!g || g.dead || g.won) return;
+    const base = Math.max(this.elapsedMs | 0, a.el | 0);
+    const now = measureAway(a, (srv) => {
+      const more = srv - now;
+      if (more > 0 && this.game === g && !g.dead && !g.won) { this.elapsedMs += more; this._persist(); this._syncHud(); }
+    });
+    this.elapsedMs = base + now;
+    this._persist();
+  }
+
   startOrResume() {
     const saved = loadSave(this.settings.level);
-    if (saved) { this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0; }
+    if (saved) {
+      this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0;
+      this.game._saved = true;
+      if (saved.away) this._chargeAway(saved.away);
+    }
     else { this.game = E.createGame(this.settings.level, { noGuess: this._noGuessOn(this.settings.level) }); this.mode = 'dig'; this.elapsedMs = 0; }
     this._result = null;
     this.renderGame();
@@ -904,7 +959,20 @@ class MinesweeperUI {
     this._syncHud();
   }
 
+  /** False (and back to the menu) when another tab finished or replaced this board. */
+  _ownsBoard() {
+    const g = this.game;
+    if (!g || !g.generated || !g._saved) return true;
+    const st = slotHolds(g);
+    if (st) { this.elapsedMs = Math.max(this.elapsedMs, st.elapsedMs | 0); return true; }
+    this._stopTimer();
+    this.game = null;
+    this.renderMenu();
+    return false;
+  }
+
   _doFlag(i) {
+    if (!this._ownsBoard()) return;
     const res = E.cycleMark(this.game, i % this.game.w, (i / this.game.w) | 0, this.settings.marks);
     for (const k of res.changed) this._paintCell(k);
     this._syncHud();
@@ -912,6 +980,7 @@ class MinesweeperUI {
   }
 
   _doDig(i) {
+    if (!this._ownsBoard()) return;
     const g = this.game;
     const x = i % g.w, y = (i / g.w) | 0;
     const wasGenerated = g.generated;
@@ -927,10 +996,16 @@ class MinesweeperUI {
   }
 
   _persist() {
-    if (!this.game) return;
-    this.game.elapsedMs = this.elapsedMs;
-    if (this.game.dead || this.game.won || !this.game.generated) clearSave(this.game.level);
-    else writeSave(this.game, this.mode);
+    const g = this.game;
+    if (!g) return;
+    g.elapsedMs = this.elapsedMs;
+    if (!g.generated) return;   // an untouched board is not saved (and never clears another board)
+    // Only while the slot is still this board's (2026-10-29): a stale tab never writes over a board
+    // another tab finished or replaced.
+    if (g._saved && !slotHolds(g)) return;
+    if (g.dead || g.won) { clearSave(g.level); return; }
+    writeSave(g, this.mode, this._away);
+    g._saved = true;
   }
 
   /* ---- clock --------------------------------------------------------------------------------
