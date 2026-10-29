@@ -250,7 +250,8 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `game-art.js` | every tile's inline SVG, keyed by hub id |
 | `difficulty-tiers.js` | READ-path mapping of difficulties onto tiers 1-4 |
 | `arcade-scores.js` | Skeeball's high scores, daily bests, unlocks |
-| `net.js` | multiplayer rooms (`rooms/<CODE>`), incl. N-seat (`joinSeat`/`vacateSeat`) |
+| `net.js` | multiplayer rooms (`rooms/<CODE>`), incl. N-seat (`joinSeat`/`vacateSeat`); `leaveRoom(code, role, forfeit)`, `readRoom` (2026-10-29) |
+| `live-leave.js` | leaving a live room: arm / forfeit / claim win / once per game (`recordLiveResult`), EN/ES strings inside (2026-10-29) |
 | `online-gate.js` | who may play online (see "Online play needs an account Matt has let in") |
 | `a2hs.js` | add-to-home-screen sheet |
 | `device-report.js` / `install-state.js` | device dump used by every bug report; installed-vs-tab plus phone size (`tools/read-install-state.mjs --screens`) |
@@ -307,7 +308,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   `js/gridlock-v1map.js`, `archery/models/bow.bin`, `way-out/js/boards8.js`, `way-out/js/boards9.js`, `way-out/js/boards10.js`, `way-out/js/boards11.js`, `way-out/js/impossible-tests.js`, sw.js's `REST_MANIFEST` and `HELD_BACK`); re-run the generator.
 
 Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
-(`players-agg.test`, `test-mp-dedupe`, `test-quit-loss`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
+(`players-agg.test`, `test-mp-dedupe`, `test-quit-loss`, `test-live-leave`, `test-recorder-contract`, `test-stats-replay`, `test-stats-identity`, `test-admin-only-plays`,
 `test-stats-corrections`, `test-rate-guard`, `test-activity`, `test-admin-config`); cross-game
 (`test-game-conventions`, `check-no-scroll`, `test-mp-lockstep`); per-feature `test-*.mjs`.
 
@@ -417,10 +418,11 @@ open: Darts took ~4 s from Play to the match).
 
 ### Quitting a game against the computer is a loss (2026-10-29)
 
-After the player's first move, an explicit discard (Restart, New game, Quit) records ONE loss through the game's own
+Once the hand is dealt, the board shown or EITHER side has moved (second pass, same day), an explicit discard (Restart, New game, Quit, a new game over a set-aside save) records ONE loss through the game's own
 recorder and one-shot flag, asked twice ("Counts as a loss"); leaving a game that saves is not quitting; a game with
-no resume arms `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`) and exports `quitCostsLoss()`. Tables of
+no resume arms `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`, kept fresh every minute) and exports `quitCostsLoss()`. Tables of
 computers record at the EASIEST one; shortened matches one tier lower. Per game: `docs/INTEGRITY-CHECKS-SPEC.md`.
+**Live rooms too (`js/live-leave.js`)**: leaving after your first move = your loss + the other's win (forfeit written with the room's end; the hub's confirmed back calls `leaveMatch()`); closing the app arms the loss (rejoin still works); 90 s gone = "Claim win"; once per game (`gamehub.liveCounted.v1`).
 
 ## Archived games (2026-09-28)
 

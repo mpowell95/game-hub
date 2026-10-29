@@ -60,3 +60,8 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 ## Quitting and easier settings (2026-10-29)
 
 No resume: vs the computer, leaving after the player's first throw is ONE loss (`gamehub.quitLoss.v1`, taken in `destroy()` / `init()`); New game / Change settings ask twice. Innings unchanged (3 is the shortest and the default). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once ANY throw, the computer's included (it was the player's own first move). `quitLossLost` stops a second result.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

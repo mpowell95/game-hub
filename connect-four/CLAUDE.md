@@ -148,3 +148,8 @@ label in either language on either row).
 ## Quitting and easier settings (2026-10-29)
 
 Restart / Quit to setup after the player's first disc = ONE loss (`_quitCostsLoss`/`_recordQuitLoss`, the game's own `_statsRecorded`; armed button: "Counts as a loss"). An undo or Show best moves now stops the game counting as a WIN or draw, but a LOSS still counts (it used to vanish); the save carries `moved` and `recorded`, an undo after the end keeps the game recorded. Leaving the hub is not quitting (the save resumes). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once any disc is dropped, the computer's opening included (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

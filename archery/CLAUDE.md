@@ -211,3 +211,8 @@ Open items: see the root TODO.md, "Archery".
 ## Quitting and easier settings (2026-10-29)
 
 Play over a saved match vs the computer the player has shot in = ONE loss, asked twice (`recorded`); Quit keeps the save; pass and play never touches the save. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once ANY arrow, the computer's included (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

@@ -197,3 +197,8 @@ Hard-vs-Easy/Medium harness (>=65% / >=55%).
 ## Quitting and easier settings (2026-10-29)
 
 Restart / New game after the player's first play or draw (`moved` in the save) = ONE loss, asked twice; a hand found past its 30-minute save is that loss on load (it used to vanish). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- **No 30-minute expiry** (supersedes "A save older than 30 minutes... is wiped" above and the loss-on-load from earlier the same day): an old hand resumes. Quitting is a loss once DEALT (every save counts).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
