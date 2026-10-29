@@ -158,7 +158,10 @@
     "rooms":          { ".read": "auth != null", ".write": "auth != null", ".indexOn": ["updated"] },
     "selfies":        { ".read": "auth != null", ".write": "auth != null" },
     "skeeballThrows": { ".read": "auth != null", ".write": false },
-    "skeeChallenges": { ".read": "auth != null", ".write": "auth != null" },
+    "skeeChallenges": { ".read": "auth != null", ".write": "auth != null",
+      "games": { "$id": { "$side": { "started": { "$leg": {
+        ".validate": "$leg.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['at', 'k']) && newData.child('k').isString() && newData.child('k').val().length <= 40 && ((data.exists() && newData.child('at').val() === data.child('at').val() && newData.child('k').val() === data.child('k').val()) || (!data.exists() && newData.child('at').val() === now && ($side === 'a' || $side === 'b') && root.child('msgAuth').child(auth.uid).val() === root.child('skeeChallenges').child('games').child($id).child($side).child('code').val()))"
+      } } } } } },
     "usernames":      { ".read": "auth != null", ".write": "auth != null" }
   }
 }

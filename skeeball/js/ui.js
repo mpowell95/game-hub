@@ -682,10 +682,22 @@ export class SkeeballUI {
       // makes "live and can be unlocked" a real state rather than a label.
       if (isBoardTesting(b.id, !!b.adminOnly)) continue;
       if (!b.unlock || b.unlock.board !== boardId) continue;
+      if (!this._ownsMachine(boardId)) continue;   // goals met on a machine played only in challenges
       const ok = b.unlock.goals ? allGoalsMet(boardId) : (score | 0) >= (b.unlock.score | 0);
       if (ok) out.push(b.id);
     }
     return out;
+  }
+
+  /** May this machine's objectives open the next one? Only on a machine the player can play outside a
+   *  challenge (2026-10-29): earned, or open to everyone. A challenged player plays the challenger's
+   *  machine even when it is locked for them; its racks count, but they never unlock anything. */
+  _ownsMachine(boardId, sk) {
+    try {
+      const s = sk || (loadStats().games.skeeball || {}).sk || {};
+      const testing = isBoardTesting(boardId, !!(boardById(boardId) || {}).adminOnly);
+      return !testing && (isUnlocked(s, boardId, DEFAULT_BOARD) || isBoardReleased(boardId));
+    } catch { return false; }
   }
 
   /** Goals completed BEFORE this shipped (or on another device - the goals derive from the
@@ -699,6 +711,7 @@ export class SkeeballUI {
         if (!b.unlock || !b.unlock.goals) continue;
         if (isUnlocked(sk, b.id, DEFAULT_BOARD)) continue;
         if (!allGoalsMet(b.unlock.board)) continue;
+        if (!this._ownsMachine(b.unlock.board, sk)) continue;   // its parent was only ever played in challenges
         // BANK IT FIRST, then owe the theatre. The order matters: a player who is granted a
         // machine here and closes the app before ever playing again still owns it.
         unlockSkeeballBoard(b.id);
@@ -2316,12 +2329,13 @@ export class SkeeballUI {
     const board = this.game.board;
     try {
       const practice = isBoardTesting(board.id, !!board.adminOnly);
-      recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice });
+      recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice, challenge: !!this.challenge });
     } catch (err) {
       console.error('[skeeball] could not record the abandoned rack', err);
     }
     try {
-      for (const id of this._earnedUnlocks(board.id, this.game.score)) unlockSkeeballBoard(id);
+      // A challenge rack never unlocks a machine (2026-10-29): not the one it was played on, not the next.
+      if (!this.challenge) for (const id of this._earnedUnlocks(board.id, this.game.score)) unlockSkeeballBoard(id);
     } catch (err) {
       console.error('[skeeball] could not store an earned unlock', err);
     }
@@ -2344,12 +2358,13 @@ export class SkeeballUI {
         // 2026-08-24, after two boards handed out scores while they were being tuned). The flag is
         // resolved at RECORD time, so the rack is judged by the machine's state when it was thrown.
         const practice = isBoardTesting(board.id, !!board.adminOnly);
-        recordSkeeball(board.id, { ...result, at: Date.now(), practice });
+        recordSkeeball(board.id, { ...result, at: Date.now(), practice, challenge: !!this.challenge });
       } catch (err) {
         console.error('[skeeball] could not record the rack', err);
       }
       try {
-        for (const id of this._earnedUnlocks(board.id, result.score)) unlockSkeeballBoard(id);
+        // A challenge rack never unlocks a machine (2026-10-29): not the one it was played on, not the next.
+        if (!this.challenge) for (const id of this._earnedUnlocks(board.id, result.score)) unlockSkeeballBoard(id);
       } catch (err) {
         console.error('[skeeball] could not store an earned unlock', err);
       }

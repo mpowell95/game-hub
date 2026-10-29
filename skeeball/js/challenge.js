@@ -23,9 +23,13 @@
 // entry for it goes into this device's outbox (score 0) before the first ball, its running score
 // is saved after every ball, and the entry is finalised when the rack ends, is walked out of, or -
 // if the app was killed mid-rack - the next time Skeeball opens. There is no path back to a game
-// that has an entry, and the server refuses a second score for any game. (Only a SECOND DEVICE
-// that has never heard of the first one's attempt could play the same game again, and its score
-// is refused if the first one's has already landed.)
+// that has an entry, and the server refuses a second score for any game.
+// THE SERVER MARKER (2026-10-29): the outbox is per STORAGE, so Safari and the Home Screen app (or
+// two phones) could each play the same game and send the better score. Before the first ball the
+// game is now also claimed on the server, write-once (`games/<id>/<side>/started/<leg>` = {at, k},
+// `claimLeg`); another storage finds the marker and cannot start it, and a game cannot be started
+// offline at all. A started game with no score 30 minutes after its marker counts 0 on every phone
+// (derived on read, like expiry; `START_GRACE_MS`), and the next write stores that 0.
 //
 // Same store shape as Connect 4 Hoops' turn-by-turn (hoops4/js/mp.js): addressed by PLAYER CODE,
 // one index row per person, nothing ever deleted, every write verified by a fresh re-read (THE LAW
@@ -41,6 +45,8 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { asCode, myCode, meLabel, mintGameId, opponentsFrom } from '../../hoops4/js/mp.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult } from '../../js/challenge-life.js';
+import { ensureAuthClaim } from '../../js/messages.js';
+import { bestNow } from '../../js/server-time.js';
 
 export { asCode, myCode, meLabel, opponentsFrom };
 
@@ -52,6 +58,8 @@ export const SCORINGS = ['games', 'total'];
 export const MAX_LEGS = 12;
 export const OUTBOX_KEY = 'gamehub.skeeball.challengeOutbox.v1';
 export const SEEN_KEY = 'gamehub.skeeball.challengeSeen.v1';
+export const LEG_KEY = 'gamehub.skeeball.legKey.v1';   // this storage's id on its server start markers
+export const START_GRACE_MS = 30 * 60 * 1000;         // a started game with no score by then counts 0
 const ID_RE = /^[a-z0-9]{6,24}$/;
 const BOARD_RE = /^[a-z0-9_-]{1,32}$/;
 const MAX_SCORE = 100000;           // a ceiling against garbage, not a rule of the game
@@ -180,7 +188,7 @@ export function makeLegs({ count = 1, all = false, board = null, boards = [] } =
  * A v1 document (one game, `a.score` / `b.score`, written for a few hours on 2026-09-24) is READ
  * as a one-game v2 challenge. Nothing stored is rewritten.
  */
-export function validateChallenge(raw) {
+export function validateChallenge(raw, now = bestNow()) {
   if (!raw || typeof raw !== 'object') return null;
   const a = asCode(raw.a && raw.a.code);
   const b = asCode(raw.b && raw.b.code);
@@ -220,8 +228,9 @@ export function validateChallenge(raw) {
       legs: [{ board: String(raw.board), boardName: String(raw.boardName || '').slice(0, 40) }],
       expires: ms(raw.expires) || (created ? created + EXPIRE_MS : 0),
       stage: over ? 'over' : 'b',
-      a: { ...who(raw.a), s: { 0: as } },
-      b: { ...who(raw.b), s: bs == null ? {} : { 0: bs } },
+      a: { ...who(raw.a), s: { 0: as }, started: {} },
+      b: { ...who(raw.b), s: bs == null ? {} : { 0: bs }, started: {} },
+      timedOut: [],
     };
   }
 
@@ -245,7 +254,7 @@ export function validateChallenge(raw) {
       if (v == null) return null;
       s[i] = v;
     }
-    sides[side] = { ...who(raw[side]), s };
+    sides[side] = { ...who(raw[side]), s, started: startedOf(raw[side].started, legs.length) };
   }
   const stage = ['a', 'b', 'over'].includes(raw.stage) ? raw.stage : (over ? 'over' : 'a');
   // A cancel that landed after the challenged player's first score is void: the challenge plays on.
@@ -258,14 +267,68 @@ export function validateChallenge(raw) {
     const d = decide({ legs, scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games', a: sides.a, b: sides.b });
     if (d.done) over.winner = d.winner;
   }
-  return {
+  const out = {
     ...base, v: 2, over,
     scoring: SCORINGS.includes(raw.scoring) ? raw.scoring : 'games',
     all: !!raw.all, legs,
     expires: ms(raw.expires),
     stage: over ? 'over' : stage,
     a: sides.a, b: sides.b,
+    timedOut: [],
   };
+  if (!over && ['a', 'b'].includes(out.stage)) applyTimeouts(out, now);
+  return out;
+}
+
+/** The server start markers of one side: { leg: {at, k} }. Firebase turns 0,1,2 keys into an array. */
+function startedOf(src, n) {
+  const out = {};
+  if (!src || typeof src !== 'object') return out;
+  for (const k of Object.keys(src)) {
+    const i = +k; const v = src[k];
+    if (!Number.isInteger(i) || i < 0 || i >= n || !v || typeof v !== 'object' || !ms(v.at)) continue;
+    out[i] = { at: ms(v.at), k: String(v.k || '') };
+  }
+  return out;
+}
+
+/** DERIVED, never stored by reading (2026-10-29): the side whose turn it is started a game on the
+ *  server and sent no score within START_GRACE_MS: that game counts 0, and the match moves on exactly
+ *  as postLeg would have moved it (`timedOut` lists what was derived, for the next write to store). */
+function applyTimeouts(g, now) {
+  for (let guard = 0; guard < MAX_LEGS * 2 && g.stage !== 'over'; guard++) {
+    const side = g.stage;
+    const mine = scoresOf(g, side);
+    const leg = mine.findIndex((x, i) => x == null && g[side].started[i] && now - g[side].started[i].at >= START_GRACE_MS);
+    if (leg < 0) return;
+    const at = g[side].started[leg].at + START_GRACE_MS;
+    g[side] = { ...g[side], s: { ...g[side].s, [leg]: 0 } };
+    g.timedOut.push({ side, leg, at });
+    g.updated = Math.max(g.updated, at);
+    const d = decide(g);
+    const stage = d.done ? 'over' : nextStage(g, side);
+    if (stage === 'over') { g.stage = 'over'; g.over = { winner: d.winner, at }; return; }
+    if (stage !== side) g.expires = at + EXPIRE_MS;
+    g.stage = stage;
+  }
+}
+
+/** Is this side's game `leg` started on the server by ANOTHER storage (phone, browser)? */
+export function startedElsewhere(game, side, leg) {
+  const m = game && game[side] && game[side].started && game[side].started[leg];
+  return !!m && m.k !== legKey();
+}
+
+/** This storage's random id, written into each start marker so a retry recognises its own. */
+export function legKey() {
+  try {
+    let k = localStorage.getItem(LEG_KEY);
+    if (!k || !/^[a-z0-9]{8,32}$/.test(k)) {
+      k = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+      localStorage.setItem(LEG_KEY, k);
+    }
+    return k;
+  } catch { return 'nostorage'; }
 }
 
 
@@ -579,11 +642,16 @@ export async function postLeg(id, side, leg, sc) {
     if (fresh.over) return { ok: false, reason: 'already-over', retryable: false };
     if (fresh.stage !== side) return { ok: false, reason: 'not-your-turn', retryable: false };
     if (!Number.isInteger(leg) || leg < 0 || leg >= fresh.legs.length) return { ok: false, reason: 'bad-leg', retryable: false };
-    if (scoresOf(fresh, side)[leg] != null) return { ok: false, reason: 'already-played', retryable: false };
+    if (scoresOf(fresh, side)[leg] != null) {
+      // Too late (2026-10-29): the game counted 0 on every phone 30 minutes after it started. Store it.
+      if (fresh.timedOut.some((x) => x.side === side && x.leg === leg)) { await settleTimedOut(id, fresh); return { ok: false, reason: 'timed-out', retryable: false }; }
+      return { ok: false, reason: 'already-played', retryable: false };
+    }
 
     const now = Date.now();
     const next = { ...fresh, updated: now, [side]: { ...fresh[side], s: { ...fresh[side].s, [leg]: s } } };
     const patch = { updated: now, [`${side}/s/${leg}`]: s };
+    for (const x of fresh.timedOut) patch[`${x.side}/s/${x.leg}`] = 0;   // derived on read until now
     // One game per turn. Settled -> over; otherwise the turn passes and gets its own 3 days.
     const d = decide(next);
     const stage = d.done ? 'over' : nextStage(next, side);
@@ -607,6 +675,78 @@ export async function postLeg(id, side, leg, sc) {
     console.error('[skeeball] could not post your score', err);
     const reason = reasonOf(err);
     return { ok: false, reason, retryable: reason !== 'denied' };
+  }
+}
+
+/** Store what reading derived (2026-10-29): games started and never sent, now 0, and where the
+ *  match went from there. Additive (a 0 into an empty score), verified, rows rewritten so the other
+ *  person's list shows their turn. Best effort: any phone that reads the match can call it. */
+export async function settleTimedOut(id, known = null) {
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, reason: 'offline' };
+    const { db, api } = boot;
+    const fresh = known || await readChallenge(id);
+    if (!fresh || !fresh.timedOut || !fresh.timedOut.length) return { ok: false, reason: 'nothing' };
+    const patch = { updated: fresh.updated, stage: fresh.stage };
+    for (const x of fresh.timedOut) patch[`${x.side}/s/${x.leg}`] = 0;
+    if (fresh.over) patch.over = { winner: fresh.over.winner, at: fresh.over.at };
+    else patch.expires = fresh.expires;
+    await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
+    const back = await readChallenge(id);
+    if (!back || fresh.timedOut.some((x) => scoresOf(back, x.side)[x.leg] !== 0)) return { ok: false, reason: 'did-not-land' };
+    await writeRows(api, db, back);
+    return { ok: true, game: back };
+  } catch (err) {
+    console.error('[skeeball] could not store a timed-out challenge game', err);
+    return { ok: false, reason: reasonOf(err) };
+  }
+}
+
+/** Race a database call against a deadline: on a dead connection RTDB calls never settle. */
+const withTimeout = (p, msT) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), msT))]);
+
+/**
+ * CLAIM A GAME ON THE SERVER before its first ball (2026-10-29). One attempt was only kept by this
+ * storage's outbox, so Safari and the Home Screen app could each play the same game. Write-once
+ * marker `games/<id>/<side>/started/<leg>` = { at: server time, k: legKey() }; refused offline.
+ * Returns { ok:true } (ours, new or from an earlier try), or { ok:false, reason }: 'offline',
+ * 'started-elsewhere', 'already-played', 'not-your-turn', 'bad-leg', 'did-not-land', 'denied'.
+ */
+export async function claimLeg(id, side, leg) {
+  if (!ID_RE.test(String(id || '')) || (side !== 'a' && side !== 'b') || !Number.isInteger(leg)) return { ok: false, reason: 'bad-leg' };
+  if (!myCode()) return { ok: false, reason: 'no-player-code' };
+  // A dev server never writes the family database: the local outbox alone, as before.
+  if (!writesAllowed('claimLeg')) return { ok: true, dev: true };
+  try { if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, reason: 'offline' }; } catch { /* unknown */ }
+  try {
+    const boot = await withTimeout(ready(), 8000);
+    if (!boot) return { ok: false, reason: 'offline' };
+    const { db, api } = boot;
+    // A fresh read first: it proves the connection is up (a write queued offline would land later
+    // and start a game nobody played) and that this game is still this side's to play.
+    const fresh = await withTimeout(readChallenge(id), 8000);
+    if (!fresh) return { ok: false, reason: 'offline' };
+    if (sideOf(fresh, myCode()) !== side) return { ok: false, reason: 'not-yours' };
+    if (fresh.over || fresh.stage !== side) return { ok: false, reason: 'not-your-turn' };
+    if (leg < 0 || leg >= fresh.legs.length) return { ok: false, reason: 'bad-leg' };
+    if (scoresOf(fresh, side)[leg] != null) return { ok: false, reason: 'already-played' };
+    const key = legKey();
+    const had = fresh[side].started[leg];
+    if (had) return had.k === key ? { ok: true, at: had.at } : { ok: false, reason: 'started-elsewhere' };
+    try { await withTimeout(ensureAuthClaim(boot), 8000); } catch { /* the rule decides */ }
+    const ref = api.ref(db, `${NODE}/games/${id}/${side}/started/${leg}`);
+    try { await withTimeout(api.set(ref, { at: api.serverTimestamp(), k: key }), 10000); }
+    catch (err) { if (/timeout/.test(String(err && err.message))) return { ok: false, reason: 'offline' }; /* denied: read who has it */ }
+    const snap = await withTimeout(api.get(ref), 8000);
+    const v = snap && snap.exists() ? snap.val() : null;
+    if (v && v.k === key) return { ok: true, at: ms(v.at) };
+    if (v) return { ok: false, reason: 'started-elsewhere' };
+    return { ok: false, reason: 'did-not-land' };
+  } catch (err) {
+    const reason = /timeout/.test(String(err && err.message)) ? 'offline' : reasonOf(err);
+    console.warn('[skeeball] could not claim the challenge game', reason);
+    return { ok: false, reason };
   }
 }
 

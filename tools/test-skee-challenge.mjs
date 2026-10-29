@@ -273,7 +273,107 @@ check('the rack start token is still initialised', /this\._startToken = 0;/.test
   const mine = (await CH.readMyChallenges()).find((x) => x.id === id3);
   check('write: her list says she won, finished', mine && mine.over && mine.result === 'won' && mine.ended === 'resign');
   check('write: the scores stay on the match', getAt(`skeeChallenges/games/${id3}/a/s/0`) === 120 && getAt(`skeeChallenges/games/${id3}/b/s/0`) === 300);
+
+  // --- ONE ATTEMPT ACROSS STORAGES (2026-10-29): the server start marker -----------------------------
+  // The rule: write-once, as in database.rules.json (skeeChallenges/games/$id/$side/started/$leg).
+  api.serverTimestamp = () => ({ '.sv': 'timestamp' });
+  const plainSet = api.set;
+  api.set = async (r, v) => {
+    if (/\/started\/\d+$/.test(r.path)) {
+      if (getAt(r.path) !== undefined) throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'PERMISSION_DENIED' });
+      return plainSet(r, { ...v, at: Date.now() });
+    }
+    return plainSet(r, v);
+  };
+  const SAFARI = 'safari00key1'; const HOMEAPP = 'homeapp0key2';
+  const storage = (k) => { store[CH.LEG_KEY] = k; };
+  as(A, 'Matt');
+  r = await CH.createChallenge({ them: { code: B, name: 'Anita' }, legs: [leg(), leg(), leg()] });
+  const id4 = r.game.id;
+  await CH.postLeg(id4, 'a', 0, 120);
+  as(B, 'Anita');
+  storage(SAFARI);
+  const c1 = await CH.claimLeg(id4, 'b', 0);
+  check('claim: the first storage claims the game on the server', c1.ok && getAt(`skeeChallenges/games/${id4}/b/started/0`).k === SAFARI);
+  check('claim: a retry from the same storage is still ok', (await CH.claimLeg(id4, 'b', 0)).ok);
+  storage(HOMEAPP);
+  const c2 = await CH.claimLeg(id4, 'b', 0);
+  check('claim: the Home Screen app (other storage) cannot start the same game', !c2.ok && c2.reason === 'started-elsewhere');
+  const g4 = await CH.readChallenge(id4);
+  check('claim: the other storage sees it as started elsewhere', CH.startedElsewhere(g4, 'b', 0));
+  storage(SAFARI);
+  check('claim: the storage that started it is not blocked by its own marker', !CH.startedElsewhere(g4, 'b', 0));
+  check('claim: the marker is not a score (the game is still to be sent)', CH.scoresOf(g4, 'b')[0] === null);
+  const sent = await CH.postLeg(id4, 'b', 0, 200);
+  check('claim: the started game\'s score is sent as usual', sent.ok && getAt(`skeeChallenges/games/${id4}/b/s/0`) === 200);
+  check('claim: a game already scored cannot be claimed', (await CH.claimLeg(id4, 'b', 0)).reason === 'not-your-turn'
+    || (await CH.claimLeg(id4, 'b', 0)).reason === 'already-played');
+
+  // Offline: never started (a write queued offline would land later).
+  const nav = globalThis.navigator;
+  Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true });
+  as(A, 'Matt');
+  const off1 = await CH.claimLeg(id4, 'a', 1);
+  check('offline: a challenge game is refused before anything is written', !off1.ok && off1.reason === 'offline' && getAt(`skeeChallenges/games/${id4}/a/started/1`) === undefined);
+  Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true, writable: true });
+  CH.__setBootForTest(async () => null);
+  check('offline: no database at all, refused too', (await CH.claimLeg(id4, 'a', 1)).reason === 'offline');
+  CH.__setBootForTest(async () => ({ db: {}, api }));
+
+  // Started and never sent: 0 after 30 minutes, on every phone, and the turn moves on.
+  storage(SAFARI);
+  check('timeout: Matt claims game 2', (await CH.claimLeg(id4, 'a', 1)).ok);
+  const startedAt = getAt(`skeeChallenges/games/${id4}/a/started/1`).at;
+  const rawG = getAt(`skeeChallenges/games/${id4}`);
+  const early = CH.validateChallenge(rawG, startedAt + CH.START_GRACE_MS - 1000);
+  check('timeout: 29 minutes on, still his turn, no score', early.stage === 'a' && CH.scoresOf(early, 'a')[1] === null && !early.timedOut.length);
+  const late = CH.validateChallenge(rawG, startedAt + CH.START_GRACE_MS + 1000);
+  check('timeout: 30 minutes on, it counts 0 and it is her turn (derived, nothing written)', late.stage === 'b'
+    && CH.scoresOf(late, 'a')[1] === 0 && late.timedOut.length === 1 && getAt(`skeeChallenges/games/${id4}/a/s/1`) === undefined
+    && late.expires === startedAt + CH.START_GRACE_MS + CH.EXPIRE_MS);
+  const best1 = CH.validateChallenge(doc({ legs: [leg()], a: { code: A, s: { 0: 100 } }, b: { code: B, s: {}, started: { 0: { at: 1000, k: 'x' } } }, stage: 'b' }), 1000 + CH.START_GRACE_MS);
+  check('timeout: the last game timing out decides the match', best1.over && best1.over.winner === 'a' && best1.stage === 'over');
+  check('timeout: Firebase\'s array form of the markers reads too', CH.validateChallenge(doc({ legs: [leg()], a: { code: A, s: {}, started: [{ at: 1000, k: 'x' }] } }), 1000 + CH.START_GRACE_MS).a.s[0] === 0);
+  // Her phone (the clock past the grace) answers: the derived 0 is stored with her score.
+  const realNow = Date.now;
+  Date.now = () => startedAt + CH.START_GRACE_MS + 60 * 1000;
+  try {
+    // validateChallenge's default clock is the server-time helper's best guess = the phone clock here.
+    as(B, 'Anita');
+    storage(HOMEAPP);
+    const herClaim = await CH.claimLeg(id4, 'b', 1);
+    check('timeout: her turn after his timed-out game; she can start game 2', herClaim.ok);
+    const hers = await CH.postLeg(id4, 'b', 1, 150);
+    check('timeout: her score lands and his 0 is stored beside it', hers.ok && getAt(`skeeChallenges/games/${id4}/a/s/1`) === 0 && getAt(`skeeChallenges/games/${id4}/b/s/1`) === 150);
+    as(A, 'Matt');
+    const lateSend = await CH.postLeg(id4, 'a', 1, 400);
+    check('timeout: his late score is refused for good (her 2 games took the match)', !lateSend.ok && ['already-played', 'already-over'].includes(lateSend.reason) && getAt(`skeeChallenges/games/${id4}/a/s/1`) === 0);
+  } finally { Date.now = realNow; }
+  const rules = JSON.parse(read('database.rules.json')).rules;
+  const sr = rules.skeeChallenges && rules.skeeChallenges.games && rules.skeeChallenges.games.$id.$side.started.$leg['.validate'];
+  check('rules: the start marker is write-once, server time, by that side\'s claimed code', !!sr && /!data\.exists\(\)/.test(sr) && /=== now/.test(sr) && /msgAuth/.test(sr) && /child\(\$side\)\.child\('code'\)/.test(sr));
+  const cui = read('skeeball/js/challenge-ui.js');
+  check('wiring: both Play paths claim the game on the server first', (cui.match(/CH\.claimLeg\(/g) || []).length >= 2);
+  check('wiring: a game started elsewhere blocks the turn (no later game offered past it)', /firstOpen >= 0 && elsewhere\(firstOpen\)/.test(cui));
   CH.__setBootForTest(null);
+}
+
+// --- B3 (2026-10-29): a challenge rack never unlocks a machine ----------------------------------------
+{
+  const GS = await import('../js/game-stats.js');
+  store['gamehub.profile'] = JSON.stringify({ name: 'test1', emoji: '🙂', playerId: 'DREG5' });
+  const unlocked = () => { const sk = (GS.loadStats().games.skeeball || {}).sk || {}; return sk.unlocked || {}; };
+  const before = GS.loadStats().games.skeeball.sk ? GS.loadStats().games.skeeball.sk.played | 0 : 0;
+  GS.recordSkeeball('brickcity', { score: 310, balls: 9, at: Date.UTC(2026, 9, 29, 12), challenge: true });
+  const after = GS.loadStats().games.skeeball.sk;
+  check('B3: a challenge rack on a locked machine is recorded', after.played === before + 1 && after.boards && after.boards.brickcity);
+  check('B3: ...and does NOT unlock that machine', !unlocked().brickcity);
+  GS.recordSkeeball('runaway', { score: 200, balls: 9, at: Date.UTC(2026, 9, 29, 12, 5) });
+  check('B3: an ordinary rack still unlocks what it was played on (as before)', !!unlocked().runaway);
+  const ui = read('skeeball/js/ui.js');
+  check('B3: both record sites pass the challenge flag', (ui.match(/challenge: !!this\.challenge \}\)/g) || []).length === 2);
+  check('B3: a challenge rack earns no objective unlock', (ui.match(/if \(!this\.challenge\) for \(const id of this\._earnedUnlocks/g) || []).length === 2);
+  check('B3: objectives open the next machine only from a machine the player owns', /if \(!this\._ownsMachine\(boardId\)\) continue;/.test(ui) && /if \(!this\._ownsMachine\(b\.unlock\.board, sk\)\) continue;/.test(ui));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
