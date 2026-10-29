@@ -29,7 +29,9 @@ const HUMAN = 0;
 
 const AI_THINK_MS = 650;
 const DRAW_STEP_MS = 420;
-const MAX_SAVE_AGE_MS = 30 * 60 * 1000;
+// MAX_SAVE_AGE_MS (30 minutes) is gone (2026-10-29, second pass, Matt): a hand is kept until it is
+// finished, like Chinchon's since 2026-10-23. A hand that used to lapse (and, from earlier on
+// 2026-10-29, counted as a loss on load) now resumes, however old, so nothing is lost either way.
 const PENALTY_TOAST_MS = 2200;
 
 // Card travel, the same numbers and easing as Chinchón (chinchon/js/ui.js FLY_MS /
@@ -228,13 +230,7 @@ function loadGame() {
     if (!raw.snap || !Array.isArray(raw.snap.players) || raw.snap.players.length !== raw.seats.length) return null;
     if (raw.snap.phase === 'over') return null;
     if (!DIFF_KEYS.some(([k]) => k === raw.difficulty)) return null;
-    // Too old to resume: the hand is over. Once the player had moved in it, that is a LOSS
-    // (2026-10-29): waiting out the 30 minutes must not be a way to make a losing hand vanish.
-    if (Date.now() - Number(raw.at || 0) > MAX_SAVE_AGE_MS) {
-      if (savedMoved(raw)) { try { recordResult('uno', raw.difficulty, false); } catch { /* never block the mount */ } }
-      clearGame();
-      return null;
-    }
+    // No age limit (2026-10-29, second pass): an old hand resumes; quitting it is what costs.
     return raw;
   } catch { return null; }
 }
@@ -247,12 +243,11 @@ function newAiSeed() {
 
 function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
-/** Has the player acted in this saved hand? Its own flag; a save from before it counts a hand that
- *  is not the dealt seven as moved. */
+/** Is quitting this saved hand a loss? Since the second pass (2026-10-29, Matt) every saved hand
+ *  was DEALT, and a dealt hand counts: re-dealing a bad seven used to be free until the player's
+ *  first play or draw. (`moved` is still written; no reader needs it now.) */
 function savedMoved(raw) {
-  if (typeof raw.moved === 'boolean') return raw.moved;
-  const h = raw.snap && raw.snap.players && raw.snap.players[HUMAN] && raw.snap.players[HUMAN].hand;
-  return Array.isArray(h) && h.length !== 7;
+  return !!(raw && raw.snap);
 }
 
 class UnoUI {
@@ -406,7 +401,7 @@ class UnoUI {
     this._saveSettings();
     clearGame();
     this.closeOverlays();
-    this._moved = false;
+    this._moved = true;   // dealt: quitting from now on is a loss (2026-10-29, second pass)
     this._statsCommitted = false;
     this._pendingWildId = null;
     for (const tm of this.timers) clearTimeout(tm);

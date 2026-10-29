@@ -785,7 +785,9 @@ class EscobaUI {
     this._resolvePending(null);
     this.game = new Game({ players, config: { targetScore: s.targetScore, deckMode: s.deckMode } });
     this._bindGame();
-    this._moved = false;
+    // Quitting is a loss once the hand is DEALT (2026-10-29, second pass, Matt): the deal starts at
+    // once, so a re-deal is no longer free. Before, only after the player's first card.
+    this._moved = true;
     // Frozen for the life of this match (see _saveSnapshot/_resumeGame): a
     // setup-screen change to the toggle should never retroactively alter a
     // match already in progress, only future ones.
@@ -2602,6 +2604,9 @@ class EscobaUI {
     // seat should be filled with an AI. (The lobby's Start button is disabled to match; this
     // is the guard behind it.)
     if (this._mpFilledSeats(room) < seatCount) return;
+    // A live match takes the one save slot (`escoba-save`): a resumable solo match it replaces is
+    // QUIT, a loss (2026-10-29, second pass). It used to vanish for free.
+    this._recordQuitLoss();
     const code = this._mpPendingCode;
     this.mp = this._mpNewState(0, code, this._mpOpponentsFrom(room, 0, seatCount));
     if (this.game) this.game.abort();
@@ -2669,6 +2674,7 @@ class EscobaUI {
     const mySeat = this._mpSeat;
     if (mySeat == null) return;
     const seatCount = this._mpSeatCount(room);
+    this._recordQuitLoss();   // the solo match this live one replaces in the save slot (see _mpHostStart)
     this.mp = this._mpNewState(mySeat, code, this._mpOpponentsFrom(room, mySeat, seatCount));
     if (this.game) this.game.abort();
     const s = this._setup;
@@ -3471,6 +3477,9 @@ function soloDiff(players) {
  *  round, a hand short of the dealt three, or any capture as moved. */
 function savedMoved(save) {
   if (!save || !save.snap) return false;
+  // Every saved match was dealt: quitting it is a loss (2026-10-29, second pass). `moved` is still
+  // written (true) and read by older builds.
+  if (save.snap) return true;
   if (typeof save.moved === 'boolean') return save.moved;
   const me = (save.snap.players || []).find((p) => p.isHuman);
   return (save.snap.round | 0) > 1 || !!(me && ((me.hand && me.hand.length < 3) || (me.captured && me.captured.length)));
