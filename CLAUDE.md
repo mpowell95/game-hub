@@ -76,6 +76,10 @@ read over 1.5 s to `gamehub.perf.v1`, mirrored as `players/<id>/perf` (report on
 *"don't use my code or username ever."* A test, probe or headless browser never sets profile name MattyIce or code
 `QZCC4` (2026-10-22 a perf test did: its "Perf" device re-recorded his challenge results under his code, doubling
 them; both "Perf" records deleted 2026-10-23 at Matt's request). Use the test admin profile **test1, code `DREG5`** (Matt, 2026-10-23), or a made-up code that syncs nothing (`gamehub.devAllowSync.v1` = `'0'`).
+**Test automation NEVER writes (2026-10-29, `js/automation.js`, after a session's test browser on the live site became a
+player, "Smokey"; Matt: "let test automations play anything and always ignore their scores")**: when `navigator.webdriver`
+is true, every Firebase writer refuses (no override), online play is refused, and the launcher shows every game.
+A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 

@@ -15,6 +15,7 @@ import { loadProfile } from './profile-store.js';
 import { loadStoredStats, deviceId, statsId, statsKey, statsOwner, FORK_KEY } from './game-stats.js';
 import { syncHealth } from './stats-net.js';
 import { getStatsApp } from './firebase-boot.js';
+import { automationBlocks } from './automation.js';
 
 function readRaw(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -166,6 +167,7 @@ export async function gatherDeviceReport() {
  *  per press (never overwrites a prior report), so pressing the button again after a
  *  fix ships doubles as a before/after record. Returns { ok, path } or { ok:false, reason }. */
 export async function uploadDeviceReport(report) {
+  if (automationBlocks('device report')) return { ok: false, reason: 'test automation' };   // js/automation.js
   try {
     const boot = await getStatsApp();
     if (!boot) return { ok: false, reason: 'offline or Firebase unavailable' };

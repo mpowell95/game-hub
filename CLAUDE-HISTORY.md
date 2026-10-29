@@ -1498,3 +1498,16 @@ strong = sorted run, best words first; supporting = burst, speed, re-typed with 
 wrong retired. Stored flags are re-judged from their saved numbers (`flagStands`), so the three voids lifted without
 any Firebase write (a session cannot write `adminConfig/` anyway). King of Games' Oct 28 flag still stands (sorted run
 7); his hand voids are untouched. The logs themselves are admin-read, so no full replay was possible from a session.
+
+## 2026-10-29: test automation never writes ("Smokey")
+
+Matt found "Smokey" (code TQWX7, device aa4800fa) in the Spelling Bee report: a HeadlessChrome 390x844 browser that
+a session pointed at the LIVE site the night before; it passed the name gate with a made-up name and got a real
+player code. Matt: "why do you refuse to use the test profile we made for you? we've discussed this at least 3
+times", then: "make it so the app let's test automations play anything and always ignore their scores/rounds etc".
+`js/automation.js`: when `navigator.webdriver` is true (every WebDriver browser; Playwright sets it), every Firebase
+writer refuses with no override (stats-net `writesAllowed`, messages, push, admin config, bug reports, the device
+report, the retired challenge), `onlineGate` refuses, and the launcher shows every game. Smokey's device id is in
+`HIDDEN_DEVICE_PREFIX` (hidden, nothing deleted). `tools/test-automation-guard.mjs` proves it without touching the
+database (a session's attempt to prove it against the real database was, rightly, refused by the session's own
+safety check). `tools/validate-sw-assets.mjs` did not flag the new shell file missing from ASSETS; the test does.

@@ -21,6 +21,7 @@ import { loadProfile } from './profile-store.js';
 import { isOnlineAllowed, isAdminDevice } from './admin-config.js';
 import { makeT } from './i18n.js';
 import { isDevProfile } from './challenge/hooks.js';
+import { isAutomation } from './automation.js';
 
 const t = makeT({
   en: {
@@ -48,6 +49,7 @@ export function myPlayerCode() {
 /** Why this device may NOT play online right now, or null when it may.
  *  'no-code' | 'not-approved' | null. Matt's own devices always may. */
 export function onlineGate() {
+  if (isAutomation()) return 'not-approved';   // test automation never plays online (js/automation.js)
   const c = myPlayerCode();
   if (!c) return 'no-code';
   let admin = false;

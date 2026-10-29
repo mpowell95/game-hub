@@ -37,6 +37,7 @@ import { getStatsApp } from './firebase-boot.js';
 import { readPlayersOnce, readPeople } from './stats-net.js';
 import { aggregatePlayers, isPlaceholderName } from './players-agg.js';
 import { hubThreadRow, withHubRow } from './hub-messages.js';
+import { automationBlocks } from './automation.js';
 
 // --- limits ---------------------------------------------------------------------------------
 
@@ -165,6 +166,7 @@ function isDevOrigin() {
   } catch { return false; }
 }
 function writesAllowed(what) {
+  if (automationBlocks('messages ' + what)) return false;   // js/automation.js
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   console.warn(`[messages] ${what} BLOCKED: this is a dev origin (${location.hostname}) and dev never writes to the family database. `
