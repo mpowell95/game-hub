@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1351;
-const CACHE = 'game-hub-v1352';
+const CACHE = 'game-hub-v1353';
 
 const ASSETS = [
   './',
@@ -812,7 +812,7 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'a6ae4887f9',
+  './js/game-stats.js': '92a93b68e4',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'd47e64cd4d',
   './js/game-stats-ui.js': 'db5f2737fb',
@@ -845,7 +845,7 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '6ab5b9c534',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': 'e25a7c2273',
+  './js/players-agg.js': 'ac89bae572',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
@@ -853,7 +853,7 @@ const REST_MANIFEST = {
   './js/leaderboard-rank.js': '4fe1b42b0f',
   './js/arrow-maze-time.js': '8a9abfb66a',
   './js/gridlock-points.js': '8a4fcce246',
-  './js/word-weaver-points.js': 'a8056f5aa4',
+  './js/word-weaver-points.js': 'be0bfcdf5b',
   './js/gridlock-v1map.js': 'f83ca3500e',
   './js/difficulty-tiers.js': 'b238c3023b',
   './js/net.js': 'd65b57c6b3',

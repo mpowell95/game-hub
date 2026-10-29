@@ -14,7 +14,7 @@ import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woClMerge, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest } from './word-weaver-points.js';
+import { wwBest, wwHintBest } from './word-weaver-points.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver']);  // solo: win-only (no loss axis) or score-based
 
@@ -426,6 +426,15 @@ export function aggregatePlayers(all, corrections) {
           if (!/^L\d+$/.test(k)) continue;
           const best = wwBest((dst.ww.es || {})[k], es[k]);
           if (best) (dst.ww.es || (dst.ww.es = {}))[k] = best;
+        }
+        // Hints recorded at tap time (2026-10-29): per level the most hints and the earliest first hint.
+        for (const key of ['hint', 'esHint']) {
+          const hm = (src.ww[key] && typeof src.ww[key] === 'object' && !Array.isArray(src.ww[key])) ? src.ww[key] : {};
+          for (const k of Object.keys(hm)) {
+            if (!/^L\d+$/.test(k)) continue;
+            const best = wwHintBest((dst.ww[key] || {})[k], hm[k]);
+            if (best) (dst.ww[key] || (dst.ww[key] = {}))[k] = best;
+          }
         }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto

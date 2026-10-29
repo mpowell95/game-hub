@@ -309,15 +309,15 @@
 /* The tap-to-select check, in the wheel's middle, shown while letters are picked (2026-10-29). */
 .ww-root .ww-go { opacity: 0; pointer-events: none; transition: opacity .15s; }
 .ww-root .ww-go.is-on { opacity: 1; }
-.ww-root .ww-go circle { fill: var(--ww-path); }
-.ww-root .ww-go path { fill: none; stroke: var(--ww-ink); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+.ww-root .ww-go circle { fill: var(--ww-ink); opacity: .82; }
+.ww-root .ww-go path { fill: none; stroke: #fff; stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
 .ww-root .ww-ltr { pointer-events: none; transition: transform .34s cubic-bezier(.3, .7, .3, 1); }
 .ww-root .ww-wheel.is-still .ww-ltr { transition: none; }
 .ww-root .ww-lc { fill: transparent; }
 .ww-root .ww-ltr.is-on .ww-lc { fill: var(--ww-path); }
 .ww-root .ww-lt {
   fill: var(--ww-ink);
-  font-size: 40px;
+  font-size: 54px;
   font-weight: 800;
   text-anchor: middle;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;

@@ -291,7 +291,7 @@
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed, woClSet, woClMap, woShownLevel } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest, wwStarsFor, wwBandOf } from './word-weaver-points.js';
+import { wwBest, wwHintBest, wwStarsFor, wwBandOf } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
 import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
@@ -582,6 +582,8 @@ function ensureWw(g) {
   if (!Number.isFinite(g.ww.x) || g.ww.x < 0) g.ww.x = 0;
   // The Spanish ladder's map (2026-10-29) exists only once a Spanish level is completed.
   if (g.ww.es !== undefined && (!g.ww.es || typeof g.ww.es !== 'object' || Array.isArray(g.ww.es))) g.ww.es = {};
+  // The hint maps (2026-10-29) exist only once a hint is used.
+  for (const k of ['hint', 'esHint']) if (g.ww[k] !== undefined && (!g.ww[k] || typeof g.ww[k] !== 'object' || Array.isArray(g.ww[k]))) g.ww[k] = {};
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -2202,6 +2204,29 @@ export function recordGridlockHint(level) {
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
   g.gl.hint[k] = Date.now();
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver: a hint was used on level n (2026-10-29, Matt: "Close the hint gap"). `count` = hints used on
+ *  that level so far; the stored count only grows and the first hint's time is kept, in `ww.hint['L<n>']`
+ *  (`ww.esHint` for the Spanish ladder). Synced like the rest of the store, so wiping the level's save cannot
+ *  bring back 3 stars (js/word-weaver-points.js wwLevels). Not a result: no rate gate. Returns the store,
+ *  or null for a level that is not a positive integer. */
+export function recordWordWeaverHint(level, count, lang) {
+  notePlay('wordweaver', 'recordWordWeaverHint', arguments);
+  const n = Math.floor(Number(level) || 0);
+  if (n < 1 || n !== Number(level)) return null;
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  const key = lang === 'es' ? 'esHint' : 'hint';
+  const map = g.ww[key] || (g.ww[key] = {});
+  const k = 'L' + n;
+  const next = wwHintBest(map[k], { c: Math.max(1, Math.floor(Number(count) || 0)), t: Date.now() });
+  if (JSON.stringify(next) === JSON.stringify(map[k])) return st;
+  map[k] = next;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

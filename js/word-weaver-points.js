@@ -19,6 +19,13 @@
 //                                 map, so Spanish level 12 is never English level 12. Points, stars and
 //                                 levels completed count BOTH ladders.
 //   ww.x = n                      lifetime extra words found (a counter; it only goes up).
+//   ww.hint['L<n>'] = { c, t }    HINTS, recorded the moment Hint is tapped (2026-10-29, Matt: "Close the hint
+//   ww.esHint['L<n>'] = { c, t }  gap"): c = hints used on level n so far (only grows), t = the first hint's
+//                                 time. Before this the count lived only in the level's save, so wiping the save
+//                                 and replaying gave 3 stars. A level's stars are now READ as at most what its
+//                                 recorded hints allow, when the first hint came before the completion (a hint on a
+//                                 second phone AFTER a clean finish elsewhere changes nothing). Nothing stored is
+//                                 lowered: the cap is applied at read time (THE LAW rule 2).
 // Keys are 'L13', never a bare number: Firebase turns an object with mostly numeric keys into an
 // ARRAY. Each field only improves (THE LAW rule 2: stars Math.max, hints Math.min, the earliest
 // time), and the cross-device merge takes the best of each, so a level finished on two phones
@@ -79,6 +86,33 @@ export function wwBest(a, b) {
   return out;
 }
 
+/** One stored hint entry, cleaned, or null. */
+function hintEntry(e) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
+  const c = Math.floor(Number(e.c) || 0), t = Math.floor(Number(e.t) || 0);
+  return c >= 1 ? { c, t: t > 0 ? t : 0 } : null;
+}
+/** The merge of two hint entries for one level: the most hints, the earliest first hint. */
+export function wwHintBest(a, b) {
+  const x = hintEntry(a), y = hintEntry(b);
+  if (!x) return y;
+  if (!y) return x;
+  const t = Math.min(x.t || Infinity, y.t || Infinity);
+  return { c: Math.max(x.c, y.c), t: t === Infinity ? 0 : t };
+}
+/** A record's recorded hints for ONE ladder as { n: { c, t } }. */
+export function wwHints(rec, lang = 'en') {
+  const raw = (rec && rec.ww && (lang === 'es' ? rec.ww.esHint : rec.ww.hint)) || {};
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const k of Object.keys(raw)) {
+    const m = /^L(\d+)$/.exec(k);
+    const e = m && +m[1] >= 1 ? hintEntry(raw[k]) : null;
+    if (e) out[+m[1]] = out[+m[1]] ? wwHintBest(out[+m[1]], e) : e;
+  }
+  return out;
+}
+
 /** A record's completed levels of ONE ladder as { n: { s, h?, t? } }, n a number >= 1. `rec` is
  *  `games.wordweaver`; `lang` 'en' (ww.lv, the default) or 'es' (ww.es). */
 export function wwLevels(rec, lang = 'en') {
@@ -90,6 +124,15 @@ export function wwLevels(rec, lang = 'en') {
     if (!m || +m[1] < 1) continue;
     const e = entry(lv[k]);
     if (e) out[+m[1]] = out[+m[1]] ? wwBest(out[+m[1]], e) : e;
+  }
+  // Hints recorded at tap time cap the stars, when the first came before the completion (see the header).
+  const hints = wwHints(rec, lang);
+  for (const n of Object.keys(out)) {
+    const h = hints[n], e = out[n];
+    if (h && (!e.t || !h.t || h.t <= e.t)) {
+      const cap = wwStarsFor(h.c);
+      if (e.s > cap) out[n] = { ...e, s: cap };
+    }
   }
   return out;
 }
