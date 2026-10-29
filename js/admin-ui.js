@@ -32,7 +32,7 @@
 
 import { GAMES } from './hub.js';
 import { BOARDS, DEFAULT_BOARD, boardById } from '../skeeball/js/boards.js';
-import { statsId, holdemBalance, GAMES as STATS_GAMES } from './game-stats.js';
+import { statsId, holdemBalance, GAMES as STATS_GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { hubIdOf } from './game-stats-ui.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
@@ -116,7 +116,7 @@ function ensureCss() {
   html.gh-dark .adm-page { --a-bg:#0d1422; --a-card:#182132; --a-ink:#eef2f8; --a-mut:#8a97ab; --a-line:rgba(190,214,244,.12);
     --a-blue:#5aa2ff; --a-red:#ff8a65; --a-bar:#111a2a; --a-chev:#56637a; --a-on:#ffce3a; --a-field:#1f2a3d; --a-sheet:#121a29; }
   .adm-page button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
-  .adm-nav { flex: none; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .adm-nav { flex: none; box-sizing: content-box; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
   .adm-nb { display: inline-flex; align-items: center; gap: 1px; height: 44px; margin-left: -9px; padding: 0 8px 0 0; background: none; border: 0; color: var(--a-blue) !important; font-size: 17px !important; font-weight: 500; max-width: 70%; }
   .adm-nb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .adm-ni { width: 44px; height: 44px; margin-right: -10px; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--a-blue) !important; }
@@ -306,6 +306,10 @@ function codesSeen() {
 const whoHTML = (emoji, name) => `<span class="adm-em">${esc(emoji || '🙂')}</span>`;
 const personOfCode = (code) => (_agg || []).find((g) => (g.playerId || '').toUpperCase() === code) || null;
 const playsIn = (g, sid) => +(obj(obj(obj(g && g.games)[sid]).total).played) || 0;
+/** The games a person has played, most first. ARCHIVED games (Pinball, old Pool, Pipes) stay stored, untouched, and
+ *  out of every list, as on the leaderboard. */
+const gamesPlayed = (p) => Object.keys(obj(p && p.games)).filter((sid) => !ARCHIVED_GAMES.includes(sid) && playsIn(p, sid) > 0)
+  .sort((a, b) => playsIn(p, b) - playsIn(p, a));
 
 // --- the flags ------------------------------------------------------------------------------------
 
@@ -855,7 +859,7 @@ function voidsOf(cfg, key) {
   }
   for (const id of ids) {
     const games = new Set([...Object.keys(obj(flags[id])), ...Object.keys(obj(HAND_VOIDS[id])), ...Object.keys(obj(obj(obj(cfg.integrity).void)[id]))]);
-    for (const gid of games) if (!out[gid] && isVoided(flags, cfg, id, gid)) out[gid] = { label: tx('adm_voided', 'Voided') };
+    for (const gid of games) if (!out[gid] && !ARCHIVED_GAMES.includes(gid) && isVoided(flags, cfg, id, gid)) out[gid] = { label: tx('adm_voided', 'Voided') };
   }
   return out;
 }
@@ -976,7 +980,7 @@ function personPage(cfg, key) {
   if (vk.length) {
     body += gh(tx('adm_voided', 'Voided'), vk.length) + grp(vk.map((sid) => row({ title: (titleOfStats(sid)), value: voids[sid].label, vcls: 'x', go: () => push({ k: 'gplayer', sid, key }) })));
   }
-  const played = Object.keys(obj(p.games)).filter((sid) => playsIn(p, sid) > 0).sort((a, b) => playsIn(p, b) - playsIn(p, a));
+  const played = gamesPlayed(p);
   if (played.length) {
     body += gh(tx('adm_most_played', 'Most played'), (played.length === 1 ? tx('adm_1_game', '1 game') : tx('adm_n_games', '{n} games', { n: played.length })))
       + grp(played.slice(0, 5).map((sid) => row({ title: (titleOfStats(sid)), value: fmt(playsIn(p, sid)), go: () => push({ k: 'gplayer', sid, key }) }))
@@ -996,7 +1000,7 @@ function testerForPage(cfg, key) {
 function allGamesPage(cfg, key) {
   const p = personByKey(key);
   if (!p) return { title: '', body: waitBody() };
-  const played = Object.keys(obj(p.games)).filter((sid) => playsIn(p, sid) > 0).sort((a, b) => playsIn(p, b) - playsIn(p, a));
+  const played = gamesPlayed(p);
   return { title: tx('adm_all_games', 'All {n} games', { n: played.length }), body: grp(played.map((sid) => row({ title: (titleOfStats(sid)), value: fmt(playsIn(p, sid)), go: () => push({ k: 'gplayer', sid, key }) })), true) };
 }
 
