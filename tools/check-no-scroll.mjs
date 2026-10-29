@@ -78,6 +78,16 @@ const EXTRA_SCREENS = {
       },
     },
     {
+      // Monsters (2026-10-29): the collection, then a monster's card on its evolved form.
+      name: 'monsters + card',
+      async open(page) {
+        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.renderMonsters(); });
+        await page.click('.ba-pick[data-id="emberkit"]');
+        await page.click('.ba-form[data-evo="1"]');
+        await page.waitForTimeout(400);
+      },
+    },
+    {
       // Online (2026-10-24): the online home (Challenge, Host / Join, the list) and the Join code.
       name: 'online home',
       async open(page) {

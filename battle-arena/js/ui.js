@@ -17,7 +17,7 @@ import { STRINGS } from './strings.js';
 import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
-import { monsterSVG, gemSVG, elementBadge, arenaSVG } from './art.js';
+import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
 import { mirror, mirrorEvents, entryOf, moveOf } from './online.js';
 import { playAttack, evolveScene } from './attacks.js';
 
@@ -126,6 +126,9 @@ const ICONS = {
   hex: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="#7B4FC4" stroke="#C9A2F0" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="#C9A2F0"/></svg>',
   berry: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8" fill="currentColor"/><path d="M12 5c0-3 2-4 5-4-1 3-2 4-5 4z" fill="#2E9E44"/></svg>',
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  online: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3.4" fill="currentColor"/><circle cx="16.5" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M2 20c0-3.6 2.7-6 6-6s6 2.4 6 6z" fill="currentColor"/><path d="M14.6 14.4c.6-.2 1.2-.3 1.9-.3 3 0 5.5 2.2 5.5 5.9h-6.4" fill="currentColor" opacity=".7"/></svg>',
+  paw: '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><ellipse cx="12" cy="16.5" rx="5.6" ry="4.6"/><ellipse cx="5" cy="10.5" rx="2.2" ry="2.8"/><ellipse cx="9.2" cy="5.8" rx="2.2" ry="2.9"/><ellipse cx="14.8" cy="5.8" rx="2.2" ry="2.9"/><ellipse cx="19" cy="10.5" rx="2.2" ry="2.8"/></g></svg>',
+  arrow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h12M12 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 /** One line per special effect, for the monster card. */
@@ -278,21 +281,38 @@ class BattleArena {
   renderHome() {
     this.newScreen('home');
     const s = this.settings;
+    const wins = totalWins();
+    const open = unlockedIds(wins);
+    // Two of this player's own monsters face off, a new pair each visit.
+    const pool = open.slice();
+    const pair = [0, 1].map(() => pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     const seg = DIFFS.map((d) => `<button type="button" class="gh-seg__item" data-v="${d}" aria-pressed="${d === s.diff}">${diffShapeSVG(tierOf(d))}<span>${t(d)}</span></button>`).join('');
+    const words = t('title').split(' ');
+    const last = words.pop();
     this.root.innerHTML = `
+      ${lobbyBG()}
       <div class="ba-home">
-        <div class="ba-home-art" aria-hidden="true">
-          <div class="ba-home-mon">${monsterSVG('emberkit')}</div>
-          <div class="ba-home-mon ba-face-left">${monsterSVG('driplet')}</div>
+        <div class="ba-home-hero">
+          <h1 class="ba-title" aria-label="${t('title')}"><span class="ba-title-a">${words.join(' ')}</span><span class="ba-title-b">${last}</span></h1>
+          <div class="ba-home-art" aria-hidden="true">
+            <div class="ba-home-mon">${monsterSVG(pair[0])}</div>
+            <b class="ba-vs">VS</b>
+            <div class="ba-home-mon ba-face-left">${monsterSVG(pair[1])}</div>
+          </div>
         </div>
-        <h1 class="ba-title">${t('title')}</h1>
-        <div class="gh-card ba-home-card">
-          <div class="gh-seg" role="group" data-role="diff">${seg}</div>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play">${t('play')}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block ba-online-btn" data-role="online">${t('online')}<span class="ba-badge-n" hidden></span></button>
+        <div class="ba-home-menu">
+          <div class="gh-seg ba-seg" role="group" data-role="diff">${seg}</div>
+          <button type="button" class="ba-bigbtn" data-role="play">${t('play')}</button>
+          <div class="ba-home-pair">
+            <button type="button" class="ba-steelbtn ba-online-btn" data-role="online">${ICONS.online}<span>${t('online')}</span><span class="ba-badge-n" hidden></span></button>
+            <button type="button" class="ba-steelbtn" data-role="dex" aria-label="${t('monsters')} ${open.length}/${MONSTERS.length}">${ICONS.paw}<span>${t('monsters')}</span><span class="ba-count-n">${open.length}/${MONSTERS.length}</span></button>
+          </div>
+          <button type="button" class="ba-link" data-role="help">${t('help')}</button>
         </div>
-        <button type="button" class="ba-link" data-role="help">${t('help')}</button>
       </div>`;
+    fitText(this.root.querySelector('.ba-title-a'), 30);
+    fitText(this.root.querySelector('.ba-title-b'), 64);
+    for (const b of this.root.querySelectorAll('.ba-steelbtn span:not([class])')) fitText(b, 17);
     const g = this.root.querySelector('[data-role="diff"]');
     this.on(g, 'click', (e) => {
       const b = e.target.closest('.gh-seg__item');
@@ -303,6 +323,7 @@ class BattleArena {
     });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.renderDraft());
     this.on(this.root.querySelector('[data-role="online"]'), 'click', () => this.openOnline());
+    this.on(this.root.querySelector('[data-role="dex"]'), 'click', () => this.renderMonsters());
     this.on(this.root.querySelector('[data-role="help"]'), 'click', () => this.showHelp());
     this.paintOnlineBadge();
   }
@@ -346,16 +367,9 @@ class BattleArena {
     this.unlocked = unlocked;
     this.wins = wins;
     this.picks = this.settings.team.filter((id) => unlocked.includes(id));
-    const cells = MONSTERS.map((m) => {
-      const locked = !unlocked.includes(m.id);
-      return `<div class="ba-pick${locked ? ' is-locked' : ''}" role="button" tabindex="0" data-id="${m.id}"
-          aria-label="${escapeHTML(m.name)}${locked ? ', ' + t('locked') + ', ' + winsMore(m.unlock - wins) : ''}">
-          <div class="ba-pick-art">${monsterSVG(m.id)}</div>
-          <span class="ba-pick-gem">${elementBadge(m.el)}</span>
-          ${locked ? `<span class="ba-pick-name">${ICONS.lock}${m.unlock - wins}</span>` : ''}
-        </div>`;
-    }).join('');
+    const cells = MONSTERS.map((m) => this.tileHTML(m)).join('');
     this.root.innerHTML = `
+      ${lobbyBG(true)}
       <div class="ba-draft">
         <div class="ba-draft-top">
           <button type="button" class="ba-iconbtn" data-role="back" aria-label="${t('back')}">${ICONS.back}</button>
@@ -367,8 +381,8 @@ class BattleArena {
         </div>
         <div class="ba-grid">${cells}</div>
         <div class="ba-draft-actions">
-          <button type="button" class="gh-btn gh-btn--ghost" data-role="random">${t('random')}</button>
-          <button type="button" class="gh-btn gh-btn--primary" data-role="fight">${t('fight')}</button>
+          <button type="button" class="ba-steelbtn" data-role="random">${t('random')}</button>
+          <button type="button" class="ba-bigbtn" data-role="fight">${t('fight')}</button>
         </div>
       </div>`;
     this.paintDraft();
@@ -413,11 +427,54 @@ class BattleArena {
     if (fight) fight.disabled = this.picks.length !== 2;
   }
 
-  /** A monster's card: Normal / Evolved, HP, cost, special. In the draft it carries Pick/Remove. */
-  showCard(id, { draft = false, evolved = false } = {}) {
+  /** One monster tile (the draft, Monsters). Locked: a black silhouette, a lock and the wins still to
+   *  go; no name, no element. `named`: the name under the art (Monsters). */
+  tileHTML(m, named = false) {
+    const locked = !this.unlocked.includes(m.id);
+    const more = locked ? m.unlock - (this.wins | 0) : 0;
+    return `<div class="ba-pick${locked ? ' is-locked' : ''}" role="button" tabindex="0" data-id="${m.id}"
+        aria-label="${locked ? t('locked') + ', ' + winsMore(more) : escapeHTML(m.name)}">
+        <div class="ba-pick-art">${monsterSVG(m.id)}</div>
+        ${locked ? '' : `<span class="ba-pick-gem">${elementBadge(m.el)}</span>`}
+        ${locked ? `<span class="ba-pick-name is-lock">${ICONS.lock}${more}</span>` : named ? `<span class="ba-pick-name">${escapeHTML(m.name)}</span>` : ''}
+      </div>`;
+  }
+
+  // --- monsters (2026-10-29, Matt: "view all of them and their abilities and evolved versions") ----
+  /** Every monster. Unlocked: in full, tap = the card (both forms, their specials). Locked: only a
+   *  silhouette and the wins still to go. Unlocks are read here, never stored. */
+  renderMonsters() {
+    this.newScreen('monsters');
+    this.wins = totalWins();
+    this.unlocked = unlockedIds(this.wins);
+    this.root.innerHTML = `
+      ${lobbyBG(true)}
+      <div class="ba-draft ba-dex">
+        <div class="ba-draft-top">
+          <button type="button" class="ba-iconbtn" data-role="back" aria-label="${t('back')}">${ICONS.back}</button>
+          <h2 class="ba-online-title">${t('monsters')}</h2>
+          <span class="ba-iconbtn-spacer ba-dex-n">${this.unlocked.length}/${MONSTERS.length}</span>
+        </div>
+        <div class="ba-grid">${MONSTERS.map((m) => this.tileHTML(m, true)).join('')}</div>
+      </div>`;
+    for (const n of this.root.querySelectorAll('.ba-pick-name:not(.is-lock)')) fitText(n, 13);
+    const grid = this.root.querySelector('.ba-grid');
+    const open = (e) => {
+      const c = e.target.closest('.ba-pick');
+      if (c) this.showCard(c.dataset.id, { locked: c.classList.contains('is-locked') });
+    };
+    this.on(grid, 'click', open);
+    this.on(grid, 'keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); } });
+    this.on(this.root.querySelector('[data-role="back"]'), 'click', () => this.renderHome());
+  }
+
+  /** A monster's card: the big art, element + charge, its special, and both forms side by side (tap
+   *  one to see it). In the draft it carries Pick / Remove. A LOCKED monster (draft, Monsters) is
+   *  only its silhouette and the wins still to go. */
+  showCard(id, { draft = false, evolved = false, locked = false } = {}) {
     const m = BY_ID[id];
     if (!m) return;
-    const locked = draft && !this.unlocked.includes(id);
+    if (draft) locked = !this.unlocked.includes(id);
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
     let evo = !!evolved;
@@ -436,32 +493,35 @@ class BattleArena {
           <span class="ba-card-fx">${fx.join(' · ')}</span>
         </div>`;
     };
-    const action = !draft ? '' : locked
-      ? `<p class="ba-card-lock">${ICONS.lock}<span>${winsMore(m.unlock - (this.wins | 0))}</span></p>`
-      : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="pick">${this.picks.includes(id) ? t('remove') : t('pick')}</button>`;
-    el.innerHTML = `
-      <div class="gh-modal ba-card" role="dialog" aria-modal="true" aria-label="${escapeHTML(m.name)}">
+    const form = (e) => `<button type="button" class="ba-form" data-evo="${e ? 1 : 0}" aria-pressed="${evo === e}"
+        aria-label="${t(e ? 'evolved' : 'normal')}: ${escapeHTML(monName(id, e))}">${monsterSVG(id, e)}</button>`;
+    const action = !draft || locked ? '' : `<button type="button" class="ba-bigbtn" data-role="pick">${this.picks.includes(id) ? t('remove') : t('pick')}</button>`;
+    el.innerHTML = locked ? `
+      <div class="gh-modal ba-card is-locked" role="dialog" aria-modal="true" aria-label="${t('locked')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
-        <div class="gh-seg ba-card-tabs" role="group">
-          <button type="button" class="gh-seg__item" data-evo="0" aria-pressed="${!evo}"><span>${t('normal')}</span></button>
-          <button type="button" class="gh-seg__item" data-evo="1" aria-pressed="${evo}"><span>${t('evolved')}</span></button>
-        </div>
+        <div class="ba-card-body"><div class="ba-card-art">${monsterSVG(id)}</div><h2 class="ba-card-name">???</h2></div>
+        <p class="ba-card-lock">${ICONS.lock}<span>${winsMore(m.unlock - (this.wins | 0))}</span></p>
+      </div>` : `
+      <div class="gh-modal ba-card" role="dialog" aria-modal="true" aria-label="${escapeHTML(m.name)}" style="--ba-el:${ELEMENT_COLOR[m.el]}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <div class="ba-card-body">${body()}</div>
+        <div class="ba-card-forms" role="group">${form(false)}<span class="ba-card-arrow" aria-hidden="true">${ICONS.arrow}</span>${form(true)}</div>
         ${action}
       </div>`;
     this.root.appendChild(el);
-    const fitAll = () => { for (const p of el.querySelectorAll('.ba-card-fx, .ba-card-spname, .ba-card-name')) fitText(p, p.classList.contains('ba-card-name') ? 22 : 15); };
+    const fitAll = () => { for (const p of el.querySelectorAll('.ba-card-fx, .ba-card-spname, .ba-card-name')) fitText(p, p.classList.contains('ba-card-name') ? 26 : 15); };
     fitAll();
     const close = () => el.remove();
     this.on(el, 'click', (e) => { if (e.target === el) close(); });
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
-    this.on(el.querySelector('.ba-card-tabs'), 'click', (e) => {
-      const b = e.target.closest('.gh-seg__item');
-      if (!b) return;
+    this.on(el.querySelector('.ba-card-forms'), 'click', (e) => {
+      const b = e.target.closest('.ba-form');
+      if (!b || (b.dataset.evo === '1') === evo) return;
       evo = b.dataset.evo === '1';
-      for (const x of el.querySelectorAll('.ba-card-tabs .gh-seg__item')) x.setAttribute('aria-pressed', String(x === b));
+      for (const x of el.querySelectorAll('.ba-form')) x.setAttribute('aria-pressed', String(x === b));
       el.querySelector('.ba-card-body').innerHTML = body();
       fitAll();
+      if (!reducedMotion()) el.querySelector('.ba-card-art').animate([{ transform: 'scale(.6)', filter: 'brightness(3)' }, { transform: 'scale(1)', filter: 'none' }], { duration: 320, easing: 'cubic-bezier(.2,.8,.3,1.3)' });
     });
     const pick = el.querySelector('[data-role="pick"]');
     this.on(pick, 'click', () => {
