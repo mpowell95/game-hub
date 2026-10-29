@@ -1851,7 +1851,10 @@ export function recordSudoku(tier, extras = {}) {
     g.sd.pre = { hints: g.sd.hints | 0, won };
   }
   if (!g.sd.clean || typeof g.sd.clean !== 'object' || Array.isArray(g.sd.clean)) g.sd.clean = {};
-  if (t && hints === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
+  // A MISTAKE counts like a hint here (Matt, 2026-10-29): the mistakes counter flags each wrong digit
+  // the moment it is placed, so guessing and watching it is help. Solves recorded before that date
+  // keep the bucket they were given (never re-bucketed).
+  if (t && hints === 0 && mistakes === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
   g.total.played += 1;
   g.total.won += 1;
   g.sd.solved += 1;
@@ -2240,12 +2243,56 @@ export function recordWordWeaver(level, { hints, extra, lang } = {}) {
   return st;
 }
 
+/** Nuts & Bolts level sets (2026-10-29): "a-b,c-d" ranges of level numbers, sorted, merged. A
+ *  string so Firebase never turns it into an array; levels are solved in order, so a whole ladder
+ *  is one range. */
+export function nbParseRanges(str) {
+  const out = [];
+  if (typeof str !== 'string' || !str) return out;
+  for (const part of str.split(',')) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(part.trim());
+    if (!m) continue;
+    const a = Number(m[1]), b = m[2] ? Number(m[2]) : a;
+    if (a >= 1 && b >= a && b - a < 1e6) out.push([a, b]);
+  }
+  out.sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const r of out) {
+    const last = merged[merged.length - 1];
+    if (last && r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+    else merged.push([r[0], r[1]]);
+  }
+  return merged;
+}
+export function nbRangesStr(ranges) { return ranges.map(([a, b]) => (a === b ? String(a) : `${a}-${b}`)).join(','); }
+export function nbRangesHas(ranges, n) { return ranges.some(([a, b]) => n >= a && n <= b); }
+export function nbRangesAdd(str, n) { return nbRangesStr(nbParseRanges((str ? str + ',' : '') + n)); }
+
 export function recordNutsBolts(level, moves, tier) {
   if (tooFast('nutsbolts')) return null;
   notePlay('nutsbolts', 'recordNutsBolts', arguments);
   const st = loadStats();
   const g = st.games.nutsbolts;
   ensureNb(g);
+  // ONE WIN PER LEVEL PER PERSON (2026-10-29): which level this was, per tier (`nb.lv[tier]`, a range
+  // string, only added to), and once, at the first tracked solve, how far the record's untracked wins
+  // reach (`nb.leg[tier]` = the best level recorded at that tier, else its win count). A fresh storage
+  // re-solving Expert 1, 2, 3... adds wins here as always; js/players-agg.js counts each level once per
+  // person (dedupeNutsBolts). Additive only.
+  {
+    const lvTier = NB_TIERS.indexOf(normDiff(tier)) >= 0 ? normDiff(tier) : null;
+    if (!g.nb.leg || typeof g.nb.leg !== 'object' || Array.isArray(g.nb.leg)) {
+      const leg = {};
+      for (const k of NB_TIERS) {
+        const best = ((g.nb.bestByTier || {})[k]) | 0;
+        leg[k] = best > 0 ? best : (((g.byDiff[k] || {}).won) | 0);
+      }
+      g.nb.leg = leg;
+    }
+    if (!g.nb.lv || typeof g.nb.lv !== 'object' || Array.isArray(g.nb.lv)) g.nb.lv = {};
+    const lvl = level | 0;
+    if (lvTier && lvl >= 1) g.nb.lv[lvTier] = nbRangesAdd(g.nb.lv[lvTier], lvl);
+  }
   g.total.played += 1;
   g.total.won += 1;
   g.nb.solved += 1;

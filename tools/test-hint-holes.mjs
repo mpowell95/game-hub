@@ -120,7 +120,7 @@ ok('C1 strings: "no hints" EN/ES', S.en.lb_nohint === 'no hints' && S.es.lb_nohi
 // --- C2 / C1 (Murdoku UI) --------------------------------------------------------------------------
 const mui = src('murdoku/js/ui.js');
 ok('C2 Murdoku: the guided case records nothing', /_recordOnce\(s, ui\) \{\s*\n\s*if \(s\.recorded\) return;[\s\S]{0,300}?if \(s\.guided\) return;/.test(mui));
-ok('C1 Murdoku: every hint tap counts and is saved', /if \(this\.hint && this\.hints !== null\) \{ this\.hints \+= 1; this\._save\(\); \}/.test(mui)
+ok('C1 Murdoku: every hint tap counts and is saved', /if \(this\.hint && this\.hints !== null\) \{ this\.hints \+= 1; if \(!this\._save\(\)\) \{ this\._leaveStale\(\); return; \} \}/.test(mui)
   && /recordMurdoku\(s\.puzzle\.tier, \{ hints:/.test(mui) && !/recordResult\(/.test(mui));
 ok('C1 Murdoku: a case saved before hints were counted reads as unknown (null), a new case as 0',
   /hints: Number\.isInteger\(s\.hints\) && s\.hints >= 0 \? s\.hints : null/.test(mui) && /guided, hints: 0 \}\);/.test(mui));

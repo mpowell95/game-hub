@@ -18,6 +18,18 @@ function digitsToNotes(digits) {
   return mask;
 }
 
+/** FNV-1a over the two 81-digit strings, twice (two seeds), as 16 hex digits. */
+export function puzzleIdOf(givens, solution) {
+  const str = String(givens) + '/' + String(solution);
+  let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+}
+
 export class SudokuGame {
   /** @param {{ tier: string, puzzle: Uint8Array|number[], solution: Uint8Array|number[] }} opts */
   constructor(opts) {
@@ -99,15 +111,21 @@ export class SudokuGame {
    *  digit AND its notes to what they were - a placement clears notes, so undoing it must bring
    *  them back or the peers' cleared notes would look permanently lost. */
   undo() {
+    // A solved puzzle is finished: Undo cannot reopen it (2026-10-29). Un-solving it let the same
+    // puzzle be solved, and recorded, again and again.
+    if (this._solved) return false;
     const snap = this._undo.pop();
     if (!snap) return false;
     this.cells[snap.i] = snap.cell;
     this.notes[snap.i] = snap.notes;
-    this._solved = false; // undoing out of a solved state always un-solves it
     this.updatedAt = Date.now();
     return true;
   }
-  canUndo() { return this._undo.length > 0; }
+  canUndo() { return !this._solved && this._undo.length > 0; }
+
+  /** This puzzle's id: a hash of its givens and solution (2026-10-29). The same puzzle in another
+   *  tab, or brought back by any route, has the same id, so it records once (ui.js DONE_KEY). */
+  puzzleId() { return puzzleIdOf(Array.from(this.givens).join(''), Array.from(this.solution).join('')); }
 
   /**
    * Fill the selected cell (or, with none selected, the one cell the NAKED-SINGLE solver can
@@ -208,4 +226,4 @@ export class SudokuGame {
   }
 }
 
-export default { SudokuGame, SAVE_V };
+export default { SudokuGame, SAVE_V, puzzleIdOf };
