@@ -20,7 +20,8 @@
 //   * NAMES: a word in either first-name list (dominictarr/random-name, smashew/NameDatabases, both
 //     MIT) is never a BONUS word (ANNA, CARL). The answers are left alone: their names are words first
 //     (TEDDY, JOEY, GRAHAM).
-//   * LDNOOBW English bad-word list (CC BY 4.0) plus BLOCK below: dropped entirely.
+//   * LDNOOBW English bad-word list (CC BY 4.0) plus BLOCK below: dropped entirely, EXCEPT the hand-checked
+//     ADULT_KEEP (2026-10-29), which are bonus words.
 //
 // RULES (the NYT game's): 4+ letters, no S anywhere, at most 7 different letters.
 //
@@ -98,6 +99,18 @@ const KEEP = 10;   // days 0-9 (Oct 22-31 2026): shipped before the 2026-10-26 r
 // letters it had; swapped only while it still has them, so a re-run never swaps twice.
 const REPLACE = { 2: 'o:hilprw', 4: 'u:dfgino', 6: 'e:ijlnuv' };
 
+// ADULT WORDS AND PROFANITY (2026-10-29, Matt, refused VAGINA: "Words like this and profanity should count"):
+// BONUS words only, never answers (hints, ranks and Yesterday's Answers never show them), HAND-CHECKED like
+// BONUS_KEEP, and they skip the bad-word, name (DICK, WILLY) and ENABLE/SCOWL filters. Slurs stay out (never add
+// one here), and so do RAPE, RAPED, RAPING, PEDOPHILE, JAILBAIT.
+const ADULT_KEEP = new Set(`
+  anal bareback bimbo bitch bitchy blowjob bondage boner boob boobie booby bugger bullcrap butt butthead
+  butthole clit cocaine cock crap crapper crappy cunt dammit damn damned damnit dick dickhead dildo domination
+  douchebag erotic eunuch fecal fellatio fingering fuck fucked fucker fuckhead fuckin fucking fuckup gangbang
+  goddam goddamn grope handjob hardcore harlot hell heroin hooker horny humping jizz kinky lynch nipple nude
+  nudity nympho orgy panty pecker pegging penial penile playboy porn porno prick queef rectum rimming titty
+  trollop turd twat vagina vibrator voyeur vulva wank wanker wench`.split(/\s+/).filter(Boolean));
+
 // Slurs and vulgarities LDNOOBW misses or lists only as phrases. A family hub: when in doubt, out.
 const BLOCK = `nigger nigga negro faggot fagot dyke kike coon chink gook wetback retard retarded tranny whore
 bitch bitchy crap crappy damn damned rape raped raping hooker boob booby titty porn porno horny dildo pecker
@@ -155,6 +168,8 @@ async function main() {
   const answerSet = new Set(words);
   const extra = [...level.keys()]
     .filter((w) => !answerSet.has(w) && level.get(w) <= BONUS_LEVEL && !names.has(w) && BONUS_KEEP.has(w) && fits(w))
+    .concat([...ADULT_KEEP].filter((w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && bits(maskOf(w)) <= 7 && !answerSet.has(w)))
+    .filter((w, i, a) => a.indexOf(w) === i)
     .sort();
   const masks = words.map(maskOf);
 

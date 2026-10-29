@@ -87,6 +87,8 @@ ok('es: names stay out of the answers', !['maria', 'martin', 'rita'].some((w) =>
 
 ok('junk Matt found is no longer a bonus word (cratch, cranch, hant, anna, carl)', !['cratch', 'cranch', 'hant', 'anna', 'carl'].some((w) => data.extra.includes(w) || data.words.includes(w)));
 ok('real rare words still are (dugong)', data.extra.includes('dugong'));
+ok('adult words and profanity are bonus words, never answers (vagina, fuck)', ['vagina', 'fuck', 'damn'].every((w) => data.extra.includes(w) && !data.words.includes(w)));
+ok('slurs stay out of both lists', !['nigger', 'faggot', 'kike', 'retard', 'wetback'].some((w) => data.extra.includes(w) || data.words.includes(w)));
 
 // The daily board (board.js): pure parts, and the rules + backup entries it needs.
 const { rowsOf, boardKey } = await import('./board.js');

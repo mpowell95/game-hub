@@ -1431,3 +1431,12 @@ was ~45 arrows on 16x22 with ~2 free at a time and blockers ~5 dots off. Generat
 and Expert's 28x38 / 75-80 arrows. Every Hard level from 101 for everyone, in the same loop as Expert; a level in
 progress finishes on its old board (no points concern was raised for Hard). Details: `way-out/CLAUDE.md`,
 "Hard = generator 11, for everyone".
+
+## 2026-10-29: Spelling Bee accepts adult words and profanity
+
+Matt typed VAGINA and was told "Not in word list": "Come on this is a word. Words like this and profanity
+should count." The LDNOOBW bad-word list and BLOCK dropped them from both lists. `ADULT_KEEP` in
+`tools/build-spelling-bee-data.mjs` (hand-checked, 83 added) makes them BONUS words: accepted and scored when
+typed, never answers, so hints, ranks, totals and Yesterday's Answers are unchanged and nothing appears unasked.
+Slurs stay blocked, and so do RAPE, RAPED, RAPING, PEDOPHILE, JAILBAIT. Spanish untouched. Only `extra` in
+`bee.json` changed (verified: words, puzzles, retired identical).
