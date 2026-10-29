@@ -8,7 +8,7 @@
 // nothing (there is no second profile to credit). Nothing is persisted mid-game: see isInProgress().
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, myName } from '../../js/i18n.js';
-import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
@@ -374,7 +374,8 @@ class CupBaseball {
     // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
     // and easier settings"): no resume, so once the player has thrown against the computer, leaving
     // the game (New game, Change settings, the hub's back, a closed app) records it as a loss.
-    if (this.mode === 'cpu' && batting === 'a' && !this.recorded && !g.over) armQuitLoss('cupbaseball', 'recordResult', ['cupbaseball', this.settings.diff, false]);
+    // Any throw, the computer's included (2026-10-29, second pass, Matt).
+    if (this.mode === 'cpu' && !this.recorded && !g.over) armQuitLoss('cupbaseball', 'recordResult', ['cupbaseball', this.settings.diff, false]);
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = true;
     const hit = ev.find((e) => e.type === 'hit');
@@ -411,9 +412,10 @@ class CupBaseball {
     if (!this.recorded) {
       this.recorded = true;
       if (this.mode === 'cpu') {
+        const lost = quitLossLost('cupbaseball');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
         dropQuitLoss('cupbaseball');   // the real result replaces the armed quit loss
         // ONCE per game: every write in the shared store is additive, so a second call inflates.
-        try {
+        if (!lost) try {
           const st = recordResult('cupbaseball', this.settings.diff, g.winner === 'a');
           if (!st) console.warn('[cup-baseball] result not recorded (rate gate or store refused it)');
         } catch (err) { console.error('[cup-baseball] record failed', err); }

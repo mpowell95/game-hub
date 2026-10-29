@@ -103,7 +103,9 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // recordGridlockHint (2026-10-14) notes that a hint was used on a level, which HALVES that level's
 // points: it is a cost, not a play. Gating it would let a fast run of hints go unrecorded and earn
 // full points, the very exploit it exists to close.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint']);
+// recordWordWeaverHint (2026-10-29) is Word Weaver's twin of recordGridlockHint: a hint COST on a level.
+// recordLiveResult (2026-10-29) only hands a live-room result to the game's own recorder, which is gated.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

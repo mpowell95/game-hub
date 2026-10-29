@@ -112,13 +112,11 @@ const PANEL_ART = `<svg viewBox="0 0 200 120" preserveAspectRatio="xMidYMid slic
 
 // --- storage ----------------------------------------------------------------------------------
 
-/** Has the player made a move in this saved match? The save's own flag; a save from before it
- *  counts a later round, or a hand that is not the dealt seven, as moved. */
+/** Is quitting this saved match a loss? Since the second pass (2026-10-29, Matt) every saved match
+ *  was DEALT, and a dealt hand counts: re-dealing a bad seven used to be free until the player's
+ *  first play or draw. (`moved` is still written; no reader needs it now.) */
 function movedIn(save) {
-  if (!save) return false;
-  if (typeof save.moved === 'boolean') return save.moved;
-  const s = save.snap || {};
-  return (s.round | 0) > 1 || !!(s.hands && s.hands[HUMAN] && s.hands[HUMAN].length !== (s.handSize || 7));
+  return !!(save && save.snap);
 }
 
 function loadSettings() {
@@ -264,7 +262,7 @@ class DominoesUI {
     this._recordQuitLoss();   // a match left unfinished after the player's first move is a loss
     saveSettings(this.difficulty, this.target);
     clearSave();
-    this._moved = false;
+    this._moved = true;   // dealt: quitting from now on is a loss (2026-10-29, second pass)
     this.game = new DominoesGame({ target: this.target });
     this.game.startMatch();
     this._bestRound = 0;

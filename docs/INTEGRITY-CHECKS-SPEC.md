@@ -452,7 +452,7 @@ tier; **E3** Monopoly Deal and Parchís get the ESM recorders' rate gate and pla
 only what a NEW result records (its bucket, or a loss that used to vanish); no stored number moves (THE LAW
 2-5). Proof: `node tools/test-quit-loss.mjs` (100 checks; `--browser` adds 16 in a real page).
 
-**E1: the rule.** "First move" = the player's own first move of that game (a card, a disc, a dart, a throw, a
+**E1: the rule** (superseded 2026-10-29 by the second pass, G3, below: the loss now arms once dealt, the board shown, or the computer has moved). "First move" = the player's own first move of that game (a card, a disc, a dart, a throw, a
 roll, a word, a tap on the board), never the deal or the computer's opening. Before it a quit records nothing.
 After it, exactly ONE result per game: each game's own one-shot flag (`_statsCommitted`, `recorded`,
 `_statsRecorded`, `state.rec`, `_resultRecorded`) is set before the loss is written through the game's own
@@ -478,7 +478,7 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 | Tic Tac Toe, Dots and Boxes, Filler | Restart, New game / Menu (now two taps when it costs) | Dots and Boxes' Undo: same rule as Connect Four |
 | Mancala | Restart, Setup (two taps when it costs); vs computer only | `hm` in the save |
 | Dominoes | Restart, the round card's restart, New match over a saved match | `moved` in the save |
-| Uno | Restart, New game; **a hand past its 30-minute save is a loss on load** (it used to vanish) | `moved` in the save |
+| Uno | Restart, New game; ~~a hand past its 30-minute save is a loss on load~~ (second pass, G4: no expiry, it resumes) | `moved` in the save |
 | Escoba, Chinchón | menu New game / Quit to setup, New game over a resumable save (Escoba) | `moved` in the save |
 | Battleship | Restart, Exit | first move = first shot (placing ships is not) |
 | Boggle | Give up (two taps) | first move = first word entered |
@@ -534,6 +534,11 @@ costs anything in a game that saves.
   board, solved away from the game, is not prevented. (Closed the same day, second pass I4: time away now counts in a solo round.)
 - A no-resume game open in TWO tabs, one of them idle over 30 minutes, can have its marker settled by the hub
   while it is still played: that game then counts its loss AND its result. Rare; not prevented.
+
+  board, solved away from the game, is not prevented.
+- ~~A no-resume game open in TWO tabs, one of them idle over 30 minutes, can have its marker settled by the hub
+  while it is still played~~: closed in the second pass (G5, below): markers are kept fresh, and a game whose
+  marker was taken anyway records nothing more.
 - A loss the HUB settles for Monopoly Deal is not added to Monopoly Deal's own legacy `bd-stats` screen (the
   unified stats have it).
 - Saves written before 2026-10-29 carry no "moved" flag: each game reads a conservative stand-in (a later
@@ -580,3 +585,115 @@ plays write them. Integrity replay: 0 strong hits on both.
   a later server time by someone with dev tools.
 - A phone offline with no server time ever measured (a fresh storage) still trusts its own clock for Rush weeks and
   crowns.
+
+## Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt
+
+Matt's decisions, built as asked. Every change only chooses whether a NEW result is written (a loss that
+used to vanish, a win the other player had earned); no stored number moves (THE LAW 2-5), and a game counts
+once. Proof: `node tools/test-live-leave.mjs` (164 checks; `--browser` adds 11: Tic Tac Toe online on two real pages over a fake database), `node tools/test-quit-loss.mjs` (150 checks,
+Q6 is this pass), `node tools/test-ai-resume-seeds.mjs` (18).
+
+**G1: leaving a live room (`js/live-leave.js`, shared by every live-room game).** Before, leaving mid-game
+recorded nothing for either side, so a player about to lose left. Now, the Battle Arena way:
+- **Leave** after your own first move of the game in play (the in-game Leave, the hub's back arrow after its
+  confirm; `js/hub.js` calls the game's `leaveMatch()` before unmounting) is YOUR loss, through the game's
+  own recorder in the `'mp'` bucket plus head-to-head where the game writes it, and the room ends with
+  `forfeit/<seat>` written in the SAME update as `status: 'ended'` (`js/net.js leaveRoom`'s optional third
+  argument; without it the write is byte-identical to before). The other phone reads it and records its WIN.
+  The Leave button takes two taps when it costs, and the hub's confirm says "Leave? Counts as a loss."
+- **Closing the app is not leaving**: the 30-minute rejoin stays. The loss is ARMED at your first move
+  (`gamehub.quitLoss.v1`, marker `<statsId>@live`, recorder `recordLiveResult`) and dropped by the real
+  result. A page that never comes back records it: the game's next mount, or the hub after 30 minutes. A
+  rejoin first reads the room (`net.readRoom`, `checkRejoin`): a game decided while away is recorded, never
+  resumed.
+- **Gone 90 seconds** (no heartbeat, `CLAIM_MS`): the other player gets **Claim win** (one pill, EN/ES in
+  `js/live-leave.js`). It records their win and ends the room with a claimed forfeit against the absent
+  seat, whose phone records the loss when it returns (or its marker does). Offered only once the absent
+  player has moved in that game (Boggle: no result reported for the round, since words are private). With
+  the other player gone 90 s, leaving costs nothing (and claims the win when they had moved).
+- **One result per game**: every leave-decided result goes through `recordLiveResult`, once per
+  `<statsId>:<room>:<game number>` (`gamehub.liveCounted.v1`, newest 300); a game that ends normally is
+  listed too, so a late forfeit adds nothing.
+- **3-4 seat tables (Chinchón, Escoba)**: the leaver loses (counted against each opponent in head-to-head);
+  the table ENDS, as it always did (the engines cannot drop a seat mid-match without every phone
+  diverging), and the others record nothing (nobody beat the table). With a seat gone 90 s, the others may
+  leave free, and the room carries a claimed forfeit against that seat, so its phone records the loss.
+
+| Game | First move | Room key's game number | Head-to-head |
+|---|---|---|---|
+| Tic Tac Toe, Mancala, Filler, Dots and Boxes | own move | series game `n` | yes |
+| Battleship | own first SHOT (placing is not a move) | series game `n` | yes |
+| Chinchón, Escoba | own first decision / card | 1 (one match a room) | yes, every opponent |
+| Boggle | own first word of the round | round `n` | yes |
+| Yahtzee | own first roll | 1 | no (never wrote any) |
+| Air Hockey | own first mallet touch of the round | round (rematch) | no |
+| Connect 4 Hoops (live) | own first shot | 1 | no |
+| Battle Arena | already had Leave = resign and Claim win; now also the armed marker, so a phone that never comes back loses (`live.js`, `countLive` checks the shared ledger) | seed | yes |
+
+Hold'em was already done (2026-09-28). Lockstep untouched: the forfeit is a new room child, never a move,
+and the lockstep invariants (`tools/test-mp-lockstep.mjs`, 244) pass unchanged. **No rules change**
+(`rooms/` takes any child).
+
+**G2: a hand-over could skip the quit loss.** A challenge or live room handed over by the launcher set the
+solo match aside, keeping its save; a new-game route then cleared the save with no loss. Every new-game
+route now checks the SAVE:
+- **Chinchón**: Start game over a set-aside match records its loss first (`_recordSavedQuitLoss`, both
+  stats places), two taps, "Tap again: counts as a loss".
+- **Battleship**: Play over a set-aside battle records its loss (two taps); a live room no longer clears the
+  solo save at all (it resumes later).
+- **Battle Arena**: a new match over a set-aside saved one records it first (`settleSavedMatch`: the loss,
+  or the WIN a save whose last move won still owed); Fight takes two taps.
+- **Escoba**: a live room's match takes the one save slot (`escoba-save`), so starting one over a
+  resumable solo match records that match's loss (host and guest).
+- Re-checked: Darts, Flick Soccer, Pool, Archery and Dominoes already checked the save; Flick Soccer and
+  Pool never hand over mid-game; Cup Pong, Cup Baseball, Hoops, Air Hockey, Yahtzee have no resume (the
+  marker covers them); Tic Tac Toe, Mancala, Filler, Dots and Boxes, Boggle and Uno cannot reach a new-game
+  route with a moved-in save still waiting (their menus record the loss first).
+
+**G3: the loss arms once the game has SHOWN something (Matt's decision).** Supersedes E1's "the player's own
+first move". A vs-computer game's quit loss now arms at the first of: the hand dealt, the board shown, or
+the computer's first move. A setup screen costs nothing.
+
+| Arms when | Games |
+|---|---|
+| dealt (at once) | Chinchón, Escoba, Dominoes, Uno, Monopoly Deal (every saved match counts as dealt) |
+| the board shown | Boggle (giving up before the first word is a loss), Battle Arena, Battleship (the battle, not placement), Air Hockey (the puck is live) |
+| the first move by EITHER side | Yahtzee and Parchís (first roll), Darts, Cup Pong, Cup Baseball, Connect 4 Hoops, Flick Soccer, Pool, Archery, Connect Four, Tic Tac Toe, Dots and Boxes, Filler, Mancala |
+
+Confirm wording unchanged ("Counts as a loss" wherever it already showed).
+
+**G4: Uno's 30-minute expiry is gone.** A hand left 30+ minutes used to become a loss on open; now it
+resumes, however old (like Chinchón since 2026-10-23), and quitting it is what costs. A save that lapsed
+before this deploy resumes if it is still readable.
+
+**G5: a marker kept fresh.** Monopoly Deal set its marker's time once, so a game longer than 30 minutes with
+the hub open in another window could be settled as a loss and later record its real result too. Now every
+page refreshes the markers it armed every minute (`js/game-stats.js keepFresh`, `js/game-stats-global.js`'s
+copy), Monopoly Deal also on every turn (`touchQuit`), and the hub settles only markers 30+ minutes old. A
+page frozen that long (the app in the background) that finds its marker taken records nothing more
+(`quitLossLost` / `quitLost`): that game already counted as a loss. Wired into every no-resume game
+(Yahtzee, Cup Pong, Cup Baseball, Air Hockey, Hoops, Monopoly Deal).
+
+**G6: Mancala's computer is deterministic.** Intermediate and Pro stopped on the wall clock (150 ms, 380 ms),
+so the same position could get a different move after a quit and resume. Both now stop on a NODE budget
+(`PRO_NODES` 640,000, the median Pro reached in 380 ms on a fast machine; Intermediate's depth 5 always
+finishes inside its 400,000). Measured: the new Pro against the old timed one, 24 games, 11-12-1 (equal);
+~300 ms a move here, longest 622 ms; the same position gives the same move every time.
+
+**What an honest player sees**: Leave in an online game asks twice once you have moved; a dropped connection
+past 90 seconds lets the other player claim the game; quitting a computer game right after the deal (or the
+computer's opening) now counts; an old Uno hand comes back instead of vanishing.
+
+**Left open / honest limits**:
+- **Real rooms unverified**: proven headlessly (`tools/test-live-leave.mjs`, fake rooms; the lockstep
+  suites); no two-phone check yet. A phone on the previous build leaves with no forfeit, so its opponent
+  records nothing for that game, as before.
+- **Both phones gone** (each closed the app after moving): each phone's armed leave settles as a loss.
+- A claim cannot see whether a Boggle opponent found a word (words are private); their loss is recorded only
+  if they had.
+- A loss settled by the hub (a closed app) is not added to Chinchón's own legacy `chinchon-stats` line (the
+  unified stats have it); leaves decided while the page is open are.
+- Tic Tac Toe's Ultimate Pro, Dots and Boxes' Pro endgame and Connect Four's solver also stop on the clock;
+  G6 covered Mancala only.
+- Escoba's G2 records the loss when the live match starts; the setup screen does not warn first.
+- Parchís is still a BUILT file: the G3 change (`doRoll` sets `cfg.hm`) must be ported to `../Parchís/src/`.

@@ -234,3 +234,8 @@ the STORED side (`mp.side`), right whichever seat the left plaque is.
 ## Quitting and easier settings (2026-10-29)
 
 Play (or Pass & play) over a saved match vs the computer the player has thrown in = ONE loss, asked twice (`playerThrew`, the match's `recorded`); Quit keeps the save. 201 and 101 record one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once ANY dart has flown, the computer's included (`playerThrew`) (it was the player's own first move).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

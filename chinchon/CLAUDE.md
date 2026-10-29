@@ -277,3 +277,9 @@ The `'draw'` event writes the solo save (`snapshot({ midTurn: true })`, `_turnDr
 ## Quitting and easier settings (2026-10-29)
 
 Solo: the menu's New game / Quit to setup after the player's first decision = ONE loss, in `chinchon-stats` too (`moved` in the save). A table records at its EASIEST computer, one step lower for a short match (under 100 points or under 10 rounds; `soloDiff`, `isShortMatch`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first decision = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per match (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
+- 3-4 seats: only the leaver records; the table ends as before. Solo: quitting is a loss once DEALT; Start game over a match set aside by `_takeArmed` asks twice and records its loss (`_recordSavedQuitLoss`, both stats places).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

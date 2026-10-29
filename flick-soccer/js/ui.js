@@ -41,8 +41,10 @@ function newAiSeed() {
 export function statsDiff(diff, goals) {
   return goals === 1 ? oneTierDown(diff, ['easy', 'medium', 'hard']) : diff;
 }
-/** Has seat 0 (the player) flicked in this match? Turns alternate shot by shot. */
-export function playerShot(m) { return !!m && (m.shots | 0) >= (m.starter === 0 ? 1 : 2); }
+/** Has anybody flicked in this match? Quitting is a loss once the first flick is made, the
+ *  computer's included (2026-10-29, second pass, Matt). (The name is kept: it was "has the PLAYER
+ *  flicked" until then.) */
+export function playerShot(m) { return !!m && (m.shots | 0) >= 1; }
 const MODES = ['cpu', 'pass'];
 const FIRSTS = ['alt', 'me', 'them'];
 /** How far back (pitch units) a full-strength pull goes, and the SAFE zone round the disc: letting go

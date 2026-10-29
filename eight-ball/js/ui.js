@@ -829,7 +829,9 @@ class PoolUI {
       shot.x = x; shot.y = y;
     }
     if (Number.isInteger(raw.c) && raw.c >= 0) shot.c = raw.c;
-    if (this.mode === 'cpu' && m.turn === 0 && !opts.replay) m.ps = 1;   // the player has shot (quitting is now a loss)
+    // The first shot of the match, whoever takes it, makes quitting a loss (2026-10-29, second pass,
+    // Matt: quitting after the computer's break was free; `ps` was the player's own first shot).
+    if (this.mode === 'cpu' && !opts.replay) m.ps = 1;
     this._save(shot);   // the position the shot was taken from, and the shot
     const ev = begin(m, shot);
     if (!ev) { this._startTurn(false); return; }

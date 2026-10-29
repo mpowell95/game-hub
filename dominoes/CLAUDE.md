@@ -449,3 +449,8 @@ padding, the title panel's padding, the avatar 84px -> 64px. Nothing is hidden, 
 ## Quitting and easier settings (2026-10-29)
 
 A match thrown away after the player's first play or draw (`moved` in the save) is ONE loss: Restart, the round card's restart and New match over a saved match ask twice. A race to 150 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Quitting is a loss once DEALT: every saved match counts (`movedIn`), `_moved` true at the deal.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

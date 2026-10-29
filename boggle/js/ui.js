@@ -44,6 +44,7 @@ import { createReactions } from '../../js/mp-reactions-ui.js';
 import { roundEndsAt, entryRemainingMs, wonFor, bothResultsIn } from './mp-round.js';
 import { awayStamp, measureAway } from '../../js/server-time.js';
 import STRINGS from './strings.js';
+import * as LL from '../../js/live-leave.js';
 
 // MULTIPLAYER (2026-07-28). Two human devices race the SAME shaken board over
 // the shared js/net.js room protocol -- js/net.js gained exactly one new
@@ -84,6 +85,7 @@ const MP_RESTORE_MAX_AGE_MS = 30 * 60 * 1000;
 // filter and claims no tier pill -- same convention Tic Tac Toe/Dots and Boxes
 // established (js/CLAUDE.md's "third consumer" section).
 const MP_DIFFICULTY = 'mp';
+const STATS_ID = 'boggle';
 
 // Ids stay module-scope (storage vocabulary); display labels resolve through t()
 // inside the render functions, same pattern as every other bilingual game.
@@ -358,6 +360,8 @@ class BoggleUI {
       net.leaveRoom(this._mpPendingCode, 'host').catch(() => { /* best-effort */ });
     }
     try { net.disconnect(); } catch { /* never let teardown throw */ }
+    if (this.mp) LL.detachLeave(STATS_ID);   // the round stays armed: closing is not leaving
+    LL.hideClaim(this.root);
     if (this._codeCopyOff) { this._codeCopyOff(); this._codeCopyOff = null; }
     if (this._reactions) { this._reactions.destroy(); this._reactions = null; }
     if (this.root) {
@@ -467,6 +471,7 @@ class BoggleUI {
       this._tryRestoreMP(mpSave);
       return;
     }
+    LL.settleLeave(STATS_ID);   // a live round that died with its page, never rejoined: its armed loss
     // A saved round wins over setup, straight onto the live board -- no
     // "resume?" dialog, same silent pattern as Escoba/Mancala.
     const save = loadGame();
@@ -791,9 +796,19 @@ class BoggleUI {
 
     if (room.status === 'ended' && !mp.opponentLeft) {
       mp.opponentLeft = true;
-      this._mpEndDueToOpponentLeft();
+      // A leave that decided the round in play (js/live-leave.js): this phone's win, or its loss when
+      // the other player claimed it. Anything else ends the room with nothing recorded, as before.
+      let res = 'none';
+      if (mp.gameNum && mp.statsCommittedGameNum !== mp.gameNum) {
+        res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
+          fn: 'recordBoggle', winArgs: [MP_DIFFICULTY, true, this._mpMine()], opps: [mp.opp] });
+        if (res !== 'none') mp.statsCommittedGameNum = mp.gameNum;
+      }
+      this._mpEndDueToOpponentLeft(res);
       return;
     }
+    mp.lastRoomSnapshot = room;
+    if (this._mpCanClaim()) LL.showClaim(this.root, () => this._mpClaim()); else LL.hideClaim(this.root);
 
     if (room.round && room.round.n && room.round.n !== mp.gameNum) {
       this._mpApplyRoundRecord(room.round);
@@ -982,8 +997,12 @@ class BoggleUI {
     const mine = isHost ? hostResult : guestResult;
     const theirs = isHost ? guestResult : hostResult;
     const won = wonFor(mine.score, theirs.score);
+    if (mp.statsCommittedGameNum !== mp.gameNum && LL.alreadyCounted(this._mpKey())) {
+      mp.statsCommittedGameNum = mp.gameNum;   // decided by a leave on this phone already: counted once, as that
+    }
     if (mp.statsCommittedGameNum !== mp.gameNum) {
       mp.statsCommittedGameNum = mp.gameNum;
+      LL.endedNormally(STATS_ID, this._mpKey());
       try { recordBoggle(MP_DIFFICULTY, won, { words: mine.words, score: mine.score, longestWord: mine.longestWord }); } catch { /* never block the result */ }
       const opp = mp.opp;
       if (opp) { try { recordHeadToHead('boggle', opp, won); } catch { /* never block the result */ } }
@@ -1053,11 +1072,13 @@ class BoggleUI {
     this._mpHostStartRound(n).finally(() => { this._mpBusy = false; });
   }
 
-  _mpEndDueToOpponentLeft() {
+  _mpEndDueToOpponentLeft(res) {
     this.stopTimer();
     net.stopHeartbeat();
     this._mpClearSave();
+    LL.hideClaim(this.root);
     const id = this._identity();
+    const decided = res === 'won' ? LL.lt('ll_left_win', { name: id.oppName }) : res === 'lost' ? LL.lt('ll_lost', { name: id.oppName }) : null;
     this.closeOverlays();
     this.mp = null;
     this._mode = 'solo';
@@ -1069,8 +1090,8 @@ class BoggleUI {
       <div class="bg-scrim"></div>
       <div class="bg-card" role="dialog" aria-modal="true" aria-label="${esc(t('mp_opponent_left_title'))}">
         <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
-        <h3 class="bg-card-title">${esc(t('mp_opponent_left_title'))}</h3>
-        <p class="bg-card-sub">${esc(t('mp_opponent_left_sub', { opp: id.oppName }))}</p>
+        <h3 class="bg-card-title">${esc(decided || t('mp_opponent_left_title'))}</h3>
+        ${decided ? '' : `<p class="bg-card-sub">${esc(t('mp_opponent_left_sub', { opp: id.oppName }))}</p>`}
         <div class="bg-card-actions"><button type="button" class="bg-btn bg-btn-primary" data-action="change-settings">${esc(t('back_to_setup'))}</button></div>
       </div>`;
     this.root.appendChild(overlay);
@@ -1083,16 +1104,76 @@ class BoggleUI {
   _mpLeaveMatch() {
     if (this._reactions) this._reactions.setActive(false);   // no reactions off the table
     if (!this.mp) return;
+    // Leaving a round in play (js/live-leave.js): after your first word it is your loss, and the room
+    // ends with your forfeit so the other phone records its win. The other player gone 90 s with no
+    // result in: leaving claims the win instead.
+    if (this._mpCanClaim()) { this._mpClaim(); return; }
+    const costs = this._mpLeaveCosts();
+    if (costs) { this.mp.statsCommittedGameNum = this.mp.gameNum; LL.forfeitNow(STATS_ID); }
+    else if (this._mpInRound()) LL.disarmLeave(STATS_ID);
+    LL.hideClaim(this.root);
     this.stopTimer();
     const { code, role } = this.mp;
+    const n = this.mp.gameNum;
     this._mpClearSave();
     this.closeOverlays();
     this.mp = null;
     this._mode = 'solo';
     this._lobby = null;
-    net.leaveRoom(code, role).catch(() => { /* best-effort */ });
+    if (costs) LL.leaveWithForfeit(net, code, role, role, n).catch(() => { /* best-effort */ });
+    else net.leaveRoom(code, role).catch(() => { /* best-effort */ });
     this.view = 'setup';
     this.renderSetup();
+  }
+
+  // --- leaving a live round (2026-10-29, js/live-leave.js) ---------------------------------------
+  _mpKey() { return this.mp ? LL.liveKey(STATS_ID, this.mp.code, this.mp.gameNum) : null; }
+  /** A round this phone is in and has not counted: playing it, or waiting for the other result. */
+  _mpInRound() { return !!(this.mp && this.mp.gameNum && this.mp.statsCommittedGameNum !== this.mp.gameNum && this._board && this.view === 'game'); }
+  _mpOppRole() { return this.mp.role === 'host' ? 'guest' : 'host'; }
+  _mpOppAwayMs() { const r = this.mp && this.mp.lastRoomSnapshot; return r ? LL.awayMs(r[this._mpOppRole()]) : 0; }
+  /** This player's words, score and longest word so far (the recorder's extras). */
+  _mpMine() {
+    const words = [...this._found.entries()];
+    const score = words.reduce((s, [, v]) => s + v, 0);
+    const longestWord = words.reduce((best, [w]) => (w.length > best.len ? { word: w, len: w.length } : best), { word: '', len: 0 });
+    return { words: words.length, score, longestWord };
+  }
+  /** The other phone has been silent 90 s and has not reported this round. (Words are private, so a
+   *  claim cannot check that they found one; their own leave is armed only if they did.) */
+  _mpCanClaim() {
+    const r = this.mp && this.mp.lastRoomSnapshot;
+    if (!this._mpInRound() || !r || this._mpOppAwayMs() < LL.CLAIM_MS) return false;
+    const theirs = r[this._mpOppRole() + 'Result'];
+    return !(theirs && (theirs.n | 0) === (this.mp.gameNum | 0));
+  }
+  _mpLeaveCosts() { return this._mpInRound() && !this._roundOver && this._mpOppAwayMs() < LL.CLAIM_MS && LL.leaveCosts(STATS_ID, this._mpKey()); }
+  _mpClaim() {
+    if (!this._mpCanClaim()) return;
+    const mp = this.mp;
+    mp.statsCommittedGameNum = mp.gameNum;
+    const mine = mp.myResult || this._mpMine();
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, true, { words: mine.words | 0, score: mine.score | 0, longestWord: mine.longestWord }], [mp.opp]);
+    LL.leaveWithForfeit(net, mp.code, mp.role, this._mpOppRole(), mp.gameNum, true).catch(() => { /* best-effort */ });
+    this.stopTimer();
+    this._mpClearSave();
+    LL.hideClaim(this.root);
+    this.closeOverlays();
+    this.mp = null;
+    this._mode = 'solo';
+    this._lobby = null;
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    overlay.dataset.role = 'mp-end';
+    overlay.innerHTML = `
+      <div class="bg-scrim"></div>
+      <div class="bg-card" role="dialog" aria-modal="true" aria-label="${esc(LL.lt('ll_claimed'))}">
+        <button type="button" class="bg-x" data-action="close-overlay" aria-label="${esc(t('aria_close'))}">&times;</button>
+        <span class="bg-card-emoji">🏆</span>
+        <h3 class="bg-card-title">${esc(LL.lt('ll_claimed'))}</h3>
+        <div class="bg-card-actions"><button type="button" class="bg-btn bg-btn-primary" data-action="change-settings">${esc(t('back_to_setup'))}</button></div>
+      </div>`;
+    this.root.appendChild(overlay);
   }
 
   /** A version-mismatched room can never be joined by this build (js/net.js's
@@ -1153,6 +1234,24 @@ class BoggleUI {
    *  clock, exactly as a normal mid-series round transition would. */
   async _tryRestoreMP(save) {
     const { code, role } = save;
+    if ((save.gameNum | 0) && (save.statsCommittedGameNum | 0) !== (save.gameNum | 0)) {
+      // Was the round decided by a leave while this phone was away? (js/live-leave.js)
+      const other = role === 'host' ? 'guest' : 'host';
+      const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
+        n: save.gameNum, mySeat: role, role, fn: 'recordBoggle',
+        winArgs: [MP_DIFFICULTY, true, { words: 0, score: 0, longestWord: { word: '', len: 0 } }],
+        oppsOf: (room) => [room[other] || save.opp] });
+      if (this._dead) return;
+      if (!chk.go) {
+        this._mpClearSave();
+        net.disconnect();
+        if (chk.res === 'won' || chk.res === 'lost') {
+          this.mp = { role, code, opp: save.opp || (chk.room && chk.room[other]) || null };
+          this._mpEndDueToOpponentLeft(chk.res);
+        }
+        return;
+      }
+    }
     try {
       if (role === 'guest') {
         const res = await net.joinRoom(code, this._myIdentity());
@@ -1235,7 +1334,9 @@ class BoggleUI {
     clearGame(); // a new round replaces any saved one
     this._path = [];
     this._found = new Map();
-    this._moved = false;
+    // The board is SHOWN: giving up from now on is a loss (2026-10-29, second pass, Matt). It used to
+    // need the first word, so a bad board could be re-shaken for free.
+    this._moved = true;
     this._statsCommitted = false;
     this._feedback = null;
     this._roundOver = false;
@@ -1306,7 +1407,7 @@ class BoggleUI {
     this._board = boardFromFaces(save.faces);
     this._solved = solveBoard(this._board.grid, this._trieRoot);
     this._found = new Map(save.found);
-    this._moved = !!save.moved;
+    this._moved = true;   // a saved round's board was shown (2026-10-29, second pass)
     this._statsCommitted = false;
     this._path = [];
     this._feedback = null;
@@ -1579,6 +1680,10 @@ class BoggleUI {
       const score = scoreForWord(word);
       this._found.set(word, score);
       this._feedback = { type: 'valid', word, score };
+      // A live round: your first word arms the leave (js/live-leave.js), refreshed with each word.
+      if (this.mp && !this._roundOver && this.mp.statsCommittedGameNum !== this.mp.gameNum) {
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, false, this._mpMine()], [this.mp.opp]);
+      }
       haptic(25); // trigger 2: successful submit only, never duplicate/invalid
       saveGame(this); // checkpoint after every scored word
     }
@@ -2004,6 +2109,7 @@ class BoggleUI {
     } else if (action === 'mp-rematch') {
       this._mpRematch();
     } else if (action === 'mp-leave') {
+      if (this._mpLeaveCosts() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quit_loss'); return; }
       this._mpLeaveMatch();
     } else if (action === 'mp-update-required') {
       this._mpForceUpdate();
@@ -2063,4 +2169,10 @@ export function isInProgress() {
   return !!(instance && instance.isInProgress());
 }
 
-export default { init, destroy, isInProgress };
+/** A live round's leave costs a loss (js/live-leave.js); the hub's leave confirm says so. */
+export function quitCostsLoss() { return !!(instance && instance.mp && instance._mpLeaveCosts()); }
+
+/** The hub's leave was confirmed: resign the live round in play (destroy() alone only detaches). */
+export function leaveMatch() { if (instance && instance.mp) instance._mpLeaveMatch(); }
+
+export default { init, destroy, isInProgress, quitCostsLoss, leaveMatch };

@@ -1,18 +1,26 @@
 // ai.js - Mancala bot. Minimax with alpha-beta over the pure engine.
 //
 // Levels map to the hub's shared tiers:
-//   1 Beginner     shallow and noisy: mostly greedy, sometimes random
+//   1 Beginner     shallow and noisy: mostly greedy, sometimes random (seeded, see seededRand)
 //   2 Intermediate fixed depth 5 search
-//   3 Pro          iterative deepening under a hard time budget
+//   3 Pro          iterative deepening under a NODE budget
 //
 // Extra turns keep the same player to move, so the search flips maximizer only
 // when the turn actually passes. Extra-turn chains do not consume depth, which
 // would explode a fixed-depth search; the Pro tier instead deepens iteratively
-// and stops at a time deadline, so a move never takes more than ~PRO_MS.
+// and stops at its node budget, keeping the last depth it finished.
+//
+// DETERMINISTIC (2026-10-29, second pass, docs/INTEGRITY-CHECKS-SPEC.md): both searches used to stop
+// on the WALL CLOCK (Pro 380 ms, Intermediate 150 ms), so the same position could get a different
+// move on a second try: quit before the computer's move was saved, resume, and it might play
+// something else. A node budget searches exactly the same tree every time, on every phone. PRO_NODES
+// is what Pro reached in 380 ms on a fast machine (median ~630k), so it is not weaker; on a slow
+// phone a move simply takes longer (measured in mancala/CLAUDE.md, "The computer is deterministic").
 
 import { applyMove, legalMoves, storeOf, P1 } from './game.js';
 
-const PRO_MS = 380;
+const PRO_NODES = 640000;          // the Pro search's budget (was PRO_MS = 380 of wall time)
+const INTERMEDIATE_NODES = 400000; // depth 5 always finishes inside it (max seen ~60k): a safety net only
 const INTERMEDIATE_DEPTH = 5;
 const ABORT = Symbol('abort');
 
@@ -39,11 +47,11 @@ function orderMoves(state) {
   });
 }
 
-/** Alpha-beta. `ctx.deadline` (ms epoch) aborts the whole subtree via ABORT. */
+/** Alpha-beta. `ctx.budget` (nodes) aborts the whole subtree via ABORT once spent. */
 function search(state, depth, alpha, beta, me, ctx) {
-  if (ctx.deadline) {
+  if (ctx.budget) {
     ctx.nodes = (ctx.nodes + 1) | 0;
-    if ((ctx.nodes & 255) === 0 && Date.now() > ctx.deadline) return ABORT;
+    if (ctx.nodes > ctx.budget) return ABORT;
   }
   if (state.over) {
     const opp = me === P1 ? 1 : 0;
@@ -107,20 +115,19 @@ export function chooseMove(state, level, rand = Math.random) {
   }
 
   if (level === 2) {
-    const r = bestAtDepth(state, INTERMEDIATE_DEPTH, { deadline: Date.now() + 150, nodes: 0 });
+    const r = bestAtDepth(state, INTERMEDIATE_DEPTH, { budget: INTERMEDIATE_NODES, nodes: 0 });
     if (r) return r.move;
     const g = bestAtDepth(state, 2, {});
     return g ? g.move : moves[0];
   }
 
-  // Pro: deepen until the time budget runs out; keep the last finished depth.
-  const ctx = { deadline: Date.now() + PRO_MS, nodes: 0 };
+  // Pro: deepen until the node budget runs out; keep the last finished depth.
+  const ctx = { budget: PRO_NODES, nodes: 0 };
   let pick = null;
   for (let depth = 3; depth <= 13; depth++) {
     const r = bestAtDepth(state, depth, ctx);
-    if (!r) break;                 // deadline hit mid-depth: discard partial result
+    if (!r) break;                 // budget spent mid-depth: discard partial result
     pick = r.move;
-    if (Date.now() > ctx.deadline) break;
   }
   if (pick != null) return pick;
   const fallback = bestAtDepth(state, 3, {});

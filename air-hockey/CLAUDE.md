@@ -292,3 +292,8 @@ A chat button during an ONLINE match (`_mountChat` in `js/ui.js`, torn down in `
 ## Quitting and easier settings (2026-10-29)
 
 No resume: once the player has touched their mallet, leaving a match vs the computer (Quit, asked twice; the hub's back; a closed app) is ONE loss at the score so far, armed in `gamehub.quitLoss.v1` (refreshed at each goal), dropped by the real result, taken in `destroy()` / `init()`. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Online (`js/live-leave.js`): after your first mallet touch in a round, leaving (Back, End match while the other is still there, the hub) = your loss and their win, per round; a closed app arms it; 90 s quiet = "Claim win"; quiet 30 s (End match showing) = leaving is free. Vs the computer: armed as soon as the puck is live; `quitLossLost` stops a second result.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

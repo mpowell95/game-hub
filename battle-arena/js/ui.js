@@ -71,8 +71,9 @@ function readSave() {
   if (!s || s.v !== 1 || !s.state || !Array.isArray(s.state.board) || s.state.board.length !== E.N) return null;
   if (!Array.isArray(s.state.sides) || s.state.sides.length !== 2) return null;
   if (s.state.sides.some((sd) => !Array.isArray(sd.mons) || sd.mons.some((m) => !BY_ID[m.id]))) return null;
-  // `pm` (2026-10-29): the player has moved (quitting is now a loss); a save from before it: past turn 2.
-  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state, pm: typeof s.pm === 'boolean' ? s.pm : (s.state.turnNo | 0) > 2 };
+  // `pm`: quitting is now a loss. Since the second pass (2026-10-29) every saved match counts: the board
+  // is dealt and shown at once (it was after the player's first move, `pm` false before that).
+  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state, pm: true };
 }
 
 /** Is a match handed over to this game's next mount (alert.js armOpen / armChallenge)? */
@@ -406,8 +407,11 @@ class BattleArena {
       while (this.picks.length < 2 && pool.length) this.picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
       this.paintDraft();
     });
-    this.on(this.root.querySelector('[data-role="fight"]'), 'click', () => {
+    this.on(this.root.querySelector('[data-role="fight"]'), 'click', (e) => {
       if (this.picks.length !== 2) return;
+      // A set-aside match vs the computer would be thrown away: two taps, the button saying so.
+      const btn = e.currentTarget;
+      if (!opts.onFight && this.savedMatchPending() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quitLoss'); return; }
       this.settings.team = this.picks.slice();
       writeJSON(SETTINGS_KEY, this.settings);
       if (opts.onFight) opts.onFight(this.picks.slice());
@@ -536,6 +540,7 @@ class BattleArena {
 
   // --- a match ----------------------------------------------------------------------------------
   startMatch(team) {
+    this.settleSavedMatch();
     const unlocked = unlockedIds(totalWins());
     const foe = chooseTeam(this.settings.diff, unlocked, team);
     let seed = 1;
@@ -545,9 +550,31 @@ class BattleArena {
     this.link = null;
     this.state = this.canon = state;
     this.recorded = false;
-    this.pm = false;
+    // Quitting is a loss once the board is shown (2026-10-29, second pass, Matt): re-dealing a bad
+    // board, or quitting after the computer's opening move, was free until the player had moved.
+    this.pm = true;
     this.save();
     this.renderBattle();
+  }
+
+  /** A match vs the computer waiting in the save while it is not on the screen (the online screens
+   *  took the mount, then Back > Play): a new match used to overwrite it for free. Now its result is
+   *  recorded first, once: the loss, or the win a save whose last move won still owes. */
+  savedMatchPending() {
+    const save = readSave();
+    if (!save) return null;
+    if (!this.link && this.state && this.state.winner == null) return null;   // that match is on screen: the menu's routes settle it
+    return save;
+  }
+  settleSavedMatch() {
+    const save = this.savedMatchPending();
+    if (!save) return;
+    this.clearSave();
+    const won = save.state.winner != null ? save.state.winner === ME : false;
+    try {
+      const st = recordResult('battlearena', save.diff, won);
+      if (!st) console.warn('[battle-arena] set-aside match not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[battle-arena] set-aside match not recorded', err); }
   }
 
   resume(save) {

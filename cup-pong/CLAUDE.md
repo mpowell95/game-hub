@@ -290,3 +290,8 @@ side (`mp.side`), never the local-frame `'a'`.
 ## Quitting and easier settings (2026-10-29)
 
 No resume: vs the computer, leaving after the player's first throw (New game / Change settings, asked twice; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss axis). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Vs the computer: quitting is a loss once ANY throw, the computer's included (it was the player's own first move). A marker settled while the page was frozen means no second result (`quitLossLost`).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

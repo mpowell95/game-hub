@@ -195,3 +195,8 @@ root-side.
 ## Quitting and easier settings (2026-10-29)
 
 No resume: after the player's first move, New Game / either Quit / the hub record ONE loss (`_takeQuitLoss`, `_resultRecorded`; the menus say "Counts as a loss"); a page closed mid-game leaves `__ghStats.armQuit`'s marker, taken at the next open. `game-stats-global.js` gained the 30-a-minute rate gate and the play log (canonical file copied verbatim). **Bump `sw.js` CACHE (and `APP_VERSION`) at deploy.** Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Quitting is a loss once DEALT (armed in `newGame`). The marker is refreshed every turn (`__ghStats.touchQuit`) and every minute, and a game whose marker the hub settled while the page was frozen records nothing more (`quitLost`). `game-stats-global.js` copied verbatim again. **Bump `sw.js` CACHE (and `APP_VERSION`) at deploy.**
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

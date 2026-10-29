@@ -27,10 +27,11 @@ import { TABLE, createMatch, resetMatch, advance, clampTarget } from './physics.
 import { createCpu, cpuThink, DIFFS } from './ai.js';
 import { createRenderer, TABLES } from './render.js';
 import { STRINGS } from './strings.js';
+import * as LL from '../../js/live-leave.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
@@ -441,6 +442,9 @@ class AirHockeyUI {
     this._syncScore();
     this.screen = 'game';
     this._showOnly(null);
+    // The puck is live and the computer moves at once: quitting is a loss from the first frame
+    // (2026-10-29, second pass, Matt). It used to wait for the player's first touch.
+    this._armQuit();
     this._start();
   }
   _pause() {
@@ -478,9 +482,13 @@ class AirHockeyUI {
     // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
     try {
       const [gf, ga] = this.match.score;
+      const lost = !this.online && quitLossLost('airhockey');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       if (!this.online) { dropQuitLoss('airhockey'); this._qArmed = false; }   // the real result replaces the armed loss
       this._bestBefore = ahRecord().bestShot | 0;
-      const st = recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
+      // Online: a round already decided by a leave on this phone (js/live-leave.js) counts once, as that.
+      const counted = !!this.online && LL.alreadyCounted(this._liveKey());
+      if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
+      const st = counted || lost ? true : recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
         { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest });
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
@@ -523,6 +531,7 @@ class AirHockeyUI {
     this._qArmed = true;
   }
   quitCostsLoss() {
+    if (this.online) return this._liveCosts();
     return !!this._qArmed && !this.online && (this.screen === 'game' || this.screen === 'paused') && this.match.phase !== 'over';
   }
   _quitNow() {
@@ -534,6 +543,7 @@ class AirHockeyUI {
   _goal(scorer) {
     const [a, b] = this.match.score;
     if (this._qArmed && this.match.phase !== 'over') this._armQuit();   // keep the loss at the score so far
+    if (this.online && this.online.armed === this.online.rd && this.match.phase !== 'over') this._liveArm();
     this._syncScore();
     this.liveEl.textContent = scorer === 0 ? t('say_goal_you', { a, b })
       : this.online ? t('say_goal_opp', { name: this.online.oppName, a, b }) : t('say_goal_cpu', { a, b });
@@ -628,6 +638,7 @@ class AirHockeyUI {
   _pointerDown(e) {
     if (this.screen !== 'game') return;
     if (!this._qArmed && !this.online) this._armQuit();
+    if (this.online && this.online.armed !== this.online.rd) this._liveArm();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     // Touch anywhere in your half (with a little grace above the centre line) to grab the mallet.
     const p = this._tablePoint(e);
@@ -639,6 +650,7 @@ class AirHockeyUI {
   _pointerMove(e) {
     if (this.screen !== 'game') return;
     if (!this._qArmed && !this.online && e.pointerType === 'mouse') this._armQuit();
+    if (this.online && this.online.armed !== this.online.rd && e.pointerType === 'mouse') this._liveArm();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     if (e.pointerId === this.drag.id) this._aim(e, true);
   }
@@ -817,6 +829,8 @@ class AirHockeyUI {
     });
     on.startedAt = performance.now();
     on.quietSince = 0;
+    on.rd = 1;          // the round (a rematch is the next one), for js/live-leave.js's key
+    on.armed = 0;       // the round whose leave is armed
     net.heartbeat(code, on.role);
     // The other phone leaving (Back, End match, closing the game) marks the room 'ended'.
     on.stopStatus = app.api.onValue(app.api.ref(app.db, `rooms/${code}/status`), (snap) => {
@@ -862,6 +876,7 @@ class AirHockeyUI {
     if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
   }
   _onlineRound() {
+    if (this.online) this.online.rd++;
     this._syncScore();
     this._resetFx();
     this.screen = 'game';
@@ -871,6 +886,7 @@ class AirHockeyUI {
     const on = this.online; if (!on) return;
     this.root.querySelector('[data-role="waitTitle"]').textContent = t('wait_for', { name: on.oppName });
     this.root.querySelector('[data-role="endMatch"]').hidden = !(on.quietSince && performance.now() - on.quietSince > GIVE_UP_MS);
+    if (this._liveCanClaim()) LL.showClaim(this.root, () => this._liveClaim()); else LL.hideClaim(this.root);
   }
   _onlineFrame(now) {
     const on = this.online;
@@ -900,8 +916,50 @@ class AirHockeyUI {
   _peerLeft() {
     const on = this.online;
     if (!on) return;
+    const inPlay = this._liveInPlay(), key = this._liveKey(), args = this._liveArgs(true);
     this._teardownOnline(false);
     this.root.querySelector('[data-role="leftTitle"]').textContent = t('left', { name: on.oppName });
+    this.screen = 'left';
+    this._showOnly('left');
+    LL.hideClaim(this.root);
+    // A leave that decided the round in play (js/live-leave.js): this phone's win, or its loss when
+    // the other phone claimed it. The forfeit rides the same write as the room's end.
+    if (!inPlay) { LL.disarmLeave('airhockey'); return; }
+    getStatsApp().then(async (app) => {
+      let forfeit = null;
+      try { if (app) forfeit = (await app.api.get(app.api.ref(app.db, `rooms/${on.code}/forfeit`))).val(); } catch { /* offline */ }
+      const res = LL.onRoomEnded({ forfeit }, { statsId: 'airhockey', key, n: on.rd, mySeat: on.role,
+        fn: 'recordAirHockey', winArgs: args, opps: [] });
+      const title = res === 'won' ? LL.lt('ll_left_win', { name: on.oppName }) : res === 'lost' ? LL.lt('ll_lost', { name: on.oppName }) : null;
+      if (title && instance === this && this.screen === 'left') this.root.querySelector('[data-role="leftTitle"]').textContent = title;
+    }).catch(() => {});
+  }
+
+  // --- leaving a live match (2026-10-29, js/live-leave.js) ---------------------------------------
+  // After your first touch of the mallet in a round, leaving it (Back, End match, the hub, any
+  // unmount: no rejoin here) is YOUR loss and the room ends with your forfeit, so the other phone
+  // records its win. A closed app leaves the loss armed; after 90 s of silence the other phone may
+  // "Claim win". With the other phone quiet 30 s (End match showing), leaving costs nothing.
+  _liveKey() { const on = this.online; return on ? LL.liveKey('airhockey', on.code, on.rd) : null; }
+  _liveInPlay() { const on = this.online; return !!(on && !on.leaving && (this.screen === 'game' || this.screen === 'wait') && this.match.phase !== 'over'); }
+  _liveArgs(won) { const [gf, ga] = this.match.score; return ['mp', won, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]; }
+  _liveArm() {
+    if (!this._liveInPlay()) return;
+    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), []);
+    this.online.armed = this.online.rd;
+  }
+  _liveQuietMs() { const on = this.online; return on && on.quietSince ? performance.now() - on.quietSince : 0; }
+  _liveCanClaim() { return this._liveInPlay() && !!this.online.session.heard && this._liveQuietMs() >= LL.CLAIM_MS; }
+  _liveCosts() { return this._liveInPlay() && this._liveQuietMs() < GIVE_UP_MS && LL.leaveCosts('airhockey', this._liveKey()); }
+  _liveClaim() {
+    if (!this._liveCanClaim()) return;
+    const on = this.online;
+    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), []);
+    on.leaving = true;
+    LL.leaveWithForfeit(on.net, on.code, on.role, on.role === 'host' ? 'guest' : 'host', on.rd, true).catch(() => {});
+    this._teardownOnline(false);
+    LL.hideClaim(this.root);
+    this.root.querySelector('[data-role="leftTitle"]').textContent = LL.lt('ll_claimed');
     this.screen = 'left';
     this._showOnly('left');
   }
@@ -918,7 +976,20 @@ class AirHockeyUI {
     if (announce) on.net.leaveRoom(on.code, on.role); else on.net.disconnect();
     this.match.puckRemote = false;
   }
-  _leaveOnline() { this._teardownOnline(true); }
+  _leaveOnline() {
+    const on = this.online;
+    if (on && this._liveCanClaim()) { this._liveClaim(); return; }
+    if (on && this._liveCosts()) {
+      LL.forfeitNow('airhockey');
+      on.leaving = true;
+      LL.leaveWithForfeit(on.net, on.code, on.role, on.role, on.rd).catch(() => {});
+      this._teardownOnline(false);
+      return;
+    }
+    if (on && this._liveInPlay()) LL.disarmLeave('airhockey');
+    LL.hideClaim(this.root);
+    this._teardownOnline(true);
+  }
 
   destroy() {
     this._quitNow();   // leaving a match against the computer mid-play: no resume, so it is a loss
@@ -939,6 +1010,7 @@ class AirHockeyUI {
 export function init(container) {
   if (instance) destroy();
   takeQuitLoss('airhockey');   // a match whose page closed mid-play (no destroy ran) is that match's loss
+  LL.settleLeave('airhockey');  // the same for an online match (js/live-leave.js; no rejoin here)
   instance = new AirHockeyUI(container);
 }
 /** The hub's leave confirm says "Counts as a loss" when this is true. */

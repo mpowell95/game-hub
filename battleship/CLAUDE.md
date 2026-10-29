@@ -423,3 +423,9 @@ Rules that came out of it (all in force):
 ## Quitting and easier settings (2026-10-29)
 
 Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move) = ONE loss (`_statsCommitted`; the armed button says "Counts as a loss"). Board size and salvos are not easier settings. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first SHOT = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per game of the series (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
+- Vs the bot: quitting is a loss once the BATTLE is on screen (placing is still not a move). A solo battle set aside by a challenge or notification is kept; Play over it asks twice and records its loss (`_recordSavedQuitLoss`); a live room no longer clears it.
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".

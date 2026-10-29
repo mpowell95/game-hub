@@ -425,3 +425,8 @@ force.
 ## Quitting and easier settings (2026-10-29)
 
 No resume, so leaving a solo game after the player's first roll is ONE loss (hub back, any unmount, a closed app): armed in `gamehub.quitLoss.v1` at each roll, dropped by the real result, taken in `destroy()` and at `init()`; `quitCostsLoss()` makes the hub's confirm say so. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+
+## Second pass (2026-10-29)
+
+- Live room (`js/live-leave.js`): after your first roll, Leave (two taps), the hub or any unmount (no rejoin here) = your loss (`'mp'`, no head-to-head) and the other phone's win; a closed app arms it; 90 s silent = "Claim win". Solo: the first roll by EITHER side arms the quit loss; a marker settled while the page was frozen means no second result (`quitLossLost`).
+- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
