@@ -208,6 +208,7 @@ let _stack = [];            // pushed views inside the current tab
 let _sheet = null;          // { k: 'tools' } | { k: 'pick', hub }
 let _edit = false;          // testers list in remove mode
 let _toastTimer = 0;
+let _backRoot = null;      // the root back button's word: 'Profile' when opened from the profile page
 let _tapped = null;         // the element of the last tap, dimmed while its write runs
 const _filters = new Map(); // search box selector -> what is typed, kept across repaints
 const _scroll = new Map();  // view key -> scrollTop
@@ -475,8 +476,9 @@ function closeAdmin() {
 }
 
 /** Open the admin page. js/hub.js gates the button on isAdmin(); this is a screen, not a lock. */
-export async function openAdmin() {
+export async function openAdmin(opts = {}) {
   ensureCss();
+  _backRoot = opts && typeof opts.backLabel === 'string' && opts.backLabel ? opts.backLabel : null;
   closeAdmin();
   const host = document.createElement('div');
   host.className = 'adm-page';
@@ -565,7 +567,7 @@ function render({ fresh = false } = {}) {
   _agg = _players ? aggregatePlayers(_players, allCorrections(cfg)) : [];
   _aggRaw = _players ? aggregatePlayers(_players) : [];
   const view = renderView(cfg, v);
-  const backLabel = !_stack.length ? tx('adm_back_hub', 'Game Hub')
+  const backLabel = !_stack.length ? (_backRoot || tx('adm_back_hub', 'Game Hub'))
     : _stack.length === 1 ? (TABS.find((x) => x.id === _tab) || TABS[0]).label() : (_stack[_stack.length - 2].title || '');
   if (v) v.title = view.title;
   const count = nowCount(cfg);

@@ -38,140 +38,85 @@
   </style>
   <link rel="stylesheet" href="../css/hub.css">
   <style>
-    .pf-main { max-width: 640px; }
-
-    /* Collapsible sections (native <details>): the summary is the header + a chevron. */
-    details.pf-collapse > summary {
-      cursor: pointer; list-style: none; user-select: none;
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      font-size: 1.06rem; font-weight: 800; color: var(--hub-ink);
-    }
-    details.pf-collapse > summary::-webkit-details-marker { display: none; }
-    details.pf-collapse > summary::after {
-      content: ""; flex: 0 0 auto; width: 9px; height: 9px;
-      border-right: 2px solid var(--hub-muted); border-bottom: 2px solid var(--hub-muted);
-      transform: rotate(45deg); transition: transform .15s ease;
-    }
-    details.pf-collapse[open] > summary::after { transform: rotate(-135deg); }
-    details.pf-collapse[open] > summary { margin-bottom: 14px; }
-    /* Settings: ONE list of collapsible rows, divided rather than boxed. Every row is the same
-       height closed, so the section reads as a list of choices and not as five nested cards. */
-    .pf-rows > details { border-top: 1px solid var(--hub-surface-2); }
-    .pf-rows > details:first-child { border-top: 0; }
-    .pf-rows > details > summary { padding: 13px 0; font-size: .95rem; }
-    .pf-rows > details[open] > summary { margin-bottom: 0; }
-    .pf-rowbody { padding: 4px 0 16px; }
-
-    /* The one full-width row button on this page: My Stats, Report a bug, Replies. They were three
-       different widths, centred, in no container - the page's most obvious loose end. */
-    .pf-linkbtn {
-      display: block; width: 100%; margin-top: 12px; padding: 13px 14px;
-      border-radius: 12px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
-      color: var(--hub-ink); font: inherit; font-weight: 800; text-align: center;
-      cursor: pointer; touch-action: manipulation;
-    }
-    .pf-linkbtn:hover { background: var(--hub-surface); border-color: var(--hub-muted); }
-
-    /* Sync code rows: value/input flexes, the button hugs. */
-    .pf-code-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-    .pf-code {
-      flex: 1 1 auto; min-width: 0; text-align: center;
-      font: 800 1.5rem/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .22em;
-      padding: 12px 10px; border-radius: 12px; background: var(--hub-surface-2); color: var(--hub-ink);
-    }
-    .pf-code-row .pf-input { flex: 1 1 auto; min-width: 0; width: auto; }
-    .pf-code-row .pf-code-btn { width: auto; margin-top: 0; flex: 0 0 auto; }
-
+    /* THE PROFILE PAGE, REBUILT (2026-10-29) from Matt's approved mockup, in the admin page's
+       style: one row style (iPhone Settings), a hero that opens Edit, and every setting one tap
+       into its own screen with a back button. The old page was cards of collapsible rows.
+       Every control element, id and handler underneath is the same one as before: only the
+       layout and the navigation changed, so saving, the name check, linking and reset are
+       untouched. --p-bg matches hub.css's --hub-bg so going hub -> profile does not flash. */
+    :root { --p-bg:#f4f6fb; --p-card:#fff; --p-ink:#111826; --p-mut:#5b6678; --p-line:rgba(16,36,58,.12);
+      --p-blue:#1462c8; --p-red:#b93d14; --p-chev:#a3adbb; --p-field:#e6e9ef; }
+    :root.gh-dark { --p-bg:#0e1420; --p-card:#182132; --p-ink:#eef2f8; --p-mut:#8a97ab; --p-line:rgba(190,214,244,.12);
+      --p-blue:#5aa2ff; --p-red:#ff8a65; --p-chev:#56637a; --p-field:#1f2a3d; }
+    body { background: var(--p-bg); color: var(--p-ink); }
+    .pf-app { max-width: 640px; margin: 0 auto; padding: 0 0 calc(32px + env(safe-area-inset-bottom, 0px));
+      font-family: -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    .pf-app button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+    .pf-view[hidden] { display: none; }
+    /* content-box: hub.css's global border-box made a 44px row swallow the notch padding, and the
+       title rode up under the status bar (the admin page's same fix, 2026-10-29). */
+    .pf-nav { box-sizing: content-box; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px;
+      display: flex; align-items: center; justify-content: space-between; }
+    .pf-nb { display: inline-flex; align-items: center; gap: 1px; height: 44px; margin-left: -9px; padding: 0 8px 0 0;
+      background: none; border: 0; color: var(--p-blue) !important; font-size: 17px; font-weight: 500; text-decoration: none; }
+    .pf-lt { margin: 0 16px 2px; font-size: 32px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; }
+    .pf-body { padding: 0 16px; }
+    .pf-hero { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 0 16px 4px;
+      background: none; border: 0; text-align: center; }
+    .pf-av { width: 84px; height: 84px; border-radius: 42px; background: var(--p-card); display: flex; align-items: center;
+      justify-content: center; font-size: 46px; line-height: 1; border: 0; }
+    .pf-av.lg { width: 104px; height: 104px; border-radius: 52px; font-size: 58px; }
+    .pf-hn { margin-top: 8px; font-size: 26px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pf-hs { font-size: 15px; color: var(--p-mut); max-width: 100%; overflow-wrap: anywhere; }
+    .pf-hs:empty { display: none; }
+    .pf-he, .pf-ch { font-size: 15px; color: var(--p-blue); }
+    .pf-ch { min-height: 44px; background: none; border: 0; font-size: 16px; font-weight: 500; color: var(--p-blue) !important; }
+    .pf-ehero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 16px 0; }
+    .pf-gh { margin: 20px 14px 7px; font-size: 13px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--p-mut); }
+    .pf-grp { background: var(--p-card); border-radius: 12px; overflow: hidden; }
+    .pf-g1 { margin-top: 16px; }
+    .pf-mt { margin-top: 12px; }
+    .pf-r { position: relative; display: flex; align-items: center; gap: 12px; min-height: 50px; width: 100%;
+      padding: 0 14px; background: none; border: 0; text-align: left; }
+    .pf-r[hidden] { display: none; }
+    .pf-r + .pf-r::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: 1px solid var(--p-line); }
+    .pf-r[hidden] + .pf-r::before { display: none; }
+    .pf-r.i + .pf-r.i::before { left: 54px; }
+    .pf-t { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pf-t.pf-red { color: var(--p-red); }
+    .pf-t.pf-blue { color: var(--p-blue); }
+    .pf-v { flex: none; max-width: 45%; font-size: 16px; color: var(--p-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pf-v.code { font: 500 15px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .06em; }
+    .pf-cv { flex: none; display: flex; color: var(--p-chev); margin-right: -4px; }
+    .pf-ck { flex: none; width: 22px; display: flex; color: var(--p-blue); }
+    .pf-em { flex: none; width: 28px; font-size: 22px; line-height: 1; text-align: center; }
+    .pf-lead { flex: none; width: 28px; display: flex; justify-content: center; color: var(--p-blue); }
+    .pf-lead svg { display: block; }
+    .pf-none-mark { width: 20px; height: 20px; border-radius: 999px; border: 2px dashed var(--p-mut); display: inline-block; }
+    .pf-r .lb-dshape { width: 18px; height: 18px; }
+    .pf-r .lb-dshape-x2 { width: 30px; }
+    .pf-f { display: block; width: 100%; padding: 14px; background: none; border: 0; outline: 0; color: var(--p-ink);
+      font: 400 17px -apple-system, system-ui, sans-serif; resize: none; }
+    .pf-f::placeholder { color: var(--p-mut); }
+    .pf-foot { margin: 7px 14px 0; font-size: 13px; line-height: 1.4; color: var(--p-mut); }
+    .pf-foot:empty { display: none; }
+    .pf-pad { padding: 4px 14px 16px; }
+    .pf-coderow { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 14px; }
+    .pf-code2 { flex: 1; min-width: 0; font: 600 22px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .18em; }
+    .pf-a { flex: none; min-height: 44px; padding: 0 6px; background: none; border: 0; font-size: 16px; font-weight: 600; color: var(--p-blue) !important; }
+    .pf-in { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--p-ink);
+      font: 500 18px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .18em; text-transform: uppercase; }
+    .pf-in::placeholder { color: var(--p-mut); letter-spacing: .02em; font-family: -apple-system, system-ui, sans-serif; text-transform: none; }
     .pf-saved {
-      margin-left: auto; font-size: .8rem; font-weight: 800; letter-spacing: .01em;
-      color: #178A7A; opacity: 0; transform: translateY(-1px);
-      transition: opacity .18s ease;
+      font-size: 13px; font-weight: 700; color: #178A7A; opacity: 0; transition: opacity .18s ease;
     }
+    :root.gh-dark .pf-saved { color: #4fd1bd; }
     .pf-saved.show { opacity: 1; }
-
-    .pf-section {
-      background: var(--hub-surface); border: 1px solid var(--hub-surface-2);
-      border-radius: 18px; padding: 18px; margin-bottom: 16px;
-      box-shadow: 0 4px 16px rgba(20, 40, 80, .06);
-    }
-    .pf-section > h2 { margin: 0 0 4px; font-size: 1.06rem; font-weight: 800; }
-    .pf-section > .pf-hint { margin: 0 0 14px; font-size: .82rem; color: var(--hub-muted); line-height: 1.4; }
-    /* Support identifier: legible in a screenshot, but visually inert so it reads as a build detail
-       rather than something a player is meant to act on. */
-    .pf-devid { margin: 10px 0 0; font-size: .68rem; letter-spacing: .06em; color: var(--hub-muted);
-                opacity: .55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    /* Support identifiers: legible in a screenshot, visually inert. */
+    .pf-devid { margin: 4px 14px 0; font: 500 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--p-chev);
+      line-height: 1.7; word-break: break-all; }
+    .pf-devid:first-of-type { margin-top: 24px; }
     .pf-devid:empty { display: none; }
-
-    .pf-label { display: block; font-size: .82rem; font-weight: 700; color: var(--hub-muted); margin-bottom: 6px; }
-    .pf-input {
-      font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px;
-      border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2); color: var(--hub-ink);
-    }
-    .pf-input:focus { outline: 2px solid var(--hub-accent); outline-offset: 1px; background: var(--hub-surface); }
-
-    .pf-you-row { display: flex; align-items: flex-end; gap: 12px; }
-    .pf-you-row .pf-name-wrap { flex: 1; }
-
-    .pf-emoji-btn {
-      font-size: 1.9rem; line-height: 1; width: 58px; height: 58px; flex: 0 0 auto;
-      border-radius: 15px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
-      cursor: pointer; display: grid; place-items: center; touch-action: manipulation;
-    }
-    .pf-emoji-btn:hover { background: #e1e8f2; }
-    .pf-emoji-btn.sm { font-size: 1.5rem; width: 48px; height: 48px; border-radius: 13px; }
-
-    /* Color swatches: shape + label, never hue alone (colorblind-safe). */
-    .pf-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
-    .pf-swatch {
-      display: flex; align-items: center; gap: 8px; font: inherit; font-weight: 700; font-size: .9rem;
-      padding: 8px 12px 8px 9px; border-radius: 12px; cursor: pointer; touch-action: manipulation;
-      border: 2px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
-      position: relative;
-    }
-    .pf-swatch:hover { background: var(--hub-surface-2); }
-    .pf-swatch svg { display: block; }
-    .pf-swatch.is-selected { border-color: var(--hub-ink); background: var(--hub-surface-2); }
-    .pf-swatch.is-selected::after {
-      content: "\2713"; /* checkmark */ font-weight: 900; color: var(--hub-ink);
-      margin-left: 2px;
-    }
-    .pf-swatch-none { color: var(--hub-muted); }
-    .pf-swatch-none .pf-none-mark {
-      width: 22px; height: 22px; border-radius: 999px; border: 2px dashed var(--hub-muted);
-      display: inline-block;
-    }
-
-    /* Opponent rows */
-    .pf-opp { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hub-surface-2); }
-    .pf-opp:first-of-type { border-top: 0; }
-    .pf-opp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-    .pf-opp-name { }
-    .pf-remove {
-      flex: 0 0 auto; width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--hub-surface-2);
-      background: var(--hub-surface); color: var(--hub-muted); font-size: 1.2rem; line-height: 1;
-      cursor: pointer; touch-action: manipulation;
-    }
-    .pf-remove:hover { background: #fbeae7; color: #c2402f; border-color: #f0ccc6; }
-
-    /* Skill segmented control */
-    .pf-seg { display: inline-flex; background: var(--hub-surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
-    .pf-seg button {
-      font: inherit; font-weight: 700; font-size: .82rem; border: 0; background: transparent;
-      color: var(--hub-muted); padding: 6px 10px; border-radius: 8px; cursor: pointer; touch-action: manipulation;
-      display: inline-flex; align-items: center;
-    }
-    .pf-seg button.is-on { background: var(--hub-surface); color: var(--hub-ink); box-shadow: 0 1px 3px rgba(20,40,80,.14); }
-    .pf-seg .lb-dshape { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.15em; margin-right: 0.3em; }
-    .pf-seg .lb-dshape-x2 { width: 1.7em; }
-    /* A computer player's row is a grid (2026-10-15): the three levels run under the name AND the
-       remove button, so "Hard" / "Difícil" no longer spill past the card on a 360px phone. */
-    .pf-opp { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 8px; }
-    .pf-opp-main { display: contents; }
-    .pf-opp > .pf-emoji-btn { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
-    .pf-opp .pf-opp-name { grid-column: 2; grid-row: 1; }
-    .pf-opp > .pf-remove { grid-column: 3; grid-row: 1; align-self: center; }
-    .pf-opp .pf-seg { grid-column: 2 / 4; grid-row: 2; display: flex; }
-    .pf-opp .pf-seg button { flex: 1 1 auto; justify-content: center; white-space: nowrap; }
 
     /* Quick chat. The top row of each kind IS your chat, in game order; "Add more" is what you
        have not picked. A picked-up item is lifted, gets a thick ink border and the bar below
@@ -221,40 +166,6 @@
       font: inherit; width: 100%; padding: 9px 11px; border-radius: 10px;
       border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
     }
-
-    /* Copy, Link and + Add opponent. They were the page's last odd style - a dashed accent outline
-       on transparent - against the solid, filled rows everything else uses. Same fill, same border,
-       same weight as .pf-linkbtn now; only the width differs, because Copy and Link hug their input
-       (.pf-code-btn) while + Add opponent spans its section. */
-    .pf-add {
-      font: inherit; font-weight: 800; margin-top: 12px; padding: 11px 14px; width: 100%;
-      border-radius: 12px; border: 1px solid var(--hub-surface-2); background: var(--hub-surface-2);
-      color: var(--hub-ink); cursor: pointer; touch-action: manipulation;
-    }
-    .pf-add:hover { background: var(--hub-surface); border-color: var(--hub-muted); }
-    .pf-add[hidden] { display: none; }
-
-    .pf-foot {
-      text-align: center; color: var(--hub-muted); font-size: .84rem; line-height: 1.5;
-      display: flex; flex-direction: column; align-items: center; gap: 10px;
-    }
-    /* Reset is destructive - a solid red button, last on the page (its own row, below Report a
-       bug) so it isn't the first/easiest tap target in this group. */
-    .pf-reset-btn {
-      font: inherit; font-weight: 700; margin-top: 12px; padding: 10px 16px; border-radius: 11px;
-      border: 1px solid #c2402f; background: #c2402f; color: #fff;
-      cursor: pointer; touch-action: manipulation;
-    }
-    .pf-reset-btn:hover { background: #a8341f; border-color: #a8341f; }
-    /* The quiet outline button (Report a bug), same shape family as Reset but its own row above
-       it. Named .pf-dev-btn until 2026-08-11, when Device details was retired and this style was
-       left serving the button that replaced it. */
-    .pf-report-btn {
-      font: inherit; font-weight: 700; margin-top: 0; padding: 10px 16px; border-radius: 11px;
-      border: 1px solid var(--hub-surface-2); background: var(--hub-surface); color: var(--hub-ink);
-      cursor: pointer; touch-action: manipulation;
-    }
-    .pf-report-btn:hover { background: var(--hub-surface-2); border-color: var(--hub-surface-2); }
 
     /* Emoji picker modal */
     .pf-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
@@ -308,9 +219,11 @@
     .pf-emoji-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px;
       overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 120px; padding: 2px;
+      /* Rows never shrink to fit the box (Chromium squashed 300 rows into it, 2026-10-29): it scrolls. */
+      grid-auto-rows: max-content; align-content: start;
     }
     .pf-emoji-grid button {
-      font-size: 1.6rem; line-height: 1; aspect-ratio: 1; border-radius: 11px; border: 1px solid var(--hub-surface-2);
+      font-size: 1.6rem; line-height: 1; aspect-ratio: 1; min-height: 44px; border-radius: 11px; border: 1px solid var(--hub-surface-2);
       background: var(--hub-surface-2); color: var(--hub-ink);
       cursor: pointer; touch-action: manipulation; display: grid; place-items: center;
       /* A flag or a ZWJ family is wider than a smiley; clamp so one entry cannot stretch the row. */
@@ -327,180 +240,168 @@
   </style>
 </head>
 <body>
-  <div class="hub">
-    <header class="hub-top">
-      <div class="hub-top-info">
-        <a class="hub-back" id="pf-back" href="../">&#8249; Hub</a>
-        <h1 class="hub-top-title" data-i18n="pf_title">Profile</h1>
+  <div class="pf-app">
+    <!-- MAIN. Matt, 2026-10-29: "I have to click bottom right then admin in a different area to get
+         there". Admin is now the first row, on admin devices only (hidden for everyone else, so no
+         other phone ever downloads js/admin-ui.js). -->
+    <section class="pf-view" data-view="main">
+      <div class="pf-nav">
+        <a class="pf-nb" id="pf-back" href="../"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="adm_back_hub">Game Hub</span></a>
         <span class="pf-saved" id="pf-saved" role="status" aria-live="polite" data-i18n="pf_saved">Saved</span>
       </div>
-    </header>
-
-    <main class="hub-main pf-main">
-      <!-- ONE container pattern per block (2026-08-31). The page had four at once: a card with a
-           heading, a card that was itself a collapsible, collapsibles nested inside a card, and
-           three loose buttons in no card at all. Now every block is a .pf-section; the only
-           collapsibles are the rows inside Settings, and they are one level deep.
-
-           WHO YOU ARE. Identity only: your face, your name, and the note that shows on your
-           leaderboard page. Colour, theme and quick chat used to live in here too, which is what
-           made this card a grab-bag - they are settings, and they moved. -->
-      <section class="pf-section">
-        <h2 id="pf-you-h"></h2>
-        <div class="pf-you-row">
-          <button type="button" class="pf-emoji-btn" id="pf-you-emoji" aria-label="Choose your emoji" data-i18n-aria="pf_you_emoji_aria">🙂</button>
-          <div class="pf-name-wrap">
-            <label class="pf-label" for="pf-you-name" data-i18n="pf_name_label">Your name</label>
-            <input class="pf-input" id="pf-you-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off" data-i18n-placeholder="pf_name_placeholder">
-          </div>
+      <button type="button" class="pf-hero" data-go="edit">
+        <span class="pf-av" id="pf-hero-emoji" aria-hidden="true">🙂</span>
+        <span class="pf-hn" id="pf-you-h"></span>
+        <span class="pf-hs" id="pf-hero-tag"></span>
+        <span class="pf-he" data-i18n="pf_edit">Edit</span>
+      </button>
+      <div class="pf-body">
+        <div class="pf-grp pf-g1">
+          <button type="button" class="pf-r" id="pf-admin-btn" hidden><span class="pf-t" data-i18n="pf_admin_row">Admin</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" id="pf-stats-btn"><span class="pf-t" data-i18n="hub_stats_btn">My Stats</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
         </div>
-        <p class="pf-hint" id="pf-name-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
-
-        <!-- Labelled "Your tagline", not "Message for other players": this is a line on your own
-             leaderboard page, and the old label read as the Messages feature two cards below. -->
-        <div class="pf-name-wrap" style="margin-top:14px">
-          <label class="pf-label" for="pf-you-msg" data-i18n="pf_msg_label">Your tagline</label>
-          <textarea class="pf-input" id="pf-you-msg" rows="2" maxlength="80"
-                    placeholder="Shown when someone opens your profile"
-                    data-i18n-placeholder="pf_msg_placeholder"></textarea>
+        <div class="pf-gh" data-i18n="pf_settings_h">Settings</div>
+        <div class="pf-grp">
+          <button type="button" class="pf-r" data-go="theme"><span class="pf-t" data-i18n="pf_theme_h">Theme</span><span class="pf-v" id="pf-val-theme"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="lang"><span class="pf-t" data-i18n="pf_lang_h">Language</span><span class="pf-v" id="pf-val-lang"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="layout"><span class="pf-t" data-i18n="pf_layout_h">Layout</span><span class="pf-v" id="pf-val-layout"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="notify"><span class="pf-t" data-i18n="pf_notify_h">Notifications</span><span class="pf-v" id="pf-val-notify"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="color"><span class="pf-t" data-i18n="pf_color_summary">Preferred color</span><span class="pf-v" id="pf-val-color"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="quickchat"><span class="pf-t" data-i18n="pf_quickchat_summary">Quick chat</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" data-go="opps"><span class="pf-t" data-i18n="pf_customize_summary">Computer players</span><span class="pf-v" id="pf-val-opps"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
         </div>
-
-        <button type="button" class="pf-linkbtn" id="pf-stats-btn" data-i18n="hub_stats_btn">My Stats</button>
-      </section>
-
-      <!-- Admin (js/admin-ui.js). Matt, 2026-09-01: the launcher's Admin button "should be moved
-           into my profile or something instead of all the way down there" - it sat under the game
-           grid, past every tile. HIGH on this page on purpose, for the same reason Messages is:
-           being on the profile page is only an improvement if it is not another scroll away.
-           ABOVE Messages since 2026-10-05 (Matt: "Can you put Admin above Messages instead?"): the
-           Messages rows load a second late and grow that card, so a tap aimed at an Admin button
-           sitting BELOW it landed on "All messages".
-           Hidden for everyone else (`hidden` until js/hub.js's own isAdmin() says otherwise), so
-           nobody but Matt ever downloads js/admin-ui.js or knows the section exists. -->
-      <section class="pf-section" id="pf-admin-sec" hidden>
-        <h2 data-i18n="adm_title">Admin controls</h2>
-        <button type="button" class="pf-linkbtn" id="pf-admin-btn" data-i18n="adm_btn">🛠️ Admin</button>
-      </section>
-
-      <!-- MESSAGES MOVED OFF THIS PAGE (2026-10-17). Matt: "Now that messages has its own tab, we
-           should remove it from the profile page, right?" Both launcher layouts open Messages
-           directly (the Messages button / the bottom tab), so this card was a third door to the same
-           screen. js/messages-ui.js's renderProfileMessages stays exported; nothing calls it now.
-           The old card-height hint gamehub.pfMsgsHeight.v1 is left in storage, unread (rule 5). -->
-
-      <!-- SETTINGS. Everything that changes how the app behaves for this person, as ONE list of
-           collapsible rows rather than scattered between a sub-collapse inside You and a whole card
-           of its own. Language joins Theme here: it was only ever in the hub's top bar, so the two
-           halves of the same choice lived on different screens. -->
-      <section class="pf-section">
-        <h2 data-i18n="pf_settings_h">Settings</h2>
-        <div class="pf-rows">
-          <details class="pf-collapse">
-            <summary data-i18n="pf_theme_h">Theme</summary>
-            <div class="pf-rowbody">
-              <div class="pf-seg" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div>
-            </div>
-          </details>
-          <details class="pf-collapse">
-            <summary data-i18n="pf_lang_h">Language</summary>
-            <div class="pf-rowbody">
-              <div class="pf-seg" id="pf-lang-seg" role="group" data-i18n-aria="pf_lang_h" aria-label="Language"></div>
-            </div>
-          </details>
-          <!-- LAYOUT (2026-10-17, js/layout.js): the launcher's Comfortable / Compact choice. -->
-          <details class="pf-collapse" id="pf-layout">
-            <summary data-i18n="pf_layout_h">Layout</summary>
-            <div class="pf-rowbody">
-              <div class="pf-seg" id="pf-layout-seg" role="group" data-i18n-aria="pf_layout_h" aria-label="Layout"></div>
-            </div>
-          </details>
-          <!-- NOTIFICATIONS (2026-09-23, js/push.js): per DEVICE, because a permission is. -->
-          <details class="pf-collapse" id="pf-notify">
-            <summary data-i18n="pf_notify_h">Notifications</summary>
-            <div class="pf-rowbody">
-              <p class="pf-hint" id="pf-notify-msg" role="status" aria-live="polite" style="margin:0 0 10px"></p>
-              <button type="button" class="pf-linkbtn" id="pf-notify-btn" hidden></button>
-            </div>
-          </details>
-          <details class="pf-collapse">
-            <summary data-i18n="pf_color_summary">Preferred color</summary>
-            <div class="pf-rowbody"><div class="pf-swatches" id="pf-colors"></div></div>
-          </details>
-          <details class="pf-collapse" id="pf-quickchat">
-            <summary data-i18n="pf_quickchat_summary">Quick chat</summary>
-            <div class="pf-rowbody">
-              <p class="pf-hint" data-i18n="pf_quickchat_hint" style="margin:0 0 4px">Your chat, in the order it shows in multiplayer games. Tap one to move or remove it.</p>
-              <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
-              <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
-              <div class="pf-qc-bar" id="pf-qc-bar-e" aria-live="polite" hidden></div>
-              <div id="pf-qc-emojis-more-wrap">
-                <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
-                <div class="pf-qc-more-e" id="pf-qc-emojis-more"></div>
-              </div>
-              <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
-              <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
-              <div class="pf-qc-bar" id="pf-qc-bar-p" aria-live="polite" hidden></div>
-              <div id="pf-qc-phrases-more-wrap">
-                <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
-                <div class="pf-qc-phrases" id="pf-qc-phrases-more"></div>
-              </div>
-              <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
-              <div class="pf-qc-custom" id="pf-qc-custom"></div>
-            </div>
-          </details>
-          <details class="pf-collapse">
-            <summary data-i18n="pf_customize_summary">Computer players</summary>
-            <div class="pf-rowbody">
-              <div id="pf-opps"></div>
-              <button type="button" class="pf-add" id="pf-add-opp" data-i18n="pf_add_opp_btn">+ Add opponent</button>
-            </div>
-          </details>
+        <div class="pf-grp pf-g1">
+          <button type="button" class="pf-r" data-go="devices"><span class="pf-t" data-i18n="pf_sync_h">Your devices</span><span class="pf-v code" id="pf-val-code"></span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" id="pf-bug-btn"><span class="pf-t" data-i18n="pf_bug_row">Report a bug</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
+          <button type="button" class="pf-r" id="pf-replies-btn"><span class="pf-t" id="pf-replies-label">Replies to your reports</span><span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span></button>
         </div>
-      </section>
-
-      <!-- DEVICES. Your code and linking belong together: one is what you read out, the other is
-           where the other phone types it. -->
-      <section class="pf-section">
-        <h2 data-i18n="pf_sync_h">Your devices</h2>
-        <div class="pf-code-row">
-          <code id="pf-code" class="pf-code" aria-label="Your code" data-i18n-aria="pf_code_aria">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
-          <button type="button" class="pf-add pf-code-btn" id="pf-code-copy" data-i18n="pf_copy_btn">Copy</button>
+        <!-- Destructive, so it is alone at the bottom with nothing to mis-tap it for. -->
+        <div class="pf-grp pf-g1">
+          <button type="button" class="pf-r" id="pf-reset-btn"><span class="pf-t pf-red" data-i18n="pf_reset_btn">Reset profile</span></button>
         </div>
-        <div class="pf-code-row">
-          <input class="pf-input" id="pf-code-link-input" type="text" maxlength="5" placeholder="Enter a code"
-                 autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.18em" data-i18n-placeholder="pf_code_placeholder">
-          <button type="button" class="pf-add pf-code-btn" id="pf-code-link-btn" data-i18n="pf_link_btn">Link</button>
-        </div>
-        <p class="pf-hint" id="pf-code-msg" role="status" aria-live="polite" style="margin:8px 0 0;min-height:1.1em"></p>
-        <!-- Support identifier. Deliberately quiet: it means nothing to a player, but a screenshot of
-             this screen then carries name + player code + which DEVICE recorded a given history, which
-             is the one thing that cannot be worked out remotely (a shared phone whose profile has been
-             switched looks identical to its own device record). Read-only: it never mints an id. -->
-        <p class="pf-devid" id="pf-device-id"></p>
-        <!-- The anonymous auth id, beside the device id and just as quiet. It is the BOOTSTRAP for
-             the admin allowlist: an admin device is one whose uid is in `admins/` in the Firebase
-             console, and a device that is not on that list has no admin UI at all - so without a
-             line like this there would be nowhere to read the id it needs to be granted. Safe to
-             show to anyone: it identifies a device, grants nothing, and `admins` is `".write":
-             false` so no client can act on it. -->
-        <p class="pf-devid" id="pf-auth-id"></p>
-      </section>
-
-      <!-- HELP. The two halves of one conversation, in one card, instead of loose buttons floating
-           at the bottom of the page at three different widths. -->
-      <section class="pf-section">
-        <h2 data-i18n="pf_help_h">Help</h2>
-        <button type="button" class="pf-linkbtn" id="pf-bug-btn" data-i18n="bug_btn">🐞 Report a bug</button>
-        <!-- Rendered ALWAYS, not only when something is waiting, so it is a place the player learns
-             exists rather than a control that appears and vanishes. -->
-        <button type="button" class="pf-linkbtn" id="pf-replies-btn" data-i18n="bug_mine_btn">📬 Replies to your reports</button>
-      </section>
-
-      <!-- Destructive, so it is alone at the bottom with nothing to mis-tap it for. -->
-      <div class="pf-foot">
-        <button type="button" class="pf-reset-btn" id="pf-reset-btn" data-i18n="pf_reset_btn">Reset profile</button>
       </div>
-    </main>
+    </section>
+
+    <!-- EDIT: who you are. A NEW name is saved only once the registry says it is free or ours. -->
+    <section class="pf-view" data-view="edit" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <div class="pf-ehero">
+        <button type="button" class="pf-av lg" id="pf-you-emoji" aria-label="Choose your emoji" data-i18n-aria="pf_you_emoji_aria">🙂</button>
+        <button type="button" class="pf-ch" data-emoji-change data-i18n="pf_change">Change</button>
+      </div>
+      <div class="pf-body">
+        <div class="pf-gh" data-i18n="pf_name_h">Name</div>
+        <div class="pf-grp"><input class="pf-f" id="pf-you-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off" data-i18n-placeholder="pf_name_placeholder" aria-label="Your name" data-i18n-aria="pf_name_label"></div>
+        <p class="pf-foot" id="pf-name-msg" role="status" aria-live="polite"></p>
+        <div class="pf-gh" data-i18n="pf_tag_h">Tagline</div>
+        <div class="pf-grp"><textarea class="pf-f" id="pf-you-msg" rows="2" maxlength="80" placeholder="Shown when someone opens your profile" data-i18n-placeholder="pf_msg_placeholder" aria-label="Your tagline" data-i18n-aria="pf_msg_label"></textarea></div>
+        <p class="pf-foot" id="pf-msg-count"></p>
+      </div>
+    </section>
+
+    <section class="pf-view" data-view="theme" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_theme_h">Theme</h1>
+      <div class="pf-body"><div class="pf-grp pf-mt" id="pf-theme-seg" role="group" data-i18n-aria="pf_theme_h" aria-label="Theme"></div></div>
+    </section>
+
+    <section class="pf-view" data-view="lang" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_lang_h">Language</h1>
+      <div class="pf-body"><div class="pf-grp pf-mt" id="pf-lang-seg" role="group" data-i18n-aria="pf_lang_h" aria-label="Language"></div></div>
+    </section>
+
+    <!-- LAYOUT (2026-10-17, js/layout.js): the launcher's Comfortable / Compact choice. -->
+    <section class="pf-view" data-view="layout" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_layout_h">Layout</h1>
+      <div class="pf-body"><div class="pf-grp pf-mt" id="pf-layout-seg" role="group" data-i18n-aria="pf_layout_h" aria-label="Layout"></div></div>
+    </section>
+
+    <!-- NOTIFICATIONS (2026-09-23, js/push.js): per DEVICE, because a permission is. -->
+    <section class="pf-view" data-view="notify" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_notify_h">Notifications</h1>
+      <div class="pf-body">
+        <div class="pf-grp pf-mt" id="pf-notify-grp" hidden><button type="button" class="pf-r" id="pf-notify-btn"></button></div>
+        <p class="pf-foot" id="pf-notify-msg" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="pf-view" data-view="color" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_color_summary">Preferred color</h1>
+      <div class="pf-body"><div class="pf-grp pf-mt" id="pf-colors"></div></div>
+    </section>
+
+    <section class="pf-view" data-view="quickchat" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_quickchat_summary">Quick chat</h1>
+      <div class="pf-body">
+        <div class="pf-grp pf-mt pf-pad" id="pf-quickchat">
+          <div class="pf-qc-label" data-i18n="pf_quickchat_emojis">Emojis</div>
+          <div class="pf-qc-emojis" id="pf-qc-emojis"></div>
+          <div class="pf-qc-bar" id="pf-qc-bar-e" aria-live="polite" hidden></div>
+          <div id="pf-qc-emojis-more-wrap">
+            <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
+            <div class="pf-qc-more-e" id="pf-qc-emojis-more"></div>
+          </div>
+          <div class="pf-qc-label" data-i18n="pf_quickchat_phrases">Phrases</div>
+          <div class="pf-qc-phrases" id="pf-qc-phrases"></div>
+          <div class="pf-qc-bar" id="pf-qc-bar-p" aria-live="polite" hidden></div>
+          <div id="pf-qc-phrases-more-wrap">
+            <div class="pf-qc-sublabel" data-i18n="pf_quickchat_more">Add more</div>
+            <div class="pf-qc-phrases" id="pf-qc-phrases-more"></div>
+          </div>
+          <div class="pf-qc-label" data-i18n="pf_quickchat_custom">Your own phrases</div>
+          <div class="pf-qc-custom" id="pf-qc-custom"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pf-view" data-view="opps" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_customize_summary">Computer players</h1>
+      <div class="pf-body">
+        <div class="pf-grp pf-mt">
+          <div id="pf-opps"></div>
+          <button type="button" class="pf-r i" id="pf-add-opp"><span class="pf-lead"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span class="pf-t pf-blue" data-i18n="pf_add_opp_row">Add computer player</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ONE computer player: face, name, level, remove. -->
+    <section class="pf-view" data-view="opp" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_customize_summary">Computer players</span></button></div>
+      <div id="pf-opp-detail"></div>
+    </section>
+
+    <!-- DEVICES. Your code and linking belong together: one is what you read out, the other is
+         where the other phone types it. -->
+    <section class="pf-view" data-view="devices" hidden>
+      <div class="pf-nav"><button type="button" class="pf-nb" data-back><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span data-i18n="pf_title">Profile</span></button></div>
+      <h1 class="pf-lt" data-i18n="pf_sync_h">Your devices</h1>
+      <div class="pf-body">
+        <div class="pf-gh" data-i18n="pf_code_h">Your code</div>
+        <div class="pf-grp"><div class="pf-coderow">
+          <code id="pf-code" class="pf-code2" aria-label="Your code" data-i18n-aria="pf_code_aria">&mdash;&mdash;&mdash;&mdash;&mdash;</code>
+          <button type="button" class="pf-a" id="pf-code-copy" data-i18n="pf_copy_btn">Copy</button>
+        </div></div>
+        <div class="pf-gh" data-i18n="pf_link_h">Link another device</div>
+        <div class="pf-grp"><div class="pf-coderow">
+          <input class="pf-in" id="pf-code-link-input" type="text" maxlength="5" placeholder="Enter a code"
+                 autocomplete="off" spellcheck="false" data-i18n-placeholder="pf_code_placeholder" aria-label="Enter a code" data-i18n-aria="pf_code_placeholder">
+          <button type="button" class="pf-a" id="pf-code-link-btn" data-i18n="pf_link_btn">Link</button>
+        </div></div>
+        <p class="pf-foot" id="pf-code-msg" role="status" aria-live="polite"></p>
+        <!-- Support identifier. Deliberately quiet: a screenshot of this screen then carries which
+             DEVICE recorded a given history. Read-only: it never mints an id. -->
+        <p class="pf-devid" id="pf-device-id"></p>
+        <!-- The anonymous auth id: the BOOTSTRAP for the admin allowlist (an admin device is one
+             whose uid is in `admins/`). Safe to show: it grants nothing. -->
+        <p class="pf-devid" id="pf-auth-id"></p>
+      </div>
+    </section>
   </div>
 
   <!-- Emoji picker (shared by You and each opponent) -->
@@ -574,7 +475,7 @@
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
       applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderLayout(); renderQuickChat();
-      paintReplyCount(); paintNotify();
+      paintReplyCount(); paintNotify(); paintValues(); paintHero(); renderOppDetail();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
       searchIndex = null; searchPromise = null;
@@ -596,8 +497,10 @@
       const text = { on: 'pf_notify_on', off: 'pf_notify_off', denied: 'pf_notify_denied', install: 'pf_notify_install',
         unsupported: 'pf_notify_unsupported', 'no-code': 'pf_notify_nocode' }[st] || 'pf_notify_unsupported';
       msg.textContent = t(text) + (extra ? ' ' + extra : '');
-      btn.hidden = !(st === 'on' || st === 'off');
-      btn.textContent = t(st === 'on' ? 'pf_notify_btn_off' : 'pf_notify_btn_on');
+      document.getElementById('pf-notify-grp').hidden = !(st === 'on' || st === 'off');
+      btn.innerHTML = `<span class="pf-t pf-blue">${escAttr(t(st === 'on' ? 'pf_notify_btn_off' : 'pf_notify_btn_on'))}</span>`;
+      const v = document.getElementById('pf-val-notify');
+      if (v) v.textContent = tf(st === 'on' ? 'pf_notify_v_on' : 'pf_notify_v_off', st === 'on' ? 'On' : 'Off');
       btn.onclick = async () => {
         if (notifyBusy) return;
         notifyBusy = true; btn.disabled = true;
@@ -879,8 +782,8 @@
         closePicker();
         return;
       }
-      if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; }
-      else { state.opponents[pickTarget].emoji = emoji; renderOpps(); }
+      if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; paintHero(); }
+      else { state.opponents[pickTarget].emoji = emoji; renderOpps(); renderOppDetail(); }
       pushRecent(emoji);
       closePicker();
       commitNow();
@@ -904,24 +807,31 @@
     els.pickQx.addEventListener('click', () => { els.pickQ.value = ''; els.pickQ.focus(); renderPickerGrid(); });
     els.picker.querySelectorAll('[data-picker-close]').forEach((n) => n.addEventListener('click', closePicker));
     // Escape closes, same as the scrim. Only while the picker is actually open.
+    // Then the reset dialog, then a sub screen steps back to the list.
     document.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape' && !els.picker.hidden) closePicker();
+      if (ev.key !== 'Escape') return;
+      if (!els.picker.hidden) closePicker();
+      else if (!els.reset.hidden) els.reset.hidden = true;
+      else if (curView !== 'main') history.back();
     });
 
     // -- Colors ------------------------------------------------------------------
+    // A check row (the admin page's pattern): the tick AND aria-pressed say which is on, never hue.
+    const CHECK = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+    const CHEV = '<span class="pf-cv"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>';
+    const checkRow = (attr, on, label, lead) =>
+      `<button type="button" class="pf-r${lead ? ' i' : ''}" ${attr} aria-pressed="${on}">${lead ? `<span class="pf-lead">${lead}</span>` : ''}`
+      + `<span class="pf-t">${escAttr(label)}</span><span class="pf-ck">${on ? CHECK : ''}</span></button>`;
     function renderColors() {
-      const none = `<button type="button" class="pf-swatch pf-swatch-none ${state.preferredColor === null ? 'is-selected' : ''}"
-          data-color="none"><span class="pf-none-mark" aria-hidden="true"></span>${t('pf_color_none')}</button>`;
       els.colors.innerHTML = COLORS.map((c) =>
-        `<button type="button" class="pf-swatch ${state.preferredColor === c.id ? 'is-selected' : ''}" data-color="${c.id}">
-           ${shapeSVG(c.shape, c.hex)}${t(c.labelKey)}
-         </button>`).join('') + none;
+        checkRow(`data-color="${c.id}"`, state.preferredColor === c.id, t(c.labelKey), shapeSVG(c.shape, c.hex))).join('')
+        + checkRow('data-color="none"', state.preferredColor === null, t('pf_color_none'), '<span class="pf-none-mark" aria-hidden="true"></span>');
     }
     els.colors.addEventListener('click', (ev) => {
       const btn = ev.target.closest('[data-color]');
       if (!btn) return;
       state.preferredColor = btn.dataset.color === 'none' ? null : btn.dataset.color;
-      renderColors();
+      renderColors(); paintValues();
       commitNow();
     });
 
@@ -937,15 +847,14 @@
     function renderTheme() {
       if (!els.themeSeg) return;
       const cur = getTheme();
-      els.themeSeg.innerHTML = THEME_OPTS.map((o) =>
-        `<button type="button" data-theme="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${t(o.labelKey)}</button>`).join('');
+      els.themeSeg.innerHTML = THEME_OPTS.map((o) => checkRow(`data-theme="${o.v}"`, cur === o.v, t(o.labelKey))).join('');
     }
     if (els.themeSeg) {
       els.themeSeg.addEventListener('click', (ev) => {
         const btn = ev.target.closest('[data-theme]');
         if (!btn) return;
         setTheme(btn.dataset.theme);
-        renderTheme();
+        renderTheme(); paintValues();
       });
     }
 
@@ -957,8 +866,7 @@
     function renderLang() {
       if (!els.langSeg) return;
       const cur = getLang();
-      els.langSeg.innerHTML = LANG_OPTS.map((o) =>
-        `<button type="button" data-lang="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${o.label}</button>`).join('');
+      els.langSeg.innerHTML = LANG_OPTS.map((o) => checkRow(`data-lang="${o.v}"`, cur === o.v, o.label)).join('');
     }
     if (els.langSeg) {
       els.langSeg.addEventListener('click', (ev) => {
@@ -971,20 +879,35 @@
     // -- Layout ---------------------------------------------------------------------
     // The launcher's Comfortable / Compact choice (gamehub.layout.v1 via js/layout.js). A device
     // preference like theme and language; the hub reads it on its next paint.
+    const LAYOUT_OPTS = [['comfortable', 'Comfortable'], ['compact', 'Compact']];
     function renderLayout() {
       const layoutSeg = document.getElementById('pf-layout-seg');   // looked up here: called before this line runs
       if (!layoutSeg) return;
       const cur = getLayout();
-      layoutSeg.innerHTML = [['comfortable', 'Comfortable'], ['compact', 'Compact']].map(([v, fb]) =>
-        `<button type="button" data-layout="${v}" class="${cur === v ? 'is-on' : ''}">${tf('pf_layout_' + v, fb)}</button>`).join('');
+      layoutSeg.innerHTML = LAYOUT_OPTS.map(([v, fb]) => checkRow(`data-layout="${v}"`, cur === v, tf('pf_layout_' + v, fb))).join('');
     }
     if (document.getElementById('pf-layout-seg')) {
       document.getElementById('pf-layout-seg').addEventListener('click', (ev) => {
         const btn = ev.target.closest('[data-layout]');
         if (!btn) return;
         setLayout(btn.dataset.layout);
-        renderLayout();
+        renderLayout(); paintValues();
       });
+    }
+
+    // -- The main list's values (what each row is set to) -------------------------
+    function paintValues() {
+      const set = (id, text) => { const n = document.getElementById(id); if (n) n.textContent = text; };
+      const th = THEME_OPTS.find((o) => o.v === getTheme());
+      set('pf-val-theme', th ? t(th.labelKey) : '');
+      const lg = LANG_OPTS.find((o) => o.v === getLang());
+      set('pf-val-lang', lg ? lg.label : '');
+      const ly = LAYOUT_OPTS.find(([v]) => v === getLayout());
+      set('pf-val-layout', ly ? tf('pf_layout_' + ly[0], ly[1]) : '');
+      const c = COLORS.find((x) => x.id === state.preferredColor);
+      set('pf-val-color', c ? t(c.labelKey) : t('pf_color_none'));
+      set('pf-val-opps', String(state.opponents.length));
+      set('pf-val-code', state.playerId || '');
     }
 
     // -- My Stats -------------------------------------------------------------------
@@ -1093,51 +1016,83 @@
     }
 
     // -- Opponents ---------------------------------------------------------------
+    // The list: one row per computer player (face, name, level); a tap opens that player.
+    let oppIdx = null;   // the computer player open in the 'opp' view
     function renderOpps() {
-      els.opps.innerHTML = state.opponents.map((o, i) => `
-        <div class="pf-opp" data-i="${i}">
-          <button type="button" class="pf-emoji-btn sm" data-opp-emoji="${i}" aria-label="${t('pf_opp_emoji_aria')}">${o.emoji}</button>
-          <div class="pf-opp-main">
-            <input class="pf-input pf-opp-name" data-opp-name="${i}" type="text" maxlength="20"
-                   value="${o.name.replace(/"/g, '&quot;')}" placeholder="${t('pf_opp_placeholder', { n: i + 1 })}" autocomplete="off">
-            <div class="pf-seg" role="group" aria-label="${t('pf_skill_aria', { name: o.name.replace(/"/g, '&quot;') })}">
-              ${SKILLS.map((s) => `<button type="button" data-opp-skill="${i}" data-v="${s.v}"
-                   class="${o.skill === s.v ? 'is-on' : ''}">${diffShapeSVG(s.v)}${t(s.labelKey)}</button>`).join('')}
-            </div>
-          </div>
-          <button type="button" class="pf-remove" data-opp-remove="${i}" aria-label="${t('pf_remove_opp_aria')}">&times;</button>
-        </div>`).join('');
+      els.opps.innerHTML = state.opponents.map((o, i) => {
+        const sk = SKILLS.find((s) => s.v === o.skill);
+        return `<button type="button" class="pf-r i" data-opp-open="${i}"><span class="pf-em" aria-hidden="true">${escAttr(o.emoji)}</span>`
+          + `<span class="pf-t">${escAttr(o.name || t('pf_opp_placeholder', { n: i + 1 }))}</span>`
+          + `<span class="pf-v">${sk ? escAttr(t(sk.labelKey)) : ''}</span>${CHEV}</button>`;
+      }).join('');
       els.addOpp.hidden = state.opponents.length >= 3;
+      paintValues();
+    }
+    function renderOppDetail() {
+      const box = document.getElementById('pf-opp-detail');
+      const o = oppIdx == null ? null : state.opponents[oppIdx];
+      if (!box) return;
+      if (!o) { box.innerHTML = ''; return; }
+      const i = oppIdx;
+      box.innerHTML = `
+        <div class="pf-ehero">
+          <button type="button" class="pf-av lg" data-opp-emoji="${i}" aria-label="${escAttr(t('pf_opp_emoji_aria'))}">${escAttr(o.emoji)}</button>
+          <button type="button" class="pf-ch" data-opp-emoji="${i}">${escAttr(tf('pf_change', 'Change'))}</button>
+        </div>
+        <div class="pf-body">
+          <div class="pf-gh">${escAttr(tf('pf_name_h', 'Name'))}</div>
+          <div class="pf-grp"><input class="pf-f" data-opp-name="${i}" type="text" maxlength="20" value="${escAttr(o.name)}"
+               placeholder="${escAttr(t('pf_opp_placeholder', { n: i + 1 }))}" autocomplete="off" aria-label="${escAttr(tf('pf_name_h', 'Name'))}"></div>
+          <div class="pf-grp pf-g1" role="group" aria-label="${escAttr(t('pf_skill_aria', { name: o.name }))}">
+            ${SKILLS.map((s) => checkRow(`data-opp-skill="${i}" data-v="${s.v}"`, o.skill === s.v, t(s.labelKey), diffShapeSVG(s.v))).join('')}
+          </div>
+          <div class="pf-grp pf-g1"><button type="button" class="pf-r" data-opp-remove="${i}"><span class="pf-t pf-red">${escAttr(tf('pf_remove_opp_row', 'Remove'))}</span></button></div>
+        </div>`;
     }
     els.opps.addEventListener('click', (ev) => {
+      const open = ev.target.closest('[data-opp-open]');
+      if (open) goView('opp', +open.dataset.oppOpen);
+    });
+    const oppBox = document.getElementById('pf-opp-detail');
+    oppBox.addEventListener('click', (ev) => {
       const emojiBtn = ev.target.closest('[data-opp-emoji]');
       if (emojiBtn) { const i = +emojiBtn.dataset.oppEmoji; openPicker(i, state.opponents[i].emoji); return; }
       const skillBtn = ev.target.closest('[data-opp-skill]');
-      if (skillBtn) { state.opponents[+skillBtn.dataset.oppSkill].skill = +skillBtn.dataset.v; renderOpps(); commitNow(); return; }
+      if (skillBtn) { state.opponents[+skillBtn.dataset.oppSkill].skill = +skillBtn.dataset.v; renderOpps(); renderOppDetail(); commitNow(); return; }
       const rm = ev.target.closest('[data-opp-remove]');
-      if (rm) { state.opponents.splice(+rm.dataset.oppRemove, 1); renderOpps(); commitNow(); return; }
+      if (rm) { state.opponents.splice(+rm.dataset.oppRemove, 1); oppIdx = null; renderOpps(); commitNow(); history.back(); return; }
     });
-    els.opps.addEventListener('input', (ev) => {
+    oppBox.addEventListener('input', (ev) => {
       const nameInput = ev.target.closest('[data-opp-name]');
-      if (nameInput) { state.opponents[+nameInput.dataset.oppName].name = nameInput.value; scheduleSave(); }
+      if (nameInput) { state.opponents[+nameInput.dataset.oppName].name = nameInput.value; renderOpps(); scheduleSave(); }
     });
     els.addOpp.addEventListener('click', () => {
       if (state.opponents.length >= 3) return;
       state.opponents.push({ name: t('pf_opp_placeholder', { n: state.opponents.length + 1 }), emoji: '🤖', skill: 2 });
       renderOpps();
       commitNow();
+      goView('opp', state.opponents.length - 1);
     });
 
     // -- You fields --------------------------------------------------------------
     els.youEmoji.addEventListener('click', () => openPicker('you', state.emoji));
+    document.querySelector('[data-emoji-change]').addEventListener('click', () => openPicker('you', state.emoji));
     // The heading IS the profile name (Matt, 2026-10-15: never "You"). Blank mid-edit keeps the old word.
     function paintYouHead() { els.youH.textContent = (state.name || '').trim() || t('pf_you_h'); }
+    // The main screen's hero: face, name, tagline. Edit's count under the tagline box.
+    function paintHero() {
+      $('#pf-hero-emoji').textContent = state.emoji;
+      $('#pf-hero-tag').textContent = (state.message || '').trim();
+      $('#pf-msg-count').textContent = `${(els.youMsg.value || '').length} / 80`;
+      paintYouHead();
+    }
     // A NEW name is saved only once the registry says it is free or ours (2026-10-29, the 'change'
     // handler below): typing it no longer saves it, so an offline phone cannot take "MattyIce".
     els.youName.addEventListener('input', () => { els.youH.textContent = (els.youName.value || '').trim() || (state.name || '').trim() || t('pf_you_h'); });
     els.youMsg.addEventListener('input', () => {
       state.message = els.youMsg.value;
       state.messageAt = Date.now();
+      paintHero();
       scheduleSave();
     });
     // Push it up immediately so the message is visible to other players without waiting for the
@@ -1259,12 +1214,12 @@
     // Unhide at once from this device's cached answer (the same key isAdminDevice() reads), so
     // the section is there at first paint. Left for the import below, it appeared a beat late and
     // pushed Messages down under a finger already on its way to it.
-    try { if (localStorage.getItem('gamehub.adminDevice.v1') === '1') $('#pf-admin-sec').hidden = false; }
+    try { if (localStorage.getItem('gamehub.adminDevice.v1') === '1') $('#pf-admin-btn').hidden = false; }
     catch { /* no storage: the async gate below still decides */ }
     // Wired up front too, so a tap the moment it shows works. Inert for everyone else: the
     // section stays hidden, so the button can never be pressed.
     $('#pf-admin-btn').addEventListener('click', async () => {
-      try { (await import('../js/admin-ui.js')).openAdmin(); }
+      try { (await import('../js/admin-ui.js')).openAdmin({ backLabel: tf('pf_title', 'Profile') }); }
       catch (e) { console.error('Admin controls failed to load', e); }
     });
     (async () => {
@@ -1277,7 +1232,7 @@
         let ok = isAdminDevice();
         if (!ok) ok = (await refreshAdminDevice()) === true;
         if (!ok) return;
-        $('#pf-admin-sec').hidden = false;
+        $('#pf-admin-btn').hidden = false;
       } catch (e) { console.error('admin gate failed', e); }
     })();
 
@@ -1295,9 +1250,10 @@
       try {
         const m = await import('../js/bug-report-ui.js');
         const n = await m.myUnreadReplies();
-        $('#pf-replies-btn').textContent = n > 0 ? t('bug_mine_btn_new', { n }) : t('bug_mine_btn');
+        $('#pf-replies-label').textContent = n > 0 ? tf('pf_replies_row_new', 'Replies to your reports ({n} new)').replace('{n}', n) : tf('pf_replies_row', 'Replies to your reports');
       } catch { /* offline: the plain label is already correct */ }
     }
+    $('#pf-replies-label').textContent = tf('pf_replies_row', 'Replies to your reports');
     paintReplyCount();
 
     // -- Initial paint -----------------------------------------------------------
@@ -1313,6 +1269,9 @@
       renderLang();
       renderLayout();
       renderQuickChat();
+      renderOppDetail();
+      paintHero();
+      paintValues();
     }
     // Support identifier. Reads gamehub.deviceId RAW rather than importing deviceId() from
     // game-stats.js, because that function MINTS and persists an id when none exists - a display
@@ -1324,9 +1283,38 @@
       els.deviceId.textContent = id ? 'id ' + id.slice(0, 8) : '';
     }
 
+    // -- Screens ---------------------------------------------------------------------
+    // One page, many screens: each row opens its own, and the phone's back gesture (history)
+    // steps back, exactly like the back button. The list keeps its scroll position.
+    const VIEWS = [...document.querySelectorAll('.pf-view')];
+    let curView = 'main', mainScroll = 0;
+    function showView(id, i) {
+      if (id === 'opp') { oppIdx = Number.isInteger(i) && state.opponents[i] ? i : null; if (oppIdx == null) id = 'opps'; }
+      if (!VIEWS.some((v) => v.dataset.view === id)) id = 'main';
+      if (curView === 'main' && id !== 'main') mainScroll = window.scrollY;
+      if (id === 'opp') renderOppDetail();
+      VIEWS.forEach((v) => { v.hidden = v.dataset.view !== id; });
+      curView = id;
+      window.scrollTo(0, id === 'main' ? mainScroll : 0);
+    }
+    function goView(id, i) {
+      history.pushState({ pfView: id, i }, '');
+      showView(id, i);
+    }
+    document.addEventListener('click', (ev) => {
+      const go = ev.target.closest('[data-go]');
+      if (go) { goView(go.dataset.go); return; }
+      if (ev.target.closest('[data-back]')) history.back();
+    });
+    window.addEventListener('popstate', (ev) => {
+      const st = ev.state || {};
+      showView(st.pfView || 'main', st.i);
+    });
+
     ensurePlayerId();
     hydrate();
     showDeviceId();
+    { const st = history.state || {}; if (st.pfView) showView(st.pfView, st.i); }
   </script>
 </body>
 </html>

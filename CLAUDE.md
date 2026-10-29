@@ -488,11 +488,13 @@ iOS 26 keyboard bug; on Matt's iPhone it left the tab bar ~65pt above the bottom
 **The bar halfway up is repaired in place (2026-10-24, `js/tabbar-fix.js`)**: it measures the bar against the true screen bottom
 and, when off, re-lays it out, then `translateY`s it down. Layout untouched. Unverified on an iPhone by the session.
 
-## The profile page's structure (2026-08-31)
+## The profile page's structure (rebuilt 2026-10-29, Matt's approved mockup)
 
-**You** · **Settings** (one list of collapsible rows, one level deep) · **Your devices** · **Help**
-· **Reset profile** at the bottom. (Messages left this page 2026-10-17: both launcher layouts open it.) Every block is a `.pf-section` card;
-full-width row buttons use `.pf-linkbtn`.
+The admin page's style (one row style, `.pf-r`): a hero (face, name, tagline) that opens **Edit**; **Admin** (admin
+devices only, first row; opens the admin page with "Profile" as its back word, `openAdmin({backLabel})`) and My Stats;
+Settings rows (Theme, Language, Layout, Notifications, Preferred color, Quick chat, Computer players), each its own
+screen; Your devices, Report a bug, Replies; Reset profile alone at the bottom. Screens are `.pf-view` sections switched
+by `history.pushState` (the phone's back gesture steps back). Every control id and handler is the old one.
 
 **Firebase rules:** root `.read`/`.write` are `false` and every branch is enumerated in
 `database.rules.json`; **add a new top-level node there or it is unreachable**, and add it to

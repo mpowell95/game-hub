@@ -1537,3 +1537,20 @@ key), Hoops (code printed under each name, `name || code` fallbacks), Spelling B
 the retired PIN-gated Challenge Control (`js/challenge/challenge-ui.js` Insights prints codes; admin-only), the profile page's
 own code, room join codes, `js/bee-fairplay.js` (shared with the server; its `name || code` is data, every screen now
 substitutes "Player"). Proven by `tools/test-no-codes.mjs` and `tools/test-no-codes-browser.mjs`.
+
+
+## The profile page, rebuilt (2026-10-29)
+
+Matt, after the admin page rebuild: "can we apply a similar upgrade to the my profile page? ... I have to click bottom
+right then admin in a different area to get there and navigate". Mockup approved ("i like it"; then "ok" after seeing
+the non-admin version). The page was cards of collapsible `<details>` rows; it is now an iPhone-Settings list in the
+admin page's style, each setting one tap into its own screen (`.pf-view`, `history.pushState`, so the phone's back
+gesture works and a reload keeps the screen). Admin is the first row on admin devices (same two gates as before:
+the cached `gamehub.adminDevice.v1`, then `isAdminDevice`/`refreshAdminDevice`). Computer players became a list with
+one screen per player (face, name, level as check rows, Remove). Quick chat's hint line was dropped (fewest words).
+Nothing about saving changed: every input, id and handler (`saveProfile`, the name registry check, code linking,
+reset) is the same code; only the markup around them moved. Found on the way: the emoji picker's grid was squashed
+to ~14px rows in Chromium (the old page too; likely Android Chrome players saw it): `grid-auto-rows: max-content`,
+`align-content: start`, buttons `min-height: 44px`. Tested headless at 402x874, 375x667, 360x780 and 430x932, EN and
+ES, dark (and light at 402): no sideways scroll, no clipped row, back from every screen lands on the list, every
+write lands in `gamehub.profile`.
