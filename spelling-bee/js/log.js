@@ -6,6 +6,8 @@
 //   w  the typed letters (guesses only)                hints, yesterday, past, board, rankings, help,
 //   r  the result: ok, bonus, or the refusal           win, list, shuffle
 //   s  the server's clock when it arrived (a phone clock set wrong shows up against it)
+//   z  the phone's time-zone offset in minutes (getTimezoneOffset; 2026-10-29): the server decides which
+//      day a guess fell on with it (js/bee-fairplay.js countsOnDay)
 //
 // Nothing in the game reads it back (no download for anyone); `node tools/read-bee-times.mjs --log`
 // does. Entries queue in localStorage (gamehub.spellingbee.log.v1) and go up in batches; a failed
@@ -35,6 +37,7 @@ export function logAction(puzzleKey, e, extra) {
   if (!/^(es-)?[a-z0]-[a-z0]{6}$/.test(k)) return;
   const t = Date.now();
   const entry = { p: k, id: `${t}-${seq++ % 10000}`, t, e };
+  try { const z = new Date(t).getTimezoneOffset(); if (Number.isFinite(z)) entry.z = z; } catch { /* no zone */ }
   if (extra && typeof extra.w === 'string') entry.w = extra.w.slice(0, 30);
   if (extra && typeof extra.r === 'string') entry.r = extra.r.slice(0, 20);
   const q = readQueue();
@@ -60,6 +63,7 @@ export async function flushLog() {
       const v = { t: x.t, e: x.e, s: api.serverTimestamp() };
       if (x.w != null) v.w = x.w;
       if (x.r != null) v.r = x.r;
+      if (Number.isFinite(x.z)) v.z = x.z;
       patch[`beeLog/${x.p}/${code}/${x.id}`] = v;
     }
     await api.update(api.ref(db), patch);

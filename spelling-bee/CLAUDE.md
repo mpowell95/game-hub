@@ -75,6 +75,11 @@ touches the viewer's own row** (silence: the cheater's phone looks unchanged). `
 2+ right per wrong, re-typed under 1 in 10; the last two added 2026-10-28 with best words first, from King of Games' Oct 28 log); a flagged
 day is written ONCE to `beeFlags/` and pushed to admins; missing-log alerts (`beeAlerts/`) push only. `boards/v1/bee` (JSON string,
 `buildBeeBoard`) = the long-term board (own day, voids, places by points). `tools/test-bee-server.mjs`.
+**The server's clock (2026-10-29, `docs/INTEGRITY-CHECKS-SPEC.md` "Holes closed 2026-10-29")**: "today" and word times come from
+`js/server-time.js`; **Yesterday's Answers opens only on this page's LIVE server time** (`answersShown`; offline = "No connection").
+Log entries carry `z` (time zone). The server counts a word for its day only if sent within 24 h of its phone time and by that day's
+midnight + 10 min; a full log (or a post over a day late, `isLatePost`) decides the row (`boards/v1/beeOwn`, read by the in-game board
+too); the phone's `dw` stays stored. Late posts are not sent. Never let a phone clock decide a day again.
 **Hub Leaderboard + My Stats (2026-10-28)**: Spelling Bee's numbers come from that board (`js/bee-board.js`): `leaderboard-ui.js`
 `gameMetricAt`/`boardPlaysOf`/`lbUnitKeyOf` read it (so By Game and the You tab match), toggles Points | Words and All | English |
 Español (`beeTabsHTML`), 🥇🥈🥉 · 🧠 · 🐝 · 📅 under each name; My Stats `spellingBeeScreen`. No board yet = the stats record, as before.

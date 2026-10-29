@@ -20,8 +20,10 @@
 // owner still sees every play of it on their own My Stats screen) - see THE LAW rule 1.
 //
 // Self-contained, like a game module: injects its own CSS, mounts into document.body, and works on
-// a bare page that loads no hub chrome. Firebase is touched lazily and never blocks: offline, the
-// name is accepted locally and claimed on a later sync, exactly as the hub's gate always behaved.
+// a bare page that loads no hub chrome. A NEW name needs the registry check to SUCCEED online
+// (2026-10-29): offline it used to be accepted and claimed later, so a phone with no signal could take
+// "MattyIce" and merge into Matt's row. Offline, the gate says to connect and stays up (a first run
+// is the only time it shows, and installing the app needs the network anyway).
 
 import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode,
   hasName, isPlaceholderName } from './profile-store.js';
@@ -183,6 +185,8 @@ function mountGate(done) {
     say(t('hub_fr_msg_checking'));
     let status = 'offline';
     try { status = await usernameStatus(name, code); } catch { status = 'offline'; }
+    // Never save a name the registry has not checked (2026-10-29): "connect to choose a name".
+    if (status !== 'free' && status !== 'mine' && status !== 'taken') { busy(false); say(t('hub_fr_msg_need_net')); return; }
     if (status === 'taken') {
       // Claimed in the last day: almost always this same person's Safari tab, and an iPhone's Home
       // Screen app cannot see it (Matt, 2026-10-25: nobody understands the codes). Offer "That's me"

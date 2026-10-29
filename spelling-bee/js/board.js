@@ -16,6 +16,7 @@ import { isHiddenName } from '../../js/hidden-players.js';
 import { watchPath } from '../../js/live-read.js';
 import { voidedCodesFor } from '../../js/stats-corrections.js';
 import { isBeeUndone } from '../../js/admin-config.js';
+import { countedRow } from '../../js/bee-fairplay.js';
 
 const POSTED_KEY = 'gamehub.spellingbee.posted.v1';   // { "<puzzle>": words last verified on the board }
 
@@ -80,6 +81,7 @@ export function rowsOf(v) {
   for (const [code, r] of Object.entries(v && typeof v === 'object' ? v : {})) {
     if (!r || typeof r !== 'object' || !(r.words > 0) || isHiddenName(r.name)) continue;
     const row = { code, name: String(r.name || code), emoji: String(r.emoji || ''), words: r.words | 0, points: r.points | 0, rank: r.rank | 0 };
+    if (Number.isFinite(Number(r.at))) row.at = Number(r.at);   // server time of the post (late posts, 2026-10-29)
     if (Number.isFinite(r.dw)) { row.dw = r.dw | 0; row.dp = r.dp | 0; row.dr = r.dr | 0; }
     rows.push(row);
   }
@@ -96,12 +98,13 @@ export function byPoints(a, b) {
  *  puzzle's OWN day (`dw`/`dp`/`dr`; a row without them predates them and counts whole), a row with nothing
  *  on its day is left out, and a voided row shows played with 0 (so last). The viewer's own row is never
  *  changed, so nothing on a voided player's own phone differs. */
-export function shownRows(rows, { me = '', voided = new Set() } = {}) {
+export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '' } = {}) {
   const out = [];
   for (const r of rows || []) {
     if (me && r.code === me) { out.push(r); continue; }
-    const day = Number.isFinite(r.dw);
-    const x = { ...r, words: day ? r.dw : r.words, points: day ? r.dp : r.points, rank: day ? r.dr : r.rank };
+    // The server's own-day numbers when they cover this post (its log, its clock); a post made over a
+    // day after the puzzle's day with none counts nothing (2026-10-29, js/bee-fairplay.js countedRow).
+    const x = { ...r, ...countedRow(r, (own || {})[r.code], day) };
     if (!(x.words > 0)) continue;
     if (voided.has(r.code)) Object.assign(x, { words: 0, points: 0, rank: 0 });
     out.push(x);
@@ -117,6 +120,16 @@ export function voidedOn(puzzleKey, flags) {
   for (const code of Object.keys(flags && typeof flags === 'object' ? flags : {})) out.add(code);
   for (const code of [...out]) if (isBeeUndone(k, code)) out.delete(code);
   return out;
+}
+
+/** Watch one puzzle's own-day numbers (boards/v1/beeOwn/<puzzle>, server only, 2026-10-29). cb(object | {}). */
+export function watchOwn(puzzleKey, cb) {
+  let stop = null, dead = false;
+  getStatsApp().then((boot) => {
+    if (!boot || dead) return;
+    stop = watchPath(boot, `boards/v1/beeOwn/${boardKey(puzzleKey)}`, (v) => cb(v && typeof v === 'object' ? v : {}));
+  }).catch(() => {});
+  return () => { dead = true; if (stop) stop(); };
 }
 
 /** Watch one puzzle's flags (written by the server only). cb(object | {}). Always-safe unsubscribe. */

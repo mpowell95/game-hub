@@ -2733,7 +2733,10 @@ export function recordSkeeball(boardId, extras) {
     score, bestThrow: e.bestThrow | 0, at: e.at, slotsHit: e.slotsHit, cleanRack: e.cleanRack,
     slotCounts: e.slotCounts, perfectRack: e.perfectRack, fullRack: e.fullRack,
   });
-  unlockBoard(g.sk, board);          // you have played it, so it is yours
+  // You have played it, so it is yours - EXCEPT a challenge rack (`challenge: true`, 2026-10-29): the
+  // challenged person plays the challenger's machine even when it is locked for them, and that rack
+  // must never open it for good. The score is still recorded like any rack.
+  if (!e.challenge) unlockBoard(g.sk, board);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

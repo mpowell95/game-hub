@@ -15,10 +15,12 @@ import { recordResult, noteVoidedResult, recordSpellingBeeGenius } from '../../j
 import { VOIDED_MATCHES } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
-  rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled,
+  rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled, answersShown,
 } from './engine.js';
 import STRINGS from './strings.js';
-import { postProgress, watchDaily, watchFlags, needsPost, shownRows, voidedOn, byPoints } from './board.js';
+import { postProgress, watchDaily, watchFlags, watchOwn, needsPost, shownRows, voidedOn, byPoints } from './board.js';
+import { bestNow, liveNow, whenLive, onLive, __setServerTimeForTest } from '../../js/server-time.js';
+import { isLatePost } from '../../js/bee-fairplay.js';
 import { logAction, flushLog } from './log.js';
 import { myCode } from '../../js/messages.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -198,6 +200,7 @@ class SpellingBee {
     };
     document.addEventListener('visibilitychange', this._onVis);
     this._dayTimer = setInterval(() => this._checkDay(), 60000);
+    this._offLive = onLive(() => this._checkDay());   // the server's clock arrived: today may differ
     await ensureCSS();
     if (this.disposed) return;
     this._offLang = onLangChange(() => { if (this.data && this.data.lang !== wordLang()) { this._closeOverlay(); this._load(); } });
@@ -229,7 +232,9 @@ class SpellingBee {
    *  `old` = the day's RETIRED letters (swapped 2026-10-26 for a fuller puzzle): still playable, so
    *  progress on it stays visible (THE LAW rule 1). */
   _startDay(n, old) {
-    this.todayN = dayNumber(this.data.epoch, new Date());
+    // The SERVER's date (2026-10-29): a phone clock set ahead used to open tomorrow's puzzle as today
+    // (js/server-time.js; offline = the last measured gap, else the phone clock).
+    this.todayN = dayNumber(this.data.epoch, new Date(bestNow()));
     this.n = (Number.isInteger(n) && n >= 0 && n <= this.todayN) ? n : this.todayN;
     this.day = dayKey(dateOfDay(this.data.epoch, this.n));
     this.old = !!(old && this.data.retired[this.n] === old);
@@ -254,12 +259,19 @@ class SpellingBee {
     // The daily board for THIS puzzle: watched while it is on screen, and our count posted if behind.
     if (this._stopBoard) this._stopBoard();
     if (this._stopFlags) this._stopFlags();
+    if (this._stopOwn) this._stopOwn();
     this.boardRows = [];
     this.boardFlags = {};
+    this.boardOwn = {};
     const key = this.puzzle.key;
     this._stopFlags = watchFlags(key, (f) => {
       if (this.disposed || !this.puzzle || this.puzzle.key !== key) return;
       this.boardFlags = f;
+      if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
+    });
+    this._stopOwn = watchOwn(key, (o) => {
+      if (this.disposed || !this.puzzle || this.puzzle.key !== key) return;
+      this.boardOwn = o;
       if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
     });
     this._stopBoard = watchDaily(key, (rows) => {
@@ -270,12 +282,12 @@ class SpellingBee {
     this._postSoon(0);
     this._log('open', { r: `day ${this.n}${this.old ? ' old' : ''}` });
     flushLog();   // anything queued from an earlier session (offline, closed too fast)
-    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old) }; } catch { /* ignore */ }
+    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old), liveTime: (o) => __setServerTimeForTest(o) }; } catch { /* ignore */ }
   }
 
   _checkDay() {
     if (!this.data || this.disposed) return;
-    const tn = dayNumber(this.data.epoch, new Date());
+    const tn = dayNumber(this.data.epoch, new Date(bestNow()));
     if (tn === this.todayN) return;
     // Midnight: today's puzzle moves on to the new day; a past puzzle being played stays put.
     if (this.n === this.todayN && !this.old) { this._closeOverlay(); this._startDay(); } else this.todayN = tn;
@@ -528,7 +540,7 @@ class SpellingBee {
     this.rec.found.push(word);
     // When each word was found (Matt, 2026-10-26: "Just record when he plays"). Parallel to `found`,
     // additive; words found before this have no time.
-    const now = Date.now();
+    const now = bestNow();   // the server's clock when known (2026-10-29), so a phone set back cannot date a word
     if (!this.rec.times || typeof this.rec.times !== 'object') this.rec.times = {};
     this.rec.times[word] = now;
     if (!this.rec.geniusAt && this.rank() >= GENIUS) this.rec.geniusAt = now;
@@ -683,6 +695,9 @@ class SpellingBee {
 
   _post() {
     if (!this.puzzle) return;
+    // Over a day after the puzzle's day: no post (2026-10-29). Such a post counts only what the log
+    // proves, and it would replace the row's on-time `at` (js/bee-fairplay.js isLatePost).
+    if (isLatePost(this.day, bestNow())) return;
     postProgress(this.puzzle.key, { words: this.found.size, points: this.score, rank: this.rank(), times: this._times(), day: this._dayStats() }).catch(() => {});
   }
 
@@ -692,9 +707,9 @@ class SpellingBee {
   _openBoard() {
     const other = this.data.lang === 'es' ? 'en' : 'es';
     this._watchOther(other);
-    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, voidedOn(this.puzzle.key, this.boardFlags));
+    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, voidedOn(this.puzzle.key, this.boardFlags), this.boardOwn, this.day);
     const o = this._other;
-    const theirs = this._boardSection(other, o ? o.rows : [], o ? o.max : 0, false, o && o.key ? voidedOn(o.key, o.flags) : new Set());
+    const theirs = this._boardSection(other, o ? o.rows : [], o ? o.max : 0, false, o && o.key ? voidedOn(o.key, o.flags) : new Set(), o ? o.own : {}, o ? o.day : '');
     const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
     this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2>${mine}${theirs}`);
     // No scrolling: drop the lowest rows (never ours), from the longer list first, and say how many.
@@ -715,9 +730,9 @@ class SpellingBee {
   }
 
   /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
-  _boardSection(lang, serverRows, max, live, voided) {
+  _boardSection(lang, serverRows, max, live, voided, own, day) {
     const code = myCode();
-    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided }).map((r) => ({ ...r, me: r.code === code }));
+    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided, own, day }).map((r) => ({ ...r, me: r.code === code }));
     if (live) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
       rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
@@ -749,7 +764,7 @@ class SpellingBee {
     const want = `${lang}:${dayKey(date)}`;
     if (this._other && this._other.want === want) return;
     if (this._other && this._other.stop) this._other.stop();
-    const o = { want, rows: [], max: 0, key: '', flags: {}, stop: null };
+    const o = { want, rows: [], max: 0, key: '', flags: {}, own: {}, day: dayKey(date), stop: null };
     this._other = o;
     getData(lang).then((d) => {
       if (this._other !== o || this.disposed) return;
@@ -761,7 +776,8 @@ class SpellingBee {
       const repaint = () => { if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard(); };
       const offRows = watchDaily(pz.key, (rows) => { if (this._other !== o || this.disposed) return; o.rows = rows; repaint(); });
       const offFlags = watchFlags(pz.key, (f) => { if (this._other !== o || this.disposed) return; o.flags = f; repaint(); });
-      o.stop = () => { offRows(); offFlags(); };
+      const offOwn = watchOwn(pz.key, (v) => { if (this._other !== o || this.disposed) return; o.own = v; repaint(); });
+      o.stop = () => { offRows(); offFlags(); offOwn(); };
     }).catch((err) => console.warn('[spelling-bee] other board', err));
   }
 
@@ -874,8 +890,15 @@ class SpellingBee {
     return { ri, mark };
   }
 
-  _openYesterday() {
-    const p = puzzleAt(this.data, this.n - 1);
+  /** Answers only for a day the SERVER says is over (2026-10-29: a phone set a day ahead showed the real
+   *  today's answers). No connection on this page yet = no answers (a cached clock gap could be stale). */
+  async _openYesterday() {
+    const n = this.n;
+    const now = liveNow() != null ? liveNow() : await whenLive(3000);
+    if (this.disposed || !this.data || n !== this.n) return;
+    const why = answersShown(this.data.epoch, n, now == null ? NaN : now);
+    if (why !== 'ok') { this._toast(t(why), 'is-bad'); return; }
+    const p = puzzleAt(this.data, n - 1);
     const ans = answersFor(this.data, p);
     const save = loadSave();
     const r = save.games[p.key];
@@ -939,6 +962,8 @@ class SpellingBee {
     if (this._postT) { clearTimeout(this._postT); this._post(); }   // a word found just before leaving still reaches the board
     if (this._stopBoard) this._stopBoard();
     if (this._stopFlags) this._stopFlags();
+    if (this._stopOwn) this._stopOwn();
+    if (this._offLive) this._offLive();
     if (this._other && this._other.stop) this._other.stop();
     if (this._offLang) this._offLang();
     try { if (window.__sbTest && window.__sbTest.ui === this) delete window.__sbTest; } catch { /* ignore */ }

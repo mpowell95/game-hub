@@ -28,7 +28,7 @@ import TUTORIAL_COURSE from '../courses/tutorial.js';
 import { Coach } from './tutorial.js';
 import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderProgress,
   courseOpenByDefault, courseAdminOnlyByDefault } from './progress.js';
-import { isCourseReleased, courseTestingOverride, readCachedConfig } from '../../js/admin-config.js';
+import { isCourseReleased, courseTestingOverride, readCachedConfig, isAdminDevice } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
@@ -742,7 +742,8 @@ class GolfGame {
   }
 
   _isDev() {
-    try { const p = loadProfile(); return !!(p && isDevProfile(p.name)); } catch { return false; }
+    // A dev NAME on an admin DEVICE (2026-10-29): the name alone opened every course to anyone who typed it.
+    try { const p = loadProfile(); return isAdminDevice() && !!(p && isDevProfile(p.name)); } catch { return false; }
   }
 
   /** What one locked round is waiting on, in words. A lock with no reason is a dead end; this is

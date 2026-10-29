@@ -180,3 +180,12 @@ export function shuffled(outer, rand = Math.random) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
+
+/** May the answers of the puzzle BEFORE day n be shown? Only once the SERVER's clock (`liveMs`, measured
+ *  on this page's connection: js/server-time.js liveNow) says that day is over, by the local date the game
+ *  uses (2026-10-29: a phone set a day ahead showed the real today's answers). 'ok', 'need_net' (no server
+ *  time yet: never fall back to the phone clock) or 'not_yet'. */
+export function answersShown(epoch, n, liveMs) {
+  if (!Number.isFinite(liveMs)) return 'need_net';
+  return n - 1 < dayNumber(epoch, new Date(liveMs)) ? 'ok' : 'not_yet';
+}

@@ -1132,7 +1132,9 @@
     els.youEmoji.addEventListener('click', () => openPicker('you', state.emoji));
     // The heading IS the profile name (Matt, 2026-10-15: never "You"). Blank mid-edit keeps the old word.
     function paintYouHead() { els.youH.textContent = (state.name || '').trim() || t('pf_you_h'); }
-    els.youName.addEventListener('input', () => { state.name = els.youName.value; paintYouHead(); scheduleSave(); });
+    // A NEW name is saved only once the registry says it is free or ours (2026-10-29, the 'change'
+    // handler below): typing it no longer saves it, so an offline phone cannot take "MattyIce".
+    els.youName.addEventListener('input', () => { els.youH.textContent = (els.youName.value || '').trim() || (state.name || '').trim() || t('pf_you_h'); });
     els.youMsg.addEventListener('input', () => {
       state.message = els.youMsg.value;
       state.messageAt = Date.now();
@@ -1141,21 +1143,26 @@
     // Push it up immediately so the message is visible to other players without waiting for the
     // next hub load. Best-effort, same pattern as the code-link path at line 537.
     els.youMsg.addEventListener('change', () => { try { net.syncMyStats(); } catch { /* best-effort */ } });
-    // Username reservation: on blur, if the name is owned by another player's code, revert and explain.
-    // Otherwise claim it for my code (releasing my previous name). Offline just skips the check.
+    // Username reservation: on blur, the registry decides. Free or ours: save it and claim it for my
+    // code (releasing my previous name). Taken: revert and explain. OFFLINE (2026-10-29): revert and
+    // say so - a name nobody checked used to be saved, so an offline phone could take anyone's name.
     els.youName.addEventListener('change', async () => {
       const name = els.youName.value.trim();
-      if (!name || name.toLowerCase() === prevName.toLowerCase()) { prevName = name; return; }
+      if (!name) { els.youName.value = prevName; paintYouHead(); return; }   // a blank name is never saved
+      if (name === prevName) return;
+      if (name.toLowerCase() === prevName.toLowerCase()) { state.name = name; prevName = name; commitNow(); paintYouHead(); return; }   // same name, new capitals
       msg(els.nameMsg, t('pf_msg_checking'));
       let status = 'offline';
       try { status = await net.usernameStatus(name, state.playerId); } catch { status = 'offline'; }
-      if (status === 'taken') {
-        els.youName.value = prevName; state.name = prevName; commitNow();
-        msg(els.nameMsg, t('pf_msg_taken'));
-      } else {
+      if (els.youName.value.trim() !== name) return;   // typed on while we checked: the next change decides
+      if (status === 'free' || status === 'mine') {
         const old = prevName; prevName = name;
+        state.name = name; commitNow(); paintYouHead();
         msg(els.nameMsg, '');
         try { net.claimUsername(name, state.playerId, old); } catch { /* best-effort */ }
+      } else {
+        els.youName.value = prevName; state.name = prevName; paintYouHead();
+        msg(els.nameMsg, t(status === 'taken' ? 'pf_msg_taken' : 'pf_msg_need_net'));
       }
     });
 

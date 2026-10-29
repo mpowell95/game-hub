@@ -99,5 +99,30 @@ const bd = rules.beeDaily && rules.beeDaily.$puzzle && rules.beeDaily.$puzzle.$c
 ok('beeDaily rules: own code only, words never go down', !!bd && /msgAuth/.test(bd['.write']) && /newData\.child\('words'\)\.val\(\) >= data\.child\('words'\)\.val\(\)/.test(bd['.validate']));
 ok('beeDaily is backed up', /'beeDaily'/.test(fsx.readFileSync(new URL('../../backups/rtdb-backup.mjs', import.meta.url), 'utf8')));
 
+// --- the clock trick (2026-10-29): Yesterday's Answers follows the SERVER's clock -------------------
+{
+  const { answersShown } = await import('./engine.js');
+  const ep = data.epoch;
+  const realNoon = new Date(2026, 10, 3, 12).getTime();   // the server says: Nov 3, noon
+  const today = dayNumber(ep, new Date(realNoon));
+  ok('yesterday sheet: on the real today, yesterday\'s answers show', answersShown(ep, today, realNoon) === 'ok');
+  ok('yesterday sheet: a phone set a day ahead opens "tomorrow"; the real today\'s answers stay hidden', answersShown(ep, today + 1, realNoon) === 'not_yet');
+  ok('yesterday sheet: two days ahead, still hidden', answersShown(ep, today + 2, realNoon) === 'not_yet');
+  ok('yesterday sheet: no server time = no answers (the phone clock is never asked)', answersShown(ep, today, NaN) === 'need_net' && answersShown(ep, 5, undefined) === 'need_net');
+  ok('yesterday sheet: one second before midnight, today\'s answers stay hidden', answersShown(ep, today + 1, new Date(2026, 10, 3, 23, 59, 59).getTime()) === 'not_yet');
+  ok('yesterday sheet: at midnight they show', answersShown(ep, today + 1, new Date(2026, 10, 4, 0, 0, 1).getTime()) === 'ok');
+  const st = await import('../../js/server-time.js');
+  st.__setServerTimeForTest(24 * 60 * 60 * 1000);   // the phone runs a day behind the server
+  ok('server time: liveNow is the phone clock plus the measured gap', Math.abs(st.liveNow() - (Date.now() + 86400000)) < 1000 && Math.abs(st.bestNow() - (Date.now() + 86400000)) < 1000);
+  st.__setServerTimeForTest(null);
+  ok('server time: never connected = no live time', st.liveNow() === null);
+  const ui = fsx.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  ok('ui.js: "today" and word times come from the server clock, never new Date() alone', !/dayNumber\(this\.data\.epoch, new Date\(\)\)/.test(ui) && /new Date\(bestNow\(\)\)/.test(ui) && /const now = bestNow\(\)/.test(ui));
+  ok('ui.js: the yesterday sheet waits for the live server time', /answersShown\(this\.data\.epoch, n, /.test(ui) && /whenLive\(/.test(ui));
+  const lg = rules.beeLog && rules.beeLog.$puzzle && rules.beeLog.$puzzle.$code && rules.beeLog.$puzzle.$code.$k;
+  ok('beeLog rules accept the time zone (z)', !!(lg && lg.z));
+  ok('boards/v1/beeOwn is readable', !!(rules.boards && rules.boards.v1 && rules.boards.v1.beeOwn));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
