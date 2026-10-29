@@ -25,7 +25,7 @@ everyone (local midnight). Seven letters in a honeycomb; every word uses the yel
 "Obviously all words should count")**: `words` = the answers, SCOWL size ≤60 English + American ∩ ENABLE
 (22,045; hints and ranks count only these); `extra` = 376 HAND-CHECKED words (2026-10-26, Matt: CRATCH, CRANCH, ANNA, CARL "aren't words"/"so many names": ENABLE ∩ SCOWL 70, no first names, read one by one into `BONUS_KEEP`; 2026-10-28 +123 incl. FUNGO, AGLET, and a kept word no longer needs the subtitle count). English stays hand-checked on purpose: 7 days of `beeLog` showed no real word refused (Spanish did, GONADA), accepted
 and scored as a BONUS word (italic in the found list, toast "Bonus word!", the How to Play line "Italic = bonus, not in hints"), never counted. No S, ≤7 distinct letters, bad words
-out of both. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
+out of both, EXCEPT `ADULT_KEEP` (2026-10-29, Matt, refused VAGINA: "Words like this and profanity should count"): ~80 hand-checked adult words and profanity are BONUS words (never answers, so never in hints or Yesterday's Answers); slurs and RAPE/PEDOPHILE stay out. Size 50 gave 22-word days and refused DUGONG; size 70 made CEORL, ORLE answers. Queen Bee needs
 every answer (bonus points can pass the total). 2,000 puzzles from epoch 2026-10-22, 25-90 answers, median 51.
 Append-only, EXCEPT `REPLACE` (2026-10-26, Matt: "I hate today's puzzle"): Oct 24, 26, 28 (33, 23, 28 words)
 swapped once for 64, 55, 63. The old letters are in `retired` (day -> letters); anyone with words on one sees it
