@@ -2808,6 +2808,32 @@ export function recordSkeeball(boardId, extras) {
     persist(st);
     return st;
   }
+  // CHALLENGE RACKS FEED NO OBJECTIVE (2026-10-29, second pass). A challenge rack is recorded and shown
+  // like any rack (rule 1), but objectives (skeeball/js/goals.js) read the machine's record, so racks
+  // thrown on the challenger's machine while it was still locked pre-earned its objectives and opened
+  // the NEXT machine the moment it was earned. Kept beside the record, additive only:
+  //   sk.chg            the challenge racks' share of the global goal counters (100s, sweeps, catches...)
+  //   sk.chk[machine]   from the first challenge rack on it: `pre` = that machine's record just before
+  //                     it, and `boards[machine]` = every NON-challenge rack on it since.
+  // goals.js goalStore() reads pre + own racks for such a machine, and the globals minus `chg`.
+  const chk = isObj(g.sk.chk) ? g.sk.chk[board] : null;
+  if (e.challenge) {
+    if (!isObj(g.sk.chg)) g.sk.chg = {};
+    const add = { hundreds: e.hundreds, fifties: e.fifties, tens: e.tens, twenties: e.twenties, thirties: e.thirties, forties: e.forties,
+      colorSweeps: e.colorSweep ? 1 : 0, runaways: e.runaways };
+    for (const k of Object.keys(add)) { const n = Math.max(0, add[k] | 0); if (n) g.sk.chg[k] = (g.sk.chg[k] | 0) + n; }
+    if (!isObj(g.sk.chk)) g.sk.chk = {};
+    if (!isObj(chk)) {
+      const b = (g.sk.boards || {})[board] || {};
+      const slots = {}; for (const id of Object.keys(b.slots || {})) if (b.slots[id]) slots[id] = true;
+      const hits = {}; for (const id of Object.keys(b.slotHits || {})) if (b.slotHits[id] | 0) hits[id] = b.slotHits[id] | 0;
+      g.sk.chk[board] = { pre: { plays: b.plays | 0, points: b.points | 0, best: b.best | 0, bestThrow: b.bestThrow | 0, slots, cleanRacks: b.cleanRacks | 0,
+        slotHits: hits, perfectRacks: b.perfectRacks | 0, fullRacks: b.fullRacks | 0 }, boards: {}, at: Date.now() };
+    }
+  } else if (isObj(chk)) {
+    recordBoardGame(chk, board, { score, bestThrow: e.bestThrow | 0, slotsHit: e.slotsHit, cleanRack: e.cleanRack,
+      slotCounts: e.slotCounts, perfectRack: e.perfectRack, fullRack: e.fullRack });
+  }
   bumpTotals(g, board, true);
   g.sk.played += 1;
   g.sk.balls += Math.max(0, e.balls | 0);
