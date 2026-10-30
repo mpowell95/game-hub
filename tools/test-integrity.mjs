@@ -152,8 +152,8 @@ console.log('\n--- flags and Matt\'s undo ---');
     && I.isVoided(flags, vcfg, 'dev1', 'contexto') === true && I.isVoided(flags, {}, 'dev1', 'contexto') === false);
   ok('...and Undo beats it', I.isVoided(flags, { integrity: { void: { dev1: { contexto: true } }, undo: { dev1: { contexto: true } } } }, 'dev1', 'contexto') === false);
   const kog = '090215fa-e525-4bbe-99d7-58f9ae3cd437';
-  ok('King of Games\' Contexto is voided by hand (Matt, 2026-10-28), and his Undo would count it again',
-    I.activeVoids({}, {})[kog].contexto === true && I.isVoided({}, { integrity: { undo: { [kog]: { contexto: true } } } }, kog, 'contexto') === false);
+  ok('King of Games\' Contexto hand void is undone (Matt, 2026-10-30): his record counts',
+    !(I.activeVoids({}, {})[kog] || {}).contexto && I.isVoided({}, {}, kog, 'contexto') === false);
   ok('admin-config reads the undo and the void', CFG.resolveIntegrityUndone(cfg, 'dev1', 'snake') === true && CFG.resolveIntegrityUndone(cfg, 'dev1', 'yahtzee') === false
     && CFG.resolveIntegrityUndone(null, 'dev1', 'snake') === false && CFG.resolveIntegrityVoid(vcfg, 'dev1', 'contexto') === true && CFG.resolveIntegrityVoid(null, 'dev1', 'contexto') === false);
   ok('hitText says the rule and the numbers', I.hitText({ rule: 'snake-longer-than-board', v: 300, lim: 255 }) === 'a snake longer than the board (300, limit 255)');
@@ -361,7 +361,7 @@ console.log('\n--- Contexto: hints and solves follow the player; alerts on a win
   ok('phone: the finishing entry\'s id is kept, the log is sent before the check, the recorder names the puzzle and marks an unchecked (offline) solve', (() => {
     const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');
     return /if \(id\) this\.rec\.doneId = id;/.test(ui) && /\{ exclude: rec\.doneId \}/.test(ui) && /flushPlayLog\(\)/.test(ui)
-      && /\{ guesses, hints, k, \.\.\.\(r \? \{\} : \{ unchecked: true \}\) \}/.test(ui);
+      && /\{ guesses, hints, k, (\.\.\.\(daily \? \{ daily: true \} : \{\}\), )?\.\.\.\(r \? \{\} : \{ unchecked: true \}\) \}/.test(ui);
   })());
   ok('the phone counts hints from the other phones (contexto/js/ui.js)', (() => {
     const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');

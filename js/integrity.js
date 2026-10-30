@@ -362,9 +362,9 @@ export function checkStats(stats) {
 /** Games voided BY HAND in code, per record: { <statsId>: { <gameId>: 'why' } }. An alert Matt wants
  *  voided goes on the admin page (Void); this list is for a void a session ships. Matt's Undo still wins. */
 export const HAND_VOIDS = {
-  // King of Games (3VN33): Contexto solved in 1 guess (the alert, 2026-10-28). Matt: "This must be voided."
-  // The store keeps no day or word per puzzle, so it is his whole Contexto record on this phone.
-  '090215fa-e525-4bbe-99d7-58f9ae3cd437': { contexto: '2026-10-28 Contexto in 1 guess' },
+  // King of Games' (3VN33) Contexto was voided here 2026-10-28 on the dropped 1-guess alert; UNDONE
+  // 2026-10-30 (Matt: "go in and undo the void. Just correctly classify those games"). His 11 wins count
+  // by medal like anyone's (8 gold, 3 with 3+ hints = iron); none recorded its day, so All only.
 };
 
 /** Is this game on this record voided? A strong flag, Matt's Void on the admin page

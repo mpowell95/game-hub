@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1363;
-const CACHE = 'game-hub-v1364';
+const CACHE = 'game-hub-v1368';
 
 const ASSETS = [
   './',
@@ -144,6 +144,10 @@ const ASSETS = [
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/medal-gold.png',     // Contexto's board medals (js/leaderboard-ui.js CT_MEDAL_IMG, 2026-10-30)
+  './icons/medal-silver.png',
+  './icons/medal-bronze.png',
+  './icons/medal-iron.png',
   // Connect Four module
   './connect-four/index.html',
   './connect-four/js/ui.js',
@@ -809,12 +813,12 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '1c3748bee7',
+  './js/strings.js': '811fc9c802',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '2fcdffebfb',
+  './js/game-stats.js': 'd566782f38',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'cfc65ffeb5',
   './js/game-stats-ui.js': 'db5f2737fb',
@@ -838,8 +842,8 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': '69cfc2e7ba',
-  './js/admin-ui.js': 'bc3e529056',
-  './js/integrity.js': '5672495ac0',
+  './js/admin-ui.js': '8aa5aa21c8',
+  './js/integrity.js': 'a3f606068c',
   './js/play-log-queue.js': '9ae1838f89',
   './js/play-log.js': '92ecc7da20',
   './js/server-time.js': '3c47cee4a4',
@@ -849,11 +853,11 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '293ae278f1',
+  './js/players-agg.js': '14ebb1c9bb',
   './js/game-art.js': '9bdc57d580',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': '9f1076de54',
+  './js/leaderboard-ui.js': 'c887165001',
   './js/leaderboard-rank.js': '4fe1b42b0f',
   './js/arrow-maze-time.js': 'ac1f6fca12',
   './js/gridlock-points.js': '8a4fcce246',
@@ -881,6 +885,10 @@ const REST_MANIFEST = {
   './icons/icon.svg': '00cbd8397e',
   './icons/icon-192.png': 'ebd15e9db6',
   './icons/icon-512.png': 'a248f6c278',
+  './icons/medal-gold.png': 'dbfa445e73',
+  './icons/medal-silver.png': '086415af76',
+  './icons/medal-bronze.png': 'bcfa821f14',
+  './icons/medal-iron.png': '4fd0e8427f',
   './js/emoji-search-en.js': 'ee87f858cb',
   './js/emoji-search-es.js': '1594c6f049',
   './img/where-hub.jpg': 'f163453a0f',
@@ -962,7 +970,7 @@ const REST_MANIFEST = {
   './contexto/': 'b0c9ee8e9d',
   './contexto/index.html': 'b0c9ee8e9d',
   './contexto/css/contexto.css': 'abcf107a31',
-  './contexto/js/ui.js': '48a5be4f41',
+  './contexto/js/ui.js': 'be978e332f',
   './contexto/js/engine.js': '4b74740c51',
   './contexto/js/strings.js': 'e3ddf5db70',
   './contexto/data/en.json': '551bf113af',

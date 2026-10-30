@@ -182,6 +182,14 @@ how-to diagram all follow the theme.
 
 ## Leaderboard: MEDALS (2026-09-29; replaces the 2026-09-28 "no-hint solves only" board)
 
+**2026-10-30 (Matt's approved mockup): Daily | All tabs and medal IMAGES.** Each row: the best medal held, big, its
+count on the face; every other medal held, small, under the name (ties read off these). Four medals in `icons/medal-*.png`
+(gold = Matt's own edit; iron = 3+ hints), numbers dark enough to read (`CT_MEDAL_IMG` in `js/leaderboard-ui.js`); a
+one-line key under the list. **Daily** = puzzles finished on their own day by the server's LIVE clock (`rec.doneLive`,
+`contexto/js/ui.js`; offline never counts as daily), counted a second time in `ct.d` (`recordContexto` `daily`), merged in
+`players-agg.js`; older plays never recorded their day, so they count on All only. `tools/test-contexto-daily.mjs`.
+No "MEDALS" label, no "N played", no "<name> is 4th." line on this board (Matt, 2026-10-30).
+
 Matt: *"gold being no hints, silver being 1 and bronze being 2, then more than 2 hints is a win, but
 not an award. And the leaderboard should show the number of their most impressive score ... Tie
 breaker ... should go to the person whose average number of guesses is lower."*

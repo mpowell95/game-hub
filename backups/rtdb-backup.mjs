@@ -54,7 +54,7 @@ export async function readPath(databaseURL, path, idToken) {
 // silently absent from every future backup, which is the worst shape a backup bug can take. The
 // run prints every branch and its size, so a missing one is visible rather than inferred.
 export const BRANCHES = [
-  'players', 'usernames', 'rooms', 'adminConfig', 'admins', 'archive',
+  'players', 'usernames', 'rooms', 'adminConfig', 'admins', 'readers', 'archive',
   'bugReports', 'bugReportShots', 'bugReplies', 'deviceReports',
   // bugReplyShots/ (2026-10-28): screenshots on Matt's bug-report replies, <reportId>/<replyAtMs>/<i>.
   'bugReplyShots',

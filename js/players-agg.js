@@ -559,6 +559,11 @@ export function aggregatePlayers(all, corrections) {
         dst.ct.bronze = (dst.ct.bronze | 0) + (src.ct.bronze | 0);
         const f = src.ct.fewest | 0;
         if (f > 0) dst.ct.fewest = (dst.ct.fewest | 0) > 0 ? Math.min(dst.ct.fewest, f) : f;
+        // The daily board's own counters (2026-10-30, js/game-stats.js recordContexto): add.
+        if (src.ct.d && typeof src.ct.d === 'object') {
+          if (!dst.ct.d || typeof dst.ct.d !== 'object') dst.ct.d = {};
+          for (const k of ['played', 'solved', 'guesses', 'hints', 'noHint', 'silver', 'bronze']) dst.ct.d[k] = (dst.ct.d[k] | 0) + (src.ct.d[k] | 0);
+        }
       } else if (g === 'ballrun' && src.br) {
         // Fourth-playthrough item 2: Ball Run's shared metric is obstacle count (bestObstacles /
         // bestObstaclesByDiff), not meters. Old meter-shaped records (pre-migration, no

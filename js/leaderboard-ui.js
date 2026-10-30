@@ -607,7 +607,7 @@ function boardView(list, id) {
   if (id === 'snake') tabsExtra.push({ view: 'off', label: t('lb_sn_walls_off') }, { view: 'on', label: t('lb_sn_walls_on') });
   if (id === 'cuppong' && list.some((g) => cpSoloBest(g) !== null)) tabsExtra.push({ view: 'solo', label: tx('lb_tab_solo', 'Solo') });
   if (anyMpPlays(list, id)) tabsExtra.push({ view: 'mp', label: t('lb_mp_short') });
-  if (_view && !tabsExtra.some((x) => x.view === _view) && id !== 'skeeball' && id !== 'holdem') _view = '';
+  if (_view && !tabsExtra.some((x) => x.view === _view) && id !== 'skeeball' && id !== 'holdem' && !(id === 'contexto' && _view === 'daily')) _view = '';
   let tabs = tiers.length || tabsExtra.length ? boardTabsHTML(tiers, tabsExtra) : '';
   const recent = (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0);
   const byDesc = (f) => (a, b) => f(b) - f(a);
@@ -636,7 +636,10 @@ function boardView(list, id) {
         const cr = id === 'cuppong' ? cpReracksOf(g) : null;
         return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
       },
-      subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : null,
+      subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : id === 'contexto' ? (g) => ctSubHTML(ctOf(g)) : null,
+      // Contexto (Matt, 2026-10-30): the medals say it all; no "MEDALS" label, no "N played", no
+      // "<name> is 4th." line under the list.
+      ...(id === 'contexto' ? { val: (g) => ctBigHTML(ctOf(g)), unit: '', sub: () => '', gap: false } : {}),
     };
   };
   const simple = (rows, f, unit, played, cmp) => {
@@ -659,6 +662,21 @@ function boardView(list, id) {
     v = _view === 'high'
       ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played)
       : { ...simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played), gap: true };
+  } else if (id === 'contexto') {
+    // Daily | All (2026-10-30): Daily = puzzles finished on their own day (ct.d), ranked the same way.
+    const vtab = (view, label) => `<button type="button" class="lb-pill lb-mstab${(_view === 'daily' ? 'daily' : 'all') === view ? ' is-sel' : ''}" data-lbview="${view === 'all' ? 'ctall' : view}" aria-pressed="${(_view === 'daily' ? 'daily' : 'all') === view}">${esc(label)}</button>`;
+    tabs = `<div class="lb-pills lb-mstabs" role="group">${vtab('daily', tx('lb_ct_daily', 'Daily'))}${vtab('all', t('lb_diff_all'))}</div>`;
+    if (_view === 'daily') {
+      const rows = list.filter((g) => (ctDailyOf(g).played | 0) > 0);
+      const cmp = (a, b) => compareContexto(ctDailyOf(a), ctDailyOf(b));
+      rows.sort((a, b) => cmp(a, b) || recent(a, b));
+      v = { rows, cmp, unit: '', empty: tx('lb_ct_daily_none', 'No daily wins yet.'),
+        val: (g) => ctBigHTML(ctDailyOf(g)),
+        sub: () => '',
+        subHtml: (g) => ctSubHTML(ctDailyOf(g)) };
+    } else {
+      v = plain();
+    }
   } else if (id === 'holdem') {
     const vtab = (view, label) => `<button type="button" class="lb-pill lb-mstab${(_view || 'bank') === view ? ' is-sel' : ''}" data-lbview="${view}" aria-pressed="${(_view || 'bank') === view}">${esc(label)}</button>`;
     tabs = `<div class="lb-pills lb-mstabs" role="group">${vtab('bank', t('lb_sort_bank'))}${vtab('wins', t('lb_sort_wins'))}</div>`;
@@ -769,11 +787,11 @@ function plainBoardHTML(list, id) {
   const v = boardView(list, id);
   const { rankOf, tiedAt } = rankMap(v.rows, () => 0, v.cmp);
   const cards = v.rows.length
-    ? `<div class="lb-unith">${esc(v.unit)}</div><div class="lb-plist is-board">${v.rows.map((g) => {
+    ? `${v.unit ? `<div class="lb-unith">${esc(v.unit)}</div>` : ''}<div class="lb-plist is-board">${v.rows.map((g) => {
         const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g), unit2: v.sub2 ? v.sub2(g) : '' };
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.subHtml ? v.subHtml(g) : v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
-    : emptyState(t('lb_empty_game', { label: labelOf(id) }));
+    : emptyState(v.empty || t('lb_empty_game', { label: labelOf(id) }));
   // Only on a view ranked by the board's own number (gameMetricAt), which is what gapText reads.
   const line = v.gap && v.rows.length
     ? standLineHTML(v.rows, rankOf, tiedAt, (me, rec) => gapText(me, rec, id, (x) => `<b>${x}</b>`)) : '';
@@ -992,6 +1010,45 @@ function gameMetricAt(g, id, tier) {
 /** A row's Contexto sub-counter, or {} (never undefined). */
 function ctOf(g) { return (((g && g.games) || {}).contexto || {}).ct || {}; }
 const CT_MEDAL_GLYPH = { gold: '\u{1F947}', silver: '\u{1F948}', bronze: '\u{1F949}', solved: '\u2713' };
+// CONTEXTO'S MEDALS ON ITS BOARD (2026-10-30, Matt's approved mockup): images, not emoji, so every phone
+// shows the same four (gold is Matt's own edit; 3+ hints is the iron medal). The count sits on the face,
+// in a colour dark enough to read (contrast 5+). [file, width/height, face centre x %, y %, number colour]
+const CT_MEDAL_IMG = {
+  gold: ['medal-gold.png', 115 / 180, 50, 69, '#7a3e00'],
+  silver: ['medal-silver.png', 114 / 180, 50, 69.4, '#3d3d42'],
+  bronze: ['medal-bronze.png', 114 / 180, 49.7, 69.4, '#5c2304'],
+  iron: ['medal-iron.png', 114 / 180, 50, 69.4, '#ffffff'],
+};
+const CT_KINDS = ['gold', 'silver', 'bronze', 'iron'];
+/** One medal `h` px tall, with `n` on its face (no number when `n` is null). */
+function ctMedalHTML(kind, n, h) {
+  const [file, ar, cx, cy, col] = CT_MEDAL_IMG[kind];
+  const src = new URL(`../icons/${file}`, import.meta.url).href;
+  const len = String(n == null ? '' : n).length;
+  const fs = Math.round(h * (len >= 3 ? 0.24 : len === 2 ? 0.3 : 0.4));
+  const num = n == null ? '' : `<span class="lb-ctm-n" style="left:${cx}%;top:${cy}%;font-size:${fs}px;color:${col}">${n}</span>`;
+  return `<span class="lb-ctm" style="height:${h}px;width:${Math.round(h * ar)}px"><img src="${src}" alt="" draggable="false">${num}</span>`;
+}
+/** Wins per medal from a `ct` (or its daily `ct.d`): iron = solved with 3+ hints. */
+function ctCounts(ct) {
+  const c = ct || {};
+  const gold = c.noHint | 0, silver = c.silver | 0, bronze = c.bronze | 0;
+  return { gold, silver, bronze, iron: Math.max(0, (c.solved | 0) - gold - silver - bronze) };
+}
+/** The row's big medal: the best one held, with its count; a dash when nothing is solved. */
+function ctBigHTML(ct) {
+  const c = ctCounts(ct);
+  const k = CT_KINDS.find((x) => c[x] > 0);
+  return k ? ctMedalHTML(k, c[k], 58) : '<span>\u2014</span>';
+}
+/** Under the name: every other medal held, smaller, each with its count (ties read off these). */
+function ctSubHTML(ct) {
+  const c = ctCounts(ct);
+  const big = CT_KINDS.find((x) => c[x] > 0);
+  const rest = CT_KINDS.filter((x) => x !== big && c[x] > 0).map((x) => ctMedalHTML(x, c[x], 34)).join('');
+  return rest ? `<span class="lb-ctsub">${rest}</span>` : '';
+}
+const ctDailyOf = (g) => ctOf(g).d || {};
 /** The unit word under a board number. Contexto's changes per row with the medal it shows
  *  ("gold", "silver", ...), so it cannot be one static key like every other game's. */
 function unitTextOf(id, metric) {
@@ -2242,14 +2299,15 @@ function recordsHTML(list, id) {
 
 /** Contexto's bottom block is the MEDAL KEY, not standing records (Matt, 2026-10-29: "Why would there
  *  be a record for most silver or bronze medals? That space should be used to define what each medal
- *  is"). Same grid as the records. Its TEXTURE specs are kept but no longer shown. */
+ *  is"); ONE line since 2026-10-30 (Matt: "Don't use a ton of space"). Its TEXTURE specs are kept but
+ *  no longer shown. */
 function ctMedalKeyHTML() {
-  const cell = (glyph, key, en) => `<div class="lb-rec"><b>${glyph}</b><span>${esc(tx(key, en))}</span></div>`;
-  return `<h3 class="lb-h3">${esc(tx('lb_ct_key_h', 'Medals'))}</h3><div class="lb-recs">`
-    + cell(CT_MEDAL_GLYPH.gold, 'lb_ct_key_gold', 'No hints')
-    + cell(CT_MEDAL_GLYPH.silver, 'lb_ct_key_silver', '1 hint')
-    + cell(CT_MEDAL_GLYPH.bronze, 'lb_ct_key_bronze', '2 hints')
-    + cell('\u2014', 'lb_ct_key_none', '3+ hints')
+  const item = (kind, key, en) => `<span class="lb-ctkey-i">${ctMedalHTML(kind, null, 24)}<span>${esc(tx(key, en))}</span></span>`;
+  return `<div class="lb-ctkey">`
+    + item('gold', 'lb_ct_key_gold', '0 hints')
+    + item('silver', 'lb_ct_key_silver', '1 hint')
+    + item('bronze', 'lb_ct_key_bronze', '2 hints')
+    + item('iron', 'lb_ct_key_none', '3+ hints')
     + '</div>';
 }
 
@@ -2412,7 +2470,9 @@ function gameDetail(list, id) {
   const fieldTiers = id === 'skeeball' || id === 'holdem' ? [] : fieldTiersPresent(list, [id]);
   const machineIds = id === 'skeeball' ? skMachinesPresent(list) : [];
   const woRush = id === 'wayout' && _woMode === 'rush';
-  const totalPlays = woRush ? list.reduce((a, g) => a + woRunsOf(g, _woRush), 0) : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
+  const totalPlays = woRush ? list.reduce((a, g) => a + woRunsOf(g, _woRush), 0)
+    : id === 'contexto' && _view === 'daily' ? list.reduce((a, g) => a + (ctDailyOf(g).played | 0), 0)
+    : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
   // Screen 3's header: the way back, the game's name at full size, and how much this game has
   // been played by everyone, which is the one number that says whether the board means anything.
   // One row (2026-10-11 spacing pass): the back chevron sits beside the title instead of on a row
@@ -3228,6 +3288,12 @@ function ensureCss() {
     // --- standing records -----------------------------------------------------------------------
     '.lb-h3{margin:24px 0 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;color:var(--lb-muted)}',
     '.lb-recs{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--lb-line);border:1px solid var(--lb-line);border-radius:10px;overflow:hidden}',
+    '.lb-ctm{position:relative;display:inline-block;vertical-align:middle;flex:none}',
+    '.lb-ctm img{display:block;width:100%;height:100%;pointer-events:none}',
+    '.lb-ctm-n{position:absolute;transform:translate(-50%,-50%);font-weight:900;line-height:1;font-family:system-ui,-apple-system,sans-serif;letter-spacing:0}',
+    '.lb-ctsub{display:flex;gap:6px;margin-top:4px}',
+    '.lb-ctkey{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:14px 0 0;padding:8px 10px;border:1px solid var(--lb-line);border-radius:10px}',
+    '.lb-ctkey-i{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;font-weight:700;color:var(--lb-muted)}',
     '.lb-rec{background:var(--lb-surface);padding:12px 13px 13px;min-width:0}',
     '.lb-rec.is-wide{grid-column:span 2}',
     '.lb-rec b{display:block;font-size:20px;font-weight:800;color:var(--lb-ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.05;overflow-wrap:anywhere}',
