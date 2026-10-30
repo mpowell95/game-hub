@@ -590,7 +590,7 @@ class WordWeaver {
     // 300px, the shuffle and hint buttons sitting in its lower corners (W - 100), about a third of the height.
     let wheel = Math.floor(Math.max(150, Math.min(300, W - 100, H * 0.36)));
     const [rows, cols] = this.box || this.level.g;
-    const gap = cols >= 8 || rows >= 8 ? 3 : 4;
+    const gap = cols >= 7 || rows >= 7 ? 3 : 4;
     const fit = (wpx) => {
       this.root.style.setProperty('--ww-wheel', wpx + 'px');
       const cs = getComputedStyle(stage);
@@ -609,7 +609,8 @@ class WordWeaver {
         wheel = w2; cell = c2;
       }
     };
-    shrink(200, 44, 10);
+    // Matt, 2026-10-30 (Medium's 8x7 tiles were 44px, Easy's 64): the wheel gives way down to 200px while tiles are under 58px.
+    shrink(200, 58, 10);
     shrink(184, 34, 12);
     fit(wheel);
     cell = Math.max(18, cell);
