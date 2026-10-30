@@ -53,12 +53,12 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - **Bigger grid letters (Matt, 2026-10-29)**: letter = 72% of the tile (was 58%), tiles up to 64px (was 54), the wheel
   shrinks to 200px while tiles are under 44px.
 - **THE WHEEL COMES FIRST (Matt, 2026-10-30, asked six times: "I NEVER ASKED FOR THE SQUARES TO BE BIGGER... MAKE THE
-  LETTERS AND THE CIRCLE BIGGER")**: the wheel is W - 32 up to 370px (46% of the height) and NEVER shrinks for the grid;
-  the grid's tiles take what is left. Wheel letters 64 units (were 54), ring 82,
-  picked disc 35. Shuffle and hint sit 12px above the safe area, clear of the wheel. Levels 501-2000 were remade twice that day (7 x 7, then 6 x 6) for a
+  LETTERS AND THE CIRCLE BIGGER"; then, with Wordscapes screenshots: "match this")**: Wordscapes' size, measured on
+  Matt's 402px iPhone: wheel 72% of the width up to 290px (42% of the height), letters 56 units (~45px capitals), ring 82,
+  picked disc 33. It NEVER shrinks for the grid; the grid's tiles take what is left. Levels 501-2000 were remade twice that day (7 x 7, then 6 x 6) for a
   misread ask and UNDONE the same night (Matt: "Fix all that shit"): the data, generators and data tests are back to their
   2026-10-29 state (pins unchanged), and the grid's 2026-10-30 gap/padding changes reverted.
-- Layout never scrolls: wheel 150-370px (a letter's touch area stays over 44px), grid cells measured to fit above it
+- Layout never scrolls: wheel 150-290px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).
 
