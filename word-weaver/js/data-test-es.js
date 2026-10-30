@@ -134,8 +134,8 @@ ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l
 
 // --- Hard and Expert (2026-10-29): their own rules (tools/build-word-weaver-data.mjs, BAND) ------
 const BANDS = [
-  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
-  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [7, 12] },
+  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [8, 13] },
 ];
 for (const B of BANDS) {
   const part = LEVELS.slice(B.from - 1, B.to);
@@ -154,8 +154,12 @@ for (const B of BANDS) {
 
 // --- the pin -----------------------------------------------------------------------------------
 // Spanish levels are APPEND-ONLY once shipped too (progress is per level number, `ww.es`).
+{
+  const big = LEVELS.slice(500).filter((lv) => lv.g[0] > 7 || lv.g[1] > 7).length;
+  ok(`every board past Easy is at most 7 x 7 (${big} bigger; remade 2026-10-30)`, big === 0);
+}
 const PINNED = 2000;
-const PIN_HASH = '1e2f586dc21f3d7c';
+const PIN_HASH = '22a56210113a70d4';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped Spanish levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);
