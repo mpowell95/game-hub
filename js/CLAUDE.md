@@ -36,6 +36,8 @@ Procedures (restore, monthly export) are in `RESTORE.md`; read it before touchin
 - **`database.rules.json` is ONE canonical file — merge into it, never replace it.** Root
   `.read`/`.write` are `false`; **a new top-level node must be added there or it is unreachable.**
   Matt publishes rules by hand (app first, rules second). The README's node list is stale.
+- **`readers/<uid>` (2026-10-30)**: READ-only access for a session to playLog, beeAlerts, integrityFlags, integrityAlerts;
+  written only by an admin phone (Admin > gear > Reader key for Claude). `tools/reader-auth.mjs`.
 - **Out-of-app writes to `players/`, `usernames/`, or anyone's profile/stats need Matt's explicit yes.**
   Run `backups/rtdb-backup.mjs` before any Firebase write.
 - **RTDB `update()` replaces each child it names** — an empty local store syncing before a restored
