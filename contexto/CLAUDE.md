@@ -188,6 +188,7 @@ count on the face; every other medal held, small, under the name (ties read off 
 one-line key under the list. **Daily** = puzzles finished on their own day by the server's LIVE clock (`rec.doneLive`,
 `contexto/js/ui.js`; offline never counts as daily), counted a second time in `ct.d` (`recordContexto` `daily`), merged in
 `players-agg.js`; older plays never recorded their day, so they count on All only. `tools/test-contexto-daily.mjs`.
+No "MEDALS" label, no "N played", no "<name> is 4th." line on this board (Matt, 2026-10-30).
 
 Matt: *"gold being no hints, silver being 1 and bronze being 2, then more than 2 hints is a win, but
 not an award. And the leaderboard should show the number of their most impressive score ... Tie
