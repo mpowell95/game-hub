@@ -286,6 +286,23 @@
 /* A bonus word (Matt, 2026-10-30: "make it more obvious"): the pill turns gold with a star, pops, and a star flies to the chip. */
 .ww-root .ww-pill.is-bonus { background: var(--ww-path); display: inline-flex; align-items: center; gap: 8px; }
 .ww-root .ww-pill.is-bonus svg { width: 22px; height: 22px; flex: none; }
+.ww-root .ww-pill.is-bonus { position: relative; }
+/* "Bonus word!" over the gold pill (Matt, 2026-10-30: "say bonus word tho"); above it, so the pill row keeps its height. */
+.ww-root .ww-bonustag {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .5);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: normal;
+  z-index: 2;
+}
 .ww-root .ww-pill.is-pop { animation: ww-pillpop .45s ease-out; }
 @keyframes ww-pillpop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.18); } }
 .ww-root .ww-flystar { position: absolute; z-index: 30; width: 34px; height: 34px; color: var(--ww-path); pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }

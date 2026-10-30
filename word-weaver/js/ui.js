@@ -651,7 +651,7 @@ class WordWeaver {
     if (this.pillTimer) this._cancel(this.pillTimer);
     this.pillHold = { word, kind };
     pill.className = 'ww-pill is-on' + (kind === 'bonus' ? ' is-bonus' : '');
-    if (kind === 'bonus') pill.innerHTML = `${ICON_STAR}<span>${esc(word)}</span>`;
+    if (kind === 'bonus') pill.innerHTML = `<span class="ww-bonustag">${esc(t('bonus_word'))}</span>${ICON_STAR}<span>${esc(word)}</span>`;   // "Bonus word!" (Matt, 2026-10-30: "say bonus word tho")
     else pill.textContent = word;
     if (kind === 'bad') this._anim(pill, 'is-shake');
     if (kind === 'bonus') this._anim(pill, 'is-pop');
