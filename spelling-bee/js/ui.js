@@ -12,7 +12,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
 import { recordResult, noteVoidedResult, recordSpellingBeeGenius } from '../../js/game-stats.js';
-import { VOIDED_MATCHES } from '../../js/stats-corrections.js';
+import { VOIDED_MATCHES, handAddFor } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
   rankThresholds, rankIndex, checkWord, praiseFor, scoreWord, isPangram, hintsFor, shuffled, answersShown,
@@ -710,9 +710,9 @@ class SpellingBee {
   _openBoard() {
     const other = this.data.lang === 'es' ? 'en' : 'es';
     this._watchOther(other);
-    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, voidedOn(this.puzzle.key, this.boardFlags), this.boardOwn, this.day);
+    const mine = this._boardSection(this.data.lang, this.boardRows, this.max, true, voidedOn(this.puzzle.key, this.boardFlags), this.boardOwn, this.day, this.puzzle.key);
     const o = this._other;
-    const theirs = this._boardSection(other, o ? o.rows : [], o ? o.max : 0, false, o && o.key ? voidedOn(o.key, o.flags) : new Set(), o ? o.own : {}, o ? o.day : '');
+    const theirs = this._boardSection(other, o ? o.rows : [], o ? o.max : 0, false, o && o.key ? voidedOn(o.key, o.flags) : new Set(), o ? o.own : {}, o ? o.day : '', o && o.key ? o.key : '');
     const title = this.n === this.todayN && !this.old ? t('today') : this._fmt(this.n, { month: 'short', day: 'numeric' });
     this._openOverlay('board', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(title)}</h2>${mine}${theirs}`);
     // No scrolling: drop the lowest rows (never ours), from the longer list first, and say how many.
@@ -733,9 +733,9 @@ class SpellingBee {
   }
 
   /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
-  _boardSection(lang, serverRows, max, live, voided, own, day) {
+  _boardSection(lang, serverRows, max, live, voided, own, day, puzzle = '') {
     const code = myCode();
-    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided, own, day }).map((r) => ({ ...r, me: r.code === code }));
+    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided, own, day, puzzle, now: bestNow() }).map((r) => ({ ...r, me: r.code === code }));
     if (live) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
       // Own-day numbers, the same ones every other phone shows for this row (never all-time totals: 2026-10-30,
@@ -744,8 +744,9 @@ class SpellingBee {
       const mine = serverRows.find((r) => r.code === code);
       const srv = mine && own && own[code] && own[code].use && Number(own[code].at) === Number(mine.at) ? own[code] : null;
       const fresh = !srv || d.dw !== (mine.dw | 0);   // a word since our last post: live until the server catches up
-      rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', me: true,
-        ...(fresh ? { words: d.dw, points: d.dp, rank: d.dr } : { words: srv.w | 0, points: srv.p | 0, rank: srv.r | 0 }) });
+      const h = handAddFor('spellingbee', puzzle, code || '', bestNow());   // Matt's hand adds show on his own row too
+      const base = fresh ? { words: d.dw, points: d.dp, rank: d.dr } : { words: srv.w | 0, points: srv.p | 0, rank: srv.r | 0 };
+      rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', me: true, ...base, words: base.words + h.words, points: base.points + h.points });
     }
     rows.sort((a, b) => b.points - a.points || b.words - a.words || (a.me ? -1 : b.me ? 1 : byPoints(a, b)));
     // Place by POINTS (ties share it; Matt, 2026-10-28), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words

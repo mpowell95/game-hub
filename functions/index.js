@@ -46,6 +46,7 @@ import webpush from 'web-push';
 import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
+import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote } from './integrity.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
@@ -374,7 +375,7 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
     for (const c of codes) await sendTo(db, c, beeNote(kind, bk, a), `bee-${kind}-${bk}-${code}`, { game: 'spelling-bee' });
   }
   const meta = (await db.ref('boards/v1/beeMeta').get()).val() || {};
-  if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) {
+  if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000 || handAddDueSince('spellingbee', meta.builtAt)) {
     const r = await rebuildBee(db);
     logger.info('bee board rebuilt', r);
   }

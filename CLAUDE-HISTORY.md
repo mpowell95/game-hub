@@ -1569,3 +1569,12 @@ The own row had been exempted from the own-day rule by stretching the "a void ne
 past what Matt asked. Fixed in PR #1342 (v1363). Asked why, the session first blamed "an earlier session" and "the
 rule"; Matt: "Next time the answer is 'I built it wrong.' You MUST NOT avoid stating it. Don't feed me bullshit.
 You botched it. Take ownership. Make this a rule."
+
+## 2026-10-29: Matt's hand add, NIGGLING on his own Oct 29 Spelling Bee day
+
+Matt: "At 11:59pm eastern, count niggling for MattyIce's score. Adding 8 points to the final daily score", then
+"you MUST add it at 11:59". A session cannot write a player's row (rules: own msgAuth code only), so it is a
+read-time HAND ADD (`HAND_ADDS` in `js/stats-corrections.js`, like the voids): +1 word, +8 points to QZCC4 on
+`g:ailnvz`, on from 2026-10-30 03:59 UTC (11:59 PM EDT). Applied in `buildBeeBoard` (long-term board, Leaderboard),
+`shownRows` and the own live row (in-game board); `beeWatch` rebuilds the board once a hand add switches on.
+Nothing stored changed. Matt's authority over his game ("It's my game, I control every aspect of it").
