@@ -1554,3 +1554,8 @@ to ~14px rows in Chromium (the old page too; likely Android Chrome players saw i
 `align-content: start`, buttons `min-height: 44px`. Tested headless at 402x874, 375x667, 360x780 and 430x932, EN and
 ES, dark (and light at 402): no sideways scroll, no clipped row, back from every screen lands on the list, every
 write lands in `gamehub.profile`.
+
+## Times are Eastern (2026-10-29)
+
+Asked when Ana was last in the app, a session reported times in US Central; Matt corrected it ("It's 8:36 right
+now") and asked that every session default to Eastern time.
