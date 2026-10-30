@@ -103,7 +103,7 @@
   var PLAYLOG_KEY = 'gamehub.playlog.v1';
   var PLAYLOG_MAX = 3000;
   var playSeq = 0;
-  function notePlay(gameId, fn, args) {
+  function notePlay(gameId, fn, args, m) {
     try {
       var code = activeCode();
       if (!code) return;
@@ -113,17 +113,47 @@
       var a = [];
       for (var i = 0; i < args.length; i++) a.push(args[i] === undefined ? null : args[i]);
       q.push({ c: code, id: t + '-' + (playSeq++ % 10000), t: t, g: String(gameId).slice(0, 24), f: String(fn).slice(0, 40), a: JSON.stringify(a).slice(0, 1600) });
+      if (m) q[q.length - 1].m = String(m).slice(0, 150);
       localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
     } catch (e) { console.error('[game-stats-global] play not logged', e); }
   }
 
-  function record(gameId, difficulty, won, drained) {
+  // WHICH MODE the game was (2026-10-30): the same `byMode` and key as js/game-stats.js withMode/modeKey
+  // (keep in step). `mode` is a flat object of the options that define the game; the bucket is the
+  // difficulty as given. Additive; a game called without `mode` records exactly as before.
+  function modeKey(mode) {
+    if (!mode || typeof mode !== 'object') return '';
+    var ks = Object.keys(mode).sort(), parts = [];
+    for (var i = 0; i < ks.length; i++) {
+      var v = mode[ks[i]];
+      if (v == null || v === '' || typeof v === 'object' || typeof v === 'function') continue;
+      var kk = String(ks[i]).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 16);
+      var vv = String(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24);
+      if (kk && vv) parts.push(kk + '=' + vv);
+    }
+    return parts.join('|').slice(0, 120);
+  }
+  function noteMode(g, mk, d, won) {
+    try {
+      if (!g.byMode || typeof g.byMode !== 'object' || Array.isArray(g.byMode)) g.byMode = {};
+      var m = g.byMode[mk] && typeof g.byMode[mk] === 'object' ? g.byMode[mk] : (g.byMode[mk] = {});
+      var dk = String(d).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || '-';
+      var b = m[dk] && typeof m[dk] === 'object' ? m[dk] : (m[dk] = bucket());
+      b.played = (b.played | 0) + 1;
+      if (won === true) b.won = (b.won | 0) + 1;
+      else if (won === false) b.lost = (b.lost | 0) + 1;
+    } catch (e) { console.error('[game-stats-global] mode not noted', e); }
+  }
+
+  function record(gameId, difficulty, won, drained, mode) {
     try {
       if (GAMES.indexOf(gameId) < 0) return;
       // A queued backlog (drainPending) is not a burst of play: it skips the gate, like
       // game-stats.js's drainPendingResults, and is logged as 'record(queued)'.
       if (!drained && tooFast(gameId, Date.now())) return;
-      notePlay(gameId, drained ? 'record(queued)' : 'record', [gameId, difficulty, won]);
+      var mk = '';
+      try { mk = modeKey(mode); } catch (e) { mk = ''; }
+      notePlay(gameId, drained ? 'record(queued)' : 'record', [gameId, difficulty, won], mk ? mk + '@' + String(difficulty) : '');
       var key = activeStatsKey();
       var st = normalize(readJSON(key));
       if (key !== STATS_KEY) latchLegacyGuards(st);
@@ -137,6 +167,7 @@
       g.total.played += 1; b.played += 1;
       if (won === true) { g.total.won += 1; b.won += 1; }
       else if (won === false) { g.total.lost += 1; b.lost += 1; }
+      if (mk) noteMode(g, mk, difficulty, won);
       st.updatedAt = new Date().toISOString();
       localStorage.setItem(key, JSON.stringify(st));
       noteActivity(key, gameId, Date.now());
@@ -176,7 +207,7 @@
       if (!Array.isArray(q) || !q.length) return;
       for (var i = 0; i < q.length; i++) {
         var e = q[i];
-        if (e) record(e.game, e.diff, e.won, true);
+        if (e) record(e.game, e.diff, e.won, true, e.mode);
       }
       localStorage.removeItem(PENDING_STATS_KEY);
       console.warn('[game-stats-global] drained ' + q.length + ' pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable');
@@ -212,10 +243,12 @@
       if (tick && typeof tick.unref === 'function') tick.unref();
     }
   }
-  function armQuit(gameId, difficulty) {
+  function armQuit(gameId, difficulty, mode) {
     if (GAMES.indexOf(gameId) < 0) return;
     var q = readQuit();
     q[gameId] = { f: 'recordResult', a: [gameId, difficulty, false], c: activeCode(), k: activeStatsKey(), t: Date.now() };
+    // The mode rides with the marker in game-stats.js modeTag's shape, so the hub settles it the same way.
+    if (modeKey(mode)) q[gameId].m = { m: mode, d: difficulty == null ? '' : String(difficulty), s: null };
     writeQuit(q);
     keepFresh(gameId);
   }
@@ -248,7 +281,7 @@
     writeQuit(q);
     notePlay(gameId, 'quitLoss', ['recordResult', m.t]);
     var a = Array.isArray(m.a) ? m.a : [];
-    record(gameId, a[1], false);
+    record(gameId, a[1], false, false, m.m && typeof m.m === 'object' ? m.m.m : null);
     return true;
   }
 

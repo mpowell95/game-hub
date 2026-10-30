@@ -31,7 +31,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, throwDart, nextTurn, KINDS, isCricket, DRAW, inOvertime } from './engine.js';
@@ -343,7 +343,7 @@ export function markCounted(id) {
  *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention").
  *  `won`: true, false, or null for a draw (equal turns). A VOIDED match (js/stats-corrections.js)
  *  is never counted, and is not marked counted either, so it can never be noted as voided below. */
-export function countResult(id, won, finishedAt = Date.now()) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   if (isVoidedMatch('darts', id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -352,7 +352,8 @@ export function countResult(id, won, finishedAt = Date.now()) {
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
   // The match id rides with the count, so a person's two devices count it once (js/players-agg.js).
-  try { withChallengeMatch('darts', id, () => recordResult('darts', 'mp', won == null ? null : !!won)); } catch (err) { console.error('[darts] recordResult failed', err); }
+  // ...and so does the match's game (2026-10-30, withMode): `mode` = { kind } from the match or its row.
+  try { withChallengeMatch('darts', id, () => withMode(mode, 'mp', () => recordResult('darts', 'mp', won == null ? null : !!won))); } catch (err) { console.error('[darts] recordResult failed', err); }
   return true;
 }
 const wonOf = (result) => (result === 'won' ? true : result === 'lost' ? false : null);
@@ -381,12 +382,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(g.id || r.id, wonOf(res), g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(g.id || r.id, wonOf(res), g.over.at, { kind: kindOfGame(g) })) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated);
+  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated, { kind: KINDS.includes(r.kind) ? r.kind : '301' });
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

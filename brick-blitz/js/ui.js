@@ -10,7 +10,7 @@ import { createGame, DIFFS, POWER_COLORS } from './game.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordBrickBlitz, loadStats } from '../../js/game-stats.js';
+import { recordBrickBlitz, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -358,7 +358,11 @@ class BrickBlitzUI {
     const d = this.game.difficulty;
     const before = bestFor(d);
     try {
-      const st = recordBrickBlitz(s.score, d, { bricks: s.bricks, stages: s.stages, bestCombo: s.bestCombo, circuit: s.circuit, endless: s.endless });
+      // WHICH game (js/game-stats.js withMode, 2026-10-30): Arcade or Endless, with the run's score
+      // kept as that mode's best (the recorder's own bests do not tell Endless apart).
+      const st = withMode({ m: s.endless ? 'endless' : 'arcade' }, d,
+        () => recordBrickBlitz(s.score, d, { bricks: s.bricks, stages: s.stages, bestCombo: s.bestCombo, circuit: s.circuit, endless: s.endless }),
+        { hi: s.score });
       if (!st) console.warn('[brickblitz] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[brickblitz] recording the result failed', err); }
     return s.score > before;

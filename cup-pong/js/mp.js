@@ -30,7 +30,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { Match } from './match.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
@@ -397,15 +397,23 @@ export function markCounted(id) {
   try { localStorage.setItem(LEDGER_KEY, JSON.stringify([...set].slice(-400))); } catch { /* private mode */ }
   return true;
 }
+/** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
+ *  the match its player-chosen rules (Gentleman's, reracks, Straight Up) and series length; from an
+ *  index row what the row carries (Straight Up, series). The other rule flags are versions, not choices. */
+export function modeOfMatch(g) {
+  const r = cleanRules(g && g.rules);
+  return { gent: r.gent ? 1 : 0, rr: r.rr, su: r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(g && g.series)) ? +g.series : 1 };
+}
+const modeOfRow = (r) => ({ su: r && r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(r && r.series)) ? +r.series : 1 });
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). */
-export function countResult(id, won, finishedAt = Date.now()) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   // A storage that never counted these challenges counts only what finished after it started
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('cuppong', id, () => recordResult('cuppong', 'mp', !!won)); } catch (err) { console.error('[cup-pong] recordResult failed', err); }
+  try { withChallengeMatch('cuppong', id, () => withMode(mode, 'mp', () => recordResult('cuppong', 'mp', !!won))); } catch (err) { console.error('[cup-pong] recordResult failed', err); }
   return true;
 }
 /** Count every finished row not yet counted here, and queue it for the Game Over popup. */
@@ -419,12 +427,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at, modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated, modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

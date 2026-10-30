@@ -47,6 +47,14 @@ incident (full text: `js/CLAUDE.md`):
 9. **A milestone is not done until CLAUDE.md reflects it** (in short form; the story goes in
    `CLAUDE-HISTORY.md`).
 
+## Every result records its MODE (Matt, 2026-10-30: "they MUST be recorded for posterity")
+
+Not recording which mode/options a game was played with lost game data (Darts' Cricket vs 301, Pool's 8/9-ball,
+every online match's terms) = THE LAW broken. **Every record call goes through `withMode(mode, chosenDiff, ...)`**
+(`js/game-stats.js`; deferred results pass `modeTag(...)` to `armQuitLoss`/`armLeave`/`recordLeaveWin`), carrying
+EVERY option that defines the game, online included. Stored `games.<id>.byMode`. A new option or a new game is not
+done until it is recorded; `tools/test-game-modes.mjs` + `tools/game-modes.json` check the wiring.
+
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
 Any request to change, fix, add or remove something means make it live. Pre-authorized, no

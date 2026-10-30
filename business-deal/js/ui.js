@@ -46,11 +46,11 @@
   // which drains the same key on every hub visit regardless of whether __ghStats ever works on
   // this device.
   const PENDING_STATS_KEY = 'gamehub.bd.pendingStats.v1';
-  function _queuePendingStat(game, diff, won) {
+  function _queuePendingStat(game, diff, won, mode) {
     try {
       const raw = JSON.parse(localStorage.getItem(PENDING_STATS_KEY) || '[]');
       const list = Array.isArray(raw) ? raw : [];
-      list.push({ game: game, diff: diff, won: won, ts: Date.now() });
+      list.push({ game: game, diff: diff, won: won, ts: Date.now(), mode: mode || null });
       localStorage.setItem(PENDING_STATS_KEY, JSON.stringify(list));
     } catch (e) { console.error('[business-deal] failed to queue pending stat, this play may be lost from the shared leaderboard', e); }
   }
@@ -390,7 +390,7 @@
       // the hub's 30-minute settle never takes a game that is still going.
       if (this._qArmed) { try { if (window.__ghStats && window.__ghStats.touchQuit) window.__ghStats.touchQuit('business'); } catch (e) {} return; }
       this._qArmed = true;
-      try { if (window.__ghStats && window.__ghStats.armQuit) window.__ghStats.armQuit('business', this.difficulty); } catch (e) {}
+      try { if (window.__ghStats && window.__ghStats.armQuit) window.__ghStats.armQuit('business', this.difficulty, this._statsMode()); } catch (e) {}
     }
     _takeQuitLoss() {
       if (!this._quitCostsLoss()) return;
@@ -2090,15 +2090,17 @@
       try { return Object.assign({ played: 0, won: 0, lost: 0 }, JSON.parse(localStorage.getItem('bd-stats') || '{}')); }
       catch (e) { return { played: 0, won: 0, lost: 0 }; }
     }
+    /** The options that define this game, recorded with its result (2026-10-30). Pace is display only. */
+    _statsMode() { return { ai: this._lastNumAI | 0 }; }
     _recordResult(humanWon) {
       // Unified Game Stats (per difficulty), recorded BEFORE the bd-stats increment so the
       // one-time bd-stats fold reads the pre-game value. bd-stats is still kept as-is below.
       try {
         if (window.__ghStats) {
-          window.__ghStats.record('business', this.difficulty, humanWon);
+          window.__ghStats.record('business', this.difficulty, humanWon, false, this._statsMode());
         } else {
           console.warn('[business-deal] __ghStats unavailable, queueing this result to sync into the shared leaderboard later', this.difficulty, humanWon);
-          _queuePendingStat('business', this.difficulty, humanWon);
+          _queuePendingStat('business', this.difficulty, humanWon, this._statsMode());
         }
       } catch (e) {}
       this._bumpBdStats(humanWon);

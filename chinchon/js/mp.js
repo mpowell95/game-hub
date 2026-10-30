@@ -35,12 +35,12 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordChinchon, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordChinchon, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
-import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
+import { Game, DEFAULT_CONFIG, makePlayer, modeOfMatch } from './game.js';
 
 const NODE = 'chinchon';
 const CODE_RE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/;
@@ -466,7 +466,13 @@ export function markCounted(id) {
  *  results go in the 'mp' bucket, the same bucket a live room's match uses (ui.js MP_DIFFICULTY).
  *  `won`: true, false, or null for a draw. `extras`: this side's { closed, minusTen, chinchons }.
  *  Never recordHeadToHead: the Multiplayer screen's Records reads challenges from the index. */
-export function countResult(id, won, extras = {}, finishedAt = Date.now()) {
+/** WHICH game a challenge was (js/game-stats.js withMode, 2026-10-30): its engine config (length +
+ *  stored rules) as game.js modeOfMatch reads it, two humans. An index row carries the length
+ *  (`kind`) only; every challenge so far stores standardRules(), so its config is configFor(len). */
+const TWO_HUMANS = [{ isHuman: true }, { isHuman: true }];
+export const chModeOf = (doc) => modeOfMatch(configFor(lenOf(doc), doc && doc.rules), TWO_HUMANS);
+const chModeOfRow = (r) => modeOfMatch(configFor(LENS.includes(r && r.kind) ? r.kind : 'hand', null), TWO_HUMANS);
+export function countResult(id, won, extras = {}, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch('chinchon', id)) return false;
@@ -475,9 +481,9 @@ export function countResult(id, won, extras = {}, finishedAt = Date.now()) {
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
   try {
-    withChallengeMatch('chinchon', id, () => recordChinchon('mp', won == null ? null : !!won, {
+    withChallengeMatch('chinchon', id, () => withMode(mode, 'mp', () => recordChinchon('mp', won == null ? null : !!won, {
       closed: extras.closed | 0, minusTen: extras.minusTen | 0, chinchons: extras.chinchons | 0,
-    }));
+    })));
   } catch (err) { console.error('[chinchon] recordChinchon failed', err); }
   return true;
 }
@@ -506,12 +512,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 }, g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 }, g.over.at, chModeOf(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 }, r.updated);
+  for (const r of todo) countResult(r.id, wonOf(r.result), { closed: r.cl, chinchons: r.cn, minusTen: r.m10 }, r.updated, chModeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

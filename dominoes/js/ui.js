@@ -16,7 +16,7 @@ import { tileHTML } from './tiles.js';
 import { openTutorial, CROWN_SVG } from './tutorial.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordDominoes, oneTierDown } from '../../js/game-stats.js';
+import { recordDominoes, oneTierDown, withMode } from '../../js/game-stats.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -684,11 +684,12 @@ class DominoesUI {
     try {
       // matchWinner is null on a genuine draw (both totals passed the target level), and
       // recordDominoes reads null as a tie rather than a loss.
-      recordDominoes(statsDiff(this.difficulty, this.target), g.matchWinner == null ? null : g.matchWinner === HUMAN, {
+      // WHICH game (js/game-stats.js withMode, 2026-10-30): the target score.
+      withMode({ to: this.target }, this.difficulty, () => recordDominoes(statsDiff(this.difficulty, this.target), g.matchWinner == null ? null : g.matchWinner === HUMAN, {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
-      });
+      }));
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }
@@ -819,7 +820,7 @@ class DominoesUI {
     this._statsCommitted = true;
     clearSave();
     try {
-      recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points });
+      withMode({ to: q.target }, q.difficulty, () => recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points }));
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }

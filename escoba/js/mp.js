@@ -37,7 +37,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordEscoba, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordEscoba, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
@@ -465,7 +465,11 @@ export function markCounted(id) {
  * from the index), and escoba's splitEscobaMp migration reads h2h as evidence. A VOIDED match
  * (js/stats-corrections.js) is never counted.
  */
-export function countResult(id, won, escobas = 0, finishedAt = Date.now()) {
+/** WHICH game a challenge was (js/game-stats.js withMode, 2026-10-30): two players, its length (`len`
+ *  '1' / '11' / '21') and the card numbering. An index row carries the length only. */
+export const chModeOf = (raw) => ({ n: 2, len: lenOf(raw) || '21', deck: deckOf(raw) });
+const chModeOfRow = (r) => ({ n: 2, len: LENS.includes(String(r && r.len)) ? String(r.len) : '21' });
+export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch('escoba', id)) return false;
@@ -473,7 +477,7 @@ export function countResult(id, won, escobas = 0, finishedAt = Date.now()) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('escoba', id, () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) })); }
+  try { withChallengeMatch('escoba', id, () => withMode(mode, 'mp', () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) }))); }
   catch (err) { console.error('[escoba] recordEscoba failed', err); }
   return true;
 }
@@ -501,12 +505,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), r.mineEsc, g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), r.mineEsc, g.over.at, chModeOf(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), r.mineEsc, r.updated);
+  for (const r of todo) countResult(r.id, wonOf(r.result), r.mineEsc, r.updated, chModeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

@@ -15,7 +15,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
-import { recordConnect4 } from '../../js/game-stats.js';
+import { recordConnect4, withMode } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -995,7 +995,7 @@ class ConnectFourUI {
       const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
       if (!this._statsDisqualified || won === false) {
         const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-        recordConnect4(this.difficulty, firstMove, won);
+        withMode(this._modeOf(), this.difficulty, () => recordConnect4(this.difficulty, firstMove, won));
       }
     }
 
@@ -1016,7 +1016,14 @@ class ConnectFourUI {
     if (!this._quitCostsLoss()) return;
     this.game._statsRecorded = true;
     const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-    recordConnect4(this.difficulty, firstMove, false);
+    withMode(this._modeOf(), this.difficulty, () => recordConnect4(this.difficulty, firstMove, false));
+  }
+
+  /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
+   *  First move setting (you / ai / alternate; who actually moved first is already in `firstMove`), and
+   *  whether Undo or Show best moves was used this game (`aid`). */
+  _modeOf() {
+    return { first: this.firstMode, aid: this._statsDisqualified ? 1 : 0 };
   }
 
   /** Count the completed game for the hazing and, once past it, award the Connect Four

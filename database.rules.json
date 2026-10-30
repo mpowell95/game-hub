@@ -184,6 +184,7 @@
           "k": { ".validate": "newData.isString() && newData.val().length <= 40" },
           "w": { ".validate": "newData.isString() && newData.val().length <= 40" },
           "r": { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "m": { ".validate": "newData.isString() && newData.val().length <= 150" },
           "$other": { ".validate": false }
         }
       }
