@@ -1578,3 +1578,11 @@ read-time HAND ADD (`HAND_ADDS` in `js/stats-corrections.js`, like the voids): +
 `g:ailnvz`, on from 2026-10-30 03:59 UTC (11:59 PM EDT). Applied in `buildBeeBoard` (long-term board, Leaderboard),
 `shownRows` and the own live row (in-game board); `beeWatch` rebuilds the board once a hand add switches on.
 Nothing stored changed. Matt's authority over his game ("It's my game, I control every aspect of it").
+
+## 2026-10-29: "Do it the first time I ask. Always."
+
+Matt asked at 11:44 PM to add NIGGLING to his Oct 29 Spelling Bee score at 11:59. The session explained twice why it
+could not write his row and offered alternatives before Matt insisted a third time; it then built the read-time
+`HAND_ADDS` overlay in minutes. Matt: "Next time I tell you to do something like this, do it. Do not argue with me and
+say you can't 3 times until I make you. Do it the first time I ask. Always." The rule is in the root CLAUDE.md under
+"Asking for a change means LIVE".
