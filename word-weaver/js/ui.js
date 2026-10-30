@@ -611,6 +611,7 @@ class WordWeaver {
     };
     // Matt, 2026-10-30 (Medium's 8x7 tiles were 44px, Easy's 64): the wheel gives way down to 200px while tiles are under 58px.
     shrink(200, 58, 10);
+    shrink(180, 52, 10);   // 2026-10-30: 7 x 7 boards on a short phone (a letter's touch area is still 49px)
     shrink(184, 34, 12);
     fit(wheel);
     cell = Math.max(18, cell);

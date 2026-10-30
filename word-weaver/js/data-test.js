@@ -134,8 +134,8 @@ ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l
 
 // --- Hard and Expert (2026-10-29): their own rules (tools/build-word-weaver-data.mjs, BAND) ------
 const BANDS = [
-  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
-  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [7, 12] },
+  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [8, 13] },
 ];
 for (const B of BANDS) {
   const part = LEVELS.slice(B.from - 1, B.to);
@@ -155,15 +155,20 @@ for (const B of BANDS) {
 // --- the pin -----------------------------------------------------------------------------------
 // PINNED = how many levels have shipped. To add levels, APPEND (re-run the generator without
 // --fresh: it keeps every shipped level) and leave this hash alone; it covers only the first PINNED.
-// Levels 1-1000 have their OWN pin: they were played before 2026-10-29, when 1001-2000 were made
-// again once for Hard and Expert (nobody could have reached them); that pin never moves.
-const PIN_1000 = '0764e4b805fbe5d5';
+// Levels 1-500 (Easy) have their OWN pin; that pin never moves. 1001-2000 were made again once on 2026-10-29 (Hard and
+// Expert lists), and 501-2000 once on 2026-10-30 (every board past Easy at most 7 x 7, Matt: bigger tiles), both while
+// the game was admin only.
+const PIN_500 = '36017cec9c6118de';
 {
-  const h = createHash('sha256').update(LEVELS.slice(0, 1000).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
-  ok(`pin: levels 1-1000 are unchanged since 2026-10-28 (${h})`, LEVELS.length >= 1000 && h === PIN_1000);
+  const h = createHash('sha256').update(LEVELS.slice(0, 500).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
+  ok(`pin: levels 1-500 are unchanged since 2026-10-28 (${h})`, LEVELS.length >= 500 && h === PIN_500);
+}
+{
+  const big = LEVELS.slice(500).filter((lv) => lv.g[0] > 7 || lv.g[1] > 7).length;
+  ok(`every board past Easy is at most 7 x 7 (${big} bigger)`, big === 0);
 }
 const PINNED = 2000;
-const PIN_HASH = '5057748d81d9a2f3';
+const PIN_HASH = '3fcaade7845b68cf';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);

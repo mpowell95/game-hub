@@ -149,6 +149,9 @@ async function main() {
     const ix = JSON.parse(fs.readFileSync(path.join(OUT, 'index.json'), 'utf8'));
     for (let k = 0; k * CHUNK < ix.count; k++) kept.push(...JSON.parse(fs.readFileSync(path.join(OUT, `levels-${k}.json`), 'utf8')).levels);
   }
+  // --replace-from N (2026-10-30, admin-only game): drop levels N.. and remake them (boards at most 7 x 7 past Easy).
+  const REPLACE_FROM = Number(arg('--replace-from', 0)) || 0;
+  if (REPLACE_FROM > 0 && kept.length >= REPLACE_FROM) kept.length = REPLACE_FROM - 1;
   const used = new Set(kept.map((lv) => sortKey(lv.l.toLowerCase())));
   const levels = kept.slice(0, COUNT);
   for (let n = levels.length + 1; n <= COUNT; n++) {
@@ -160,7 +163,7 @@ async function main() {
       const p = (n - X.from) / (X.to - X.from);
       target = Math.min(X.words[1], Math.max(X.words[0], Math.round(X.words[0] + (X.words[1] - X.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
     }
-    const [mr, mc] = X ? [9, 9] : maxDims(n, size);
+    const [mr, mc] = X ? [7, 7] : maxDims(n, size);
     let made = null;
     const failed = new Set();
     for (let tries = 0; !made && tries < 400; tries++) {
@@ -186,6 +189,7 @@ async function main() {
       if (!best) {
         failed.add(b.key);
         if (X && failed.size % 20 === 0) target = Math.max(X.words[0], target - 1);
+        if (!X && failed.size % 20 === 0) target = Math.max(3, target - 1);
         continue;
       }
       const problems = gridProblems(best.ws, best.rows, best.cols);

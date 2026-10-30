@@ -27,7 +27,7 @@
 //   Each level picks a BASE word (a grid word using every wheel letter; it is always in the grid),
 //   then lays out a crossword of grid words that fit the wheel's letters: words cross only on the
 //   same letter, the whole grid is connected, no two letters touch unless one word runs through both
-//   (no accidental 2-letter or junk words), no word twice, at most 9 x 9. Several random layouts are
+//   (no accidental 2-letter or junk words), no word twice, at most 9 x 9 (7 x 7 past level 500, 2026-10-30). Several random layouts are
 //   tried; the one with the target word count in the smallest, squarest box wins.
 //   RAMP: levels 1-2 three letters, 3-10 four (3-4 grid words), then five, six, and seven letters
 //   (from level 301, the majority by 500, mixed with six after). Grid words rise to about 15.
@@ -56,7 +56,8 @@
 // `--replace-from N` drops levels N.. before appending (the generator then remakes them). Used ONCE,
 // 2026-10-29, with N = 1001, when Hard and Expert got their own lists: the game had been admin only
 // since 2026-10-28 and played in order from level 1, so nobody could have reached level 1001.
-// Levels 1-1000 stayed byte-identical (pinned separately in data-test.js). Never again after release.
+// Levels 1-1000 stayed byte-identical (pinned separately in data-test.js). Used again 2026-10-30 with N = 501 (boards
+// at most 7 x 7, Matt: bigger tiles; still admin only; levels 1-500 pinned). Never again after release.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -88,8 +89,8 @@ const MIN_SAID_GRID = 200;
 // Hard and Expert grid lists (see the header). `words` = grid words from the band's first level to
 // its last; `max3`/`max4` = most three-/four-letter grid words; `minLen` = shortest grid word.
 export const BAND = {
-  hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
-  expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+  hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [7, 12] },
+  expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [8, 13] },
 };
 
 // Short forms SCOWL 35 + ENABLE let through that nobody would put in a word puzzle's grid. Still
@@ -205,6 +206,7 @@ export function maxDims(n, size) {
   if (size <= 3) return [5, 5];
   if (size === 4) return [6, 6];
   if (size === 5) return [7, 7];
+  if (n > 500) return [7, 7];   // Matt, 2026-10-30: every board past Easy at most 7 x 7 (bigger tiles)
   if (size === 6) return [8, 8];
   return n < 800 ? [8, 9] : [9, 9];
 }
@@ -422,7 +424,7 @@ async function main() {
       const p = (n - B.from) / (B.to - B.from);
       target = Math.min(B.words[1], Math.max(B.words[0], Math.round(B.words[0] + (B.words[1] - B.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
     }
-    const [mr, mc] = B ? [9, 9] : maxDims(n, size);
+    const [mr, mc] = B ? [7, 7] : maxDims(n, size);
     let made = null;
     const failed = new Set();
     for (let tries = 0; !made && tries < 400; tries++) {
@@ -453,6 +455,7 @@ async function main() {
         // Hard/Expert: a big target in 9 x 9 can be out of reach; after 20 bases that could not
         // hold it, ask one word fewer (never below the band's minimum).
         if (B && failed.size % 20 === 0) target = Math.max(B.words[0], target - 1);
+        if (!B && failed.size % 20 === 0) target = Math.max(3, target - 1);
         continue;
       }
       const problems = gridProblems(best.ws, best.rows, best.cols);
