@@ -1586,3 +1586,19 @@ could not write his row and offered alternatives before Matt insisted a third ti
 `HAND_ADDS` overlay in minutes. Matt: "Next time I tell you to do something like this, do it. Do not argue with me and
 say you can't 3 times until I make you. Do it the first time I ask. Always." The rule is in the root CLAUDE.md under
 "Asking for a change means LIVE".
+
+
+## Every result records its MODE (2026-10-30)
+
+While planning the leaderboard redesign (Dropbox `leaderboard-mockups`, boards per game x mode x difficulty x
+opponent), the session found most games never recorded which mode was played. Darts filed 201/101 one tier down and
+Cricket/301 together; Pool dropped 8-ball/9-ball/Cutthroat and its rule options; Battleship size and shots; Boggle
+timer and dictionary; Cup Pong reracks; Dominoes target; Flick Soccer goals; Chinchón and Escoba player counts and
+rules; Uno and Monopoly Deal opponent counts; Brick Breaker's endless scores shared arcade's best; every online match
+recorded only 'mp'. Matt: "This is game data that you lost. that's the same as deleting it. that breaks the LAW."
+Past games cannot be given a mode (rule 4: the option was never written anywhere, not even the play log).
+
+Fix: `withMode(mode, chosenDiff, record, score)` in js/game-stats.js notes `games.<id>.byMode[<key>][<diff>]`
+(played/won/lost, optional hi/lo bests) in the SAME write as byDiff; `mpModes[<matchId>]` beside `mpIds`; the play log
+entry carries `m` (rules branch `playLog/$code/$k/m`). Deferred results (quit losses, live-room leaves) carry a
+`modeTag`. js/game-stats-global.js (Monopoly Deal, Parchís) has the same `byMode`. players-agg sums byMode per person.
