@@ -69,6 +69,27 @@ const bad = {}; Object.defineProperty(bad, 'x', { enumerable: true, get() { thro
 GS.withMode(bad, 'hard', () => GS.recordResult('darts', 'hard', true));
 ok('a broken mode still counts the result', GS.loadStoredStats().games.darts.total.played === before + 1);
 
+// 6b. per-mode bests
+GS.withMode({ m: 'endless' }, 'easy', () => GS.recordResult('snake', 'easy', true), { hi: 40 });
+GS.withMode({ m: 'endless' }, 'easy', () => GS.recordResult('snake', 'easy', true), { hi: 25 });
+GS.withMode({ m: 'endless' }, 'easy', () => GS.recordResult('snake', 'easy', true), { lo: 900 });
+GS.withMode({ m: 'endless' }, 'easy', () => GS.recordResult('snake', 'easy', true), { lo: 1200 });
+const sb = GS.loadStoredStats().games.snake.byMode['m=endless'].easy;
+ok('hi best only improves', sb.hi === 40, JSON.stringify(sb));
+ok('lo best only improves', sb.lo === 900, JSON.stringify(sb));
+
+// 6c. a deferred quit loss carries its mode
+GS.armQuitLoss('darts', 'recordResult', ['darts', 'easy', false], GS.modeTag({ kind: '101' }, 'medium'));
+GS.takeQuitLoss('darts');
+ok('quit loss recorded under its mode', GS.loadStoredStats().games.darts.byMode['kind=101'].medium.lost === 1);
+// 6d. a live-room leave carries its mode
+GS.recordLiveResult('darts:ROOM:1', 'darts', 'recordResult', ['darts', 'mp', true], [], true, GS.modeTag({ kind: 'cricket' }, 'mp'));
+ok('live leave recorded under its mode', GS.loadStoredStats().games.darts.byMode['kind=cricket'].mp.won === 2);
+const LL = await import('../js/live-leave.js');
+LL.armLeave('darts', 'darts:ROOM:2', 'recordResult', ['darts', 'mp', false], [], GS.modeTag({ kind: 'cricket' }, 'mp'));
+LL.forfeitNow('darts');
+ok('armed live leave recorded under its mode', GS.loadStoredStats().games.darts.byMode['kind=cricket'].mp.lost === 1);
+
 // 7. players-agg
 const recA = { profile: { name: 'test1', emoji: '🧪', playerId: 'DREG5' }, updatedAt: 1, stats: GS.loadStoredStats() };
 const recOld = { profile: { name: 'test1', emoji: '🧪', playerId: 'DREG5' }, updatedAt: 1, stats: { version: 1, games: { darts: { total: { played: 2, won: 1, lost: 1 }, byDiff: { hard: { played: 2, won: 1, lost: 1 } } } } } };

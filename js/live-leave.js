@@ -61,11 +61,12 @@ export function liveKey(statsId, code, n) { return `${statsId}:${String(code || 
 /** This player has moved in game `key`: from now on leaving is their loss, recorded as
  *  `<fn>(...lossArgs)` plus head-to-head against each of `opps` ({ deviceId, name }). Call on every
  *  own move (it refreshes the arguments and the time). Nothing if that game is already counted. */
-export function armLeave(statsId, key, fn, lossArgs, opps) {
+export function armLeave(statsId, key, fn, lossArgs, opps, tag) {
   if (!key || liveCounted(key)) return;
   const cleanOpps = (Array.isArray(opps) ? opps : []).filter((o) => o && o.deviceId)
     .map((o) => ({ deviceId: String(o.deviceId), name: String(o.name || '') }));
-  armQuitLoss(marker(statsId), 'recordLiveResult', [key, statsId, fn, Array.from(lossArgs || []), cleanOpps, false]);
+  // `tag` (game-stats.js modeTag, 2026-10-30): the match's mode, recorded with the result.
+  armQuitLoss(marker(statsId), 'recordLiveResult', [key, statsId, fn, Array.from(lossArgs || []), cleanOpps, false, tag || null]);
 }
 
 /** The game key the armed leave belongs to, or null. */
@@ -106,10 +107,10 @@ export function endedNormally(statsId, key) { if (key) markLiveCounted(key); dis
 export function alreadyCounted(key) { return !!key && liveCounted(key); }
 
 /** Record this player's WIN decided by a leave (the other left, or a claim), once. */
-export function recordLeaveWin(statsId, key, fn, winArgs, opps) {
+export function recordLeaveWin(statsId, key, fn, winArgs, opps, tag) {
   disarmLeave(statsId);
   const cleanOpps = (Array.isArray(opps) ? opps : []).filter((o) => o && o.deviceId);
-  return recordLiveResult(key, statsId, fn, winArgs, cleanOpps, true);
+  return recordLiveResult(key, statsId, fn, winArgs, cleanOpps, true, tag || null);
 }
 
 /** The forfeits written into a room for game `n`: [{ seat, n, at, claim }]. */

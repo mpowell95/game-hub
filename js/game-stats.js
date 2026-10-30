@@ -1111,13 +1111,23 @@ export function modeKey(mode) {
 let _mode = null;
 /** Run `record` (the game's own recorder) noting the game's mode with the count it adds. `mode` is a
  *  flat object of every option that defines the game; `diff` the difficulty the player chose ('mp'
- *  online). Returns whatever `record` returns. Never throws for a bad mode: the result still counts. */
-export function withMode(mode, diff, record) {
+ *  online). `score` (optional): `{ hi: n }` a higher-is-better best, `{ lo: n }` lower-is-better (a
+ *  time), kept per mode as `hi` (Math.max) / `lo` (Math.min of nonzero). Returns whatever `record`
+ *  returns. Never throws for a bad mode: the result still counts. */
+export function withMode(mode, diff, record, score) {
   let key = '';
   try { key = modeKey(mode); } catch { key = ''; }
   const prev = _mode;
-  _mode = key ? { key, diff: String(diff == null ? '' : diff).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false } : null;
+  _mode = key ? { key, diff: String(diff == null ? '' : diff).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: score || null } : null;
   try { return record(); } finally { _mode = prev; }
+}
+/** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. */
+export function modeTag(mode, diff, score) {
+  const k = modeKey(mode);
+  return k ? { m: mode, d: diff == null ? '' : String(diff), s: score || null } : null;
+}
+function withTag(tag, record) {
+  return tag && typeof tag === 'object' && tag.m ? withMode(tag.m, tag.d, record, tag.s) : record();
 }
 function noteMode(g, won) {
   if (!_mode || _mode.noted) return;
@@ -1129,6 +1139,9 @@ function noteMode(g, won) {
     b.played = (b.played | 0) + 1;
     if (won === true) b.won = (b.won | 0) + 1;
     else if (won === false) b.lost = (b.lost | 0) + 1;
+    const sc = _mode.score;
+    if (sc && Number.isFinite(+sc.hi) && +sc.hi > 0) b.hi = Math.max(+b.hi || 0, +sc.hi);
+    if (sc && Number.isFinite(+sc.lo) && +sc.lo > 0) b.lo = +b.lo > 0 ? Math.min(+b.lo, +sc.lo) : +sc.lo;
   } catch (err) { console.error('[game-stats] mode not noted', err); }
 }
 
@@ -3425,10 +3438,11 @@ function writeQuit(q) {
 
 /** The player has moved in a game with no resume: quitting it from now on is a loss, recorded as
  *  `<fn>(...args)` (one of QUIT_RECORDERS). Call again to refresh the arguments (score so far). */
-export function armQuitLoss(gameId, fn, args) {
+export function armQuitLoss(gameId, fn, args, tag) {
   if (!QUIT_RECORDERS()[fn]) return;
   const q = readQuit();
   q[gameId] = { f: fn, a: Array.from(args || []), c: activeCode(), k: statsKey(), t: Date.now() };
+  if (tag && typeof tag === 'object' && tag.m) q[gameId].m = tag;   // the game's mode (modeTag, 2026-10-30)
   writeQuit(q);
   keepFresh(gameId);
 }
@@ -3490,7 +3504,7 @@ function takeOne(gameId, bySettle) {
   notePlay(gameId, 'quitLoss', [m.f, m.t]);      // the play log says this loss was a quit
   const fn = QUIT_RECORDERS()[m.f];
   if (!fn) return false;
-  try { fn(...(Array.isArray(m.a) ? m.a : [])); return true; } catch (err) { console.error('[game-stats] quit loss not recorded', err); return false; }
+  try { withTag(m.m, () => fn(...(Array.isArray(m.a) ? m.a : []))); return true; } catch (err) { console.error('[game-stats] quit loss not recorded', err); return false; }
 }
 
 /** Every loss left armed by a game that died with its page (app or tab closed mid-game). The hub calls
@@ -3527,13 +3541,13 @@ export function markLiveCounted(key) {
 }
 /** One live-room result decided by a leave: `<fn>(...args)` (the game's own recorder, 'mp' bucket),
  *  then head-to-head against each of `opps` ({ deviceId, name }). Once per `key`. True when recorded. */
-export function recordLiveResult(key, statsId, fn, args, opps, won) {
+export function recordLiveResult(key, statsId, fn, args, opps, won, tag) {
   if (!key || liveCounted(key)) return false;
   const rec = QUIT_RECORDERS()[fn];
   if (!rec || fn === 'recordLiveResult') return false;
   notePlay(statsId || 'live', 'recordLiveResult', [key, fn, won]);   // evidence: this result came through a live-room leave
   markLiveCounted(key);                           // listed BEFORE the write, so it can never count twice
-  try { rec(...(Array.isArray(args) ? args : [])); } catch (err) { console.error('[game-stats] live result not recorded', err); return false; }
+  try { withTag(tag, () => rec(...(Array.isArray(args) ? args : []))); } catch (err) { console.error('[game-stats] live result not recorded', err); return false; }
   for (const o of Array.isArray(opps) ? opps : []) {
     if (o && o.deviceId) { try { recordHeadToHead(statsId, { deviceId: o.deviceId, name: o.name || '' }, !!won); } catch { /* never block the result */ } }
   }
