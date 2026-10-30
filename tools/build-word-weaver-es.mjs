@@ -123,14 +123,14 @@ async function main() {
 
   // Hard and Expert: English's shape (BAND: levels, word counts, 3-/4-letter caps), Spanish word lists.
   const BANDS = {
-    hard: { ...BAND.hard, rankMax: HARD_RANK },
-    expert: { ...BAND.expert, rankMax: Infinity },
+    hard: { ...BAND.hard, rankMax: HARD_RANK, words: [5, 10] },   // 2026-10-30: 6 x 6 boards, fewer Spanish 6-letter bases
+    expert: { ...BAND.expert, rankMax: Infinity, words: [4, 10] },
   };
   for (const [name, X] of Object.entries(BANDS)) {
     X.list = extra.filter((w) => w.length >= X.minLen && gridOk(w) && rank.get(w) < X.rankMax && (w.length >= 5 || commonSet.has(w)));
     const lc7 = X.list.map(counts), lm7 = X.list.map(maskOf);
     const byKey = new Map();
-    for (const w of X.list) if (w.length === 7) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
+    for (const w of X.list) if (w.length === 6) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
     X.bases = [...byKey.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
     for (const b of X.bases) {
       const lc = counts(b.key), lm = maskOf(b.key);
@@ -139,7 +139,7 @@ async function main() {
       b.rare = b.pool.filter(isRare).length;
       b.common = Math.max(...b.words.map(coreScore));
     }
-    console.log(`${name}: list ${X.list.length}, 7-letter bases ${X.bases.length}`);
+    console.log(`${name}: list ${X.list.length}, 6-letter bases ${X.bases.length}`);
   }
   const bandOf = (n) => (n >= BANDS.expert.from ? BANDS.expert : n >= BANDS.hard.from ? BANDS.hard : null);
 
@@ -157,20 +157,20 @@ async function main() {
   for (let n = levels.length + 1; n <= COUNT; n++) {
     const r = rng(SEED + n * 7919);
     const X = bandOf(n);
-    let size = X ? 7 : wheelSize(n, r);
+    let size = X ? 6 : wheelSize(n, r);
     let target = targetWords(n, size, r);
     if (X) {
       const p = (n - X.from) / (X.to - X.from);
       target = Math.min(X.words[1], Math.max(X.words[0], Math.round(X.words[0] + (X.words[1] - X.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
     }
-    const [mr, mc] = X ? [7, 7] : maxDims(n, size);
+    const [mr, mc] = X ? [6, 6] : maxDims(n, size);
     let made = null;
     const failed = new Set();
     for (let tries = 0; !made && tries < 400; tries++) {
       const cands = (X ? X.bases : bySize[size] || []).filter((b) => !used.has(b.key) && !failed.has(b.key) && b.pool.length >= target + (size >= 6 ? 2 : 0));
       if (X && !cands.length) { if (target > X.words[0]) { target--; failed.clear(); continue; } break; }
       if (!cands.length) {
-        if (tries > 300) { size = size === 7 ? 6 : size + 1; continue; }
+        if (tries > 300) { size = size === 7 ? 6 : n > 500 ? 5 : size + 1; continue; }
         target = Math.max(3, target - 1); continue;
       }
       const from = X ? [...cands].sort((x, y) => y.rare - x.rare || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * 0.4)))
