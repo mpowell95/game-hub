@@ -1104,6 +1104,10 @@ function renderSheet(cfg) {
       try { await navigator.clipboard.writeText(id); toast(tx('adm_copied', 'Copied.')); } catch { toast(id); }
     }, [`<span class="adm-code">${esc(id ? id.slice(0, 8) + '…' : '?')}</span>`]),
   ];
+  // READER KEY FOR CLAUDE (2026-10-30, Matt: "set up the read-only list"): a separate sign-in that may
+  // READ the admin-only logs (play log, flags, alerts) and change nothing (database.rules.json readers/).
+  // The key is copied for Matt to put in the session environment as GAMEHUB_READER (tools/reader-auth.mjs).
+  rows.push(link(tx('adm_reader_key', 'Reader key for Claude'), () => makeReaderKey()));
   if (isDevOrigin()) {
     rows.push(link(devWritesOn() ? tx('adm_devwrites_off', 'Block writes from this dev server') : tx('adm_devwrites_on', 'Allow writes from this dev server'), () => {
       try { if (devWritesOn()) localStorage.removeItem(DEV_SYNC_OK); else localStorage.setItem(DEV_SYNC_OK, '1'); render(); } catch (err) { toast(String(err), true); }
@@ -1112,6 +1116,31 @@ function renderSheet(cfg) {
   return `<div class="adm-dim" ${close}></div><div class="adm-sheet" role="dialog" aria-label="${esc(tx('adm_this_phone', 'This phone'))}">
     <div class="adm-sh"><b>${esc(tx('adm_this_phone', 'This phone'))}</b><button type="button" ${close}>${esc(tx('adm_done', 'Done'))}</button></div>
     <div class="adm-sbody">${grp(rows)}</div></div>`;
+}
+
+/** Create one reader: a new anonymous account (not this phone's), put on readers/ by this admin phone,
+ *  verified by re-read, then its key copied. Nothing else is written; the reader can only read. */
+async function makeReaderKey() {
+  try {
+    const { writesAllowed } = await import('./stats-net.js');
+    if (!writesAllowed('reader key')) { toast(tx('adm_reader_blocked', 'Not from this device.'), true); return; }
+    const { firebaseConfig } = await import('./firebase-config.js');
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnSecureToken: true }),
+    });
+    const acct = await res.json();
+    if (!res.ok || !acct.localId || !acct.refreshToken) throw new Error((acct.error && acct.error.message) || 'sign-up failed');
+    const { getStatsApp } = await import('./firebase-boot.js');
+    const boot = await getStatsApp();
+    if (!boot) throw new Error('offline');
+    const { db, api } = boot;
+    const ref = api.ref(db, `readers/${acct.localId}`);
+    await api.set(ref, { on: true, at: api.serverTimestamp(), by: String(statsId() || '') });
+    const back = await api.get(ref);
+    if (!back || !back.exists()) throw new Error('not saved');
+    try { await navigator.clipboard.writeText(acct.refreshToken); toast(tx('adm_reader_copied', 'Key copied. Add it as GAMEHUB_READER.')); }
+    catch { window.prompt(tx('adm_reader_copy', 'Copy this key, then add it as GAMEHUB_READER'), acct.refreshToken); }
+  } catch (err) { console.error('[admin] reader key', err); toast(String((err && err.message) || err), true); }
 }
 
 export default { openAdmin };

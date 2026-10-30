@@ -323,6 +323,10 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
+- **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env
+  var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's
+  sign-in is never admin). The key comes from Admin > gear > Reader key for Claude; `readers/<uid>` may READ playLog,
+  beeAlerts, integrityFlags, integrityAlerts and nothing else (`tools/reader-auth.mjs`). Use it before saying "I can't see that".
 - **Firebase-writing scripts are Matt-only, dry-run by default** (`tools/clear-skeeball-stats.mjs`,
   `tools/delete-test-players.mjs`, `tools/delete-device-record.mjs`, `tools/fix-natalia-record.mjs`). Never `--write`
   on your own judgement.
