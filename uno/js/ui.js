@@ -17,7 +17,7 @@ import { UnoGame, COLORS } from './game.js';
 import { chooseAction, pickWildColor, seededRng, positionKey } from './ai.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, withMode } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -956,7 +956,8 @@ class UnoUI {
     const won = g.winner === HUMAN;
     if (!this._statsCommitted) {
       this._statsCommitted = true;
-      try { recordResult('uno', this.difficulty, won); } catch { /* never block the result */ }
+      // WHICH game (js/game-stats.js withMode, 2026-10-30): players at the table.
+      try { withMode({ n: g.n }, this.difficulty, () => recordResult('uno', this.difficulty, won)); } catch { /* never block the result */ }
     }
     clearGame();
     const winnerSeat = this.seats[g.winner];
@@ -1065,7 +1066,7 @@ class UnoUI {
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { recordResult('uno', this.difficulty, false); } catch { /* never block leaving */ }
+    try { withMode({ n: this.game.n }, this.difficulty, () => recordResult('uno', this.difficulty, false)); } catch { /* never block leaving */ }
     clearGame();
   }
 

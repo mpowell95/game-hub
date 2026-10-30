@@ -32,7 +32,7 @@ import { newGame, legalMoves, applyMove, edgeKey, edgeCount, isOver, score } fro
 import { chooseMove } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordDotsBoxes, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
+import { recordDotsBoxes, recordHeadToHead, loadStats, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -956,7 +956,7 @@ class DotsBoxesUI {
     // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
     if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
-    try { recordDotsBoxes(difficulty, won, extras); } catch { /* never block the result */ }
+    try { withMode(this._modeOf(), difficulty, () => recordDotsBoxes(difficulty, won, extras)); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // has no `this.mp` and is untouched. Never allowed to block the ordinary result from being
     // recorded.
@@ -1123,8 +1123,16 @@ class DotsBoxesUI {
     this._statsCommitted = true;
     const sc = score(this.state);
     const boxes = this.humanSeat === 0 ? sc.p0 : sc.p1;
-    try { recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame }); } catch { /* never block leaving */ }
+    try { withMode(this._modeOf(), this._setup.difficulty, () => recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame })); } catch { /* never block leaving */ }
     clearGame();
+  }
+
+  /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the board
+   *  size; vs the computer also the First move setting and whether Undo was used. A live room's size
+   *  is the host's (`mp.size`). */
+  _modeOf() {
+    if (this.mp) return { size: this.mp.size };
+    return { size: this._boardSizeKey(), first: this._setup.firstMode, undo: this._undone ? 1 : 0 };
   }
 
   // --- undo (solo only) -------------------------------------------------------
@@ -1311,7 +1319,7 @@ class DotsBoxesUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(edge), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!isOver(this.state) && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp]);
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(this._modeOf(), MP_DIFFICULTY));
     }
   }
 
@@ -1575,7 +1583,7 @@ class DotsBoxesUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp] });
+          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(this._modeOf(), MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1752,7 +1760,7 @@ class DotsBoxesUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp]);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(this._modeOf(), MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;

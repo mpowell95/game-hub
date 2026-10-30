@@ -118,4 +118,13 @@ export function freshSeed() {
   catch { return (Math.floor(Math.random() * 4294967295) >>> 0) || 1; }
 }
 
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the team a
+ *  side drafted, one key per slot (t1, t2, t3...: a joined list would be cut at the key's length cap). */
+export function teamMode(state, side) {
+  const out = {};
+  const mons = state && Array.isArray(state.sides) && state.sides[side] && Array.isArray(state.sides[side].mons) ? state.sides[side].mons : [];
+  mons.forEach((m, i) => { if (m && typeof m.id === 'string') out['t' + (i + 1)] = m.id; });
+  return out;
+}
+
 export default { SIDES, sideOfSeat, seatOfSide, PLACEHOLDER_TEAM, cleanTeam, cleanEntry, moveOf, entryOf, startState, replay, mirror, mirrorEvents, stateHash, freshSeed };

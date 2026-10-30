@@ -24,7 +24,7 @@ import { newGame, legalMoves, applyMove, X, O } from './game.js';
 import { chooseMove } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordTicTacToe, recordHeadToHead, loadStats, deviceId } from '../../js/game-stats.js';
+import { recordTicTacToe, recordHeadToHead, loadStats, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -790,7 +790,7 @@ class TicTacToeUI {
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { recordTicTacToe(this.state.variant, this._setup.difficulty, false); } catch { /* never block leaving */ }
+    try { withMode(this._modeOf(this.state.variant), this._setup.difficulty, () => recordTicTacToe(this.state.variant, this._setup.difficulty, false)); } catch { /* never block leaving */ }
   }
 
   /** Record the finished game exactly once on THIS device.
@@ -802,6 +802,12 @@ class TicTacToeUI {
    *  Idempotence is the local _statsCommitted flag, set BEFORE any write --
    *  MP reaches game-end by several paths (normal finish, restore of a
    *  finished game), and the flag is what stops one game counting twice here. */
+  /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
+   *  variant; vs the computer also the First move setting. */
+  _modeOf(variant) {
+    return this.mp ? { v: variant } : { v: variant, first: this._setup.firstMode };
+  }
+
   _commitStats() {
     if (this._statsCommitted) return;
     this._statsCommitted = true;
@@ -813,7 +819,7 @@ class TicTacToeUI {
     // a loss written as a win is not additive-safe). null = draw.
     const won = s.isDraw ? null : (s.winner === this._myMark());
     const difficulty = this.mp ? MP_DIFFICULTY : this._setup.difficulty;
-    try { recordTicTacToe(s.variant, difficulty, won); } catch { /* never block the result */ }
+    try { withMode(this._modeOf(s.variant), difficulty, () => recordTicTacToe(s.variant, difficulty, won)); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is
     // still live. Solo has no `this.mp` and is untouched. Never allowed to
     // block the ordinary result from being recorded.
@@ -933,7 +939,7 @@ class TicTacToeUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(move), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!this.state.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, false], [mp.opp]);
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, false], [mp.opp], modeTag({ v: mp.variant }, MP_DIFFICULTY));
     }
   }
 
@@ -1172,7 +1178,7 @@ class TicTacToeUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordTicTacToe', winArgs: [mp.variant, MP_DIFFICULTY, true], opps: [mp.opp] });
+          fn: 'recordTicTacToe', winArgs: [mp.variant, MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag({ v: mp.variant }, MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1354,7 +1360,7 @@ class TicTacToeUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, true], [mp.opp]);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, true], [mp.opp], modeTag({ v: mp.variant }, MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;

@@ -17,7 +17,10 @@ import { Renderer, ARROW_COLORS, FLIGHT_T } from './render.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult } from '../../js/game-stats.js';
+import { recordResult, withMode } from '../../js/game-stats.js';
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the one
+ *  option a match vs the computer has, who shoots first. (Online challenges have no options.) */
+const modeOf = (m) => ({ first: m && m.starter === 1 ? 'them' : 'me' });
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -461,7 +464,7 @@ class ArcheryUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = recordResult('archery', q.diff, false);
+      const st = withMode(modeOf(q.m), q.diff, () => recordResult('archery', q.diff, false));
       if (!st) console.warn('[archery] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[archery] recording the quit loss failed', err); }
   }
@@ -971,7 +974,7 @@ class ArcheryUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = recordResult('archery', this.diff, m.winner === 0);
+        const st = withMode(modeOf(m), this.diff, () => recordResult('archery', this.diff, m.winner === 0));
         if (!st) console.warn('[archery] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[archery] recording the result failed', err); }
     }

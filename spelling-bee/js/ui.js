@@ -11,7 +11,7 @@
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
-import { recordResult, noteVoidedResult, recordSpellingBeeGenius } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, recordSpellingBeeGenius, withMode } from '../../js/game-stats.js';
 import { VOIDED_MATCHES, handAddFor } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
@@ -127,7 +127,8 @@ function countDays(save) {
   for (const [d, recs] of byDay) {
     if (!recs.some((r) => r.recorded)) {
       let st = null;
-      try { st = recordResult(STATS_ID, 'daily', null); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
+      // WHICH puzzle language (js/game-stats.js withMode, 2026-10-30), read off the day's key.
+      try { st = withMode({ lang: d.startsWith('es:') ? 'es' : 'en' }, 'daily', () => recordResult(STATS_ID, 'daily', null)); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
       if (!st) { console.error('[spelling-bee] day not counted yet; will retry on the next word or open'); break; }
     }
     save.days[d] = 1;
@@ -604,7 +605,7 @@ class SpellingBee {
     if (this.rec.recorded || this._dayStats().dr < GENIUS) return;
     const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
-    try { st = counted ? recordSpellingBeeGenius() : recordResult(STATS_ID, 'daily', true); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
+    try { st = counted ? recordSpellingBeeGenius() : withMode({ lang: this.data.lang === 'es' ? 'es' : 'en' }, 'daily', () => recordResult(STATS_ID, 'daily', true)); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
     this.rec.recorded = true;
     this.save.days[dayOf(this.puzzle.key, this.rec)] = 1;

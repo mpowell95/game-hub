@@ -6,7 +6,11 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the shot
+ *  rule (one shot, or until you sink one). A live room's rule is the host's (room config), on the
+ *  Match either way. The player always shoots first vs the computer; the caption is words, not a rule. */
+const modeOf = (m) => ({ one: m && m.oneShot ? 1 : 0 });
 import * as LL from '../../js/live-leave.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -806,7 +810,7 @@ class Hoops4 {
       let res = 'none';
       if (this._liveInPlay()) {
         res = LL.onRoomEnded(room, { statsId: 'hoops4', key: this._liveKey(), n: 1, mySeat: this.mp.role,
-          fn: 'recordResult', winArgs: ['hoops4', 'mp', true], opps: [] });
+          fn: 'recordResult', winArgs: ['hoops4', 'mp', true], opps: [], tag: modeTag(modeOf(this.match), 'mp') });
       }
       this.mp.decided = true;
       if (res !== 'none') this.recorded = true;
@@ -838,7 +842,7 @@ class Hoops4 {
     const mp = this.mp;
     mp.decided = true;
     this.recorded = true;
-    LL.recordLeaveWin('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', true], []);
+    LL.recordLeaveWin('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', true], [], modeTag(modeOf(this.match), 'mp'));
     LL.hideClaim(this.root);
     if (this._roomStop) { try { this._roomStop(); } catch {} this._roomStop = null; }
     LL.leaveWithForfeit(this.net, mp.code, mp.role, this._liveOppRole(), 1, true).catch(() => {});
@@ -1530,7 +1534,7 @@ class Hoops4 {
     this.busy = true;
     // Any shot, the computer's included (2026-10-29, second pass, Matt): quitting after its opening was free.
     if (!this.mp && this.match.vsCpu && !this.recorded) {
-      armQuitLoss('hoops4', 'recordResult', ['hoops4', this.cpuDiff(), false]);
+      armQuitLoss('hoops4', 'recordResult', ['hoops4', this.cpuDiff(), false], modeTag(modeOf(this.match), this.cpuDiff()));
     }
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
@@ -1634,7 +1638,7 @@ class Hoops4 {
     this.busy = false;
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
-    if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], []);
+    if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], [], modeTag(modeOf(this.match), 'mp'));
 
     if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
     this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
@@ -1744,16 +1748,16 @@ class Hoops4 {
           const won = g.over && (g.over.winner === 'a' || g.over.winner === 'b')
             ? g.over.winner === this.mp.side : m.winner === this.myPlayer;
           // Its finish time keeps a fresh storage honest; the id rides with the count (2026-10-29).
-          this.mp.MP.countFinished(this.mp.id, won, (g.over && g.over.at) || Date.now());
+          this.mp.MP.countFinished(this.mp.id, won, (g.over && g.over.at) || Date.now(), this.mp.MP.modeOfMatch(g));
           // Seen right here, so the away-from-the-board Game Over popup never repeats it.
           try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
         } else if (this.mp && LL.alreadyCounted(this._liveKey())) {
           // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
-        } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); recordResult('hoops4', 'mp', m.winner === this.myPlayer); }
+        } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); withMode(modeOf(m), 'mp', () => recordResult('hoops4', 'mp', m.winner === this.myPlayer)); }
         else if (m.vsCpu) {
           const lost = quitLossLost('hoops4');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
           dropQuitLoss('hoops4');
-          if (!lost) recordResult('hoops4', this.cpuDiff(), r.won);
+          if (!lost) withMode(modeOf(m), this.cpuDiff(), () => recordResult('hoops4', this.cpuDiff(), r.won));
         }
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }

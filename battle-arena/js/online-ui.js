@@ -17,7 +17,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { STRINGS } from './strings.js';
 import * as MP from './mp.js';
 import { LiveRoom, readRoomSave, clearRoomSave, countLive, CLAIM_MS, STALE_MS } from './live.js';
-import { seatOfSide, sideOfSeat } from './online.js';
+import { seatOfSide, sideOfSeat, teamMode } from './online.js';
 import { lobbyBG, monsterSVG } from './art.js';
 
 const t = makeT(STRINGS);
@@ -373,7 +373,7 @@ class ChallengeLink {
 
   finish(canon, won) {
     const ov = this.game && this.game.over;
-    MP.countResult(this.id, won, (ov && ov.at) || Date.now());   // the finish time keeps a fresh storage honest
+    MP.countResult(this.id, won, (ov && ov.at) || Date.now(), teamMode(canon, this.seat));   // the finish time keeps a fresh storage honest
     MP.markResultSeen(this.id);
   }
 
@@ -502,7 +502,7 @@ class LiveLink {
     return items;
   }
 
-  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp, this.room.llKey()); }
+  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp, this.room.llKey(), teamMode(canon, this.seat)); }
 
   done() { this.left = true; this.room.leave(); this.dead = true; home(this.ui); }
   resync() { if (this.room.canon) this.ui.startOnline(this, this.room.canon); }

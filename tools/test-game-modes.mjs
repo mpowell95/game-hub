@@ -99,12 +99,13 @@ ok('agg keeps old records in byDiff', p.games.darts.byDiff.hard.played >= 2);
 const pOld = aggregatePlayers({ 'dev-b': recOld }).find((x) => x.playerId === 'DREG5');
 ok('a person with no modes has no byMode', !pOld.games.darts.byMode);
 
-// 8. static: every game that has modes wraps every record call
+// 8. static: every game that has modes wraps every record call (withMode) and tags every deferred one
+//    (modeTag: armQuitLoss, LL.armLeave, LL.recordLeaveWin, LL.onRoomEnded's `tag`), counted together.
 export const MODE_GAMES = JSON.parse(readFileSync(new URL('./game-modes.json', import.meta.url), 'utf8'));
 for (const [file, n] of Object.entries(MODE_GAMES)) {
   const src = readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-  const calls = (src.match(/withMode\(/g) || []).length;
-  ok(`${file}: ${n} record call(s) wrapped in withMode`, calls >= n, `found ${calls}`);
+  const calls = (src.match(/withMode\(|modeTag\(/g) || []).length;
+  ok(`${file}: ${n} record call(s) wrapped in withMode / tagged with modeTag`, calls >= n, `found ${calls}`);
 }
 
 console.log(`\n${fail ? 'FAILED' : 'ALL PASS'} (${pass} passed, ${fail} failed)`);

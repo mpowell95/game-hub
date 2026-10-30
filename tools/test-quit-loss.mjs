@@ -254,8 +254,10 @@ W('escoba/js/ui.js', /_mpGuestStartMatch\(room\) \{[\s\S]{0,300}this\._recordQui
     _soloClearSave: () => calls.push('clear') };
   const soloDiff = cc.soloDiff;
   self._savedQuitPending = new Function('soloDiff', `return function () ${body('_savedQuitPending')}`)(soloDiff);
-  self._recordSavedQuitLoss = new Function('saveJSON', 'STORE_STATS', 'recordChinchon', `return function () ${body('_recordSavedQuitLoss')}`)(
-    () => calls.push('stats'), 'x', (d, w, x) => calls.push(['rec', d, w, x.closed]));
+  // withMode / modeOfMatch / pickedDiff (2026-10-30, the game's mode) pass straight through here:
+  // tools/test-game-modes.mjs proves the mode itself.
+  self._recordSavedQuitLoss = new Function('saveJSON', 'STORE_STATS', 'recordChinchon', 'withMode', 'modeOfMatch', 'pickedDiff', `return function () ${body('_recordSavedQuitLoss')}`)(
+    () => calls.push('stats'), 'x', (d, w, x) => calls.push(['rec', d, w, x.closed]), (m, d, f) => f(), () => null, () => 'easy');
   self._recordSavedQuitLoss();
   ok('G2 Chinchon: the set-aside save\'s loss is recorded once, at its easiest computer, save cleared first',
     calls[0] === 'clear' && calls.some((c) => Array.isArray(c) && c[1] === 'easy' && c[2] === false && c[3] === 2) && self.stats.losses === 1);

@@ -22,9 +22,9 @@
 //
 // RESULTS: `recordResult('battlearena', 'mp', won)` + `recordHeadToHead('battlearena', opponent, won)`
 // (the live rooms' Records, js/mp-records.js), once per match per phone (LIVE_LEDGER).
-import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
+import { recordResult, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat } from './online.js';
+import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat, teamMode } from './online.js';
 import * as E from './engine.js';
 import NET from '../../js/net.js';
 import * as LL from '../../js/live-leave.js';
@@ -47,7 +47,7 @@ export function clearRoomSave() { try { localStorage.removeItem(ROOM_KEY); } cat
 /** Record a finished live match on this phone, once (THE LAW rule 2). `llKey` (2026-10-29): the same
  *  match in js/live-leave.js's ledger, so a loss already settled from an armed leave is not counted
  *  again, and a counted match drops its armed leave. */
-export function countLive(key, won, opp, llKey) {
+export function countLive(key, won, opp, llKey, mode = null) {
   const done = readJSON(localStorage, LIVE_LEDGER);
   const list = Array.isArray(done) ? done.filter((x) => typeof x === 'string') : [];
   if (list.includes(key)) return false;
@@ -55,7 +55,8 @@ export function countLive(key, won, opp, llKey) {
   writeJSON(localStorage, LIVE_LEDGER, list.slice(-200));
   if (llKey && LL.alreadyCounted(llKey)) return false;
   if (llKey) LL.endedNormally(GAME, llKey);
-  try { recordResult(GAME, 'mp', !!won); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
+  // `mode` (2026-10-30, js/game-stats.js withMode): this player's drafted team.
+  try { withMode(mode, 'mp', () => recordResult(GAME, 'mp', !!won)); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   if (opp && opp.deviceId) { try { recordHeadToHead(GAME, { deviceId: opp.deviceId, name: opp.name || '' }, !!won); } catch { /* never block the result */ } }
   return true;
 }
@@ -259,7 +260,7 @@ export class LiveRoom {
     const h = entry.k === 'r' ? null : stateHash(this.canon);
     // Your own first move arms the leave (js/live-leave.js): a phone that never comes back loses.
     if (entry.k !== 'r' && !this.over && entry.by === sideOfSeat(this.seat)) {
-      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : []);
+      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : [], modeTag(teamMode(this.canon, this.seat), 'mp'));
     }
     this.sending = this.sending.then(async () => {
       for (let tries = 0; tries < 8 && !this.dead; tries++) {

@@ -32,7 +32,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, flick, runToRest, settle, cleanForms, cleanPairs, GOAL_OPTIONS, DISCS } from './engine.js';
@@ -370,7 +370,10 @@ export function markCounted(id) {
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). Online
  *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention"). A
  *  VOIDED match (js/stats-corrections.js) is never counted, and is not marked counted either. */
-export function countResult(id, won, finishedAt = Date.now()) {
+/** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
+ *  the match its goals and aiming help; from an index row its goals (all a row carries). */
+export const modeOfMatch = (raw) => ({ goals: goalsOfGame(raw), aids: aidsOfGame(raw) });
+export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -378,7 +381,7 @@ export function countResult(id, won, finishedAt = Date.now()) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch(STATS_ID, id, () => recordResult(STATS_ID, 'mp', !!won)); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won))); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }
   return true;
 }
 /** A voided match this phone HAD counted: noted once, so the stats screens take it back out. */
@@ -404,12 +407,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at, modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated, { goals: goalsOfGame(r) });
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
