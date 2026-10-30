@@ -637,7 +637,9 @@ function boardView(list, id) {
         return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
       },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : id === 'contexto' ? (g) => ctSubHTML(ctOf(g)) : null,
-      ...(id === 'contexto' ? { val: (g) => ctBigHTML(ctOf(g)) } : {}),
+      // Contexto (Matt, 2026-10-30): the medals say it all; no "MEDALS" label, no "N played", no
+      // "<name> is 4th." line under the list.
+      ...(id === 'contexto' ? { val: (g) => ctBigHTML(ctOf(g)), unit: '', sub: () => '', gap: false } : {}),
     };
   };
   const simple = (rows, f, unit, played, cmp) => {
@@ -668,9 +670,9 @@ function boardView(list, id) {
       const rows = list.filter((g) => (ctDailyOf(g).played | 0) > 0);
       const cmp = (a, b) => compareContexto(ctDailyOf(a), ctDailyOf(b));
       rows.sort((a, b) => cmp(a, b) || recent(a, b));
-      v = { rows, cmp, unit: t('lb_unit_ct_medals'), empty: tx('lb_ct_daily_none', 'No daily wins yet.'),
+      v = { rows, cmp, unit: '', empty: tx('lb_ct_daily_none', 'No daily wins yet.'),
         val: (g) => ctBigHTML(ctDailyOf(g)),
-        sub: (g) => t('lb_played_count', { n: ctDailyOf(g).played | 0 }),
+        sub: () => '',
         subHtml: (g) => ctSubHTML(ctDailyOf(g)) };
     } else {
       v = plain();
@@ -785,7 +787,7 @@ function plainBoardHTML(list, id) {
   const v = boardView(list, id);
   const { rankOf, tiedAt } = rankMap(v.rows, () => 0, v.cmp);
   const cards = v.rows.length
-    ? `<div class="lb-unith">${esc(v.unit)}</div><div class="lb-plist is-board">${v.rows.map((g) => {
+    ? `${v.unit ? `<div class="lb-unith">${esc(v.unit)}</div>` : ''}<div class="lb-plist is-board">${v.rows.map((g) => {
         const big = { cls: 'lb-msval', val: v.val(g), unit: v.sub(g), unit2: v.sub2 ? v.sub2(g) : '' };
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.subHtml ? v.subHtml(g) : v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
