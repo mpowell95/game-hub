@@ -3330,7 +3330,7 @@
     var es = window.ParchisI18n.getLang() === "es";
     HUD.prompt(es ? "\u00bfPartida nueva?" : "New game?", es ? "Cuenta como derrota." : "Counts as a loss.", [
       { label: es ? "Jugar" : "Play", onClick: function () {
-        try { if (window.__ghStats) window.__ghStats.record("parchis", parchisStatsDiff(sv.cfg), false); } catch (e) {}
+        try { if (window.__ghStats) window.__ghStats.record("parchis", parchisStatsDiff(sv.cfg), false, false, parchisStatsMode(sv.cfg)); } catch (e) {}
         startNewGame(buildCfg(setup));
       } },
       { label: es ? "Volver" : "Back", kind: "ghost", onClick: showTitle }
@@ -3346,6 +3346,13 @@
     return diff;
   }
 
+  /** Every option that defines the game, recorded with its result (2026-10-30, root CLAUDE.md "Every result
+   *  records its MODE"). HUB-SIDE PATCH: port to ../Parchís/src at its next rebuild. */
+  function parchisStatsMode(cfg) {
+    var humans = cfg.humans || [cfg.anchor], ai = [];
+    (cfg.active || []).forEach(function (c) { if (humans.indexOf(c) === -1) ai.push((cfg.skills && cfg.skills[c]) || "intermediate"); });
+    return { mode: cfg.mode || "", players: (cfg.active || []).length, humans: humans.length, ai: ai.sort().join("-") };
+  }
   function settingsSnapshot() { return { lang: window.ParchisI18n.getLang(), theme: getTheme(), speed: Speed.get(), sound: false }; }
   function onSettingsSaved(s) {
     window.ParchisI18n.setLang(s.lang || "en");
@@ -3459,7 +3466,7 @@
         // The EASIEST computer at the table (2026-10-29, Matt; it was the hardest). Hub-side patch:
         // port to ../Parchis/src/game.js (parchisStatsDiff).
         G.cfg.rec = true;
-        window.__ghStats.record("parchis", parchisStatsDiff(G.cfg), winners[0] === G.cfg.anchor);
+        window.__ghStats.record("parchis", parchisStatsDiff(G.cfg), winners[0] === G.cfg.anchor, false, parchisStatsMode(G.cfg));
       }
     } catch (e) {}
   }
