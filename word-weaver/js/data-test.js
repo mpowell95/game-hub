@@ -134,15 +134,15 @@ ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l
 
 // --- Hard and Expert (2026-10-29): their own rules (tools/build-word-weaver-data.mjs, BAND) ------
 const BANDS = [
-  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [7, 12] },
-  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [8, 13] },
+  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [6, 10] },
+  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [6, 10] },
 ];
 for (const B of BANDS) {
   const part = LEVELS.slice(B.from - 1, B.to);
   const bad = (f) => part.map((lv, i) => (f(lv) ? 0 : B.from + i)).filter(Boolean).slice(0, 5).join(', ');
   const len = (lv, n) => lv.w.filter((e) => e[0].length === n).length;
   let b;
-  ok(`${B.name}: every level has 7 wheel letters (${b = bad((lv) => lv.l.length === 7)})`, !b);
+  ok(`${B.name}: every level has 6 wheel letters (${b = bad((lv) => lv.l.length === 6)})`, !b);
   ok(`${B.name}: ${B.words[0]}-${B.words[1]} grid words (${b = bad((lv) => lv.w.length >= B.words[0] && lv.w.length <= B.words[1])})`, !b);
   ok(`${B.name}: no grid word under ${B.minLen} letters (${b = bad((lv) => lv.w.every((e) => e[0].length >= B.minLen))})`, !b);
   ok(`${B.name}: at most ${B.max3} three- and ${B.max4} four-letter grid words (${b = bad((lv) => len(lv, 3) <= B.max3 && len(lv, 4) <= B.max4)})`, !b);
@@ -156,7 +156,7 @@ for (const B of BANDS) {
 // PINNED = how many levels have shipped. To add levels, APPEND (re-run the generator without
 // --fresh: it keeps every shipped level) and leave this hash alone; it covers only the first PINNED.
 // Levels 1-500 (Easy) have their OWN pin; that pin never moves. 1001-2000 were made again once on 2026-10-29 (Hard and
-// Expert lists), and 501-2000 once on 2026-10-30 (every board past Easy at most 7 x 7, Matt: bigger tiles), both while
+// Expert lists), and 501-2000 once on 2026-10-30 (every board past Easy at most 6 x 6, Matt: bigger tiles), both while
 // the game was admin only.
 const PIN_500 = '36017cec9c6118de';
 {
@@ -164,11 +164,11 @@ const PIN_500 = '36017cec9c6118de';
   ok(`pin: levels 1-500 are unchanged since 2026-10-28 (${h})`, LEVELS.length >= 500 && h === PIN_500);
 }
 {
-  const big = LEVELS.slice(500).filter((lv) => lv.g[0] > 7 || lv.g[1] > 7).length;
-  ok(`every board past Easy is at most 7 x 7 (${big} bigger)`, big === 0);
+  const big = LEVELS.slice(500).filter((lv) => lv.g[0] > 6 || lv.g[1] > 6).length;
+  ok(`every board past Easy is at most 6 x 6 (${big} bigger)`, big === 0);
 }
 const PINNED = 2000;
-const PIN_HASH = '3fcaade7845b68cf';
+const PIN_HASH = 'c3c3c5bf369914de';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
   ok(`pin: the first ${PINNED} shipped levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);

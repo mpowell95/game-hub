@@ -27,7 +27,7 @@
 //   Each level picks a BASE word (a grid word using every wheel letter; it is always in the grid),
 //   then lays out a crossword of grid words that fit the wheel's letters: words cross only on the
 //   same letter, the whole grid is connected, no two letters touch unless one word runs through both
-//   (no accidental 2-letter or junk words), no word twice, at most 9 x 9 (7 x 7 past level 500, 2026-10-30). Several random layouts are
+//   (no accidental 2-letter or junk words), no word twice, at most 9 x 9 (6 x 6 past level 500, 2026-10-30). Several random layouts are
 //   tried; the one with the target word count in the smallest, squarest box wins.
 //   RAMP: levels 1-2 three letters, 3-10 four (3-4 grid words), then five, six, and seven letters
 //   (from level 301, the majority by 500, mixed with six after). Grid words rise to about 15.
@@ -89,8 +89,8 @@ const MIN_SAID_GRID = 200;
 // Hard and Expert grid lists (see the header). `words` = grid words from the band's first level to
 // its last; `max3`/`max4` = most three-/four-letter grid words; `minLen` = shortest grid word.
 export const BAND = {
-  hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [7, 12] },
-  expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [8, 13] },
+  hard: { from: 1001, to: 1500, scowl: 50, said: 50, minLen: 3, max3: 1, max4: 4, words: [6, 10] },
+  expert: { from: 1501, to: 2000, scowl: 60, said: 30, minLen: 4, max3: 0, max4: 4, words: [6, 10] },
 };
 
 // Short forms SCOWL 35 + ENABLE let through that nobody would put in a word puzzle's grid. Still
@@ -189,7 +189,7 @@ export function wheelSize(n, r) {
   if (n <= 250) return r() < ramp(101, 250, 0.4, 0.9) ? 6 : 5;
   if (n <= 300) return 6;
   if (n <= 500) return r() < ramp(301, 500, 0.15, 0.6) ? 7 : 6;
-  return r() < ramp(501, 2000, 0.6, 0.7) ? 7 : 6;
+  return 6;   // Matt, 2026-10-30: past Easy, at most 6 letters (boards at most 6 x 6, Easy-size tiles)
 }
 /** Grid words wanted for level n with a wheel of `size` letters. */
 export function targetWords(n, size, r) {
@@ -203,10 +203,10 @@ export function targetWords(n, size, r) {
 }
 /** The biggest grid allowed: [rows, cols]. */
 export function maxDims(n, size) {
+  if (n > 500) return [6, 6];   // Matt, 2026-10-30: every board past Easy at most 6 x 6 (Easy-size tiles)
   if (size <= 3) return [5, 5];
   if (size === 4) return [6, 6];
   if (size === 5) return [7, 7];
-  if (n > 500) return [7, 7];   // Matt, 2026-10-30: every board past Easy at most 7 x 7 (bigger tiles)
   if (size === 6) return [8, 8];
   return n < 800 ? [8, 9] : [9, 9];
 }
@@ -383,7 +383,7 @@ async function main() {
   for (const b of bases.values()) (bySize[b.key.length] ||= []).push(b);
   for (const s of Object.keys(bySize)) bySize[s].sort((a, b) => (a.key < b.key ? -1 : 1));
 
-  // Hard and Expert: their own grid lists, 7-letter bases only.
+  // Hard and Expert: their own grid lists, 6-letter bases only (7 until 2026-10-30).
   const commonSet = new Set(grid);
   const isRare = (w) => !commonSet.has(w);
   for (const [name, B] of Object.entries(BAND)) {
@@ -393,7 +393,7 @@ async function main() {
       && (w.length >= 5 || commonSet.has(w)) && !GRID_BLOCK.has(w) && !EXPERT_BLOCK.has(w));
     const lc7 = B.list.map(counts), lm7 = B.list.map(maskOf);
     const byKey = new Map();
-    for (const w of B.list) if (w.length === 7) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
+    for (const w of B.list) if (w.length === 6) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
     B.bases = [...byKey.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
     for (const b of B.bases) {
       const lc = counts(b.key), lm = maskOf(b.key);
@@ -402,7 +402,7 @@ async function main() {
       b.rare = b.pool.filter(isRare).length;
       b.common = Math.max(...b.words.map(coreScore));
     }
-    console.log(`${name}: list ${B.list.length}, 7-letter bases ${B.bases.length}`);
+    console.log(`${name}: list ${B.list.length}, 6-letter bases ${B.bases.length}`);
   }
   const bandOf = (n) => (n >= BAND.expert.from ? BAND.expert : n >= BAND.hard.from ? BAND.hard : null);
 
@@ -418,13 +418,13 @@ async function main() {
   for (let n = levels.length + 1; n <= COUNT; n++) {
     const r = rng(SEED + n * 7919);
     const B = bandOf(n);
-    let size = B ? 7 : wheelSize(n, r);
+    let size = B ? 6 : wheelSize(n, r);
     let target = targetWords(n, size, r);
     if (B) {
       const p = (n - B.from) / (B.to - B.from);
       target = Math.min(B.words[1], Math.max(B.words[0], Math.round(B.words[0] + (B.words[1] - B.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
     }
-    const [mr, mc] = B ? [7, 7] : maxDims(n, size);
+    const [mr, mc] = B ? [6, 6] : maxDims(n, size);
     let made = null;
     const failed = new Set();
     for (let tries = 0; !made && tries < 400; tries++) {
@@ -432,7 +432,7 @@ async function main() {
       const cands = (B ? B.bases : bySize[size] || []).filter((b) => !used.has(b.key) && !failed.has(b.key) && b.pool.length >= target + (size >= 6 ? 2 : 0));
       if (B && !cands.length) break;
       if (!cands.length) {
-        if (tries > 300) { size = size === 7 ? 6 : size + 1; continue; }
+        if (tries > 300) { size = size === 7 ? 6 : n > 500 ? 5 : size + 1; continue; }
         target = Math.max(3, target - 1); continue;
       }
       // Hard/Expert: the bases whose pools hold the most rare words (top 40%).
