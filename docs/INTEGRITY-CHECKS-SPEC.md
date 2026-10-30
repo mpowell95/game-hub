@@ -86,6 +86,8 @@ in the database that day: **75 of 75 still open**, a forged winner is refused.
   on the 1-guess alert: "This must be voided"): the store keeps no day or word per puzzle, so the void is
   his whole Contexto record on that phone (10 played, 8 wins -> 0 wins, still played). Undo on the admin
   page counts it again.
+  **UNDONE 2026-10-30 (Matt: "go in and undo the void. Just correctly classify those games")**: the entry is
+  gone; his 11 wins count by medal (8 gold, 3 iron = 3+ hints), All board only (no day was recorded).
 - Rules: `integrityFlags`, `integrityAlerts` admin-read, written only by the server. Both in the backup.
 
 **Known gap**: a phone that falls back to reading all of `players/` (no board package yet) does not see
