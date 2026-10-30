@@ -317,14 +317,14 @@
 .ww-root .ww-ltr.is-on .ww-lc { fill: var(--ww-path); }
 .ww-root .ww-lt {
   fill: var(--ww-ink);
-  font-size: 54px;
+  font-size: 64px;   /* 54 until 2026-10-30 (Matt: bigger letters) */
   font-weight: 800;
   text-anchor: middle;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 .ww-root .ww-side {
   position: absolute;
-  bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));   /* 36 until 2026-10-30: clear of the bigger wheel */
   width: 48px;
   height: 48px;
   padding: 0;
