@@ -208,7 +208,7 @@
   min-height: 0;
   display: grid;
   place-items: center;
-  padding: 4px;
+  padding: 8px;
   overflow: hidden;
 }
 .ww-root .ww-grid {

@@ -52,19 +52,12 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - **Bigger wheel letters (Matt, 2026-10-29)**: 54 units of the 240 box (was 40), ring 80, picked disc 31, touch radius 33.
 - **Bigger grid letters (Matt, 2026-10-29)**: letter = 72% of the tile (was 58%), tiles up to 64px (was 54), the wheel
   shrinks to 200px while tiles are under 44px.
-- **A big wheel (Matt, 2026-10-29: "The circle... must be increased too")**: up to 300px (W - 100, ~36% of the height), shuffle
-  and hint in its lower corners. It shrinks for the grid ONLY while that makes the cells bigger: a wide grid is limited by the
-  screen's width, so on a 402px phone a 9x9 grid keeps 40px tiles with a 290px wheel (it was 200px for nothing).
-- **Every board past Easy is at most 6 x 6, 6 wheel letters (Matt, 2026-10-30: "ALL PUZZLES must have a bigger size",
-  then "Bigger." after 7 x 7)**: levels 501-2000, EN and ES, remade with `--replace-from 501` (admin only; 1-500 pinned
-  unchanged; `data-test*.js` check 6 x 6). EN Medium 6-9 grid words, Hard 6-7, Expert 6; ES Hard 5-7, Expert 4-6 (fewer
-  Spanish 6-letter bases). Layout: the wheel gives way to 200px while tiles are under 64px, to 180px under 52px; stage
-  padding 4px. Tiles 57-62px on a 402px phone (were 40-46), the same as Easy's 6 x 6 boards.
 - **THE WHEEL COMES FIRST (Matt, 2026-10-30, asked six times: "I NEVER ASKED FOR THE SQUARES TO BE BIGGER... MAKE THE
   LETTERS AND THE CIRCLE BIGGER")**: the wheel is W - 32 up to 370px (46% of the height) and NEVER shrinks for the grid;
-  the grid's tiles take what is left (6 x 6 about 43px on a 402x874 screen). Wheel letters 64 units (were 54), ring 82,
-  picked disc 35. Shuffle and hint sit 12px above the safe area, clear of the wheel. The 6 x 6 rebuild above was made for a
-  misread ask; whether to restore the 2026-10-29 puzzles is Matt's call.
+  the grid's tiles take what is left. Wheel letters 64 units (were 54), ring 82,
+  picked disc 35. Shuffle and hint sit 12px above the safe area, clear of the wheel. Levels 501-2000 were remade twice that day (7 x 7, then 6 x 6) for a
+  misread ask and UNDONE the same night (Matt: "Fix all that shit"): the data, generators and data tests are back to their
+  2026-10-29 state (pins unchanged), and the grid's 2026-10-30 gap/padding changes reverted.
 - Layout never scrolls: wheel 150-370px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).

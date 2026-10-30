@@ -590,7 +590,7 @@ class WordWeaver {
     // screen allows (W - 32, up to 370px, 46% of the height) and it NEVER shrinks for the grid; the grid gets what is left.
     const wheel = Math.floor(Math.max(150, Math.min(370, W - 32, H * 0.46)));
     const [rows, cols] = this.box || this.level.g;
-    const gap = cols >= 7 || rows >= 7 ? 3 : 4;
+    const gap = cols >= 8 || rows >= 8 ? 3 : 4;
     const fit = (wpx) => {
       this.root.style.setProperty('--ww-wheel', wpx + 'px');
       const cs = getComputedStyle(stage);
