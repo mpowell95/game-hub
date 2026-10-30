@@ -71,6 +71,11 @@ before code speed. A new screen must never read all of `players/`**: use `readPe
 the app returns after 20 s away (Firebase's own retry can wait up to 5 min if the line dropped while hidden), and logs any
 read over 1.5 s to `gamehub.perf.v1`, mirrored as `players/<id>/perf` (report only). Read real phones' numbers there first.
 
+## Times are Eastern (Matt, 2026-10-29)
+
+Matt is on US Eastern time. Every time you show him (play times, last seen, logs) is in `America/New_York`,
+never UTC or Central, unless he asks otherwise.
+
 ## Tests NEVER use Matt's code or name (Matt, 2026-10-23)
 
 *"don't use my code or username ever."* A test, probe or headless browser never sets profile name MattyIce or code
