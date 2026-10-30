@@ -60,7 +60,12 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   unchanged; `data-test*.js` check 6 x 6). EN Medium 6-9 grid words, Hard 6-7, Expert 6; ES Hard 5-7, Expert 4-6 (fewer
   Spanish 6-letter bases). Layout: the wheel gives way to 200px while tiles are under 64px, to 180px under 52px; stage
   padding 4px. Tiles 57-62px on a 402px phone (were 40-46), the same as Easy's 6 x 6 boards.
-- Layout never scrolls: wheel 184-300px (a letter's touch area stays over 44px), grid cells measured to fit above it
+- **THE WHEEL COMES FIRST (Matt, 2026-10-30, asked six times: "I NEVER ASKED FOR THE SQUARES TO BE BIGGER... MAKE THE
+  LETTERS AND THE CIRCLE BIGGER")**: the wheel is W - 32 up to 370px (46% of the height) and NEVER shrinks for the grid;
+  the grid's tiles take what is left (6 x 6 about 43px on a 402x874 screen). Wheel letters 64 units (were 54), ring 82,
+  picked disc 35. Shuffle and hint sit 12px above the safe area, clear of the wheel. The 6 x 6 rebuild above was made for a
+  misread ask; whether to restore the 2026-10-29 puzzles is Matt's call.
+- Layout never scrolls: wheel 150-370px (a letter's touch area stays over 44px), grid cells measured to fit above it
   (`_layout`, `ResizeObserver` + `onViewportResize`), only the box the words fill is drawn. The sky is the look
   in light and dark; the sheets follow `.gh-dark`. The extras list inside its sheet scrolls (unbounded content).
 

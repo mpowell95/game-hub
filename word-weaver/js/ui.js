@@ -162,7 +162,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // 27 across the visible disc of a letter, 31 as the touch radius (62 of 240 units: 58px on a 224px wheel).
 // Bigger letters (Matt, 2026-10-29: "Improve the letters... make it larger"): ring 80, letter 54 units (was 40), the
 // picked disc 31, touch radius 33 (seven letters stay 69 units apart, so touch areas never overlap).
-const RING = 80, LETTER_R = 31, HIT_R = 33, DISC_R = 116;
+const RING = 82, LETTER_R = 35, HIT_R = 34, DISC_R = 117;   // 2026-10-30: bigger letters (64 units, CSS)
 // TAP TO SELECT (Matt, 2026-10-29: "allow for selecting letters in addition to swiping"): the centre's check enters
 // the tapped word; it sits inside the ring's free middle (letters start 47 units out).
 // The check is quiet (Matt, 2026-10-29: the gold check "is distracting"): small, ink with a white tick, so gold only ever
@@ -586,9 +586,9 @@ class WordWeaver {
     if (!stage || !grid) return;
     const W = this.root.clientWidth, H = this.root.clientHeight;
     if (!W || !H) return;
-    // A BIG wheel (Matt, 2026-10-29: "The circle... must be increased too. it's difficult when they're so small"): up to
-    // 300px, the shuffle and hint buttons sitting in its lower corners (W - 100), about a third of the height.
-    let wheel = Math.floor(Math.max(150, Math.min(300, W - 100, H * 0.36)));
+    // THE WHEEL COMES FIRST (Matt, 2026-10-30, after six asks: "MAKE THE LETTERS AND THE CIRCLE BIGGER"): as big as the
+    // screen allows (W - 32, up to 370px, 46% of the height) and it NEVER shrinks for the grid; the grid gets what is left.
+    const wheel = Math.floor(Math.max(150, Math.min(370, W - 32, H * 0.46)));
     const [rows, cols] = this.box || this.level.g;
     const gap = cols >= 7 || rows >= 7 ? 3 : 4;
     const fit = (wpx) => {
@@ -599,21 +599,6 @@ class WordWeaver {
       return Math.floor(Math.min((sw - gap * (cols - 1)) / cols, (sh - gap * (rows - 1)) / rows, 64));
     };
     let cell = fit(wheel);
-    // Bigger grid letters (Matt, 2026-10-29): the wheel gives up room (down to 200px while cells are under 44px, 184px
-    // under 34px), but ONLY while that makes the cells bigger. A wide grid is limited by the screen's WIDTH, and
-    // shrinking the wheel for it gained nothing: on a 402px phone a 9-column grid stayed 40px with a 200px wheel.
-    const shrink = (floor, below, step) => {
-      while (cell < below && wheel > floor) {
-        const w2 = Math.max(floor, wheel - step), c2 = fit(w2);
-        if (c2 <= cell) break;
-        wheel = w2; cell = c2;
-      }
-    };
-    // Matt, 2026-10-30 (Medium's 8x7 tiles were 44px, Easy's 64): the wheel gives way down to 200px while tiles are under 64px (Easy's size).
-    shrink(200, 64, 10);
-    shrink(180, 52, 10);   // 2026-10-30: 7 x 7 boards on a short phone (a letter's touch area is still 49px)
-    shrink(184, 34, 12);
-    fit(wheel);
     cell = Math.max(18, cell);
     this.cell = cell;
     grid.style.setProperty('--ww-cell', cell + 'px');
