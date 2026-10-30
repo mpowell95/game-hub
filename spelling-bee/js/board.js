@@ -14,7 +14,7 @@ import { ensureAuthClaim, myCode } from '../../js/messages.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { isHiddenName } from '../../js/hidden-players.js';
 import { watchPath } from '../../js/live-read.js';
-import { voidedCodesFor } from '../../js/stats-corrections.js';
+import { voidedCodesFor, handAddFor } from '../../js/stats-corrections.js';
 import { isBeeUndone } from '../../js/admin-config.js';
 import { countedRow, flagStands } from '../../js/bee-fairplay.js';
 
@@ -100,7 +100,7 @@ export function byPoints(a, b) {
  *  words and put her 1st over Ana: "Fix it permanently"). Others with nothing on the day are left out, and a
  *  voided row shows played with 0 (so last). A void never touches the viewer's own row (a voided player's
  *  phone looks unchanged). */
-export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '' } = {}) {
+export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '', puzzle = '', now = Date.now() } = {}) {
   const out = [];
   for (const r of rows || []) {
     if (me && r.code === me) { out.push({ ...r, ...countedRow(r, (own || {})[r.code], day) }); continue; }
@@ -109,6 +109,7 @@ export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '
     const x = { ...r, ...countedRow(r, (own || {})[r.code], day) };
     if (!(x.words > 0)) continue;
     if (voided.has(r.code)) Object.assign(x, { words: 0, points: 0, rank: 0 });
+    else { const h = handAddFor('spellingbee', puzzle, r.code, now); x.words += h.words; x.points += h.points; }   // Matt's hand adds
     out.push(x);
   }
   return out.sort(byPoints);

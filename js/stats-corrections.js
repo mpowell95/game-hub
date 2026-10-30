@@ -54,6 +54,26 @@ export const VOIDED_MATCHES = {
     eneabcdhu: { winner: '3VN33', puzzle: 'e:abcdhu', day: '2026-10-28', bucket: 'daily', keepPlayed: true },   // Oct 28 (Matt: "void today for him too")
   },
 };
+// HAND ADDS: a Spelling Bee word Matt credits by hand to one player's day (Matt, 2026-10-29: "At 11:59pm eastern,
+// count niggling for MattyIce's score. Adding 8 points to the final daily score"; "you MUST add it at 11:59"). Read time
+// only, like the voids: nothing stored changes, the player's save, beeDaily row and log stay as they are. On from
+// `from` (ms; the server's clock where known), counted in the in-game board, the long-term board and the Leaderboard.
+export const HAND_ADDS = {
+  spellingbee: [
+    { code: 'QZCC4', puzzle: 'g:ailnvz', day: '2026-10-29', word: 'niggling', words: 1, points: 8, from: Date.UTC(2026, 9, 30, 3, 59) },   // 11:59 PM EDT
+  ],
+};
+/** { words, points } Matt has added by hand to `code`'s day on `puzzle`, as of `now`. */
+export function handAddFor(gameId, puzzle, code, now = Date.now()) {
+  let words = 0, points = 0;
+  for (const a of HAND_ADDS[gameId] || []) if (a.puzzle === puzzle && a.code === code && now >= a.from) { words += a.words; points += a.points; }
+  return { words, points };
+}
+/** Did a hand add switch on after `since` (and by `now`)? The server rebuilds the board when one has. */
+export function handAddDueSince(gameId, since, now = Date.now()) {
+  return (HAND_ADDS[gameId] || []).some((a) => a.from > (since || 0) && a.from <= now);
+}
+
 /** Codes whose day on one puzzle counts for nothing long-term (Spelling Bee). Not the day's own board. */
 export function voidedCodesFor(gameId, puzzle) {
   const out = new Set();

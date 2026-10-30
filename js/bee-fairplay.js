@@ -8,7 +8,7 @@
 // beeLog entries are never changed.
 
 import { isHiddenName } from './hidden-players.js';
-import { voidedCodesFor } from './stats-corrections.js';
+import { voidedCodesFor, handAddFor } from './stats-corrections.js';
 import { resolveBeeUndone } from './admin-config.js';
 
 export const GENIUS = 8;   // rank index of Genius (spelling-bee/js/engine.js RANKS)
@@ -346,7 +346,7 @@ export function voidedAt(puzzleKey, boardKey, flags, cfg) {
  * server's own-day numbers per row, `ownEntry`; absent = every row's own numbers, as before).
  * Returns { v: 1, people: {CODE: {n, e}}, days: [{d, l, r: [[code, points, words, rank, place|0, void 0|1]]}] }.
  */
-export function buildBeeBoard(daily, puzzles, flags, cfg, own) {
+export function buildBeeBoard(daily, puzzles, flags, cfg, own, now = Date.now()) {
   const people = {};
   const nameAt = {};
   const best = new Map();   // `${lang}|${day}` -> Map(code -> row)
@@ -362,7 +362,8 @@ export function buildBeeBoard(daily, puzzles, flags, cfg, own) {
       const at = Number(r.at) || 0;
       if (!nameAt[code] || at >= nameAt[code]) { nameAt[code] = at; people[code] = { n: String(r.name || code), e: String(r.emoji || '') }; }
       const v = off.has(code);
-      const row = v ? { code, points: 0, words: 0, rank: 0, v: 1 } : { code, points: c.points, words, rank: c.rank, v: 0 };
+      const h = handAddFor('spellingbee', pz.key, code, now);   // Matt's hand adds (js/stats-corrections.js HAND_ADDS)
+      const row = v ? { code, points: 0, words: 0, rank: 0, v: 1 } : { code, points: c.points + h.points, words: words + h.words, rank: c.rank, v: 0 };
       const k = `${pz.lang}|${pz.day}`;
       if (!best.has(k)) best.set(k, new Map());
       const m = best.get(k);
