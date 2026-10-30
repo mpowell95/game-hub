@@ -77,6 +77,9 @@ export const BRANCHES = [
   // playLog/ (2026-10-28): every finished game in every game + Contexto's guesses, <CODE>/<t>-<n>
   // (js/play-log.js). Admin-read only (Contexto's guesses hold answers), so an anonymous backup is denied.
   'playLog',
+  // ctHistory/ (2026-10-30): every Contexto puzzle in each phone's save, <CODE>/<deviceId>/<lang>-<n>
+  // (js/contexto-history.js). Admin-read only, so an anonymous backup is denied.
+  'ctHistory',
   // careers/ (BB-0-phase-0-handoff.md): Baseball's career sync. Same auth shape as players/ etc -
   // readable by any signed-in anonymous session - so it reads normally here, unlike messages/ below.
   'careers',

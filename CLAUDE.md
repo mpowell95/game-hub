@@ -305,6 +305,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `stats-corrections.js` | read-time score voids (`VOIDED_MATCHES` too); raw records untouched |
 | `bee-fairplay.js` | Spelling Bee fair play, PURE, shared with the server: `detectCopying` (the void rules), `buildBeeBoard` (the long-term board, `boards/v1/bee`), `beeTotals` |
 | `integrity.js` | every other game's integrity rules, PURE, shared with `functions/integrity.js`: STRONG (an impossible stored number: voids that game on that record in the server-built board, `voidIntegrityGame`) and ALERT (a push, never a void); online-match alerts (`checkMatch`). `tools/test-integrity.mjs --db <snapshot>` before any new rule |
+| `contexto-history.js` | every Contexto puzzle in each phone's save (each guess in order, hints, result) sent to `ctHistory/<CODE>/<deviceId>/<lang>-<n>` (admin-read; 2026-10-30, Matt: "I want all of it"); `tools/read-contexto-history.mjs` |
 | `play-log-queue.js` / `play-log.js` | THE PLAY LOG (2026-10-28): every recorder's call (`notePlay`, its arguments + time) and Contexto's every guess/hint/give-up, queued locally then sent to `playLog/<CODE>` (admin-read). Evidence only, never read back |
 | `bee-board.js` | the phone's copy of `boards/v1/bee` (watch + `gamehub.beeBoard.v1` cache); read by the Leaderboard's Spelling Bee board (Points/Words, All/English/Español), By Game, the You tab and My Stats |
 | `announce.js` / `announce-ui.js` | one-time launcher announcements (`gamehub.announce.v1`), each with an `until` date |

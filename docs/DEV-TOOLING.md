@@ -119,3 +119,4 @@
 - `tools/test-contexto-daily.mjs`: Contexto's Daily board counters (`ct.d`): recorded only for daily plays, added across a person's devices.
 - `tools/reader-auth.mjs`: `signInForReading()`: signs in with the reader key in env `GAMEHUB_READER` (made on Admin > gear > Reader key for Claude), else anonymously.
 - `tools/read-play-log.mjs <CODE> [--game contexto] [--moves]`: READ ONLY, one player's play log; Contexto one line per puzzle (day it was for, when played, result, typed guesses, hints and their ranks, closest rank before the end); Eastern time; no answer words.
+- `tools/read-contexto-history.mjs [CODE]`: READ ONLY, every Contexto puzzle each phone uploaded from its save (`ctHistory/`); no code = one line per player (averages with hint = 1 and hint = 10 guesses, no-hint wins); a code = its puzzles one per line; no answer words.

@@ -167,6 +167,25 @@
       ".write": false
     },
 
+    "ctHistory": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
+      "$code": {
+        "$dev": {
+          "$k": {
+            ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val()",
+            ".validate": "$k.matches(/^(en|es)-(x[a-z0-9]{1,8}|[0-9]{1,5})$/) && $dev.length <= 60 && newData.hasChildren(['n', 'l', 'g', 's'])",
+            "n": { ".validate": "newData.isNumber()" },
+            "l": { ".validate": "newData.val() === 'en' || newData.val() === 'es'" },
+            "d": { ".validate": "newData.val() === 'won' || newData.val() === 'gave'" },
+            "r": { ".validate": "newData.val() === 1" },
+            "s": { ".validate": "newData.val() === now" },
+            "g": { "$i": { ".validate": "newData.hasChildren(['w']) && $i.matches(/^[0-9]{1,4}$/)", "w": { ".validate": "newData.isString() && newData.val().length <= 40" }, "h": { ".validate": "newData.val() === 1" }, "$other": { ".validate": false } } },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
+
     "playLog": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {

@@ -92,6 +92,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
 | `admin-config.js`, `stats-corrections.js`, `admin-ui.js` | see "The admin config", "Score corrections" |
 | `integrity.js` | PURE and SHARED with `functions/integrity.js` (and `boards.js`): a STRONG rule must be proven from the game's code AND replayed over a whole snapshot with 0 hits (`tools/test-integrity.mjs --db`); anything weaker is an alert. Voids apply only in the server-built board (`correctStats` `integrity`), never on the player's own phone |
+| `contexto-history.js` | sends changed save puzzles only (seen-list `gamehub.contexto.histSent.v1`), verified by re-read; never touches the save; rules allow no delete (2026-10-30) |
 | `play-log-queue.js`, `play-log.js` | the queue is PURE (no network: `game-stats.js`, also copied to the server, imports it); **every `export function record*` calls `notePlay`** (`tools/test-integrity.mjs` checks); a new recorder must too |
 | `bee-fairplay.js` | PURE and SHARED with `functions/bee.js` (copied by `tools/sync-functions-shared.mjs`): change it and both the phone and the server change; `tools/test-bee-server.mjs` + `tools/test-bee-fairplay.mjs` |
 | `announce.js` | see "The announcement layer" |

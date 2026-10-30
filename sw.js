@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1369;
-const CACHE = 'game-hub-v1369';
+const IMPORTANT_SINCE = 1370;
+const CACHE = 'game-hub-v1370';
 
 const ASSETS = [
   './',
@@ -77,6 +77,7 @@ const ASSETS = [
   './js/integrity.js',
   './js/play-log-queue.js',
   './js/play-log.js',
+  './js/contexto-history.js',
   './js/server-time.js',
   './js/challenge-clock.js',
   './js/live-leave.js',
@@ -800,7 +801,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '55649d813e',
+  './js/hub.js': '88f47db54c',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -846,6 +847,7 @@ const REST_MANIFEST = {
   './js/integrity.js': 'a3f606068c',
   './js/play-log-queue.js': '807dc8b53f',
   './js/play-log.js': 'bedfb01f46',
+  './js/contexto-history.js': 'caeb757ec1',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',

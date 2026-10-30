@@ -1151,6 +1151,8 @@ class Hub {
     } else {
       import('./play-log.js').then((m) => m.flushPlayLog()).catch(() => {});
     }
+    // Every Contexto puzzle in this phone's save (2026-10-30, js/contexto-history.js): changed ones only.
+    import('./contexto-history.js').then((m) => m.flushContextoHistory()).catch((err) => console.error('[hub] contexto history', err));
   }
 
   render() {
