@@ -94,14 +94,16 @@ export function byPoints(a, b) {
 }
 
 /** Pure: a puzzle's rows as the viewer `me` sees them (Matt, 2026-10-28: "you have to do it on the correct
- *  day"; "show that he played, but make it so his score is 0"). Everyone else shows what they found on the
- *  puzzle's OWN day (`dw`/`dp`/`dr`; a row without them predates them and counts whole), a row with nothing
- *  on its day is left out, and a voided row shows played with 0 (so last). The viewer's own row is never
- *  changed, so nothing on a voided player's own phone differs. */
+ *  day"; "show that he played, but make it so his score is 0"). EVERY row, the viewer's own included, shows
+ *  what was found on the puzzle's OWN day (`dw`/`dp`/`dr`; a row without them predates them and counts whole),
+ *  so every phone shows the same numbers and places (2026-10-30, Matt, after Lili's phone counted 7 next-day
+ *  words and put her 1st over Ana: "Fix it permanently"). Others with nothing on the day are left out, and a
+ *  voided row shows played with 0 (so last). A void never touches the viewer's own row (a voided player's
+ *  phone looks unchanged). */
 export function shownRows(rows, { me = '', voided = new Set(), own = {}, day = '' } = {}) {
   const out = [];
   for (const r of rows || []) {
-    if (me && r.code === me) { out.push(r); continue; }
+    if (me && r.code === me) { out.push({ ...r, ...countedRow(r, (own || {})[r.code], day) }); continue; }
     // The server's own-day numbers when they cover this post (its log, its clock); a post made over a
     // day after the puzzle's day with none counts nothing (2026-10-29, js/bee-fairplay.js countedRow).
     const x = { ...r, ...countedRow(r, (own || {})[r.code], day) };

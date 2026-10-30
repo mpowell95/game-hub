@@ -738,7 +738,14 @@ class SpellingBee {
     const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided, own, day }).map((r) => ({ ...r, me: r.code === code }));
     if (live) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
-      rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', words: this.found.size, points: this.score, rank: this.rank(), me: true });
+      // Own-day numbers, the same ones every other phone shows for this row (never all-time totals: 2026-10-30,
+      // Lili's phone counted next-day words and showed her 1st). The server's own-day verdict wins once it covers our post.
+      const d = this._dayStats();
+      const mine = serverRows.find((r) => r.code === code);
+      const srv = mine && own && own[code] && own[code].use && Number(own[code].at) === Number(mine.at) ? own[code] : null;
+      const fresh = !srv || d.dw !== (mine.dw | 0);   // a word since our last post: live until the server catches up
+      rows.push({ code: code || '', name: p.name || '', emoji: p.emoji || '', me: true,
+        ...(fresh ? { words: d.dw, points: d.dp, rank: d.dr } : { words: srv.w | 0, points: srv.p | 0, rank: srv.r | 0 }) });
     }
     rows.sort((a, b) => b.points - a.points || b.words - a.words || (a.me ? -1 : b.me ? 1 : byPoints(a, b)));
     // Place by POINTS (ties share it; Matt, 2026-10-28), emoji, name (🧠/🐝 at Genius/Queen Bee) over a bar toward Genius, then words

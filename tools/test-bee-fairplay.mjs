@@ -39,8 +39,20 @@ ok('a row without own-day fields counts whole', by.AAAAA.words === 18 && by.AAAA
 const his = shownRows(rows, { me: 'KKKKK', voided: new Set(['KKKKK']) });
 const hisRow = his.find((r) => r.code === 'KKKKK');
 ok('the viewer\'s own row is never voided', hisRow.words === 46 && hisRow.points === 223 && hisRow.rank === 8);
-ok('the viewer\'s own row keeps its live totals (not own-day)', shownRows(rows, { me: 'MMMMM' }).find((r) => r.code === 'MMMMM').words === 30);
+ok('the viewer\'s own row shows own-day numbers too, like every other phone (2026-10-30)', shownRows(rows, { me: 'MMMMM' }).find((r) => r.code === 'MMMMM').words === 10);
 ok('his own phone still ranks him first', his[0].code === 'KKKKK');
+// Every phone shows the same numbers and order (2026-10-30: Lili's phone counted 7 next-day words, 486 vs Ana's 434,
+// and put her 1st; Ana's phone showed Lili's on-day 428, 2nd). Real Oct 28 Spanish rows.
+{
+  const oct28 = rowsOf({
+    K99MB: { name: 'Anita Bonita', emoji: '🦁', words: 87, points: 434, rank: 8, dw: 87, dp: 434, dr: 8 },
+    S2BEP: { name: 'Lili', emoji: '🐢', words: 86, points: 486, rank: 8, dw: 79, dp: 428, dr: 8 },
+    QZCC4: { name: 'MattyIce', emoji: '🧊', words: 1, points: 5, rank: 1, dw: 1, dp: 5, dr: 1 },
+  });
+  const view = (me) => shownRows(oct28, { me }).map((r) => `${r.code}:${r.words}:${r.points}`).join();
+  ok('Lili\'s phone and Ana\'s phone show the same board', view('S2BEP') === view('K99MB') && view('K99MB') === view(''));
+  ok('Ana is first on Lili\'s phone', shownRows(oct28, { me: 'S2BEP' })[0].code === 'K99MB');
+}
 ok('no void: the same rows minus nothing-on-the-day', shownRows(rows, { me: '' }).length === 3);
 
 // --- voidedOn: code list + flags - undo -----------------------------------------------------------

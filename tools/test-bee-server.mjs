@@ -296,7 +296,7 @@ ok('the push says who, when, which rules', n1.title === 'Spelling Bee' && n1.bod
   ok('in-game board: the clock-trick row shows the server\'s 2 words', sh.CLOCK && sh.CLOCK.words === 2);
   ok('in-game board: late posts are not shown on other phones', !sh.LATE1 && !sh.LATE2);
   const his = shownRows(rowsOf(db2.tree.beeDaily[bkD]), { me: 'CLOCK', own: db2.tree.boards.v1.beeOwn[bkD], day: D });
-  ok('in-game board: his own phone still shows his own row unchanged', his.find((r) => r.code === 'CLOCK').words === 5);
+  ok('in-game board: his own phone shows what every other phone shows (2026-10-30, Matt: boards must match)', his.find((r) => r.code === 'CLOCK').words === 2);
 }
 
 console.log(`\nSpelling Bee server tests: ${pass} passed, ${fail} failed.`);
