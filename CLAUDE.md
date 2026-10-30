@@ -92,6 +92,11 @@ is true, every Firebase writer refuses (no override), online play is refused, an
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 **How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
+## Open handoff (2026-10-30)
+
+"Let's pick up where we just left off" = **`docs/HANDOFF-KING-OF-GAMES-2026-10-30.md`** (reader key, King of Games'
+Contexto games, the average-guesses mockup). Delete this section once that file's open items are closed.
+
 ## When Matt asks what you are doing, ANSWER HIM. Immediately.
 
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
