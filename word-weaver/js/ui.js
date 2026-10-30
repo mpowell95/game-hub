@@ -650,9 +650,11 @@ class WordWeaver {
     if (!pill) return;
     if (this.pillTimer) this._cancel(this.pillTimer);
     this.pillHold = { word, kind };
-    pill.className = 'ww-pill is-on';
-    pill.textContent = word;
+    pill.className = 'ww-pill is-on' + (kind === 'bonus' ? ' is-bonus' : '');
+    if (kind === 'bonus') pill.innerHTML = `${ICON_STAR}<span>${esc(word)}</span>`;
+    else pill.textContent = word;
     if (kind === 'bad') this._anim(pill, 'is-shake');
+    if (kind === 'bonus') this._anim(pill, 'is-pop');
     this.pillTimer = this._later(() => { this.pillTimer = 0; this.pillHold = null; if (!this.sel.length) this._paintPill(); }, ms);
   }
 
@@ -763,9 +765,11 @@ class WordWeaver {
         this._showPill(W, 'ok', 450);
         break;
       case 'extra':
+        // A bonus word is made OBVIOUS (Matt, 2026-10-30): the pill turns gold with a star, a star flies from it
+        // to the extra-words chip, and the chip pops (gold) as its count goes up.
         this._save();
-        this._paintExtra('is-bump');
-        this._showPill(W, 'ok', 450);
+        this._showPill(W, 'bonus', 1100);
+        this._flyStar(() => this._paintExtra('is-bump'));
         break;
       case 'extraFound':
         this._paintExtra('is-wiggle');
@@ -779,6 +783,31 @@ class WordWeaver {
         this._paintPill();
     }
     return res.kind;
+  }
+
+  /** A star flies from the pill to the extra-words chip (a bonus word); `then` runs as it lands (at once
+   *  with reduced motion or nothing to fly between). */
+  _flyStar(then) {
+    const pill = this.root.querySelector('.ww-pill'), chip = this.root.querySelector('.ww-chip');
+    if (reduceMotion() || !pill || !chip || !this.root.animate) { then(); return; }
+    const rr = this.root.getBoundingClientRect(), pr = pill.getBoundingClientRect(), cr = chip.getBoundingClientRect();
+    const star = document.createElement('div');
+    star.className = 'ww-flystar';
+    star.innerHTML = ICON_STAR;
+    const x0 = pr.left + pr.width / 2 - rr.left, y0 = pr.top + pr.height / 2 - rr.top;
+    const x1 = cr.left + cr.width / 2 - rr.left, y1 = cr.top + cr.height / 2 - rr.top;
+    star.style.left = x0 + 'px';
+    star.style.top = y0 + 'px';
+    this.root.appendChild(star);
+    const a = star.animate([
+      { transform: 'translate(-50%, -50%) scale(.6)', opacity: 0 },
+      { transform: 'translate(-50%, -50%) scale(1.5)', opacity: 1, offset: 0.2 },
+      { transform: `translate(calc(-50% + ${x1 - x0}px), calc(-50% + ${y1 - y0}px)) scale(.7)`, opacity: 1 },
+    ], { duration: 650, easing: 'cubic-bezier(.4,.1,.3,1)' });
+    let done = false;
+    const land = () => { if (done) return; done = true; star.remove(); if (!this.dead) then(); };
+    a.onfinish = a.oncancel = land;
+    this._later(land, 900);   // never leave the count un-bumped
   }
 
   /** The new letters of a word fly from the pill into their cells. */
