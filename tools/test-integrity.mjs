@@ -361,7 +361,7 @@ console.log('\n--- Contexto: hints and solves follow the player; alerts on a win
   ok('phone: the finishing entry\'s id is kept, the log is sent before the check, the recorder names the puzzle and marks an unchecked (offline) solve', (() => {
     const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');
     return /if \(id\) this\.rec\.doneId = id;/.test(ui) && /\{ exclude: rec\.doneId \}/.test(ui) && /flushPlayLog\(\)/.test(ui)
-      && /\{ guesses, hints, k, \.\.\.\(r \? \{\} : \{ unchecked: true \}\) \}/.test(ui);
+      && /\{ guesses, hints, k, (\.\.\.\(daily \? \{ daily: true \} : \{\}\), )?\.\.\.\(r \? \{\} : \{ unchecked: true \}\) \}/.test(ui);
   })());
   ok('the phone counts hints from the other phones (contexto/js/ui.js)', (() => {
     const ui = readFileSync(new URL('../contexto/js/ui.js', import.meta.url), 'utf8');

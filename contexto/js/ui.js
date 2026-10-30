@@ -10,6 +10,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { recordContexto, contextoMedal, backfillContextoMedals, activeCode } from '../../js/game-stats.js';
 import { appendPlayLog } from '../../js/play-log-queue.js';
+import { liveNow, startServerTime } from '../../js/server-time.js';
 import { loadModel, puzzleNumber, hintRank, band, logSummary } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -201,6 +202,7 @@ class ContextoUI {
   // --- entering a puzzle -------------------------------------------------------------------------
 
   _enterPuzzle(n) {
+    try { startServerTime(); } catch { /* the Daily board needs the server's clock by the finish */ }
     this.n = n;
     this.secret = this.model.secretFor(n);
     this.word = this.model.words[this.secret];
@@ -332,6 +334,8 @@ class ContextoUI {
     const id = this._log(kind === 'won' ? 'win' : 'giveup');
     this.rec.done = kind === 'won' ? 'won' : 'gave';
     this.rec.doneAt = Date.now();
+    // The SERVER's live time at the finish (null offline): decides the Daily board (`_recordFinished`).
+    try { const lt = liveNow(); if (lt != null) this.rec.doneLive = lt; } catch { /* not daily */ }
     if (id) this.rec.doneId = id;   // this phone's own finishing entry (2026-10-29, `_recordFinished`)
     this._persist();
     this._overlay = 'result';
@@ -361,7 +365,10 @@ class ContextoUI {
       this._persist();
       // `k` names the puzzle for the server's check; `unchecked`: no other phone could be read (offline),
       // so the server judges it when the log arrives (an alert, js/integrity.js checkContextoWin).
-      try { recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(r ? {} : { unchecked: true }) }); }
+      // Daily = finished on the puzzle's own day by the server's live clock; offline or a phone clock
+      // never makes a play daily (it still counts on the All board).
+      const daily = Number.isFinite(rec.doneLive) && Number(rec.n) > 0 && puzzleNumber(new Date(rec.doneLive)) === Number(rec.n);
+      try { recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(daily ? { daily: true } : {}), ...(r ? {} : { unchecked: true }) }); }
       catch (err) { console.error('[contexto] recordContexto', err); }
     } finally { this._recording = false; }
   }

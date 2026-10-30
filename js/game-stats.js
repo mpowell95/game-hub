@@ -1947,6 +1947,23 @@ export function recordContexto(lang, won, extras = {}) {
     else if (hints === 2) g.ct.bronze += 1;
     if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
   }
+  // The DAILY board (2026-10-30, Matt's approved mockup): a puzzle finished on its own day, by the
+  // server's live clock (contexto/js/ui.js decides `daily`), is counted a second time here, apart.
+  // Additive; older plays never recorded their day, so they count only on the All board.
+  if (extras.daily === true) {
+    if (!g.ct.d || typeof g.ct.d !== 'object') g.ct.d = {};
+    const d = g.ct.d;
+    for (const k of ['played', 'solved', 'guesses', 'hints', 'noHint', 'silver', 'bronze']) if (!Number.isFinite(d[k])) d[k] = 0;
+    d.played += 1;
+    d.hints += hints;
+    if (won === true) {
+      d.solved += 1;
+      d.guesses += guesses;
+      if (hints === 0) d.noHint += 1;
+      else if (hints === 1) d.silver += 1;
+      else if (hints === 2) d.bronze += 1;
+    }
+  }
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
