@@ -413,7 +413,7 @@ export function activeCode() {
  *  own arguments (score, time, moves, hints, difficulty), queued for playLog/<CODE> (admins only). Called
  *  by each recorder once its result is accepted. Evidence only: never read back, never a stat, never throws. */
 export function notePlay(gameId, fn, args) {
-  try { appendPlayLog(activeCode(), { g: gameId, f: fn, a: argsJSON(args) }); } catch (err) { console.error('[game-stats] play not logged', err); }
+  try { appendPlayLog(activeCode(), { g: gameId, f: fn, a: argsJSON(args), m: _mode ? _mode.key + '@' + _mode.diff : null }); } catch (err) { console.error('[game-stats] play not logged', err); }
 }
 function activeName() {
   try {
@@ -1069,13 +1069,67 @@ function bumpTotals(g, d, won) {
   g.total.played += 1; g.byDiff[d].played += 1;
   if (won === true) { g.total.won += 1; g.byDiff[d].won += 1; }
   else if (won === false) { g.total.lost += 1; g.byDiff[d].lost += 1; }
+  noteMode(g, won);
   // A CHALLENGE result (withChallengeMatch below) notes WHICH match this 'mp' count was, in the
   // same write as the count itself, so the two can never disagree (2026-10-29).
   if (_mpMatch && !_mpMatch.noted && d === 'mp') {
     if (!g.mpIds || typeof g.mpIds !== 'object' || Array.isArray(g.mpIds)) g.mpIds = {};
     if (!g.mpIds[_mpMatch.id]) g.mpIds[_mpMatch.id] = won === true ? 'w' : won === false ? 'l' : 'd';
+    // ...and its mode (2026-10-30), so a later per-mode board can take a duplicate copy out too.
+    if (_mode && _mode.key) {
+      if (!g.mpModes || typeof g.mpModes !== 'object' || Array.isArray(g.mpModes)) g.mpModes = {};
+      if (!g.mpModes[_mpMatch.id]) g.mpModes[_mpMatch.id] = _mode.key;
+    }
     _mpMatch.noted = true;
   }
+}
+
+// --- WHICH MODE a game was (2026-10-30, Matt: "they MUST be recorded for posterity") -----------------
+// Until this day most games kept only a difficulty bucket: Darts never said Cricket or 301, Pool never
+// said 8-ball or 9-ball, a shorter match was folded one tier down, and an online match said only 'mp'.
+// That lost what game was actually played (THE LAW). Now a game wraps its recorder in withMode(), and
+// the same write that bumps `byDiff` also bumps
+//     games.<id>.byMode[<mode key>][<difficulty chosen>] = { played, won, lost }
+// where the mode key is every option that defines the game ('kind=301|legs=3', sorted by name) and the
+// difficulty is the one the player PICKED (`byDiff` keeps the bucket the game counted it under).
+// ADDITIVE ONLY: a new field, counters only grow, `byDiff`/`total` untouched (rules 2 and 5). Games
+// from before this carry no mode and cannot be given one (rule 4). The play log gets the key too (`m`).
+const MODE_PART_RE = /[^A-Za-z0-9_-]/g;
+/** A mode object ({kind: '301', legs: 3}) as a stable Firebase-safe key, or '' for nothing usable. */
+export function modeKey(mode) {
+  if (!mode || typeof mode !== 'object') return '';
+  const parts = [];
+  for (const k of Object.keys(mode).sort()) {
+    const v = mode[k];
+    if (v == null || v === '' || typeof v === 'object' || typeof v === 'function') continue;
+    const kk = String(k).replace(MODE_PART_RE, '').slice(0, 16);
+    const vv = String(v).replace(MODE_PART_RE, '').slice(0, 24);
+    if (kk && vv) parts.push(kk + '=' + vv);
+  }
+  return parts.join('|').slice(0, 120);
+}
+let _mode = null;
+/** Run `record` (the game's own recorder) noting the game's mode with the count it adds. `mode` is a
+ *  flat object of every option that defines the game; `diff` the difficulty the player chose ('mp'
+ *  online). Returns whatever `record` returns. Never throws for a bad mode: the result still counts. */
+export function withMode(mode, diff, record) {
+  let key = '';
+  try { key = modeKey(mode); } catch { key = ''; }
+  const prev = _mode;
+  _mode = key ? { key, diff: String(diff == null ? '' : diff).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false } : null;
+  try { return record(); } finally { _mode = prev; }
+}
+function noteMode(g, won) {
+  if (!_mode || _mode.noted) return;
+  _mode.noted = true;
+  try {
+    if (!g.byMode || typeof g.byMode !== 'object' || Array.isArray(g.byMode)) g.byMode = {};
+    const m = g.byMode[_mode.key] && typeof g.byMode[_mode.key] === 'object' ? g.byMode[_mode.key] : (g.byMode[_mode.key] = {});
+    const b = m[_mode.diff] && typeof m[_mode.diff] === 'object' ? m[_mode.diff] : (m[_mode.diff] = bucket());
+    b.played = (b.played | 0) + 1;
+    if (won === true) b.won = (b.won | 0) + 1;
+    else if (won === false) b.lost = (b.lost | 0) + 1;
+  } catch (err) { console.error('[game-stats] mode not noted', err); }
 }
 
 // --- WHICH challenge match an 'mp' count was (2026-10-29) -------------------------------------------

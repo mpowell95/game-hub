@@ -313,6 +313,22 @@ export function aggregatePlayers(all, corrections) {
         const b = bd[k] || {}; const d = dst.byDiff[k] || (dst.byDiff[k] = { played: 0, won: 0, lost: 0 });
         d.played += b.played | 0; d.won += b.won | 0; d.lost += b.lost | 0;
       }
+      // WHICH MODE each game was (2026-10-30, js/game-stats.js withMode): summed per person, like
+      // byDiff. Challenge copies counted on two of a person's devices are NOT taken back out here yet
+      // (each copy's mode is kept in `mpModes` for that); nothing reads byMode for a board yet.
+      const bm = src.byMode;
+      if (bm && typeof bm === 'object' && !Array.isArray(bm)) {
+        const dm = dst.byMode || (dst.byMode = {});
+        for (const mk of Object.keys(bm)) {
+          const per = bm[mk];
+          if (!per || typeof per !== 'object') continue;
+          const to = dm[mk] || (dm[mk] = {});
+          for (const dk of Object.keys(per)) {
+            const b = per[dk] || {}; const d = to[dk] || (to[dk] = { played: 0, won: 0, lost: 0 });
+            d.played += b.played | 0; d.won += b.won | 0; d.lost += b.lost | 0;
+          }
+        }
+      }
       // Which challenge matches this device's 'mp' counts were (2026-10-29, js/game-stats.js
       // withChallengeMatch): gathered per person, so a match counted on two of their devices is
       // taken back out once per extra copy below. An integrity void (correctStats) already took this

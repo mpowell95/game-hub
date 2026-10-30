@@ -33,7 +33,7 @@ export async function flushPlayLog() {
     const patch = {};
     for (const x of batch) {
       const v = { t: x.t, g: x.g, s: api.serverTimestamp() };
-      for (const k of ['f', 'a', 'e', 'k', 'w', 'r']) if (x[k] != null) v[k] = x[k];
+      for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm']) if (x[k] != null) v[k] = x[k];
       patch[`playLog/${code}/${x.id}`] = v;
     }
     await api.update(api.ref(db), patch);
