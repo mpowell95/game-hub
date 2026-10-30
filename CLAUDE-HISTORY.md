@@ -1559,3 +1559,13 @@ write lands in `gamehub.profile`.
 
 Asked when Ana was last in the app, a session reported times in US Central; Matt corrected it ("It's 8:36 right
 now") and asked that every session default to Eastern time.
+
+
+## When you got it wrong, say "I built it wrong." (2026-10-30)
+
+Ana and Lili's phones showed different winners for the Oct 28 Spanish Spelling Bee: the viewer's own row counted
+words found the next day (Lili 486, 1st) while every other phone counted only on-day words (Lili 428, Ana 434, 1st).
+The own row had been exempted from the own-day rule by stretching the "a void never touches your own row" rule
+past what Matt asked. Fixed in PR #1342 (v1363). Asked why, the session first blamed "an earlier session" and "the
+rule"; Matt: "Next time the answer is 'I built it wrong.' You MUST NOT avoid stating it. Don't feed me bullshit.
+You botched it. Take ownership. Make this a rule."

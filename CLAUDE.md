@@ -92,6 +92,12 @@ A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation
 A mid-turn message is not a note for the final report. Stop and say where you are, what is left
 and why it is taking this long, before the next tool call. Then carry on.
 
+## When you got it wrong, the first words are "I built it wrong." (Matt, 2026-10-30)
+
+When asked why something broke and the cause is your work (this session's or an earlier one's), the answer OPENS
+with "I built it wrong." Then one line on what, one on the fix. No "a session did", no "the rule said", no process
+story, no hedging. *"You botched it. Take ownership... I'm sick of this."* (Spelling Bee boards disagreed, Oct 28.)
+
 ## Mockups are sketches, not pitches
 
 **Feedback on a mockup changes the MOCKUP, never the live game (Matt, 2026-10-29).** While Matt is reviewing a
