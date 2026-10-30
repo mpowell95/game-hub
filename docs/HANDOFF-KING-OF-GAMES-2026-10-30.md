@@ -5,13 +5,10 @@ Times are Eastern. Never show Matt Spelling Bee or Contexto answer words.
 
 ## Still open, in order
 
-1. **Matt's step: the reader key.** Live since v1368: Admin > gear > **Reader key for Claude** copies a key; Matt adds
-   it to the session environment as `GAMEHUB_READER` (environment menu > Edit > Network secrets / environment
-   variables). A NEW session picks it up. Check first: `node -e "console.log(!!process.env.GAMEHUB_READER)"`.
-2. **Then list King of Games' Contexto games one by one** (Matt asked; nobody could see the admin-only log):
-   `NODE_USE_ENV_PROXY=1 node tools/read-play-log.mjs 3VN33 --game contexto` (add `--moves` for each move).
-   It covers everything since Oct 28 7:34 PM ET (his 3 wins on Oct 29 are in it, with puzzle numbers = the day
-   each was for). Older games exist only as totals (table below) and in his phone's own save.
+1. ~~Reader key~~ DONE 2026-10-30 (the rules checked `readers/<uid> === true`, the admin page writes `{on: true}`;
+   fixed in PR #1356). ~~List King of Games' Contexto games~~ DONE: en-8 (Oct 5 puzzle) won Oct 28 11:40 PM-12:02 AM,
+   95 typed, 0 hints; en-32 (Oct 29) won 12:04-12:08 AM, 46 typed, 0 hints; en-4 (Oct 1 puzzle) won Oct 29 1:11-1:15 PM,
+   41 typed, 0 hints; en-31 opened, never played. The log starts Oct 28 10:44 PM ET.
 3. **Contexto average guesses: MOCKUP, waiting for "build it".** Matt asked: "In the space between the lowest medal
    received and the # of gold medals, show avg guesses." Mockup: `docs/mockups/2026-10-30-contexto/contexto-avg.png`
    (+ `.html`, renderer `render-avg-mockup.cjs`). Each row: on the small-medal line, right side, the average
