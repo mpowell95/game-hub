@@ -59,6 +59,11 @@ re-confirming per step, no need for Matt to say "deploy":
 Pause only for a genuinely destructive step (force-push, history rewrite). If something should not
 ship yet, Matt will say so.
 
+**Do it the FIRST time Matt asks (Matt, 2026-10-29: "Do not argue with me and say you can't 3 times until I make you.
+Do it the first time I ask. Always.").** It's his game. If the obvious route is blocked (a session cannot write a
+player's row, Firebase rules), build the route that works (a read-time overlay like `HAND_ADDS` / `VOIDED_MATCHES`)
+and do it; say the limit in one line while doing it, never as a reason to stop or ask again.
+
 ## Performance: measure what the phone DOWNLOADS first (Matt, 2026-10-22)
 
 For months every Leaderboard, My Stats, Records and picker downloaded all of `players/` (~930 KB) and grouped it
