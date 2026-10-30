@@ -162,7 +162,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // 27 across the visible disc of a letter, 31 as the touch radius (62 of 240 units: 58px on a 224px wheel).
 // Bigger letters (Matt, 2026-10-29: "Improve the letters... make it larger"): ring 80, letter 54 units (was 40), the
 // picked disc 31, touch radius 33 (seven letters stay 69 units apart, so touch areas never overlap).
-const RING = 82, LETTER_R = 35, HIT_R = 34, DISC_R = 117;   // 2026-10-30: bigger letters (64 units, CSS)
+const RING = 82, LETTER_R = 33, HIT_R = 34, DISC_R = 117;   // 2026-10-30: Wordscapes' proportions (ring 70% of the disc)
 // TAP TO SELECT (Matt, 2026-10-29: "allow for selecting letters in addition to swiping"): the centre's check enters
 // the tapped word; it sits inside the ring's free middle (letters start 47 units out).
 // The check is quiet (Matt, 2026-10-29: the gold check "is distracting"): small, ink with a white tick, so gold only ever
@@ -586,9 +586,10 @@ class WordWeaver {
     if (!stage || !grid) return;
     const W = this.root.clientWidth, H = this.root.clientHeight;
     if (!W || !H) return;
-    // THE WHEEL COMES FIRST (Matt, 2026-10-30, after six asks: "MAKE THE LETTERS AND THE CIRCLE BIGGER"): as big as the
-    // screen allows (W - 32, up to 370px, 46% of the height) and it NEVER shrinks for the grid; the grid gets what is left.
-    const wheel = Math.floor(Math.max(150, Math.min(370, W - 32, H * 0.46)));
+    // THE WHEEL COMES FIRST (Matt, 2026-10-30: "The circle and the letters are important"): Wordscapes' size, measured
+    // from Matt's screenshots on a 402px iPhone: 72% of the width (290px), letters ~45px tall. It NEVER shrinks for the
+    // grid; the grid gets what is left.
+    const wheel = Math.floor(Math.max(150, Math.min(290, W * 0.72, H * 0.42)));
     const [rows, cols] = this.box || this.level.g;
     const gap = cols >= 8 || rows >= 8 ? 3 : 4;
     const fit = (wpx) => {
