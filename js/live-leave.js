@@ -128,7 +128,7 @@ const sameSeat = (a, b) => String(a) === String(b);
  * result: 'won' (the other player left or was claimed against, 2 seats: the win is recorded here),
  * 'lost' (someone claimed against THIS seat: the armed loss is recorded), or 'none' (a plain leave
  * from an older build, a leave before anyone's first move, or a 3-4 seat table: nothing recorded).
- *   o = { statsId, key, n, mySeat, seats (2 by default), fn, winArgs, opps }
+ *   o = { statsId, key, n, mySeat, seats (2 by default), fn, winArgs, opps, tag (game-stats.js modeTag) }
  */
 export function onRoomEnded(room, o) {
   const list = forfeitsOf(room, o.n);
@@ -136,7 +136,7 @@ export function onRoomEnded(room, o) {
     return forfeitNow(o.statsId) ? 'lost' : (disarmLeave(o.statsId), 'none');
   }
   if (list.length && (o.seats || 2) === 2) {
-    recordLeaveWin(o.statsId, o.key, o.fn, o.winArgs, o.opps);
+    recordLeaveWin(o.statsId, o.key, o.fn, o.winArgs, o.opps, o.tag);
     return 'won';
   }
   disarmLeave(o.statsId);
