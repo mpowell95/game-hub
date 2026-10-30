@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1361;
-const CACHE = 'game-hub-v1362';
+const IMPORTANT_SINCE = 1363;
+const CACHE = 'game-hub-v1363';
 
 const ASSETS = [
   './',
@@ -972,10 +972,10 @@ const REST_MANIFEST = {
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
   './spelling-bee/css/spelling-bee.css': '6c9b1a2fa9',
-  './spelling-bee/js/ui.js': '006555ec1e',
+  './spelling-bee/js/ui.js': 'b625e41162',
   './spelling-bee/js/engine.js': '87146a700c',
   './spelling-bee/js/strings.js': '6b11bfab1d',
-  './spelling-bee/js/board.js': '9c23ea427a',
+  './spelling-bee/js/board.js': '34fbe44c31',
   './spelling-bee/js/log.js': '695bc3fcc1',
   './spelling-bee/data/bee.json': 'beaa2059b3',
   './spelling-bee/data/bee-es.json': 'ac2796f02d',

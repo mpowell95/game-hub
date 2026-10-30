@@ -69,7 +69,7 @@ to do it on the correct day"; `onDay`/`dayWords` in ui.js, by each word's time; 
 win and the board row's `dw`/`dp`/`dr` (own-day words/points/rank) use only those. The in-game board sorts by POINTS
 (`byPoints`), shows everyone else's own-day numbers (`shownRows`), and a VOIDED row (`voidedOn`: code list + server
 `beeFlags/<puzzle>/<CODE>` - Matt's admin undo `adminConfig/v1/bee/undo/<puzzle>/<CODE>`) as played, 0, last. **A void never
-touches the viewer's own row** (silence: the cheater's phone looks unchanged). `tools/test-bee-fairplay.mjs`.
+touches the viewer's own row** (silence: the cheater's phone looks unchanged). **Your OWN row shows own-day numbers too (2026-10-30, Matt: "Fix it permanently"): every phone shows the same board.** Lili's phone counted 7 next-day words (486) and put her 1st; Ana's showed Lili's on-day 428 and Ana 1st (434). `tools/test-bee-fairplay.mjs`.
 **Matt's settled view of fair play (2026-10-29, "what I've been telling you over and over... across multiple sessions"):
 (1) the STRONG checks (sorted run, best words first) are what catch real copying, and they did (King of Games, Oct 28);
 (2) NO "copied from another player" check: Matt, "irrelevant and unnecessary"; do not propose it again;
