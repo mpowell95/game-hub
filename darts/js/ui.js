@@ -15,7 +15,7 @@ import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, s
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, oneTierDown } from '../../js/game-stats.js';
+import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -56,6 +56,9 @@ export function playerThrew(m) {
 const kindFrom = (s) => (s.game === 'cricket'
   ? 'cricket' + (s.order === 'order' ? '-order' : '') + (s.points === 'off' ? '-np' : '')
   : s.game);
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the kind
+ *  (301/201/101/cricket...) and who threw first. */
+const modeOf = (m) => ({ kind: kindOf(m), first: m && m.starter === 1 ? 'them' : 'me' });
 
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -556,7 +559,7 @@ class DartsUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false);
+      const st = withMode(modeOf(q.m), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false));
       if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[darts] recording the quit loss failed', err); }
   }
@@ -920,7 +923,7 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0);
+        const st = withMode(modeOf(m), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0));
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
@@ -1246,7 +1249,7 @@ class DartsUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     // once per phone, whoever ended it (null: a draw); the finish time keeps a fresh storage honest
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { kind: kindOf(this.match) });
     this.MP.markResultSeen(mp.id);
     this._say(this._winSay());
     this.screen = 'result';

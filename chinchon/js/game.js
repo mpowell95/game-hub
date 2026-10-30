@@ -32,6 +32,27 @@ export const DEFAULT_CONFIG = {
   figuresFaceValue: false,      // false: figures flat 10; true: own value (10/11/12)
 };
 
+/** WHICH game a match was, as a flat mode object for js/game-stats.js withMode (2026-10-30): the
+ *  number of players, each computer's difficulty in seat order (`ai`, when there are computers), the
+ *  ending (`vc`, with `sl` / `rl` as it uses them) and every rule in the config. Short keys, booleans
+ *  as 1/0. PURE. */
+export function modeOfMatch(config, players) {
+  const c = Object.assign({}, DEFAULT_CONFIG, config || {});
+  const b = (v) => (v ? 1 : 0);
+  const list = Array.isArray(players) ? players : [];
+  const ai = list.filter((p) => p && !p.isHuman).map((p) => p.difficulty || 'normal');
+  const m = { n: list.length, vc: c.victoryCondition };
+  if (ai.length && list.some((p) => p && p.isHuman) && ai.length === list.length - 1) m.ai = ai.join('-');
+  if (c.victoryCondition !== 'rounds') m.sl = c.scoreLimit;
+  if (c.victoryCondition !== 'points') m.rl = c.roundsLimit;
+  Object.assign(m, {
+    rem: b(c.showRemaining), ext: b(c.extended), jk: b(c.joker), ace: b(c.aceOrosWild),
+    wwc: b(c.winWithChinchon), neg: c.chinchonNegative, res: c.maxResets, place: c.placeOnEnding,
+    mc: c.maxClose, fig: b(c.figuresFaceValue),
+  });
+  return m;
+}
+
 export function makePlayer({ id, name, avatar, isHuman, difficulty, agent }) {
   return {
     id, name, avatar, agent,

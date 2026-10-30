@@ -31,7 +31,10 @@ import * as LL from '../../js/live-leave.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30). The table
+ *  is a look; the only thing that defines a match is its length, first to 7 (physics.js PHYS.WIN). */
+const AH_MODE = { to: 7 };
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
@@ -488,8 +491,8 @@ class AirHockeyUI {
       // Online: a round already decided by a leave on this phone (js/live-leave.js) counts once, as that.
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
-      const st = counted || lost ? true : recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
-        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest });
+      const st = counted || lost ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
+        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }));
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
     this._fillOver();
@@ -527,7 +530,7 @@ class AirHockeyUI {
   _armQuit() {
     if (this.online || (this.screen !== 'game' && this.screen !== 'paused') || this.match.phase === 'over') return;
     const [gf, ga] = this.match.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [this.difficulty, false, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]);
+    armQuitLoss('airhockey', 'recordAirHockey', [this.difficulty, false, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }], modeTag(AH_MODE, this.difficulty));
     this._qArmed = true;
   }
   quitCostsLoss() {
@@ -929,7 +932,7 @@ class AirHockeyUI {
       let forfeit = null;
       try { if (app) forfeit = (await app.api.get(app.api.ref(app.db, `rooms/${on.code}/forfeit`))).val(); } catch { /* offline */ }
       const res = LL.onRoomEnded({ forfeit }, { statsId: 'airhockey', key, n: on.rd, mySeat: on.role,
-        fn: 'recordAirHockey', winArgs: args, opps: [] });
+        fn: 'recordAirHockey', winArgs: args, opps: [], tag: modeTag(AH_MODE, 'mp') });
       const title = res === 'won' ? LL.lt('ll_left_win', { name: on.oppName }) : res === 'lost' ? LL.lt('ll_lost', { name: on.oppName }) : null;
       if (title && instance === this && this.screen === 'left') this.root.querySelector('[data-role="leftTitle"]').textContent = title;
     }).catch(() => {});
@@ -945,7 +948,7 @@ class AirHockeyUI {
   _liveArgs(won) { const [gf, ga] = this.match.score; return ['mp', won, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]; }
   _liveArm() {
     if (!this._liveInPlay()) return;
-    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), []);
+    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), [], modeTag(AH_MODE, 'mp'));
     this.online.armed = this.online.rd;
   }
   _liveQuietMs() { const on = this.online; return on && on.quietSince ? performance.now() - on.quietSince : 0; }
@@ -954,7 +957,7 @@ class AirHockeyUI {
   _liveClaim() {
     if (!this._liveCanClaim()) return;
     const on = this.online;
-    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), []);
+    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), [], modeTag(AH_MODE, 'mp'));
     on.leaving = true;
     LL.leaveWithForfeit(on.net, on.code, on.role, on.role === 'host' ? 'guest' : 'host', on.rd, true).catch(() => {});
     this._teardownOnline(false);

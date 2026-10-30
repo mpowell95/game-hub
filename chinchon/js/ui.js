@@ -6,7 +6,7 @@
 // added here (never in the engine), in the awaited onEvent hook.
 
 import { SUIT_META } from './deck.js';
-import { Game, DEFAULT_CONFIG, makePlayer } from './game.js';
+import { Game, DEFAULT_CONFIG, makePlayer, modeOfMatch } from './game.js';
 import { AIAgent } from './ai.js';
 import * as meld from './meld.js';
 import { renderCardFace as cardFaceHTML, preloadDeck, setDeck, listDecks, deckAssetUrl } from './cards.js';
@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordChinchon, recordHeadToHead, deviceId, easiestDiff, oneTierDown } from '../../js/game-stats.js';
+import { recordChinchon, recordHeadToHead, deviceId, easiestDiff, oneTierDown, withMode, modeTag } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
@@ -1216,11 +1216,11 @@ class ChinchonUI {
     // Solo (2026-10-29, Matt): the EASIEST computer's tier, one step lower for a shortened match.
     const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players, this.game.config);
     const won = !!(this.game.winner && this.game.winner.id === human.id);
-    recordChinchon(difficulty, won, {
+    withMode(modeOfMatch(this.game.config, this.game.players), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordChinchon(difficulty, won, {
       closed: this._matchCloses || 0,
       minusTen: this._matchMinusTens || 0,
       chinchons: this._matchChinchons || 0,
-    });
+    }));
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
     // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2181,7 +2181,7 @@ class ChinchonUI {
     if (!snap || !Array.isArray(snap.players) || snap.players.length < 2) return null;
     const c = save.counts || {};
     const n = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
-    return { difficulty: soloDiff(snap.players, snap.config), closed: n(c.closes), chinchons: n(c.chinchons), minusTen: n(c.minusTens) };
+    return { difficulty: soloDiff(snap.players, snap.config), closed: n(c.closes), chinchons: n(c.chinchons), minusTen: n(c.minusTens), snap };
   }
 
   /** Record that set-aside match's loss once (the save is cleared first), in both stats places. */
@@ -2195,7 +2195,9 @@ class ChinchonUI {
     this.stats.chinchons += q.chinchons;
     this.stats.minusTen = (this.stats.minusTen | 0) + q.minusTen;
     saveJSON(STORE_STATS, this.stats);
-    recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons });
+    // WHICH game the set-aside match was (js/game-stats.js withMode, 2026-10-30), from its snapshot.
+    withMode(modeOfMatch(q.snap.config, q.snap.players), pickedDiff(q.snap.players),
+      () => recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons }));
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
@@ -2209,9 +2211,9 @@ class ChinchonUI {
     this.stats.chinchons += this._matchChinchons || 0;
     this.stats.minusTen = (this.stats.minusTen | 0) + (this._matchMinusTens || 0);
     saveJSON(STORE_STATS, this.stats);
-    recordChinchon(soloDiff(this.game.players, this.game.config), false, {
+    withMode(modeOfMatch(this.game.config, this.game.players), pickedDiff(this.game.players), () => recordChinchon(soloDiff(this.game.players, this.game.config), false, {
       closed: this._matchCloses || 0, minusTen: this._matchMinusTens || 0, chinchons: this._matchChinchons || 0,
-    });
+    }));
   }
 
   _stepRule(field, d) {
@@ -2444,7 +2446,7 @@ class ChinchonUI {
       net.appendMove(mp.code, mp.seat, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
       // Your first decision arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps);
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps, modeTag(modeOfMatch(this.game.config, this.game.players), MP_DIFFICULTY));
       }
       return;
     }
@@ -2666,7 +2668,7 @@ class ChinchonUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps });
+          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps, tag: this.game ? modeTag(modeOfMatch(this.game.config, this.game.players), MP_DIFFICULTY) : null });
         if (res !== 'none') { this._statsCommitted = true; this._mpBumpLocalStats(res === 'won'); }
       }
       this._mpEndDueToOpponentLeft(res);
@@ -2964,7 +2966,7 @@ class ChinchonUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps)) this._mpBumpLocalStats(true);
+    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps, this.game ? modeTag(modeOfMatch(this.game.config, this.game.players), MP_DIFFICULTY) : null)) this._mpBumpLocalStats(true);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -3469,7 +3471,7 @@ class ChinchonUI {
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
     MP.countResult(ch.id, w === 'draw' ? null : w === ch.side, {
       closed: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTen: this._matchMinusTens || 0,
-    }, (ov && ov.at) || Date.now());
+    }, (ov && ov.at) || Date.now(), typeof MP.chModeOf === 'function' ? MP.chModeOf(ch.game) : null);
     MP.markResultSeen(ch.id);
     MP.markShown(ch.id, ch.log.length);
     if (ch.replay) { ch.replay = false; this._buildPiles(); this.render(); }
@@ -3483,7 +3485,7 @@ class ChinchonUI {
     ch.finished = true;
     const MP = this._chMods.MP;
     const won = g.over.winner === ch.side;
-    MP.countResult(ch.id, won, {}, g.over.at || Date.now());
+    MP.countResult(ch.id, won, {}, g.over.at || Date.now(), typeof MP.chModeOf === 'function' ? MP.chModeOf(g) : null);
     MP.markResultSeen(ch.id);
     MP.markSeen(ch.id, g.updated);
     if (ch.replay) { ch.replay = false; this._buildPiles(); }
@@ -3649,6 +3651,11 @@ export function isShortMatch(config) {
 }
 
 /** A solo table records at its EASIEST computer's tier, one step lower for a short match. */
+/** The difficulty a solo table was PICKED at, for its mode (js/game-stats.js withMode): the easiest
+ *  computer, before a short match takes it one step down (every computer's is in the mode's `ai`). */
+function pickedDiff(players) {
+  return easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), DIFF_LADDER, 'normal');
+}
 export function soloDiff(players, config) {
   const d = easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), DIFF_LADDER, 'normal');
   return isShortMatch(config) ? oneTierDown(d, DIFF_LADDER) : d;

@@ -7,7 +7,7 @@
 // isInProgress() for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -55,6 +55,10 @@ const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.str
 export function statsDiff(diff, reracks) {
   return reracks === 'inf' ? oneTierDown(diff, DIFFS) : diff;
 }
+/** WHICH game was played vs the computer, recorded with its result (js/game-stats.js withMode,
+ *  2026-10-30): Gentleman's on/off, reracks per game, and who shot first (settings.nextFirst is this
+ *  match's until finish() turns it over). */
+const modeOf = (s) => ({ gent: s.gentlemans ? 1 : 0, rr: s.reracks, first: s.nextFirst === 'b' ? 'them' : 'me' });
 
 /** css/ui.css's primitives first (idempotent, matched by resolved href too, the same guard
  *  skeeball and hoops4 use), then this game's own sheet. Module stylesheets are never removed on
@@ -485,7 +489,7 @@ class CupPong {
     // The first throw of the match, the computer's included, arms the quit loss (2026-10-29, second
     // pass, Matt: quitting after the computer's opening throws was free).
     if (ev.length && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
-      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a]);
+      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a], modeTag(modeOf(this.settings), this.settings.diff));
     }
     if (ev.length && shooter === 'a' && this.lastShot) {
       this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
@@ -882,7 +886,7 @@ class CupPong {
     this.waiting = false;
     const MP = this.MP;
     const ov = mp.game && mp.game.over;
-    MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone, whoever ended it
+    MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), MP.modeOfMatch(mp.game));   // once per phone, whoever ended it
     MP.markResultSeen(mp.id);
     this.paintHud();
     this.paintOptions();
@@ -960,7 +964,7 @@ class CupPong {
       if (!res.ok) { this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2400); return; }
       // Called off (nobody had answered): no loss to count.
       if (res.cancelled) { this.mpEndedNoResult(this.mpEndText(res.game, mp.side)); return; }
-      this.MP.countResult(mp.id, false);
+      this.MP.countResult(mp.id, false, Date.now(), this.MP.modeOfMatch(mp.game));
       this.MP.markResultSeen(mp.id);
       this.openMultiplayer();
     });
@@ -1345,7 +1349,7 @@ class CupPong {
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       const lost = quitLossLost('cuppong');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
-      if (!lost) try { recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a); } catch (err) { console.error('[cup-pong] record failed', err); }
+      if (!lost) try { withMode(modeOf(this.settings), this.settings.diff, () => recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a)); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }

@@ -27,7 +27,7 @@ import * as store from './store.js';
 import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordHillClimb, loadStats } from '../../js/game-stats.js';
+import { recordHillClimb, loadStats, withMode } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -615,7 +615,12 @@ class HillClimb {
     // Shared, cross-device stats. Guarded: a stats failure must never take the game down with it,
     // and the local save above is already committed by this point either way.
     try {
-      recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips });
+      // WHICH run (js/game-stats.js withMode, 2026-10-30): the vehicle and its upgrade levels (engine,
+      // suspension, tires, drive), under the stage; the distance kept as that mode's best.
+      const veh = this.save.vehicle;
+      const ups = (this.save.upgrades && this.save.upgrades[veh]) || {};
+      withMode({ veh, up: PARTS.map((p) => ups[p] | 0).join('-') }, stage.id,
+        () => recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips }), { hi: res.distance });
     } catch (err) {
       console.error('[hill-climb] recordHillClimb failed', err);
     }

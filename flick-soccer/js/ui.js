@@ -20,7 +20,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, oneTierDown } from '../../js/game-stats.js';
+import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -41,6 +41,12 @@ function newAiSeed() {
 export function statsDiff(diff, goals) {
   return goals === 1 ? oneTierDown(diff, ['easy', 'medium', 'hard']) : diff;
 }
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): goals,
+ *  the player's two line-ups (kick-off, defending), and who kicked off. */
+const modeOf = (m) => {
+  const p = m && Array.isArray(m.pairs) && Array.isArray(m.pairs[0]) ? m.pairs[0] : [];
+  return { goals: m && m.goals, off: p[0], def: p[1], first: m && m.starter === 1 ? 'them' : 'me' };
+};
 /** Has anybody flicked in this match? Quitting is a loss once the first flick is made, the
  *  computer's included (2026-10-29, second pass, Matt). (The name is kept: it was "has the PLAYER
  *  flicked" until then.) */
@@ -798,7 +804,7 @@ class FlickSoccerUI {
     if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0);
+      const st = withMode(modeOf(m), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0));
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -972,7 +978,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false);
+      const st = withMode(modeOf(q.m), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false));
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1317,7 +1323,7 @@ class FlickSoccerUI {
     if (resigned) m.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     const ov = mp.game && mp.game.over;
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone; the finish time keeps a fresh storage honest
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), this.MP.modeOfMatch(mp.game));   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';

@@ -32,7 +32,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
@@ -298,7 +298,9 @@ export function markCounted(id) {
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2). Online results go in the
  *  'mp' bucket; challenges never write head-to-head (js/mp-records.js reads them from the index). */
-export function countResult(id, won, finishedAt = Date.now()) {
+//  `mode` (2026-10-30, js/game-stats.js withMode): this player's team when the page has the match
+//  (online-ui.js finish); an index row carries no team, so a count from the launcher has none.
+export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch(STATS_ID, id)) return false;
@@ -306,7 +308,7 @@ export function countResult(id, won, finishedAt = Date.now()) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch(STATS_ID, id, () => recordResult(STATS_ID, 'mp', !!won)); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won))); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   return true;
 }
 export function noteVoided() {

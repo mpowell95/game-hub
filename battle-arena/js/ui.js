@@ -10,7 +10,7 @@
 // nothing here stores an unlock.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, myName } from '../../js/i18n.js';
-import { recordResult, loadStats } from '../../js/game-stats.js';
+import { recordResult, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { STRINGS } from './strings.js';
@@ -18,7 +18,9 @@ import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
-import { mirror, mirrorEvents, entryOf, moveOf } from './online.js';
+import { mirror, mirrorEvents, entryOf, moveOf, teamMode } from './online.js';
+/** A match vs the computer: the player's drafted team (side 0) and who opened. */
+const modeOf = (s) => ({ ...teamMode(s, 0), first: s && s.first === 1 ? 'them' : 'me' });
 import { playAttack, evolveScene } from './attacks.js';
 
 const t = makeT(STRINGS);
@@ -572,7 +574,7 @@ class BattleArena {
     this.clearSave();
     const won = save.state.winner != null ? save.state.winner === ME : false;
     try {
-      const st = recordResult('battlearena', save.diff, won);
+      const st = withMode(modeOf(save.state), save.diff, () => recordResult('battlearena', save.diff, won));
       if (!st) console.warn('[battle-arena] set-aside match not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] set-aside match not recorded', err); }
   }
@@ -1737,7 +1739,7 @@ class BattleArena {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       try {
-        const st = recordResult('battlearena', this.diff, s.winner === ME);
+        const st = withMode(modeOf(s), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME));
         if (!st) console.warn('[battle-arena] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[battle-arena] record failed', err); }
       this.clearSave();
@@ -1868,7 +1870,7 @@ class BattleArena {
     if (!this.quitCostsLoss()) return;
     this.recorded = true;
     try {
-      const st = recordResult('battlearena', this.diff, false);
+      const st = withMode(modeOf(this.state), this.diff, () => recordResult('battlearena', this.diff, false));
       if (!st) console.warn('[battle-arena] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] quit loss not recorded', err); }
   }

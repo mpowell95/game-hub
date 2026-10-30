@@ -18,7 +18,19 @@ import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordEscoba, recordHeadToHead, deviceId, easiestDiff } from '../../js/game-stats.js';
+import { loadStats, recordEscoba, recordHeadToHead, deviceId, easiestDiff, withMode, modeTag } from '../../js/game-stats.js';
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): players at
+ *  the table, each computer's difficulty in seat order (`ai`, solo), target score, card numbering and
+ *  capture hints. `src` is the Game or its snapshot (both carry players; the config or the snapshot
+ *  carries targetScore / deckMode). */
+function modeOf(src, assist) {
+  const players = (src && src.players) || [];
+  const cfg = (src && src.config) || src || {};
+  const ai = players.filter((p) => p && !p.isHuman).map((p) => p.difficulty || 'normal');
+  const m = { n: players.length, to: cfg.targetScore, deck: cfg.deckMode === 'american' ? 'american' : 'spanish', assist: assist === false ? 0 : 1 };
+  if (ai.length && ai.length === players.length - 1) m.ai = ai.join('-');
+  return m;
+}
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -1098,7 +1110,7 @@ class EscobaUI {
     // A table of computers counts at the EASIEST one's tier (2026-10-29, Matt): before, the first
     // computer's tier, so one Hard and one Easy computer filed a win as Hard.
     const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players);
-    recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() });
+    withMode(modeOf(this.game, this._matchAssist), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() }));
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2109,12 +2121,13 @@ class EscobaUI {
     if (this.mp || this.ch) return null;
     if (this.game && this.el && !this.el.game.hidden) {
       if (this._matchEnded || this._statsCommitted || this.game.winner || !this._moved) return null;
-      return { difficulty: soloDiff(this.game.players), escobas: this._matchEscobasNow() };
+      return { difficulty: soloDiff(this.game.players), escobas: this._matchEscobasNow(), mode: modeOf(this.game, this._matchAssist), picked: pickedDiff(this.game.players) };
     }
     const save = this._loadSave();
     if (!save || save.mp || !savedMoved(save)) return null;
     const me = save.snap.players.find((p) => p.isHuman);
-    return { difficulty: soloDiff(save.snap.players), escobas: Math.max(me ? me.matchEscobas | 0 : 0, save.matchEscobas | 0) };
+    return { difficulty: soloDiff(save.snap.players), escobas: Math.max(me ? me.matchEscobas | 0 : 0, save.matchEscobas | 0),
+      mode: modeOf(save.snap, save.assist !== false), picked: pickedDiff(save.snap.players) };
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`, and the save is cleared first). */
@@ -2123,7 +2136,7 @@ class EscobaUI {
     if (!q) return;
     this._statsCommitted = true;
     this._clearSave();
-    recordEscoba(q.difficulty, false, { escobas: q.escobas });
+    withMode(q.mode, q.picked, () => recordEscoba(q.difficulty, false, { escobas: q.escobas }));
   }
 
   // --- multiplayer (M1 pilot) -------------------------------------------------
@@ -2272,7 +2285,7 @@ class EscobaUI {
       const hash = stateHash(this.game);
       // Your first card arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps);
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps, modeTag(modeOf(this.game, this._matchAssist), MP_DIFFICULTY));
       }
       try {
         await net.appendMove(mp.code, mp.seat, seq, move, hash);
@@ -2494,7 +2507,7 @@ class EscobaUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps });
+          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps, tag: this.game ? modeTag(modeOf(this.game, this._matchAssist), MP_DIFFICULTY) : null });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -2771,7 +2784,7 @@ class EscobaUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps, this.game ? modeTag(modeOf(this.game, this._matchAssist), MP_DIFFICULTY) : null);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -3258,7 +3271,8 @@ class EscobaUI {
     ch.counted = true;
     const won = o.winner === 'draw' ? null : o.winner === ch.side;
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now()); } catch (err) { console.error('[escoba] could not count the challenge', err); }
+    const mode = typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(ch.game || ch) : null;
+    try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now(), mode); } catch (err) { console.error('[escoba] could not count the challenge', err); }
     try { this.MP.markResultSeen(ch.id); } catch { /* the popup shows once more */ }
   }
 
@@ -3473,6 +3487,11 @@ class EscobaUI {
 // --- quitting and easier settings (2026-10-29) ---------------------------------
 
 /** A solo table records at its EASIEST computer's tier. */
+/** The difficulty a solo table was PICKED at, for its mode: the easiest computer (every computer's is
+ *  in the mode's `ai`). The same as soloDiff today; kept apart so a later fold cannot change it. */
+function pickedDiff(players) {
+  return easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), ['easy', 'normal', 'hard'], 'normal');
+}
 function soloDiff(players) {
   return easiestDiff((players || []).filter((p) => !p.isHuman).map((p) => p.difficulty || 'normal'), ['easy', 'normal', 'hard'], 'normal');
 }

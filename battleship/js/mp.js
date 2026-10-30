@@ -66,7 +66,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordBattleship, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordBattleship, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
@@ -498,7 +498,14 @@ export function markCounted(id) {
  *  'mp' bucket, beside the live rooms' (ui.js MP_DIFFICULTY); challenges never write head-to-head
  *  (js/mp-records.js reads them from the index). `extras` are this player's shots / hits / sunk /
  *  accuracy when the match screen saw the end; a result counted from the list alone has none. */
-export function countResult(id, won, extras = null, finishedAt = Date.now()) {
+/** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
+ *  board, shots a turn, the salvo rule (0 none, 1/2/3) and the bonus shot. An index row carries none
+ *  of them, so a count made from the launcher's list has no mode. */
+export function modeOfMatch(g) {
+  if (!g || typeof g !== 'object') return null;
+  return { size: g.size === 'quick' ? 'quick' : 'classic', shots: [1, 3, 5].includes(+g.shots) ? +g.shots : 1, rule: salvoRule(g.salvo), bonus: g.bonus === false ? 0 : 1 };
+}
+export function countResult(id, won, extras = null, finishedAt = Date.now(), mode = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -506,7 +513,7 @@ export function countResult(id, won, extras = null, finishedAt = Date.now()) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('battleship', id, () => recordBattleship('mp', !!won, extras || {})); } catch (err) { console.error('[battleship] recordBattleship failed', err); }
+  try { withChallengeMatch('battleship', id, () => withMode(mode, 'mp', () => recordBattleship('mp', !!won, extras || {}))); } catch (err) { console.error('[battleship] recordBattleship failed', err); }
   return true;
 }
 export function noteVoided() {
@@ -531,7 +538,7 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', null, g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', null, g.over.at, modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });

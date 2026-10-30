@@ -14,7 +14,14 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStoredStats, statsId } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStoredStats, statsId, withMode } from '../../js/game-stats.js';
+/** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): players at
+ *  the table, the table (tier id, 'free' for no buy-in) and the blind speed. `g` is the engine state
+ *  or its public view (both carry `cfg` and `players`). Computer speed (pace) is a look, not a rule. */
+const modeOf = (g) => {
+  const cfg = (g && g.cfg) || {};
+  return { n: g && Array.isArray(g.players) ? g.players.length : 0, tier: cfg.tier || 'free', speed: cfg.speed || 'normal' };
+};
 import { corrections } from '../../js/admin-config.js';
 import { correctHoldemLedger } from '../../js/stats-corrections.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
@@ -1631,7 +1638,7 @@ class Game {
     if (!st.rec) {
       st.rec = true;
       writeJSON(SAVE_KEY, { state: st, at: Date.now() });
-      try { recordResult('holdem', SKILL_ID[st.skill] || 'medium', false); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(modeOf(st), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false)); } catch (e) { console.warn('[holdem] stats write failed', e); }
     }
     drop(SAVE_KEY);
   }
@@ -1864,7 +1871,7 @@ class Game {
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
-      try { recordResult('holdem', SKILL_ID[s.skill] || 'medium', won); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(modeOf(s), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
       // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
       if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
@@ -1877,7 +1884,7 @@ class Game {
     if (prize) rec.push(key + ':prize:' + prize);
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
-    try { recordResult('holdem', 'mp', won); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    try { withMode(modeOf(pub), 'mp', () => recordResult('holdem', 'mp', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
     if (prize) recordHoldemBank({ prize });
   }
 
