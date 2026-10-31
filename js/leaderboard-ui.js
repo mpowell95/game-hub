@@ -3719,6 +3719,16 @@ export function lb2PlayerGames(list, key) {
   games.sort((a, b) => b.plays - a.plays || labelOf(a.id).localeCompare(labelOf(b.id)));
   return { g, games, wins: winsOf(g, null), played: playedOf(g, null) };
 }
+/** The old By Player list as it opens (category All, sorted by Wins: playerListHTML's own order and
+ *  rankMap ties): [{ g, key, rank, tie, wins, played }], everyone with any play. */
+export function lb2Players(list) {
+  const rows = list.filter((g) => playedOf(g, null) > 0);
+  const value = (g) => catValueOf(g, 'all');
+  const { rankOf, tiedAt } = rankMap(rows, value);
+  rows.sort((a, b) => (value(b) - value(a)) || (playedOf(a, null) - playedOf(b, null)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
+  // `cat` = the old card's line under the name (catInlineHTML: wins per tier shape, runs, VS wins), as HTML.
+  return rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), wins: value(g), played: playedOf(g, null), cat: catInlineHTML(g) }));
+}
 /** The tab-word for a difficulty, and the old board's unit-less number text (v2's lists). */
 export function lb2TierWord(tier) { return tierWord(tier); }
 /** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */

@@ -87,6 +87,8 @@ const old = await pg.evaluate(async () => {
     await L.openLeaderboard({ game: id, legacy: true });
     L.__lbSetBoardForTest(H.board);
     await sleep(40);
+    out.plays = out.plays || {};
+    out.plays[id] = ((document.querySelector('.lb-board-n b') || {}).textContent || '').trim();
     const groups = [...document.querySelectorAll('.lb-mstabs')].map((g) => [...g.querySelectorAll('button')].filter((b) => stOf(b, id)));
     const rows = groups.filter((g) => g.length);
     const combos = rows.reduce((acc, row) => acc.flatMap((c) => row.map((_, i) => c.concat(i))), [[]]);
@@ -119,6 +121,16 @@ const old = await pg.evaluate(async () => {
       return { rank: m ? Number(m[1]) : 0, tie: /^\D/.test(lab.trim()), name: (x.querySelector('.lb-gtop-nm') || {}).textContent.trim() };
     });
   }
+  // By Player as it opens (category All, by Wins).
+  const ps = document.querySelector('[data-seg="players"]');
+  if (ps) { ps.click(); await sleep(40); }
+  out.players = [...document.querySelectorAll('.lb-plist:not(.is-board) .lb-pcard')].map((c) => {
+    const chip = c.querySelector('.lb-chip');
+    const lab = (chip && (chip.getAttribute('aria-label') || chip.textContent) || '').trim();
+    const m = /(\d+)/.exec(lab);
+    return { rank: m ? Number(m[1]) : 0, tie: /^\D/.test(lab), name: (c.querySelector('.lb-pname') || {}).textContent.trim(),
+      val: ((c.querySelector('.lb-pnum b') || {}).textContent || '').trim() };
+  });
   L.closeLeaderboard();
   return out;
 });
@@ -158,6 +170,9 @@ const v2 = await pg.evaluate(async (keys) => {
     await V.openLeaderboard2({ game: id }).catch(() => {});
     V.__setPeopleForTest(H.people, '');
     await sleep(40);
+    // The header's total plays, on the default tab (where the old board was read too).
+    if (!out.plays) out.plays = {};
+    out.plays[id] = (((document.querySelector('.lb2-bar .lb2-t2') || {}).textContent) || '').replace(/[^\d.,]/g, '');
     for (const key of byGame[id]) {
       // Click the v2 tab(s) whose state makes this key (tabs, not a state poke: the real screen).
       const want = key.split('~');
@@ -168,7 +183,10 @@ const v2 = await pg.evaluate(async (keys) => {
           return Object.keys(x.st).every((p) => kk[['tier', 'view', 'machine', 'lang', 'by'].indexOf(p)] === want[['tier', 'view', 'machine', 'lang', 'by'].indexOf(p)]);
         });
         const btn = document.querySelector(`.lb2 [data-act="stab"][data-v="${r}:${i}"]`);
-        if (btn) { btn.click(); await sleep(40); }
+        if (btn) { btn.click(); await sleep(40); continue; }
+        // A long name list is one native picker (Skeeball's machines).
+        const sel = [...document.querySelectorAll('.lb2 select[data-role="stab"]')].find((x) => [...x.options].some((o) => o.value === `${r}:${i}`));
+        if (sel && sel.value !== `${r}:${i}`) { sel.value = `${r}:${i}`; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); }
       }
       out.boards[id + '|' + key] = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
         rank: Number(el.dataset.rank), tie: el.dataset.tie === '1', name: el.querySelector('.lb2-nmt').textContent.trim(),
@@ -181,6 +199,11 @@ const v2 = await pg.evaluate(async (keys) => {
   const t = document.querySelector('.lb2 [data-act="tab"][data-v="hof"]'); if (t) t.click();
   await sleep(40);
   out.hof = [...document.querySelectorAll('.lb2 .lb2-lr')].map((el) => [...el.querySelectorAll('.lb2-strong, .lb2-gm')].map((x) => Number(x.textContent)));
+  out.hofNames = [...document.querySelectorAll('.lb2 .lb2-lr')].map((el) => [el.querySelector('.lb2-nmt').textContent.trim(), Number(el.querySelector('.lb2-strong').textContent)]);
+  const w = document.querySelector('.lb2 [data-act="hofview"][data-v="wins"]'); if (w) { w.click(); await sleep(40); }
+  out.players = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
+    rank: Number(el.dataset.rank), tie: el.dataset.tie === '1', name: el.querySelector('.lb2-nmt').textContent.trim(),
+    val: el.querySelector('.lb2-val').textContent.trim() }));
   V.closeLeaderboard2();
   return out;
 }, Object.keys(gold.boards));
@@ -189,6 +212,15 @@ for (const k of Object.keys(gold.boards)) {
   const strip = (rows) => rows.map((r) => ({ rank: r.rank, tie: r.tie, name: r.name, val: r.val.replace(/\s+/g, ' ') }));
   ok('v2 = old: ' + k, same(strip(a), strip(b)), { old: strip(a).slice(0, 5), v2: strip(b).slice(0, 5), nOld: a.length, nV2: b.length });
 }
+// By Player (Hall of Fame's Wins view) = the old By Player tab.
+ok('By Player: v2 Wins view = old By Player, row for row', same(gold.players, v2.players), { old: (gold.players || []).slice(0, 4), v2: (v2.players || []).slice(0, 4), nOld: (gold.players || []).length, nV2: (v2.players || []).length });
+// Each board's total plays (the header number).
+for (const id of Object.keys(gold.plays || {})) ok('plays header: ' + id, String(gold.plays[id]).replace(/[^\d]/g, '') === String((v2.plays || {})[id] || '').replace(/[^\d]/g, ''), { old: gold.plays[id], v2: (v2.plays || {})[id] });
+// Per-person golds: Hall of Fame = rank-1 rows in the old By Game standing.
+const want = {};
+for (const rows of Object.values(gold.standing)) for (const r of rows) if (r.rank === 1) want[r.name] = (want[r.name] || 0) + 1;
+const have = Object.fromEntries((v2.hofNames || []).filter((x) => x[1] > 0));
+ok('golds per person: Hall of Fame = old By Game', same(Object.keys(want).sort().map((k) => [k, want[k]]), Object.keys(have).sort().map((k) => [k, have[k]])), { want, have });
 const oldGolds = Object.values(gold.standing).reduce((a, rows) => a + rows.filter((r) => r.rank === 1).length, 0);
 const v2Golds = v2.hof.reduce((a, r) => a + (r[0] || 0), 0);
 ok(`gold medals: v2 Hall of Fame ${v2Golds} = old By Game ${oldGolds}`, v2Golds === oldGolds);
