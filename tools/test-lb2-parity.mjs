@@ -168,7 +168,10 @@ const v2 = await pg.evaluate(async (keys) => {
           return Object.keys(x.st).every((p) => kk[['tier', 'view', 'machine', 'lang', 'by'].indexOf(p)] === want[['tier', 'view', 'machine', 'lang', 'by'].indexOf(p)]);
         });
         const btn = document.querySelector(`.lb2 [data-act="stab"][data-v="${r}:${i}"]`);
-        if (btn) { btn.click(); await sleep(40); }
+        if (btn) { btn.click(); await sleep(40); continue; }
+        // A long name list is one native picker (Skeeball's machines).
+        const sel = [...document.querySelectorAll('.lb2 select[data-role="stab"]')].find((x) => [...x.options].some((o) => o.value === `${r}:${i}`));
+        if (sel && sel.value !== `${r}:${i}`) { sel.value = `${r}:${i}`; sel.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); }
       }
       out.boards[id + '|' + key] = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
         rank: Number(el.dataset.rank), tie: el.dataset.tie === '1', name: el.querySelector('.lb2-nmt').textContent.trim(),
