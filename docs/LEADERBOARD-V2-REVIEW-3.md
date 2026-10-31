@@ -43,3 +43,20 @@ against a golden file made from `main`'s untouched old board). What is left is l
 
 - Hold'em: 14 people tied 2nd on an untouched bankroll, exactly as the old board; they earn no medal in the tallies.
 - Rank arrows off; per-game tab memory off (the old board always opens on its default tab).
+
+### Second reviewer (opus, independent, round 2): grade B-
+
+**Agrees:** parity holds (334 checks, English and Spanish, golds 40 = 40); Tic Tac Toe's two leaders are Matt's call;
+the Player page lacks the old totals; tabs ran off-screen; Me names cut short; the place column has no label.
+
+**New to my review:**
+- **By Player is gone.** The old first tab ranked everyone by total wins across all games; Hall of Fame's medal count
+  replaced it. Golds match, but a person's overall rank became a different number.
+- **Places on the lists contradict the boards.** The standing drops 0-win players, so Natalia reads "–" on 6 games
+  (Connect 4, Mancala, Monopoly Deal, Minesweeper, Tic Tac Toe, Cup Pong) where the board ranks her. Hold'em: the list
+  says "=2" for a never-used bankroll while the board says "Not ranked"; King of Games is 2nd on the board, "#16" on his page.
+- **Silver/bronze totals**: old By Game showed 40 / 32 / 30 (top 3 rows only); v2 counts every tied place: 40 / 31 / 31.
+  The test checked golds only.
+- Hall of Fame ties have no "="; Play button only on empty boards; "Hall of Fame #1" twice on the Player page.
+
+**Disagrees:** none of substance. **Merged grade: B-.**
