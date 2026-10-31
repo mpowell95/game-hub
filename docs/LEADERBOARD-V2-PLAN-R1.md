@@ -62,7 +62,7 @@ Headless Chromium on localhost (`tools/lb2-harness.html`), the same people list 
 4. Tests above + the suites in the brief; screenshots (dark, 402x874, compact) in `docs/mockups/lb2-shots/r1/`.
 5. Deploy (admin-only still; old board unchanged for everyone else).
 
-## Revision after the critique (second reviewer, opus, 2026-10-31 ~04:40 Eastern)
+## Revision after the critique (second reviewer, opus, 2026-10-31 ~04:10 Eastern)
 
 Accepted:
 - **Golden file first.** `tools/lb2-golden.mjs` runs `main`'s OLD overlay (unchanged code, a test hook appended at load

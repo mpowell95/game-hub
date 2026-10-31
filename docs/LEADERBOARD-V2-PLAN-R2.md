@@ -24,7 +24,7 @@ Source: `docs/LEADERBOARD-V2-REVIEW-3.md`. Same rule as round 1: no new number, 
 - Tic Tac Toe: the old standing (Ultimate first) gives MattyIce the record; the All tab (all wins) puts HDJ, Inc. 1st.
   The lists now follow the board; the Hall of Fame keeps the standing. Matt's call to unify.
 
-## Revision after the critique (fresh opus reviewer, 2026-10-31 ~06:00 Eastern)
+## Revision after the critique (fresh opus reviewer, 2026-10-31 ~04:25 Eastern)
 
 - **Item 1 reverted.** The old You tab and By Game read the standing (`gameStanding`), never a board's place, and mixing
   the two contradicted Records held, the Hall of Fame and the Player tiles (Tic Tac Toe). Every list place and leader
