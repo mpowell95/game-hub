@@ -38,7 +38,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   letter again takes it off; the check in the wheel's middle enters the word: small, INK with a white tick (gold means only a
   picked letter; Matt, 2026-10-29: the gold check "is distracting"), shown and tappable only from 3 letters.
   Taps and a swipe join (tapped letters stay, the swipe carries on). Grid word: its letters fly from the pill into the grid. Found again: that word flashes. Extra word (the
-  level's `x`): the star chip bumps and counts; found again: it wiggles. Anything else: the pill shakes. Under 3
+  level's `x`): made OBVIOUS (Matt, 2026-10-30): the pill turns gold with a star and pops, "Bonus word!" over it (`bonus_word`; Matt: "say bonus word tho"), a star flies to the extra-words chip
+  (`_flyStar`), and the chip pops with a gold ring as its count goes up; found again: it wiggles. Anything else: the pill shakes. Under 3
   letters: silent. **No sound, ever.**
 - **Hints are unlimited.** One tap reveals one letter: the first unrevealed cell (top to bottom, left to right)
   of the shortest unfound grid word (ties: earlier in `w`; cells a found word already shows are skipped). Each

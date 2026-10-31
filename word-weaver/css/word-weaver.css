@@ -277,8 +277,36 @@
   54% { transform: translateX(-6px); }
   72% { transform: translateX(4px); }
 }
-.ww-root .ww-chip.is-bump { animation: ww-bump .4s ease-out; }
-@keyframes ww-bump { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.3); } }
+.ww-root .ww-chip.is-bump { animation: ww-bump .6s ease-out; }
+@keyframes ww-bump {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(242, 183, 5, 0); }
+  35% { transform: scale(1.45); box-shadow: 0 0 0 6px rgba(242, 183, 5, .9); color: var(--ww-path); }
+  70% { box-shadow: 0 0 0 14px rgba(242, 183, 5, 0); }
+}
+/* A bonus word (Matt, 2026-10-30: "make it more obvious"): the pill turns gold with a star, pops, and a star flies to the chip. */
+.ww-root .ww-pill.is-bonus { background: var(--ww-path); display: inline-flex; align-items: center; gap: 8px; }
+.ww-root .ww-pill.is-bonus svg { width: 22px; height: 22px; flex: none; }
+.ww-root .ww-pill.is-bonus { position: relative; }
+/* "Bonus word!" over the gold pill (Matt, 2026-10-30: "say bonus word tho"); above it, so the pill row keeps its height. */
+.ww-root .ww-bonustag {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .5);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: normal;
+  z-index: 2;
+}
+.ww-root .ww-pill.is-pop { animation: ww-pillpop .45s ease-out; }
+@keyframes ww-pillpop { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.18); } }
+.ww-root .ww-flystar { position: absolute; z-index: 30; width: 34px; height: 34px; color: var(--ww-path); pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.ww-root .ww-flystar svg { width: 100%; height: 100%; display: block; }
 .ww-root .ww-chip.is-wiggle { animation: ww-wiggle .45s ease-in-out; }
 @keyframes ww-wiggle {
   0%, 100% { transform: rotate(0); }
@@ -428,5 +456,5 @@
 /* Reduced motion: letters land where they go with no flight; the garnish goes, the game stays. */
 @media (prefers-reduced-motion: reduce) {
   .ww-root .ww-ltr { transition: none; }
-  .ww-root .ww-c.is-flash, .ww-root .ww-pill.is-shake, .ww-root .ww-chip.is-bump, .ww-root .ww-chip.is-wiggle { animation: none; }
+  .ww-root .ww-c.is-flash, .ww-root .ww-pill.is-shake, .ww-root .ww-pill.is-pop, .ww-root .ww-chip.is-bump, .ww-root .ww-chip.is-wiggle { animation: none; }
 }
