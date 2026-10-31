@@ -1,12 +1,12 @@
 // leaderboard2-strings.js - Leaderboard v2's words, EN/ES (js/leaderboard2-ui.js, 2026-10-31).
 // Game titles, difficulty names, tab names, units and the gap lines come from js/strings.js (the old
-// board's own words), so both boards say the same thing.
+// board's own words), so the old and new leaderboards say the same thing.
 const plural = (n, one, many) => (Number(n) === 1 ? one : many);
 
 export const STRINGS = {
   en: {
     lb2_title: 'Leaderboard',
-    lb2_tab_boards: 'Boards',
+    lb2_tab_boards: 'Games',
     lb2_tab_hof: 'Hall of Fame',
     lb2_tab_me: 'Me',
     lb2_search: 'Search {n} games',
@@ -47,13 +47,17 @@ export const STRINGS = {
     lb2_message: 'Message',
     lb2_rush: 'Rush',
     lb2_medals: 'Medals',
+    lb2_sort_az: 'A to Z',
+    lb2_sort_rank: 'My rank',
+    lb2_sort_played: 'Most played',
+    lb2_sort_recent: 'Recent',
     lb2_nothing: 'Nothing yet',
     lb2_loading: 'Loading',
     lb2_offline: 'Needs a connection',
   },
   es: {
     lb2_title: 'Clasificación',
-    lb2_tab_boards: 'Tablas',
+    lb2_tab_boards: 'Juegos',
     lb2_tab_hof: 'Salón de la Fama',
     lb2_tab_me: 'Yo',
     lb2_search: 'Buscar entre {n} juegos',
@@ -94,6 +98,10 @@ export const STRINGS = {
     lb2_message: 'Mensaje',
     lb2_rush: 'Rush',
     lb2_medals: 'Medallas',
+    lb2_sort_az: 'A a Z',
+    lb2_sort_rank: 'Mi puesto',
+    lb2_sort_played: 'Más jugados',
+    lb2_sort_recent: 'Recientes',
     lb2_nothing: 'Nada todavía',
     lb2_loading: 'Cargando',
     lb2_offline: 'Necesita conexión',
