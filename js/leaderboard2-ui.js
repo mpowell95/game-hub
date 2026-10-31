@@ -350,7 +350,7 @@ function winsHTML() {
   const tie = tiedIn(rows);
   const cols = '44px minmax(0,1fr) auto';
   const list = rows.length ? `<div class="lb2-card" data-role="rows">${rows.map((r) => `<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
-      ${med(r.rank, r.tie)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt">${esc(nameOf(r.g))}</span></span><span class="lb2-sub lb2-cat">${r.cat}</span></span><span class="r lb2-val num">${fmt(r.wins)}</span></button>`).join('')}</div>`
+      ${med(r.rank, r.tie)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt">${esc(nameOf(r.g))}</span></span></span><span class="r lb2-val num">${fmt(r.wins)}</span></button>`).join('')}</div>`
     : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   const me = rows.find((r) => r.key === _meKey) || null;
   const meName = esc(nameOf(meGroup() || { name: (loadProfile() || {}).name }));
@@ -389,6 +389,8 @@ function hofRankOf(key) { const r = _model.hof.find((x) => x.key === key); retur
 // --- Me: the old You tab in the new look ------------------------------------------------------------------
 // The number alone: its difficulty goes in a worded pill under the game's name (tierPill), never a bare shape.
 function valHTML(v) { return `<span>${esc(v.text)}</span>`; }
+/** Me's rows: the difficulty as plain words after the number (Matt, 2026-10-31: the pill was clutter). */
+const tierWords = (tier) => (tier ? `<span class="lb2-tw"> · ${esc(lb2TierWord(tier))}</span>` : '');
 function gapWords(p) {
   if (!p) return '';
   if (p.k === 'tier') return t('lb_gap', { k: 'tier', v: p.v, tier: p.tier });
@@ -403,17 +405,17 @@ function meHTML() {
     <button type="button" class="lb2-tile" data-act="tab" data-v="hof"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></button>
     <div class="lb2-tile"><b class="num">${pg ? pg.games.length : 0}</b><span>${esc(t2('lb2_games_tile'))}</span></div></div>`;
   const held = R.held.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_hold_h'))}</h2><div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>${x.mine.tier ? `<span class="lb2-t2">${tierPill(x.mine.tier)}</span>` : ''}</span><span class="lb2-right"><span class="lb2-strong lb2-rv num">${valHTML(x.mine)}</span>${medal(1, 'sm')}</span></button>`).join('')}</div></div>` : '';
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span></span><span class="lb2-right"><span class="lb2-strong lb2-rv num">${valHTML(x.mine)}${tierWords(x.mine.tier)}</span>${medal(1, 'sm')}</span></button>`).join('')}</div></div>` : '';
   const close = R.close.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_close_h'))}</h2><div class="lb2-card">${R.close.map((x) => {
     const gw = gapWords(x.gap);
     return `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>${x.mine.tier ? `<span class="lb2-t2">${tierPill(x.mine.tier)}</span>` : ''}
-      <span class="lb2-t2 lb2-vsr">${medal(1, 'xs')}<span class="lb2-nmt">${esc(nameOf(x.rec))}</span> <span class="lb2-rv num">${valHTML(x.recVal)}</span>${x.mine && x.mine.tier === x.recVal.tier ? '' : tierPill(x.recVal.tier)}</span>
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
+      <span class="lb2-t2 lb2-vsr">${medal(1, 'xs')}<span class="lb2-nmt">${esc(nameOf(x.rec))}</span> <span class="lb2-rv num">${valHTML(x.recVal)}</span>${tierWords(x.recVal.tier)}</span>
       ${gw ? `<span class="lb2-gapw">${esc(gw)}</span>` : ''}</span>
-      <span class="lb2-right"><span class="lb2-rv num lb2-strong">${valHTML(x.mine)}</span>${placeHTML(defPlace(x.id, _meKey))}</span></button>`;
+      <span class="lb2-right"><span class="lb2-rv num lb2-strong">${valHTML(x.mine)}${tierWords(x.mine.tier)}</span>${placeHTML(defPlace(x.id, _meKey))}</span></button>`;
   }).join('')}</div></div>` : '';
   const fresh = R.fresh.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_fresh_h'))}</h2><div class="lb2-card">${R.fresh.map((x) => `<div class="lb2-row sm">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vsr">${medal(1, 'xs')}<span class="lb2-nmt">${esc(nameOf(x.rec))}</span> <span class="lb2-rv num">${valHTML(x.recVal)}</span>${x.mine && x.mine.tier === x.recVal.tier ? '' : tierPill(x.recVal.tier)}</span></span>
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vsr">${medal(1, 'xs')}<span class="lb2-nmt">${esc(nameOf(x.rec))}</span> <span class="lb2-rv num">${valHTML(x.recVal)}</span>${tierWords(x.recVal.tier)}</span></span>
       ${playable(x.id) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(x.id)}">${esc(t2('lb2_play'))}</button>` : ''}</div>`).join('')}</div></div>` : '';
   const body = R.me ? tiles + held + close + fresh : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   return `${headHTML()}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${body}</div></div>`;
@@ -648,7 +650,7 @@ function ensureCss() {
 :root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6)}
 html.gh-lb2-open,html.gh-lb2-open body{overflow:hidden;overscroll-behavior:none}
 .lb2{position:fixed;top:0;left:0;right:0;bottom:auto;height:100vh;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
-html.gh-compact .lb2{z-index:19;padding-bottom:calc(64px + max(0px, env(safe-area-inset-bottom,0px) - 16px))}
+html.gh-compact .lb2{z-index:19;padding-bottom:calc(53px + max(6px, calc(env(safe-area-inset-bottom,0px) - 16px)))}
 .lb2 *{box-sizing:border-box}
 :where(.lb2) button{font:inherit;color:inherit;touch-action:manipulation;cursor:pointer}
 .lb2 .num{font-variant-numeric:tabular-nums}
@@ -725,6 +727,8 @@ html.gh-compact .lb2-x{display:none}
 .lb2-gear{width:48px;height:48px;flex-shrink:0;border-radius:12px;border:0;display:flex;align-items:center;justify-content:center;background:var(--l2-seg);color:var(--l2-text)}
 .lb2-pin{flex-shrink:0;display:grid;gap:8px;align-items:center;min-height:60px;padding:6px 16px;background:var(--l2-you);color:var(--l2-youText);border-top:1px solid var(--l2-line)}
 .lb2-pin .lb2-val{padding-right:0}
+.lb2-tw{font-weight:500;color:var(--l2-muted);white-space:nowrap}
+.lb2-tw{font-size:14px}
 .lb2-pinrank{font-weight:700}
 .lb2-pinplay{display:flex;justify-content:flex-end}
 .lb2-gap{font-size:13px;font-weight:500;line-height:1.25}
