@@ -50,7 +50,7 @@
 
 import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
-import { corrections } from './admin-config.js';
+import { corrections, isAdminDevice } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { loadProfile } from './profile-store.js';
@@ -2936,6 +2936,14 @@ export function closeLeaderboard() {
  *  and show you everyone who's played"). The board's back chevron, Esc and the phone's Back then
  *  return to the GAME, not to the every-game list it never passed through. */
 export async function openLeaderboard(opts = {}) {
+  // LEADERBOARD V2, ADMIN PREVIEW (2026-10-31): THE ONE GATE. On an admin device the new screen
+  // (js/leaderboard2-ui.js) opens instead, so Matt reviews it with real data; every other device
+  // takes the path below, unchanged. `legacy: true` is its "Old" link back here. Arrow Maze's Rush
+  // board exists only here, so a Rush button keeps opening it.
+  if (!(opts && opts.legacy) && !(opts && opts.woMode === 'rush') && isAdminDevice()) {
+    try { const m = await import('./leaderboard2-ui.js'); m.openLeaderboard2(opts || {}); return; }
+    catch (err) { console.error('[leaderboard] v2 failed to load; opening the old one', err); }
+  }
   ensureCss();
   ensureStatsCss();   // the player detail screen reuses My Stats' gs-* renderers/markup verbatim
   closeLeaderboard();
@@ -3416,5 +3424,144 @@ function ensureCss() {
   ].join('');
   document.head.appendChild(el);
 }
+
+// --- LEADERBOARD V2: the score/puzzle boards, read through THIS file's own orders (2026-10-31) -----
+// js/leaderboard2-ui.js (admin preview) ranks every score and puzzle game exactly the way this file's
+// boards do: the same rows, the same comparator (boardView / msAllCmp / msCellCmp), the same number and
+// the same ties (rankMap). These two functions only borrow the board state for one computation and put
+// it back, so this overlay's own behaviour is untouched. ADDITIVE; read-only like everything here.
+const LB2_RANK_ALT = { skeeball: [{ by: '', key: 'lb_sort_points' }, { by: 'high', key: 'lb_sort_high' }],
+  spellingbee: [{ by: 'points', key: 'lb_bee_points' }, { by: 'words', key: 'lb_bee_words' }] };
+function lb2With(id, st, fn) {
+  const saved = [_game, _tier, _view, _machine, _beeLang, _beeBy];
+  _game = id; _tier = st.tier == null ? null : st.tier; _view = st.view || ''; _machine = st.machine || 'all';
+  _beeLang = st.lang || 'all'; _beeBy = st.by || 'points';
+  try { return fn(); } finally { [_game, _tier, _view, _machine, _beeLang, _beeBy] = saved; }
+}
+/** What boards a score/puzzle game has: its difficulty tabs (`tiers`, All = null first), its other
+ *  tabs as `views` ([{view, label, tiered}], the first is the default), alternative numbers (`rankBy`)
+ *  and Spelling Bee's languages. Holdem and Cup Pong return only their extra boards (Bankroll, Solo);
+ *  their wins boards are built from byDiff/byMode by js/leaderboard2-boards.js. */
+export function lb2ScoreSpecs(list, id) {
+  const all = t('lb_diff_all');
+  if (id === 'holdem') return { tiers: [], views: [{ view: 'bank', label: t('lb_sort_bank'), tiered: false }], rankBy: [], langs: null };
+  if (id === 'cuppong') return { tiers: [], views: list.some((g) => cpSoloBest(g) !== null) ? [{ view: 'solo', label: tx('lb_tab_solo', 'Solo'), tiered: false }] : [], rankBy: [], langs: null };
+  if (id === 'skeeball') {
+    const views = [{ view: '', label: all, tiered: false }].concat(skMachinesPresent(list).map((m) => ({ view: 'm:' + m, label: skMachineMeta(m).name, tiered: false })));
+    return { tiers: [], views, rankBy: LB2_RANK_ALT.skeeball.map((r) => ({ by: r.by, label: t(r.key) })), langs: null };
+  }
+  if (id === 'spellingbee') {
+    return { tiers: [], views: [{ view: '', label: '', tiered: false }], rankBy: LB2_RANK_ALT.spellingbee.map((r) => ({ by: r.by, label: tx(r.key, r.by) })),
+      langs: [{ lang: 'all', label: tx('lb_bee_all', 'All') }, { lang: 'en', label: 'English' }, { lang: 'es', label: 'Español' }] };
+  }
+  if (id === 'contexto') return { tiers: [], views: [{ view: '', label: all, tiered: false }, { view: 'daily', label: tx('lb_ct_daily', 'Daily'), tiered: false }], rankBy: [], langs: null };
+  if (id === 'minesweeper') return { tiers: [null, 1, 2, 3, 4], views: [{ view: '', label: '', tiered: true }], rankBy: [], langs: null };
+  let tiers = fieldTiersPresent(list, [id]);
+  if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
+  const views = [{ view: '', label: id === 'snake' || id === 'brickblitz' ? all : '', tiered: true }];
+  if (id === 'snake') views.push({ view: 'off', label: t('lb_sn_walls_off'), tiered: false }, { view: 'on', label: t('lb_sn_walls_on'), tiered: false });
+  if (id === 'brickblitz') {
+    for (const m of ['arcade', 'endless']) if (list.some((g) => lb2BzModeRow(g, m, null))) views.push({ view: 'bz:' + m, label: m === 'arcade' ? 'Arcade' : 'Endless', tiered: true });
+  }
+  return { tiers: tiers.length ? [null, ...tiers] : [], views, rankBy: [], langs: null };
+}
+/** Brick Breaker's best per mode (js/game-stats.js withMode `{m}` + `{hi}`, recorded from 2026-10-30):
+ *  { tier, hi, played } at `tier` (null = the hardest tier with a best), or null. */
+function lb2BzModeRow(g, m, tier) {
+  const bm = (((g.games || {}).brickblitz || {}).byMode) || {};
+  const per = {};
+  for (const k of Object.keys(bm)) {
+    if (!k.split('|').includes('m=' + m)) continue;
+    for (const d of Object.keys(bm[k] || {})) {
+      const b = bm[k][d] || {}; const tr = tierOf(d) || 0;
+      const c = per[tr] || (per[tr] = { hi: 0, played: 0 });
+      c.hi = Math.max(c.hi, +b.hi || 0); c.played += b.played | 0;
+    }
+  }
+  if (tier != null) { const c = per[tier]; return c && c.hi > 0 ? { tier, hi: c.hi, played: c.played } : null; }
+  for (const tr of [4, 3, 2, 1, 0]) { const c = per[tr]; if (c && c.hi > 0) return { tier: tr || null, hi: c.hi, played: c.played }; }
+  return null;
+}
+function lb2SmallMedal(ct) {
+  const c = ctCounts(ct);
+  const k = CT_KINDS.find((x) => c[x] > 0);
+  return k ? ctMedalHTML(k, c[k], 30) : '—';
+}
+/** One score/puzzle board: rows in the board's own order with ranks (ties share one), each row's
+ *  printed number (`html` and plain `text`), games, and `num`/`tier` for the gap line. `gap(me, above)`
+ *  returns { k, v, n } (v already formatted), { k: 'tier' } across difficulties, or null. */
+export function lb2ScoreBoard(list, id, spec = {}) {
+  const view = spec.view || '';
+  const st = { tier: spec.tier, lang: spec.lang, by: spec.by,
+    view: view.startsWith('m:') || view.startsWith('bz:') ? (id === 'skeeball' ? spec.by || '' : '') : (id === 'skeeball' ? spec.by || '' : view),
+    machine: view.startsWith('m:') ? view.slice(2) : 'all' };
+  return lb2With(id, st, () => {
+    let rows, cmp, kind = gapKind(id), lower = LOWER_IS_BETTER.has(id), unit = '';
+    let games = (g) => boardPlaysOf(g, id), num = (g) => boardMetricOf(g, id), tierOfRow = (g) => boardTierOf(g, id);
+    let html = null, text = null;
+    if (id === 'minesweeper') {
+      const tier = _tier;
+      rows = tier == null ? list.filter((g) => msHeadline(g)) : list.filter((g) => msCellAt(g, tier));
+      cmp = tier == null ? msAllCmp : (a, b) => msCellCmp(msCellAt(a, tier), msCellAt(b, tier));
+      rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
+      const cell = (g) => (tier == null ? msHeadline(g) : { tier, c: msCellAt(g, tier) });
+      html = (g) => msCellHTML(cell(g).c);
+      text = (g) => { const c = cell(g).c; return c.ms != null ? formatBoardMetric(c.ms, 'minesweeper', '') : c.pct != null ? c.pct + '%' : '—'; };
+      games = (g) => playsAtTier(g, ['minesweeper'], tier);
+      num = (g) => { const c = cell(g); return c && c.c.ms != null ? c.c.ms : null; };
+      tierOfRow = (g) => { const c = cell(g); return c ? c.tier : null; };
+      kind = 'time'; lower = true; unit = t('lb_unit_ms_best');
+    } else if (view.startsWith('bz:')) {
+      const m = view.slice(3);
+      const at = (g) => lb2BzModeRow(g, m, _tier);
+      rows = list.filter((g) => at(g));
+      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi);
+      rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
+      num = (g) => at(g).hi; tierOfRow = (g) => at(g).tier; games = (g) => at(g).played;
+      text = (g) => numText(at(g).hi); kind = 'points'; lower = false; unit = t('lb_unit_points');
+    } else {
+      const v = boardView(list, id);
+      rows = v.rows; cmp = v.cmp; unit = v.unit || unitTextOf(id, null);
+      html = (g) => v.val(g);
+      if (id === 'skeeball') {
+        games = (g) => skPlaysAt(g, _machine);
+        num = _view === 'high' ? (g) => skBestAt(g, _machine) : (g) => skPointsAt(g, _machine);
+        tierOfRow = () => null; kind = 'points';
+        text = (g) => numText(num(g));
+      } else if (id === 'contexto') {
+        const src = _view === 'daily' ? ctDailyOf : ctOf;
+        games = (g) => (_view === 'daily' ? (ctDailyOf(g).played | 0) : boardPlaysOf(g, id));
+        html = (g) => lb2SmallMedal(src(g)); kind = null; unit = t('lb_unit_ct_medals');
+        text = (g) => { const c = ctCounts(src(g)); const k = CT_KINDS.find((x) => c[x] > 0); return k ? `${CT_MEDAL_GLYPH[k === 'iron' ? 'solved' : k]} ${c[k]}` : '—'; };
+      } else if (id === 'cuppong' && _view === 'solo') {
+        games = cpSoloRacks; num = cpSoloBest; tierOfRow = () => null; kind = 'throws'; lower = true;
+        text = (g) => String(cpSoloBest(g)); unit = t('lb_unit_fewest');
+      } else if (id === 'snake' && (_view === 'off' || _view === 'on')) {
+        const w = _view;
+        num = (g) => snWallsCell(g, w).v; tierOfRow = (g) => snWallsCell(g, w).tier; text = (g) => String(snWallsCell(g, w).v);
+      } else if (id === 'holdem') {
+        kind = 'bank'; tierOfRow = () => null;
+      } else if (id === 'spellingbee' && beeBoard()) {
+        games = (g) => beeRowFor(g).days; tierOfRow = () => null;
+        kind = beeView().by === 'words' ? 'words' : 'points';
+      }
+    }
+    if (!text) text = (g) => (id === 'holdem' && hbReview(g) ? t('lb_hb_review') : metricText(num(g), id));
+    if (!html) html = (g) => `<span>${esc(text(g))}</span>`;
+    const { rankOf } = rankMap(rows, () => 0, cmp);
+    const out = rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], games: games(g) | 0, num: num(g), tier: tierOfRow(g), html: html(g), text: text(g), noPodium: id === 'holdem' && _view === 'bank' && num(g) == null }));
+    const gap = (me, above) => {
+      if (!kind || !me || !above) return null;
+      if ((me.tier || 0) !== (above.tier || 0) || me.num == null || above.num == null) return { k: 'tier' };
+      let d = lower ? me.num - above.num : above.num - me.num;
+      let v;
+      if (kind === 'time') { d = Math.floor(me.num / 1000) - Math.floor(above.num / 1000); v = formatTimeMetric(d * 1000); }
+      else v = kind === 'bank' ? bankText(d) : numText(d);
+      return d > 0 ? { k: kind, v, n: d } : null;
+    };
+    return { rows: out, unit, kind, lower, gap };
+  });
+}
+export { GAME_META, ensureCss as ensureLeaderboardCss };
 
 export default { openLeaderboard, closeLeaderboard };
