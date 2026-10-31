@@ -780,6 +780,7 @@ html.gh-compact .lb2-x{display:none}
 
 .lb2-shape{background:#fff;border-radius:4px;padding:1px;box-sizing:content-box}
 :root:not(.gh-dark) .lb2-shape{background:transparent;padding:0}
+:root.gh-dark .lb2 .lb-dshape-t3,:root.gh-dark .lb2 .lb-dshape-t4{fill:#1c2430}
 .lb2-close{align-items:flex-start;padding-top:10px;padding-bottom:10px}
 .lb2-close .lb2-right{align-self:center}
 .lb2-vs{display:flex;align-items:center;gap:10px;color:var(--l2-text)}
