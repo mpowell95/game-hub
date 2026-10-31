@@ -3729,6 +3729,9 @@ export function lb2Players(list) {
   // `cat` = the old card's line under the name (catInlineHTML: wins per tier shape, runs, VS wins), as HTML.
   return rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), wins: value(g), played: playedOf(g, null), cat: catInlineHTML(g) }));
 }
+/** v2's place medal (Matt, 2026-10-31: "I like the medals we recently created for Contexto more than the
+ *  ribbons"): Contexto's gold / silver / bronze image with the PLACE on its face, `h` px tall. */
+export function lb2Medal(rank, h = 36) { return ctMedalHTML(['gold', 'silver', 'bronze'][rank - 1] || 'iron', rank, h); }
 /** The tab-word for a difficulty, and the old board's unit-less number text (v2's lists). */
 export function lb2TierWord(tier) { return tierWord(tier); }
 /** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */
