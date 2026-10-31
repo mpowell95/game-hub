@@ -3562,6 +3562,6 @@ export function lb2ScoreBoard(list, id, spec = {}) {
     return { rows: out, unit, kind, lower, gap };
   });
 }
-export { GAME_META, ensureCss as ensureLeaderboardCss };
+export { GAME_META, ensureCss as ensureLeaderboardCss, medalSVG };
 
 export default { openLeaderboard, closeLeaderboard };

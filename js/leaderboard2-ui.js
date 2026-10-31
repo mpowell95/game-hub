@@ -25,7 +25,9 @@ import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
-import { GAME_META, lb2ScoreSpecs, lb2ScoreBoard, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { GAME_META, lb2ScoreSpecs, lb2ScoreBoard, ensureLeaderboardCss, openLeaderboard, medalSVG } from './leaderboard-ui.js';
+import { trueBottom } from './tabbar-fix.js';
+import { onViewportResize } from './viewport.js';
 
 const t = makeT(STRINGS);
 const t2 = makeT(LB2);
@@ -83,6 +85,22 @@ let _ranks = null;
 let _boardMemo = new Map();
 let _pidx = [];           // row index -> person key (never in the DOM)
 let _bidx = [];           // row index -> board
+let _offVp = null;
+let _ty = 0;
+/** iOS 26 can leave a fixed element's inset:0 at about half the screen (WebKit bug 297779, js/tabbar-fix.js):
+ *  the launcher showed under the board. Size the page to the TRUE screen bottom, like the tab bar's repair. */
+function fitHeight() { if (_host) _host.style.height = Math.max(trueBottom(), window.innerHeight || 0) + 'px'; }
+/** Only a scroll list (or the sheet) moves under a finger; nothing chains to the page behind. */
+function onTouchStart(e) { _ty = e.touches && e.touches[0] ? e.touches[0].clientY : 0; }
+function onTouchMove(e) {
+  const t = e.touches && e.touches[0];
+  if (!t || e.target.closest('input')) return;
+  const sc = e.target.closest('.lb2-scroll, .lb2-sh');
+  if (!sc) { e.preventDefault(); return; }
+  const dy = t.clientY - _ty;
+  const atTop = sc.scrollTop <= 0, atEnd = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1;
+  if ((dy > 0 && atTop) || (dy < 0 && atEnd)) e.preventDefault();
+}
 
 const scoreApi = {
   specs: (people, id) => lb2ScoreSpecs(people, id),
@@ -228,12 +246,15 @@ function metricHead(b) {
 const SVG = {
   back: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
   heart: (s, on) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.2 3.4 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.6 0 6 3.7 4.5 7.3C19.5 16.4 12 21 12 21z"/></svg>`,
-  crown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>',
   search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   gear: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   x: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
 };
-const med = (n, cls = '') => (n <= 3 ? `<span class="lb2-med m${n} num ${cls}">${n}</span>` : `<span class="lb2-plain num">${n}</span>`);
+// The old board's ribboned medals (leaderboard-ui.js medalSVG), number on the face, for 1st to 3rd.
+const medal = (n, cls = '') => `<span class="lb2-medal ${cls}" role="img" aria-label="${n}">${medalSVG(n)}</span>`;
+const med = (n, cls = '') => (n <= 3 ? medal(n, cls) : `<span class="lb2-plain num">${n}</span>`);
+const pod = (r) => (r.rank <= 3 ? ` pod${r.rank}` : '');
+const art = (id, cls = '') => `<span class="lb2-ic ${cls}">${GAME_ART[hubIdOf(id)] || ''}</span>`;
 const mv = (d) => (d > 0 ? `<span class="lb2-mv up num">▲${d}</span>` : d < 0 ? `<span class="lb2-mv dn num">▼${-d}</span>` : '');
 function pIdx(key) { let i = _pidx.indexOf(key); if (i < 0) { i = _pidx.length; _pidx.push(key); } return i; }
 function bIdx(b) { let i = _bidx.indexOf(b); if (i < 0) { i = _bidx.length; _bidx.push(b); } return i; }
@@ -262,6 +283,10 @@ function chipNow(rows) {
   if (_chip) return _chip;
   return rows.some((r) => r.fav) ? 'fav' : rows.some((r) => r.played) ? 'played' : 'all';
 }
+/** The viewer's placement in a game, in words, only when the medal alone does not say it: "1st in 3". */
+function placeLine(firsts, best) { return firsts > 1 ? t2('lb2_first_in', { n: firsts }) : ''; }
+/** Best placement: a medal for 1st to 3rd, "#N" below that, a dash when not ranked. */
+function bestHTML(best) { return best == null ? '<span class="lb2-best num">–</span>' : best <= 3 ? medal(best, 'sm') : `<span class="lb2-best num">#${best}</span>`; }
 function boardsListHTML() {
   const rows = gameRows();
   const chip = chipNow(rows);
@@ -272,12 +297,11 @@ function boardsListHTML() {
   if (chip === 'all' && !q) list.sort(az);
   else list.sort((a, b) => ((a.best == null) - (b.best == null)) || ((a.best || 0) - (b.best || 0)) || az(a, b));
   const items = list.map((r) => {
-    const art = GAME_ART[hubIdOf(r.id)] || '';
-    const sub = r.id === 'spellingbee' ? t2('lb2_en_es') : t2('lb2_n_boards', { n: r.n });
+    const sub = placeLine(r.crowns, r.best);
     return `<button type="button" class="lb2-row" data-act="game" data-game="${esc(r.id)}">
-      <span class="lb2-ic">${art}</span>
-      <span class="lb2-grow"><span class="lb2-t1">${esc(r.title)}</span><span class="lb2-t2">${esc(sub)}</span></span>
-      <span class="lb2-right"><span class="lb2-crown num${r.crowns ? '' : ' mute'}">${SVG.crown}${r.crowns}</span><span class="lb2-best num">${r.best != null ? '#' + r.best : '–'}</span></span>
+      ${art(r.id)}
+      <span class="lb2-grow"><span class="lb2-t1">${esc(r.title)}</span>${sub ? `<span class="lb2-t2">${esc(sub)}</span>` : ''}</span>
+      <span class="lb2-right">${bestHTML(r.best)}</span>
     </button>`;
   }).join('');
   return (items ? `<div class="lb2-card">${items}</div>` : `<p class="lb2-empty-t">${esc(t2('lb2_none'))}</p>`)
@@ -350,7 +374,7 @@ function boardScreenHTML(top) {
   const games = b.game !== 'spellingbee';
   const fav = loadFavorites().includes(hubIdOf(game));
   const bar = `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
-    <span class="lb2-grow"><h1>${esc(title(game))}</h1><span class="lb2-t2">${esc(subLine(b))}</span></span>
+    ${art(game, 'hd')}<span class="lb2-grow lb2-pl"><h1>${esc(title(game))}</h1><span class="lb2-t2">${esc(subLine(b))}</span></span>
     <button type="button" class="lb2-icon lb2-heart" data-act="fav" aria-pressed="${fav}" aria-label="${esc(t2(fav ? 'lb2_fav_remove' : 'lb2_fav_add'))}">${SVG.heart(24, fav)}</button></div>`;
   const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span class="c">${esc(t2('lb2_col_rank'))}</span><span>${esc(t2('lb2_col_player'))}</span>${games ? `<span class="r">${esc(t2('lb2_col_games'))}</span>` : ''}<span class="r">${esc(metricHead(b))}</span></div>`;
   const rows = b.rows.slice(0, TOP_N);
@@ -358,9 +382,9 @@ function boardScreenHTML(top) {
   if (!rows.length) {
     const d = b.diff ? tierName(b.diff) : '';
     const play = playable(game) ? `<button type="button" class="lb2-play" data-act="play" data-game="${esc(game)}">${esc(d ? t2('lb2_play_diff', { d }) : t2('lb2_play'))}</button>` : '';
-    list = `<div class="lb2-card"><div class="lb2-emptyst"><span class="lb2-med m1 big num">1</span><b>${esc(t2('lb2_open'))}</b>${play}</div></div>`;
+    list = `<div class="lb2-card"><div class="lb2-emptyst">${medal(1, 'big')}<b>${esc(t2('lb2_open'))}</b>${play}</div></div>`;
   } else {
-    list = `<div class="lb2-card">${rows.map((r) => `<button type="button" class="lb2-lr${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}">
+    list = `<div class="lb2-card">${rows.map((r) => `<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}">
       ${med(r.rank)}<span class="lb2-nm"><span class="lb2-nmt">${esc(nameOf(r))}</span>${mv(moveOf(b.id, r))}</span>${games ? `<span class="r lb2-gm num">${fmt(r.games)}</span>` : ''}<span class="r lb2-val num">${valueHTML(b, r)}</span></button>`).join('')}</div>`;
   }
   // Bottom controls: the difficulty (or Spelling Bee's language) in one tap, the rest behind the gear.
@@ -383,7 +407,7 @@ function boardScreenHTML(top) {
   const meName = esc(nameOf(meGroup() || { name: (loadProfile() || {}).name }));
   let pin;
   if (me) {
-    pin = `<div class="lb2-pin" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">#${me.rank}</span>
+    pin = `<div class="lb2-pin" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me.rank <= 3 ? medal(me.rank, 'sm') : '#' + me.rank}</span>
       <span class="lb2-grow"><span class="lb2-nm"><b class="lb2-nmt">${meName}</b>${mv(moveOf(b.id, me))}</span><span class="lb2-gap num">${esc(B.gapLine(b, me, t2, fmt))}</span></span>
       ${games ? `<span class="r num">${fmt(me.games)}</span>` : ''}<span class="r lb2-val num">${valueHTML(b, me)}</span></div>`;
   } else {
@@ -431,10 +455,10 @@ function hofHTML() {
   const rows = _model.hof[which];
   const bid = 'hof~' + which;
   const cols = '44px minmax(0,1fr) 46px 46px 46px';
-  const m = (n) => `<span class="c"><span class="lb2-med m${n} sm num">${n}</span></span>`;
+  const m = (n) => `<span class="c">${medal(n, 'xs')}</span>`;
   const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span class="c">#</span><span>${esc(t2('lb2_col_player'))}</span>${m(1)}${m(2)}${m(3)}</div>`;
-  const list = rows.length ? `<div class="lb2-card">${rows.map((r) => `<button type="button" class="lb2-lr${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}">
-      <span class="c num lb2-hofrank${r.rank <= 3 ? ' top' : ''}">${r.rank}</span><span class="lb2-nm"><span class="lb2-nmt">${esc(nameOf(r))}</span>${mv(moveOf(bid, r))}</span>
+  const list = rows.length ? `<div class="lb2-card">${rows.map((r) => `<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}">
+      ${med(r.rank)}<span class="lb2-nm"><span class="lb2-nmt">${esc(nameOf(r))}</span>${mv(moveOf(bid, r))}</span>
       <span class="c num lb2-strong">${r.firsts}</span><span class="c lb2-gm num">${r.seconds}</span><span class="c lb2-gm num">${r.thirds}</span></button>`).join('')}</div>`
     : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   const me = rows.find((r) => r.key === _meKey) || null;
@@ -443,7 +467,7 @@ function hofHTML() {
   if (!me) gap = t2('lb2_not_ranked');
   else if (me.rank === 1) gap = t2('lb2_first');
   else { const above = B.aboveOf(rows, me); gap = t2('lb2_pass', { n: B.firstsToPass(me, above), r: above.rank }); }
-  const pin = `<div class="lb2-pin" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me ? '#' + me.rank : '–'}</span>
+  const pin = `<div class="lb2-pin" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me ? (me.rank <= 3 ? medal(me.rank, 'sm') : '#' + me.rank) : '–'}</span>
     <span class="lb2-grow"><span class="lb2-nm"><b class="lb2-nmt">${meName}</b>${me ? mv(moveOf(bid, me)) : ''}</span><span class="lb2-gap num">${esc(gap)}</span></span>
     <span class="c num lb2-strong">${me ? me.firsts : ''}</span><span class="c num">${me ? me.seconds : ''}</span><span class="c num">${me ? me.thirds : ''}</span></div>`;
   const ctrl = `<div class="lb2-ctrl"><div class="lb2-grow">${seg([{ v: 'all', label: t2('lb2_all_levels') }, { v: 'top', label: t2('lb2_top_level') }], which, 'hoflvl')}</div></div>`;
@@ -458,7 +482,7 @@ function meHTML() {
   const tiles = `<div class="lb2-tiles">
     <button type="button" class="lb2-tile" data-act="myfirsts"><b class="num">${s.firsts}</b><span>${esc(t2('lb2_firsts_tile'))}</span></button>
     <button type="button" class="lb2-tile" data-act="tab" data-v="hof"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></button>
-    <button type="button" class="lb2-tile" data-act="tab" data-v="boards"><b class="num">${s.ranked}</b><span>${esc(t2('lb2_boards_tile'))}</span></button></div>`;
+    <button type="button" class="lb2-tile" data-act="tab" data-v="boards"><b class="num">${s.ranked}</b><span>${esc(t2('lb2_ranked_tile'))}</span></button></div>`;
   const close = [];
   for (const b of _model.boards) {
     const r = b.rows.find((x) => x.key === _meKey);
@@ -469,15 +493,15 @@ function meHTML() {
   }
   close.sort((a, b) => a.r.rank - b.r.rank || (a.gap ? 0 : 1) - (b.gap ? 0 : 1) || title(a.b.game).localeCompare(title(b.b.game)));
   const closeHTML = close.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_closest'))}</h2><div class="lb2-card">${close.slice(0, 5).map(({ b, r, gap }) => `<button type="button" class="lb2-row" data-act="board" data-bi="${bIdx(b)}">
-      ${med(r.rank)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(b.game))}</span><span class="lb2-t2">${esc(boardDesc(b))}</span></span>
-      <span class="lb2-acc num">${gap && gap.k !== 'tier' ? esc(t2('lb2_amt', gap)) : ''}</span></button>`).join('')}</div></div>` : '';
+      ${art(b.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(b.game))}</span><span class="lb2-t2">${esc(boardDesc(b))}</span></span>
+      <span class="lb2-right">${med(r.rank, 'sm')}<span class="lb2-acc lb2-rv num">${gap && gap.k !== 'tier' ? esc(t2('lb2_amt', gap)) : ''}</span></span></button>`).join('')}</div></div>` : '';
   const games = _model.games.filter((id) => playedGame(id)).map((id) => ({ id, title: title(id), f: s.crowns[id] || 0, n: s.boards[id] || 0, best: s.best[id] }));
   if (_meSort === 'az') games.sort((a, b) => a.title.localeCompare(b.title));
   else games.sort((a, b) => ((a.best == null) - (b.best == null)) || ((a.best || 0) - (b.best || 0)) || (b.f - a.f) || a.title.localeCompare(b.title));
   const gamesHTML = `<div><div class="lb2-gh"><h2 class="lb2-h2">${esc(t2('lb2_games'))}</h2><div class="lb2-gseg">${seg([{ v: 'rank', label: t2('lb2_sort_rank') }, { v: 'az', label: t2('lb2_sort_az') }], _meSort, 'mesort')}</div></div>
-    ${games.length ? `<div class="lb2-card">${games.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}"><span class="lb2-ic sm">${GAME_ART[hubIdOf(x.id)] || ''}</span>
-      <span class="lb2-grow"><span class="lb2-t1">${esc(x.title)}</span><span class="lb2-t2">${esc(x.id === 'spellingbee' ? t2('lb2_en_es') : x.f ? t2('lb2_firsts_line', { f: x.f, b: x.n }) : t2('lb2_n_boards', { n: x.n }))}</span></span>
-      <span class="lb2-strong num">${x.best != null ? '#' + x.best : '–'}</span></button>`).join('')}</div>` : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`}</div>`;
+    ${games.length ? `<div class="lb2-card">${games.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">${art(x.id)}
+      <span class="lb2-grow"><span class="lb2-t1">${esc(x.title)}</span>${placeLine(x.f, x.best) ? `<span class="lb2-t2">${esc(placeLine(x.f, x.best))}</span>` : ''}</span>
+      <span class="lb2-right">${bestHTML(x.best)}</span></button>`).join('')}</div>` : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`}</div>`;
   return `${headHTML()}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tiles}${closeHTML}${gamesHTML}</div></div>`;
 }
 
@@ -495,9 +519,9 @@ function playerHTML(top) {
     <span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1>${esc(nameOf(g))}</h1><span class="lb2-t2">${hr ? esc(t2('lb2_hof_rank', { n: hr })) : ''}</span></span></div>`;
   const tiles = `<div class="lb2-tiles"><div class="lb2-tile"><b class="num">${s.firsts}</b><span>${esc(t2('lb2_firsts_tile'))}</span></div>
     <div class="lb2-tile"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></div>
-    <div class="lb2-tile"><b class="num">${s.ranked}</b><span>${esc(t2('lb2_boards_tile'))}</span></div></div>`;
+    <div class="lb2-tile"><b class="num">${s.ranked}</b><span>${esc(t2('lb2_ranked_tile'))}</span></div></div>`;
   const list = firsts.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_firsts_h'))}</h2><div class="lb2-card">${shown.map(({ b, r }) => `<button type="button" class="lb2-row sm" data-act="board" data-bi="${bIdx(b)}">
-      ${med(1)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(b.game))}</span><span class="lb2-t2">${esc(boardDesc(b))}</span></span><span class="lb2-strong num">${esc(valueText(b, r))}</span></button>`).join('')}</div></div>
+      ${art(b.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(b.game))}</span><span class="lb2-t2">${esc(boardDesc(b))}</span></span><span class="lb2-right">${medal(1, 'xs')}<span class="lb2-strong lb2-rv num">${esc(valueText(b, r))}</span></span></button>`).join('')}</div></div>
     ${!top.all && firsts.length > PLAYER_LIST ? `<button type="button" class="lb2-more" data-act="seeall">${esc(t2('lb2_see_all', { n: firsts.length }))}</button>` : ''}` : '';
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tiles}${list}</div></div>`;
 }
@@ -617,6 +641,8 @@ export function closeLeaderboard2({ keepHistory = false } = {}) {
   _unsub = null;
   if (_beeOff) { try { _beeOff(); } catch { /* gone */ } _beeOff = null; }
   if (_host) { _host.remove(); _host = null; lightTab(false); }
+  document.documentElement.classList.remove('gh-lb2-open');
+  if (_offVp) { try { _offVp(); } catch { /* gone */ } _offVp = null; }
   document.removeEventListener('keydown', onKey);
   document.removeEventListener('click', onTabTap, true);
   window.removeEventListener('popstate', onPop);
@@ -644,8 +670,13 @@ export async function openLeaderboard2(opts = {}) {
   host.innerHTML = '<div class="lb2-page"></div>';
   host.addEventListener('click', onClick);
   host.addEventListener('input', onInput);
+  host.addEventListener('touchstart', onTouchStart, { passive: true });
+  host.addEventListener('touchmove', onTouchMove, { passive: false });
   document.body.appendChild(host);
   _host = host;
+  document.documentElement.classList.add('gh-lb2-open');
+  fitHeight();
+  _offVp = onViewportResize(fitHeight);
   lightTab(true);
   document.addEventListener('keydown', onKey);
   document.addEventListener('click', onTabTap, true);
@@ -685,7 +716,8 @@ function ensureCss() {
   el.textContent = `
 .lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55}
 :root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6)}
-.lb2{position:fixed;inset:0;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
+html.gh-lb2-open,html.gh-lb2-open body{overflow:hidden;overscroll-behavior:none}
+.lb2{position:fixed;top:0;left:0;right:0;bottom:auto;height:100vh;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
 html.gh-compact .lb2{z-index:19;padding-bottom:calc(64px + max(0px, env(safe-area-inset-bottom,0px) - 16px))}
 .lb2 *{box-sizing:border-box}
 :where(.lb2) button{font:inherit;color:inherit;touch-action:manipulation;cursor:pointer}
@@ -716,16 +748,25 @@ html.gh-compact .lb2-x{display:none}
 .lb2-row{width:100%;display:flex;align-items:center;gap:12px;min-height:62px;padding:8px 14px;border:0;border-top:1px solid var(--l2-line);background:transparent;text-align:left}
 .lb2-row.sm{min-height:58px}
 .lb2-card>.lb2-row:first-child,.lb2-card>.lb2-lr:first-child{border-top:0}
-.lb2-ic{width:44px;height:44px;flex-shrink:0;border-radius:10px;overflow:hidden;background:var(--l2-chip);display:flex;align-items:center;justify-content:center}
-.lb2-ic.sm{width:40px;height:40px}
+.lb2-ic{width:64px;height:36px;flex-shrink:0;border-radius:8px;overflow:hidden;background:var(--l2-chip);display:flex;align-items:center;justify-content:center}
+.lb2-ic.hd{width:56px;height:32px;margin-left:2px}
 .lb2-ic svg{width:100%;height:100%;display:block}
 .lb2-grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .lb2-t1{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-t2{font-size:14px;color:var(--l2-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
-.lb2-crown{display:flex;align-items:center;gap:4px;font-size:16px;font-weight:700}
-.lb2-crown.mute{color:var(--l2-muted)}
-.lb2-best{font-size:13px;color:var(--l2-muted)}
+.lb2-right{flex-direction:row;align-items:center;gap:8px}
+.lb2-best{font-size:16px;font-weight:700;color:var(--l2-muted);min-width:30px;text-align:center}
+.lb2-medal{display:block;width:30px;height:36px;margin:0 auto;flex-shrink:0}
+.lb2-medal svg{width:100%;height:100%;display:block}
+.lb2-medal.sm{width:26px;height:31px;margin:0}
+.lb2-medal.xs{width:22px;height:26px}
+.lb2-medal.big{width:56px;height:67px}
+.lb2-lr.pod1 .lb2-medal{filter:drop-shadow(0 0 6px rgba(245,200,66,.55))}
+.lb2-lr.pod1{background:linear-gradient(90deg,rgba(245,200,66,.24),rgba(245,200,66,.06) 70%);box-shadow:inset 5px 0 0 #f5c842}
+.lb2-lr.pod1 .lb2-nm{font-weight:700}
+.lb2-lr.pod2{box-shadow:inset 5px 0 0 #b9c0c9}
+.lb2-lr.pod3{box-shadow:inset 5px 0 0 #c27a42}
 .lb2-old{align-self:center;min-height:44px;padding:0 20px;border:0;background:transparent;color:var(--l2-muted);font-size:14px;font-weight:600;text-decoration:underline}
 .lb2-bar{min-height:60px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:4px 4px 0}
 .lb2-bar h1{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -735,14 +776,9 @@ html.gh-compact .lb2-x{display:none}
 .lb2-pl{padding-left:8px}
 .lb2-cols{flex-shrink:0;display:grid;gap:8px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--l2-muted);align-items:center}
 .lb2 .c{text-align:center;display:flex;justify-content:center}.lb2 .r{text-align:right;justify-content:flex-end}
-.lb2-lr{width:100%;display:grid;gap:8px;align-items:center;min-height:48px;padding:0 4px;border:0;border-top:1px solid var(--l2-line);background:transparent;text-align:left}
+.lb2-lr{width:100%;display:grid;gap:8px;align-items:center;min-height:52px;padding:0 4px;border:0;border-top:1px solid var(--l2-line);background:transparent;text-align:left}
 .lb2-lr.me{background:var(--l2-you);color:var(--l2-youText)}
 .lb2-lr.me .lb2-nm{font-weight:700}
-.lb2-med{width:30px;height:30px;border-radius:15px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#14161A;flex-shrink:0}
-.lb2-med.m1{background:var(--l2-g)}.lb2-med.m2{background:var(--l2-s)}.lb2-med.m3{background:var(--l2-b)}
-.lb2-med.sm{width:26px;height:26px;font-size:13px}
-.lb2-med.big{width:56px;height:56px;border-radius:28px;font-size:24px}
-.lb2-row .lb2-med{margin:0}
 .lb2-plain{font-size:15px;font-weight:600;color:var(--l2-muted);text-align:center;display:block}
 .lb2-nm{display:flex;align-items:center;gap:6px;min-width:0;font-size:16px;font-weight:500}
 .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -759,6 +795,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-hofrank{font-weight:700;color:var(--l2-muted)}.lb2-hofrank.top{color:var(--l2-text)}
 .lb2-lr.me .lb2-hofrank{color:inherit}
 .lb2-acc{font-size:14px;font-weight:700;color:var(--l2-accent);white-space:nowrap}
+.lb2-rv{min-width:72px;text-align:right}
 .lb2-ctrl{flex-shrink:0;display:flex;gap:8px;padding:10px 16px;align-items:center}
 .lb2-gear{width:48px;height:48px;flex-shrink:0;border-radius:12px;border:0;display:flex;align-items:center;justify-content:center;background:var(--l2-seg);color:var(--l2-text)}
 .lb2-pin{flex-shrink:0;display:grid;gap:8px;align-items:center;min-height:60px;padding:6px 16px;background:var(--l2-you);color:var(--l2-youText);border-top:1px solid var(--l2-line)}
