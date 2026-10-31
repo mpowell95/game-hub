@@ -2,8 +2,10 @@
 
 Design source: Dropbox `/Claude Code Refs/leaderboard-mockups.zip` (SPEC.md + 6 screens). Mockups for approval:
 https://claude.ai/artifact/SMav6oWdSxsR3X1darSnjX (file: `docs/mockups/leaderboard-v2.html`; Boards, Darts board, settings sheet, Multiplayer board, empty board, Spelling Bee
-board, Hall of Fame, Me, Player; dark by default). Status: MOCKUPS SENT, NOT APPROVED. Build nothing until Matt
-says "build it".
+board, Hall of Fame, Me, Player; dark by default). Status (2026-10-31): BUILT, admin-only (v1374). Overnight rounds 1-2 replaced the boards below with the OLD
+board's numbers (Matt: "an interface redesign, not a stats redesign"): no Win %, no mode boards, no Top level, no
+arrows. See `LEADERBOARD-V2-REVIEW-2.md`, `-REVIEW-3.md`, `-PLAN-R1.md`, `-PLAN-R2.md`, `-MORNING.md`. The table
+below is the ORIGINAL design, kept for the record.
 
 ## Settled with Matt (2026-10-30)
 
