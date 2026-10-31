@@ -1944,17 +1944,26 @@ function youValText(id, v) {
  *  difficulty outranks score on every board: a Medium 40 is not "30 ahead" of a Hard 10. When the
  *  viewer has no score at that tier, the line says what to beat and where instead of a difference. */
 function gapText(me, rec, id, b = (x) => x) {
+  const p = gapParts(me, rec, id);
+  if (!p) return '';
+  if (p.k === 'tier') return tx('lb_gap', '', { k: 'tier', v: b(esc(p.v)), tier: esc(p.tier) });
+  return tx('lb_gap', '', { k: p.k, v: b(p.v), n: p.n });
+}
+/** gapText's maths as parts (2026-10-31, shared with Leaderboard v2's pinned row so both boards
+ *  print the same gap): { k, v, n } for a difference in one unit (`v` formatted), { k: 'tier', v,
+ *  tier } when `rec` is at a harder difficulty, or null when there is no honest number. Same rules. */
+function gapParts(me, rec, id) {
   const k = gapKind(id);
-  if (!k || !me || !rec || me.key === rec.key) return '';
+  if (!k || !me || !rec || me.key === rec.key) return null;
   // A no-hint record over a hint-only row: no difference in one unit to give (2026-10-29).
-  if (!noHintTierOf(rec, id) !== !noHintTierOf(me, id)) return '';
+  if (!noHintTierOf(rec, id) !== !noHintTierOf(me, id)) return null;
   const tier = boardTierOf(rec, id);
   const r = gameMetricAt(rec, id, tier);
   const m = gameMetricAt(me, id, tier);
   const myTier = boardTierOf(me, id);
   if (m == null || (tier || 0) !== (myTier || 0)) {
-    if (!tier || (myTier || 0) > tier) return '';
-    return tx('lb_gap', '', { k: 'tier', v: b(esc(youValText(id, r))), tier: esc(t(TIER_LABEL_KEY[tier])) });
+    if (!tier || (myTier || 0) > tier) return null;
+    return { k: 'tier', v: youValText(id, r), tier: t(TIER_LABEL_KEY[tier]) };
   }
   let d;
   let v;
@@ -1965,8 +1974,8 @@ function gapText(me, rec, id, b = (x) => x) {
     d = LOWER_IS_BETTER.has(id) ? m - r : r - m;
     v = k === 'bank' ? bankText(d) : numText(d);
   }
-  if (!(d > 0)) return '';
-  return tx('lb_gap', '', { k, v: b(v), n: d });
+  if (!(d > 0)) return null;
+  return { k, v, n: d };
 }
 /** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
 function closeness(me, rec, id) {
@@ -3562,6 +3571,158 @@ export function lb2ScoreBoard(list, id, spec = {}) {
     return { rows: out, unit, kind, lower, gap };
   });
 }
+/** The OLD board's one standing per game (gameStanding: the All tab's own order, boardMetricCmp, ties
+ *  shared), read with no tab selected. Leaderboard v2's medals, Hall of Fame and records come ONLY from
+ *  this (Matt, 2026-10-31: "an interface redesign, not a stats redesign"). [{ g, key, rank }]. */
+export function lb2Standing(list, id) {
+  return lb2With(id, {}, () => {
+    const st = gameStanding(list, id);
+    // Hold'em: a bankroll never used (no entry, no grant) sits on the starting stack and ties for 2nd with
+    // everyone else who never sat down. The board still shows them there; it earns no medal in v2's tallies.
+    return st.rows.map((g) => ({ g, key: g.key, rank: st.rankOf[g.key], tie: st.tiedAt(g.key), noMedal: id === 'holdem' && !hbTouched(g) }));
+  });
+}
+
+// --- Leaderboard v2, round 1 (2026-10-31): the OLD board's numbers, for the new look ------------------
+// Matt: "This is an interface redesign, not a stats redesign." v2 (js/leaderboard2-ui.js) draws ONLY what
+// the functions below return, and they are this board's own code run on a borrowed state (lb2With): the
+// same tabs (boardView / msBoardHTML / beeTabsHTML / the Skeeball, Hold'em and Contexto tabs), the same
+// rows, order, ranks, ties, numbers and sub lines, the same gap maths (gapParts), the same You-tab lists
+// (youHTML) and the same per-game standing (gameStanding). tools/test-lb2-parity.mjs renders both
+// overlays from one people list and compares them row by row. ADDITIVE and read-only.
+const stKey = (st) => [st.tier == null ? '' : st.tier, st.view || '', st.machine || 'all', st.lang || 'all', st.by || 'points'].join('~');
+const tierWord = (tier) => (tier == null ? t('lb_diff_all') : t(TIER_LABEL_KEY[tier]));
+/** The old board's tabs for a game: { rows: [[{ st, key, label, tier }]], def } (`st` = { tier, view,
+ *  machine, lang, by }; one row of tabs, two for Skeeball and Spelling Bee). `def` = the tab it opens on. */
+export function lb2Tabs(list, id) {
+  // Each tab's state is COMPLETE for its own dimension, the way the old tab handlers set it: a difficulty
+  // tab clears the view (_view = ''), a view tab clears the difficulty (_tier = null).
+  const tab = (st0, label, tier = null) => {
+    const st = ('tier' in st0 || 'view' in st0) ? { tier: null, view: '', ...st0 } : st0;
+    return { st, key: stKey(st), label, tier };
+  };
+  if (id === 'minesweeper') return { rows: [[null, 1, 2, 3, 4].map((tr) => tab({ tier: tr }, tierWord(tr), tr))], def: { tier: null } };
+  if (id === 'holdem') return { rows: [[tab({ view: 'bank' }, t('lb_sort_bank')), tab({ view: 'wins' }, t('lb_sort_wins'))]], def: { view: 'bank' } };
+  if (id === 'contexto') return { rows: [[tab({ view: 'daily' }, tx('lb_ct_daily', 'Daily')), tab({ view: '' }, t('lb_diff_all'))]], def: {} };
+  if (id === 'skeeball') {
+    const ms = skMachinesPresent(list);
+    const rows = [];
+    if (ms.length > 1) rows.push([tab({ machine: 'all' }, t('lb_diff_all'))].concat(ms.map((m) => tab({ machine: m }, skMachineMeta(m).name))));
+    rows.push([tab({ view: '' }, t('lb_sort_points')), tab({ view: 'high' }, t('lb_sort_high'))]);
+    return { rows, def: { machine: 'all', view: '' } };
+  }
+  if (id === 'spellingbee' && beeBoard()) {
+    return { rows: [[tab({ by: 'points' }, tx('lb_bee_points', 'Points')), tab({ by: 'words' }, tx('lb_bee_words', 'Words'))],
+      [tab({ lang: 'all' }, tx('lb_bee_all', 'All')), tab({ lang: 'en' }, 'English'), tab({ lang: 'es' }, 'Español')]], def: { lang: 'all', by: 'points' } };
+  }
+  return lb2With(id, {}, () => {
+    let tiers = id === 'tictactoe' ? [] : fieldTiersPresent(list, [id]);
+    if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
+    const row = [null, ...tiers].map((tr) => tab({ tier: tr }, tr === 2 && tiers.length > 3 ? tx('lb_tab_med', 'Med') : tierWord(tr), tr));
+    if (id === 'tictactoe') row.push(tab({ view: 'ultimate' }, t('lb_tt_ultimate')), tab({ view: 'classic' }, t('lb_tt_classic')));
+    if (id === 'snake') row.push(tab({ view: 'off' }, t('lb_sn_walls_off')), tab({ view: 'on' }, t('lb_sn_walls_on')));
+    if (id === 'cuppong' && list.some((g) => cpSoloBest(g) !== null)) row.push(tab({ view: 'solo' }, tx('lb_tab_solo', 'Solo')));
+    if (anyMpPlays(list, id)) row.push(tab({ view: 'mp' }, t('lb_mp_short')));
+    return { rows: [row], def: {} };
+  });
+}
+const stripTags = (h) => String(h == null ? '' : h).replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+/** One old-board tab, fully built: { rows: [{ g, key, rank, tie, html, text, sub, sub2, subHtml, tier }],
+ *  unit, empty, gap(meKey) -> gap parts to the row above ({ k, v, n } | { k: 'tier', v, tier } | null),
+ *  standing gap only on views ranked by the board's own number (the old board's stand line rule). */
+export function lb2Board(list, id, st = {}) {
+  return lb2With(id, st, () => {
+    let rows, cmp, rowOut, gapFn = null, unit = '', empty = '';
+    if (id === 'minesweeper') {
+      const tier = _tier;
+      rows = tier == null ? list.filter((g) => msHeadline(g)) : list.filter((g) => msCellAt(g, tier));
+      cmp = tier == null ? msAllCmp : (a, b) => msCellCmp(msCellAt(a, tier), msCellAt(b, tier));
+      rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
+      const cellOf = (g) => (tier == null ? msHeadline(g) : { tier: null, c: msCellAt(g, tier) });
+      rowOut = (g) => {
+        const h = cellOf(g); const n = playsAtTier(g, ['minesweeper'], tier); const w = winsAtTier(g, ['minesweeper'], tier);
+        return { html: msCellHTML(h.c), sub: tx('lb_ms_won_of', `${w} of ${n} won`, { w, n }), tier: h.tier };
+      };
+      unit = t('lb_unit_ms_best');
+      empty = t('lb_empty_game', { label: labelOf('minesweeper') });
+      const cell = (g) => (tier == null ? msHeadline(g) : { tier, c: msCellAt(g, tier) });
+      gapFn = (me, rec) => {
+        const hm = cell(me), hr = cell(rec);
+        if (!hr || hr.c.ms == null) return null;
+        if (hm && hm.c.ms != null && hm.tier === hr.tier) {
+          const d = Math.floor(hm.c.ms / 1000) - Math.floor(hr.c.ms / 1000);
+          return d > 0 ? { k: 'time', v: formatTimeMetric(d * 1000), n: d } : null;
+        }
+        return hr.tier ? { k: 'tier', v: formatTimeMetric(hr.c.ms), tier: t(TIER_LABEL_KEY[hr.tier]) } : null;
+      };
+    } else {
+      const v = boardView(list, id);
+      rows = v.rows; cmp = v.cmp; unit = v.unit || ''; empty = v.empty || t('lb_empty_game', { label: labelOf(id) });
+      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null });
+      if (v.gap) gapFn = (me, rec) => gapParts(me, rec, id);
+    }
+    const { rankOf, tiedAt } = rankMap(rows, () => 0, cmp);
+    const out = rows.map((g) => { const o = rowOut(g); return { g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), ...o, text: stripTags(o.html) }; });
+    // The pinned row's gap = the old stand line's (standLineHTML): to the board's FIRST row, read at its
+    // tier, only on the views the old board printed it on. Computed NOW (the borrowed state ends below).
+    const gaps = new Map();
+    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, gapFn(me.g, out[0].g));
+    // The board's header number (all plays, gameDetail's) and its standing records block (recordsHTML).
+    const plays = id === 'contexto' && _view === 'daily' ? list.reduce((a, g) => a + (ctDailyOf(g).played | 0), 0)
+      : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
+    let records = '';
+    try { records = id === 'minesweeper' ? '' : recordsHTML(list, id); } catch { records = ''; }
+    return { rows: out, unit, empty, plays, records, gap: (key) => gaps.get(key) || null };
+  });
+}
+/** The old You tab's three lists for `meKey` (youHTML, same order and same lines): records held, closest to
+ *  breaking (closeness order, gap to the record at the record's tier), not played yet (the record + holder). */
+export function lb2Records(list, meKey) {
+  const me = list.find((g) => g.key === meKey);
+  const out = { held: [], close: [], fresh: [], withRecord: 0, me: me || null };
+  if (!me) return out;
+  for (const meta of gameMetaSorted()) {
+    const id = meta.id;
+    if (!isGameOnLauncher(id)) continue;
+    lb2With(id, {}, () => {
+      const st = gameStanding(list, id);
+      const rec = st.rows[0] || null;
+      if (rec) out.withRecord++;
+      const played = boardPlaysOf(me, id) > 0;
+      const rank = st.rankOf[me.key];
+      const val = (g) => ({ text: youValText(id, boardMetricOf(g, id)), tier: boardTierOf(g, id) });
+      if (rank === 1) out.held.push({ id, mine: val(me), tie: st.tiedAt(me.key) });
+      else if (played && rec) out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), mine: val(me), rec, recVal: val(rec) });
+      else if (!played && rec) out.fresh.push({ id, rec, recVal: val(rec) });
+    });
+  }
+  out.close.sort((a, b) => b.c - a.c || labelOf(a.id).localeCompare(labelOf(b.id)));
+  return out;
+}
+/** A person's page: every game on the launcher they played, most played first, with their place in that
+ *  game's standing and their board number; plus the old player page's totals (wins, played). */
+export function lb2PlayerGames(list, key) {
+  const g = list.find((x) => x.key === key);
+  if (!g) return null;
+  const games = [];
+  for (const meta of GAME_META) {
+    const id = meta.id;
+    if (!isGameOnLauncher(id)) continue;
+    lb2With(id, {}, () => {
+      const plays = boardPlaysOf(g, id);
+      if (!(plays > 0)) return;
+      const st = gameStanding(list, id);
+      games.push({ id, plays, rank: st.rankOf[g.key] || null, tie: st.rankOf[g.key] ? st.tiedAt(g.key) : false,
+        text: youValText(id, boardMetricOf(g, id)), tier: boardTierOf(g, id) });
+    });
+  }
+  games.sort((a, b) => b.plays - a.plays || labelOf(a.id).localeCompare(labelOf(b.id)));
+  return { g, games, wins: winsOf(g, null), played: playedOf(g, null) };
+}
+/** The tab-word for a difficulty, and the old board's unit-less number text (v2's lists). */
+export function lb2TierWord(tier) { return tierWord(tier); }
+/** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */
+export function __lbSetBoardForTest(board) { _board = board; _connected = true; rerender({ fromData: true }); }
 export { GAME_META, ensureCss as ensureLeaderboardCss, medalSVG };
 
 export default { openLeaderboard, closeLeaderboard };

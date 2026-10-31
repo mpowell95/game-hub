@@ -1,0 +1,25 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>lb2 harness</title></head>
+<body>
+<!-- Leaderboard v2 parity harness (dev only, never deployed): loads a board package from
+     /backups/lb-z.json (a LOCAL read-only copy of boards/v1/lb/z, git-ignored) and exposes
+     window.H for tools/test-lb2-parity.mjs. Writes nothing anywhere but this browser. -->
+<script type="module">
+  const j = async (u) => { const r = await fetch(u); return r.ok ? r.json() : null; };
+  const admin = await j('/backups/lb-admin.json');
+  if (admin) localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify(admin));
+  const bee = await j('/backups/lb-bee.json');
+  if (bee) localStorage.setItem('gamehub.beeBoard.v1', bee);
+  localStorage.setItem('gamehub.profile', JSON.stringify({ v: 1, name: 'test1', emoji: '🧪', playerId: 'DREG5' }));
+  localStorage.setItem('gamehub.devAllowSync.v1', '0');
+  const net = await import('/js/stats-net.js');
+  const { isHiddenName } = await import('/js/hidden-players.js');
+  const z = await j('/backups/lb-z.json');
+  const parts = await net.unpackBoard(z);
+  const board = net.boardList(parts);
+  const people = board.list.filter((g) => !isHiddenName(g && g.name));
+  window.H = { people, board, ready: true };
+  document.title = 'ready';
+</script>
+</body></html>
