@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leaderboard Mockups</title>
+<style>
+:root{--bg:#0E1014;--surf:#171A20;--text:#F1F3F6;--muted:#A2A9B5;--line:#272B33;--accent:#7AA7FF;--accentText:#0E1014;--chip:#252A33;--seg:#1F232A;--segOn:#323844;--you:#1C2D4D;--youText:#D6E4FF;--down:#FDBA74;--scrim:rgba(0,0,0,.6);--page:#07080B;--g:#E0A92E;--s:#B9C0CA;--b:#C98A55}
+:root.light{--bg:#F4F5F7;--surf:#FFFFFF;--text:#14161A;--muted:#596170;--line:#E2E5EA;--accent:#1F5FD1;--accentText:#FFFFFF;--chip:#E9ECF1;--seg:#E4E7EC;--segOn:#FFFFFF;--you:#DCE7FB;--youText:#0F3478;--down:#B45309;--scrim:rgba(10,12,16,.45);--page:#D9DCE1}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.top{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;background:var(--page);border-bottom:1px solid var(--line)}
+.top a,.top button{height:36px;padding:0 12px;border-radius:18px;border:0;display:flex;align-items:center;font:inherit;font-size:14px;font-weight:600;text-decoration:none;background:var(--chip);color:var(--text);cursor:pointer}
+.top button{margin-left:auto;background:var(--accent);color:var(--accentText)}
+.wall{display:flex;flex-wrap:wrap;gap:32px;padding:24px 16px 48px;justify-content:center}
+.cap{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px 4px}
+.ph{position:relative;width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;border-radius:28px;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+.num{font-variant-numeric:tabular-nums}
+.head{flex-shrink:0;padding:16px 16px 10px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em}
+.seg{display:grid;gap:3px;padding:3px;border-radius:12px;background:var(--seg)}
+.seg>*{height:42px;border:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font:inherit;font-size:15px;font-weight:500;color:var(--muted);background:transparent}
+.seg>.on{background:var(--segOn);color:var(--text);font-weight:700}
+.search{height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:12px;background:var(--surf);border:1px solid var(--line);color:var(--muted);font-size:16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:44px;padding:0 16px;border-radius:22px;display:flex;align-items:center;gap:6px;font-size:15px;font-weight:600;background:var(--chip);color:var(--text)}
+.chip.on{background:var(--accent);color:var(--accentText)}
+.body{flex:1;overflow:hidden;padding:0 12px 12px;display:flex;flex-direction:column;gap:16px}
+.card{border-radius:14px;overflow:hidden;background:var(--surf);border:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;min-height:62px;padding:8px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.ic{width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;background:var(--chip)}
+.grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.t1{font-size:16px;font-weight:600}
+.t2{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.bar{height:60px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 4px}
+.icon{width:48px;height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.bar h1{font-size:20px}
+.cols{flex-shrink:0;display:grid;gap:8px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--muted)}
+.lr{display:grid;gap:8px;align-items:center;height:48px;padding:0 4px;border-top:1px solid var(--line)}
+.lr:first-child{border-top:0}
+.c{text-align:center}.r{text-align:right}
+.med{width:30px;height:30px;border-radius:15px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#14161A}
+.plain{font-size:15px;font-weight:600;color:var(--muted);text-align:center}
+.nm{display:flex;align-items:center;gap:6px;min-width:0;font-size:16px;font-weight:500}
+.nm span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mv{flex-shrink:0;font-size:12px;font-weight:700}
+.up{color:var(--accent)}.dn{color:var(--down)}
+.val{font-size:16px;font-weight:700;padding-right:8px}
+.gm{font-size:14px;color:var(--muted)}
+.me{background:var(--you);color:var(--youText)}
+.me .nm{font-weight:700}
+.ctrl{flex-shrink:0;display:flex;gap:8px;padding:10px 16px}
+.gear{width:48px;height:48px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--seg);color:var(--text)}
+.pin{flex-shrink:0;display:grid;gap:8px;align-items:center;min-height:60px;padding:6px 16px;background:var(--you);color:var(--youText);border-top:1px solid var(--line)}
+.pin .gap{font-size:13px;font-weight:500}
+.nav{height:64px;flex-shrink:0;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--surf);color:var(--muted)}
+.nav span{display:flex;align-items:center;justify-content:center}
+.nav .on{color:var(--accent)}
+.sheet{position:absolute;inset:0;background:var(--scrim);display:flex;flex-direction:column;justify-content:flex-end}
+.sh{border-radius:20px 20px 0 0;padding:10px 16px 24px;display:flex;flex-direction:column;gap:16px;background:var(--surf)}
+.grab{width:40px;height:5px;border-radius:3px;align-self:center;background:var(--line)}
+.lbl{font-size:14px;font-weight:600;color:var(--muted);margin-bottom:8px}
+.done{height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;background:var(--accent);color:var(--accentText)}
+.empty{height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.play{height:48px;padding:0 28px;border-radius:24px;display:flex;align-items:center;font-size:16px;font-weight:700;background:var(--accent);color:var(--accentText)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{min-height:84px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--surf);border:1px solid var(--line)}
+.tile b{font-size:26px}
+.tile span{font-size:14px;color:var(--muted)}
+h2{margin:0 0 8px;padding:0 4px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.more{height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;background:var(--surf);border:1px solid var(--line);color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="top" id="top"></div>
+<div class="wall" id="wall"></div>
+<script>
+const SVG = {
+  back: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  heart: (s) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.2 3.4 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.6 0 6 3.7 4.5 7.3C19.5 16.4 12 21 12 21z"/></svg>`,
+  crown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>',
+  search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  gear: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>'
+};
+const NAV = '<div class="nav">' + [
+  '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
+  '<circle cx="8" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.8"/><path d="M2 20c0-3.5 2.7-6 6-6s6 2.5 6 6M14.5 14.5c3.3-.6 7 1.4 7.5 5.5"/>',
+  '<path d="M4 5h16v11H9l-5 4z"/>',
+  '<path d="M4 20v-9h4v9M10 20V5h4v15M16 20v-6h4v6"/>',
+  '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>'
+].map((p, i) => `<span class="${i === 3 ? 'on' : ''}"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>`).join('') + '</div>';
+const MED = ['var(--g)', 'var(--s)', 'var(--b)'];
+const med = (n) => n <= 3 ? `<div class="med num" style="background:${MED[n - 1]}">${n}</div>` : `<div class="plain num">${n}</div>`;
+const mv = (d) => d > 0 ? `<span class="mv up num">▲${d}</span>` : d < 0 ? `<span class="mv dn num">▼${-d}</span>` : '';
+const seg = (list, on, cols) => `<div class="seg" style="grid-template-columns:repeat(${cols || list.length},1fr)">${list.map((x) => `<span class="${x === on ? 'on' : ''}">${x}</span>`).join('')}</div>`;
+const tabs = (on) => seg(['Boards', 'Hall of Fame', 'Me'], on);
+const homeHead = (on, extra = '') => `<div class="head"><h1>Leaderboard</h1>${tabs(on)}${extra}</div>`;
+const boardBar = (title, sub) => `<div class="bar"><span class="icon">${SVG.back}</span><span class="grow"><h1>${title}</h1><span class="t2">${sub}</span></span><span class="icon" style="color:var(--accent)">${SVG.heart(24)}</span></div>`;
+const ME = 'Jo T.';
+
+function boardRows(rows, cols, cells) {
+  return `<div class="body" style="padding-top:0"><div class="card">${rows.map((r, i) => `<div class="lr ${r[0] === ME ? 'me' : ''}" style="grid-template-columns:${cols}">${med(i + 1)}<span class="nm"><span>${r[0]}</span>${mv(r.mv || 0)}</span>${cells(r)}</div>`).join('')}</div></div>`;
+}
+function pinRow(cols, rank, move, gap, cells) {
+  return `<div class="pin" style="grid-template-columns:${cols}"><span class="c num" style="font-weight:700">${rank}</span><span class="grow"><span class="nm">${ME}${mv(move)}</span><span class="gap num">${gap}</span></span>${cells}</div>`;
+}
+
+// --- Darts data
+const CPU = [['Rosa M.', 88, 69, 0], ['Dev K.', 51, 38, 1], ['Tomás R.', 120, 86, -1], ['Priya S.', 33, 23, 3], ['Jordan L.', 64, 43, 0], ['Ava C.', 29, 19, -2], ['Marco D.', 47, 30, 1], ['Lena W.', 22, 14, 4], ['Sam O.', 71, 44, -3], ['Ines G.', 18, 11, 0], ['Jo T.', 42, 25, 4]];
+const MPD = [['Dev K.', 64, 41, 1], ['Rosa M.', 90, 39, 0], ['Tomás R.', 77, 35, -1], ['Lena W.', 31, 20, 2], ['Jordan L.', 50, 19, 0], ['Priya S.', 25, 15, 3], ['Sam O.', 61, 14, -2], ['Ava C.', 22, 11, 0], ['Marco D.', 40, 10, 1], ['Ines G.', 15, 6, 0], ['Jo T.', 38, 5, 2]];
+function dartsBoard({ mp = false, sheet = false, empty = false } = {}) {
+  const cols = '44px minmax(0,1fr) 64px 76px';
+  const data = (mp ? MPD : CPU).map(([n, g, w, m]) => ({ 0: n, g, w, pct: w / g * 100, mv: m }));
+  const key = mp ? 'w' : 'pct';
+  data.sort((a, b) => b[key] - a[key]);
+  const fmt = (d) => mp ? String(d.w) : d.pct.toFixed(1) + '%';
+  const top = data.slice(0, 10);
+  const yi = data.findIndex((d) => d[0] === ME);
+  const me = data[yi], above = data[yi - 1];
+  const gap = mp ? `${above.w - me.w} ${above.w - me.w === 1 ? 'win' : 'wins'} behind #${yi}` : `${(above.pct - me.pct).toFixed(1)}% behind #${yi}`;
+  const list = empty
+    ? `<div class="body"><div class="card"><div class="empty"><div class="med" style="width:56px;height:56px;border-radius:28px;font-size:24px;background:var(--g)">1</div><b style="font-size:18px">1st place is open</b><span class="play">Play Hard</span></div></div></div>`
+    : boardRows(top, cols, (d) => `<span class="r gm num">${d.g}</span><span class="r val num">${fmt(d)}</span>`);
+  const sub = (empty ? '101' : 'Cricket') + ' · ' + (mp ? 'Multiplayer' : 'vs computer');
+  return `<div class="ph">${boardBar('Darts', sub)}
+    <div class="cols" style="grid-template-columns:${cols}"><span class="c">#</span><span>Player</span><span class="r">Games</span><span class="r">${mp ? 'Wins' : 'Win %'}</span></div>
+    ${list}
+    <div class="ctrl">${mp ? '<span style="flex:1"></span>' : `<div style="flex:1">${seg(['Easy', 'Medium', 'Hard'], 'Hard')}</div>`}<span class="gear">${SVG.gear}</span></div>
+    ${empty ? pinRow(cols, '–', 0, 'Not ranked', '<span></span><span></span>') : pinRow(cols, '#' + (yi + 1), me.mv, gap, `<span class="r num">${me.g}</span><span class="r val num" style="padding-right:0">${fmt(me)}</span>`)}
+    ${NAV}
+    ${sheet ? `<div class="sheet"><div class="sh"><div class="grab"></div>
+      <div><div class="lbl">Mode</div><div class="chips">${['All modes', '301', '201', '101', 'Cricket', 'Cricket · In order', 'Cricket · No points', 'Cricket · In order · No points'].map((m) => `<span class="chip ${m === 'Cricket' ? 'on' : ''}">${m}</span>`).join('')}</div></div>
+      <div><div class="lbl">Opponent</div>${seg(['vs computer', 'Multiplayer'], 'vs computer')}</div>
+      <div><div class="lbl">Rank by</div>${seg(['Win %', 'Wins'], 'Win %')}</div>
+      <span class="done">Done</span></div></div>` : ''}
+  </div>`;
+}
+
+function boards() {
+  const G = [['Da', 'Darts', '32 boards', 2, '#1'], ['SB', 'Spelling Bee', 'English + Español', 0, '#2'], ['Su', 'Sudoku', '4 boards', 0, '#3'], ['Po', 'Pool', '24 boards', 0, '#6']];
+  return `<div class="ph">${homeHead('Boards', `<div class="search">${SVG.search}Search 40 games</div>
+    <div class="chips"><span class="chip on">${SVG.heart(16)}4</span><span class="chip">Played 11</span><span class="chip">All 40</span></div>`)}
+    <div class="body"><div class="card">${G.map(([i, n, s, o, b]) => `<div class="row"><span class="ic">${i}</span><span class="grow"><span class="t1">${n}</span><span class="t2">${s}</span></span><span class="right"><span class="num" style="display:flex;align-items:center;gap:4px;font-size:16px;font-weight:700;color:${o ? 'var(--text)' : 'var(--muted)'}">${SVG.crown}${o}</span><span class="num" style="font-size:13px;color:var(--muted)">${b}</span></span></div>`).join('')}</div></div>
+    ${NAV}</div>`;
+}
+
+function bee() {
+  const cols = '44px minmax(0,1fr) 84px';
+  const L = [['Ines G.', 3180, 0], ['Jo T.', 3060, 4], ['Marco D.', 2970, -1], ['Lucía P.', 2840, 1], ['Tomás R.', 2700, 0], ['Ava C.', 2510, -2], ['Rosa M.', 2480, 2], ['Dev K.', 2330, 0], ['Jordan L.', 2190, 0], ['Sam O.', 2050, 1]].map(([n, p, m]) => ({ 0: n, p, mv: m }));
+  return `<div class="ph">${boardBar('Spelling Bee', 'Español')}
+    <div class="cols" style="grid-template-columns:${cols}"><span class="c">#</span><span>Player</span><span class="r">Points</span></div>
+    ${boardRows(L, cols, (d) => `<span class="r val num">${d.p.toLocaleString('en-US')}</span>`)}
+    <div class="ctrl"><div style="flex:1">${seg(['All', 'English', 'Español'], 'Español')}</div><span class="gear">${SVG.gear}</span></div>
+    ${pinRow(cols, '#2', 4, '120 pts behind #1', '<span class="r val num" style="padding-right:0">3,060</span>')}
+    ${NAV}</div>`;
+}
+
+function hall() {
+  const cols = '44px minmax(0,1fr) 48px 48px 48px';
+  const all = [['Rosa M.', 41, 22, 15, 0], ['Dev K.', 37, 30, 12, 1], ['Tomás R.', 29, 18, 21, -1], ['Priya S.', 22, 25, 19, 3], ['Jordan L.', 18, 14, 16, 0], ['Ava C.', 15, 19, 9, -2], ['Marco D.', 12, 11, 14, 1], ['Lena W.', 9, 8, 12, 4], ['Sam O.', 7, 13, 10, -3], ['Ines G.', 6, 4, 9, 0]];
+  const m = (n, c) => `<span><div class="med" style="width:26px;height:26px;font-size:13px;background:${c}">${n}</div></span>`;
+  return `<div class="ph">${homeHead('Hall of Fame')}
+    <div class="cols" style="grid-template-columns:${cols}"><span class="c">#</span><span>Player</span>${m(1, MED[0])}${m(2, MED[1])}${m(3, MED[2])}</div>
+    <div class="body" style="padding-top:0"><div class="card">${all.map(([n, g, s, b, d], i) => `<div class="lr" style="grid-template-columns:${cols}"><span class="c num" style="font-weight:700;color:${i < 3 ? 'var(--text)' : 'var(--muted)'}">${i + 1}</span><span class="nm"><span>${n}</span>${mv(d)}</span><span class="c num" style="font-weight:700">${g}</span><span class="c gm num">${s}</span><span class="c gm num">${b}</span></div>`).join('')}</div></div>
+    <div class="ctrl"><div style="flex:1">${seg(['All levels', 'Top level'], 'All levels')}</div></div>
+    ${pinRow(cols, '#23', 4, '1 more 1st to pass #22', '<span class="c num" style="font-weight:700">3</span><span class="c num">5</span><span class="c num">2</span>')}
+    ${NAV}</div>`;
+}
+
+function meScreen() {
+  const close = [['2', MED[1], 'Spelling Bee', 'Español · Points', '120 pts'], ['2', MED[1], 'Darts', 'Cricket · In order · Hard', '0.8%'], ['3', MED[2], 'Sudoku', 'Expert', '0:14']];
+  const games = [['Da', 'Darts', '2 firsts · 11 boards', '#1'], ['C4', 'Connect Four', '1 first · 4 boards', '#1'], ['SB', 'Spelling Bee', 'English + Español', '#2'], ['Bs', 'Battleship', '3 boards', '#7']];
+  return `<div class="ph">${homeHead('Me')}
+    <div class="body" style="padding:4px 16px 12px">
+      <div class="tiles"><div class="tile"><b class="num">3</b><span>1st places</span></div><div class="tile"><b class="num">#23</b><span>Hall of Fame</span></div><div class="tile"><b class="num">47</b><span>Boards</span></div></div>
+      <div><h2>Closest to 1st</h2><div class="card">${close.map(([r, c, g, b, x]) => `<div class="row"><div class="med" style="margin:0;background:${c}">${r}</div><span class="grow"><span class="t1">${g}</span><span class="t2">${b}</span></span><span class="num" style="font-size:14px;font-weight:700;color:var(--accent)">${x}</span></div>`).join('')}</div></div>
+      <div><div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1;margin:0">Games</h2><div style="width:150px">${seg(['Rank', 'A to Z'], 'Rank')}</div></div>
+        <div class="card" style="margin-top:8px">${games.map(([i, n, s, b]) => `<div class="row" style="min-height:58px"><span class="ic" style="width:40px;height:40px;font-size:14px">${i}</span><span class="grow"><span class="t1">${n}</span><span class="t2">${s}</span></span><span class="num" style="font-size:16px;font-weight:700">${b}</span></div>`).join('')}</div></div>
+    </div>${NAV}</div>`;
+}
+
+function player() {
+  const leads = [['Darts', 'Cricket · In order · Hard · vs computer', '81.2%'], ['Darts', '301 · Multiplayer', '44'], ['Pool', '9-ball · Hard · vs computer', '74.0%'], ['Spelling Bee', 'English · Points', '4,120'], ['Sudoku', 'Medium', '3:48'], ['Battleship', 'Classic · Hard · vs computer', '68.9%']];
+  return `<div class="ph"><div class="bar"><span class="icon">${SVG.back}</span><span class="ic" style="width:40px;height:40px;border-radius:20px">RM</span><span class="grow" style="padding-left:6px"><h1>Rosa M.</h1><span class="t2">Hall of Fame #1</span></span></div>
+    <div class="body" style="padding:8px 16px 12px">
+      <div class="tiles"><div class="tile"><b class="num">41</b><span>1st places</span></div><div class="tile"><b class="num">#1</b><span>Hall of Fame</span></div><div class="tile"><b class="num">212</b><span>Boards</span></div></div>
+      <div><h2>1st places</h2><div class="card">${leads.map(([g, b, x]) => `<div class="row" style="min-height:58px"><div class="med" style="margin:0;background:var(--g)">1</div><span class="grow"><span class="t1">${g}</span><span class="t2">${b}</span></span><span class="num" style="font-size:16px;font-weight:700">${x}</span></div>`).join('')}</div></div>
+      <span class="more">See all 41</span>
+    </div>${NAV}</div>`;
+}
+
+const SCREENS = [
+  ['boards', 'Boards', boards],
+  ['darts', 'Darts board', () => dartsBoard()],
+  ['settings', 'Settings', () => dartsBoard({ sheet: true })],
+  ['multi', 'Multiplayer board', () => dartsBoard({ mp: true })],
+  ['empty', 'Empty board', () => dartsBoard({ empty: true })],
+  ['bee', 'Spelling Bee', bee],
+  ['hall', 'Hall of Fame', hall],
+  ['me', 'Me', meScreen],
+  ['player', 'Player', player]
+];
+document.getElementById('wall').innerHTML = SCREENS.map(([id, name, fn]) => `<section id="${id}"><p class="cap">${name}</p>${fn()}</section>`).join('');
+document.getElementById('top').innerHTML = SCREENS.map(([id, name]) => `<a href="#${id}">${name}</a>`).join('') + '<button type="button" id="theme">Light</button>';
+const btn = document.getElementById('theme');
+if (location.hash === '#light') document.documentElement.classList.add('light');
+const sync = () => { btn.textContent = document.documentElement.classList.contains('light') ? 'Dark' : 'Light'; };
+btn.onclick = () => { document.documentElement.classList.toggle('light'); sync(); };
+sync();
+</script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 # Leaderboard v2: plan (2026-10-30)
 
 Design source: Dropbox `/Claude Code Refs/leaderboard-mockups.zip` (SPEC.md + 6 screens). Mockups for approval:
-https://claude.ai/artifact/5uknCANqsi77toiNP81sWf (Boards, Darts board, settings sheet, empty board, Spelling Bee
-board, Hall of Fame, Me, Player, dark Boards and board). Status: MOCKUPS SENT, NOT APPROVED. Build nothing until Matt
+https://claude.ai/artifact/SMav6oWdSxsR3X1darSnjX (file: `docs/mockups/leaderboard-v2.html`; Boards, Darts board, settings sheet, Multiplayer board, empty board, Spelling Bee
+board, Hall of Fame, Me, Player; dark by default). Status: MOCKUPS SENT, NOT APPROVED. Build nothing until Matt
 says "build it".
 
 ## Settled with Matt (2026-10-30)
