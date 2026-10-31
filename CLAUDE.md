@@ -282,6 +282,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
 | `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge, points = stars x 1/2/3/4 by band = its leaderboard number |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
+| `leaderboard2-ui.js` / `leaderboard2-boards.js` | Leaderboard v2 (Boards / Hall of Fame / Me), admin devices only until Matt approves; boards pure; `docs/LEADERBOARD-V2-PLAN.md` |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |
 | `difficulty-tiers.js` | READ-path mapping of difficulties onto tiers 1-4 |
 | `arcade-scores.js` | Skeeball's high scores, daily bests, unlocks |

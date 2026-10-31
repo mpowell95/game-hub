@@ -21,6 +21,7 @@ const DICTS = [
   { name: 'js/strings.js', path: './js/strings.js' },
   { name: 'js/challenges-strings.js', path: './js/challenges-strings.js' },
   { name: 'js/live-leave.js', path: './js/live-leave.js' },
+  { name: 'js/leaderboard2-strings.js', path: './js/leaderboard2-strings.js' },
   { name: 'snake/js/strings.js', path: './snake/js/strings.js' },
   { name: 'filler/js/strings.js', path: './filler/js/strings.js' },
   { name: 'mancala/js/strings.js', path: './mancala/js/strings.js' },
