@@ -84,6 +84,10 @@ column (no plain numbers). Gold medals = one per game (40), from the old per-gam
 `pgame`, `personGameHTML`: the old board's `screenFor` from `game-stats-ui.js`), with "All games" to their page; a game
 row on a person's page opens the same screen (was: the game's board). Matt: "Do the contexto fix first ... directly to
 the admin version. Then we'll address the rest in mockups." Rest of section 4 still open.
+**v1384 (same day):** Matt's "fix" on mockup `docs/mockups/lb2-session3.html`: Games list search behind an icon, filters and sort
+on one line; a board's tabs (and Contexto's medal key) on top, players right under, pinned own row only while it is off
+screen; the person's game page restyled to v2 (rows, no caps, cards) for all 34 games, Contexto drawn in full; Sudoku's
+missing `gs_pi_solved` label added.
 5. **Pinned row**: the outside reviewer suggested hiding it when your own row is on screen; the original spec says it
    is always there so the layout never jumps. Not changed.
 6. **Shape tile**: reviewer suggested dropping the white tile behind shapes; Matt wants black Hard/Expert diamonds,

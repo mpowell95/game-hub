@@ -3747,6 +3747,7 @@ export function lb2Players(list) {
  *  ribbons"): Contexto's gold / silver / bronze image with the PLACE on its face, `h` px tall. */
 export function lb2Medal(rank, h = 36) { return ctMedalHTML(['gold', 'silver', 'bronze'][rank - 1] || 'iron', rank, h); }
 /** The tab-word for a difficulty, and the old board's unit-less number text (v2's lists). */
+export function lb2CtImg(kind, h = 34) { return ctMedalHTML(kind, null, h); }
 export function lb2TierWord(tier) { return tierWord(tier); }
 /** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */
 export function __lbSetBoardForTest(board) { _board = board; _connected = true; rerender({ fromData: true }); }
