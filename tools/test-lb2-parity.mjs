@@ -207,13 +207,20 @@ const v2 = await pg.evaluate(async (keys) => {
   V.closeLeaderboard2();
   return out;
 }, Object.keys(gold.boards));
+// v2 PRINTS some numbers differently (round 4, 2026-11-01; display only): thousands separators on every number
+// (Spanish too: 4.000), and golf's to-par in words ("2 under", "3 over"). Undo exactly those, on both sides, and
+// nothing else: any other difference in a number still fails.
+const canon = (v) => String(v).replace(/\s+/g, '')
+  .replace(/(\d)[,.](?=\d{3}(?!\d))/g, '$1')
+  .replace(/^(\d+)(under|bajopar)$/, '-$1').replace(/^(\d+)(over|sobrepar)$/, '+$1');
 for (const k of Object.keys(gold.boards)) {
   const a = gold.boards[k], b = v2.boards[k] || [];
-  const strip = (rows) => rows.map((r) => ({ rank: r.rank, tie: r.tie, name: r.name, val: r.val.replace(/\s+/g, ' ') }));
+  const strip = (rows) => rows.map((r) => ({ rank: r.rank, tie: r.tie, name: r.name, val: canon(r.val) }));
   ok('v2 = old: ' + k, same(strip(a), strip(b)), { old: strip(a).slice(0, 5), v2: strip(b).slice(0, 5), nOld: a.length, nV2: b.length });
 }
 // By Player (Hall of Fame's Wins view) = the old By Player tab.
-ok('By Player: v2 Wins view = old By Player, row for row', same(gold.players, v2.players), { old: (gold.players || []).slice(0, 4), v2: (v2.players || []).slice(0, 4), nOld: (gold.players || []).length, nV2: (v2.players || []).length });
+const canonRows = (rows) => (rows || []).map((r) => ({ ...r, val: canon(r.val) }));
+ok('By Player: v2 Wins view = old By Player, row for row', same(canonRows(gold.players), canonRows(v2.players)), { old: (gold.players || []).slice(0, 4), v2: (v2.players || []).slice(0, 4), nOld: (gold.players || []).length, nV2: (v2.players || []).length });
 // Each board's total plays (the header number).
 for (const id of Object.keys(gold.plays || {})) ok('plays header: ' + id, String(gold.plays[id]).replace(/[^\d]/g, '') === String((v2.plays || {})[id] || '').replace(/[^\d]/g, ''), { old: gold.plays[id], v2: (v2.plays || {})[id] });
 // Per-person golds: Hall of Fame = rank-1 rows in the old By Game standing.
