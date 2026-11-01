@@ -95,7 +95,7 @@ export function canMake(letters, word) {
 
 /** An empty state for a fresh level. */
 export function freshState() {
-  return { found: [], extra: [], hints: 0, revealed: [], recorded: false };
+  return { found: [], extra: [], hints: 0, free: 0, revealed: [], recorded: false };
 }
 
 /** What a swiped / typed word is, against the level and the state so far:
@@ -172,8 +172,11 @@ export function cleanState(level, raw) {
     for (const k of raw.revealed) if (typeof k === 'string' && inWord.has(k) && !st.revealed.includes(k)) st.revealed.push(k);
   }
   const h = Math.floor(Number(raw.hints));
-  // Hints are never fewer than the letters this level has revealed (each reveal was one hint).
-  st.hints = Math.max(st.revealed.length, h >= 0 && h < 1e6 ? h : 0);
+  // FREE hints (2026-11-01) reveal letters too, but cost no star; never more than the letters revealed.
+  const f = Math.floor(Number(raw.free));
+  st.free = Math.min(st.revealed.length, f >= 0 && f < 1e6 ? f : 0);
+  // Paid hints are never fewer than the letters revealed that no free hint paid for.
+  st.hints = Math.max(st.revealed.length - st.free, h >= 0 && h < 1e6 ? h : 0);
   st.recorded = raw.recorded === true;
   return st;
 }

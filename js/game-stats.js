@@ -582,6 +582,8 @@ function ensureWw(g) {
   if (!Number.isFinite(g.ww.x) || g.ww.x < 0) g.ww.x = 0;
   // The Spanish ladder's map (2026-10-29) exists only once a Spanish level is completed.
   if (g.ww.es !== undefined && (!g.ww.es || typeof g.ww.es !== 'object' || Array.isArray(g.ww.es))) g.ww.es = {};
+  // Free hints used (2026-11-01) exists only once one is used.
+  if (g.ww.fu !== undefined && !(Number.isFinite(g.ww.fu) && g.ww.fu >= 0)) g.ww.fu = 0;
   // The hint maps (2026-10-29) exist only once a hint is used.
   for (const k of ['hint', 'esHint']) if (g.ww[k] !== undefined && (!g.ww[k] || typeof g.ww[k] !== 'object' || Array.isArray(g.ww[k]))) g.ww[k] = {};
 }
@@ -2333,6 +2335,20 @@ export function recordGridlockHint(level, at) {
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
   g.gl.hint[k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();   // the server's time where known (2026-10-29)
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver: a FREE hint was used (2026-11-01: every 10 bonus words earn one that costs no star,
+ *  js/word-weaver-points.js wwFreeHints). Adds 1 to the counter `ww.fu`; never a result (no rate gate).
+ *  Returns the store. */
+export function recordWordWeaverFreeHint() {
+  notePlay('wordweaver', 'recordWordWeaverFreeHint', arguments);
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  g.ww.fu = (Number(g.ww.fu) || 0) + 1;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
