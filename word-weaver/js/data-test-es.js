@@ -13,6 +13,8 @@
 // (js/word-weaver-points.js), so the levels are APPEND-ONLY once shipped.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import * as BEE from '../../tools/build-spelling-bee-es.mjs';
+import { VULGAR_OK, VULGAR_TOO } from '../../tools/build-word-weaver-es.mjs';
 
 const DATA = new URL('../data/es/', import.meta.url);
 let fails = 0;
@@ -126,39 +128,80 @@ for (let i = 0; i < LEVELS.length; i++) {
   ok(`extras are complete (${missing} missing; ${example})`, missing === 0);
 }
 
-// --- the ramp ----------------------------------------------------------------------------------
-ok('levels 1-10: 3-4 wheel letters, 3-4 grid words', LEVELS.slice(0, 10).every((lv) => lv.l.length <= 4 && lv.w.length >= 3 && lv.w.length <= 4));
-ok('never the same letters twice in a row', keys.every((k, i) => i === 0 || keys[i - 1] !== k));
-ok('no letter multiset is used twice anywhere', new Set(keys).size === keys.length);
-ok('7-letter wheels arrive by level 500', LEVELS.slice(0, 500).some((lv) => lv.l.length === 7));
-
-// --- Hard and Expert (2026-10-29): their own rules (tools/build-word-weaver-data.mjs, BAND) ------
+// --- the ramp and the caps (2026-11-01, Matt: "Yes do all") -----------------------------------
+// COMMON WORDS FIRST: a level's grid takes the most said words its wheel can make. A "common bonus
+// word" is a bonus word among the 10,000 most said (FrequencyWords 2018, its line number; the ranks
+// file is GENERATED with the levels, so this test runs offline). Caps per band, and one smooth climb
+// with no cliff at 501, 1001 or 1501 (tools/build-word-weaver-data.mjs, BANDS and plan()).
+const RANK = new Map();
+for (const line of readFileSync(new URL('../../tools/word-weaver-ranks-es.txt', import.meta.url), 'utf8').split('\n')) {
+  if (!line || line[0] === '#') continue;
+  const [w, k] = line.split(' ');
+  RANK.set(w, Number(k));
+}
+const rank = (w) => RANK.get(w) ?? Infinity;
+ok(`ranks file: ${RANK.size} words`, RANK.size > 3000);
+const COMMON = 10000;
+const commonBonus = (lv) => lv.x.filter((w) => rank(w) <= COMMON).length;
+const rarest = (lv) => Math.max(...lv.w.map((e) => rank(e[0])));
+const avg = (xs) => xs.reduce((p, q) => p + q, 0) / xs.length;
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor((s.length - 1) / 2)]; };
 const BANDS = [
-  { name: 'Hard', from: 1001, to: 1500, minLen: 3, max3: 1, max4: 4, words: [9, 14] },
-  { name: 'Expert', from: 1501, to: 2000, minLen: 4, max3: 0, max4: 4, words: [11, 16] },
+  { name: 'Easy', from: 1, to: 500, letters: [3, 5], words: [3, 8], bonusAvg: 1, bonusMax: 3, rare: 10000, rarestMedian: 8000 },
+  { name: 'Medium', from: 501, to: 1000, letters: [5, 6], words: [5, 11], bonusAvg: 2, bonusMax: 4, rare: 15000, rarestMedian: 15000 },
+  { name: 'Hard', from: 1001, to: 1500, letters: [6, 7], words: [7, 14], bonusAvg: 3, bonusMax: 5, rare: 30000, rarestMedian: 30000 },
+  { name: 'Expert', from: 1501, to: 2000, letters: [7, 7], words: [10, 15], bonusAvg: 4, bonusMax: 6, rare: 60000, rarestMedian: 60000 },
 ];
+const at5 = (list) => list.slice(0, 5).join(', ');
 for (const B of BANDS) {
   const part = LEVELS.slice(B.from - 1, B.to);
-  const bad = (f) => part.map((lv, i) => (f(lv) ? 0 : B.from + i)).filter(Boolean).slice(0, 5).join(', ');
-  const len = (lv, n) => lv.w.filter((e) => e[0].length === n).length;
+  const bad = (f) => at5(part.map((lv, i) => (f(lv) ? 0 : B.from + i)).filter(Boolean));
   let b;
-  ok(`${B.name}: every level has 7 wheel letters (${b = bad((lv) => lv.l.length === 7)})`, !b);
-  ok(`${B.name}: ${B.words[0]}-${B.words[1]} grid words (${b = bad((lv) => lv.w.length >= B.words[0] && lv.w.length <= B.words[1])})`, !b);
-  ok(`${B.name}: no grid word under ${B.minLen} letters (${b = bad((lv) => lv.w.every((e) => e[0].length >= B.minLen))})`, !b);
-  ok(`${B.name}: at most ${B.max3} three- and ${B.max4} four-letter grid words (${b = bad((lv) => len(lv, 3) <= B.max3 && len(lv, 4) <= B.max4)})`, !b);
+  ok(`${B.name}: ${B.letters.join('-')} wheel letters (${b = bad((lv) => lv.l.length >= B.letters[0] && lv.l.length <= B.letters[1])})`, !b);
+  ok(`${B.name}: ${B.words.join('-')} grid words (${b = bad((lv) => lv.w.length >= B.words[0] && lv.w.length <= B.words[1])})`, !b);
+  ok(`${B.name}: at most ${B.bonusMax} common bonus words a level (${b = bad((lv) => commonBonus(lv) <= B.bonusMax)})`, !b);
+  const cb = avg(part.map(commonBonus));
+  ok(`${B.name}: at most ${B.bonusAvg} common bonus words a level on average (${cb.toFixed(2)})`, cb <= B.bonusAvg);
+  ok(`${B.name}: every grid word within the ${B.rare} most said (${b = bad((lv) => rarest(lv) <= B.rare)})`, !b);
+  const rm = median(part.map(rarest));
+  ok(`${B.name}: the median level's rarest grid word within ${B.rarestMedian} (${rm})`, rm <= B.rarestMedian);
 }
+ok('levels 1-10: 3-4 wheel letters, 3-4 grid words', LEVELS.slice(0, 10).every((lv) => lv.l.length <= 4 && lv.w.length >= 3 && lv.w.length <= 4));
 {
-  const avgLen = (a, z) => { const ws = LEVELS.slice(a - 1, z).flatMap((lv) => lv.w.map((e) => e[0].length)); return ws.reduce((p, q) => p + q, 0) / ws.length; };
-  ok('Expert grid words are longer on average than Medium\'s, Hard\'s than Medium\'s', avgLen(1501, 2000) > avgLen(501, 1000) + 0.3 && avgLen(1001, 1500) > avgLen(501, 1000) + 0.2);
+  const share = (a, z, f) => LEVELS.slice(a - 1, z).filter(f).length / (z - a + 1);
+  ok('levels 201-500: five letters (95%+)', share(201, 500, (lv) => lv.l.length === 5) >= 0.95);
+  ok('levels 561-1000: six letters (95%+)', share(561, 1000, (lv) => lv.l.length === 6) >= 0.95);
+  ok('levels 1061-1500: seven letters (95%+)', share(1061, 1500, (lv) => lv.l.length === 7) >= 0.95);
+  // The climb: grid words rise band by band, and 25 levels either side of each band's edge differ little.
+  const words = (a, z) => avg(LEVELS.slice(a - 1, z).map((lv) => lv.w.length));
+  ok('grid words rise band by band', words(1, 500) < words(501, 1000) && words(501, 1000) < words(1001, 1500) && words(1001, 1500) < words(1501, 2000));
+  for (const e of [500, 1000, 1500]) {
+    const A = LEVELS.slice(e - 25, e), Z = LEVELS.slice(e, e + 25);
+    const d = (f) => avg(Z.map(f)) - avg(A.map(f));
+    const dl = d((lv) => lv.l.length), dw = d((lv) => lv.w.length), dc = d(commonBonus);
+    ok(`no cliff at ${e + 1}: letters +${dl.toFixed(2)}, grid words +${dw.toFixed(2)}, common bonus words +${dc.toFixed(2)}`, dl <= 1 && Math.abs(dw) <= 1.5 && dc <= 1.5);
+  }
+  const avgLen = (a, z) => avg(LEVELS.slice(a - 1, z).flatMap((lv) => lv.w.map((e) => e[0].length)));
+  ok('grid words are longer in Hard and Expert than in Medium', avgLen(1001, 1500) > avgLen(501, 1000) && avgLen(1501, 2000) > avgLen(501, 1000));
 }
+// No vulgar or adult word anywhere, bonus words included (2026-11-01, English's rule). The generator also
+// uses LDNOOBW's downloaded list; this checks the hand lists it imports.
+{
+  const hit = [...vocab].map((w) => w.toLowerCase()).filter((w) => !VULGAR_OK.has(w)
+    && [w, w.replace(/s$/, ''), w.replace(/es$/, '')].some((x) => !VULGAR_OK.has(x) && (BEE.BLOCK.includes(x) || BEE.BLOCK_RE.test(x) || BEE.ADULT_SKIP.has(x) || BEE.SLURS.has(x) || VULGAR_TOO.has(x))));
+  ok(`no vulgar or adult word in any level (${hit.slice(0, 8).join(', ')})`, hit.length === 0);
+}
+ok('never the same letters twice in a row', keys.every((k, i) => i === 0 || keys[i - 1] !== k));
+ok('no letter multiset is used twice anywhere', new Set(keys).size === keys.length);
 
 // --- the pin -----------------------------------------------------------------------------------
 // Spanish levels are APPEND-ONLY once shipped too (progress is per level number, `ww.es`).
+// 2026-11-01: all 2,000 made again with English (the pin before it, '1e2f586dc21f3d7c', is history).
 const PINNED = 2000;
-const PIN_HASH = '1e2f586dc21f3d7c';
+const PIN_HASH = 'e6ecfd13cbfaa7d1';
 if (PINNED) {
   const h = createHash('sha256').update(LEVELS.slice(0, PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
-  ok(`pin: the first ${PINNED} shipped Spanish levels are unchanged (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);
+  ok(`pin: the first ${PINNED} shipped Spanish levels are unchanged since 2026-11-01 (${h})`, LEVELS.length >= PINNED && h === PIN_HASH);
 }
 {
   const n = LEVELS.filter((lv) => lv.l.includes('Ñ')).length;

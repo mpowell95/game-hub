@@ -76,8 +76,9 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   `js/word-weaver-points.js`; Spanish level 12 is not English level 12), pending entries carry `lang: 'es'`. Points,
   stars and levels completed count BOTH ladders.
 - Grid words: common dictionary words and conjugations, no names, no vulgar words (`GRID_BLOCK` = hand-read oddities:
-  ANO, which subtitles say for AÑO; English loans like SET, TOP). Extras: every dictionary word, adult words included,
-  slurs out. English Word Weaver still keeps adult words out of its extras (unchanged).
+  ANO, which subtitles say for AÑO; English loans like SET, TOP). Extras: every dictionary word, slurs out, and since
+  2026-11-01 adult and vulgar words (and plurals) out too, as in English (they were extras 2026-10-29 to 11-01).
+- Same rules and ramp as English since the 2026-11-01 remake (common words first, the band caps, one smooth climb).
 - `node word-weaver/js/data-test-es.js` checks every Spanish level and pins them (APPEND-ONLY once shipped).
 
 ## Data (GENERATED, never hand-edited)
@@ -85,6 +86,13 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 `data/index.json` `{ v:1, count, chunk:250 }` and `data/levels-<k>.json` `{ v:1, first, levels }` (level n is in
 chunk `floor((n-1)/250)`), written by `tools/build-word-weaver-data.mjs`. Level = `{ l, g:[rows,cols], w:[[WORD,r,c,'a'|'d'],...], x:[extras] }`.
 `engine.js` refuses a level that does not add up (words off the grid, grid over 9x9) instead of drawing it wrong.
+**Remade 2026-11-01, all 2,000 levels, EN + ES (Matt approved: "Yes do all").** COMMON WORDS FIRST: every common word
+(top 10,000 said, FrequencyWords) a wheel makes goes in the grid before any rarer one; wheels are chosen so few are
+left as bonus words. Per band, common bonus words avg/max: Easy 1/3, Medium 2/4, Hard 3/5, Expert 4/6; grid word rank
+caps Easy 10k, Medium 10k->15k, Hard 15k->30k, Expert 30k->60k. One smooth climb: 1-10 intro; Easy 4 -> 5 letters,
+~4 -> ~6 words; Medium 6 letters, ~6 -> ~9; Hard 7, ~9 -> ~12; Expert 7, ~12 -> ~14. Both data tests check the caps and
+the climb (ranks from the GENERATED `tools/word-weaver-ranks-{en,es}.txt`) and pin the new levels. The story: the
+generator's header. Finished levels keep their stars by NUMBER (the levels under a number changed once, before release).
 
 ## Save, and where "recorded" lives (THE LAW)
 
