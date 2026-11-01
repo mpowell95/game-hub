@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Tower (mockup)</title>
+<style>
+  * { box-sizing: border-box; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1830;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; }
+  #app { position: fixed; inset: 0; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .bar { position: absolute; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 12px; z-index: 3; }
+  .icon { width: 44px; height: 44px; border-radius: 999px; border: 0; background: rgba(255,255,255,.16);
+    color: #fff; font-size: 22px; display: grid; place-items: center; cursor: pointer; }
+  .best { font-size: 14px; font-weight: 700; opacity: .85; display: flex; gap: 6px; align-items: center; }
+  .score { position: absolute; top: 70px; left: 0; right: 0; text-align: center; font-size: 64px; font-weight: 800;
+    text-shadow: 0 2px 10px rgba(0,0,0,.35); z-index: 2; pointer-events: none; }
+  .streak { position: absolute; top: 146px; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none;
+    background: #ffce3a; color: #16243a; font-weight: 800; font-size: 16px; padding: 4px 12px; border-radius: 999px;
+    display: none; align-items: center; gap: 6px; }
+  .streak.on { display: flex; }
+  .home, .over { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; }
+  .home h1 { font-size: 52px; margin: 0; letter-spacing: 1px; text-shadow: 0 3px 12px rgba(0,0,0,.35); }
+  .btn { min-width: 200px; height: 56px; border-radius: 999px; border: 0; background: #ffce3a; color: #16243a;
+    font-size: 20px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+  .btn.ghost { background: rgba(255,255,255,.18); color: #fff; }
+  .card { position: relative; background: #fff; color: #16243a; border-radius: 20px; padding: 28px 24px 22px;
+    width: min(320px, 86vw); text-align: center; box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+  .card .x { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; border: 0; background: transparent;
+    font-size: 24px; color: #5b6b82; cursor: pointer; }
+  .card .big { font-size: 72px; font-weight: 800; line-height: 1; }
+  .card .row { display: flex; justify-content: center; gap: 22px; margin: 14px 0 20px; font-size: 16px; color: #5b6b82; }
+  .card .row b { color: #16243a; font-size: 20px; display: block; }
+  .card .new { display: inline-flex; align-items: center; gap: 6px; background: #ffce3a; border-radius: 999px;
+    padding: 4px 12px; font-weight: 800; font-size: 14px; margin-top: 10px; }
+  .card .btn { width: 100%; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="cv"></canvas>
+  <div class="bar">
+    <button class="icon" id="back" aria-label="Back">&#8249;</button>
+    <div class="best">&#9733; <span id="bestTop">0</span></div>
+  </div>
+  <div class="score hidden" id="score">0</div>
+  <div class="streak" id="streak">&#9670; <span id="streakN">3</span></div>
+
+  <div class="home" id="home">
+    <h1>Tower</h1>
+    <button class="btn" id="play">Play</button>
+  </div>
+
+  <div class="over hidden" id="over">
+    <div class="card">
+      <button class="x" id="closeOver" aria-label="Close">&#10005;</button>
+      <div class="big" id="oScore">0</div>
+      <div class="new hidden" id="oNew">&#9733; Best</div>
+      <div class="row">
+        <div><b id="oBest">0</b>Best</div>
+        <div><b id="oPerf">0</b>Perfect</div>
+      </div>
+      <button class="btn" id="again">Again</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  let W = 0, H = 0, DPR = 1;
+
+  // ---- tuning ----
+  const BLOCK_H = 30;            // slab height (css px)
+  const START_FRAC = 0.62;       // first slab width as fraction of screen
+  const PERFECT_PX = 5;          // within this = perfect, width kept
+  const GROW_EVERY = 5;          // perfects in a row that grow the slab back
+  const GROW_FRAC = 0.08;        // grow by this fraction of the start width
+  const SPEED0 = 170, SPEED_ADD = 7, SPEED_MAX = 520; // px per second
+
+  const S = {
+    state: 'home', stack: [], mover: null, falling: [], flashes: [],
+    cam: 0, camTarget: 0, zoom: 1, zoomTarget: 1, streak: 0, perfects: 0, best: +(localStorage.getItem('tower.mock.best') || 0),
+    startW: 0, t: 0,
+  };
+
+  function resize() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  // Colour by height: a slow walk round the wheel, never hue-only for meaning.
+  function slabColor(i) {
+    const h = (200 + i * 9) % 360;
+    return { top: `hsl(${h} 70% 62%)`, face: `hsl(${h} 62% 50%)`, edge: `hsl(${h} 55% 38%)` };
+  }
+  // Sky by height: day -> dusk -> night.
+  function skyStops(level) {
+    const k = Math.min(1, level / 60);
+    const lerp = (a, b) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+    const top = k < .5 ? lerpC([94,170,240],[60,70,150], k*2) : lerpC([60,70,150],[10,14,40], (k-.5)*2);
+    const bot = k < .5 ? lerpC([200,230,255],[245,150,120], k*2) : lerpC([245,150,120],[30,40,90], (k-.5)*2);
+    return [top, bot, k];
+    function lerpC(a, b, t) { return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+  }
+
+  function groundY() { return H - 120; }
+  function slabY(i) { return groundY() - (i + 1) * BLOCK_H + S.cam; }
+
+  function reset() {
+    S.startW = Math.round(W * START_FRAC);
+    S.stack = [{ x: (W - S.startW) / 2, w: S.startW }];
+    S.falling = []; S.flashes = []; S.cam = 0; S.camTarget = 0; S.zoom = 1; S.zoomTarget = 1;
+    S.streak = 0; S.perfects = 0;
+    spawn();
+    updateHud();
+  }
+
+  function spawn() {
+    const top = S.stack[S.stack.length - 1];
+    const i = S.stack.length;
+    const fromLeft = i % 2 === 1;
+    const speed = Math.min(SPEED_MAX, SPEED0 + (i - 1) * SPEED_ADD);
+    S.mover = { w: top.w, x: fromLeft ? -top.w : W, dir: fromLeft ? 1 : -1, speed };
+  }
+
+  function drop(offset) {
+    if (S.state !== 'play' || !S.mover) return;
+    const m = S.mover, top = S.stack[S.stack.length - 1];
+    if (offset != null) m.x = top.x + offset;
+    let diff = m.x - top.x;
+    const i = S.stack.length;
+    if (Math.abs(diff) <= PERFECT_PX) {
+      S.streak++; S.perfects++;
+      let w = top.w, x = top.x;
+      if (S.streak % GROW_EVERY === 0 && w < S.startW) {
+        const g = Math.min(S.startW - w, S.startW * GROW_FRAC);
+        w += g; x -= g / 2;
+      }
+      S.stack.push({ x, w });
+      S.flashes.push({ i, x, w, t: 0 });
+    } else {
+      S.streak = 0;
+      const left = Math.max(m.x, top.x), right = Math.min(m.x + m.w, top.x + top.w);
+      const keep = right - left;
+      if (keep <= 0) {
+        S.falling.push({ x: m.x, w: m.w, y: slabY(i), vy: 0, rot: 0, vr: m.dir * 1.2, i });
+        S.mover = null;
+        return gameOver();
+      }
+      S.stack.push({ x: left, w: keep });
+      const cutX = diff > 0 ? right : m.x;
+      const cutW = m.w - keep;
+      S.falling.push({ x: cutX, w: cutW, y: slabY(i), vy: 0, rot: 0, vr: (diff > 0 ? 1 : -1) * 2.2, i });
+    }
+    const n = S.stack.length;
+    S.camTarget = Math.max(0, (n - 8) * BLOCK_H);
+    spawn();
+    updateHud();
+  }
+
+  function updateHud() {
+    const score = S.stack.length - 1;
+    $('score').textContent = score;
+    $('bestTop').textContent = Math.max(S.best, 0);
+    $('streak').classList.toggle('on', S.streak >= 2 && S.state === 'play');
+    $('streakN').textContent = S.streak;
+  }
+
+  function gameOver() {
+    S.state = 'over';
+    const score = S.stack.length - 1;
+    const isNew = score > S.best;
+    if (isNew) { S.best = score; try { localStorage.setItem('tower.mock.best', String(score)); } catch {} }
+    // Zoom out to show the whole tower.
+    S.camTarget = 0;
+    S.zoomTarget = Math.min(1, (groundY() - 110) / (S.stack.length * BLOCK_H));
+    $('score').classList.add('hidden');
+    setTimeout(() => {
+      $('oScore').textContent = score;
+      $('oBest').textContent = S.best;
+      $('oPerf').textContent = S.perfects;
+      $('oNew').classList.toggle('hidden', !isNew || score === 0);
+      $('over').classList.remove('hidden');
+    }, 700);
+    updateHud();
+  }
+
+  function start() {
+    $('home').classList.add('hidden'); $('over').classList.add('hidden');
+    $('score').classList.remove('hidden');
+    S.state = 'play'; reset();
+  }
+
+  // ---- drawing ----
+  function drawSlab(x, y, w, i, alpha = 1) {
+    const c = slabColor(i);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = c.face; ctx.fillRect(x, y + 6, w, BLOCK_H - 6);
+    ctx.fillStyle = c.top;  ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = c.edge; ctx.fillRect(x, y + BLOCK_H - 3, w, 3);
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    const level = S.stack.length;
+    const [top, bot, k] = skyStops(level);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, `rgb(${top})`); g.addColorStop(1, `rgb(${bot})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // Stars fade in at night.
+    if (k > .55) {
+      ctx.fillStyle = `rgba(255,255,255,${(k - .55) * 1.6})`;
+      for (let s = 0; s < 60; s++) {
+        const sx = (s * 97.3) % W, sy = ((s * 53.7) % (H * .7));
+        ctx.fillRect(sx, sy, 2, 2);
+      }
+    }
+    // Distant skyline silhouette, scrolls slower than the tower.
+    const par = S.cam * .35;
+    ctx.fillStyle = `rgba(20,30,60,${.18 + k * .3})`;
+    for (let b = 0; b < 12; b++) {
+      const bw = W / 10, bx = b * bw * 0.95 - 10;
+      const bh = 60 + ((b * 37) % 90);
+      ctx.fillRect(bx, groundY() - bh + par + 20, bw * .8, bh + 200);
+    }
+    ctx.fillStyle = '#2b3a55'; ctx.fillRect(0, groundY() + S.cam * S.zoom, W, H);
+    ctx.save();
+    ctx.translate(W / 2, groundY()); ctx.scale(S.zoom, S.zoom); ctx.translate(-W / 2, -groundY());
+    // Ground.
+    const gy = groundY() + S.cam;
+    ctx.fillStyle = '#2b3a55'; ctx.fillRect(0, gy, W, H - gy + 400);
+    ctx.fillStyle = '#3d5070'; ctx.fillRect(0, gy, W, 6);
+
+    // Stack.
+    S.stack.forEach((s, i) => { const y = slabY(i); if (y > -BLOCK_H && y < H) drawSlab(s.x, y, s.w, i); });
+
+    // Perfect flash: white outline ring that grows.
+    S.flashes.forEach(f => {
+      const y = slabY(f.i), p = f.t / .45;
+      ctx.strokeStyle = `rgba(255,255,255,${1 - p})`; ctx.lineWidth = 3;
+      const pad = 4 + p * 14;
+      ctx.strokeRect(f.x - pad, y - pad, f.w + pad * 2, BLOCK_H + pad * 2);
+    });
+
+    // Mover.
+    if (S.mover) drawSlab(S.mover.x, slabY(S.stack.length), S.mover.w, S.stack.length);
+
+    // Falling pieces.
+    S.falling.forEach(f => {
+      ctx.save();
+      ctx.translate(f.x + f.w / 2, f.y + BLOCK_H / 2);
+      ctx.rotate(f.rot);
+      drawSlab(-f.w / 2, -BLOCK_H / 2, f.w, f.i, .95);
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+
+  function step(dt) {
+    if (S.mover && S.state === 'play') {
+      const m = S.mover, top = S.stack[S.stack.length - 1];
+      m.x += m.dir * m.speed * dt;
+      const lo = top.x - m.w - 40, hi = top.x + top.w + 40;
+      if (m.x > Math.min(W, hi)) { m.x = Math.min(W, hi); m.dir = -1; }
+      if (m.x < Math.max(-m.w, lo)) { m.x = Math.max(-m.w, lo); m.dir = 1; }
+    }
+    S.cam += (S.camTarget - S.cam) * Math.min(1, dt * 6);
+    S.zoom += (S.zoomTarget - S.zoom) * Math.min(1, dt * 4);
+    S.falling.forEach(f => { f.vy += 1400 * dt; f.y += f.vy * dt; f.rot += f.vr * dt; });
+    S.falling = S.falling.filter(f => f.y < H + 200);
+    S.flashes.forEach(f => f.t += dt);
+    S.flashes = S.flashes.filter(f => f.t < .45);
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (!FROZEN) step(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- input ----
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); if (S.state === 'play') drop(); });
+  $('play').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  $('closeOver').addEventListener('click', () => $('over').classList.add('hidden'));
+  $('back').addEventListener('click', () => {
+    S.state = 'home'; S.mover = null;
+    $('over').classList.add('hidden'); $('score').classList.add('hidden');
+    $('home').classList.remove('hidden'); updateHud();
+  });
+
+  // ---- frozen shots for the mockup sheet: ?shot=home|play|over ----
+  const shot = new URLSearchParams(location.search).get('shot');
+  let FROZEN = false;
+  resize(); addEventListener('resize', resize);
+  S.startW = Math.round(W * START_FRAC);
+  S.stack = [{ x: (W - S.startW) / 2, w: S.startW }];
+  if (shot === 'play' || shot === 'over') {
+    S.best = 41;
+    start();
+    const offs = [0,8,0,0,-6,0,0,0,10,0,-12,0,0,3,0,0,-9,0,0,7,0,0,0];
+    offs.forEach(o => drop(o));
+    S.cam = S.camTarget;
+    if (shot === 'play') {
+      S.mover.x = S.stack[S.stack.length - 1].x + 46;
+      S.falling = [{ x: S.stack[S.stack.length-1].x + S.stack[S.stack.length-1].w, w: 9, y: slabY(S.stack.length-1) + 40, vy: 0, rot: .5, vr: 0, i: S.stack.length-1 }];
+      S.streak = 3; S.flashes = []; updateHud();
+    } else {
+      S.mover.x = -400; drop(); // miss
+      S.cam = 0; S.zoom = S.zoomTarget; S.falling = []; S.flashes = [];
+    }
+    FROZEN = shot === 'play';
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
