@@ -78,7 +78,12 @@ column (no plain numbers). Gold medals = one per game (40), from the old per-gam
 3. **By Player filters/sorts in Hall of Fame > Wins** (difficulty categories, vs people, no-difficulty runs; Played and
    Name sorts): asked 2026-11-01, no answer yet. Part of the release gate below.
 4. **Release gate** before v2 replaces the old board for everyone (`docs/LEADERBOARD-V2-MORNING.md`): By Player
-   filters/sorts, the old player page's full per-game stats, Arrow Maze Rush in v2, then remove "Old".
+   filters/sorts, Arrow Maze Rush in v2, then remove "Old". (Per-game stats DONE v1382, below.)
+
+**Session 3 (2026-11-01), v1382:** a name tapped on a game's board opens THAT person's stats for THAT game (stack kind
+`pgame`, `personGameHTML`: the old board's `screenFor` from `game-stats-ui.js`), with "All games" to their page; a game
+row on a person's page opens the same screen (was: the game's board). Matt: "Do the contexto fix first ... directly to
+the admin version. Then we'll address the rest in mockups." Rest of section 4 still open.
 5. **Pinned row**: the outside reviewer suggested hiding it when your own row is on screen; the original spec says it
    is always there so the layout never jumps. Not changed.
 6. **Shape tile**: reviewer suggested dropping the white tile behind shapes; Matt wants black Hard/Expert diamonds,
