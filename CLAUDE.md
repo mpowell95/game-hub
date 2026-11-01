@@ -100,6 +100,11 @@ is true, every Firebase writer refuses (no override), online play is refused, an
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 **How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
+## Open handoff: Leaderboard v2 (2026-11-01)
+
+"Pick up the leaderboard" = **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** (v2 live for admin only, Matt's decisions,
+open questions, tools). Delete this section once v2 is released or abandoned.
+
 ## Open handoff (2026-10-30)
 
 "Let's pick up where we just left off" = **`docs/HANDOFF-KING-OF-GAMES-2026-10-30.md`** (reader key, King of Games'
@@ -338,6 +343,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
+- **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked).
 - **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env
   var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's
   sign-in is never admin). The key comes from Admin > gear > Reader key for Claude; `readers/<uid>` may READ playLog,
