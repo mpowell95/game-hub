@@ -157,6 +157,12 @@
 //                                                   // lifetime counters, additive. The one home of a
 //                                                   // Brick Breaker score (no local high-score table);
 //                                                   // see recordBrickBlitz
+//       tower: {                              // 2026-11-01, tower/: stack sliding blocks
+//         total, byDiff,                           // byDiff keyed easy|medium|hard|expert
+//         tw: { games, best, bestByDiff: { easy, medium, hard, expert }, blocks, perfects, bestStreak } },
+//                                                   // solo, no loss axis: every run is played+won.
+//                                                   // best/bestByDiff/bestStreak Math.max ONLY;
+//                                                   // games/blocks/perfects additive. See recordTower
 //       airhockey: {
 //         total, byDiff,                           // byDiff easy|medium|hard|expert vs the computer,
 //                                                   // 'mp' online (2026-09-27/28)
@@ -302,7 +308,7 @@ const STATS_KEY = 'gamehub.stats';
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
 // archive/<game>/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver', 'tower'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 // The challenge match being counted right now (withChallengeMatch, 2026-10-29); null otherwise.
 let _mpMatch = null;
@@ -1058,6 +1064,7 @@ function normalize(raw) {
   ensureGl(st.games.gridlock);
   ensureWw(st.games.wordweaver);
   ensureBz(st.games.brickblitz);
+  ensureTw(st.games.tower);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
   ensureCp(st.games.cuppong);
@@ -1556,7 +1563,7 @@ function resetKingOfGamesSkeeball(st) {
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
   archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
-  gridlock: 'gridlock', wordweaver: 'word-weaver',
+  gridlock: 'gridlock', wordweaver: 'word-weaver', tower: 'tower',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
 export function isTestGame(id) {
@@ -3066,6 +3073,42 @@ export function recordBrickBlitz(score, difficulty, extras) {
   g.bz.stages += n(x.stages);
   if (x.circuit === true) g.bz.circuits += 1;
   g.bz.bestCombo = Math.max(g.bz.bestCombo | 0, n(x.bestCombo));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Tower (2026-11-01, tower/): stack sliding blocks; the overhang is cut off. Solo, no loss axis,
+ *  so every finished run is played+won and `tw.games` is the true play count.
+ *    best / bestByDiff   tallest tower (blocks stacked) overall and per difficulty. Math.max ONLY.
+ *    bestStreak          most Perfect drops in a row. Math.max ONLY.
+ *    blocks / perfects   lifetime counters, additive forever. */
+export const TW_DIFFS = ['easy', 'medium', 'hard', 'expert'];
+function ensureTw(g) {
+  if (!g.tw || typeof g.tw !== 'object') g.tw = { games: 0, best: 0, bestByDiff: {}, blocks: 0, perfects: 0, bestStreak: 0 };
+  for (const k of ['games', 'best', 'blocks', 'perfects', 'bestStreak']) if (!Number.isFinite(g.tw[k])) g.tw[k] = 0;
+  if (!g.tw.bestByDiff || typeof g.tw.bestByDiff !== 'object') g.tw.bestByDiff = {};
+  for (const d of TW_DIFFS) if (!Number.isFinite(g.tw.bestByDiff[d])) g.tw.bestByDiff[d] = 0;
+}
+/** Tower: record one finished run. `height` = blocks stacked, `difficulty` one of TW_DIFFS,
+ *  `extras` = { perfects, bestStreak } from the run. */
+export function recordTower(height, difficulty, extras) {
+  if (tooFast('tower')) return null;
+  notePlay('tower', 'recordTower', arguments);
+  const st = loadStats();
+  const g = st.games.tower;
+  ensureTw(g);
+  const d = TW_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const n = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
+  const h = n(height);
+  const x = extras || {};
+  if (d) bumpTotals(g, d, true); else { g.total.played += 1; g.total.won += 1; }
+  g.tw.games += 1;
+  g.tw.blocks += h;
+  g.tw.perfects += n(x.perfects);
+  g.tw.best = Math.max(g.tw.best | 0, h);
+  if (d) g.tw.bestByDiff[d] = Math.max(g.tw.bestByDiff[d] | 0, h);
+  g.tw.bestStreak = Math.max(g.tw.bestStreak | 0, n(x.bestStreak));
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

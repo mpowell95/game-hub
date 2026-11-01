@@ -183,6 +183,8 @@ const GAME_META = [
   { id: 'gridlock', labelKey: 'game_title_gridlock' },
   // Word Weaver (2026-10-28, stats id 'wordweaver'): admin only at first; the row ships with the game.
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
+  // Tower (2026-11-01, tower/): admin only at first; the row ships with the game.
+  { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
   { id: 'snake', labelKey: 'game_title_snake' },
   { id: 'tictactoe', labelKey: 'game_title_tictactoe' },
@@ -846,6 +848,15 @@ function bzBestAt(g, tier) {
   const key = BZ_TIER_KEYS[tier - 1];
   return key ? (bz.bestScoreByDiff || {})[key] | 0 : 0;
 }
+/** Tower's board: tallest tower (blocks stacked), per difficulty tier (the same shape as Brick Breaker's). */
+const TW_TIER_KEYS = ['easy', 'medium', 'hard', 'expert'];
+function twBestAt(g, tier) {
+  const tw = ((g.games || {}).tower || {}).tw;
+  if (!tw) return 0;
+  if (tier == null) return tw.best | 0;
+  const key = TW_TIER_KEYS[tier - 1];
+  return key ? (tw.bestByDiff || {})[key] | 0 : 0;
+}
 function hcBestAt(g, tier) {
   const hc = (g.games.hillclimb || {}).hc;
   if (!hc) return 0;
@@ -982,6 +993,7 @@ function gameMetricAt(g, id, tier) {
   if (id === 'hillclimb') return hcBestAt(g, tier);
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'brickblitz') return bzBestAt(g, tier);
+  if (id === 'tower') return twBestAt(g, tier);
   // Contexto ranks on MEDALS (Matt, 2026-09-29): golds, then silvers, then bronzes, then solves
   // with no medal, packed into one number by ctMedalScore (js/leaderboard-rank.js). Ties go to
   // the lower average guesses in boardMetricCmp below. Every solve is still stored and shown.

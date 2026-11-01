@@ -51,6 +51,8 @@ const TABS = [
   // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
   // sub-counter has its own screen (wordWeaverScreen).
   { id: 'wordweaver', labelKey: 'game_title_wordweaver', devOnly: true },
+  // Tower (2026-11-01, tower/): admin only, so devOnly as in js/hub.js. Its `tw` sub-counter: towerScreen.
+  { id: 'tower', labelKey: 'game_title_tower', devOnly: true },
   { id: 'escoba', labelKey: 'game_title_escoba' },
   { id: 'filler', labelKey: 'game_title_filler' },
   { id: 'mancala', labelKey: 'game_title_mancala' },
@@ -125,7 +127,7 @@ const HUB_ID = {
   wordweaver: 'word-weaver',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -1379,6 +1381,7 @@ function hasPlays(id, rec) {
   if (id === 'snake') return !!(rec.sn && rec.sn.runs);
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
+  if (id === 'tower') return !!(rec.tw && rec.tw.games);
   if (id === 'cuppong') return ((rec.total || {}).played | 0) > 0 || !!(rec.cp && rec.cp.soloRacks);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
@@ -1399,6 +1402,7 @@ function headlineOf(id, rec) {
   if (id === 'snake') return { n: (rec.sn && rec.sn.bestLen) | 0, unitKey: unitKeyOf(id) };
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
+  if (id === 'tower') return { n: (rec.tw && rec.tw.best) | 0, unitKey: unitKeyOf(id) };
   if (id === 'contexto') return { n: (rec.ct && rec.ct.solved) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
   // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
@@ -1536,6 +1540,27 @@ function airHockeyScreen(rec) {
       <div class="gs-tally"><b>${ah.goalsFor | 0}-${ah.goalsAgainst | 0}</b><span>${t('gs_ah_goals')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Tower (2026-11-01): the `tw` sub-counter (js/game-stats.js recordTower). */
+function towerScreen(rec) {
+  const tw = (rec && rec.tw) || {};
+  const games = tw.games | 0;
+  if (!games) return emptyState(tf('game_title_tower', 'Tower'));
+  const by = tw.bestByDiff || {};
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${tw.best | 0}</b><span>${t('gs_tw_best')}</span></div>
+      <div class="gs-tally"><b>${games}</b><span>${t('gs_played')}</span></div>
+      <div class="gs-tally"><b>${(tw.perfects | 0).toLocaleString()}</b><span>${t('gs_tw_perfects')}</span></div>
+      <div class="gs-tally"><b>${tw.bestStreak | 0}</b><span>${t('gs_tw_streak')}</span></div>
+    </div>
+    <h4 class="gs-tbl-h">${t('gs_bz_by_diff')}</h4>
+    <table class="gs-grid">
+      <thead><tr><th scope="col"></th><th scope="col">${t('gs_played')}</th><th scope="col">${t('gs_tw_best')}</th></tr></thead>
+      <tbody>${C4_DIFFS.map(([k, labelKey]) =>
+        `<tr><th scope="row">${t(labelKey)}</th><td>${((rec && rec.byDiff && rec.byDiff[k] && rec.byDiff[k].played) | 0)}</td><td>${by[k] | 0}</td></tr>`).join('')}</tbody>
+    </table>`;
 }
 
 function brickBlitzScreen(rec) {
@@ -1731,6 +1756,7 @@ function screenFor(id, st) {
   if (id === 'battleship') return battleshipScreen(rec);
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
+  if (id === 'tower') return towerScreen(rec);
   if (id === 'airhockey') return airHockeyScreen(rec);
   if (id === 'cuppong') return cupPongScreen(rec);
   if (id === 'holdem') return holdemScreen(rec);

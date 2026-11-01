@@ -265,6 +265,7 @@ const ZERO = {
   contexto: { ct: ['fewest', 'noHint', 'silver', 'bronze', 'solved', 'guesses'] },
   wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush', 'cl', 'leg'] },
   brickblitz: { bz: ['bestScore', 'bestScoreByDiff', 'points', 'bestCombo'] },
+  tower: { tw: ['best', 'bestByDiff', 'bestStreak', 'blocks', 'perfects'] },
   ballrun: { br: ['bestObstacles', 'bestObstaclesByDiff'], brOrbital: ['bestObstacles', 'bestObstaclesByDiff'] },
   nutsbolts: { nb: ['bestLevel', 'bestByTier'] },
   holdem: { hb: ['winnings', 'best', 'cashes'], hs: ['won', 'bigPot', 'best', 'bestCat', 'bestCards'] },

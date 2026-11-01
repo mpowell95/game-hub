@@ -1264,6 +1264,17 @@ export const GAME_ART = {
               <g fill="#1d2230"><text x="44" y="29">W</text><text x="60.2" y="40.7">O</text><text x="54" y="59.8">R</text><text x="34" y="59.8">D</text><text x="27.8" y="40.7">E</text></g>
             </g>
           </svg>`,
+  // Tower (2026-11-01, tower/): a stack of slabs at dusk, the next block sliding in off-centre.
+  'tower': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <defs><linearGradient id="twTileSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#4a5aa8"/><stop offset="1" stop-color="#f0a084"/>
+            </linearGradient></defs>
+            <rect width="160" height="90" fill="url(#twTileSky)"/>
+            <g fill="rgba(20,30,60,.25)"><rect x="4" y="48" width="14" height="32"/><rect x="20" y="58" width="12" height="22"/><rect x="122" y="44" width="14" height="36"/><rect x="140" y="56" width="16" height="24"/></g>
+            <rect x="0" y="78" width="160" height="12" fill="#2b3a55"/><rect x="0" y="78" width="160" height="2" fill="#3d5070"/>
+            <rect x="48" y="71.5" width="64" height="6.5" fill="hsl(200 62% 50%)"/><rect x="48" y="70" width="64" height="1.8" fill="hsl(200 70% 64%)"/><rect x="51" y="63.5" width="61" height="6.5" fill="hsl(212 62% 50%)"/><rect x="51" y="62" width="61" height="1.8" fill="hsl(212 70% 64%)"/><rect x="49" y="55.5" width="59" height="6.5" fill="hsl(224 62% 50%)"/><rect x="49" y="54" width="59" height="1.8" fill="hsl(224 70% 64%)"/><rect x="49" y="47.5" width="59" height="6.5" fill="hsl(236 62% 50%)"/><rect x="49" y="46" width="59" height="1.8" fill="hsl(236 70% 64%)"/><rect x="53" y="39.5" width="55" height="6.5" fill="hsl(248 62% 50%)"/><rect x="53" y="38" width="55" height="1.8" fill="hsl(248 70% 64%)"/><rect x="50" y="31.5" width="52" height="6.5" fill="hsl(260 62% 50%)"/><rect x="50" y="30" width="52" height="1.8" fill="hsl(260 70% 64%)"/><rect x="50" y="23.5" width="52" height="6.5" fill="hsl(272 62% 50%)"/><rect x="50" y="22" width="52" height="1.8" fill="hsl(272 70% 64%)"/><rect x="76" y="14" width="52" height="8" fill="hsl(284 62% 50%)"/>
+            <rect x="118" y="34" width="4" height="7" fill="hsl(284 62% 50%)" transform="rotate(24 120 37)"/>
+          </svg>`,
 };
 
 export default GAME_ART;
