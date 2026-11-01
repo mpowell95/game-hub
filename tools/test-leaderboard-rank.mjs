@@ -557,9 +557,11 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   eq('the rows, the badges and the By Game leader all use the board\'s one order',
     // 4 since 2026-10-15: the tabbed board (plainBoardHTML) numbers its badges through it too.
     (src.match(/(?<!function )boardMetricCmp\((?:id|meta\.id)\)/g) || []).length, 4);
-  ok('[KNOWN-BUG PROBE] Tic Tac Toe\'s bespoke order lives INSIDE that one function',
-    /function boardMetricCmp\(id\) \{\s*\n\s*if \(id === 'tictactoe'\)/.test(src)
-    && !/if \(id === 'tictactoe'\) \{\s*\n\s*rows\.sort/.test(src),
+  // 2026-11-01 (Matt: "You choose"): Tic Tac Toe has no bespoke order any more; its standing takes the
+  // board's All-tab order, so rows, badges and the leader still share ONE comparator.
+  ok('[KNOWN-BUG PROBE] Tic Tac Toe\'s order is the one board order (no bespoke rows.sort, no Ultimate-first standing)',
+    !/if \(id === 'tictactoe'\) \{\s*\n\s*rows\.sort/.test(src)
+    && !/function boardMetricCmp\(id\) \{\s*\n\s*if \(id === 'tictactoe'\)/.test(src),
     'ordering the rows Ultimate-first while numbering the badges on generic wins read 3,2,1,T4,T4,7,6,T8');
   ok('the badge comparator carries no plays or recency tie-break, so an equal pair ties',
     /rows\.sort\(\(a, b\) => metric\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\) \|\| recent\(a, b\)\);/.test(src)
@@ -667,8 +669,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('the You tab and the line under a board read the record at the RECORD\'S tier',
     /const tier = boardTierOf\(rec, id\);\s*\n\s*const r = gameMetricAt\(rec, id, tier\);\s*\n\s*const m = gameMetricAt\(me, id, tier\);/.test(src));
   ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
-  ok('Tic Tac Toe\'s own Ultimate/Classic order leads with the tier too',
-    /const d = \(boardTierOf\(b, id\) \|\| 0\) - \(boardTierOf\(a, id\) \|\| 0\);\s*\n\s*if \(d\) return d;/.test(src));
+  ok('Tic Tac Toe ranks on the generic difficulty-first order (2026-11-01)',
+    /const cmp = id === 'tictactoe' \? \(a, b\) => compareBoardRow\(a, b, id\) : boardMetricCmp\(id\);/.test(src));
   // FIVE, not three, since 2026-09-11: the generic card, plus Tic Tac Toe's and Snake's cards in
   // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
   // Drop the chip from any one of them and this fails, which is the point.
