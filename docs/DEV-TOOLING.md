@@ -123,3 +123,6 @@
 - `tools/reader-auth.mjs`: `signInForReading()`: signs in with the reader key in env `GAMEHUB_READER` (made on Admin > gear > Reader key for Claude), else anonymously.
 - `tools/read-play-log.mjs <CODE> [--game contexto] [--moves]`: READ ONLY, one player's play log; Contexto one line per puzzle (day it was for, when played, result, typed guesses, hints and their ranks, closest rank before the end); Eastern time; no answer words.
 - `tools/read-contexto-history.mjs [CODE]`: READ ONLY, every Contexto puzzle each phone uploaded from its save (`ctHistory/`); no code = one line per player (averages with hint = 1 and hint = 10 guesses, no-hint wins); a code = its puzzles one per line; no answer words.
+
+- `tools/read-lb-snapshot.mjs` (2026-11-01): read-only copy of `boards/v1/lb/z`, `adminConfig/v1`, `boards/v1/bee` into `backups/` (git-ignored). Needs `GAMEHUB_READER`.
+- `tools/lb2-shots.cjs` (2026-11-01): Leaderboard v2 screenshots with real data and the network blocked (viewer *King of Games*), into `review-shots/latest/` (git-ignored). Needs the snapshot and `PORT=8177 node server.mjs`.
