@@ -35,6 +35,7 @@ on:
       - 'spelling-bee/data/bee.json'
       - 'spelling-bee/data/bee-es.json'
       - 'tools/sync-functions-shared.mjs'
+      - 'tools/test-push.mjs'
       - 'database.rules.json'
       - 'firebase.json'
       - '.firebaserc'

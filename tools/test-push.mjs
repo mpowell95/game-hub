@@ -132,7 +132,7 @@ check('a tapped notification survives a reload (queued first, cleared only once 
   && /await this\.launch\(id\);\n\s*if \(this\.current && this\.current\.id === id\) this\._clearPushOpen\(\);/.test(hub)
   && /const q = this\._peekPushOpen\(\);/.test(hub));
 check('a cold start opens the notified game without waiting on the network alert check',
-  /this\._afterPaint\(\(\) => this\._openFromUrl\(\)\);/.test(hub));
+  /this\._afterPaint\(\(\) => (?:this\._openFromUrl\(\)|\{ this\._openFromUrl\(\);[^}]*\})\);/.test(hub));
 check('the launcher refresh gives a tapped notification a moment to open its game first',
   /setTimeout\(\(\) => \{[\s\S]{0,120}if \(this\.current\) \{ this\._reloaded = false; this\._updateWaiting = true;/.test(hub));
 check('the hub refreshes this device\'s address on load', /import\('\.\/push\.js'\)\.then\(\(m\) => m\.refreshPush\(\)\)/.test(hub));
