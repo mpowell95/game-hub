@@ -536,6 +536,9 @@ devices only, first row; opens the admin page with "Profile" as its back word, `
 Settings rows (Theme, Language, Layout, Notifications, Preferred color, Quick chat, Computer players), each its own
 screen; Your devices, Report a bug, Replies; Reset profile alone at the bottom. Screens are `.pf-view` sections switched
 by `history.pushState` (the phone's back gesture steps back). Every control id and handler is the old one.
+**Compact's tab bar shows on the profile page too (2026-11-01, Matt)**: a copy of the hub's bar (icons copied from `hub.js`
+`TAB_ICON`), Profile lit; another tab writes `sessionStorage['hub.openTab']` and goes back, the launcher opens it
+(`_takeTabRequest`, after paint and on `pageshow`). Which tabs and counts: the launcher's last paint (`hub.tabs`).
 
 **Firebase rules:** root `.read`/`.write` are `false` and every branch is enumerated in
 `database.rules.json`; **add a new top-level node there or it is unreachable**, and add it to
