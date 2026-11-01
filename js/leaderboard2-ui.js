@@ -20,7 +20,7 @@ import { loadProfile } from './profile-store.js';
 import { statsId, activityReport } from './game-stats.js';
 import { GAME_ART } from './game-art.js';
 import { loadFavorites, toggleFavorite } from './favorites.js';
-import { hubIdOf, isGameOnLauncher } from './game-stats-ui.js';
+import { hubIdOf, isGameOnLauncher, screenFor, ensureStatsCss } from './game-stats-ui.js';
 import { diffShapeSVG } from './difficulty-tiers.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -114,7 +114,7 @@ let _model = null;
 let _tab = 'boards';
 let _chip = null;
 let _q = '';
-let _stack = [];          // [{ kind: 'board', game, sel } | { kind: 'player', key, all }]
+let _stack = [];          // [{ kind: 'board', game, sel } | { kind: 'player', key, all } | { kind: 'pgame', key, game }]
 let _entryGame = null;
 let _onPlay = null;
 let _canPlay = () => false;
@@ -509,31 +509,50 @@ function meHTML() {
 
 // --- Player: every game they played, their place and their number ----------------------------------------
 const _msgTo = [];
+/** The person's top bar (back, face, name, a second line, Message). Shared by their page and their game page. */
+function personBarHTML(g, key, sub) {
+  const face = String(g.emoji || '').trim() || esc(nameOf(g).slice(0, 1).toUpperCase());
+  const code = typeof g.playerId === 'string' ? g.playerId.trim().toUpperCase() : '';
+  let msg = '';
+  if (code && key !== _meKey) {
+    if (_msgTo.length > 200) _msgTo.length = 0;
+    const mi = _msgTo.push({ code, name: nameOf(g), emoji: g.emoji || '🙂' }) - 1;
+    msg = `<button type="button" class="lb2-icon lb2-msg" data-act="msg" data-mi="${mi}" aria-label="${esc(t2('lb2_message'))}">${SVG.chat}</button>`;
+  }
+  return `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
+    <span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${sub ? esc(sub) : ''}</span></span>${msg}</div>`;
+}
 function playerHTML(top) {
   const pg = lb2PlayerGames(_people, top.key);
   const g = (pg && pg.g) || _people.find((x) => x.key === top.key) || {};
   const places = B.personPlaces(_model.standings, top.key);
   const hr = hofRankOf(top.key);
-  const face = String(g.emoji || '').trim() || esc(nameOf(g).slice(0, 1).toUpperCase());
-  const code = typeof g.playerId === 'string' ? g.playerId.trim().toUpperCase() : '';
-  let msg = '';
-  if (code && top.key !== _meKey) {
-    if (_msgTo.length > 200) _msgTo.length = 0;
-    const mi = _msgTo.push({ code, name: nameOf(g), emoji: g.emoji || '🙂' }) - 1;
-    msg = `<button type="button" class="lb2-icon lb2-msg" data-act="msg" data-mi="${mi}" aria-label="${esc(t2('lb2_message'))}">${SVG.chat}</button>`;
-  }
-  const bar = `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
-    <span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(top.key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${pg ? esc(`${t('lb_played_count', { n: fmt(pg.played) })} · ${fmt(pg.wins)} ${t('lb_wins_unit')}`) : ''}</span></span>${msg}</div>`;
+  const bar = personBarHTML(g, top.key, pg ? `${t('lb_played_count', { n: fmt(pg.played) })} · ${fmt(pg.wins)} ${t('lb_wins_unit')}` : '');
   const tag = String(g.message || '').trim();
   const nHeld = Object.values(places.place).filter((p) => p.rank === 1 && !p.noMedal).length;
   const tiles = `<div class="lb2-tiles"><div class="lb2-tile"><b class="num">${nHeld}</b><span>${esc(t2('lb2_records_tile'))}</span></div>
     <div class="lb2-tile"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></div>
     <div class="lb2-tile"><b class="num">${pg ? pg.games.length : 0}</b><span>${esc(t2('lb2_games_tile'))}</span></div></div>`;
   // Under the game's name: lifetime plays only. The difficulty is the shape before the number at the right.
-  const games = pg && pg.games.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_games_h'))}</h2><div class="lb2-card">${pg.games.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
+  const games = pg && pg.games.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_games_h'))}</h2><div class="lb2-card">${pg.games.map((x) => `<button type="button" class="lb2-row sm" data-act="pgame" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(x.plays) }))}</span></span>
       <span class="lb2-right"><span class="lb2-rv num">${valHTML(x.id, x)}</span>${placeHTML(defPlace(x.id, top.key))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tag ? `<p class="lb2-tag">${esc(tag)}</p>` : ''}${tiles}${games}</div></div>`;
+}
+
+// --- One person, one game (Matt, 2026-11-01): a name tapped on a game's board opens THAT person's stats for
+// THAT game, the old leaderboard's player-game screen (game-stats-ui.js screenFor, My Stats' own renderers).
+// "All games" under it opens their whole page.
+function personGameHTML(top) {
+  const g = _people.find((x) => x.key === top.key) || {};
+  const plays = (lb2PlayerGames(_people, top.key) || { games: [] }).games.find((x) => x.id === top.game);
+  const bar = personBarHTML(g, top.key, title(top.game));
+  const head = `<div class="lb2-card"><div class="lb2-row sm">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span>${plays ? `<span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(plays.plays) }))}</span>` : ''}</span>
+    ${plays ? `<span class="lb2-right"><span class="lb2-rv num">${valHTML(top.game, plays)}</span>${placeHTML(defPlace(top.game, top.key))}</span>` : ''}</div></div>`;
+  let stats = '';
+  try { stats = screenFor(top.game, { games: g.games || {}, code: g.playerId }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
+  const all = `<div class="lb2-card"><button type="button" class="lb2-row sm" data-act="pall"><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_all_games'))}</span></span>${CHEV}</button></div>`;
+  return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="lb2-pgs">${stats}</div>${all}</div></div>`;
 }
 
 // --- How rankings work (round 4): every line checked against leaderboard-ui.js ----------------------------
@@ -557,6 +576,7 @@ function screenHTML() {
   const top = _stack[_stack.length - 1];
   if (top && top.kind === 'board') return boardScreenHTML(top);
   if (top && top.kind === 'player') return playerHTML(top);
+  if (top && top.kind === 'pgame') return personGameHTML(top);
   const sheet = _help ? helpHTML() : '';
   if (_tab === 'hof') return hofHTML() + sheet;
   if (_tab === 'me') return meHTML() + sheet;
@@ -585,6 +605,9 @@ function openGame(game, sel) {
   render();
 }
 function openPerson(key) {
+  const top = _stack[_stack.length - 1];
+  // From a game's board: that person's stats for that game (the viewer's own too).
+  if (top && top.kind === 'board') { _stack.push({ kind: 'pgame', key, game: top.game }); render(); return; }
   if (key === _meKey) { _stack = []; _tab = 'me'; render(); return; }
   _stack.push({ kind: 'player', key, all: false });
   render();
@@ -613,6 +636,14 @@ function onClick(e) {
     case 'chip': _chip = v; _q = ''; render(); return;
     case 'game': openGame(el.dataset.game); return;
     case 'person': { const k = _pidx[Number(el.dataset.pi)]; if (k != null) openPerson(k); return; }
+    case 'pgame': { const top = _stack[_stack.length - 1]; if (top && top.kind === 'player') { _stack.push({ kind: 'pgame', key: top.key, game: el.dataset.game }); render(); } return; }
+    case 'pall': {
+      const top = _stack[_stack.length - 1];
+      if (!top || top.kind !== 'pgame') return;
+      const below = _stack[_stack.length - 2];
+      if (below && below.kind === 'player' && below.key === top.key) { stepBack(); return; }
+      _stack.push({ kind: 'player', key: top.key, all: false }); render(); return;
+    }
     case 'back': if (!stepBack()) closeLeaderboard2(); return;
     case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
     case 'hofview': _hofView = v === 'wins' ? 'wins' : 'medals'; render(); return;
@@ -690,6 +721,7 @@ export async function openLeaderboard2(opts = {}) {
   closeLeaderboard2();
   ensureCss();
   try { ensureLeaderboardCss(); } catch { /* Minesweeper's % bar and Contexto's medals style from it */ }
+  try { ensureStatsCss(); } catch { /* a person's game page uses My Stats' gs-* screens */ }
   _opts = { ...opts };
   delete _opts.legacy;
   _onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : null;
