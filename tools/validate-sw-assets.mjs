@@ -123,6 +123,7 @@ const SCAN_EXT = new Set(['.js', '.css', '.html']);
 // Deliberate exclusions, transcribed from the comments already in this repo (not re-invented
 // here - see the cited source of each):
 const EXCLUDED = [
+  { re: /^tools\/lb2-harness\.html$/, why: "Leaderboard v2 parity harness (tools/test-lb2-parity.mjs), dev-only, never served to a player" },
   // Every game's headless engine test/sim runner is node-only and explicitly "not
   // deployed/precached" (escoba/js/test.js and chinchon/js/sim.js say so in their own header
   // comments; connect-four/js/test.js and nuts-bolts/js/test.js follow the identical
