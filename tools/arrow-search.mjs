@@ -109,11 +109,11 @@ function walk(R, occ, start, len) {
   return path;
 }
 /** One random change; null when it does not apply. */
-function mutate(R, arrows) {
+function mutate(R, arrows, floor = 26) {
   const a = clone(arrows), k = R();
   const id = (R() * a.length) | 0;
   if (k < 0.3) { a[id].reverse(); return a; }
-  if (k < 0.42) { if (a.length <= 26) return null; a.splice(id, 1); return a; }
+  if (k < 0.42) { if (a.length <= floor) return null; a.splice(id, 1); return a; }
   if (k < 0.62) {   // grow a tail into an empty neighbour
     const occ = occOf(a), t = a[id][0], x = t % W, y = (t / W) | 0;
     const d = DIRS[(R() * 4) | 0], nx = x + d[0], ny = y + d[1];
@@ -142,7 +142,7 @@ export function search(seed, style, ITERS, over, scorer) {
   let cs = sc(cur), best = cur, bs = cs;
   for (let it = 0; it < ITERS; it++) {
     const temp = 3 * (1 - it / ITERS) + 0.05;
-    const nx = mutate(R, cur);
+    const nx = mutate(R, cur, S.keep || 26);   // S.keep (2026-11-01): the fewest arrows a removal may leave (Easy / Medium tests)
     if (!nx) continue;
     const s = sc(nx);
     if (s === -Infinity) continue;

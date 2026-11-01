@@ -373,6 +373,18 @@ bigger? Drop all the rules ... Make it AS DIFFICULT AS POSSIBLE"*. Boards **11-1
 largest): 11 = 75 arrows, next arrow ~8.7 dots away on every move, blockers ~10.5 dots off (86% far); 12 = 120
 arrows, ~5.9 dots. One free at every step, no trains. Proposed, not built: 1 heart and no hints for Impossible.
 
+## Easy and Medium test boards (2026-11-01, admin only, not yet published)
+
+Points per minute (clean levels): Easy ~3.4, Medium ~3.3, Hard ~2.0, Expert ~1.0. Matt rejected Expert 18 points
+(*"18 points for an expert level feels INSANE ... we're better off adjusting the difficulties of easy and medium
+instead"*), then *"Make test boards"*. Aim: Easy ~0:30 a level (today ~0:18), Medium ~1:00 (~0:36), Hard unchanged,
+Expert maybe 9 points. `js/easymed-tests.js` (GENERATED, `tools/build-arrow-easymed-tests.mjs`, APPEND-ONLY), listed
+first under the 🧪 as "Easy test 1-3" / "Medium test 1-3" (ids `e1`..`e6`, results in `gamehub.wayout.tests2.v1`
+under that id, nothing else touched). Recipes: 1 = generator 8's old Hard style (2-3 free), 2 = one arrow free at
+every step (generator 11, smaller), 3 = in between. Easy: 20 / 13 / 22 arrows on 11x14 / 10x13 / 12x16; Medium:
+45 / 26 / 39 on 16x22 / 14x19 / 15x20. `tools/arrow-search.mjs` `S.keep` lets a removal go below 26 arrows
+(default 26, so every shipped board file builds the same).
+
 ## Test boards (2026-10-26, removed 2026-10-27)
 
 Admin-only 🧪 boards that proved generator 8's styles (Matt: *"WAY harder. And WAY better"*). Removed once
