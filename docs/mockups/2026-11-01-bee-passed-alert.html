@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spelling Bee: passed alert</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #e9e9ee; font-family: -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif; color: #000; }
+  .row { display: flex; gap: 28px; justify-content: center; align-items: flex-start; }
+  .cap { text-align: center; font: 700 15px/1 inherit; margin: 0 0 10px; color: #444; }
+  .phone { width: 402px; height: 874px; border-radius: 48px; background: #fff; position: relative; overflow: hidden; box-shadow: 0 0 0 10px #111, 0 12px 40px rgba(0,0,0,.25); }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .modal { position: absolute; left: 16px; right: 16px; top: 110px; background: #fff; border-radius: 18px; padding: 16px 16px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .top { display: flex; align-items: center; justify-content: space-between; height: 36px; }
+  .ib { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 0; background: none; padding: 0; }
+  .ib svg { width: 24px; height: 24px; display: block; }
+  .bell.on { background: #f7da21; }
+  h2 { margin: 0; font-size: 20px; font-weight: 800; text-align: center; flex: 1; }
+  h3 { margin: 12px 2px 6px; font-size: 14px; font-weight: 800; opacity: .75; }
+  ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  li { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 12px; background: rgba(0,0,0,.07); }
+  li.me { background: rgba(247,218,33,.22); box-shadow: inset 0 0 0 2px #f7da21; }
+  .pos { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; opacity: .7; }
+  .pos.top3 { background: #f7da21; opacity: 1; }
+  .av { flex: none; font-size: 24px; width: 28px; text-align: center; }
+  .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .nm { font-weight: 700; font-size: 16px; }
+  .bar { display: block; height: 6px; border-radius: 3px; background: rgba(0,0,0,.16); overflow: hidden; }
+  .bar b { display: block; height: 100%; background: #f7da21; }
+  .n { flex: none; min-width: 66px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; line-height: 1.1; }
+  .n b { font-size: 20px; font-weight: 800; }
+  .n .p b { font-size: 14px; font-weight: 700; }
+  .n small { font-size: 11px; opacity: .65; }
+  .toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: 150px; background: #111; color: #fff; font-weight: 700; font-size: 15px; padding: 10px 18px; border-radius: 20px; display: flex; gap: 8px; align-items: center; }
+  .toast svg { width: 18px; height: 18px; }
+  /* lock screen */
+  .lock { background: linear-gradient(160deg, #1f3a5f, #4a2a5e 60%, #1b1b2e); color: #fff; }
+  .clock { text-align: center; margin-top: 92px; }
+  .clock .d { font-size: 20px; font-weight: 600; opacity: .9; }
+  .clock .t { font-size: 96px; font-weight: 700; letter-spacing: -2px; line-height: 1; }
+  .note { position: absolute; left: 12px; right: 12px; top: 380px; background: rgba(245,245,250,.82); color: #000; border-radius: 22px; padding: 12px 14px; display: flex; gap: 10px; }
+  .note img { width: 38px; height: 38px; border-radius: 9px; flex: none; }
+  .note .b { flex: 1; min-width: 0; }
+  .note .h { display: flex; justify-content: space-between; font-size: 15px; font-weight: 700; }
+  .note .h span { font-weight: 400; opacity: .55; font-size: 14px; }
+  .note .x { font-size: 15px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="row">
+
+  <!-- 1. Rankings, bell off -->
+  <div>
+    <p class="cap">Off</p>
+    <div class="phone">
+      <div class="dim"></div>
+      <div class="modal">
+        <div class="top">
+          <button class="ib bell" aria-label="Alert me">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          </button>
+          <h2>Today</h2>
+          <button class="ib" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <h3>English</h3>
+        <ol>
+          <li><span class="pos top3">1</span><span class="av">🦊</span><span class="mid"><span class="nm">Ana</span><span class="bar"><b style="width:88%"></b></span></span><span class="n"><span><b>41</b> <small>words</small></span><span class="p"><b>142</b> <small>points</small></span></span></li>
+          <li class="me"><span class="pos top3">2</span><span class="av">🧊</span><span class="mid"><span class="nm">MattyIce</span><span class="bar"><b style="width:85%"></b></span></span><span class="n"><span><b>39</b> <small>words</small></span><span class="p"><b>138</b> <small>points</small></span></span></li>
+          <li><span class="pos top3">3</span><span class="av">🌻</span><span class="mid"><span class="nm">Lili</span><span class="bar"><b style="width:60%"></b></span></span><span class="n"><span><b>30</b> <small>words</small></span><span class="p"><b>97</b> <small>points</small></span></span></li>
+          <li><span class="pos">4</span><span class="av">🐢</span><span class="mid"><span class="nm">Moonis</span><span class="bar"><b style="width:34%"></b></span></span><span class="n"><span><b>18</b> <small>words</small></span><span class="p"><b>55</b> <small>points</small></span></span></li>
+        </ol>
+        <h3>Español</h3>
+        <ol>
+          <li><span class="pos top3">1</span><span class="av">🌻</span><span class="mid"><span class="nm">Lili</span><span class="bar"><b style="width:52%"></b></span></span><span class="n"><span><b>22</b> <small>words</small></span><span class="p"><b>71</b> <small>points</small></span></span></li>
+          <li class="me"><span class="pos top3">2</span><span class="av">🧊</span><span class="mid"><span class="nm">MattyIce</span><span class="bar"><b style="width:20%"></b></span></span><span class="n"><span><b>9</b> <small>words</small></span><span class="p"><b>27</b> <small>points</small></span></span></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Rankings, bell on (just tapped) -->
+  <div>
+    <p class="cap">On</p>
+    <div class="phone">
+      <div class="dim"></div>
+      <div class="modal">
+        <div class="top">
+          <button class="ib bell on" aria-label="Alert me">
+            <svg viewBox="0 0 24 24" fill="#000" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" fill="none"/></svg>
+          </button>
+          <h2>Today</h2>
+          <button class="ib" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <h3>English</h3>
+        <ol>
+          <li><span class="pos top3">1</span><span class="av">🦊</span><span class="mid"><span class="nm">Ana</span><span class="bar"><b style="width:88%"></b></span></span><span class="n"><span><b>41</b> <small>words</small></span><span class="p"><b>142</b> <small>points</small></span></span></li>
+          <li class="me"><span class="pos top3">2</span><span class="av">🧊</span><span class="mid"><span class="nm">MattyIce</span><span class="bar"><b style="width:85%"></b></span></span><span class="n"><span><b>39</b> <small>words</small></span><span class="p"><b>138</b> <small>points</small></span></span></li>
+          <li><span class="pos top3">3</span><span class="av">🌻</span><span class="mid"><span class="nm">Lili</span><span class="bar"><b style="width:60%"></b></span></span><span class="n"><span><b>30</b> <small>words</small></span><span class="p"><b>97</b> <small>points</small></span></span></li>
+          <li><span class="pos">4</span><span class="av">🐢</span><span class="mid"><span class="nm">Moonis</span><span class="bar"><b style="width:34%"></b></span></span><span class="n"><span><b>18</b> <small>words</small></span><span class="p"><b>55</b> <small>points</small></span></span></li>
+        </ol>
+        <h3>Español</h3>
+        <ol>
+          <li><span class="pos top3">1</span><span class="av">🌻</span><span class="mid"><span class="nm">Lili</span><span class="bar"><b style="width:52%"></b></span></span><span class="n"><span><b>22</b> <small>words</small></span><span class="p"><b>71</b> <small>points</small></span></span></li>
+          <li class="me"><span class="pos top3">2</span><span class="av">🧊</span><span class="mid"><span class="nm">MattyIce</span><span class="bar"><b style="width:20%"></b></span></span><span class="n"><span><b>9</b> <small>words</small></span><span class="p"><b>27</b> <small>points</small></span></span></li>
+        </ol>
+      </div>
+      <div class="toast"><svg viewBox="0 0 24 24" fill="#f7da21" stroke="#f7da21" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/></svg>Alerts on</div>
+    </div>
+  </div>
+
+  <!-- 3. The push -->
+  <div>
+    <p class="cap">Push</p>
+    <div class="phone lock">
+      <div class="clock"><div class="d">Sunday, November 1</div><div class="t">4:12</div></div>
+      <div class="note">
+        <img src="../../icons/icon-192.png" alt="">
+        <div class="b">
+          <div class="h">Spelling Bee <span>now</span></div>
+          <div class="x">🦊 Ana passed MattyIce: 142 to 138</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
