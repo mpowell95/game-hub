@@ -34,3 +34,14 @@ obscure), because English has 22,045 answers (Spanish 6,317). So English keeps i
 50+ subtitle mentions (FUNGO, said 7 times, had stayed refused although the header named it), and the 824 SCOWL-70
 words said 10-49 times were read; 123 recognisable ones added (AGLET, FUNGO, TAHINI, LATKE, GOOGOL...). 253 -> 376.
 Answers and puzzles byte-identical.
+
+
+## 2026-11-01: past days look-only, missed days for fun
+
+Matt: "Can players play previous days in spelling bee right now? I don't think they should be able to." Until now any
+past day was fully playable (late words never counted, `onDay`, but the day could be played after its answers were out).
+Mockup (`docs/mockups/spelling-bee-past-days.html`) approved with: played days look-only with every word and bonus word,
+yours ticked; missed days "play for fun" behind a popup (Matt's wording request: "doesn't count towards your stats or the
+leaderboard"); answers hidden while playing for fun but available any time from the eye; that day's leaderboard shown
+with the for-fun score clearly not counting; "no for fun playing on past days you actually played"; the Bonus list may
+scroll (Spanish days have up to ~200+ bonus words). Built the same day.

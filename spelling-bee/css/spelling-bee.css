@@ -249,3 +249,48 @@
 /* Two lists made the board tall enough to slide under the hub's Back button: keep it below (rows past
    this fold into "+N", _openBoard). */
 .sb-root .sb-modal--board { max-height: calc(100% - 2 * (var(--sb-top, 8px) + 52px)); }
+
+/* --- past days (2026-11-01): for fun, and look-only ------------------------------------------- */
+.sb-root .sb-fun-tag {
+  display: inline-block; margin-left: 4px; padding: 0 7px; border: 1.5px dashed currentColor; border-radius: 10px;
+  font-size: 11px; font-weight: 800; line-height: 1.5; white-space: nowrap; vertical-align: middle; opacity: 1;
+}
+.sb-root .sb-rank-date .sb-fun-tag { margin-left: 2px; }
+.sb-root .sb-review { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 16px; }
+.sb-root .sb-rv-date { margin: 6px 0 0; text-align: center; font-size: 14px; color: var(--sb-muted); }
+.sb-root .sb-rv-date .sb-fun-tag { color: var(--sb-ink); }
+.sb-root .sb-rv-rank { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 6px 0; font-size: 18px; }
+.sb-root .sb-rv-rank span { color: var(--sb-muted); font-variant-numeric: tabular-nums; }
+.sb-root .sb-review .sb-hive { max-width: 280px; max-height: 292px; }
+.sb-root .sb-rv-rows { flex: none; border: 1px solid var(--sb-line); border-radius: 12px; overflow: hidden; }
+.sb-root .sb-rv-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 0 12px 0 16px; border: 0;
+  background: transparent; color: var(--sb-ink); font: inherit; font-size: 18px; font-weight: 600; text-align: left;
+  cursor: pointer; touch-action: manipulation;
+}
+.sb-root .sb-rv-row + .sb-rv-row { border-top: 1px solid var(--sb-line); }
+.sb-root .sb-rv-row svg { width: 20px; height: 20px; flex: none; color: var(--sb-muted); }
+.sb-root .sb-rv-n { margin-left: auto; color: var(--sb-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.sb-root h2 .sb-rv-n { margin-left: 6px; font-size: 16px; }
+.sb-root .sb-rv-letters { justify-content: center; }
+.sb-root .sb-rv-list { columns: 2; }
+.sb-root .sb-rv-list.is-3 { columns: 3; column-gap: 12px; }
+.sb-root .sb-rv-list li { border-bottom: 1px solid var(--sb-line); overflow: hidden; text-overflow: ellipsis; }
+.sb-root .sb-rv-list li.is-miss { color: var(--sb-muted); }
+.sb-root .sb-rv-list li.is-got { font-weight: 700; }
+.sb-root .sb-rv-list li.is-pangram.is-got { background: color-mix(in srgb, var(--sb-yellow) 35%, transparent); }
+.sb-root .sb-rv-list .sb-tick { display: inline-block; width: 14px; font-size: 11px; }
+.sb-root .sb-modal--list { max-height: calc(100% - 2 * (var(--sb-top, 8px) + 52px)); }
+.sb-root .sb-ask-line { margin: 0 0 14px; text-align: center; color: var(--sb-muted); }
+.sb-root .sb-modal--fun .gh-modal__title, .sb-root .sb-modal--reveal .gh-modal__title { text-align: center; }
+.sb-root .sb-ask-btns { display: flex; flex-direction: column; gap: 10px; }
+.sb-root .sb-cal-day.is-fun { border: 1.5px dashed var(--sb-ink); }
+.sb-root .sb-cal-day.is-fun .sb-cal-bar { outline: 1px solid var(--sb-ink); background: transparent; }
+.sb-root .sb-bd-row.is-fun { background: transparent; box-shadow: none; border: 2px dashed var(--sb-ink); }
+.sb-root .sb-bd-row.is-fun .sb-bd-bar b { background: repeating-linear-gradient(90deg, var(--sb-yellow) 0 5px, transparent 5px 8px); }
+.sb-root .sb-bd-row.is-fun .sb-bd-name { display: flex; align-items: center; gap: 4px; }
+.sb-root .sb-modal--fun .gh-modal__title { font-size: 19px; white-space: nowrap; }
+.sb-root .sb-rv-list.is-3 { font-size: 13px; }
+.sb-root .sb-modal--fun .gh-modal__title { padding: 0 34px; text-align: center; }
+.sb-root .sb-bd-row.is-fun .sb-bd-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sb-root .sb-bd-row.is-fun .sb-fun-tag { flex: none; }

@@ -147,6 +147,29 @@ function writeSave(save) {
   } catch (err) { console.error('[spelling-bee] save FAILED - progress may not survive a reload', err); return false; }
 }
 
+// --- for fun (2026-11-01, Matt) ---------------------------------------------------------------
+// A past day this player never played can be played FOR FUN: its own store, never `games`, so nothing
+// here can reach countDays, the Genius win, the daily board or the stats. Found words only grow (rule 2).
+// { v:1, games: { "<centre>:<outer>": { day, found: [...], times: {word: ms}, revealed: ms } } }
+// `revealed` = the player chose to see the answers: from then on that day is look-only.
+const FUN_KEY = 'gamehub.spellingbee.fun.v1';
+function loadFun() {
+  try {
+    const v = JSON.parse(localStorage.getItem(FUN_KEY) || '{}') || {};
+    return { v: 1, games: isObj(v.games) ? v.games : {} };
+  } catch { return { v: 1, games: {} }; }
+}
+function writeFun(fun) {
+  try {
+    const s = JSON.stringify(fun);
+    localStorage.setItem(FUN_KEY, s);
+    if (localStorage.getItem(FUN_KEY) !== s) throw new Error('re-read mismatch');
+    return true;
+  } catch (err) { console.error('[spelling-bee] for-fun save FAILED', err); return false; }
+}
+/** Words on this puzzle in the REAL save: such a day was played, so it is look-only. */
+const playedReal = (save, key) => { const r = save.games[key]; return isObj(r) && Array.isArray(r.found) && r.found.some((w) => typeof w === 'string'); };
+
 function recOf(save, puzzle, day) {
   let r = save.games[puzzle.key];
   if (!r || typeof r !== 'object') r = save.games[puzzle.key] = {};
@@ -174,6 +197,7 @@ const ICON = {
   past: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
   fwd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
 };
 
@@ -232,7 +256,7 @@ class SpellingBee {
   /** Day n's puzzle (default today). Past days play exactly like today: same save, same Genius win.
    *  `old` = the day's RETIRED letters (swapped 2026-10-26 for a fuller puzzle): still playable, so
    *  progress on it stays visible (THE LAW rule 1). */
-  _startDay(n, old) {
+  _startDay(n, old, how) {
     // The SERVER's date (2026-10-29): a phone clock set ahead used to open tomorrow's puzzle as today
     // (js/server-time.js; offline = the last measured gap, else the phone clock).
     this.todayN = dayNumber(this.data.epoch, new Date(bestNow()));
@@ -247,7 +271,24 @@ class SpellingBee {
     this.save = loadSave();
     countDays(this.save);
     noteVoidedDays(this.save);
-    this.rec = recOf(this.save, this.puzzle, this.day);
+    // Past days (Matt, 2026-11-01): today is played as always. A past day with words in the real save is
+    // look-only ('review'); any other past day is played FOR FUN in its own store ('fun'), and becomes
+    // look-only once its answers are seen. `how`: 'play' or 'reveal', from the missed-day popup.
+    this.fun = null;
+    if (this.n === this.todayN && !this.old) this.mode = 'live';
+    else if (playedReal(this.save, this.puzzle.key)) this.mode = 'review';
+    else {
+      this.fun = loadFun();
+      let fr = this.fun.games[this.puzzle.key];
+      if (!isObj(fr)) fr = this.fun.games[this.puzzle.key] = { day: this.day, found: [] };
+      if (!Array.isArray(fr.found)) fr.found = [];
+      fr.found = fr.found.filter((w) => typeof w === 'string');
+      if (!fr.day) fr.day = this.day;
+      if (how === 'reveal' && !fr.revealed) fr.revealed = bestNow();
+      if (how) writeFun(this.fun);
+      this.mode = fr.revealed ? 'review' : 'fun';
+    }
+    this.rec = this.fun ? this.fun.games[this.puzzle.key] : recOf(this.save, this.puzzle, this.day);
     // Keep only words that still count for the SCORE, but never drop a stored word (rule 5).
     this.found = new Set(this.rec.found.filter((w) => this.counts(w) || legal(w, this.puzzle)));
     this.outer = this.puzzle.outer.slice();
@@ -281,9 +322,9 @@ class SpellingBee {
       if (this._overlay && this._overlay.dataset.kind === 'board') this._openBoard();
     });
     this._postSoon(0);
-    this._log('open', { r: `day ${this.n}${this.old ? ' old' : ''}` });
+    this._log('open', { r: `day ${this.n}${this.old ? ' old' : ''}${this.mode === 'live' ? '' : ' ' + this.mode}` });
     flushLog();   // anything queued from an earlier session (offline, closed too fast)
-    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old) => this._startDay(d, old), liveTime: (o) => __setServerTimeForTest(o) }; } catch { /* ignore */ }
+    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old, how) => this._startDay(d, old, how), liveTime: (o) => __setServerTimeForTest(o) }; } catch { /* ignore */ }
   }
 
   _checkDay() {
@@ -327,13 +368,16 @@ class SpellingBee {
   // --- render ----------------------------------------------------------------------------------
 
   _render() {
+    if (this.mode === 'review') { this._renderReview(); return; }
+    const fun = this.mode === 'fun';
     this.root.innerHTML = `
       <div class="sb-hud">
         <span class="sb-hud-fill"></span>
         <button type="button" class="sb-langbtn" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.data.lang === 'es' ? 'ES' : 'EN'}</button>
         <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
         <button type="button" class="sb-iconbtn" data-act="hints" aria-label="${esc(t('hints_aria'))}">${ICON.hints}</button>
-        <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 ? '' : ' hidden'}>${ICON.yesterday}</button>
+        <button type="button" class="sb-iconbtn" data-act="yesterday" aria-label="${esc(t('yesterday_aria'))}"${this.n > 0 && !fun ? '' : ' hidden'}>${ICON.yesterday}</button>
+        ${fun ? `<button type="button" class="sb-iconbtn" data-act="reveal" aria-label="${esc(t('see_answers'))}">${ICON.eye}</button>` : ''}
         <button type="button" class="sb-iconbtn" data-act="board" aria-label="${esc(t('board_aria'))}">${ICON.rankings}</button>
         <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
       </div>
@@ -413,7 +457,7 @@ class SpellingBee {
     }
     // A past day's date sits over the rank (2026-10-27: the HUD's left end is the hub's Back button now
     // that the EN/ES button joined the icons).
-    const date = this.n < this.todayN || this.old ? `<small class="sb-rank-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}</small>` : '';
+    const date = this.n < this.todayN || this.old ? `<small class="sb-rank-date">${esc(this._fmt(this.n, { month: 'short', day: 'numeric' }))}${this.mode === 'fun' ? ` <span class="sb-fun-tag">${esc(t('fun_tag'))}</span>` : ''}</small>` : '';
     this.el.progress.innerHTML = `<span class="sb-rank">${date}${esc(t('rank_' + RANKS[ri].id))}</span>
       <span class="sb-track"><span class="sb-line"></span>${dots.join('')}</span>`;
     this.el.progress.setAttribute('aria-label', `${t('rank_' + RANKS[ri].id)}, ${t('points_n', { n: sc })}`);
@@ -462,7 +506,7 @@ class SpellingBee {
 
   _handleDown(ev) {
     const cell = ev.target.closest && ev.target.closest('.sb-cell');
-    if (!cell || this._overlay) return;
+    if (!cell || this._overlay || this.mode === 'review') return;
     ev.preventDefault();
     this._press(cell);
     this.type(cell.dataset.letter);
@@ -490,6 +534,9 @@ class SpellingBee {
     else if (a === 'board') this._openBoard();
     else if (a === 'lang') this._switchLang();
     else if (a === 'help') this._openHelp();
+    else if (a === 'reveal') this._askReveal();
+    else if (a === 'rv-words') this._openList('words');
+    else if (a === 'rv-bonus') this._openList('bonus');
     else if (a === 'retry') this._load();
   }
 
@@ -498,6 +545,7 @@ class SpellingBee {
     if (this._overlay) { if (ev.key === 'Escape') this._closeOverlay(); return; }
     const k = ev.key;
     const ch = k.length === 1 ? fold(k) : '';   // á -> a; ñ stays ñ (its own letter)
+    if (this.mode === 'review') return;
     if (/^[a-zñ]$/.test(ch)) { this.type(ch); const i = [this.puzzle.center, ...this.outer].indexOf(ch); if (i >= 0) this._press(this.el.cells[i]); ev.preventDefault(); }
     else if (k === 'Backspace') { this.backspace(); ev.preventDefault(); }
     else if (k === 'Enter') { this.submit(); ev.preventDefault(); }
@@ -506,7 +554,7 @@ class SpellingBee {
 
   type(ch) {
     if (this._settle) this._settle();
-    if (!this.puzzle || this._busy) return;
+    if (!this.puzzle || this._busy || this.mode === 'review') return;
     if (this.open) { this.open = false; this._paintFound(); }
     if (this.input.length >= MAX_LEN + 1) return;
     if (!this.input) this._typeAt = Date.now();   // the log's `k`: first letter to Enter
@@ -516,14 +564,14 @@ class SpellingBee {
 
   backspace() {
     if (this._settle) { this._settle(); return; }   // the shown word is already on its way out
-    if (this._busy || !this.input) return;
+    if (this._busy || !this.input || this.mode === 'review') return;
     this.input = this.input.slice(0, -1);
     this._log('del', { w: this.input });
     this._paintInput();
   }
 
   shuffle() {
-    if (!this.puzzle) return;
+    if (!this.puzzle || this.mode === 'review') return;
     this._log('shuffle');
     this.outer = shuffled(this.outer);
     if (reduced()) { this._paintLetters(); return; }
@@ -532,7 +580,7 @@ class SpellingBee {
   }
 
   submit() {
-    if (!this.puzzle || this._busy || !this.input) return;
+    if (!this.puzzle || this._busy || !this.input || this.mode === 'review') return;
     this._checkDay();
     const word = this.input;
     const why = checkWord(word, this.puzzle, this.answerSet, this.found, this.extraSet);
@@ -547,7 +595,7 @@ class SpellingBee {
     if (!this.rec.times || typeof this.rec.times !== 'object') this.rec.times = {};
     this.rec.times[word] = now;
     if (!this.rec.geniusAt && this.rank() >= GENIUS) this.rec.geniusAt = now;
-    writeSave(this.save);
+    if (this.fun) writeFun(this.fun); else writeSave(this.save);
     const pts = scoreWord(word, this.puzzle);
     // A bonus word (a rarer real word, not in the hints) says so (Matt, 2026-10-26).
     const praise = this.answerSet.has(word) ? praiseFor(word, this.puzzle) : 'bonus';
@@ -602,6 +650,7 @@ class SpellingBee {
    *  the win alone when the day is already counted. Flags set only once the recorder took it. */
   _maybeRecord() {
     countDays(this.save);
+    if (this.fun) return;   // for fun: never a stat (its rec lives in the fun store)
     if (this.rec.recorded || this._dayStats().dr < GENIUS) return;
     const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
@@ -617,7 +666,7 @@ class SpellingBee {
     const key = ri === QUEEN ? 'seenQueen' : 'seenGenius';
     if (this.rec[key]) return;
     this.rec[key] = true;
-    writeSave(this.save);
+    if (this.fun) writeFun(this.fun); else writeSave(this.save);
     this._later(() => this._openOverlay('win', `
       <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>
       <div class="sb-win-bee" aria-hidden="true">${crestOf(ri)}</div>
@@ -676,12 +725,16 @@ class SpellingBee {
 
   /** Every guess and action, timed (log.js; Matt, 2026-10-27: "Everything."). Never shown in the game. */
   _log(e, extra) {
+    // For fun (2026-11-01): every action is still logged, as 'f' + its name, so no fair-play rule
+    // (js/bee-fairplay.js reads 'guess', 'open', 'win', ...) ever reads a for-fun play as real.
+    if (this.mode === 'fun') e = ('f' + e).slice(0, 12);
     if (this.puzzle) { try { logAction(this.puzzle.key, e, extra); } catch (err) { console.error('[spelling-bee] log', err); } }
   }
 
   _postSoon(ms) {
     clearTimeout(this._postT);
     this._postT = null;
+    if (this.fun) return;   // for fun: never on the board
     if (!needsPost(this.puzzle.key, this.found.size)) return;
     this._postT = setTimeout(() => { this._postT = null; this._post(); }, ms);
   }
@@ -698,7 +751,7 @@ class SpellingBee {
   }
 
   _post() {
-    if (!this.puzzle) return;
+    if (!this.puzzle || this.fun) return;
     // Over a day after the puzzle's day: no post (2026-10-29). Such a post counts only what the log
     // proves, and it would replace the row's on-time `at` (js/bee-fairplay.js isLatePost).
     if (isLatePost(this.day, bestNow())) return;
@@ -736,8 +789,14 @@ class SpellingBee {
   /** One language's list: heading + rows (place, emoji, name and a bar toward Genius, words over points). */
   _boardSection(lang, serverRows, max, live, voided, own, day, puzzle = '') {
     const code = myCode();
-    const rows = shownRows(serverRows.filter((r) => !live || r.code !== code), { me: code, voided, own, day, puzzle, now: bestNow() }).map((r) => ({ ...r, me: r.code === code }));
-    if (live) {
+    // For fun (2026-11-01): that day's real board, plus this player's for-fun score as a row that takes no
+    // place (no number, dashed, tagged). A real row of theirs (another phone) stays as it is.
+    const fun = live && this.mode === 'fun';
+    const rows = shownRows(serverRows.filter((r) => !live || fun || r.code !== code), { me: code, voided, own, day, puzzle, now: bestNow() }).map((r) => ({ ...r, me: r.code === code }));
+    if (fun) {
+      const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
+      rows.push({ code: '', name: p.name || '', emoji: p.emoji || '', me: true, fun: true, words: this.found.size, points: this.score, rank: this.rank() });
+    } else if (live) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
       // Own-day numbers, the same ones every other phone shows for this row (never all-time totals: 2026-10-30,
       // Lili's phone counted next-day words and showed her 1st). The server's own-day verdict wins once it covers our post.
@@ -754,14 +813,21 @@ class SpellingBee {
     // over points (Matt, 2026-10-26: "I wanna see how many points they have too").
     const genius = rankThresholds(max || 1)[GENIUS] || 1;
     let place = 0;
-    const li = rows.map((r, i) => {
-      if (i === 0 || r.points !== rows[i - 1].points || r.words !== rows[i - 1].words) place = i + 1;
+    let k = 0;
+    let prev = null;
+    const li = rows.map((r) => {
+      if (!r.fun) {
+        k++;
+        if (!prev || r.points !== prev.points || r.words !== prev.words) place = k;
+        prev = r;
+      }
       const pct = Math.max(4, Math.round(Math.min(1, r.points / genius) * 100));
       const crest = r.rank >= GENIUS ? crestOf(r.rank) : '';
-      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}" aria-label="${esc(`${place}. ${r.name || t('anon_player')}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
-        <span class="sb-bd-pos${place <= 3 ? ' is-top' : ''}">${place}</span>
+      const tag = r.fun ? ` <span class="sb-fun-tag">${esc(t('fun_tag'))}</span>` : '';
+      return `<li class="sb-bd-row${r.me ? ' is-me' : ''}${r.fun ? ' is-fun' : ''}" aria-label="${esc(`${r.fun ? t('fun_tag') : place + '.'} ${r.name || t('anon_player')}, ${t('rank_' + RANKS[r.rank].id)}, ${r.words} ${t('words_col')}, ${r.points} ${t('points_col')}`)}">
+        <span class="sb-bd-pos${!r.fun && place <= 3 ? ' is-top' : ''}">${r.fun ? '' : place}</span>
         <span class="sb-bd-av" aria-hidden="true">${esc(r.emoji)}</span>
-        <span class="sb-bd-mid"><span class="sb-bd-name">${esc(r.name || t('anon_player'))}</span>
+        <span class="sb-bd-mid"><span class="sb-bd-name">${r.fun ? `<span class="sb-bd-nm">${esc(r.name || t('anon_player'))}</span>${tag}` : esc(r.name || t('anon_player'))}</span>
           <span class="sb-bd-line"><span class="sb-bd-bar"><b style="width:${pct}%"></b></span><span class="sb-bd-crest" aria-hidden="true">${crest}</span></span></span>
         <span class="sb-bd-n"><span><b>${r.words}</b> <small>${esc(r.words === 1 ? t('word_1') : t('words_col'))}</small></span>
           <span class="sb-bd-pts"><b>${r.points}</b> <small>${esc(r.points === 1 ? t('point_1') : t('points_col'))}</small></span></span></li>`;
@@ -839,6 +905,7 @@ class SpellingBee {
     const days = new Date(y, m + 1, 0).getDate();
     const lead = new Date(y, m, 1).getDay();
     const save = loadSave();
+    const fun = loadFun();
     const wk = [];
     for (let i = 0; i < 7; i++) {
       let w = '';
@@ -851,9 +918,13 @@ class SpellingBee {
     for (let d = 1; d <= days; d++) {
       const n = n1 + d - 1;
       if (n < 0 || n > this.todayN) { cells.push(`<span class="sb-cal-day is-off">${d}</span>`); continue; }
-      const pr = this._progress(save, puzzleAt(this.data, n));
-      const label = this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' }) + (pr ? ', ' + t('rank_' + RANKS[pr.ri].id) : '');
-      const cls = `sb-cal-day${n === this.n && !this.old ? ' is-now' : ''}${n === this.todayN ? ' is-today' : ''}`;
+      const pz = puzzleAt(this.data, n);
+      let pr = this._progress(save, pz);
+      // A day played for fun: a dashed border (a shape, not only a colour) and its own progress.
+      const fr = !pr && n !== this.todayN && isObj(fun.games[pz.key]) ? fun.games[pz.key] : null;
+      if (fr) pr = this._progress({ games: { [pz.key]: { found: fr.found } } }, pz) || { ri: 0, mark: '' };
+      const label = this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' }) + (pr ? ', ' + t('rank_' + RANKS[pr.ri].id) : '') + (fr ? ', ' + t('fun_tag') : '');
+      const cls = `sb-cal-day${n === this.n && !this.old ? ' is-now' : ''}${n === this.todayN ? ' is-today' : ''}${fr ? ' is-fun' : ''}`;
       cells.push(`<button type="button" class="${cls}" data-day="${n}" aria-label="${esc(label)}"><span>${d}</span>${pr ? pr.mark : ''}</button>`);
       // A retired puzzle this player has words on: still shown and playable, under the grid.
       const old = this.data.retired[n];
@@ -876,7 +947,12 @@ class SpellingBee {
       <div class="sb-cal">${wk.join('')}${cells.join('')}</div>${olds.length ? `<div class="sb-cal-olds">${olds.join('')}</div>` : ''}`);
     this._overlay.addEventListener('click', (ev) => {
       const day = ev.target.closest('[data-day]');
-      if (day) { this._closeOverlay(); this._startDay(Number(day.dataset.day), day.dataset.old); return; }
+      if (day) {
+        this._closeOverlay();
+        if (day.dataset.old) this._startDay(Number(day.dataset.day), day.dataset.old);
+        else this._pickDay(Number(day.dataset.day));
+        return;
+      }
       const nav = ev.target.closest('[data-cal]');
       if (nav && !nav.disabled) this._openPast(Number(nav.dataset.cal));
     });
@@ -932,6 +1008,129 @@ class SpellingBee {
       ul.style.fontSize = fs + 'px';
       if (m.scrollHeight <= m.clientHeight + 1) break;
     }
+  }
+
+  // --- past days: look-only and for fun (Matt, 2026-11-01) ---------------------------------------
+
+  /** A past day you played, or whose answers you chose to see: the board, the score, and two rows that
+   *  open every answer and every bonus word, yours ticked. Nothing can be typed. */
+  _renderReview() {
+    const sc = this.score;
+    const ri = this.rank();
+    const bonus = this._bonusList();
+    const gotA = this.answers.filter((w) => this.found.has(w)).length;
+    const gotB = bonus.filter((w) => this.found.has(w)).length;
+    const tag = this.fun ? ` <span class="sb-fun-tag">${esc(t('fun_tag'))}</span>` : '';
+    this.root.innerHTML = `
+      <div class="sb-hud">
+        <span class="sb-hud-fill"></span>
+        <button type="button" class="sb-langbtn" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.data.lang === 'es' ? 'ES' : 'EN'}</button>
+        <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
+        <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
+      </div>
+      <div class="sb-review">
+        <p class="sb-rv-date">${esc(this._fmt(this.n, { weekday: 'long', month: 'long', day: 'numeric' }))}${tag}</p>
+        <div class="sb-rv-rank"><b>${esc(t('rank_' + RANKS[ri].id))}</b><span>${sc} / ${this.max}</span></div>
+        <div class="sb-msg" data-role="msg" aria-live="polite"></div>
+        <div class="sb-hivewrap">
+          <svg class="sb-hive is-static" data-role="hive" viewBox="-134 -140 268 280" role="img" aria-label="${esc([this.puzzle.center, ...this.puzzle.outer].join(' ').toUpperCase())}">
+            ${SPOTS.map(([x, y], i) => `<g class="sb-cell${i === 0 ? ' is-center' : ''}" transform="translate(${x} ${y})">
+              <g class="sb-cell-in"><polygon points="${HEX}"/><text x="0" y="2" text-anchor="middle" dominant-baseline="central"></text></g></g>`).join('')}
+          </svg>
+        </div>
+        <div class="sb-rv-rows">
+          <button type="button" class="sb-rv-row" data-act="rv-words"><span>${esc(t('words_title'))}</span><span class="sb-rv-n">${gotA} / ${this.answers.length}</span>${ICON.fwd}</button>
+          <button type="button" class="sb-rv-row" data-act="rv-bonus"><span>${esc(t('bonus_title'))}</span><span class="sb-rv-n">${gotB} / ${bonus.length}</span>${ICON.fwd}</button>
+        </div>
+      </div>`;
+    this.el = {
+      msg: this.root.querySelector('[data-role="msg"]'),
+      hive: this.root.querySelector('[data-role="hive"]'),
+      cells: [...this.root.querySelectorAll('.sb-cell')],
+    };
+    if (!this._onClick) {
+      this._onClick = (ev) => this._handleClick(ev);
+      this.root.addEventListener('click', this._onClick);
+      this._onDown = (ev) => this._handleDown(ev);
+      this.root.addEventListener('pointerdown', this._onDown);
+    }
+    this._paintLetters();
+  }
+
+  /** Every bonus word of the puzzle, plus any word this player found that is in neither list today
+   *  (found under an older, bigger list: it still counts, `legal`). Alphabetical. */
+  _bonusList() {
+    const set = new Set(this.extraSet);
+    for (const w of this.found) if (!this.answerSet.has(w)) set.add(w);
+    return [...set].sort();
+  }
+
+  /** Words or Bonus: every word, yours ticked. The answers show only once the SERVER says the day is
+   *  over, and only after the server has the `answers` stamp (as Yesterday's Answers, 2026-10-29). */
+  async _openList(kind) {
+    const n = this.n;
+    const key = this.puzzle.key;
+    const stale = () => this.disposed || !this.puzzle || this.puzzle.key !== key || this.n !== n;
+    const now = liveNow() != null ? liveNow() : await whenLive(3000);
+    if (stale()) return;
+    const why = answersShown(this.data.epoch, n + 1, now == null ? NaN : now);
+    if (why !== 'ok') { this._toast(t(why), 'is-bad'); return; }
+    if (!this._answersSent || this._answersSent !== key) {
+      const sent = await logConfirmed(key, 'answers', { r: `day ${n}` });
+      if (stale()) return;
+      if (!sent) { this._toast(t('need_net'), 'is-bad'); return; }
+      this._answersSent = key;
+    }
+    const p = this.puzzle;
+    const words = kind === 'bonus' ? this._bonusList() : this.answers;
+    const got = words.filter((w) => this.found.has(w)).length;
+    const letters = `<div class="sb-yletters sb-rv-letters" aria-hidden="true"><span class="is-center">${p.center.toUpperCase()}</span>${p.outer.map((c) => `<span>${c.toUpperCase()}</span>`).join('')}</div>`;
+    const list = words.map((w) => {
+      const has = this.found.has(w);
+      const pg = kind !== 'bonus' && isPangram(w, p);
+      return `<li class="${has ? 'is-got' : 'is-miss'}${pg ? ' is-pangram' : ''}"><span class="sb-tick" aria-hidden="true">${has ? '✓' : ''}</span>${esc(this._show(w))}${pg ? ' <span aria-hidden="true">★</span>' : ''}</li>`;
+    }).join('') || '<li class="is-miss">-</li>';
+    this._openOverlay('list', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t(kind === 'bonus' ? 'bonus_title' : 'words_title'))} <span class="sb-rv-n">${got} / ${words.length}</span></h2>${letters}<ul class="sb-ylist sb-rv-list${words.length > 24 ? ' is-3' : ''}">${list}</ul>`);
+  }
+
+  /** A past day never played: play it for fun, or see its answers. */
+  _askFun(n) {
+    this._openOverlay('fun', `${this._closeBtn()}<h2 class="gh-modal__title sb-fit">${esc(this._fmt(n, { weekday: 'long', month: 'long', day: 'numeric' }))}</h2>
+      <p class="sb-ask-line">${esc(t('fun_line'))}</p>
+      <div class="gh-modal__actions sb-ask-btns">
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-fun="play">${esc(t('play'))}</button>
+        <button type="button" class="gh-btn gh-btn--block" data-fun="reveal">${esc(t('see_answers'))}</button>
+      </div>`);
+    this._overlay.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-fun]');
+      if (!b) return;
+      this._closeOverlay();
+      this._startDay(n, undefined, b.dataset.fun);
+    });
+  }
+
+  /** For fun, the eye: see the answers, and the puzzle ends (look-only from then on). */
+  _askReveal() {
+    this._openOverlay('reveal', `${this._closeBtn()}<h2 class="gh-modal__title">${esc(t('reveal_q'))}</h2>
+      <p class="sb-ask-line">${esc(t('reveal_line'))}</p>
+      <div class="gh-modal__actions sb-ask-btns">
+        <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-rv="yes">${esc(t('see_answers'))}</button>
+        <button type="button" class="gh-btn gh-btn--block" data-ov="close">${esc(t('keep_playing'))}</button>
+      </div>`);
+    this._overlay.querySelector('[data-rv="yes"]').addEventListener('click', () => {
+      if (!this.fun || !this.rec) return;
+      this._closeOverlay();
+      this._startDay(this.n, undefined, 'reveal');
+    });
+  }
+
+  /** A calendar tap: today plays; a past day you played, or already started or revealed for fun, opens;
+   *  any other past day asks first (for fun, or the answers). */
+  _pickDay(n, old) {
+    if (old || n === this.todayN) { this._startDay(n, old); return; }
+    const key = puzzleAt(this.data, n).key;
+    if (playedReal(loadSave(), key) || isObj(loadFun().games[key])) { this._startDay(n); return; }
+    this._askFun(n);
   }
 
   /** Fewest words (Matt, 2026-10-26: "Too. Many. Words."): the hive, then four short lines. */
