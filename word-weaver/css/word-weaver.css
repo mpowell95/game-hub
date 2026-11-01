@@ -169,6 +169,8 @@
 }
 .ww-root .ww-seg svg { width: 18px; height: 18px; flex: none; }
 .ww-root .ww-seg svg.lb-dshape-x2 { width: 30px; }
+/* The buttons stay light in dark mode, so Hard/Expert diamonds stay dark (hub.css lightens them for dark backgrounds). */
+:root.gh-dark .ww-root .ww-seg svg.lb-dshape-t3, :root.gh-dark .ww-root .ww-seg svg.lb-dshape-t4 { fill: var(--ww-ink); }
 .ww-root .ww-seg.is-selected { outline: 3px solid #ffce3a; outline-offset: 2px; }
 .ww-root .ww-check {
   position: absolute;
