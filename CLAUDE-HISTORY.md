@@ -1602,3 +1602,16 @@ Fix: `withMode(mode, chosenDiff, record, score)` in js/game-stats.js notes `game
 (played/won/lost, optional hi/lo bests) in the SAME write as byDiff; `mpModes[<matchId>]` beside `mpIds`; the play log
 entry carries `m` (rules branch `playLog/$code/$k/m`). Deferred results (quit losses, live-room leaves) carry a
 `modeTag`. js/game-stats-global.js (Monopoly Deal, Parchís) has the same `byMode`. players-agg sums byMode per person.
+
+
+## The tab bar on the profile page (2026-11-01)
+
+Matt, with screenshots of the compact launcher and the rebuilt profile page: "The bottom navigation bar shouldn't
+disappear when I go into the me section". The profile page is its own document, so the hub's bar (drawn by
+`js/hub.js`) was never on it. It now draws the same bar (`css/hub.css` `.hub-tabs`, Profile lit, its own face) on
+every profile screen while the layout is Compact, and follows a layout switch made there. Games goes back to the
+launcher; Multiplayer, Messages and Leaderboards leave `hub.openTab` in sessionStorage and go back (history when
+we came from the launcher, so it is restored as it was; a plain load otherwise), and the launcher opens that screen
+once, never over a game. Profile on a sub screen returns to the list. The profile page reads no counts of its own:
+the launcher writes its tab badges and whether Multiplayer is shown into sessionStorage `hub.tabs`. `watchTabBar()`
+(the iOS halfway-up repair) runs there too. Tested headless at 402x874, 360x780 (ES), 375x667 and 430x932.

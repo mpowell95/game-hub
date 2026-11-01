@@ -813,6 +813,13 @@ const AWAY_MS = 30 * 60 * 1000;
 // A tapped notification, kept across a reload (_queuePushOpen). sessionStorage, not a gamehub.* key.
 const PUSH_OPEN_KEY = 'hub.pushOpen';
 const PUSH_OPEN_MS = 2 * 60 * 1000;
+// The profile page's copy of the compact tab bar (2026-11-01, Matt: "The bottom navigation bar
+// shouldn't disappear"). It is a separate page, so a tap there writes the tab here and comes back;
+// the launcher opens it (`_takeTabRequest`). It also reads which tabs and counts to draw (TABS_KEY).
+// sessionStorage / plain keys, not gamehub.* data.
+const OPEN_TAB_KEY = 'hub.openTab';
+const OPEN_TAB_MS = 60 * 1000;
+const TABS_KEY = 'hub.tabs';
 const PUSH_GRACE_MS = 1200;
 
 class Hub {
@@ -888,7 +895,7 @@ class Hub {
     // that check reads every challenge game's index over the network, and a Firebase read on a bad
     // connection never settles, so a cold start from a notification could sit on the launcher for
     // ever. Opening a named match needs nothing from it.
-    this._afterPaint(() => this._openFromUrl());
+    this._afterPaint(() => { this._openFromUrl(); this._takeTabRequest(); });
     // NOT idle time (2026-10-18): requestIdleCallback could hold the "your turn" check up to 2 s
     // behind the rest of startup (Matt: "3-5 seconds"). One frame, then straight away.
     this._rightAfterPaint(() => this._checkGameAlerts());
@@ -1615,6 +1622,11 @@ class Hub {
     const badge = (k) => `<span class="hub-tab-badge" data-role="tab-badge-${k}" hidden></span>`;
     const emoji = prof && prof.emoji ? String(prof.emoji) : '';
     const face = emoji ? `<span class="hub-tab-av" aria-hidden="true">${emoji.replace(/[<>&"]/g, '')}</span>` : tabSvg('profile');
+    try {
+      const st = JSON.parse(sessionStorage.getItem(TABS_KEY) || '{}') || {};
+      st.mp = !!hasChallenges;
+      sessionStorage.setItem(TABS_KEY, JSON.stringify(st));
+    } catch { /* the profile page then draws Multiplayer too */ }
     return `<nav class="hub-tabs" data-role="tabs" aria-label="${tf('hub_tabs_aria', 'Sections')}">
         <button type="button" class="hub-tab is-on" data-tab="games" aria-current="page" aria-label="${t('hub_games_aria')}">${tabSvg('games')}</button>
         ${hasChallenges ? `<button type="button" class="hub-tab" data-tab="challenges" aria-label="${t('hub_challenges_btn')}">${tabSvg('challenges')}${badge('challenges')}</button>` : ''}
@@ -1693,8 +1705,28 @@ class Hub {
     show();
   }
 
+  /** A tab tapped on the profile page's copy of the bar: open that screen here, once, only on the
+   *  launcher (never over a game). Games needs nothing: the launcher is the Games tab. */
+  _takeTabRequest() {
+    let q = null;
+    try {
+      q = JSON.parse(sessionStorage.getItem(OPEN_TAB_KEY) || 'null');
+      sessionStorage.removeItem(OPEN_TAB_KEY);
+    } catch { return; }
+    if (!q || !q.k || Date.now() - (+q.at || 0) > OPEN_TAB_MS || this.current || !this.el) return;
+    if (q.k === 'challenges') this.openChallenges();
+    else if (q.k === 'messages' && this.el.messages) this.el.messages.click();
+    else if (q.k === 'leaderboard' && this.el.leaderboard) this.el.leaderboard.click();
+  }
+
   /** A count on one tab; a number in a pill (never hue alone), "9+" past nine. */
   _tabBadge(k, n) {
+    // Remembered for the profile page's copy of the bar (TABS_KEY), which reads no counts itself.
+    try {
+      const st = JSON.parse(sessionStorage.getItem(TABS_KEY) || '{}') || {};
+      st.badges = { ...(st.badges || {}), [k]: n | 0 };
+      sessionStorage.setItem(TABS_KEY, JSON.stringify(st));
+    } catch { /* the profile page just shows no count */ }
     const el = this.root && this.root.querySelector(`[data-role="tab-badge-${k}"]`);
     if (!el) return;
     el.hidden = !(n > 0);
@@ -2239,6 +2271,7 @@ class Hub {
       if (document.visibilityState !== 'visible') { this._noteHidden(); return; }
       this._noteBack();   // back after AWAY_MS: a fresh open (the visibility handler asks for a build)
       this._onNewBuildActive();
+      this._takeTabRequest();   // back from the profile page's tab bar (a back-forward-cache restore)
     };
     document.addEventListener('visibilitychange', this._onResume);
     // pageshow fires for a back-forward-cache restore, which visibilitychange does not cover.

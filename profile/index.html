@@ -53,6 +53,8 @@
       font-family: -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
     .pf-app button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
     .pf-view[hidden] { display: none; }
+    /* Compact layout: the hub's tab bar is drawn here too (css/hub.css .hub-tabs); room for it. */
+    html.gh-compact .pf-app { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
     /* content-box: hub.css's global border-box made a 44px row swallow the notch padding, and the
        title rode up under the status bar (the admin page's same fix, 2026-10-29). */
     .pf-nav { box-sizing: content-box; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px;
@@ -448,7 +450,8 @@
     // Validation only (~2 KB). The browsable set itself is imported lazily when the picker opens.
     import { isEmoji, firstEmoji } from '../js/emoji.js';
     import { getTheme, setTheme } from '../js/theme.js';
-    import { getLayout, setLayout } from '../js/layout.js';
+    import { getLayout, setLayout, onLayoutChange } from '../js/layout.js';
+    import { watchTabBar } from '../js/tabbar-fix.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import { loadPalette, savePalette, ALL_EMOJIS, EMOJI_MAX, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
     import STRINGS from '../js/strings.js';
@@ -475,7 +478,7 @@
     // "(2 new)" off the replies button on a language switch.
     onLangChange(() => {
       applyI18n(); renderColors(); renderOpps(); renderTheme(); renderLang(); renderLayout(); renderQuickChat();
-      paintReplyCount(); paintNotify(); paintValues(); paintHero(); renderOppDetail();
+      paintReplyCount(); paintNotify(); paintValues(); paintHero(); renderOppDetail(); renderTabs();
       // The emoji picker's category tabs are rendered, not [data-i18n] markup, and its search
       // keywords are a per-language file - so both have to be dropped and rebuilt, not just relabelled.
       searchIndex = null; searchPromise = null;
@@ -782,7 +785,7 @@
         closePicker();
         return;
       }
-      if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; paintHero(); }
+      if (pickTarget === 'you') { state.emoji = emoji; els.youEmoji.textContent = emoji; paintHero(); renderTabs(); }
       else { state.opponents[pickTarget].emoji = emoji; renderOpps(); renderOppDetail(); }
       pushRecent(emoji);
       closePicker();
@@ -1311,10 +1314,66 @@
       showView(st.pfView || 'main', st.i);
     });
 
+    // -- The compact layout's tab bar (2026-11-01, Matt: "The bottom navigation bar shouldn't
+    // disappear when I go into the me section") ---------------------------------------------------
+    // The hub's own bar (css/hub.css .hub-tabs), Profile lit. This is a separate page, so another tab
+    // leaves a note for the launcher (js/hub.js `_takeTabRequest`, sessionStorage 'hub.openTab') and
+    // goes back to it. Which tabs and counts to show come from the launcher's last paint ('hub.tabs').
+    // The icons are a COPY of js/hub.js TAB_ICON: change both together.
+    const TAB_ICON = {
+      games: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+      challenges: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/>',
+      messages: '<path d="M4 5h16v11H9l-5 4z"/>',
+      leaderboard: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3M12 14v4M8 20h8"/>',
+      profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    };
+    const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
+    function renderTabs() {
+      let bar = document.querySelector('.hub-tabs');
+      if (getLayout() !== 'compact') { if (bar) bar.remove(); return; }
+      let st = {};
+      try { st = JSON.parse(sessionStorage.getItem('hub.tabs') || '{}') || {}; } catch { st = {}; }
+      const b = st.badges || {};
+      const badge = (k) => (b[k] > 0 ? `<span class="hub-tab-badge">${b[k] > 9 ? '9+' : b[k]}</span>` : '');
+      const tab = (k, label) => `<button type="button" class="hub-tab" data-tab="${k}" aria-label="${escAttr(label)}">${tabSvg(k)}${badge(k)}</button>`;
+      const face = state.emoji ? `<span class="hub-tab-av" aria-hidden="true">${escAttr(state.emoji)}</span>` : tabSvg('profile');
+      if (!bar) { bar = document.createElement('nav'); bar.className = 'hub-tabs'; document.body.appendChild(bar); }
+      bar.setAttribute('aria-label', tf('hub_tabs_aria', 'Sections'));
+      bar.innerHTML = tab('games', t('hub_games_aria'))
+        + (st.mp === false ? '' : tab('challenges', t('hub_challenges_btn')))
+        + tab('messages', t('msg_title'))
+        + tab('leaderboard', t('hub_leaderboard_aria'))
+        + `<button type="button" class="hub-tab is-on" data-tab="profile" aria-current="page" aria-label="${escAttr(t('hub_profile_btn'))}">${face}${badge('profile')}</button>`;
+    }
+    // How many screens deep this page is (the list = 0), so one history.go() reaches the list or the hub.
+    const depth = () => (curView === 'main' ? 0 : curView === 'opp' ? 2 : 1);
+    document.addEventListener('click', (ev) => {
+      const tabEl = ev.target.closest('.hub-tabs [data-tab]');
+      if (!tabEl) return;
+      const k = tabEl.dataset.tab;
+      if (k === 'profile') {
+        if (curView !== 'main') history.go(-depth());
+        else { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
+        return;
+      }
+      if (k !== 'games') {
+        try { sessionStorage.setItem('hub.openTab', JSON.stringify({ k, at: Date.now() })); } catch { /* lands on Games */ }
+      }
+      // Back through history when we came from the launcher (restored as it was, no reload, the same
+      // as the Game Hub button); otherwise a plain load of it.
+      let fromHub = false;
+      try { fromHub = history.length > 1 && !!document.referrer && new URL(document.referrer).origin === location.origin; } catch { fromHub = false; }
+      if (fromHub) history.go(-(depth() + 1));
+      else location.href = '../';
+    });
+    onLayoutChange(renderTabs);
+
     ensurePlayerId();
     hydrate();
     showDeviceId();
     { const st = history.state || {}; if (st.pfView) showView(st.pfView, st.i); }
+    renderTabs();
+    watchTabBar();
   </script>
 </body>
 </html>
