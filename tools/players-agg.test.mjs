@@ -646,6 +646,25 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('brickblitz counts as a SOLO game', SOLO.has('brickblitz'));
 }
 
+// ---- Tower's tw sub-counter survives the cross-device combine (THE LAW rule 1, 2026-11-01) ----
+{
+  const all = {
+    d1: rec({ playerId: 'TW111', name: 'Stacker' }, {
+      tower: { total: { played: 3, won: 3, lost: 0 }, byDiff: { easy: { played: 3, won: 3, lost: 0 } },
+        tw: { games: 3, best: 40, bestByDiff: { easy: 40, medium: 0, hard: 0, expert: 0 }, blocks: 90, perfects: 20, bestStreak: 6 } },
+    }, 100),
+    d2: rec({ playerId: 'tw111', name: 'Stacker' }, {
+      tower: { total: { played: 2, won: 2, lost: 0 }, byDiff: { expert: { played: 2, won: 2, lost: 0 } },
+        tw: { games: 2, best: 12, bestByDiff: { easy: 3, medium: 0, hard: 0, expert: 12 }, blocks: 20, perfects: 4, bestStreak: 9 } },
+    }, 200),
+  };
+  const tw = aggregatePlayers(all)[0].games.tower.tw;
+  eq('tower: lifetime counters add', [tw.games, tw.blocks, tw.perfects], [5, 110, 24]);
+  eq('tower: best and best streak take the max', [tw.best, tw.bestStreak], [40, 9]);
+  eq('tower: per-difficulty bests take the max per key', tw.bestByDiff, { easy: 40, medium: 0, hard: 0, expert: 12 });
+  ok('tower counts as a SOLO game', SOLO.has('tower'));
+}
+
 // ---- Arrow Maze's wo (timer) survives the cross-device combine (THE LAW rule 1) ----
 // 2026-10-13. Counters add. A finish log cannot be summed across phones, so per difficulty the
 // person keeps the log of the device with the most timed finishes there; d2's arrives as a Firebase

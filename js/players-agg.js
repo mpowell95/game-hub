@@ -16,7 +16,7 @@ import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLeg
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest } from './word-weaver-points.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -710,6 +710,16 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'tower' && src.tw) {
+        // Tower (2026-11-01). Counters ADD; every best (overall, per difficulty, streak) takes Math.max.
+        if (!dst.tw) dst.tw = { games: 0, best: 0, bestByDiff: {}, blocks: 0, perfects: 0, bestStreak: 0 };
+        dst.tw.games += src.tw.games | 0;
+        dst.tw.blocks += src.tw.blocks | 0;
+        dst.tw.perfects += src.tw.perfects | 0;
+        dst.tw.best = Math.max(dst.tw.best | 0, src.tw.best | 0);
+        dst.tw.bestStreak = Math.max(dst.tw.bestStreak | 0, src.tw.bestStreak | 0);
+        const tbd = src.tw.bestByDiff || {};
+        for (const k of Object.keys(tbd)) dst.tw.bestByDiff[k] = Math.max(dst.tw.bestByDiff[k] | 0, tbd[k] | 0);
       } else if (g === 'airhockey' && src.ah) {
         // Air Hockey records (js/game-stats.js, recordAirHockey). Counters ADD; bestShot and
         // bestStreak take Math.max, never a sum. `streak` is one device's live state and is not

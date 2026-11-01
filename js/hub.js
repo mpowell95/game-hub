@@ -777,6 +777,22 @@ export const GAMES = [
     // input to the launcher's New pill and must be the day Matt releases it from the admin page.
     devOnly: true,
   },
+  {
+    // Tower (2026-11-01): stack sliding blocks as high as you can; the overhang is cut off, so the
+    // next block is only as wide as what landed (tower/CLAUDE.md). Four difficulties, three looks.
+    // IMMERSIVE: the tower wants the whole screen. Hub id = stats id = folder = `tower`.
+    id: 'tower',
+    added: '2026-11-01',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Tower', es: 'Torre' },
+    blurb: { en: 'Stack the blocks as high as you can.',
+      es: 'Apila los bloques lo más alto que puedas.' },
+    module: '../tower/js/ui.js',
+    immersive: true,
+    accent: '#4a5aa8',
+    art: GAME_ART['tower'],
+    // ADMIN ONLY at first, like every new game here. No `released` date on purpose.
+    devOnly: true,
+  },
 ];
 
 /** A game held back from this player's code (a `GAMES` entry's `hideFrom`, 2026-10-13). Never for
