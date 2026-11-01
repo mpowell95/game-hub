@@ -102,8 +102,10 @@ A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation
 
 ## Open handoff: Leaderboard v2 (2026-11-01)
 
-"Pick up the leaderboard" = **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** (v2 live for admin only, Matt's decisions,
-open questions, tools). Delete this section once v2 is released or abandoned.
+**"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
+and continue that conversation as if it were the same session (where it stopped, Matt's decisions, open questions,
+tools). Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
+released or abandoned.
 
 ## Open handoff (2026-10-30)
 
