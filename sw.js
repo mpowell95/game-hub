@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1370;
-const CACHE = 'game-hub-v1378';
+const CACHE = 'game-hub-v1379';
 
 const ASSETS = [
   './',
@@ -256,6 +256,7 @@ const ASSETS = [
   './way-out/js/boards10.js',
   './way-out/js/boards11.js',
   './way-out/js/impossible-tests.js',
+  './way-out/js/easymed-tests.js',
   './gridlock/',
   './gridlock/index.html',
   './gridlock/css/gridlock.css',
@@ -1004,14 +1005,15 @@ const REST_MANIFEST = {
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '48873b9523',
-  './way-out/js/ui.js': 'faaa1e82af',
+  './way-out/js/ui.js': 'acfa35e182',
   './way-out/js/engine.js': '475f0bb4eb',
-  './way-out/js/strings.js': '17497f2cfa',
+  './way-out/js/strings.js': 'd5dc282381',
   './way-out/js/boards8.js': '56f9933468',
   './way-out/js/boards9.js': 'dfd4be284c',
   './way-out/js/boards10.js': '0f415f7796',
   './way-out/js/boards11.js': 'b4ad7927e0',
   './way-out/js/impossible-tests.js': '019128540e',
+  './way-out/js/easymed-tests.js': '5f3f6da857',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',

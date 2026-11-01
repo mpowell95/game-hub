@@ -424,6 +424,26 @@ function checkLadder(gen, from, to) {
 // here WITHOUT the search's own measure(): played one arrow at a time, exactly one arrow can go at every
 // step (so one order solves it), 70+ arrows, and the arrow freed by each move is never the one right
 // behind it pointing the same way in its row or column (no "trains").
+// EASY AND MEDIUM TEST BOARDS (2026-11-01, admin only): every board in range and solvable by peeling.
+{
+  const { EM_TESTS } = await import('./easymed-tests.js');
+  let good = EM_TESTS.length >= 6;
+  for (const b of EM_TESTS) {
+    const [W, H] = b.grid, n = b.arrows.length, gone = new Array(n).fill(false);
+    if (!['easy', 'medium'].includes(b.tier)) good = false;
+    for (const c of b.arrows) for (const p of c) if (!(p >= 0 && p < W * H)) good = false;
+    let left = n;
+    while (left && good) {
+      const occ = occupancy({ cols: W, rows: H, arrows: b.arrows }, gone);
+      const free = [];
+      for (let id = 0; id < n; id++) if (!gone[id] && !blockerOf(b.arrows[id], occ, W, H, id)) free.push(id);
+      if (!free.length) { good = false; break; }
+      for (const id of free) gone[id] = true;
+      left -= free.length;
+    }
+  }
+  ok(`Easy/Medium test boards: ${EM_TESTS.length}, all solvable`, good);
+}
 {
   const { IMPOSSIBLE_TESTS, IMPOSSIBLE_GRID } = await import('./impossible-tests.js');
   let good = IMPOSSIBLE_TESTS.length >= 12 && IMPOSSIBLE_GRID.length === IMPOSSIBLE_TESTS.length

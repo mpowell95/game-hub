@@ -23,6 +23,7 @@ import { isAdminDevice } from '../../js/admin-config.js';
 import { bestNow, serverNow, clockSuspect } from '../../js/server-time.js';
 import * as IMPT from './impossible-tests.js';
 const { IMPOSSIBLE_TESTS, IMP_W, IMP_H } = IMPT;
+import { EM_TESTS } from './easymed-tests.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.wayout.v1';
@@ -206,7 +207,16 @@ function bestTest(n) {
   if (!Array.isArray(list) || !list.length) return null;
   return list.slice().sort((a, b) => (a.m + a.h) - (b.m + b.h) || a.t - b.t)[0];
 }
-const testName = (n) => `${t('tier_impossible')} ${n}`;
+// EASY AND MEDIUM TEST BOARDS (2026-11-01, admin only; Matt: "Make test boards", to make Easy ~0:30 and Medium
+// ~1:00 a level): js/easymed-tests.js, listed first under the same 🧪, ids 'e1'... (Impossible keep 1, 2, ...);
+// results in the same key, under their id.
+const emOf = (id) => (typeof id === 'string' && /^e\d+$/.test(id) ? EM_TESTS[+id.slice(1) - 1] || null : null);
+const testName = (id) => {
+  const b = emOf(id);
+  if (!b) return `${t('tier_impossible')} ${id}`;
+  const k = EM_TESTS.slice(0, +id.slice(1)).filter((x) => x.tier === b.tier).length;
+  return t('test_n', { tier: t(`tier_${b.tier}`), n: k });
+};
 function readJSON(key) {
   try {
     const v = JSON.parse(localStorage.getItem(key) || '{}');
@@ -822,7 +832,7 @@ class WayOut {
         <div class="wo-herorow">
           <div class="wo-hero" aria-hidden="true">${HERO_SVG}</div>
           <button type="button" class="wo-howq" data-act="help" aria-label="${t('how_title')}" title="${t('how_title')}">?</button>
-          ${isAdminDevice() && IMPOSSIBLE_TESTS.length ? `<button type="button" class="wo-howq wo-testq" data-act="tests" aria-label="${t('tests_title')}" title="${t('tests_title')}">🧪</button>` : ''}
+          ${isAdminDevice() && (IMPOSSIBLE_TESTS.length || EM_TESTS.length) ? `<button type="button" class="wo-howq wo-testq" data-act="tests" aria-label="${t('tests_title')}" title="${t('tests_title')}">🧪</button>` : ''}
         </div>
         <div class="wo-head">
           <h1>${t('title')}</h1>
@@ -895,7 +905,7 @@ class WayOut {
           <button type="button" class="wo-iconbtn" data-act="menu" aria-label="${t('menu_aria')}">${ICON_MENU}</button>
           <div class="wo-hud-mid">
             <span class="wo-tierpill">${diffShapeSVG(TIER_NUM[tier])}${t('tier_' + tier)}</span>
-            <span class="wo-level">${this.replay && this.replay.test ? testName(this.level) : `${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}`}</span>
+            <span class="wo-level">${this.replay && this.replay.test ? testName(this.replay.test) : `${this.replay ? ICON_REPLAY : ''}${t('level_n', { n: this.level })}`}</span>
           </div>
           <button type="button" class="wo-iconbtn wo-restart" data-act="restart" aria-label="${t('restart_aria')}">${ICON_RESTART}</button>
         </div>
@@ -959,7 +969,7 @@ class WayOut {
     else if (act === 'replay' && hasNews()) this._startReplay(this.settings.tier, +btn.dataset.l, +btn.dataset.g);
     else if (act === 'news-close') this._closeModal();
     else if (act === 'tests' && isAdminDevice()) this._openTests();
-    else if (act === 'test' && isAdminDevice()) this._startTest(+btn.dataset.n);
+    else if (act === 'test' && isAdminDevice()) this._startTest(/^e\d+$/.test(btn.dataset.n) ? btn.dataset.n : +btn.dataset.n);
     else if (act === 'help') { this.helpPage = 0; this._openHelp(); }
     else if (act === 'menu') this._toSetup(false);
     else if (act === 'restart') this._restart();
@@ -1137,8 +1147,8 @@ class WayOut {
       <div class="gh-modal wo-dialog wo-replays" role="dialog" aria-modal="true" aria-labelledby="wo-ts-h">
         <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
         <h2 class="gh-modal__title" id="wo-ts-h">${t('tests_title')}</h2>
-        <ul class="wo-rp-list">${IMPOSSIBLE_TESTS.map((_, i) => {
-          const n = i + 1, b = bestTest(n);
+        <ul class="wo-rp-list">${[...EM_TESTS.map((_, i) => `e${i + 1}`), ...IMPOSSIBLE_TESTS.map((_, i) => i + 1)].map((n) => {
+          const b = bestTest(n);
           return `
           <li><button type="button" class="wo-rp-row" data-act="test" data-n="${n}">
             <span class="wo-rp-n">${testName(n)}</span>
@@ -1152,20 +1162,21 @@ class WayOut {
   }
   /** Play Impossible test board n: like a replay, it keeps nothing but its result (TESTS2_KEY). */
   _startTest(n) {
-    const arrows = IMPOSSIBLE_TESTS[n - 1];
+    const em = emOf(n);
+    const arrows = em ? em.arrows : IMPOSSIBLE_TESTS[n - 1];
     if (!arrows) return;
     const m = this.root.querySelector('.wo-modal');
     if (m && !m.hidden) { m.hidden = true; m.innerHTML = ''; this._opener = null; }
     this._stopLevel();
     this.rush = null;
     this.replay = { test: n };
-    this.tier = 'expert';   // Expert's time penalties; the pill reads Expert, the title "Impossible N"
-    this.level = n;
+    this.tier = em ? em.tier : 'expert';   // its difficulty's time penalties (Impossible: Expert's); the title "Impossible N" / "Easy test N"
+    this.level = em ? +n.slice(1) : n;   // a number, as every level is; the title reads replay.test
     this._helpPaused = false;
     this.src = { k: 'R', test: n };
     this.gen = 0;
     // Each board's own grid (boards 7-8 are 18 wide, 2026-10-28); older files had one for all.
-    const [cols, rows] = (IMPT.IMPOSSIBLE_GRID && IMPT.IMPOSSIBLE_GRID[n - 1]) || [IMP_W, IMP_H];
+    const [cols, rows] = em ? em.grid : (IMPT.IMPOSSIBLE_GRID && IMPT.IMPOSSIBLE_GRID[n - 1]) || [IMP_W, IMP_H];
     this.lvl = { cols, rows, arrows: arrows.map((c) => c.slice()) };
     this._resetBoard(null);
     this.clock = { n, key: 'R', ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false };
