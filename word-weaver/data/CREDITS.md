@@ -12,8 +12,10 @@
   implied warranty.
 - **ENABLE** (public domain), `boggle/data/words.txt`: every grid word and extra word is also here.
 - **FrequencyWords** English 2018 (OpenSubtitles), by Hermit Dave, https://github.com/hermitdave/FrequencyWords,
-  licensed **CC BY-SA 4.0**: which words are said often enough to be grid words. The shipped
-  levels are a derived work and are shared under the same licence.
+  licensed **CC BY-SA 4.0**: which words are said often enough to be grid words, and (since 2026-11-01) each
+  word's rank, which decides which words a grid takes first. The shipped levels, and the generated rank copies
+  `tools/word-weaver-ranks-en.txt` / `-es.txt` that the data tests read, are a derived work and are shared under
+  the same licence.
 - **First-name lists** (dominictarr/random-name and smashew/NameDatabases, MIT): names are never extra
   words, and only plain-word names are grid words.
 - **LDNOOBW** English list (CC BY 4.0): words on it, and their plurals and verb forms, are removed.

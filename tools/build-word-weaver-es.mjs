@@ -1,8 +1,8 @@
 // build-word-weaver-es.mjs - GENERATOR for word-weaver/data/es/ (Word Weaver's SPANISH ladder, Tejepalabras;
-// Matt, 2026-10-29: "Yes, build Spanish puzzles"). Run it, then `node word-weaver/js/data-test.js`, then commit
+// Matt, 2026-10-29: "Yes, build Spanish puzzles"). Run it, then `node word-weaver/js/data-test-es.js`, then commit
 // the data. Never hand-edit the files it writes.
 //
-//   NODE_USE_ENV_PROXY=1 node tools/build-word-weaver-es.mjs [--cache <dir>] [--levels 2000]
+//   NODE_USE_ENV_PROXY=1 node tools/build-word-weaver-es.mjs [--cache <dir>] [--levels 2000] [--fresh]
 //
 // THE SAME GAME AS ENGLISH (tools/build-word-weaver-data.mjs: its ramp, bands, crossword layout and grid
 // rules are imported, not copied), with Spelling Bee's Spanish sources and rules (tools/build-spelling-bee-es.mjs,
@@ -11,22 +11,28 @@
 //
 // THE TWO LISTS
 //   EXTRA words (accepted, counted, never shown until found) = every dictionary word and conjugation of 3-7
-//     letters (Spelling Bee's bonus rule), no first names (NAME_WORDS keeps LUNA, CLARA), no SLURS. Adult
-//     words and profanity ARE extras (Matt, 2026-10-29: "just because these words have bad meanings doesn't
-//     mean they aren't words").
-//   GRID words (what a level asks for) = extras that lemmatization-lists knows, among the GRID_RANK most said
-//     words, not a name, not on NOT_ANSWERS, not a vulgar or adult word, not on GRID_BLOCK.
-//   HARD / EXPERT grid lists (as English: 7-letter wheels, rarer words): the same, up to HARD_RANK / any
-//     ranked word; a 3- or 4-letter word there must already be an Easy/Medium grid word.
+//     letters (Spelling Bee's bonus rule), no first names (NAME_WORDS keeps LUNA, CLARA), no slurs, and since
+//     2026-11-01 no vulgar or adult words and their plurals (English's rule; VULGAR_TOO / VULGAR_OK below).
+//     (2026-10-29 they were extras, Matt: "just because these words have bad meanings doesn't mean they
+//     aren't words"; the 2026-11-01 review asked for English's rule and Matt approved it: "Yes do all".)
+//   GRID lists (English's bits): 1 Easy/Medium = extras lemmatization-lists knows, among the EASY_RANK most
+//     said, not a name, not on NOT_ANSWERS, not on GRID_BLOCK; 2 Hard = the same up to HARD_RANK, 4 Expert =
+//     any ranked word; a 3- or 4-letter Hard/Expert word must be among the GRID_RANK most said.
+//
+// 2026-11-01: REMADE, ALL 2,000, with English (Matt: "Yes do all"): common words first, the band caps and
+//   the one smooth climb are tools/build-word-weaver-data.mjs's (its header; makeLadder, BANDS, plan()),
+//   ranks = es_50k.txt line numbers, accents off, Ñ kept. The grid words were already common; the cliff at
+//   1001 and Hard = Expert were the same as English's.
 //
 // WHAT IS WRITTEN: word-weaver/data/es/index.json and levels-<k>.json, English's format exactly (letters may
-//   include Ñ). APPEND-ONLY ONCE SHIPPED, as English: a re-run keeps every level in the files.
+//   include Ñ), and tools/word-weaver-ranks-es.txt (the data test's offline ranks). APPEND-ONLY ONCE SHIPPED,
+//   as English: a re-run keeps every level in the files (`--fresh`: used once, 2026-11-01, before release).
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { rng, wheelSize, targetWords, maxDims, layout, gridProblems, BAND, CHUNK } from './build-word-weaver-data.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { makeLadder, writeLevels, writeRanks, report, COMMON, CHUNK } from './build-word-weaver-data.mjs';
 import { FREQ_URL, LEM_URL, NAME_URLS, BAD_URL, BLOCK, ALLOW, NOT_ANSWERS, NAME_WORDS, SPANISH_TOO, SKIP, BLOCK_RE,
   SLURS, ADULT_SKIP, fold, flat } from './build-spelling-bee-es.mjs';
 
@@ -35,17 +41,24 @@ const args = process.argv.slice(2);
 const arg = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
 const CACHE = arg('--cache', path.join(os.tmpdir(), 'word-weaver-es-cache'));
 const COUNT = Number(arg('--levels', 2000));
+const FRESH = args.includes('--fresh');
 const OUT = path.join(ROOT, 'word-weaver/data/es');
 const SEED = 20261029;
-const GRID_RANK = 12000;
-const CORE_RANK = 3000;
-const HARD_RANK = 25000;
+const GRID_RANK = 12000;   // a short (3-4 letter) Hard/Expert grid word is among these
+const EASY_RANK = 15000;   // the Easy/Medium list (BANDS' rank caps cut it further)
+const HARD_RANK = 30000;
 const WORD = /^[a-zñ]{3,7}$/;
 // Read by hand 2026-10-29, still accepted as extras: words whose subtitle count belongs to their Ñ twin (subtitles
 // drop the tilde: ANO is mostly AÑO), abbreviations, names and English the lists let through.
 const GRID_BLOCK = new Set(`ano anos danes cia seo dea are sir dom nasa tesla cross stand single suite tour set top test pop yes
 fans master masters charter aspen alien lord peralta mateo adama
 `.split(/\s+/).filter(Boolean));
+
+// Other forms of vulgar words the plural rule does not reach; and plain words the lists catch
+// (BLOCK_RE's foll- and coñ-, BLOCK's cono = cone, LDNOOBW's asno, maciza and trio), all read by hand 2026-11-01.
+export const VULGAR_TOO = new Set('maldita malditas sadica sadicas bollero bolleros pajera pajeras'.split(' '));
+export const VULGAR_OK = new Set('asno asnos asna asnas coñac coñacs follaje follajes folleto folletos follon follones trio trios cono conos maciza macizas'.split(' '));
+const PLURAL_OK = new Set(['pises']);   // pisar, not pis + es
 
 const idx = (c) => (c === 'ñ' ? 26 : c.charCodeAt(0) - 97);
 const sortKey = (w) => [...w].sort().join('');
@@ -85,7 +98,7 @@ async function main() {
     const [w0, n] = line.split(' ');
     const f = fold(w0 || '');
     if (!f || !/^[a-zñ]+$/.test(f) || rank.has(f)) continue;
-    rank.set(f, i);
+    rank.set(f, i + 1);   // the line number (the 2026-11-01 review's rank)
     said.set(f, Number(n) || 0);
   }
   const fromA = [];
@@ -95,131 +108,40 @@ async function main() {
 
   // --- the lists ---
   const isName = (w) => (names.has(w) || NOT_ANSWERS.has(w)) && !NAME_WORDS.has(w);
-  const vulgar = (w) => bad.has(w) || BLOCK_RE.test(w) || ADULT_SKIP.has(w);
+  // Vulgar and adult words, with their plurals: out of the grid AND, since 2026-11-01, out of the extras
+  // too (English's rule; slurs were already out). VULGAR_TOO and VULGAR_OK were read by hand that day.
+  const vulgar1 = (w) => !VULGAR_OK.has(w) && (bad.has(w) || BLOCK_RE.test(w) || ADULT_SKIP.has(w) || SLURS.has(w) || VULGAR_TOO.has(w));
+  const vulgar = (w) => vulgar1(w) || (w.endsWith('s') && vulgar1(w.slice(0, -1))) || (w.endsWith('es') && !PLURAL_OK.has(w) && vulgar1(w.slice(0, -2)));
   const accepted = new Set([...fromA, ...B].filter((w) => WORD.test(w)));
   const common = [...L].filter((w) => WORD.test(w) && !accepted.has(w) && rank.has(w) && !names.has(w)
     && (!SKIP.has(w) || ADULT_SKIP.has(w)) && (!english.has(w) || SPANISH_TOO.has(w)));
-  const extra = [...new Set([...accepted, ...common])].filter((w) => !isName(w) && !SLURS.has(w)).sort();
+  const all = [...new Set([...accepted, ...common])].filter((w) => !isName(w));
+  const extra = all.filter((w) => !vulgar(w)).sort();
   // A grid word is a DICTIONARY word or one of its conjugations (`accepted`), never only a subtitle word (SET, STOP, JET).
-  const gridOk = (w) => accepted.has(w) && L.has(w) && rank.has(w) && !vulgar(w) && !NOT_ANSWERS.has(w) && !isName(w) && !GRID_BLOCK.has(w);
-  const grid = extra.filter((w) => gridOk(w) && rank.get(w) < GRID_RANK);
-  const commonSet = new Set(grid);
-  const isRare = (w) => !commonSet.has(w);
-  const coreScore = (w) => (rank.get(w) < CORE_RANK ? 2 : 0) + Math.log10(said.get(w) || 1);
-  const gridC = grid.map(counts), gridM = grid.map(maskOf);
-  const extraC = extra.map(counts), extraM = extra.map(maskOf);
-
-  const bases = new Map();
-  for (const w of grid) { const k = sortKey(w); if (!bases.has(k)) bases.set(k, { key: k, words: [] }); bases.get(k).words.push(w); }
-  for (const b of bases.values()) {
-    const lc = counts(b.key), lm = maskOf(b.key);
-    b.pool = [];
-    for (let i = 0; i < grid.length; i++) if (grid[i].length <= b.key.length && !(gridM[i] & ~lm) && fitsIn(gridC[i], lc)) b.pool.push(grid[i]);
-    b.common = Math.max(...b.words.map(coreScore));
+  const gridOk = (w) => accepted.has(w) && L.has(w) && rank.has(w) && !NOT_ANSWERS.has(w) && !isName(w) && !GRID_BLOCK.has(w);
+  // The grid lists, one bit each (English's): 1 Easy/Medium, 2 Hard, 4 Expert; a 3- or 4-letter Hard/Expert
+  // word must be among the GRID_RANK most said. Plus every accepted COMMON word (lists 0 if never a grid word).
+  const vocab = [];
+  for (const w of extra) {
+    const k = rank.get(w) ?? Infinity, ok = gridOk(w), shortOk = w.length >= 5 || k <= GRID_RANK;
+    const lists = (ok && k <= EASY_RANK ? 1 : 0) | (ok && shortOk && k <= HARD_RANK ? 2 : 0) | (ok && shortOk ? 4 : 0);
+    if (lists || k <= COMMON) vocab.push({ w, rank: k, lists });
   }
-  const bySize = {};
-  for (const b of bases.values()) (bySize[b.key.length] ||= []).push(b);
-  for (const s of Object.keys(bySize)) bySize[s].sort((a, b) => (a.key < b.key ? -1 : 1));
+  console.log(`grid ${vocab.filter((v) => v.lists & 1).length}, hard ${vocab.filter((v) => v.lists & 2).length}, expert ${vocab.filter((v) => v.lists & 4).length}, extra ${extra.length}, common extras never in a grid ${vocab.filter((v) => !v.lists).length}`);
 
-  // Hard and Expert: English's shape (BAND: levels, word counts, 3-/4-letter caps), Spanish word lists.
-  const BANDS = {
-    hard: { ...BAND.hard, rankMax: HARD_RANK },
-    expert: { ...BAND.expert, rankMax: Infinity },
-  };
-  for (const [name, X] of Object.entries(BANDS)) {
-    X.list = extra.filter((w) => w.length >= X.minLen && gridOk(w) && rank.get(w) < X.rankMax && (w.length >= 5 || commonSet.has(w)));
-    const lc7 = X.list.map(counts), lm7 = X.list.map(maskOf);
-    const byKey = new Map();
-    for (const w of X.list) if (w.length === 7) { const k = sortKey(w); if (!byKey.has(k)) byKey.set(k, { key: k, words: [] }); byKey.get(k).words.push(w); }
-    X.bases = [...byKey.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
-    for (const b of X.bases) {
-      const lc = counts(b.key), lm = maskOf(b.key);
-      b.pool = [];
-      for (let i = 0; i < X.list.length; i++) if (!(lm7[i] & ~lm) && fitsIn(lc7[i], lc)) b.pool.push(X.list[i]);
-      b.rare = b.pool.filter(isRare).length;
-      b.common = Math.max(...b.words.map(coreScore));
-    }
-    console.log(`${name}: list ${X.list.length}, 7-letter bases ${X.bases.length}`);
-  }
-  const bandOf = (n) => (n >= BANDS.expert.from ? BANDS.expert : n >= BANDS.hard.from ? BANDS.hard : null);
-
-  // --- the levels (English's loop: kept levels first, then append) ---
+  // --- the levels (English's ladder) ---
   const kept = [];
-  if (fs.existsSync(path.join(OUT, 'index.json'))) {
+  if (!FRESH && fs.existsSync(path.join(OUT, 'index.json'))) {
     const ix = JSON.parse(fs.readFileSync(path.join(OUT, 'index.json'), 'utf8'));
     for (let k = 0; k * CHUNK < ix.count; k++) kept.push(...JSON.parse(fs.readFileSync(path.join(OUT, `levels-${k}.json`), 'utf8')).levels);
   }
-  const used = new Set(kept.map((lv) => sortKey(lv.l.toLowerCase())));
-  const levels = kept.slice(0, COUNT);
-  for (let n = levels.length + 1; n <= COUNT; n++) {
-    const r = rng(SEED + n * 7919);
-    const X = bandOf(n);
-    let size = X ? 7 : wheelSize(n, r);
-    let target = targetWords(n, size, r);
-    if (X) {
-      const p = (n - X.from) / (X.to - X.from);
-      target = Math.min(X.words[1], Math.max(X.words[0], Math.round(X.words[0] + (X.words[1] - X.words[0]) * p) + (r() < 0.3 ? -1 : r() < 0.4 ? 1 : 0)));
-    }
-    const [mr, mc] = X ? [9, 9] : maxDims(n, size);
-    let made = null;
-    const failed = new Set();
-    for (let tries = 0; !made && tries < 400; tries++) {
-      const cands = (X ? X.bases : bySize[size] || []).filter((b) => !used.has(b.key) && !failed.has(b.key) && b.pool.length >= target + (size >= 6 ? 2 : 0));
-      if (X && !cands.length) { if (target > X.words[0]) { target--; failed.clear(); continue; } break; }
-      if (!cands.length) {
-        if (tries > 300) { size = size === 7 ? 6 : size + 1; continue; }
-        target = Math.max(3, target - 1); continue;
-      }
-      const from = X ? [...cands].sort((x, y) => y.rare - x.rare || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * 0.4)))
-        : n <= 400 ? [...cands].sort((x, y) => y.common - x.common || (x.key < y.key ? -1 : 1)).slice(0, Math.max(8, Math.ceil(cands.length * (n <= 60 ? 0.2 : 0.4)))) : cands;
-      const b = from[Math.floor(r() * from.length)];
-      const base = [...b.words].sort((x, y) => coreScore(y) - coreScore(x) || (x < y ? -1 : 1))[0];
-      let best = null;
-      for (let a = 0; a < 60; a++) {
-        const ws = X ? layout(base, b.pool, target, mr, mc, r, { rare: isRare, max3: X.max3, max4: X.max4 }) : layout(base, b.pool, target, mr, mc, r);
-        if (ws.length < target) continue;
-        const rows = Math.max(...ws.map(([w, r0, , d]) => r0 + (d === 'd' ? w.length : 1)));
-        const cols = Math.max(...ws.map(([w, , c0, d]) => c0 + (d === 'a' ? w.length : 1)));
-        const score = rows * cols + Math.abs(rows - cols) * 3;
-        if (!best || score < best.score) best = { ws, rows, cols, score };
-      }
-      if (!best) {
-        failed.add(b.key);
-        if (X && failed.size % 20 === 0) target = Math.max(X.words[0], target - 1);
-        continue;
-      }
-      const problems = gridProblems(best.ws, best.rows, best.cols);
-      if (problems.length) throw new Error(`level ${n}: ${problems.join('; ')}`);
-      const lc = counts(b.key), lm = maskOf(b.key);
-      const inGrid = new Set(best.ws.map(([w]) => w));
-      const x = [];
-      for (let i = 0; i < extra.length; i++) if (!inGrid.has(extra[i]) && extra[i].length <= b.key.length && !(extraM[i] & ~lm) && fitsIn(extraC[i], lc)) x.push(extra[i]);
-      made = { l: b.key.toUpperCase(), g: [best.rows, best.cols], w: best.ws.map(([w, r0, c0, d]) => [w.toUpperCase(), r0, c0, d]), x: x.map((w) => w.toUpperCase()) };
-      used.add(b.key);
-    }
-    if (!made) throw new Error(`level ${n}: no layout (size ${size}, target ${target})`);
-    levels.push(made);
-  }
-
-  fs.mkdirSync(OUT, { recursive: true });
-  let total = 0;
-  for (let k = 0; k * CHUNK < levels.length; k++) {
-    const part = levels.slice(k * CHUNK, (k + 1) * CHUNK);
-    const body = `{"v":1,"first":${1 + k * CHUNK},"levels":[\n${part.map((lv) => JSON.stringify(lv)).join(',\n')}\n]}\n`;
-    fs.writeFileSync(path.join(OUT, `levels-${k}.json`), body);
-    total += body.length;
-  }
-  fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify({ v: 1, count: levels.length, chunk: CHUNK }) + '\n');
-  console.log(`grid words ${grid.length}, extra words ${extra.length}, levels ${levels.length} (kept ${kept.length}), ${(total / 1024).toFixed(0)} KB`);
-  for (const [band, a, z] of [['easy', 1, 500], ['medium', 501, 1000], ['hard', 1001, 1500], ['expert', 1501, 2000]]) {
-    const part = levels.slice(a - 1, z);
-    if (!part.length) continue;
-    const ws = part.flatMap((lv) => lv.w.map((e) => e[0]));
-    const sizes = {}; for (const lv of part) sizes[lv.l.length] = (sizes[lv.l.length] || 0) + 1;
-    const nw = part.map((lv) => lv.w.length);
-    const avg = (xs) => xs.reduce((p, q) => p + q, 0) / xs.length;
-    console.log(`BAND ${band.padEnd(6)} letters ${JSON.stringify(sizes)} words ${Math.min(...nw)}-${Math.max(...nw)} (avg ${avg(nw).toFixed(1)}) avg len ${avg(ws.map((w) => w.length)).toFixed(2)} Ñ levels ${part.filter((lv) => lv.l.includes('Ñ')).length} extras avg ${avg(part.map((lv) => lv.x.length)).toFixed(0)}`);
-  }
+  const levels = makeLadder({ count: COUNT, seed: SEED, vocab, extra, kept, A: { counts, maskOf, fitsIn, sortKey }, log: console.log });
+  writeLevels(OUT, levels);
+  const rk = (w) => rank.get(w.toLowerCase()) ?? Infinity;
+  writeRanks(path.join(ROOT, 'tools/word-weaver-ranks-es.txt'), levels, rk, 'FrequencyWords es 2018 (es_50k.txt line number, accents off, Ñ kept)');
+  console.log(`levels ${levels.length} (kept ${kept.length}), Ñ levels ${levels.filter((lv) => lv.l.includes('Ñ')).length}`);
+  report(levels, rk, console.log);
 }
 
-main().catch((err) => { console.error(err); process.exit(1); });
+// word-weaver/js/data-test-es.js imports the hand lists above; main runs only when called.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((err) => { console.error(err); process.exit(1); });
