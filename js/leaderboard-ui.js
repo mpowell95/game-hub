@@ -637,6 +637,8 @@ function boardView(list, id) {
         return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
       },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : id === 'contexto' ? (g) => ctSubHTML(ctOf(g)) : null,
+      // Leaderboard v2 only (2026-11-01): the row's number is a no-hint count (its "no hints" pill). Unread here.
+      nohint: (g) => !!noHintTierOf(g, id),
       // Contexto (Matt, 2026-10-30): the medals say it all; no "MEDALS" label, no "N played", no
       // "<name> is 4th." line under the list.
       ...(id === 'contexto' ? { val: (g) => ctBigHTML(ctOf(g)), unit: '', sub: () => '', gap: false } : {}),
@@ -3658,7 +3660,7 @@ export function lb2Board(list, id, st = {}) {
     } else {
       const v = boardView(list, id);
       rows = v.rows; cmp = v.cmp; unit = v.unit || ''; empty = v.empty || t('lb_empty_game', { label: labelOf(id) });
-      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null });
+      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null, nohint: v.nohint ? v.nohint(g) : false });
       if (v.gap) gapFn = (me, rec) => gapParts(me, rec, id);
     }
     const { rankOf, tiedAt } = rankMap(rows, () => 0, cmp);
