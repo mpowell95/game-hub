@@ -88,6 +88,12 @@ the admin version. Then we'll address the rest in mockups." Rest of section 4 st
 on one line; a board's tabs (and Contexto's medal key) on top, players right under, pinned own row only while it is off
 screen; the person's game page restyled to v2 (rows, no caps, cards) for all 34 games, Contexto drawn in full; Sudoku's
 missing `gs_pi_solved` label added.
+**v1385 (same day), Matt's answers:** Tic Tac Toe: "You choose" = the standing (medals, game list) now follows the
+board's All tab (every win, difficulty first; `boardMetricCmp` has no Tic Tac Toe branch): HDJ, Inc. leads both.
+Hall of Fame name: keep. Release: wait. Baseball Quick Play: no. Mockup `docs/mockups/lb2-byplayer-rush.html`
+(Wins with a category picker + sort; Arrow Maze Levels | Rush in v2) sent for review; `lb2Players(list, cat)` added
+for it. Similar names: Begoña / Bego, Andrew Powell / Andrew P (each its own code); not merged, Matt's call.
+King of Games' Contexto Fewest 1 = en-31, 1 typed guess after 8 hints (real; Fewest counts typed guesses only).
 5. **Pinned row**: the outside reviewer suggested hiding it when your own row is on screen; the original spec says it
    is always there so the layout never jumps. Not changed.
 6. **Shape tile**: reviewer suggested dropping the white tile behind shapes; Matt wants black Hard/Expert diamonds,

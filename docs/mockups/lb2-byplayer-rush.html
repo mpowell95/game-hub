@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leaderboard v2 By Player and Rush</title>
+<style>
+:root{--bg:#0E1014;--surf:#171A20;--text:#F1F3F6;--muted:#A2A9B5;--line:#272B33;--accent:#7AA7FF;--seg:#1F232A;--segOn:#323844;--you:#1C2D4D}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#05060a;color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px;display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:10px}
+.cap{font:600 15px system-ui;color:#cfd5df;width:402px}
+.ph{width:402px;height:874px;background:var(--bg);border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column;border:1px solid #222}
+.sb{height:50px;flex:none}
+.body{flex:1;overflow:hidden;padding:0 16px}
+.tabbar{height:68px;flex:none;border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;background:var(--bg)}
+.tabbar i{width:26px;height:26px;border-radius:6px;background:#3a4150;display:block}
+.tabbar i.on{background:#f2b705}
+.num{font-variant-numeric:tabular-nums}
+h1.big{font-size:30px;font-weight:800}
+.trow{display:flex;align-items:center;justify-content:space-between;height:52px}
+.icons{display:flex;gap:14px}
+.ic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.ic svg{width:24px;height:24px}
+.seg{display:flex;background:var(--seg);border-radius:12px;padding:3px;height:44px;margin-top:8px}
+.seg>span{flex:1;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:16px;color:var(--muted);gap:6px}
+.seg>span.on{background:var(--segOn);color:var(--text);font-weight:600}
+.frow{display:flex;gap:8px;margin-top:8px}
+.frow .seg{flex:1;margin:0}
+.sortb{width:44px;height:44px;border-radius:12px;background:var(--seg);display:flex;align-items:center;justify-content:center;color:var(--text);margin-top:0}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:10px}
+.row{display:flex;align-items:center;gap:12px;padding:0 12px;min-height:62px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.sm{min-height:50px}
+.art{width:62px;height:36px;border-radius:7px;overflow:hidden;flex:none}
+.art svg{width:100%;height:100%;display:block}
+.grow{flex:1;min-width:0;display:flex;flex-direction:column}
+.t1{font-size:17px;font-weight:600}
+.t2{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.me{color:var(--accent)}
+.chev{color:#59606d;font-size:20px;width:10px}
+.right{display:flex;align-items:center;gap:6px;font-size:16px}
+.ctm{position:relative;display:inline-block;flex:none}
+.ctm img{display:block;width:100%;height:100%}
+.ctm b{position:absolute;transform:translate(-50%,-50%);font-weight:900;line-height:1;left:50%;top:69%}
+.bar{display:flex;align-items:center;gap:10px;height:62px}
+.back{width:30px;color:var(--text);font-size:28px}
+.face{width:44px;height:44px;border-radius:50%;background:var(--surf);display:flex;align-items:center;justify-content:center;font-size:24px}
+.play{background:var(--accent);color:#0E1014;font-weight:700;border-radius:20px;padding:8px 16px;font-size:16px}
+.heart{color:var(--accent);font-size:22px}
+.key{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:10px 4px 0}
+.key span{display:flex;align-items:center;gap:4px}
+.lr{display:grid;grid-template-columns:44px 1fr auto 10px;align-items:center;gap:8px;padding:6px 10px 6px 0;min-height:66px;border-top:1px solid var(--line);position:relative}
+.lr:first-child{border-top:0}
+.lr .rk{text-align:center;color:var(--muted);font-weight:700}
+.lr.g{background:linear-gradient(90deg,#3a3014,#262113);box-shadow:inset 4px 0 #E0A92E}
+.lr.s{box-shadow:inset 4px 0 #B9C0CA}
+.lr.b{box-shadow:inset 4px 0 #C98A55}
+.lr.meRow{background:var(--you)}
+.sub{display:flex;gap:3px;margin-top:2px}
+.h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:none;margin:16px 4px 0}
+.stat{display:flex;justify-content:space-between;align-items:center;padding:0 14px;height:48px;border-top:1px solid var(--line);font-size:16px}
+.stat:first-child{border-top:0}
+.stat b{font-weight:700}
+.medals{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 6px 10px;text-align:center}
+.medals div{display:flex;flex-direction:column;align-items:center;gap:4px}
+.medals small{font-size:12px;color:var(--muted)}
+.medals .n{font-size:20px;font-weight:800}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font-size:13px;color:var(--muted);font-weight:600;text-align:right;padding:10px 14px 6px}
+th:first-child{text-align:left}
+td{padding:0 14px;height:44px;border-top:1px solid var(--line);text-align:right}
+td:first-child{text-align:left}
+td .lbl{display:inline-flex;align-items:center;gap:8px}
+.tile{display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:4px}
+.tile.w{background:#fff}
+.tile svg{width:13px;height:13px}
+.dim{color:#59606d}
+
+.pick{flex:1;height:44px;border-radius:12px;background:var(--seg);display:flex;align-items:center;gap:8px;padding:0 14px;font-size:16px;font-weight:600}
+.pick .dn{margin-left:auto;color:var(--muted)}
+.cols{display:flex;justify-content:flex-end;font-size:13px;color:var(--muted);padding:12px 34px 0 0}
+.wr{display:grid;grid-template-columns:44px 1fr auto 10px;align-items:center;gap:8px;padding:0 10px 0 0;min-height:56px;border-top:1px solid var(--line)}
+.wr:first-child{border-top:0}
+.wr .rk{text-align:center;color:var(--muted);font-weight:700}
+.wr .v{font-size:17px;font-weight:700}
+.wr.g{background:linear-gradient(90deg,#3a3014,#262113);box-shadow:inset 4px 0 #E0A92E}
+.wr.s{box-shadow:inset 4px 0 #B9C0CA}.wr.b{box-shadow:inset 4px 0 #C98A55}
+.wr.meRow{background:var(--you)}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+.sh{width:100%;background:var(--surf);border-radius:18px 18px 0 0;padding:8px 0 84px}
+.grab{width:40px;height:5px;border-radius:3px;background:#3a4150;margin:4px auto 10px}
+.opt{display:flex;align-items:center;gap:10px;height:50px;padding:0 20px;font-size:17px;border-top:1px solid var(--line)}
+.opt:first-of-type{border-top:0}
+.opt .ck{margin-left:auto;color:var(--accent);font-weight:700}
+.wk{display:flex;flex-direction:column}
+</style>
+</head>
+<body>
+<div class="col"><div class="cap">Hall of Fame · Wins</div><div class="ph" id="a"></div></div>
+<div class="col"><div class="cap">Hall of Fame · Wins · Hard</div><div class="ph" id="b"></div></div>
+<div class="col"><div class="cap">Hall of Fame · Wins · picker</div><div class="ph" id="c"></div></div>
+<div class="col"><div class="cap">Arrow Maze · Rush · This week</div><div class="ph" id="d"></div></div>
+<div class="col"><div class="cap">Arrow Maze · Rush · Past weeks</div><div class="ph" id="e"></div></div>
+<script type="module">
+import { GAME_ART } from '../../js/game-art.js';
+import { diffShapeSVG } from '../../js/difficulty-tiers.js';
+const D = {"1": [[1, 0, "*King of Games*", 345, 4481, "🤴"], [2, 0, "*TP*", 199, 661, "🏆"], [3, 0, "Ele", 70, 798, "🙂"], [4, 0, "MattyIce", 57, 1776, "🧊"], [5, 0, "HDJ, Inc.", 53, 576, "🙂"], [6, 0, "Jojopow", 18, 474, "🙂"], [7, 0, "Natalia", 6, 605, "🐙"], [8, 0, "Unai", 5, 733, "🙂"], [9, 1, "Bego", 4, 62, "🙂"]], "2": [[1, 0, "HDJ, Inc.", 73, 576, "🙂"], [2, 0, "MattyIce", 47, 1776, "🧊"], [3, 0, "Natalia", 44, 605, "🐙"], [4, 0, "*King of Games*", 35, 4481, "🤴"], [5, 0, "Unai", 26, 733, "🙂"], [6, 0, "Lili", 24, 921, "🐢"], [7, 0, "Anita Bonita", 14, 1169, "🦁"], [8, 0, "Ele", 7, 798, "🙂"], [9, 1, "Allie", 5, 51, "🙂"]], "3": [[1, 0, "*King of Games*", 392, 4481, "🤴"], [2, 0, "MattyIce", 35, 1776, "🧊"], [3, 0, "Lili", 11, 921, "🐢"], [4, 0, "Anita Bonita", 7, 1169, "🦁"], [5, 0, "HDJ, Inc.", 5, 576, "🙂"], [6, 0, "*TP*", 2, 661, "🏆"], [7, 1, "Begoña", 0, 1, "🙂"], [7, 1, "Oneill", 0, 1, "🙂"], [7, 1, "Zed99", 0, 1, "🙂"]], "4": [[1, 0, "*King of Games*", 2, 4481, "🤴"], [2, 1, "Begoña", 0, 1, "🙂"], [2, 1, "Oneill", 0, 1, "🙂"], [2, 1, "Zed99", 0, 1, "🙂"], [2, 1, "Andrew Powell", 0, 4, "🙂"], [2, 1, "Sam1", 0, 6, "🙂"], [2, 1, "Rick", 0, 8, "🙂"], [2, 1, "Alec king of games", 0, 15, "🙂"], [2, 1, "KFee", 0, 22, "🙂"]], "all": [[1, 0, "*King of Games*", 867, 4481, "🤴"], [2, 0, "MattyIce", 210, 1776, "🧊"], [3, 0, "*TP*", 201, 661, "🏆"], [4, 0, "HDJ, Inc.", 131, 576, "🙂"], [5, 0, "Ele", 106, 798, "🙂"], [6, 0, "Natalia", 60, 605, "🐙"], [7, 0, "Anita Bonita", 56, 1169, "🦁"], [8, 0, "Lili", 55, 921, "🐢"], [9, 0, "Unai", 38, 733, "🙂"]], "VS": [[1, 1, "MattyIce", 64, 1776, "🧊"], [1, 1, "*King of Games*", 64, 4481, "🤴"], [3, 0, "Anita Bonita", 33, 1169, "🦁"], [4, 0, "Lili", 19, 921, "🐢"], [5, 0, "Unai", 7, 733, "🙂"], [6, 0, "Natalia", 5, 605, "🐙"], [7, 0, "Liz", 4, 53, "🐝"], [8, 0, "Brian Spalding", 1, 110, "🦊"], [9, 1, "Begoña", 0, 1, "🙂"]], "NT": [[1, 0, "*King of Games*", 2592, 4481, "🤴"], [2, 0, "MattyIce", 831, 1776, "🧊"], [3, 0, "Anita Bonita", 210, 1169, "🦁"], [4, 0, "HDJ, Inc.", 205, 576, "🙂"], [5, 0, "Ele", 165, 798, "🙂"], [6, 0, "Bego", 42, 62, "🙂"], [7, 0, "Natalia", 34, 605, "🐙"], [8, 0, "*TP*", 23, 661, "🏆"], [9, 0, "Alec king of games", 15, 15, "🙂"]]};
+const IMG = { gold: ['medal-gold.png', 115 / 180, '#7a3e00'], silver: ['medal-silver.png', 114 / 180, '#3d3d42'], bronze: ['medal-bronze.png', 114 / 180, '#5c2304'], iron: ['medal-iron.png', 114 / 180, '#fff'] };
+const med = (k, n, h) => { const [f, ar, col] = IMG[k]; const fs = Math.round(h * (String(n ?? '').length >= 2 ? 0.3 : 0.4)); return `<span class="ctm" style="height:${h}px;width:${Math.round(h * ar)}px"><img src="../../icons/${f}">${n == null ? '' : `<b style="font-size:${fs}px;color:${col}">${n}</b>`}</span>`; };
+const shp = (t) => `<span class="tile${t >= 3 ? ' w' : ''}">${diffShapeSVG(t)}</span>`;
+const art = (id) => `<span class="art">${GAME_ART[id] || ''}</span>`;
+const tabs = '<div class="tabbar"><i></i><i></i><i></i><i class="on"></i><i></i></div>';
+const frame = (inner, extra = '') => `<div class="sb"></div><div class="body">${inner}</div>${tabs}${extra}`;
+const SEARCH = '';
+const HELP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>';
+const SORT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4"/></svg>';
+const fmt = (n) => n.toLocaleString('en-US');
+const rankCell = (r, tie) => (r <= 3 ? med(['gold', 'silver', 'bronze'][r - 1], r, 30) : (tie ? '=' : '#') + r);
+const pod = (r) => (r === 1 ? ' g' : r === 2 ? ' s' : r === 3 ? ' b' : '');
+const list = (rows, unit) => `<div class="cols">${unit}</div><div class="card" style="margin-top:4px">${rows.map(([r, tie, name, v]) => `<div class="wr${pod(r)}${name === 'MattyIce' ? ' meRow' : ''}"><span class="rk">${rankCell(r, tie)}</span><span class="t1${name === 'MattyIce' ? ' me' : ''}">${name}</span><span class="v num">${fmt(v)}</span><span class="chev">›</span></div>`).join('')}</div>`;
+const head = (label, pickInner) => `
+  <div class="trow"><h1 class="big">Leaderboard</h1><span class="icons"><span class="ic">${HELP}</span></span></div>
+  <div class="seg"><span>Games</span><span class="on">Hall of Fame</span><span>Me</span></div>
+  <div class="seg"><span>Medals</span><span class="on">Wins</span></div>
+  <div class="frow"><span class="pick">${pickInner}<span class="dn">▾</span></span><span class="sortb">${SORT}</span></div>`;
+document.getElementById('a').innerHTML = frame(head('', 'Everything') + list(D.all, 'Wins'));
+document.getElementById('b').innerHTML = frame(head('', `${shp(3)}Hard`) + list(D['3'], 'Wins'));
+const opt = (inner, on) => `<div class="opt">${inner}${on ? '<span class="ck">✓</span>' : ''}</div>`;
+document.getElementById('c').innerHTML = frame(head('', 'Everything') + list(D.all, 'Wins'), `<div class="sheet"><div class="sh"><div class="grab"></div>
+  ${opt('Everything', 1)}${opt(shp(1) + 'Easy')}${opt(shp(2) + 'Medium')}${opt(shp(3) + 'Hard')}${opt(shp(4) + 'Expert')}${opt('vs people')}${opt('No difficulty')}</div></div>`);
+const bar = `<div class="bar"><span class="back">‹</span>${art('way-out')}<span class="grow"><span class="t1" style="font-size:22px;font-weight:700">Arrow Maze</span><span class="t2">1,261 played</span></span><span class="play">Play</span><span class="heart">♥</span></div>`;
+const rushTop = (mode, view) => `${bar}
+  <div class="seg"><span>Levels</span><span class="on">Rush</span></div>
+  <div class="seg"><span class="${mode === 'easy' ? 'on' : ''}">${shp(1)}Easy</span><span class="${mode === 'hard' ? 'on' : ''}">${shp(3)}Hard</span></div>
+  <div class="seg"><span class="${view === 'week' ? 'on' : ''}">This week</span><span class="${view === 'won' ? 'on' : ''}">Weeks won</span><span class="${view === 'past' ? 'on' : ''}">Past weeks</span></div>`;
+document.getElementById('d').innerHTML = frame(rushTop('easy', 'week') + `<div class="cols">Oct 26 – Nov 1 · Arrows</div><div class="card" style="margin-top:4px"><div class="wr g"><span class="rk">${med('gold', 1, 30)}</span><span class="t1">*King of Games*</span><span class="v num">1,865</span><span class="chev">›</span></div></div>`);
+const wk = (w, v) => `<div class="wr"><span class="rk">${med('gold', null, 26)}</span><span class="wk"><span class="t1">*King of Games*</span><span class="t2">${w}</span></span><span class="v num">${v}</span><span class="chev">›</span></div>`;
+document.getElementById('e').innerHTML = frame(rushTop('easy', 'past') + `<div class="cols">Arrows</div><div class="card" style="margin-top:4px">${wk('Oct 19 – 25', '1,004')}${wk('Oct 12 – 18', '541')}</div>`);
+</script>
+</body>
+</html>

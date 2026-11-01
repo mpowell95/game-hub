@@ -1222,17 +1222,10 @@ function compareAllWins(a, b, id) {
  *  Deliberately WITHOUT the plays/recency tie-breaks `sortRows` adds after it: those decide which
  *  of two equally-ranked rows is drawn first, and a rank badge must call that pair TIED. */
 function boardMetricCmp(id) {
-  if (id === 'tictactoe') {
-    return (a, b) => {
-      // Difficulty leads (2026-09-08); the Ultimate -> Classic order inside a tier is untouched.
-      const d = (boardTierOf(b, id) || 0) - (boardTierOf(a, id) || 0);
-      if (d) return d;
-      const ta = (a.games.tictactoe && a.games.tictactoe.tt) || {};
-      const tb = (b.games.tictactoe && b.games.tictactoe.tt) || {};
-      return (ttVariantWins(tb.ultimate) - ttVariantWins(ta.ultimate))
-        || (ttVariantWins(tb.classic) - ttVariantWins(ta.classic));
-    };
-  }
+  // Tic Tac Toe (2026-11-01, Matt: "You choose"): the standing, its medals and the game list follow the
+  // board's All tab (every win, difficulty first), so the top of the board holds the record. Until then the
+  // standing ranked Ultimate wins first and named a different leader than the board. Ultimate and Classic
+  // keep their own tabs.
   // Contexto: medals, then the LOWER average guesses (Matt, 2026-09-29). Only a pair equal on
   // both is tied, so the rank badges agree with the order (see the note above).
   if (id === 'contexto') return (a, b) => compareContexto(ctOf(a), ctOf(b));
@@ -3735,9 +3728,9 @@ export function lb2PlayerGames(list, key) {
 }
 /** The old By Player list as it opens (category All, sorted by Wins: playerListHTML's own order and
  *  rankMap ties): [{ g, key, rank, tie, wins, played }], everyone with any play. */
-export function lb2Players(list) {
+export function lb2Players(list, cat = 'all') {
   const rows = list.filter((g) => playedOf(g, null) > 0);
-  const value = (g) => catValueOf(g, 'all');
+  const value = (g) => catValueOf(g, cat);
   const { rankOf, tiedAt } = rankMap(rows, value);
   rows.sort((a, b) => (value(b) - value(a)) || (playedOf(a, null) - playedOf(b, null)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
   // `cat` = the old card's line under the name (catInlineHTML: wins per tier shape, runs, VS wins), as HTML.
