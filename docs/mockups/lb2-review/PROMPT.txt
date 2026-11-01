@@ -1,0 +1,5 @@
+These are screenshots of the leaderboard screens in a family game app for iPhone (dark mode and light mode). The bottom bar belongs to the app. The person viewing is "*King of Games*".
+
+Do a thorough visual UI/UX review as an experienced mobile designer AND as a player who wants to (1) find their own stats, (2) compare themselves to others, and (3) see what other players have achieved.
+
+Give: a letter grade; strengths; problems ranked by severity, each with a concrete fix; anything confusing or unclear on first look; and anything that is missing. Be blunt. Assume you know nothing beyond what the screens show.
