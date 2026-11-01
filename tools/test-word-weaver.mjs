@@ -217,6 +217,23 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('merge: hint maps survive the combine and cap the other phone\'s finish', g.ww.hint.L5.c === 2 && P.wwLevels(g)[5].s === 1);
 }
 
+// --- free hints: every 10 bonus words earn one that costs no star (Matt, 2026-11-01) ---
+{
+  ok('free: 9 bonus words = 0, 10 = 1, 25 = 2', P.wwFreeHints({ ww: { x: 9 } }) === 0 && P.wwFreeHints({ ww: { x: 10 } }) === 1 && P.wwFreeHints({ ww: { x: 25 } }) === 2);
+  ok('free: this level\'s bonus words count too', P.wwFreeHints({ ww: { x: 8 } }, 2) === 1);
+  ok('free: used ones come off, never below 0', P.wwFreeHints({ ww: { x: 20, fu: 1 } }) === 1 && P.wwFreeHints({ ww: { x: 5, fu: 3 } }) === 0);
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaver(1, { hints: 0, extra: 12 });
+  ok('free: 12 bonus words recorded = 1 free hint', P.wwFreeHints(G.loadStats().games.wordweaver) === 1);
+  G.recordWordWeaverFreeHint();
+  const w = G.loadStats().games.wordweaver;
+  ok('free: using one counts it (fu) and leaves no star cost', w.ww.fu === 1 && P.wwFreeHints(w) === 0 && !w.ww.hint);
+  const rec = (playerId, ww) => ({ profile: { playerId, name: 'Free' }, stats: { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ww } } }, updatedAt: 100 });
+  const g = A.aggregatePlayers({ d1: rec('FF111', { lv: {}, x: 15, fu: 1 }), d2: rec('FF111', { lv: {}, x: 7, fu: 1 }) })[0].games.wordweaver;
+  ok('free: two phones add bonus words and used free hints', g.ww.x === 22 && g.ww.fu === 2 && P.wwFreeHints(g) === 0);
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');

@@ -154,7 +154,7 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
     }, 200),
   };
   const g = aggregatePlayers(all)[0].games.wordweaver;
-  eq('wordweaver: level 1 on both phones is ONE entry, best of each field', g.ww.lv.L1, { s: 3, h: 0, t: 50 });
+  eq('wordweaver: level 1 on both phones is ONE entry: the most hints (1), stars capped by them, the earliest time (2026-10-29)', g.ww.lv.L1, { s: 2, h: 1, t: 50 });
   eq('wordweaver: every level kept, extras summed', [Object.keys(g.ww.lv).sort(), g.ww.x], [['L1', 'L1501', 'L2'], 5]);
   eq('wordweaver: ladder and band plays both summed', [g.total.won, g.byDiff.ladder.won, g.byDiff.easy.won, g.byDiff.expert.won], [4, 2, 1, 1]);
 }

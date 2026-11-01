@@ -14,8 +14,8 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWordWeaver, recordWordWeaverHint, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints } from '../../js/word-weaver-points.js';
+import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints } from '../../js/word-weaver-points.js';
 import { loadIndex, loadLevel, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -357,7 +357,7 @@ class WordWeaver {
   _save() {
     if (!this.level) return false;
     const s = this.st;
-    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, revealed: s.revealed, recorded: s.recorded }, this.lang);
+    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, free: s.free || 0, revealed: s.revealed, recorded: s.recorded }, this.lang);
   }
 
   /** Count the level, once. The recorder runs FIRST (before any animation); the `recorded` flag is set only
@@ -480,7 +480,7 @@ class WordWeaver {
             <g class="ww-go" aria-hidden="true"><circle r="${GO_R}"/><path d="M-7.5 .5l5 5 10-11"/></g>
           </svg>
         </div>
-        <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
+        <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}<span class="ww-badge" hidden></span></button>
       </div>`;
   }
 
@@ -559,9 +559,22 @@ class WordWeaver {
     }
   }
 
-  _paintTools() {
+  _paintTools(bumpFree) {
     const hint = this.root.querySelector('[data-act="hint"]');
-    if (hint) hint.disabled = this.finishing || !hintCell(this.level, this.st);
+    if (!hint) return;
+    hint.disabled = this.finishing || !hintCell(this.level, this.st);
+    // Free hints banked (every 10 bonus words, 2026-11-01): a gold count on the hint button.
+    const n = this._freeBank();
+    const b = hint.querySelector('.ww-badge');
+    if (b) { b.textContent = String(n); b.hidden = n === 0; }
+    hint.setAttribute('aria-label', n ? t('free_aria', { n }) : t('hint_aria'));
+    if (bumpFree && n > (this._lastFree || 0)) this._anim(hint, 'is-bump');
+    this._lastFree = n;
+  }
+
+  /** Free hints this player can use now (lifetime bonus words + this level's, not yet recorded). */
+  _freeBank() {
+    try { return wwFreeHints(loadStats().games.wordweaver, this.st ? this.st.extra.length : 0); } catch { return 0; }
   }
 
   /** Restart a CSS animation class on an element (the class is removed when it ends). */
@@ -769,7 +782,7 @@ class WordWeaver {
         // to the extra-words chip, and the chip pops (gold) as its count goes up.
         this._save();
         this._showPill(W, 'bonus', 1100);
-        this._flyStar(() => this._paintExtra('is-bump'));
+        this._flyStar(() => { this._paintExtra('is-bump'); this._paintTools(true); });
         break;
       case 'extraFound':
         this._paintExtra('is-wiggle');
@@ -837,12 +850,20 @@ class WordWeaver {
     const c = hintCell(this.level, this.st);
     if (!c) return;
     const k = c.r + ',' + c.c;
+    // A FREE hint first, when one is banked (every 10 bonus words, 2026-11-01): it reveals a letter and costs no star.
+    let free = false;
+    if (this._freeBank() > 0) {
+      try { free = !!recordWordWeaverFreeHint(); } catch (err) { console.error('[word-weaver] free hint NOT recorded; a normal hint is used', err); }
+    }
     this.st.revealed.push(k);
-    this.st.hints += 1;
-    // Recorded at once in the synced stats store, not only in this save (Matt, 2026-10-29: "Close the hint gap").
-    try {
-      if (!recordWordWeaverHint(this.n, this.st.hints, this.lang === 'es' ? 'es' : undefined)) console.error('[word-weaver] hint NOT recorded in the stats store', this.n);
-    } catch (err) { console.error('[word-weaver] hint NOT recorded in the stats store', err); }
+    if (free) this.st.free = (this.st.free || 0) + 1;
+    else {
+      this.st.hints += 1;
+      // Recorded at once in the synced stats store, not only in this save (Matt, 2026-10-29: "Close the hint gap").
+      try {
+        if (!recordWordWeaverHint(this.n, this.st.hints, this.lang === 'es' ? 'es' : undefined)) console.error('[word-weaver] hint NOT recorded in the stats store', this.n);
+      } catch (err) { console.error('[word-weaver] hint NOT recorded in the stats store', err); }
+    }
     // A word whose every letter is now showing counts as found, as in Wordscapes (no swipe needed).
     const shown = foundCells(this.level, this.st);
     for (const r of this.st.revealed) shown.add(r);
@@ -960,6 +981,7 @@ class WordWeaver {
         <p>${t('how_swipe')}</p>
         <p>${t('how_hints')}</p>
         <p>${t('how_extra')}</p>
+        <p>${t('how_free')}</p>
       </div>`);
   }
 

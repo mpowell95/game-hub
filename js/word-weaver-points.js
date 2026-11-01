@@ -19,6 +19,7 @@
 //                                 map, so Spanish level 12 is never English level 12. Points, stars and
 //                                 levels completed count BOTH ladders.
 //   ww.x = n                      lifetime extra words found (a counter; it only goes up).
+//   ww.fu = n                     FREE hints used (2026-11-01; a counter; every 10 bonus words earn one, wwFreeHints).
 //   ww.hint['L<n>'] = { c, t }    HINTS, recorded the moment Hint is tapped (2026-10-29, Matt: "Close the hint
 //   ww.esHint['L<n>'] = { c, t }  gap"): c = hints used on level n so far (only grows), t = the first hint's
 //                                 time. Before this the count lived only in the level's save, so wiping the save
@@ -82,6 +83,24 @@ export function wwBest(a, b) {
   if (!y) return x;
   const out = { s: Math.max(x.s, y.s) };
   if (x.h != null || y.h != null) out.h = Math.min(x.h ?? Infinity, y.h ?? Infinity);
+  if (x.t || y.t) out.t = Math.min(x.t || Infinity, y.t || Infinity);
+  return out;
+}
+
+/** ONE LEVEL ACROSS A PERSON'S RECORDS (2026-10-29; restored 2026-11-01, lost in a merge that day): hints learn a
+ *  level, so the MOST hints any record used on it count (Math.max), and its stars are capped by them. `wwBest`
+ *  (fewest hints) let hints taken on one storage and a clean completion on another (Safari next to the Home
+ *  Screen app) earn 3 stars. Read time only (js/players-agg.js): each record keeps what it stored. A record whose
+ *  hints are unknown (no `h`) caps nothing. Both ladders merge this way. */
+export function wwMerge(a, b) {
+  const x = entry(a), y = entry(b);
+  if (!x) return y;
+  if (!y) return x;
+  const out = { s: Math.max(x.s, y.s) };
+  if (x.h != null || y.h != null) {
+    out.h = Math.max(x.h ?? 0, y.h ?? 0);
+    out.s = Math.min(out.s, wwStarsFor(out.h));
+  }
   if (x.t || y.t) out.t = Math.min(x.t || Infinity, y.t || Infinity);
   return out;
 }
@@ -166,4 +185,17 @@ export function wwThreeStars(rec, band = null) {
 export function wwExtra(rec) {
   const x = Math.floor(Number(rec && rec.ww && rec.ww.x) || 0);
   return x > 0 ? x : 0;
+}
+
+/** FREE HINTS (Matt, 2026-11-01: bonus words made worth something): every WW_FREE_EVERY bonus words earn one
+ *  hint that costs no star. Earned = floor((lifetime bonus words + this level's, not yet recorded) / 10); used =
+ *  `ww.fu`, a counter written by js/game-stats.js recordWordWeaverFreeHint. Nothing else is stored. */
+export const WW_FREE_EVERY = 10;
+export function wwFreeUsed(rec) {
+  const n = Math.floor(Number(rec && rec.ww && rec.ww.fu) || 0);
+  return n > 0 ? n : 0;
+}
+export function wwFreeHints(rec, pendingExtra = 0) {
+  const earned = Math.floor((wwExtra(rec) + Math.max(0, Math.floor(Number(pendingExtra) || 0))) / WW_FREE_EVERY);
+  return Math.max(0, earned - wwFreeUsed(rec));
 }

@@ -46,6 +46,10 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   reveal is one hint, **recorded at once in the synced stats store** (`recordWordWeaverHint`, `ww.hint`/`ww.esHint`;
   Matt, 2026-10-29: "Close the hint gap"): reopening a level takes the larger of the save's and the store's count, and a
   level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side).
+- **Free hints (Matt, 2026-11-01)**: every 10 bonus words (lifetime, both ladders, plus this level's unrecorded ones) earn one
+  hint that costs NO star (`wwFreeHints`; used ones counted in `ww.fu` by `recordWordWeaverFreeHint`, merged across phones by
+  adding). A banked one is used first: a gold count on the hint button; the save keeps `free` (cleanState: paid hints = at
+  least the letters revealed minus `free`). How to play: "10 bonus words = 1 free hint".
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter
@@ -120,4 +124,6 @@ chunk `floor((n-1)/250)`), written by `tools/build-word-weaver-data.mjs`. Level 
 
 ## The most hints across records (2026-10-29, second pass)
 
-The second pass (2026-10-29) found this hole already closed by the hint-gap fix above (`wwHintBest`); nothing more changed here.
+A person's level reads the MOST hints any of their records used, stars capped by them (`wwMerge`, both ladders, `js/players-agg.js`);
+`wwBest` still guards each record's own entry. Written 2026-10-29, LOST in a merge the same day (its tests stayed and failed),
+restored 2026-11-01. It also covers entries from before hints were recorded at tap time (`ww.hint`).
