@@ -129,3 +129,5 @@
 .gh-dark .tw-root .tw-lead-who b { color: #a9b6ca; }
 .gh-dark .tw-root .tw-lead-all { color: #7fb2ff; }
 .gh-dark .tw-root .tw-play, .gh-dark .tw-root .tw-new, .gh-dark .tw-root .tw-chk { color: #16243a; }
+/* Hard / Expert shapes are dark ink; light them in dark mode (the hub does this in hub.css, the standalone page needs it here). */
+.gh-dark .tw-root .lb-dshape-t3, .gh-dark .tw-root .lb-dshape-t4 { fill: #e6e9f0; }

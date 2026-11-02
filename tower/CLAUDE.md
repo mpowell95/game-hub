@@ -25,6 +25,9 @@ Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's ap
   chosen difficulty, Look (City / Ice / Space, cosmetic), Difficulty (shape + best each), Play, leader footer
   (`readPeople()`, at the chosen difficulty) + Leaderboard ›.
 - Settings: `gamehub.tower.v1` = `{ diff, look }`.
+- **Dark mode (2026-11-02, Matt: "quality dark mode")**: City plays at night (lit windows), Ice under an aurora with
+  dark peaks, Space unchanged; the setup picture and look thumbnails match. `isDark()` reads `.gh-dark` at draw time;
+  `onThemeChange` repaints.
 - **Best line + record towers (2026-11-02, Matt)**: a dashed "★ N" line at your best (this difficulty) while playing
   (turns yellow once beaten) and at game over (the PREVIOUS best). Game over zooms to fit the tower and the line, the
   ground lifts above a bottom card (score, best, Again, Compare). Compare and the setup footer's Leaderboard open
