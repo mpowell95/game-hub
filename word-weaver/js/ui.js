@@ -805,11 +805,24 @@ class WordWeaver {
 
   /** The BONUS COUNTER (Matt, 2026-11-02: "a bonus counter on the game play screen"): the star chip shows how far
    *  to the next free hint, "N/10" (bonus words + bonus squares). Tap: this level's bonus words. */
+  /** This level's bonuses that the stats store does not hold yet. Once the level is recorded they are IN the store
+   *  (ww.x / ww.b), so they count as 0 here: counting them again made the counter jump on the done screen and drop
+   *  back at the next level (Matt, 2026-11-02: "I got up to 3 then it went back to one"). */
+  _pendingBonuses() {
+    const s = this.st;
+    // A completion the recorder refused waits in the queue (PENDING_KEY): its bonuses still count, once.
+    let queued = 0;
+    try { for (const e of readPending()) queued += Math.max(0, Math.floor(e.extra) || 0) + Math.max(0, Math.floor(e.sym) || 0); } catch { /* none */ }
+    if (!s || s.recorded) return queued;
+    return queued + s.extra.length + s.sym.length;
+  }
+
   _paintExtra(bump) {
     const chip = this.root.querySelector('.ww-chip');
     if (!chip) return;
     let total = 0;
-    try { total = wwBonuses(loadStats().games.wordweaver, this.st.extra.length + this.st.sym.length); } catch { total = this.st.extra.length + this.st.sym.length; }
+    const pending = this._pendingBonuses();
+    try { total = wwBonuses(loadStats().games.wordweaver, pending); } catch { total = pending; }
     const n = total % WW_FREE_EVERY;
     const p = chip.querySelector('.ww-prog');
     if (p) p.textContent = `${n}/${WW_FREE_EVERY}`;
@@ -833,7 +846,7 @@ class WordWeaver {
 
   /** Free hints this player can use now (lifetime bonus words + this level's, not yet recorded). */
   _freeBank() {
-    const pending = this.st ? this.st.extra.length + this.st.sym.length : 0;
+    const pending = this._pendingBonuses();
     try {
       // At most 3 banked (Matt, 2026-11-02): one earned past that is written off as lost at once, never saved for later.
       const raw = wwFreeRaw(loadStats().games.wordweaver, pending);

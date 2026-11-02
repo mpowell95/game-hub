@@ -58,6 +58,9 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   save's `sym` and are recorded at completion as `ww.b` (`recordWordWeaver(..., { sym })`, at most 3 a level; merged by
   adding). Bonuses = bonus words + bonus squares (`wwBonuses`) and earn the free hints. The star chip at the top IS the
   counter: star + "N/10" toward the next free hint with a gold bar filling; tap = this level's bonus words.
+  **A level's bonuses count ONCE (`_pendingBonuses`, fixed 2026-11-02)**: as "pending" only until it is recorded (then they
+  are in `ww.x`/`ww.b`); counting both made the counter jump on the done screen and drop back at the next level (Matt:
+  "I got up to 3 then it went back to one"). Queued (refused) completions count as pending.
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list), the STAR SQUARES collected "n/of"
   (a white tile with a gold star; Matt, 2026-11-02) and Next.
