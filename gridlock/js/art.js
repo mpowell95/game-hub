@@ -17,6 +17,10 @@ export const WOOD_TONES = ['#e2bd84', '#d3a265', '#ecd3a1', '#c38c52', '#dcae72'
 // Bright cartoon colours, none dark (a dark car vanished into the asphalt).
 export const CAR_COLORS = ['#2f7de1', '#ffc61a', '#19b39b', '#8c5ce0', '#f4f5f7', '#4cc3ff', '#7ed321', '#ff8a1f', '#ff6fb5', '#3dd6c6', '#5b6cff', '#c8a2ff'];
 const TAXI = '#ffc61a';
+// Shipping yard: container colours (no dark red, so the red one stays the red one).
+export const YARD_COLORS = ['#2e6fb5', '#e07a22', '#2f8f6a', '#c9a227', '#7a4fa0', '#8b95a1', '#1f9bb0', '#5b7f2a', '#4a5fc1', '#b0b8c2'];
+// Log jam: bark browns.
+export const LOG_TONES = ['#8a5a33', '#7a4e2c', '#9c6a3e', '#6e4627', '#a0703f', '#82552f'];
 
 /** Mix a #rrggbb colour toward white (amt > 0) or black (amt < 0). */
 export function shade(hex, amt) {
@@ -183,6 +187,75 @@ function truckBody(L, c, model, u) {
   return g;
 }
 
+// --- shipping yard ---------------------------------------------------------------------------------
+
+function arrowBadge(cx, cy, r = 27) {
+  return `<circle cx="${cx}" cy="${cy + 2.5}" r="${r}" fill="#000" fill-opacity=".25"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>`
+    + `<path d="M${cx - 13} ${cy}h22M${cx + 1} ${cy - 12}l12 12-12 12" stroke="${RED}" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+
+/** A shipping container lying along the row, doors at the front (right). */
+function containerSVG(L, c, isRed, u) {
+  const x0 = 5, y0 = 8, w = L - 10, h = 84;
+  const dk = shade(c, -0.35), lt = shade(c, 0.25);
+  let g = `<defs><clipPath id="${u}c"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="5"/></clipPath></defs>`;
+  g += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="5" fill="${c}"/>`;
+  g += `<g clip-path="url(#${u}c)">`;
+  for (let x = x0 + 8; x < L - 40; x += 13) g += `<rect x="${x}" y="${y0}" width="5" height="${h}" fill="${lt}" fill-opacity=".55"/><rect x="${x + 5}" y="${y0}" width="3" height="${h}" fill="${dk}" fill-opacity=".45"/>`;
+  g += `<rect x="${x0}" y="${y0}" width="${w}" height="9" fill="${dk}"/><rect x="${x0}" y="${y0 + h - 9}" width="${w}" height="9" fill="${dk}"/>`;
+  // Door end: the door seam and two locking bars.
+  g += `<rect x="${L - 40}" y="${y0}" width="35" height="${h}" fill="${shade(c, -0.08)}"/>`;
+  g += `<path d="M${L - 40} ${y0}V${y0 + h}" stroke="${dk}" stroke-width="3"/>`;
+  g += `<path d="M${L - 30} ${y0 + 10}V${y0 + h - 10}M${L - 17} ${y0 + 10}V${y0 + h - 10}" stroke="${shade(c, -0.55)}" stroke-width="3.5" stroke-linecap="round"/>`;
+  g += `<rect x="${L - 34}" y="${y0 + h / 2 - 3}" width="8" height="6" rx="2" fill="${shade(c, -0.55)}"/><rect x="${L - 21}" y="${y0 + h / 2 - 3}" width="8" height="6" rx="2" fill="${shade(c, -0.55)}"/>`;
+  g += `</g>`;
+  // Corner castings.
+  for (const [x, y] of [[x0, y0], [L - 17, y0], [x0, y0 + h - 12], [L - 17, y0 + h - 12]]) g += `<rect x="${x}" y="${y}" width="12" height="12" rx="2" fill="#2a2f38"/>`;
+  g += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="5" fill="none" stroke="${shade(c, -0.6)}" stroke-width="3"/>`;
+  if (isRed) g += arrowBadge((L - 40) / 2 + 4, 50);
+  return g;
+}
+
+// --- log jam -------------------------------------------------------------------------------------
+
+/** A log floating along the row, its cut end at the front (right). */
+function logSVG(L, c, R, u) {
+  const x0 = 6, y0 = 12, w = L - 12, h = 76;
+  const dk = shade(c, -0.45);
+  let g = `<defs><clipPath id="${u}c"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="36"/></clipPath>
+    <linearGradient id="${u}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(c, 0.18)}"/><stop offset=".45" stop-color="${c}"/><stop offset="1" stop-color="${shade(c, -0.3)}"/></linearGradient></defs>`;
+  g += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="36" fill="url(#${u}b)"/>`;
+  g += `<g clip-path="url(#${u}c)">`;
+  // Bark: long rough ridges along the log, a few short cracks.
+  for (let k = 0; k < 6; k++) {
+    const y = y0 + 9 + k * 11 + R() * 4;
+    const a = (R() - 0.5) * 6;
+    g += `<path d="M${x0} ${y.toFixed(1)}Q${(L * 0.4).toFixed(0)} ${(y + a).toFixed(1)} ${L} ${(y - a * 0.5).toFixed(1)}" stroke="${dk}" stroke-opacity="${(0.35 + R() * 0.25).toFixed(2)}" stroke-width="${(2 + R() * 2).toFixed(1)}" fill="none"/>`;
+  }
+  for (let k = 0; k < Math.round(L / 60); k++) {
+    const x = 20 + R() * (L - 70), y = y0 + 14 + R() * (h - 28);
+    g += `<path d="M${x.toFixed(0)} ${y.toFixed(0)}l${(10 + R() * 14).toFixed(0)} ${((R() - 0.5) * 6).toFixed(0)}" stroke="${shade(c, -0.6)}" stroke-width="3" stroke-linecap="round"/>`;
+  }
+  g += `</g>`;
+  // The sawn end: pale wood with growth rings.
+  const cx = L - 24, cy = 50;
+  g += `<ellipse cx="${cx}" cy="${cy}" rx="17" ry="36" fill="#e9c98f" stroke="${dk}" stroke-width="3"/>`;
+  g += `<ellipse cx="${cx}" cy="${cy}" rx="12" ry="26" fill="none" stroke="#c49a5c" stroke-width="2.5"/><ellipse cx="${cx}" cy="${cy}" rx="7" ry="15" fill="none" stroke="#c49a5c" stroke-width="2.5"/><ellipse cx="${cx}" cy="${cy}" rx="2.5" ry="5" fill="#b0874d"/>`;
+  g += `<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="36" fill="none" stroke="${shade(c, -0.6)}" stroke-width="2.5"/>`;
+  return g;
+}
+
+/** The red piece of the log jam: a canoe, pointed at both ends. */
+function canoeSVG(L) {
+  const m = 50;
+  let g = `<path d="M8 ${m}Q${L * 0.18} 14 ${L / 2} 14Q${L * 0.82} 14 ${L - 8} ${m}Q${L * 0.82} 86 ${L / 2} 86Q${L * 0.18} 86 8 ${m}Z" fill="${RED}" stroke="#6e1a12" stroke-width="3.5"/>`;
+  g += `<path d="M26 ${m}Q${L * 0.22} 26 ${L / 2} 26Q${L * 0.78} 26 ${L - 26} ${m}Q${L * 0.78} 74 ${L / 2} 74Q${L * 0.22} 74 26 ${m}Z" fill="#e8c38a" stroke="#8a5a2e" stroke-width="2.5"/>`;
+  for (const x of [L * 0.3, L * 0.7]) g += `<rect x="${(x - 5).toFixed(0)}" y="27" width="10" height="46" rx="3" fill="#a87a45" stroke="#6e4a22" stroke-width="2"/>`;
+  g += `<path d="M30 22Q${L / 2} 16 ${L - 30} 22" stroke="#fff" stroke-opacity=".45" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  g += arrowBadge(L / 2, 50, 24);
+  return g;
+}
+
 /** One piece's SVG. `p` = { len, h } from the engine; `color` from the palette for its look. */
 export function pieceArt(p, look, color, isRed, seed, uid) {
   const R = rand(seed + 1);
@@ -195,6 +268,10 @@ export function pieceArt(p, look, color, isRed, seed, uid) {
       if (color === TAXI) models.push('taxi', 'taxi');
       inner = carBody(L, color, isRed ? 'sports' : models[Math.floor(R() * models.length)], isRed, uid);
     }
+  } else if (look === 'yard') {
+    inner = containerSVG(L, color, isRed, uid);
+  } else if (look === 'logs') {
+    inner = isRed ? canoeSVG(L) : logSVG(L, color, R, uid);
   } else {
     inner = woodSVG(L, color, isRed, R, uid);
   }
