@@ -12,7 +12,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordMinesweeper } from '../../js/game-stats.js';
+import { recordMinesweeper, withMode } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
 import { awayStamp, measureAway } from '../../js/server-time.js';
 import E, { LEVELS, OPEN, FLAGGED, QUESTION } from './engine.js';
@@ -1055,7 +1055,9 @@ class MinesweeperUI {
       // in ms.noGuess too (2026-10-16; before that it went to ms.practice and counted for nothing).
       let cause;
       if (!won) { try { cause = E.lossCause(g, how); } catch (err) { cause = 'unknown'; console.error('[minesweeper] lossCause', err); } }
-      recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, noGuess: !!g.noGuess });
+      withMode({ ng: g.noGuess ? 1 : 0, marks: this.settings && this.settings.marks === false ? 0 : 1 }, level,
+        () => recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, noGuess: !!g.noGuess }),
+        { ...(won && timeMs > 0 ? { lo: timeMs } : {}), detail: { cleared: Math.max(0, Math.round(+cleared || 0)), flagsRight, flagsWrong: Math.max(0, flagsWrong | 0), ...(cause ? { cause: String(cause) } : {}) } });
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
     this._result = { won, timeMs, cleared, flagsRight, flagsWrong, level, prevBest, isBest, wins: winsSoFar() };
@@ -1132,7 +1134,7 @@ class MinesweeperUI {
     q.g._quit = true;   // once: this board can never record again
     clearSave(level);
     try {
-      recordMinesweeper(level, false, { timeMs: q.timeMs, cleared: E.clearedPct(q.g), flagsRight: E.correctFlags(q.g), mines: q.g.mines, noGuess: !!q.g.noGuess });
+      withMode({ ng: q.g.noGuess ? 1 : 0, marks: this.settings && this.settings.marks === false ? 0 : 1 }, level, () => recordMinesweeper(level, false, { timeMs: q.timeMs, cleared: E.clearedPct(q.g), flagsRight: E.correctFlags(q.g), mines: q.g.mines, noGuess: !!q.g.noGuess }), { detail: { quit: 1 } });
     } catch (err) { console.error('[minesweeper] quit loss', err); }
   }
 

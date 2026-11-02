@@ -373,7 +373,7 @@ export function markCounted(id) {
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
  *  the match its goals and aiming help; from an index row its goals (all a row carries). */
 export const modeOfMatch = (raw) => ({ goals: goalsOfGame(raw), aids: aidsOfGame(raw) });
-export function countResult(id, won, finishedAt = Date.now(), mode = null) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null, score = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -381,7 +381,7 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won))); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won), score)); } catch (err) { console.error('[flick-soccer] recordResult failed', err); }   // `score`: withMode's 4th argument (detail, 2026-11-02)
   return true;
 }
 /** A voided match this phone HAD counted: noted once, so the stats screens take it back out. */

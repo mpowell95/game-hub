@@ -956,7 +956,9 @@ class DotsBoxesUI {
     // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
     if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
-    try { withMode(this._modeOf(), difficulty, () => recordDotsBoxes(difficulty, won, extras)); } catch { /* never block the result */ }
+    // the game's own numbers (2026-11-02): boxes each side took, the longest chain this game
+    const detail = { mine: humanScore, theirs: aiScore, chain: this._humanBestChainThisGame | 0 };
+    try { withMode(this._modeOf(), difficulty, () => recordDotsBoxes(difficulty, won, extras), { detail }); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // has no `this.mp` and is untouched. Never allowed to block the ordinary result from being
     // recorded.
@@ -1131,8 +1133,11 @@ class DotsBoxesUI {
    *  size; vs the computer also the First move setting and whether Undo was used. A live room's size
    *  is the host's (`mp.size`). */
   _modeOf() {
-    if (this.mp) return { size: this.mp.size };
-    return { size: this._boardSizeKey(), first: this._setup.firstMode, undo: this._undone ? 1 : 0 };
+    // Engine seat 0 always opens (game.js newGame), so humanSeat says who went first (2026-11-02).
+    // Solo's `first` is the SETTING (it may be 'alternate'); who actually went is `went`.
+    const went = this.humanSeat === 0 ? 'me' : this.humanSeat === 1 ? 'them' : undefined;
+    if (this.mp) return { size: this.mp.size, first: went };
+    return { size: this._boardSizeKey(), first: this._setup.firstMode, undo: this._undone ? 1 : 0, went };
   }
 
   // --- undo (solo only) -------------------------------------------------------
@@ -1883,6 +1888,7 @@ class DotsBoxesUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, { boxes: 0, bestChain: 0 }],
+        tag: modeTag({ size: save.size, first: (save.dealer === 1 ? 1 : 0) === (role === 'host' ? 0 : 1) ? 'me' : 'them' }, MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {

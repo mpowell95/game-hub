@@ -3050,6 +3050,7 @@ class ChinchonUI {
     const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
       mySeat: seat, role: seat, seats: count, fn: 'recordChinchon',
       winArgs: [MP_DIFFICULTY, true, { closed: 0, minusTen: 0, chinchons: 0 }],
+      tag: modeTag(modeOfMatch(save.snap.config, save.snap.players), MP_DIFFICULTY),
       oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
     if (this._dead) return;
     if (!chk.go) {

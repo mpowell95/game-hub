@@ -12,7 +12,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
-import { recordSudoku } from '../../js/game-stats.js';
+import { recordSudoku, withMode } from '../../js/game-stats.js';
 import { generate, TIER_ORDER } from './generator.js';
 import { SudokuGame } from './game.js';
 import STRINGS from './strings.js';
@@ -589,7 +589,7 @@ class SudokuUI {
       const id = g.puzzleId();
       if (isDone(id)) { clearSave(); this._leaveStale(); return; }
       try {
-        recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints });
+        withMode({ sd: 1 }, g.tier, () => recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints }), { ...(g.elapsedMs > 0 ? { lo: Math.round(g.elapsedMs) } : {}), detail: { mistakes: g.mistakes | 0, hints: g.hints | 0 } });
         markDone(id);
       } catch (err) { console.error('[sudoku] recordSudoku', err); }
       clearSave();

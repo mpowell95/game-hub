@@ -689,7 +689,7 @@ class DominoesUI {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
-      }));
+      }), { detail: { rounds: Math.max(0, g.round | 0), pts: Math.max(0, g.scores[HUMAN] | 0), theirs: Math.max(0, ...g.scores.filter((_, i) => i !== HUMAN).map((x) => x | 0)) } });
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }

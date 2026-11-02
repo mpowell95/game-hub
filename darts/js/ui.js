@@ -59,6 +59,14 @@ const kindFrom = (s) => (s.game === 'cricket'
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the kind
  *  (301/201/101/cricket...) and who threw first. */
 const modeOf = (m) => ({ kind: kindOf(m), first: m && m.starter === 1 ? 'them' : 'me' });
+/** The finished match's own numbers (2026-11-02, withMode's detail), seat 0 = the player: turns
+ *  thrown, and the scores it ended on (x01: points LEFT each side; Cricket: points), overtime or not. */
+const dartsDetail = (m) => {
+  if (!m || !Array.isArray(m.scores)) return null;
+  const s0 = Math.max(0, m.scores[0] | 0), s1 = Math.max(0, m.scores[1] | 0);
+  const cricket = String(kindOf(m)).startsWith('cricket');
+  return { turns: Math.max(0, m.turns | 0), ...(cricket ? { pts: s0, theirs: s1 } : { left: s0, oppLeft: s1 }), ot: m.bo ? 1 : 0 };
+};
 
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
@@ -923,7 +931,7 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(modeOf(m), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0));
+        const st = withMode(modeOf(m), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: dartsDetail(m) });
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
@@ -1249,7 +1257,7 @@ class DartsUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     // once per phone, whoever ended it (null: a draw); the finish time keeps a fresh storage honest
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { kind: kindOf(this.match) });
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { kind: kindOf(this.match), first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' });
     this.MP.markResultSeen(mp.id);
     this._say(this._winSay());
     this.screen = 'result';

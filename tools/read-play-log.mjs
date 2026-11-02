@@ -55,5 +55,5 @@ if (!GAME || GAME === 'contexto') {
 if (GAME !== 'contexto') {
   const done = ev.filter((x) => x.f && (!GAME || x.g === GAME));
   if (done.length) console.log('\nFINISHED GAMES (the recorder and its arguments)');
-  for (const x of done) console.log(`  ${ET(x.t)}  ${x.g}  ${x.f}(${x.a || ''})`);
+  for (const x of done) console.log(`  ${ET(x.t)}  ${x.g}  ${x.f}(${x.a || ''})${x.m ? `  mode ${x.m}` : ''}${x.d ? `  detail ${x.d}` : ''}`);   // m '?' = recorded outside withMode
 }

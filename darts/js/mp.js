@@ -343,7 +343,7 @@ export function markCounted(id) {
  *  results go in the 'mp' bucket (docs/BUILDING-A-GAME.md, "Multiplayer save-key convention").
  *  `won`: true, false, or null for a draw (equal turns). A VOIDED match (js/stats-corrections.js)
  *  is never counted, and is not marked counted either, so it can never be noted as voided below. */
-export function countResult(id, won, finishedAt = Date.now(), mode = null) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null, score = null) {
   if (isVoidedMatch('darts', id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -353,7 +353,7 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   if (!markCounted(id)) return false;
   // The match id rides with the count, so a person's two devices count it once (js/players-agg.js).
   // ...and so does the match's game (2026-10-30, withMode): `mode` = { kind } from the match or its row.
-  try { withChallengeMatch('darts', id, () => withMode(mode, 'mp', () => recordResult('darts', 'mp', won == null ? null : !!won))); } catch (err) { console.error('[darts] recordResult failed', err); }
+  try { withChallengeMatch('darts', id, () => withMode(mode, 'mp', () => recordResult('darts', 'mp', won == null ? null : !!won), score)); } catch (err) { console.error('[darts] recordResult failed', err); }
   return true;
 }
 const wonOf = (result) => (result === 'won' ? true : result === 'lost' ? false : null);

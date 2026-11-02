@@ -1615,3 +1615,38 @@ we came from the launcher, so it is restored as it was; a plain load otherwise),
 once, never over a game. Profile on a sub screen returns to the list. The profile page reads no counts of its own:
 the launcher writes its tab badges and whether Multiplayer is shown into sessionStorage `hub.tabs`. `watchTabBar()`
 (the iOS halfway-up repair) runs there too. Tested headless at 402x874, 360x780 (ES), 375x667 and 430x932.
+
+## Every result records its MODE, enforced on every file; per-match detail (2026-11-02)
+
+Matt: *"it is IMPERATIVE that ALL game data is logged for stats analysis and leaderboard stuff. I've said this
+many times. I don't understand why things STILL are not being logged and saved. FIX THIS PERMANENTLY."*
+
+**Why it happened.** The 2026-10-30 mode rule was checked by `tools/test-game-modes.mjs` against a fixed LIST of
+files with an expected count of `withMode(` per file (`tools/game-modes.json`). A file not on the list was never
+read. Filler and Mancala were never listed and recorded no mode at all (not who went first, nothing); neither
+did Yahtzee, Ball Run, Snake, Golf, Gridlock, Minesweeper, Murdoku, Nuts & Bolts, Skeeball, Sudoku, Contexto,
+Arrow Maze (levels, replays, Rush), Cup Pong's Solo, Archery's challenges or Baseball's career games, and six
+live-room rejoin paths (`checkRejoin` objects) carried no mode tag. A count per file also passed a file whose
+NEW call was bare as long as the count was reached. And per-match numbers (shots, made, goals) were never part of
+any rule.
+
+**What changed.**
+- `tools/scan-game-modes.mjs`: a full scan of every file, every recorder call, no list. A call must sit lexically
+  inside `withMode(`; a deferred result must carry `modeTag(`; Monopoly Deal / Parchis must pass their mode
+  argument. The only exceptions are `AUX` (non-result recorders), each with its reason. `game-modes.json` deleted.
+- `js/game-stats.js`: a result recorder reached outside withMode still counts exactly as before (THE LAW: never
+  lost), is filed under `byMode['?']` at its counted bucket, `console.error`s, and its play log entry says
+  `m: '?'`. `withMode({})` is the key `'-'` (declared, no options), never `'?'`. Recorders that bump totals by hand
+  (Sudoku, Minesweeper, Nuts & Bolts, Arrow Maze replay and Rush, Cup Pong Solo) now note their mode too (before,
+  withMode around them did nothing).
+- `withMode(mode, diff, fn, { detail })`: non-negative counters ADD into `games.<id>.dt.<key>`, short string facts
+  count `dt.<key>.<value>`, `dt._n` counts results that carried detail (detail exists only from this day). The
+  play log carries it as `d` (new rules field). `js/players-agg.js` sums `dt` per person; the server-built board
+  carries it unchanged (proved in the test).
+- Every game fixed; `first: 'me'|'them'` (who actually went first) added where it was missing or only the setting
+  (`went`), and per-match counters added where the engine knows them at the end. The report of what each game
+  records is in the commit message.
+
+**Not done:** `js/game-stats-global.js` (Monopoly Deal, Parchis) has no '?' net: both already pass a mode (the
+scan checks it), and changing it means a `business-deal/` copy whose own service worker needs a cache bump.
+Chinchón and Escoba record no `first` (a dealer rotates per round; 3-4 seats).

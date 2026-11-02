@@ -25,7 +25,7 @@ import {
   pullCareer, pushCareer, retireCareer, careerSyncHealth, validateCareer,
 } from '../../js/career-store.js';
 import {
-  recordBaseball, recordBaseballCareerStarted, setBaseballHand,
+  recordBaseball, recordBaseballCareerStarted, setBaseballHand, withMode,
 } from '../../js/game-stats.js';
 import { myCode } from '../../js/messages.js';
 import { RULES_V } from './engine/settings.js';
@@ -194,7 +194,9 @@ export function recordGameResult(record) {
     console.error('[career-io] recordGameResult called with no record; nothing written');
     return null;
   }
-  const st = recordBaseball(record.league, record.won, record.extras || {});
+  // its mode (2026-11-02, js/game-stats.js withMode): a Career game (the only caller), its league
+  const st = withMode({ kind: 'career', forfeit: record.extras && record.extras.forfeits ? 1 : 0 }, record.league,
+    () => recordBaseball(record.league, record.won, record.extras || {}));
   if (!st) {
     // recordBaseball returns null ONLY when the rate gate refused it ("No human plays this fast").
     console.error('[career-io] recordBaseball refused this result; it was NOT counted', record);

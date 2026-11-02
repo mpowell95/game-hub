@@ -1258,7 +1258,7 @@ class ArcheryUI {
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     const ov = mp.game && mp.game.over;
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now());   // once per phone; the finish time keeps a fresh storage honest
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' });   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[this.match.winner].name }));
     this.screen = 'result';

@@ -332,6 +332,24 @@ export function aggregatePlayers(all, corrections) {
           }
         }
       }
+      // PER-MATCH DETAIL (2026-11-02, js/game-stats.js withMode's `detail`): `dt.<key>` counters and
+      // `dt.<key>.<value>` fact counts, summed per person (all counters, so they add). Without this
+      // branch a person's second device would hide the first one's detail (js/CLAUDE.md).
+      const sdt = src.dt;
+      if (sdt && typeof sdt === 'object' && !Array.isArray(sdt)) {
+        const ddt = dst.dt || (dst.dt = {});
+        for (const k of Object.keys(sdt)) {
+          const v = sdt[k];
+          if (typeof v === 'number') {
+            if (!Number.isFinite(v) || v < 0 || (ddt[k] != null && typeof ddt[k] !== 'number')) continue;
+            ddt[k] = (ddt[k] || 0) + v;
+          } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+            if (ddt[k] != null && (typeof ddt[k] !== 'object' || Array.isArray(ddt[k]))) continue;
+            const to = ddt[k] || (ddt[k] = {});
+            for (const fv of Object.keys(v)) { const n = +v[fv]; if (Number.isFinite(n) && n > 0) to[fv] = (to[fv] || 0) + n; }
+          }
+        }
+      }
       // Which challenge matches this device's 'mp' counts were (2026-10-29, js/game-stats.js
       // withChallengeMatch): gathered per person, so a match counted on two of their devices is
       // taken back out once per extra copy below. An integrity void (correctStats) already took this

@@ -1243,6 +1243,7 @@ class BoggleUI {
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordBoggle',
         winArgs: [MP_DIFFICULTY, true, { words: 0, score: 0, longestWord: { word: '', len: 0 } }],
+        tag: modeTag(modeOf(save), MP_DIFFICULTY),
         oppsOf: (room) => [room[other] || save.opp] });
       if (this._dead) return;
       if (!chk.go) {

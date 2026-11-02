@@ -33,9 +33,12 @@ import { recordBattleship, recordHeadToHead, deviceId, withMode, modeTag } from 
 /** WHICH game was played vs the bot, recorded with its result (js/game-stats.js withMode, 2026-10-30):
  *  the board, shots a volley (1 = no salvo), the salvo rule, the bonus shot, and the First shot setting. */
 const soloMode = (s, firstMode) => ({ size: s && s.sizeKey, shots: (s && s.salvo) || 1, rule: (s && s.salvoRule) || 0,
-  bonus: s && s.bonusShotOnHit ? 1 : 0, first: firstMode });
+  bonus: s && s.bonusShotOnHit ? 1 : 0, first: firstMode,
+  // who actually shot first (2026-11-02; `first` is the SETTING, which may be 'alternate')
+  went: s && (s.op === 0 || s.op === 1) ? (s.op === 0 ? 'me' : 'them') : undefined });
 /** A live room: the host's board and bonus-shot choice. */
-const liveMode = (mp) => ({ size: mp && mp.sizeKey, bonus: mp && mp.bonusShotOnHit ? 1 : 0 });
+const liveMode = (mp) => ({ size: mp && mp.sizeKey, bonus: mp && mp.bonusShotOnHit ? 1 : 0,
+  first: mp && (mp.dealerSeat === 0 || mp.dealerSeat === 1) ? (mp.dealerSeat === mp.localSeat ? 'me' : 'them') : undefined });
 import { makeT, myName } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -780,6 +783,7 @@ class BattleshipUI {
     if (this._dead || !this._botFleet) return;
     const size = boardSizeFor(this._placeSizeKey);
     let s = newGame(size, this._placeSizeKey, this._setup.bonusShotOnHit, this._soloStarterSeat);
+    s = { ...s, op: s.turn };   // who shot first (stats mode `went`, 2026-11-02); not in the hash
     // SALVOS vs the bot (2026-10-27): the volley size rides on the game, so a resumed save keeps it
     if (typeof CH.fireVolley === 'function') {
       s = { ...s, salvo: chShotsOf(this._setup.soloShots) || 3 };
@@ -3110,6 +3114,7 @@ class BattleshipUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, { shots: 0, hits: 0, sunk: 0, accuracy: 0 }],
+        tag: modeTag(liveMode({ sizeKey: save.sizeKey, bonusShotOnHit: save.bonusShotOnHit, dealerSeat: save.dealerSeat, localSeat: role === 'host' ? 0 : 1 }), MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {

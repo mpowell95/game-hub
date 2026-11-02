@@ -2834,6 +2834,7 @@ class EscobaUI {
     const count = Array.isArray(save.snap.players) ? save.snap.players.length : 2;
     const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
       mySeat: seat, role: seat, seats: count, fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: save.matchEscobas | 0 }],
+      tag: modeTag(modeOf(save.snap, save.assist !== false), MP_DIFFICULTY),
       oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
     if (this._dead) return;
     if (!chk.go) {

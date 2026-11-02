@@ -9,7 +9,7 @@ import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, DEFAULT_MAP, MAPS } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordBallRun, loadStats } from '../../js/game-stats.js';
+import { recordBallRun, loadStats, withMode } from '../../js/game-stats.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -89,7 +89,7 @@ function trySyncRunEntry(entry) {
   let before = -1;
   try { before = loadStats().games.ballrun[bucketKey].runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
   try {
-    recordBallRun(entry.score, entry.difficulty, map);
+    withMode({ map }, entry.difficulty, () => recordBallRun(entry.score, entry.difficulty, map), { hi: entry.score | 0 });
   } catch (err) {
     console.error('[ball-run] recordBallRun threw', { entry, err });
     return false;

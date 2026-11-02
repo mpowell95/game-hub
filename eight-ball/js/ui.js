@@ -40,9 +40,11 @@ export function statsDiff(diff, racks) {
   return racks === 1 ? oneTierDown(diff, ['easy', 'medium', 'hard']) : diff;
 }
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30). */
-const modeOf = (m) => {
+const modeOf = (m, me = 0) => {
   const o = (m && m.opts) || {};
-  return { game: m && m.mode, racks: m && m.racks, call: o.call ? 1 : 0, bank: o.bank ? 1 : 0, obst: o.obst ? 1 : 0 };
+  // + who broke the first rack, from seat `me` (2026-11-02; the engine's `breaker`)
+  return { game: m && m.mode, racks: m && m.racks, call: o.call ? 1 : 0, bank: o.bank ? 1 : 0, obst: o.obst ? 1 : 0,
+    ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === me ? 'me' : 'them' } : {}) };
 };
 const OPPS = ['cpu', 'pass'];
 const OPTS = ['call', 'bank', 'obst'];
@@ -1432,7 +1434,7 @@ class PoolUI {
     const m = this.match;
     if (resigned) m.winner = mp.game.over.winner;
     const ov = mp.game && mp.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), this.MP.modeOfMatch(mp.game));   // once per phone, whoever ended it
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) });   // once per phone, whoever ended it
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';
