@@ -756,7 +756,8 @@ no Default buttons.
   area (`testGames`/`testH2h` in the store; `loadStats()` swaps it in so the game and its recorders work unchanged;
   it starts as a copy of the real record). Everything that shows or uploads stats reads `loadStoredStats()`. Off My
   Stats and out of By Player's totals for everyone while admin-only. Plays from before 2026-10-28 stay in the real
-  record and count at launch (Matt's choice). `tools/test-admin-only-plays.mjs`. `visibleTabs()` keeps its own, more permissive
+  record and count at launch (Matt's choice). **Exception: `CARRY_TEST` (`js/game-stats.js`) counts a released game's test plays too
+  (Word Weaver, Matt 2026-11-02): one stamped write per store (`carried.<id>`), read-time combine in `players-agg.js` until then.** `tools/test-admin-only-plays.mjs`. `visibleTabs()` keeps its own, more permissive
   rule on purpose; do not unify them.
 - `hideFrom: ['<CODE>']` on a `GAMES` entry hides a game from named players (never Matt/dev).
   `games/<id>/allow/<CODE>` opens a hidden game to named players (the picker under EVERY hidden game's row, since 2026-10-29); it hides the

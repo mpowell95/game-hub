@@ -9,7 +9,7 @@
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
@@ -305,7 +305,14 @@ export function aggregatePlayers(all, corrections) {
     // path in this file. See js/stats-corrections.js. A missing corrections argument (every caller
     // that predates this, and every test) leaves the record exactly as it was.
     const corrected = corrections ? correctStats(rec.stats, id, corrections) : rec.stats;
-    const games = (corrected && corrected.games) || {};
+    let games = (corrected && corrected.games) || {};
+    // A released game's TEST plays count too where Matt asked (js/game-stats.js CARRY_TEST, 2026-11-02): a record
+    // whose phone has not stamped `carried` yet is combined here, at read time; `rec` is never changed.
+    for (const cg of Object.keys(CARRY_TEST)) {
+      if (!corrected || !corrected.testGames || !corrected.testGames[cg]) continue;
+      const c = carriedGame(corrected, cg);
+      if (c !== games[cg]) games = { ...games, [cg]: c };
+    }
     for (const g of GAMES) {
       const src = games[g] || {};
       const t = src.total || {};

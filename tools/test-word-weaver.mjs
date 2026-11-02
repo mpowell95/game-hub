@@ -358,6 +358,37 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('ui: no free-hint writer is called any more', !/recordWordWeaverFree(Hint|Lost)\(/.test(ui));
 }
 
+// --- test plays carried into the real record (Matt, 2026-11-02: "count all me Ana and lilis games from before it went live") ---
+{
+  // A store as a tester's phone left it at release: the real record empty, the test record holding the plays.
+  const test = { total: { played: 3, won: 3, lost: 0 }, byDiff: { expert: { played: 3, won: 3, lost: 0 } },
+    ww: { lv: {}, es: { L1501: { s: 3, h: 0, t: 10 }, L1502: { s: 1, h: 3, t: 20 } }, esHint: { L1502: { c: 3, t: 15 } }, x: 30, fu: 2 } };
+  const realAfter = { total: { played: 1, won: 1, lost: 0 }, byDiff: { medium: { played: 1, won: 1, lost: 0 } },
+    ww: { lv: { L501: { s: 3, h: 0, t: 99 } }, es: { L1501: { s: 2, h: 1, t: 50 } }, x: 4, b: 2, sp: 40, by: { l: 1 } } };
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  localStorage.setItem('gamehub.stats', JSON.stringify({ version: 1, games: { wordweaver: realAfter }, testGames: { wordweaver: test } }));
+  const testBefore = JSON.stringify(test);
+  const st = G.loadStats();
+  const w = st.games.wordweaver;
+  const raw = JSON.parse(store.get('gamehub.stats'));
+  ok('carry: played and wins add (real + test)', w.total.played === 4 && w.byDiff.expert.played === 3 && w.byDiff.medium.played === 1);
+  ok('carry: every level from both, a level in both counted once (most hints)', P.wwCleared(w) === 3 && P.wwLevels(w, 'es')[1501].s === 2);
+  ok('carry: hints taken in testing still cap their level', P.wwLevels(w, 'es')[1502].s === 1);
+  ok('carry: bonus words, squares, spent and free hints add', w.ww.x === 34 && w.ww.b === 2 && w.ww.sp === 40 && w.ww.fu === 2 && P.wwSpent(w) === 60);
+  ok('carry: written once, stamped carried.wordweaver', raw.carried && raw.carried.wordweaver > 0 && raw.games.wordweaver.total.played === 4);
+  ok('carry: the test record is kept, untouched', JSON.stringify(raw.testGames.wordweaver) === testBefore);
+  G.loadStats(); G.loadStats();
+  ok('carry: never twice (reloads change nothing)', JSON.parse(store.get('gamehub.stats')).games.wordweaver.total.played === 4);
+  // The server's board, on a record whose phone is still on an older build (no stamp): combined at read time, once.
+  const rec = (stats) => ({ profile: { playerId: 'CW111', name: 'Carry' }, stats, updatedAt: 1 });
+  const g1 = A.aggregatePlayers({ d1: rec({ games: { wordweaver: realAfter }, testGames: { wordweaver: test } }) })[0].games.wordweaver;
+  ok('board: an unstamped record counts real + test', g1.total.played === 4 && P.wwCleared(g1) === 3 && g1.ww.x === 34);
+  const g2 = A.aggregatePlayers({ d1: rec(raw) })[0].games.wordweaver;
+  ok('board: a stamped record counts its real record only (never twice)', g2.total.played === 4 && g2.ww.x === 34);
+  ok('board: a game still admin-only is never carried', !G.CARRY_TEST.tower);
+}
+
 // --- released (2026-11-02) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');
