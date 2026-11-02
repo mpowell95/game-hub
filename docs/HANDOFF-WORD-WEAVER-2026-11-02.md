@@ -70,7 +70,7 @@ wants one).
   `node tools/validate-sw-assets.mjs`, and the Firebase workflow redeploys functions (boards). Word Weaver-only files
   need no CACHE bump (held back, network-first).
 
-## Release (when Matt says "release Word Weaver")
+## Release: DONE 2026-11-02 (Matt: "release"; CACHE v1412). This handoff is closed.
 
 Matt was advised to play a few levels + the daily first (nobody had finished a level on the rebuilt data as of
 2026-11-02 ~noon ET). The release commit: remove `devOnly` from the `GAMES` entry in `js/hub.js` (add `released`), drop

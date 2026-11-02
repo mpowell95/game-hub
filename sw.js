@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1411';
+const CACHE = 'game-hub-v1412';
 
 const ASSETS = [
   './',
@@ -268,6 +268,35 @@ const ASSETS = [
   './gridlock/js/art.js',
   './gridlock/js/levels.js',
   './gridlock/js/strings.js',
+  // Word Weaver (released 2026-11-02). test.js / data-test*.js are node-only, never listed. Its level data is LAZY.
+  './word-weaver/',
+  './word-weaver/index.html',
+  './word-weaver/css/word-weaver.css',
+  './word-weaver/js/ui.js',
+  './word-weaver/js/engine.js',
+  './word-weaver/js/daily.js',
+  './word-weaver/js/board.js',
+  './word-weaver/js/strings.js',
+  './word-weaver/data/index.json',
+  './word-weaver/data/levels-0.json',
+  './word-weaver/data/levels-1.json',
+  './word-weaver/data/levels-2.json',
+  './word-weaver/data/levels-3.json',
+  './word-weaver/data/levels-4.json',
+  './word-weaver/data/levels-5.json',
+  './word-weaver/data/levels-6.json',
+  './word-weaver/data/levels-7.json',
+  './word-weaver/data/daily.json',
+  './word-weaver/data/es/index.json',
+  './word-weaver/data/es/levels-0.json',
+  './word-weaver/data/es/levels-1.json',
+  './word-weaver/data/es/levels-2.json',
+  './word-weaver/data/es/levels-3.json',
+  './word-weaver/data/es/levels-4.json',
+  './word-weaver/data/es/levels-5.json',
+  './word-weaver/data/es/levels-6.json',
+  './word-weaver/data/es/levels-7.json',
+  './word-weaver/data/es/daily.json',
   './flick-soccer/',
   './flick-soccer/index.html',
   './flick-soccer/css/flick-soccer.css',
@@ -646,7 +675,7 @@ const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
 
 // --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-... [docs/SW-NOTES.md #10]
-const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json)$/;
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json|word-weaver\/data\/(es\/)?[a-z0-9-]+\.json)$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -798,7 +827,7 @@ const REST_MANIFEST = {
   './css/hub.css': '1f4608e970',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '6221f22f73',
+  './js/hub.js': '4455fa4b21',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -818,10 +847,10 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '30ef3ec563',
+  './js/game-stats.js': '4017bad27c',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '98f7e7f3ca',
+  './js/game-stats-ui.js': 'a9bf01a7af',
   './js/stats-net.js': 'e4990614f7',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -1018,6 +1047,34 @@ const REST_MANIFEST = {
   './gridlock/js/art.js': 'f6a160d680',
   './gridlock/js/levels.js': '68ee3200cb',
   './gridlock/js/strings.js': 'f15ede65c4',
+  './word-weaver/': '6cfc088022',
+  './word-weaver/index.html': '6cfc088022',
+  './word-weaver/css/word-weaver.css': 'd5a91d681a',
+  './word-weaver/js/ui.js': 'a3bd2d819a',
+  './word-weaver/js/engine.js': 'fd399c2d42',
+  './word-weaver/js/daily.js': '4bc8b1e063',
+  './word-weaver/js/board.js': 'd23a562192',
+  './word-weaver/js/strings.js': '033ad670aa',
+  './word-weaver/data/index.json': 'b8a9e23ac2',
+  './word-weaver/data/levels-0.json': 'e9d72f774c',
+  './word-weaver/data/levels-1.json': 'd35dce34ac',
+  './word-weaver/data/levels-2.json': '84892a0a5b',
+  './word-weaver/data/levels-3.json': 'e99f473ad4',
+  './word-weaver/data/levels-4.json': '36360f3bf4',
+  './word-weaver/data/levels-5.json': '85d0c5653c',
+  './word-weaver/data/levels-6.json': '2a81957e63',
+  './word-weaver/data/levels-7.json': 'febdd008e5',
+  './word-weaver/data/daily.json': 'ffdb275524',
+  './word-weaver/data/es/index.json': 'b8a9e23ac2',
+  './word-weaver/data/es/levels-0.json': 'ca0f2fc949',
+  './word-weaver/data/es/levels-1.json': '5034b1684a',
+  './word-weaver/data/es/levels-2.json': 'aebbd0e7a6',
+  './word-weaver/data/es/levels-3.json': '1da9616636',
+  './word-weaver/data/es/levels-4.json': '723a7fb83f',
+  './word-weaver/data/es/levels-5.json': '7a6888b375',
+  './word-weaver/data/es/levels-6.json': '50feb4362f',
+  './word-weaver/data/es/levels-7.json': 'a412b67c60',
+  './word-weaver/data/es/daily.json': 'd5f8928f0e',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',
