@@ -10,16 +10,18 @@
 export const DIFFS = ['easy', 'medium', 'hard', 'expert'];
 export const WORLD_W = 400;
 export const START_W = 250;
-export const BLOCK_H = 26;
+export const BLOCK_H = 40;   // 2026-11-02, Matt: "each block should be taller" (was 26)
 export const GROW_EVERY = 5;
 export const GROW = 20;
 
 // v0: first block's speed (units/s); dv: added per block; vmax: cap; perfect: units of slack.
 export const TUNE = {
-  easy:   { v0: 150, dv: 4,  vmax: 380, perfect: 8 },
-  medium: { v0: 180, dv: 6,  vmax: 480, perfect: 6 },
-  hard:   { v0: 220, dv: 8,  vmax: 600, perfect: 4.5 },
-  expert: { v0: 270, dv: 10, vmax: 720, perfect: 3.5 },
+// 2026-11-02, Matt: "The speed should increase as the game goes on": about twice the old ramp, higher caps
+// (reached around block 45).
+  easy:   { v0: 150, dv: 8,  vmax: 520, perfect: 8 },
+  medium: { v0: 180, dv: 11, vmax: 660, perfect: 6 },
+  hard:   { v0: 220, dv: 14, vmax: 800, perfect: 4.5 },
+  expert: { v0: 270, dv: 17, vmax: 940, perfect: 3.5 },
 };
 
 export function normDiff(d) { return DIFFS.indexOf(d) >= 0 ? d : 'medium'; }
