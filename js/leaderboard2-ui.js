@@ -633,7 +633,7 @@ function meHTML() {
 const _msgTo = [];
 let _pSort = 'best';   // a person's page: best place first (Matt, 2026-11-02), Most played, A to Z
 /** The person's top bar (back, face, name, a second line, Message). Shared by their page and their game page. */
-function personBarHTML(g, key, sub) {
+function personBarHTML(g, key, sub, link = false) {
   const face = String(g.emoji || '').trim() || esc(nameOf(g).slice(0, 1).toUpperCase());
   const code = typeof g.playerId === 'string' ? g.playerId.trim().toUpperCase() : '';
   let msg = '';
@@ -643,7 +643,7 @@ function personBarHTML(g, key, sub) {
     msg = `<button type="button" class="lb2-icon lb2-msg" data-act="msg" data-mi="${mi}" aria-label="${esc(t2('lb2_message'))}">${SVG.chat}</button>`;
   }
   return `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
-    <span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${sub ? esc(sub) : ''}</span></span>${msg}</div>`;
+    ${link ? '<button type="button" class="lb2-plink" data-act="pall">' : ''}<span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${sub ? esc(sub) : ''}</span></span>${link ? '</button>' : ''}${msg}</div>`;
 }
 function playerHTML(top) {
   const pg = lb2PlayerGames(_people, top.key);
@@ -676,7 +676,7 @@ function playerHTML(top) {
 function personGameHTML(top) {
   const g = _people.find((x) => x.key === top.key) || {};
   const plays = (lb2PlayerGames(_people, top.key) || { games: [] }).games.find((x) => x.id === top.game);
-  const bar = personBarHTML(g, top.key, title(top.game));
+  const bar = personBarHTML(g, top.key, title(top.game), true);   // tap the name: their page (Matt, 2026-11-02)
   const head = `<div class="lb2-card"><div class="lb2-row sm">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span>${plays ? `<span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(plays.plays) }))}</span>` : ''}</span>
     ${plays ? `<span class="lb2-right"><span class="lb2-rv num">${valHTML(top.game, plays)}</span>${placeHTML(defPlace(top.game, top.key))}</span>` : ''}</div></div>`;
   let stats = '';
@@ -1012,6 +1012,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-heart{color:var(--l2-accent)}
 .lb2-face{width:40px;height:40px;flex-shrink:0;border-radius:20px;background:var(--l2-chip);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 .lb2-pl{padding-left:8px}
+.lb2-plink{flex:1;min-width:0;display:flex;align-items:center;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;touch-action:manipulation}
 .lb2-cols{flex-shrink:0;display:grid;gap:8px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--l2-muted);align-items:center}
 .lb2 .c{text-align:center;display:flex;justify-content:center}.lb2 .r{text-align:right;justify-content:flex-end}
 .lb2-lr{width:100%;display:grid;gap:8px;align-items:center;min-height:52px;padding:0 4px;border:0;border-top:1px solid var(--l2-line);background:transparent;text-align:left}
