@@ -494,7 +494,7 @@ A record joins its code always, its name only if that is the code's current name
 
 ### Name aliases, and why a rename in Firebase does not stick (2026-07-31)
 
-`NAME_ALIAS` (`matt → mattyice`, `lill → lili`), `DISPLAY_NAME` (`lili → 'Lili'`). **An alias name is RESERVED
+`NAME_ALIAS` (`matt → mattyice`, `lill → lili`, `bego → begoña`, `andrew powell → andrew p`: Matt 2026-11-02, newer name wins), `DISPLAY_NAME` (`lili → 'Lili'`, `Begoña`, `Andrew P`). **An alias name is RESERVED
 (2026-10-29, `aliasTarget` + `usernameStatus`): only the code owning its target may take it.** A server rename never
 sticks (devices re-mirror); durable fixes are an alias here, a rename ON the device, or linking devices
 to one code. Every alias needs a test in `tools/players-agg.test.mjs` (a wrong alias merges two people).

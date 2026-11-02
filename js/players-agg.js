@@ -41,7 +41,10 @@ const emptyGrid = () => {
 // Aliasing here is immune to that: it is applied at READ time, on every render, no matter what the
 // devices push. (The durable alternative is renaming the profile ON the device itself, or linking
 // both devices to one player code - either would also work, and this alias stays harmless if so.)
-const NAME_ALIAS = { matt: 'mattyice', lill: 'lili' };
+// 2026-11-02, Matt: "merge Begoña and Bego ... Andrew Powell with Andrew P. Use their more recent name"
+// (each pair was two codes; the newer record's name wins: Begoña synced Oct 31, Bego Aug 1; Andrew P Aug 1,
+// Andrew Powell Jul 31).
+const NAME_ALIAS = { matt: 'mattyice', lill: 'lili', bego: 'begoña', 'andrew powell': 'andrew p' };
 const canonName = (n) => NAME_ALIAS[n] || n;
 /** The name an ALIAS folds into ('matt' -> 'mattyice'), or null for a name that is not an alias. Such a
  *  name is RESERVED (2026-10-29, js/stats-net.js usernameStatus): only the code that owns the target may
@@ -58,7 +61,7 @@ export const canonicalName = (raw) => canonName((typeof raw === 'string' ? raw :
 // so a merged Lili would still have flickered between "Lili" and "Lill" depending on which phone
 // synced last. An entry here pins the row's label. Names with no entry are displayed exactly as the
 // device wrote them (which is why `mattyice` has none - its display behaviour is unchanged).
-const DISPLAY_NAME = { lili: 'Lili' };
+const DISPLAY_NAME = { lili: 'Lili', 'begoña': 'Begoña', 'andrew p': 'Andrew P' };
 const displayName = (raw) => {
   const s = (typeof raw === 'string' ? raw : '').trim();
   return DISPLAY_NAME[canonName(s.toLowerCase())] || s;
