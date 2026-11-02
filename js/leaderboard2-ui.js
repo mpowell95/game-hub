@@ -178,14 +178,15 @@ const SVG = {
 // Contexto's medal images (Matt, 2026-10-31), the place on the face; sized per use.
 const MEDAL_H = { '': 38, sm: 32, xs: 24, big: 64 };
 const medal = (n, cls = '') => `<span class="lb2-medal ${cls}" role="img" aria-label="${n}">${lb2Medal(n, MEDAL_H[cls] || 38)}</span>`;
-/** ONE rank format: a medal for 1st to 3rd ("=" beside it when tied), "#5" below, "=5" when tied. */
+/** ONE rank format: a medal for 1st to 3rd, "#5" below. A tie shows the SAME rank on each tied row, no "="
+ *  (Matt, 2026-11-02: "I do not like '=4' for ties. It looks bad."). `tie` is kept for callers. */
 const med = (n, tie, cls = '') => (n <= 3
-  ? `<span class="lb2-rk">${tie ? '<span class="lb2-eq" aria-hidden="true">=</span>' : ''}${medal(n, cls)}</span>`
-  : `<span class="lb2-plain num">${tie ? '=' : '#'}${n}</span>`);
+  ? `<span class="lb2-rk">${medal(n, cls)}</span>`
+  : `<span class="lb2-plain num">#${n}</span>`);
 const pod = (r) => (r.rank <= 3 && earned(r) ? ` pod${r.rank}` : '');
 /** Session 4 (display only): a rank WITHOUT a medal, "#1" / "=7". Used where a medal would not mean the game's
  *  standing (Past weeks, Records held, Wins sorted by Played) and on rows with nothing earned (a 0). */
-const plainRank = (n, tie) => `<span class="lb2-plain num">${tie ? '=' : '#'}${n}</span>`;
+const plainRank = (n, tie) => `<span class="lb2-plain num">#${n}</span>`;
 /** A row whose ranked number is 0 earned no medal; its rank is unchanged. */
 function earned(r) {
   if (!r || r.noPodium) return false;
@@ -215,7 +216,7 @@ function placeHTML(p) {
   // No place in the standing: nothing, as the old You tab showed no chip (a dash read as a rank).
   if (!p || !p.rank) return '';
   if (p.rank <= 3 && !p.noMedal) return med(p.rank, p.tie, 'sm');
-  return `<span class="lb2-best num">${p.tie ? '=' : '#'}${p.rank}</span>`;
+  return `<span class="lb2-best num">#${p.rank}</span>`;
 }
 
 // --- Boards (tab 1) --------------------------------------------------------------------------------------

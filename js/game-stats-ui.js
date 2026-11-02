@@ -1846,6 +1846,7 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .gs-sk-mc{background:var(--l2-surf);border-color:var(--l2-line);border-left-color:var(--mc,#8a93a3)}
 .gs-v2 .gs-grid tbody th{white-space:normal}
 .gs-v2 .lb2-pmed{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 6px 10px;text-align:center}
+.gs-v2 .lb2-pmed.is-3{grid-template-columns:repeat(3,1fr)}
 .gs-v2 .lb2-pmed div{display:flex;flex-direction:column;align-items:center;gap:4px}
 .gs-v2 .lb2-pmed b{font-size:20px;font-weight:800}
 .gs-panel.gs-v2 .gs-grow2 .gs-gname{display:flex;flex-direction:column;gap:2px;white-space:normal}
@@ -1908,8 +1909,29 @@ function contextoV2(rec) {
     <h4 class="gs-tbl-h">${esc(t('gs_lang_h'))}</h4><table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('gs_ms_played'))}</th><th scope="col">${esc(t('gs_ct_solved'))}</th></tr></thead><tbody>${langs}</tbody></table>`;
 }
 /** One game's stats in the v2 look (wrap the result in a `.gs-v2` element). */
+/** Spelling Bee in the v2 look (Matt, 2026-11-02: the emoji-only tallies "look terrible"): the daily places as
+ *  medals in fixed slots with words, one card of named numbers, the language table only when both were played.
+ *  Same numbers as spellingBeeScreen (the long-term board, beeTotals). */
+function spellingBeeV2(rec, code) {
+  const me = code || ((loadProfile() || {}).playerId) || '';
+  const b = beeBoard();
+  if (!_beeWatching) { _beeWatching = true; watchBeeBoard(() => { if (_game === 'spellingbee') rerender(); }); }
+  if (!b) return v2Polish(recordScreen('spellingbee', rec));
+  const of = (lang) => beeTotals(b, { lang }).find((r) => r.code === me) || null;
+  const all = of('all');
+  if (!all) return emptyState(gameLabel('spellingbee'));
+  const mc = (k, n, w) => `<div>${ctImg(k, 34)}<b class="num">${v2fmt(n)}</b><small>${esc(w)}</small></div>`;
+  const row = (l, v) => `<div class="lb2-stat"><span>${esc(l)}</span><b class="num">${v2fmt(v)}</b></div>`;
+  const en = of('en'), es = of('es');
+  const line = (label, r) => `<tr><th scope="row">${esc(label)}</th><td>${v2fmt(r.points)}</td><td>${v2fmt(r.words)}</td><td>${v2fmt(r.days)}</td></tr>`;
+  const langs = en && es && en.days && es.days ? `<h4 class="gs-tbl-h">${esc(t('gs_lang_h'))}</h4><table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(tf('lb_bee_points', 'Points'))}</th><th scope="col">${esc(tf('lb_bee_words', 'Words'))}</th><th scope="col">${esc(t('gs_bee_days'))}</th></tr></thead><tbody>${line('English', en)}${line('Español', es)}</tbody></table>` : '';
+  return `<div class="lb2-card lb2-pmed is-3">${mc('gold', all.first, t('gs_bee_1st'))}${mc('silver', all.second, t('gs_bee_2nd'))}${mc('bronze', all.third, t('gs_bee_3rd'))}</div>
+    <div class="lb2-card">${row(tf('lb_bee_points', 'Points'), all.points)}${row(tf('lb_bee_words', 'Words'), all.words)}${row(t('gs_sk_days'), all.days)}${row(t('gs_bee_genius'), all.genius)}${row(t('gs_bee_queen'), all.queen)}</div>
+    ${langs}`;
+}
 export function v2ScreenFor(id, st) {
   if (id === 'contexto') return contextoV2((st.games || {}).contexto || {});
+  if (id === 'spellingbee') return spellingBeeV2((st.games || {}).spellingbee || {}, st.code);
   return v2Polish(screenFor(id, st));
 }
 
@@ -1945,8 +1967,8 @@ let _medalFn = null;
 function rankHTML(pl) {
   if (!pl || !pl.rank) return '';
   const zero = String(pl.text || '').replace(/[^\d]/g, '') === '0' && !/[1-9]/.test(String(pl.text || ''));
-  if (pl.rank <= 3 && !pl.noMedal && !zero && _medalFn) return `<span class="gs-rk">${pl.tie ? '<i>=</i>' : ''}${_medalFn(pl.rank, 32)}</span>`;
-  return `<span class="gs-rkp">${pl.tie ? '=' : '#'}${pl.rank}</span>`;
+  if (pl.rank <= 3 && !pl.noMedal && !zero && _medalFn) return `<span class="gs-rk">${_medalFn(pl.rank, 32)}</span>`;
+  return `<span class="gs-rkp">#${pl.rank}</span>`;
 }
 function placesFrom(L, list, meKey) {
   const pg = meKey ? L.lb2PlayerGames(list, meKey) : null;
