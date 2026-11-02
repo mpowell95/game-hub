@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1408';
+const CACHE = 'game-hub-v1409';
 
 const ASSETS = [
   './',
@@ -738,16 +738,6 @@ const HELD_BACK = {
     './battle-arena/js/online-ui.js',
     './battle-arena/js/alert.js',
   ],
-  'gridlock': [
-    './gridlock/',
-    './gridlock/index.html',
-    './gridlock/css/gridlock.css',
-    './gridlock/js/ui.js',
-    './gridlock/js/engine.js',
-    './gridlock/js/art.js',
-    './gridlock/js/levels.js',
-    './gridlock/js/strings.js',
-  ],
   'pinball2': [
     './pinball2/index.html',
     './pinball2/editor/index.html',
@@ -807,7 +797,7 @@ const REST_MANIFEST = {
   './css/hub.css': '1f4608e970',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '83213cc499',
+  './js/hub.js': '6221f22f73',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -826,10 +816,10 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'ec176f23bb',
+  './js/game-stats.js': '5c87ecfd33',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '51ba96d74b',
+  './js/game-stats-ui.js': 'a2b47ae54e',
   './js/stats-net.js': 'e4990614f7',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -1018,6 +1008,14 @@ const REST_MANIFEST = {
   './way-out/js/boards12.js': 'c1ebe09ce8',
   './way-out/js/impossible-tests.js': '019128540e',
   './way-out/js/easymed-tests.js': '5f3f6da857',
+  './gridlock/': '108ea98541',
+  './gridlock/index.html': '108ea98541',
+  './gridlock/css/gridlock.css': 'd066d67b97',
+  './gridlock/js/ui.js': '11b9a4c6b1',
+  './gridlock/js/engine.js': 'bc7b7b12e0',
+  './gridlock/js/art.js': 'f6a160d680',
+  './gridlock/js/levels.js': '68ee3200cb',
+  './gridlock/js/strings.js': 'f15ede65c4',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
   './flick-soccer/css/flick-soccer.css': 'b3b5c42958',

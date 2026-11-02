@@ -444,7 +444,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Filler | module, multiplayer (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | module, immersive, released 2026-10-20; vs computer, 2 players, challenges (`flicksoccer/`); hub id `flick-soccer`, stats id `flicksoccer` | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` (+ `.save.v1`) | `recordResult('flicksoccer', …)` |
 | Golf | module, immersive | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` |
-| Gridlock | module, immersive, devOnly; 4,000-level ladder, Wood/Cars looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
+| Gridlock | module, immersive, released 2026-11-02; 4,000-level ladder, Wood/Cars/Yard/Logs looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
 | Hill Climb | module, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | module, immersive, multiplayer (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Minesweeper | module, immersive (own title row), grid puzzle | `.ms-root` / `.ms-` | `gamehub.minesweeper.v1` (+ `.save.v1`) | `recordMinesweeper` |

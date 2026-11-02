@@ -136,8 +136,9 @@ ok('...and other games are untouched', G.loadStats().games.snake.total.played ==
   const at = hub.indexOf("id: 'gridlock'");
   const entry = at < 0 ? '' : hub.slice(at, hub.indexOf('\n  },', at));
   ok('hub: Gridlock has a GAMES entry', at >= 0);
-  ok('hub: Gridlock is admin only (devOnly: true)', /\bdevOnly:\s*true\b/.test(entry));
-  ok('hub: Gridlock has no released date (that is the New pill, for release day)', !/\breleased:/.test(entry));
+  // Released 2026-11-02 (Matt: "if gridlock passes all your tests, release it").
+  ok('hub: Gridlock is released (no devOnly)', !/\bdevOnly:\s*true\b/.test(entry));
+  ok('hub: Gridlock has its released date (the New pill)', /\breleased:\s*'2026-11-02'/.test(entry));
 }
 
 console.log(`${pass} passed, ${fail} failed`);
