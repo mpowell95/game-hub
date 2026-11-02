@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v40';
+  const APP_VERSION = 'v41';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -1057,27 +1057,10 @@
     _reassignFlow(wilds) {
       if (wilds.length === 1) return this._reassignPickColor(wilds[0]);
       // Matt, 2026-11-02: pick the CARD by looking at it, not a sentence per card.
-      const root = this.$('overlay');
-      root.innerHTML = '<div class="scrim"></div>';
-      const sheet = elNew('div', 'sheet wild-pick');
-      sheet.append(elNew('h3', null, 'Move which?'));
-      const row = elNew('div', 'wild-pick-row');
-      wilds.forEach(w => {
-        const b = elNew('button', 'wild-pick-card');
-        b.style.setProperty('--pick-c', `var(--c-${w.color})`);
-        const f = renderCardFace(w.card);
-        f.style.setProperty('--fs', '11px');
-        b.append(f, elNew('div', 'wild-pick-now', esc(colorLabel(w.color))));
-        b.addEventListener('click', () => this._reassignPickColor(w));
-        row.append(b);
-      });
-      sheet.append(row);
-      const cancel = elNew('button', 'cta swatch-cancel', 'Cancel');
-      cancel.addEventListener('click', () => this._closeOverlay());
-      sheet.append(cancel);
-      root.append(sheet);
-      root.querySelector('.scrim').addEventListener('click', () => this._closeOverlay());
-      root.classList.add('show');
+      this._cardPicker('Move which?', wilds.map(w => ({
+        cards: [w.card], tag: colorLabel(w.color), tagColor: w.color,
+        onPick: () => this._reassignPickColor(w),
+      })));
     }
     _reassignPickColor(w) {
       const valid = Deck.placeableColors(w.card).filter(c => c !== w.color);
@@ -1415,12 +1398,13 @@
       const askDouble = (base, back) => {
         const dbl = doubleOf(base);
         const amt = setRentUI(me.properties, base.color);
-        const who = base.targetPlayerId != null ? this._oppName(view, base.targetPlayerId) : 'all players';
         if (!dbl) return this._resolveMove(base);
-        this._pickList('Double the Rent?', [
-          { label: `Yes — charge ${amt * 2}M (uses your Double the Rent card)`, win: true, color: base.color, onPick: () => this._resolveMove(dbl) },
-          { label: `No — charge ${amt}M`, color: base.color, onPick: () => this._resolveMove(base) },
-        ], { subtitle: `Rent on ${colorLabel(base.color)} — ${who} would pay ${amt}M` });
+        const rCard = me.hand.find(c => c.id === base.cardId);
+        const dCard = me.hand.find(c => dbl.doubleCardIds.indexOf(c.id) !== -1);
+        this._cardPicker('Double it?', [
+          { cards: [rCard, dCard].filter(Boolean), tag: `${amt * 2}M`, tagColor: base.color, onPick: () => this._resolveMove(dbl) },
+          { cards: [rCard].filter(Boolean), tag: `${amt}M`, tagColor: base.color, onPick: () => this._resolveMove(base) },
+        ]);
       };
 
       // Wild rent charges ONE player: pick who pays (avatar+name tiles) before
@@ -1432,8 +1416,7 @@
           avatar: this.meta[b.targetPlayerId].avatar, tint: this.meta[b.targetPlayerId].tint,
           sub: `pays ${amt}M`, onPick: () => askDouble(b, back),
         }));
-        this._pickPlayerTile(`Charge ${colorLabel(color)} rent — who pays?`, entries,
-          { subtitle: 'Wild rent hits one player', onBack: back, backLabel: '← Sets' });
+        this._pickPlayerTile('Who pays?', entries, { onBack: back, backLabel: '← Sets' });
       };
 
       // Group the base moves by your color set.
@@ -1446,16 +1429,13 @@
         const items = colors.map(color => {
           const list = byColor.get(color);
           const amt = setRentUI(me.properties, color);
-          const targeted = list[0].targetPlayerId != null; // wild rent → pick a player
           return {
-            name: colorLabel(color), color, count: countOf(me.properties, color), req: REQ[color],
-            sub: targeted ? 'charge one player' : 'charge all players',
-            amount: `${amt}M`,
-            flag: null,
+            cards: me.properties[color].cards.slice(0, REQ[color]),
+            tag: `${amt}M`, tagColor: color,
             onPick: () => (list.length > 1 ? pickWho(color, list, showGrid) : askDouble(list[0], showGrid)),
           };
         });
-        this._propTilePicker('Charge rent — pick a set', items, {});
+        this._cardPicker('Rent', items);
       };
       showGrid();
     }
@@ -1488,6 +1468,22 @@
     }
 
     _showTargets(moves, title) {
+      const view = this._view, me = view.me;
+      // House / Hotel: tap the set it goes on.
+      if (moves.every(m => m.type === 'action' && m.color && m.targetPlayerId == null && me.properties[m.color])) {
+        return this._cardPicker(title || 'Which set?', moves.map(m => ({
+          cards: me.properties[m.color].cards.slice(0, REQ[m.color]), tag: colorLabel(m.color), tagColor: m.color,
+          onPick: () => this._resolveMove(m),
+        })));
+      }
+      // Debt Collector and the like: tap the person.
+      if (moves.every(m => m.targetPlayerId != null && m.targetCardId == null && m.targetColor == null && !m.color)) {
+        return this._pickPlayerTile(title || 'Who?', moves.map(m => ({
+          id: m.targetPlayerId, name: this._oppName(view, m.targetPlayerId),
+          avatar: this.meta[m.targetPlayerId].avatar, tint: this.meta[m.targetPlayerId].tint,
+          onPick: () => this._resolveMove(m),
+        })));
+      }
       const seen = {};
       const options = moves.map(m => {
         const lbl = this._describeMove(this._view, m);
@@ -1569,6 +1565,62 @@
         band.style.background = `linear-gradient(90deg,var(--c-${spec.colors[0]}) 0 50%,var(--c-${spec.colors[1]}) 50% 100%)`;
       else band.style.background = `var(--c-${spec.color})`;
       return band;
+    }
+
+    /** Every "which card?" choice (Matt, 2026-11-02: "Why write a sentence when you
+     *  can just have me select the card by looking at my cards?"). The real card
+     *  faces, a set fanned together; a pill under each (the set it sits in, its
+     *  count, or an amount) edged in that set's color; gold ring = wins, green =
+     *  completes. items: {cards, tag, tagColor, flag, onPick}. opts: {onBack, backLabel}. */
+    _cardPicker(title, items, opts) {
+      opts = opts || {};
+      const root = this.$('overlay');
+      root.innerHTML = '<div class="scrim"></div>';
+      const sheet = elNew('div', 'sheet picker card-pick');
+      sheet.append(elNew('h3', null, esc(title)));
+      const row = elNew('div', 'cpick-row');
+      items.forEach(it => {
+        const b = elNew('button', 'cpick' + (it.flag === 'win' ? ' win' : it.flag === 'completes' ? ' completes' : ''));
+        const fan = elNew('div', 'cpick-fan');
+        it.cards.forEach(c => { const f = renderCardFace(c); f.style.setProperty('--fs', '10px'); fan.append(f); });
+        b.append(fan);
+        if (it.flag) b.append(elNew('div', 'cpick-flag', it.flag === 'win' ? '🏆' : '✓'));
+        if (it.tag) {
+          const t = elNew('div', 'cpick-tag', esc(it.tag));
+          if (it.tagColor) t.style.setProperty('--pick-c', `var(--c-${it.tagColor})`);
+          b.append(t);
+        }
+        b.addEventListener('click', it.onPick);
+        row.append(b);
+      });
+      sheet.append(row);
+      const foot = elNew('div', 'ppick-foot');
+      if (opts.onBack) {
+        const back = elNew('button', 'pick ghost', opts.backLabel || '← Back');
+        back.addEventListener('click', opts.onBack);
+        foot.append(back);
+      }
+      const cancel = elNew('button', 'pick ghost', 'Cancel');
+      cancel.addEventListener('click', () => this._closeOverlay());
+      foot.append(cancel);
+      sheet.append(foot);
+      root.append(sheet);
+      root.querySelector('.scrim').addEventListener('click', () => this._closeOverlay());
+      root.classList.add('show');
+    }
+    /** {card, color, count} for a property card a player holds, by id. */
+    _cardOf(pv, cardId) {
+      for (const color of Object.keys(pv.properties)) {
+        const g = pv.properties[color], card = g.cards.find(x => x.id === cardId);
+        if (card) return { card, color, count: g.cards.length };
+      }
+      return null;
+    }
+    /** One card-picker item for a single property card a player holds. */
+    _cardItem(pv, cardId, flag, onPick) {
+      const f = this._cardOf(pv, cardId);
+      if (!f) return { cards: [], tag: 'Property', flag, onPick };
+      return { cards: [f.card], tag: `${colorLabel(f.color)} ${f.count}/${REQ[f.color]}`, tagColor: f.color, flag, onPick };
     }
 
     /** Grid of property tiles. items: {color/colors/isWild/isMulti, name, sub,
@@ -1664,11 +1716,10 @@
         const n = new Set(byId.get(id).map(m => m.targetCardId != null ? m.targetCardId : m.targetColor)).size;
         return {
           id, name: opp.name, avatar: this.meta[id].avatar, tint: this.meta[id].tint,
-          sub: `${n} option${n > 1 ? 's' : ''}`,
           onPick: () => render(byId.get(id), opp, back),
         };
       });
-      this._pickPlayerTile(title, entries, { subtitle: 'Choose a player, then their card' });
+      this._pickPlayerTile(title, entries);
     }
 
     /** Tile spec from a _propDesc, for a steal/give grid. */
@@ -1715,46 +1766,38 @@
 
     /** Sly Deal: pick a player, then a tile from that player's stealable props. */
     _slyDealFlow(moves) {
-      this._pickStealPlayer('Sly Deal — steal a property', moves, (list, opp, back) => {
+      this._pickStealPlayer('Sly Deal', moves, (list, opp, back) => {
         const me = this._view.me;
         const unique = this._dedupeMoves(list, (m) => this._propDesc(opp, m.targetCardId));
-        const items = unique.map(m => {
-          const pd = this._propDesc(opp, m.targetCardId);
-          return this._tileFromDesc(pd, this._stealFlag(pd), () => this._resolveMove(m));
-        });
-        this._propTilePicker(`Steal from ${opp.name}`, items, { onBack: back, backLabel: '← Players' });
+        const items = unique.map(m => this._cardItem(opp, m.targetCardId,
+          this._stealFlag(this._propDesc(opp, m.targetCardId)), () => this._resolveMove(m)));
+        this._cardPicker(opp.name, items, { onBack: back, backLabel: '← Players' });
       });
     }
 
     /** Deal Breaker: pick a player, then which of their COMPLETE sets to take —
      *  always an explicit choice (even with one set) so it never "just happens". */
     _dealBreakerFlow(moves) {
-      this._pickStealPlayer('Deal Breaker — steal a full set', moves, (list, opp, back) => {
+      this._pickStealPlayer('Deal Breaker', moves, (list, opp, back) => {
         const items = list.map(m => {
           const g = opp.properties[m.targetColor];
-          // Only ONE complete set is stolen, so price up just those cards — an
-          // over-full color's extras stay with the owner (see _stealCompleteSet).
-          const value = g ? g.cards.slice(0, REQ[m.targetColor]).reduce((s, c) => s + (c.value || 0), 0) : 0;
-          const rentTop = RENT[m.targetColor] ? RENT[m.targetColor][RENT[m.targetColor].length - 1] : null;
-          // Stealing a whole set gives me a complete set of that color — true win
-          // only if it's a NEW distinct complete color reaching 3 total.
+          // Only ONE complete set is stolen; an over-full color's extras stay (_stealCompleteSet).
           const win = this._completeColorsAfter({ [m.targetColor]: REQ[m.targetColor] }) >= 3;
-          const bld = g ? (g.house ? '🏠' : '') + (g.hotel ? '🏨' : '') : '';
+          const bld = g ? (g.house ? ' 🏠' : '') + (g.hotel ? ' 🏨' : '') : '';
           return {
-            name: colorLabel(m.targetColor) + (bld ? ' ' + bld : ''), color: m.targetColor,
-            sub: `full set${value ? ` · worth ${value}M` : ''}`,
-            amount: rentTop != null ? `rent ${rentTop}M` : null,
-            flag: win ? 'win' : 'completes',
+            cards: g ? g.cards.slice(0, REQ[m.targetColor]) : [],
+            tag: colorLabel(m.targetColor) + bld, tagColor: m.targetColor,
+            flag: win ? 'win' : null,
             onPick: () => this._resolveMove(m),
           };
         });
-        this._propTilePicker(`Steal ${opp.name}'s set`, items, { onBack: back, backLabel: '← Players' });
+        this._cardPicker(opp.name, items, { onBack: back, backLabel: '← Players' });
       });
     }
 
     /** Forced Deal: player → take (tile) → give one of yours (tile), Back at each. */
     _forcedDealFlow(moves) {
-      this._pickStealPlayer('Forced Deal — take a property', moves, (list, opp, back) => {
+      this._pickStealPlayer('Forced Deal', moves, (list, opp, back) => {
         this._forcedDealTake(list, opp, back);
       });
     }
@@ -1768,18 +1811,16 @@
       });
       const items = [...takeMap.values()].map(group => {
         const pd = this._propDesc(opp, group[0].targetCardId);
-        return this._tileFromDesc(pd, this._stealFlag(pd, true), () =>
+        return this._cardItem(opp, group[0].targetCardId, this._stealFlag(pd, true), () =>
           this._forcedDealGive(group, () => this._forcedDealTake(list, opp, back)));
       });
-      this._propTilePicker(`Take from ${opp.name}`, items, {
-        subtitle: 'You give one of yours in exchange', onBack: back, backLabel: '← Players',
-      });
+      this._cardPicker(`Take from ${opp.name}`, items, { onBack: back, backLabel: '← Players' });
     }
     _forcedDealGive(moves, back) {
       const me = this._view.me;
       const unique = this._dedupeMoves(moves, (m) => this._propDesc(me, m.myCardId));
-      const items = unique.map(m => this._tileFromDesc(this._propDesc(me, m.myCardId), null, () => this._resolveMove(m)));
-      this._propTilePicker('Give which of yours?', items, { onBack: back, backLabel: '← Back' });
+      const items = unique.map(m => this._cardItem(me, m.myCardId, null, () => this._resolveMove(m)));
+      this._cardPicker('Give which?', items, { onBack: back, backLabel: '← Back' });
     }
 
     /** Would taking this property complete a set for me / win the game? */
