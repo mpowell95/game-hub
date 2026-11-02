@@ -96,7 +96,13 @@ picture first (`max-height: 760px`). `check-no-scroll` fits all 8 screens.
 Still no tagline, no "Look" / "Difficulty" labels (`aria-label`s), no level ranges or current level on
 the difficulty buttons, no "worth N points" line. Matt (10-14): *"There are WAY too many words."*
 
-## The two looks (Matt, 2026-10-14)
+## The looks (Matt, 2026-10-14; Yard and Logs 2026-11-02)
+
+**Four looks since 2026-11-02 (Matt's approved mockup):** Wood, Cars, **Yard** (shipping containers on
+painted concrete, hazard-striped walls) and **Logs** (logs on a river, boulder walls, the red piece is a
+red canoe). All cosmetic: same levels, stars and points. Setup screen shows them 2x2. Yard and Logs follow
+the hub's light/dark theme like Wood. Art in `js/art.js` (`containerSVG`, `logSVG`, `canoeSVG`).
+
 
 **Wood** (default: Unblock Me is the best-known version) and **Cars** (Rush Hour's parking lot).
 Same levels, stars and points; the choice is `look` in the settings key, per phone, picked on the
