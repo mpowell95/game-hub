@@ -14,14 +14,13 @@ export const BLOCK_H = 40;   // 2026-11-02, Matt: "each block should be taller" 
 export const GROW_EVERY = 5;
 export const GROW = 20;
 
-// v0: first block's speed (units/s); dv: added per block; vmax: cap; perfect: units of slack.
+// v0: first block's speed (units/s); dv: added per block, FOREVER (no top speed: Matt, 2026-11-02, "There
+// shouldn't be a max speed"); perfect: units of slack.
 export const TUNE = {
-// 2026-11-02, Matt: "The speed should increase as the game goes on": about twice the old ramp, higher caps
-// (reached around block 45).
-  easy:   { v0: 150, dv: 8,  vmax: 520, perfect: 8 },
-  medium: { v0: 180, dv: 11, vmax: 660, perfect: 6 },
-  hard:   { v0: 220, dv: 14, vmax: 800, perfect: 4.5 },
-  expert: { v0: 270, dv: 17, vmax: 940, perfect: 3.5 },
+  easy:   { v0: 150, dv: 8,  perfect: 8 },
+  medium: { v0: 180, dv: 11, perfect: 6 },
+  hard:   { v0: 220, dv: 14, perfect: 4.5 },
+  expert: { v0: 270, dv: 17, perfect: 3.5 },
 };
 
 export function normDiff(d) { return DIFFS.indexOf(d) >= 0 ? d : 'medium'; }
@@ -41,7 +40,7 @@ export function score(run) { return run.stack.length - 1; }
 
 export function speedFor(diff, n) {
   const k = TUNE[normDiff(diff)];
-  return Math.min(k.vmax, k.v0 + k.dv * Math.max(0, n - 1));
+  return k.v0 + k.dv * Math.max(0, n - 1);
 }
 
 /** The travel range for a block of width w: it may hang 60% off either edge. */
@@ -62,7 +61,7 @@ export function stepMover(run, dt) {
   const r = range(m.w);
   m.x += m.dir * m.v * dt;
   // A long frame can overshoot more than once; fold it back until it is inside.
-  for (let i = 0; i < 4 && (m.x > r.hi || m.x < r.lo); i++) {
+  for (let i = 0; i < 64 && (m.x > r.hi || m.x < r.lo); i++) {
     if (m.x > r.hi) { m.x = 2 * r.hi - m.x; m.dir = -1; }
     if (m.x < r.lo) { m.x = 2 * r.lo - m.x; m.dir = 1; }
   }
