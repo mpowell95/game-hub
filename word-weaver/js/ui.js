@@ -14,8 +14,8 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwBonuses, WW_FREE_EVERY } from '../../js/word-weaver-points.js';
+import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, recordWordWeaverFreeLost, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwFreeRaw, wwBonuses, WW_FREE_EVERY, WW_FREE_MAX } from '../../js/word-weaver-points.js';
 import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
 import STRINGS from './strings.js';
 
@@ -581,7 +581,13 @@ class WordWeaver {
 
   /** Free hints this player can use now (lifetime bonus words + this level's, not yet recorded). */
   _freeBank() {
-    try { return wwFreeHints(loadStats().games.wordweaver, this.st ? this.st.extra.length + this.st.sym.length : 0); } catch { return 0; }
+    const pending = this.st ? this.st.extra.length + this.st.sym.length : 0;
+    try {
+      // At most 3 banked (Matt, 2026-11-02): one earned past that is written off as lost at once, never saved for later.
+      const raw = wwFreeRaw(loadStats().games.wordweaver, pending);
+      if (raw > WW_FREE_MAX && !recordWordWeaverFreeLost(raw - WW_FREE_MAX)) console.error('[word-weaver] free hints over the cap NOT written off');
+      return wwFreeHints(loadStats().games.wordweaver, pending);
+    } catch { return 0; }
   }
 
   /** Restart a CSS animation class on an element (the class is removed when it ends). */

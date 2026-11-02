@@ -528,6 +528,9 @@ export function aggregatePlayers(all, corrections) {
         // Free hints used (2026-11-01) add, like the bonus words that earn them.
         const fu = Math.max(0, Math.floor(Number(src.ww.fu) || 0));
         if (fu) dst.ww.fu = (dst.ww.fu || 0) + fu;
+        // Free hints lost over the cap of 3 (2026-11-02) add the same way.
+        const fl = Math.max(0, Math.floor(Number(src.ww.fl) || 0));
+        if (fl) dst.ww.fl = (dst.ww.fl || 0) + fl;
         // Bonus squares (2026-11-02) add the same way.
         const bsq = Math.max(0, Math.floor(Number(src.ww.b) || 0));
         if (bsq) dst.ww.b = (dst.ww.b || 0) + bsq;

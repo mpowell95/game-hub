@@ -287,7 +287,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `players-agg.js` | per-person aggregation of synced devices (no `headToHeadRows`; removed 2026-08-11) |
 | `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game; tabs By Player / By Game top 3 / You, last tab remembered) |
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
-| `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band = its leaderboard number; free hints (10 bonuses = 1, `ww.fu`); bonus squares `ww.b` (2026-11-02) |
+| `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band = its leaderboard number; free hints (10 bonuses = 1, at most 3 banked, `ww.fu`/`ww.fl`); bonus squares `ww.b` (2026-11-02) |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
 | `leaderboard2-ui.js` / `leaderboard2-boards.js` | Leaderboard v2 (Boards / Hall of Fame / Me), admin devices only until Matt approves. **The old board's numbers only (Matt, 2026-10-31: "an interface redesign, not a stats redesign")**: boards, medals and places come from `leaderboard-ui.js`'s `lb2*` exports; `tools/test-lb2-parity.mjs` proves it (golds 40 = 40). Status: `docs/LEADERBOARD-V2-MORNING.md` |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |

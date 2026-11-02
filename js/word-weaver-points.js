@@ -20,6 +20,7 @@
 //                                 levels completed count BOTH ladders.
 //   ww.x = n                      lifetime extra words found (a counter; it only goes up).
 //   ww.b = n                      BONUS SQUARES collected (2026-11-02; a counter; they earn free hints like bonus words).
+//   ww.fl = n                     FREE hints LOST (2026-11-02): earned while 3 were banked (the most).
 //   ww.fu = n                     FREE hints used (2026-11-01; a counter; every 10 bonus words earn one, wwFreeHints).
 //   ww.hint['L<n>'] = { c, t }    HINTS, recorded the moment Hint is tapped (2026-10-29, Matt: "Close the hint
 //   ww.esHint['L<n>'] = { c, t }  gap"): c = hints used on level n so far (only grows), t = the first hint's
@@ -205,7 +206,17 @@ export function wwBonusSquares(rec) {
 export function wwBonuses(rec, pending = 0) {
   return wwExtra(rec) + wwBonusSquares(rec) + Math.max(0, Math.floor(Number(pending) || 0));
 }
+/** AT MOST 3 BANKED (Matt, 2026-11-02: "Max 3 free hints. They can't store up more than that"). One earned while 3
+ *  are banked is LOST, not saved for later: `ww.fl` counts those (js/game-stats.js recordWordWeaverFreeLost). */
+export const WW_FREE_MAX = 3;
+export function wwFreeLost(rec) {
+  const n = Math.floor(Number(rec && rec.ww && rec.ww.fl) || 0);
+  return n > 0 ? n : 0;
+}
+/** Free hints earned and neither used nor lost; above WW_FREE_MAX the excess is still to be written off. */
+export function wwFreeRaw(rec, pendingExtra = 0) {
+  return Math.floor(wwBonuses(rec, pendingExtra) / WW_FREE_EVERY) - wwFreeUsed(rec) - wwFreeLost(rec);
+}
 export function wwFreeHints(rec, pendingExtra = 0) {
-  const earned = Math.floor(wwBonuses(rec, pendingExtra) / WW_FREE_EVERY);
-  return Math.max(0, earned - wwFreeUsed(rec));
+  return Math.max(0, Math.min(WW_FREE_MAX, wwFreeRaw(rec, pendingExtra)));
 }
