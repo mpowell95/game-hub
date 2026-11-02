@@ -254,7 +254,7 @@ console.log('\n--- wiring ---');
   ok('backup: both branches are in BRANCHES', /'integrityFlags', 'integrityAlerts'/.test(read('backups/rtdb-backup.mjs')));
   const idx = read('functions/index.js');
   ok('server: every board rebuild runs the checks and builds with the flags',
-    /await writeFlags\(db, players \|\| \{\}\)/.test(idx) && /buildBoardParts\(players \|\| \{\}, cfg \|\| null, flags\)/.test(idx));
+    /await writeFlags\(db, players \|\| \{\}\)/.test(idx) && /buildBoardParts\(players \|\| \{\}, cfg \|\| null, flags[,)]/.test(idx));
   ok('server: an undo rebuilds; the four challenge games are checked when they end',
     /integrityOnUndo = onValueWritten\(\{ ref: '\/adminConfig\/v1\/integrity'/.test(idx)
     && ['darts', 'cuppong', 'battleship', 'hoops'].every((n) => idx.includes(`onMatchOver('${n}')`)));
