@@ -1,8 +1,10 @@
 /* gridlock/css/gridlock.css - every rule descendant-scoped under .gl-root.
  *
- * TWO LOOKS, one game (chosen on the setup screen, gridlock/js/ui.js): WOOD (.gl-look-wood, the
- * default: blocks on a wooden board, the play screen follows the hub's light/dark theme) and CARS
- * (.gl-look-cars: cars and trucks in a parking lot, a dark lot in both themes). The SETUP screen
+ * FOUR LOOKS, one game (chosen on the setup screen, gridlock/js/ui.js): WOOD (.gl-look-wood, the
+ * default: blocks on a wooden board, the play screen follows the hub's light/dark theme), CARS
+ * (.gl-look-cars: cars and trucks in a parking lot, a dark lot in both themes), YARD (.gl-look-yard:
+ * shipping containers on painted concrete) and LOGS (.gl-look-logs: logs on a river, a red canoe);
+ * Yard and Logs follow the hub's theme like Wood (2026-11-02). The SETUP screen
  * and the popups follow the hub's theme through css/ui.css's --gh-* tokens.
  *
  * The red block is told apart by SHAPE as well as colour (a white arrow badge on wood, a white star
@@ -465,7 +467,7 @@
 .gl-root.gl-look-cars .gl-art { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .4)); }
 .gl-root.gl-look-cars .gl-piece.is-drag .gl-art { filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .4)) brightness(1.06); }
 
-/* MOCKUP 2026-11-02: two more looks. Shipping yard: containers on painted concrete, steel frame. */
+/* Two more looks (Matt, 2026-11-02). YARD: containers on painted concrete, steel frame. */
 .gl-root.gl-look-yard { --gl-bed: #b9bec4; }
 .gl-root.gl-look-yard .gl-frame {
   background: repeating-linear-gradient(90deg, transparent 0 22px, rgba(0, 0, 0, .12) 22px 24px), linear-gradient(#4d5c6b, #33404c);

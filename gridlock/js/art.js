@@ -10,7 +10,8 @@
 // same, and `uid` keeps each piece's gradient ids apart (ids are page-global).
 //
 // The red piece is told apart by SHAPE as well as colour (Matt is red/green colourblind): a white
-// badge with an arrow on the wooden block, a white star badge on the red car.
+// badge with an arrow on the wooden block, the red container and the red canoe, a white star badge on
+// the red car. Yard and Logs added 2026-11-02 (Matt's approved mockup).
 
 export const RED = '#d8392b';
 export const WOOD_TONES = ['#e2bd84', '#d3a265', '#ecd3a1', '#c38c52', '#dcae72', '#b98048', '#e7c792', '#cc9a5e'];
