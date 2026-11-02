@@ -132,6 +132,38 @@ function bandNext(band, total, lang = 'en') {
   return { n, finished: n > end };
 }
 
+/** Bonus stars found but not in the stats store yet (2026-11-02, the setup screen's balance): the refused queue, every
+ *  unfinished or unrecorded ladder attempt (both languages, every band) and every unrecorded daily. Each counts ONCE: a
+ *  ladder attempt is `recorded` once the recorder took it OR it went to the queue. `cur` = the level on screen, read
+ *  from memory instead of its save (they match; memory is never behind). Never throws. */
+function pendingBonuses(cur) {
+  const n = (v) => Math.max(0, Math.floor(Number(v)) || 0);
+  const len = (a) => (Array.isArray(a) ? a.length : 0);
+  const of = (a) => len(a.extra) + Math.min(3, len(a.sym));
+  let sum = 0;
+  try { for (const e of readPending()) sum += n(e.extra) + n(e.sym); } catch { /* none */ }
+  for (const lang of ['en', 'es']) {
+    let done = new Set();
+    try { done = completedLevels(lang); } catch { /* none */ }
+    for (const band of WW_TIERS) {
+      let a = null;
+      try { a = attemptOf(band, lang); } catch { a = null; }
+      // A saved attempt whose level is already in the store or the queue is counted there, never twice.
+      if (a && done.has(Math.floor(Number(a.n)))) a = null;
+      if (cur && !cur.daily && cur.band === band && cur.lang === lang) a = cur.st;
+      if (a && a.recorded !== true) sum += of(a);
+    }
+  }
+  try {
+    for (const [key, a0] of dailyAttempts()) {
+      const a = cur && cur.daily === key ? { ...a0, ...cur.st, recorded: a0.recorded || cur.st.recorded } : a0;
+      if (!a.recorded) sum += of(a);
+    }
+  } catch { /* none */ }
+  if (cur && cur.daily) { try { if (!dailyAttempt(cur.daily) && !cur.st.recorded) sum += of(cur.st); } catch { /* none */ } }
+  return sum;
+}
+
 function readPending() {
   try {
     const a = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
@@ -679,8 +711,9 @@ class WordWeaver {
   _setupHTML() {
     const band = this.band, total = this.count == null ? Infinity : this.count;
     const nx = bandNext(band, total, this.lang);
-    let pts = 0;
+    let pts = 0, bal = 0;
     try { pts = wwPoints(loadStats().games.wordweaver); } catch { pts = 0; }
+    try { bal = wwBalance(loadStats().games.wordweaver, pendingBonuses(null)); } catch { bal = 0; }
     const segs = WW_TIERS.map((k) => `
       <button type="button" class="ww-seg${k === band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === band}">
         ${diffShapeSVG(TIER_NUM[k])}<b>${t('tier_' + k)}</b>${k === band ? '<span class="ww-check" aria-hidden="true">&#10003;</span>' : ''}
@@ -694,7 +727,7 @@ class WordWeaver {
       <div class="ww-setup">
         <div class="ww-head">
           <h1>${t('title')}</h1>
-          <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}</p>
+          <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}<span class="ww-bal" role="img" aria-label="${t('balance_aria', { n: bal })}">${ICON_STAR}<b>${bal}</b></span></p>
           <button type="button" class="ww-lang" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
         </div>
         ${this._dailyButtonHTML()}
@@ -811,12 +844,8 @@ class WordWeaver {
    *  (ww.x / ww.b), so they count as 0 here: counting them again made the counter jump on the done screen and drop
    *  back at the next level (Matt, 2026-11-02: "I got up to 3 then it went back to one"). */
   _pendingBonuses() {
-    const s = this.st;
-    // A completion the recorder refused waits in the queue (PENDING_KEY): its bonuses still count, once.
-    let queued = 0;
-    try { for (const e of readPending()) queued += Math.max(0, Math.floor(e.extra) || 0) + Math.max(0, Math.floor(e.sym) || 0); } catch { /* none */ }
-    if (!s || s.recorded) return queued;
-    return queued + s.extra.length + s.sym.length;
+    const cur = !this.level || !this.st ? null : this.daily ? { daily: this.daily.key, st: this.st } : { band: this.band, lang: this.lang, st: this.st };
+    return pendingBonuses(cur);
   }
 
   /** The star chip = the BONUS STAR BALANCE (2026-11-02: bonus stars are spent on hints): collected - spent. */
