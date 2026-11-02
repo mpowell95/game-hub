@@ -28,6 +28,7 @@ import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
+import { pointsKey } from './lb-points.js';
 import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
@@ -773,7 +774,21 @@ function infoHTML(game) {
   const counts = r.counts.length ? `<div class="lb2-ih">${esc(t2('lb2_counts_as'))}</div><div class="lb2-ca">${r.counts.map((c) => `<div class="lb2-cah">${esc(t2('lb2_ca_' + c.when))}</div>${
     c.rows.length ? c.rows.map((x) => `<div class="lb2-car">${lvl(x.from)}${arrow}${lvl(x.to)}</div>`).join('') : `<div class="lb2-car">${arrow}<span>${esc(t2('lb2_ca_easiest'))}</span></div>`}`).join('')}</div>` : '';
   return sheetHTML(title(game), `<div class="lb2-ihd">${art(game)}<h2 class="lb2-shh">${esc(title(game))}</h2></div>
-    <div><div class="lb2-ih">${esc(t2('lb2_ranked_by'))}</div><p class="lb2-ib">${esc(t2('lb2_rb_' + r.by))}</p></div>${counts}`);
+    <div><div class="lb2-ih">${esc(t2('lb2_ranked_by'))}</div><p class="lb2-ib">${esc(t2('lb2_rb_' + r.by))}</p></div>${ptsTableHTML(game, r, lvl)}${counts}`);
+}
+/** A wins board's points per win (2026-11-02, js/lb-points.js): each level, the 20 cap, online, the options. */
+function ptsTableHTML(game, r, lvl) {
+  if (r.by !== 'wins' && r.by !== 'cuppong') return '';
+  const k = pointsKey(game);
+  const row = (a, b) => `<div class="lb2-car"><span style="flex:1">${a}</span><b>${b}</b></div>`;
+  const rows = [];
+  if (k.ult) rows.push(`<div class="lb2-cah">${esc(t('lb_tt_classic'))}</div>`);
+  for (const l of k.levels) rows.push(row(lvl(l.tier), l.capped ? `1 <span style="font-weight:400">(${esc(t('lb_pts_max', { n: k.cap }))})</span>` : l.pts));
+  if (!k.levels.length) rows.push(row(esc(t('lb_diff_all')), 1));
+  if (k.ult) { rows.push(`<div class="lb2-cah">${esc(t('lb_tt_ultimate'))}</div>`); for (const l of k.ult) rows.push(row(lvl(l.tier), l.pts)); }
+  rows.push(row(esc(t('lb_pts_online')), k.on));
+  if (k.extra) rows.push(row(esc(t('lb_pts_x_' + game)), ''));
+  return `<div class="lb2-ih">${esc(t('lb_pts_key'))}</div><div class="lb2-ca">${rows.join('')}</div>`;
 }
 
 // --- render ----------------------------------------------------------------------------------------------
