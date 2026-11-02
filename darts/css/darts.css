@@ -335,6 +335,8 @@
 .dt-root .dt-seg .dt-seg-item[aria-pressed="true"] { background: #fff; color: var(--dt-ink); box-shadow: 0 0 0 2px #b8282d; }
 .dt-root .dt-seg .dt-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-root .dt-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+/* hub.css lightens Hard/Expert shapes in dark mode; this surface keeps its own colour, so set them here. */
+:root.gh-dark .dt-root .dt-seg .lb-dshape-t3, :root.gh-dark .dt-root .dt-seg .lb-dshape-t4 { fill: #1c2430; }
 .dt-root .dt-go { font-size: 17px; font-weight: 800; }
 /* How to play beside Play (2026-10-08), which made the room for Computer speed: the card was already
    the full height of a short phone in Cricket. */
