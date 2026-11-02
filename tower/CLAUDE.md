@@ -11,8 +11,8 @@ Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's ap
 
 - A block slides across (alternating sides). Tap = drop. The overlap with the block below stays; the
   overhang is cut off and falls. The next block is only as wide as what landed.
-- **Perfect**: within `TUNE[diff].perfect` world units, the block keeps its full width. Every 5 Perfects in
-  a row (`GROW_EVERY`) grow it back by `GROW` (never past `START_W`).
+- **Perfect**: within `TUNE[diff].perfect` world units, the block keeps its full width. A block NEVER grows
+  back (Matt, 2026-11-02: "No growing back ever"; a 5-in-a-row regrow existed until then).
 - No overlap = game over. Score = blocks stacked (stack length - 1).
 - Speed rises every block with NO top speed (ramp doubled 2026-11-02, Matt: "should increase as the game goes on"; cap removed the same day: "There shouldn't be a max speed"). Blocks 40 units tall (were 26; Matt: "pretty thin"). Four difficulties (speed + perfect slack): easy / medium / hard / expert.
 - World is `WORLD_W` (400) units wide; the UI scales it to the screen.

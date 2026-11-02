@@ -42,16 +42,12 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
   ok('miss ends the run, score stays 0', res.kind === 'miss' && r.over && E.score(r) === 0 && r.stack.length === 1);
   ok('no drop after the run is over', E.drop(r).kind === 'none');
 }
-// Grow back: 5 perfects in a row grow a narrowed block by GROW, never past START_W.
+// Never grows back (Matt, 2026-11-02): any number of perfects keeps a narrowed block's width.
 {
   const r = E.createRun('easy');
   r.mover.x = r.stack[0].x + 50; E.drop(r);          // narrow to 200
-  let grew = false;
-  for (let i = 0; i < 5; i++) { r.mover.x = r.stack[r.stack.length - 1].x; grew = E.drop(r).grew || grew; }
-  ok('5 perfects in a row grow the block by GROW', grew && near(r.stack[r.stack.length - 1].w, 200 + E.GROW));
-  const r2 = E.createRun('easy');
-  for (let i = 0; i < 5; i++) { r2.mover.x = r2.stack[r2.stack.length - 1].x; E.drop(r2); }
-  ok('a full-width block never grows past START_W', r2.stack[r2.stack.length - 1].w === E.START_W);
+  for (let i = 0; i < 12; i++) { r.mover.x = r.stack[r.stack.length - 1].x; E.drop(r); }
+  ok('12 perfects in a row: the block never grows back', near(r.stack[r.stack.length - 1].w, 200) && near(r.mover.w, 200));
 }
 // Speed rises per block and caps; harder is faster.
 ok('speed rises with height', E.speedFor('medium', 10) > E.speedFor('medium', 1));

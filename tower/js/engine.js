@@ -3,16 +3,14 @@
 // tablet play the same game.
 //
 // The rule: a block slides across; on a drop, the part that overlaps the block below stays and the
-// rest is cut off. Land within `perfect` units and the block keeps its full width (a PERFECT). Every
-// GROW_EVERY perfects in a row grows the block back by GROW units (never past START_W). No overlap at
+// rest is cut off. Land within `perfect` units and the block keeps its full width (a PERFECT). A block
+// NEVER grows back (Matt, 2026-11-02: "No growing back ever"; the 5-in-a-row regrow is gone). No overlap at
 // all = the run is over. Score = blocks stacked on the base.
 
 export const DIFFS = ['easy', 'medium', 'hard', 'expert'];
 export const WORLD_W = 400;
 export const START_W = 250;
 export const BLOCK_H = 40;   // 2026-11-02, Matt: "each block should be taller" (was 26)
-export const GROW_EVERY = 5;
-export const GROW = 20;
 
 // v0: first block's speed (units/s); dv: added per block, FOREVER (no top speed: Matt, 2026-11-02, "There
 // shouldn't be a max speed"); perfect: units of slack.
@@ -79,14 +77,9 @@ export function drop(run) {
   if (Math.abs(diff) <= tol) {
     run.streak += 1; run.perfects += 1;
     run.bestStreak = Math.max(run.bestStreak, run.streak);
-    let x = top.x, w = top.w, grew = false;
-    if (run.streak % GROW_EVERY === 0 && w < START_W) {
-      const g = Math.min(START_W - w, GROW);
-      w += g; x = Math.max(0, Math.min(WORLD_W - w, x - g / 2)); grew = true;
-    }
-    run.stack.push({ x, w });
+    run.stack.push({ x: top.x, w: top.w });
     spawn(run);
-    return { kind: 'perfect', cut: null, grew };
+    return { kind: 'perfect', cut: null, grew: false };
   }
   run.streak = 0;
   const left = Math.max(m.x, top.x), right = Math.min(m.x + m.w, top.x + top.w);
@@ -101,4 +94,4 @@ export function drop(run) {
   return { kind: 'cut', cut, grew: false };
 }
 
-export default { DIFFS, WORLD_W, START_W, BLOCK_H, GROW_EVERY, GROW, TUNE, createRun, score, spawn, stepMover, drop, speedFor, normDiff };
+export default { DIFFS, WORLD_W, START_W, BLOCK_H, TUNE, createRun, score, spawn, stepMover, drop, speedFor, normDiff };
