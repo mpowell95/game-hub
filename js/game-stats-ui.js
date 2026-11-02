@@ -53,7 +53,7 @@ const TABS = [
   { id: 'gridlock', labelKey: 'game_title_gridlock' },
   // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
   // sub-counter has its own screen (wordWeaverScreen).
-  { id: 'wordweaver', labelKey: 'game_title_wordweaver', devOnly: true },
+  { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   // Tower (2026-11-01, tower/): admin only, so devOnly as in js/hub.js. Its `tw` sub-counter: towerScreen.
   { id: 'tower', labelKey: 'game_title_tower', devOnly: true },
   { id: 'escoba', labelKey: 'game_title_escoba' },

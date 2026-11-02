@@ -358,12 +358,17 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('ui: no free-hint writer is called any more', !/recordWordWeaverFree(Hint|Lost)\(/.test(ui));
 }
 
-// --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
+// --- released (2026-11-02) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');
   const at = hub.indexOf("id: 'word-weaver'");
   if (at < 0) console.log('NOTE  js/hub.js has no word-weaver entry yet (the screens half adds it)');
-  else ok('hub: Word Weaver is admin only (devOnly: true)', /\bdevOnly:\s*true\b/.test(hub.slice(at, hub.indexOf('\n  },', at))));
+  else {
+    // Released 2026-11-02 (Matt: "release").
+    const entry = hub.slice(at, hub.indexOf('\n  },', at));
+    ok('hub: Word Weaver is released (no devOnly)', !/\bdevOnly:\s*true\b/.test(entry));
+    ok('hub: Word Weaver has its released date (the New pill)', /\breleased:\s*'2026-11-02'/.test(entry));
+  }
 }
 
 console.log(`${pass} passed, ${fail} failed`);

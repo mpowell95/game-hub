@@ -779,9 +779,7 @@ export const GAMES = [
     immersive: true,
     accent: '#c9795c',
     art: GAME_ART['word-weaver'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-11-02',         // Matt: "release"; the New pill counts from here
   },
   {
     // Tower (2026-11-01): stack sliding blocks as high as you can; the overhang is cut off, so the

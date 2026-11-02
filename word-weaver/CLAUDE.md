@@ -14,7 +14,7 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 |---|---|
 | Folder / hub id / stats id | `word-weaver/` / `word-weaver` / `wordweaver` |
 | Entry | module `../word-weaver/js/ui.js`, **immersive**, prefix `.ww-root` / `.ww-` |
-| Admin only | `devOnly: true`, `added: '2026-10-28'`, no `released` (the New pill's only input; Matt releases it from the admin page) |
+| Released | 2026-11-02 (Matt: "release"): `released: '2026-11-02'` in `js/hub.js` (the New pill), out of `ADMIN_ONLY` and the TABS `devOnly`; every file in `sw.js` ASSETS, `data/**` LAZY (downloaded on first play). Admin-only test plays did not carry over: it starts at 0 for everyone |
 | Recorder | `recordWordWeaver(level, { hints, extra, sym, lang })` in `js/game-stats.js` (`lang: 'es'` = the Spanish ladder, `ww.es`); points in `js/word-weaver-points.js` (the stats side, not this folder) |
 | Settings key | `gamehub.wordweaver.v1` `{ band }` (shared by both languages); save `gamehub.wordweaver.save.v2` (`.save.v1` read once, `.best.v1` no longer read); Spanish save `gamehub.wordweaver.es.save.v1`; puzzle language `gamehub.wordweaver.lang.v1` |
 | `isInProgress()` | always `false`: every accepted word and hint is saved, leaving is lossless |
