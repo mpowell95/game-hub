@@ -170,6 +170,78 @@ await stepAll('lb2 back button', lb2Levels, '.lb2', async () => {
   else await page.keyboard.press('Escape');
   await settle();
 });
+// Matt's 12, item 9 (2026-11-02): a person's GAME page opened FROM their player page: back = their player page.
+// (a) Medal Count -> person -> a game: swipe back twice.
+async function lb2PersonGameDown(tag) {
+  await page.evaluate(async () => { (await import('/js/leaderboard-ui.js')).openLeaderboard(); });
+  await page.waitForSelector('.lb2 [data-act="tab"][data-v="hof"]', { timeout: 10000 });
+  await page.locator('.lb2 [data-act="tab"][data-v="hof"]').first().click();
+  await page.waitForSelector('.lb2 [data-act="person"]', { timeout: 5000 });
+  await settle();
+  // Someone else's row (the viewer's own opens the Me tab).
+  await page.locator('.lb2 .lb2-lr:not(.me)[data-act="person"]').first().click();
+  await page.waitForSelector('.lb2 [data-act="pgame"]', { timeout: 5000 });
+  await settle();
+  ok(`${tag}: player page = 2 entries`, (await depth()) === 2, await depth());
+  await page.locator('.lb2 [data-act="pgame"]').first().click();
+  await page.waitForSelector('.lb2 [data-act="pall"]', { timeout: 5000 });
+  await settle();
+  ok(`${tag}: their game = 3 entries`, (await depth()) === 3, await depth());
+}
+const pgLevels = [
+  ['their game', null],
+  ['player page', () => page.evaluate(() => !!document.querySelector('.lb2 [data-act="pgame"]') && !document.querySelector('.lb2 [data-act="pall"]'))],
+  ['Medal Count', () => present('.lb2 [data-act="hofview"]')],
+];
+await lb2PersonGameDown('lb2 player->game swipe');
+await stepAll('lb2 player->game swipe', pgLevels, '.lb2', swipe);
+await lb2PersonGameDown('lb2 player->game back button');
+await stepAll('lb2 player->game back button', pgLevels, '.lb2', async () => {
+  if (await present('.lb2 [data-act="back"]')) await page.locator('.lb2 [data-act="back"]').first().click();
+  else await page.keyboard.press('Escape');
+  await settle();
+});
+// (b) board -> person's game -> "Back to <name>" (their page) -> another game -> back, back, back.
+await lb2Down();
+await page.locator('.lb2 [data-act="pgame"]').last().click();
+await page.waitForSelector('.lb2 [data-act="pall"]', { timeout: 5000 });
+await settle();
+ok('lb2 board->pgame->player->pgame: 5 entries', (await depth()) === 5, await depth());
+await stepAll('lb2 board->pgame->player->pgame', [
+  ['their game', null],
+  ['player page', () => page.evaluate(() => !!document.querySelector('.lb2 [data-act="pgame"]') && !document.querySelector('.lb2 [data-act="pall"]'))],
+  ['person\'s game', () => present('.lb2 [data-act="pall"]')],
+  ['board', () => present('.lb2 [data-act="person"]')],
+  ['Games', () => present('.lb2 [data-act="game"]')],
+], '.lb2', swipe);
+// (c) the "Back to <name>" row on a game page opened from the player page goes back (one entry fewer, not one more).
+await lb2PersonGameDown('lb2 back-to row');
+await page.locator('.lb2 [data-act="pall"]').first().click();
+await settle();
+ok('lb2 back-to row: lands on the player page', await page.evaluate(() => !!document.querySelector('.lb2 [data-act="pgame"]') && !document.querySelector('.lb2 [data-act="pall"]')));
+ok('lb2 back-to row: 2 entries', (await depth()) === 2, await depth());
+await page.evaluate(async () => { (await import('/js/leaderboard2-ui.js')).closeLeaderboard2(); });
+await settle(400);
+ok('lb2 back-to row: closed, nothing left', (await depth()) === 0 && (await onSentinel()));
+// Matt's 12: a game's (i) sheet is a level; back closes it and leaves the board. The Games list's scroll comes back.
+await page.evaluate(async () => { (await import('/js/leaderboard-ui.js')).openLeaderboard(); });
+await page.waitForSelector('.lb2 [data-act="game"]', { timeout: 10000 });
+await settle();
+const gl = () => page.evaluate(() => { const s = document.querySelector('.lb2 [data-role="scroll"]'); return s ? Math.round(s.scrollTop) : -1; });
+await page.evaluate(() => { document.querySelector('.lb2 [data-role="scroll"]').scrollTop = 300; });
+const before = await gl();
+await page.locator('.lb2 [data-act="game"][data-game="connect4"]').first().click();
+await page.waitForSelector('.lb2 [data-act="info"]', { timeout: 5000 });
+await page.locator('.lb2 [data-act="info"]').first().click();
+await settle();
+ok('lb2 info: sheet open = 3 entries', (await present('.lb2 .lb2-sheet')) && (await depth()) === 3, await depth());
+await swipe();
+ok('lb2 info: back closes the sheet, board stays', !(await present('.lb2 .lb2-sheet')) && (await present('.lb2 [data-act="info"]')) && (await depth()) === 2, await depth());
+await swipe();
+ok('lb2 scroll: back to Games restores its scroll', before > 0 && Math.abs((await gl()) - before) <= 1, [before, await gl()]);
+await page.evaluate(async () => { (await import('/js/leaderboard2-ui.js')).closeLeaderboard2(); });
+await settle(400);
+ok('lb2 info: closed, nothing left', (await depth()) === 0 && (await onSentinel()));
 // The help sheet is a level of its own.
 await page.evaluate(async () => { (await import('/js/leaderboard-ui.js')).openLeaderboard(); });
 await page.waitForSelector('.lb2 [data-act="help"]', { timeout: 10000 });
