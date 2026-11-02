@@ -155,6 +155,8 @@ const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const STAR_D = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${STAR_D}"/></svg>`;
+// A star square (2026-11-02): a tile with a star on it, for the done screen's "squares collected".
+const ICON_SQUARE = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#fff"/><path d="${STAR_D}" fill="currentColor" transform="translate(4.2 4.2) scale(.65)"/></svg>`;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -389,6 +391,8 @@ class WordWeaver {
     const v = this.view, played = v === 'play' || v === 'done';
     const modal = '<div class="gh-overlay ww-modal" hidden></div>';
     this.root.classList.toggle('is-setup', v === 'setup');
+    // A sky per difficulty (Matt, 2026-11-02): dawn, sunset, dusk, night; the setup screen shows the one picked.
+    this.root.dataset.sky = this.band;
     if (v === 'setup') {
       this.root.innerHTML = this._setupHTML() + modal;
       this._positionRoot();
@@ -491,7 +495,10 @@ class WordWeaver {
       <div class="ww-done">
         <h2>${t('level_n', { n: this.n })}</h2>
         <div class="ww-stars" role="img" aria-label="${t('stars_aria', { n: stars })}">${row}</div>
-        <button type="button" class="ww-bonus" data-act="extras" aria-label="${t('extra_aria', { n: this.st.extra.length })}">${ICON_STAR}<b>${this.st.extra.length}</b></button>
+        <div class="ww-donechips">
+          <button type="button" class="ww-bonus" data-act="extras" aria-label="${t('extra_aria', { n: this.st.extra.length })}">${ICON_STAR}<b>${this.st.extra.length}</b></button>
+          <span class="ww-bonus ww-sqchip" role="img" aria-label="${t('squares_aria', { n: this.st.sym.length, of: bonusCells(this.level).length })}">${ICON_SQUARE}<b>${this.st.sym.length}/${bonusCells(this.level).length}</b></span>
+        </div>
         <button type="button" class="ww-next" data-act="next">${t('next')}</button>
       </div>`;
   }
