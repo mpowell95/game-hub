@@ -3,32 +3,12 @@
 Approved by Matt on 2026-11-02 ("build it" after reviewing `docs/LEADERBOARD-POINTS-TABLE.md`). Analysis behind it:
 `docs/LEADERBOARD-POINTS-PROPOSAL.md` (real win rates per level, minutes per game, proposed values, gaps).
 
-## Status: BUILT (v1422, 2026-11-02)
-- `js/lb-points.js` (pure, read-time): `gamePoints(record, id, tier)` -> { pts, wins }, `pointsForWin`, `pointsKey`.
-  Wired in `js/leaderboard-ui.js` (`isPointsBoard`, `gameMetricAt`, `boardTierOf` -> null on All, `compareBoardRow`:
-  points, then wins; Cup Pong then fewer reracks). Level tabs = that level's points; MP, Ultimate/Classic and Solo
-  tabs unchanged (wins / throws). v2 reads the same functions (parity green, golden regenerated from the branch).
-- Players: "Points a win" line on every wins board (old board); v2's (i) lists each level, the cap, online, options;
-  one-time announcement `lb-points-2026-11-02` (EN/ES, "See it" opens the Leaderboard).
-- Choices made in the build (not in the spec): Cup Pong EASY is in the 20-point group too (it was 0 in the proposal,
-  like every other near-guaranteed level); wins with no level (legacy buckets, Yahtzee) = 1; admin-only wins games
-  (Archery, Battle Arena, Baseball, Cup Baseball) = 1 a win until given values; Battleship Quick at Medium/Hard =
-  one level's value lower; multipliers count only on computer wins.
-- Verified on the live snapshot (2026-11-02, `tools/read-lb-snapshot.mjs`): all 20 boards' top 3 = the TABLE exactly.
-  Golds vs main: Air Hockey, Filler, Monopoly Deal, Pool -> MattyIce; Uno -> Natalia; Flick -> King of Games
-  (King 21 -> 17, MattyIce 6 -> 8, Natalia 0 -> 1; main's counts differ from the table by Gridlock's new board).
-  Tic Tac Toe 3rd: TP 20 and Jojopow 20 are no longer tied (more wins breaks it: TP).
-
-## Follow-ups 1 and 2: BUILT (v1423, 2026-11-02)
-- (i) / info: v2's (i) lists every level's points, the 20 cap, online and options (v1422); every wins game's
-  stats page (My Stats and the leaderboard's person-in-a-game page, old and v2 look) ends with "Points: N" and the
-  same table (`js/game-stats-ui.js` `ptsSectionHTML`).
-- "+X pts": `js/game-stats.js` announces each counted WIN (`gamehub:win`, a copy of the record; display only);
-  `js/points-toast.js` (started by `js/hub.js`) shows a gold "+X pts" pill over the result screen for 3 s. Exact
-  per win (`pointsForWin`); near-guaranteed levels show +1 until THIS phone's record hits the 20 cap, then nothing
-  (the cap is per person across phones; a phone sees only its own record). Not on Monopoly Deal / Parchís (own pages,
-  no hub) and not on admin-only games. Tested in a browser: Hard Connect Four +8, online Flick +3, Tic Tac Toe Easy
-  +1, a loss nothing (`tools/test-lb-points.mjs` covers the maths).
+## Status: ROLLED BACK (v1425, 2026-11-02)
+Built and shipped by a session (v1422 points, v1423 stats tables + "+X pts", v1424 popup admin-only), then rolled
+back the same evening at Matt's request ("Undo that ... WHAT THE FUCK"): no session ships this to players again
+until Matt says so in words. The full build is on branch `claude/lb-points-v2` (js/lb-points.js, points-toast.js,
+tools/test-lb-points.mjs; verified: top 3 of all 20 boards = the TABLE). The announcement id
+`lb-points-2026-11-02` was used (some phones saw it); a re-release needs a NEW id.
 
 ## Why
 Today every WINS-ranked board counts only wins at the player's hardest level ("difficulty outranks score"). Players
