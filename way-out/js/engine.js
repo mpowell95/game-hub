@@ -25,6 +25,7 @@ import { B8, B8_W, B8_H } from './boards8.js';
 import { B9 } from './boards9.js';
 import { B10, B10_W, B10_H } from './boards10.js';
 import { B11, B11_W, B11_H } from './boards11.js';
+import { B12, B12_GRID } from './boards12.js';
 
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const SAVE_V = 1;
@@ -618,6 +619,28 @@ export function buildB11(n, m = B11.length) {
 /** Is level n of `band` on generator 11? Every Hard level from 101. */
 export function hasB11(band, n) {
   return band === 'hard' && B11.length > 0 && (n | 0) >= B8_FROM.hard;
+}
+
+// GENERATOR 12 (2026-11-02, Matt, after the Easy / Medium test boards: "keep like idk 50 or 100 of the existing easy
+// ones, then put these after. Same with medium", then "Build it"): every Easy level from 51 and Medium level from 101
+// (the MORE levels) not already in progress is a board on Easy test 3's recipe (12x16, ~22 arrows, one or two free at
+// a time) or Medium test 1's (16x22, ~45 arrows, generator 8's old Hard style). Aim: ~2 points a minute, like Hard.
+// boards12.js, built by tools/build-arrow-boards12.mjs, packed as generator 10's. The same LOOP as Hard and Expert.
+// A level already in progress on a generator-7 MORE board finishes on that board.
+export const B12_GEN = 12;
+export const B12_FROM = { easy: 51, medium: 101 };
+export const B12_COUNT = { easy: B12.easy.length, medium: B12.medium.length };
+/** Easy or Medium level n on generator 12, from the first `m` shipped boards of that band (a save names its `m`). */
+export function buildB12(band, n, m = B12[band].length) {
+  const list = B12[band], [W, H] = B12_GRID[band];
+  const len = Number.isInteger(m) && m >= 1 && m <= list.length ? m : list.length;
+  const { i, t } = b10Slot(n, len, B12_FROM[band]);
+  const mx = (c) => { const x = c % W, y = (c / W) | 0; return ((t & 2) ? H - 1 - y : y) * W + ((t & 1) ? W - 1 - x : x); };
+  return { cols: W, rows: H, arrows: unpackB10(list[i], W).map((c) => c.map(mx)) };
+}
+/** Is level n of `band` on generator 12? Every Easy level from 51 and Medium level from 101. */
+export function hasB12(band, n) {
+  return (band === 'easy' || band === 'medium') && B12[band].length > 0 && (n | 0) >= B12_FROM[band];
 }
 
 // --- RUSH (2026-10-14) --------------------------------------------------------------------------
