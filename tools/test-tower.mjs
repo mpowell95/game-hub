@@ -55,7 +55,7 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
 }
 // Speed rises per block and caps; harder is faster.
 ok('speed rises with height', E.speedFor('medium', 10) > E.speedFor('medium', 1));
-ok('speed caps at vmax', E.speedFor('medium', 10000) === E.TUNE.medium.vmax);
+ok('no top speed: it keeps rising', E.speedFor('medium', 200) > E.speedFor('medium', 100) && E.speedFor('medium', 100) > 1000);
 ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0 || (E.TUNE[d].v0 > E.TUNE[E.DIFFS[i - 1]].v0 && E.TUNE[d].perfect < E.TUNE[E.DIFFS[i - 1]].perfect)));
 // The mover stays in range on a long frame.
 {
