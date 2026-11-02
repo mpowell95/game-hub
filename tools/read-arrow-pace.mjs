@@ -18,7 +18,8 @@ const args = process.argv.slice(2);
 const ALL = args.includes('--all');
 const si = args.indexOf('--since');
 const SINCE = si >= 0 ? Date.parse(`${args[si + 1]}T00:00:00-05:00`) : 0;
-const TODAY = { easy: () => true, medium: () => true, hard: (f) => f.g === 11, expert: (f) => f.g === 10 };
+// Today's boards: Easy from 51 / Medium from 101 on generator 12 (2026-11-02), Hard 11, Expert 10. --all shows the rest.
+const TODAY = { easy: (f) => f.g === 12, medium: (f) => f.g === 12, hard: (f) => f.g === 11, expert: (f) => f.g === 10 };
 
 const { idToken } = await signInForReading();
 const players = await readPath(firebaseConfig.databaseURL, 'players', idToken);
@@ -52,7 +53,7 @@ function line(label, L) {
   return `  ${label.padEnd(14)} ${String(L.length).padStart(4)} levels  avg ${clock(sec / L.length)}  clean ${C.length ? clock(cs / C.length) : '-'} (${C.length})`
     + `  pts/min ${(pts / (sec / 60)).toFixed(1)}  clean ${C.length ? (cp / (cs / 60)).toFixed(1) : '-'}`;
 }
-console.log(`Arrow Maze pace${ALL ? ' (every board)' : " (today's boards: Hard generator 11, Expert generator 10)"}${SINCE ? `, since ${args[si + 1]}` : ''}`);
+console.log(`Arrow Maze pace${ALL ? ' (every board)' : " (today's boards: Easy and Medium generator 12, Hard 11, Expert 10)"}${SINCE ? `, since ${args[si + 1]}` : ''}`);
 const pooled = {};
 for (const P of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
   const keys = Object.keys(P.rows).sort();

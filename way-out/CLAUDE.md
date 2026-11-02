@@ -338,8 +338,19 @@ server board: 0 point changes. The only difference: generator-10 levels cleared 
 appear in Replay and can win up to 8; an old board's level never can (it replays at its old points).
 **Revisit with `node tools/read-arrow-pace.mjs`** (READ ONLY, every timed finish in `wo.log`, per person and
 difficulty: average, clean average, points per minute; `--all` per board generator, `--since`). Nothing new is
-stored: `wo.log` already keeps every timed finish (t, m, h, l, g, d). Easy and Medium: Matt liked Easy test 3 /
-Medium test 1's recipes (his times 0:23 / 0:46, ~2.6 a minute) for the levels past Easy 50 / Medium 100; not built.
+stored: `wo.log` already keeps every timed finish (t, m, h, l, g, d). Easy and Medium: see generator 12 below.
+
+## Easy from 51 and Medium from 101 = generator 12, for everyone (2026-11-02)
+
+Matt, after the Easy / Medium test boards (his times 0:15-0:23 and 0:29-0:46): *"I like these better. We can keep like
+idk 50 or 100 of the existing easy ones, then put these after. Same with medium"*, then *"Build it"* (Easy test 3 and
+Medium test 1's recipes, ~2.6 points a minute for him, closest to Hard's ~2). `js/boards12.js` (GENERATED,
+`tools/build-arrow-boards12.mjs`, 100 boards a band, APPEND-ONLY, pinned in test.js): Easy 12x16 ~22 arrows (one or two
+free at a time), Medium 16x22 ~45 (generator 8's old Hard style). `src {k:'N', band, n, g:12, m}`, clock key
+`N12:<band>:<n>`, log `g` 12, `buildB12(band, n, m)`, the LOOP (`b10Slot` from 51 / 101). Easy 1-50 and Medium 51-100
+unchanged. A level in progress on a generator-7 MORE board finishes on that board (browser-checked: Easy 55 on g 7,
+then 56 on g 12). Points unchanged (Easy 1, Medium 2). The 🧪 test boards stay. Revisit pace with
+`tools/read-arrow-pace.mjs` (its default now reads generator 12 for Easy and Medium).
 
 ## Hard = generator 11, for everyone (2026-10-28)
 
