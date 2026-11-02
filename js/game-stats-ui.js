@@ -25,7 +25,7 @@ import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
-import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 
 const t = makeT(STRINGS);
@@ -483,13 +483,14 @@ function wayoutScreen(rec) {
 function wordWeaverScreen(rec) {
   const ww = (rec && rec.ww) || {};
   const done = ((rec && rec.total) || {}).won | 0;
-  if (!done && !Object.keys(ww.lv || {}).length && !Object.keys(ww.es || {}).length && !wwExtra(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
+  if (!done && !Object.keys(ww.lv || {}).length && !Object.keys(ww.es || {}).length && !wwExtra(rec) && !wwDailyCount(rec)) return emptyState(tf('game_title_wordweaver', 'Word Weaver'));
   const rows = SD_DIFFS.filter(([k]) => WW_TIERS.includes(k)).map(([k, labelKey]) =>
     `<tr><th scope="row">${t(labelKey)}</th><td>${wwCleared(rec, k)}</td><td>${wwStars(rec, k)}</td><td>${wwPoints(rec, k)}</td><td>${wwThreeStars(rec, k)}</td></tr>`).join('');
   return `
     <div class="gs-tallies">
       <div class="gs-tally"><b>${wwPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
       <div class="gs-tally"><b>${wwCleared(rec)}</b><span>${tf('lb_tex_ww_cleared', 'Levels completed')}</span></div>
+      <div class="gs-tally"><b>${wwDailyCount(rec)}</b><span>${tf('gs_ww_daily', 'Daily puzzles')}</span></div>
     </div>
     <div class="gs-tallies">
       <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>

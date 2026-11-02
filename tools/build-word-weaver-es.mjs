@@ -27,12 +27,14 @@
 // WHAT IS WRITTEN: word-weaver/data/es/index.json and levels-<k>.json, English's format exactly (letters may
 //   include Ñ), and tools/word-weaver-ranks-es.txt (the data test's offline ranks). APPEND-ONLY ONCE SHIPPED,
 //   as English: a re-run keeps every level in the files (`--fresh`: used once, 2026-11-01, before release).
+// `--daily` (2026-11-02): word-weaver/data/es/daily.json, the Spanish daily puzzles, English's rules exactly
+//   (makeDaily: 730, 6-7 letters, 8-11 grid words, no multiset of a Spanish ladder level or another daily).
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { makeLadder, writeLevels, writeRanks, report, COMMON, CHUNK } from './build-word-weaver-data.mjs';
+import { makeLadder, writeLevels, writeRanks, report, COMMON, CHUNK, makeDaily, readLadder } from './build-word-weaver-data.mjs';
 import { FREQ_URL, LEM_URL, NAME_URLS, BAD_URL, BLOCK, ALLOW, NOT_ANSWERS, NAME_WORDS, SPANISH_TOO, SKIP, BLOCK_RE,
   SLURS, ADULT_SKIP, fold, flat } from './build-spelling-bee-es.mjs';
 
@@ -42,6 +44,7 @@ const arg = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args
 const CACHE = arg('--cache', path.join(os.tmpdir(), 'word-weaver-es-cache'));
 const COUNT = Number(arg('--levels', 2000));
 const FRESH = args.includes('--fresh');
+const DAILY = args.includes('--daily');   // data/es/daily.json, English's daily rules (tools/build-word-weaver-data.mjs header)
 const OUT = path.join(ROOT, 'word-weaver/data/es');
 const SEED = 20261029;
 const GRID_RANK = 12000;   // a short (3-4 letter) Hard/Expert grid word is among these
@@ -129,6 +132,14 @@ async function main() {
   }
   console.log(`grid ${vocab.filter((v) => v.lists & 1).length}, hard ${vocab.filter((v) => v.lists & 2).length}, expert ${vocab.filter((v) => v.lists & 4).length}, extra ${extra.length}, common extras never in a grid ${vocab.filter((v) => !v.lists).length}`);
 
+  const rk0 = (w) => rank.get(w.toLowerCase()) ?? Infinity;
+  if (DAILY) {
+    const ladder = readLadder(OUT);
+    const daily = makeDaily({ out: OUT, seed: SEED, vocab, extra, ladder, A: { counts, maskOf, fitsIn, sortKey }, log: console.log });
+    writeRanks(path.join(ROOT, 'tools/word-weaver-ranks-es.txt'), [...ladder, ...daily], rk0, 'FrequencyWords es 2018 (es_50k.txt line number, accents off, Ñ kept)');
+    report(daily, rk0, console.log, [['Daily', 1, daily.length]]);
+    return;
+  }
   // --- the levels (English's ladder) ---
   const kept = [];
   if (!FRESH && fs.existsSync(path.join(OUT, 'index.json'))) {

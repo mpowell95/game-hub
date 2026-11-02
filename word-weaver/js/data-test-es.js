@@ -91,16 +91,16 @@ function gridProblems(lv) {
 
 const vocab = new Set();
 const keys = [];
-for (let i = 0; i < LEVELS.length; i++) {
-  const n = i + 1, lv = LEVELS[i], at = `level ${n}`;
-  if (!lv || typeof lv !== 'object' || Object.keys(lv).join() !== 'l,g,w,x') { ok(`${at}: keys l, g, w, x`, false); continue; }
+/** Every rule a level must keep (the ladder's and the daily puzzles'); its words go into `vocab`, its wheel into `keyList`. */
+function checkLevel(lv, at, keyList) {
+  if (!lv || typeof lv !== 'object' || Object.keys(lv).join() !== 'l,g,w,x') { ok(`${at}: keys l, g, w, x`, false); return; }
   const L = lv.l;
   ok(`${at}: wheel is 3-7 uppercase letters, sorted`, typeof L === 'string' && /^[A-ZÑ]{3,7}$/.test(L) && [...L].sort().join('') === L);
   ok(`${at}: g is [rows, cols], 1-9 each`, Array.isArray(lv.g) && lv.g.length === 2 && lv.g.every((x) => Number.isInteger(x) && x >= 1 && x <= 9));
   ok(`${at}: w is a list of [WORD, r, c, a|d]`, Array.isArray(lv.w) && lv.w.length >= 3 && lv.w.every((e) => Array.isArray(e) && e.length === 4
     && /^[A-ZÑ]{3,7}$/.test(e[0]) && Number.isInteger(e[1]) && Number.isInteger(e[2]) && (e[3] === 'a' || e[3] === 'd')));
   ok(`${at}: x is a sorted list of uppercase words`, Array.isArray(lv.x) && lv.x.every((w) => /^[A-ZÑ]{3,7}$/.test(w)) && sorted(lv.x));
-  if (!Array.isArray(lv.w) || !Array.isArray(lv.x) || typeof L !== 'string') continue;
+  if (!Array.isArray(lv.w) || !Array.isArray(lv.x) || typeof L !== 'string') return;
   const lc = counts(L);
   const words = lv.w.map((e) => e[0]);
   ok(`${at}: no grid word twice`, new Set(words).size === words.length);
@@ -113,8 +113,9 @@ for (let i = 0; i < LEVELS.length; i++) {
   ok(`${at}: crossword: ${problems.join('; ')}`, problems.length === 0);
   for (const w of words) vocab.add(w);
   for (const w of lv.x) vocab.add(w);
-  keys.push(L);
+  keyList.push(L);
 }
+for (let i = 0; i < LEVELS.length; i++) checkLevel(LEVELS[i], `level ${i + 1}`, keys);
 
 // Extras are complete: a word accepted anywhere is accepted wherever the wheel can make it.
 {
@@ -184,6 +185,50 @@ ok('levels 1-10: 3-4 wheel letters, 3-4 grid words', LEVELS.slice(0, 10).every((
   const avgLen = (a, z) => avg(LEVELS.slice(a - 1, z).flatMap((lv) => lv.w.map((e) => e[0].length)));
   ok('grid words are longer in Hard and Expert than in Medium', avgLen(1001, 1500) > avgLen(501, 1000) && avgLen(1501, 2000) > avgLen(501, 1000));
 }
+// --- the DAILY puzzles (2026-11-02, Matt: "Do 1"; the generator's --daily) ---------------------------
+// data/es/daily.json = { v: 1, epoch, count, levels }: day d (0 = the epoch, each phone's own local date) plays
+// levels[d]. Every ladder rule above, plus their one shape (6-7 letters, 7-12 grid words, the Hard list within the
+// 20,000 most said, common words first), and no letter multiset of another daily or of ANY ladder level.
+// APPEND-ONLY once shipped, like the ladder (the board and the stats are keyed by the day), pinned below.
+const DAILY = JSON.parse(readFileSync(new URL('daily.json', DATA), 'utf8'));
+ok('daily: { v: 1, epoch, count, levels }', DAILY.v === 1 && Array.isArray(DAILY.levels) && DAILY.count === DAILY.levels.length
+  && Object.keys(DAILY).sort().join() === 'count,epoch,levels,v');
+ok('daily: the epoch is 2026-11-02 (the day it first ships; it never moves)', DAILY.epoch === '2026-11-02');
+ok(`daily: at least 730 puzzles, two years (${DAILY.count})`, DAILY.count >= 730);
+const dkeys = [];
+DAILY.levels.forEach((lv, d) => checkLevel(lv, `daily ${d}`, dkeys));
+{
+  const part = DAILY.levels;
+  const bad = (f) => part.map((lv, i) => (f(lv) ? -1 : i)).filter((i) => i >= 0).slice(0, 5).join(', ');
+  let b;
+  ok(`daily: 6-7 wheel letters (${b = bad((lv) => lv.l.length >= 6 && lv.l.length <= 7)})`, !b);
+  ok(`daily: 7-12 grid words (${b = bad((lv) => lv.w.length >= 7 && lv.w.length <= 12)})`, !b);
+  const aw = avg(part.map((lv) => lv.w.length));
+  ok(`daily: about 8-11 grid words on average (${aw.toFixed(2)})`, aw >= 8 && aw <= 11);
+  ok(`daily: at most 5 common bonus words a puzzle (${b = bad((lv) => commonBonus(lv) <= 5)})`, !b);
+  const cb = avg(part.map(commonBonus));
+  ok(`daily: at most 3 common bonus words a puzzle on average (${cb.toFixed(2)})`, cb <= 3);
+  ok(`daily: every grid word within the 20000 most said (${b = bad((lv) => rarest(lv) <= 20000)})`, !b);
+  const rm = median(part.map(rarest));
+  ok(`daily: the median puzzle's rarest grid word within 20000 (${rm})`, rm <= 20000);
+  ok('daily: no letter multiset twice', new Set(dkeys).size === dkeys.length);
+  const ladder = new Set(keys);
+  ok(`daily: no letter multiset of a ladder level (${dkeys.filter((k) => ladder.has(k)).slice(0, 5).join(', ')})`, dkeys.every((k) => !ladder.has(k)));
+  // Extras are complete on the daily puzzles too (every word of the ladder and the dailies).
+  const V = [...vocab].map((w) => [w, counts(w)]);
+  let missing = 0, example = '';
+  part.forEach((lv, i) => {
+    const lc = counts(lv.l), have = new Set([...lv.w.map((e) => e[0]), ...lv.x]);
+    for (const [w, wc] of V) if (w.length <= lv.l.length && !have.has(w) && fits(wc, lc)) { missing++; if (!example) example = `daily ${i} misses ${w}`; }
+  });
+  ok(`daily: extras are complete (${missing} missing; ${example})`, missing === 0);
+  // The pin (append-only): the first DAILY_PINNED puzzles never change.
+  const DAILY_PINNED = 730;
+  const DAILY_PIN_HASH = 'ded7e8edfbaf7452';
+  const h = createHash('sha256').update(part.slice(0, DAILY_PINNED).map((lv) => JSON.stringify(lv)).join('\n')).digest('hex').slice(0, 16);
+  ok(`daily pin: the first ${DAILY_PINNED} daily puzzles are unchanged since 2026-11-02 (${h})`, part.length >= DAILY_PINNED && h === DAILY_PIN_HASH);
+}
+
 // No vulgar or adult word anywhere, bonus words included (2026-11-01, English's rule). The generator also
 // uses LDNOOBW's downloaded list; this checks the hand lists it imports.
 {

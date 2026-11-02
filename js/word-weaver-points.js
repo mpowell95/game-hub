@@ -220,3 +220,64 @@ export function wwFreeRaw(rec, pendingExtra = 0) {
 export function wwFreeHints(rec, pendingExtra = 0) {
   return Math.max(0, Math.min(WW_FREE_MAX, wwFreeRaw(rec, pendingExtra)));
 }
+
+// --- THE DAILY PUZZLE (2026-11-02, Matt: "Do 1") -----------------------------------------------------------
+// One shared level a day per language (word-weaver/data/daily.json, data/es/daily.json). It adds NO points (the
+// leaderboard number stays the ladder's) but is recorded, apart from the ladder (js/game-stats.js
+// recordWordWeaverDaily, with its mode):
+//   ww.dl['<lang>-<YYYY-MM-DD>'] = { s, h, t, ms }   that day's puzzle: stars, hints, when first completed, solve ms
+//   ww.dh['<lang>-<YYYY-MM-DD>'] = { c, t }          hints at tap time (the hint-gap rule), never mixed with a ladder level
+// Keys are never bare numbers (Firebase arrays). One phone: each field only improves (wwDailyBest). Across a person's
+// records: the MOST hints, stars capped by them, the earliest time, the fastest solve (wwDailyMerge).
+export const WW_DAY_RE = /^(en|es)-\d{4}-\d{2}-\d{2}$/;
+function dayEntry(e) {
+  const x = entry(e);
+  if (!x) return null;
+  const ms = Math.floor(Number(e.ms) || 0);
+  if (ms > 0) x.ms = ms;
+  return x;
+}
+const minPos = (a, b) => { const m = Math.min(a > 0 ? a : Infinity, b > 0 ? b : Infinity); return m === Infinity ? 0 : m; };
+/** One phone's record of a day: the better of two entries, field by field (stars up, hints down, earliest, fastest). */
+export function wwDailyBest(a, b) {
+  const x = dayEntry(a), y = dayEntry(b);
+  if (!x || !y) return x || y;
+  const out = wwBest(x, y);
+  const ms = minPos(x.ms, y.ms);
+  if (ms) out.ms = ms;
+  return out;
+}
+/** A day across a person's records: the most hints any record used, stars capped by them (wwMerge), the fastest solve. */
+export function wwDailyMerge(a, b) {
+  const x = dayEntry(a), y = dayEntry(b);
+  if (!x || !y) return x || y;
+  const out = wwMerge(x, y);
+  const ms = minPos(x.ms, y.ms);
+  if (ms) out.ms = ms;
+  return out;
+}
+/** A record's daily puzzles done, { '<lang>-<day>': { s, h?, t?, ms? } }; stars capped by hints recorded before the completion. */
+export function wwDaily(rec) {
+  const raw = (rec && rec.ww && rec.ww.dl) || {};
+  const hraw = (rec && rec.ww && rec.ww.dh) || {};
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const k of Object.keys(raw)) {
+    if (!WW_DAY_RE.test(k)) continue;
+    const e = dayEntry(raw[k]);
+    if (!e) continue;
+    const h = hraw && typeof hraw === 'object' ? hintEntry(hraw[k]) : null;
+    if (h && (!e.t || !h.t || h.t <= e.t)) e.s = Math.min(e.s, wwStarsFor(h.c));
+    out[k] = e;
+  }
+  return out;
+}
+/** Daily puzzles done, lifetime (both languages): My Stats. */
+export function wwDailyCount(rec) {
+  return Object.keys(wwDaily(rec)).length;
+}
+/** Hints recorded at tap time on one day's puzzle (`ww.dh`), 0 if none. */
+export function wwDailyHints(rec, key) {
+  const h = hintEntry(rec && rec.ww && rec.ww.dh && rec.ww.dh[key]);
+  return h ? h.c : 0;
+}

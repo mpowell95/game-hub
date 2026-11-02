@@ -69,6 +69,9 @@ export const BRANCHES = [
   'beeLog',
   // beeFlags/ (2026-10-28): Spelling Bee days the server flagged as copied, <puzzle>/<CODE>. Server writes only.
   'beeFlags',
+  // wwDaily/ (2026-11-02): Word Weaver's daily puzzle board, <lang>-<YYYY-MM-DD>/<CODE> = stars, hints, time.
+  // Readable by any signed-in session.
+  'wwDaily',
   // beeAlerts/ (2026-10-28): Spelling Bee missing-log alerts. Admin-read only, so an anonymous backup is denied.
   'beeAlerts',
   // integrityFlags/ + integrityAlerts/ (2026-10-28): every game's integrity checks (functions/integrity.js),

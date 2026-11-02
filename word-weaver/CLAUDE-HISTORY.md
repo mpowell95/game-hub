@@ -45,3 +45,26 @@ as the leaderboard number; the done screen keeps stars).
   its words, hints and cells; `save.v1` is never written or deleted; `best.v1` is left as stored and no longer read.
   Tested with a hand-built v1 save in the shape the live `ui.js` wrote (level 7, a found word, an extra, 2 hints, 2
   revealed cells): it resumes in Easy with all of it, `save.v1` byte-identical afterwards.
+
+## 2026-11-02: the daily puzzle (Matt: "Do 1")
+
+Matt picked option 1 of a list of reasons to come back: one shared level a day, the same for everyone (per language),
+with its own small board like Spelling Bee's, so the family compares every day.
+
+- **Data**: `--daily` in both generators (`makeDaily`, `dailyPlan`), reusing the ladder's `makeLadder` with a fixed
+  shape (6-7 letters, 8-11 grid words, the Hard list within the 20,000 most said, common words first) and the ladder's
+  multisets passed as `exclude`. 730 puzzles per language from epoch 2026-11-02 (EN avg 9.7 grid words, common bonus
+  1.06; ES 9.5, 1.61). A re-run keeps the file (checked byte-identical). The ranks files only gained lines.
+- **Day**: Spelling Bee's model (local date of `bestNow()`), keys `<lang>-<YYYY-MM-DD>` rather than day numbers, so a
+  key never depends on the epoch and is never a bare number. Past days are not playable (Bee's past days needed a
+  whole "for fun" store; not worth it here).
+- **Time**: "first open to completion" read literally: time away counts. Measured twice, the larger kept: server wall
+  time from the first open (the board row's `o` when another phone started first), and a running clock (on-screen
+  time + `measureAway` charges) for when the server's clock was never known.
+- **Board**: `wwDaily/<key>/<CODE>`, a start row at first open (gives the server-time `o`), the result final once
+  posted (rules). Ranking stars, hints, time. The own row always comes from the phone's save, so test1 sees itself
+  even though test names are hidden from everyone else.
+- **Modes**: the daily records `withMode({ mode: 'daily', lang }, 'daily')`; the ladder's two record calls were
+  wrapped the same day (`{ mode: 'ladder', lang }`, the band), so Word Weaver is in `tools/game-modes.json`.
+- `recordWordWeaverFreeHint`/`FreeLost` were failing `tools/test-rate-guard.mjs` on main (costs, not plays): exempted
+  with the new `recordWordWeaverDailyHint`.

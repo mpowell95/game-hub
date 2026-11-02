@@ -167,6 +167,24 @@
       ".write": false
     },
 
+    "wwDaily": {
+      "$day": {
+        ".read": "auth != null",
+        "$code": {
+          ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val()",
+          ".validate": "$day.matches(/^(en|es)-20[0-9][0-9]-[01][0-9]-[0-3][0-9]$/) && newData.hasChildren(['name', 'o', 'at']) && ((data.exists() && newData.child('o').val() === data.child('o').val()) || (!data.exists() && newData.child('o').val() === now)) && (!data.child('stars').exists() || (newData.child('stars').val() === data.child('stars').val() && newData.child('hints').val() === data.child('hints').val() && newData.child('sec').val() === data.child('sec').val())) && (!newData.child('stars').exists() || (newData.hasChildren(['hints', 'sec']) && ((newData.child('hints').val() === 0 && newData.child('stars').val() === 3) || (newData.child('hints').val() === 1 && newData.child('stars').val() === 2) || (newData.child('hints').val() >= 2 && newData.child('stars').val() === 1))))",
+          "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
+          "emoji": { ".validate": "newData.isString() && newData.val().length <= 16" },
+          "o": { ".validate": "newData.isNumber()" },
+          "at": { ".validate": "newData.val() === now" },
+          "stars": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3" },
+          "hints": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 500" },
+          "sec": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 8640000" },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+
     "ctHistory": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {

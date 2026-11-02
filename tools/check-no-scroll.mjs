@@ -182,6 +182,43 @@ const EXTRA_SCREENS = {
         await page.waitForTimeout(250);
       },
     },
+    // The DAILY puzzle (2026-11-02): its play screen, its board sheet (a stand-in board of 9 people, so the rows
+    // are real; window.__wwBoardFake is read on a dev server only), and its done screen with the board.
+    {
+      name: 'daily play',
+      async open(page) {
+        await page.evaluate(() => {
+          const p = (n) => String(n).padStart(2, '0'), d = new Date(), day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+          const rows = {};
+          ['Ana', 'Begoña', 'Lili', 'Andrew P', 'Moonis', 'Natalia', 'Rosa María', 'Jo', 'Sam'].forEach((name, i) => {
+            rows['ZZ' + i + 'XY'] = i < 7 ? { name, emoji: '🙂', o: 1, at: 2, stars: 3 - (i % 3), hints: i % 3, sec: 120 + i * 37 } : { name, emoji: '🙂', o: 1, at: 2 };
+          });
+          window.__wwBoardFake = { ['en-' + day]: rows, ['es-' + day]: rows };
+        });
+        await page.click('.ww-back');
+        await page.waitForSelector('.ww-daily', { timeout: 8000 });
+        await page.click('.ww-daily');
+        await page.waitForSelector('.ww-wheel', { timeout: 15000 });
+        await page.waitForTimeout(400);
+      },
+    },
+    {
+      name: 'daily board',
+      async open(page) {
+        await page.click('.ww-trophy');
+        await page.waitForSelector('.ww-board--sheet', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
+    {
+      name: 'daily done',
+      async open(page) {
+        await page.click('.ww-modal .gh-modal__close');
+        await page.evaluate(() => { const w = window.__wwTest; for (const e of w.level.w) w.submit(e[0]); });
+        await page.waitForSelector('.ww-done--daily', { timeout: 8000 });
+        await page.waitForTimeout(250);
+      },
+    },
   ],
   // Chinchón: the Challenge pane (2026-10-18), the fourth choice on the setup switch. With this
   // run's profile (no player code) it is the New challenge button and "No matches"; the lists with

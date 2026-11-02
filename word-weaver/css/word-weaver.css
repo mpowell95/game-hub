@@ -444,6 +444,75 @@
   box-shadow: 0 3px 0 rgba(0, 0, 0, .22);
 }
 
+/* --- the DAILY puzzle (2026-11-02): the setup screen's Daily button, the trophy chip, the board --- */
+.ww-root .ww-daily {
+  position: relative;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--ww-wheel-bg);
+  color: var(--ww-ink);
+  font-size: 19px;
+  font-weight: 900;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
+}
+.ww-root .ww-daily svg { width: 24px; height: 24px; flex: none; }
+/* Done today: an ink disc with a white tick (a shape, never colour alone). */
+.ww-root .ww-dcheck {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ww-ink);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+.ww-root .ww-trophy svg { width: 24px; height: 24px; color: var(--ww-path); }
+.ww-root .ww-board { list-style: none; margin: 0; padding: 0; width: min(360px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 4px; }
+.ww-root .ww-br {
+  display: grid;
+  grid-template-columns: 22px 24px minmax(0, 1fr) auto 56px;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--ww-wheel-bg);
+  color: var(--ww-ink);
+  font-size: 16px;
+  font-weight: 800;
+  text-align: left;
+}
+/* This phone's own row: an outline (a shape) as well as the accent. */
+.ww-root .ww-br.is-me { outline: 3px solid #ffce3a; outline-offset: -2px; font-weight: 900; }
+.ww-root .ww-br.is-open { opacity: .72; }
+.ww-root .ww-bp, .ww-root .ww-bt { font-variant-numeric: tabular-nums; }
+.ww-root .ww-bp { text-align: center; }
+.ww-root .ww-be { text-align: center; font-size: 18px; }
+.ww-root .ww-bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ww-root .ww-bs { display: inline-flex; gap: 1px; }
+.ww-root .ww-bt { text-align: right; }
+.ww-root .ww-sstar { width: 17px; height: 17px; }
+.ww-root .ww-sstar path { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; opacity: .55; }
+.ww-root .ww-sstar.is-on path { fill: var(--ww-path); stroke: #8a6600; stroke-width: 1.2; opacity: 1; }
+/* The sheet's list takes the room the screen has (a long board scrolls inside it, unbounded content). */
+.ww-root .ww-board--sheet { width: 100%; max-height: calc(100vh - 230px); max-height: calc(100dvh - 230px); overflow-y: auto; overscroll-behavior: contain; gap: 3px; }
+.ww-root .ww-board--sheet .ww-br { min-height: 34px; }
+.ww-root .ww-board--sheet .ww-br { background: var(--gh-surface-2, #eef2f8); color: var(--gh-ink, #1d2230); }
+.ww-root .ww-done--daily { gap: 8px; }
+.ww-root .ww-dtop { display: flex; align-items: center; gap: 12px; }
+.ww-root .ww-done--daily h2 { font-size: 28px; }
+.ww-root .ww-done--daily .ww-star { width: 36px; height: 36px; }
+.ww-root .ww-done--daily .ww-next { margin-top: 2px; min-height: 50px; }
+
 /* --- sheets: How to play and the extra words (css/ui.css's .gh-overlay / .gh-modal) -----------
  * In the hub the floating back button stays above the overlay, so the sheet is pushed below it. */
 .ww-root .ww-modal[hidden] { display: none; }

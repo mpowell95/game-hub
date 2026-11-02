@@ -31,5 +31,6 @@
   "spelling-bee/js/ui.js": 2,
   "tic-tac-toe/js/ui.js": 5,
   "tower/js/ui.js": 1,
-  "uno/js/ui.js": 2
+  "uno/js/ui.js": 2,
+  "word-weaver/js/ui.js": 3
 }
