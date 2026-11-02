@@ -117,6 +117,32 @@ body {
 }
 .hub-back:hover { background: var(--hub-surface-2); }
 
+/* The in-game bug button (js/hub.js BUG_BTN_GAMES, 2026-11-02): top-right, level with the floating
+   "‹ Hub" (same 54px / safe-area top, centred on its 36px height), the same spot in every game. */
+.hub-gamebug {
+  position: fixed;
+  z-index: 10;   /* the floating "‹ Hub" layer (.hub-top), so a game's own popups still cover it */
+  top: calc(max(env(safe-area-inset-top, 0px), 54px) - 4px);
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 1px solid var(--hub-surface-2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(1.2) blur(6px);
+  box-shadow: 0 2px 10px rgba(20, 40, 80, 0.18);
+  font-size: 20px; line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.hub-gamebug[hidden] { display: none; }
+/* Room for it in each game's play screen, kept HERE so the button's games need no edits of their own.
+   Tower: the best-score pill (right: 14px) moves left of it. Word Weaver: its top row (?, star chip,
+   level number) ends left of it. */
+html.gh-gamebug .tw-root .tw-best { right: calc(64px + env(safe-area-inset-right, 0px)); }
+html.gh-gamebug .ww-root.is-immersive .ww-top { padding-right: calc(64px + env(safe-area-inset-right, 0px)); }
+
 /* Profile entry in the top bar (profile project). Sits to the right; hidden while
    a game is mounted so the game keeps focus. Long names ellipsize. */
 .hub-profile {
@@ -647,6 +673,7 @@ body {
    is a real button and is meant to read on a dark game. */
 :root.gh-dark .hub-top:not(.hub-top-immersive) { background: rgba(14, 20, 32, 0.92); }
 :root.gh-dark .hub-top.hub-top-immersive .hub-back { background: rgba(27, 35, 51, 0.92); }
+:root.gh-dark .hub-gamebug { background: rgba(27, 35, 51, 0.92); }
 :root.gh-dark .hub-cbtn-ghost { background: var(--hub-surface-2); }
 /* The Leaderboard/My Stats overlays' own injected CSS hardcodes a couple of literal
    colors instead of --hub-* vars (a light-mode-only top-band tint and two segmented/

@@ -3863,3 +3863,15 @@ UTC-midnight number (the Newest sort uses it). Unchanged on purpose: fixed rule-
 forfeit, 24 h reminders, rate gate), and the server's Spelling Bee judging (`functions/bee.js`: UTC
 date windows only pick which puzzles to scan, wide enough for every zone; a word's day is judged by the
 phone's own zone `z` via `bee-fairplay.js dayWindow`, already local).
+
+## The in-game bug button (2026-11-02)
+
+Matt: "We should add a way for users to report bugs in game or on the game setup screen. We should do
+this for all new games probably." A mockup put a 🐞 beside each game's own "?" (Gridlock, Word Weaver,
+Tower); Matt: "No, it should be in the same spot everywhere." So it is HUB chrome, not game UI: one
+fixed round button top-right, centred on the floating "‹ Hub" button's row, shown while a game in
+`BUG_BTN_GAMES` is mounted (setup and play). This reverses the 2026-08-11 "no in-game entry point"
+decision (that worry was space fights in immersive games; the per-game opt-in plus a corner check is the
+answer). Play screens checked at 402x874: Gridlock clear; Tower's best pill and Word Weaver's top row
+(level number) sat under it and are moved by `html.gh-gamebug` rules in `css/hub.css`, kept out of the
+games' own files because other sessions were editing both games that day.
