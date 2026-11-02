@@ -351,6 +351,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's
   sign-in is never admin). The key comes from Admin > gear > Reader key for Claude; `readers/<uid>` may READ playLog,
   beeAlerts, integrityFlags, integrityAlerts and nothing else (`tools/reader-auth.mjs`). Use it before saying "I can't see that".
+- **Arrow Maze points per minute: `node tools/read-arrow-pace.mjs`** (Expert 8 since 2026-11-02; Matt wants it revisited with more data).
 - **Firebase-writing scripts are Matt-only, dry-run by default** (`tools/clear-skeeball-stats.mjs`,
   `tools/delete-test-players.mjs`, `tools/delete-device-record.mjs`, `tools/fix-natalia-record.mjs`). Never `--write`
   on your own judgement.

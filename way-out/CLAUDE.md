@@ -326,6 +326,21 @@ keeps the old generator-8-style wrap.
 - **Points already earned stay** (THE LAW): `wo.pts`, logs and counts are untouched; Expert stays 6 a level.
 - Generators 8 and 9's Expert boards stay in their files (append-only) but are no longer played.
 
+## Expert = 8 points (2026-11-02), and the pace log
+
+Points per minute (clean, real times): Easy ~3.4, Medium ~3.3, Hard ~2.0, Expert ~1.0 at 6 points (Matt's 3 Expert
+levels on generator 10, ~5:50). Matt rejected 18 (*"feels INSANE"*), then: *"Make expert 8 points. Keep track and log
+everyone's games so we can revisit when we have more data."* `js/arrow-maze-time.js`: `WO_BAND_POINTS.expert` 8, slips
+**8, 5, 3, 1** (`WO_SLIP_POINTS`), for clears on generator 10 from `WO_EXPERT8_SINCE` (the deploy). **Nothing already
+earned moved**: legacy counts use `WO_LEGACY_POINTS` (6), an Expert finish on an older board or from before the switch
+is scored with `WO_SLIP_POINTS_OLD` (`woEarnedPoints(band, slips, g, d)`); checked on all 62 real records + the
+server board: 0 point changes. The only difference: generator-10 levels cleared before the switch (Matt's 302-304)
+appear in Replay and can win up to 8; an old board's level never can (it replays at its old points).
+**Revisit with `node tools/read-arrow-pace.mjs`** (READ ONLY, every timed finish in `wo.log`, per person and
+difficulty: average, clean average, points per minute; `--all` per board generator, `--since`). Nothing new is
+stored: `wo.log` already keeps every timed finish (t, m, h, l, g, d). Easy and Medium: Matt liked Easy test 3 /
+Medium test 1's recipes (his times 0:23 / 0:46, ~2.6 a minute) for the levels past Easy 50 / Medium 100; not built.
+
 ## Hard = generator 11, for everyone (2026-10-28)
 
 Matt, after Expert moved: *"Now Hard is too easy ... make Hard a bit more challenging. Not as challenging as expert,
