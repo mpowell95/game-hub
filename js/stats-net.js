@@ -176,6 +176,8 @@ export async function applyDeviceReset() {
 // is only opened, never played, showing as seen at least twice a day. A report, not player data.
 const SYNC_SIG_KEY = 'gamehub.syncSig.v1';
 const SYNC_HEARTBEAT_MS = 12 * 60 * 60 * 1000;
+/** This phone's IANA time zone ('America/New_York'), or '' when the browser will not say. */
+function tzName() { try { return String(Intl.DateTimeFormat().resolvedOptions().timeZone || '').slice(0, 64); } catch { return ''; } }
 export function syncSignature(rec) {
   // Only the two clocks that change on every sync are left out: the record's own updatedAt and the
   // announce report's `at`. Everything else, stats included, counts as a change.
@@ -228,7 +230,9 @@ export async function syncMyStats() {
       // so nobody should be more than one launch behind - but "should" is a guess, and this makes
       // it a fact. It also catches the one case an auto-reload could never fix: a device whose
       // shell install FAILED sits on an old build indefinitely and looks completely normal.
-      device: Object.assign(installState(), { build: await appVersion() }),
+      // + the time zone (2026-11-02): one of the "look-alike phones" signs of the online-pairs alerts
+      // (js/integrity.js pairAlerts). A report, read by no gameplay or stats path.
+      device: Object.assign(installState(), { build: await appVersion(), tz: tzName() }),
       // WHICH LAUNCHER ANNOUNCEMENTS THIS DEVICE HAS DISMISSED (2026-09-09). Matt, releasing golf:
       // *"i want a way to see who has seen the popup too."* The seen-list is a local preference and
       // never left the phone, so "did everyone get told about the new game" had no answer anywhere.
