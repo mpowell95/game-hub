@@ -572,7 +572,7 @@ function ctPersonHTML(g) {
   const mc = (k, n, word) => `<div>${lb2CtImg(k, 34)}<b class="num">${fmt(n)}</b><small>${esc(word)}</small></div>`;
   const medals = `<div class="lb2-card lb2-pmed">${mc('gold', gold, t('lb_ct_key_gold'))}${mc('silver', silver, t('lb_ct_key_silver'))}${mc('bronze', bronze, t('lb_ct_key_bronze'))}${mc('iron', iron, t('lb_ct_key_none'))}</div>`;
   const row = (l, v) => `<div class="lb2-stat"><span>${esc(l)}</span><b class="num">${v}</b></div>`;
-  const rows = `<div class="lb2-card">${row(t('gs_ct_solved'), fmt(solved))}${row(t('gs_ct_avg'), esc(avg))}${row(t('gs_ct_fewest'), (ct.fewest | 0) > 0 ? fmt(ct.fewest | 0) : '–')}</div>`;
+  const rows = `<div class="lb2-card">${row(t('gs_ct_solved'), fmt(solved))}${row(t('gs_ct_avg'), esc(avg))}${row(t('gs_ct_fewest'), (ct.fewestNH | 0) > 0 ? fmt(ct.fewestNH | 0) : '–')}</div>`;
   const bd = rec.byDiff || {};
   const langs = [['en', 'gs_ct_lang_en'], ['es', 'gs_ct_lang_es']].map(([k, w]) => `<tr><th scope="row">${esc(t(w))}</th><td>${fmt((bd[k] || {}).played | 0)}</td><td>${fmt((bd[k] || {}).won | 0)}</td></tr>`).join('');
   const tbl = `<h4 class="gs-tbl-h">${esc(t2('lb2_lang'))}</h4><table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('gs_ms_played'))}</th><th scope="col">${esc(t('gs_ct_solved'))}</th></tr></thead><tbody>${langs}</tbody></table>`;

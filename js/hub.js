@@ -1175,7 +1175,14 @@ class Hub {
       import('./play-log.js').then((m) => m.flushPlayLog()).catch(() => {});
     }
     // Every Contexto puzzle in this phone's save (2026-10-30, js/contexto-history.js): changed ones only.
-    import('./contexto-history.js').then((m) => m.flushContextoHistory()).catch((err) => console.error('[hub] contexto history', err));
+    import('./contexto-history.js').then((m) => {
+      m.flushContextoHistory();
+      // Contexto's "Fewest guesses" counts no-hint solves only (2026-11-02): fill it from this phone's save.
+      try {
+        const n = m.fewestNoHintFromSave(JSON.parse(localStorage.getItem('gamehub.contexto.save.v1') || 'null'));
+        if (n > 0) import('./game-stats.js').then((gs) => gs.noteContextoFewestNoHint(n)).catch((err) => console.error('[hub] contexto fewest', err));
+      } catch (err) { console.error('[hub] contexto fewest', err); }
+    }).catch((err) => console.error('[hub] contexto history', err));
   }
 
   render() {

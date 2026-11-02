@@ -43,6 +43,19 @@ export function historyRows(save) {
   return rows;
 }
 
+/** The fewest typed guesses on any puzzle in the save WON with no hint and counted into stats, or 0. Pure. */
+export function fewestNoHintFromSave(save) {
+  const games = save && save.games && typeof save.games === 'object' ? save.games : {};
+  let best = 0;
+  for (const e of Object.values(games)) {
+    if (!e || e.done !== 'won' || !e.recorded || !Array.isArray(e.guesses)) continue;
+    const gs = e.guesses.filter((x) => x && typeof x.w === 'string');
+    if (!gs.length || gs.some((x) => x.hint)) continue;
+    if (!best || gs.length < best) best = gs.length;
+  }
+  return best;
+}
+
 let sending = false;
 /** Send every puzzle that changed since its last verified send. Safe to call any time. */
 export async function flushContextoHistory() {

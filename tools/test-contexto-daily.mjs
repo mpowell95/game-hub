@@ -18,5 +18,14 @@ const out = agg.aggregatePlayers({ a: rec('a', { played: 1, solved: 1, guesses: 
 const g = (Array.isArray(out) ? out : Object.values(out)).find((x) => x && x.games && x.games.contexto);
 const d = g && g.games.contexto.ct.d;
 t('Daily counters add across devices', d && d.played === 3 && d.solved === 2 && d.noHint === 1 && d.silver === 1 && d.guesses === 12);
+// Fewest guesses counts NO-HINT solves only (2026-11-02): the 20 (1 hint) and 25 (5 hints) solves never count.
+gs.recordContexto('en', true, { guesses: 1, hints: 8 });
+t('fewestNH: a hinted 1-guess solve does not count', gs.loadStats().games.contexto.ct.fewestNH === 30);
+t('fewest (old field) keeps its meaning', gs.loadStats().games.contexto.ct.fewest === 1);
+t('noteContextoFewestNoHint lowers it', gs.noteContextoFewestNoHint(17) === true && gs.loadStats().games.contexto.ct.fewestNH === 17);
+t('noteContextoFewestNoHint never raises it', gs.noteContextoFewestNoHint(40) === false && gs.loadStats().games.contexto.ct.fewestNH === 17);
+const two = agg.aggregatePlayers({ a: rec('a', null), b: { ...rec('b', null), stats: { games: { contexto: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ct: { solved: 1, guesses: 9, hints: 0, noHint: 1, fewest: 9, fewestNH: 9 } } } } } });
+const g2 = (Array.isArray(two) ? two : Object.values(two)).find((x) => x && x.games && x.games.contexto);
+t('fewestNH: lowest across devices', g2 && g2.games.contexto.ct.fewestNH === 9);
 console.log(`Contexto daily: ${ok} passed, ${bad} failed.`);
 if (bad) process.exit(1);

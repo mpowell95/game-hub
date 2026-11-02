@@ -2024,6 +2024,9 @@ export function recordContexto(lang, won, extras = {}) {
     else if (hints === 1) g.ct.silver += 1;
     else if (hints === 2) g.ct.bronze += 1;
     if (guesses > 0) g.ct.fewest = g.ct.fewest > 0 ? Math.min(g.ct.fewest, guesses) : guesses;
+    // Fewest guesses on a NO-HINT solve (2026-11-02, Matt: a 1-guess solve after 8 hints "shouldn't count").
+    // A new field, so `fewest` (every solve) keeps its meaning (rule 5); shown as "Fewest guesses".
+    if (hints === 0 && guesses > 0) g.ct.fewestNH = g.ct.fewestNH > 0 ? Math.min(g.ct.fewestNH, guesses) : guesses;
   }
   // The DAILY board (2026-10-30, Matt's approved mockup): a puzzle finished on its own day, by the
   // server's live clock (contexto/js/ui.js decides `daily`), is counted a second time here, apart.
@@ -2045,6 +2048,22 @@ export function recordContexto(lang, won, extras = {}) {
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
+}
+
+/** Contexto's no-hint fewest from the phone's own save (2026-11-02): every puzzle this phone kept, so solves
+ *  from before `fewestNH` existed count too. Only ever lowers a positive best (rule 2); not a play, so no
+ *  rate gate or play log. Returns true when it wrote. */
+export function noteContextoFewestNoHint(n) {
+  const v = Math.floor(Number(n));
+  if (!(v > 0)) return false;
+  const st = loadStats();
+  const g = st.games.contexto;
+  if (!g || !g.ct || !((g.ct.noHint | 0) > 0)) return false;   // no no-hint solve recorded for this player
+  if (g.ct.fewestNH > 0 && g.ct.fewestNH <= v) return false;
+  g.ct.fewestNH = v;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return true;
 }
 
 /** Minesweeper: one finished board, won or lost.

@@ -551,7 +551,7 @@ function contextoScreen(rec) {
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${solved}</b><span>${t('gs_ct_solved')}</span></div>
       <div class="gs-tally"><b>${avg}</b><span>${t('gs_ct_avg')}</span></div>
-      <div class="gs-tally"><b>${(ct.fewest | 0) > 0 ? ct.fewest | 0 : '&mdash;'}</b><span>${t('gs_ct_fewest')}</span></div>
+      <div class="gs-tally"><b>${(ct.fewestNH | 0) > 0 ? ct.fewestNH | 0 : '&mdash;'}</b><span>${t('gs_ct_fewest')}</span></div>
     </div>
     <table class="gs-grid">
       <thead><tr><th scope="col"></th><th scope="col">${t('gs_ms_played')}</th><th scope="col">${t('gs_ct_solved')}</th></tr></thead>
