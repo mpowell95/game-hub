@@ -1650,3 +1650,11 @@ any rule.
 **Not done:** `js/game-stats-global.js` (Monopoly Deal, Parchis) has no '?' net: both already pass a mode (the
 scan checks it), and changing it means a `business-deal/` copy whose own service worker needs a cache bump.
 Chinchón and Escoba record no `first` (a dealer rotates per round; 3-4 seats).
+
+**Same day, second pass (the coordinator's review):** the first pass computed the mode and detail AT THE CALL SITE
+(`withMode(fillerMode(s), d, () => record(...), { detail: fillerDetail(s) })` inside a `try {} catch {}`): a helper
+that threw skipped the record call, the catch swallowed it, and the result was LOST, the exact thing this work was
+for. Now `withMode` and `modeTag` take thunks and evaluate them inside their own try (mode throws: recorded under '?';
+detail throws: recorded without it; the play log's `d` carries `_err`), every call site passes thunks (also the
+challenge `countResult`/`countFinished` mode arguments), and the scan fails a computed mode or detail argument.
+Also: Connect 4 Hoops vs the computer, "shoot until you score" records one level lower (Matt approved).

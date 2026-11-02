@@ -995,7 +995,7 @@ class ConnectFourUI {
       const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
       if (!this._statsDisqualified || won === false) {
         const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-        withMode(this._modeOf(), this.difficulty, () => recordConnect4(this.difficulty, firstMove, won));
+        withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, won));
       }
     }
 
@@ -1016,7 +1016,7 @@ class ConnectFourUI {
     if (!this._quitCostsLoss()) return;
     this.game._statsRecorded = true;
     const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-    withMode(this._modeOf(), this.difficulty, () => recordConnect4(this.difficulty, firstMove, false));
+    withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, false));
   }
 
   /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the

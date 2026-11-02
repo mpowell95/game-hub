@@ -414,7 +414,7 @@ class SnakeUI {
     // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode({ walls: this.settings.walls === 'off' ? 'off' : 'on' }, this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), { hi: this.game.length | 0 }); }
+      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0 })); }
       catch (err) { console.error('[snake] stats record failed — this run is not counted', err); }
     }
     const newBest = this.game.length > this.best;

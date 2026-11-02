@@ -954,7 +954,7 @@ class MurdokuUI {
     // move: it is a lesson, never a win (2026-10-29). It records nothing at all.
     if (s.guided) return;
     try {
-      withMode({ size: s.puzzle.n | 0 }, s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), { ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}) });
+      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}) }));
       s.recorded = true;
       if (ui) ui.recorded = true;
       writeSaveObj(s);

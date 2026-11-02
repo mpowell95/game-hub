@@ -373,7 +373,7 @@ class ChallengeLink {
 
   finish(canon, won) {
     const ov = this.game && this.game.over;
-    MP.countResult(this.id, won, (ov && ov.at) || Date.now(), teamMode(canon, this.seat));   // the finish time keeps a fresh storage honest
+    MP.countResult(this.id, won, (ov && ov.at) || Date.now(), () => teamMode(canon, this.seat));   // the finish time keeps a fresh storage honest
     MP.markResultSeen(this.id);
   }
 

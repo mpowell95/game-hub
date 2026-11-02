@@ -589,7 +589,7 @@ class SudokuUI {
       const id = g.puzzleId();
       if (isDone(id)) { clearSave(); this._leaveStale(); return; }
       try {
-        withMode({ sd: 1 }, g.tier, () => recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints }), { ...(g.elapsedMs > 0 ? { lo: Math.round(g.elapsedMs) } : {}), detail: { mistakes: g.mistakes | 0, hints: g.hints | 0 } });
+        withMode({ sd: 1 }, g.tier, () => recordSudoku(g.tier, { timeMs: g.elapsedMs, mistakes: g.mistakes, hints: g.hints }), () => ({ ...(g.elapsedMs > 0 ? { lo: Math.round(g.elapsedMs) } : {}), detail: { mistakes: g.mistakes | 0, hints: g.hints | 0 } }));
         markDone(id);
       } catch (err) { console.error('[sudoku] recordSudoku', err); }
       clearSave();

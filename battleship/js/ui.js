@@ -2260,7 +2260,7 @@ class BattleshipUI {
     let hits = 0;
     for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
     const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
-    try { withMode(soloMode(s, this._setup.firstMode), saved.difficulty, () => recordBattleship(saved.difficulty, false, extras)); } catch { /* never block the new game */ }
+    try { withMode(() => (soloMode(s, this._setup.firstMode)), saved.difficulty, () => recordBattleship(saved.difficulty, false, extras)); } catch { /* never block the new game */ }
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), with the shots fired so far. */
@@ -2273,7 +2273,7 @@ class BattleshipUI {
     let hits = 0;
     for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
     const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
-    try { withMode(soloMode(s, this._setup.firstMode), this._setup.difficulty, () => recordBattleship(this._setup.difficulty, false, extras)); } catch { /* never block leaving */ }
+    try { withMode(() => (soloMode(s, this._setup.firstMode)), this._setup.difficulty, () => recordBattleship(this._setup.difficulty, false, extras)); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -2296,14 +2296,14 @@ class BattleshipUI {
       // Counted once per match on this phone, through mp.js's ledger (the launcher's list read may
       // have counted it already, without these extras). Challenges write no head-to-head.
       const ov = this.ch.game && this.ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-      const chMode = typeof CH.modeOfMatch === 'function' ? CH.modeOfMatch(this.ch.game) : null;
+      const chMode = () => (typeof CH.modeOfMatch === 'function' ? CH.modeOfMatch(this.ch.game) : null);   // a thunk: read inside withMode (2026-11-02)
       try { CH.countResult(this.ch.id, won, extras, (ov && ov.at) || Date.now(), chMode); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
       return;
     }
     // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
     if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
-    try { withMode(this.mp ? liveMode(this.mp) : soloMode(s, this._setup.firstMode), difficulty, () => recordBattleship(difficulty, won, extras)); } catch { /* never block the result */ }
+    try { withMode(() => (this.mp ? liveMode(this.mp) : soloMode(s, this._setup.firstMode)), difficulty, () => recordBattleship(difficulty, won, extras)); } catch { /* never block the result */ }
     const opp = this.mp && this.mp.opp;
     if (opp) { try { recordHeadToHead('battleship', opp, won); } catch { /* never block the result */ } }
   }
@@ -2544,7 +2544,7 @@ class BattleshipUI {
     net.appendMove(mp.code, mp.role, seq, { t: 's', k: 's', g: mp.gameNum, seat: this._localSeat(), r, c }, stateHash(this.state))
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     // The first shot arms the leave (js/live-leave.js): leaving from now on is this player's loss.
-    if (!this._statsCommitted) LL.armLeave(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(liveMode(mp), MP_DIFFICULTY));
+    if (!this._statsCommitted) LL.armLeave(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY));
     this.renderBattle();
   }
 
@@ -2821,7 +2821,7 @@ class BattleshipUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(liveMode(mp), MP_DIFFICULTY) });
+          fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (liveMode(mp)), MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -3011,7 +3011,7 @@ class BattleshipUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(liveMode(mp), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;
@@ -3114,7 +3114,7 @@ class BattleshipUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, { shots: 0, hits: 0, sunk: 0, accuracy: 0 }],
-        tag: modeTag(liveMode({ sizeKey: save.sizeKey, bonusShotOnHit: save.bonusShotOnHit, dealerSeat: save.dealerSeat, localSeat: role === 'host' ? 0 : 1 }), MP_DIFFICULTY),
+        tag: modeTag(() => (liveMode({ sizeKey: save.sizeKey, bonusShotOnHit: save.bonusShotOnHit, dealerSeat: save.dealerSeat, localSeat: role === 'host' ? 0 : 1 })), MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {

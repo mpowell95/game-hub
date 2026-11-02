@@ -123,7 +123,7 @@ export function blank(src) {
 }
 
 /** Position of the `)` closing the `(` at `open`, or -1. */
-function closeOf(s, open) {
+export function closeOf(s, open) {
   let depth = 0;
   for (let k = open; k < s.length; k++) {
     const ch = s[k];
@@ -147,6 +147,40 @@ function enclosingCalls(s, pos) {
   return names;
 }
 const lineOf = (s, pos) => s.slice(0, pos).split('\n').length;
+
+/** Split `s` (blanked) at its top-level commas. */
+function splitTop(s) {
+  const out = []; let depth = 0, from = 0;
+  for (let k = 0; k < s.length; k++) {
+    const ch = s[k];
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth--;
+    else if (ch === ',' && depth === 0) { out.push(s.slice(from, k)); from = k + 1; }
+  }
+  out.push(s.slice(from));
+  return out.map((x) => x.trim()).filter((x, i, a) => x || i < a.length - 1);
+}
+const THUNK_RE = /^(async\s*)?(\([^()]*\)|[A-Za-z_$][\w$]*)\s*=>|^function\b/;
+const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+// after blanking a string literal is its quotes with spaces inside
+const LITERAL_RE = /^(-?\d[\d_.eE+-]*|'\s*'|"\s*"|`\s*`|true|false|null|undefined)$/;
+/** Is `arg` safe to evaluate at the call site: a thunk, an identifier, a literal, or an object literal
+ *  of those (no member access, no call, no spread: anything that could THROW before withMode runs). */
+export function safeArg(arg) {
+  const a = String(arg || '').trim();
+  if (!a) return true;
+  if (THUNK_RE.test(a) || IDENT_RE.test(a) || LITERAL_RE.test(a)) return true;
+  if (a[0] === '{' && closeOf(a, 0) === a.length - 1) {
+    for (const p of splitTop(a.slice(1, -1))) {
+      if (!p) continue;
+      if (IDENT_RE.test(p)) continue;                       // shorthand { detail }
+      const m = /^([A-Za-z_$][\w$]*|'\s*'|"\s*")\s*:\s*([\s\S]*)$/.exec(p);
+      if (!m || !safeArg(m[2])) return false;
+    }
+    return true;
+  }
+  return false;
+}
 
 /** Every problem in one file's source: [{ line, what }]. */
 export function scanSource(src, recorders = resultRecorders()) {
@@ -172,6 +206,19 @@ export function scanSource(src, recorders = resultRecorders()) {
     if (close > 0 && /^\s*\{/.test(s.slice(close + 1, close + 20))) continue;
     const args = close > 0 ? src.slice(at, close) : '';
     if (!/\bmodeTag\s*\(/.test(blank(args))) bad.push({ line: lineOf(s, at), what: `${m[1]}(...) without a modeTag()` });
+  }
+  // The MODE and the SCORE/DETAIL are evaluated INSIDE withMode / modeTag (2026-11-02): an argument
+  // computed at the call site that throws would skip the record call itself (THE LAW). So each must be
+  // a thunk (() => ...), an identifier, a literal, or an object literal of those.
+  for (const m of s.matchAll(/(?:^|[^\w$.])(withMode|modeTag)\s*\(/g)) {
+    const at = m.index + m[0].length - 1;
+    if (/function\s+$/.test(s.slice(Math.max(0, at - 30), at - m[1].length))) continue;
+    const close = closeOf(s, at);
+    if (close < 0 || /^\s*\{/.test(s.slice(close + 1, close + 20))) continue;
+    const args = splitTop(s.slice(at + 1, close));
+    const scoreAt = m[1] === 'withMode' ? 3 : 2;
+    if (!safeArg(args[0])) bad.push({ line: lineOf(s, at), what: `${m[1]}(...) mode argument is computed at the call site; pass a thunk: () => (...)` });
+    if (args.length > scoreAt && !safeArg(args[scoreAt])) bad.push({ line: lineOf(s, at), what: `${m[1]}(...) score/detail argument is computed at the call site; pass { detail: () => (...) } or a thunk` });
   }
   for (const m of s.matchAll(/\bwinArgs\s*:/g)) {
     // the object literal holding it

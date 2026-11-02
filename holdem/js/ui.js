@@ -1638,7 +1638,7 @@ class Game {
     if (!st.rec) {
       st.rec = true;
       writeJSON(SAVE_KEY, { state: st, at: Date.now() });
-      try { withMode(modeOf(st), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(st)), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false)); } catch (e) { console.warn('[holdem] stats write failed', e); }
     }
     drop(SAVE_KEY);
   }
@@ -1871,7 +1871,7 @@ class Game {
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
-      try { withMode(modeOf(s), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
       // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
       if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
@@ -1884,7 +1884,7 @@ class Game {
     if (prize) rec.push(key + ':prize:' + prize);
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
-    try { withMode(modeOf(pub), 'mp', () => recordResult('holdem', 'mp', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
     if (prize) recordHoldemBank({ prize });
   }
 

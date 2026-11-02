@@ -957,7 +957,7 @@ class UnoUI {
     if (!this._statsCommitted) {
       this._statsCommitted = true;
       // WHICH game (js/game-stats.js withMode, 2026-10-30): players at the table.
-      try { withMode({ n: g.n }, this.difficulty, () => recordResult('uno', this.difficulty, won)); } catch { /* never block the result */ }
+      try { withMode(() => ({ n: g.n }), this.difficulty, () => recordResult('uno', this.difficulty, won)); } catch { /* never block the result */ }
     }
     clearGame();
     const winnerSeat = this.seats[g.winner];
@@ -1066,7 +1066,7 @@ class UnoUI {
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode({ n: this.game.n }, this.difficulty, () => recordResult('uno', this.difficulty, false)); } catch { /* never block leaving */ }
+    try { withMode(() => ({ n: this.game.n }), this.difficulty, () => recordResult('uno', this.difficulty, false)); } catch { /* never block leaving */ }
     clearGame();
   }
 

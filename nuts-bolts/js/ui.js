@@ -866,7 +866,7 @@ class NutsBoltsUI {
     if (!this._winRecorded && (this.won[tier] | 0) < level) {
       this._winRecorded = true;
       try {
-        if (withMode({ lvl: 'ladder' }, tier, () => recordNutsBolts(level, this.game.moves, tier), { detail: { moves: this.game.moves | 0 } })) {
+        if (withMode({ lvl: 'ladder' }, tier, () => recordNutsBolts(level, this.game.moves, tier), { detail: () => ({ moves: this.game.moves | 0 }) })) {
           this.won[tier] = level;
           this.persist();
         } else console.error('[nuts-bolts] the solve was NOT recorded (refused)', { tier, level });

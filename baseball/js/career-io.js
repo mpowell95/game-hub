@@ -195,7 +195,7 @@ export function recordGameResult(record) {
     return null;
   }
   // its mode (2026-11-02, js/game-stats.js withMode): a Career game (the only caller), its league
-  const st = withMode({ kind: 'career', forfeit: record.extras && record.extras.forfeits ? 1 : 0 }, record.league,
+  const st = withMode(() => ({ kind: 'career', forfeit: record.extras && record.extras.forfeits ? 1 : 0 }), record.league,
     () => recordBaseball(record.league, record.won, record.extras || {}));
   if (!st) {
     // recordBaseball returns null ONLY when the rate gate refused it ("No human plays this fast").

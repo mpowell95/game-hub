@@ -128,7 +128,7 @@ function countDays(save) {
     if (!recs.some((r) => r.recorded)) {
       let st = null;
       // WHICH puzzle language (js/game-stats.js withMode, 2026-10-30), read off the day's key.
-      try { st = withMode({ lang: d.startsWith('es:') ? 'es' : 'en' }, 'daily', () => recordResult(STATS_ID, 'daily', null)); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
+      try { st = withMode(() => ({ lang: d.startsWith('es:') ? 'es' : 'en' }), 'daily', () => recordResult(STATS_ID, 'daily', null)); } catch (err) { console.error('[spelling-bee] recordResult failed - day NOT counted', err); }
       if (!st) { console.error('[spelling-bee] day not counted yet; will retry on the next word or open'); break; }
     }
     save.days[d] = 1;
@@ -654,7 +654,7 @@ class SpellingBee {
     if (this.rec.recorded || this._dayStats().dr < GENIUS) return;
     const counted = !!this.save.days[dayOf(this.puzzle.key, this.rec)];
     let st = null;
-    try { st = counted ? recordSpellingBeeGenius() : withMode({ lang: this.data.lang === 'es' ? 'es' : 'en' }, 'daily', () => recordResult(STATS_ID, 'daily', true)); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
+    try { st = counted ? recordSpellingBeeGenius() : withMode(() => ({ lang: this.data.lang === 'es' ? 'es' : 'en' }), 'daily', () => recordResult(STATS_ID, 'daily', true)); } catch (err) { console.error('[spelling-bee] recordResult failed - Genius NOT recorded', err); }
     if (!st) { console.error('[spelling-bee] Genius not recorded yet; will retry on the next word or open'); return; }
     this.rec.recorded = true;
     this.save.days[dayOf(this.puzzle.key, this.rec)] = 1;

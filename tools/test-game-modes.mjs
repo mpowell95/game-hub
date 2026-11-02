@@ -27,6 +27,7 @@ store.set('gamehub.profile', JSON.stringify({ name: 'test1', emoji: '🧪', play
 store.set('gamehub.deviceId', 'dev-modes');
 
 const GS = await import('../js/game-stats.js');
+const LL = await import('../js/live-leave.js');
 const { aggregatePlayers } = await import('../js/players-agg.js');
 const { readQueue } = await import('../js/play-log-queue.js');
 
@@ -87,6 +88,48 @@ ok('a drained queued result keeps its queued mode', es['n=2|to=21'] && es['n=2|t
 ok("a drained queued result with no mode goes to '?'", es['?'] && es['?'].hard.lost === 1);
 ok('the live result keeps ITS mode', es['n=4|to=31'] && es['n=4|to=31'].easy.won === 1);
 
+// 3c. THUNKS (2026-11-02): mode and detail are read INSIDE withMode / modeTag; one that throws never
+//     costs the result. Each case: the result lands exactly once.
+{
+  const boom = () => { throw new Error('boom'); };
+  const tot = () => GS.loadStoredStats().games.filler.total.played;
+  console.error = () => {};
+  let before = tot();
+  GS.withMode(boom, 'pro', () => GS.recordResult('filler', 'pro', true), { detail: () => ({ mine: 40 }) });
+  let f = GS.loadStoredStats().games.filler;
+  ok('a THROWING mode thunk: the result lands once, under \'?\', with its detail', tot() === before + 1 && f.byMode['?'].pro.won === 1 && f.dt.mine === 40);
+  let lg = readQueue().filter((x) => x.g === 'filler').pop();
+  ok('...and the play log says the mode failed', lg && lg.m === '?@pro' && JSON.parse(lg.d)._err === 'mode', lg && (lg.m + ' ' + lg.d));
+  before = tot();
+  GS.withMode(() => ({ first: 'me' }), 'pro', () => GS.recordResult('filler', 'pro', false), { detail: boom });
+  f = GS.loadStoredStats().games.filler;
+  ok('a THROWING detail thunk: the result lands once, under its mode, with no detail', tot() === before + 1 && f.byMode['first=me'].pro.lost === 1 && f.dt._n === 1);
+  lg = readQueue().filter((x) => x.g === 'filler').pop();
+  ok('...and the play log says the detail failed', lg && JSON.parse(lg.d)._err === 'detail');
+  before = tot();
+  GS.withMode(() => ({ first: 'them' }), boom, () => GS.recordResult('filler', 'pro', true), boom);
+  ok('a throwing chosen difficulty and a throwing score thunk: still once', tot() === before + 1);
+  // deferred: quit loss, live leave (armed), live claim/win; the arm itself never throws
+  before = tot();
+  let tag; let threw = false;
+  try { tag = GS.modeTag(boom, 'pro', { detail: boom }); } catch { threw = true; }
+  ok('modeTag never throws on a throwing mode or detail', !threw && tag && tag.m === '?');
+  GS.armQuitLoss('filler', 'recordResult', ['filler', 'pro', false], tag);
+  GS.takeQuitLoss('filler');
+  ok('quit loss with a throwing mode: recorded once, under \'?\'', tot() === before + 1 && GS.loadStoredStats().games.filler.byMode['?'].pro.lost === 1);
+  before = tot();
+  LL.armLeave('filler', 'filler:ROOM:9', 'recordResult', ['filler', 'mp', false], [], GS.modeTag(boom, 'mp'));
+  LL.forfeitNow('filler');
+  ok('armed live leave with a throwing mode: recorded once', tot() === before + 1 && GS.loadStoredStats().games.filler.byMode['?'].mp.lost === 1);
+  before = tot();
+  LL.recordLeaveWin('filler', 'filler:ROOM:10', 'recordResult', ['filler', 'mp', true], [], GS.modeTag(() => ({ first: 'me' }), 'mp', { detail: boom }));
+  ok('live claim/leave win with a throwing detail: recorded once, under its mode', tot() === before + 1 && GS.loadStoredStats().games.filler.byMode['first=me'].mp.won === 1);
+  before = tot();
+  LL.onRoomEnded({ forfeit: { x: { seat: 'guest', n: 11 } } }, { statsId: 'filler', key: 'filler:ROOM:11', n: 11, mySeat: 'host', fn: 'recordResult', winArgs: ['filler', 'mp', true], opps: [], tag: GS.modeTag(boom, 'mp') });
+  ok('onRoomEnded (the other left) with a throwing mode: recorded once', tot() === before + 1);
+  console.error = realErr;
+}
+
 // 3b. per-match DETAIL
 GS.withMode({ one: 0, first: 'me' }, 'easy', () => GS.recordResult('hoops4', 'easy', true), { detail: { shots: 12, made: 7, missed: 5, rack: 'tri10' } });
 GS.withMode({ one: 0, first: 'them' }, 'easy', () => GS.recordResult('hoops4', 'easy', false), { detail: { shots: 9, made: 4, missed: 5, rack: 'tri10', bad: -3, nan: NaN, up: true } });
@@ -142,7 +185,6 @@ ok('quit loss recorded under its mode', GS.loadStoredStats().games.darts.byMode[
 // 6d. a live-room leave carries its mode
 GS.recordLiveResult('darts:ROOM:1', 'darts', 'recordResult', ['darts', 'mp', true], [], true, GS.modeTag({ kind: 'cricket' }, 'mp'));
 ok('live leave recorded under its mode', GS.loadStoredStats().games.darts.byMode['kind=cricket'].mp.won === 2);
-const LL = await import('../js/live-leave.js');
 LL.armLeave('darts', 'darts:ROOM:2', 'recordResult', ['darts', 'mp', false], [], GS.modeTag({ kind: 'cricket' }, 'mp'));
 LL.forfeitNow('darts');
 ok('armed live leave recorded under its mode', GS.loadStoredStats().games.darts.byMode['kind=cricket'].mp.lost === 1);
@@ -182,7 +224,7 @@ ok('the scan finds a sensible number of record calls (it is not silently reading
 // the scanner itself: a bare call fails, a wrapped one passes, a deferred one needs its tag
 const t1 = SCAN.scanSource(`import { recordResult } from 'x';\nfunction f(){ recordResult('filler', 'pro', true); }`);
 ok('scanner: a bare recordResult fails', t1.bad.length === 1);
-const t2 = SCAN.scanSource(`function f(){ try { withMode(modeOf(s), d, () => recordResult('filler', d, true), { detail }); } catch {} }`);
+const t2 = SCAN.scanSource(`function f(){ try { withMode(() => modeOf(s), d, () => recordResult('filler', d, true), { detail }); } catch {} }`);
 ok('scanner: a wrapped recordResult passes', t2.bad.length === 0 && t2.calls.length === 1);
 const t3 = SCAN.scanSource(`LL.armLeave(A, k, 'recordResult', ['x', 'mp', false], [o]);\nLL.armLeave(A, k, 'recordResult', ['x', 'mp', false], [o], modeTag(m, 'mp'));`);
 ok('scanner: armLeave needs a modeTag', t3.bad.length === 1);
@@ -192,6 +234,16 @@ const t5 = SCAN.scanSource('const s = `${a}`; // recordResult(x)\n/* recordSnake
 ok('scanner: comments and strings are not calls', t5.calls.length === 0 && t5.bad.length === 0);
 const t6 = SCAN.scanSource('el.innerHTML = `<b>${t(`x${y}`)}</b>`; recordSnake(1, d, w);');
 ok('scanner: a nested template does not hide the code after it', t6.bad.length === 1);
+// mode and detail must be thunks (or literals / identifiers): an argument computed at the call site that
+// throws would skip the record call itself
+const t7 = SCAN.scanSource(`withMode(modeOf(m), d, () => recordResult('x', d, true));`);
+ok('scanner: a computed mode argument fails', t7.bad.length === 1);
+const t8 = SCAN.scanSource(`withMode(() => modeOf(m), d, () => recordResult('x', d, true), { detail: hoopsDetail(m, me) });`);
+ok('scanner: a computed detail fails', t8.bad.length === 1);
+const t9 = SCAN.scanSource(`withMode({ to: 21, lang }, d, () => recordResult('x', d, true), { detail: () => det(m), hi: score });\nwithMode(mode, 'mp', () => recordResult('x', 'mp', w), score);`);
+ok('scanner: thunks, literal objects and identifiers pass', t9.bad.length === 0, JSON.stringify(t9.bad));
+const t10 = SCAN.scanSource(`LL.armLeave(A, k, 'recordResult', ['x', 'mp', false], [o], modeTag(liveMode(mp), 'mp'));`);
+ok('scanner: a computed modeTag mode fails', t10.bad.length === 1);
 // the runtime net and the scanner agree on what is not a result
 const gsSrc = readFileSync(new URL('../js/game-stats.js', import.meta.url), 'utf8');
 const nar = gsSrc.slice(gsSrc.indexOf('const NOT_A_RESULT'), gsSrc.indexOf(']);', gsSrc.indexOf('const NOT_A_RESULT')));

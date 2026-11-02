@@ -479,7 +479,7 @@ function commitStatsOnce(){
   const difficulty = state.mp ? 'mp' : MODE;
   // the game's own numbers (2026-11-02): final scores, Yahtzees, the upper bonus earned or not
   const detail = { score: myTotal, theirs: oppTotal, yahtzees, upper: upperBonus(me.scores) > 0 };
-  try{ withMode(ytzMode(), difficulty, () => recordYahtzee(difficulty, won, { yahtzees, score: myTotal }), { detail }); }
+  try{ withMode(() => (ytzMode()), difficulty, () => recordYahtzee(difficulty, won, { yahtzees, score: myTotal }), { detail }); }
   catch(e){ /* never block the result */ }
 }
 
@@ -497,7 +497,7 @@ function armSoloQuitLoss(){
   if(!state || state.mp || state.statsCommitted || state.phase==='gameOver') return;
   const me = state.players[0];
   const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[0]||0);
-  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(ytzMode(), MODE));
+  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(() => (ytzMode()), MODE));
 }
 
 function endTurn(effects){
@@ -772,7 +772,7 @@ function mpMine(){
   const me = state.players[localSeat()];
   return { yahtzees: (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[localSeat()]||0), score: totalScore(me) };
 }
-function mpArmLeave(){ LL.armLeave('yahtzee', mpKey(), 'recordYahtzee', ['mp', false, mpMine()], [], modeTag(ytzMode(), 'mp')); }
+function mpArmLeave(){ LL.armLeave('yahtzee', mpKey(), 'recordYahtzee', ['mp', false, mpMine()], [], modeTag(() => (ytzMode()), 'mp')); }
 function mpInGame(){ return !!(state && state.mp && !state.mp.ended && !state.statsCommitted && state.phase!=='gameOver'); }
 function mpOppRole(){ return state.mp.role==='host' ? 'guest' : 'host'; }
 function mpOppAwayMs(){ const r = state && state.mp && state.mp.lastRoom; return r ? LL.awayMs(r[mpOppRole()]) : 0; }
@@ -801,7 +801,7 @@ function mpClaim(){
   const mp = state.mp;
   state.statsCommitted = true;
   mp.ended = true;
-  LL.recordLeaveWin('yahtzee', mpKey(), 'recordYahtzee', ['mp', true, mpMine()], [], modeTag(ytzMode(), 'mp'));
+  LL.recordLeaveWin('yahtzee', mpKey(), 'recordYahtzee', ['mp', true, mpMine()], [], modeTag(() => (ytzMode()), 'mp'));
   LL.leaveWithForfeit(net, mp.code, mp.role, mpOppRole(), 1, true).catch(()=>{});
   if(root) LL.hideClaim(root);
   renderMpEndOverlay('', LL.lt('ll_claimed'));
@@ -943,7 +943,7 @@ function mpOnRoomUpdate(room){
     let res = 'none';
     if(mpInGame()){
       res = LL.onRoomEnded(room, { statsId: 'yahtzee', key: mpKey(), n: 1, mySeat: mp.role,
-        fn: 'recordYahtzee', winArgs: ['mp', true, mpMine()], opps: [], tag: modeTag(ytzMode(), 'mp') });
+        fn: 'recordYahtzee', winArgs: ['mp', true, mpMine()], opps: [], tag: modeTag(() => (ytzMode()), 'mp') });
       if(res!=='none') state.statsCommitted = true;
     }
     mpEndDueToOpponentLeft(res);

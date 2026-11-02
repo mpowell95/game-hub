@@ -723,8 +723,8 @@ class Gridlock {
     const stars = glStars(moves, this.fewest);
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
-    const res = withMode({ look: this.settings.look }, this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
-      { detail: { moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 } });
+    const res = withMode(() => ({ look: this.settings.look }), this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
+      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }) });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();

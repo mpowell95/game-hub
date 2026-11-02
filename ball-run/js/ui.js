@@ -89,7 +89,7 @@ function trySyncRunEntry(entry) {
   let before = -1;
   try { before = loadStats().games.ballrun[bucketKey].runs | 0; } catch (err) { console.error('[ball-run] pre-write stats read failed', err); }
   try {
-    withMode({ map }, entry.difficulty, () => recordBallRun(entry.score, entry.difficulty, map), { hi: entry.score | 0 });
+    withMode({ map }, entry.difficulty, () => recordBallRun(entry.score, entry.difficulty, map), () => ({ hi: entry.score | 0 }));
   } catch (err) {
     console.error('[ball-run] recordBallRun threw', { entry, err });
     return false;

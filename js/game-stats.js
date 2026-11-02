@@ -1191,22 +1191,69 @@ function noteDetail(g, dt) {
  *  online). `score` (optional): `{ hi: n }` a higher-is-better best, `{ lo: n }` lower-is-better (a
  *  time), kept per mode as `hi` (Math.max) / `lo` (Math.min of nonzero), and/or `{ detail: {...} }`
  *  the match's own numbers and facts (see cleanDetail). Returns whatever `record` returns. Never throws
- *  for a bad mode: the result still counts. A mode with no usable option is key '-' (declared, none). */
-export function withMode(mode, diff, record, score) {
+ *  for a bad mode: the result still counts. A mode with no usable option is key '-' (declared, none).
+ *
+ *  THUNKS (2026-11-02): `mode`, `diff`, `score` and `score.detail` may each be a FUNCTION returning the
+ *  value, and every call site passes them that way (tools/scan-game-modes.mjs fails any other shape).
+ *  They are evaluated HERE, inside a try: a mode that throws records the result under '?', a detail that
+ *  throws records it with no detail, and the play log says which (`d: {"_err": ...}`). A result never
+ *  depends on mode or detail code succeeding (THE LAW: before this an argument that threw at the call
+ *  site skipped the record call itself). A mode that is null/undefined (not given) is also '?'. */
+function resolveMode(mode) {
+  if (mode === NO_MODE) return { key: NO_MODE, err: null };
+  let m = mode;
+  try { if (typeof m === 'function') m = m(); } catch (err) { console.error('[game-stats] the MODE threw; the result is recorded under \'?\'', err); return { key: NO_MODE, err: 'mode' }; }
+  if (m == null || typeof m !== 'object') return { key: NO_MODE, err: null };
   let key = '';
-  try { key = modeKey(mode); } catch { key = ''; }
+  try { key = modeKey(m); } catch (err) { console.error('[game-stats] the MODE could not be read; the result is recorded under \'?\'', err); return { key: NO_MODE, err: 'mode' }; }
+  return { key: key || '-', err: null, m };
+}
+function resolveScore(score) {
+  let s = score;
+  try { if (typeof s === 'function') s = s(); } catch (err) { console.error('[game-stats] the score/detail threw; the result is recorded without it', err); return { s: null, dt: null, err: 'score' }; }
+  if (!s || typeof s !== 'object') return { s: null, dt: null, err: null };
+  let detail = s.detail, err = null;
+  try { if (typeof detail === 'function') detail = detail(); } catch (e) { console.error('[game-stats] the DETAIL threw; the result is recorded without it', e); detail = null; err = 'detail'; }
   let dt = null;
-  try { dt = cleanDetail(score && score.detail); } catch { dt = null; }
+  try { dt = cleanDetail(detail); } catch (e) { console.error('[game-stats] the DETAIL could not be read; the result is recorded without it', e); dt = null; err = 'detail'; }
+  return { s: { hi: s.hi, lo: s.lo }, dt, err };
+}
+export function withMode(mode, diff, record, score) {
+  let md = { key: NO_MODE, err: 'mode' }, sc = { s: null, dt: null, err: null }, df = '';
+  try { md = resolveMode(mode); } catch { /* resolveMode never throws; belt and braces */ }
+  try { sc = resolveScore(score); } catch { /* idem */ }
+  try { df = typeof diff === 'function' ? diff() : diff; } catch (err) { console.error('[game-stats] the chosen difficulty threw', err); df = ''; }
   let dtLog = null;
-  if (dt) { try { dtLog = JSON.stringify({ ...dt.c, ...dt.f }).slice(0, 400); } catch { dtLog = null; } }
+  try {
+    const errs = [md.err, sc.err].filter(Boolean);
+    const o = sc.dt ? { ...sc.dt.c, ...sc.dt.f } : {};
+    if (errs.length) o._err = errs.join('+');
+    if (Object.keys(o).length) dtLog = JSON.stringify(o).slice(0, 400);
+  } catch { dtLog = null; }
   const prev = _mode;
-  _mode = { key: key || '-', diff: String(diff == null ? '' : diff).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: score || null, dt, dtLog };
+  _mode = { key: md.key, diff: String(df == null ? '' : df).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: sc.s, dt: sc.dt, dtLog };
   try { return record(); } finally { _mode = prev; }
 }
-/** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. */
+/** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. Takes the
+ *  same thunks as withMode, evaluated NOW (at arm time) inside a try: it never throws, so arming a loss
+ *  can never fail because of mode or detail code. A mode that threw travels as '?'; a detail that threw
+ *  travels as none. */
 export function modeTag(mode, diff, score) {
-  if (!mode || typeof mode !== 'object') return null;
-  return { m: mode, d: diff == null ? '' : String(diff), s: score || null };
+  let m = null;
+  try { m = typeof mode === 'function' ? mode() : mode; } catch (err) { console.error('[game-stats] the MODE threw at arm time; the result will be recorded under \'?\'', err); m = NO_MODE; }
+  let d = '';
+  try { d = typeof diff === 'function' ? diff() : diff; } catch (err) { console.error('[game-stats] the chosen difficulty threw at arm time', err); d = ''; }
+  let s = null;
+  try {
+    const r = typeof score === 'function' ? score() : score;
+    if (r && typeof r === 'object') {
+      let det = r.detail;
+      try { if (typeof det === 'function') det = det(); } catch (err) { console.error('[game-stats] the DETAIL threw at arm time; recorded without it', err); det = null; }
+      s = { hi: r.hi, lo: r.lo, ...(det && typeof det === 'object' ? { detail: det } : {}) };
+    }
+  } catch (err) { console.error('[game-stats] the score/detail threw at arm time; recorded without it', err); s = null; }
+  if (m !== NO_MODE && (!m || typeof m !== 'object')) return null;
+  return { m, d: d == null ? '' : String(d), s };
 }
 function withTag(tag, record) {
   return tag && typeof tag === 'object' && tag.m ? withMode(tag.m, tag.d, record, tag.s) : record();

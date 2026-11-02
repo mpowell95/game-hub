@@ -2073,7 +2073,7 @@ class GolfGame {
     const strokes = this.scores.reduce((a, v) => a + v, 0);
     const before = this._storedBest(key);
     try {
-      withMode({ round: key, holes: this.holeIdxs.length }, this.course.id, () => recordGolf(this.course.id, {
+      withMode(() => ({ round: key, holes: this.holeIdxs.length }), this.course.id, () => recordGolf(this.course.id, {
         courseId: key,
         holes: this.holeIdxs.length,
         strokes,
@@ -2082,7 +2082,7 @@ class GolfGame {
         eagles: this.roundStats.eagles,
         aces: this.roundStats.aces,
         longestDriveYd: Math.round(this.roundStats.longestDriveYd),
-      }), { lo: strokes, detail: { strokes, birdies: this.roundStats.birdies | 0, eagles: this.roundStats.eagles | 0, aces: this.roundStats.aces | 0 } });
+      }), () => ({ lo: strokes, detail: { strokes, birdies: this.roundStats.birdies | 0, eagles: this.roundStats.eagles | 0, aces: this.roundStats.aces | 0 } }));
     } catch (e) {
       console.error('[golf] recording the round FAILED', e);
       return;
@@ -2115,7 +2115,7 @@ class GolfGame {
     if (!Number.isFinite(strokes) || strokes <= 0) return;
     try {
       // a hole's own record, not a round (no total is counted); its mode says which hole
-      withMode({ hole: holeKey(this.course, hole.n) }, this.course.id, () => recordGolf(this.course.id, {
+      withMode(() => ({ hole: holeKey(this.course, hole.n) }), this.course.id, () => recordGolf(this.course.id, {
         holeOnly: true, holeScores: { [holeKey(this.course, hole.n)]: strokes },
       }));
     } catch (e) {

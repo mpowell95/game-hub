@@ -958,7 +958,7 @@ class DotsBoxesUI {
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
     // the game's own numbers (2026-11-02): boxes each side took, the longest chain this game
     const detail = { mine: humanScore, theirs: aiScore, chain: this._humanBestChainThisGame | 0 };
-    try { withMode(this._modeOf(), difficulty, () => recordDotsBoxes(difficulty, won, extras), { detail }); } catch { /* never block the result */ }
+    try { withMode(() => (this._modeOf()), difficulty, () => recordDotsBoxes(difficulty, won, extras), { detail }); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // has no `this.mp` and is untouched. Never allowed to block the ordinary result from being
     // recorded.
@@ -1125,7 +1125,7 @@ class DotsBoxesUI {
     this._statsCommitted = true;
     const sc = score(this.state);
     const boxes = this.humanSeat === 0 ? sc.p0 : sc.p1;
-    try { withMode(this._modeOf(), this._setup.difficulty, () => recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame })); } catch { /* never block leaving */ }
+    try { withMode(() => (this._modeOf()), this._setup.difficulty, () => recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1324,7 +1324,7 @@ class DotsBoxesUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(edge), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!isOver(this.state) && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(this._modeOf(), MP_DIFFICULTY));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY));
     }
   }
 
@@ -1588,7 +1588,7 @@ class DotsBoxesUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(this._modeOf(), MP_DIFFICULTY) });
+          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (this._modeOf()), MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1765,7 +1765,7 @@ class DotsBoxesUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(this._modeOf(), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;
@@ -1888,7 +1888,7 @@ class DotsBoxesUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, { boxes: 0, bestChain: 0 }],
-        tag: modeTag({ size: save.size, first: (save.dealer === 1 ? 1 : 0) === (role === 'host' ? 0 : 1) ? 'me' : 'them' }, MP_DIFFICULTY),
+        tag: modeTag(() => ({ size: save.size, first: (save.dealer === 1 ? 1 : 0) === (role === 'host' ? 0 : 1) ? 'me' : 'them' }), MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {

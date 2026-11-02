@@ -464,7 +464,7 @@ class ArcheryUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(modeOf(q.m), q.diff, () => recordResult('archery', q.diff, false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('archery', q.diff, false));
       if (!st) console.warn('[archery] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[archery] recording the quit loss failed', err); }
   }
@@ -974,7 +974,7 @@ class ArcheryUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(modeOf(m), this.diff, () => recordResult('archery', this.diff, m.winner === 0));
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('archery', this.diff, m.winner === 0));
         if (!st) console.warn('[archery] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[archery] recording the result failed', err); }
     }
@@ -1258,7 +1258,7 @@ class ArcheryUI {
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     const ov = mp.game && mp.game.over;
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' });   // once per phone; the finish time keeps a fresh storage honest
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' }));   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[this.match.winner].name }));
     this.screen = 'result';

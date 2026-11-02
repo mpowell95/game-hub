@@ -600,12 +600,12 @@ export function recordFinished(rows) {
   const ledger = readLedger();
   queueConfirm('hoops', (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && r.why === TIMEOUT && RESULTS.includes(r.result) && !ledger.has(r.id)), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countFinished(r.id, res === 'won', g.over.at, modeOfMatch(g))) return false;
+    if (!RESULTS.includes(res) || !countFinished(r.id, res === 'won', g.over.at, () => modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = all.filter((r) => r.why !== TIMEOUT);
-  for (const r of todo) countFinished(r.id, r.result === 'won', r.updated, modeOfMatch(r));
+  for (const r of todo) countFinished(r.id, r.result === 'won', r.updated, () => modeOfMatch(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

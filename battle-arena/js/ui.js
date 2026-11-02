@@ -574,7 +574,7 @@ class BattleArena {
     this.clearSave();
     const won = save.state.winner != null ? save.state.winner === ME : false;
     try {
-      const st = withMode(modeOf(save.state), save.diff, () => recordResult('battlearena', save.diff, won));
+      const st = withMode(() => (modeOf(save.state)), save.diff, () => recordResult('battlearena', save.diff, won));
       if (!st) console.warn('[battle-arena] set-aside match not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] set-aside match not recorded', err); }
   }
@@ -1739,7 +1739,7 @@ class BattleArena {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       try {
-        const st = withMode(modeOf(s), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME));
+        const st = withMode(() => (modeOf(s)), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME));
         if (!st) console.warn('[battle-arena] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[battle-arena] record failed', err); }
       this.clearSave();
@@ -1870,7 +1870,7 @@ class BattleArena {
     if (!this.quitCostsLoss()) return;
     this.recorded = true;
     try {
-      const st = withMode(modeOf(this.state), this.diff, () => recordResult('battlearena', this.diff, false));
+      const st = withMode(() => (modeOf(this.state)), this.diff, () => recordResult('battlearena', this.diff, false));
       if (!st) console.warn('[battle-arena] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] quit loss not recorded', err); }
   }

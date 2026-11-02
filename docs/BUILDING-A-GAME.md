@@ -324,6 +324,8 @@ When restructuring an old game, migrate it toward the reference for each axis in
     the end (shots, made, goals for/against, score...: non-negative counters, or short string facts).
     `node tools/test-game-modes.mjs` scans EVERY file and fails a call that skips it; there is no list
     to add a game to. A call that slips through at run time is still counted, filed under mode `'?'`.
+    Pass the mode and the detail as THUNKS (`() => modeOf(m)`, `{ detail: () => det(m) }`), never computed
+    at the call site: a throw there would skip the record call itself. The scan fails it.
 12. **Run `node tools/test-game-conventions.mjs`, then `node tools/run-all-tests.mjs`.** It discovers game
     folders from disk, so your new game is checked automatically — listener hygiene, the module
     contract, translation plumbing, folder layout, quick chat in every online game, and (as of this file) the 11px text-size floor

@@ -60,7 +60,9 @@ runs `tools/scan-game-modes.mjs`, a full scan with no list of files (Filler and 
 `withMode(mode, diff, fn, { detail: { shots: 12, rack: 'tri10' } })`: counters ADD into `games.<id>.dt.<key>`, string
 facts count `dt.<key>.<value>`, `dt._n` = results with detail; summed per person in `players-agg.js`; in the play log as
 `d`. **Run-time net**: a result recorded outside withMode still counts, is filed under `byMode['?']`, `console.error`s
-and logs `m: '?'` (read with `tools/read-play-log.mjs`).
+and logs `m: '?'` (read with `tools/read-play-log.mjs`). **Mode and detail are THUNKS** (`withMode(() => modeOf(m), d,
+() => record…, { detail: () => det(m) })`, `modeTag(() => …)`): read inside withMode's own try, so a throw records the
+result anyway (mode `'?'` / no detail, play log `d._err`); the scan fails anything computed at the call site.
 
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 

@@ -567,7 +567,7 @@ class DartsUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(modeOf(q.m), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false));
       if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[darts] recording the quit loss failed', err); }
   }
@@ -931,7 +931,7 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(modeOf(m), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: dartsDetail(m) });
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: () => (dartsDetail(m)) });
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
@@ -1257,7 +1257,7 @@ class DartsUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');
     if (resigned) this.match.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     // once per phone, whoever ended it (null: a draw); the finish time keeps a fresh storage honest
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), { kind: kindOf(this.match), first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' });
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ kind: kindOf(this.match), first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' }));
     this.MP.markResultSeen(mp.id);
     this._say(this._winSay());
     this.screen = 'result';

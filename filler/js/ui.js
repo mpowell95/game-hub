@@ -789,13 +789,13 @@ class FillerUI {
         // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
       } else if (this.mp) {
         LL.endedNormally(STATS_ID, this._mpKey());
-        try { withMode(fillerMode(s, this._localSeat()), MP_DIFFICULTY, () => recordResult('filler', MP_DIFFICULTY, won), { detail: fillerDetail(s, this._localSeat()) }); } catch { /* never block the result */ }
+        try { withMode(() => (fillerMode(s, this._localSeat())), MP_DIFFICULTY, () => recordResult('filler', MP_DIFFICULTY, won), { detail: () => (fillerDetail(s, this._localSeat())) }); } catch { /* never block the result */ }
         // Multiplayer only: capture WHO this was against while the room state is still live.
         // Never allowed to block the ordinary result from being recorded.
         const opp = this.mp.opp;
         if (opp) { try { recordHeadToHead('filler', opp, won); } catch { /* never block the result */ } }
       } else {
-        try { withMode(fillerMode(s, P1), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], won), { detail: fillerDetail(s, P1) }); } catch { /* never block the result */ }
+        try { withMode(() => (fillerMode(s, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], won), { detail: () => (fillerDetail(s, P1)) }); } catch { /* never block the result */ }
       }
     }
     if (this.mp) this._mpAfterGameEnd();
@@ -941,7 +941,7 @@ class FillerUI {
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(fillerMode(this.state, P1), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], false), { detail: { ...fillerDetail(this.state, P1), quit: 1 } }); } catch { /* never block leaving */ }
+    try { withMode(() => (fillerMode(this.state, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], false), { detail: () => ({ ...fillerDetail(this.state, P1), quit: 1 }) }); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1042,7 +1042,7 @@ class FillerUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(color), h)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!trial.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, false], [mp.opp], modeTag(fillerMode(trial, this._localSeat()), MP_DIFFICULTY));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (fillerMode(trial, this._localSeat())), MP_DIFFICULTY));
     }
   }
 
@@ -1299,7 +1299,7 @@ class FillerUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordResult', winArgs: ['filler', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(fillerMode(this.state, this._localSeat()), MP_DIFFICULTY) });
+          fn: 'recordResult', winArgs: ['filler', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1472,7 +1472,7 @@ class FillerUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, true], [mp.opp], modeTag(fillerMode(this.state, this._localSeat()), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.container);
     this.mp = null;
@@ -1591,7 +1591,7 @@ class FillerUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordResult', winArgs: ['filler', MP_DIFFICULTY, true],
-        tag: modeTag(fillerMode(save.state, role === 'host' ? P1 : P2), MP_DIFFICULTY),
+        tag: modeTag(() => (fillerMode(save.state, role === 'host' ? P1 : P2)), MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {
