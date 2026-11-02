@@ -178,14 +178,15 @@ const SVG = {
 // Contexto's medal images (Matt, 2026-10-31), the place on the face; sized per use.
 const MEDAL_H = { '': 38, sm: 32, xs: 24, big: 64 };
 const medal = (n, cls = '') => `<span class="lb2-medal ${cls}" role="img" aria-label="${n}">${lb2Medal(n, MEDAL_H[cls] || 38)}</span>`;
-/** ONE rank format: a medal for 1st to 3rd ("=" beside it when tied), "#5" below, "=5" when tied. */
+/** ONE rank format: a medal for 1st to 3rd, "#5" below. A tie shows the SAME rank on each tied row, no "="
+ *  (Matt, 2026-11-02: "I do not like '=4' for ties. It looks bad."). `tie` is kept for callers. */
 const med = (n, tie, cls = '') => (n <= 3
-  ? `<span class="lb2-rk">${tie ? '<span class="lb2-eq" aria-hidden="true">=</span>' : ''}${medal(n, cls)}</span>`
-  : `<span class="lb2-plain num">${tie ? '=' : '#'}${n}</span>`);
+  ? `<span class="lb2-rk">${medal(n, cls)}</span>`
+  : `<span class="lb2-plain num">#${n}</span>`);
 const pod = (r) => (r.rank <= 3 && earned(r) ? ` pod${r.rank}` : '');
 /** Session 4 (display only): a rank WITHOUT a medal, "#1" / "=7". Used where a medal would not mean the game's
  *  standing (Past weeks, Records held, Wins sorted by Played) and on rows with nothing earned (a 0). */
-const plainRank = (n, tie) => `<span class="lb2-plain num">${tie ? '=' : '#'}${n}</span>`;
+const plainRank = (n, tie) => `<span class="lb2-plain num">#${n}</span>`;
 /** A row whose ranked number is 0 earned no medal; its rank is unchanged. */
 function earned(r) {
   if (!r || r.noPodium) return false;
@@ -215,7 +216,7 @@ function placeHTML(p) {
   // No place in the standing: nothing, as the old You tab showed no chip (a dash read as a rank).
   if (!p || !p.rank) return '';
   if (p.rank <= 3 && !p.noMedal) return med(p.rank, p.tie, 'sm');
-  return `<span class="lb2-best num">${p.tie ? '=' : '#'}${p.rank}</span>`;
+  return `<span class="lb2-best num">#${p.rank}</span>`;
 }
 
 // --- Boards (tab 1) --------------------------------------------------------------------------------------
@@ -603,13 +604,13 @@ function meHTML() {
   const R = lb2Records(_people, _meKey);
   const hr = hofRankOf(_meKey);
   const pg = lb2PlayerGames(_people, _meKey);
-  const tiles = `<div class="lb2-tiles">
-    <div class="lb2-tile"><b class="num">${R.held.length}<small>/${R.withRecord}</small></b><span>${esc(t2('lb2_records_tile'))}</span></div>
-    <button type="button" class="lb2-tile" data-act="tab" data-v="hof"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></button>
-    <div class="lb2-tile"><b class="num">${pg ? pg.games.length : 0}</b><span>${esc(t2('lb2_games_tile'))}</span></div></div>`;
+  // Matt, 2026-11-02: "#2 under medals ... reads like I only have 2 medals"; "/34" and the Games tile meant nothing.
+  // Three tiles = the viewer's gold, silver and bronze medals (the Hall of Fame Medals row); a tap opens Hall of Fame.
+  const mp = ((_model.hof.find((x) => x.key === _meKey) || {}).p) || [0, 0, 0];
+  const tiles = `<div class="lb2-tiles">${[1, 2, 3].map((n) => `<button type="button" class="lb2-tile lb2-mtile" data-act="tab" data-v="hof">${medal(n, 'sm')}<b class="num">${fmt(mp[n - 1])}</b></button>`).join('')}</div>`;
   // Records held: the viewer's number under the game's name (full width), the gold medal at the right.
   const held = R.held.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_hold_h'))}</h2><div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${plainRank(1, x.tie)}</span>${CHEV}</button>`).join('')}</div></div>` : '';
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   // Closest to a record: "3 wins · record 5", the viewer's number beside the record; the holder on its own line.
   // Closest (session 4): the viewer's number at the RECORD'S difficulty (the old gapText rule), and one word for why
   // the record ranks above when the numbers alone hide it: the record's difficulty ("Hard") or "No hints".
@@ -618,8 +619,7 @@ function meHTML() {
   const whyPill = (x) => (x.why === 'tier' ? `<span class="lb2-pill lb2-why">${esc(lb2TierWord(x.whyTier))}</span>` : x.why === 'nohint' ? `<span class="lb2-pill lb2-why">${esc(t2('lb2_nohint'))}</span>` : '');
   const close = closeRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_close_h'))}</h2><div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
-      <span class="lb2-t2 lb2-vline num"><span class="lb2-nw"><b>${valHTML(x.id, x.mineAt || x.mine)}</b><span class="lb2-dot">·</span></span><span class="lb2-nw"><span class="lb2-recw">${esc(t2('lb2_record'))}</span>${valHTML(x.id, x.recVal)}${whyPill(x)}</span></span>
-      <span class="lb2-t2 lb2-vsr">${holderHTML(x)}</span></span>
+      <span class="lb2-t2 lb2-vline num">${(x.mineAt || x.mine).text === '–' ? '' : `<span class="lb2-nw"><b>${valHTML(x.id, x.mineAt || x.mine)}</b><span class="lb2-dot">·</span></span>`}<span class="lb2-nw lb2-recq"><span class="lb2-recw">${esc(t2('lb2_record'))}</span>${valHTML(x.id, x.recVal)}${whyPill(x)}</span></span></span>
       <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   const fresh = R.fresh.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_fresh_h'))}</h2><div class="lb2-card">${R.fresh.map((x) => `<div class="lb2-row sm">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vsr">${holderHTML(x)}<span class="lb2-rv num">${valHTML(x.id, x.recVal)}</span></span></span>
@@ -1038,6 +1038,8 @@ html.gh-compact .lb2-x{display:none}
 .lb2-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .lb2-tile{min-height:84px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;background:var(--l2-surf);border:1px solid var(--l2-line);text-align:center}
 .lb2-tile b{font-size:26px}
+.lb2-mtile{flex-direction:row;gap:10px;font:inherit;color:inherit;cursor:pointer}
+.lb2-recq{color:var(--l2-muted)}
 .lb2-tile span{font-size:14px;color:var(--l2-muted);line-height:1.15}
 .lb2-h2{margin:0 0 8px;padding:0 4px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--l2-muted)}
 .lb2-gh{display:flex;align-items:center;gap:8px;margin-bottom:8px}

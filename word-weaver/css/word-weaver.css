@@ -39,6 +39,21 @@
 .ww-root button svg, .ww-root button span, .ww-root button b { pointer-events: none; }
 /* The standalone page has no css/hub.css, so css/ui.css's --gh-* tokens would stay light under
    .gh-dark. Give them the hub's own dark values here (in the hub these are the same numbers). */
+/* A SKY PER DIFFICULTY (Matt, 2026-11-02): dawn (Easy), sunset (Medium, the mockup's), dusk (Hard), night with
+   stars (Expert). White tiles, the white wheel and white text read on all four. */
+.ww-root[data-sky="easy"] { --ww-sky1: #4b74ab; --ww-sky2: #e0959c; --ww-sky3: #fbd8aa; }
+.ww-root[data-sky="hard"] { --ww-sky1: #1c2350; --ww-sky2: #64478a; --ww-sky3: #cf7f8e; }
+.ww-root[data-sky="expert"] {
+  --ww-sky1: #070b1f; --ww-sky2: #17224f; --ww-sky3: #33467f;
+  --ww-chip: rgba(255, 255, 255, .16);
+  background:
+    radial-gradient(1.5px 1.5px at 12% 8%, #fff 99%, transparent), radial-gradient(1px 1px at 28% 18%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 46% 6%, #fff 99%, transparent), radial-gradient(1px 1px at 63% 14%, #fff 99%, transparent),
+    radial-gradient(1.5px 1.5px at 81% 9%, #fff 99%, transparent), radial-gradient(1px 1px at 92% 22%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 8% 30%, #fff 99%, transparent), radial-gradient(1px 1px at 72% 34%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 38% 40%, rgba(255,255,255,.7) 99%, transparent), radial-gradient(1px 1px at 88% 46%, rgba(255,255,255,.7) 99%, transparent),
+    linear-gradient(180deg, var(--ww-sky1) 0%, var(--ww-sky2) 62%, var(--ww-sky3) 100%);
+}
 :root.gh-dark .ww-root {
   --gh-bg: var(--hub-bg, #0e1420);
   --gh-surface: var(--hub-surface, #1b2333);
@@ -411,6 +426,10 @@
   font-variant-numeric: tabular-nums;
 }
 .ww-root .ww-bonus svg { width: 22px; height: 22px; }
+/* The done screen's bonus words and star squares, side by side (2026-11-02). */
+.ww-root .ww-donechips { display: flex; gap: 10px; justify-content: center; }
+.ww-root .ww-sqchip { cursor: default; }
+.ww-root .ww-sqchip svg { color: var(--ww-path); }
 .ww-root .ww-next {
   min-width: 190px;
   min-height: 54px;

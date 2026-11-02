@@ -197,6 +197,8 @@ const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="tru
 const ICON_CAL = `<svg ${SVGA}><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>`;
 const ICON_TROPHY = `<svg ${SVGA}><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M9 20h6M10 17h4"/></svg>`;
 const starRow = (n, cls = 'ww-star') => [0, 1, 2].map((k) => `<svg viewBox="0 0 24 24" class="${cls}${k < n ? ' is-on' : ''}" aria-hidden="true"><path d="${STAR_D}"/></svg>`).join('');
+// A star square (2026-11-02): a tile with a star on it, for the done screen's "squares collected".
+const ICON_SQUARE = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#fff"/><path d="${STAR_D}" fill="currentColor" transform="translate(4.2 4.2) scale(.65)"/></svg>`;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -622,6 +624,9 @@ class WordWeaver {
     const v = this.view, played = v === 'play' || v === 'done';
     const modal = '<div class="gh-overlay ww-modal" hidden></div>';
     this.root.classList.toggle('is-setup', v === 'setup');
+    // A sky per difficulty (Matt, 2026-11-02): dawn, sunset, dusk, night; the setup screen shows the one picked.
+    // The daily puzzle (2026-11-02) keeps the mockup's sunset, whatever difficulty the setup screen has picked.
+    this.root.dataset.sky = this.daily ? 'medium' : this.band;
     if (v === 'setup') {
       this.root.innerHTML = this._setupHTML() + modal;
       this._positionRoot();
@@ -735,7 +740,10 @@ class WordWeaver {
       <div class="ww-done">
         <h2>${t('level_n', { n: this.n })}</h2>
         <div class="ww-stars" role="img" aria-label="${t('stars_aria', { n: stars })}">${row}</div>
-        <button type="button" class="ww-bonus" data-act="extras" aria-label="${t('extra_aria', { n: this.st.extra.length })}">${ICON_STAR}<b>${this.st.extra.length}</b></button>
+        <div class="ww-donechips">
+          <button type="button" class="ww-bonus" data-act="extras" aria-label="${t('extra_aria', { n: this.st.extra.length })}">${ICON_STAR}<b>${this.st.extra.length}</b></button>
+          <span class="ww-bonus ww-sqchip" role="img" aria-label="${t('squares_aria', { n: this.st.sym.length, of: bonusCells(this.level).length })}">${ICON_SQUARE}<b>${this.st.sym.length}/${bonusCells(this.level).length}</b></span>
+        </div>
         <button type="button" class="ww-next" data-act="next">${t('next')}</button>
       </div>`;
   }

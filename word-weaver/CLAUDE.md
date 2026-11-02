@@ -59,7 +59,10 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   adding). Bonuses = bonus words + bonus squares (`wwBonuses`) and earn the free hints. The star chip at the top IS the
   counter: star + "N/10" toward the next free hint with a gold bar filling; tap = this level's bonus words.
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
-  (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
+  (filled vs outline, never colour alone), the extra-words count (tap: the list), the STAR SQUARES collected "n/of"
+  (a white tile with a gold star; Matt, 2026-11-02) and Next.
+- **A sky per difficulty (Matt, 2026-11-02)**: `data-sky` on the root = the band: dawn (Easy), sunset (Medium, the
+  mockup's), dusk (Hard), night with a few CSS stars (Expert); the setup screen shows the picked one.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter
   submits, Space shuffles.
 - **Bigger wheel letters (Matt, 2026-10-29)**: 54 units of the 240 box (was 40), ring 80, picked disc 31, touch radius 33.
@@ -98,7 +101,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - **One shared level a day per language**, the same for everyone. The setup screen's ONE **Daily** button (calendar,
   an ink check once this phone finished today) opens today's puzzle on the usual play screen (wheel, hints, free hints,
   bonus words, star squares, the counter all as on the ladder); the level number becomes a trophy chip = the board
-  sheet. The done screen: the date, the stars, the board's top rows (this phone's own always among them), Back.
+  sheet. The done screen: the date, the stars, the board's top rows (this phone's own always among them), Back (no
+  squares chip: no room beside the board). Its sky is always the mockup's sunset (`data-sky="medium"`).
 - **The day** = Spelling Bee's: the phone's LOCAL date of `bestNow()` (`js/server-time.js`, the server's clock where
   known). Day 0 = the data's `epoch` **2026-11-02**. Only today is playable (no past days, kept simple); a puzzle open
   at midnight may be finished under its own day. Key `<en|es>-<YYYY-MM-DD>` everywhere (save, stats, board).
