@@ -6,7 +6,7 @@
 // "Play a friend" sheet made, because a list of people can be longer than a phone.
 import STRINGS from './strings.js';
 import { makeT } from '../../js/i18n.js';
-import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
+import { BOARDS, boardById, DEFAULT_BOARD, liveBoards } from './boards.js';
 import { isBoardReleased, isBoardTesting } from '../../js/admin-config.js';
 import { loadStats } from '../../js/game-stats.js';
 import { readPlayersForMe } from '../../js/stats-net.js';
@@ -48,7 +48,7 @@ export function formatLine(x) {
  * playing it unlocks nothing (the challenge never writes sk.unlocked). `mine` is a Set of unlocked
  * board ids; `testing(b)`/`released(b)` are injected so this is testable without the admin config.
  */
-export function challengeBoards(mine, { boards = BOARDS, testing, released } = {}) {
+export function challengeBoards(mine, { boards = liveBoards(BOARDS), testing, released } = {}) {
   const isTesting = testing || ((b) => isBoardTesting(b.id, !!b.adminOnly));
   const isReleased = released || ((b) => isBoardReleased(b.id));
   return boards.filter((b) => !isTesting(b) && (b.id === DEFAULT_BOARD || isReleased(b) || (mine && mine.has(b.id))));

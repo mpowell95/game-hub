@@ -1212,6 +1212,10 @@ export const BOARDS = [
   {
     id: 'popongo',
     name: 'POPONGO',
+    // ARCHIVED (Matt, 2026-11-02): never offered or named again (gallery, challenges, My Stats, leaderboard,
+    // admin). Its id, engine and every stored play stay (THE LAW rules 1 and 5): its racks still count in
+    // every Skeeball total. `liveBoards()` is the list anything a person SEES iterates.
+    archived: true,
     taglineKey: 'board_popongo_tag',
     // GOALS-BASED UNLOCK: { board, goals: true } means "complete every objective on <board>"
     // (js/goals.js's three, checked by ui.js via allGoalsMet). unlocksEarned() below only handles
@@ -1476,6 +1480,10 @@ export function scoringColors(board) {
 
 export const DEFAULT_BOARD = 'classic';
 
+/** Every machine still offered (2026-11-02): BOARDS minus the archived ones. Stored plays on an archived
+ *  machine are untouched and still counted; only what is shown and offered uses this. */
+export function liveBoards(list = BOARDS) { return list.filter((b) => !b.archived); }
+
 export function boardById(id, list = BOARDS) {
   return list.find((b) => b.id === id) || list[0];
 }
@@ -1491,4 +1499,4 @@ export function unlocksEarned(boardId, score, list = BOARDS) {
     .map((b) => b.id);
 }
 
-export default { BALLS_PER_GAME, BOARDS, DEFAULT_BOARD, boardById, unlocksEarned };
+export default { BALLS_PER_GAME, BOARDS, DEFAULT_BOARD, boardById, unlocksEarned, liveBoards };

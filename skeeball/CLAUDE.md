@@ -18,7 +18,7 @@ touching physics, geometry, or the swipe/power curve. Per-machine docs: `MACHINE
 A realistic arcade skeeball alley (three.js + cannon-es), rebuilt from scratch 2026-08-13. Swipe up the
 lane: swipe speed is power, angle is aim. Nine balls to a rack. Five machines: **THE CLASSIC**
 (`classic`), **HOT SHOT** (`basketball`), **HOT SHOT: BRICK CITY** (`brickcity`), **HOT SHOT: RUNAWAY**
-(`runaway`), **POPONGO** (`popongo`). Solo, plus "beat my score" challenges (2026-09-24).
+(`runaway`), **POPONGO** (`popongo`, **ARCHIVED 2026-11-02**: never offered or named; `archived: true`, `liveBoards()`; its racks still count in every total). Solo, plus "beat my score" challenges (2026-09-24).
 - **ADMIN ONLY (`devOnly: true`, no `released` date) since 2026-08-23** (Matt's ask), after work for one
   machine changed another. Re-releasing is four edits and three stop it being silently broken: drop
   `devOnly` in `js/hub.js`; add a FRESH `released` date (only input to the New pill); put the

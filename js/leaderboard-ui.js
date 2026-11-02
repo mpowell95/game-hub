@@ -2452,7 +2452,9 @@ function skMachinesPresent(list) {
   }
   // Known machines in the game's own chain order first, then anything else the store holds - an
   // id this file has never heard of still has to be reachable (THE LAW rule 1, see skMachineMeta).
-  return Object.keys(SK_MACHINES).filter((mid) => seen.has(mid))
+  // An ARCHIVED machine (POPONGO, Matt 2026-11-02) is never offered or named: its racks still count in every
+  // Skeeball total (All), it just has no machine tab of its own.
+  return Object.keys(SK_MACHINES).filter((mid) => seen.has(mid) && !SK_MACHINES[mid].archived)
     .concat([...seen].filter((mid) => !SK_MACHINES[mid]));
 }
 

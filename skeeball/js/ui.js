@@ -14,7 +14,10 @@
 
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { engineFor, loadEngine } from './engines.js';
-import { BOARDS, boardById, DEFAULT_BOARD } from './boards.js';
+import { BOARDS as ALL_BOARDS, boardById, DEFAULT_BOARD, liveBoards } from './boards.js';
+// The machines this screen offers and names: every machine but the archived (POPONGO, 2026-11-02). Its stored
+// racks are untouched and still count in every total; it is just never shown or offered again.
+const BOARDS = liveBoards(ALL_BOARDS);
 import { readPic, writePic } from './picstore.js';
 import { swipeSpeed, powerOf } from './swipe.js';
 import STRINGS from './strings.js';
@@ -125,7 +128,8 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-    return { board: typeof s.board === 'string' ? s.board : DEFAULT_BOARD };
+    // A machine since archived (2026-11-02) is no longer offered: back to the first machine.
+    return { board: typeof s.board === 'string' && BOARDS.some((b) => b.id === s.board) ? s.board : DEFAULT_BOARD };
   } catch { return { board: DEFAULT_BOARD }; }
 }
 function saveSettings(patch) {

@@ -31,7 +31,10 @@
 // game page asks, the last 400 entries of that player's playLog/<CODE>.
 
 import { GAMES } from './hub.js';
-import { BOARDS, DEFAULT_BOARD, boardById } from '../skeeball/js/boards.js';
+import { BOARDS as ALL_BOARDS, DEFAULT_BOARD, boardById, liveBoards } from '../skeeball/js/boards.js';
+// Skeeball machines this page names: every machine but the archived (POPONGO, Matt 2026-11-02). Its stored racks,
+// and any void on them, are untouched and still apply; `ALL_BOARDS` still counts a person's voided machines.
+const BOARDS = liveBoards(ALL_BOARDS);
 import { statsId, holdemBalance, GAMES as STATS_GAMES, ARCHIVED_GAMES } from './game-stats.js';
 import { hubIdOf } from './game-stats-ui.js';
 import { dayKey } from './arcade-scores.js';
@@ -855,7 +858,7 @@ function voidsOf(cfg, key) {
   const out = {};
   const ids = idsOf(key);
   const flags = obj(_integ.flags);
-  const machines = BOARDS.filter((b) => ids.some((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, b.id))).length;
+  const machines = ALL_BOARDS.filter((b) => ids.some((id) => correctionFor(resolveBoardCorrections(cfg, id) || {}, b.id))).length;
   if (machines) out.skeeball = { label: machines === 1 ? tx('adm_1_machine', '1 machine') : tx('adm_n_machines', '{n} machines', { n: machines }) };
   if (ids.some((id) => resolveHoldemCorrection(cfg, id))) out.holdem = { label: tx('adm_bankroll', 'Bankroll') };
   const p = personByKey(key);

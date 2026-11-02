@@ -20,7 +20,7 @@ import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
 import { GAME_ART } from './game-art.js';
-import { diffShapeSVG } from './difficulty-tiers.js';
+import { diffShapeSVG, tierOf } from './difficulty-tiers.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
@@ -1163,7 +1163,9 @@ export const SK_MACHINES = {
   // cabinet, because all three HOT SHOTs share one yellow cabinet and would be one colour.
   brickcity: { name: 'HOT SHOT: BRICK CITY', color: '#a33427' },
   runaway: { name: 'HOT SHOT: RUNAWAY', color: '#39e0d0' },
-  popongo: { name: 'POPONGO', color: '#c9a36a' },
+  // ARCHIVED (Matt, 2026-11-02): never named on a screen again (no card, no tab, no picker row). Its racks stay
+  // stored and still count in every Skeeball total; `archived` only keeps it off the lists.
+  popongo: { name: 'POPONGO', color: '#c9a36a', archived: true },
 };
 
 /** A machine's display name and colour, tolerating an id this table has never heard of.
@@ -1228,7 +1230,7 @@ function skSparkHTML(daily) {
  *  lifetime block or a machine card. */
 function skPracticeHTML(sk) {
   const prac = ((sk || {}).practice || {}).boards || {};
-  const ids = Object.keys(prac).filter((id) => ((prac[id] || {}).plays | 0) > 0);
+  const ids = Object.keys(prac).filter((id) => ((prac[id] || {}).plays | 0) > 0 && !(SK_MACHINES[id] || {}).archived);
   if (!ids.length) return '';
   return `<div class="gs-sk-practice">
     <div class="gs-sk-practice-h">${esc(t('gs_sk_practice'))}</div>
@@ -1262,13 +1264,15 @@ function skMachineCardHTML(id, b) {
   </div>`;
 }
 
-function skeeballScreen(rec) {
+function skeeballScreen(rec, fresh = false) {
   const sk = (rec && rec.sk) || {};
   if (!(sk.played | 0)) return emptyState('Skeeball');
   const boards = sk.boards || {};
   // Known machines first, in the game's own unlock-chain order, then ANY other id the store
   // happens to hold (see skMachineMeta) so no recorded machine can fall off this screen.
-  const known = Object.keys(SK_MACHINES);
+  // An ARCHIVED machine (POPONGO, 2026-11-02) gets no card, played or locked: its racks stay in every
+  // lifetime number above, it is just never named.
+  const known = Object.keys(SK_MACHINES).filter((id) => !SK_MACHINES[id].archived);
   const playedIds = known.filter((id) => ((boards[id] || {}).plays | 0) > 0)
     .concat(Object.keys(boards).filter((id) => !SK_MACHINES[id] && ((boards[id] || {}).plays | 0) > 0));
   const lockedIds = known.filter((id) => !playedIds.includes(id));
@@ -1282,6 +1286,11 @@ function skeeballScreen(rec) {
   if (bestId) {
     const day = Object.keys(boards[bestId].daily || {}).sort().find((d) => (boards[bestId].daily[d] | 0) === (sk.bestGame | 0));
     bestNote = skMachineMeta(bestId).name + (day ? `, ${day}` : '');
+  } else {
+    // The best game was on an ARCHIVED machine (never named): its day only, from the store.
+    const arch = Object.keys(boards).find((id) => (SK_MACHINES[id] || {}).archived && (boards[id].best | 0) === (sk.bestGame | 0) && (sk.bestGame | 0) > 0);
+    const day = arch ? Object.keys(boards[arch].daily || {}).sort().find((d) => (boards[arch].daily[d] | 0) === (sk.bestGame | 0)) : null;
+    if (day) bestNote = day;
   }
   // The best throw's note is the count of balls at that exact value, and only when the value maps
   // to a counter the store actually keeps. Anything else gets no note.
@@ -1350,7 +1359,7 @@ function skeeballScreen(rec) {
     <div class="gs-sk-grid is-3">${totals}</div>
     <div class="gs-sk-sub">${esc(t('gs_sk_every_ball'))}</div>
     <div class="gs-sk-grid is-3">${balls}</div>
-    <div class="gs-sk-grid is-2 is-quiet">${rare}</div>
+    ${fresh ? '' : `<div class="gs-sk-grid is-2 is-quiet">${rare}</div>`}
     <h4 class="gs-tbl-h">${esc(t('gs_sk_machines_h'))}</h4>
     <div class="gs-sk-machines">
       ${playedIds.map((id) => skMachineCardHTML(id, boards[id])).join('')}
@@ -1781,6 +1790,354 @@ function screenFor(id, st) {
   return recordScreen(id, rec);   // business, parchis
 }
 
+// --- One vocabulary, the same layout in every game (2026-11-02, Matt's themes) ------------------------------------
+// ADMIN DEVICES ONLY until Matt releases it: My Stats under `_s4`, leaderboard v2's person-in-a-game page always
+// (`v2ScreenFor(id, st, { fresh: true })`); players keep `screenFor` above. Order: 1 Wins / Losses / Ties / Played,
+// 2 Online (byDiff.mp), 3 Went first / Went second (byMode `went`, else `first` when it says me/them), 4 By
+// difficulty (shape + word), 5 each game's modes (byMode), 6 a few numbers (`dt`, averaged over `dt._n`).
+// DISPLAY ONLY: every number is stored, a sum of stored ones, or a ratio of two. A breakdown with no data is not
+// drawn (no "since" notes, no tables of zeros). '?' (a result recorded outside withMode) has no options to group by.
+const n0 = (v) => Math.max(0, Math.floor(+v || 0));
+// Separators always (Spanish too: "4.481", Matt's item 9), like My Stats under `_s4`.
+const fmtG = (v) => { try { return Number(v).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', { useGrouping: 'always', maximumFractionDigits: 1 }); } catch { return String(v); } };
+const nf = (v) => fmtG(n0(v));
+const r1 = (v) => fmtG(Math.round(v * 10) / 10);
+function parseMode(key) {
+  const o = {};
+  for (const part of String(key || '').split('|')) { const i = part.indexOf('='); if (i > 0) o[part.slice(0, i)] = part.slice(i + 1); }
+  return o;
+}
+/** Every byMode cell as { o (the options), d (difficulty chosen), played, won, lost, hi, lo }. */
+function modeEntries(rec) {
+  const out = [];
+  const bm = rec && rec.byMode;
+  if (!bm || typeof bm !== 'object' || Array.isArray(bm)) return out;
+  for (const k of Object.keys(bm)) {
+    const per = bm[k];
+    if (k === '?' || !per || typeof per !== 'object') continue;
+    const o = parseMode(k);
+    for (const d of Object.keys(per)) {
+      const b = per[d] || {};
+      out.push({ o, d, played: n0(b.played), won: n0(b.won), lost: n0(b.lost), hi: +b.hi > 0 ? +b.hi : 0, lo: +b.lo > 0 ? +b.lo : 0 });
+    }
+  }
+  return out;
+}
+/** byMode cells summed by `fn(options, diff)` (null = left out), in first-seen order. */
+function groupModes(entries, fn) {
+  const m = new Map();
+  for (const e of entries) {
+    let k = null;
+    try { k = fn(e.o, e.d); } catch { k = null; }
+    if (k == null || k === '') continue;
+    const g = m.get(k) || { key: k, played: 0, won: 0, lost: 0, hi: 0, lo: 0 };
+    g.played += e.played; g.won += e.won; g.lost += e.lost;
+    if (e.hi > g.hi) g.hi = e.hi;
+    if (e.lo > 0 && (!g.lo || e.lo < g.lo)) g.lo = e.lo;
+    m.set(k, g);
+  }
+  return [...m.values()].filter((g) => g.played > 0);
+}
+const tiesOf = (r) => Math.max(0, n0(r.played) - n0(r.won) - n0(r.lost));
+const pctOf = (r) => { const d = n0(r.won) + n0(r.lost); return d ? `${Math.round((n0(r.won) * 100) / d)}%` : '–'; };
+const wentOf = (o) => { const w = o.went || o.first; return w === 'me' || w === 'them' ? w : null; };
+const avgOf = (dt, k) => (dt && n0(dt._n) > 0 && Number.isFinite(+dt[k]) ? r1(+dt[k] / n0(dt._n)) : null);
+const sumOf = (dt, k) => (dt && n0(dt._n) > 0 && Number.isFinite(+dt[k]) ? nf(dt[k]) : null);
+/** The value a fact map ({value: count}) holds most often. */
+function topOf(map) {
+  let best = null, n = 0;
+  for (const k of Object.keys(map || {})) if (n0(map[k]) > n) { n = n0(map[k]); best = k; }
+  return best;
+}
+const fh = (k) => `<h4 class="gs-tbl-h">${esc(t(k))}</h4>`;
+/** 1. Wins / Losses / Ties / Played (Ties only when there are some). */
+function recCard(r, ties) {
+  const tie = ties != null ? n0(ties) : tiesOf(r);
+  const cells = [[r.won, 'st_wins'], [r.lost, 'st_losses']].concat(tie > 0 ? [[tie, 'st_ties']] : [], [[r.played, 'st_played']]);
+  return `<div class="gs-rec is-${cells.length}">${cells.map(([v, k]) => `<div><b>${nf(v)}</b><span>${esc(t(k))}</span></div>`).join('')}</div>`;
+}
+/** A record table: label | W–L (–T when any row tied) | Win %. Rows: { label (HTML), won, lost, played }. */
+function wlTable(titleKey, rows) {
+  if (!rows.length) return '';
+  const anyT = rows.some((r) => tiesOf(r) > 0);
+  const body = rows.map((r) => `<tr><th scope="row">${r.label}</th><td>${nf(r.won)}–${nf(r.lost)}${anyT ? `–${nf(tiesOf(r))}` : ''}</td><td>${pctOf(r)}</td></tr>`).join('');
+  return `${titleKey ? fh(titleKey) : ''}<table class="gs-grid gs-wl"><thead><tr><th scope="col"></th><th scope="col">${esc(t(anyT ? 'st_wlt' : 'st_wl'))}</th><th scope="col">${esc(t('st_pct'))}</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+/** 2. Online: the 'mp' bucket, near the top. */
+function onlineHTML(rec) {
+  const mp = ((rec && rec.byDiff) || {}).mp;
+  if (!mp || !n0(mp.played)) return '';
+  return fh('st_online') + recCard(mp);
+}
+/** 3. Went first / went second, from byMode (or rows handed in, Connect 4's grid). */
+function firstHTML(entriesOrRows, rowsGiven) {
+  const rows = rowsGiven ? entriesOrRows : groupModes(entriesOrRows, (o) => wentOf(o));
+  const pick = (k) => rows.find((r) => r.key === k);
+  const out = [['me', 'st_first'], ['them', 'st_second']].map(([k, w]) => { const r = pick(k); return r && n0(r.played) ? { ...r, label: esc(t(w)) } : null; }).filter(Boolean);
+  return wlTable(null, out);
+}
+/** A difficulty as the board shows it: its shape and word; a bucket with no tier keeps its own name. */
+function diffLabelHTML(k) {
+  const tr = tierOf(k);
+  if (tr) return `<span class="lb2-tw">${v2shape(tr)}${esc(t(['', 'gs_diff_easy', 'gs_diff_medium', 'gs_diff_hard', 'gs_diff_expert'][tr]))}</span>`;
+  const m = DIFF_META[k];
+  return esc(m ? t(m.labelKey) : titleCase(String(k)));
+}
+const diffOrder = (k) => tierOf(k) || ((DIFF_META[k] || {}).order) || 8;
+/** 4. By difficulty (online is its own card, so 'mp' is not a row). */
+function diffHTML(byDiff) {
+  const bd = byDiff || {};
+  const rows = Object.keys(bd).filter((k) => k !== 'mp' && n0((bd[k] || {}).played) > 0).sort((a, b) => diffOrder(a) - diffOrder(b))
+    .map((k) => ({ label: diffLabelHTML(k), won: bd[k].won, lost: bd[k].lost, played: bd[k].played }));
+  return wlTable('st_by_diff', rows);
+}
+/** 5. A mode table from byMode: `fn(options, diff)` names the row, `labelOf(key)` prints it. */
+function modeHTML(titleKey, entries, fn, labelOf, order) {
+  let rows = groupModes(entries, fn);
+  if (order) rows = rows.sort((a, b) => order(a.key) - order(b.key));
+  return wlTable(titleKey, rows.map((r) => ({ ...r, label: esc(labelOf(r.key)) })));
+}
+/** 6. Named numbers: [labelKey or text, value]; a null value is not drawn. */
+function factsHTML(list) {
+  const rows = list.filter((x) => x && x[1] != null && x[1] !== '');
+  if (!rows.length) return '';
+  return `<div class="gs-tallies">${rows.map(([k, v]) => `<div class="gs-tally"><b>${v}</b><span>${esc(String(k).startsWith('st_') || String(k).startsWith('gs_') ? t(k) : k)}</span></div>`).join('')}</div>`;
+}
+/** The usual competitive screen, in the themes' order. `o.total` overrides rec.total (a game whose own counter is
+ *  the record), `o.top` sits above everything, `o.modes` are mode tables, `o.facts` the named numbers. */
+function stdScreen(id, rec, o = {}) {
+  const tot = o.total || (rec && rec.total) || {};
+  if (!n0(tot.played)) return o.top ? o.top + (o.tail || '') : emptyState(gameLabel(id));
+  const E = modeEntries(rec);
+  return [
+    o.onlineFirst ? onlineHTML(rec) : '',
+    o.top || '',
+    recCard(tot, o.ties),
+    o.onlineFirst ? '' : onlineHTML(rec),
+    o.first === false ? '' : (o.firstRows ? firstHTML(o.firstRows, true) : firstHTML(E)),
+    o.diff === false ? '' : diffHTML(o.byDiff || (rec && rec.byDiff)),
+    ...(o.modes ? o.modes(E) : []),
+    factsHTML(o.facts || []),
+    o.tail || '',
+  ].join('');
+}
+const playersLabel = (k) => t('st_players_n', { n: k });
+const byNum = (k) => +k || 0;
+const subTotal = (rec, sub) => { const t0 = (rec && rec.total) || {}; return n0(t0.played) ? t0 : (sub || t0); };
+const FORM = { balanced: 'st_form_balanced', attack: 'st_form_attack', defend: 'st_form_defend', diamond: 'st_form_diamond' };
+const formWord = (k) => (FORM[k] ? t(FORM[k]) : titleCase(String(k)));
+const HD_TABLES = ['alley', 'free', 'buddy', 'vegas', 'regional', 'world', 'solar', 'galaxy', 'universe'];
+const tableWord = (k) => (k === 'free' ? t('st_free_table') : HD_TABLES.includes(k) ? t('st_hd_' + k) : titleCase(String(k)));
+const DARTS_KINDS = ['101', '201', '301', 'cricket'];
+const dartsKind = (k) => (String(k).startsWith('cricket') ? 'cricket' : String(k));
+
+function freshConnect4(rec) {
+  const grid = (rec && rec.grid) || {};
+  const side = (s) => { let w = 0, l = 0; for (const [d] of C4_DIFFS) { const c = (grid[s] || {})[d] || {}; w += c.w | 0; l += c.l | 0; } return { won: w, lost: l, played: w + l }; };
+  const g = c4Totals(grid);
+  const tot = n0(((rec && rec.total) || {}).played) >= g.plays ? rec.total : { won: g.w, lost: g.l, played: g.plays };
+  const byDiff = {};
+  for (const [d] of C4_DIFFS) {
+    const a = (grid.player || {})[d] || {}, b = (grid.computer || {})[d] || {};
+    const w = (a.w | 0) + (b.w | 0), l = (a.l | 0) + (b.l | 0);
+    if (w + l) byDiff[d] = { won: w, lost: l, played: w + l };
+  }
+  return stdScreen('connect4', rec, { total: tot, byDiff, firstRows: [{ key: 'me', ...side('player') }, { key: 'them', ...side('computer') }] });
+}
+function freshTicTacToe(rec) {
+  const tt = (rec && rec.tt) || {};
+  const E = modeEntries(rec);
+  let anyDiff = false;
+  const variant = (v, key) => {
+    const r = tt[v] || {};
+    if (!n0(r.played)) return '';
+    const rows = groupModes(E.filter((e) => e.o.v === v && e.d !== 'mp'), (o, d) => (tierOf(d) ? d : null))
+      .sort((a, b) => diffOrder(a.key) - diffOrder(b.key)).map((x) => ({ ...x, label: diffLabelHTML(x.key) }));
+    if (rows.length) anyDiff = true;
+    return fh(key) + recCard(r, r.tied) + wlTable(null, rows);
+  };
+  const parts = variant('ultimate', 'gs_tt_ultimate') + variant('classic', 'gs_tt_classic');
+  return stdScreen('tictactoe', rec, { diff: false, tail: parts + (anyDiff ? '' : diffHTML(rec && rec.byDiff)) });
+}
+function freshHoldem(rec) {
+  const hb = (rec && rec.hb) || {}, hs = (rec && rec.hs) || {};
+  const money = (n) => '$' + nf(n);
+  const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  const SUITS = ['♠', '♥', '♦', '♣'];
+  const cards = Array.isArray(hs.bestCards) && hs.bestCards.length === 5
+    ? hs.bestCards.map((c) => `<span class="gs-pkc${(c & 3) === 1 || (c & 3) === 2 ? ' is-red' : ''}">${RANKS[c >> 2] || '?'}${SUITS[c & 3]}</span>`).join('') : '';
+  const bestName = hs.bestCat >= 0 && hs.bestCat <= 9 ? esc(t('lb_hb_cat_' + hs.bestCat)) : null;
+  const hasBank = n0(hb.entries) || n0(hb.grants) || n0(hb.cashes) || +hb.winnings > 0;
+  if (!n0(((rec && rec.total) || {}).played) && !hasBank && !n0(hs.hands)) return emptyState("Texas Hold'em");
+  const top = factsHTML([
+    ['gs_hb_bank', hasBank ? money(holdemBalance(hb)) : null],
+    ['gs_hs_pot', n0(hs.hands) ? money(hs.bigPot) : null],
+    ['gs_hs_best', n0(hs.hands) ? bestName : null],
+  ]) + (cards ? `<p class="gs-pkbest">${cards}</p>` : '');
+  const E = modeEntries(rec);
+  const tables = groupModes(E, (o) => o.tier || null);
+  const most = tables.slice().sort((a, b) => b.played - a.played)[0];
+  return stdScreen('holdem', rec, {
+    top, diff: false, first: false,
+    modes: () => [wlTable('st_by_table', tables.sort((a, b) => HD_TABLES.indexOf(a.key) - HD_TABLES.indexOf(b.key)).map((r) => ({ ...r, label: esc(tableWord(r.key)) })))],
+    facts: [['st_most_table', most ? esc(tableWord(most.key)) : null]],
+  });
+}
+function freshCupPong(rec) {
+  const cp = (rec && rec.cp) || {}, dt = (rec && rec.dt) || {};
+  const racks = n0(cp.soloRacks);
+  const solo = racks ? fh('st_solo') + factsHTML([
+    ['gs_cp_best', cp.soloBest ? nf(cp.soloBest) : '–'],
+    ['gs_cp_racks', nf(racks)],
+    ['gs_cp_avg', r1(n0(cp.soloThrows) / racks)],
+  ]) : '';
+  if (!n0(((rec && rec.total) || {}).played)) return racks ? solo : emptyState('Cup Pong');
+  const rack = topOf(dt.rack);
+  // No make %: a solo rack's detail adds its throws into the same `dt.throws` as a match's, so made / throws
+  // would mix the two (it would need its own key in the solo writer first).
+  return stdScreen('cuppong', rec, {
+    facts: [
+      ['st_on_fire', sumOf(dt, 'onFire')], ['st_balls_back', sumOf(dt, 'ballsBack')],
+      ['st_reracks', sumOf(dt, 'reracks')], ['st_fav_rack', rack ? esc(tf('st_rk_' + rack, titleCase(rack))) : null],
+    ],
+    tail: solo,
+  });
+}
+function freshWayout(rec) {
+  const solved = n0(((rec && rec.total) || {}).won);
+  const wo = (rec && rec.wo) || {};
+  const rush = wo.rush || null;
+  const runsOf = (m) => woRushRuns(((rush || {}).runs || {})[m]);
+  const hasRush = RUSH_MODES.some((m) => runsOf(m).length > 0);
+  if (!solved && !hasRush) return emptyState(t('game_title_wayout'));
+  // Arrows cleared: every timed level's arrows (wo.log, per difficulty) + every Rush run's arrows (its score).
+  let arrows = 0;
+  for (const k of Object.keys(wo.log || {})) for (const e of woList(wo.log[k])) arrows += n0(e && e.a);
+  for (const m of RUSH_MODES) for (const r of runsOf(m)) arrows += n0(r.s);
+  const byDiff = (rec && rec.byDiff) || {};
+  const rows = SD_DIFFS.filter(([k]) => n0((byDiff[k] || {}).won) > 0 || woPoints(rec, k) > 0)
+    .map(([k]) => `<tr><th scope="row">${diffLabelHTML(k)}</th><td>${nf((byDiff[k] || {}).won)}</td><td>${nf(woPoints(rec, k))}</td></tr>`).join('');
+  const rushRows = RUSH_MODES.filter((m) => runsOf(m).length).map((m) => {
+    const wk = woRushBest(rec, m), all = Object.values(woRushBestMap(((rush || {}).best || {})[m]));
+    return `<tr><th scope="row">${diffLabelHTML(m === 'hard' ? 'hard' : 'easy')}</th><td>${wk == null ? '–' : nf(wk)}</td><td>${all.length ? nf(Math.max(...all)) : '–'}</td><td>${nf(runsOf(m).length)}</td></tr>`;
+  }).join('');
+  return factsHTML([['st_points', nf(woPoints(rec))], ['st_levels_cleared', nf(solved)], ['st_arrows', arrows ? nf(arrows) : null]])
+    + (rows ? `${fh('st_by_diff')}<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('st_levels_cleared'))}</th><th scope="col">${esc(t('st_points'))}</th></tr></thead><tbody>${rows}</tbody></table>` : '')
+    + (rushRows ? `${fh('st_rush')}<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('st_this_week'))}</th><th scope="col">${esc(t('st_best_week'))}</th><th scope="col">${esc(t('st_runs'))}</th></tr></thead><tbody>${rushRows}</tbody></table>` : '');
+}
+/** Arrow Maze's per-level log as stored: an array, or an object keyed by index (Firebase). */
+function woList(raw) { return Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.values(raw) : []; }
+function freshMinesweeper(rec) {
+  const ms = (rec && rec.ms) || {}, tot = (rec && rec.total) || {};
+  if (!n0(tot.played)) return emptyState('Minesweeper');
+  const bd = (rec && rec.byDiff) || {};
+  const rows = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => {
+    const b = bd[k], best = (ms.bestTimeMs || {})[k] | 0, p = ((ms.bestClearedPct || {})[k] | 0);
+    return `<tr><th scope="row">${diffLabelHTML(k)}</th><td>${nf(b.won)}–${nf(b.lost)}</td><td>${best > 0 ? fmtMmSs(best) : p > 0 ? `${p}%` : '–'}</td></tr>`;
+  }).join('');
+  return recCard(tot) + (rows ? `${fh('st_by_diff')}<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('st_wl'))}</th><th scope="col">${esc(t('st_best'))}</th></tr></thead><tbody>${rows}</tbody></table>` : '')
+    + factsHTML([['gs_ms_flags', nf(ms.flagsRight)]]);
+}
+function freshMurdoku(rec) {
+  const html = murdokuScreen(rec);
+  const best = groupModes(modeEntries(rec), (o, d) => (tierOf(d) ? d : null)).filter((g) => g.lo > 0).sort((a, b) => diffOrder(a.key) - diffOrder(b.key));
+  if (!best.length || !n0(((rec && rec.total) || {}).won)) return html;
+  return html + `<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('gs_sd_best_time'))}</th></tr></thead><tbody>${best.map((g) => `<tr><th scope="row">${diffLabelHTML(g.key)}</th><td>${fmtMmSs(g.lo)}</td></tr>`).join('')}</tbody></table>`;
+}
+function freshBrickBlitz(rec) {
+  const html = brickBlitzScreen(rec);
+  const modes = groupModes(modeEntries(rec), (o) => o.m || null);
+  if (modes.length < 2) return html;
+  return html + `${fh('st_by_mode')}<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('st_played'))}</th><th scope="col">${esc(t('st_best'))}</th></tr></thead><tbody>${modes.map((g) => `<tr><th scope="row">${esc(t(g.key === 'endless' ? 'st_bz_endless' : 'st_bz_arcade'))}</th><td>${nf(g.played)}</td><td>${g.hi ? nf(g.hi) : '–'}</td></tr>`).join('')}</tbody></table>`;
+}
+
+/** The new screen for one game (admin devices only for now; see the block comment above). */
+function freshScreenFor(id, stt) {
+  const rec = (stt.games && stt.games[id]) || {};
+  const dt = rec.dt || {};
+  switch (id) {
+    case 'connect4': return freshConnect4(rec);
+    case 'tictactoe': return freshTicTacToe(rec);
+    case 'holdem': return freshHoldem(rec);
+    case 'cuppong': return freshCupPong(rec);
+    case 'wayout': return freshWayout(rec);
+    case 'minesweeper': return freshMinesweeper(rec);
+    case 'murdoku': return freshMurdoku(rec);
+    case 'brickblitz': return freshBrickBlitz(rec);
+    case 'skeeball': return skeeballScreen(rec, true);
+    case 'chinchon': {
+      const cc = rec.cc || {};
+      return stdScreen(id, rec, { modes: (E) => [modeHTML('st_by_players', E, (o) => o.n || null, playersLabel, byNum)],
+        facts: [['gs_cc_closed', nf(cc.closed)], ['gs_cc_minus_ten', nf(cc.minusTen)], ['gs_cc_chinchons', nf(cc.chinchons)]] });
+    }
+    case 'escoba': return stdScreen(id, rec, { modes: (E) => [modeHTML('st_by_players', E, (o) => o.n || null, playersLabel, byNum)],
+      facts: [['gs_es_escobas', nf((rec.es || {}).escobas)]] });
+    case 'uno': return stdScreen(id, rec, { modes: (E) => [modeHTML('st_by_players', E, (o) => o.n || null, playersLabel, byNum)] });
+    case 'darts': return stdScreen(id, rec, {
+      modes: (E) => [modeHTML('st_by_game', E, (o) => (o.kind ? dartsKind(o.kind) : null), (k) => (k === 'cricket' ? t('st_cricket') : k), (k) => DARTS_KINDS.indexOf(k))],
+      facts: [['st_avg_turns', avgOf(dt, 'turns')]] });
+    case 'flicksoccer': {
+      const E = modeEntries(rec);
+      const forms = groupModes(E, (o) => (o.off && o.def ? `${o.off}|${o.def}` : null));
+      const lab = (k) => k.split('|').map(formWord).join(' / ');
+      const most = forms.slice().sort((a, b) => b.played - a.played)[0];
+      return stdScreen(id, rec, {
+        modes: () => [wlTable('st_by_form', forms.map((r) => ({ ...r, label: esc(lab(r.key)) })))],
+        facts: [['st_most_form', most && forms.length > 1 ? esc(lab(most.key)) : null], ['st_goals_for', sumOf(dt, 'gf')], ['st_goals_against', sumOf(dt, 'ga')], ['st_flicks', sumOf(dt, 'flicks')]] });
+    }
+    case 'hoops4': {
+      const make = n0(dt.shots) ? `${Math.round((n0(dt.made) * 100) / n0(dt.shots))}%` : null;
+      return stdScreen(id, rec, {
+        modes: (E) => [modeHTML('st_shot_rule', E, (o) => (o.one === '1' || o.one === '0' ? o.one : null), (k) => t(k === '1' ? 'st_one_shot' : 'st_until_score'))],
+        facts: [['st_shots', sumOf(dt, 'shots')], ['st_made', sumOf(dt, 'made')], ['st_missed', sumOf(dt, 'missed')], ['st_make_pct', make]] });
+    }
+    case 'mancala': return stdScreen(id, rec, { facts: [['st_stones', sumOf(dt, 'mine')], ['st_avg_stones', avgOf(dt, 'mine')], ['st_avg_their_stones', avgOf(dt, 'theirs')]] });
+    case 'filler': return stdScreen(id, rec, { facts: [['st_squares', sumOf(dt, 'mine')], ['st_avg_squares', avgOf(dt, 'mine')], ['st_avg_their_squares', avgOf(dt, 'theirs')], ['st_avg_moves', avgOf(dt, 'moves')]] });
+    case 'dotsboxes': {
+      const db = rec.db || {};
+      return stdScreen(id, rec, { total: subTotal(rec, db), ties: n0(((rec.total || {}).played)) ? undefined : db.tied,
+        facts: [['st_boxes', nf(db.boxes)], ['st_avg_boxes', avgOf(dt, 'mine')], ['st_avg_their_boxes', avgOf(dt, 'theirs')], ['st_best_chain', nf(db.bestChain)]] });
+    }
+    case 'yahtzee': {
+      const yz = rec.yz || {};
+      return stdScreen(id, rec, { total: subTotal(rec, yz),
+        facts: [['st_best_score', nf(yz.bestScore)], ['st_avg_score', avgOf(dt, 'score')], ['st_yahtzees', nf(yz.yahtzees)], ['st_upper', sumOf(dt, 'upper')]] });
+    }
+    case 'dominoes': {
+      const dm = rec.dm || {};
+      return stdScreen(id, rec, { total: subTotal(rec, dm),
+        modes: (E) => [modeHTML('st_by_target', E, (o) => o.to || null, (k) => t('st_to_n', { n: k }), byNum)],
+        facts: [['gs_dm_rounds', nf(dm.rounds)], ['gs_dm_best_round', nf(dm.bestRound)], ['gs_dm_points', nf(dm.points)], ['st_avg_points', avgOf(dt, 'pts')]] });
+    }
+    case 'battleship': {
+      const bs = rec.bs || {};
+      return stdScreen(id, rec, { total: subTotal(rec, bs),
+        modes: (E) => [modeHTML('st_by_board', E, (o) => (o.size === 'quick' || o.size === 'classic' ? o.size : null), (k) => t('st_bs_' + k))],
+        facts: [['gs_bs_shots', nf(bs.shots)], ['gs_bs_hit_rate', n0(bs.shots) ? `${Math.round((n0(bs.hits) * 100) / n0(bs.shots))}%` : null],
+          ['gs_bs_ships_sunk', nf(bs.sunk)], ['gs_bs_fewest_shots', bs.fewestShotsWin ? nf(bs.fewestShotsWin) : null]] });
+    }
+    case 'boggle': {
+      const bg = rec.bg || {};
+      const lw = bg.longestWord || {};
+      return stdScreen(id, rec, {
+        modes: (E) => [modeHTML('gs_lang_h', E, (o) => (o.lang === 'en' || o.lang === 'es' ? o.lang : null), (k) => t('st_lang_' + k)),
+          modeHTML('st_by_timer', E, (o) => o.min || null, (k) => t('st_min_n', { n: k }), byNum)],
+        facts: [['gs_bg_best_score', nf(bg.bestScore)], ['gs_bg_words', nf(bg.words)], ['gs_bg_longest', lw.word ? esc(`${lw.word} (${lw.len | 0})`) : null]] });
+    }
+    case 'eightball': return stdScreen(id, rec, {
+      modes: (E) => [modeHTML('st_by_game', E, (o) => (['8', '9', 'ct'].includes(o.game) ? o.game : null), (k) => t('st_pool_' + k), (k) => ['8', '9', 'ct'].indexOf(k))] });
+    case 'airhockey': {
+      const ah = rec.ah || {};
+      const ms = (ah.bestShot | 0) * 2.44 / 900;
+      const shot = getLang() === 'es' ? `${Math.round(ms * 3.6)} km/h` : `${Math.round(ms * 2.23694)} mph`;
+      return stdScreen(id, rec, { facts: [['gs_ah_shot', ah.bestShot ? shot : null], ['gs_ah_shutouts', nf(ah.shutouts)], ['gs_ah_streak', nf(ah.bestStreak)], ['gs_ah_goals', `${nf(ah.goalsFor)}–${nf(ah.goalsAgainst)}`]] });
+    }
+    case 'business': case 'parchis': case 'archery': case 'cupbaseball': case 'battlearena':
+      return stdScreen(id, rec);
+    default: return screenFor(id, stt);
+  }
+}
+
 // --- The v2 look (2026-11-02, Matt: "Restyle My Stats to match") --------------------------------------
 // ONE set of rules for My Stats and the leaderboard v2 person-in-a-game page (js/leaderboard2-ui.js): rows,
 // cards, no capitals, the board's difficulty shapes. Numbers are unchanged; only the markup around them.
@@ -1890,7 +2247,14 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .lb2-pmed small{font-size:12px;color:var(--l2-muted)}
 .gs-v2 .lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
 .gs-v2 .lb2-stat:first-child{border-top:0}
-.gs-v2 .lb2-stat b{font-weight:700}`;
+.gs-v2 .lb2-stat b{font-weight:700}
+.gs-v2 .gs-rec{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;padding:12px 4px}
+.gs-v2 .gs-rec.is-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gs-v2 .gs-rec div{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;text-align:center}
+.gs-v2 .gs-rec b{font-size:22px;font-weight:800;color:var(--l2-text);font-variant-numeric:tabular-nums;line-height:1.1}
+.gs-v2 .gs-rec span{font-size:13px;color:var(--l2-muted);overflow-wrap:anywhere}
+.gs-v2 .gs-wl td{font-variant-numeric:tabular-nums;white-space:nowrap}
+.gs-v2 .gs-grid tbody th .lb2-tw{color:var(--l2-text)}`;
 // Session 4 (2026-11-02): admin devices only until Matt approves (`_s4`, set at open): ranks, one close, 4.481, one dash.
 let _s4 = false;
 const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', _s4 ? { useGrouping: 'always' } : undefined); } catch { return String(n); } };
@@ -1944,9 +2308,11 @@ function spellingBeeV2(rec, code) {
     <div class="lb2-card">${row(tf('lb_bee_points', 'Points'), all.points)}${row(tf('lb_bee_words', 'Words'), all.words)}${row(t('gs_sk_days'), all.days)}${row(t('gs_bee_genius'), all.genius)}${row(t('gs_bee_queen'), all.queen)}</div>
     ${langs}`;
 }
-export function v2ScreenFor(id, st) {
+/** `opts.fresh` (admin devices only, 2026-11-02): the one-vocabulary screens (freshScreenFor). Without it, today's. */
+export function v2ScreenFor(id, st, opts) {
   if (id === 'contexto') return contextoV2((st.games || {}).contexto || {});
   if (id === 'spellingbee') return spellingBeeV2((st.games || {}).spellingbee || {}, st.code);
+  if (opts && opts.fresh) return v2Polish(freshScreenFor(id, st));
   return v2Polish(screenFor(id, st));
 }
 
@@ -2031,8 +2397,10 @@ function bodyHTML() {
     const played = ((rec.total || {}).played) | 0;
     const pl = _places && _places[_game];
     const right = pl ? `<span class="gs-gbd">${boardValHTML(_game, pl)}${rankHTML(pl)}</span>` : '';
-    const head = `<div class="gs-ghead"><span class="gs-gart">${GAME_ART[hubIdOf(_game)] || ''}</span><span class="gs-ghn"><b>${esc(tab ? t(tab.labelKey) : _game)}</b><small>${esc(t('lb_played_count', { n: v2fmt(played) }))}</small></span>${right}</div>`;
-    return head + v2ScreenFor(_game, st);
+    // The new screens (admin, `_s4`) carry Played themselves, so the head card does not repeat it.
+    const sub = _s4 && !SOLO.has(_game) ? '' : `<small>${esc(t('lb_played_count', { n: v2fmt(played) }))}</small>`;
+    const head = `<div class="gs-ghead"><span class="gs-gart">${GAME_ART[hubIdOf(_game)] || ''}</span><span class="gs-ghn"><b>${esc(tab ? t(tab.labelKey) : _game)}</b>${sub}</span>${right}</div>`;
+    return head + v2ScreenFor(_game, st, { fresh: _s4 });
   }
   return v2Polish(overviewHTML(st) + gameListHTML(st.games || {}, _places ? { places: _places } : undefined));
 }
