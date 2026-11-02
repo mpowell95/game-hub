@@ -1363,7 +1363,7 @@ class CupPong {
       const lost = quitLossLost('cuppong');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
       const tl = this._tally || {};
-      const detail = { throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, reracks: m.reracksUsed.a | 0, ...(tl.rack ? { rack: tl.rack } : {}) };
+      const detail = { mt: tl.throws | 0, mm: tl.made | 0, throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, reracks: m.reracksUsed.a | 0, ...(tl.rack ? { rack: tl.rack } : {}) };
       if (!lost) try { withMode(() => (modeOf(this.settings)), this.settings.diff, () => recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a), { detail }); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);

@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1416';
+const CACHE = 'game-hub-v1417';
 
 const ASSETS = [
   './',
@@ -842,7 +842,7 @@ const REST_MANIFEST = {
   './js/lb-rules.js': '229e7a9b85',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'fb46a6947a',
+  './js/strings.js': 'eb08353293',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -850,7 +850,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '4017bad27c',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '0017ed3c14',
+  './js/game-stats-ui.js': '0a8365fc12',
   './js/stats-net.js': 'e4990614f7',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -966,7 +966,7 @@ const REST_MANIFEST = {
   './filler/': '12eb5af876',
   './filler/index.html': '12eb5af876',
   './filler/css/filler.css': '89d92bcc00',
-  './filler/js/ui.js': 'f64354f341',
+  './filler/js/ui.js': 'af61ed5afa',
   './filler/js/game.js': '90ce8fb511',
   './filler/js/ai.js': '7696a3c895',
   './filler/js/hash.js': '3491931082',
@@ -1217,7 +1217,7 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': '698942a954',
   './cup-pong/css/cup-pong.css': 'd71937af33',
-  './cup-pong/js/ui.js': '554b1be3b2',
+  './cup-pong/js/ui.js': '252c603653',
   './cup-pong/js/geom.js': 'b4007cdf47',
   './cup-pong/js/rack.js': 'e23be8d550',
   './cup-pong/js/physics.js': '108758b93f',
