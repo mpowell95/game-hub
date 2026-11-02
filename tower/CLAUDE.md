@@ -14,7 +14,7 @@ Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's ap
 - **Perfect**: within `TUNE[diff].perfect` world units, the block keeps its full width. Every 5 Perfects in
   a row (`GROW_EVERY`) grow it back by `GROW` (never past `START_W`).
 - No overlap = game over. Score = blocks stacked (stack length - 1).
-- Speed rises per block to a cap. Four difficulties (speed + perfect slack): easy / medium / hard / expert.
+- Speed rises per block to a cap (doubled 2026-11-02, Matt: "should increase as the game goes on"). Blocks 40 units tall (were 26; Matt: "pretty thin"). Four difficulties (speed + perfect slack): easy / medium / hard / expert.
 - World is `WORLD_W` (400) units wide; the UI scales it to the screen.
 
 ## Hub integration
