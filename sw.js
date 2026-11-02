@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1422';
+const CACHE = 'game-hub-v1423';
 
 const ASSETS = [
   './',
@@ -30,6 +30,7 @@ const ASSETS = [
   './js/back-stack.js',
   './js/lb-rules.js',
   './js/lb-points.js',
+  './js/points-toast.js',
   './js/lb2-lost.js',
   './js/tabbar-fix.js',
   './js/viewport.js',
@@ -829,7 +830,7 @@ const REST_MANIFEST = {
   './css/hub.css': '1f4608e970',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '997a6680bc',
+  './js/hub.js': '305dd7e2f2',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -843,18 +844,19 @@ const REST_MANIFEST = {
   './js/back-stack.js': '30b257fa2a',
   './js/lb-rules.js': '229e7a9b85',
   './js/lb-points.js': '594d65f358',
+  './js/points-toast.js': 'e677624283',
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '306304c5b7',
+  './js/strings.js': 'd15ce11009',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'e14ea46fd7',
+  './js/game-stats.js': 'b1834b017a',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '0a8365fc12',
+  './js/game-stats-ui.js': 'e01d4753a6',
   './js/stats-net.js': '6281c321bf',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',

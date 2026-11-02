@@ -19,6 +19,17 @@ Approved by Matt on 2026-11-02 ("build it" after reviewing `docs/LEADERBOARD-POI
   (King 21 -> 17, MattyIce 6 -> 8, Natalia 0 -> 1; main's counts differ from the table by Gridlock's new board).
   Tic Tac Toe 3rd: TP 20 and Jojopow 20 are no longer tied (more wins breaks it: TP).
 
+## Follow-ups 1 and 2: BUILT (v1423, 2026-11-02)
+- (i) / info: v2's (i) lists every level's points, the 20 cap, online and options (v1422); every wins game's
+  stats page (My Stats and the leaderboard's person-in-a-game page, old and v2 look) ends with "Points: N" and the
+  same table (`js/game-stats-ui.js` `ptsSectionHTML`).
+- "+X pts": `js/game-stats.js` announces each counted WIN (`gamehub:win`, a copy of the record; display only);
+  `js/points-toast.js` (started by `js/hub.js`) shows a gold "+X pts" pill over the result screen for 3 s. Exact
+  per win (`pointsForWin`); near-guaranteed levels show +1 until THIS phone's record hits the 20 cap, then nothing
+  (the cap is per person across phones; a phone sees only its own record). Not on Monopoly Deal / Parchís (own pages,
+  no hub) and not on admin-only games. Tested in a browser: Hard Connect Four +8, online Flick +3, Tic Tac Toe Easy
+  +1, a loss nothing (`tools/test-lb-points.mjs` covers the maths).
+
 ## Why
 Today every WINS-ranked board counts only wins at the player's hardest level ("difficulty outranks score"). Players
 (Moonis, bug reports 2026-11-02 Flick Soccer + Dots and Boxes) think wins are missing; one lucky Hard win decides

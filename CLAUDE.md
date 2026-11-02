@@ -113,11 +113,12 @@ A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation
 
 Every WINS board (lb-rules `wins`/`cuppong`) ranks on POINTS: `js/lb-points.js` (per game + level, online value,
 near-guaranteed levels 1 a win, max 20 per game per person, option multipliers from byMode). Read-time only. Spec and
-status: `docs/LEADERBOARD-POINTS-DECISIONS.md`. Changing a value = edit `P` there; old and v2 boards move together.
+status: `docs/LEADERBOARD-POINTS-DECISIONS.md`. Changing a value = edit `P` there; boards, (i), stats pages and the
+"+X pts" pill (`js/points-toast.js`, fed by game-stats' `gamehub:win` event) all move together. `tools/test-lb-points.mjs`.
 
 ## Open handoff: Leaderboard v2 (2026-11-01)
 
-**"leaderboard session 5"**: points BUILT (v1422); (i) text and "+X pts" per `docs/LEADERBOARD-POINTS-DECISIONS.md`. **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
+**"leaderboard session 5"**: DONE (v1422 points, v1423 (i)/stats tables + "+X pts" `js/points-toast.js`); `docs/LEADERBOARD-POINTS-DECISIONS.md`. **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
 and continue that conversation as if it were the same session (where it stopped, Matt's decisions, open questions,
 tools). Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
 released or abandoned.
@@ -363,6 +364,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
+- **Leaderboard points (2026-11-02):** `tools/test-lb-points.mjs` (per-game points, the cap, "+X pts").
 - **Online pairs (2026-11-02):** `tools/test-online-pairs.mjs [--db <snapshot>]` (the sock-account alerts; `--db` lists every pair and alert).
 - **Word Weaver's daily board (2026-11-02):** `tools/read-ww-daily.mjs` (read only), `tools/test-ww-daily-rules.mjs`.
 - **Leaderboard (i) rules (2026-11-02):** `tools/test-lb-rules.mjs` (every board game has a `js/lb-rules.js` entry, checked against each game's own `statsDiff`).
