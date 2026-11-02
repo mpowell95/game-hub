@@ -48,9 +48,17 @@ input (centre letter yellow, wrong letters grey), the hive, Delete / shuffle / E
 letters, Backspace, Enter, Space = shuffle. Hints show what is LEFT, titled "Left to find" (Matt could not tell, 2026-10-26).
 How to Play = the hive + four short lines (Matt, 2026-10-26: "Too. Many. Words."). Genius and Queen Bee each pop once per puzzle (`seenGenius` / `seenQueen`).
 **Type-ahead (2026-10-26)**: typing during the accepted/refused feedback ends it at once (`_feedback`/`_settle`); it used to swallow the next word's first letter.
-**Past puzzles (Matt, 2026-10-25)**: a month calendar, epoch to today; tap a day to play it (`_startDay(n)`). Same save
-record per puzzle, same one Genius win per puzzle. The HUD shows the date while on a past day; Yesterday's Answers is
-relative to the puzzle shown (hidden on day 0). Opening the game always starts on today.
+**Past puzzles (Matt, 2026-10-25; reworked 2026-11-01)**: a month calendar, epoch to today. Opening the game always starts
+on today. **Only today is played for real** (`this.mode`: `live` / `review` / `fun`, set in `_startDay`). A past day with
+words in the real save is LOOK-ONLY (`_renderReview`: hive, rank, score, Words / Bonus rows opening every word, yours
+ticked; Matt: "no for fun playing on past days you actually played"). Any other past day asks first (`_askFun`: "Just for
+fun. Doesn't count toward your stats or the leaderboard.", Play / See answers). **For fun** = its own store
+`gamehub.spellingbee.fun.v1` (`{games: {key: {day, found, times, revealed}}}`, never `games` of the real save, so never
+countDays, Genius, the board or stats; no board post); a dashed "For fun" tag; the trophy shows that day's real board with
+the for-fun row unplaced and dashed; the eye = "See answers? This puzzle ends." (`revealed`, look-only after). Its log
+events are `f` + the name (`fguess`, `fopen`...) so no fair-play rule reads them as real. The Words/Bonus lists open only
+like Yesterday's Answers (server time `answersShown(n + 1)` + a confirmed `answers` log). Dashed calendar day = for fun.
+Days played late under the old calendar keep everything they counted (rule 2) and are look-only now.
 
 ## Hub integration
 
