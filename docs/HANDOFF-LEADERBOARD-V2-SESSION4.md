@@ -110,3 +110,18 @@ Interface only: `tools/test-lb2-parity.mjs` 372/372 EN and ES (old gold 38 = v2 
    `table-layout:fixed` with wrapping headers (Arrow Maze, Minesweeper in Spanish). A probe over all 34 games' stats
    (v2 and My Stats, 402/360, EN/ES) finds nothing wider than the screen.
 12. Back to a list restores its scroll (v2: each level's `scroll`, each tab's first screen; My Stats `_s4`: the list).
+
+## Session 4, later the same day (2026-11-02, v1395-v1419): where it stands
+
+Live: time zones (v1395, everyone); items 1-10 + Matt's 12 + Games sort row + Play on person-game + Lost records (admin);
+every result logs mode + detail, enforced by `tools/scan-game-modes.mjs` (v1410, everyone); stats screens rebuilt (admin,
+v1416); POPONGO archived (everyone); Filler squares per color, Cup Pong match-only make % (`mt`/`mm`, v1417); (i) "Easier
+wins don't add" (v1418); Hoops "until you score" counts one level lower (v1410).
+**OPEN, waiting on Matt:** Flick Soccer points. Branch `claude/lb-points` (commit 69d642c, NOT merged) implements
+"every win adds" (level 1/2/3 x goals to win, unknown length x2, online 2): King of Games 159 > MattyIce 68.
+Matt's original example wanted HARDEST LEVEL FIRST, then goal points at that level (MattyIce Hard 10 > King Hard 9).
+Asked "Option 1 (hardest first) or 2 (every win adds)"; his answer also decides the other wins boards (proposal per game:
+Darts 101/201/301 = x1/x2/x3, Cricket x3; Pool race x1-3; Dominoes 150/300/500; Chinchón length; Hoops one shot x2;
+Cup Pong limited reracks x2; level-only for the rest; old wins at the game's default length). Release of v2 to everyone:
+Matt has not said "release it". Moonis's bug reports (Flick, Dots): all games recorded; the board counts only the
+hardest level's wins; a reply text was given to Matt.
