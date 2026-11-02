@@ -917,6 +917,7 @@ export const STRINGS = {
     lb_tt_classic: 'Classic',
     // Points per win (2026-11-02, js/lb-points.js): the line on every wins board, the (i), the result screens.
     lb_pts_key: 'Points a win',
+    lb_pts_total: 'Points',
     lb_pts_online: 'Online',
     lb_pts_max: (p) => `max ${p.n} in all`,
     lb_pts_x_dotsboxes: 'Large board x2',
@@ -1889,6 +1890,7 @@ export const STRINGS = {
     lb_tt_ultimate: 'Definitivo',
     lb_tt_classic: 'Clásico',
     lb_pts_key: 'Puntos por victoria',
+    lb_pts_total: 'Puntos',
     lb_pts_online: 'En línea',
     lb_pts_max: (p) => `máx. ${p.n} en total`,
     lb_pts_x_dotsboxes: 'Tablero grande x2',
