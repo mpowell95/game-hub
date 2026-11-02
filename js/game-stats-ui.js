@@ -18,6 +18,7 @@ import { isGameLive, corrections } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
+import LB2 from './leaderboard2-strings.js';
 import { GAME_ART } from './game-art.js';
 import { diffShapeSVG } from './difficulty-tiers.js';
 import { SOLO } from './players-agg.js';
@@ -1458,6 +1459,15 @@ export function gameListHTML(games, opts) {
       const rec = g[tab.id] || {};
       const head = headlineOf(tab.id, rec);
       const art = GAME_ART[hubIdOf(tab.id)] || '';
+      const pl = opts && opts.places ? opts.places[tab.id] : null;
+      if (pl) {
+        return `<button type="button" class="gs-grow gs-grow2" data-game="${tab.id}">
+        <span class="gs-gart">${art}</span>
+        <span class="gs-gname"><span class="gs-gn">${esc(t(tab.labelKey))}</span><small>${esc(lifeText(head))}</small></span>
+        <span class="gs-gbd">${boardValHTML(tab.id, pl)}${rankHTML(pl)}</span>
+        <span class="gs-gchev" aria-hidden="true">&rsaquo;</span>
+      </button>`;
+      }
       return `<button type="button" class="gs-grow" data-game="${tab.id}">
         <span class="gs-gart">${art}</span>
         <span class="gs-gname">${esc(t(tab.labelKey))}</span>
@@ -1838,11 +1848,34 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .lb2-pmed{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 6px 10px;text-align:center}
 .gs-v2 .lb2-pmed div{display:flex;flex-direction:column;align-items:center;gap:4px}
 .gs-v2 .lb2-pmed b{font-size:20px;font-weight:800}
+.gs-panel.gs-v2 .gs-grow2 .gs-gname{display:flex;flex-direction:column;gap:2px;white-space:normal}
+.gs-panel.gs-v2 .gs-gname .gs-gn{white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.15}
+.gs-panel.gs-v2 .gs-gname small{font-size:13px;font-weight:400;color:var(--l2-muted);white-space:nowrap}
+.gs-v2 .gs-gbd{flex:0 0 auto;display:flex;align-items:center;gap:8px;margin-left:auto}
+.gs-v2 .gs-bv{display:inline-flex;align-items:center;gap:5px;font-size:16px;font-weight:700;color:var(--l2-text);white-space:nowrap;font-variant-numeric:tabular-nums}
+.gs-v2 .gs-rk{display:inline-flex;align-items:center;min-width:30px;justify-content:center}
+.gs-v2 .gs-rk i{font-style:normal;font-weight:700;color:var(--l2-muted);margin-right:1px}
+.gs-v2 .gs-rk .lb-ctm{position:relative;display:inline-block}
+.gs-v2 .gs-rk .lb-ctm img{display:block;width:100%;height:100%}
+.gs-v2 .gs-rk .lb-ctm-n{position:absolute;transform:translate(-50%,-50%);font-weight:800;line-height:1}
+.gs-v2 .gs-rkp{min-width:30px;text-align:center;font-size:16px;font-weight:700;color:var(--l2-muted);font-variant-numeric:tabular-nums}
+.gs-v2 .gs-ghn{flex:1;min-width:0}
+.gs-v2 .gs-bv .lb2-shape{margin-right:2px}
+.gs-panel.gs-v2 .gs-grow2{gap:10px}
+.gs-panel.gs-v2 .gs-grow2 .gs-gname{flex:1 1 0;min-width:92px}
+.gs-panel.gs-v2 .gs-grow2 .gs-gname small{white-space:normal;line-height:1.2}
+.gs-panel.gs-v2 .gs-grow2 .gs-gbd{gap:6px}
+.gs-panel.gs-v2 .gs-grow2 .gs-bv{font-size:15px}
+.gs-panel.gs-v2 .gs-grow2 .gs-bv span{white-space:normal;text-align:right;max-width:104px;line-height:1.15}
+@media (max-width:380px){.gs-panel.gs-v2 .gs-grow2 .gs-gart{width:44px;height:28px}.gs-panel.gs-v2 .gs-grow2 .gs-gname{min-width:76px}.gs-panel.gs-v2 .gs-grow2{gap:8px;padding-left:10px;padding-right:8px}}
+.gs-v2 .gs-sk-mc{border-left:1px solid var(--l2-line)}
+:root:not(.gh-dark) .gs-v2 .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;box-sizing:content-box}
+:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .gs-v2 .lb2-pmed small{font-size:12px;color:var(--l2-muted)}
 .gs-v2 .lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
 .gs-v2 .lb2-stat:first-child{border-top:0}
 .gs-v2 .lb2-stat b{font-weight:700}`;
-const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US'); } catch { return String(n); } };
+const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', { useGrouping: 'always' }); } catch { return String(n); } };
 const v2shape = (tier) => `<span class="lb2-shape${tier === 4 ? ' x2' : ''}" aria-hidden="true">${diffShapeSVG(tier)}</span>`;
 const CT_IMG = { gold: ['medal-gold.png', 115 / 180], silver: ['medal-silver.png', 114 / 180], bronze: ['medal-bronze.png', 114 / 180], iron: ['medal-iron.png', 114 / 180] };
 const ctImg = (k, h) => `<span class="gs-ctm" style="height:${h}px;width:${Math.round(h * CT_IMG[k][1])}px"><img src="${new URL('../icons/' + CT_IMG[k][0], import.meta.url).href}" alt="" draggable="false"></span>`;
@@ -1850,7 +1883,8 @@ const ctImg = (k, h) => `<span class="gs-ctm" style="height:${h}px;width:${Math.
 function v2Polish(html) {
   let out = html.replace(/<div class="gs-tally"><b>(\d{4,})<\/b>/g, (m, n) => `<div class="gs-tally"><b>${v2fmt(Number(n))}</b>`)
     .replace(/<td>(\d{4,})<\/td>/g, (m, n) => `<td>${v2fmt(Number(n))}</td>`)
-    .replace(/<span class="gs-gnum"><b>(\d{4,})<\/b>/g, (m, n) => `<span class="gs-gnum"><b>${v2fmt(Number(n))}</b>`);
+    .replace(/<span class="gs-gnum"><b>(\d{4,})<\/b>/g, (m, n) => `<span class="gs-gnum"><b>${v2fmt(Number(n))}</b>`)
+    .replace(/&mdash;|\u2014/g, '\u2013');
   for (const [tr, k] of [[1, 'gs_diff_easy'], [2, 'gs_diff_medium'], [3, 'gs_diff_hard'], [4, 'gs_diff_expert']]) {
     out = out.split(`<th scope="row">${t(k)}</th>`).join(`<th scope="row"><span class="lb2-tw">${v2shape(tr)}${t(k)}</span></th>`);
   }
@@ -1877,6 +1911,67 @@ export function v2ScreenFor(id, st) {
   return v2Polish(screenFor(id, st));
 }
 
+
+// --- My Stats: the board's number and rank per game (session 4 mockup, 2026-11-02) --------------------------
+// The SAME people list, number and standing the leaderboard uses (stats-net.js readPeople = the server-built
+// board, the hidden-name filter, leaderboard-ui.js lb2PlayerGames = gameStanding). No board (offline, none yet)
+// = no rank and the old row, never a guessed one. Display only.
+const t2 = makeT(LB2);
+let _places = null;           // { [statsId]: { text, tier, rank, tie, noMedal } } or null
+const groupAlways = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', { useGrouping: 'always' }); } catch { return String(n); } };
+/** The lifetime number under a game's name, singular when it is 1 ("1 win", "1 victoria"). */
+function lifeText(head) {
+  const n = head.n;
+  const one = Number(n) === 1 && t('gs_unit_one', { k: head.unitKey });
+  const num = /^\d{4,}$/.test(String(n)) ? groupAlways(n) : String(n);
+  return `${num} ${one && one !== 'gs_unit_one' ? one : t(head.unitKey)}`;
+}
+/** A board number as v2 prints it: golf in words, Contexto's count before its medal, separators, one dash. */
+function boardText(id, text) {
+  let x = String(text == null ? '' : text);
+  const m = id === 'golf' && /^([+\-−])(\d+)$/.exec(x.trim());
+  if (m) x = t2(m[1] === '+' ? 'lb2_over' : 'lb2_under', { n: m[2] });
+  if (id === 'contexto') x = x.replace(/^(\S+) (\d+)$/u, '$2 $1');
+  x = x.replace(/—/g, '–');
+  return x.replace(/(?<![\d.,:#&])\d{4,}(?!\d|[.,:]\d)/g, (d) => groupAlways(d));
+}
+function boardValHTML(id, pl) {
+  return `<b class="gs-bv">${pl.tier ? v2shape(pl.tier) : ''}<span>${esc(boardText(id, pl.text))}</span></b>`;
+}
+let _medalFn = null;
+/** The player page's rank badge: a medal for 1st to 3rd ("=" when tied), "#5" / "=5" below, none for a 0. */
+function rankHTML(pl) {
+  if (!pl || !pl.rank) return '';
+  const zero = String(pl.text || '').replace(/[^\d]/g, '') === '0' && !/[1-9]/.test(String(pl.text || ''));
+  if (pl.rank <= 3 && !pl.noMedal && !zero && _medalFn) return `<span class="gs-rk">${pl.tie ? '<i>=</i>' : ''}${_medalFn(pl.rank, 32)}</span>`;
+  return `<span class="gs-rkp">${pl.tie ? '=' : '#'}${pl.rank}</span>`;
+}
+function placesFrom(L, list, meKey) {
+  const pg = meKey ? L.lb2PlayerGames(list, meKey) : null;
+  if (!pg) return null;
+  const out = {};
+  for (const x of pg.games) out[x.id] = { text: x.text, tier: x.tier, rank: x.rank, tie: x.tie, noMedal: false };
+  if (out.holdem) { try { const r = L.lb2Standing(list, 'holdem').find((y) => y.key === meKey); if (r && r.noMedal) out.holdem.noMedal = true; } catch { /* keep */ } }
+  return out;
+}
+async function loadPlaces() {
+  try {
+    const [net, L, H] = await Promise.all([import('./stats-net.js'), import('./leaderboard-ui.js'), import('./hidden-players.js')]);
+    const ppl = await net.readPeople();
+    if (!ppl || !_host) return;
+    _medalFn = L.lb2Medal;
+    _places = placesFrom(L, ppl.list.filter((g) => !H.isHiddenName(g && g.name)), ppl.meKey);
+    rerender();
+  } catch { /* no board: no ranks */ }
+}
+/** Tests and the mockup harness: the board's people list and the viewer's key, no network. */
+export async function __setBoardForTest(list, meKey) {
+  const [L, H] = await Promise.all([import('./leaderboard-ui.js'), import('./hidden-players.js')]);
+  _medalFn = L.lb2Medal;
+  _places = placesFrom(L, (list || []).filter((g) => !H.isHiddenName(g && g.name)), meKey);
+  rerender();
+}
+
 // --- overlay shell ----------------------------------------------------------
 let _host = null;
 let _game = null;             // non-null => drilled into that game's own screenFor
@@ -1895,10 +1990,12 @@ function bodyHTML() {
     const tab = visibleTabs().find((x) => x.id === _game);
     const rec = (st.games || {})[_game] || {};
     const played = ((rec.total || {}).played) | 0;
-    const head = `<div class="gs-ghead"><span class="gs-gart">${GAME_ART[hubIdOf(_game)] || ''}</span><span><b>${esc(tab ? t(tab.labelKey) : _game)}</b><small>${esc(t('lb_played_count', { n: v2fmt(played) }))}</small></span></div>`;
+    const pl = _places && _places[_game];
+    const right = pl ? `<span class="gs-gbd">${boardValHTML(_game, pl)}${rankHTML(pl)}</span>` : '';
+    const head = `<div class="gs-ghead"><span class="gs-gart">${GAME_ART[hubIdOf(_game)] || ''}</span><span class="gs-ghn"><b>${esc(tab ? t(tab.labelKey) : _game)}</b><small>${esc(t('lb_played_count', { n: v2fmt(played) }))}</small></span>${right}</div>`;
     return head + v2ScreenFor(_game, st);
   }
-  return v2Polish(overviewHTML(st) + gameListHTML(st.games || {}));
+  return v2Polish(overviewHTML(st) + gameListHTML(st.games || {}, _places ? { places: _places } : undefined));
 }
 
 function rerender() {
@@ -1950,6 +2047,7 @@ export function openStatsOverlay() {
   // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
   _st = correctStats(loadStoredStats(), statsId(), corrections());
   _combinedDevices = 1;
+  _places = null;
   const host = document.createElement('div');
   host.className = 'gs-overlay';
   host.setAttribute('role', 'dialog');
@@ -1962,7 +2060,6 @@ export function openStatsOverlay() {
         <div class="gs-top-row">
           <button type="button" class="gs-hback" data-role="gs-up" aria-label="${STRINGS.en.gs_back_aria ? t('gs_back_aria') : 'Back'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
           <h2>${t('gs_title')}</h2>
-          <button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>
         </div>
       </header>
       <div class="gs-body" data-role="gs-body">${bodyHTML()}</div>
@@ -1973,6 +2070,7 @@ export function openStatsOverlay() {
   document.addEventListener('keydown', onKey);
   requestAnimationFrame(() => host.classList.add('is-in'));
   refreshCombined();
+  loadPlaces();
 }
 
 function ensureCss() {

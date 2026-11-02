@@ -3699,7 +3699,16 @@ export function lb2Records(list, meKey) {
       const rank = st.rankOf[me.key];
       const val = (g) => ({ text: youValText(id, boardMetricOf(g, id)), tier: boardTierOf(g, id) });
       if (rank === 1) out.held.push({ id, mine: val(me), tie: st.tiedAt(me.key) });
-      else if (played && rec) out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), mine: val(me), rec, recVal: val(rec) });
+      else if (played && rec) {
+        // Session 4 mockup (display only): the viewer's number read at the RECORD'S difficulty (gapText's rule),
+        // and why the record ranks above when that is invisible: a harder difficulty or the no-hint rule.
+        const rt = boardTierOf(rec, id), mt = boardTierOf(me, id);
+        const nhRec = !!noHintTierOf(rec, id), nhMe = !!noHintTierOf(me, id);
+        const why = nhRec && !nhMe ? 'nohint' : (rt || 0) > (mt || 0) ? 'tier' : '';
+        const at = rt && why === 'tier' ? gameMetricAt(me, id, rt) : null;
+        const mineAt = why === 'tier' ? { text: at == null ? '–' : youValText(id, at), tier: rt } : null;
+        out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), mine: val(me), rec, recVal: val(rec), why, mineAt, whyTier: rt || null });
+      }
       else if (!played && rec) out.fresh.push({ id, rec, recVal: val(rec) });
     });
   }
@@ -3775,6 +3784,8 @@ export function lb2Rush(list, mode = 'easy', view = 'week') {
   return { head: '', unit: arrows, empty: tx('lb_wo_none_past', 'No finished weeks yet'),
     rows: weeks.flatMap((wk) => wk.winners.map((g) => ({ g, key: g.key, rank: 1, tie: wk.winners.length > 1, val: wk.top, sub: woWeekRange(wk.w) }))) };
 }
+/** Contexto's medal counts for a person (All, or the Daily tab's `daily`): { gold, silver, bronze, iron }. Display only. */
+export function lb2CtCounts(g, daily = false) { return ctCounts(daily ? ctDailyOf(g) : ctOf(g)); }
 export function lb2CtImg(kind, h = 34) { return ctMedalHTML(kind, null, h); }
 export function lb2TierWord(tier) { return tierWord(tier); }
 /** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */
