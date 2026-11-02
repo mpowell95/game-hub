@@ -40,7 +40,7 @@ export const LB_RULES = {
   gridlock: { by: 'points' },
   hillclimb: { by: 'best' },
   holdem: { by: 'holdem' },
-  hoops4: { by: 'wins' },
+  hoops4: { by: 'wins', short: { when: 'hoops4', ladder: L3 } },   // until you score = one level down (2026-11-02)
   mancala: { by: 'wins' },
   minesweeper: { by: 'minesweeper' },
   murdoku: { by: 'nohint' },

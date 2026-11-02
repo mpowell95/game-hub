@@ -58,7 +58,9 @@ check('dominoes', (await imp('dominoes/js/ui.js')).statsDiff, [150], [300, 500])
 
 // 3. Every game whose code moves a result down a level has its entry.
 const scan = { flicksoccer: 'flick-soccer/js/ui.js', eightball: 'eight-ball/js/ui.js', darts: 'darts/js/ui.js', cuppong: 'cup-pong/js/ui.js',
-  boggle: 'boggle/js/ui.js', dominoes: 'dominoes/js/ui.js', chinchon: 'chinchon/js/ui.js', escoba: 'escoba/js/ui.js' };
+  boggle: 'boggle/js/ui.js', dominoes: 'dominoes/js/ui.js', chinchon: 'chinchon/js/ui.js', escoba: 'escoba/js/ui.js', hoops4: 'hoops4/js/ui.js' };
+// Hoops' statsDiff is a method (needs the screen); its rule: one shot = as chosen, until you score = one down.
+ok('hoops4: shows rows', rulesFor('hoops4').counts.some((c) => c.when === 'hoops4' && c.rows.length));
 for (const [id, f] of Object.entries(scan)) {
   const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
   if (/oneTierDown\(/.test(s.replace(/import[^;]*;/g, ''))) ok(`${id}: shortened rule listed`, !!LB_RULES[id].short);

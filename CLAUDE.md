@@ -364,6 +364,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
 - **Word Weaver's daily board (2026-11-02):** `tools/read-ww-daily.mjs` (read only), `tools/test-ww-daily-rules.mjs`.
+- **Leaderboard (i) rules (2026-11-02):** `tools/test-lb-rules.mjs` (every board game has a `js/lb-rules.js` entry, checked against each game's own `statsDiff`).
 - **Back swipe (2026-11-02):** `tools/test-swipe-back.mjs` (every drill-down overlay steps back one screen; dev server on 8185).
 - **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked); `tools/lb2-review-shots.cjs` (the outside-review set, 2026-11-02).
 - **Days and weeks are each player's LOCAL midnight (2026-11-02)**: `tools/test-rush-weeks.mjs`, run with `TZ=America/New_York` and `TZ=Europe/Madrid`.
