@@ -6,6 +6,9 @@
 
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md`.
 
+**"How many wrong guesses?" counts REPEATED words too (Matt, 2026-11-02)**: wrong = not a word + already found, shown per
+language as Not a word | Repeated | Total wrong (`tools/read-bee-times.mjs --log`).
+
 A clone of the NYT Spelling Bee (Matt, 2026-10-23: "An exact clone"). One puzzle a day, the same for
 everyone (local midnight). Seven letters in a honeycomb; every word uses the yellow centre letter.
 
