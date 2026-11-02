@@ -572,6 +572,8 @@ export function aggregatePlayers(all, corrections) {
         dst.ct.bronze = (dst.ct.bronze | 0) + (src.ct.bronze | 0);
         const f = src.ct.fewest | 0;
         if (f > 0) dst.ct.fewest = (dst.ct.fewest | 0) > 0 ? Math.min(dst.ct.fewest, f) : f;
+        const fn = src.ct.fewestNH | 0;   // no-hint solves only (2026-11-02), same rule
+        if (fn > 0) dst.ct.fewestNH = (dst.ct.fewestNH | 0) > 0 ? Math.min(dst.ct.fewestNH, fn) : fn;
         // The daily board's own counters (2026-10-30, js/game-stats.js recordContexto): add.
         if (src.ct.d && typeof src.ct.d === 'object') {
           if (!dst.ct.d || typeof dst.ct.d !== 'object') dst.ct.d = {};

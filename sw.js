@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1386;
-const CACHE = 'game-hub-v1390';
+const CACHE = 'game-hub-v1391';
 
 const ASSETS = [
   './',
@@ -805,7 +805,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7ee4518a10',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '2a6f1b251b',
+  './js/hub.js': 'd5a120fa08',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -818,15 +818,15 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '214c59901c',
+  './js/strings.js': 'd109d05dbd',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '496be25282',
+  './js/game-stats.js': '9a71193e36',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '00080bcd5e',
+  './js/game-stats-ui.js': '33b88f72ec',
   './js/stats-net.js': 'e4990614f7',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -851,7 +851,7 @@ const REST_MANIFEST = {
   './js/integrity.js': 'a3f606068c',
   './js/play-log-queue.js': '807dc8b53f',
   './js/play-log.js': 'bedfb01f46',
-  './js/contexto-history.js': 'caeb757ec1',
+  './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
@@ -859,12 +859,12 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '8f47975d00',
+  './js/players-agg.js': 'e9bcc1106a',
   './js/game-art.js': '2a05bbf02f',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
   './js/leaderboard-ui.js': '9b7b3a6b85',
-  './js/leaderboard2-ui.js': 'b3f7cb0d31',
+  './js/leaderboard2-ui.js': 'a0d4c598cd',
   './js/leaderboard2-boards.js': 'f44f51f7fd',
   './js/leaderboard2-strings.js': 'a3d8d1964e',
   './js/leaderboard-rank.js': '4fe1b42b0f',

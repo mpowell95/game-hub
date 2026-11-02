@@ -553,7 +553,7 @@ export const STRINGS = {
     gs_ms_flags: 'Flags right',
     gs_ct_solved: 'Solved',
     gs_ct_avg: 'Avg guesses',
-    gs_ct_fewest: 'Fewest',
+    gs_ct_fewest: 'Fewest guesses',
     gs_ct_nohint: 'Gold (no hints)',
     gs_ct_silver: 'Silver (1 hint)',
     gs_ct_bronze: 'Bronze (2 hints)',

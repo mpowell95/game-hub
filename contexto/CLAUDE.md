@@ -272,3 +272,7 @@ previous games, reload-resume, both hosts, both phone heights, light/dark, EN/ES
 ## The other phones by the server's clock (2026-10-29, second pass)
 
 `_finish` keeps its log entry's id (`rec.doneId`); `_recordFinished` sends the log, then counts every other entry the SERVER received before it (`logSummary(..., { exclude })`), never the phone-time cut-off. The recorder carries `k` and `unchecked` (no other phone could be read); the server judges on that entry too (alerts only). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+**Fewest guesses (2026-11-02, Matt):** `ct.fewestNH` = fewest typed guesses on a NO-HINT solve (recorder; hub fills older ones
+from the phone's save via `contexto-history.js` `fewestNoHintFromSave` + `game-stats.js` `noteContextoFewestNoHint`). Shown as
+"Fewest guesses" (My Stats, leaderboard person page). `ct.fewest` (every solve, hints too) stays stored, no longer shown.
