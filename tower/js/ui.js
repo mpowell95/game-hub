@@ -99,7 +99,7 @@ class Tower {
     this.screen = 'setup';
     this.run = null;
     this.fx = { falling: [], flashes: [] };
-    this.cam = 0; this.camTarget = 0; this.zoom = 1; this.zoomTarget = 1;
+    this.cam = 0; this.camTarget = 0; this.zoom = 1; this.zoomTarget = 1; this.lift = 0; this.liftTarget = 0;
     this.lead = null; this.leadBusy = false;
     this.raf = 0; this.last = 0;
     this._ensureCss();
@@ -141,6 +141,7 @@ class Tower {
         <div class="tw-setup" data-role="setup"></div>
         <div class="tw-ov" data-role="over" hidden></div>
         <div class="tw-ov" data-role="help" hidden></div>
+        <div class="tw-towers" data-role="towers" hidden></div>
       </div>`;
     this.root = this.host.querySelector('.tw-root');
     this.canvas = this.root.querySelector('.tw-canvas');
@@ -168,8 +169,9 @@ class Tower {
     this.screen = 'setup';
     this.run = null;
     this.fx = { falling: [], flashes: [] };
-    this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1;
+    this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1; this.lift = this.liftTarget = 0;
     this.el('hud').hidden = true;
+    this.el('towers').hidden = true;
     this.el('over').hidden = true;
     this.el('setup').hidden = false;
     this._renderSetup();
@@ -242,6 +244,7 @@ class Tower {
     this.lead = { at: Date.now(), rows };
     const box = this.root && this.screen === 'setup' && this.root.querySelector('.tw-lead');
     if (box) box.innerHTML = this._leadHTML();
+    this._renderTowers();
   }
   async _openLeaderboard() {
     try {
@@ -269,7 +272,10 @@ class Tower {
     else if (act === 'play' || act === 'again') this._play();
     else if (act === 'help') this.el('help').hidden = false;
     else if (act === 'helpClose') this.el('help').hidden = true;
-    else if (act === 'board') this._openLeaderboard();
+    else if (act === 'board' || act === 'compare') this._showTowers();
+    else if (act === 'towersClose') this.el('towers').hidden = true;
+    else if (act === 'twDiff') { this.towersDiff = E.normDiff(b.dataset.v); this._renderTowers(); }
+    else if (act === 'fullBoard') this._openLeaderboard();
     else if (act === 'menu') this._showSetup();
   }
 
@@ -283,7 +289,8 @@ class Tower {
     this.best = bestFor(this.s.diff);
     this.recorded = false;
     this.fx = { falling: [], flashes: [] };
-    this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1;
+    this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1; this.lift = this.liftTarget = 0;
+    this.el('towers').hidden = true;
     this._hud();
   }
 
@@ -325,11 +332,15 @@ class Tower {
     const run = this.run;
     this.screen = 'over';
     const sc = E.score(run);
-    const before = this.best | 0;
+    const before = this.best | 0;          // the PREVIOUS best: its line stays drawn at game over
     this._record(run);
     const isNew = sc > before && sc > 0;
     this.camTarget = 0;
-    this.zoomTarget = Math.min(1, (this._groundY() - 150) / ((run.stack.length + 1) * E.BLOCK_H * this.k));
+    // Zoom out to show the whole tower AND the best line, above the card (the ground lifts over it).
+    this.liftTarget = Math.min(this.H * 0.3, 210);
+    const room = this.H - Math.max(90, this.H * 0.13) - this.liftTarget - 110;
+    const tall = (Math.max(run.stack.length, before + 1) + 1) * E.BLOCK_H * this.k;
+    this.zoomTarget = Math.min(1, room / tall);
     this.el('hud').hidden = true;
     clearTimeout(this._overT);
     this._overT = setTimeout(() => {
@@ -339,15 +350,71 @@ class Tower {
         <div class="tw-card tw-overcard">
           <button type="button" class="tw-x" data-act="menu" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
           <div class="tw-big">${sc}</div>
-          ${isNew ? `<div class="tw-new">&#9733; ${esc(t('new_best'))}</div>` : ''}
-          <div class="tw-row">
-            <div><b>${Math.max(before, sc)}</b><span>${esc(t('best'))}</span></div>
-            <div><b>${run.perfects}</b><span>${esc(t('perfect'))}</span></div>
+          ${isNew ? `<div class="tw-new">&#9733; ${esc(t('new_best'))}</div>` : `<div class="tw-obest">&#9733; ${before}</div>`}
+          <div class="tw-btns">
+            <button type="button" class="tw-play" data-act="again">${esc(t('again'))}</button>
+            <button type="button" class="tw-play tw-alt" data-act="compare">${esc(t('compare'))}</button>
           </div>
-          <button type="button" class="tw-play" data-act="again">${esc(t('again'))}</button>
         </div>`;
       ov.hidden = false;
     }, 750);
+  }
+
+  // --- Everyone's record tower (Matt, 2026-11-02: "the screen where you can see everyone's record tower") ---
+  _showTowers() {
+    this.towersDiff = this.screen === 'over' && this.run ? this.run.diff : this.s.diff;
+    if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
+    this.el('towers').hidden = false;
+    this._renderTowers();
+  }
+  /** One column per person with a best at this difficulty, tallest first, drawn as a stack of slabs in
+   *  the chosen look. Names are profile names (never "You"); this phone's own column is ringed + bold. */
+  _renderTowers() {
+    const box = this.el('towers');
+    if (!box || box.hidden) return;
+    const d = this.towersDiff;
+    const rows = ((this.lead && this.lead.rows) || []).map((r) => ({ ...r, best: r.by[d] | 0 }));
+    const mine = bestFor(d);
+    let meRow = rows.find((r) => r.me);
+    if (meRow) meRow.best = Math.max(meRow.best, mine);
+    else if (mine > 0) {
+      let p = {};
+      try { p = loadProfile() || {}; } catch { p = {}; }
+      rows.push({ me: true, name: p.name || '', emoji: p.emoji || '', best: mine });
+    }
+    const list = rows.filter((r) => r.best > 0).sort((a, b) => b.best - a.best);
+    const top = list.reduce((m, r) => Math.max(m, r.best), 0);
+    const look = this.s.look;
+    const col = (r, i) => {
+      const n = r.best, H = 100;
+      const sh = H / Math.max(n, 1);   // the column's own height is set to n / top below
+      const draw = Math.min(n, 120), step = n / draw;
+      let rects = '';
+      for (let j = 0; j < draw; j++) {
+        const c = slabOf(look, Math.floor(j * step));
+        const y = H - (j + 1) * sh * step;
+        rects += `<rect x="0" y="${y.toFixed(2)}" width="20" height="${(sh * step + 0.05).toFixed(2)}" fill="${c.face}"/>`;
+        if (sh * step > 2.5) rects += `<rect x="0" y="${y.toFixed(2)}" width="20" height="${(Math.min(1, sh * step * 0.2)).toFixed(2)}" fill="${c.top}"/>`;
+      }
+      return `
+        <div class="tw-col${r.me ? ' is-me' : ''}">
+          <b class="tw-col-n">${n}</b>
+          <svg class="tw-col-t" viewBox="0 0 20 100" preserveAspectRatio="none" style="height:calc((100% - 64px) * ${(n / Math.max(top, 1)).toFixed(4)})" aria-hidden="true">${rects}</svg>
+          <span class="tw-col-who">${i < 3 ? ['&#129351;', '&#129352;', '&#129353;'][i] + ' ' : ''}${esc(r.emoji)} ${esc(r.name || t('anon_player'))}</span>
+        </div>`;
+    };
+    const tabs = E.DIFFS.map((k) => `
+      <button type="button" class="tw-tab${k === d ? ' is-sel' : ''}" data-act="twDiff" data-v="${k}" role="tab" aria-selected="${k === d}">${diffShapeSVG(tierOf(k))}<b>${t('diff_' + k)}</b></button>`).join('');
+    box.innerHTML = `
+      <div class="tw-tw-head">
+        <h2>${esc(t('records'))}</h2>
+        <button type="button" class="tw-x" data-act="towersClose" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
+      </div>
+      <div class="tw-tabs" role="tablist">${tabs}</div>
+      <div class="tw-cols">${list.length ? list.map(col).join('') : '<p class="tw-none">-</p>'}</div>
+      <button type="button" class="tw-lead-all tw-full" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>`;
+    const me = box.querySelector('.tw-col.is-me');
+    if (me && me.scrollIntoView) { try { me.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch { /* old browser */ } }
   }
 
   /** Once per run. withMode carries the LOOK and the DIFFICULTY (root CLAUDE.md, "Every result records
@@ -383,13 +450,14 @@ class Tower {
     if (this.screen === 'play' && this.run) E.stepMover(this.run, dt);
     this.cam += (this.camTarget - this.cam) * Math.min(1, dt * 6);
     this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 4);
+    this.lift += (this.liftTarget - this.lift) * Math.min(1, dt * 4);
     for (const f of this.fx.falling) { f.vy += 1300 * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
     this.fx.falling = this.fx.falling.filter((f) => f.y < 4000);
     for (const f of this.fx.flashes) f.t += dt;
     this.fx.flashes = this.fx.flashes.filter((f) => f.t < 0.45);
   }
 
-  _groundY() { return this.H - Math.max(90, this.H * 0.13); }
+  _groundY() { return this.H - Math.max(90, this.H * 0.13) - (this.lift || 0); }
   /** World y (units, up from the ground) of level i's top edge, in screen px before zoom. */
   _yOf(i) { return -(i + 1) * E.BLOCK_H; }
 
@@ -453,6 +521,27 @@ class Tower {
       const py = this._yOf(i) * k;
       if (py > viewTop && py < viewBot) slab(s.x, this._yOf(i), s.w, i);
     });
+    // Your best at this difficulty, as a dashed line across at its height (play and game over;
+    // at game over it is the PREVIOUS best). Matt, 2026-11-02: "so you know when you beat it".
+    if (this.run && (this.best | 0) > 0) {
+      const ly = this._yOf(this.best) * k;   // the top edge of block #best (a tower of `best`)
+      const beat = E.score(this.run) > this.best;
+      ctx.save();
+      ctx.strokeStyle = beat ? 'rgba(255,206,58,.95)' : 'rgba(255,255,255,.9)';
+      ctx.lineWidth = 2 / this.zoom;
+      ctx.setLineDash([10 / this.zoom, 7 / this.zoom]);
+      ctx.beginPath(); ctx.moveTo(-W, ly); ctx.lineTo(W * 2, ly); ctx.stroke();
+      ctx.setLineDash([]);
+      const fs = 15 / this.zoom, label = '\u2605 ' + this.best;
+      ctx.font = `800 ${fs}px system-ui, sans-serif`;
+      const tw = ctx.measureText(label).width + 12 / this.zoom;
+      const lx = W / 2 + (W / 2 - 8) / this.zoom - tw;
+      ctx.fillStyle = beat ? '#ffce3a' : 'rgba(0,0,0,.45)';
+      ctx.fillRect(lx, ly - fs - 8 / this.zoom, tw, fs + 8 / this.zoom);
+      ctx.fillStyle = beat ? '#16243a' : '#fff';
+      ctx.fillText(label, lx + 6 / this.zoom, ly - 6 / this.zoom);
+      ctx.restore();
+    }
     for (const f of this.fx.flashes) {
       const p = f.t / 0.45, pad = 4 + p * 14;
       ctx.strokeStyle = `rgba(255,255,255,${1 - p})`; ctx.lineWidth = 3;
@@ -491,7 +580,8 @@ class Tower {
 
   /** Test seam (tools/test-tower.mjs drives the real screen through it). */
   _seam() {
-    return { screen: () => this.screen, run: () => this.run, drop: () => this._drop(), play: () => this._play() };
+    return { screen: () => this.screen, run: () => this.run, drop: () => this._drop(), play: () => this._play(),
+      setLead: (rows) => { this.lead = { at: Date.now() + 1e9, rows }; this._renderTowers(); } };
   }
 }
 
