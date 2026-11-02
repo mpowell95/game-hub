@@ -50,7 +50,7 @@ const TABS = [
   { id: 'wayout', labelKey: 'game_title_wayout' },
   // devOnly matches js/hub.js (Matt, 2026-10-28: admin-only games off the leaderboard, for everyone).
   // tools/test-leaderboard-rank.mjs fails if this list and the hub's devOnly list drift apart.
-  { id: 'gridlock', labelKey: 'game_title_gridlock', devOnly: true },
+  { id: 'gridlock', labelKey: 'game_title_gridlock' },
   // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
   // sub-counter has its own screen (wordWeaverScreen).
   { id: 'wordweaver', labelKey: 'game_title_wordweaver', devOnly: true },
