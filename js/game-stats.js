@@ -271,7 +271,9 @@
 //                                                   // before the bands (kept as stored, counted in
 //                                                   // All). One play+won per level completed
 //         ww: { lv: { L<n>: { s, h, t } }, x,     // (2026-10-28) per level n, written ONCE at its
-//               es: { L<n>: { s, h, t } } } },     // es = the SPANISH ladder (2026-10-29), same shape
+//               es: { L<n>: { s, h, t } },        // es = the SPANISH ladder (2026-10-29), same shape
+//               dl: { '<en|es>-<day>': { s, h, t, ms } },  // the DAILY puzzle (2026-11-02), byDiff 'daily';
+//               dh: { '<en|es>-<day>': { c, t } } } },     // its hints at tap time. See recordWordWeaverDaily
 //                                                   // first completion (no replays): s = stars 1-3
 //                                                   // (0 hints 3, 1 hint 2, 2+ hints 1), h = hints
 //                                                   // used, t = when (ms). Only improves (wwBest).
@@ -297,7 +299,7 @@
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed, woClSet, woClMap, woShownLevel } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest, wwHintBest, wwStarsFor, wwBandOf } from './word-weaver-points.js';
+import { wwBest, wwHintBest, wwStarsFor, wwBandOf, wwDailyBest, WW_DAY_RE } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
 import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
@@ -593,7 +595,8 @@ function ensureWw(g) {
   // Free hints used (2026-11-01) exists only once one is used.
   if (g.ww.fu !== undefined && !(Number.isFinite(g.ww.fu) && g.ww.fu >= 0)) g.ww.fu = 0;
   // The hint maps (2026-10-29) exist only once a hint is used.
-  for (const k of ['hint', 'esHint']) if (g.ww[k] !== undefined && (!g.ww[k] || typeof g.ww[k] !== 'object' || Array.isArray(g.ww[k]))) g.ww[k] = {};
+  // The daily puzzle's maps (2026-11-02) exist only once a daily is completed / hinted.
+  for (const k of ['hint', 'esHint', 'dl', 'dh']) if (g.ww[k] !== undefined && (!g.ww[k] || typeof g.ww[k] !== 'object' || Array.isArray(g.ww[k]))) g.ww[k] = {};
 }
 
 /** Contexto (2026-09-28): one finished puzzle per record. `solved`/`hints`/`noHint`/`guesses` are
@@ -2451,6 +2454,53 @@ export function recordWordWeaver(level, { hints, extra, sym, lang } = {}) {
     const map = lang === 'es' ? (g.ww.es || (g.ww.es = {})) : g.ww.lv;
     map[k] = wwBest(map[k], { s: wwStarsFor(h), h, t: Date.now() });
   }
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver's DAILY PUZZLE (2026-11-02, Matt: "Do 1"): that day's puzzle completed. `key` = '<en|es>-<YYYY-MM-DD>'
+ *  (the puzzle's language and day, never a bare number). The FIRST completion on this store is one play and one win
+ *  under `byDiff.daily` (All only; no tier, no points); a later one for the same key only improves the entry. The
+ *  entry `ww.dl[key] = { s, h, t, ms }` (wwDailyBest: stars Math.max, hints Math.min, the earliest time, the fastest
+ *  `ms`); bonus words (`extra`) and bonus squares (`sym`, at most 3) add to `ww.x` / `ww.b` like a ladder level's, so
+ *  they earn free hints. The caller wraps it in withMode({ mode: 'daily', lang }, 'daily', ...). Returns the store,
+ *  or null when rate-gated or the key is malformed (nothing written). */
+export function recordWordWeaverDaily(key, { hints, extra, sym, ms } = {}) {
+  if (tooFast('wordweaver')) return null;
+  notePlay('wordweaver', 'recordWordWeaverDaily', arguments);
+  const k = String(key || '');
+  if (!WW_DAY_RE.test(k)) { console.error('[game-stats] Word Weaver daily: bad key, nothing recorded', key); return null; }
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  const map = g.ww.dl || (g.ww.dl = {});
+  if (!map[k]) bumpTotals(g, 'daily', true);
+  const h = Math.max(0, Math.floor(Number(hints) || 0));
+  g.ww.x += Math.max(0, Math.floor(Number(extra) || 0));
+  const b = Math.min(3, Math.max(0, Math.floor(Number(sym) || 0)));
+  if (b) g.ww.b = (Number(g.ww.b) || 0) + b;
+  const t = Math.max(0, Math.floor(Number(ms) || 0));
+  map[k] = wwDailyBest(map[k], { s: wwStarsFor(h), h, t: Date.now(), ...(t ? { ms: t } : {}) });
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver daily: a hint used on that day's puzzle, recorded at tap time (the hint-gap rule, 2026-10-29), in
+ *  `ww.dh[key]` = { c, t } (the count only grows, the first hint's time kept), never in a ladder level's map. Not a
+ *  result: no rate gate. Returns the store, or null for a malformed key. */
+export function recordWordWeaverDailyHint(key, count) {
+  notePlay('wordweaver', 'recordWordWeaverDailyHint', arguments);
+  const k = String(key || '');
+  if (!WW_DAY_RE.test(k)) return null;
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  const map = g.ww.dh || (g.ww.dh = {});
+  const next = wwHintBest(map[k], { c: Math.max(1, Math.floor(Number(count) || 0)), t: Date.now() });
+  if (JSON.stringify(next) === JSON.stringify(map[k])) return st;
+  map[k] = next;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

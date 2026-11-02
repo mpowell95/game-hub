@@ -261,6 +261,76 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('recorder: a bad count writes nothing', G.recordWordWeaverFreeLost(0) === null);
 }
 
+// --- THE DAILY PUZZLE (2026-11-02, Matt: "Do 1") ---
+{
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaver(5, { hints: 0, extra: 1 });
+  const before = P.wwPoints(G.loadStats().games.wordweaver);
+  const D = 'en-2026-11-02';
+  const st = G.withMode({ mode: 'daily', lang: 'en' }, 'daily', () => G.recordWordWeaverDaily(D, { hints: 1, extra: 4, sym: 2, ms: 95000 }));
+  let w = G.loadStats().games.wordweaver;
+  ok('daily recorder: returns the store', !!st);
+  ok('daily: the entry is ww.dl[<lang>-<day>] = { s, h, t, ms }', w.ww.dl[D].s === 2 && w.ww.dl[D].h === 1 && w.ww.dl[D].ms === 95000 && w.ww.dl[D].t > 0);
+  ok('daily: one play and one win under byDiff.daily, nothing in a band', w.byDiff.daily.played === 1 && w.byDiff.daily.won === 1 && w.byDiff.easy.played === 1);
+  ok('daily: its MODE is recorded (byMode lang=en|mode=daily, chosen "daily")', w.byMode['lang=en|mode=daily'].daily.won === 1);
+  ok('daily: no ladder points, no ladder level', P.wwPoints(w) === before && P.wwCleared(w) === 1 && !w.ww.lv.L1);
+  ok('daily: its bonus words and squares count toward free hints', w.ww.x === 5 && w.ww.b === 2);
+  ok('daily: counted once in the lifetime daily count', P.wwDailyCount(w) === 1);
+  // Again on the same day (a wiped save): no second play; the entry only improves.
+  G.withMode({ mode: 'daily', lang: 'en' }, 'daily', () => G.recordWordWeaverDaily(D, { hints: 0, ms: 120000 }));
+  w = G.loadStats().games.wordweaver;
+  ok('daily: the same day again is not a second play', w.byDiff.daily.played === 1 && w.total.played === 2);
+  ok('daily: the same day again only improves (stars up, hints down, fastest kept)', w.ww.dl[D].s === 3 && w.ww.dl[D].h === 0 && w.ww.dl[D].ms === 95000);
+  // Hints at tap time cap the stars (the hint-gap rule), keyed by the day, never a ladder level.
+  const E = 'es-2026-11-03';
+  ok('daily hint: recorded at tap time in ww.dh', !!G.recordWordWeaverDailyHint(E, 2) && G.loadStats().games.wordweaver.ww.dh[E].c === 2);
+  G.withMode({ mode: 'daily', lang: 'es' }, 'daily', () => G.recordWordWeaverDaily(E, { hints: 0 }));
+  w = G.loadStats().games.wordweaver;
+  ok('daily hint: a wiped save gains nothing (3 stars stored, read as 1)', w.ww.dl[E].s === 3 && P.wwDaily(w)[E].s === 1);
+  ok('daily hint: never in a ladder level\'s hint map', !w.ww.hint && !w.ww.esHint);
+  ok('daily: the Spanish mode is its own', w.byMode['lang=es|mode=daily'].daily.won === 1);
+  ok('daily: a bad key writes nothing', G.recordWordWeaverDaily('2026-11-02', { hints: 0 }) === null && G.recordWordWeaverDaily('12', { hints: 0 }) === null && G.recordWordWeaverDailyHint('L5', 1) === null);
+  ok('daily: keys are never bare numbers', Object.keys(w.ww.dl).every((k) => P.WW_DAY_RE.test(k)));
+  // Merge across a person's phones: the most hints, stars capped, the earliest time, the fastest solve; hints too.
+  const rec = (ww) => ({ profile: { playerId: 'DD111', name: 'Daily' }, stats: { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: { daily: { played: 1, won: 1, lost: 0 } }, ww } } }, updatedAt: 100 });
+  const g = A.aggregatePlayers({
+    d1: rec({ lv: {}, x: 0, dl: { [D]: { s: 3, h: 0, t: 50, ms: 90000 } } }),
+    d2: rec({ lv: {}, x: 0, dl: { [D]: { s: 2, h: 1, t: 70, ms: 60000 }, 'es-2026-11-04': { s: 3, h: 0, t: 9 } }, dh: { [D]: { c: 1, t: 60 } } }),
+  })[0].games.wordweaver;
+  ok('merge: a day on two phones is ONE day, the most hints and stars capped', JSON.stringify(g.ww.dl[D]) === JSON.stringify({ s: 2, h: 1, t: 50, ms: 60000 }));
+  ok('merge: days add up across phones, hints merged', P.wwDailyCount(g) === 2 && g.ww.dh[D].c === 1);
+  ok('merge: wwDailyBest vs wwDailyMerge', JSON.stringify(P.wwDailyBest({ s: 2, h: 1, t: 5, ms: 900 }, { s: 3, h: 0, t: 9, ms: 1200 })) === JSON.stringify({ s: 3, h: 0, t: 5, ms: 900 }));
+}
+
+// --- the daily board (word-weaver/js/board.js) and the day (word-weaver/js/daily.js) ---
+{
+  const B = await import('../word-weaver/js/board.js');
+  const rows = B.rowsOf({
+    AAAAA: { name: 'Ana', emoji: '🌸', o: 1, at: 2, stars: 3, hints: 0, sec: 300 },
+    BBBBB: { name: 'Bo', emoji: '🐻', o: 1, at: 2, stars: 3, hints: 0, sec: 200 },
+    CCCCC: { name: 'Cy', emoji: '🐱', o: 1, at: 2, stars: 2, hints: 1, sec: 50 },
+    DDDDD: { name: 'Di', emoji: '🐶', o: 1, at: 2 },
+    TTTTT: { name: 'test2', emoji: '🧪', o: 1, at: 2, stars: 3, hints: 0, sec: 1 },
+  });
+  ok('board: most stars, then fewest hints, then fastest; unfinished last', rows.map((r) => r.name).join() === 'Bo,Ana,Cy,Di');
+  ok('board: test accounts hidden', !rows.some((r) => r.name === 'test2'));
+  const shown = B.shownRows(rows, { name: 'Me', emoji: '🙂', done: true, stars: 3, hints: 0, sec: 200 }, 'AAAAA');
+  ok('board: the own row comes from the phone, never twice; ties share a place', shown.map((r) => `${r.place}${r.name}`).join() === '1Bo,1Me,3Cy,0Di' && shown.filter((r) => r.me).length === 1);
+  ok('board: times read m:ss', B.fmtSec(65) === '1:05' && B.fmtSec(3725) === '1:02:05' && B.fmtSec(0) === '0:00');
+  const Dy = await import('../word-weaver/js/daily.js');
+  ok('day: the epoch is day 0, the next local day is 1', Dy.dayNumber('2026-11-02', new Date(2026, 10, 2, 23, 59)) === 0 && Dy.dayNumber('2026-11-02', new Date(2026, 10, 3, 0, 1)) === 1);
+  ok('day: the key is <lang>-<local date>', Dy.today(new Date(2026, 10, 5, 8).getTime()).key('es') === 'es-2026-11-05');
+  ok('clock: the solve time is the larger of the running clock and the server wall time', Dy.clockSolve({ ms: 5000, t0: 1000, t0s: true }, { now: 61000, serverKnown: true }) === 60000
+    && Dy.clockSolve({ ms: 90000, t0: 1000, t0s: true }, { now: 61000, serverKnown: true }) === 90000
+    && Dy.clockSolve({ ms: 7000, t0: 1000, t0s: false }, { now: 61000, serverKnown: true }) === 7000);
+  const ui = readFileSync(new URL('word-weaver/js/ui.js', ROOT), 'utf8');
+  ok('ui: "today" comes from the server clock (daily.js today() = bestNow)', /today\(\)/.test(ui) && /bestNow/.test(readFileSync(new URL('word-weaver/js/daily.js', ROOT), 'utf8')) && !/new Date\(\)\.get/.test(ui));
+  ok('ui: every daily result goes through withMode with mode "daily"', /withMode\(\{ mode: 'daily', lang \}, 'daily', \(\) => recordWordWeaverDaily\(/.test(ui));
+  ok('ui: the daily save never touches the ladder saves', /writeDailyAttempt\(this\.daily\.key/.test(ui) && /if \(this\.daily\) return writeDailyAttempt/.test(ui));
+  ok('ui: no code in the board rows (built from the in-memory list)', !/data-code|r\.code\b.*\$\{/.test(ui));
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');

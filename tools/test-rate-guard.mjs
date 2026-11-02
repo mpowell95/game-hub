@@ -105,7 +105,10 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // full points, the very exploit it exists to close.
 // recordWordWeaverHint (2026-10-29) is Word Weaver's twin of recordGridlockHint: a hint COST on a level.
 // recordLiveResult (2026-10-29) only hands a live-room result to the game's own recorder, which is gated.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult']);
+// recordWordWeaverFreeHint / recordWordWeaverFreeLost (2026-11-01/02) count free hints used and lost over the cap of 3:
+// costs and write-offs, not plays (gating one would let a free hint go unrecorded). recordWordWeaverDailyHint
+// (2026-11-02) is recordWordWeaverHint's twin for the daily puzzle; the daily result itself (recordWordWeaverDaily) is gated.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult', 'recordWordWeaverFreeHint', 'recordWordWeaverFreeLost', 'recordWordWeaverDailyHint']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

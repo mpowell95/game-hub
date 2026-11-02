@@ -96,6 +96,41 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - Same rules and ramp as English since the 2026-11-01 remake (common words first, the band caps, one smooth climb).
 - `node word-weaver/js/data-test-es.js` checks every Spanish level and pins them (APPEND-ONLY once shipped).
 
+## The daily puzzle (2026-11-02, Matt: "Do 1" = a daily puzzle)
+
+- **One shared level a day per language**, the same for everyone. The setup screen's ONE **Daily** button (calendar,
+  an ink check once this phone finished today) opens today's puzzle on the usual play screen (wheel, hints, free hints,
+  bonus words, star squares, the counter all as on the ladder); the level number becomes a trophy chip = the board
+  sheet. The done screen: the date, the stars, the board's top rows (this phone's own always among them), Back (no
+  squares chip: no room beside the board). Its sky is always the mockup's sunset (`data-sky="medium"`).
+- **The day** = Spelling Bee's: the phone's LOCAL date of `bestNow()` (`js/server-time.js`, the server's clock where
+  known). Day 0 = the data's `epoch` **2026-11-02**. Only today is playable (no past days, kept simple); a puzzle open
+  at midnight may be finished under its own day. Key `<en|es>-<YYYY-MM-DD>` everywhere (save, stats, board).
+- **Save** `gamehub.wordweaver.daily.v1` = `{ v:1, d: { <key>: attempt } }` (`js/daily.js`), never the ladder saves:
+  the ladder's attempt shape + `t0`/`t0s` (first open, server clock?), `ms` (the running clock), `away` (an
+  `awayStamp`), `done`, `sec`, `recorded`, `posted`, `ps`. Nothing deleted.
+- **Recorded** (THE LAW): `withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints, extra, sym, ms }))`
+  (`js/game-stats.js`): `ww.dl[key] = { s, h, t, ms }` (best of each), one play + win in `byDiff.daily` on the first
+  completion only, bonus words/squares add to `ww.x`/`ww.b` (they earn free hints). **No points** (`wwPoints` reads
+  only the ladder). Hints at tap time `recordWordWeaverDailyHint` -> `ww.dh[key]` (stars capped at read time,
+  `wwDaily`). Merged across phones by `wwDailyMerge` (most hints, stars capped, earliest, fastest). My Stats: "Daily
+  puzzles" = `wwDailyCount`. A refused record stays `recorded: false` and is retried on every open (`flushDaily`).
+  The ladder's records go through `withMode({ mode: 'ladder', lang }, band, ...)` too since that day.
+- **The solve time** (`sec`): from the FIRST open of that day's puzzle (this phone's `t0`, or the board row's `o`
+  when another phone of the code opened it earlier) to its last word, on the server's clock; **time away counts**
+  (leaving, closing, sleeping never stop it). The larger of the server wall time and the running clock (time on
+  screen + every stretch away charged by `measureAway`, server top-up included).
+- **Board** `wwDaily/<key>/<CODE>` = `{ name, emoji, o, at, stars?, hints?, sec? }` (`js/board.js`, Spelling Bee's
+  pattern): a start row at first open (`o` = server time, never changes), the result at completion (FINAL: rules
+  refuse any change; stars must follow hints). Own msgAuth code only, `writesAllowed` (test automation and dev never
+  write). Order: most stars, fewest hints, fastest; unfinished last. Others' rows from the board (test names hidden,
+  `isHiddenName`), the phone's own row from its save (by profile name, never "You"); rows carry no code.
+  `node tools/read-ww-daily.mjs` reads it. Rules test: `node tools/test-ww-daily-rules.mjs`.
+- **Data** `data/daily.json`, `data/es/daily.json` = `{ v:1, epoch, count, levels }` (730 each = two years), GENERATED
+  by `--daily` of both generators: 6-7 letters, 8-11 grid words (7-12 allowed), the Hard list within the 20,000 most
+  said, common words first; no multiset of another daily or any ladder level. APPEND-ONLY, pinned in both data tests.
+  At release they belong in `sw.js` LAZY (single-game data).
+
 ## Data (GENERATED, never hand-edited)
 
 `data/index.json` `{ v:1, count, chunk:250 }` and `data/levels-<k>.json` `{ v:1, first, levels }` (level n is in
@@ -129,8 +164,10 @@ generator's header. Finished levels keep their stars by NUMBER (the levels under
 
 | File | Role |
 |---|---|
-| `js/engine.js` | pure: loading (`loadIndex`, `loadLevel`), `cellsOf`, `checkWord`, `applyWord`, `hintCell`, `starsFor`, `isDone`, `cleanState` |
+| `js/engine.js` | pure: loading (`loadIndex`, `loadLevel`, `loadDailyData`, `dailyLevel`), `cellsOf`, `checkWord`, `applyWord`, `hintCell`, `starsFor`, `isDone`, `cleanState` |
 | `js/ui.js` | the setup screen, the play and done screens, the wheel, the sheets, the saves and migration, the module contract |
+| `js/daily.js` | the daily puzzle: the day (`dayNumber`, `today`), its save, the solve clock |
+| `js/board.js` | the daily board `wwDaily/`: post, watch, order, `shownRows` |
 | `js/strings.js` | EN/ES, every string and aria-label |
 | `js/test.js` | `node word-weaver/js/test.js`, engine against an in-file fixture (not precached) |
 | `css/word-weaver.css` | all styling |
@@ -139,7 +176,9 @@ generator's header. Finished levels keep their stars by NUMBER (the levels under
 ## Tests
 
 `node word-weaver/js/test.js`, `node tools/test-game-conventions.mjs`, `node tools/check-no-scroll.mjs word-weaver`
-(setup, How to play, Expert play, level done; needs data in `data/`), `node tools/test-i18n-strings.mjs`.
+(setup, How to play, Expert play, level done, daily play, daily board, daily done; needs data in `data/`),
+`node tools/test-i18n-strings.mjs`, `node tools/test-word-weaver.mjs` (daily recorder, merge, mode, board order),
+`node tools/test-ww-daily-rules.mjs`, both data tests (daily pins).
 
 ## The most hints across records (2026-10-29, second pass)
 

@@ -2,7 +2,7 @@
 // (levels in the data contract's format; the real data is built by tools/build-word-weaver-data.mjs).
 // Run: node word-weaver/js/test.js
 import {
-  loadIndex, loadLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells,
+  loadIndex, loadLevel, loadDailyData, dailyLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells,
 } from './engine.js';
 
 let fails = 0;
@@ -20,6 +20,7 @@ const DATA = {
   'index.json': { v: 1, count: 4, chunk: 2 },
   'levels-0.json': { v: 1, first: 1, levels: [L1, L2] },
   'levels-1.json': { v: 1, first: 3, levels: [L3, L4] },
+  'daily.json': { v: 1, epoch: '2026-11-02', count: 2, levels: [L2, L3] },
 };
 const hits = [];
 globalThis.fetch = async (url) => {
@@ -182,6 +183,15 @@ eq('junk hints = 3 stars', starsFor(undefined), 3);
   const k = a[0];
   eq('a collected square survives a reload', cleanState(lv, { sym: [k, '9,9', 7] }).sym, [k]);
   eq('a square a hint revealed is never collected', cleanState(lv, { revealed: [k], sym: [k] }).sym, []);
+}
+
+// --- the daily puzzles (2026-11-02): data/daily.json, day d plays levels[d] --------------------------------
+{
+  const d = await loadDailyData(new URL('http://x/data/'));
+  ok('daily: loads { epoch, count, levels }', d && d.epoch === '2026-11-02' && d.count === 2);
+  eq('daily: day 1 is levels[1], cleaned like a ladder level', dailyLevel(d, 1).l, 'ATE');
+  ok('daily: before day 0 or past the last day there is no puzzle', dailyLevel(d, -1) === null && dailyLevel(d, 2) === null && dailyLevel(null, 0) === null);
+  ok('daily: a missing file reads as null', (await loadDailyData(new URL('http://nowhere/data/'))) === null);
 }
 
 console.log(fails ? `\n${fails} check(s) FAILED` : 'word-weaver engine: all checks passed');
