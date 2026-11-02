@@ -184,6 +184,31 @@ export function hintCell(level, state) {
   return null;
 }
 
+/** A BOUGHT word (2026-11-02): every square still empty of the word the letter hint would start on (the shortest
+ *  unfound word with something left to show), as ['r,c', ...]; [] when nothing is left. */
+export function hintWordCells(level, state) {
+  const c = hintCell(level, state);
+  if (!c) return [];
+  const shown = foundCells(level, state);
+  for (const k of state.revealed) shown.add(k);
+  const open = level.w.map((e, i) => ({ e, i })).filter(({ e }) => !state.found.includes(e[0]));
+  open.sort((a, b) => a.e[0].length - b.e[0].length || a.i - b.i);
+  for (const { e } of open) {
+    const cells = cellsOf(e).map((q) => keyOf(q.r, q.c)).filter((k) => !shown.has(k));
+    if (cells.length) return cells;
+  }
+  return [];
+}
+
+/** Squares a player may PICK to reveal (2026-11-02): every grid square showing nothing yet. */
+export function emptyCells(level, state) {
+  const shown = foundCells(level, state);
+  for (const k of state.revealed) shown.add(k);
+  const out = [];
+  for (const e of level.w) for (const q of cellsOf(e)) { const k = keyOf(q.r, q.c); if (!shown.has(k) && !out.includes(k)) out.push(k); }
+  return out;
+}
+
 /** Stars for a level: no hint 3, one hint 2, two or more 1. */
 export function starsFor(hints) {
   const h = Math.max(0, Math.floor(Number(hints) || 0));
