@@ -204,6 +204,11 @@ const v2 = await pg.evaluate(async (keys) => {
   out.players = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
     rank: Number(el.dataset.rank), tie: el.dataset.tie === '1', name: el.querySelector('.lb2-nmt').textContent.trim(),
     val: el.querySelector('.lb2-val').textContent.trim() }));
+  // Win % (Matt's 12, 2026-11-02): the same people and the same wins as the Wins view, info only.
+  const pc = document.querySelector('.lb2 [data-act="hofview"][data-v="pct"]'); if (pc) { pc.click(); await sleep(40); }
+  out.pct = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
+    name: el.querySelector('.lb2-nmt').textContent.trim(), pct: el.querySelector('.lb2-pctv b').textContent.trim(), wl: el.querySelector('.lb2-wl').textContent.trim(),
+    medal: !!el.querySelector('.lb2-medal') }));
   V.closeLeaderboard2();
   return out;
 }, Object.keys(gold.boards));
@@ -221,6 +226,20 @@ for (const k of Object.keys(gold.boards)) {
 // By Player (Hall of Fame's Wins view) = the old By Player tab.
 const canonRows = (rows) => (rows || []).map((r) => ({ ...r, val: canon(r.val) }));
 ok('By Player: v2 Wins view = old By Player, row for row', same(canonRows(gold.players), canonRows(v2.players)), { old: (gold.players || []).slice(0, 4), v2: (v2.players || []).slice(0, 4), nOld: (gold.players || []).length, nV2: (v2.players || []).length });
+// Win %: every Wins-view person listed once, with the Wins view's own wins; pct = wins / (wins + losses); no medals.
+{
+  const num = (x) => Number(canon(x).replace(/[^\d]/g, '') || 0);
+  const wins = new Map((gold.players || []).map((r) => [r.name, num(r.val)]));
+  const rows = v2.pct || [];
+  ok('Win %: same people as the Wins view', same([...wins.keys()].sort(), rows.map((r) => r.name).sort()), { nWins: wins.size, nPct: rows.length });
+  let bad = 0;
+  for (const r of rows) {
+    const [w, l] = r.wl.split('\u2013').map(num);
+    const want = w + l > 0 ? Math.round(100 * w / (w + l)) + '%' : '\u2013';
+    if (w !== wins.get(r.name) || r.pct !== want || r.medal) bad++;
+  }
+  ok('Win %: wins = Wins view, % = wins / (wins + losses), no medals', rows.length > 0 && bad === 0, bad);
+}
 // Each board's total plays (the header number).
 for (const id of Object.keys(gold.plays || {})) ok('plays header: ' + id, String(gold.plays[id]).replace(/[^\d]/g, '') === String((v2.plays || {})[id] || '').replace(/[^\d]/g, ''), { old: gold.plays[id], v2: (v2.plays || {})[id] });
 // Per-person golds: Hall of Fame = rank-1 rows in the old By Game standing.

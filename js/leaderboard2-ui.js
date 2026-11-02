@@ -11,7 +11,7 @@
 // READ ONLY. People come from the server-built board (stats-net.js watchBoard, falling back to players/
 // exactly as the old board does), the same hidden-row filter. Nothing here writes anything.
 // Rows carry an index into an in-memory list, never a player code (tools/test-no-codes.mjs).
-import { aggregatePlayers, buildIdentity } from './players-agg.js';
+import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers, watchBoard, readPlayersForMe } from './stats-net.js';
@@ -27,14 +27,15 @@ import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
-import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { rulesFor } from './lb-rules.js';
+import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
 
 const t = makeT(STRINGS);
 const t2 = makeT(LB2);
 // The Hall of Fame tab's ONE label key: renaming it (Matt is choosing a name) is this line and the strings.
-const HOF_LABEL = 'lb2_tab_hof';
+const HOF_LABEL = 'lb2_tab_hof';   // "Medal Count" / "Medallero" (Matt's 12, 2026-11-02)
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const title = (id) => { const m = GAME_META.find((x) => x.id === id); return m ? t(m.labelKey) : id; };
@@ -79,7 +80,10 @@ const mineCls = (key) => (key && key === _meKey ? ' lb2-mine' : '');
 // sort the games in different ways") adds the Games tab's `sort`, written ADDITIVELY beside it. `gamehub.lb2.ranks.v1`
 // (round 0's arrows) is no longer read or written; it stays on each phone untouched (rule 5).
 const PREF_KEY = 'gamehub.lb2.v1';
-const SORTS = ['az', 'rank', 'played', 'recent'];
+// Matt's 12 (2026-11-02): "Most played" split: 'played' = the viewer's own plays (the stored value keeps its
+// meaning), 'playedall' = everyone's plays (the board header's number, boardOf(...).plays).
+const SORTS = ['az', 'rank', 'played', 'playedall', 'recent'];
+const sortWord = (v) => t2(v === 'played' ? 'lb2_sort_playedme' : 'lb2_sort_' + v);
 function readPref() { try { const p = JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; } }
 function loadSort() { const v = readPref().sort; return SORTS.includes(v) ? v : 'az'; }
 function saveSort(v) {
@@ -115,7 +119,6 @@ let _meKey = '';
 let _connected = false;
 let _model = null;
 let _tab = 'boards';
-let _chip = null;
 let _q = '';
 let _srch = false;        // the Games list's search field is open
 let _stack = [];          // [{ kind: 'board', game, sel } | { kind: 'player', key, all } | { kind: 'pgame', key, game }]
@@ -173,6 +176,7 @@ const SVG = {
   search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   x: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   help: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.2-2.5 3.9"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg>',
+  info: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/></svg>',
   sort: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4M13.5 7.5 17 4l3.5 3.5"/></svg>',
   chat: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>',
 };
@@ -206,8 +210,8 @@ function pIdx(key) { let i = _pidx.indexOf(key); if (i < 0) { i = _pidx.length; 
 function seg(items, on, act, fit = false, cls = '') {
   return `<div class="lb2-seg${fit ? ' fit' : ''}${cls ? ' ' + cls : ''}" role="group" style="grid-template-columns:repeat(${items.length},minmax(0,1fr))">${items.map((x) => `<button type="button" class="${x.v === on ? 'on' : ''}${items.length > 4 ? ' sm' : ''}" data-act="${act}" data-v="${esc(x.v)}" aria-pressed="${x.v === on}">${x.html || esc(x.label)}</button>`).join('')}</div>`;
 }
-function headHTML(extra = '', search = false) {
-  const sb = search ? `<button type="button" class="lb2-icon" data-act="search" aria-pressed="${_srch}" aria-label="${esc(t2('lb2_search_aria'))}">${SVG.search}</button>` : '';
+function headHTML(extra = '', search = false, pre = '') {
+  const sb = pre + (search ? `<button type="button" class="lb2-icon" data-act="search" aria-pressed="${_srch}" aria-label="${esc(t2('lb2_search_aria'))}">${SVG.search}</button>` : '');
   return `<div class="lb2-head"><div class="lb2-titlerow"><h1>${esc(t2('lb2_title'))}</h1><span class="lb2-tbtns">${sb}<button type="button" class="lb2-icon lb2-help" data-act="help" aria-label="${esc(t2('lb2_help_aria'))}">${SVG.help}</button><button type="button" class="lb2-icon lb2-x" data-act="close" aria-label="${esc(t2('lb2_close'))}">${SVG.x}</button></span></div>
     ${seg([{ v: 'boards', label: t2('lb2_tab_boards') }, { v: 'hof', label: t2(HOF_LABEL) }, { v: 'me', label: t2('lb2_tab_me') }], _tab, 'tab', true)}${extra}</div>`;
 }
@@ -231,26 +235,24 @@ function gameRows() {
   const favs = new Set(loadFavorites());
   return _model.games.map((id) => ({ id, title: title(id), fav: favs.has(hubIdOf(id)), played: playedGame(id), place: defPlace(id, _meKey) }));
 }
-function chipNow(rows) {
-  if (_chip) return _chip;
-  return rows.some((r) => r.fav) ? 'fav' : rows.some((r) => r.played) ? 'played' : 'all';
-}
+/** Matt's 12 (2026-11-02): ONE list. Favorites first, a divider, then every other game (the All / Played
+ *  split is gone); the sort applies inside each part; a search looks through every game. */
 function boardsListHTML() {
   const rows = gameRows();
-  const chip = chipNow(rows);
   const q = fold(_q.trim());
-  let list = rows.filter((r) => (chip === 'fav' ? r.fav : chip === 'played' ? r.played : true));
-  if (q) list = rows.filter((r) => fold(r.title).includes(q));
+  const list = q ? rows.filter((r) => fold(r.title).includes(q)) : rows.slice();
   const az = (a, b) => a.title.localeCompare(b.title);
   const rk = (r) => (r.place ? r.place.rank : 1e9);
   const sort = loadSort();
   const g = meGroup();
   const plays = (id) => ((((g && g.games) || {})[id] || {}).total || {}).played | 0;
+  const all = (id) => boardOf(id, selFor(id, null)).plays | 0;
   if (sort === 'rank') list.sort((a, b) => rk(a) - rk(b) || az(a, b));
   else if (sort === 'played') list.sort((a, b) => plays(b.id) - plays(a.id) || az(a, b));
+  else if (sort === 'playedall') list.sort((a, b) => all(b.id) - all(a.id) || az(a, b));
   else if (sort === 'recent') { const rc = recentMap(); list.sort((a, b) => (rc[b.id] || 0) - (rc[a.id] || 0) || az(a, b)); }
   else list.sort(az);
-  const items = list.map((r) => {
+  const item = (r) => {
     const lead = _model.byGame[r.id].rows.filter((x) => x.rank === 1);
     const sub = lead.map((x) => `<span class="lb2-ld${mineCls(x.key)}">${esc(nameOf(x.g))}</span>`).join(', ');
     return `<button type="button" class="lb2-row" data-act="game" data-game="${esc(r.id)}">
@@ -258,29 +260,20 @@ function boardsListHTML() {
       <span class="lb2-grow"><span class="lb2-t1">${esc(r.title)}</span>${sub ? `<span class="lb2-t2">${medal(1, 'xs')}${sub}</span>` : ''}</span>
       <span class="lb2-right">${placeHTML(r.place)}</span>${CHEV}
     </button>`;
-  }).join('');
-  // The right column is the viewer's own place in each game: say whose, by profile name (never "You").
-  const mg = meGroup() || { name: (loadProfile() || {}).name, emoji: (loadProfile() || {}).emoji };
-  const meName = nameOf(mg);
-  const meFace = String(mg.emoji || (loadProfile() || {}).emoji || '').trim();
-  void meName; void meFace;
-  return (items ? `<div class="lb2-card">${items}</div>` : `<p class="lb2-empty-t">${esc(t2('lb2_none'))}</p>`)
+  };
+  const favs = list.filter((r) => r.fav), rest = list.filter((r) => !r.fav);
+  const items = favs.length && rest.length ? favs.map(item).join('') + '<div class="lb2-div lb2-gdiv" aria-hidden="true"></div>' + rest.map(item).join('')
+    : list.map(item).join('');
+  // "Old" (the old board) stays one small link at the very end until v2's release.
+  return (list.length ? `<div class="lb2-card">${items}</div>` : `<p class="lb2-empty-t">${esc(t2('lb2_none'))}</p>`)
     + `<button type="button" class="lb2-old" data-act="old">${esc(t2('lb2_old'))}</button>`;
 }
 function boardsHTML() {
   const rows = gameRows();
-  const chip = chipNow(rows);
-  const nFav = rows.filter((r) => r.fav).length, nPlayed = rows.filter((r) => r.played).length;
-  // Filters are the ONE control pattern (round 4): the segmented bar, like every board's tabs.
-  const chips = seg([
-    { v: 'fav', label: t2('lb2_favs_aria'), html: `<span class="lb2-favseg" aria-label="${esc(t2('lb2_favs_aria'))}">${SVG.heart(16, true)}<span class="num">${nFav}</span></span>` },
-    { v: 'played', label: t2('lb2_played', { n: nPlayed }) },
-    { v: 'all', label: t2('lb2_all', { n: rows.length }) },
-  ], chip, 'chip', true);
   const search = _srch || _q ? `<label class="lb2-search">${SVG.search}<input type="search" data-role="q" value="${esc(_q)}" placeholder="${esc(t2('lb2_search', { n: rows.length }))}" aria-label="${esc(t2('lb2_search_aria'))}" autocomplete="off" enterkeyhint="search"></label>` : '';
-  // Session 3 (Matt, 2026-11-01): the list starts higher. Search sits behind an icon; filters and sort share a line.
-  const sortBtn = `<label class="lb2-sortbtn" aria-label="${esc(t2('lb2_sort_aria'))}: ${esc(t2('lb2_sort_' + loadSort()))}">${SVG.sort}<select data-role="gsort" aria-label="${esc(t2('lb2_sort_aria'))}">${SORTS.map((v) => `<option value="${v}"${v === loadSort() ? ' selected' : ''}>${esc(t2('lb2_sort_' + v))}</option>`).join('')}</select></label>`;
-  return headHTML(search + `<div class="lb2-frow">${chips}${sortBtn}</div>`, true)
+  // The sort sits in the title row beside search (no filter row any more: the list starts higher).
+  const sortBtn = `<label class="lb2-icon lb2-sorti" aria-label="${esc(t2('lb2_sort_aria'))}: ${esc(sortWord(loadSort()))}">${SVG.sort}<select data-role="gsort" aria-label="${esc(t2('lb2_sort_aria'))}">${SORTS.map((v) => `<option value="${v}"${v === loadSort() ? ' selected' : ''}>${esc(sortWord(v))}</option>`).join('')}</select></label>`;
+  return headHTML(search, true, sortBtn)
     + `<div class="lb2-scroll" data-role="scroll"><div class="lb2-body" data-role="glist">${boardsListHTML()}</div></div>`;
 }
 
@@ -454,6 +447,7 @@ function boardScreenHTML(top) {
   const bar = `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
     ${art(game, 'hd')}<span class="lb2-grow lb2-pl"><h1>${esc(title(game))}</h1><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(total) }))}</span></span>
     ${playable(game) && b.rows.length ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(game)}">${esc(t2('lb2_play'))}</button>` : ''}
+    ${rulesFor(game) ? `<button type="button" class="lb2-icon lb2-info" data-act="info" aria-label="${esc(t2('lb2_info_aria'))}">${SVG.info}</button>` : ''}
     <button type="button" class="lb2-icon lb2-heart" data-act="fav" aria-pressed="${fav}" aria-label="${esc(t2(fav ? 'lb2_fav_remove' : 'lb2_fav_add'))}">${SVG.heart(24, fav)}</button></div>`;
   const cols = COLS;
   const unit = unitLabel(game, st, b.unit || '');
@@ -530,7 +524,7 @@ const HOF_CATS = ['all', 1, 2, 3, 4, 'VS', 'NT'];
 let _hofCat = 'all';
 let _hofSort = 'wins';
 let _hofFold = false;
-const catWord = (c) => (c === 'all' ? t('lb_cat_all') : c === 'VS' ? t('lb_cat_vs') : c === 'NT' ? t('lb_cat_nt') : lb2TierWord(c));
+const catWord = (c) => (c === 'all' ? t2('lb2_all_diffs') : c === 'VS' ? t('lb_cat_vs') : c === 'NT' ? t('lb_cat_nt') : lb2TierWord(c));
 function winsRows() {
   let rows = lb2Players(_people, _hofCat);
   if (_hofSort === 'played') {
@@ -570,9 +564,28 @@ function winsHTML() {
     <span class="r lb2-val num">${me ? fmt(me.show) : ''}</span><span></span></div>`;
   return `${headHTML(hofSeg() + winsCtrlHTML())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;
 }
-const hofSeg = () => seg([{ v: 'medals', label: t2('lb2_medals') }, { v: 'wins', label: t('lb_sort_wins') }], _hofView, 'hofview');
+const hofSeg = () => seg([{ v: 'medals', label: t2('lb2_medals') }, { v: 'wins', label: t('lb_sort_wins') }, { v: 'pct', label: t2('lb2_winpct') }], _hofView, 'hofview');
+/** Medal Count > Win % (Matt's 12, 2026-11-02; info only): wins / (wins + losses) over the games with a loss
+ *  (lb2WinPct: the Wins view's own wins, the losses stored beside them). Every player, plain "#", no medals. */
+function pctHTML() {
+  const rows = lb2WinPct(_people);
+  const cols = '44px minmax(0,1fr) auto 10px';
+  const pct = (r) => (r.pct == null ? '–' : `${Math.round(r.pct * 100)}%`);
+  const rec = (r) => `${fmt(r.wins)}–${fmt(r.losses)}`;
+  const one = (r) => `<button type="button" class="lb2-lr${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}">
+      ${plainRank(r.rank, r.tie)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span></span></span><span class="r lb2-val lb2-pctv num"><b>${pct(r)}</b><span class="lb2-wl">${rec(r)}</span></span>${CHEV}</button>`;
+  const list = rows.length ? `<div class="lb2-card" data-role="rows">${rows.map(one).join('')}</div>` : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
+  const me = rows.find((r) => r.key === _meKey) || null;
+  const meName = esc(nameOf(meGroup() || { name: (loadProfile() || {}).name }));
+  const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span></span><span></span><span class="r">${esc(t2('lb2_winpct'))}</span><span></span></div>`;
+  const pin = `<div class="lb2-pin${me ? ' lb2-pin-auto' : ''}" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me ? plainRank(me.rank, me.tie) : '–'}</span>
+    <span class="lb2-grow"><b class="lb2-nmt lb2-mine">${meName}</b>${me ? '' : `<span class="lb2-gap">${esc(t2('lb2_not_ranked'))}</span>`}</span>
+    <span class="r lb2-val lb2-pctv num">${me ? `<b>${pct(me)}</b><span class="lb2-wl">${rec(me)}</span>` : ''}</span><span></span></div>`;
+  return `${headHTML(hofSeg())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;
+}
 function hofHTML() {
   if (_hofView === 'wins') return winsHTML();
+  if (_hofView === 'pct') return pctHTML();
   const rows = _model.hof;
   const tie = tiedIn(rows);
   const bid = 'hof~all';
@@ -664,9 +677,11 @@ function playerHTML(top) {
   const psorts = [['best', t2('lb2_sort_best')], ['played', t2('lb2_sort_played')], ['az', t2('lb2_sort_az')]];
   const psortBtn = `<label class="lb2-sortbtn lb2-psort" aria-label="${esc(t2('lb2_sort_aria'))}">${SVG.sort}<select data-role="psort" aria-label="${esc(t2('lb2_sort_aria'))}">${psorts.map(([v, l]) => `<option value="${v}"${v === _pSort ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   // Under the game's name: lifetime plays only. The difficulty is the shape before the number at the right.
+  // Matt's 12 (2026-11-02): each row EXACTLY like the Me tab's: the game's name, its board number (shape +
+  // number) under it, the medal / place at the right; no "N played" line.
   const games = list.length ? `<div><div class="lb2-h2row"><h2 class="lb2-h2">${esc(t2('lb2_games_h'))}</h2>${psortBtn}</div><div class="lb2-card">${list.map((x) => `<button type="button" class="lb2-row sm" data-act="pgame" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(x.plays) }))}</span></span>
-      <span class="lb2-right"><span class="lb2-rv num">${valHTML(x.id, x)}</span>${placeHTML(defPlace(x.id, top.key))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x)}</span></span>
+      <span class="lb2-right">${placeHTML(defPlace(x.id, top.key))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tag ? `<p class="lb2-tag">${esc(tag)}</p>` : ''}${tiles}${games}</div></div>`;
 }
 
@@ -677,26 +692,57 @@ function personGameHTML(top) {
   const g = _people.find((x) => x.key === top.key) || {};
   const plays = (lb2PlayerGames(_people, top.key) || { games: [] }).games.find((x) => x.id === top.game);
   const bar = personBarHTML(g, top.key, title(top.game), true);   // tap the name: their page (Matt, 2026-11-02)
-  const head = `<div class="lb2-card"><div class="lb2-row sm">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span>${plays ? `<span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(plays.plays) }))}</span>` : ''}</span>
-    ${plays ? `<span class="lb2-right"><span class="lb2-rv num">${valHTML(top.game, plays)}</span>${placeHTML(defPlace(top.game, top.key))}</span>` : ''}</div></div>`;
+  // Matt's 12 (2026-11-02): a top card that stands out: the place, the board number and the record, big; then
+  // the details. Layout only: every number is the one the board and My Stats already show.
+  const place = defPlace(top.game, top.key);
+  const def = selFor(top.game, null);
+  const unit = cap(unitLabel(top.game, def, boardOf(top.game, def).unit || ''));
+  const tot = (((g.games || {})[top.game] || {}).total) || {};
+  const nPlayed = Math.max(plays ? plays.plays | 0 : 0, tot.played | 0);
+  const solo = SOLO.has(top.game);
+  // The board number = this person's row on the game's default board, printed as the board prints it.
+  const brow = boardOf(top.game, def).rows.find((r) => r.key === top.key) || null;
+  const bnum = !brow ? '' : top.game === 'contexto' ? ctValHTML(brow.g, false)
+    : brow.text && brow.text !== '—' ? `${shape(brow.tier)}${dispHTML(top.game, brow.html)}` : '';
+  const len = (h) => String(h).replace(/<[^>]*>/g, '').length;
+  const cell = (big, small) => `<div class="lb2-kc"><b class="num${len(big) > 6 ? ' lb2-kc-s' : ''}">${big}</b><span>${esc(small)}</span></div>`;
+  const cells = [
+    place && place.rank ? cell(placeHTML(place), t2('lb2_place')) : cell('–', t2('lb2_place')),
+    bnum ? cell(bnum, unit || t2('lb2_record')) : '',
+    solo ? cell(fmt(nPlayed), t2('lb2_played_col')) : cell(`${fmt(tot.won | 0)}–${fmt(tot.lost | 0)}`, t2('lb2_wl')),
+  ].filter(Boolean).join('');
+  const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(nPlayed) }))}</span></span></div>
+    <div class="lb2-kcells" style="grid-template-columns:repeat(${cells.split('class="lb2-kc"').length - 1},minmax(0,1fr))">${cells}</div></div>`;
   let stats = '';
   try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
-  const all = `<div class="lb2-card"><button type="button" class="lb2-row sm" data-act="pall"><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_all_games'))}</span></span>${CHEV}</button></div>`;
+  // Matt's 12 (item 10): the way back to the person, arrow on the LEFT: "Back to <name>".
+  const all = `<div class="lb2-card"><button type="button" class="lb2-row sm lb2-backto" data-act="pall"><span class="lb2-chev lb2-chevl" aria-hidden="true">${SVG.back}</span><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_back_to', { name: nameOf(g) }))}</span></span></button></div>`;
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="gs-v2 gs-s4">${stats}</div>${all}</div></div>`;
 }
 
-// --- How rankings work (round 4): every line checked against leaderboard-ui.js ----------------------------
+// --- How rankings work: four short lines (Matt's 12, 2026-11-02: "far too wordy"); each game's own rule is its (i) --
 let _help = false;
+let _info = false;            // a game's (i) sheet is open over its board
+function sheetHTML(label, inner) {
+  return `<div class="lb2-sheet" data-act="helpclose"><div class="lb2-sh" role="dialog" aria-label="${esc(label)}" data-act="noop"><span class="lb2-grab"></span>
+    ${inner}<button type="button" class="lb2-done" data-act="helpclose">${esc(t2('lb2_done'))}</button></div></div>`;
+}
 function helpHTML() {
-  const on = (ids) => ids.filter((id) => _model && _model.games.includes(id)).map((id) => title(id)).join(', ');
-  const pts = on(['wayout', 'gridlock', 'wordweaver']), nh = on(['sudoku', 'murdoku']);
-  const lines = [t2('lb2_help_harder'), pts ? t2('lb2_help_points', { g: pts }) : '', nh ? t2('lb2_help_nohint', { g: nh }) : '',
-    t2('lb2_help_medals'), t2('lb2_help_bests'), t2('lb2_help_online'), t2('lb2_help_h2h')].filter(Boolean);
-  return `<div class="lb2-sheet" data-act="helpclose"><div class="lb2-sh" role="dialog" aria-label="${esc(t2('lb2_help_h'))}" data-act="noop"><span class="lb2-grab"></span>
-    <h2 class="lb2-shh">${esc(t2('lb2_help_h'))}</h2>
+  const lines = [t2('lb2_help_harder'), t2('lb2_help_medals'), t2('lb2_help_bests'), t2('lb2_help_info')];
+  return sheetHTML(t2('lb2_help_h'), `<h2 class="lb2-shh">${esc(t2('lb2_help_h'))}</h2>
     <div class="lb2-shape-key">${[4, 3, 2, 1].map((tr) => `<span>${shape(tr)}${esc(lb2TierWord(tr))}</span>`).join('')}</div>
-    <ul class="lb2-help">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-    <button type="button" class="lb2-done" data-act="helpclose">${esc(t2('lb2_done'))}</button></div></div>`;
+    <ul class="lb2-help">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`);
+}
+/** A game's (i): "Ranked by" one line, then "Counts as" ONLY where a mode records at another level (js/lb-rules.js). */
+function infoHTML(game) {
+  const r = rulesFor(game);
+  if (!r) return '';
+  const lvl = (tr) => `<span class="lb2-lvl">${shape(tr)}${esc(lb2TierWord(tr))}</span>`;
+  const arrow = '<span class="lb2-arw" aria-hidden="true">→</span>';
+  const counts = r.counts.length ? `<div class="lb2-ih">${esc(t2('lb2_counts_as'))}</div><div class="lb2-ca">${r.counts.map((c) => `<div class="lb2-cah">${esc(t2('lb2_ca_' + c.when))}</div>${
+    c.rows.length ? c.rows.map((x) => `<div class="lb2-car">${lvl(x.from)}${arrow}${lvl(x.to)}</div>`).join('') : `<div class="lb2-car">${arrow}<span>${esc(t2('lb2_ca_easiest'))}</span></div>`}`).join('')}</div>` : '';
+  return sheetHTML(title(game), `<div class="lb2-ihd">${art(game)}<h2 class="lb2-shh">${esc(title(game))}</h2></div>
+    <div><div class="lb2-ih">${esc(t2('lb2_ranked_by'))}</div><p class="lb2-ib">${esc(t2('lb2_rb_' + r.by))}</p></div>${counts}`);
 }
 
 // --- render ----------------------------------------------------------------------------------------------
@@ -704,7 +750,7 @@ function screenHTML() {
   _pidx = [];
   if (!_connected || !_model) return `${headHTML()}<div class="lb2-scroll"><p class="lb2-empty-t">${esc(t2(navigator.onLine === false ? 'lb2_offline' : 'lb2_loading'))}</p></div>`;
   const top = _stack[_stack.length - 1];
-  if (top && top.kind === 'board') return boardScreenHTML(top);
+  if (top && top.kind === 'board') return boardScreenHTML(top) + (_info ? infoHTML(top.game) : '');
   if (top && top.kind === 'player') return playerHTML(top);
   if (top && top.kind === 'pgame') return personGameHTML(top);
   const sheet = _help ? helpHTML() : '';
@@ -713,11 +759,11 @@ function screenHTML() {
   return boardsHTML() + sheet;
 }
 let _lastHTML = '';
-function render({ keepScroll = false } = {}) {
+function render({ keepScroll = false, restore = false } = {}) {
   if (!_host) return;
   const page = _host.querySelector('.lb2-page');
   const old = page.querySelector('[data-role="scroll"]');
-  const top = keepScroll && old ? old.scrollTop : 0;
+  const top = restore ? savedScroll() : keepScroll && old ? old.scrollTop : 0;
   const html = screenHTML();
   if (html === _lastHTML) { if (_bs) _bs.sync(levelNow()); return; }
   const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.role === 'q';
@@ -732,7 +778,8 @@ function render({ keepScroll = false } = {}) {
 /** Screens deep (1 = the first screen): the game it was opened on is level 1, the help sheet one more. */
 function levelNow() {
   const entry = _entryGame && _stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame ? 1 : 0;
-  return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0);
+  const top = _stack[_stack.length - 1];
+  return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0) + (_info && top && top.kind === 'board' ? 1 : 0);
 }
 /** The pinned own row: hidden while the viewer's row on the board is fully on screen. */
 function watchPin(page, sc) {
@@ -751,21 +798,32 @@ function watchPin(page, sc) {
 function onData() { if (!_host) return; buildModel(); render({ keepScroll: true }); }
 
 // --- navigation ------------------------------------------------------------------------------------------
-function openGame(game, sel) {
-  _stack.push({ kind: 'board', game, sel: sel || null });
-  render();
+// Matt's 12, item 12 (2026-11-02): back to a list lands exactly where it was scrolled. Each level keeps its
+// own scrollTop as it is left (a stack entry's `scroll`; each tab's first screen in _rootScroll).
+const _rootScroll = {};
+const rootKey = () => _tab + (_tab === 'hof' ? ':' + _hofView : '');
+function saveScroll() {
+  const sc = _host && _host.querySelector('.lb2-page [data-role="scroll"]');
+  const y = sc ? sc.scrollTop : 0;
+  if (_stack.length) _stack[_stack.length - 1].scroll = y; else _rootScroll[rootKey()] = y;
 }
+function savedScroll() {
+  return _stack.length ? (_stack[_stack.length - 1].scroll || 0) : (_rootScroll[rootKey()] || 0);
+}
+/** Every new level goes through here: the level left keeps its scroll; render() pushes the level's own
+ *  history entry (back-stack sync), synchronously inside the tap. */
+function pushLevel(entry) { saveScroll(); _stack.push(entry); render(); }
+function openGame(game, sel) { pushLevel({ kind: 'board', game, sel: sel || null }); }
 function openPerson(key) {
   const top = _stack[_stack.length - 1];
   // From a game's board: that person's stats for that game (the viewer's own too).
-  if (top && top.kind === 'board') { _stack.push({ kind: 'pgame', key, game: top.game }); render(); return; }
+  if (top && top.kind === 'board') { pushLevel({ kind: 'pgame', key, game: top.game }); return; }
   if (key === _meKey) { _stack = []; _tab = 'me'; render(); return; }
-  _stack.push({ kind: 'player', key, all: false });
-  render();
+  pushLevel({ kind: 'player', key, all: false });
 }
 function stepBack() {
   if (_stack.length === 1 && _entryGame && _stack[0].kind === 'board' && _stack[0].game === _entryGame) return false;
-  if (_stack.length) { _stack.pop(); render(); return true; }
+  if (_stack.length) { _stack.pop(); render({ restore: true }); return true; }
   return false;
 }
 function setSel(patch) {
@@ -783,9 +841,9 @@ function onClick(e) {
   switch (act) {
     case 'close': closeLeaderboard2(); return;
     case 'help': _help = true; render({ keepScroll: true }); return;
-    case 'helpclose': if (_bs) _bs.back(); else { _help = false; render({ keepScroll: true }); } return;
-    case 'tab': _stack = []; _tab = v; render(); return;
-    case 'chip': _chip = v; _q = ''; _srch = false; render(); return;
+    case 'helpclose': if (_bs) _bs.back(); else { _help = false; _info = false; render({ keepScroll: true }); } return;
+    case 'info': _info = true; render({ keepScroll: true }); return;
+    case 'tab': if (!_stack.length) saveScroll(); _stack = []; _tab = v; render({ restore: true }); return;
     case 'search': {
       _srch = !(_srch || _q); if (!_srch) _q = '';
       render({ keepScroll: true });
@@ -794,17 +852,19 @@ function onClick(e) {
     }
     case 'game': openGame(el.dataset.game); return;
     case 'person': { const k = _pidx[Number(el.dataset.pi)]; if (k != null) openPerson(k); return; }
-    case 'pgame': { const top = _stack[_stack.length - 1]; if (top && top.kind === 'player') { _stack.push({ kind: 'pgame', key: top.key, game: el.dataset.game }); render(); } return; }
+    case 'pgame': { const top = _stack[_stack.length - 1]; if (top && top.kind === 'player') pushLevel({ kind: 'pgame', key: top.key, game: el.dataset.game }); return; }
     case 'pall': {
       const top = _stack[_stack.length - 1];
       if (!top || top.kind !== 'pgame') return;
       const below = _stack[_stack.length - 2];
-      if (below && below.kind === 'player' && below.key === top.key) { stepBack(); return; }
-      _stack.push({ kind: 'player', key: top.key, all: false }); render(); return;
+      // Opened from their page: this IS back (through history, like the back button and the swipe, so the
+      // history entry and the screen leave together; it used to pop the screen and unwind history after).
+      if (below && below.kind === 'player' && below.key === top.key) { if (_bs) _bs.back(); else stepBack(); return; }
+      pushLevel({ kind: 'player', key: top.key, all: false }); return;
     }
     case 'back': if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); return;
     case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
-    case 'hofview': _hofView = v === 'wins' ? 'wins' : 'medals'; render(); return;
+    case 'hofview': saveScroll(); _hofView = v === 'wins' || v === 'pct' ? v : 'medals'; render({ restore: true }); return;
     case 'fold': {
       const top = _stack[_stack.length - 1];
       if (top && top.kind === 'board') top.fold = true; else _hofFold = true;
@@ -859,6 +919,7 @@ function onKey(e) { if (e.key === 'Escape' && _host && _bs) _bs.back(); }
 function onBackSteps(n) {
   for (let i = 0; i < n && _host; i++) {
     if (_help && !_stack.length) { _help = false; render({ keepScroll: true }); continue; }
+    if (_info && _stack.length && _stack[_stack.length - 1].kind === 'board') { _info = false; render({ keepScroll: true }); continue; }
     if (!stepBack()) { closeLeaderboard2(); return; }
   }
 }
@@ -902,7 +963,8 @@ export async function openLeaderboard2(opts = {}) {
   delete _opts.legacy;
   _onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : null;
   _canPlay = typeof opts.canPlay === 'function' ? opts.canPlay : () => false;
-  _tab = 'boards'; _chip = null; _q = ''; _srch = false; _hofView = 'medals'; _stack = []; _entryGame = null; _help = false;
+  _tab = 'boards'; _q = ''; _srch = false; _hofView = 'medals'; _stack = []; _entryGame = null; _help = false; _info = false;
+  for (const k of Object.keys(_rootScroll)) delete _rootScroll[k];
   if (typeof opts.game === 'string' && isGameOnLauncher(opts.game)) { _entryGame = opts.game; _stack = [{ kind: 'board', game: opts.game, sel: null }]; }
   const host = document.createElement('div');
   host.className = 'lb2';
@@ -1217,6 +1279,45 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 :root:not(.gh-dark) .lb2-seg .lb2-shape.x2,:root:not(.gh-dark) .lb2-t2 .lb2-shape.x2{width:22px}
 .lb2-shape svg{width:100%;height:100%;display:block}
 @media (max-width:380px){.lb2-ic{width:48px;height:30px}.lb2-row{gap:10px;padding:8px 10px}}
+
+/* Matt's 12 (2026-11-02) */
+.lb2-sorti{position:relative;width:44px}
+.lb2-sorti select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none}
+.lb2-sorti svg{pointer-events:none;width:20px;height:20px}
+.lb2-gdiv{min-height:10px;padding:0;border-top:1px solid var(--l2-line)}
+.lb2-info{width:40px;color:var(--l2-muted)}
+.lb2-ihd{display:flex;align-items:center;gap:12px}
+.lb2-ih{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--l2-muted);margin-bottom:6px}
+.lb2-ib{margin:0;font-size:17px;line-height:1.35;color:var(--l2-text)}
+.lb2-ca{display:flex;flex-direction:column;border:1px solid var(--l2-line);border-radius:12px;overflow:hidden}
+.lb2-cah{padding:8px 12px;font-size:15px;font-weight:700;background:var(--l2-bg)}
+.lb2-car{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:16px;border-top:1px solid var(--l2-line)}
+.lb2-lvl{display:inline-flex;align-items:center;gap:6px;min-width:96px}
+.lb2-arw{color:var(--l2-muted)}
+.lb2-pctv{gap:10px}
+.lb2-pctv b{font-weight:700;min-width:42px;text-align:right}
+.lb2-wl{font-size:14px;font-weight:500;color:var(--l2-muted);min-width:64px;text-align:right}
+.lb2-lr.me .lb2-wl,.lb2-pin .lb2-wl{color:inherit}
+.lb2-kcard{padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px}
+.lb2-khead{display:flex;align-items:center;gap:12px}
+.lb2-kcells{display:grid;gap:8px}
+.lb2-kc{min-width:0;min-height:84px;border-radius:12px;background:var(--l2-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;text-align:center}
+.lb2-kc>b{font-size:26px;font-weight:800;line-height:1.1;display:flex;align-items:center;justify-content:center;max-width:100%;white-space:nowrap;overflow:hidden}
+.lb2-kc>b.lb2-kc-s{font-size:19px}
+.lb2-kc>b>*{flex-shrink:0}
+.lb2-kc>b .lb2-shape{margin-right:6px}
+.lb2-kc>b .lb2-ctv img{height:30px;width:auto}
+.lb2-kc>b .lb2-shape{width:18px;height:18px}
+.lb2-kc>b .lb2-shape.x2{width:30px}
+.lb2-kc>b .lb2-best{font-size:26px;color:var(--l2-text)}
+.lb2-kc>span{font-size:13px;color:var(--l2-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.lb2-backto{gap:8px}
+.lb2-chevl{justify-content:flex-start;opacity:1;color:var(--l2-accent)}
+.lb2-backto .lb2-t1{color:var(--l2-accent)}
+/* item 11: nothing on a stats page drags sideways; tables fit the width */
+.lb2-scroll{overflow-x:hidden;touch-action:pan-y}
+.lb2-body,.lb2-card{max-width:100%;min-width:0}
+.lb2 .gs-v2{min-width:0;max-width:100%;overflow-x:hidden}
 `;
   document.head.appendChild(el);
 }

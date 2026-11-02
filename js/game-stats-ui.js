@@ -1874,6 +1874,15 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-s4 .gs-sk-mc{border-left:1px solid var(--l2-line)}
 :root:not(.gh-dark) .gs-s4 .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;box-sizing:content-box}
 :root.gh-dark .gs-s4 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
+.gs-overlay.gs-ov4{overflow-x:hidden;touch-action:pan-y}
+.gs-s4.gs-panel{overflow-x:hidden}
+.gs-s4 .gs-body,.gs-s4.gs-body{grid-template-columns:minmax(0,1fr)}
+.gs-s4 .gs-gf-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(30px,1fr));overflow-x:visible;padding-bottom:0}
+.gs-s4 .gs-gf-cell{min-width:0}
+.gs-s4 .gs-grid{width:100%;max-width:100%;table-layout:fixed}
+.gs-s4 .gs-grid th,.gs-s4 .gs-grid td{padding:0 8px;overflow-wrap:anywhere}
+.gs-s4 .gs-grid thead th{white-space:normal;line-height:1.15;padding-top:4px;padding-bottom:4px;height:auto;min-height:36px}
+.gs-s4 .gs-grid th:first-child{width:36%}
 .gs-v2 .lb2-pmed small{font-size:12px;color:var(--l2-muted)}
 .gs-v2 .lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
 .gs-v2 .lb2-stat:first-child{border-top:0}
@@ -2030,6 +2039,18 @@ function rerender() {
   if (bodyEl) bodyEl.innerHTML = bodyHTML();
   if (_bs) _bs.sync(_game ? 2 : 1);
 }
+// Matt's 12, item 12 (2026-11-02; admin devices, `_s4`): back to the list lands where it was scrolled, and a game
+// opens at its top. The overlay itself is the scroll box.
+let _listScroll = 0;
+function openGameRow(id) {
+  if (_s4 && _host) _listScroll = _host.scrollTop;
+  _game = id; rerender();
+  if (_s4 && _host) _host.scrollTop = 0;
+}
+function backToList() {
+  _game = null; rerender();
+  if (_s4 && _host) _host.scrollTop = _listScroll;
+}
 
 /** Fetch every device record and re-render from THIS player's combined (code-aggregated) stats.
  *  Best-effort: offline / unconfigured leaves the local view in place. */
@@ -2051,9 +2072,9 @@ async function refreshCombined() {
 // The phone's back gesture: one history entry per level (list 1, a game 2), js/back-stack.js.
 let _bs = null;
 function onBackSteps(n) {
-  for (let i = 0; i < n && _host; i++) { if (_game) { _game = null; rerender(); } else { closeStats(); return; } }
+  for (let i = 0; i < n && _host; i++) { if (_game) backToList(); else { closeStats(); return; } }
 }
-function goUp() { if (_bs) _bs.back(); else if (_game) { _game = null; rerender(); } else closeStats(); }
+function goUp() { if (_bs) _bs.back(); else if (_game) backToList(); else closeStats(); }
 
 function onKey(e) {
   if (e.key !== 'Escape') return;
@@ -2067,7 +2088,7 @@ function onClick(e) {
   if (e.target.closest('[data-role="gs-up"]')) { goUp(); return; }
   if (e.target.closest('[data-role="gs-back"]')) { goUp(); return; }
   const row = e.target.closest('.gs-grow[data-game]');
-  if (row) { _game = row.dataset.game; rerender(); }
+  if (row) openGameRow(row.dataset.game);
 }
 
 export function closeStats() {
@@ -2080,6 +2101,7 @@ export function openStatsOverlay() {
   ensureCss();
   closeStats();
   _game = null;
+  _listScroll = 0;
   // The first paint is local, before the network answers - so it applies the corrections too.
   // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
   _st = correctStats(loadStoredStats(), statsId(), corrections());

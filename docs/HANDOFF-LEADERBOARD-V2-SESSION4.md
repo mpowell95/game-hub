@@ -81,3 +81,32 @@ Wins / Losses / Ties / Played in that order everywhere, same headings, no repeat
   `isAdminDevice()`; class `gs-s4`); players' My Stats unchanged. Closest = variant A (all games; B behind `__setClosestForTest('b')`).
   Open calls for Matt: Closest A/B, "Medals" also renames the Me tile, Contexto gold shown twice, "All" pill on Bests, folds stay open.
 - **Task 3** (#11 one vocabulary): not started; mockup first.
+
+## Matt's 12 (2026-11-02, branch `claude/lb2-matt-12`; admin-only v2, My Stats changes behind `_s4`)
+
+Interface only: `tools/test-lb2-parity.mjs` 372/372 EN and ES (old gold 38 = v2 gold 38). Shots: `docs/mockups/lb2-matt12/`.
+1. Games list = ONE list: favorites, a divider, every other game (`boardsListHTML`); All / Played chips gone; sort icon
+   in the title row; "Old" stays as a small link at the very end until release.
+2. Sorts: Most played (me) = stored `played` (same meaning), Most played (all) = `playedall` (each board's header total).
+3. "?" sheet = shape key + 4 lines. Per-game (i) on each board (`infoHTML`): "Ranked by" + "Counts as" only where a
+   mode records at another level. Table: `js/lb-rules.js` (`LB_RULES`, `rulesFor`); `tools/test-lb-rules.mjs` calls each
+   game's own `statsDiff` / `soloDiff` and fails on a game with no entry or an unlisted `oneTierDown` / `easiestDiff`.
+   The board does NOT import the games' screens (bytes); the test proves the table against them instead.
+4. Hall of Fame -> **Medal Count** / **Medallero** (`lb2_tab_hof`).
+5. Wins picker "Everything" -> **All difficulties** / **Todas las dificultades** (fits at 360).
+6. **Win %** view (`leaderboard-ui.js` `lb2WinPct`, `pctHTML`): the Wins view's own wins + the losses stored beside
+   them, % = W / (W + L), "62%  87–53", plain #, no medals; people with no decided game last with "–".
+7. A person's page rows = the Me tab's rows (number under the name, medal right, no "N played").
+8. A person's game page: top card (Place, the board number exactly as the board prints it, Won–lost or Played), then
+   the details.
+9. Swipe back from a person's game opened from their page: the path is in `tools/test-swipe-back.mjs` (Medal Count ->
+   person -> game, and board -> game -> person -> game, swipe and button). It did NOT fail in headless Chromium before
+   the change; the one push/unwind outside a tap ("All games" back to the page popped the screen, then unwound
+   history behind it) now goes through `history.back()` like the button, and every level is pushed by `pushLevel`.
+   Needs a check on Matt's iPhone.
+10. "Back to <name>" / "Volver a <nombre>", arrow left.
+11. No sideways drag: `.lb2-scroll` and My Stats (`.gs-ov4`) `overflow-x:hidden; touch-action:pan-y`; the sources
+   fixed: Golf's per-hole row wraps (was a sideways scroller that widened My Stats' grid to 624 px), stats tables
+   `table-layout:fixed` with wrapping headers (Arrow Maze, Minesweeper in Spanish). A probe over all 34 games' stats
+   (v2 and My Stats, 402/360, EN/ES) finds nothing wider than the screen.
+12. Back to a list restores its scroll (v2: each level's `scroll`, each tab's first screen; My Stats `_s4`: the list).

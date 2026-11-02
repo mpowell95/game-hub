@@ -3748,6 +3748,24 @@ export function lb2Players(list, cat = 'all') {
   // `cat` = the old card's line under the name (catInlineHTML: wins per tier shape, runs, VS wins), as HTML.
   return rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), wins: value(g), played: playedOf(g, null), cat: catInlineHTML(g) }));
 }
+/** Leaderboard v2's Win % view (Matt's 12, 2026-11-02; info only, no medals): the SAME people and the SAME wins
+ *  as lb2Players(list, 'all') (winsOf: competitive games only, admin-only games left out), and the losses
+ *  stored beside them in those same buckets. pct = wins / (wins + losses); a draw counts in neither. Rows with
+ *  no decided game come last with pct null. [{ g, key, rank, tie, wins, losses, pct }] */
+export function lb2WinPct(list) {
+  const ids = counted(COMP_IDS);
+  const lossesOf = (g) => { let n = 0; for (const id of ids) for (const b of bucketsOf(g.games[id])) n += b.losses; return n; };
+  const rows = list.filter((g) => playedOf(g, null) > 0).map((g) => {
+    const wins = winsOf(g, null), losses = lossesOf(g);
+    return { g, key: g.key, wins, losses, pct: wins + losses > 0 ? wins / (wins + losses) : null };
+  });
+  const v = (r) => (r.pct == null ? -1 : r.pct);
+  rows.sort((a, b) => (v(b) - v(a)) || ((b.wins + b.losses) - (a.wins + a.losses)) || rankName(a.g).localeCompare(rankName(b.g)));
+  let rank = 0, last = null;
+  const n = new Map(); for (const r of rows) n.set(v(r), (n.get(v(r)) || 0) + 1);
+  rows.forEach((r, i) => { if (v(r) !== last) { rank = i + 1; last = v(r); } r.rank = rank; r.tie = n.get(v(r)) > 1; });
+  return rows;
+}
 /** v2's place medal (Matt, 2026-10-31: "I like the medals we recently created for Contexto more than the
  *  ribbons"): Contexto's gold / silver / bronze image with the PLACE on its face, `h` px tall. */
 export function lb2Medal(rank, h = 36) { return ctMedalHTML(['gold', 'silver', 'bronze'][rank - 1] || 'iron', rank, h); }
