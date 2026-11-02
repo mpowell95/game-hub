@@ -100,6 +100,12 @@ is true, every Firebase writer refuses (no override), online play is refused, an
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 **How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
+## Open handoff: Word Weaver (2026-11-02)
+
+**"Word Weaver, pick up where we left off"** = read **`docs/HANDOFF-WORD-WEAVER-2026-11-02.md`** first (the open task:
+bonus stars become a currency spent on 3 kinds of hints; prices to set, Matt: "too affordable"; then the release).
+Delete this section once that task is done and Word Weaver is released.
+
 ## Open handoff: Leaderboard v2 (2026-11-01)
 
 **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
