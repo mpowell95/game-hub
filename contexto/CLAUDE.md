@@ -276,3 +276,4 @@ previous games, reload-resume, both hosts, both phone heights, light/dark, EN/ES
 **Fewest guesses (2026-11-02, Matt):** `ct.fewestNH` = fewest typed guesses on a NO-HINT solve (recorder; hub fills older ones
 from the phone's save via `contexto-history.js` `fewestNoHintFromSave` + `game-stats.js` `noteContextoFewestNoHint`). Shown as
 "Fewest guesses" (My Stats, leaderboard person page). `ct.fewest` (every solve, hints too) stays stored, no longer shown.
+The SERVER also fills `fewestNH` on the leaderboard from `ctHistory/` (`functions/boards.js` `ctNoHintBest`, every rebuild, only lowers), so it shows before a phone reopens.
