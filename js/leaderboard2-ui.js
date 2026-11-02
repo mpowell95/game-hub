@@ -29,6 +29,7 @@ import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
 import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
 
@@ -119,6 +120,7 @@ let _host = null;
 let _opts = {};
 let _people = [];
 let _meKey = '';
+let _lost = [];             // Me > Lost records (js/lb2-lost.js): games the viewer held that someone else now holds
 let _connected = false;
 let _model = null;
 let _tab = 'boards';
@@ -169,6 +171,18 @@ function buildModel() {
   const hof = B.hallOfFame(standings);
   _boardMemo = new Map();
   _model = { games, byGame, standings, hof, me: B.personPlaces(standings, _meKey) };
+  // Lost records: note the golds held now (rank 1, ties hold) against the last set this device saw. Names only.
+  _lost = [];
+  if (_meKey && meGroup()) {
+    const now = {};
+    for (const id of games) {
+      const rows = byGame[id].rows;
+      if (!rows.length) continue;
+      now[id] = { mine: rows.some((r) => r.key === _meKey && r.rank === 1), by: rows.filter((r) => r.rank === 1 && r.key !== _meKey).map((r) => nameOf(r.g)) };
+    }
+    const st = noteHeld(_meKey, now);
+    _lost = st ? st.lost : [];
+  }
 }
 const moveOf = () => 0;
 
@@ -645,10 +659,16 @@ function meHTML() {
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
       <span class="lb2-t2 lb2-vline num">${(x.mineAt || x.mine).text === '–' ? '' : `<span class="lb2-nw"><b>${valHTML(x.id, x.mineAt || x.mine)}</b><span class="lb2-dot">·</span></span>`}<span class="lb2-nw lb2-recq"><span class="lb2-recw">${esc(t2('lb2_record'))}</span>${valHTML(x.id, x.recVal)}${whyPill(x)}</span></span></span>
       <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
+  // Lost records: a game the viewer held that someone else holds now; who holds it, the day it was noticed, the viewer's place.
+  const day = (ms) => { try { return new Date(ms).toLocaleDateString(LOC(), { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  const lostRows = _lost.filter((x) => _model.games.includes(x.game));
+  const lost = lostRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_lost_h'))}</h2><div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.game)}">
+      ${art(x.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.game))}</span><span class="lb2-t2">${medal(1, 'xs')}${esc(x.takenBy.join(', '))} · ${esc(day(x.at))}</span></span>
+      <span class="lb2-right">${placeHTML(defPlace(x.game, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   const fresh = R.fresh.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_fresh_h'))}</h2><div class="lb2-card">${R.fresh.map((x) => `<div class="lb2-row sm">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vsr">${holderHTML(x)}<span class="lb2-rv num">${valHTML(x.id, x.recVal)}</span></span></span>
       ${playable(x.id) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(x.id)}">${esc(t2('lb2_play'))}</button>` : ''}</div>`).join('')}</div></div>` : '';
-  const body = R.me ? tiles + held + close + fresh : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
+  const body = R.me ? tiles + held + lost + close + fresh : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   return `${headHTML()}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${body}</div></div>`;
 }
 
