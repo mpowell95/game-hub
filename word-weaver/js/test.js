@@ -2,7 +2,7 @@
 // (levels in the data contract's format; the real data is built by tools/build-word-weaver-data.mjs).
 // Run: node word-weaver/js/test.js
 import {
-  loadIndex, loadLevel, loadDailyData, dailyLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells,
+  loadIndex, loadLevel, loadDailyData, dailyLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells,
 } from './engine.js';
 
 let fails = 0;
@@ -112,6 +112,20 @@ ok('canMake: a letter that is not there', !canMake('ATE', 'TAB'));
   eq('apply: extra does not duplicate', st.extra, ['ONSET']);
   applyWord(lv, st, 'XYZZY');
   eq('apply: bad changes nothing', [st.found, st.extra], [['STONE'], ['ONSET']]);
+}
+
+// --- bought hints (2026-11-02): a whole word, a picked square ------------------------------------------
+{
+  const lv = cleanLevel(L1, 1), st = freshState();
+  eq('word: the shortest unfound word, every square still empty', hintWordCells(lv, st), ['0,0', '1,0', '2,0', '3,0']);
+  st.revealed.push('0,0');
+  eq('word: squares already showing are left out', hintWordCells(lv, st), ['1,0', '2,0', '3,0']);
+  const all = emptyCells(lv, freshState());
+  ok('square: every grid square is pickable on a fresh level', all.length > 4 && all.includes('0,0') && new Set(all).size === all.length);
+  ok('square: a revealed square is not pickable', !emptyCells(lv, st).includes('0,0'));
+  const st2 = freshState();
+  for (const e of lv.w) applyWord(lv, st2, e[0]);
+  eq('done: no word and no square left', [hintWordCells(lv, st2), emptyCells(lv, st2)], [[], []]);
 }
 
 // --- hintCell: the first unrevealed cell of the shortest unfound word -------------------------------

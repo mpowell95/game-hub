@@ -763,9 +763,7 @@ export const GAMES = [
     immersive: true,
     accent: '#a5672e',
     art: GAME_ART['gridlock'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-11-02',         // Matt: "if gridlock passes all your tests, release it"; the New pill counts from here
   },
   {
     // Word Weaver (2026-10-28): a Wordscapes-style crossword. Swipe across a wheel of letters to spell

@@ -603,6 +603,9 @@ function ensureWw(g) {
   if (g.ww.fl !== undefined && !(Number.isFinite(g.ww.fl) && g.ww.fl >= 0)) g.ww.fl = 0;
   // Free hints used (2026-11-01) exists only once one is used.
   if (g.ww.fu !== undefined && !(Number.isFinite(g.ww.fu) && g.ww.fu >= 0)) g.ww.fu = 0;
+  // Bonus stars SPENT on hints (2026-11-02) and hints bought by kind exist only once one is bought.
+  if (g.ww.sp !== undefined && !(Number.isFinite(g.ww.sp) && g.ww.sp >= 0)) g.ww.sp = 0;
+  if (g.ww.by !== undefined && (!g.ww.by || typeof g.ww.by !== 'object' || Array.isArray(g.ww.by))) g.ww.by = {};
   // The hint maps (2026-10-29) exist only once a hint is used.
   // The daily puzzle's maps (2026-11-02) exist only once a daily is completed / hinted.
   for (const k of ['hint', 'esHint', 'dl', 'dh']) if (g.ww[k] !== undefined && (!g.ww[k] || typeof g.ww[k] !== 'object' || Array.isArray(g.ww[k]))) g.ww[k] = {};
@@ -1708,7 +1711,7 @@ function resetKingOfGamesSkeeball(st) {
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
   archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
-  gridlock: 'gridlock', wordweaver: 'word-weaver', tower: 'tower',
+  wordweaver: 'word-weaver', tower: 'tower',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
 export function isTestGame(id) {
@@ -2525,6 +2528,26 @@ export function recordWordWeaverFreeLost(n) {
   const g = st.games.wordweaver;
   ensureWw(g);
   g.ww.fl = (Number(g.ww.fl) || 0) + k;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver: a hint BOUGHT with bonus stars (Matt, 2026-11-02: "You should have to spend bonus stars to buy hints").
+ *  `kind` 'l' (a letter), 'q' (a square the player picks), 'w' (a word); `cost` = the stars paid (js/word-weaver-points.js
+ *  WW_PRICE); `where` = the level or daily key, for the play log only. Adds `cost` to the counter `ww.sp` and 1 to
+ *  `ww.by[kind]`; both only grow, merged across phones by adding. A bought hint never lowers a level's stars (it is not
+ *  a hint count). Never a result (no rate gate). Returns the store, or null for a bad kind or cost (nothing written). */
+export function recordWordWeaverBuy(kind, cost, where) {
+  const c = Math.floor(Number(cost) || 0);
+  if (!['l', 'q', 'w'].includes(kind) || !(c >= 1)) return null;
+  notePlay('wordweaver', 'recordWordWeaverBuy', arguments);
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  g.ww.sp = (Number(g.ww.sp) || 0) + c;
+  if (!g.ww.by) g.ww.by = {};
+  g.ww.by[kind] = (Number(g.ww.by[kind]) || 0) + 1;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

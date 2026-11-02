@@ -573,3 +573,48 @@
   .ww-root .ww-ltr { transition: none; }
   .ww-root .ww-c.is-flash, .ww-root .ww-pill.is-shake, .ww-root .ww-pill.is-pop, .ww-root .ww-chip.is-bump, .ww-root .ww-chip.is-wiggle, .ww-root .ww-side.is-bump { animation: none; }
 }
+
+/* --- the hint sheet + pick-a-square (2026-11-02: bonus stars buy hints; mockup docs/mockups/word-weaver-hint-shop.html) --- */
+.ww-root .ww-modal.is-shop { place-items: end center; padding: 0; }
+.ww-root .ww-shop {
+  width: min(480px, 100%); border-radius: 24px 24px 0 0; gap: 0; text-align: left;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+}
+.ww-root .ww-shop .gh-modal__title { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 44px 8px; }
+.ww-root .ww-srow {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 60px; padding: 0 6px;
+  background: none; border: 0; border-top: 1px solid var(--gh-border); color: inherit; font: inherit;
+  cursor: pointer; touch-action: manipulation; text-align: left;
+}
+.ww-root .ww-srow:first-of-type { border-top: 0; }
+.ww-root .ww-srow:disabled { opacity: .38; cursor: default; }
+.ww-root .ww-srow:not(:disabled):active { background: var(--gh-surface-2); }
+.ww-root .ww-snm { flex: 1; font-size: 20px; font-weight: 800; }
+.ww-root .ww-scost { display: inline-flex; align-items: center; gap: 5px; font-size: 20px; font-weight: 800; }
+.ww-root .ww-scost svg { width: 20px; height: 20px; color: var(--ww-path); }
+.ww-root .ww-srate { gap: 2px; }
+.ww-root .ww-sic { display: inline-flex; gap: 3px; width: 84px; flex: none; }
+.ww-root .ww-sic i { width: 24px; height: 24px; border-radius: 5px; background: var(--gh-surface-2); box-shadow: inset 0 0 0 1.5px var(--gh-border); }
+.ww-root .ww-sic i.is-f { background: var(--gh-surface); box-shadow: inset 0 0 0 2px currentColor; }
+.ww-root .ww-sic i.is-t { background: var(--gh-surface); box-shadow: inset 0 0 0 2.5px var(--ww-path), 0 0 0 2px var(--gh-surface), 0 0 0 4px currentColor; }
+.ww-root .ww-sbulb svg { width: 26px; height: 26px; }
+.ww-root .ww-ssep { height: 8px; margin: 6px -16px 0; background: var(--gh-surface-2); }
+.ww-root .ww-ssep + .ww-srow { border-top: 0; }
+
+.ww-root.is-picking .ww-c.is-e {
+  border: 3px dashed #ffce3a; box-shadow: 0 0 12px rgba(255, 206, 58, .75);
+  cursor: pointer; animation: ww-pick 1.2s ease-in-out infinite;
+}
+@keyframes ww-pick { 50% { transform: scale(.9); } }
+@media (prefers-reduced-motion: reduce) { .ww-root.is-picking .ww-c.is-e { animation: none; } }
+.ww-root .ww-pickbar {
+  position: relative; z-index: 20;
+  display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 14px; border-radius: 22px;
+  background: #1b2333; color: #fff; font-size: 17px; font-weight: 800; white-space: nowrap;
+}
+.ww-root .ww-pickbar svg { width: 18px; height: 18px; color: var(--ww-path); }
+.ww-root .ww-pickx {
+  width: 36px; height: 36px; border-radius: 18px; border: 0; background: rgba(255, 255, 255, .18); color: #fff;
+  font-size: 20px; line-height: 1; cursor: pointer; touch-action: manipulation;
+}
+.ww-root.is-picking .ww-pill { display: none; }

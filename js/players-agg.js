@@ -555,6 +555,15 @@ export function aggregatePlayers(all, corrections) {
         // Bonus squares (2026-11-02) add the same way.
         const bsq = Math.max(0, Math.floor(Number(src.ww.b) || 0));
         if (bsq) dst.ww.b = (dst.ww.b || 0) + bsq;
+        // Bonus stars spent on hints, and hints bought by kind (2026-11-02), add the same way.
+        const sp = Math.max(0, Math.floor(Number(src.ww.sp) || 0));
+        if (sp) dst.ww.sp = (dst.ww.sp || 0) + sp;
+        if (src.ww.by && typeof src.ww.by === 'object' && !Array.isArray(src.ww.by)) {
+          for (const k of ['l', 'q', 'w']) {
+            const n = Math.max(0, Math.floor(Number(src.ww.by[k]) || 0));
+            if (n) { if (!dst.ww.by) dst.ww.by = {}; dst.ww.by[k] = (dst.ww.by[k] || 0) + n; }
+          }
+        }
         const lv = (src.ww.lv && typeof src.ww.lv === 'object') ? src.ww.lv : {};
         for (const k of Object.keys(lv)) {
           if (!/^L\d+$/.test(k)) continue;
