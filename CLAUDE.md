@@ -360,7 +360,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Word Weaver's daily board (2026-11-02):** `tools/read-ww-daily.mjs` (read only), `tools/test-ww-daily-rules.mjs`.
 - **Leaderboard (i) rules (2026-11-02):** `tools/test-lb-rules.mjs` (every board game has a `js/lb-rules.js` entry, checked against each game's own `statsDiff`).
 - **Back swipe (2026-11-02):** `tools/test-swipe-back.mjs` (every drill-down overlay steps back one screen; dev server on 8185).
-- **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked); `tools/lb2-review-shots.cjs` (the outside-review set, 2026-11-02).
+- **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked); `tools/lb2-review-shots.cjs` (the outside-review set, 2026-11-02). **Stats screens (2026-11-02):** `tools/test-stats-screens.mjs [--browser]`, `tools/stats-screens-shots.cjs`.
 - **Days and weeks are each player's LOCAL midnight (2026-11-02)**: `tools/test-rush-weeks.mjs`, run with `TZ=America/New_York` and `TZ=Europe/Madrid`.
 - **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env
   var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's

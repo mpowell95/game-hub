@@ -329,6 +329,9 @@ export function aggregatePlayers(all, corrections) {
           for (const dk of Object.keys(per)) {
             const b = per[dk] || {}; const d = to[dk] || (to[dk] = { played: 0, won: 0, lost: 0 });
             d.played += b.played | 0; d.won += b.won | 0; d.lost += b.lost | 0;
+            // The mode's best (2026-11-02, read by the stats screens): `hi` the most, `lo` the least non-zero.
+            if (Number.isFinite(+b.hi) && +b.hi > 0) d.hi = Math.max(+d.hi || 0, +b.hi);
+            if (Number.isFinite(+b.lo) && +b.lo > 0) d.lo = +d.lo > 0 ? Math.min(+d.lo, +b.lo) : +b.lo;
           }
         }
       }

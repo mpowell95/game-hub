@@ -983,5 +983,24 @@ const OFF_THE_BOARD = {};
   eq('minesweeper: counters still add with an old-shape device present', [ms.cleared, ms.flagsRight], [1, 6]);
 }
 
+// byMode across a person's devices (2026-11-02, read by the stats screens): counters add per mode and chosen
+// difficulty; `hi` is the most, `lo` the least non-zero; a device with no byMode changes nothing.
+{
+  const all = {
+    d1: rec({ playerId: 'BM111', name: 'Moder' }, { darts: { total: { played: 3, won: 2, lost: 1 }, byMode: { 'first=me|kind=301': { hard: { played: 2, won: 2, lost: 0 } }, 'first=them|kind=cricket': { easy: { played: 1, won: 0, lost: 1 } } } },
+      snake: { total: { played: 2, won: 2, lost: 0 }, byMode: { 'walls=on': { easy: { played: 2, won: 2, lost: 0, hi: 30 } } } },
+      murdoku: { total: { played: 1, won: 1, lost: 0 }, byMode: { 'size=6': { easy: { played: 1, won: 1, lost: 0, lo: 90000 } } } } }, 1),
+    d2: rec({ playerId: 'bm111', name: 'Moder' }, { darts: { total: { played: 2, won: 1, lost: 1 }, byMode: { 'first=me|kind=301': { hard: { played: 2, won: 1, lost: 1 } } } },
+      snake: { total: { played: 1, won: 1, lost: 0 }, byMode: { 'walls=on': { easy: { played: 1, won: 1, lost: 0, hi: 44 } } } },
+      murdoku: { total: { played: 1, won: 1, lost: 0 }, byMode: { 'size=6': { easy: { played: 1, won: 1, lost: 0, lo: 70000 } } } } }, 2),
+    d3: rec({ playerId: 'BM111', name: 'Moder' }, { darts: { total: { played: 1, won: 1, lost: 0 } } }, 3),
+  };
+  const g = aggregatePlayers(all)[0].games;
+  eq('byMode: a mode adds across devices', g.darts.byMode['first=me|kind=301'].hard, { played: 4, won: 3, lost: 1 });
+  eq('byMode: a mode on one device only is kept', g.darts.byMode['first=them|kind=cricket'].easy, { played: 1, won: 0, lost: 1 });
+  eq('byMode: hi is the most across devices', g.snake.byMode['walls=on'].easy.hi, 44);
+  eq('byMode: lo is the least non-zero across devices', g.murdoku.byMode['size=6'].easy.lo, 70000);
+}
+
 console.log(fail ? `\n${fail} FAILURE(S)` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

@@ -1562,7 +1562,7 @@ class CupPong {
     const before = soloBest();
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { throws: this.throws | 0 } })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
+      try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { soloThrows: this.throws | 0 } })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
     }
     const best = soloBest();
     // "New best" only when this rack actually set it (a first clear counts); otherwise the best.

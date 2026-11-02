@@ -719,12 +719,13 @@ function personGameHTML(top) {
   const cells = [
     place && place.rank ? cell(placeHTML(place), t2('lb2_place')) : cell('–', t2('lb2_place')),
     bnum ? cell(bnum, unit || t2('lb2_record')) : '',
-    solo ? cell(fmt(nPlayed), t2('lb2_played_col')) : cell(`${fmt(tot.won | 0)}–${fmt(tot.lost | 0)}`, t2('lb2_wl')),
+    // The details below now open with Wins / Losses / Ties / Played (2026-11-02): no record here twice, Win % instead.
+    solo ? cell(fmt(nPlayed), t2('lb2_played_col')) : cell((tot.won | 0) + (tot.lost | 0) ? `${Math.round(((tot.won | 0) * 100) / ((tot.won | 0) + (tot.lost | 0)))}%` : '–', t('st_pct')),
   ].filter(Boolean).join('');
-  const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(nPlayed) }))}</span></span>${playable(top.game) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : ''}</div>
+  const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span></span>${playable(top.game) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : ''}</div>
     <div class="lb2-kcells" style="grid-template-columns:repeat(${cells.split('class="lb2-kc"').length - 1},minmax(0,1fr))">${cells}</div></div>`;
   let stats = '';
-  try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
+  try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }, { fresh: true }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
   // Matt's 12 (item 10): the way back to the person, arrow on the LEFT: "Back to <name>".
   const all = `<div class="lb2-card"><button type="button" class="lb2-row sm lb2-backto" data-act="pall"><span class="lb2-chev lb2-chevl" aria-hidden="true">${SVG.back}</span><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_back_to', { name: nameOf(g) }))}</span></span></button></div>`;
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="gs-v2 gs-s4">${stats}</div>${all}</div></div>`;
@@ -1024,6 +1025,8 @@ export async function openLeaderboard2(opts = {}) {
 }
 
 /** For tests and the visual check: render from a given people list, no network. */
+/** Screenshot harness only (tools/stats-screens-shots.cjs): open one person's page for one game. */
+export function __openPersonGameForTest(key, game) { _stack = [{ kind: 'pgame', key, game }]; render(); }
 export function __setPeopleForTest(people, meKey) { _people = people || []; _meKey = meKey || ''; _connected = true; onData(); }
 
 function ensureCss() {

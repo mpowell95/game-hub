@@ -3900,3 +3900,34 @@ Everyone 3 (a step back taps the screen's own back button); Admin 1 + pushed vie
 report 2 (a typed bug form keeps its guard: the swipe is refused like Esc). The profile page's tab bar counts the
 open overlays' entries (`backDepth()`). Games are untouched: the hub has no popstate handling while a game is
 mounted. Proven in Chromium by `tools/test-swipe-back.mjs`; not yet on an iPhone.
+
+
+## One vocabulary on every stats screen (2026-11-02)
+
+Matt's themes for each game's stats screen (My Stats and leaderboard v2's person-in-a-game page), approved per game.
+Built ADMIN-ONLY until he releases it: My Stats draws them under `_s4` (`isAdminDevice()`), v2's person-game page always
+(`v2ScreenFor(id, st, { fresh: true })`); every player keeps today's `screenFor`. `freshScreenFor` in
+`js/game-stats-ui.js` draws, in this order: 1 Wins / Losses / Ties / Played (Ties only when there are some; Chinchón's
+Victories/Draws/Defeats and every other wording unified), 2 Online (`byDiff.mp`) right under it, 3 Went first / Went
+second (byMode: `went`, else `first` when it is 'me'/'them'; Connect 4 from its grid), 4 By difficulty (shape + word,
+W–L and Win % = W / (W + L), online not a row), 5 the game's modes from byMode (Darts by game with every Cricket kind as
+Cricket, Pool by game, Flick Soccer by formation + most played, Hold'em by table + most played (replacing its
+Easy/Medium/Hard rows), Hoops shots per turn, Chinchón/Escoba/Uno by players, Dominoes by target, Battleship by board,
+Boggle by language and timer, Tic Tac Toe each variant by difficulty, Brick Breaker by mode, Murdoku best time per
+difficulty from byMode `lo`), 6 a few `dt` numbers (sums, or averages over `dt._n`). A breakdown with no data is simply
+not drawn: real data has byMode only since 2026-10-30 and `dt` only since this morning, so most real screens are
+sections 1-4 for now. Arrow Maze: "Levels cleared", "Timed" dropped (it counted levels with an honest time, meaningless
+to a player), "(arrows in one run)" dropped, Arrows cleared = every timed level's arrows (`wo.log`) + every Rush run's
+score. Cup Pong has no make %: a solo rack's detail adds its throws into the same `dt.throws` a match does, so made /
+throws would mix the two (needs its own key in the solo writer first). The v2 top card's third cell is Win % (the
+record is now the first card below it) and the "N played" line under the title went (non-solo games); solo games keep
+both. `js/players-agg.js` also merges byMode's `hi` (max) and `lo` (least non-zero). Display only:
+`tools/test-lb2-parity.mjs` 388/388 EN and ES. Tests: `tools/test-stats-screens.mjs` (fixture written by the real
+recorders through withMode, `tools/stats-screens-fixture.mjs`, plus all 61 real people; `--browser` checks 360/402
+EN/ES widths). Shots: `tools/stats-screens-shots.cjs` -> `docs/mockups/stats-screens/`.
+
+POPONGO archived the same day (Matt): never named again. `skeeball/js/boards.js` keeps the entry (`archived: true`) and
+exports `liveBoards()`; the gallery, challenge machine list and admin machine rows iterate it; `SK_MACHINES.popongo`
+keeps its id and `archived: true`, so My Stats draws no card for it (played or locked, practice rows too, and a best set
+on it notes only its day) and the leaderboard offers no machine tab. Its racks, and the two existing admin voids on it,
+stay stored and keep counting: every Skeeball total (games, balls, points, the board's All number) is unchanged.
