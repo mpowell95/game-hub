@@ -12,6 +12,14 @@ until Matt says so in words. The full build is on branch `claude/lb-points-v2` (
 tools/test-lb-points.mjs; verified: top 3 of all 20 boards = the TABLE). The announcement id
 `lb-points-2026-11-02` was used (some phones saw it); a re-release needs a NEW id.
 
+## Status: ADMIN DEVICES ONLY for Matt's review (v1426, 2026-11-02)
+Matt: "I want the changes deployed to the ADMIN ONLY leaderboard for me to review and test." The points build
+(from `claude/lb-points-v2`) is on main behind `isAdminDevice()`: boards (old and v2), (i), stats-page tables and the
+"+X pts" pill show points ONLY on admin devices. Every player's phone keeps "hardest level first", proven by
+`tools/test-lb2-parity.mjs` against main's golden (player view) and `--admin` (admin view). No announcement.
+Releasing to players = Matt's own words only ("release it", "ship it", "make it live for everyone"); then remove the
+`isAdminDevice()` checks in `leaderboard-ui.js isPointsBoard`, `game-stats-ui.js ptsSectionHTML`, `points-toast.js`.
+
 ## Why
 Today every WINS-ranked board counts only wins at the player's hardest level ("difficulty outranks score"). Players
 (Moonis, bug reports 2026-11-02 Flick Soccer + Dots and Boxes) think wins are missing; one lucky Hard win decides

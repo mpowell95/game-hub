@@ -28,6 +28,8 @@ import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridloc
 import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount, wwCollected, wwSpent } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { backStack } from './back-stack.js';
+import { gamePoints, pointsKey } from './lb-points.js';
+import { LB_RULES } from './lb-rules.js';
 
 const t = makeT(STRINGS);
 /** t() with an English fallback, for a key newer than a cached js/strings.js (js/CLAUDE.md, Language support). */
@@ -1757,7 +1759,29 @@ function baseballScreen(rec) {
     </table>` : ''}`;
 }
 
-function screenFor(id, st) {
+// --- POINTS on a wins game's stats page (2026-11-02, Matt: say exactly how that game's points are calculated) ---
+// The game's leaderboard number for this record (js/lb-points.js, the board's own maths) and what one win is
+// worth at each level, online and with any option. Display only.
+function ptsSectionHTML(id, st) {
+  const r = LB_RULES[id];
+  if (!r || (r.by !== 'wins' && r.by !== 'cuppong')) return '';
+  if (!isAdminDevice()) return '';   // admin devices only until Matt releases the points (2026-11-02)
+  const rec = (st && st.games && st.games[id]) || {};
+  const k = pointsKey(id);
+  const lvl = (tr) => `<span class="lb2-tw">${v2shape(tr)}${esc(t(['', 'gs_diff_easy', 'gs_diff_medium', 'gs_diff_hard', 'gs_diff_expert'][tr]))}</span>`;
+  const row = (a, b) => `<tr><th scope="row">${a}</th><td>${b}</td></tr>`;
+  const rows = [];
+  if (k.ult) rows.push(row(`<b>${esc(t('lb_tt_classic'))}</b>`, ''));
+  for (const l of k.levels) rows.push(row(lvl(l.tier), l.capped ? `1 (${esc(t('lb_pts_max', { n: k.cap }))})` : l.pts));
+  if (!k.levels.length) rows.push(row(esc(t('lb_diff_all')), 1));
+  if (k.ult) { rows.push(row(`<b>${esc(t('lb_tt_ultimate'))}</b>`, '')); for (const l of k.ult) rows.push(row(lvl(l.tier), l.pts)); }
+  rows.push(row(esc(t('lb_pts_online')), k.on));
+  if (k.extra) rows.push(`<tr><td colspan="2">${esc(t('lb_pts_x_' + id))}</td></tr>`);
+  return `<h4 class="gs-tbl-h">${esc(t('lb_pts_total'))}: ${nf(gamePoints(rec, id).pts)}</h4>`
+    + `<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('lb_pts_key'))}</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
+function screenFor(id, st) { return screenForBase(id, st) + ptsSectionHTML(id, st); }
+function screenForBase(id, st) {
   const rec = (st.games && st.games[id]) || {};
   if (id === 'spellingbee') return spellingBeeScreen(rec, st.code);
   if (id === 'connect4') return connect4Screen(rec);
@@ -2053,7 +2077,8 @@ function freshBrickBlitz(rec) {
 }
 
 /** The new screen for one game (admin devices only for now; see the block comment above). */
-function freshScreenFor(id, stt) {
+function freshScreenFor(id, stt) { return freshScreenForBase(id, stt) + ptsSectionHTML(id, stt); }
+function freshScreenForBase(id, stt) {
   const rec = (stt.games && stt.games[id]) || {};
   const dt = rec.dt || {};
   switch (id) {

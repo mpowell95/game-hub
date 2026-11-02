@@ -24,7 +24,7 @@ const MAKE = args.includes('--make-golden');
 const ri = args.indexOf('--root');
 const SRC = ri >= 0 ? path.resolve(args[ri + 1]) : ROOT;
 const LANG = args.includes('--lang') ? args[args.indexOf('--lang') + 1] : 'en';
-const GOLDEN = path.join(ROOT, 'backups', `lb2-golden${LANG === 'en' ? '' : '-' + LANG}.json`);
+const GOLDEN = path.join(ROOT, 'backups', `lb2-golden${LANG === 'en' ? '' : '-' + LANG}${args.includes('--admin') ? '-admin' : ''}.json`);
 for (const f of ['lb-z.json', 'lb-admin.json', 'lb-bee.json']) {
   if (!fs.existsSync(path.join(ROOT, 'backups', f))) { console.log(`SKIP: backups/${f} missing (read it with the reader key first)`); process.exit(0); }
 }
@@ -53,7 +53,8 @@ await pg.route('**/js/leaderboard-ui.js', async (route) => {
 // No network beyond localhost: the boards must come from the snapshot alone (and never race a live read).
 await pg.route(/^https?:\/\/(?!localhost)/, (route) => route.abort());
 await pg.addInitScript((lang) => { try { localStorage.setItem('gamehub.lang.v1', lang); } catch { /* */ } }, LANG);
-await pg.goto(`http://localhost:${PORT}/tools/lb2-harness.html`);
+// --admin: render as an ADMIN device (the points boards, 2026-11-02; golden must then come from an --admin run too).
+await pg.goto(`http://localhost:${PORT}/tools/lb2-harness.html${args.includes('--admin') ? '?admin=1' : ''}`);
 await pg.waitForFunction(() => document.title === 'ready', null, { timeout: 30000 });
 
 // --- the OLD overlay, every tab of every game -------------------------------------------------------------

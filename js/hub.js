@@ -30,6 +30,9 @@ import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement, loadSeen, markSeen } from './announce.js';
+import { startPointsToast } from './points-toast.js';
+// "+X pts" over a result screen whenever a win is counted (2026-11-02, js/points-toast.js). Display only.
+try { startPointsToast(); } catch (err) { console.warn('[hub] points toast off', err); }
 import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
 import { setGameShownCheck } from './online-gate.js';
 import STRINGS from './strings.js';
@@ -1045,6 +1048,8 @@ class Hub {
           // "Try it" on the new-layout announcement switches this device to Compact; the
           // onLayoutChange listener repaints the launcher.
           else if (action === 'try-compact') setLayout('compact');
+          // Leaderboard points (2026-11-02): "See it" opens the Leaderboard.
+          else if (action === 'open-leaderboard') this.el.leaderboard.click();
         },
       });
     } catch (err) { console.warn('[hub] announcement could not be shown', err); }
