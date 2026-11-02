@@ -520,7 +520,7 @@ function hofHTML() {
   if (!me) gap = t2('lb2_not_ranked');
   else if (me.rank === 1) gap = t2('lb2_first');
   else { const above = B.aboveOf(rows, me); gap = t2('lb2_pass', { n: B.firstsToPass(me, above), r: above.rank }); }
-  const pin = `<div class="lb2-pin lb2-hof-cols" style="grid-template-columns:${cols}"><span class="c num lb2-pin lb2-hof-colsrank">${me ? med(me.rank, tie(me), 'sm') : '–'}</span>
+  const pin = `<div class="lb2-pin lb2-hof-cols${me ? ' lb2-pin-auto' : ''}" style="grid-template-columns:${cols}"><span class="c num lb2-pin lb2-hof-colsrank">${me ? med(me.rank, tie(me), 'sm') : '–'}</span>
     <span class="lb2-grow"><span class="lb2-nm"><b class="lb2-nmt lb2-mine">${meName}</b>${me ? mv(moveOf(bid, me)) : ''}</span><span class="lb2-gap num">${esc(gap)}</span></span>
     <span class="c num lb2-strong">${me ? fmt(me.firsts) : ''}</span><span class="c num">${me ? fmt(me.seconds) : ''}</span><span class="c num">${me ? fmt(me.thirds) : ''}</span><span></span></div>`;
   return `${headHTML(hofSeg())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;

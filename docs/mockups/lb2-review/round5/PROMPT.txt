@@ -1,0 +1,13 @@
+Attached: 56 screenshots of the leaderboard and "My Stats" screens of a private family game app for iPhone, and a context sheet (LEADERBOARD-V2-REVIEWER-CONTEXT-2.md). Read the context sheet first: it gives the owner's settled rules, what every number means, and exactly how to reach each screenshot. File names start with the screenshot number from the sheet's table (en- = dark mode, light- = light mode, es360- = Spanish on a 360-wide phone).
+
+Do a thorough visual UI/UX review as an experienced mobile designer AND as a player who wants to (1) find their own stats, (2) compare themselves to others, and (3) see what other players have achieved.
+
+Give:
+1. A letter grade, and a grade for each of the three player goals.
+2. Strengths.
+3. Problems ranked by severity, each with: the screenshot number(s), what is wrong, and a concrete fix that obeys the settled rules. Keep it to the fewest words on screen (the owner dislikes explanatory text).
+4. Anything confusing on first look, even with the context sheet.
+5. Anything missing.
+6. Separately, at the end: any settled rule you believe hurts the experience, with one line on why. Do not let these change the grade.
+
+Be blunt. Judge only what the screens and the context sheet show.
