@@ -49,7 +49,9 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - **Free hints (Matt, 2026-11-01)**: every 10 bonus words (lifetime, both ladders, plus this level's unrecorded ones) earn one
   hint that costs NO star (`wwFreeHints`; used ones counted in `ww.fu` by `recordWordWeaverFreeHint`, merged across phones by
   adding). A banked one is used first: a gold count on the hint button; the save keeps `free` (cleanState: paid hints = at
-  least the letters revealed minus `free`). How to play: "10 bonus words = 1 free hint".
+  least the letters revealed minus `free`). **At most 3 banked (Matt, 2026-11-02: "They can't store up more than that")**:
+  one earned past 3 is LOST at once (`ww.fl`, `recordWordWeaverFreeLost`, written when `_freeBank` sees more than 3;
+  merged by adding). How to play: "10 bonuses = 1 free hint (3 max)".
 - **Bonus squares + the bonus counter (Matt, 2026-11-02, as in Wordscapes)**: 1-3 grid squares a level carry a gold star
   (`engine.js` `bonusCells`, picked from the level's own letters and layout, so always the same). Filling one by finding its
   word YOURSELF earns a bonus (a star flies to the counter); a square a hint revealed is lost. Collected ones live in the

@@ -248,6 +248,19 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('merge: bonus squares add across phones', g.ww.b === 6);
 }
 
+// --- at most 3 free hints banked (Matt, 2026-11-02) ---
+{
+  ok('cap: 50 bonuses earn 5 but only 3 are banked', P.wwFreeHints({ ww: { x: 50 } }) === 3 && P.wwFreeRaw({ ww: { x: 50 } }) === 5);
+  ok('cap: lost ones are gone for good, not saved for later', P.wwFreeHints({ ww: { x: 50, fl: 2, fu: 3 } }) === 0 && P.wwFreeHints({ ww: { x: 60, fl: 2, fu: 3 } }) === 1);
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaver(1, { hints: 0, extra: 45 });
+  G.recordWordWeaverFreeLost(1);
+  const w = G.loadStats().games.wordweaver;
+  ok('recorder: lost ones counted in ww.fl; 4 earned, 1 lost = 3 banked', w.ww.fl === 1 && P.wwFreeHints(w) === 3 && P.wwFreeRaw(w) === 3);
+  ok('recorder: a bad count writes nothing', G.recordWordWeaverFreeLost(0) === null);
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');

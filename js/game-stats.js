@@ -589,6 +589,7 @@ function ensureWw(g) {
   // The Spanish ladder's map (2026-10-29) exists only once a Spanish level is completed.
   if (g.ww.es !== undefined && (!g.ww.es || typeof g.ww.es !== 'object' || Array.isArray(g.ww.es))) g.ww.es = {};
   if (g.ww.b !== undefined && !(Number.isFinite(g.ww.b) && g.ww.b >= 0)) g.ww.b = 0;
+  if (g.ww.fl !== undefined && !(Number.isFinite(g.ww.fl) && g.ww.fl >= 0)) g.ww.fl = 0;
   // Free hints used (2026-11-01) exists only once one is used.
   if (g.ww.fu !== undefined && !(Number.isFinite(g.ww.fu) && g.ww.fu >= 0)) g.ww.fu = 0;
   // The hint maps (2026-10-29) exist only once a hint is used.
@@ -2343,6 +2344,21 @@ export function recordGridlockHint(level, at) {
   const k = 'L' + n;
   if (Number(g.gl.hint[k]) > 0) return st;
   g.gl.hint[k] = Math.floor(Number(at)) > 0 ? Math.floor(Number(at)) : Date.now();   // the server's time where known (2026-10-29)
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Weaver: `n` free hints earned while 3 were already banked (2026-11-02, Matt: "Max 3 free hints"), so they are
+ *  LOST: added to the counter `ww.fl`. Never a result (no rate gate). Returns the store, or null for a bad n. */
+export function recordWordWeaverFreeLost(n) {
+  const k = Math.floor(Number(n) || 0);
+  if (k < 1) return null;
+  notePlay('wordweaver', 'recordWordWeaverFreeLost', arguments);
+  const st = loadStats();
+  const g = st.games.wordweaver;
+  ensureWw(g);
+  g.ww.fl = (Number(g.ww.fl) || 0) + k;
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
