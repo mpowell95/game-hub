@@ -13,6 +13,8 @@
   if (bee) localStorage.setItem('gamehub.beeBoard.v1', bee);
   localStorage.setItem('gamehub.profile', JSON.stringify({ v: 1, name: 'test1', emoji: '🧪', playerId: 'DREG5' }));
   localStorage.setItem('gamehub.devAllowSync.v1', '0');
+  // ?admin=1: an admin device (points boards, 2026-11-02); otherwise a player's phone.
+  localStorage.setItem('gamehub.adminDevice.v1', new URLSearchParams(location.search).get('admin') === '1' ? '1' : '0');
   const net = await import('/js/stats-net.js');
   const { isHiddenName } = await import('/js/hidden-players.js');
   const z = await j('/backups/lb-z.json');

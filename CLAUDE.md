@@ -119,7 +119,7 @@ A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation
 
 ## Open handoff: Leaderboard v2 (2026-11-01)
 
-**Points ROLLED BACK 2026-11-02 at Matt's request: never ship them to players without his explicit word** (build on branch `claude/lb-points-v2`). **"leaderboard session 5" / "build the points"** = **`docs/LEADERBOARD-POINTS-DECISIONS.md`** (Matt's approved per-game points, then the (i) text and "+X pts"). **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
+**Points: ADMIN DEVICES ONLY (v1426, Matt's review; `isAdminDevice()` in `isPointsBoard`, `ptsSectionHTML`, `points-toast.js`). Players keep the old ranking until Matt says "release it" in his own words.** **"leaderboard session 5" / "build the points"** = **`docs/LEADERBOARD-POINTS-DECISIONS.md`** (Matt's approved per-game points, then the (i) text and "+X pts"). **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
 and continue that conversation as if it were the same session (where it stopped, Matt's decisions, open questions,
 tools). Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
 released or abandoned.
