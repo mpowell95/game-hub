@@ -624,3 +624,25 @@ while devOnly, so a merge would reach every player at once).
 
 Same day: Matt approved a mock announcement and said *"Release it admin only too"*: merged to `main` behind
 `NEWS_FOR_ALL = false` (only `isAdminDevice()` phones get more levels, Replay and the popup).
+
+## Rush weeks on each player's own calendar (2026-11-02)
+
+Matt chose "option B": every player-facing day/week cutoff turns over at EACH player's local midnight
+(players are in US Eastern and in Spain). Rush weeks were UTC (`woWeekKey` = the UTC Monday), so the
+week ended Sunday 7 PM in New York and "This week" emptied on Sunday evening there; in Spain it ended
+Monday 1-2 AM. `woWeekKey` is now the phone's LOCAL Monday (same 'YYYY-MM-DD' format), `woWeekEnd` the next
+local Monday 00:00 (DST-safe, `new Date(y, m, d + 7)`).
+
+- Stored runs and bests keep the key they were written with (rule 5): nothing is re-keyed. A New York
+  run on Sunday evening before the change sits under the NEXT Monday's key and therefore shows in that
+  week's board; harmless, kept.
+- Readers (the old board's `woRushHTML`, v2's `lb2Rush`, My Stats, the in-game leader line, the waiting-save
+  settle) all call `woWeekKey()` with no argument, so "this week" is the viewer's own local week. A week
+  is "finished" for a viewer once their own week has moved on; a run from a zone behind (New York's Sunday
+  night, after Spain's Monday) still files under its own Monday and counts to that week when it arrives.
+  So Weeks won / Past weeks can change for a few hours after a viewer's Monday; no result is ever dropped.
+- Seeds are random per run (`buildRush(mode, i, seed)`), not derived from the week, so nothing else moves.
+- Nothing on the server decides by week (functions/ has no Rush code; `aggregatePlayers` only merges the
+  stored keys, Math.max per key).
+- `tools/test-rush-weeks.mjs` runs the OLD writer (js/ at 0abbb83, from git) and proves its runs still read
+  and count, plus the New York and Madrid edges.

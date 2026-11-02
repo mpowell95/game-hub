@@ -17,10 +17,9 @@
 // pill's self-cleaning idea): a phone left in a drawer for two months opens to today's app, not to
 // a stack of old news.
 
-import { parseReleaseDate } from './new-badge.js';
+import { parseReleaseDate, localDayMs } from './new-badge.js';
 
 const KEY = 'gamehub.announce.v1';
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Newest last. `action: 'bug-report'` and `action: 'play-golf'` are understood by the hub's
  *  handler and run straight from the popup's own button. `tile: { art, name }` draws that game's
@@ -173,9 +172,11 @@ export function markSeen(id) {
 export function isLive(a, now = Date.now()) {
   const from = parseReleaseDate(a && a.from);
   const until = parseReleaseDate(a && a.until);
-  if (from !== null && now < from) return false;
+  // Calendar days on the player's own phone (2026-11-02: every day turns over at local midnight).
+  const today = localDayMs(now);
+  if (from !== null && today < from) return false;
   // `until` covers that whole day, so one ending on the 15th still shows all day on the 15th.
-  if (until !== null && now > until + DAY_MS) return false;
+  if (until !== null && today > until) return false;
   return true;
 }
 

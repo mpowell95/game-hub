@@ -407,18 +407,22 @@ export function woRushTime(ms) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
-/** The week a moment belongs to: the date of its MONDAY, in UTC ("2026-10-12"). One clock for
- *  everybody, wherever they play: the week turns over at Monday 00:00 UTC (Sunday evening in the
- *  US, early Monday in Spain). */
+/** The week a moment belongs to: the date of its MONDAY on THIS PHONE'S OWN CALENDAR ("2026-10-12").
+ *  Each player's week turns over at their own local Monday 00:00 (2026-11-02, Matt's "option B": the
+ *  UTC week ended Sunday 7 PM in New York). Runs stored before then keep the UTC Monday they were
+ *  filed under (same format, never re-keyed); every reader accepts both. A viewer's "this week" is
+ *  the viewer's own; a run from a zone ahead files under a Monday the viewer reaches at their own
+ *  midnight, and a run from a zone behind still counts to its week after the viewer has moved on. */
 export function woWeekKey(ms = Date.now()) {
   const d = new Date(+ms || 0);
-  const back = (d.getUTCDay() + 6) % 7;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back)).toISOString().slice(0, 10);
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${mon.getFullYear()}-${p(mon.getMonth() + 1)}-${p(mon.getDate())}`;
 }
-/** When the week that `ms` is in ends: the next Monday 00:00 UTC, in epoch ms. */
+/** When the week that `ms` is in ends: the next local Monday 00:00, in epoch ms (DST-safe). */
 export function woWeekEnd(ms = Date.now()) {
   const [y, m, d] = woWeekKey(ms).split('-').map(Number);
-  return Date.UTC(y, m - 1, d + 7);
+  return new Date(y, m - 1, d + 7).getTime();
 }
 const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
 

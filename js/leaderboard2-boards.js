@@ -94,11 +94,14 @@ export function moveOf(stored, bid, key, rank) {
   const was = p[keyHash(key)];
   return was ? was - rank : 0;
 }
-/** Today's date in America/New_York (Matt's day), 'YYYY-MM-DD'. */
-export function nyDay(now = Date.now()) {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now));
-  } catch { return new Date(now).toISOString().slice(0, 10); }
+/** Today's date on the VIEWER'S own calendar, 'YYYY-MM-DD' (2026-11-02, Matt's "option B": each
+ *  player's day turns over at their own midnight; it was New York's for everyone). Dormant while the
+ *  rank arrows are off. */
+export function localDay(now = Date.now()) {
+  const d = new Date(now), p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+/** The old name, kept so nothing that imports it breaks. */
+export const nyDay = localDay;
 
-export default { rankInPlace, hallOfFame, medalTotals, firstsToPass, aboveOf, personPlaces, keyHash, rankSnapshot, rollRanks, moveOf, nyDay };
+export default { rankInPlace, hallOfFame, medalTotals, firstsToPass, aboveOf, personPlaces, keyHash, rankSnapshot, rollRanks, moveOf, nyDay, localDay };

@@ -727,7 +727,8 @@ function woBestMapOf(g, mode) { return woRushBestMap((woRushOf(g).best || {})[mo
 /** Counted runs in one version (left runs are kept but never counted). The merged record keeps the
  *  run list of the person's phone with the most runs, so this is a size for the header, not a total. */
 function woRunsOf(g, mode) { return woRushRuns((woRushOf(g).runs || {})[mode]).filter((r) => !r.left).length; }
-/** "Oct 12 – 18" / "Sep 28 – Oct 4" for the week starting Monday `key` (UTC, as the weeks are). */
+/** "Oct 12 – 18" / "Sep 28 – Oct 4" for the week starting Monday `key` (a calendar date: formatted in
+ *  UTC only so the label is that date wherever the phone is; the week itself is the viewer's local one). */
 function woWeekRange(key) {
   const [y, m, d] = key.split('-').map(Number);
   const a = new Date(Date.UTC(y, m - 1, d)), b = new Date(Date.UTC(y, m - 1, d + 6));

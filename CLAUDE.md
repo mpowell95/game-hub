@@ -346,6 +346,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
 - **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked); `tools/lb2-review-shots.cjs` (the outside-review set, 2026-11-02).
+- **Days and weeks are each player's LOCAL midnight (2026-11-02)**: `tools/test-rush-weeks.mjs`, run with `TZ=America/New_York` and `TZ=Europe/Madrid`.
 - **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env
   var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's
   sign-in is never admin). The key comes from Admin > gear > Reader key for Claude; `readers/<uid>` may READ playLog,
