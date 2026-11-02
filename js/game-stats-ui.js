@@ -14,7 +14,7 @@
 
 import { loadStoredStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
-import { isGameLive, corrections } from './admin-config.js';
+import { isGameLive, corrections, isAdminDevice } from './admin-config.js';
 import { correctStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -1868,14 +1868,16 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-panel.gs-v2 .gs-grow2 .gs-bv{font-size:15px}
 .gs-panel.gs-v2 .gs-grow2 .gs-bv span{white-space:normal;text-align:right;max-width:104px;line-height:1.15}
 @media (max-width:380px){.gs-panel.gs-v2 .gs-grow2 .gs-gart{width:44px;height:28px}.gs-panel.gs-v2 .gs-grow2 .gs-gname{min-width:76px}.gs-panel.gs-v2 .gs-grow2{gap:8px;padding-left:10px;padding-right:8px}}
-.gs-v2 .gs-sk-mc{border-left:1px solid var(--l2-line)}
-:root:not(.gh-dark) .gs-v2 .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;box-sizing:content-box}
-:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
+.gs-s4 .gs-sk-mc{border-left:1px solid var(--l2-line)}
+:root:not(.gh-dark) .gs-s4 .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;box-sizing:content-box}
+:root.gh-dark .gs-s4 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .gs-v2 .lb2-pmed small{font-size:12px;color:var(--l2-muted)}
 .gs-v2 .lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
 .gs-v2 .lb2-stat:first-child{border-top:0}
 .gs-v2 .lb2-stat b{font-weight:700}`;
-const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', { useGrouping: 'always' }); } catch { return String(n); } };
+// Session 4 (2026-11-02): admin devices only until Matt approves (`_s4`, set at open): ranks, one close, 4.481, one dash.
+let _s4 = false;
+const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', _s4 ? { useGrouping: 'always' } : undefined); } catch { return String(n); } };
 const v2shape = (tier) => `<span class="lb2-shape${tier === 4 ? ' x2' : ''}" aria-hidden="true">${diffShapeSVG(tier)}</span>`;
 const CT_IMG = { gold: ['medal-gold.png', 115 / 180], silver: ['medal-silver.png', 114 / 180], bronze: ['medal-bronze.png', 114 / 180], iron: ['medal-iron.png', 114 / 180] };
 const ctImg = (k, h) => `<span class="gs-ctm" style="height:${h}px;width:${Math.round(h * CT_IMG[k][1])}px"><img src="${new URL('../icons/' + CT_IMG[k][0], import.meta.url).href}" alt="" draggable="false"></span>`;
@@ -1884,7 +1886,7 @@ function v2Polish(html) {
   let out = html.replace(/<div class="gs-tally"><b>(\d{4,})<\/b>/g, (m, n) => `<div class="gs-tally"><b>${v2fmt(Number(n))}</b>`)
     .replace(/<td>(\d{4,})<\/td>/g, (m, n) => `<td>${v2fmt(Number(n))}</td>`)
     .replace(/<span class="gs-gnum"><b>(\d{4,})<\/b>/g, (m, n) => `<span class="gs-gnum"><b>${v2fmt(Number(n))}</b>`)
-    .replace(/&mdash;|\u2014/g, '\u2013');
+    .replace(/&mdash;|\u2014/g, (m) => (_s4 ? '\u2013' : m));
   for (const [tr, k] of [[1, 'gs_diff_easy'], [2, 'gs_diff_medium'], [3, 'gs_diff_hard'], [4, 'gs_diff_expert']]) {
     out = out.split(`<th scope="row">${t(k)}</th>`).join(`<th scope="row"><span class="lb2-tw">${v2shape(tr)}${t(k)}</span></th>`);
   }
@@ -2048,6 +2050,7 @@ export function openStatsOverlay() {
   _st = correctStats(loadStoredStats(), statsId(), corrections());
   _combinedDevices = 1;
   _places = null;
+  _s4 = isAdminDevice();
   const host = document.createElement('div');
   host.className = 'gs-overlay';
   host.setAttribute('role', 'dialog');
@@ -2055,11 +2058,12 @@ export function openStatsOverlay() {
   host.setAttribute('aria-label', t('gs_dialog_aria'));
   host.innerHTML = `
     <div class="gs-scrim" data-role="gs-close"></div>
-    <div class="gs-panel gs-v2">
+    <div class="gs-panel gs-v2${_s4 ? ' gs-s4' : ''}">
       <header class="gs-top">
         <div class="gs-top-row">
           <button type="button" class="gs-hback" data-role="gs-up" aria-label="${STRINGS.en.gs_back_aria ? t('gs_back_aria') : 'Back'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-          <h2>${t('gs_title')}</h2>
+          <h2>${t(_s4 ? 'gs_title_me' : 'gs_title')}</h2>
+          ${_s4 ? '' : `<button type="button" class="gs-x" data-role="gs-close" aria-label="${t('gs_close_aria')}">&times;</button>`}
         </div>
       </header>
       <div class="gs-body" data-role="gs-body">${bodyHTML()}</div>
@@ -2070,7 +2074,7 @@ export function openStatsOverlay() {
   document.addEventListener('keydown', onKey);
   requestAnimationFrame(() => host.classList.add('is-in'));
   refreshCombined();
-  loadPlaces();
+  if (_s4) loadPlaces();
 }
 
 function ensureCss() {

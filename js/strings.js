@@ -507,8 +507,9 @@ export const STRINGS = {
     ann_dialog_aria: 'Announcement',
     ann_dismiss: 'Got it',
 
-    gs_title: 'My Stats',
-    gs_dialog_aria: 'My Stats',
+    gs_title: 'Game Stats',
+    gs_title_me: 'My Stats',
+    gs_dialog_aria: 'Game stats',
     // A lifetime count of exactly 1 (My Stats rows, session 4): the unit in the singular.
     gs_unit_one: (p) => ({ lb_unit_wins: 'win', lb_unit_obstacles: 'obstacle', lb_unit_points: 'point', lb_unit_blocks: 'block',
       lb_unit_words: 'word', lb_unit_stars: 'star', lb_unit_meters: 'meter', lb_unit_runs: 'run' })[p.k] || '',
@@ -1448,8 +1449,9 @@ export const STRINGS = {
     ann_dialog_aria: 'Anuncio',
     ann_dismiss: 'Entendido',
 
-    gs_title: 'Mis estadísticas',
-    gs_dialog_aria: 'Mis estadísticas',
+    gs_title: 'Estadísticas de juego',
+    gs_title_me: 'Mis estadísticas',
+    gs_dialog_aria: 'Estadísticas de juego',
     gs_unit_one: (p) => ({ lb_unit_wins: 'victoria', lb_unit_obstacles: 'obstáculo', lb_unit_points: 'punto', lb_unit_blocks: 'bloque',
       lb_unit_words: 'palabra', lb_unit_stars: 'estrella', lb_unit_meters: 'metro', lb_unit_runs: 'carrera', lb_unit_solved: 'resuelto',
       lb_unit_cleared: 'despejado' })[p.k] || '',
