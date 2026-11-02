@@ -53,7 +53,16 @@ Not recording which mode/options a game was played with lost game data (Darts' C
 every online match's terms) = THE LAW broken. **Every record call goes through `withMode(mode, chosenDiff, ...)`**
 (`js/game-stats.js`; deferred results pass `modeTag(...)` to `armQuitLoss`/`armLeave`/`recordLeaveWin`), carrying
 EVERY option that defines the game, online included. Stored `games.<id>.byMode`. A new option or a new game is not
-done until it is recorded; `tools/test-game-modes.mjs` + `tools/game-modes.json` check the wiring.
+done until it is recorded. **Enforced on EVERY file (2026-11-02, Matt: "FIX THIS PERMANENTLY")**: `tools/test-game-modes.mjs`
+runs `tools/scan-game-modes.mjs`, a full scan with no list of files (Filler and Mancala were never on the old list); its
+`AUX` (= `NOT_A_RESULT` in `js/game-stats.js`) is the only exception list, each with a reason. Turn-based games carry
+`first: 'me'|'them'` (who actually went first; `went` where `first` is the setting). **Per-match numbers** go in
+`withMode(mode, diff, fn, { detail: { shots: 12, rack: 'tri10' } })`: counters ADD into `games.<id>.dt.<key>`, string
+facts count `dt.<key>.<value>`, `dt._n` = results with detail; summed per person in `players-agg.js`; in the play log as
+`d`. **Run-time net**: a result recorded outside withMode still counts, is filed under `byMode['?']`, `console.error`s
+and logs `m: '?'` (read with `tools/read-play-log.mjs`). **Mode and detail are THUNKS** (`withMode(() => modeOf(m), d,
+() => record…, { detail: () => det(m) })`, `modeTag(() => …)`): read inside withMode's own try, so a throw records the
+result anyway (mode `'?'` / no detail, play log `d._err`); the scan fails anything computed at the call site.
 
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
@@ -347,6 +356,8 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
+- **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
+
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
   `version.json`. Commit `sw.js` after changing any game file.
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
@@ -607,6 +618,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   and pushes admins; `integrityOnUndo`; `dartsMatchCheck`/`cupPongMatchCheck`/`battleshipMatchCheck`/`hoopsMatchCheck` (`integrityAlerts`).
   2026-10-28: `playLog` rules branch (every finished game + Contexto's moves, admin-read; `js/play-log.js`).
   2026-11-02: `wwDaily` rules branch (Word Weaver's daily board, own claimed code, a finished row final; `word-weaver/CLAUDE.md`).
+  2026-11-02: `d` (string, <= 400) on `playLog` rows: a result's withMode detail (until the rules deploy, a batch holding one is refused and stays queued, never lost).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,

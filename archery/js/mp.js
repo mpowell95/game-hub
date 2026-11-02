@@ -26,7 +26,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, withMode, mayCountChallenge, countingSince } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, shoot, totals, hashStr, isShootOff } from './engine.js';
@@ -297,7 +297,7 @@ export function markCounted(id) {
 }
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice), in the 'mp'
  *  bucket. A VOIDED match (js/stats-corrections.js) is never counted. */
-export function countResult(id, won, finishedAt = Date.now()) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch('archery', id)) return false;
@@ -305,7 +305,8 @@ export function countResult(id, won, finishedAt = Date.now()) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('archery', id, () => recordResult('archery', 'mp', !!won)); } catch (err) { console.error('[archery] recordResult failed', err); }
+  // the match's mode (2026-11-02, withMode): who shot first, when the caller knows; else '?' (unknown)
+  try { withChallengeMatch('archery', id, () => withMode(mode, 'mp', () => recordResult('archery', 'mp', !!won))); } catch (err) { console.error('[archery] recordResult failed', err); }
   return true;
 }
 const wonOf = (result) => result === 'won';

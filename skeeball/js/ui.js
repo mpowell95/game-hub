@@ -21,7 +21,7 @@ import STRINGS from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the setup screen themes standalone
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordSkeeball, unlockSkeeballBoard, statsId } from '../../js/game-stats.js';
+import { loadStats, recordSkeeball, unlockSkeeballBoard, statsId, withMode } from '../../js/game-stats.js';
 import { readGoals, readGoalsLive, allGoalsMet } from './goals.js';
 import { syncMyStats, readPlayersOnce, readPeople } from '../../js/stats-net.js';
 import { aggregatePlayers } from '../../js/players-agg.js';
@@ -2331,7 +2331,7 @@ export class SkeeballUI {
     const board = this.game.board;
     try {
       const practice = isBoardTesting(board.id, !!board.adminOnly);
-      recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice, challenge: !!this.challenge });
+      withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0, left: 1 }), board.id, () => recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: this.game.score | 0 }));
     } catch (err) {
       console.error('[skeeball] could not record the abandoned rack', err);
     }
@@ -2360,7 +2360,7 @@ export class SkeeballUI {
         // 2026-08-24, after two boards handed out scores while they were being tuned). The flag is
         // resolved at RECORD time, so the rack is judged by the machine's state when it was thrown.
         const practice = isBoardTesting(board.id, !!board.adminOnly);
-        recordSkeeball(board.id, { ...result, at: Date.now(), practice, challenge: !!this.challenge });
+        withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0 }), board.id, () => recordSkeeball(board.id, { ...result, at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: (result && result.score) | 0 }));
       } catch (err) {
         console.error('[skeeball] could not record the rack', err);
       }

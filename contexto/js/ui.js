@@ -8,7 +8,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
-import { recordContexto, contextoMedal, backfillContextoMedals, activeCode } from '../../js/game-stats.js';
+import { recordContexto, withMode, contextoMedal, backfillContextoMedals, activeCode } from '../../js/game-stats.js';
 import { appendPlayLog } from '../../js/play-log-queue.js';
 import { liveNow, startServerTime } from '../../js/server-time.js';
 import { loadModel, puzzleNumber, hintRank, band, logSummary } from './engine.js';
@@ -368,7 +368,7 @@ class ContextoUI {
       // Daily = finished on the puzzle's own day by the server's live clock; offline or a phone clock
       // never makes a play daily (it still counts on the All board).
       const daily = Number.isFinite(rec.doneLive) && Number(rec.n) > 0 && puzzleNumber(new Date(rec.doneLive)) === Number(rec.n);
-      try { recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(daily ? { daily: true } : {}), ...(r ? {} : { unchecked: true }) }); }
+      try { withMode(() => ({ lang, daily: daily ? 1 : 0 }), lang, () => recordContexto(lang, rec.done === 'won', { guesses, hints, k, ...(daily ? { daily: true } : {}), ...(r ? {} : { unchecked: true }) }), { detail: { guesses, hints } }); }
       catch (err) { console.error('[contexto] recordContexto', err); }
     } finally { this._recording = false; }
   }

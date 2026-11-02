@@ -14,7 +14,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordGridlock, recordGridlockHint, loadStats } from '../../js/game-stats.js';
+import { recordGridlock, recordGridlockHint, loadStats, withMode } from '../../js/game-stats.js';
 import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints, glLevelPoints, glHintedPoints } from '../../js/gridlock-points.js';
 import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
@@ -728,7 +728,8 @@ class Gridlock {
     const stars = glStars(moves, this.fewest);
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
-    const res = recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() });
+    const res = withMode(() => ({ look: this.settings.look }), this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
+      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }) });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();

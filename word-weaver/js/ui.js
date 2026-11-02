@@ -433,7 +433,7 @@ class WordWeaver {
     }
     const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, sym: this.st.sym.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = withMode({ mode: 'ladder', lang: info.lang || 'en' }, wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = withMode(() => ({ mode: 'ladder', lang: info.lang || 'en' }), wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();

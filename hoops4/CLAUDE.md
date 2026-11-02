@@ -430,3 +430,7 @@ No resume: vs the computer, leaving after the player's first shot (New game, ask
 
 - Live room (`js/live-leave.js`): after your first shot, leaving (Menu, the hub, any unmount) = your loss and their win; a closed app arms it; 90 s silent = "Claim win". Vs the computer: ANY shot (its opening too) arms the quit loss; `quitLossLost` stops a second result.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Shoot until you score counts one level lower (2026-11-02, Matt)
+
+Vs the computer, a "shoot until you score" match records one level LOWER than chosen (`statsDiff(m)`, `oneTierDown`; Easy stays Easy); "one shot" records at the chosen level. The mode (withMode / modeTag) keeps the CHOSEN level; online (`'mp'`) unchanged. `docs/INTEGRITY-CHECKS-SPEC.md` E2 (b).

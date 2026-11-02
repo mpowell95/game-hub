@@ -421,7 +421,16 @@ export function activeCode() {
  *  own arguments (score, time, moves, hints, difficulty), queued for playLog/<CODE> (admins only). Called
  *  by each recorder once its result is accepted. Evidence only: never read back, never a stat, never throws. */
 export function notePlay(gameId, fn, args) {
-  try { appendPlayLog(activeCode(), { g: gameId, f: fn, a: argsJSON(args), m: _mode ? _mode.key + '@' + _mode.diff : null }); } catch (err) { console.error('[game-stats] play not logged', err); }
+  // A RESULT recorder called outside withMode (2026-11-02): the result still counts, filed under the
+  // mode '?' (noteMode below), and the log says so ('?'), so Matt can see which game skipped its mode.
+  _bare = !_mode && !NOT_A_RESULT.has(fn) ? { noted: false, fn: String(fn), g: String(gameId) } : null;
+  try {
+    appendPlayLog(activeCode(), {
+      g: gameId, f: fn, a: argsJSON(args),
+      m: _mode ? _mode.key + '@' + _mode.diff : (_bare ? NO_MODE : null),
+      d: _mode && _mode.dtLog ? _mode.dtLog : null,
+    });
+  } catch (err) { console.error('[game-stats] play not logged', err); }
 }
 function activeName() {
   try {
@@ -1086,7 +1095,7 @@ function bumpTotals(g, d, won) {
   g.total.played += 1; g.byDiff[d].played += 1;
   if (won === true) { g.total.won += 1; g.byDiff[d].won += 1; }
   else if (won === false) { g.total.lost += 1; g.byDiff[d].lost += 1; }
-  noteMode(g, won);
+  noteMode(g, won, d);
   // A CHALLENGE result (withChallengeMatch below) notes WHICH match this 'mp' count was, in the
   // same write as the count itself, so the two can never disagree (2026-10-29).
   if (_mpMatch && !_mpMatch.noted && d === 'mp') {
@@ -1126,29 +1135,153 @@ export function modeKey(mode) {
   return parts.join('|').slice(0, 120);
 }
 let _mode = null;
+// --- EVERY result is moded, or it says so (2026-11-02, Matt: "it is IMPERATIVE that ALL game data is
+// logged ... FIX THIS PERMANENTLY"). Filler and Mancala recorded no mode for days because the static
+// check only read a list of files. Now tools/test-game-modes.mjs scans every file, AND at run time a
+// result recorder reached outside withMode still counts exactly as before (never lost), is filed under
+// the mode key '?' (`byMode['?'][<counted diff>]`), logs loudly and marks its play log entry `m: '?'`.
+// Recorders that are not a game's result (a hint, a bankroll line, the head-to-head side count) carry
+// no mode; tools/scan-game-modes.mjs AUX lists the same names with the reason for each.
+export const NO_MODE = '?';
+const NOT_A_RESULT = new Set([
+  'recordHeadToHead', 'recordGridlockHint', 'recordWordWeaverFreeLost', 'recordWordWeaverFreeHint',
+  'recordWordWeaverHint', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy', 'recordHoldemBank', 'recordHoldemHand',
+  'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordLiveResult', 'quitLoss',
+  'noteWayOutSlips', 'recordSpellingBeeGenius',
+]);
+let _bare = null;
+// --- PER-MATCH DETAIL (2026-11-02): `withMode(mode, diff, record, { detail: {...} })` (also inside a
+// modeTag's score). Counters (non-negative numbers, true = 1) are ADDED into `games.<id>.dt.<key>`;
+// string facts count their value, `games.<id>.dt.<key>.<value> += 1`; `dt._n` counts the results that
+// carried detail (the denominator: detail exists only from this day on). Additive only; a negative,
+// NaN or oversized value is ignored, never stored. The play log entry carries the detail too (`d`).
+// js/players-agg.js sums `dt` across a person's devices.
+const DT_MAX_KEYS = 24;
+/** A detail object cleaned for storage: { c: {key: n}, f: {key: 'value'} } or null. */
+export function cleanDetail(detail) {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const c = {}, f = {};
+  let n = 0;
+  for (const k0 of Object.keys(detail)) {
+    if (n >= DT_MAX_KEYS) break;
+    const k = String(k0).replace(MODE_PART_RE, '').slice(0, 16);
+    if (!k || k === '_n') continue;
+    const v = detail[k0];
+    if (typeof v === 'boolean') { c[k] = v ? 1 : 0; n++; }
+    else if (typeof v === 'number') { if (Number.isFinite(v) && v >= 0 && v <= 1e9) { c[k] = Math.floor(v); n++; } }
+    else if (typeof v === 'string') { const s = v.replace(MODE_PART_RE, '').slice(0, 24); if (s) { f[k] = s; n++; } }
+  }
+  return n ? { c, f } : null;
+}
+function noteDetail(g, dt) {
+  try {
+    if (!g.dt || typeof g.dt !== 'object' || Array.isArray(g.dt)) g.dt = {};
+    const t = g.dt;
+    t._n = Math.max(0, +t._n || 0) + 1;
+    for (const k of Object.keys(dt.c)) {
+      if (t[k] != null && typeof t[k] !== 'number') { console.error('[game-stats] detail key is a fact, not a counter:', k); continue; }
+      t[k] = Math.max(0, +t[k] || 0) + dt.c[k];
+    }
+    for (const k of Object.keys(dt.f)) {
+      if (t[k] != null && (typeof t[k] !== 'object' || Array.isArray(t[k]))) { console.error('[game-stats] detail key is a counter, not a fact:', k); continue; }
+      const m = t[k] || (t[k] = {});
+      m[dt.f[k]] = Math.max(0, +m[dt.f[k]] || 0) + 1;
+    }
+  } catch (err) { console.error('[game-stats] detail not noted', err); }
+}
 /** Run `record` (the game's own recorder) noting the game's mode with the count it adds. `mode` is a
  *  flat object of every option that defines the game; `diff` the difficulty the player chose ('mp'
  *  online). `score` (optional): `{ hi: n }` a higher-is-better best, `{ lo: n }` lower-is-better (a
- *  time), kept per mode as `hi` (Math.max) / `lo` (Math.min of nonzero). Returns whatever `record`
- *  returns. Never throws for a bad mode: the result still counts. */
-export function withMode(mode, diff, record, score) {
+ *  time), kept per mode as `hi` (Math.max) / `lo` (Math.min of nonzero), and/or `{ detail: {...} }`
+ *  the match's own numbers and facts (see cleanDetail). Returns whatever `record` returns. Never throws
+ *  for a bad mode: the result still counts. A mode with no usable option is key '-' (declared, none).
+ *
+ *  THUNKS (2026-11-02): `mode`, `diff`, `score` and `score.detail` may each be a FUNCTION returning the
+ *  value, and every call site passes them that way (tools/scan-game-modes.mjs fails any other shape).
+ *  They are evaluated HERE, inside a try: a mode that throws records the result under '?', a detail that
+ *  throws records it with no detail, and the play log says which (`d: {"_err": ...}`). A result never
+ *  depends on mode or detail code succeeding (THE LAW: before this an argument that threw at the call
+ *  site skipped the record call itself). A mode that is null/undefined (not given) is also '?'. */
+function resolveMode(mode) {
+  if (mode === NO_MODE) return { key: NO_MODE, err: null };
+  let m = mode;
+  try { if (typeof m === 'function') m = m(); } catch (err) { console.error('[game-stats] the MODE threw; the result is recorded under \'?\'', err); return { key: NO_MODE, err: 'mode' }; }
+  if (m == null || typeof m !== 'object') return { key: NO_MODE, err: null };
   let key = '';
-  try { key = modeKey(mode); } catch { key = ''; }
+  try { key = modeKey(m); } catch (err) { console.error('[game-stats] the MODE could not be read; the result is recorded under \'?\'', err); return { key: NO_MODE, err: 'mode' }; }
+  return { key: key || '-', err: null, m };
+}
+function resolveScore(score) {
+  let s = score;
+  try { if (typeof s === 'function') s = s(); } catch (err) { console.error('[game-stats] the score/detail threw; the result is recorded without it', err); return { s: null, dt: null, err: 'score' }; }
+  if (!s || typeof s !== 'object') return { s: null, dt: null, err: null };
+  let detail = s.detail, err = null;
+  try { if (typeof detail === 'function') detail = detail(); } catch (e) { console.error('[game-stats] the DETAIL threw; the result is recorded without it', e); detail = null; err = 'detail'; }
+  let dt = null;
+  try { dt = cleanDetail(detail); } catch (e) { console.error('[game-stats] the DETAIL could not be read; the result is recorded without it', e); dt = null; err = 'detail'; }
+  return { s: { hi: s.hi, lo: s.lo }, dt, err };
+}
+export function withMode(mode, diff, record, score) {
+  let md = { key: NO_MODE, err: 'mode' }, sc = { s: null, dt: null, err: null }, df = '';
+  try { md = resolveMode(mode); } catch { /* resolveMode never throws; belt and braces */ }
+  try { sc = resolveScore(score); } catch { /* idem */ }
+  try { df = typeof diff === 'function' ? diff() : diff; } catch (err) { console.error('[game-stats] the chosen difficulty threw', err); df = ''; }
+  let dtLog = null;
+  try {
+    const errs = [md.err, sc.err].filter(Boolean);
+    const o = sc.dt ? { ...sc.dt.c, ...sc.dt.f } : {};
+    if (errs.length) o._err = errs.join('+');
+    if (Object.keys(o).length) dtLog = JSON.stringify(o).slice(0, 400);
+  } catch { dtLog = null; }
   const prev = _mode;
-  _mode = key ? { key, diff: String(diff == null ? '' : diff).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: score || null } : null;
+  _mode = { key: md.key, diff: String(df == null ? '' : df).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: sc.s, dt: sc.dt, dtLog };
   try { return record(); } finally { _mode = prev; }
 }
-/** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. */
+/** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. Takes the
+ *  same thunks as withMode, evaluated NOW (at arm time) inside a try: it never throws, so arming a loss
+ *  can never fail because of mode or detail code. A mode that threw travels as '?'; a detail that threw
+ *  travels as none. */
 export function modeTag(mode, diff, score) {
-  const k = modeKey(mode);
-  return k ? { m: mode, d: diff == null ? '' : String(diff), s: score || null } : null;
+  let m = null;
+  try { m = typeof mode === 'function' ? mode() : mode; } catch (err) { console.error('[game-stats] the MODE threw at arm time; the result will be recorded under \'?\'', err); m = NO_MODE; }
+  let d = '';
+  try { d = typeof diff === 'function' ? diff() : diff; } catch (err) { console.error('[game-stats] the chosen difficulty threw at arm time', err); d = ''; }
+  let s = null;
+  try {
+    const r = typeof score === 'function' ? score() : score;
+    if (r && typeof r === 'object') {
+      let det = r.detail;
+      try { if (typeof det === 'function') det = det(); } catch (err) { console.error('[game-stats] the DETAIL threw at arm time; recorded without it', err); det = null; }
+      s = { hi: r.hi, lo: r.lo, ...(det && typeof det === 'object' ? { detail: det } : {}) };
+    }
+  } catch (err) { console.error('[game-stats] the score/detail threw at arm time; recorded without it', err); s = null; }
+  if (m !== NO_MODE && (!m || typeof m !== 'object')) return null;
+  return { m, d: d == null ? '' : String(d), s };
 }
 function withTag(tag, record) {
   return tag && typeof tag === 'object' && tag.m ? withMode(tag.m, tag.d, record, tag.s) : record();
 }
-function noteMode(g, won) {
-  if (!_mode || _mode.noted) return;
+/** Note the mode (and detail) of the result being counted into `g` under the counted bucket `d`. Every
+ *  result recorder calls it once (bumpTotals does; recorders that bump by hand call it themselves). */
+function noteMode(g, won, d) {
+  if (!_mode) {
+    if (!_bare || _bare.noted) return;
+    _bare.noted = true;
+    try {
+      console.error(`[game-stats] ${_bare.fn} for '${_bare.g}' ran OUTSIDE withMode: counted, filed under mode '${NO_MODE}'. Wrap the call in withMode (tools/test-game-modes.mjs).`);
+      if (!g.byMode || typeof g.byMode !== 'object' || Array.isArray(g.byMode)) g.byMode = {};
+      const m = g.byMode[NO_MODE] && typeof g.byMode[NO_MODE] === 'object' ? g.byMode[NO_MODE] : (g.byMode[NO_MODE] = {});
+      const dk = String(d == null ? '' : d).replace(MODE_PART_RE, '').slice(0, 24) || '-';
+      const b = m[dk] && typeof m[dk] === 'object' ? m[dk] : (m[dk] = bucket());
+      b.played = (b.played | 0) + 1;
+      if (won === true) b.won = (b.won | 0) + 1;
+      else if (won === false) b.lost = (b.lost | 0) + 1;
+    } catch (err) { console.error('[game-stats] mode not noted', err); }
+    return;
+  }
+  if (_mode.noted) return;
   _mode.noted = true;
+  if (_mode.dt) noteDetail(g, _mode.dt);
   try {
     if (!g.byMode || typeof g.byMode !== 'object' || Array.isArray(g.byMode)) g.byMode = {};
     const m = g.byMode[_mode.key] && typeof g.byMode[_mode.key] === 'object' ? g.byMode[_mode.key] : (g.byMode[_mode.key] = {});
@@ -1335,7 +1468,9 @@ function queueResult(entry) {
   try {
     const q = readJSON(PENDING_KEY);
     const list = Array.isArray(q) ? q : [];
-    list.push(Object.assign({ at: Date.now() }, entry));
+    // its mode rides with it (2026-11-02), so the replay files it where the live result would have
+    const m = _mode && _mode.key ? { key: _mode.key, diff: _mode.diff } : null;
+    list.push(Object.assign({ at: Date.now() }, m ? { m } : {}, entry));
     localStorage.setItem(PENDING_KEY, JSON.stringify(list.slice(-PENDING_MAX)));
     console.warn('[game-stats] the stats write failed, so this result was queued and will be '
       + 'applied on the next load', entry);
@@ -1371,7 +1506,10 @@ function drainPendingResults(st) {
   // A queued result is an OLDER play: it must not take the id of the challenge being counted now.
   const held = _mpMatch;
   _mpMatch = null;
-  try { return drainQueued(st, q); } finally { _mpMatch = held; }
+  // ...nor the MODE of the result being recorded now (drains run inside loadStats(), inside a recorder):
+  // each queued result is noted under its own mode, or '?' when it carries none (2026-11-02).
+  const heldMode = _mode, heldBare = _bare;
+  try { return drainQueued(st, q); } finally { _mpMatch = held; _mode = heldMode; _bare = heldBare; }
 }
 function drainQueued(st, q) {
   let applied = 0;
@@ -1380,6 +1518,8 @@ function drainQueued(st, q) {
     if (e.h2h) { applyHeadToHead(st, e.game, e.h2h, e.won); applied++; continue; }
     if (e.bank) { applyHoldemBank(st.games.holdem, e.bank); applied++; continue; }
     if (e.hand) { applyHoldemHand(st.games.holdem, e.hand); applied++; continue; }
+    _mode = e.m && typeof e.m === 'object' && e.m.key ? { key: String(e.m.key), diff: String(e.m.diff || '-'), noted: false, score: null, dt: null } : null;
+    _bare = _mode ? null : { noted: false, fn: 'queued result', g: String(e.game) };
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
     if (e.game === 'escoba') {
       ensureEs(st.games.escoba);
@@ -1967,6 +2107,7 @@ export function recordSudoku(tier, extras = {}) {
   if (t && hints === 0 && mistakes === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
   g.total.played += 1;
   g.total.won += 1;
+  noteMode(g, true, t || normDiff(tier));
   g.sd.solved += 1;
   if (mistakes === 0 && hints === 0) g.sd.perfect += 1;
   g.sd.hints += hints;
@@ -2116,6 +2257,7 @@ export function recordMinesweeper(level, won, extras = {}) {
   const lv = MS_LEVELS.indexOf(normDiff(level)) >= 0 ? normDiff(level) : null;
   g.total.played += 1;
   if (won) g.total.won += 1; else g.total.lost += 1;
+  noteMode(g, !!won, lv || normDiff(level));
   g.ms.flagsRight += flagsRight;
   if (won) g.ms.cleared += 1;
   if (lv) {
@@ -2258,6 +2400,7 @@ export function recordWayOutReplay(tier, f = {}) {
   const n = woShownLevel(d, l, gen);
   if (isObj(g.wo.cl) && woClMap(g.wo.cl[d]).has(n)) g.wo.cl[d] = woClSet(g.wo.cl[d], n, earned);
   else if (isObj(g.wo.leg) && isObj(g.wo.leg[d])) g.wo.leg[d].p = (Math.max(0, Math.floor(Number(g.wo.leg[d].p) || 0))) + up;
+  noteMode(g, null, d);   // a replay: its mode noted as played (no win: the level was already won)
   st.updatedAt = new Date().toISOString();
   persist(st);
   return up;
@@ -2317,6 +2460,7 @@ export function recordWayOutRush(mode, run = {}) {
   Object.assign(e, woRushExtras(run));   // the tuning data (bt, ba, bc, mx, mb, pk, gn, pn, res, rv)
   r.runs[mode] = r.runs[mode].concat([e]);
   if (!e.left && !e.late) r.best[mode][e.w] = Math.max(r.best[mode][e.w] ?? -1, e.s);
+  noteMode(g, null, 'rush');   // a Rush run: its mode noted as played (it adds no win)
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
@@ -2581,6 +2725,7 @@ export function recordNutsBolts(level, moves, tier) {
   }
   g.total.played += 1;
   g.total.won += 1;
+  noteMode(g, true, normDiff(tier));
   g.nb.solved += 1;
   g.nb.moves += Math.max(0, moves | 0);
   g.nb.bestLevel = Math.max(g.nb.bestLevel | 0, level | 0);
@@ -3288,6 +3433,7 @@ export function recordCupPongSolo(throws) {
   const g = st.games.cuppong;
   ensureCp(g);
   g.cp.soloRacks += 1;
+  noteMode(g, true, 'solo');
   g.cp.soloThrows += n;
   g.cp.soloBest = g.cp.soloBest ? Math.min(g.cp.soloBest, n) : n;
   st.updatedAt = new Date().toISOString();

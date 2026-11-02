@@ -579,12 +579,13 @@ export function rowsToCount(rows, ledger) {
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
  *  shot rule and the series length. A match and its index row both carry them. */
 export const modeOfMatch = (g) => ({ one: g && g.oneShot ? 1 : 0, series: Math.max(1, ms(g && g.series) || 1) });
-export function countFinished(id, won, finishedAt = Date.now(), mode = null) {
+/** `score` (optional, 2026-11-02): withMode's 4th argument, e.g. `{ detail: { shots, made } }`. */
+export function countFinished(id, won, finishedAt = Date.now(), mode = null, score = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure('hoops', id)) return false;
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('hoops4', id, () => withMode(mode, 'mp', () => recordResult('hoops4', 'mp', !!won))); } catch (err) { console.error('[hoops4] recordResult failed', err); }
+  try { withChallengeMatch('hoops4', id, () => withMode(mode, 'mp', () => recordResult('hoops4', 'mp', !!won), score)); } catch (err) { console.error('[hoops4] recordResult failed', err); }
   return true;
 }
 
@@ -599,12 +600,12 @@ export function recordFinished(rows) {
   const ledger = readLedger();
   queueConfirm('hoops', (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && r.why === TIMEOUT && RESULTS.includes(r.result) && !ledger.has(r.id)), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countFinished(r.id, res === 'won', g.over.at, modeOfMatch(g))) return false;
+    if (!RESULTS.includes(res) || !countFinished(r.id, res === 'won', g.over.at, () => modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = all.filter((r) => r.why !== TIMEOUT);
-  for (const r of todo) countFinished(r.id, r.result === 'won', r.updated, modeOfMatch(r));
+  for (const r of todo) countFinished(r.id, r.result === 'won', r.updated, () => modeOfMatch(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

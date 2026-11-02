@@ -510,11 +510,12 @@ difficulty for every computer; Hold'em's table sets one skill for all (left alon
 | Darts | 201, 101 | 301, Cricket (all variants) |
 | Cup Pong | unlimited reracks | 0-3 reracks |
 | Boggle | the 2-minute timer (the computer's share of the board does not depend on the clock) | 1, 1.5 minutes |
+| Connect 4 Hoops (2026-11-02, Matt) | "shoot until you score" (vs the computer; `statsDiff`) | one shot |
 
 Decided NOT easier, left alone: Escoba's capture hints and Dominoes' +N badges (they show what the rules
 allow, which the computer always sees; Connect Four's solver hints already cannot win), Battleship's board
 size and salvo, Dots and Boxes' and Tic Tac Toe's variants (Pro solves small boards exactly), Cup Baseball's
-innings (3 is already the shortest and the default), Connect 4 Hoops' one-shot rule, Escoba's 21/31 points,
+innings (3 is already the shortest and the default), Escoba's 21/31 points,
 Mancala's speed, every "computer speed" setting. No setup screen gained words (the tier shapes already there).
 
 **E3: Monopoly Deal and Parchís** (`js/game-stats-global.js`, copied verbatim into

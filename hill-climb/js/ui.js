@@ -619,8 +619,8 @@ class HillClimb {
       // suspension, tires, drive), under the stage; the distance kept as that mode's best.
       const veh = this.save.vehicle;
       const ups = (this.save.upgrades && this.save.upgrades[veh]) || {};
-      withMode({ veh, up: PARTS.map((p) => ups[p] | 0).join('-') }, stage.id,
-        () => recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips }), { hi: res.distance });
+      withMode(() => ({ veh, up: PARTS.map((p) => ups[p] | 0).join('-') }), stage.id,
+        () => recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips }), () => ({ hi: res.distance }));
     } catch (err) {
       console.error('[hill-climb] recordHillClimb failed', err);
     }

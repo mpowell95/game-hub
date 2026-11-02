@@ -538,7 +538,7 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', null, g.over.at, modeOfMatch(g))) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', null, g.over.at, () => modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });

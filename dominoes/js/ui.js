@@ -685,11 +685,11 @@ class DominoesUI {
       // matchWinner is null on a genuine draw (both totals passed the target level), and
       // recordDominoes reads null as a tie rather than a loss.
       // WHICH game (js/game-stats.js withMode, 2026-10-30): the target score.
-      withMode({ to: this.target }, this.difficulty, () => recordDominoes(statsDiff(this.difficulty, this.target), g.matchWinner == null ? null : g.matchWinner === HUMAN, {
+      withMode(() => ({ to: this.target }), this.difficulty, () => recordDominoes(statsDiff(this.difficulty, this.target), g.matchWinner == null ? null : g.matchWinner === HUMAN, {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
-      }));
+      }), { detail: () => ({ rounds: Math.max(0, g.round | 0), pts: Math.max(0, g.scores[HUMAN] | 0), theirs: Math.max(0, ...g.scores.filter((_, i) => i !== HUMAN).map((x) => x | 0)) }) });
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }
@@ -820,7 +820,7 @@ class DominoesUI {
     this._statsCommitted = true;
     clearSave();
     try {
-      withMode({ to: q.target }, q.difficulty, () => recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points }));
+      withMode(() => ({ to: q.target }), q.difficulty, () => recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points }));
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }
