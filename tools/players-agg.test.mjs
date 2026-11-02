@@ -17,7 +17,7 @@ const byKey = (list, needle) => list.find((g) => g.key.includes(needle));
 
 // ---- identityKey precedence ----
 eq('identity: code wins', identityKey({ playerId: 'ab7kq', name: 'x' }, 'dev1').key, 'code:AB7KQ');
-eq('identity: name fallback', identityKey({ name: 'Bego' }, 'dev1').key, 'name:bego');
+eq('identity: name fallback', identityKey({ name: 'Ana' }, 'dev1').key, 'name:ana');
 eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
 
 // ---- code grouping: same code, different names, two devices -> ONE group ----
@@ -594,7 +594,21 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   const other = { a: rec({ name: 'Lili' }, { connect4: comp(2, 1, 1) }), b: rec({ name: 'Lilian' }, { connect4: comp(3, 2, 1) }) };
   eq('alias: exact match only, "Lilian" stays separate', aggregatePlayers(other).length, 2);
   // A name with no DISPLAY_NAME entry is shown exactly as the device wrote it (unchanged behaviour).
-  eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Bego' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Bego');
+  eq('non-aliased names are untouched', aggregatePlayers({ a: rec({ name: 'Ana' }, { connect4: comp(1, 1, 0) }) })[0].name, 'Ana');
+  // 2026-11-02 (Matt): Bego -> Begoña and Andrew Powell -> Andrew P, each pair on TWO codes; the newer name wins.
+  for (const [older, newer] of [['Bego', 'Begoña'], ['Andrew Powell', 'Andrew P']]) {
+    for (const last of [older, newer]) {
+      const two = {
+        a: rec({ name: older, playerId: 'AAAA1' }, { connect4: comp(5, 2, 3) }, last === older ? 900 : 100),
+        b: rec({ name: newer, playerId: 'BBBB2' }, { connect4: comp(1, 1, 0) }, last === newer ? 900 : 100),
+      };
+      const l = aggregatePlayers(two);
+      eq(`alias ${older} -> ${newer} (${last} synced last): one row`, l.length, 1);
+      eq(`alias ${older} -> ${newer} (${last} synced last): labelled "${newer}"`, l[0].name, newer);
+      eq(`alias ${older} -> ${newer}: plays combined`, l[0].games.connect4.total.played, 6);
+    }
+  }
+  eq('alias: "Andrew" alone stays separate', aggregatePlayers({ a: rec({ name: 'Andrew', playerId: 'CCCC3' }, { connect4: comp(1, 1, 0) }), b: rec({ name: 'Andrew P', playerId: 'BBBB2' }, { connect4: comp(1, 1, 0) }) }).length, 2);
 }
 
 // ---- An ARCHIVED game's records are carried but counted nowhere (2026-09-28) ----

@@ -284,7 +284,7 @@ console.log('\n-- B4 (2026-10-29): names are checked online before they are take
   net.__setNetBootForTest(async () => null);
   eq('no database: offline (callers keep the old name)', await net.usernameStatus('MattyIce', OTHER), 'offline');
   net.__setNetBootForTest(null);
-  eq('aliasTarget names each alias and nothing else', [agg.aliasTarget('Matt'), agg.aliasTarget(' lill '), agg.aliasTarget('MattyIce'), agg.aliasTarget('Ana')], ['mattyice', 'lili', null, null]);
+  eq('aliasTarget names each alias and nothing else', [agg.aliasTarget('Matt'), agg.aliasTarget(' lill '), agg.aliasTarget('MattyIce'), agg.aliasTarget('Ana'), agg.aliasTarget('Bego'), agg.aliasTarget('Andrew Powell')], ['mattyice', 'lili', null, null, 'begoña', 'andrew p']);
   const { readFileSync } = await import('node:fs');
   const gate = readFileSync(join(ROOT, 'js', 'name-gate.js'), 'utf8');
   ok('name gate: nothing is saved unless the check said free or mine (taken refuses, offline asks to connect)', /if \(status !== 'free' && status !== 'mine' && status !== 'taken'\) \{ busy\(false\); say\(t\('hub_fr_msg_need_net'\)\); return; \}/.test(gate)

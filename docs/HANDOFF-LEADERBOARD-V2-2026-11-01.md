@@ -92,7 +92,7 @@ missing `gs_pi_solved` label added.
 board's All tab (every win, difficulty first; `boardMetricCmp` has no Tic Tac Toe branch): HDJ, Inc. leads both.
 Hall of Fame name: keep. Release: wait. Baseball Quick Play: no. Mockup `docs/mockups/lb2-byplayer-rush.html`
 (Wins with a category picker + sort; Arrow Maze Levels | Rush in v2) sent for review; `lb2Players(list, cat)` added
-for it. Similar names: Begoña / Bego, Andrew Powell / Andrew P (each its own code); not merged, Matt's call.
+for it. Similar names: MERGED 2026-11-02 at Matt's word (v1386, `NAME_ALIAS`): Bego -> Begoña, Andrew Powell -> Andrew P (newer name).
 King of Games' Contexto Fewest 1 = en-31, 1 typed guess after 8 hints (real; Fewest counts typed guesses only).
 5. **Pinned row**: the outside reviewer suggested hiding it when your own row is on screen; the original spec says it
    is always there so the layout never jumps. Not changed.
