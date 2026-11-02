@@ -46,18 +46,23 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   reveal is one hint, **recorded at once in the synced stats store** (`recordWordWeaverHint`, `ww.hint`/`ww.esHint`;
   Matt, 2026-10-29: "Close the hint gap"): reopening a level takes the larger of the save's and the store's count, and a
   level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side).
-- **Free hints (Matt, 2026-11-01)**: every 10 bonus words (lifetime, both ladders, plus this level's unrecorded ones) earn one
-  hint that costs NO star (`wwFreeHints`; used ones counted in `ww.fu` by `recordWordWeaverFreeHint`, merged across phones by
-  adding). A banked one is used first: a gold count on the hint button; the save keeps `free` (cleanState: paid hints = at
-  least the letters revealed minus `free`). **At most 3 banked (Matt, 2026-11-02: "They can't store up more than that")**:
-  one earned past 3 is LOST at once (`ww.fl`, `recordWordWeaverFreeLost`, written when `_freeBank` sees more than 3;
-  merged by adding). How to play: "10 bonuses = 1 free hint (3 max)".
+- **Bonus stars BUY hints (Matt, 2026-11-02, "build it"; mockup `docs/mockups/word-weaver-hint-shop.html`)**: the bulb opens
+  a bottom sheet: **Letter 40, Square 60, Word 120** bonus stars (`WW_PRICE`, `js/word-weaver-points.js`), greyed when
+  unaffordable, plus the PLAIN letter (shows the stars it leaves; costs a level star as before). A bought hint never lowers the
+  level's stars (the save's `free` counts bought reveals, so `cleanState` never turns them into paid hints). Square = every empty
+  square glows, "Tap a square" + ✕ replaces the pill; charged only at the tap. Word = every empty square of the shortest unfound
+  word (`hintWordCells`). **The spend is recorded FIRST** (`recordWordWeaverBuy(kind, cost, where)` -> `ww.sp` += cost,
+  `ww.by[l|q|w]` += 1, merged by adding); a refused write reveals nothing. Balance (`wwBalance`) = collected (`ww.x` + `ww.b`
+  + this level's pending) - spent (`ww.sp` + 10 x `ww.fu`, the old free hints; lost ones `ww.fl` are NOT spent). The star chip at
+  the top shows the balance. No cap. Broke = earn more or take the plain hint. My Stats and the leaderboard's records show
+  "Bonus stars collected / spent" (`wwCollected`, `wwSpent`). The old free hints (2026-11-01 to 11-02: 10 bonuses = 1, max 3)
+  are gone from the game; `ww.fu`/`ww.fl` stay as stored and `recordWordWeaverFreeHint`/`FreeLost` stay exported, uncalled.
 - **Bonus squares + the bonus counter (Matt, 2026-11-02, as in Wordscapes)**: 1-3 grid squares a level carry a gold star
   (`engine.js` `bonusCells`, picked from the level's own letters and layout, so always the same). Filling one by finding its
   word YOURSELF earns a bonus (a star flies to the counter); a square a hint revealed is lost. Collected ones live in the
   save's `sym` and are recorded at completion as `ww.b` (`recordWordWeaver(..., { sym })`, at most 3 a level; merged by
-  adding). Bonuses = bonus words + bonus squares (`wwBonuses`) and earn the free hints. The star chip at the top IS the
-  counter: star + "N/10" toward the next free hint with a gold bar filling; tap = this level's bonus words.
+  adding). Bonuses = bonus words + bonus squares (`wwBonuses`) = bonus stars to spend. The star chip at the top shows the balance; tap =
+  this level's bonus words.
   **A level's bonuses count ONCE (`_pendingBonuses`, fixed 2026-11-02)**: as "pending" only until it is recorded (then they
   are in `ww.x`/`ww.b`); counting both made the counter jump on the done screen and drop back at the next level (Matt:
   "I got up to 3 then it went back to one"). Queued (refused) completions count as pending.

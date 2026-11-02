@@ -62,7 +62,7 @@ import { TIERS, diffShapeSVG, TIER_COLOR, tierOf } from './difficulty-tiers.js';
 import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
-import { WW_TIERS, wwPoints, wwCleared, wwThreeStars } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwCleared, wwThreeStars, wwCollected, wwSpent } from './word-weaver-points.js';
 import { loadFavorites } from './favorites.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -2178,6 +2178,9 @@ const TEXTURE = {
   wordweaver: [
     { labelKey: 'lb_tex_ww_cleared', get: (g) => wwCleared(g.games.wordweaver) },
     { labelKey: 'lb_tex_ww_three', get: (g) => wwThreeStars(g.games.wordweaver) },
+    // Bonus stars (2026-11-02, Matt: "keep track of total stars collected and spent for the leaderboard stats").
+    { labelKey: 'lb_tex_ww_bonus', en: 'Bonus stars collected', get: (g) => wwCollected(g.games.wordweaver) },
+    { labelKey: 'lb_tex_ww_spent', en: 'Bonus stars spent', get: (g) => wwSpent(g.games.wordweaver) },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
@@ -2305,7 +2308,7 @@ function recordsHTML(list, id) {
     if (!best) return;
     // `show` lets a record rank on a number but DISPLAY something else (Boggle's longest word).
     const shown = spec.show ? esc(spec.show(best.g) || String(best.v)) : String(best.v);
-    cells.push(`<div class="lb-rec"><b>${shown}</b><span>${esc(t(spec.labelKey))}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
+    cells.push(`<div class="lb-rec"><b>${shown}</b><span>${esc(spec.en ? tx(spec.labelKey, spec.en) : t(spec.labelKey))}</span><em>${avatarHTML(best.g)}${rankName(best.g)}</em></div>`);
   });
   if (!cells.length) return '';
   if (cells.length % 2) cells[cells.length - 1] = cells[cells.length - 1].replace('class="lb-rec"', 'class="lb-rec is-wide"');

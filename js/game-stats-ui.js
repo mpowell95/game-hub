@@ -25,7 +25,7 @@ import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
-import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount, wwCollected, wwSpent } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { backStack } from './back-stack.js';
 
@@ -497,6 +497,10 @@ function wordWeaverScreen(rec) {
       <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>
       <div class="gs-tally"><b>${wwThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
       <div class="gs-tally"><b>${wwExtra(rec)}</b><span>${tf('gs_ww_extra', 'Extra words')}</span></div>
+    </div>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${wwCollected(rec)}</b><span>${tf('lb_tex_ww_bonus', 'Bonus stars collected')}</span></div>
+      <div class="gs-tally"><b>${wwSpent(rec)}</b><span>${tf('lb_tex_ww_spent', 'Bonus stars spent')}</span></div>
     </div>
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">

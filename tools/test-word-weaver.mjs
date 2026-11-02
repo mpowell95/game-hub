@@ -331,6 +331,33 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('ui: no code in the board rows (built from the in-memory list)', !/data-code|r\.code\b.*\$\{/.test(ui));
 }
 
+// --- bonus stars are a currency: hints are BOUGHT (Matt, 2026-11-02) ---
+{
+  ok('prices: letter 40, square 60, word 120', P.WW_PRICE.l === 40 && P.WW_PRICE.q === 60 && P.WW_PRICE.w === 120);
+  ok('balance: collected (words + squares + pending) minus spent', P.wwBalance({ ww: { x: 50, b: 10 } }, 5) === 65 && P.wwCollected({ ww: { x: 50, b: 10 } }, 5) === 65);
+  ok('balance: each free hint used before counts as 10 spent; lost ones do not', P.wwSpent({ ww: { fu: 3, fl: 2, sp: 40 } }) === 70 && P.wwBalance({ ww: { x: 100, fu: 3, fl: 2, sp: 40 } }) === 30);
+  ok('balance: never below 0, an empty record reads 0', P.wwBalance({ ww: { x: 5, sp: 40 } }) === 0 && P.wwBalance(null) === 0 && P.wwSpent({}) === 0);
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaver(1, { hints: 0, extra: 100, sym: 3 });
+  ok('buy: a bad kind or cost writes nothing', G.recordWordWeaverBuy('x', 40) === null && G.recordWordWeaverBuy('l', 0) === null && !G.loadStats().games.wordweaver.ww.sp);
+  G.recordWordWeaverBuy('l', 40, 'en-L2');
+  G.recordWordWeaverBuy('w', 120, 'en-2026-11-02');
+  G.recordWordWeaverBuy('q', 60, 'es-L3');
+  G.recordWordWeaverBuy('l', 40, 'en-L2');
+  const w = G.loadStats().games.wordweaver;
+  ok('buy: spent counted in ww.sp, kinds in ww.by', w.ww.sp === 260 && w.ww.by.l === 2 && w.ww.by.q === 1 && w.ww.by.w === 1);
+  ok('buy: never a hint (no star cost), never a play', !w.ww.hint && P.wwLevels(w)[1].s === 3 && w.total.played === 1);
+  ok('buy: collected and spent read back', P.wwCollected(w) === 103 && P.wwSpent(w) === 260 && P.wwBalance(w) === 0);
+  const rec = (playerId, ww) => ({ profile: { playerId, name: 'Buy' }, stats: { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ww } } }, updatedAt: 100 });
+  const g = A.aggregatePlayers({ d1: rec('BY111', { lv: {}, x: 200, sp: 120, by: { w: 1 } }), d2: rec('BY111', { lv: {}, x: 60, b: 2, sp: 100, fu: 1, by: { l: 1, q: 1 } }) })[0].games.wordweaver;
+  ok('merge: spent and bought add across phones', g.ww.sp === 220 && g.ww.by.l === 1 && g.ww.by.q === 1 && g.ww.by.w === 1);
+  ok('merge: the person\'s balance = all collected - all spent', P.wwCollected(g) === 262 && P.wwSpent(g) === 230 && P.wwBalance(g) === 32);
+  const ui = readFileSync(new URL('word-weaver/js/ui.js', ROOT), 'utf8');
+  ok('ui: the spend is recorded BEFORE anything is revealed', ui.indexOf('recordWordWeaverBuy(kind, cost, where)') > 0 && ui.indexOf('recordWordWeaverBuy(kind, cost, where)') < ui.indexOf('this._reveal(keys, false)'));
+  ok('ui: no free-hint writer is called any more', !/recordWordWeaverFree(Hint|Lost)\(/.test(ui));
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');
