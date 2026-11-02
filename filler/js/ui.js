@@ -212,7 +212,14 @@ function fillerMode(s, me) {
 /** The finished game's own numbers: squares held by each side at the end, and moves played. */
 function fillerDetail(s, me) {
   if (!s || !s.counts) return null;
-  return { mine: Math.max(0, s.counts[me] | 0), theirs: Math.max(0, s.counts[3 - me] | 0), moves: Math.max(0, s.moves | 0) };
+  // Squares per color at the end (Matt, 2026-11-02: "How many of each color?"): sq_<color> for the squares this player owns.
+  const per = {};
+  if (s.owner && s.colors) for (let i = 0; i < s.owner.length; i++) {
+    if (s.owner[i] !== me) continue;
+    const m = COLOR_META[s.colors[i]];
+    if (m) per['sq_' + m.key] = (per['sq_' + m.key] || 0) + 1;
+  }
+  return { mine: Math.max(0, s.counts[me] | 0), theirs: Math.max(0, s.counts[3 - me] | 0), moves: Math.max(0, s.moves | 0), ...per };
 }
 
 function plainFromState(s) {

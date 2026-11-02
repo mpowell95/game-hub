@@ -1993,11 +1993,12 @@ function freshCupPong(rec) {
   ]) : '';
   if (!n0(((rec && rec.total) || {}).played)) return racks ? solo : emptyState('Cup Pong');
   const rack = topOf(dt.rack);
-  // No make %: a solo rack's detail adds its throws into the same `dt.throws` as a match's, so made / throws
-  // would mix the two (it would need its own key in the solo writer first).
+  // Make % from MATCH throws only (Matt, 2026-11-02): `mt`/`mm` are written by matches from v1417 on; the older
+  // `throws`/`made` keys are kept (rule 5) but mixed with solo racks earlier that day, so they are not used here.
+  const cpMake = n0(dt.mt) ? `${Math.round((n0(dt.mm) * 100) / n0(dt.mt))}%` : null;
   return stdScreen('cuppong', rec, {
     facts: [
-      ['st_on_fire', sumOf(dt, 'onFire')], ['st_balls_back', sumOf(dt, 'ballsBack')],
+      ['st_make_pct', cpMake], ['st_on_fire', sumOf(dt, 'onFire')], ['st_balls_back', sumOf(dt, 'ballsBack')],
       ['st_reracks', sumOf(dt, 'reracks')], ['st_fav_rack', rack ? esc(tf('st_rk_' + rack, titleCase(rack))) : null],
     ],
     tail: solo,
@@ -2092,7 +2093,8 @@ function freshScreenFor(id, stt) {
         facts: [['st_shots', sumOf(dt, 'shots')], ['st_made', sumOf(dt, 'made')], ['st_missed', sumOf(dt, 'missed')], ['st_make_pct', make]] });
     }
     case 'mancala': return stdScreen(id, rec, { facts: [['st_stones', sumOf(dt, 'mine')], ['st_avg_stones', avgOf(dt, 'mine')], ['st_avg_their_stones', avgOf(dt, 'theirs')]] });
-    case 'filler': return stdScreen(id, rec, { facts: [['st_squares', sumOf(dt, 'mine')], ['st_avg_squares', avgOf(dt, 'mine')], ['st_avg_their_squares', avgOf(dt, 'theirs')], ['st_avg_moves', avgOf(dt, 'moves')]] });
+    case 'filler': return stdScreen(id, rec, { facts: [['st_squares', sumOf(dt, 'mine')], ['st_avg_squares', avgOf(dt, 'mine')], ['st_avg_their_squares', avgOf(dt, 'theirs')], ['st_avg_moves', avgOf(dt, 'moves')],
+      ...['yellow', 'blue', 'vermilion', 'teal', 'purple', 'pink'].map((c) => ['st_sq_' + c, sumOf(dt, 'sq_' + c)])] });
     case 'dotsboxes': {
       const db = rec.db || {};
       return stdScreen(id, rec, { total: subTotal(rec, db), ties: n0(((rec.total || {}).played)) ? undefined : db.tied,
