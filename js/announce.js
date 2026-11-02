@@ -140,6 +140,8 @@ export const ANNOUNCEMENTS = [
     id: 'lb-points-2026-11-02',
     from: '2026-11-02',
     until: '2026-11-30',
+    // Matt, 2026-11-02: pulled from players minutes after shipping ("Undo that"). Admin preview only.
+    adminOnly: true,
     icon: '🏆',
     badge: true,
     title: { en: 'Leaderboards: points', es: 'Clasificación: puntos' },
