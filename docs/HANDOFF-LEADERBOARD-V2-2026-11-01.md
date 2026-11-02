@@ -136,3 +136,5 @@ button (Wins, Played, Name); Arrow Maze's board has Levels | Rush on top, Rush d
 This week | Weeks won | Past weeks; the old board's numbers). Pinned row hides on Wins when the own row shows.
 Contexto "Fewest guesses" = no-hint solves only (v1391 + server `ctNoHintBest`). Release gate left: none of the
 listed items; Matt said release = wait.
+
+**v1393 (2026-11-02):** My Stats restyled to match v2 for EVERY player (Matt). Next: a brand-new AI chat reviews v2 again.
