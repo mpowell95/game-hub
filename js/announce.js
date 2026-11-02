@@ -135,6 +135,22 @@ export const ANNOUNCEMENTS = [
     action: 'try-compact',
   },
   {
+    // Leaderboard points (2026-11-02, Matt: "Tell players clearly"; js/lb-points.js). Wins boards now
+    // rank on points: every win adds, harder levels pay more. "See it" opens the Leaderboard.
+    id: 'lb-points-2026-11-02',
+    from: '2026-11-02',
+    until: '2026-11-30',
+    icon: '🏆',
+    badge: true,
+    title: { en: 'Leaderboards: points', es: 'Clasificación: puntos' },
+    body: {
+      en: ['Every win adds points. Harder levels pay more.'],
+      es: ['Cada victoria suma puntos. Los niveles difíciles valen más.'],
+    },
+    cta: { en: 'See it', es: 'Verla' },
+    action: 'open-leaderboard',
+  },
+  {
     // NOT a popup: the compact layout's bottom-bar tips (js/hub.js `_maybeTour`), the first time a
     // device shows Compact. Listed here only so its seen-stamp rides the same report
     // (players/<id>/announce) and Matt's Admin > Announcements shows who has seen it.

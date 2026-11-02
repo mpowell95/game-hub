@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1421';
+const CACHE = 'game-hub-v1422';
 
 const ASSETS = [
   './',
@@ -29,6 +29,7 @@ const ASSETS = [
   './js/layout.js',
   './js/back-stack.js',
   './js/lb-rules.js',
+  './js/lb-points.js',
   './js/lb2-lost.js',
   './js/tabbar-fix.js',
   './js/viewport.js',
@@ -828,7 +829,7 @@ const REST_MANIFEST = {
   './css/hub.css': '1f4608e970',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '4455fa4b21',
+  './js/hub.js': '997a6680bc',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -841,10 +842,11 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/back-stack.js': '30b257fa2a',
   './js/lb-rules.js': '229e7a9b85',
+  './js/lb-points.js': '594d65f358',
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '08963d8420',
+  './js/strings.js': '306304c5b7',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -859,7 +861,7 @@ const REST_MANIFEST = {
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'e6de6b7a35',
   './js/bug-report-ui.js': '557cd3d1ed',
-  './js/announce.js': '1ffa060596',
+  './js/announce.js': '17a3bde629',
   './js/announce-ui.js': '0bdfcd673d',
   './js/messages.js': 'd12738ffad',
   './js/live-read.js': '0c8419185d',
@@ -889,10 +891,10 @@ const REST_MANIFEST = {
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': 'f9f5d57800',
-  './js/leaderboard2-ui.js': 'a96a519a84',
+  './js/leaderboard-ui.js': '9a552f34f5',
+  './js/leaderboard2-ui.js': 'a526133dd9',
   './js/leaderboard2-boards.js': 'afbc6ba443',
-  './js/leaderboard2-strings.js': 'd13fc89dd6',
+  './js/leaderboard2-strings.js': '39823e2009',
   './js/leaderboard-rank.js': '4fe1b42b0f',
   './js/arrow-maze-time.js': 'ab86cff936',
   './js/gridlock-points.js': '8a4fcce246',

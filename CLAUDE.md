@@ -109,9 +109,15 @@ is true, every Firebase writer refuses (no override), online play is refused, an
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 **How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
+## Leaderboard points (live v1422, 2026-11-02)
+
+Every WINS board (lb-rules `wins`/`cuppong`) ranks on POINTS: `js/lb-points.js` (per game + level, online value,
+near-guaranteed levels 1 a win, max 20 per game per person, option multipliers from byMode). Read-time only. Spec and
+status: `docs/LEADERBOARD-POINTS-DECISIONS.md`. Changing a value = edit `P` there; old and v2 boards move together.
+
 ## Open handoff: Leaderboard v2 (2026-11-01)
 
-**"leaderboard session 5" / "build the points"** = **`docs/LEADERBOARD-POINTS-DECISIONS.md`** (Matt's approved per-game points, then the (i) text and "+X pts"). **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
+**"leaderboard session 5"**: points BUILT (v1422); (i) text and "+X pts" per `docs/LEADERBOARD-POINTS-DECISIONS.md`. **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
 and continue that conversation as if it were the same session (where it stopped, Matt's decisions, open questions,
 tools). Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
 released or abandoned.

@@ -1045,6 +1045,8 @@ class Hub {
           // "Try it" on the new-layout announcement switches this device to Compact; the
           // onLayoutChange listener repaints the launcher.
           else if (action === 'try-compact') setLayout('compact');
+          // Leaderboard points (2026-11-02): "See it" opens the Leaderboard.
+          else if (action === 'open-leaderboard') this.el.leaderboard.click();
         },
       });
     } catch (err) { console.warn('[hub] announcement could not be shown', err); }

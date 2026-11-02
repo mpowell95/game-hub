@@ -64,6 +64,8 @@ import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } 
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
 import { WW_TIERS, wwPoints, wwCleared, wwThreeStars, wwCollected, wwSpent } from './word-weaver-points.js';
 import { loadFavorites } from './favorites.js';
+import { gamePoints, pointsKey } from './lb-points.js';
+import { LB_RULES } from './lb-rules.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
 import { makeT, getLang } from './i18n.js';
@@ -789,6 +791,25 @@ function woRushHTML(list) {
   return tabs + body;
 }
 
+/** THE POINTS LINE on a wins board (2026-11-02): what one win is worth at each level, online, and any
+ *  option worth more ("Points a win: (circle)1 (square)6 (diamond)8 . Online 5"). Shapes, never hue alone. */
+function ptsKeyHTML(id) {
+  const k = pointsKey(id);
+  const lv = (l) => `<span class="lb-ptsk-l">${tierMarkHTML(l.tier)}${l.pts}</span>`;
+  const capped = k.levels.filter((l) => l.capped);
+  const parts = [];
+  if (k.levels.length) {
+    const free = k.levels.filter((l) => !l.capped).map(lv).join('');
+    const cap = capped.length ? `<span class="lb-ptsk-c">${capped.map(lv).join('')} (${esc(tx('lb_pts_max', `max ${k.cap} in all`, { n: k.cap }))})</span>` : '';
+    parts.push((k.ult ? `${esc(t('lb_tt_classic'))} ` : '') + cap + free);
+  } else parts.push('1');
+  if (k.ult) parts.push(`${esc(t('lb_tt_ultimate'))} ${k.ult.map(lv).join('')}`);
+  parts.push(`${esc(tx('lb_pts_online', 'Online'))} ${k.on}`);
+  if (k.extra) parts.push(esc(tx('lb_pts_x_' + id, '')));
+  return `<p class="lb-note lb-ptsk"><b>${esc(tx('lb_pts_key', 'Points a win'))}:</b> ${parts.filter(Boolean).join(' <span aria-hidden="true">·</span> ')}</p>`;
+}
+/** The tabs that show points (All and the levels; not MP, Solo or Tic Tac Toe's variant tabs). */
+function ptsView(id) { return isPointsBoard(id) && !_view; }
 function plainBoardHTML(list, id) {
   const v = boardView(list, id);
   const { rankOf, tiedAt } = rankMap(v.rows, () => 0, v.cmp);
@@ -798,10 +819,11 @@ function plainBoardHTML(list, id) {
         return playerCardHTML(g, rankChipHTML(rankOf[g.key], tiedAt(g.key)), big, '', '', v.subHtml ? v.subHtml(g) : v.tier ? tierPillHTML(v.tier(g)) : '', '');
       }).join('')}</div>`
     : emptyState(v.empty || t('lb_empty_game', { label: labelOf(id) }));
+  const key = ptsView(id) ? ptsKeyHTML(id) : '';
   // Only on a view ranked by the board's own number (gameMetricAt), which is what gapText reads.
   const line = v.gap && v.rows.length
     ? standLineHTML(v.rows, rankOf, tiedAt, (me, rec) => gapText(me, rec, id, (x) => `<b>${x}</b>`)) : '';
-  return v.tabs + cards + line;
+  return v.tabs + key + cards + line;
 }
 
 /** ONE LINE UNDER A BOARD (2026-10-27, Matt's mockup 2b): where the viewer stands and what it takes
@@ -1017,8 +1039,15 @@ function gameMetricAt(g, id, tier) {
   if (id === 'wordweaver') return wwPoints(g.games.wordweaver, tier == null ? null : WW_TIERS[tier - 1]);
   // Sudoku / Murdoku: a row with a no-hint solve is ranked and shown by its no-hint solves (2026-10-29).
   if (NOHINT_GAMES.has(id) && noHintTierOf(g, id)) return noHintAt(g, id, tier);
+  // Every wins board ranks on POINTS (Matt, 2026-11-02, js/lb-points.js): every win adds, harder levels
+  // pay more, near-guaranteed levels at most 20. At a tier, that level's own points.
+  if (isPointsBoard(id)) return gamePoints(g.games[id], id, tier).pts;
   return winsAtTier(g, [id], tier);
 }
+/** A board ranked on points per win (js/lb-rules.js `wins` / `cuppong`; Hold'em's Wins tab is not one). */
+function isPointsBoard(id) { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong'); }
+/** Wins behind a row's points (the tie-break: equal points, more wins first). */
+function pointsWinsOf(g, id) { return gamePoints(g.games[id], id, _tier).wins; }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
  *  always did; golf takes a sign and shows level par as "E" (js/leaderboard-rank.js does the
  *  maths, this supplies the translated word). A player with no number gets the same em-dash
@@ -1092,6 +1121,7 @@ function lbUnitKeyOf(id) {
   // Same split: this board ranks medals; My Stats' list still leads with every solve.
   if (id === 'contexto') return 'lb_unit_ct_medals';
   if (id === 'holdem') return 'lb_unit_bank';
+  if (isPointsBoard(id)) return 'lb_unit_points';
   if (id === 'spellingbee' && beeBoard()) return beeView().by === 'words' ? 'lb_unit_words' : 'lb_unit_points';
   return unitKeyOf(id);
 }
@@ -1142,7 +1172,7 @@ function boardTierOf(g, id) {
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
-  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver') && _tier == null) return null;
+  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver' || isPointsBoard(id)) && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -1158,6 +1188,7 @@ function boardMetricOf(g, id) { return gameMetricAt(g, id, boardTierOf(g, id)); 
 /** THE ONE comparator every metric sort on a game board goes through. Tier first, then that tier's
  *  own score via compareBoardMetric - which is what still gets golf's direction right. */
 function compareBoardRow(a, b, id) {
+  if (isPointsBoard(id)) return compareBoardMetric(boardMetricOf(a, id), boardMetricOf(b, id), id) || (pointsWinsOf(b, id) - pointsWinsOf(a, id));
   return compareTierFirst(boardTierOf(a, id) || 0, boardTierOf(b, id) || 0,
     boardMetricOf(a, id), boardMetricOf(b, id), id);
 }
@@ -3437,6 +3468,10 @@ function ensureCss() {
     '.lb-ynew-rec{font-size:13px;color:var(--lb-muted);line-height:1.35}',
     '.lb-ynew-rec .lb-av{display:inline-flex;width:16px;height:16px;font-size:12px;border:0;background:transparent;vertical-align:-3px}',
     '.lb-standline{margin:12px 0 0}',
+    '.lb-ptsk{margin:0 0 8px;line-height:1.7}',
+    '.lb-ptsk-l{display:inline-flex;align-items:center;gap:2px;margin-right:8px;white-space:nowrap}',
+    '.lb-ptsk-l .lb-tiermark{display:inline-flex}',
+    '.lb-ptsk-c{white-space:nowrap;margin-right:8px}',
     '.lb-standline b{color:var(--lb-ink)}',
     // --- skeleton + empty -------------------------------------------------------------------------
     '.lb-sk{display:inline-block;width:100%;height:11px;border-radius:5px;background:var(--lb-surface-2);vertical-align:middle}',
