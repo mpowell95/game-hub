@@ -129,3 +129,10 @@ King of Games' Contexto Fewest 1 = en-31, 1 typed guess after 8 hints (real; Few
   screenshots, the 44 round-4 screenshots).
 - Earlier docs: `docs/LEADERBOARD-V2-PLAN.md` (original design + decisions), `-REVIEW-1/2/3.md`, `-PLAN-R1/R2.md`,
   `-MORNING.md`; mockups `docs/mockups/leaderboard-v2.html`.
+
+**v1392 (2026-11-02):** mockup `lb2-byplayer-rush` built for admin (Matt: "deploy any mockups"): Hall of Fame > Wins has a
+category picker (Everything, Easy, Medium, Hard, Expert, vs people, No difficulty; `lb2Players(list, cat)`) and a sort
+button (Wins, Played, Name); Arrow Maze's board has Levels | Rush on top, Rush drawn in v2 (`lb2Rush`: Easy | Hard,
+This week | Weeks won | Past weeks; the old board's numbers). Pinned row hides on Wins when the own row shows.
+Contexto "Fewest guesses" = no-hint solves only (v1391 + server `ctNoHintBest`). Release gate left: none of the
+listed items; Matt said release = wait.

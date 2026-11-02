@@ -3740,6 +3740,41 @@ export function lb2Players(list, cat = 'all') {
  *  ribbons"): Contexto's gold / silver / bronze image with the PLACE on its face, `h` px tall. */
 export function lb2Medal(rank, h = 36) { return ctMedalHTML(['gold', 'silver', 'bronze'][rank - 1] || 'iron', rank, h); }
 /** The tab-word for a difficulty, and the old board's unit-less number text (v2's lists). */
+/** Arrow Maze Rush for v2 (2026-11-02, Matt's approved mockup): woRushHTML's own numbers as rows.
+ *  mode 'easy'|'hard', view 'week'|'won'|'past'. Returns { head, unit, rows: [{ g, key, rank, tie, val, sub }], empty }. */
+export function lb2Rush(list, mode = 'easy', view = 'week') {
+  const thisWeek = woWeekKey();
+  const best = new Map(list.map((g) => [g.key, woBestMapOf(g, mode)]));
+  const arrows = tx('lb_wo_arrows', 'arrows');
+  const weeks = [...new Set(list.flatMap((g) => Object.keys(best.get(g.key)).filter((w) => w < thisWeek)))].sort().reverse()
+    .map((w) => {
+      const top = list.reduce((m, g) => Math.max(m, best.get(g.key)[w] ?? -1), -1);
+      return { w, top, winners: top > 0 ? list.filter((g) => best.get(g.key)[w] === top) : [] };
+    });
+  if (view === 'week') {
+    const rows = list.filter((g) => best.get(g.key)[thisWeek] != null);
+    const val = (g) => best.get(g.key)[thisWeek];
+    rows.sort((a, b) => val(b) - val(a) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val);
+    return { head: woWeekRange(thisWeek), unit: arrows, empty: tx('lb_wo_none_week', 'No runs this week yet'),
+      rows: rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), val: val(g), sub: '' })) };
+  }
+  if (view === 'won') {
+    const won = {}, played = {};
+    for (const wk of weeks) {
+      for (const g of list) if (best.get(g.key)[wk.w] != null) played[g.key] = (played[g.key] || 0) + 1;
+      for (const g of wk.winners) won[g.key] = (won[g.key] || 0) + 1;
+    }
+    const rows = list.filter((g) => won[g.key] > 0);
+    const val = (g) => won[g.key];
+    rows.sort((a, b) => val(b) - val(a) || (played[a.key] - played[b.key]) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val);
+    return { head: '', unit: tx('lb_wo_won_unit', 'weeks won'), empty: tx('lb_wo_none_past', 'No finished weeks yet'),
+      rows: rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), val: val(g), sub: tx('lb_wo_of', 'of {n}', { n: played[g.key] }) })) };
+  }
+  return { head: '', unit: arrows, empty: tx('lb_wo_none_past', 'No finished weeks yet'),
+    rows: weeks.flatMap((wk) => wk.winners.map((g) => ({ g, key: g.key, rank: 1, tie: wk.winners.length > 1, val: wk.top, sub: woWeekRange(wk.w) }))) };
+}
 export function lb2CtImg(kind, h = 34) { return ctMedalHTML(kind, null, h); }
 export function lb2TierWord(tier) { return tierWord(tier); }
 /** Tests only (tools/test-lb2-parity.mjs): render this overlay from a given board, no network. */

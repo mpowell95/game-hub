@@ -26,7 +26,7 @@ import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
-import { GAME_META, lb2CtImg, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { GAME_META, lb2CtImg, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
 
@@ -382,6 +382,18 @@ function dividerHTML(r) {
 const COLS = '44px minmax(0,1fr) auto 10px';
 /** The shape before a row's number on a grouped board (none beside a dash: there is no number to qualify). */
 const numShape = (tiered, r) => (tiered && r.text && r.text !== '—' ? shape(r.tier) : '');
+function rushHTML(top, modeRow) {
+  const mode = top.rmode === 'hard' ? 'hard' : 'easy', view = ['won', 'past'].includes(top.rview) ? top.rview : 'week';
+  const R = lb2Rush(_people, mode, view);
+  const ctrl = `<div class="lb2-ctrl">${modeRow}<div class="lb2-ctrlrow">${seg([{ v: 'easy', html: `${shape(1)}${esc(lb2TierWord(1))}` }, { v: 'hard', html: `${shape(3)}${esc(lb2TierWord(3))}` }], mode, 'worush', true)}</div>
+    <div class="lb2-ctrlrow">${seg([{ v: 'week', label: t('lb_wo_week') }, { v: 'won', label: t('lb_wo_won') }, { v: 'past', label: t('lb_wo_past') }], view, 'woview', true)}</div></div>`;
+  const cols = COLS;
+  const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span></span><span></span><span class="r">${esc(cap([R.head, R.unit].filter(Boolean).join(' · ')))}</span><span></span></div>`;
+  const list = R.rows.length ? `<div class="lb2-card" data-role="rows">${R.rows.map((r) => `<button type="button" class="lb2-lr${view === 'past' ? '' : pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}">
+      ${med(r.rank, r.tie, view === 'past' ? 'sm' : '')}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span></span>${r.sub ? `<span class="lb2-sub">${esc(r.sub)}</span>` : ''}</span><span class="r lb2-val num">${fmt(r.val)}</span>${CHEV}</button>`).join('')}</div>`
+    : `<div class="lb2-card"><p class="lb2-empty-t">${esc(R.empty)}</p></div>`;
+  return `${ctrl}${R.rows.length ? head : ''}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>`;
+}
 function boardScreenHTML(top) {
   const game = top.game;
   const st = top.sel = selFor(game, top.sel);
@@ -414,9 +426,11 @@ function boardScreenHTML(top) {
     }).join('')}</div>`;
   }
   // Arrow Maze's Rush (the old board) gets its own line: beside five tabs it squeezed every word off them.
-  const rush = game === 'wayout' ? `<div class="lb2-ctrlrow lb2-rushrow"><button type="button" class="lb2-chip" data-act="rush">${esc(t2('lb2_rush'))}${CHEV}</button></div>` : '';
+  // Arrow Maze: Levels | Rush on top (2026-11-02, Matt's approved mockup); Rush is drawn here, not on the old board.
+  const rush = game === 'wayout' ? `<div class="lb2-ctrlrow">${seg([{ v: 'levels', label: t2('lb2_levels') }, { v: 'rush', label: t2('lb2_rush') }], top.rush ? 'rush' : 'levels', 'womode', true)}</div>` : '';
+  if (game === 'wayout' && top.rush) return bar + rushHTML(top, rush);
   const ctrl = tb.rows.length && (tb.rows.length > 1 || tb.rows[0].length > 1)
-    ? `<div class="lb2-ctrl">${tb.rows.map((row, ri) => `<div class="lb2-ctrlrow">${tabRowHTML(game, row, st, ri)}</div>`).join('')}${rush}</div>`
+    ? `<div class="lb2-ctrl">${rush}${tb.rows.map((row, ri) => `<div class="lb2-ctrlrow">${tabRowHTML(game, row, st, ri)}</div>`).join('')}</div>`
     : (rush ? `<div class="lb2-ctrl">${rush}</div>` : '');
   const me = b.rows.find((r) => r.key === _meKey) || null;
   const meName = esc(nameOf(meGroup() || { name: (loadProfile() || {}).name }));
@@ -444,19 +458,48 @@ function boardScreenHTML(top) {
 const tiedIn = (rows) => { const n = {}; for (const r of rows) n[r.rank] = (n[r.rank] || 0) + 1; return (r) => n[r.rank] > 1; };
 let _hofView = 'medals';
 /** Hall of Fame's second view: the old By Player list as it opened (category All, by Wins), unchanged. */
+/** Hall of Fame > Wins' filter and sort (2026-11-02, Matt's approved mockup): the old By Player list's categories
+ *  (Everything, the four difficulties, vs people, No difficulty) and its Wins / Played / Name sorts. */
+const HOF_CATS = ['all', 1, 2, 3, 4, 'VS', 'NT'];
+let _hofCat = 'all';
+let _hofSort = 'wins';
+const catWord = (c) => (c === 'all' ? t('lb_cat_all') : c === 'VS' ? t('lb_cat_vs') : c === 'NT' ? t('lb_cat_nt') : lb2TierWord(c));
+function winsRows() {
+  let rows = lb2Players(_people, _hofCat);
+  if (_hofSort === 'played') {
+    rows = rows.slice().sort((a, b) => b.played - a.played || nameOf(a.g).localeCompare(nameOf(b.g)));
+    let last = null, rank = 0;
+    const n = {}; for (const r of rows) n[r.played] = (n[r.played] || 0) + 1;
+    rows = rows.map((r, i) => { if (r.played !== last) { rank = i + 1; last = r.played; } return { ...r, rank, tie: n[r.played] > 1, show: r.played }; });
+  } else {
+    if (_hofSort === 'name') rows = rows.slice().sort((a, b) => nameOf(a.g).localeCompare(nameOf(b.g)));
+    rows = rows.map((r) => ({ ...r, show: r.wins }));
+  }
+  return rows;
+}
+function winsCtrlHTML() {
+  const pick = `<label class="lb2-catpick">${typeof _hofCat === 'number' ? shape(_hofCat) : ''}<span>${esc(catWord(_hofCat))}</span><select data-role="hofcat" aria-label="${esc(catWord(_hofCat))}">${HOF_CATS.map((c) => `<option value="${c}"${c === _hofCat ? ' selected' : ''}>${esc(catWord(c))}</option>`).join('')}</select></label>`;
+  const sorts = [['wins', t('lb_sort_wins')], ['played', t2('lb2_played_col')], ['name', t('lb_sort_alpha')]];
+  const sortBtn = `<label class="lb2-sortbtn" aria-label="${esc(t2('lb2_sort_aria'))}">${SVG.sort}<select data-role="hofsort" aria-label="${esc(t2('lb2_sort_aria'))}">${sorts.map(([v, l]) => `<option value="${v}"${v === _hofSort ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+  return `<div class="lb2-frow">${pick}${sortBtn}</div>`;
+}
+function winsUnit() {
+  if (_hofSort === 'played') return t2('lb2_played_col');
+  return _hofCat === 'NT' ? t('lb_unit_runs') : _hofCat === 'VS' ? t('lb_unit_vs_wins') : t('lb_wins_unit');
+}
 function winsHTML() {
-  const rows = lb2Players(_people);
+  const rows = winsRows();
   const cols = COLS;
   const list = rows.length ? `<div class="lb2-card" data-role="rows">${rows.map((r) => `<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
-      ${med(r.rank, r.tie)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span></span></span><span class="r lb2-val num">${fmt(r.wins)}</span>${CHEV}</button>`).join('')}</div>`
+      ${med(r.rank, r.tie)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span></span></span><span class="r lb2-val num">${fmt(r.show)}</span>${CHEV}</button>`).join('')}</div>`
     : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   const me = rows.find((r) => r.key === _meKey) || null;
   const meName = esc(nameOf(meGroup() || { name: (loadProfile() || {}).name }));
-  const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span></span><span></span><span class="r">${esc(cap(t('lb_wins_unit')))}</span><span></span></div>`;
-  const pin = `<div class="lb2-pin" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me ? med(me.rank, me.tie, 'sm') : '–'}</span>
+  const head = `<div class="lb2-cols" style="grid-template-columns:${cols}"><span></span><span></span><span class="r">${esc(cap(winsUnit()))}</span><span></span></div>`;
+  const pin = `<div class="lb2-pin${me ? ' lb2-pin-auto' : ''}" style="grid-template-columns:${cols}"><span class="c num lb2-pinrank">${me ? med(me.rank, me.tie, 'sm') : '–'}</span>
     <span class="lb2-grow"><b class="lb2-nmt lb2-mine">${meName}</b>${me ? `<span class="lb2-gap num">${esc(t('lb_played_count', { n: fmt(me.played) }))}</span>` : `<span class="lb2-gap">${esc(t2('lb2_not_ranked'))}</span>`}</span>
-    <span class="r lb2-val num">${me ? fmt(me.wins) : ''}</span><span></span></div>`;
-  return `${headHTML(hofSeg())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;
+    <span class="r lb2-val num">${me ? fmt(me.show) : ''}</span><span></span></div>`;
+  return `${headHTML(hofSeg() + winsCtrlHTML())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;
 }
 const hofSeg = () => seg([{ v: 'medals', label: t2('lb2_medals') }, { v: 'wins', label: t('lb_sort_wins') }], _hofView, 'hofview');
 function hofHTML() {
@@ -707,6 +750,12 @@ function onClick(e) {
       if (tab) setSel(tab.st);
       return;
     }
+    case 'womode': case 'worush': case 'woview': {
+      const top = _stack[_stack.length - 1];
+      if (!top || top.kind !== 'board') return;
+      if (act === 'womode') top.rush = v === 'rush'; else if (act === 'worush') top.rmode = v; else top.rview = v;
+      render(); return;
+    }
     case 'rush': { const o = { ..._opts, game: 'wayout', woMode: 'rush', legacy: true }; closeLeaderboard2({ keepHistory: true }); openLeaderboard(o); return; }
     case 'msg': {
       const to = _msgTo[Number(el.dataset.mi)];
@@ -719,6 +768,8 @@ function onClick(e) {
   }
 }
 function onChange(e) {
+  if (e.target && e.target.dataset.role === 'hofcat') { const v = e.target.value; _hofCat = /^\d$/.test(v) ? Number(v) : v; render(); return; }
+  if (e.target && e.target.dataset.role === 'hofsort') { _hofSort = e.target.value; render(); return; }
   if (e.target && e.target.dataset.role === 'gsort') { if (SORTS.includes(e.target.value)) { saveSort(e.target.value); render(); } return; }
   if (!e.target || e.target.dataset.role !== 'stab') return;
   const top = _stack[_stack.length - 1];
@@ -1040,6 +1091,10 @@ html.gh-compact .lb2-x{display:none}
 .lb2-close .lb2-vsr{flex-wrap:nowrap;white-space:nowrap}
 .lb2-close .lb2-vsr .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-frow{display:flex;gap:8px;align-items:stretch}
+.lb2-catpick{position:relative;flex:1;min-width:0;min-height:44px;border-radius:12px;background:var(--l2-seg);display:flex;align-items:center;gap:8px;padding:0 36px 0 14px;font-size:15px;font-weight:600;color:var(--l2-text)}
+.lb2-catpick span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb2-catpick::after{content:'';position:absolute;right:16px;top:50%;width:8px;height:8px;margin-top:-6px;border-right:2px solid var(--l2-muted);border-bottom:2px solid var(--l2-muted);transform:rotate(45deg);pointer-events:none}
+.lb2-catpick select{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;-webkit-appearance:none;appearance:none}
 .lb2-frow>.lb2-seg{flex:1;min-width:0}
 .lb2-sortbtn{position:relative;flex:0 0 44px;min-height:44px;border-radius:12px;background:var(--l2-seg);display:flex;align-items:center;justify-content:center;color:var(--l2-text)}
 .lb2-sortbtn svg{pointer-events:none}
