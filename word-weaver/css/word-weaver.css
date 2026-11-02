@@ -72,6 +72,14 @@
 }
 .ww-root .ww-help { font-size: 22px; font-weight: 800; line-height: 1; }
 .ww-root .ww-chip svg { width: 24px; height: 24px; }
+/* The bonus counter (2026-11-02): star + "N/10" toward the next free hint, a gold bar filling underneath. */
+.ww-root .ww-chip { width: auto; min-width: 44px; padding: 0 12px 0 10px; border-radius: 22px; display: inline-flex; align-items: center; gap: 6px; overflow: hidden; }
+.ww-root .ww-chip svg { color: var(--ww-path); position: relative; }
+.ww-root .ww-prog { position: relative; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ww-root .ww-chip::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; width: calc(var(--ww-fill, 0) * 100%); background: var(--ww-path); transition: width .3s; }
+/* A bonus square: its star, until the square is filled. */
+.ww-root .ww-c.is-bonus { color: var(--ww-path); }
+.ww-root .ww-c.is-bonus svg { width: 62%; height: 62%; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
 .ww-root .ww-badge {
   position: absolute;
   top: -3px;

@@ -528,6 +528,9 @@ export function aggregatePlayers(all, corrections) {
         // Free hints used (2026-11-01) add, like the bonus words that earn them.
         const fu = Math.max(0, Math.floor(Number(src.ww.fu) || 0));
         if (fu) dst.ww.fu = (dst.ww.fu || 0) + fu;
+        // Bonus squares (2026-11-02) add the same way.
+        const bsq = Math.max(0, Math.floor(Number(src.ww.b) || 0));
+        if (bsq) dst.ww.b = (dst.ww.b || 0) + bsq;
         const lv = (src.ww.lv && typeof src.ww.lv === 'object') ? src.ww.lv : {};
         for (const k of Object.keys(lv)) {
           if (!/^L\d+$/.test(k)) continue;

@@ -234,6 +234,20 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('free: two phones add bonus words and used free hints', g.ww.x === 22 && g.ww.fu === 2 && P.wwFreeHints(g) === 0);
 }
 
+// --- bonus squares and the bonus counter (Matt, 2026-11-02) ---
+{
+  ok('bonus squares: they count toward free hints with bonus words', P.wwBonuses({ ww: { x: 6, b: 3 } }, 1) === 10 && P.wwFreeHints({ ww: { x: 6, b: 3 } }, 1) === 1);
+  store.clear();
+  localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { 'word-weaver': { live: true } } }));
+  G.recordWordWeaver(3, { hints: 0, extra: 2, sym: 2 });
+  G.recordWordWeaver(4, { hints: 0, extra: 0, sym: 9 });          // never more than 3 a level
+  const w = G.loadStats().games.wordweaver.ww;
+  ok('recorder: bonus squares add to ww.b (at most 3 a level), extra words stay their own count', w.b === 5 && w.x === 2);
+  const rec = (playerId, ww) => ({ profile: { playerId, name: 'Sq' }, stats: { games: { wordweaver: { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ww } } }, updatedAt: 100 });
+  const g = A.aggregatePlayers({ d1: rec('SQ111', { lv: {}, x: 1, b: 2 }), d2: rec('SQ111', { lv: {}, x: 0, b: 4 }) })[0].games.wordweaver;
+  ok('merge: bonus squares add across phones', g.ww.b === 6);
+}
+
 // --- admin only (the screens' half adds the hub entry; when it is there it must be devOnly) ---
 {
   const hub = readFileSync(new URL('js/hub.js', ROOT), 'utf8');

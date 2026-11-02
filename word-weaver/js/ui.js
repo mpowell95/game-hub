@@ -15,8 +15,8 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints } from '../../js/word-weaver-points.js';
-import { loadIndex, loadLevel, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwBonuses, WW_FREE_EVERY } from '../../js/word-weaver-points.js';
+import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -141,7 +141,7 @@ function flushPending() {
   const left = [];
   for (const e of list) {
     let ok = null;
-    try { ok = recordWordWeaver(Math.floor(e.n), { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0), ...(e.lang === 'es' ? { lang: 'es' } : {}) }); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
+    try { ok = recordWordWeaver(Math.floor(e.n), { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0), sym: Math.max(0, Math.floor(e.sym) || 0), ...(e.lang === 'es' ? { lang: 'es' } : {}) }); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
     if (!ok) left.push(e);
   }
   if (left.length !== list.length) writeJSON(PENDING_KEY, left, 'queued levels');
@@ -357,16 +357,16 @@ class WordWeaver {
   _save() {
     if (!this.level) return false;
     const s = this.st;
-    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, free: s.free || 0, revealed: s.revealed, recorded: s.recorded }, this.lang);
+    return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, free: s.free || 0, revealed: s.revealed, sym: s.sym || [], recorded: s.recorded }, this.lang);
   }
 
   /** Count the level, once. The recorder runs FIRST (before any animation); the `recorded` flag is set only
    *  after it returned. A refusal is queued (PENDING_KEY) rather than lost. */
   _record() {
     if (this.st.recorded) return true;
-    const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
+    const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, sym: this.st.sym.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, ...(info.lang ? { lang: info.lang } : {}) }); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) }); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();
@@ -398,7 +398,7 @@ class WordWeaver {
     let top = `<button type="button" class="ww-lang ww-lang--top" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>`
       + `<button type="button" class="ww-help" data-act="help" aria-label="${t('help_aria')}">?</button>`;
     if (played) {
-      top += `<button type="button" class="ww-chip" data-act="extras" aria-label="">${ICON_STAR}<span class="ww-badge" hidden></span></button>`
+      top += `<button type="button" class="ww-chip" data-act="extras" aria-label="">${ICON_STAR}<span class="ww-prog"></span></button>`
         + `<span class="ww-lvl" aria-label="${t('level_aria', { n: this.n })}">${this.n}</span>`;
     }
     let stage = '', lower = '';
@@ -510,6 +510,7 @@ class WordWeaver {
     const grid = this.root.querySelector('.ww-grid');
     this.cells = new Map();
     const lv = this.level;
+    this.bonus = bonusCells(lv);
     // Only the box the words really fill is drawn and centred (the data's declared grid may be larger).
     let r0 = 99, c0 = 99, r1 = 0, c1 = 0;
     for (const e of lv.w) for (const q of cellsOf(e)) { r0 = Math.min(r0, q.r); c0 = Math.min(c0, q.c); r1 = Math.max(r1, q.r); c1 = Math.max(c1, q.c); }
@@ -524,6 +525,7 @@ class WordWeaver {
         el.className = 'ww-c is-e';
         el.dataset.k = k;
         el.dataset.ch = q.ch;
+        if (this.bonus.includes(k)) el.dataset.b = '1';
         el.style.gridRow = String(q.r - r0 + 1);
         el.style.gridColumn = String(q.c - c0 + 1);
         grid.appendChild(el);
@@ -538,25 +540,30 @@ class WordWeaver {
     const fc = foundCells(this.level, this.st), rv = new Set(this.st.revealed);
     for (const [k, el] of this.cells) {
       const s = fc.has(k) ? 'f' : rv.has(k) ? 'h' : 'e';
-      const cls = 'ww-c is-' + s;
-      if (el.dataset.s !== s) {
-        el.dataset.s = s;
-        el.className = cls;
-        el.textContent = s === 'e' ? '' : el.dataset.ch;
+      // An empty bonus square shows its star (2026-11-02); once filled it shows the letter like any other.
+      const star = s === 'e' && el.dataset.b === '1';
+      const key = s + (star ? '*' : '');
+      if (el.dataset.s !== key) {
+        el.dataset.s = key;
+        el.className = 'ww-c is-' + s + (star ? ' is-bonus' : '');
+        if (star) el.innerHTML = ICON_STAR; else el.textContent = s === 'e' ? '' : el.dataset.ch;
       }
     }
   }
 
+  /** The BONUS COUNTER (Matt, 2026-11-02: "a bonus counter on the game play screen"): the star chip shows how far
+   *  to the next free hint, "N/10" (bonus words + bonus squares). Tap: this level's bonus words. */
   _paintExtra(bump) {
-    const n = this.st.extra.length;
     const chip = this.root.querySelector('.ww-chip');
-    if (chip) {
-      const b = chip.querySelector('.ww-badge');
-      b.textContent = String(n);
-      b.hidden = n === 0;
-      chip.setAttribute('aria-label', t('extra_aria', { n }));
-      if (bump) this._anim(chip, bump);
-    }
+    if (!chip) return;
+    let total = 0;
+    try { total = wwBonuses(loadStats().games.wordweaver, this.st.extra.length + this.st.sym.length); } catch { total = this.st.extra.length + this.st.sym.length; }
+    const n = total % WW_FREE_EVERY;
+    const p = chip.querySelector('.ww-prog');
+    if (p) p.textContent = `${n}/${WW_FREE_EVERY}`;
+    chip.style.setProperty('--ww-fill', String(n / WW_FREE_EVERY));
+    chip.setAttribute('aria-label', t('bonus_aria', { n, of: WW_FREE_EVERY }));
+    if (bump) this._anim(chip, bump);
   }
 
   _paintTools(bumpFree) {
@@ -574,7 +581,7 @@ class WordWeaver {
 
   /** Free hints this player can use now (lifetime bonus words + this level's, not yet recorded). */
   _freeBank() {
-    try { return wwFreeHints(loadStats().games.wordweaver, this.st ? this.st.extra.length : 0); } catch { return 0; }
+    try { return wwFreeHints(loadStats().games.wordweaver, this.st ? this.st.extra.length + this.st.sym.length : 0); } catch { return 0; }
   }
 
   /** Restart a CSS animation class on an element (the class is removed when it ends). */
@@ -767,9 +774,13 @@ class WordWeaver {
       case 'grid': {
         this._save();
         const fresh = cellsOf(res.word).map((q) => q.r + ',' + q.c).filter((k) => !before.has(k));
+        // A bonus square filled by this word (not one a hint already showed) earns a bonus (2026-11-02).
+        const won = fresh.filter((k) => this.bonus.includes(k) && !this.st.revealed.includes(k) && !this.st.sym.includes(k));
+        if (won.length) { this.st.sym.push(...won); this._save(); }
         this._paintGrid();
         this._showPill(W, 'ok', 450);
         this._fly(fresh);
+        for (const k of won) this._flyStar(() => { this._paintExtra('is-bump'); this._paintTools(true); }, this.cells.get(k));
         if (isDone(this.level, this.st)) this._complete(); else this._paintTools();
         break;
       }
@@ -800,8 +811,8 @@ class WordWeaver {
 
   /** A star flies from the pill to the extra-words chip (a bonus word); `then` runs as it lands (at once
    *  with reduced motion or nothing to fly between). */
-  _flyStar(then) {
-    const pill = this.root.querySelector('.ww-pill'), chip = this.root.querySelector('.ww-chip');
+  _flyStar(then, fromEl) {
+    const pill = fromEl || this.root.querySelector('.ww-pill'), chip = this.root.querySelector('.ww-chip');
     if (reduceMotion() || !pill || !chip || !this.root.animate) { then(); return; }
     const rr = this.root.getBoundingClientRect(), pr = pill.getBoundingClientRect(), cr = chip.getBoundingClientRect();
     const star = document.createElement('div');
@@ -981,6 +992,7 @@ class WordWeaver {
         <p>${t('how_swipe')}</p>
         <p>${t('how_hints')}</p>
         <p>${t('how_extra')}</p>
+        <p>${t('how_square')}</p>
         <p>${t('how_free')}</p>
       </div>`);
   }
