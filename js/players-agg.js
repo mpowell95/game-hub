@@ -14,7 +14,7 @@ import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwMerge, wwHintBest } from './word-weaver-points.js';
+import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
 
 export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower']);  // solo: win-only (no loss axis) or score-based
 
@@ -558,6 +558,20 @@ export function aggregatePlayers(all, corrections) {
             const best = wwHintBest((dst.ww[key] || {})[k], hm[k]);
             if (best) (dst.ww[key] || (dst.ww[key] = {}))[k] = best;
           }
+        }
+        // The DAILY puzzle (2026-11-02), keyed '<en|es>-<day>': per day the most hints, stars capped by them, the
+        // earliest time, the fastest solve (wwDailyMerge); its tap-time hints like the ladder's.
+        const dl = (src.ww.dl && typeof src.ww.dl === 'object' && !Array.isArray(src.ww.dl)) ? src.ww.dl : {};
+        for (const k of Object.keys(dl)) {
+          if (!WW_DAY_RE.test(k)) continue;
+          const best = wwDailyMerge((dst.ww.dl || {})[k], dl[k]);
+          if (best) (dst.ww.dl || (dst.ww.dl = {}))[k] = best;
+        }
+        const dh = (src.ww.dh && typeof src.ww.dh === 'object' && !Array.isArray(src.ww.dh)) ? src.ww.dh : {};
+        for (const k of Object.keys(dh)) {
+          if (!WW_DAY_RE.test(k)) continue;
+          const best = wwHintBest((dst.ww.dh || {})[k], dh[k]);
+          if (best) (dst.ww.dh || (dst.ww.dh = {}))[k] = best;
         }
       } else if (g === 'contexto' && src.ct) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without it every Contexto

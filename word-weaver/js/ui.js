@@ -14,9 +14,13 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, recordWordWeaverFreeLost, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwFreeRaw, wwBonuses, WW_FREE_EVERY, WW_FREE_MAX } from '../../js/word-weaver-points.js';
-import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells } from './engine.js';
+import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, recordWordWeaverFreeLost, recordWordWeaverDaily, recordWordWeaverDailyHint, withMode, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwFreeRaw, wwBonuses, WW_FREE_EVERY, WW_FREE_MAX, wwDaily, wwDailyHints } from '../../js/word-weaver-points.js';
+import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells, loadDailyData, dailyLevel } from './engine.js';
+import { today, dayNumber, dateOfDay, dailyAttempt, dailyAttempts, writeDailyAttempt, clockStart, clockPause, clockResume, clockSolve, perfNow } from './daily.js';
+import { postDaily, readMyStart, watchDaily, shownRows, fmtSec } from './board.js';
+import { myCode } from '../../js/messages.js';
+import { loadProfile } from '../../js/profile-store.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -141,10 +145,45 @@ function flushPending() {
   const left = [];
   for (const e of list) {
     let ok = null;
-    try { ok = recordWordWeaver(Math.floor(e.n), { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0), sym: Math.max(0, Math.floor(e.sym) || 0), ...(e.lang === 'es' ? { lang: 'es' } : {}) }); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
+    const n = Math.floor(e.n), lang = e.lang === 'es' ? 'es' : 'en';
+    try { ok = withMode({ mode: 'ladder', lang }, wwBandOf(n), () => recordWordWeaver(n, { hints: Math.max(0, Math.floor(e.hints) || 0), extra: Math.max(0, Math.floor(e.extra) || 0), sym: Math.max(0, Math.floor(e.sym) || 0), ...(lang === 'es' ? { lang: 'es' } : {}) })); } catch (err) { console.error('[word-weaver] queued level not recorded', err); }
     if (!ok) left.push(e);
   }
   if (left.length !== list.length) writeJSON(PENDING_KEY, left, 'queued levels');
+}
+
+/** THE DAILY PUZZLE (2026-11-02): every finished day the recorder has not taken yet is handed to it again (with its
+ *  mode), and every recorded day whose result is not on the board yet is posted again. Nothing is removed. */
+function recordDailyAttempt(key, a) {
+  const lang = key.slice(0, 2) === 'es' ? 'es' : 'en';
+  const len = (x) => (Array.isArray(x) ? x.length : 0);
+  let res = null;
+  try {
+    res = withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints: Math.max(0, Math.floor(a.hints) || 0), extra: len(a.extra), sym: len(a.sym), ms: Math.max(0, Math.floor(a.sec) || 0) * 1000 }));
+  } catch (err) { console.error('[word-weaver] daily puzzle NOT recorded yet; retried on the next open', err); }
+  if (!res) { console.error('[word-weaver] daily puzzle not recorded (refused); retried on the next open', key); return false; }
+  return writeDailyAttempt(key, { recorded: true });
+}
+function postDailyAttempt(key, a) {
+  const h = Math.max(0, Math.floor(a.hints) || 0);
+  return postDaily(key, { stars: starsFor(h), hints: h, sec: Math.max(0, Math.floor(a.sec) || 0) }).then((r) => {
+    if (r === 'done') writeDailyAttempt(key, { posted: 1 });
+    return r;
+  }).catch(() => false);
+}
+function flushDaily() {
+  for (const [key, a] of dailyAttempts()) {
+    if (!a.done) continue;
+    if (!a.recorded) recordDailyAttempt(key, a);
+    const b = dailyAttempt(key);
+    if (b && b.recorded && !b.posted) postDailyAttempt(key, b);
+  }
+}
+/** Has this phone finished the day's puzzle `key`? (its save, or its stats store) */
+function dailyDone(key) {
+  const a = dailyAttempt(key);
+  if (a && a.done) return true;
+  try { return !!wwDaily(loadStats().games.wordweaver)[key]; } catch { return false; }
 }
 
 // --- drawings ------------------------------------------------------------------------------------
@@ -155,6 +194,9 @@ const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
 const STAR_D = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${STAR_D}"/></svg>`;
+const ICON_CAL = `<svg ${SVGA}><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>`;
+const ICON_TROPHY = `<svg ${SVGA}><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M9 20h6M10 17h4"/></svg>`;
+const starRow = (n, cls = 'ww-star') => [0, 1, 2].map((k) => `<svg viewBox="0 0 24 24" class="${cls}${k < n ? ' is-on' : ''}" aria-hidden="true"><path d="${STAR_D}"/></svg>`).join('');
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -191,6 +233,11 @@ class WordWeaver {
     this.dead = false;
     this.cells = new Map();      // 'r,c' -> grid cell element
     this.cell = 0;
+    this.daily = null;           // the DAILY puzzle on screen: { key, lang, day, date }, else null (a ladder level)
+    this.wantDaily = false;      // the last open asked for the daily (Try again opens it again)
+    this.dclk = null;            // performance.now() since the daily's clock last ran on screen, else null
+    this.board = [];             // the daily's board rows (codes stay here, never in the page)
+    this.offBoard = null;
   }
 
   mount() {
@@ -207,11 +254,15 @@ class WordWeaver {
     this.root.addEventListener('pointerup', this._onUp);
     this.root.addEventListener('pointercancel', this._onUp);
     document.addEventListener('keydown', this._onKey);
+    // The daily's clock (2026-11-02): it keeps counting while away, charged when the puzzle is back on screen.
+    this._onVis = () => { if (document.visibilityState === 'hidden') this._dailyHold(); else this._dailyRun(); };
+    document.addEventListener('visibilitychange', this._onVis);
     this.offResize = onViewportResize(() => { this._positionRoot(); this._layout(); });
     this.offLang = onLangChange(() => this._render());
     this._positionRoot();
     try { flushPending(); } catch (err) { console.error('[word-weaver] queued levels', err); }
     try { loadSaves(); } catch (err) { console.error('[word-weaver] saves', err); }   // the first build's save is carried across now, so its difficulty is the one picked
+    try { flushDaily(); } catch (err) { console.error('[word-weaver] daily puzzles', err); }
     this.band = loadBand();
     this._render();
     // The setup screen's Play button needs to know how many levels exist: repaint when that is known.
@@ -241,6 +292,7 @@ class WordWeaver {
       this._loadCount();
       return;
     }
+    if (this.daily) { this._openDaily(lang); return; }   // a daily: the other language's daily
     const nx = bandNext(this.band, Infinity, lang);
     if (nx.finished) { this.seq++; this._leaveLevel(lang); this.view = 'bandDone'; this._render(); return; }
     this._open(nx.n, lang);
@@ -260,6 +312,9 @@ class WordWeaver {
   }
 
   destroy() {
+    this._dailyHold();
+    this._stopBoard();
+    if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
     this.dead = true;
     for (const id of this.timers) clearTimeout(id);
     this.timers = [];
@@ -319,11 +374,13 @@ class WordWeaver {
    *  last level is the "More levels soon" state; an unreadable level is "Can't load" with a retry. */
   async _open(n, lang = this.lang) {
     const seq = ++this.seq;
+    this.wantDaily = false;
     // Nothing about the level on screen changes until the new one has loaded (2026-10-29): while it loads, the
     // old level is still playable and saves under ITS number and language (the in-game EN/ES switch).
     const lv = await loadLevel(n, dataOf(lang));
     if (this.dead || seq !== this.seq) return;
     const commit = () => {
+      this._leaveDaily();
       if (lang !== this.lang) this._leaveLevel(lang);
       this.n = n;
       this.band = wwBandOf(n);
@@ -357,6 +414,7 @@ class WordWeaver {
   _save() {
     if (!this.level) return false;
     const s = this.st;
+    if (this.daily) return writeDailyAttempt(this.daily.key, { found: s.found, extra: s.extra, hints: s.hints, free: s.free || 0, revealed: s.revealed, sym: s.sym || [] });
     return writeAttempt(this.band, { v: SAVE_V, n: this.n, found: s.found, extra: s.extra, hints: s.hints, free: s.free || 0, revealed: s.revealed, sym: s.sym || [], recorded: s.recorded }, this.lang);
   }
 
@@ -364,9 +422,16 @@ class WordWeaver {
    *  after it returned. A refusal is queued (PENDING_KEY) rather than lost. */
   _record() {
     if (this.st.recorded) return true;
+    if (this.daily) {
+      const a = dailyAttempt(this.daily.key);
+      if (!a || !a.done) return false;
+      if (!a.recorded && !recordDailyAttempt(this.daily.key, a)) return false;
+      this.st.recorded = true;
+      return true;
+    }
     const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, sym: this.st.sym.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) }); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = withMode({ mode: 'ladder', lang: info.lang || 'en' }, wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();
@@ -375,6 +440,174 @@ class WordWeaver {
     this.st.recorded = true;
     this._save();
     return !!res;
+  }
+
+  // --- the daily puzzle (2026-11-02, Matt: "Do 1") -------------------------------------------------
+  // Today's shared puzzle in `lang` (word-weaver/js/daily.js: the day, the save, the clock; board.js: the board).
+  // The same play screen; its own save (gamehub.wordweaver.daily.v1, never the ladder saves); no points.
+
+  async _openDaily(lang = this.lang) {
+    const seq = ++this.seq;
+    this.wantDaily = true;
+    const data = await loadDailyData(dataOf(lang));
+    if (this.dead || seq !== this.seq) return;
+    const now = today();
+    const day = data ? dayNumber(data.epoch, now.date) : -1;
+    const lv = dailyLevel(data, day);
+    this._leaveDaily();
+    if (lang !== this.lang) this._leaveLevel(lang);
+    if (!lv) {
+      this.level = null;
+      this.view = data ? 'soon' : 'fail';
+      this._render();
+      return;
+    }
+    const key = now.key(lang);
+    this.daily = { key, lang, day, date: dateOfDay(data.epoch, day) };
+    let a = dailyAttempt(key);
+    if (!a || !Number.isFinite(Number(a.t0))) { writeDailyAttempt(key, clockStart()); a = dailyAttempt(key) || {}; }
+    this.level = lv;
+    this.st = cleanState(lv, a);
+    this.st.recorded = a.recorded === true;
+    // Hints recorded at tap time outlive this save (the hint-gap rule).
+    try { const h = wwDailyHints(loadStats().games.wordweaver, key); if (h > this.st.hints) this.st.hints = h; } catch { /* the save's count stands */ }
+    this.order = shuffled(lv.l.length, null);
+    this.finishing = false;
+    this.view = isDone(lv, this.st) ? 'done' : 'play';
+    if (this.view === 'done' && !a.done) this._finishDaily();   // the last word saved, the app closed before the finish
+    if (this.view === 'done') this._record();
+    this._render();
+    this._dailyRun();
+    this._watchBoard();
+    if (!a.done) this._startPost(key);
+  }
+
+  /** The board row's first post (its server time `o` is when this code first opened today's puzzle); a start on
+   *  another phone of this code, earlier, becomes this phone's start too. */
+  _startPost(key) {
+    const a = dailyAttempt(key);
+    const begin = a && a.ps ? Promise.resolve('started') : postDaily(key, null).then((r) => { if (r) writeDailyAttempt(key, { ps: 1 }); return r; });
+    begin.then(() => readMyStart(key)).then((o) => {
+      const b = dailyAttempt(key);
+      if (o && b && !b.done && (!b.t0s || o < Number(b.t0))) writeDailyAttempt(key, { t0: o, t0s: true });
+    }).catch(() => {});
+  }
+
+  /** The daily's clock runs while its puzzle is being played on screen. */
+  _dailyRun() {
+    if (!this.daily || this.view !== 'play' || this.dclk != null) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    const key = this.daily.key, a = dailyAttempt(key);
+    if (!a || a.done) return;
+    const r = clockResume(a, (more) => {
+      const b = dailyAttempt(key);
+      if (b && !b.done) writeDailyAttempt(key, { ms: (Number(b.ms) || 0) + more });   // the server's top-up of the time away
+    });
+    writeDailyAttempt(key, r);
+    this.dclk = perfNow();
+  }
+  /** ...and is put on hold (time on screen added, the moment it left stamped) when the puzzle leaves the screen. */
+  _dailyHold() {
+    if (!this.daily || this.dclk == null) return;
+    const key = this.daily.key, a = dailyAttempt(key);
+    if (a && !a.done) writeDailyAttempt(key, clockPause(a, this.dclk));
+    this.dclk = null;
+  }
+  /** Leaving the daily (the setup screen, a ladder level, the other language). */
+  _leaveDaily() {
+    this._dailyHold();
+    this._stopBoard();
+    this.daily = null;
+  }
+  /** The last word is in: stop the clock, the solve time, then record (the caller) and post. */
+  _finishDaily() {
+    const key = this.daily.key;
+    this._dailyHold();
+    const a = dailyAttempt(key) || {};
+    const sec = Math.round(clockSolve(a) / 1000);
+    writeDailyAttempt(key, { done: 1, sec, away: null, found: this.st.found, extra: this.st.extra, hints: this.st.hints, free: this.st.free || 0, revealed: this.st.revealed, sym: this.st.sym || [] });
+    this._record();
+    const b = dailyAttempt(key);
+    if (b && b.recorded) postDailyAttempt(key, b).then(() => this._paintBoard());
+  }
+
+  _watchBoard() {
+    this._stopBoard();
+    if (!this.daily) return;
+    const key = this.daily.key;
+    this.offBoard = watchDaily(key, (rows) => {
+      if (!this.daily || this.daily.key !== key) return;
+      this.board = rows;
+      this._paintBoard();
+    });
+  }
+  _stopBoard() {
+    if (this.offBoard) { try { this.offBoard(); } catch { /* gone */ } }
+    this.offBoard = null;
+    this.board = [];
+  }
+  /** This phone's own row, from its own save (always shown, by its profile name). */
+  _mineRow() {
+    const a = this.daily ? dailyAttempt(this.daily.key) || {} : {};
+    const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
+    const done = !!a.done;
+    return { name: String(p.name || ''), emoji: String(p.emoji || ''), done, stars: done ? starsFor(this.st.hints) : 0, hints: done ? this.st.hints : 0, sec: done ? Math.max(0, Number(a.sec) || 0) : 0 };
+  }
+  _boardRows() {
+    let me = '';
+    try { me = myCode() || ''; } catch { me = ''; }
+    return shownRows(this.board, this._mineRow(), me);
+  }
+  /** Board rows: place, emoji, name, stars (shapes), time. Built from the in-memory list; no code in the page. */
+  _boardHTML(rows) {
+    return rows.map((r) => `
+      <li class="ww-br${r.me ? ' is-me' : ''}${r.done ? '' : ' is-open'}">
+        <span class="ww-bp">${r.place || ''}</span>
+        <span class="ww-be" aria-hidden="true">${esc(r.emoji || '')}</span>
+        <span class="ww-bn">${esc(r.name || t('player'))}</span>
+        <span class="ww-bs" role="img" aria-label="${r.done ? t('stars_aria', { n: r.stars }) : t('playing_aria')}">${starRow(r.stars, 'ww-sstar')}</span>
+        <span class="ww-bt">${r.done ? fmtSec(r.sec) : '–'}</span>
+      </li>`).join('');
+  }
+  _dateLabel() {
+    try { return new Intl.DateTimeFormat(getLang() === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' }).format(this.daily.date); } catch { return ''; }
+  }
+  /** The daily's done screen: its date, its stars, the board (the top rows and this phone's own), Back. */
+  _dailyDoneHTML() {
+    const stars = starsFor(this.st.hints);
+    return `
+      <div class="ww-done ww-done--daily">
+        <div class="ww-dtop">
+          <h2>${esc(this._dateLabel())}</h2>
+          <div class="ww-stars" role="img" aria-label="${t('stars_aria', { n: stars })}">${starRow(stars)}</div>
+        </div>
+        <ol class="ww-board ww-board--done" aria-label="${t('board_aria')}">${this._boardHTML(this._doneRows())}</ol>
+        <button type="button" class="ww-next" data-act="menu">${t('back_setup')}</button>
+      </div>`;
+  }
+  /** At most 4 rows on the done screen: the top ones, and this phone's own row always among them. */
+  _doneRows() {
+    const rows = this._boardRows();
+    if (rows.length <= 4) return rows;
+    const mine = rows.findIndex((r) => r.me);
+    return mine < 3 ? rows.slice(0, 4) : [...rows.slice(0, 3), rows[mine]];
+  }
+  _openBoard() {
+    if (!this.daily) return;
+    this._sheet(`
+      <div class="gh-modal ww-dialog" role="dialog" aria-modal="true" aria-labelledby="ww-h">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="ww-h"><span class="ww-h-star">${ICON_TROPHY}</span>${esc(this._dateLabel())}</h2>
+        <ol class="ww-board ww-board--sheet" aria-label="${t('board_aria')}">${this._boardHTML(this._boardRows())}</ol>
+      </div>`);
+  }
+  /** Repaint whichever board is on screen (the done screen's, the sheet's). */
+  _paintBoard() {
+    if (!this.root || !this.daily) return;
+    const d = this.root.querySelector('.ww-board--done');
+    if (d) d.innerHTML = this._boardHTML(this._doneRows());
+    const s = this.root.querySelector('.ww-board--sheet');
+    if (s) s.innerHTML = this._boardHTML(this._boardRows());
   }
 
   // --- rendering ----------------------------------------------------------------------------------
@@ -399,7 +632,9 @@ class WordWeaver {
       + `<button type="button" class="ww-help" data-act="help" aria-label="${t('help_aria')}">?</button>`;
     if (played) {
       top += `<button type="button" class="ww-chip" data-act="extras" aria-label="">${ICON_STAR}<span class="ww-prog"></span></button>`
-        + `<span class="ww-lvl" aria-label="${t('level_aria', { n: this.n })}">${this.n}</span>`;
+        + (this.daily
+          ? `<button type="button" class="ww-help ww-trophy" data-act="board" aria-label="${t('board_aria')}">${ICON_TROPHY}</button>`
+          : `<span class="ww-lvl" aria-label="${t('level_aria', { n: this.n })}">${this.n}</span>`);
     }
     let stage = '', lower = '';
     if (played) {
@@ -410,7 +645,7 @@ class WordWeaver {
     } else if (v === 'bandDone') {
       stage = `<div class="ww-msg"><span class="ww-shapechip">${diffShapeSVG(TIER_NUM[this.band])}</span><b>${t('band_done', { name: t('tier_' + this.band) })}</b><button type="button" class="ww-next" data-act="menu">${t('back_setup')}</button></div>`;
     } else if (v === 'fail') {
-      stage = `<div class="ww-msg"><b>${t('load_failed')}</b><button type="button" class="ww-next" data-act="retry">${t('retry')}</button></div>`;
+      stage = `<div class="ww-msg"><b>${t('load_failed')}</b><button type="button" class="ww-next" data-act="retry"${this.wantDaily ? ' data-daily="1"' : ''}>${t('retry')}</button></div>`;
     }
     // The way back to the setup screen: TOP LEFT, on the row UNDER the Hub button, never beside it
     // (docs/BUILDING-A-GAME.md, Part 0; Gridlock's rule).
@@ -455,10 +690,18 @@ class WordWeaver {
           <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}</p>
           <button type="button" class="ww-lang" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
         </div>
+        ${this._dailyButtonHTML()}
         <div class="ww-segs" role="radiogroup" aria-label="${t('diff_aria')}">${segs}</div>
         ${play}
         <button type="button" class="ww-link" data-act="help">${t('how_title')}</button>
       </div>`;
+  }
+
+  /** The setup screen's ONE Daily button (2026-11-02): today's shared puzzle; a check once this phone finished it. */
+  _dailyButtonHTML() {
+    const done = dailyDone(today().key(this.lang));
+    return `<button type="button" class="ww-daily${done ? ' is-done' : ''}" data-act="daily" aria-label="${t(done ? 'daily_done_aria' : 'daily_aria')}">`
+      + `${ICON_CAL}<b>${t('daily')}</b>${done ? '<span class="ww-dcheck" aria-hidden="true">&#10003;</span>' : ''}</button>`;
   }
 
   _playHTML() {
@@ -485,6 +728,7 @@ class WordWeaver {
   }
 
   _doneHTML() {
+    if (this.daily) return this._dailyDoneHTML();
     const stars = starsFor(this.st.hints);
     const row = [0, 1, 2].map((k) => `<svg viewBox="0 0 24 24" class="ww-star${k < stars ? ' is-on' : ''}" aria-hidden="true"><path d="${STAR_D}"/></svg>`).join('');
     return `
@@ -878,7 +1122,9 @@ class WordWeaver {
       this.st.hints += 1;
       // Recorded at once in the synced stats store, not only in this save (Matt, 2026-10-29: "Close the hint gap").
       try {
-        if (!recordWordWeaverHint(this.n, this.st.hints, this.lang === 'es' ? 'es' : undefined)) console.error('[word-weaver] hint NOT recorded in the stats store', this.n);
+        // A daily's hints are keyed by its day, never by a ladder level number (2026-11-02).
+        const ok = this.daily ? recordWordWeaverDailyHint(this.daily.key, this.st.hints) : recordWordWeaverHint(this.n, this.st.hints, this.lang === 'es' ? 'es' : undefined);
+        if (!ok) console.error('[word-weaver] hint NOT recorded in the stats store', this.daily ? this.daily.key : this.n);
       } catch (err) { console.error('[word-weaver] hint NOT recorded in the stats store', err); }
     }
     // A word whose every letter is now showing counts as found, as in Wordscapes (no swipe needed).
@@ -897,6 +1143,7 @@ class WordWeaver {
   /** The last word is in: count the level FIRST, then let the letters land and show the done screen. */
   _complete() {
     this.finishing = true;
+    if (this.daily) this._finishDaily();
     this._record();
     this._paintTools();
     this._later(() => { this.finishing = false; this.view = 'done'; this._render(); }, reduceMotion() ? 150 : 800);
@@ -905,6 +1152,7 @@ class WordWeaver {
   /** The next level of the same difficulty; the band's last one leads to "<Band> done". */
   _next() {
     if (this.view !== 'done') return;
+    if (this.daily) { this._toSetup(); return; }
     this._record();
     const band = this.band;
     // The finished level's words and hints live in the stats store now (the recorder ran first); the attempt is spent.
@@ -930,6 +1178,7 @@ class WordWeaver {
     this.finishing = false;
     this.pillTimer = 0;
     this._closeModal();
+    this._leaveDaily();
     this.view = 'setup';
     this._render();
   }
@@ -947,7 +1196,9 @@ class WordWeaver {
     else if (act === 'help') this._openHelp();
     else if (act === 'close') this._closeModal();
     else if (act === 'next') this._next();
-    else if (act === 'retry') this._open(this.n);
+    else if (act === 'retry') { if (btn.dataset.daily) this._openDaily(this.lang); else this._open(this.n); }
+    else if (act === 'daily') this._openDaily(this.lang);
+    else if (act === 'board') this._openBoard();
     else if (act === 'play') this._play();
     else if (act === 'lang') this._switchLang();
     else if (act === 'menu') this._toSetup();
@@ -1000,6 +1251,7 @@ class WordWeaver {
         <p>${t('how_extra')}</p>
         <p>${t('how_square')}</p>
         <p>${t('how_free')}</p>
+        <p>${t('how_daily')}</p>
       </div>`);
   }
 
@@ -1044,6 +1296,7 @@ class WordWeaver {
         get state() { return ui.st; },
         submit: (word) => ui._resolve(word),
         hint: () => ui._hint(),
+        get daily() { return ui.daily; },
       };
     } catch { /* no window */ }
   }

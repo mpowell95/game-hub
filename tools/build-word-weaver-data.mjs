@@ -72,6 +72,14 @@
 // `--fresh` used 2026-11-01 for the remake above (Matt approved; the game is still admin only, and a
 // finished level keeps its stars by number). Never again after release.
 // Also written: tools/word-weaver-ranks-en.txt (the data test's offline copy of the ranks).
+//
+// THE DAILY PUZZLES (2026-11-02, Matt: "Do 1" = a daily puzzle): `--daily` writes word-weaver/data/daily.json
+//   { v: 1, epoch: 'YYYY-MM-DD', count, levels: [ ...one level a line ] } instead of the ladder: day d (0 = the
+//   epoch, each phone's own local date, Spelling Bee's rule) plays levels[d]. DAILY_COUNT (730 = two years) puzzles,
+//   one shape (dailyPlan): 6 or 7 letters, 8-11 grid words, the Hard grid list, every grid word within the 20,000
+//   most said, common words first (the same makeLadder). No multiset repeats another daily or ANY ladder level
+//   (the ladder's are passed as `exclude`). APPEND-ONLY like the ladder: a re-run keeps every daily puzzle in the
+//   file and its epoch; data-test.js pins them. The ranks file then covers the ladder and the daily puzzles.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -86,6 +94,7 @@ const CACHE = arg('--cache', path.join(os.tmpdir(), 'word-weaver-cache'));
 const COUNT = Number(arg('--levels', 2000));
 const FRESH = args.includes('--fresh');
 const REPLACE_FROM = Number(arg('--replace-from', 0)) || 0;
+const DAILY = args.includes('--daily');
 const OUT = path.join(ROOT, 'word-weaver/data');
 export const CHUNK = 250;
 export const SEED = 20261028;
@@ -342,7 +351,7 @@ export function layout(base, must, fill, target, maxWords, maxR, maxC, r, nOver 
  *  COMMON (lists 0 when it may never be a grid word). `extra` = every accepted word, sorted (a
  *  level's x = those its wheel makes, minus its grid). `kept` = levels already made (their multisets
  *  are never reused). `A` = the alphabet's { counts, maskOf, fitsIn, sortKey }. */
-export function makeLadder({ count, seed, vocab, extra, kept = [], A, log = () => {} }) {
+export function makeLadder({ count, seed, vocab, extra, kept = [], A, log = () => {}, planOf = plan, exclude = [] }) {
   const { counts, maskOf, fitsIn, sortKey } = A;
   const V = vocab.map((v) => ({ ...v, c: counts(v.w), m: maskOf(v.w) }));
   const EX = extra.map((w) => ({ w, c: counts(w), m: maskOf(w) }));
@@ -379,11 +388,12 @@ export function makeLadder({ count, seed, vocab, extra, kept = [], A, log = () =
   }
   const upper = (a, x) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= x) lo = m + 1; else hi = m; } return lo; };
 
-  const used = new Set(kept.map((lv) => sortKey(lv.l.toLowerCase())));
+  // `exclude` (the daily puzzles, 2026-11-02): multisets another set of levels already uses (the ladder's), never reused.
+  const used = new Set([...kept.map((lv) => sortKey(lv.l.toLowerCase())), ...exclude]);
   const levels = kept.slice(0, count);
   for (let n = levels.length + 1; n <= count; n++) {
     const r = rng(seed + n * 7919);
-    const P = plan(n, r);
+    const P = planOf(n, r);
     const { band } = P;
     let { size, target } = P;
     const bit = band.list, hardish = bit !== 1;
@@ -573,6 +583,13 @@ async function main() {
   }
   console.log(`grid words ${grid.length}, hard ${vocab.filter((v) => v.lists & 2).length}, expert ${vocab.filter((v) => v.lists & 4).length}, extra ${extra.length}, common extras never in a grid ${vocab.filter((v) => !v.lists).length}`);
 
+  if (DAILY) {
+    const ladder = readLadder(OUT);
+    const daily = makeDaily({ out: OUT, seed: SEED, vocab, extra, ladder, A: { counts, maskOf, fitsIn, sortKey }, log: console.log });
+    writeRanks(path.join(ROOT, 'tools/word-weaver-ranks-en.txt'), [...ladder, ...daily], (w) => rank(w.toLowerCase()), 'FrequencyWords en 2018 (en_full.txt line number)');
+    report(daily, (w) => rank(w.toLowerCase()), console.log, [['Daily', 1, daily.length]]);
+    return;
+  }
   // Keep what has shipped (append-only).
   const kept = [];
   if (!FRESH && fs.existsSync(path.join(OUT, 'index.json'))) {
@@ -608,7 +625,7 @@ export function writeRanks(file, levels, rank, source) {
 }
 
 /** The ramp, band by band and across each band's edges (the numbers in the 2026-11-01 review). */
-export function report(levels, rank, log) {
+export function report(levels, rank, log, parts = null) {
   const avg = (xs) => (xs.length ? xs.reduce((p, q) => p + q, 0) / xs.length : 0);
   const med = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor((s.length - 1) / 2)] : 0; };
   const fmt = (k) => (k === Infinity ? 'rare' : String(Math.round(k)));
@@ -619,6 +636,7 @@ export function report(levels, rank, log) {
       + ` (max ${Math.max(...part.map((lv) => lv.x.filter((w) => rank(w) <= COMMON).length))})  grid median rank ${fmt(med(ws.map(rank)))}`
       + `  rarest median ${fmt(med(part.map((lv) => Math.max(...lv.w.map((e) => rank(e[0]))))))}`;
   };
+  if (parts) { for (const [name, a, z] of parts) log(row(name, levels.slice(a - 1, z))); return; }
   for (const [name, a, z] of [['Easy 1-100', 1, 100], ['Easy 101-500', 101, 500], ['Medium 501-750', 501, 750], ['Medium 751-1000', 751, 1000],
     ['Hard 1001-1250', 1001, 1250], ['Hard 1251-1500', 1251, 1500], ['Expert 1501-1750', 1501, 1750], ['Expert 1751-2000', 1751, 2000]]) {
     if (levels.length >= z) log(row(name, levels.slice(a - 1, z)));
@@ -628,6 +646,38 @@ export function report(levels, rank, log) {
     log(row(`${e - 24}-${e}`, levels.slice(e - 25, e)));
     log(row(`${e + 1}-${e + 25}`, levels.slice(e, e + 25)));
   }
+}
+
+// --- the daily puzzles (2026-11-02; see the header) ----------------------------------------------
+export const DAILY_COUNT = 730;
+export const DAILY_EPOCH = '2026-11-02';
+export const DAILY_FILE = 'daily.json';
+/** The daily puzzles' one shape: late Medium / early Hard, never a band of the ladder (word-weaver/js/data-test.js checks it). */
+export const DAILY_BAND = { name: 'daily', from: 1, to: Infinity, list: 2, rare: [20000, 20000], bonusAvg: 3, bonusMax: 5, rarestMedian: 20000, aim: 2 };
+export function dailyPlan(n, r) {
+  const size = r() < 0.5 ? 6 : 7;
+  const target = size === 6 ? 8 + (r() < 0.5 ? 0 : 1) : 9 + Math.floor(r() * 3);
+  return { band: DAILY_BAND, size, target, maxWords: target + 1, rcap: DAILY_BAND.rare[0], dims: [9, 9] };
+}
+/** Every ladder level in a data folder (index.json + levels-<k>.json). */
+export function readLadder(out) {
+  const levels = [];
+  if (!fs.existsSync(path.join(out, 'index.json'))) return levels;
+  const idx = JSON.parse(fs.readFileSync(path.join(out, 'index.json'), 'utf8'));
+  for (let k = 0; k * CHUNK < idx.count; k++) levels.push(...JSON.parse(fs.readFileSync(path.join(out, `levels-${k}.json`), 'utf8')).levels);
+  return levels;
+}
+/** Make (append to) a folder's daily.json: keeps every puzzle already there and its epoch. Returns the puzzles. */
+export function makeDaily({ out, seed, vocab, extra, ladder, A, log = () => {}, count = DAILY_COUNT }) {
+  const file = path.join(out, DAILY_FILE);
+  const old = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  const epoch = old && /^\d{4}-\d{2}-\d{2}$/.test(old.epoch) ? old.epoch : DAILY_EPOCH;
+  const kept = old && Array.isArray(old.levels) ? old.levels : [];
+  const exclude = ladder.map((lv) => A.sortKey(lv.l.toLowerCase()));
+  const levels = makeLadder({ count, seed: seed + 7300001, vocab, extra, kept, A, log, planOf: dailyPlan, exclude });
+  fs.writeFileSync(file, `{"v":1,"epoch":"${epoch}","count":${levels.length},"levels":[\n${levels.map((lv) => JSON.stringify(lv)).join(',\n')}\n]}\n`);
+  log(`daily puzzles ${levels.length} (kept ${kept.length}), epoch ${epoch}`);
+  return levels;
 }
 
 // tools/build-word-weaver-es.mjs imports the ramp and the crossword layout above; main runs only when called.
