@@ -31,6 +31,7 @@
 //   beeOnDaily        a Spelling Bee board row changed: rebuild boards/v1/bee (at most every 2 min)
 //   beeOnUndo         Matt undid a Spelling Bee void on the admin page: rebuild boards/v1/bee
 //   (rebuildBoards)   every board rebuild also runs the integrity checks on every record (2026-10-28)
+//                     and, at most hourly, the online-pairs alerts (2026-11-02, functions/integrity.js)
 //   integrityOnUndo   Matt undid or redid an integrity void on the admin page: rebuild the board
 //   <game>MatchCheck  an online challenge ended (darts, cuppong, battleship, hoops): integrity alerts
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
@@ -47,7 +48,7 @@ import { buildBoardParts, ctNoHintBest, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
-import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote } from './integrity.js';
+import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -291,8 +292,9 @@ export const directoryOnApprove = onValueWritten({ ref: '/adminConfig/v1/online/
 const BOARD_GAP_MS = 2 * 60 * 1000;
 async function rebuildBoards(db) {
   await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
-  const [players, cfg, sums, cth] = await Promise.all([
+  const [players, cfg, sums, cth, pairsAt] = await Promise.all([
     db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(), db.ref('ctHistory').get(),
+    db.ref('boards/v1/meta/pairsAt').get(),
   ]).then((s) => s.map((x) => x.val()));
   // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
   // flagged once and every admin told; a strong one is voided in the package built just below.
@@ -303,6 +305,19 @@ async function rebuildBoards(db) {
       logger.info('integrity flag', { id: f.id, gid: f.gid, rule: f.rule, void: f.flag.void });
       for (const c of codes) await sendTo(db, c, integrityNote('flag', f), `integrity-${f.id}-${f.gid}`, { game: 'admin' });
     }
+  }
+  // ONLINE PAIRS (2026-11-02): at most hourly, from this same players/ read plus the challenge indexes.
+  // Alerts only (each written once, pushed); no score, board or record changes.
+  if (pairsDue(pairsAt)) {
+    await db.ref('boards/v1/meta/pairsAt').set(Date.now());
+    try {
+      const pw = await checkOnlinePairs(db, players || {});
+      const codes = pw.length ? await adminCodes(db) : new Set();
+      for (const a of pw) {
+        logger.info('integrity alert', { node: 'pair', rule: a.rule, code: a.code, v: a.v });
+        for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-pair-${a.code}-${a.rule}`, { game: 'admin' });
+      }
+    } catch (err) { logger.error('online pairs check failed', { err: String(err) }); }
   }
   const parts = buildBoardParts(players || {}, cfg || null, flags, ctNoHintBest(cth || {}));
   const sum = sumOf(JSON.stringify(parts));

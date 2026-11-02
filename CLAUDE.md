@@ -357,6 +357,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
+- **Online pairs (2026-11-02):** `tools/test-online-pairs.mjs [--db <snapshot>]` (the sock-account alerts; `--db` lists every pair and alert).
 - **Word Weaver's daily board (2026-11-02):** `tools/read-ww-daily.mjs` (read only), `tools/test-ww-daily-rules.mjs`.
 - **Leaderboard (i) rules (2026-11-02):** `tools/test-lb-rules.mjs` (every board game has a `js/lb-rules.js` entry, checked against each game's own `statsDiff`).
 - **Back swipe (2026-11-02):** `tools/test-swipe-back.mjs` (every drill-down overlay steps back one screen; dev server on 8185).
@@ -613,6 +614,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   and pushes admins; `integrityOnUndo`; `dartsMatchCheck`/`cupPongMatchCheck`/`battleshipMatchCheck`/`hoopsMatchCheck` (`integrityAlerts`).
   2026-10-28: `playLog` rules branch (every finished game + Contexto's moves, admin-read; `js/play-log.js`).
   2026-11-02: `wwDaily` rules branch (Word Weaver's daily board, own claimed code, a finished row final; `word-weaver/CLAUDE.md`).
+  2026-11-02: online-pairs alerts (no new trigger or node): `rebuildBoards` runs `checkOnlinePairs` at most hourly (`boards/v1/meta/pairsAt`), alerts in `integrityAlerts/pair~<A>~<B>` (`docs/INTEGRITY-CHECKS-SPEC.md`, "Online pairs").
   2026-11-02: `d` (string, <= 400) on `playLog` rows: a result's withMode detail (until the rules deploy, a batch holding one is refused and stays queued, never lost).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:

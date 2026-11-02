@@ -50,7 +50,7 @@ import {
   setIntegrityVoided, resolveReviewed, setReviewed,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
-import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS } from './integrity.js';
+import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -139,6 +139,7 @@ function ensureCss() {
   .adm-t { font-size: 16px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .adm-s { font-size: 13px; line-height: 1.3; color: var(--a-mut); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .adm-s.wrap { white-space: normal; }
+  .adm-r.wrap .adm-t, .adm-r.wrap .adm-s { white-space: normal; }
   .adm-v { flex: none; max-width: 55%; font-size: 16px; color: var(--a-mut); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .adm-v.x { color: var(--a-red); }
   .adm-cv { flex: none; display: flex; color: var(--a-chev); margin-right: -4px; }
@@ -217,6 +218,7 @@ let _tapped = null;         // the element of the last tap, dimmed while its wri
 const _filters = new Map(); // search box selector -> what is typed, kept across repaints
 const _scroll = new Map();  // view key -> scrollTop
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
+let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
 
 const loading = () => _players === null;
 const act = (fn) => { _acts.push(fn); return `data-a="${_acts.length - 1}"`; };
@@ -407,7 +409,11 @@ function nowRows(cfg) {
       icon: whoHTML(''), title: m.a.name || '',
       sub: `${titleOfStats(m.gid)}${m.at ? ` · ${shortDate(m.at)}` : ''}`,
       sub2: hitText({ rule: String(m.rk).split('~')[0], v: m.a.v, lim: m.a.lim }),
-      acts: [btn(tx('adm_keep', 'Keep'), () => setReviewed('ma', m.key, m.rk, true))],
+      acts: [
+        // An online-pairs alert (2026-11-02) opens that pair's page.
+        ...(String(m.key).startsWith('pair~') ? [`<button type="button" class="adm-a" ${act(() => push({ k: 'pair', key: String(m.key).slice(5) }))}>${esc(tx('adm_see', 'See'))}</button>`] : []),
+        btn(tx('adm_keep', 'Keep'), () => setReviewed('ma', m.key, m.rk, true)),
+      ],
     }));
   }
   const newest = [...codes.values()].sort((a, b) => b.at - a.at);
@@ -624,6 +630,8 @@ function renderView(cfg, v) {
     case 'allgames': return allGamesPage(cfg, v.key);
     case 'ann': return annPage(v.id);
     case 'hm': return hmPage(v.id);
+    case 'pairs': return pairsPage();
+    case 'pair': return pairPage(v.key);
     default: return nowTab(cfg);
   }
 }
@@ -971,9 +979,78 @@ function peopleTab() {
   if (loading()) return { title, body: waitBody() };
   const people = codedPeople();
   return { title, body: `<label class="adm-search" data-filter="#adm-people">${I.search}<input type="search" placeholder="${esc(tx('adm_search_people', 'Name or code'))}" aria-label="${esc(tx('adm_search_people', 'Name or code'))}"></label>`
+    + grp([more(tx('adm_online_pairs', 'Online pairs'), () => push({ k: 'pairs' }))])
     + gh(tx('adm_everyone', 'Everyone'), people.length)
     + `<div class="adm-grp" id="adm-people">${people.map((p) => row({ icon: whoHTML(p.emoji), title: (p.name), acts: [`<span class="adm-code">${esc(p.playerId)}</span>`],
       q: `${p.name} ${p.playerId}`, go: () => push({ k: 'person', key: p.key }) })).join('')}</div>` };
+}
+
+// --- Online pairs (2026-11-02, js/integrity.js onlinePairs / pairAlerts) --------------------------------
+// Every pair of player codes who played each other online: record each way, games, last played (Eastern),
+// most lopsided first; a pair with an alert is marked. Read only: the challenge indexes and usernames/ are
+// read on first open (a few KB each); players/ is the page's own read.
+async function readPairSrc() {
+  _pairSrc = 'loading';
+  const nodes = Object.keys(PAIR_NODES);
+  const r = await readNodes([...nodes.map((n) => `${n}/index`), 'usernames']);
+  _pairSrc = { indexes: Object.fromEntries(nodes.map((n) => [n, r[`${n}/index`] || {}])), usernames: r.usernames || {} };
+  render();
+}
+function pairData() {
+  if (!_pairSrc || _pairSrc === 'loading') return null;
+  const codes = pairCodes(_players || {}, _pairSrc.usernames);
+  const pairs = onlinePairs(_players || {}, _pairSrc.indexes, _pairSrc.usernames, codes);
+  const alerts = {};   // pair key -> [{ rule, v, lim }]: the server's stored alerts, plus any the rules raise now
+  for (const [key, byRule] of Object.entries(obj(_integ.alerts))) {
+    if (!String(key).startsWith('pair~')) continue;
+    for (const [rk, a] of Object.entries(obj(byRule))) (alerts[key.slice(5)] || (alerts[key.slice(5)] = [])).push({ rule: rk.split('~')[0], v: obj(a).v, lim: obj(a).lim });
+  }
+  for (const h of pairAlerts(pairs, codes)) {
+    const list = alerts[h.key] || (alerts[h.key] = []);
+    if (!list.some((x) => x.rule === h.rule)) list.push(h);
+  }
+  // Alerts first, then most lopsided: the winning margin as a share of the games, scaled down under 8 games.
+  const tilt = (p) => (p.games ? Math.abs(p.wa - p.wb) / p.games * Math.min(1, p.games / PAIR_LIMITS.LOPSIDED_MIN_WINS) : 0);
+  pairs.sort((x, y) => (+!!alerts[y.key] - +!!alerts[x.key]) || (tilt(y) - tilt(x)) || (y.games - x.games));
+  return { codes, pairs, alerts };
+}
+const easternWhen = (ms) => { try { return new Date(ms).toLocaleString(locale(), { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+const rec3 = (w, l, d) => `${w}-${l}${d ? `-${d}` : ''}`;
+function pairsPage() {
+  const title = tx('adm_online_pairs', 'Online pairs');
+  if (loading()) return { title, body: waitBody() };
+  if (!_pairSrc) { readPairSrc(); return { title, body: waitBody() }; }
+  const d = pairData();
+  if (!d) return { title, body: waitBody() };
+  if (!d.pairs.length) return { title, body: `<p class="adm-empty">${esc(tx('adm_no_pairs', 'No online games yet.'))}</p>` };
+  const nm = (c) => (d.codes[c] || {}).name || tx('anon_player', 'Player');
+  return { title, body: gh(tx('adm_pairs', 'Pairs'), d.pairs.length) + grp(d.pairs.map((p) => {
+    const flagged = !!d.alerts[p.key];
+    return row({
+      title: `${nm(p.a)} · ${nm(p.b)}`,
+      sub: [tx('adm_n_online', '{n} played', { n: p.games }), p.last ? easternWhen(p.last) : ''].filter(Boolean).join(' · '),
+      value: `${flagged ? '⚠ ' : ''}${rec3(p.wa, p.wb, p.d)}`, vcls: flagged ? 'x' : '',
+      go: () => push({ k: 'pair', key: p.key }),
+    });
+  }), true) };
+}
+function pairPage(key) {
+  if (!_pairSrc && !loading()) readPairSrc();
+  const d = pairData();
+  const p = d && d.pairs.find((x) => x.key === key);
+  if (!p) return { title: tx('adm_online_pairs', 'Online pairs'), body: waitBody() };
+  const nm = (c) => (d.codes[c] || {}).name || tx('anon_player', 'Player');
+  const list = d.alerts[key] || [];
+  let body = list.length ? gh(tx('adm_alerts', 'Alerts'), list.length) + grp(list.map((h) => row({ title: hitText(h), cls: 'wrap' })), true) : '';
+  body += gh(`${nm(p.a)} - ${nm(p.b)}`, rec3(p.wa, p.wb, p.d))
+    + grp(Object.entries(p.byGame).sort((x, y) => (y[1].wa + y[1].wb + y[1].d) - (x[1].wa + x[1].wb + x[1].d))
+      .map(([gid, g]) => row({ title: titleOfStats(gid), value: rec3(g.wa, g.wb, g.d) })), !list.length);
+  const facts = [
+    p.last ? row({ title: tx('adm_last_played', 'Last played'), value: easternWhen(p.last) }) : '',
+    p.ra || p.rb ? row({ title: tx('adm_resigned', 'Resigned'), value: `${p.ra}-${p.rb}` }) : '',
+  ].filter(Boolean);
+  if (facts.length) body += grp(facts);
+  return { title: `${nm(p.a)} · ${nm(p.b)}`, body };
 }
 
 function personPage(cfg, key) {

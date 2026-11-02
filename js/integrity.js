@@ -23,6 +23,7 @@ import { WO_TIERS, WO_PENALTY_S, woList } from './arrow-maze-time.js';
 import { scoreAt } from '../darts/js/engine.js';
 import { SHIP_SETS, shipCells } from '../battleship/js/fleet.js';
 import { replayResult, sameResult } from '../hoops4/js/replay.js';
+import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 
 const num = (v) => (Number.isFinite(+v) ? +v : 0);
 const obj = (v) => (v && typeof v === 'object' ? v : {});
@@ -332,6 +333,184 @@ export function contextoWinForRecord(puzzle, rec) {
   return wins[0] || null;
 }
 
+// --- ONLINE PAIRS (2026-11-02; ALERTS only, never a void) --------------------------------------------
+// Matt: "I could see moonis making a second profile ... that only loses to him in multiplayer games."
+// Every pair of PLAYER CODES who played each other online, from what the server and the admin page can
+// read: each challenge game's index (`<node>/index/<CODE>/<id>`: `with`, `result`, `why`, `updated`; a
+// match counted once, by its id) and the live rooms' head-to-head (`players/<id>/stats/h2h/<game>/<their
+// device id>` = {w, l}; each side keeps its own, so the larger of the two counts stands). By CODE on
+// purpose: two codes of one person are two accounts. Hidden test accounts are left out. Judged by
+// functions/integrity.js checkOnlinePairs (at most hourly, inside the board rebuild); each alert is
+// written once to integrityAlerts/pair~<A>~<B>/<rule>~<a|b|x> and pushed to the admins. The admin page's
+// Online pairs list runs the same functions. Nothing here touches a score, a board or a record.
+export const PAIR_LIMITS = {
+  LOPSIDED_MIN_WINS: 8,           // (a) one code beat the same opponent at least this often...
+  LOPSIDED_MAX_SHARE: 0.10,       //     ...the opponent winning at most this share of their games
+  ONE_OPP_MIN_GAMES: 6,           // (b) a code with at least this many online games...
+  ONE_OPP_SHARE: 0.80,            //     ...this share or more against one person, LOSING more than winning
+                                  //     to them (a feeder loses; without it, 4 honest family pairs tripped
+                                  //     it on 2026-11-02's data: a kid who plays only a sister is no sock)
+  LOOKALIKE_MS: 48 * 3600 * 1000, // (c) two look-alike phones first seen this close together
+  RESIGN_MIN: 3,                  // (d) resigned to the same person this many times
+  EVERY_MS: 60 * 60 * 1000,       // the server judges at most this often
+};
+/** Challenge nodes with a per-player index, and the stats id their results belong to. */
+export const PAIR_NODES = {
+  hoops: 'hoops4', skeeChallenges: 'skeeball', cuppong: 'cuppong', darts: 'darts', flicksoccer: 'flicksoccer',
+  eightball: 'eightball', archery: 'archery', chinchon: 'chinchon', escoba: 'escoba', battlearena: 'battlearena',
+  battleship: 'battleship',
+};
+const PAIR_RESULTS = ['won', 'lost', 'draw'];
+const codeOf = (v) => String(v || '').trim().toUpperCase();
+/** The players/ node an h2h opponent device id names (js/mp-records.js recordForDevice, the same pick). */
+function recordForDevice(all, devId, rowName) {
+  const ids = Object.keys(all).filter((id) => id === devId || id.startsWith(devId + '-'));
+  if (!ids.length) return null;
+  const want = String(rowName || '').trim().toLowerCase();
+  const byName = want && ids.find((id) => String(obj(obj(all[id]).profile).name || '').trim().toLowerCase() === want);
+  return byName || (ids.includes(devId) ? devId : ids[0]);
+}
+/** The phone a players/ node lives on: a second code on a shared phone is `<deviceId>-<CODE>`. */
+const phoneOf = (id) => String(id).slice(0, 36);
+
+/** PURE. Each player code: { code, name, emoji, hidden, first, phones: [device ids], devices: [{ device,
+ *  screen, tz }] }. `first` = the earliest of its name claims (usernames/) and first plays (activity). */
+export function pairCodes(players, usernames) {
+  const out = {};
+  for (const [id, rec0] of Object.entries(obj(players))) {
+    const rec = obj(rec0), p = obj(rec.profile), code = codeOf(p.playerId);
+    if (!code) continue;
+    const c = out[code] || (out[code] = { code, name: '', emoji: '', at: -1, hidden: false, first: 0, phones: [], devices: [] });
+    const at = num(rec.updatedAt);
+    if (at >= c.at) { c.at = at; c.name = String(p.name || '').trim(); c.emoji = String(p.emoji || ''); }
+    if (isHiddenDeviceId(id)) c.hidden = true;
+    if (!c.phones.includes(phoneOf(id))) c.phones.push(phoneOf(id));
+    const d = obj(rec.device);
+    if (d.device) {
+      const s = obj(d.screen);
+      c.devices.push({ device: String(d.device), screen: s.w ? `${num(s.w)}x${num(s.h)}@${num(s.dpr)}` : '', tz: String(d.tz || '') });
+    }
+    for (const a of Object.values(obj(rec.activity))) {
+      const f = num(obj(a).first);
+      if (f > 0 && (!c.first || f < c.first)) c.first = f;
+    }
+  }
+  for (const u of Object.values(obj(usernames))) {
+    const c = out[codeOf(obj(u).code)], f = num(obj(u).at);
+    if (c && f > 0 && (!c.first || f < c.first)) c.first = f;
+  }
+  for (const c of Object.values(out)) { if (isHiddenName(c.name)) c.hidden = true; delete c.at; }
+  return out;
+}
+
+/** PURE. Every pair who played each other online: [{ key: 'A~B' (codes sorted), a, b, wa, wb, d, games,
+ *  last (newest challenge row's time; 0 = live rooms only, which keep no time), ra, rb (resignations),
+ *  byGame: { <stats id>: { wa, wb, d } } }]. `indexes` = { <node>: that node's index }. */
+export function onlinePairs(players, indexes, usernames, codes = pairCodes(players, usernames)) {
+  const pairs = new Map();
+  const shown = (c) => !!(c && codes[c] && !codes[c].hidden);
+  const pairOf = (x, y) => {
+    const [a, b] = [x, y].sort();
+    const key = `${a}~${b}`;
+    if (!pairs.has(key)) pairs.set(key, { key, a, b, wa: 0, wb: 0, d: 0, games: 0, last: 0, ra: 0, rb: 0, byGame: {} });
+    return pairs.get(key);
+  };
+  const tally = (p, gid, winner, n = 1) => {
+    const g = p.byGame[gid] || (p.byGame[gid] = { wa: 0, wb: 0, d: 0 });
+    p.games += n;
+    if (winner === p.a) { p.wa += n; g.wa += n; } else if (winner === p.b) { p.wb += n; g.wb += n; } else { p.d += n; g.d += n; }
+  };
+  // 1. challenges: one match, one result, from whichever player's row is read first.
+  const seen = new Set();
+  for (const [node, gid] of Object.entries(PAIR_NODES)) {
+    for (const [me0, rows] of Object.entries(obj(obj(indexes)[node]))) {
+      const me = codeOf(me0);
+      for (const [id, r0] of Object.entries(obj(rows))) {
+        const r = obj(r0), them = codeOf(r.with);
+        if (!r.over || r.ended || !PAIR_RESULTS.includes(r.result) || !them || them === me) continue;
+        if (!shown(me) || !shown(them) || seen.has(`${node}~${id}`)) continue;
+        seen.add(`${node}~${id}`);
+        const p = pairOf(me, them);
+        const winner = r.result === 'won' ? me : r.result === 'lost' ? them : '';
+        tally(p, gid, winner);
+        if (r.why === 'resign' && winner) { if (winner === p.a) p.rb++; else p.ra++; }
+        p.last = Math.max(p.last, num(r.updated));
+      }
+    }
+  }
+  // 2. live rooms: each side's own h2h, summed over its devices; the larger count of each result stands.
+  const h2h = {};   // `${me}|${them}|${gid}` -> { w, l }
+  const all = obj(players);
+  for (const [id, rec0] of Object.entries(all)) {
+    const rec = obj(rec0), me = codeOf(obj(rec.profile).playerId);
+    if (!shown(me) || isHiddenDeviceId(id)) continue;
+    for (const [gid, per] of Object.entries(obj(obj(rec.stats).h2h))) {
+      for (const [dev, row0] of Object.entries(obj(per))) {
+        const row = obj(row0), oid = recordForDevice(all, dev, row.name);
+        const them = oid ? codeOf(obj(obj(all[oid]).profile).playerId) : '';
+        if (!shown(them) || them === me) continue;
+        const k = `${me}|${them}|${gid}`, h = h2h[k] || (h2h[k] = { w: 0, l: 0 });
+        h.w += Math.max(0, Math.floor(num(row.w))); h.l += Math.max(0, Math.floor(num(row.l)));
+      }
+    }
+  }
+  const done = new Set();
+  for (const k of Object.keys(h2h)) {
+    const [me, them, gid] = k.split('|');
+    const [a, b] = [me, them].sort();
+    if (done.has(`${a}|${b}|${gid}`)) continue;
+    done.add(`${a}|${b}|${gid}`);
+    const ab = h2h[`${a}|${b}|${gid}`] || { w: 0, l: 0 }, ba = h2h[`${b}|${a}|${gid}`] || { w: 0, l: 0 };
+    const wa = Math.max(ab.w, ba.l), wb = Math.max(ab.l, ba.w);
+    if (!wa && !wb) continue;
+    const p = pairOf(a, b);
+    if (wa) tally(p, gid, a, wa);
+    if (wb) tally(p, gid, b, wb);
+  }
+  return [...pairs.values()];
+}
+
+/** PURE. The alerts: [{ key, rule, side: 'a'|'b'|'x', v, lim }]. `pairs` from onlinePairs, `codes` from
+ *  pairCodes. (a) lopsided, (b) one opponent, (c) one phone or look-alike phones, (d) resignations. */
+export function pairAlerts(pairs, codes, L = PAIR_LIMITS) {
+  const out = [];
+  const nm = (c) => (obj(obj(codes)[c]).name || 'Player');
+  const pct = (x) => Math.round(100 * x);
+  const total = {};
+  for (const p of pairs) { total[p.a] = (total[p.a] || 0) + p.games; total[p.b] = (total[p.b] || 0) + p.games; }
+  for (const p of pairs) {
+    for (const [side, me, them, w, l, resigned] of [['a', p.a, p.b, p.wa, p.wb, p.ra], ['b', p.b, p.a, p.wb, p.wa, p.rb]]) {
+      if (w >= L.LOPSIDED_MIN_WINS && l <= L.LOPSIDED_MAX_SHARE * p.games) {
+        out.push({ key: p.key, rule: 'pair-lopsided', side, v: `${w}-${l} vs ${nm(them)}`, lim: `${pct(L.LOPSIDED_MAX_SHARE)}%` });
+      }
+      const mine = total[me] || 0;
+      if (mine >= L.ONE_OPP_MIN_GAMES && p.games >= L.ONE_OPP_SHARE * mine && l > w) {
+        out.push({ key: p.key, rule: 'pair-one-opponent', side, v: `${p.games} of ${mine} vs ${nm(them)}`, lim: `${pct(L.ONE_OPP_SHARE)}%` });
+      }
+      if (resigned >= L.RESIGN_MIN) out.push({ key: p.key, rule: 'pair-resigns', side, v: `${resigned} vs ${nm(them)}`, lim: L.RESIGN_MIN });
+    }
+    const A = obj(obj(codes)[p.a]), B = obj(obj(codes)[p.b]);
+    if ((A.phones || []).some((x) => (B.phones || []).includes(x))) {
+      out.push({ key: p.key, rule: 'pair-same-phone', side: 'x', v: `${nm(p.a)} / ${nm(p.b)}`, lim: '' });
+    } else if (A.first && B.first && Math.abs(A.first - B.first) <= L.LOOKALIKE_MS) {
+      // Alike = the same model and system, and the same screen and time zone wherever both phones report one
+      // (at least one of the two on both: "iPhone · iOS 18.7" alone is half the family).
+      const same = (x, y) => x.device === y.device && (!x.screen || !y.screen || x.screen === y.screen)
+        && (!x.tz || !y.tz || x.tz === y.tz) && ((x.screen && y.screen) || (x.tz && y.tz));
+      const alike = (A.devices || []).find((x) => (B.devices || []).some((y) => same(x, y)));
+      if (alike) out.push({ key: p.key, rule: 'pair-look-alike', side: 'x', v: `${nm(p.a)} / ${nm(p.b)}, ${alike.device}`, lim: '48 h' });
+    }
+  }
+  return out;
+}
+Object.assign(MATCH_RULE_TEXT, {
+  'pair-lopsided': 'beat the same person in nearly every online game',
+  'pair-one-opponent': 'almost every online game against one person',
+  'pair-same-phone': 'two accounts on one phone played each other online',
+  'pair-look-alike': 'two look-alike phones, new within 48 h, played each other online',
+  'pair-resigns': 'resigned to the same person again and again',
+});
+
 export const RULE_BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
 
 /** Every rule one game's record breaks: [{ rule, void, v, lim, at? }]. */
@@ -409,8 +588,8 @@ export const GAME_NAMES = {
   chinchon: 'Chinchón', escoba: 'Escoba', mancala: 'Mancala', filler: 'Filler', uno: 'Uno', murdoku: 'Murdoku',
   flicksoccer: 'Flick Soccer', eightball: 'Pool', archery: 'Archery', business: 'Monopoly Deal', parchis: 'Parchís',
   spellingbee: 'Spelling Bee', gridlock: 'Gridlock', wordweaver: 'Word Weaver', baseball: 'Baseball',
-  battlearena: 'Battle Arena', cupbaseball: 'Cup Baseball',
+  battlearena: 'Battle Arena', cupbaseball: 'Cup Baseball', pair: 'Online play',
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
+export default { PAIR_LIMITS, PAIR_NODES, pairCodes, onlinePairs, pairAlerts, RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };

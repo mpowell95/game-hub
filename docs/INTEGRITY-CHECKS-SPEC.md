@@ -700,3 +700,59 @@ computer's opening) now counts; an old Uno hand comes back instead of vanishing.
   G6 covered Mancala only.
 - Escoba's G2 records the loss when the live match starts; the setup screen does not warn first.
 - Parchís is still a BUILT file: the G3 change (`doRoll` sets `cfg.hm`) must be ported to `../Parchís/src/`.
+
+## Online pairs (2026-11-02, Matt: "we need to put a safeguard in place now that we're counting multiplayer games")
+
+Matt: *"I could see moonis making a second profile ... that only loses to him in multiplayer games. ... we need a
+way to track that kind of stuff."* Already in place: online play needs Matt's approval per code (`js/online-gate.js`;
+Admin > Now lists new accounts). Built: **ALERTS only** (each pushed to the admins once and listed on Admin > Now);
+nothing changes a score, a board or a stored record.
+
+**Rules** (`js/integrity.js`, `PAIR_LIMITS` is the one constants block; `pairCodes`, `onlinePairs`, `pairAlerts`,
+pure, shared with the server):
+
+| Rule | Fires when | On |
+|---|---|---|
+| `pair-lopsided` | one code beat the same opponent 8+ times and the opponent won 10% or less of their games | the winner |
+| `pair-one-opponent` | a code with 6+ online games played 80%+ of them against one person AND lost more than it won to them | the feeder |
+| `pair-same-phone` | two codes on ONE phone (`players/<deviceId>` and `<deviceId>-<CODE>`) played each other | the pair |
+| `pair-look-alike` | two codes first seen within 48 h, on phones with the same model and system and the same screen and time zone wherever both report one (one of the two on both), played each other | the pair |
+| `pair-resigns` | a code resigned to the same opponent 3+ times | the resigner |
+
+`pair-one-opponent`'s "lost more than it won" is added to the brief's thresholds: without it, 4 honest family pairs
+tripped it on 2026-11-02's data (King of Games 101 of 105 games vs MattyIce, which he leads 63-37; Unai 16 of 17 vs
+Lili, 8-8; Natalia 8 of 8 vs Anita Bonita, 5-3; Anita Bonita's second code 6 of 7 vs Lili, 3-3). A feeder loses.
+
+**Sources** (whatever the server can read; pairs are by PLAYER CODE, so two codes of one person are two accounts;
+hidden test accounts are left out):
+- Challenges: every challenge node's index (`hoops`, `skeeChallenges`, `cuppong`, `darts`, `flicksoccer`, `eightball`,
+  `archery`, `chinchon`, `escoba`, `battlearena`, `battleship`): finished rows with a stored `result`, one match counted
+  once (both players keep a row), `why: 'resign'`, `updated` = last played. Called-off, expired and unfinished rows,
+  and rows with no stored result, count for nothing (derived 7-day timeouts are not stored, so not counted).
+- Live rooms: `players/<id>/stats/h2h/<game>/<their device id>` = `{w, l}`, summed per code; each side keeps its own,
+  so the larger of the two counts of each result stands. Live rooms keep no time, so a live-only pair has no "last
+  played". Air Hockey, Hold'em and Yahtzee write no h2h (not seen).
+- First seen: the earliest of a code's name claims (`usernames/<name>.at`) and first plays (`players/<id>/activity`).
+- Device: `players/<id>/device` (`device`, `screen`) plus, from 2026-11-02, `tz` (the phone's time zone,
+  `js/stats-net.js`). Until phones sync once on the new build, most records have no screen and no zone, so
+  `pair-look-alike` can rarely fire.
+
+**Runs** inside the server's board rebuild (`functions/index.js rebuildBoards`, which already reads `players/`), at
+most once an hour (`boards/v1/meta/pairsAt`); extra reads: the 11 indexes (about 85 KB today) and `usernames/`.
+Alerts: `integrityAlerts/pair~<A>~<B>/<rule>~<a|b|x>` (existing node, admin-read, server-written), written once by
+transaction, pushed as "<name>, Online play: alert. <rule> (<numbers>)". No new node, rule, trigger or backup branch.
+
+**Admin**: People > **Online pairs**: every pair, record each way, games, last played (Eastern), alerts first then
+the most lopsided (margin as a share of games, scaled down under 8 games); a pair with an alert is marked ⚠ (shape
+and colour). A pair's page: its alerts, each game's record, last played, resignations. A pair alert on Now has See.
+
+**Replay over the 2026-11-02 snapshot** (`node tools/test-online-pairs.mjs --db <snapshot>`): 15 pairs, **0 alerts**.
+Most played: King of Games 63-37-1 MattyIce (101), Anita Bonita 24-23-1 MattyIce (48), Unai 8-8 Lili (16).
+The most lopsided: King of Games 4-0 Anita Bonita (Cup Pong, 4 games: under the 8 wins).
+
+**What cannot be detected**: a feeder who wins sometimes (above 10%) or plays a few other people; two accounts on two
+different phones (a second phone, a family member's); collusion between two real approved players; live-room
+games with no h2h (Air Hockey, Hold'em, Yahtzee) and the online games played before each game wrote h2h; how long a
+match took (honest Hoops games between two people at one table end in 49 s, so time alone separates nothing);
+device fields are self-reported and look-alike phones are common in one family (most are "iPhone · iOS 18.7").
+Online play still needs Matt's yes per code: the gate is the real safeguard; these alerts tell him what to look at.

@@ -93,7 +93,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `match-chat.js` | chat at `<node>/chat/<matchId>`, BESIDE the match, never in it; verified; nothing deleted; `gamehub.matchChatSeen.v1`; sides `a`/`b`, and `c` for a third player (Pool's Cutthroat, 2026-10-22; `match-chat-ui.js` `add({who})` names the sender) |
 | `push.js` | `pushSubs/<CODE>/<sha256(endpoint)>`; permission asked inside the tap; `gamehub.push.v1` = write only on change |
 | `admin-config.js`, `stats-corrections.js`, `admin-ui.js` | see "The admin config", "Score corrections" |
-| `integrity.js` | PURE and SHARED with `functions/integrity.js` (and `boards.js`): a STRONG rule must be proven from the game's code AND replayed over a whole snapshot with 0 hits (`tools/test-integrity.mjs --db`); anything weaker is an alert. Voids apply only in the server-built board (`correctStats` `integrity`), never on the player's own phone |
+| `integrity.js` | PURE and SHARED with `functions/integrity.js` (and `boards.js`): a STRONG rule must be proven from the game's code AND replayed over a whole snapshot with 0 hits (`tools/test-integrity.mjs --db`); anything weaker is an alert. Voids apply only in the server-built board (`correctStats` `integrity`), never on the player's own phone. **Online pairs (2026-11-02)**: `PAIR_LIMITS` + `pairCodes`/`onlinePairs`/`pairAlerts` (challenge indexes + live h2h, by code), ALERTS only, run hourly in the board rebuild and by Admin > People > Online pairs (`tools/test-online-pairs.mjs`; spec "Online pairs") |
 | `contexto-history.js` | sends changed save puzzles only (seen-list `gamehub.contexto.histSent.v1`), verified by re-read; never touches the save; rules allow no delete (2026-10-30) |
 | `play-log-queue.js`, `play-log.js` | the queue is PURE (no network: `game-stats.js`, also copied to the server, imports it); **every `export function record*` calls `notePlay`** (`tools/test-integrity.mjs` checks); a new recorder must too |
 | `bee-fairplay.js` | PURE and SHARED with `functions/bee.js` (copied by `tools/sync-functions-shared.mjs`): change it and both the phone and the server change; `tools/test-bee-server.mjs` + `tools/test-bee-fairplay.mjs` |
@@ -354,7 +354,7 @@ Not proof against someone with a (public) code and devtools — never oversell. 
 
 ## Who is on the installed app, and who is in a browser tab (2026-08-11)
 
-`syncMyStats()` mirrors `installState()` + `build` to `players/<id>/device` (additive, never read by
+`syncMyStats()` mirrors `installState()` + `build` + `tz` (time zone, 2026-11-02, an online-pairs sign) to `players/<id>/device` (additive, never read by
 gameplay). `tools/read-install-state.mjs`. **"Not seen yet" is missing data, never "browser tab".**
 `a2hsDismissed` separates "asked and declined" from "never asked".
 

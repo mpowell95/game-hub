@@ -71,6 +71,7 @@ jobs:
           node tools/test-push.mjs
           node tools/test-bee-server.mjs
           node tools/test-integrity.mjs
+          node tools/test-online-pairs.mjs
 
       - name: Install function dependencies
         run: npm install --prefix functions

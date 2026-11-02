@@ -7,11 +7,15 @@
 //      Matt's undo at adminConfig/v1/integrity/undo/<statsId>/<gameId>).
 //   2. MATCHES: when an online challenge ends (darts, cuppong, battleship, hoops), its log is checked;
 //      an alert is written ONCE to integrityAlerts/<node>~<matchId>/<ruleId>~<side> and pushed. Never a void.
+//   3. ONLINE PAIRS (2026-11-02): at most hourly, inside the board rebuild (which already holds players/),
+//      every pair of codes who played each other online (challenge indexes + live-room h2h) is judged by
+//      js/integrity.js pairAlerts; each alert is written ONCE to integrityAlerts/pair~<A>~<B>/<rule>~<a|b|x>
+//      and pushed. Never a void.
 //
 // THE LAW: nothing here changes players/, a match, or a stats store. Flags and alerts are new nodes,
 // never removed by this code.
 import './shared-env.js';
-import { checkStats, checkMatch, checkContextoWin, contextoWinForRecord, hitText, gameName } from './shared/js/integrity.js';
+import { checkStats, checkMatch, checkContextoWin, contextoWinForRecord, hitText, gameName, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './shared/js/integrity.js';
 import { isHiddenDeviceId, isHiddenName } from './shared/js/hidden-players.js';
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
@@ -108,3 +112,30 @@ export async function checkContextoLogWin(db, code, id, entry, now = Date.now())
   }
   return written;
 }
+
+/** ONLINE PAIRS (2026-11-02, js/integrity.js pairAlerts). `players` = the board rebuild's own read; this
+ *  reads only the challenge indexes and usernames/ (a few KB each). Each alert written once, by
+ *  transaction. Returns the alerts written, each with { node: 'pair', name, code } for the push. */
+export async function checkOnlinePairs(db, players, now = Date.now()) {
+  const nodes = Object.keys(PAIR_NODES);
+  const [usernames, ...idx] = await Promise.all([valOf(db, 'usernames'), ...nodes.map((n) => valOf(db, `${n}/index`))]);
+  const indexes = Object.fromEntries(nodes.map((n, i) => [n, idx[i] || {}]));
+  const codes = pairCodes(players || {}, usernames || {});
+  const pairs = onlinePairs(players || {}, indexes, usernames || {}, codes);
+  const nm = (c) => String(((codes[c] || {}).name) || '').slice(0, 40);
+  const written = [];
+  for (const h of pairAlerts(pairs, codes)) {
+    const p = pairs.find((x) => x.key === h.key);
+    const who = h.side === 'a' ? p.a : h.side === 'b' ? p.b : '';
+    const other = h.side === 'a' ? p.b : h.side === 'b' ? p.a : '';
+    const alert = {
+      v: h.v, lim: h.lim, side: h.side === 'x' ? '' : h.side,
+      name: who ? nm(who) : `${nm(p.a)} / ${nm(p.b)}`, code: who || h.key, with: other, games: p.games, when: now,
+    };
+    const res = await db.ref(`integrityAlerts/pair~${h.key}/${h.rule}~${h.side}`).transaction((cur) => (cur ? undefined : alert));
+    if (res && res.committed) written.push({ ...alert, rule: h.rule, node: 'pair' });
+  }
+  return written;
+}
+/** Is the hourly pair check due? `pairsAt` = boards/v1/meta/pairsAt (the last run). */
+export const pairsDue = (pairsAt, now = Date.now()) => !(+pairsAt > 0 && now - +pairsAt < PAIR_LIMITS.EVERY_MS);
