@@ -279,6 +279,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `layout.js` | launcher Comfortable/Compact (`gamehub.layout.v1`), `.gh-compact` on `<html>`; see "The compact layout" |
 | `emoji.js` / `emoji-data.js` | `isEmoji()` gate at the moment of choosing only (never in `glyph()`); GENERATED emoji set (`tools/build-emoji-data.mjs`); search keywords `emoji-search-{en,es}.js` kept out of SHELL |
 | `viewport.js` | `onViewportResize(cb)`: the ONE way to re-fit on resize |
+| `back-stack.js` | the phone's back swipe = one screen back: `backStack(onBack)` → `sync(level)`/`back()`/`close()`, one history entry per level, in every drill-down overlay (2026-11-02) |
 | `no-zoom.js` | classic script on every page: no double-tap/pinch zoom, no text selection (inputs excepted) |
 | `game-stats.js` | unified per-player stats; one recorder per game; failed writes queued (`gamehub.pendingResults.v1`); rate gate; play activity (`gamehub.activity.v1`, mirrored to `players/<id>/activity`) |
 | `game-stats-global.js` | non-ESM recorder for Monopoly Deal/Parchís (`window.__ghStats`) |
@@ -346,6 +347,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
 - **Word Weaver's daily board (2026-11-02):** `tools/read-ww-daily.mjs` (read only), `tools/test-ww-daily-rules.mjs`.
+- **Back swipe (2026-11-02):** `tools/test-swipe-back.mjs` (every drill-down overlay steps back one screen; dev server on 8185).
 - **Leaderboard v2 dev tools (2026-11-01):** `tools/read-lb-snapshot.mjs` (read-only board copy) and `tools/lb2-shots.cjs` (real-data screenshots, network blocked); `tools/lb2-review-shots.cjs` (the outside-review set, 2026-11-02).
 - **Days and weeks are each player's LOCAL midnight (2026-11-02)**: `tools/test-rush-weeks.mjs`, run with `TZ=America/New_York` and `TZ=Europe/Madrid`.
 - **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env

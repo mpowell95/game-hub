@@ -16,6 +16,7 @@ import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { corrections } from './admin-config.js';
 import { watchPlayers, watchBoard, readPlayersForMe } from './stats-net.js';
 import { watchBeeBoard } from './bee-board.js';
+import { backStack } from './back-stack.js';
 import { loadProfile } from './profile-store.js';
 import { statsId, activityReport } from './game-stats.js';
 import { GAME_ART } from './game-art.js';
@@ -123,7 +124,7 @@ let _onPlay = null;
 let _canPlay = () => false;
 let _unsub = null;
 let _beeOff = null;
-let _histArmed = false;
+let _bs = null;             // the phone's back gesture: one history entry per level (js/back-stack.js)
 let _boardMemo = new Map();
 let _pidx = [];           // row index -> person key (never in the DOM)
 let _offVp = null;
@@ -710,7 +711,7 @@ function render({ keepScroll = false } = {}) {
   const old = page.querySelector('[data-role="scroll"]');
   const top = keepScroll && old ? old.scrollTop : 0;
   const html = screenHTML();
-  if (html === _lastHTML) return;
+  if (html === _lastHTML) { if (_bs) _bs.sync(levelNow()); return; }
   const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.role === 'q';
   page.innerHTML = html;
   _lastHTML = html;
@@ -718,6 +719,12 @@ function render({ keepScroll = false } = {}) {
   if (sc) sc.scrollTop = top;
   watchPin(page, sc);
   if (focused) { const q = page.querySelector('[data-role="q"]'); if (q) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch { /* type=search */ } } }
+  if (_bs) _bs.sync(levelNow());
+}
+/** Screens deep (1 = the first screen): the game it was opened on is level 1, the help sheet one more. */
+function levelNow() {
+  const entry = _entryGame && _stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame ? 1 : 0;
+  return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0);
 }
 /** The pinned own row: hidden while the viewer's row on the board is fully on screen. */
 function watchPin(page, sc) {
@@ -768,7 +775,7 @@ function onClick(e) {
   switch (act) {
     case 'close': closeLeaderboard2(); return;
     case 'help': _help = true; render({ keepScroll: true }); return;
-    case 'helpclose': _help = false; render({ keepScroll: true }); return;
+    case 'helpclose': if (_bs) _bs.back(); else { _help = false; render({ keepScroll: true }); } return;
     case 'tab': _stack = []; _tab = v; render(); return;
     case 'chip': _chip = v; _q = ''; _srch = false; render(); return;
     case 'search': {
@@ -787,7 +794,7 @@ function onClick(e) {
       if (below && below.kind === 'player' && below.key === top.key) { stepBack(); return; }
       _stack.push({ kind: 'player', key: top.key, all: false }); render(); return;
     }
-    case 'back': if (!stepBack()) closeLeaderboard2(); return;
+    case 'back': if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); return;
     case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
     case 'hofview': _hofView = v === 'wins' ? 'wins' : 'medals'; render(); return;
     case 'fold': {
@@ -838,12 +845,13 @@ function onInput(e) {
   const box = _host && _host.querySelector('[data-role="glist"]');
   if (box) { _pidx = []; box.innerHTML = boardsListHTML(); }
 }
-function onKey(e) { if (e.key === 'Escape' && _host) { if (_help) { _help = false; render({ keepScroll: true }); return; } if (!stepBack()) closeLeaderboard2(); } }
-function armHistory() { try { history.pushState({ gamehubOverlay: 'leaderboard2' }, ''); _histArmed = true; } catch { _histArmed = false; } }
-function onPop() {
-  if (!_host) return;
-  _histArmed = false;
-  if (stepBack()) armHistory(); else closeLeaderboard2();
+function onKey(e) { if (e.key === 'Escape' && _host && _bs) _bs.back(); }
+/** The phone's back gesture (and the back button, Esc): n screens back; past the first, close. */
+function onBackSteps(n) {
+  for (let i = 0; i < n && _host; i++) {
+    if (_help && !_stack.length) { _help = false; render({ keepScroll: true }); continue; }
+    if (!stepBack()) { closeLeaderboard2(); return; }
+  }
 }
 // The compact layout's own tab bar stays usable (the Multiplayer screen's way): another tab puts this away.
 function onTabTap(e) {
@@ -867,8 +875,10 @@ export function closeLeaderboard2({ keepHistory = false } = {}) {
   if (_offVp) { try { _offVp(); } catch { /* gone */ } _offVp = null; }
   document.removeEventListener('keydown', onKey);
   document.removeEventListener('click', onTabTap, true);
-  window.removeEventListener('popstate', onPop);
-  if (_histArmed) { _histArmed = false; if (!keepHistory) { try { history.back(); } catch { /* ignore */ } } }
+  // `keepHistory` (the Old / Rush links) no longer matters: this unwinds its own entries and the
+  // board opened next pushes its own once that has landed (js/back-stack.js).
+  void keepHistory;
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
   _connected = false; _model = null; _lastHTML = '';
 }
 
@@ -904,8 +914,7 @@ export async function openLeaderboard2(opts = {}) {
   lightTab(true);
   document.addEventListener('keydown', onKey);
   document.addEventListener('click', onTabTap, true);
-  window.addEventListener('popstate', onPop);
-  armHistory();
+  _bs = backStack(onBackSteps);
   render();
   try {
     _beeOff = watchBeeBoard(() => { if (_host && _connected) onData(); });

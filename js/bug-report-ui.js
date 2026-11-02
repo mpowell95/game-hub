@@ -26,6 +26,7 @@ import {
 import { makeT, getLang } from './i18n.js';
 import { GAME_ART } from './game-art.js';
 import STRINGS from './strings.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 
@@ -137,8 +138,25 @@ function ensureCss() {
 
 let _host = null;
 let _onKey = null;
+// The phone's back gesture (js/back-stack.js): one history entry per level (the overlay 1, a report
+// opened from the inbox 2). A step back taps the screen's own back, so both run the same code; at
+// the top it closes, except a form with something typed in (the same guard as Escape).
+let _bs = null;
+let _stepping = false;
+let _mayClose = () => true;
+function stepBack(n) {
+  for (let i = 0; i < n && _host; i++) {
+    const btn = _host.querySelector('[data-role="bug-back"]');
+    if (btn) { _stepping = true; try { btn.click(); } finally { _stepping = false; } continue; }
+    if (_mayClose()) closeOverlay();
+    else if (_bs) _bs.sync(1);   // kept open: its entry comes back
+    return;
+  }
+}
+function syncLevel() { if (_bs && _host) _bs.sync(_host.querySelector('[data-role="bug-back"]') ? 2 : 1); }
 
 function closeOverlay() {
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
   if (_host) { _host.remove(); _host = null; }
 }
@@ -157,6 +175,14 @@ function mountOverlay({ wide, ariaLabel, guardClose }) {
   _host = host;
   const card = host.querySelector('.gh-modal');
   const mayClose = () => !guardClose || guardClose();
+  _mayClose = mayClose;
+  _bs = backStack(stepBack);
+  _bs.sync(1);
+  host.addEventListener('click', (e) => {
+    if (_stepping || !_bs || !e.target.closest('[data-role="bug-back"]')) return;
+    e.stopPropagation();
+    _bs.back();
+  }, true);
   host.addEventListener('click', (e) => { if (e.target === host && mayClose()) closeOverlay(); });
   _onKey = (e) => { if (e.key === 'Escape' && mayClose()) closeOverlay(); };
   document.addEventListener('keydown', _onKey);
@@ -388,6 +414,7 @@ export async function openBugInbox() {
       <h2 class="gh-modal__title">🐞 ${esc(t('bug_inbox_title'))}</h2>
       ${inner}`;
     card.querySelector('[data-role="close"]').addEventListener('click', closeOverlay);
+    syncLevel();
   };
   shell(`<p class="bug-lead">${esc(t('bug_inbox_loading'))}</p>`);
 

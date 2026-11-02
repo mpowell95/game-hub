@@ -3875,3 +3875,28 @@ decision (that worry was space fights in immersive games; the per-game opt-in pl
 answer). Play screens checked at 402x874: Gridlock clear; Tower's best pill and Word Weaver's top row
 (level number) sat under it and are moved by `html.gh-gamebug` rules in `css/hub.css`, kept out of the
 games' own files because other sessions were editing both games that day.
+
+## The back swipe steps back one screen (2026-11-02)
+
+Matt, on his iPhone (Home Screen app, compact layout): *"I want to be able to swipe left to right and move back 1
+screen. Not leave the whole leaderboard. Everywhere should work like that."* Both leaderboards held ONE history
+entry and re-pushed it inside `popstate` after each step (`armHistory`/`onPop`). Chromium honours that; on Matt's
+iPhone the next swipe left the whole leaderboard (a push made during iOS's back-swipe animation does not hold).
+My Stats, the Multiplayer screen, Messages, Admin and the bug inbox had no history at all, so on the profile page a
+swipe inside My Stats went straight back to the hub.
+
+`js/back-stack.js` replaces the pattern: each overlay owns `backStack(onBack)` and calls `sync(level)` after every
+render; it pushes one entry per level (state `ghb: {<owner id>: level}`, the state below spread in so the profile
+page's `pfView` rides along) and never pushes from a popstate. A popstate reads each owner's depth from the landed
+entry, so `history.go(-2)` is two steps and a nested overlay (Messages over a leaderboard, My Stats over the profile
+page) only moves its own levels. The back buttons and Esc call `back()` = `history.back()`, the same path as the
+swipe. Closing any other way (X, tab bar, Play, the Old/Rush links) unwinds the remaining entries with ONE
+`history.go(-n)`, and a push that follows waits for that traversal to land. `closeLeaderboard2({keepHistory})` now
+ignores `keepHistory`. Levels: lb2 = 1 + its stack (a game opened from its own Leaderboard button is level 1) + the
+"?" sheet; old leaderboard = board, person (a name tapped on a board is ONE level; `stepBack` clears both), person's
+game off By Player, a select panel; My Stats list 1 / game 2; Multiplayer screen 1, Records 2, person 3, a picker,
+confirm or the pick-a-person sheet one more (the ⋯ menu is not a level); Messages list 1, conversation or New 2,
+Everyone 3 (a step back taps the screen's own back button); Admin 1 + pushed views + sheet; bug overlays 1, a
+report 2 (a typed bug form keeps its guard: the swipe is refused like Esc). The profile page's tab bar counts the
+open overlays' entries (`backDepth()`). Games are untouched: the hub has no popstate handling while a game is
+mounted. Proven in Chromium by `tools/test-swipe-back.mjs`; not yet on an iPhone.

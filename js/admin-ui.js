@@ -51,6 +51,7 @@ import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS } from './integrit
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 /** t() with an English fallback: js/strings.js is cache-first, so a new key can be missing for one visit. */
@@ -454,10 +455,16 @@ const TABS = [
 ];
 const viewKey = (v) => JSON.stringify(v || { tab: _tab });
 function push(v) { _scroll.set(viewKey(top()), scrollTop()); _stack.push(v); _edit = false; render({ fresh: true }); }
-function back() {
-  if (_sheet) { _sheet = null; render(); return; }
-  if (_stack.length) { _stack.pop(); _edit = false; render(); return; }
-  closeAdmin();
+// The phone's back gesture (js/back-stack.js): one history entry per level (the tab 1, each pushed
+// view one more, a sheet one more). The back button and Esc go through history: `back()`.
+let _bs = null;
+function back() { if (_bs) _bs.back(); else stepBack(1); }
+function stepBack(n) {
+  for (let i = 0; i < n && _host; i++) {
+    if (_sheet) { _sheet = null; render(); continue; }
+    if (_stack.length) { _stack.pop(); _edit = false; render(); continue; }
+    closeAdmin();
+  }
 }
 const top = () => (_stack.length ? _stack[_stack.length - 1] : null);
 const scrollTop = () => { const m = _host && _host.querySelector('.adm-main'); return m ? m.scrollTop : 0; };
@@ -470,6 +477,7 @@ function setTab(id) {
 }
 
 function closeAdmin() {
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
   if (_host) { _host.remove(); _host = null; }
   document.documentElement.classList.remove('adm-open');
@@ -494,6 +502,7 @@ export async function openAdmin(opts = {}) {
   host.addEventListener('input', onInput);
   _onKey = (e) => { if (e.key === 'Escape' && !_busy) back(); };
   document.addEventListener('keydown', _onKey);
+  _bs = backStack(stepBack);
   // Paint at once from the cached config; the people-shaped parts fill in when the reads land.
   _players = null; _offline = false;
   render();
@@ -591,6 +600,7 @@ function render({ fresh = false } = {}) {
   if (toastState) { const el = _host.querySelector('.adm-toast'); el.textContent = toastState.text; el.className = toastState.cls; }
   const main = _host.querySelector('.adm-main');
   main.scrollTop = keep != null ? keep : (fresh ? 0 : (_scroll.get(viewKey(v)) || 0));
+  if (_bs) _bs.sync(1 + _stack.length + (_sheet ? 1 : 0));
 }
 
 function renderView(cfg, v) {
