@@ -480,7 +480,9 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
   = best COUNTED run of each week (Math.max only). A run is not a level: `total` / `byDiff` / points
   untouched. Three-edit rule done (recorder, My Stats `wayoutScreen`, `js/players-agg.js`: a week's best
   = best on any of the person's phones).
-- **Weeks** (`woWeekKey`): the Monday's date in **UTC**, stamped on each run when it ends.
+- **Weeks** (`woWeekKey`): the Monday's date on the **player's own local calendar** (since 2026-11-02; UTC before,
+  which ended the week Sunday 7 PM in New York), stamped on each run when it ends. Old runs keep their UTC key
+  (never re-keyed); "This week" is the viewer's local week. `tools/test-rush-weeks.mjs` (run with TZ=America/New_York and TZ=Europe/Madrid).
 - **Results live on the hub leaderboard since 2026-10-16** (the in-game Results screens were removed):
   Arrow Maze's board has **Levels | Rush**; Rush has Easy | Hard and **This week** (best run this week),
   **Weeks won** (finished weeks only; ties all win; "of N" = finished weeks they played) and **Past

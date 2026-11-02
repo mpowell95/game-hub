@@ -11,10 +11,10 @@
 // (test-new-badge.mjs) and THE LAW has no surface here at all: nothing is written, nothing is
 // read back, and a badge that never renders costs a player nothing.
 //
-// Dates are parsed as UTC midnight and compared against the device's real clock, so the window's
-// edge can land up to a day early or late relative to a player's local midnight. At a
-// week-long scale that is noise, and the alternative (a local-midnight parse) would just move the
-// same fuzziness onto players in other timezones.
+// The window counts CALENDAR days on the player's own phone (2026-11-02, Matt's "option B": every
+// player-facing day turns over at each player's local midnight). `released` is a calendar date; the
+// clock is turned into this phone's local date before the two are compared. parseReleaseDate still
+// returns the date's UTC-midnight number (the Newest sort uses it; any fixed instant per date works).
 
 /** How many days a game wears the New pill after its release date. */
 export const NEW_DAYS = 7;
@@ -43,7 +43,14 @@ export function parseReleaseDate(released) {
 export function daysSinceRelease(released, now = Date.now()) {
   const ms = parseReleaseDate(released);
   if (ms === null) return null;
-  return Math.floor((now - ms) / DAY_MS);
+  return Math.round((localDayMs(now) - ms) / DAY_MS);
+}
+
+/** The LOCAL calendar date of an instant, as that date's UTC-midnight number (comparable with
+ *  parseReleaseDate's numbers; whole days apart, so no DST hour can creep in). */
+export function localDayMs(ms) {
+  const d = new Date(+ms);
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 /** WHEN this game was released, in epoch ms, or null when nothing says.
@@ -80,9 +87,11 @@ export function sortMsOf(game, liveAtMs = 0) {
  *  launcher at all once the game is registered, and a device whose clock runs slow shouldn't be
  *  the one player who misses the announcement. */
 export function isNewGame(game, now = Date.now(), liveAtMs = 0) {
-  const ms = releaseMsOf(game, liveAtMs);
-  if (ms === null) return false;
-  return Math.floor((now - ms) / DAY_MS) < NEW_DAYS;
+  const coded = parseReleaseDate(typeof game === 'string' ? game : (game && game.released));
+  // An app-switch release (no `released` date) starts on the local date it went live.
+  const day = coded !== null ? coded : Number.isFinite(liveAtMs) && liveAtMs > 0 ? localDayMs(liveAtMs) : null;
+  if (day === null) return false;
+  return Math.round((localDayMs(now) - day) / DAY_MS) < NEW_DAYS;
 }
 
 export default { NEW_DAYS, parseReleaseDate, daysSinceRelease, releaseMsOf, sortMsOf, isNewGame };

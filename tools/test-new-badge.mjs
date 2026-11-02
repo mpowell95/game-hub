@@ -26,7 +26,11 @@ const eq = (label, got, want) => {
   } else console.log(`ok   ${label}`);
 };
 
-const day = (s) => Date.UTC(...s.split('-').map(Number).map((n, i) => (i === 1 ? n - 1 : n)));
+// LOCAL midnight of a date (2026-11-02: the window counts the phone's own calendar days). Run under
+// TZ=America/New_York and TZ=Europe/Madrid as well as UTC.
+const day = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+eq('the last minute of day 6 is still new (local midnight, not UTC)', isNewGame('2026-08-01', day('2026-08-08') - 60e3), true);
+eq('local midnight starting day 7 ends it', isNewGame('2026-08-01', day('2026-08-08')), false);
 
 // ---- parseReleaseDate ----
 eq('parses a valid date to UTC midnight', parseReleaseDate('2026-08-01'), Date.UTC(2026, 7, 1));

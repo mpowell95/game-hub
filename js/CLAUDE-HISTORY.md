@@ -3847,3 +3847,19 @@ Gap lines are read at the RECORD holder's difficulty, because difficulty outrank
 when your best is on an easier difficulty the line says "Beat 10 on Hard to take the record" instead of a
 meaningless difference. Contexto gets no gap line (its packed medal score has no honest difference).
 `gamehub.lb.view.v1` gained a `seg` field (additive; an old record without it opens By Game).
+
+## Days and weeks on each player's own calendar (2026-11-02)
+
+Matt's "option B": every player-facing day/week cutoff is the PLAYER'S local midnight. Audit: Spelling
+Bee (`dayKey`/`dayNumber`), Contexto (`puzzleNumber`, Daily via `doneLive` read on the local date),
+Skeeball's daily bests (`arcade-scores.js dayKey`) and the activity log's week were already local. Changed:
+Arrow Maze Rush weeks (`woWeekKey`, was UTC; story in `way-out/CLAUDE-HISTORY.md`), the New pill
+(`new-badge.js` `isNewGame`/`daysSinceRelease`: calendar days on the phone, `localDayMs`; it was UTC
+midnight, so the pill appeared/disappeared around 7-8 PM in New York), announcements' `from`/`until`
+(`announce.js isLive`, same), and `leaderboard2-boards.js nyDay` (New York for everyone) -> `localDay`,
+`nyDay` kept as an alias (dormant while v2's rank arrows are off). `parseReleaseDate` still returns the
+UTC-midnight number (the Newest sort uses it). Unchanged on purpose: fixed rule-start instants
+(`COUNT_FLOOR`, `FORFEIT_FROM`, `WO_SLIP_SINCE`, hand voids' `from`), durations (3-day expiry, 7-day
+forfeit, 24 h reminders, rate gate), and the server's Spelling Bee judging (`functions/bee.js`: UTC
+date windows only pick which puzzles to scan, wide enough for every zone; a word's day is judged by the
+phone's own zone `z` via `bee-fairplay.js dayWindow`, already local).

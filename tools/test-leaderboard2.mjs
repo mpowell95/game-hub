@@ -37,7 +37,9 @@ ok('next day: arrow = yesterday\'s rank - today\'s (3 -> 1 = up 2)', B.moveOf(s1
 const s2 = B.rollRanks(s1, '2026-10-31', { x: { [B.keyHash('a')]: 4 } });
 ok('same day: prev kept, so 3 -> 4 = down 1', B.moveOf(s2, 'x', 'a', 4) === -1);
 ok('keyHash never carries the key itself', !B.keyHash('code:QQQQQ').includes('QQQQQ'));
-ok('nyDay is a YYYY-MM-DD in New York (00:30 UTC Oct 31 = Oct 30 there)', B.nyDay(Date.UTC(2026, 9, 31, 0, 30)) === '2026-10-30');
+// 2026-11-02: the viewer's OWN day (it was New York's for everyone); nyDay is kept as its alias.
+ok('localDay is the phone\'s local YYYY-MM-DD (23:30 local Oct 30 = Oct 30, whatever TZ)', B.localDay(new Date(2026, 9, 30, 23, 30).getTime()) === '2026-10-30');
+ok('nyDay is the same function (old name kept)', B.nyDay === B.localDay);
 
 console.log(`\nleaderboard2 tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

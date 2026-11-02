@@ -96,10 +96,13 @@ ok('the recorder stores the ladder level, generator and date', g.wo.log.medium[0
 ok('and counts it in its band', g.byDiff.medium.won === 1 && T.woPoints(g) === 2);
 
 // --- Rush (2026-10-14) ---
-ok('week key: the Monday, in UTC', T.woWeekKey(Date.UTC(2026, 9, 14, 3)) === '2026-10-12' && T.woWeekKey(Date.UTC(2026, 9, 12, 0)) === '2026-10-12'
-  && T.woWeekKey(Date.UTC(2026, 9, 11, 23, 59)) === '2026-10-05' && T.woWeekKey(Date.UTC(2026, 9, 18, 23)) === '2026-10-12');
-ok('week end: the next Monday 00:00 UTC', T.woWeekEnd(Date.UTC(2026, 9, 14, 3)) === Date.UTC(2026, 9, 19) && T.woWeekEnd(Date.UTC(2026, 9, 18, 23, 59)) === Date.UTC(2026, 9, 19)
-  && T.woWeekEnd(Date.UTC(2026, 9, 19)) === Date.UTC(2026, 9, 26));
+// 2026-11-02: the phone's LOCAL Monday (it was UTC's). Local-time fixtures, so this holds in any TZ;
+// tools/test-rush-weeks.mjs pins New York and Madrid explicitly.
+const L = (...a) => new Date(...a).getTime();
+ok('week key: the local Monday', T.woWeekKey(L(2026, 9, 14, 3)) === '2026-10-12' && T.woWeekKey(L(2026, 9, 12, 0)) === '2026-10-12'
+  && T.woWeekKey(L(2026, 9, 11, 23, 59)) === '2026-10-05' && T.woWeekKey(L(2026, 9, 18, 23)) === '2026-10-12');
+ok('week end: the next local Monday 00:00', T.woWeekEnd(L(2026, 9, 14, 3)) === L(2026, 9, 19) && T.woWeekEnd(L(2026, 9, 18, 23, 59)) === L(2026, 9, 19)
+  && T.woWeekEnd(L(2026, 9, 19)) === L(2026, 9, 26));
 store.clear();
 G.recordWayOut('easy', { timeMs: 20000, penaltyMs: 0, arrows: 12, rounds: 4, timed: true, level: 2, gen: 6 });
 const mon = Date.UTC(2026, 9, 13, 12);
