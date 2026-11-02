@@ -221,7 +221,7 @@ console.log('\n-- THE LAW rule 1: nobody visible before the change is invisible 
     d1: rec({ name: 'Ana', playerId: 'AAA11' }, { chinchon: { total: { played: 22, won: 14, lost: 6 }, byDiff: { normal: { played: 22, won: 14, lost: 6 } } } }, 5000),
     d2: rec({ name: 'Ana', playerId: 'AAA11' }, { escoba: { total: { played: 8, won: 5, lost: 3 }, byDiff: { normal: { played: 8, won: 5, lost: 3 } }, es: { escobas: 9 } } }, 6000),
     d3: rec({ name: 'Matt' }, { ballrun: { total: { played: 40, won: 40, lost: 0 }, byDiff: {}, br: { runs: 40, bestObstacles: 31, bestObstaclesByDiff: {} } } }, 7000),
-    d4: rec({ name: 'Bego' }, { nutsbolts: { total: { played: 12, won: 12, lost: 0 }, byDiff: { medium: { played: 12, won: 12, lost: 0 } }, nb: { solved: 12, moves: 300, bestLevel: 7 } } }, 4000),
+    d4: rec({ name: 'Nutsy' }, { nutsbolts: { total: { played: 12, won: 12, lost: 0 }, byDiff: { medium: { played: 12, won: 12, lost: 0 } }, nb: { solved: 12, moves: 300, bestLevel: 7 } } }, 4000),
     d5: rec({ name: 'Vieja' }, { filler: { total: { played: 30, won: 11, lost: 19 }, byDiff: { legacy: { played: 30, won: 11, lost: 19 } } } }, 3000),
     d6: rec({ name: 'Draws' }, { tictactoe: { total: { played: 14, won: 2, lost: 2 }, byDiff: { pro: { played: 14, won: 2, lost: 2 } }, tt: { classic: { played: 14, won: 2, lost: 2, tied: 10 }, ultimate: { played: 0, won: 0, lost: 0, tied: 0 } } } }, 2000),
   };
@@ -245,7 +245,7 @@ console.log('\n-- THE LAW rule 1: nobody visible before the change is invisible 
   // Solo-only players were on NO main board before; they are ranked now.
   ok('Matt (Ball Run only) was absent from the old main board', !oldOverall.has('Matt'));
   ok('Matt is ranked on the new one', nowVisible.has('Matt'));
-  ok('Bego (Nuts & Bolts only) is ranked too', nowVisible.has('Bego'));
+  ok('Nutsy (Nuts & Bolts only) is ranked too', nowVisible.has('Nutsy'));
 
   // No play may be lost anywhere in the transform.
   for (const r of ranked) {
