@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1386;
-const CACHE = 'game-hub-v1386';
+const CACHE = 'game-hub-v1387';
 
 const ASSETS = [
   './',
@@ -1044,7 +1044,7 @@ const REST_MANIFEST = {
   './battle-arena/js/mp.js': '985763049f',
   './darts/': '9565b5b35f',
   './darts/index.html': '9565b5b35f',
-  './darts/css/darts.css': 'd4360f7631',
+  './darts/css/darts.css': '86b6ca0556',
   './darts/js/ui.js': 'e4e503b2d5',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/render.js': 'd05671e727',
@@ -1112,7 +1112,7 @@ const REST_MANIFEST = {
   './snake/js/strings.js': '7d8a6ccce9',
   './brick-blitz/': '8f1267a3bb',
   './brick-blitz/index.html': '8f1267a3bb',
-  './brick-blitz/css/brick-blitz.css': 'ab92a86eb8',
+  './brick-blitz/css/brick-blitz.css': '73cd48030c',
   './brick-blitz/js/ui.js': '55bc89f395',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': '00a75d8c6d',
@@ -1233,7 +1233,7 @@ const REST_MANIFEST = {
   './golf/courses/tutorial.js': '5f72833828',
   './dominoes/': '042b51de46',
   './dominoes/index.html': '042b51de46',
-  './dominoes/css/dominoes.css': 'b7b65f248d',
+  './dominoes/css/dominoes.css': '275e4f26ce',
   './dominoes/js/ui.js': '34394efe60',
   './dominoes/js/game.js': '99e5127583',
   './dominoes/js/board.js': 'bd0c13936b',
