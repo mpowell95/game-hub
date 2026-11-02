@@ -15,6 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { recordTower, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import { onThemeChange } from '../../js/theme.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.tower.v1';
@@ -41,9 +42,18 @@ function bestFor(diff) {
 // --- Looks: sky, skyline, block colours --------------------------------------------------------
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
 const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
-function skyOf(look, level) {
+/** Dark theme (js/theme.js puts .gh-dark on <html>): City and Ice play at NIGHT (Matt, 2026-11-02: "quality
+ *  dark mode"); Space is already dark. Read at draw time, so a theme switch shows on the next frame. */
+const isDark = () => { try { return document.documentElement.classList.contains('gh-dark'); } catch { return false; } };
+function skyOf(look, level, dark = isDark()) {
   const k = Math.min(1, level / 60);
   const two = (a, b, c, kk) => (kk < 0.5 ? mix(a, b, kk * 2) : mix(b, c, (kk - 0.5) * 2));
+  if (dark && look === 'city') {
+    return { top: two([18, 26, 62], [12, 16, 46], [4, 6, 22], k), bot: two([58, 62, 118], [38, 40, 92], [16, 18, 48], k), stars: 0.45 + k * 0.55, k, night: true };
+  }
+  if (dark && look === 'ice') {
+    return { top: two([10, 34, 58], [8, 26, 48], [2, 10, 24], k), bot: two([34, 96, 104], [22, 70, 88], [10, 34, 46], k), stars: 0.5 + k * 0.5, k, night: true };
+  }
   if (look === 'ice') {
     return { top: two([150, 205, 235], [60, 120, 170], [8, 30, 60], k), bot: two([235, 248, 255], [170, 220, 235], [30, 90, 110], k), stars: Math.max(0, k - 0.5) * 2, k };
   }
@@ -62,7 +72,8 @@ function slabOf(look, i) {
 
 /** The setup screen's picture: a short tower in the chosen look (SVG, no canvas). */
 function heroSVG(look) {
-  const sky = skyOf(look, 30);
+  const dark = isDark();
+  const sky = skyOf(look, dark ? 10 : 30);
   let blocks = '';
   let x = 50, w = 150;
   const offs = [0, 6, -4, 0, 8, 0, -5, 3, 0];
@@ -74,18 +85,22 @@ function heroSVG(look) {
   const c9 = slabOf(look, 9);
   blocks += `<rect x="${x + 34}" y="${218 - 10 * 20}" width="${w}" height="20" fill="${c9.face}"/>`;
   let scenery = '';
-  if (look === 'city') scenery = '<g fill="rgba(20,30,60,.25)"><rect x="0" y="150" width="28" height="70"/><rect x="34" y="170" width="24" height="50"/><rect x="190" y="140" width="26" height="80"/><rect x="222" y="165" width="30" height="55"/></g>';
+  if (look === 'city') scenery = `<g fill="${dark ? '#0b1230' : 'rgba(20,30,60,.25)'}"><rect x="0" y="150" width="28" height="70"/><rect x="34" y="170" width="24" height="50"/><rect x="190" y="140" width="26" height="80"/><rect x="222" y="165" width="30" height="55"/></g>`
+    + (dark ? '<g fill="#F2B705" opacity=".85"><rect x="6" y="160" width="4" height="4"/><rect x="16" y="176" width="4" height="4"/><rect x="40" y="182" width="4" height="4"/><rect x="196" y="152" width="4" height="4"/><rect x="206" y="170" width="4" height="4"/><rect x="230" y="176" width="4" height="4"/><rect x="240" y="192" width="4" height="4"/></g><g fill="#fff"><rect x="40" y="30" width="2" height="2"/><rect x="120" y="18" width="2" height="2"/><rect x="210" y="44" width="2" height="2"/><rect x="70" y="90" width="2" height="2"/></g>' : '');
+  else if (dark && look === 'ice') scenery = '<path d="M0 218 L40 160 L80 218Z M170 218 L215 150 L250 200 L250 218Z" fill="#244a5c"/><path d="M0 60 Q60 30 125 70 T250 50" stroke="#3fd6a8" stroke-width="10" fill="none" opacity=".35"/><g fill="#fff"><rect x="30" y="20" width="2" height="2"/><rect x="200" y="30" width="2" height="2"/><rect x="150" y="100" width="2" height="2"/></g>';
   else if (look === 'ice') scenery = '<path d="M0 218 L40 160 L80 218Z M170 218 L215 150 L250 200 L250 218Z" fill="rgba(255,255,255,.55)"/>';
   else scenery = '<g fill="#fff"><rect x="20" y="30" width="2" height="2"/><rect x="60" y="80" width="2" height="2"/><rect x="200" y="40" width="2" height="2"/><rect x="230" y="110" width="2" height="2"/><rect x="30" y="140" width="2" height="2"/><rect x="120" y="20" width="2" height="2"/></g><circle cx="205" cy="70" r="16" fill="#F2B705"/>';
   return `<svg viewBox="0 0 250 250" aria-hidden="true"><defs><linearGradient id="twsky-${look}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${rgb(sky.top)}"/><stop offset="1" stop-color="${rgb(sky.bot)}"/></linearGradient></defs>
     <rect width="250" height="250" fill="url(#twsky-${look})"/>${scenery}
-    <rect x="0" y="218" width="250" height="32" fill="#2b3a55"/><rect x="0" y="218" width="250" height="4" fill="#3d5070"/>${blocks}</svg>`;
+    <rect x="0" y="218" width="250" height="32" fill="${dark && look === 'ice' ? '#5d7f90' : '#2b3a55'}"/><rect x="0" y="218" width="250" height="4" fill="#3d5070"/>${blocks}</svg>`;
 }
 function lookThumb(look) {
+  const dark = isDark();
   const sky = skyOf(look, look === 'space' ? 30 : 0);
   const b = [0, 1, 2].map((i) => slabOf(look, i).face);
   let extra = '';
-  if (look === 'city') extra = '<g fill="rgba(20,30,60,.25)"><rect x="4" y="20" width="12" height="24"/><rect x="80" y="16" width="14" height="28"/></g>';
+  if (look === 'city') extra = `<g fill="${dark ? '#0b1230' : 'rgba(20,30,60,.25)'}"><rect x="4" y="20" width="12" height="24"/><rect x="80" y="16" width="14" height="28"/></g>` + (dark ? '<g fill="#F2B705"><rect x="7" y="25" width="2" height="2"/><rect x="11" y="32" width="2" height="2"/><rect x="84" y="22" width="2" height="2"/><rect x="88" y="30" width="2" height="2"/></g>' : '');
+  else if (dark && look === 'ice') extra = '<path d="M0 44 L18 22 L34 44 Z M66 44 L84 18 L100 40 L100 44Z" fill="#244a5c"/><path d="M0 12 Q30 2 60 14 T100 8" stroke="#3fd6a8" stroke-width="4" fill="none" opacity=".5"/>';
   else if (look === 'ice') extra = '<path d="M0 44 L18 22 L34 44 Z M66 44 L84 18 L100 40 L100 44Z" fill="rgba(255,255,255,.7)"/>';
   else extra = '<g fill="#fff"><rect x="10" y="8" width="2" height="2"/><rect x="30" y="16" width="2" height="2"/><rect x="72" y="6" width="2" height="2"/><rect x="18" y="30" width="2" height="2"/></g><circle cx="84" cy="12" r="6" fill="#F2B705"/>';
   return `<svg viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="44" fill="${rgb(sky.top)}"/><rect y="22" width="100" height="22" fill="${rgb(sky.bot)}" opacity=".6"/>${extra}
@@ -115,6 +130,7 @@ class Tower {
     this._ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this._layout()) : null;
     if (this._ro) this._ro.observe(this.root);
     this._offLang = onLangChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderHelp(); });
+    this._offTheme = onThemeChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderTowers(); this._draw(); });
     this._layout();
     this._showSetup();
     this._start();
@@ -480,11 +496,38 @@ class Tower {
     // Scenery behind the tower, scrolling slower than it.
     const par = camPx * 0.35;
     if (look === 'city') {
-      ctx.fillStyle = `rgba(20,30,60,${0.18 + sky.k * 0.3})`;
+      ctx.fillStyle = sky.night ? '#0b1230' : `rgba(20,30,60,${0.18 + sky.k * 0.3})`;
       for (let b = 0; b < 12; b++) {
         const bw = W / 10, bh = 60 + ((b * 37) % 90);
         ctx.fillRect(b * bw * 0.95 - 10, gy - bh + par, bw * 0.8, bh + 400);
       }
+      if (sky.night) {
+        // Lit windows: a fixed pattern per building (no flicker), warm yellow.
+        ctx.fillStyle = 'rgba(242,183,5,.8)';
+        for (let b = 0; b < 12; b++) {
+          const bw = W / 10, bh = 60 + ((b * 37) % 90), x0 = b * bw * 0.95 - 10;
+          for (let r = 0; r * 14 + 10 < bh; r++) for (let c = 0; c < 3; c++) {
+            if (((b * 7 + r * 3 + c * 5) % 4) !== 0) continue;
+            ctx.fillRect(x0 + 5 + c * (bw * 0.8 - 10) / 3, gy - bh + par + 8 + r * 14, 4, 5);
+          }
+        }
+      }
+    } else if (look === 'ice' && sky.night) {
+      // Aurora ribbons + dark peaks.
+      for (let a = 0; a < 2; a++) {
+        ctx.strokeStyle = a ? 'rgba(120,120,255,.18)' : 'rgba(63,214,168,.28)';
+        ctx.lineWidth = 26 - a * 8;
+        ctx.beginPath();
+        const y0 = H * (0.18 + a * 0.08) + par * 0.2;
+        ctx.moveTo(-20, y0);
+        ctx.bezierCurveTo(W * 0.3, y0 - 50, W * 0.6, y0 + 60, W + 20, y0 - 10);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#244a5c';
+      ctx.beginPath();
+      ctx.moveTo(0, gy + par); ctx.lineTo(W * 0.18, gy - 110 + par); ctx.lineTo(W * 0.36, gy + par);
+      ctx.moveTo(W * 0.55, gy + par); ctx.lineTo(W * 0.8, gy - 140 + par); ctx.lineTo(W, gy - 40 + par); ctx.lineTo(W, gy + par);
+      ctx.fill();
     } else if (look === 'ice') {
       ctx.fillStyle = `rgba(255,255,255,${0.55 - sky.k * 0.35})`;
       ctx.beginPath();
@@ -496,7 +539,7 @@ class Tower {
       ctx.beginPath(); ctx.arc(W * 0.8, H * 0.22 + par * 0.3, 26, 0, Math.PI * 2); ctx.fill();
     }
     // Ground, full width at any zoom.
-    ctx.fillStyle = look === 'ice' ? '#d8ecf5' : '#2b3a55';
+    ctx.fillStyle = look === 'ice' ? (sky.night ? '#5d7f90' : '#d8ecf5') : (sky.night ? '#1a2440' : '#2b3a55');
     ctx.fillRect(0, gy + camPx * this.zoom, W, H);
 
     // The world: x in units across WORLD_W centred on the screen, y up from the ground.
@@ -505,7 +548,7 @@ class Tower {
     ctx.scale(this.zoom, this.zoom);
     ctx.translate(-W / 2, 0);
     const ox = (W - E.WORLD_W * k) / 2;
-    ctx.fillStyle = look === 'ice' ? '#bcdcea' : '#3d5070';
+    ctx.fillStyle = look === 'ice' ? (sky.night ? '#7fa3b4' : '#bcdcea') : '#3d5070';
     ctx.fillRect(-W, 0, W * 3, 6);
     const slab = (x, y, w, i, a) => {
       const c = slabOf(look, i), px = ox + x * k, pw = w * k, ph = E.BLOCK_H * k, py = y * k;
@@ -572,6 +615,7 @@ class Tower {
     document.removeEventListener('visibilitychange', this._onVis);
     if (this._offResize) this._offResize();
     if (this._offLang) this._offLang();
+    if (this._offTheme) this._offTheme();
     if (this._ro) this._ro.disconnect();
     this.host.innerHTML = '';
   }
