@@ -64,6 +64,9 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list), the STAR SQUARES collected "n/of"
   (a white tile with a gold star; Matt, 2026-11-02) and Next.
+- **Dark mode (Matt, 2026-11-02: "It's not very dark themed while on dark")**: under `.gh-dark` night versions of each
+  sky, dark tiles, wheel and buttons with light letters (`--ww-on` = text on the game's surfaces; `--ww-ink` stays for text
+  on gold). Before this the sky look was the same in light and dark on purpose.
 - **A sky per difficulty (Matt, 2026-11-02)**: `data-sky` on the root = the band: dawn (Easy), sunset (Medium, the
   mockup's), dusk (Hard), night with a few CSS stars (Expert); the setup screen shows the picked one.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter

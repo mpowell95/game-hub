@@ -9,6 +9,7 @@
   --ww-sky3: #f3c58f;
   --ww-tile: #ffffff;
   --ww-ink: #1d2230;
+  --ww-on: #1d2230;        /* text on the game's own surfaces (tiles, wheel, buttons); light in dark mode */
   --ww-slot: rgba(255, 255, 255, .28);
   --ww-slot-line: rgba(255, 255, 255, .55);
   --ww-wheel-bg: rgba(255, 255, 255, .88);
@@ -54,6 +55,20 @@
     radial-gradient(1px 1px at 38% 40%, rgba(255,255,255,.7) 99%, transparent), radial-gradient(1px 1px at 88% 46%, rgba(255,255,255,.7) 99%, transparent),
     linear-gradient(180deg, var(--ww-sky1) 0%, var(--ww-sky2) 62%, var(--ww-sky3) 100%);
 }
+/* DARK MODE (Matt, 2026-11-02: "It's not very dark themed while on dark"): night versions of each difficulty's sky,
+   dark tiles, wheel and buttons with light letters. Gold (picked letters, the path, the bonus pill) keeps ink text. */
+:root.gh-dark .ww-root {
+  --ww-sky1: #0d1630; --ww-sky2: #33243a; --ww-sky3: #4a3128;
+  --ww-tile: #2b3446;
+  --ww-on: #eef2f8;
+  --ww-slot: rgba(255, 255, 255, .08);
+  --ww-slot-line: rgba(255, 255, 255, .22);
+  --ww-wheel-bg: rgba(24, 30, 46, .92);
+  --ww-chip: rgba(255, 255, 255, .12);
+}
+:root.gh-dark .ww-root[data-sky="easy"] { --ww-sky1: #101d38; --ww-sky2: #33283f; --ww-sky3: #45323a; }
+:root.gh-dark .ww-root[data-sky="hard"] { --ww-sky1: #090c22; --ww-sky2: #251a3f; --ww-sky3: #3f2340; }
+:root.gh-dark .ww-root[data-sky="expert"] { --ww-sky1: #020309; --ww-sky2: #080d28; --ww-sky3: #111a3c; }
 :root.gh-dark .ww-root {
   --gh-bg: var(--hub-bg, #0e1420);
   --gh-surface: var(--hub-surface, #1b2333);
@@ -185,16 +200,16 @@
   justify-content: center;
   gap: 8px;
   background: var(--ww-wheel-bg);
-  color: var(--ww-ink);
+  color: var(--ww-on);
   font-size: 17px;
   font-weight: 800;
   box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
 }
 .ww-root .ww-seg svg { width: 18px; height: 18px; flex: none; }
 .ww-root .ww-seg svg.lb-dshape-x2 { width: 30px; }
-/* The buttons stay light in dark mode, so Hard/Expert diamonds stay dark (hub.css lightens them for dark backgrounds). */
-:root.gh-dark .ww-root .ww-seg svg.lb-dshape-t3, :root.gh-dark .ww-root .ww-seg svg.lb-dshape-t4,
-:root.gh-dark .ww-root .ww-shapechip svg.lb-dshape-t3, :root.gh-dark .ww-root .ww-shapechip svg.lb-dshape-t4 { fill: var(--ww-ink); }
+/* Hard/Expert diamonds take the surface's text colour (ink on the light buttons, light on the dark ones, 2026-11-02). */
+.ww-root .ww-seg svg.lb-dshape-t3, .ww-root .ww-seg svg.lb-dshape-t4,
+.ww-root .ww-shapechip svg.lb-dshape-t3, .ww-root .ww-shapechip svg.lb-dshape-t4 { fill: var(--ww-on); }
 .ww-root .ww-seg.is-selected { outline: 3px solid #ffce3a; outline-offset: 2px; }
 .ww-root .ww-check {
   position: absolute;
@@ -255,8 +270,8 @@
   line-height: 1;
 }
 .ww-root .ww-c.is-e { background: var(--ww-slot); border: 1.5px solid var(--ww-slot-line); }
-.ww-root .ww-c.is-f { background: var(--ww-tile); color: var(--ww-ink); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
-.ww-root .ww-c.is-h { background: var(--ww-tile); color: var(--ww-ink); opacity: .55; }
+.ww-root .ww-c.is-f { background: var(--ww-tile); color: var(--ww-on); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
+.ww-root .ww-c.is-h { background: var(--ww-tile); color: var(--ww-on); opacity: .55; }
 .ww-root .ww-c.is-flash { animation: ww-pop .55s ease-out; }
 @keyframes ww-pop {
   0%, 100% { transform: scale(1); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
@@ -285,7 +300,7 @@
   padding: 4px 16px;
   border-radius: 10px;
   background: var(--ww-tile);
-  color: var(--ww-ink);
+  color: var(--ww-on);
   font-size: 24px;
   font-weight: 800;
   letter-spacing: .08em;
@@ -310,7 +325,7 @@
   70% { box-shadow: 0 0 0 14px rgba(242, 183, 5, 0); }
 }
 /* A bonus word (Matt, 2026-10-30: "make it more obvious"): the pill turns gold with a star, pops, and a star flies to the chip. */
-.ww-root .ww-pill.is-bonus { background: var(--ww-path); display: inline-flex; align-items: center; gap: 8px; }
+.ww-root .ww-pill.is-bonus { background: var(--ww-path); color: var(--ww-ink); display: inline-flex; align-items: center; gap: 8px; }
 .ww-root .ww-pill.is-bonus svg { width: 22px; height: 22px; flex: none; }
 .ww-root .ww-pill.is-bonus { position: relative; }
 /* "Bonus word!" over the gold pill (Matt, 2026-10-30: "say bonus word tho"); above it, so the pill row keeps its height. */
@@ -363,14 +378,15 @@
 /* The tap-to-select check, in the wheel's middle, shown while letters are picked (2026-10-29). */
 .ww-root .ww-go { opacity: 0; pointer-events: none; transition: opacity .15s; }
 .ww-root .ww-go.is-on { opacity: 1; }
-.ww-root .ww-go circle { fill: var(--ww-ink); opacity: .82; }
-.ww-root .ww-go path { fill: none; stroke: #fff; stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
+.ww-root .ww-go circle { fill: var(--ww-on); opacity: .82; }
+.ww-root .ww-go path { fill: none; stroke: var(--ww-tile); stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
 .ww-root .ww-ltr { pointer-events: none; transition: transform .34s cubic-bezier(.3, .7, .3, 1); }
 .ww-root .ww-wheel.is-still .ww-ltr { transition: none; }
 .ww-root .ww-lc { fill: transparent; }
 .ww-root .ww-ltr.is-on .ww-lc { fill: var(--ww-path); }
+.ww-root .ww-ltr.is-on .ww-lt { fill: var(--ww-ink); }
 .ww-root .ww-lt {
-  fill: var(--ww-ink);
+  fill: var(--ww-on);
   font-size: 56px;   /* 2026-10-30: ~45px capitals at a 290px wheel, Wordscapes' size */
   font-weight: 800;
   text-anchor: middle;
@@ -456,7 +472,7 @@
   justify-content: center;
   gap: 10px;
   background: var(--ww-wheel-bg);
-  color: var(--ww-ink);
+  color: var(--ww-on);
   font-size: 19px;
   font-weight: 900;
   box-shadow: 0 2px 0 rgba(0, 0, 0, .2);
@@ -469,8 +485,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--ww-ink);
-  color: #fff;
+  background: var(--ww-on);
+  color: var(--ww-tile);
   font-size: 15px;
   font-weight: 900;
   line-height: 1;
@@ -486,7 +502,7 @@
   padding: 0 10px;
   border-radius: 10px;
   background: var(--ww-wheel-bg);
-  color: var(--ww-ink);
+  color: var(--ww-on);
   font-size: 16px;
   font-weight: 800;
   text-align: left;
