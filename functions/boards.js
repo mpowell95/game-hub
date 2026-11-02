@@ -41,7 +41,24 @@ export function buildBoard(players, adminConfig, integrityFlags) {
 }
 /** `integrityFlags`: the integrityFlags/ node (functions/integrity.js); its strong flags, minus Matt's
  *  undo, void those games on those records (js/stats-corrections.js voidIntegrityGame). */
-export function buildBoardParts(players, adminConfig, integrityFlags) {
+/** Contexto's "Fewest guesses" (no-hint solves only, 2026-11-02) from ctHistory/<CODE>/<deviceId>/<puzzle>
+ *  (every puzzle each phone kept, js/contexto-history.js): { CODE: fewest typed guesses on a won, recorded,
+ *  hint-free puzzle }. Pure. */
+export function ctNoHintBest(ctHistory) {
+  const out = {};
+  for (const [code, devs] of Object.entries(ctHistory || {})) {
+    for (const puzzles of Object.values(devs || {})) {
+      for (const p of Object.values(puzzles || {})) {
+        if (!p || p.d !== 'won' || !p.r || !Array.isArray(p.g) || !p.g.length || p.g.some((x) => x && x.h)) continue;
+        const n = p.g.length;
+        if (!(out[code] > 0) || n < out[code]) out[code] = n;
+      }
+    }
+  }
+  return out;
+}
+
+export function buildBoardParts(players, adminConfig, integrityFlags, ctBest) {
   const visible = {};
   for (const id of Object.keys(players || {})) if (!isHiddenDeviceId(id)) visible[id] = players[id];
   const corrections = resolveCorrections(adminConfig || null);
@@ -53,6 +70,17 @@ export function buildBoardParts(players, adminConfig, integrityFlags) {
     const k = ident.keyFor((visible[id] || {}).profile || {}, id);
     if (!ids.has(k)) ids.set(k, []);
     ids.get(k).push(id);
+  }
+  // Contexto's no-hint fewest from the uploaded puzzles, so it shows before each phone fills its own
+  // (only ever lowers, and only for a person with a no-hint solve on record).
+  if (ctBest) for (const g of groups) {
+    const ct = g.games && g.games.contexto && g.games.contexto.ct;
+    if (!ct || !((ct.noHint | 0) > 0)) continue;
+    for (const id of ids.get(g.key) || []) {
+      const code = String(((visible[id] || {}).profile || {}).playerId || '').trim().toUpperCase();
+      const n = code && ctBest[code];
+      if (n > 0 && !((ct.fewestNH | 0) > 0 && ct.fewestNH <= n)) ct.fewestNH = n;
+    }
   }
   // Each game's most common entry across everyone: the never-played zeros.
   const counts = new Map();

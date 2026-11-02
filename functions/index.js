@@ -43,7 +43,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { buildBoardParts, packBoard, sumOf } from './boards.js';
+import { buildBoardParts, ctNoHintBest, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
@@ -291,8 +291,8 @@ export const directoryOnApprove = onValueWritten({ ref: '/adminConfig/v1/online/
 const BOARD_GAP_MS = 2 * 60 * 1000;
 async function rebuildBoards(db) {
   await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
-  const [players, cfg, sums] = await Promise.all([
-    db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
+  const [players, cfg, sums, cth] = await Promise.all([
+    db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(), db.ref('ctHistory').get(),
   ]).then((s) => s.map((x) => x.val()));
   // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
   // flagged once and every admin told; a strong one is voided in the package built just below.
@@ -304,7 +304,7 @@ async function rebuildBoards(db) {
       for (const c of codes) await sendTo(db, c, integrityNote('flag', f), `integrity-${f.id}-${f.gid}`, { game: 'admin' });
     }
   }
-  const parts = buildBoardParts(players || {}, cfg || null, flags);
+  const parts = buildBoardParts(players || {}, cfg || null, flags, ctNoHintBest(cth || {}));
   const sum = sumOf(JSON.stringify(parts));
   const patch = { 'meta/builtAt': Date.now(), 'meta/people': Object.keys(parts.people).length };
   // The pickers' directory/ from the same read (2026-10-22: its own hourly timer had not fired
