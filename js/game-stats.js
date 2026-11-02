@@ -1264,10 +1264,6 @@ function withTag(tag, record) {
 /** Note the mode (and detail) of the result being counted into `g` under the counted bucket `d`. Every
  *  result recorder calls it once (bumpTotals does; recorders that bump by hand call it themselves). */
 function noteMode(g, won, d) {
-  noteModeOnly(g, won, d);
-  if (won === true) announceWin(g, d);
-}
-function noteModeOnly(g, won, d) {
   if (!_mode) {
     if (!_bare || _bare.noted) return;
     _bare.noted = true;
@@ -1940,21 +1936,6 @@ export function rateDecision(stamps, now) {
   return { blocked: recent.length >= RATE_MAX, recent };
 }
 
-// --- "+X pts" (2026-11-02, Matt: show points being earned on every wins game's result screen) --------
-// The game a recorder is counting right now (set in tooFast's allowed branch, the gate every live recorder
-// passes). After a WIN is counted, the game's record is announced as `gamehub:win` {id, d, mode, g}; the hub's
-// js/points-toast.js works out the points it added (js/lb-points.js) and shows "+X pts". Display only: the
-// event carries a copy, nothing listens for it to write anything.
-let _curGame = '';
-function announceWin(g, d) {
-  try {
-    if (!_curGame || typeof window === 'undefined' || typeof CustomEvent !== 'function') { _curGame = ''; return; }
-    const id = _curGame;
-    _curGame = '';   // one win per recorder call; a later replay (no tooFast) announces nothing
-    const detail = { id, d: String(d == null ? '' : d), mode: _mode ? _mode.key : '', diff: _mode ? _mode.diff : '', g: JSON.parse(JSON.stringify(g)) };
-    setTimeout(() => { try { window.dispatchEvent(new CustomEvent('gamehub:win', { detail })); } catch { /* display only */ } }, 0);
-  } catch { /* display only: never touches the result */ }
-}
 function tooFast(gameId) {
   if (!gameId) return false;
   let rec = null;
@@ -1973,7 +1954,6 @@ function tooFast(gameId) {
     console.warn(`[game-stats] "${gameId}" result REFUSED: ${RATE_MAX}+ results in ${RATE_WINDOW_MS / 1000}s is faster than anyone can play. Nothing was recorded.`);
     return true;
   }
-  _curGame = gameId;
   recent.push(now);
   rec.seen[gameId] = recent;
   try { localStorage.setItem(RATE_KEY, JSON.stringify(rec)); } catch { /* a full disk must not block a real play */ }

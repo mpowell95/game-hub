@@ -579,8 +579,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && !/class="lb-pcard\$\{me\}"[\s\S]{0,400}lb-tt-split/.test(src)
     && !/lb-psubline">\$\{esc\(t\('lb_played_count'[^}]*\}\)\)\}\$\{tierChipHTML/.test(src),
     '"22 played  MEDIUM" reads as "22 games played on Medium"');
-  ok('compareBoardRow: points boards by points then wins (2026-11-02), every other board tier-first over the tier\'s OWN score',
-    /function compareBoardRow\(a, b, id\) \{\s*\n\s*if \(isPointsBoard\(id\)\) return [^\n]+\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
+  ok('compareBoardRow is the tier-first comparator over the tier\'s OWN score',
+    /function compareBoardRow\(a, b, id\) \{\s*\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
   ok('[KNOWN-BUG PROBE] the card headline is still the metric at the row\'s own tier',
     /const metric = boardMetricOf\(g, id\);/.test(src));
   ok('a row\'s tier is decided by the tested pure function, not re-derived here',
