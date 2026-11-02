@@ -631,6 +631,7 @@ function meHTML() {
 
 // --- Player: every game they played, their place and their number ----------------------------------------
 const _msgTo = [];
+let _pSort = 'best';   // a person's page: best place first (Matt, 2026-11-02), Most played, A to Z
 /** The person's top bar (back, face, name, a second line, Message). Shared by their page and their game page. */
 function personBarHTML(g, key, sub) {
   const face = String(g.emoji || '').trim() || esc(nameOf(g).slice(0, 1).toUpperCase());
@@ -651,12 +652,19 @@ function playerHTML(top) {
   const hr = hofRankOf(top.key);
   const bar = personBarHTML(g, top.key, pg ? `${t('lb_played_count', { n: fmt(pg.played) })} · ${fmt(pg.wins)} ${t('lb_wins_unit')}` : '');
   const tag = String(g.message || '').trim();
-  const nHeld = Object.values(places.place).filter((p) => p.rank === 1 && !p.noMedal).length;
-  const tiles = `<div class="lb2-tiles"><div class="lb2-tile"><b class="num">${nHeld}</b><span>${esc(t2('lb2_records_tile'))}</span></div>
-    <div class="lb2-tile"><b class="num">${hr ? '#' + hr : '–'}</b><span>${esc(t2('lb2_hof_tile'))}</span></div>
-    <div class="lb2-tile"><b class="num">${pg ? pg.games.length : 0}</b><span>${esc(t2('lb2_games_tile'))}</span></div></div>`;
+  // Matt, 2026-11-02: "the Me page is way easier to read than someone else's profile": the same medal tiles as Me
+  // (the Hall of Fame Medals row), and the games sorted best place first by default, with a sort picker.
+  const mp = ((_model.hof.find((x) => x.key === top.key) || {}).p) || [0, 0, 0];
+  const tiles = `<div class="lb2-tiles">${[1, 2, 3].map((n) => `<button type="button" class="lb2-tile lb2-mtile" data-act="tab" data-v="hof">${medal(n, 'sm')}<b class="num">${fmt(mp[n - 1])}</b></button>`).join('')}</div>`;
+  const rankOf = (id) => { const p = defPlace(id, top.key); return p && p.rank ? p.rank : Infinity; };
+  const list = pg ? pg.games.slice() : [];
+  if (_pSort === 'best') list.sort((a, b) => (rankOf(a.id) - rankOf(b.id)) || ((b.plays | 0) - (a.plays | 0)));
+  else if (_pSort === 'az') list.sort((a, b) => title(a.id).localeCompare(title(b.id), getLang()));
+  else list.sort((a, b) => (b.plays | 0) - (a.plays | 0));
+  const psorts = [['best', t2('lb2_sort_best')], ['played', t2('lb2_sort_played')], ['az', t2('lb2_sort_az')]];
+  const psortBtn = `<label class="lb2-sortbtn lb2-psort" aria-label="${esc(t2('lb2_sort_aria'))}">${SVG.sort}<select data-role="psort" aria-label="${esc(t2('lb2_sort_aria'))}">${psorts.map(([v, l]) => `<option value="${v}"${v === _pSort ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
   // Under the game's name: lifetime plays only. The difficulty is the shape before the number at the right.
-  const games = pg && pg.games.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_games_h'))}</h2><div class="lb2-card">${pg.games.map((x) => `<button type="button" class="lb2-row sm" data-act="pgame" data-game="${esc(x.id)}">
+  const games = list.length ? `<div><div class="lb2-h2row"><h2 class="lb2-h2">${esc(t2('lb2_games_h'))}</h2>${psortBtn}</div><div class="lb2-card">${list.map((x) => `<button type="button" class="lb2-row sm" data-act="pgame" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(x.plays) }))}</span></span>
       <span class="lb2-right"><span class="lb2-rv num">${valHTML(x.id, x)}</span>${placeHTML(defPlace(x.id, top.key))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tag ? `<p class="lb2-tag">${esc(tag)}</p>` : ''}${tiles}${games}</div></div>`;
@@ -829,6 +837,7 @@ function onClick(e) {
 }
 function onChange(e) {
   if (e.target && e.target.dataset.role === 'hofcat') { const v = e.target.value; _hofCat = /^\d$/.test(v) ? Number(v) : v; _hofFold = false; render(); return; }
+  if (e.target && e.target.dataset.role === 'psort') { _pSort = e.target.value; render({ keepScroll: true }); return; }
   if (e.target && e.target.dataset.role === 'hofsort') { _hofSort = e.target.value; _hofFold = false; render(); return; }
   if (e.target && e.target.dataset.role === 'woview') { const top = _stack[_stack.length - 1]; if (top && top.kind === 'board') { top.rview = e.target.value; render(); } return; }
   if (e.target && e.target.dataset.role === 'gsort') { if (SORTS.includes(e.target.value)) { saveSort(e.target.value); render(); } return; }
@@ -1049,6 +1058,9 @@ html.gh-compact .lb2-x{display:none}
 .lb2-tile b{font-size:26px}
 .lb2-mtile{flex-direction:row;gap:10px;font:inherit;color:inherit;cursor:pointer}
 .lb2-recq{color:var(--l2-muted)}
+.lb2-h2row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lb2-h2row .lb2-h2{margin-bottom:0}
+.lb2-h2row+.lb2-card{margin-top:8px}
 .lb2-tile span{font-size:14px;color:var(--l2-muted);line-height:1.15}
 .lb2-h2{margin:0 0 8px;padding:0 4px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--l2-muted)}
 .lb2-gh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
