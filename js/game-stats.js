@@ -1145,7 +1145,7 @@ let _mode = null;
 export const NO_MODE = '?';
 const NOT_A_RESULT = new Set([
   'recordHeadToHead', 'recordGridlockHint', 'recordWordWeaverFreeLost', 'recordWordWeaverFreeHint',
-  'recordWordWeaverHint', 'recordWordWeaverDailyHint', 'recordHoldemBank', 'recordHoldemHand',
+  'recordWordWeaverHint', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy', 'recordHoldemBank', 'recordHoldemHand',
   'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordLiveResult', 'quitLoss',
   'noteWayOutSlips', 'recordSpellingBeeGenius',
 ]);

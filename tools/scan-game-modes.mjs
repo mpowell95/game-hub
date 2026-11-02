@@ -27,6 +27,7 @@ export const AUX = {
   recordWordWeaverFreeLost: 'free-hint bookkeeping, not a result',
   recordWordWeaverFreeHint: 'free-hint bookkeeping, not a result',
   recordWordWeaverHint: 'a hint used on a level, not a result; the level result is recordWordWeaver',
+  recordWordWeaverBuy: 'a hint BOUGHT with stars (a spend), not a result; the level result is recordWordWeaver',
   recordWordWeaverDailyHint: 'a hint used on the daily, not a result; the result is recordWordWeaverDaily',
   recordHoldemBank: 'a bankroll ledger line; the match result is recordResult(\'holdem\') in withMode',
   recordHoldemHand: 'one hand inside a match; the match result is recordResult(\'holdem\') in withMode',
