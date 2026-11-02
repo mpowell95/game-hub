@@ -79,8 +79,16 @@ export function bandOf(n) {
 export function bandEnd(band) {
   return band === 'expert' ? Infinity : BAND_LAST[band];
 }
-/** What one cleared level of each difficulty is worth. */
-export const WO_BAND_POINTS = { easy: 1, medium: 2, hard: 4, expert: 6 };
+/** What one cleared level of each difficulty is worth NOW. Expert 6 -> 8 on 2026-11-02 (Matt: "Make expert 8
+ *  points"), for clears on today's Expert boards (generator 10) from WO_EXPERT8_SINCE only. */
+export const WO_BAND_POINTS = { easy: 1, medium: 2, hard: 4, expert: 8 };
+/** What a LEGACY clear (a count with no level set, woLegacyOf) is worth: the values before 2026-11-02. Every
+ *  point earned before Expert went to 8 stays exactly what it was (nothing raised, nothing lowered). */
+export const WO_LEGACY_POINTS = { easy: 1, medium: 2, hard: 4, expert: 6 };
+/** When Expert became 8 points (the deploy, 2026-11-02). An Expert finish logged before it, or on an
+ *  older board (generator below 10), is scored with the old table. */
+export const WO_EXPERT8_SINCE = Date.UTC(2026, 10, 2, 6, 40);
+const WO_EXPERT8_GEN = 10;
 /** What level n is worth: its difficulty's points. Since 2026-10-26 Easy, Medium and Hard go on past
  *  50 / 100 / 200 (their MORE levels, numbered on: "Easy 51" is an Easy level), so a caller that knows
  *  the difficulty passes it; without one, the ladder number says which. */
@@ -92,7 +100,7 @@ export function woLevelPoints(n, band = null) {
  *  endless tiers) earns the same per level: never dropped, never more. */
 export function woBandPoints(band, cleared) {
   const c = Math.max(0, Math.floor(Number(cleared) || 0));
-  return WO_BAND_POINTS[band] ? c * WO_BAND_POINTS[band] : 0;
+  return WO_LEGACY_POINTS[band] ? c * WO_LEGACY_POINTS[band] : 0;
 }
 // HINTS AND LOST LIVES COST POINTS (2026-10-17). Matt: "Using a hint or losing a life should reduce
 // the number of points you get for that level. You should not be able to use a hint and lose a life
@@ -105,10 +113,15 @@ export function woBandPoints(band, cleared) {
 // counters that add across a person's phones. Every other cleared level (before this, untimed, or
 // from a phone on an older build) keeps its difficulty's full points, as before. Matt: "Let's wait on
 // going back and recalculating... once we have enough data we can use averages."
-export const WO_SLIP_POINTS = { easy: [1], medium: [2, 1], hard: [4, 3, 2, 1], expert: [6, 4, 2, 1] };
-/** What a cleared level of `band` earns after `slips` hints and lost lives. */
-export function woEarnedPoints(band, slips) {
-  const row = WO_SLIP_POINTS[band];
+// Expert 8 (2026-11-02): 8, 5, 3, 1 on today's boards; the old 6, 4, 2, 1 for every earlier Expert finish.
+export const WO_SLIP_POINTS = { easy: [1], medium: [2, 1], hard: [4, 3, 2, 1], expert: [8, 5, 3, 1] };
+export const WO_SLIP_POINTS_OLD = { ...WO_SLIP_POINTS, expert: [6, 4, 2, 1] };
+/** What a cleared level of `band` earns after `slips` hints and lost lives. `g` (board generator) and `d`
+ *  (when it was finished) when known: an Expert finish on an older board, or from before WO_EXPERT8_SINCE,
+ *  is worth what it was worth then. Neither given = a clear today on today's board. */
+export function woEarnedPoints(band, slips, g = 0, d = 0) {
+  const old = band === 'expert' && ((g > 0 && g < WO_EXPERT8_GEN) || (d > 0 && d < WO_EXPERT8_SINCE));
+  const row = (old ? WO_SLIP_POINTS_OLD : WO_SLIP_POINTS)[band];
   if (!row) return 0;
   const n = Math.max(0, Math.floor(Number(slips) || 0));
   return row[Math.min(n, row.length - 1)];
@@ -120,7 +133,7 @@ function legacyPoints(b, won, ptsN, pts) {
   const n = Math.min(w, Math.max(0, Math.floor(Number(ptsN) || 0)));
   const earned = Math.max(0, Math.floor(Number(pts) || 0));
   // A scored level earns between 1 and its full points; a count out of that range is clamped.
-  return woBandPoints(b, w - n) + (n ? Math.min(n * (WO_BAND_POINTS[b] || 0), Math.max(n, earned)) : 0);
+  return woBandPoints(b, w - n) + (n ? Math.min(n * (WO_LEGACY_POINTS[b] || 0), Math.max(n, earned)) : 0);
 }
 
 // ONE LEVEL, ONE SCORE PER PERSON (2026-10-29). Points used to be read from per-band COUNTS added up
@@ -335,15 +348,15 @@ export function woMissed(rec, band) {
   const by = new Map();
   for (const f of woList((wo.log || {})[band])) {
     if (!(f.d >= WO_SLIP_SINCE) || !(f.l > 0) || !(f.g > 0)) continue;
-    const k = `${f.g}:${f.l}`, e = woEarnedPoints(band, slipsOf(f));
+    const k = `${f.g}:${f.l}`, e = woEarnedPoints(band, slipsOf(f), f.g, f.d);
     const cur = by.get(k);
     by.set(k, { l: f.l, g: f.g, best: cur ? Math.max(cur.best, e) : e, p: Math.max(cur ? cur.p : 0, f.p | 0) });
   }
   for (const f of woReplayList((wo.replay || {})[band])) {
     const cur = by.get(`${f.g}:${f.l}`);
-    if (cur) cur.best = Math.max(cur.best, woEarnedPoints(band, slipsOf(f)));
+    if (cur) cur.best = Math.max(cur.best, woEarnedPoints(band, slipsOf(f), f.g, f.d));
   }
-  return [...by.values()].map((x) => ({ ...x, full: woEarnedPoints(band, x.p) }))
+  return [...by.values()].map((x) => ({ ...x, full: woEarnedPoints(band, x.p, x.g) }))
     .filter((x) => x.best < x.full)
     .map((x) => ({ ...x, n: woShownLevel(band, x.l, x.g), gain: x.full - x.best }))
     .sort((a, b) => b.gain - a.gain || a.n - b.n);

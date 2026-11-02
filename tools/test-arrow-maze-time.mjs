@@ -75,9 +75,9 @@ ok('bands: Easy 1-50, Medium 51-100, Hard 101-200, Expert 201 on', T.bandOf(1) =
   && T.bandOf(51) === 'medium' && T.bandOf(100) === 'medium' && T.bandOf(101) === 'hard' && T.bandOf(200) === 'hard'
   && T.bandOf(201) === 'expert' && T.bandOf(9999) === 'expert');
 ok('band ends', T.bandEnd('easy') === 50 && T.bandEnd('medium') === 100 && T.bandEnd('hard') === 200 && T.bandEnd('expert') === Infinity);
-ok('points per level: Easy 1, Medium 2, Hard 4, Expert 6', T.woLevelPoints(1) === 1 && T.woLevelPoints(50) === 1
+ok('points per level: Easy 1, Medium 2, Hard 4, Expert 8 (2026-11-02)', T.woLevelPoints(1) === 1 && T.woLevelPoints(50) === 1
   && T.woLevelPoints(51) === 2 && T.woLevelPoints(100) === 2 && T.woLevelPoints(101) === 4 && T.woLevelPoints(200) === 4
-  && T.woLevelPoints(201) === 6 && T.woLevelPoints(5000) === 6);
+  && T.woLevelPoints(201) === 8 && T.woLevelPoints(5000) === 8);
 ok('a band\'s points are its cleared count times its points', T.woBandPoints('easy', 26) === 26 && T.woBandPoints('medium', 1) === 2
   && T.woBandPoints('hard', 27) === 108 && T.woBandPoints('expert', 2) === 12 && T.woBandPoints('easy', 0) === 0 && T.woBandPoints('nope', 5) === 0);
 ok('an old count past a band\'s 50 keeps earning the same per level', T.woBandPoints('easy', 52) === 52);
@@ -123,7 +123,7 @@ ok('rush: a malformed run list is cleaned, not crashed on', T.woRushRuns([null, 
 
 // --- Hints and lost lives cost points (2026-10-17) ---
 ok('slip table: Expert 6, 4, 2, 1; Hard 4, 3, 2, 1; Medium 2, 1; Easy 1',
-  [0, 1, 2, 3, 9].map((n) => T.woEarnedPoints('expert', n)).join() === '6,4,2,1,1'
+  [0, 1, 2, 3, 9].map((n) => T.woEarnedPoints('expert', n)).join() === '8,5,3,1,1'
   && [0, 1, 2, 3, 4].map((n) => T.woEarnedPoints('hard', n)).join() === '4,3,2,1,1'
   && [0, 1, 5].map((n) => T.woEarnedPoints('medium', n)).join() === '2,1,1'
   && [0, 3].map((n) => T.woEarnedPoints('easy', n)).join() === '1,1' && T.woEarnedPoints('nope', 0) === 0);
@@ -217,6 +217,24 @@ ok('replay: lists in Firebase object form read back', T.woReplayList({ 1: g.wo.r
 // --- MORE LEVELS (2026-10-26): Easy 51 is an Easy level, worth Easy's points ---
 ok('more levels: points follow the difficulty, not the number', T.woLevelPoints(51, 'easy') === 1 && T.woLevelPoints(150, 'medium') === 2
   && T.woLevelPoints(400, 'hard') === 4 && T.woLevelPoints(51) === 2 && T.woLevelPoints(51, 'nope') === 2);
+
+// EXPERT 8 (2026-11-02): today's boards from the switch pay 8/5/3/1; an older board or an earlier finish keeps 6/4/2/1.
+ok('Expert 8: an old board, or a finish before the switch, keeps the old table; a legacy count stays 6 a level',
+  [0, 1, 2, 3].map((n) => T.woEarnedPoints('expert', n, 9)).join() === '6,4,2,1'
+  && [0, 1, 2, 3].map((n) => T.woEarnedPoints('expert', n, 10, T.WO_EXPERT8_SINCE - 1)).join() === '6,4,2,1'
+  && [0, 1, 2, 3].map((n) => T.woEarnedPoints('expert', n, 10, T.WO_EXPERT8_SINCE + 1)).join() === '8,5,3,1'
+  && T.woEarnedPoints('hard', 0, 8) === 4 && T.woBandPoints('expert', 3) === 18 && T.woLevelPoints(250, 'expert') === 8);
+{
+  const before = T.WO_EXPERT8_SINCE - 60000, after = T.WO_EXPERT8_SINCE + 60000;
+  const rec = { byDiff: { expert: { won: 3 } }, wo: { log: { expert: [
+    { t: 300000, a: 80, r: 80, m: 0, h: 0, l: 260, g: 9, d: before },
+    { t: 300000, a: 80, r: 80, m: 1, h: 0, l: 302, g: 10, d: before },
+    { t: 300000, a: 80, r: 80, m: 0, h: 0, l: 303, g: 10, d: after },
+  ] } } };
+  const miss = T.woMissed(rec, 'expert');
+  ok('Expert 8 replay: an old board is never listed for more; a new-board level from before the switch can win up to 8',
+    miss.length === 1 && miss[0].l === 302 && miss[0].best === 4 && miss[0].full === 8 && miss[0].gain === 4, JSON.stringify(miss));
+}
 
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

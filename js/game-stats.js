@@ -2180,7 +2180,7 @@ export function recordWayOut(tier, f = {}) {
   bumpTotals(g, d, true);
   const t = Math.round(Math.max(0, +f.timeMs || 0) + Math.max(0, +f.penaltyMs || 0));
   const a = Math.max(0, f.arrows | 0), r = Math.max(0, f.rounds | 0);
-  let earned = woEarnedPoints(d, 0);   // an untimed level keeps its full points (nothing invented)
+  let earned = woEarnedPoints(d, 0, f.gen | 0);   // an untimed level keeps its full points (nothing invented)
   if (f.timed && WO_TIERS.includes(d) && t > 0 && a > 0 && r > 0) {
     const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
     // Slips carried from earlier attempts of this level (New game, another storage: 2026-10-29) are
@@ -2205,7 +2205,7 @@ export function recordWayOut(tier, f = {}) {
     g.wo.log[d] = g.wo.log[d].concat([e]);
     // Hints and lost lives cost points from 2026-10-17 (woEarnedPoints): a timed level's slips are
     // known, so it is scored with them. An untimed one keeps its full points (nothing invented).
-    earned = woEarnedPoints(d, slips);
+    earned = woEarnedPoints(d, slips, f.gen | 0);
     g.wo.pts[d] += earned;
     g.wo.ptsN[d] += 1;
   }
@@ -2241,7 +2241,7 @@ export function recordWayOutReplay(tier, f = {}) {
   // Slips of earlier tries of this replay, and slips from before the level's clearing attempt (the
   // log's `p`), are scored too (2026-10-29): a replay never pays past them.
   const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)), miss ? miss.p : 0);
-  const earned = woEarnedPoints(d, slips);
+  const earned = woEarnedPoints(d, slips, gen);   // an old Expert board's level replays at its old points
   const up = miss ? Math.max(0, earned - miss.best) : 0;
   if (!g.wo.replay) g.wo.replay = {};
   const e = { t, a, r, m, h, l, g: gen, d: Date.now(), u: up };

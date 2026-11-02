@@ -146,19 +146,19 @@ for (let n = 211; n <= 213; n++) G.recordWayOut('expert', { timeMs: 60000, arrow
 const devA = JSON.parse(store.get(G.statsKey()));
 let wo = devA.games.wayout.wo;
 ok('C5 the first tracked clear snapshots the legacy part once', wo.leg.expert.w === 10 && wo.leg.expert.n === 2 && wo.leg.expert.p === 8 && wo.leg.expert.e === 211);
-ok('C5 the level set holds each level\'s points', wo.cl.expert === '211:666');
-ok('C5 the device\'s own points: legacy 56 + 3 x 6', T.woPoints(devA.games.wayout) === 74);
+ok('C5 the level set holds each level\'s points (Expert 8 since 2026-11-02)', wo.cl.expert === '211:888');
+ok('C5 the device\'s own points: legacy 56 + 3 x 8', T.woPoints(devA.games.wayout) === 80);
 // Storage B (same person, a fresh storage): replays the SAME levels 201-213 clean.
 const devB = device(() => { for (let n = 201; n <= 213; n++) G.recordWayOut('expert', { timeMs: 60000, arrows: 80, rounds: 20, timed: true, n, level: n, gen: 10 }); });
-ok('C5 storage B on its own: 13 levels, 78 points', T.woPoints(devB.games.wayout) === 78);
+ok('C5 storage B on its own: 13 levels, 104 points', T.woPoints(devB.games.wayout) === 104);
 const person = A.aggregatePlayers({ a: rec('Kay', 'KAYKA', devA), b: rec('Kay', 'KAYKA', devB) })[0];
-ok('C5 a person counts each level once: A\'s legacy 201-210 + 211-213, B adds nothing (74, not 152)', T.woPoints(person.games.wayout) === 74);
-ok('C5 the merged view: legacy covers 201-210, the sets unite', JSON.stringify(person.games.wayout.wo.lg.expert.cv) === '[[201,210]]' && person.games.wayout.wo.cl.expert === '201:6666666666666');
+ok('C5 a person counts each level once: A\'s legacy 201-210 + 211-213, B adds nothing (80, not 184)', T.woPoints(person.games.wayout) === 80);
+ok('C5 the merged view: legacy covers 201-210, the sets unite', JSON.stringify(person.games.wayout.wo.lg.expert.cv) === '[[201,210]]' && person.games.wayout.wo.cl.expert === '201:8888888888888');
 const devB2 = device(() => { for (let n = 211; n <= 215; n++) G.recordWayOut('expert', { timeMs: 60000, arrows: 80, rounds: 20, mistakes: 1, timed: true, n, level: n, gen: 10 }); });
 const person2 = A.aggregatePlayers({ a: rec('Kay', 'KAYKA', devA), b: rec('Kay', 'KAYKA', devB2) })[0];
-ok('C5 a level on two storages counts once, at its best; new levels count (74 + 214, 215 at 4 = 82)', T.woPoints(person2.games.wayout) === 82);
+ok('C5 a level on two storages counts once, at its best; new levels count (80 + 214, 215 at 5 = 90)', T.woPoints(person2.games.wayout) === 90);
 const other = A.aggregatePlayers({ a: rec('Kay', 'KAYKA', devA), b: rec('Lu', 'LULUL', devB) });
-ok('C5 two different people are never deduplicated against each other', other.map((g) => T.woPoints(g.games.wayout)).sort().join() === '74,78');
+ok('C5 two different people are never deduplicated against each other', other.map((g) => T.woPoints(g.games.wayout)).sort().join() === '104,80');
 const oldOnly = A.aggregatePlayers({ a: rec('Mo', 'MOMOM', { games: { wayout: { total: { played: 4, won: 4, lost: 0 }, byDiff: { hard: { played: 4, won: 4, lost: 0 } } } } }) })[0];
 ok('C5 a record with wins but no `wo` at all still counts in full (16)', T.woPoints(oldOnly.games.wayout) === 16);
 ok('C5 a voided record zeroes its level set and snapshot too', /wayout: \{ wo: \['pts', 'log', 'replay', 'best', 'recent', 'rush', 'cl', 'leg'\] \}/.test(src('js/stats-corrections.js')));
@@ -175,12 +175,12 @@ ok('C4 a replay can never win back slips from before the clearing try (nothing t
 G.recordWayOut('expert', { timeMs: 60000, arrows: 80, rounds: 20, mistakes: 1, hints: 0, timed: true, n: 202, level: 202, gen: 10, slips: 1, prior: 0 });
 gw = G.loadStats().games.wayout;
 miss = T.woMissed(gw, 'expert');
-ok('C4 a level messed up in its own clearing try is still listed for Replay (Matt\'s design)', miss.length === 1 && miss[0].n === 202 && miss[0].gain === 2);
+ok('C4 a level messed up in its own clearing try is still listed for Replay (Matt\'s design)', miss.length === 1 && miss[0].n === 202 && miss[0].gain === 3);
 const up1 = G.recordWayOutReplay('expert', { timeMs: 60000, arrows: 80, rounds: 20, mistakes: 0, hints: 0, level: 202, gen: 10, slips: 2 });
-ok('C4 a replay is scored with the slips of its earlier tries (2 carried: 2 points, adds nothing)', up1 === 0);
+ok('C4 a replay is scored with the slips of its earlier tries (2 carried: 3 points, adds nothing)', up1 === 0);
 const up2 = G.recordWayOutReplay('expert', { timeMs: 60000, arrows: 80, rounds: 20, mistakes: 0, hints: 0, level: 202, gen: 10, slips: 0 });
 gw = G.loadStats().games.wayout;
-ok('C4 a clean replay wins back what the clearing try lost, in the level set too', up2 === 2 && gw.wo.cl.expert === '201:16');
+ok('C4 a clean replay wins back what the clearing try lost, in the level set too', up2 === 3 && gw.wo.cl.expert === '201:18');
 ok('C4 noteWayOutSlips keeps the most slips per level (max only)', G.noteWayOutSlips('expert', 300, 2) === true && G.noteWayOutSlips('expert', 300, 1) === true
   && G.loadStats().games.wayout.wo.sl.expert.L300 === 2 && T.woSlipsOf(G.loadStats().games.wayout, 'expert', 300) === 2);
 ok('C4 noteWayOutSlips refuses junk', G.noteWayOutSlips('rush', 3, 1) === false && G.noteWayOutSlips('expert', 0, 1) === false);
