@@ -473,6 +473,8 @@
 .ar-root .ar-seg .ar-seg-item[aria-pressed="true"] { background: #fff; color: var(--ar-ink); box-shadow: 0 0 0 2px var(--ar-blue); }
 .ar-root .ar-seg .ar-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ar-root .ar-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+/* hub.css lightens Hard/Expert shapes in dark mode; this surface keeps its own colour, so set them here. */
+:root.gh-dark .ar-root .ar-seg .lb-dshape-t3, :root.gh-dark .ar-root .ar-seg .lb-dshape-t4 { fill: #1c2430; }
 .ar-root .ar-gobtn { font-size: 17px; font-weight: 800; }
 .ar-root .ar-go-row { display: flex; gap: 8px; }
 .ar-root .ar-go-row > .ar-alt { flex: 0 0 auto; width: auto; white-space: nowrap; padding-inline: 16px; }
