@@ -2,7 +2,7 @@
 // (levels in the data contract's format; the real data is built by tools/build-word-weaver-data.mjs).
 // Run: node word-weaver/js/test.js
 import {
-  loadIndex, loadLevel, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells,
+  loadIndex, loadLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells,
 } from './engine.js';
 
 let fails = 0;
@@ -171,6 +171,17 @@ eq('junk hints = 3 stars', starsFor(undefined), 3);
   eq('negative hints read as none', cleanState(lv, { hints: -4 }).hints, 0);
   eq('NaN hints read as none', cleanState(lv, { hints: 'x' }).hints, 0);
   eq('recorded must be exactly true', cleanState(lv, { recorded: 'yes' }).recorded, false);
+}
+
+// --- bonus squares (2026-11-02) --------------------------------------------------------------------------
+{
+  const lv = cleanLevel(L1, 1);
+  const a = bonusCells(lv), b = bonusCells(cleanLevel(L1, 1));
+  eq('bonus squares: the same level always has the same ones', a, b);
+  ok('bonus squares: 1 to 3, all on the grid', a.length >= 1 && a.length <= 3 && a.every((k) => [...lv.w].some((e) => cellsOf(e).some((q) => q.r + ',' + q.c === k))));
+  const k = a[0];
+  eq('a collected square survives a reload', cleanState(lv, { sym: [k, '9,9', 7] }).sym, [k]);
+  eq('a square a hint revealed is never collected', cleanState(lv, { revealed: [k], sym: [k] }).sym, []);
 }
 
 console.log(fails ? `\n${fails} check(s) FAILED` : 'word-weaver engine: all checks passed');

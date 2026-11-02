@@ -588,6 +588,7 @@ function ensureWw(g) {
   if (!Number.isFinite(g.ww.x) || g.ww.x < 0) g.ww.x = 0;
   // The Spanish ladder's map (2026-10-29) exists only once a Spanish level is completed.
   if (g.ww.es !== undefined && (!g.ww.es || typeof g.ww.es !== 'object' || Array.isArray(g.ww.es))) g.ww.es = {};
+  if (g.ww.b !== undefined && !(Number.isFinite(g.ww.b) && g.ww.b >= 0)) g.ww.b = 0;
   // Free hints used (2026-11-01) exists only once one is used.
   if (g.ww.fu !== undefined && !(Number.isFinite(g.ww.fu) && g.ww.fu >= 0)) g.ww.fu = 0;
   // The hint maps (2026-10-29) exist only once a hint is used.
@@ -2395,7 +2396,7 @@ export function recordWordWeaverHint(level, count, lang) {
  *  entry is written (rule 4: never invent a level). `lang: 'es'` (2026-10-29) = a level of the SPANISH
  *  ladder, written to `ww.es` instead (its own numbers; same band, same play/win buckets). Returns the
  *  store, or null when rate-gated. */
-export function recordWordWeaver(level, { hints, extra, lang } = {}) {
+export function recordWordWeaver(level, { hints, extra, sym, lang } = {}) {
   if (tooFast('wordweaver')) return null;
   notePlay('wordweaver', 'recordWordWeaver', arguments);
   const st = loadStats();
@@ -2407,6 +2408,9 @@ export function recordWordWeaver(level, { hints, extra, lang } = {}) {
   const h = Math.max(0, Math.floor(Number(hints) || 0));
   const x = Math.max(0, Math.floor(Number(extra) || 0));
   g.ww.x += x;
+  // Bonus squares filled on that level (2026-11-02), a lifetime counter like the extra words; at most 3 a level.
+  const b = Math.min(3, Math.max(0, Math.floor(Number(sym) || 0)));
+  if (b) g.ww.b = (Number(g.ww.b) || 0) + b;
   if (n >= 1 && n === Number(level)) {
     const k = 'L' + n;
     const map = lang === 'es' ? (g.ww.es || (g.ww.es = {})) : g.ww.lv;

@@ -19,6 +19,7 @@
 //                                 map, so Spanish level 12 is never English level 12. Points, stars and
 //                                 levels completed count BOTH ladders.
 //   ww.x = n                      lifetime extra words found (a counter; it only goes up).
+//   ww.b = n                      BONUS SQUARES collected (2026-11-02; a counter; they earn free hints like bonus words).
 //   ww.fu = n                     FREE hints used (2026-11-01; a counter; every 10 bonus words earn one, wwFreeHints).
 //   ww.hint['L<n>'] = { c, t }    HINTS, recorded the moment Hint is tapped (2026-10-29, Matt: "Close the hint
 //   ww.esHint['L<n>'] = { c, t }  gap"): c = hints used on level n so far (only grows), t = the first hint's
@@ -195,7 +196,16 @@ export function wwFreeUsed(rec) {
   const n = Math.floor(Number(rec && rec.ww && rec.ww.fu) || 0);
   return n > 0 ? n : 0;
 }
+/** Bonus squares collected (2026-11-02): `ww.b`, a counter added at each level's completion. */
+export function wwBonusSquares(rec) {
+  const n = Math.floor(Number(rec && rec.ww && rec.ww.b) || 0);
+  return n > 0 ? n : 0;
+}
+/** Bonuses so far = bonus words + bonus squares (+ this level's, not yet recorded): what earns free hints. */
+export function wwBonuses(rec, pending = 0) {
+  return wwExtra(rec) + wwBonusSquares(rec) + Math.max(0, Math.floor(Number(pending) || 0));
+}
 export function wwFreeHints(rec, pendingExtra = 0) {
-  const earned = Math.floor((wwExtra(rec) + Math.max(0, Math.floor(Number(pendingExtra) || 0))) / WW_FREE_EVERY);
+  const earned = Math.floor(wwBonuses(rec, pendingExtra) / WW_FREE_EVERY);
   return Math.max(0, earned - wwFreeUsed(rec));
 }

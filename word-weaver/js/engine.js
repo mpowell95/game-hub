@@ -94,8 +94,30 @@ export function canMake(letters, word) {
 }
 
 /** An empty state for a fresh level. */
+/** BONUS SQUARES (Matt, 2026-11-02, as in Wordscapes): a few grid squares carry a star; filling one by finding its
+ *  word yourself earns a bonus (it counts toward free hints like a bonus word). 1 star on a grid of up to 12 squares,
+ *  2 up to 30, 3 above. Picked from the level's own letters and layout, so the same level always has the same stars.
+ *  Returns the squares' 'r,c' keys. */
+export function bonusCells(level) {
+  if (!level || !Array.isArray(level.w)) return [];
+  const keys = [];
+  for (const e of level.w) for (const q of cellsOf(e)) { const k = keyOf(q.r, q.c); if (!keys.includes(k)) keys.push(k); }
+  keys.sort();
+  const want = keys.length <= 12 ? 1 : keys.length <= 30 ? 2 : 3;
+  let h = 2166136261;
+  const src = level.l + '|' + level.w.map((e) => e.join(',')).join(';');
+  for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  const out = [];
+  while (out.length < Math.min(want, keys.length)) {
+    h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0;
+    const k = keys[h % keys.length];
+    if (!out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
 export function freshState() {
-  return { found: [], extra: [], hints: 0, free: 0, revealed: [], recorded: false };
+  return { found: [], extra: [], hints: 0, free: 0, revealed: [], sym: [], recorded: false };
 }
 
 /** What a swiped / typed word is, against the level and the state so far:
@@ -177,6 +199,9 @@ export function cleanState(level, raw) {
   st.free = Math.min(st.revealed.length, f >= 0 && f < 1e6 ? f : 0);
   // Paid hints are never fewer than the letters revealed that no free hint paid for.
   st.hints = Math.max(st.revealed.length - st.free, h >= 0 && h < 1e6 ? h : 0);
+  // Bonus squares collected (2026-11-02): only real bonus squares of this level, never one a hint revealed.
+  const bc = bonusCells(level);
+  if (Array.isArray(raw.sym)) for (const k of raw.sym) if (typeof k === 'string' && bc.includes(k) && !st.sym.includes(k) && !st.revealed.includes(k)) st.sym.push(k);
   st.recorded = raw.recorded === true;
   return st;
 }

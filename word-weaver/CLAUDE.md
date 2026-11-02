@@ -15,7 +15,7 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
 | Folder / hub id / stats id | `word-weaver/` / `word-weaver` / `wordweaver` |
 | Entry | module `../word-weaver/js/ui.js`, **immersive**, prefix `.ww-root` / `.ww-` |
 | Admin only | `devOnly: true`, `added: '2026-10-28'`, no `released` (the New pill's only input; Matt releases it from the admin page) |
-| Recorder | `recordWordWeaver(level, { hints, extra, lang })` in `js/game-stats.js` (`lang: 'es'` = the Spanish ladder, `ww.es`); points in `js/word-weaver-points.js` (the stats side, not this folder) |
+| Recorder | `recordWordWeaver(level, { hints, extra, sym, lang })` in `js/game-stats.js` (`lang: 'es'` = the Spanish ladder, `ww.es`); points in `js/word-weaver-points.js` (the stats side, not this folder) |
 | Settings key | `gamehub.wordweaver.v1` `{ band }` (shared by both languages); save `gamehub.wordweaver.save.v2` (`.save.v1` read once, `.best.v1` no longer read); Spanish save `gamehub.wordweaver.es.save.v1`; puzzle language `gamehub.wordweaver.lang.v1` |
 | `isInProgress()` | always `false`: every accepted word and hint is saved, leaving is lossless |
 
@@ -50,6 +50,12 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   hint that costs NO star (`wwFreeHints`; used ones counted in `ww.fu` by `recordWordWeaverFreeHint`, merged across phones by
   adding). A banked one is used first: a gold count on the hint button; the save keeps `free` (cleanState: paid hints = at
   least the letters revealed minus `free`). How to play: "10 bonus words = 1 free hint".
+- **Bonus squares + the bonus counter (Matt, 2026-11-02, as in Wordscapes)**: 1-3 grid squares a level carry a gold star
+  (`engine.js` `bonusCells`, picked from the level's own letters and layout, so always the same). Filling one by finding its
+  word YOURSELF earns a bonus (a star flies to the counter); a square a hint revealed is lost. Collected ones live in the
+  save's `sym` and are recorded at completion as `ww.b` (`recordWordWeaver(..., { sym })`, at most 3 a level; merged by
+  adding). Bonuses = bonus words + bonus squares (`wwBonuses`) and earn the free hints. The star chip at the top IS the
+  counter: star + "N/10" toward the next free hint with a gold bar filling; tap = this level's bonus words.
 - Level done = every grid word found. The done screen keeps the grid and shows "Level N", three star SHAPES
   (filled vs outline, never colour alone), the extra-words count (tap: the list) and Next.
 - Desktop keyboard: letters type into the pill (wheel letters only, counts respected), Backspace, Enter
