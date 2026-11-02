@@ -239,8 +239,12 @@ Writes no stats key, profile field or `players/` record.
 
 ### Where a player finds it
 
-Launcher footer and profile page. **No in-game entry point, deliberately.** Preselects `_lastGameId`
-(set before the import, so a failed load is preselected).
+Launcher footer, profile page, and (2026-11-02, Matt) **the in-game 🐞**: a round button top-right, level
+with "‹ Hub", while a game in `BUG_BTN_GAMES` (`js/hub.js`) is mounted, setup and play alike; same spot in
+every game (Matt: "it should be in the same spot everywhere"). Opt-in per game after checking its corner;
+a game control in that corner is moved by an `html.gh-gamebug` rule in `css/hub.css`, never the game's
+files. Golf keeps its own pause-menu row. Preselects `_lastGameId` (set before the import, so a failed
+load is preselected).
 
 ### What a report contains
 

@@ -262,6 +262,9 @@ When restructuring an old game, migrate it toward the reference for each axis in
      composition and crop it with `preserveAspectRatio="slice"` — that was tried during the
      2026-07 tile redesign and rejected because it cuts shapes off mid-shape at the frame edge
      (it bisected Connect Four's discs). Compose for the frame you're given.
+   - **Add its hub id to `BUG_BTN_GAMES`** in `js/hub.js` (the in-game 🐞 Report a bug, top-right,
+     Matt 2026-11-02) after checking that corner is clear on its setup AND play screens; if a control
+     sits there, move it with an `html.gh-gamebug` rule in `css/hub.css`.
 6. Add the game's files (including its `index.html`) to the `ASSETS` precache list in `sw.js`
    and **bump `CACHE`** (`game-hub-vN` → `vN+1`, past what's on `origin/main` right now — a
    concurrent session may have bumped it since you last checked) — or the new files won't be

@@ -63,6 +63,14 @@ const TOUR_FB = {
 // The live-room multiplayer games (hub ids), listed on the Multiplayer screen beside the challenge
 // games. MUST match js/mp-records.js LIVE_GAMES' keys (tools/test-challenges.mjs checks); kept here
 // so the launcher does not import players-agg just to draw a button.
+// THE IN-GAME BUG BUTTON (Matt, 2026-11-02: "a way for users to report bugs in game or on the game
+// setup screen", then "it should be in the same spot everywhere"). A round 🐞 in the top-right corner,
+// level with "‹ Hub", for as long as one of these games is mounted (setup screen and play). It opens
+// the same Report a bug form as the launcher, with this game preselected. Opt-in per game: add a hub
+// id here once that game's top-right corner is checked clear on its setup AND play screens; anything of
+// the game's own in that corner is moved by a `html.gh-gamebug` rule in css/hub.css (not the game's files).
+const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver']);
+
 const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
 const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
@@ -1295,6 +1303,7 @@ class Hub {
             <a class="hub-profile" data-role="profile" href="profile/">${t('hub_profile_btn')}</a>
           </div>
         </header>
+        <button type="button" class="hub-gamebug" data-role="gamebug" hidden aria-label="${t('bug_btn_aria')}">🐞</button>
         <main class="hub-main">
           <!-- CHALLENGES (2026-10-05). Matt: "a button you can press where you can see all your live
                challenges". Its own row above the games, not a fourth top-bar button: four buttons
@@ -1338,6 +1347,7 @@ class Hub {
       top: this.root.querySelector('.hub-top'),
       main: this.root.querySelector('.hub-main'),
       back: this.root.querySelector('[data-role="back"]'),
+      gamebug: this.root.querySelector('[data-role="gamebug"]'),
       title: this.root.querySelector('[data-role="title"]'),
       grid: this.root.querySelector('[data-role="grid"]'),
       extra: this.root.querySelector('.hub-extra'),
@@ -1363,6 +1373,7 @@ class Hub {
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
+    if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => this.openBugReport());
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
       el.addEventListener('click', () => { this.el.confirm.hidden = true; }));
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
@@ -2868,6 +2879,10 @@ class Hub {
     document.documentElement.classList.add('gh-ingame');
     this.el.title.textContent = titleText(game);
     this.el.back.hidden = false;
+    // `html.gh-gamebug` lets css/hub.css move a game's own top-right control out of its way.
+    const bug = BUG_BTN_GAMES.has(game.id);
+    if (this.el.gamebug) this.el.gamebug.hidden = !bug;
+    document.documentElement.classList.toggle('gh-gamebug', bug);
     this.el.grid.hidden = true;
     if (this.el.extra) this.el.extra.hidden = true;
     if (this.el.chbar) this.el.chbar.hidden = true;
@@ -2917,6 +2932,8 @@ class Hub {
     if (this.el.extra) this.el.extra.hidden = false;
     if (this.el.chbar) this.el.chbar.hidden = false;
     this.el.back.hidden = true;
+    if (this.el.gamebug) this.el.gamebug.hidden = true;
+    document.documentElement.classList.remove('gh-gamebug');
     this.el.title.textContent = "Matt's Game Hub";
     this._setImmersive(false);
     if (this.el.top) this.el.top.classList.remove('hub-top-ingame');
