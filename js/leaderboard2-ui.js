@@ -86,6 +86,9 @@ const SORTS = ['az', 'rank', 'played', 'playedall', 'recent'];
 const sortWord = (v) => t2(v === 'played' ? 'lb2_sort_playedme' : 'lb2_sort_' + v);
 function readPref() { try { const p = JSON.parse(localStorage.getItem(PREF_KEY) || 'null'); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; } catch { return {}; } }
 function loadSort() { const v = readPref().sort; return SORTS.includes(v) ? v : 'az'; }
+// Favorites first (Matt, 2026-11-02: the heart button on the Games tab's sort row), default on; a preference.
+function favFirst() { return readPref().favFirst !== false; }
+function saveFavFirst(on) { try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, favFirst: !!on, updatedAt: Date.now() })); } catch { /* a preference */ } }
 function saveSort(v) {
   try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, sort: v, updatedAt: Date.now() })); } catch { /* a preference: best effort */ }
 }
@@ -257,23 +260,30 @@ function boardsListHTML() {
     const sub = lead.map((x) => `<span class="lb2-ld${mineCls(x.key)}">${esc(nameOf(x.g))}</span>`).join(', ');
     return `<button type="button" class="lb2-row" data-act="game" data-game="${esc(r.id)}">
       ${art(r.id)}
-      <span class="lb2-grow"><span class="lb2-t1">${esc(r.title)}</span>${sub ? `<span class="lb2-t2">${medal(1, 'xs')}${sub}</span>` : ''}</span>
+      <span class="lb2-grow"><span class="lb2-t1">${r.fav ? `<span class="lb2-favh" aria-hidden="true">${SVG.heart(15, true)}</span>` : ''}${esc(r.title)}</span>${sub ? `<span class="lb2-t2">${medal(1, 'xs')}${sub}</span>` : ''}</span>
       <span class="lb2-right">${placeHTML(r.place)}</span>${CHEV}
     </button>`;
   };
   const favs = list.filter((r) => r.fav), rest = list.filter((r) => !r.fav);
-  const items = favs.length && rest.length ? favs.map(item).join('') + '<div class="lb2-div lb2-gdiv" aria-hidden="true"></div>' + rest.map(item).join('')
-    : list.map(item).join('');
+  // Favorites first (heart on): two separate cards, each favorite row wearing a filled heart (Matt, 2026-11-02:
+  // "the divider ... isn't distinct"); heart off: one list in the chosen order, hearts still on favorites.
+  const cards = favFirst() && favs.length && rest.length
+    ? `<div class="lb2-card">${favs.map(item).join('')}</div><div class="lb2-card lb2-restcard">${rest.map(item).join('')}</div>`
+    : `<div class="lb2-card">${(favFirst() ? favs.concat(rest) : list).map(item).join('')}</div>`;
   // "Old" (the old board) stays one small link at the very end until v2's release.
-  return (list.length ? `<div class="lb2-card">${items}</div>` : `<p class="lb2-empty-t">${esc(t2('lb2_none'))}</p>`)
+  return (list.length ? cards : `<p class="lb2-empty-t">${esc(t2('lb2_none'))}</p>`)
     + `<button type="button" class="lb2-old" data-act="old">${esc(t2('lb2_old'))}</button>`;
 }
 function boardsHTML() {
   const rows = gameRows();
   const search = _srch || _q ? `<label class="lb2-search">${SVG.search}<input type="search" data-role="q" value="${esc(_q)}" placeholder="${esc(t2('lb2_search', { n: rows.length }))}" aria-label="${esc(t2('lb2_search_aria'))}" autocomplete="off" enterkeyhint="search"></label>` : '';
   // The sort sits in the title row beside search (no filter row any more: the list starts higher).
-  const sortBtn = `<label class="lb2-icon lb2-sorti" aria-label="${esc(t2('lb2_sort_aria'))}: ${esc(sortWord(loadSort()))}">${SVG.sort}<select data-role="gsort" aria-label="${esc(t2('lb2_sort_aria'))}">${SORTS.map((v) => `<option value="${v}"${v === loadSort() ? ' selected' : ''}>${esc(sortWord(v))}</option>`).join('')}</select></label>`;
-  return headHTML(search, true, sortBtn)
+  // One row under the tabs (Matt, 2026-11-02): heart = favorites first, then the sorts that fit, then "more".
+  const sort = loadSort(), ff = favFirst(), MORE = ['rank', 'played', 'playedall'];
+  const chip = (v) => `<button type="button" class="lb2-chip${sort === v ? ' on' : ''}" data-act="gsortc" data-v="${v}" aria-pressed="${sort === v}">${esc(sortWord(v))}</button>`;
+  const more = `<label class="lb2-chip lb2-morechip${MORE.includes(sort) ? ' on' : ''}" aria-label="${esc(t2('lb2_sort_aria'))}">${SVG.sort}<select data-role="gsort" aria-label="${esc(t2('lb2_sort_aria'))}">${MORE.includes(sort) ? '' : '<option value="" selected disabled hidden></option>'}${MORE.map((v) => `<option value="${v}"${v === sort ? ' selected' : ''}>${esc(sortWord(v))}</option>`).join('')}</select></label>`;
+  const bar = `<div class="lb2-chips lb2-gsorts"><button type="button" class="lb2-chip lb2-hchip${ff ? ' on' : ''}" data-act="favfirst" aria-pressed="${ff}" aria-label="${esc(t2('lb2_favs_first'))}">${SVG.heart(20, ff)}</button>${['az', 'recent'].map(chip).join('')}${more}</div>`;
+  return headHTML(bar + search, true)
     + `<div class="lb2-scroll" data-role="scroll"><div class="lb2-body" data-role="glist">${boardsListHTML()}</div></div>`;
 }
 
@@ -863,6 +873,8 @@ function onClick(e) {
       pushLevel({ kind: 'player', key: top.key, all: false }); return;
     }
     case 'back': if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); return;
+    case 'favfirst': saveFavFirst(!favFirst()); render(); return;
+    case 'gsortc': if (SORTS.includes(el.dataset.v)) { saveSort(el.dataset.v); render(); } return;
     case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
     case 'hofview': saveScroll(); _hofView = v === 'wins' || v === 'pct' ? v : 'medals'; render({ restore: true }); return;
     case 'fold': {
@@ -1047,6 +1059,13 @@ html.gh-compact .lb2-x{display:none}
 .lb2-chips{display:flex;flex-wrap:wrap;gap:8px}
 .lb2-chip{min-height:44px;padding:0 16px;border-radius:22px;border:0;display:flex;align-items:center;gap:6px;font-size:15px;font-weight:600;background:var(--l2-chip);color:var(--l2-text)}
 .lb2-chip.on{background:var(--l2-accent);color:var(--l2-accentText)}
+.lb2-gsorts{flex-wrap:nowrap;gap:6px;margin-top:10px}
+.lb2-gsorts .lb2-chip{flex:0 0 auto;min-height:40px;padding:0 13px;font-size:15px}
+.lb2-gsorts .lb2-hchip,.lb2-gsorts .lb2-morechip{width:44px;padding:0;justify-content:center;position:relative}
+.lb2-gsorts .lb2-hchip:not(.on){color:var(--l2-accent)}
+.lb2-morechip select{position:absolute;inset:0;opacity:0;width:100%;height:100%;font-size:16px}
+.lb2-favh{display:inline-flex;vertical-align:-1px;margin-right:6px;color:var(--l2-accent)}
+.lb2-restcard{margin-top:18px}
 .lb2-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:16px}
 .lb2-pad{padding:4px 16px 16px}
 .lb2-card{border-radius:14px;overflow:hidden;background:var(--l2-surf);border:1px solid var(--l2-line)}
