@@ -12,7 +12,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen the
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
-import { recordMurdoku } from '../../js/game-stats.js';
+import { recordMurdoku, withMode } from '../../js/game-stats.js';
 import {
   generate, checkBoard, personInfo, validPuzzle, nextHint, TIERS, TIER_N, ROOM_ICON, OBJ_ICON, isBlocker, SAVE_V,
 } from './engine.js';
@@ -954,7 +954,7 @@ class MurdokuUI {
     // move: it is a lesson, never a win (2026-10-29). It records nothing at all.
     if (s.guided) return;
     try {
-      recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null });
+      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}) }));
       s.recorded = true;
       if (ui) ui.recorded = true;
       writeSaveObj(s);

@@ -38,12 +38,13 @@ localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzprobe', playe
 localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { archery: { live: true } } }));
 // Plays recorded BEFORE this existed sit in the real records (Matt: "leave them, count them"),
 // plus an old test record for Archery that must never come back once it is live.
+// (Word Weaver stands in for Gridlock here since Gridlock's release, 2026-11-02.)
 const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { played: 22, won: 22, lost: 0 } },
-  gl: { lv: {}, lv2: { L1: { m: 9, s: 3, c: 1 } }, hint: {}, hints: 0 } };
+  ww: { lv: { L1: { s: 3, h: 0, t: 1 } }, x: 0 } };
 const legacyBa = { total: { played: 6, won: 3, lost: 3 }, byDiff: { mp: { played: 6, won: 3, lost: 3 } } };
 localStorage.setItem('gamehub.stats', JSON.stringify({
   version: 1,
-  games: { gridlock: legacyGl, battlearena: legacyBa, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
+  games: { wordweaver: legacyGl, battlearena: legacyBa, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
   h2h: { battlearena: { devOld: { name: 'Old', w: 1, l: 0 } } },
   testGames: { archery: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } } },
 }));
@@ -51,25 +52,25 @@ const raw = () => JSON.parse(store.get('gamehub.stats'));
 
 const G = await import('../js/game-stats.js');
 
-ok('Gridlock and Battle Arena are admin-only right now', G.isTestGame('gridlock') && G.isTestGame('battlearena'));
+ok('Word Weaver and Battle Arena are admin-only right now', G.isTestGame('wordweaver') && G.isTestGame('battlearena'));
 ok('Archery, switched live from the admin page, is not', !G.isTestGame('archery'));
-ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts'));
+ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock'));
 
-const before = JSON.stringify(raw().games.gridlock);
-G.recordGridlock('easy', { level: 2, moves: 7, stars: 2 });
+const before = JSON.stringify(raw().games.wordweaver);
+G.recordWordWeaver(2, { hints: 1 });
 G.recordResult('battlearena', 'mp', true);
 let r = raw();
-ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.gridlock.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
-ok('the real Gridlock record is byte-for-byte unchanged', JSON.stringify(r.games.gridlock) === before);
+ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.wordweaver.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
+ok('the real Word Weaver record is byte-for-byte unchanged', JSON.stringify(r.games.wordweaver) === before);
 ok('the real Battle Arena record is unchanged', JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
-ok('the tester\'s progress carries on in the test record (level 1 kept, level 2 added)', !!r.testGames.gridlock.gl.lv2.L2 && !!r.testGames.gridlock.gl.lv2.L1);
-ok('...and the real record did not gain level 2', !r.games.gridlock.gl.lv2.L2);
+ok('the tester\'s progress carries on in the test record (level 1 kept, level 2 added)', !!r.testGames.wordweaver.ww.lv.L2 && !!r.testGames.wordweaver.ww.lv.L1);
+ok('...and the real record did not gain level 2', !r.games.wordweaver.ww.lv.L2);
 
 const view = G.loadStats();
-ok('the GAME sees its test record while testing (its progress reads)', view.games.gridlock.total.played === 23 && !!view.games.gridlock.gl.lv2.L2);
+ok('the GAME sees its test record while testing (its progress reads)', view.games.wordweaver.total.played === 23 && !!view.games.wordweaver.ww.lv.L2);
 const stored = G.loadStoredStats();
-ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.gridlock.total.played === 22 && !!stored.games.gridlock.gl.lv2.L1);
-ok('loadStoredStats() carries the test record apart', stored.testGames.gridlock.total.played === 23);
+ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.wordweaver.total.played === 22 && !!stored.games.wordweaver.ww.lv.L1);
+ok('loadStoredStats() carries the test record apart', stored.testGames.wordweaver.total.played === 23);
 ok('no hidden swap marker leaks into JSON', JSON.stringify(stored) === JSON.stringify(JSON.parse(JSON.stringify(stored))) && !Object.getOwnPropertySymbols(stored).length);
 
 G.recordHeadToHead('battlearena', { deviceId: 'devNew', name: 'New' }, true);
@@ -88,8 +89,8 @@ ok('a released game is untouched by any of this', r.games.uno.total.played === 3
 
 for (let i = 0; i < 3; i++) { G.loadStats(); G.recordResult('uno', 'easy', false); }
 r = raw();
-ok('repeated loads and writes never nest or move records', r.games.gridlock.total.played === 22 && r.testGames.gridlock.total.played === 23
-  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.gridlock) === before);
+ok('repeated loads and writes never nest or move records', r.games.wordweaver.total.played === 22 && r.testGames.wordweaver.total.played === 23
+  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.wordweaver) === before);
 
 // --- the readers: everything that shows or uploads stats reads the stored shape ---
 const src = (p) => readFileSync(new URL(p, __ROOT_URL), 'utf8');

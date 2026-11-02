@@ -14,12 +14,12 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordGridlock, recordGridlockHint, loadStats } from '../../js/game-stats.js';
+import { recordGridlock, recordGridlockHint, loadStats, withMode } from '../../js/game-stats.js';
 import { GL_TIERS, GL_BAND_START, glBandOf, glBandEnd, glStars, glLevels, glHints, glCrowned, glPointsFor, glPoints, glLevelPoints, glHintedPoints } from '../../js/gridlock-points.js';
 import { V1_TO_V2 } from '../../js/gridlock-v1map.js';
 import { N, EXIT_ROW, SOLVED_POS, parse, positions, range, solve, isSolved, cellOf } from './engine.js';
 import { LEVELS } from './levels.js';
-import { pieceArt, RED, WOOD_TONES, CAR_COLORS } from './art.js';
+import { pieceArt, RED, WOOD_TONES, CAR_COLORS, YARD_COLORS, LOG_TONES } from './art.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { bestNow } from '../../js/server-time.js';
@@ -38,7 +38,7 @@ const DEV_HOST = (() => { try { return /^(localhost|127\.0\.0\.1)$/.test(locatio
 const SAVE_V = 1;
 const TOTAL = LEVELS.length;
 const TIER_NUM = { easy: 1, medium: 2, hard: 3, expert: 4 };
-const LOOKS = ['wood', 'cars'];
+const LOOKS = ['wood', 'cars', 'yard', 'logs'];
 const PAGE = 25;                                 // levels per page of the level list (5 x 5)
 
 /** Ladder level n (1-based): its board string and fewest moves. */
@@ -181,7 +181,7 @@ const HOW_SVG = `<svg viewBox="0 0 220 150" aria-hidden="true">
 /** Each piece's colour: red first, then the look's palette, offset by level (the board and the setup
  *  screen's picture use this one rule, so the picture is the board the player is about to meet). */
 function pieceColors(pz, look, n) {
-  const pal = look === 'cars' ? CAR_COLORS : WOOD_TONES;
+  const pal = look === 'cars' ? CAR_COLORS : look === 'yard' ? YARD_COLORS : look === 'logs' ? LOG_TONES : WOOD_TONES;
   let k = 0;
   return pz.pieces.map((p, i) => (i === 0 ? RED : pal[(k++ + n * 3) % pal.length]));
 }
@@ -192,10 +192,11 @@ function boardPreviewSVG(look, n) {
   const lvl = levelAt(n);
   if (!lvl) return '';
   const pz = parse(lvl.board), U = 100, F = 34, B = U * N, E = 46;
-  const cars = look === 'cars';
-  let g = `<defs><linearGradient id="glhf" x1="0" y1="0" x2="0" y2="1">${cars ? '<stop offset="0" stop-color="#d3d6db"/><stop offset="1" stop-color="#aeb3bb"/>' : '<stop offset="0" stop-color="#9a6535"/><stop offset="1" stop-color="#6b4220"/>'}</linearGradient>`
-    + `<filter id="glhs" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="${cars ? 4 : 4}" stdDeviation="${cars ? 0 : 2.5}" flood-opacity=".4"/></filter></defs>`;
-  const bed = cars ? '#535c6c' : '#3c2614';
+  const cars = look === 'cars', yard = look === 'yard', logs = look === 'logs';
+  const stops = cars ? ['#d3d6db', '#aeb3bb'] : yard ? ['#4d5c6b', '#33404c'] : logs ? ['#6f8a45', '#4a6230'] : ['#9a6535', '#6b4220'];
+  let g = `<defs><linearGradient id="glhf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${stops[0]}"/><stop offset="1" stop-color="${stops[1]}"/></linearGradient>`
+    + `<filter id="glhs" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="${cars ? 0 : 2.5}" flood-opacity=".4"/></filter></defs>`;
+  const bed = cars ? '#535c6c' : yard ? '#b9bec4' : logs ? '#2f7590' : '#3c2614';
   g += `<rect x="0" y="0" width="${B + 2 * F}" height="${B + 2 * F}" rx="${F * 1.1}" fill="url(#glhf)"/>`;
   g += `<rect x="${B + F - 4}" y="${F + EXIT_ROW * U}" width="${F + E}" height="${U}" rx="10" fill="${bed}"/>`;
   g += `<path d="M${B + 2 * F + 12} ${F + EXIT_ROW * U + 36}l14 14-14 14" stroke="#ffce3a" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -203,11 +204,15 @@ function boardPreviewSVG(look, n) {
   for (let c = 0; c < N * N; c++) {
     const x = F + (c % N) * U, y = F + ((c / N) | 0) * U;
     g += cars ? `<rect x="${x + 18}" y="${y - 1}" width="${U - 36}" height="3" fill="#fff" fill-opacity=".16"/>`
+      : yard ? `<rect x="${x + 4}" y="${y + 4}" width="${U - 8}" height="${U - 8}" rx="3" fill="none" stroke="#e8b923" stroke-opacity=".7" stroke-width="3"/>`
+      : logs ? `<path d="M${x + 22} ${y + 50}q14 -8 28 0t28 0" stroke="#fff" stroke-opacity=".14" stroke-width="3" fill="none"/>`
       : `<rect x="${x + 6}" y="${y + 6}" width="${U - 12}" height="${U - 12}" rx="12" fill="#4a3019"/>`;
   }
   for (const w of pz.walls) {
     const x = F + (w % N) * U, y = F + ((w / N) | 0) * U;
     g += cars ? `<rect x="${x + 10}" y="${y + 10}" width="${U - 20}" height="${U - 20}" rx="18" fill="#23272f" stroke="#12151c" stroke-width="6"/>`
+      : yard ? `<rect x="${x + 8}" y="${y + 8}" width="${U - 16}" height="${U - 16}" rx="8" fill="#e8b923" stroke="#2a2f38" stroke-width="5"/><path d="M${x + 20} ${y + 80}l40 -60M${x + 44} ${y + 84}l36 -54" stroke="#2a2f38" stroke-width="9"/>`
+      : logs ? `<ellipse cx="${x + 50}" cy="${y + 52}" rx="40" ry="36" fill="#8d949c" stroke="#555c64" stroke-width="5"/><ellipse cx="${x + 40}" cy="${y + 38}" rx="14" ry="8" fill="#fff" fill-opacity=".25"/>`
       : `<rect x="${x + 7}" y="${y + 7}" width="${U - 14}" height="${U - 14}" rx="14" fill="#949ca7" stroke="#5f6874" stroke-width="4"/>`;
   }
   const colors = pieceColors(pz, look, n);
@@ -723,7 +728,8 @@ class Gridlock {
     const stars = glStars(moves, this.fewest);
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
-    const res = recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() });
+    const res = withMode(() => ({ look: this.settings.look }), this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
+      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }) });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();
@@ -957,6 +963,18 @@ class Gridlock {
 function lookThumb(kind) {
   if (kind === 'wood') return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#6b4220"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#3c2614"/>
     <rect x="7" y="7" width="22" height="11" rx="3" fill="#d9a866"/><rect x="7" y="21" width="20" height="11" rx="3" fill="${RED}"/><rect x="33" y="7" width="11" height="25" rx="3" fill="#c98f4e"/></svg>`;
+  if (kind === 'yard') {
+    const box = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.5" fill="${c}" stroke="#1d2230" stroke-width="1.2"/>`
+      + (w > h ? `<path d="M${x + 3} ${y + 2}V${y + h - 2}M${x + 7} ${y + 2}V${y + h - 2}M${x + 11} ${y + 2}V${y + h - 2}" stroke="#000" stroke-opacity=".25" stroke-width="1.2"/>` : `<path d="M${x + 2} ${y + 4}H${x + w - 2}M${x + 2} ${y + 8}H${x + w - 2}M${x + 2} ${y + 12}H${x + w - 2}" stroke="#000" stroke-opacity=".25" stroke-width="1.2"/>`);
+    return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#3f4c59"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#b9bec4"/>
+    ${box(7, 7.5, 21, 10, '#2e6fb5')}${box(7, 21.5, 19, 10, RED)}${box(33, 7.5, 10, 24, '#e07a22')}</svg>`;
+  }
+  if (kind === 'logs') {
+    const log = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w, h) / 2}" fill="${c}" stroke="#3a2412" stroke-width="1.2"/>`
+      + (w > h ? `<ellipse cx="${x + w - 3}" cy="${y + h / 2}" rx="2.2" ry="${h / 2 - 1}" fill="#e9c98f"/>` : `<ellipse cx="${x + w / 2}" cy="${y + 3}" rx="${w / 2 - 1}" ry="2.2" fill="#e9c98f"/>`);
+    return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#58753a"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#2f7590"/>
+    ${log(7, 7.5, 21, 10, '#8a5a33')}<path d="M7 26.5Q10 21.5 16.5 21.5Q23 21.5 26 26.5Q23 31.5 16.5 31.5Q10 31.5 7 26.5Z" fill="${RED}" stroke="#6e1a12" stroke-width="1.2"/><path d="M10 26.5Q12 24 16.5 24Q21 24 23 26.5Q21 29 16.5 29Q12 29 10 26.5Z" fill="#e8c38a"/>${log(33, 7.5, 10, 24, '#7a4e2c')}</svg>`;
+  }
   const car = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4.5" fill="${c}" stroke="#1d2230" stroke-width="1.6"/>`;
   return `<svg class="gl-thumb" viewBox="0 0 54 40" aria-hidden="true"><rect width="54" height="40" rx="7" fill="#c9ccd2"/><rect x="4" y="4" width="46" height="32" rx="4" fill="#535c6c"/>
     ${car(7, 7.5, 21, 10, '#2f7de1')}<rect x="21" y="9.5" width="3.5" height="6" rx="1" fill="#9fdcfb" stroke="#1d2230" stroke-width="1"/>

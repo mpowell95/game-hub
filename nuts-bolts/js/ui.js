@@ -2,7 +2,7 @@ import { NutsBoltsGame, getTopRun } from './game.js';
 import { CAP, PALETTE, isBoltComplete, TIER_ORDER, rampStart } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordNutsBolts } from '../../js/game-stats.js';
+import { recordNutsBolts, withMode } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -866,7 +866,7 @@ class NutsBoltsUI {
     if (!this._winRecorded && (this.won[tier] | 0) < level) {
       this._winRecorded = true;
       try {
-        if (recordNutsBolts(level, this.game.moves, tier)) {
+        if (withMode({ lvl: 'ladder' }, tier, () => recordNutsBolts(level, this.game.moves, tier), { detail: () => ({ moves: this.game.moves | 0 }) })) {
           this.won[tier] = level;
           this.persist();
         } else console.error('[nuts-bolts] the solve was NOT recorded (refused)', { tier, level });

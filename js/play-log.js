@@ -4,6 +4,7 @@
 //     t  the phone's clock when it happened     s  the server's clock when it arrived
 //     g  the game (stats id)                    f  the recorder (a finished game), a its arguments (JSON)
 //     e  an event (Contexto: open, guess, hint, giveup, win, hidden, visible)
+//     m  the game's mode ('<key>@<diff>', '?' = recorded outside withMode)   d  the match's detail (JSON)
 //     k  the puzzle (Contexto 'en-31')          w  the word guessed      r  its rank, or 'unknown'
 //
 // Admins read it (database.rules.json), nobody else: Contexto's guesses include the answers. Entries
@@ -33,7 +34,7 @@ export async function flushPlayLog() {
     const patch = {};
     for (const x of batch) {
       const v = { t: x.t, g: x.g, s: api.serverTimestamp() };
-      for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm']) if (x[k] != null) v[k] = x[k];
+      for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm', 'd']) if (x[k] != null) v[k] = x[k];
       patch[`playLog/${code}/${x.id}`] = v;
     }
     await api.update(api.ref(db), patch);

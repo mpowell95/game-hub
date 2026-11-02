@@ -59,7 +59,7 @@ console.log('\n--- I1 / I2 Sudoku ---');
   const ui = src('sudoku/js/ui.js');
   ok('I1 ui: Undo on a solved board does nothing; a puzzle already recorded on this storage is never recorded again',
     /case 'undo':\s*\n\s*if \(this\.game\.isSolved\(\)\) break;/.test(ui) && /if \(isDone\(id\)\) \{ clearSave\(\); this\._leaveStale\(\); return; \}/.test(ui)
-    && /recordSudoku\(g\.tier, \{[^}]*\}\);\s*\n\s*markDone\(id\);/.test(ui) && /const DONE_KEY = 'gamehub\.sudoku\.done\.v1';/.test(ui));
+    && /recordSudoku\(g\.tier, \{[^}]*\}\)[^\n]*;\s*\n\s*markDone\(id\);/.test(ui) && /const DONE_KEY = 'gamehub\.sudoku\.done\.v1';/.test(ui));
   const s = device(() => { G.recordSudoku('hard', { hints: 0, mistakes: 2 }); G.recordSudoku('hard', { hints: 0, mistakes: 0 }); });
   ok('I2 Sudoku: a solve with a mistake is a win but not a no-hint solve', s.games.sudoku.byDiff.hard.won === 2 && s.games.sudoku.sd.clean.hard === 1);
 }
@@ -152,7 +152,7 @@ console.log('\n--- I6 Arrow Maze ---');
     r.runs.easy.length === 2 && r.runs.easy[1].late === 1 && r.best.easy[T.woWeekKey(t0)] === 40);
   const ui = src('way-out/js/ui.js');
   ok('I6 ui: the week and every stamp come from the server\'s clock; the clear re-reads the carry and the stored slips',
-    /at: bestNow\(\), \.\.\.\(late \? \{ late: 1 \} : \{\}\) \}\);/.test(ui) && /d: bestNow\(\), sv: serverNow\(\) != null \? 1 : 0/.test(ui)
+    /at: bestNow\(\), \.\.\.\(late \? \{ late: 1 \} : \{\}\) \}\)[),]/.test(ui) && /d: bestNow\(\), sv: serverNow\(\) != null \? 1 : 0/.test(ui)
     && /noteWayOutSlips\(this\.tier, this\.level, s, bestNow\(\)\)/.test(ui) && /readCarry\(this\.tier, this\.level, this\.src\)/.test(ui)
     && /woSlipsOf\(loadStats\(\)\.games\.wayout, this\.tier, this\.level\)/.test(ui));
 }
@@ -174,7 +174,7 @@ console.log('\n--- I9 Word Weaver, Gridlock ---');
   let gl = null;   // admin-only: its plays live in the test area, which loadStats() swaps in
   device(() => { G.recordGridlockHint(7, 1111); G.recordGridlock('easy', { level: 8, moves: 10, stars: 3, hints: 0, at: 2222 }); gl = G.loadStats().games.gridlock.gl; });
   ok('I9 Gridlock: the hint and crown times are the ones the game passes (the server\'s)', gl.hint.L7 === 1111 && gl.lv2.L8.t === 2222);
-  ok('I9 Gridlock ui passes bestNow()', /recordGridlockHint\(this\.n, bestNow\(\)\)/.test(src('gridlock/js/ui.js')) && /at: bestNow\(\) \}\);/.test(src('gridlock/js/ui.js')));
+  ok('I9 Gridlock ui passes bestNow()', /recordGridlockHint\(this\.n, bestNow\(\)\)/.test(src('gridlock/js/ui.js')) && /at: bestNow\(\) \}\)[),;]/.test(src('gridlock/js/ui.js')));
 }
 
 // --- I10 Skeeball ----------------------------------------------------------------------------------

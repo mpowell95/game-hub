@@ -440,9 +440,9 @@ class Tower {
     this.recorded = true;
     const d = run.diff;
     try {
-      const st = withMode({ look: this.s.look }, d,
+      const st = withMode(() => ({ look: this.s.look }), d,
         () => recordTower(E.score(run), d, { perfects: run.perfects, bestStreak: run.bestStreak }),
-        { hi: E.score(run) });
+        () => ({ hi: E.score(run) }));
       if (!st) console.warn('[tower] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[tower] recording the result failed', err); }
   }

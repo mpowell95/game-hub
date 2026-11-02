@@ -108,7 +108,8 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // recordWordWeaverFreeHint / recordWordWeaverFreeLost (2026-11-01/02) count free hints used and lost over the cap of 3:
 // costs and write-offs, not plays (gating one would let a free hint go unrecorded). recordWordWeaverDailyHint
 // (2026-11-02) is recordWordWeaverHint's twin for the daily puzzle; the daily result itself (recordWordWeaverDaily) is gated.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult', 'recordWordWeaverFreeHint', 'recordWordWeaverFreeLost', 'recordWordWeaverDailyHint']);
+// recordWordWeaverBuy (2026-11-02) counts bonus stars SPENT on a bought hint: a cost, never a play.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult', 'recordWordWeaverFreeHint', 'recordWordWeaverFreeLost', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

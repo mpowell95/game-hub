@@ -24,7 +24,14 @@ Built and live (all on `main`):
 - Fixed 2026-11-02: the counter counted a finished level's bonuses twice (jumped on the done screen, dropped at the next
   level). Matt kept the grid word COMMIES (Expert 1501): "keep it, whatever".
 
-## THE OPEN TASK: bonus stars become a currency you SPEND on hints
+## DONE 2026-11-02: bonus stars are a currency you SPEND on hints (built and live; `word-weaver/CLAUDE.md`)
+
+The open item now is the RELEASE (below). The notes under this heading are the history of the build.
+
+**Settled 2026-11-02 (Matt: "yes to all")**: prices Letter 40, Pick a square 60, Word 120 bonus stars. Broke = earn more
+or take the plain hint (costs a level star). Free hints already used count as spent (`fu` x 10). Bought hints never lower
+the level's stars; balance replaces "N/10"; no cap. Mockup sent for review: `docs/mockups/word-weaver-hint-shop.html`
+(+ `.jpg`). Next: Matt's comments on the mockup (edit the MOCKUP), build only when he says "build it".
 
 Matt, 2026-11-02, in order:
 1. "We should change the bonus structure. You should have to spend bonus stars to buy hints."

@@ -20,7 +20,7 @@ import { chooseMove, seededRand } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, recordHeadToHead, deviceId } from '../../js/game-stats.js';
+import { recordResult, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -127,6 +127,18 @@ function saveSettings(patch) {
 /** Persist the in-progress game so leaving (hub, Setup, a reload, or closing the
  *  PWA) never loses it. Only ever holds ONE unfinished game; cleared the moment
  *  it finishes or a new one starts. */
+/** WHICH game this was (2026-11-02, js/game-stats.js withMode): who sowed first, from seat `me`'s
+ *  side. `opener` is the seat that opened (P1/P2), or null when this phone cannot know (a save from
+ *  before it was kept): then nothing is claimed. */
+function mancalaMode(opener, me) {
+  return opener === P1 || opener === P2 ? { first: opener === me ? 'me' : 'them' } : {};
+}
+/** The finished game's own numbers: each side's mancala (store) at the end. */
+function mancalaDetail(state, me) {
+  if (!state || !Array.isArray(state.pits)) return null;
+  return { mine: Math.max(0, state.pits[storeOf(me)] | 0), theirs: Math.max(0, state.pits[storeOf(me === P1 ? P2 : P1)] | 0) };
+}
+
 function saveGame(ui) {
   try {
     if (ui.mp) return;   // MP never writes the solo slot (see MP_SAVE_KEY)
@@ -140,6 +152,7 @@ function saveGame(ui) {
       movesMade: ui.movesMade,
       aiSeed: ui.aiSeed,   // the computer's random choices come from this + the position (2026-10-29)
       hm: !!ui._humanMoved,   // 2026-10-29: the human has sown this game (quitting now is a loss)
+      op: ui._opener === P2 ? P2 : ui._opener === P1 ? P1 : null,   // 2026-11-02: who opened (stats mode)
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -165,6 +178,7 @@ function loadGame() {
       // A save from before `hm`: two moves in means the human has almost surely sown once.
       // Since the second pass (2026-10-29) any sowing counts, the computer's included.
       hm: raw.hm === true || (Math.round(Number(raw.movesMade)) || 0) >= 1,
+      op: raw.op === P1 || raw.op === P2 ? raw.op : null,
     };
   } catch { return null; }
 }
@@ -374,7 +388,7 @@ class MancalaUI {
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { recordResult('mancala', LEVEL_KEY[this.level], false); } catch { /* never block leaving */ }
+    try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], false), { detail: () => ({ ...mancalaDetail(this.state, P1), quit: 1 }) }); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -632,6 +646,7 @@ class MancalaUI {
     this.persistSettings();
     clearGame();                 // a new game replaces any saved one
     this.state = newGame(starter);
+    this._opener = starter;
     this.aiSeed = newAiSeed();   // each game's computer choices differ; a resume of THIS game replays them
     // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
     // (finish()'s `if (!this._statsCommitted)` would otherwise silently skip every game after the
@@ -671,6 +686,8 @@ class MancalaUI {
     this.movesMade = saved.movesMade;
     this.aiSeed = saved.aiSeed;
     this._humanMoved = saved.hm;
+    // who opened: saved since 2026-11-02; before that, the alternation already flipped past it
+    this._opener = saved.op != null ? saved.op : (this.nextStarter === P2 ? P1 : P2);
     this.renderGame();
     // If we left while the bot was on move, it picks up where it left off.
     if (this.mode === 'bot' && this.state.turn === P2) this.botTurn();
@@ -1166,13 +1183,13 @@ class MancalaUI {
         // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
       } else if (this.mp) {
         LL.endedNormally(STATS_ID, this._mpKey());
-        try { recordResult('mancala', MP_DIFFICULTY, won); } catch { /* never block the result */ }
+        try { withMode(() => (mancalaMode(this.mp.opener, this._localSeat())), MP_DIFFICULTY, () => recordResult('mancala', MP_DIFFICULTY, won), { detail: () => (mancalaDetail(s, this._localSeat())) }); } catch { /* never block the result */ }
         // Multiplayer only: capture WHO this was against while the room state is still live.
         // Never allowed to block the ordinary result from being recorded.
         const opp = this.mp.opp;
         if (opp) { try { recordHeadToHead('mancala', opp, won); } catch { /* never block the result */ } }
       } else if (this.mode === 'bot') {
-        try { recordResult('mancala', LEVEL_KEY[this.level], won); } catch { /* never block the result */ }
+        try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], won), { detail: () => (mancalaDetail(s, P1)) }); } catch { /* never block the result */ }
       }
     }
     if (this.mp) this._mpAfterGameEnd();
@@ -1359,7 +1376,7 @@ class MancalaUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(pit), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!result.state.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, false], [mp.opp]);
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY));
     }
   }
 
@@ -1533,6 +1550,7 @@ class MancalaUI {
     this._statsCommitted = false;
     clearGame();   // an MP match supersedes any solo save
     this.state = newGame(round.dealer === P2 ? P2 : P1);
+    mp.opener = round.dealer === P2 ? P2 : P1;   // who opened THIS game (stats mode, 2026-11-02)
     this.view = 'game';
     this.busy = false;
     this.movesMade = 0;
@@ -1578,7 +1596,7 @@ class MancalaUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true], opps: [mp.opp] });
+          fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1751,7 +1769,7 @@ class MancalaUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, true], [mp.opp]);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.container);
     this.mp = null;
@@ -1830,6 +1848,7 @@ class MancalaUI {
         at: Date.now(),
         gameNum: mp.gameNum | 0,
         nextDealer: mp.nextDealer,
+        opener: mp.opener === P1 || mp.opener === P2 ? mp.opener : null,   // 2026-11-02, stats mode
         series: { wins: mp.series.wins.slice(), draws: mp.series.draws | 0 },
         lastScoredGame: mp.lastScoredGame | 0,
         statsCommitted: !!this._statsCommitted,
@@ -1871,6 +1890,7 @@ class MancalaUI {
       const other = role === 'host' ? 'guest' : 'host';
       const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, save.gameNum),
         n: save.gameNum, mySeat: role, role, fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true],
+        tag: modeTag(() => (mancalaMode(save.opener, role === 'host' ? P1 : P2)), MP_DIFFICULTY),
         oppsOf: (room) => [room[other]] });
       if (this._dead) return;
       if (!chk.go) {
@@ -1896,6 +1916,7 @@ class MancalaUI {
     const mp = this.mp;
     mp.gameNum = save.gameNum | 0;
     mp.nextDealer = save.nextDealer === P2 ? P2 : P1;
+    mp.opener = save.opener === P1 || save.opener === P2 ? save.opener : null;
     // The series tally is carried through UNTOUCHED, same as tic-tac-toe/js/ui.js's restore:
     // a restore that zeroed it would be the initMatch-wipe failure shape from js/CLAUDE.md's
     // invariant 5, translated to this game's vocabulary.

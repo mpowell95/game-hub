@@ -17,13 +17,11 @@ want"*) and approved the name: *"Gridlock is good"*. Spanish title: **Atasco**.
 
 - In-hub `module: '../gridlock/js/ui.js'`, **immersive**. Hub id and stats id are both `gridlock`.
   Prefix `.gl-root` / `.gl-`.
-- **Admin only** (`devOnly: true`, an `added` date for the Newest sort, no `released` date: that is
-  the New pill's input and must be the day Matt releases it from the admin page). Its `GAME_META`
-  row shipped with the game, so the board appears the moment it is released.
-- **KEEP IT ADMIN ONLY until Matt says otherwise** (Matt, 2026-10-14: *"make sure it's admin only
-  until I've had time to fully test it"*). He releases it himself from the admin page (Games ->
-  Gridlock), which overrides the code default with no commit. `tools/test-gridlock.mjs` fails if the
-  `GAMES` entry loses `devOnly: true` or gains a `released` date; change those checks only on his word.
+- **RELEASED 2026-11-02** (Matt: *"if gridlock passes all your tests, release it"*): `released:
+  '2026-11-02'` on its `GAMES` entry (the New pill), off `ADMIN_ONLY` (`js/game-stats.js`) and the
+  `devOnly` TABS flag (`js/game-stats-ui.js`). Plays made while admin-only stayed in the TEST area
+  (`testGames.gridlock`, kept, counted by nothing); the leaderboard starts from the real record. It was
+  admin only from 2026-10-14 (Matt: *"make sure it's admin only until I've had time to fully test it"*).
 - `isInProgress()` is always `false`: every move autosaves, so leaving is lossless.
 - Immersive layout is Arrow Maze's `_positionRoot()` (a fixed root measured against the mount
   point; in the hub it runs edge to edge and the top bar starts right of the floating back button).
@@ -96,7 +94,13 @@ picture first (`max-height: 760px`). `check-no-scroll` fits all 8 screens.
 Still no tagline, no "Look" / "Difficulty" labels (`aria-label`s), no level ranges or current level on
 the difficulty buttons, no "worth N points" line. Matt (10-14): *"There are WAY too many words."*
 
-## The two looks (Matt, 2026-10-14)
+## The looks (Matt, 2026-10-14; Yard and Logs 2026-11-02)
+
+**Four looks since 2026-11-02 (Matt's approved mockup):** Wood, Cars, **Yard** (shipping containers on
+painted concrete, hazard-striped walls) and **Logs** (logs on a river, boulder walls, the red piece is a
+red canoe). All cosmetic: same levels, stars and points. Setup screen shows them 2x2. Yard and Logs follow
+the hub's light/dark theme like Wood. Art in `js/art.js` (`containerSVG`, `logSVG`, `canoeSVG`).
+
 
 **Wood** (default: Unblock Me is the best-known version) and **Cars** (Rush Hour's parking lot).
 Same levels, stars and points; the choice is `look` in the settings key, per phone, picked on the

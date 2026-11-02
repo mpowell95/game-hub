@@ -40,7 +40,8 @@ export function appendPlayLog(code, entry) {
     if (entry.k != null) x.k = str(entry.k, 40);
     if (entry.w != null) x.w = str(entry.w, 40);
     if (entry.r != null) x.r = str(entry.r, 20);
-    if (entry.m != null) x.m = str(entry.m, 150);   // the game's mode (game-stats.js withMode, 2026-10-30)
+    if (entry.m != null) x.m = str(entry.m, 150);   // the game's mode (game-stats.js withMode, 2026-10-30); '?' = none given
+    if (entry.d != null) x.d = str(entry.d, 400);   // the match's detail, JSON (withMode's `detail`, 2026-11-02)
     const q = readQueue();
     q.push(x);
     writeQueue(q);

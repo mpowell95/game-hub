@@ -14,9 +14,9 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone 
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
-import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverFreeHint, recordWordWeaverFreeLost, recordWordWeaverDaily, recordWordWeaverDailyHint, withMode, loadStats } from '../../js/game-stats.js';
-import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwFreeHints, wwFreeRaw, wwBonuses, WW_FREE_EVERY, WW_FREE_MAX, wwDaily, wwDailyHints } from '../../js/word-weaver-points.js';
-import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, starsFor, isDone, cleanState, freshState, foundCells, loadDailyData, dailyLevel } from './engine.js';
+import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverBuy, recordWordWeaverDaily, recordWordWeaverDailyHint, withMode, loadStats } from '../../js/game-stats.js';
+import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwBalance, WW_PRICE, wwDaily, wwDailyHints } from '../../js/word-weaver-points.js';
+import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells, loadDailyData, dailyLevel } from './engine.js';
 import { today, dayNumber, dateOfDay, dailyAttempt, dailyAttempts, writeDailyAttempt, clockStart, clockPause, clockResume, clockSolve, perfNow } from './daily.js';
 import { postDaily, readMyStart, watchDaily, shownRows, fmtSec } from './board.js';
 import { myCode } from '../../js/messages.js';
@@ -433,7 +433,7 @@ class WordWeaver {
     }
     const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, sym: this.st.sym.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = withMode({ mode: 'ladder', lang: info.lang || 'en' }, wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = withMode(() => ({ mode: 'ladder', lang: info.lang || 'en' }), wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();
@@ -621,6 +621,8 @@ class WordWeaver {
     this.sel = [];
     this.tail = null;
     this.pillHold = null;
+    this.picking = false;
+    this.root.classList.remove('is-picking');
     const v = this.view, played = v === 'play' || v === 'done';
     const modal = '<div class="gh-overlay ww-modal" hidden></div>';
     this.root.classList.toggle('is-setup', v === 'setup');
@@ -728,7 +730,7 @@ class WordWeaver {
             <g class="ww-go" aria-hidden="true"><circle r="${GO_R}"/><path d="M-7.5 .5l5 5 10-11"/></g>
           </svg>
         </div>
-        <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}<span class="ww-badge" hidden></span></button>
+        <button type="button" class="ww-side ww-r" data-act="hint" aria-label="${t('hint_aria')}">${ICON_BULB}</button>
       </div>`;
   }
 
@@ -817,42 +819,34 @@ class WordWeaver {
     return queued + s.extra.length + s.sym.length;
   }
 
+  /** The star chip = the BONUS STAR BALANCE (2026-11-02: bonus stars are spent on hints): collected - spent. */
   _paintExtra(bump) {
     const chip = this.root.querySelector('.ww-chip');
     if (!chip) return;
-    let total = 0;
-    const pending = this._pendingBonuses();
-    try { total = wwBonuses(loadStats().games.wordweaver, pending); } catch { total = pending; }
-    const n = total % WW_FREE_EVERY;
+    const n = this._balance();
     const p = chip.querySelector('.ww-prog');
-    if (p) p.textContent = `${n}/${WW_FREE_EVERY}`;
-    chip.style.setProperty('--ww-fill', String(n / WW_FREE_EVERY));
-    chip.setAttribute('aria-label', t('bonus_aria', { n, of: WW_FREE_EVERY }));
+    if (p) p.textContent = String(n);
+    chip.style.setProperty('--ww-fill', '0');
+    chip.setAttribute('aria-label', t('balance_aria', { n }));
     if (bump) this._anim(chip, bump);
+  }
+
+  /** Bonus stars to spend now (lifetime collected + this level's not yet recorded, minus spent). */
+  _balance() {
+    const pending = this._pendingBonuses();
+    try { return wwBalance(loadStats().games.wordweaver, pending); } catch { return 0; }
   }
 
   _paintTools(bumpFree) {
     const hint = this.root.querySelector('[data-act="hint"]');
     if (!hint) return;
     hint.disabled = this.finishing || !hintCell(this.level, this.st);
-    // Free hints banked (every 10 bonus words, 2026-11-01): a gold count on the hint button.
-    const n = this._freeBank();
-    const b = hint.querySelector('.ww-badge');
-    if (b) { b.textContent = String(n); b.hidden = n === 0; }
-    hint.setAttribute('aria-label', n ? t('free_aria', { n }) : t('hint_aria'));
-    if (bumpFree && n > (this._lastFree || 0)) this._anim(hint, 'is-bump');
-    this._lastFree = n;
-  }
-
-  /** Free hints this player can use now (lifetime bonus words + this level's, not yet recorded). */
-  _freeBank() {
-    const pending = this._pendingBonuses();
-    try {
-      // At most 3 banked (Matt, 2026-11-02): one earned past that is written off as lost at once, never saved for later.
-      const raw = wwFreeRaw(loadStats().games.wordweaver, pending);
-      if (raw > WW_FREE_MAX && !recordWordWeaverFreeLost(raw - WW_FREE_MAX)) console.error('[word-weaver] free hints over the cap NOT written off');
-      return wwFreeHints(loadStats().games.wordweaver, pending);
-    } catch { return 0; }
+    hint.setAttribute('aria-label', t('hint_aria'));
+    // A hint the balance can now buy: the bulb pops when a bonus lands (the old free-hint badge is gone, 2026-11-02).
+    const can = this._balance() >= WW_PRICE.l;
+    if (bumpFree && can && !this._couldBuy) this._anim(hint, 'is-bump');
+    this._couldBuy = can;
+    if (this.picking && (hint.disabled || !emptyCells(this.level, this.st).length)) this._endPick();
   }
 
   /** Restart a CSS animation class on an element (the class is removed when it ends). */
@@ -1127,18 +1121,81 @@ class WordWeaver {
     });
   }
 
+  // --- hints (2026-11-02, Matt: "You should have to spend bonus stars to buy hints") ----------------------------------
+  // The bulb opens the hint sheet: a LETTER (40), a SQUARE the player picks (60), a WORD (120), bought with bonus
+  // stars (js/word-weaver-points.js WW_PRICE) and never lowering the level's stars; or the plain letter, which costs
+  // a level star (0 hints 3, 1 hint 2, 2+ 1). Broke = play on for more bonus stars, or take the plain one.
+
   _hint() {
+    if (this.view !== 'play' || this.finishing || !hintCell(this.level, this.st)) return;
+    this._endPick();
+    this._openShop();
+  }
+
+  _openShop() {
+    const bal = this._balance();
+    const has = { l: !!hintCell(this.level, this.st), q: emptyCells(this.level, this.st).length > 0, w: hintWordCells(this.level, this.st).length > 0 };
+    const tiles = (cls) => `<span class="ww-sic" aria-hidden="true">${cls.map((c) => `<i class="${c}"></i>`).join('')}</span>`;
+    const icon = { l: tiles(['is-f', '', '']), q: tiles(['', 'is-t', '']), w: tiles(['is-f', 'is-f', 'is-f']) };
+    const row = (k) => {
+      const ok = has[k] && bal >= WW_PRICE[k];
+      return `<button type="button" class="ww-srow" data-act="buy" data-kind="${k}"${ok ? '' : ' disabled'} aria-label="${t('buy_aria', { what: t('buy_' + k), n: WW_PRICE[k] })}">`
+        + `${icon[k]}<b class="ww-snm">${t('buy_' + k)}</b><span class="ww-scost">${ICON_STAR}<b>${WW_PRICE[k]}</b></span></button>`;
+    };
+    const after = starsFor(this.st.hints + 1);
+    this._sheet(`
+      <div class="gh-modal ww-dialog ww-shop" role="dialog" aria-modal="true" aria-labelledby="ww-h">
+        <button type="button" class="gh-modal__close" data-act="close" aria-label="${t('close_aria')}">&times;</button>
+        <h2 class="gh-modal__title" id="ww-h"><span class="ww-h-star">${ICON_STAR}</span>${bal}</h2>
+        ${row('l')}${row('q')}${row('w')}
+        <div class="ww-ssep" aria-hidden="true"></div>
+        <button type="button" class="ww-srow" data-act="plain" aria-label="${t('plain_aria', { n: after })}">`
+          + `<span class="ww-sic ww-sbulb" aria-hidden="true">${ICON_BULB}</span><b class="ww-snm">${t('buy_l')}</b>`
+          + `<span class="ww-scost ww-srate" aria-hidden="true">${starRow(after, 'ww-sstar')}</span></button>
+      </div>`);
+    const m = this.root.querySelector('.ww-modal');
+    if (m) m.classList.add('is-shop');
+  }
+
+  /** Buy a hint of `kind` ('l' letter, 'q' square, 'w' word); a square needs `cell` ('r,c'), else it starts picking. */
+  _buy(kind, cell) {
+    if (this.view !== 'play' || this.finishing || !this.level) return false;
+    const cost = WW_PRICE[kind];
+    if (!cost || this._balance() < cost) return false;
+    let keys;
+    if (kind === 'l') { const c = hintCell(this.level, this.st); keys = c ? [c.r + ',' + c.c] : []; }
+    else if (kind === 'w') keys = hintWordCells(this.level, this.st);
+    else {
+      if (!cell) { this._closeModal(); this._startPick(); return false; }
+      keys = emptyCells(this.level, this.st).includes(cell) ? [cell] : [];
+    }
+    if (!keys.length) return false;
+    // Paid FIRST, in the synced stats store (THE LAW: the spend is never lost); a refused write reveals nothing.
+    let ok = null;
+    const where = this.daily ? this.daily.key : (this.lang === 'es' ? 'es-' : 'en-') + 'L' + this.n;
+    try { ok = recordWordWeaverBuy(kind, cost, where); } catch (err) { console.error('[word-weaver] hint NOT bought (not recorded)', err); }
+    if (!ok) { console.error('[word-weaver] hint NOT bought (the spend was not recorded)'); return false; }
+    this._closeModal();
+    this._endPick();
+    this._reveal(keys, false);
+    this._paintExtra('is-wiggle');
+    return true;
+  }
+
+  /** The plain hint: one letter that costs a level star (a hint, recorded at once: the hint-gap rule). */
+  _plainHint() {
     if (this.view !== 'play' || this.finishing) return;
     const c = hintCell(this.level, this.st);
     if (!c) return;
-    const k = c.r + ',' + c.c;
-    // A FREE hint first, when one is banked (every 10 bonus words, 2026-11-01): it reveals a letter and costs no star.
-    let free = false;
-    if (this._freeBank() > 0) {
-      try { free = !!recordWordWeaverFreeHint(); } catch (err) { console.error('[word-weaver] free hint NOT recorded; a normal hint is used', err); }
-    }
-    this.st.revealed.push(k);
-    if (free) this.st.free = (this.st.free || 0) + 1;
+    this._closeModal();
+    this._endPick();
+    this._reveal([c.r + ',' + c.c], true);
+  }
+
+  /** Show `keys`: a paid hint counts one hint (stars); a bought reveal counts in `free` (costs no star). */
+  _reveal(keys, paid) {
+    for (const k of keys) if (!this.st.revealed.includes(k)) this.st.revealed.push(k);
+    if (!paid) this.st.free = (this.st.free || 0) + keys.length;
     else {
       this.st.hints += 1;
       // Recorded at once in the synced stats store, not only in this save (Matt, 2026-10-29: "Close the hint gap").
@@ -1156,9 +1213,31 @@ class WordWeaver {
     }
     this._save();
     this._paintGrid();
-    this._anim(this.cells.get(k), 'is-flash');
+    for (const k of keys) this._anim(this.cells.get(k), 'is-flash');
     this._paintTools();
     if (isDone(this.level, this.st)) this._complete();
+  }
+
+  /** Pick-a-square: every empty square glows; the next one tapped is bought and revealed. ✕ backs out, free. */
+  _startPick() {
+    if (this.view !== 'play' || !this.root) return;
+    this.picking = true;
+    this.root.classList.add('is-picking');
+    let bar = this.root.querySelector('.ww-pickbar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'ww-pickbar';
+      bar.setAttribute('role', 'status');
+      (this.root.querySelector('.ww-pillrow') || this.root).appendChild(bar);
+    }
+    bar.innerHTML = `${ICON_STAR}<b>${t('pick_square')}</b><button type="button" class="ww-pickx" data-act="pickx" aria-label="${t('close_aria')}">&times;</button>`;
+  }
+  _endPick() {
+    this.picking = false;
+    if (!this.root) return;
+    this.root.classList.remove('is-picking');
+    const bar = this.root.querySelector('.ww-pickbar');
+    if (bar) bar.remove();
   }
 
   /** The last word is in: count the level FIRST, then let the letters land and show the done screen. */
@@ -1209,10 +1288,19 @@ class WordWeaver {
   _handleClick(ev) {
     const btn = ev.target.closest('[data-act]');
     if (ev.target.classList && ev.target.classList.contains('ww-modal') && !ev.target.hidden) { this._closeModal(); return; }
+    // Pick-a-square (2026-11-02): the square tapped is the one bought.
+    if (this.picking && !btn) {
+      const cell = ev.target.closest && ev.target.closest('.ww-c');
+      if (cell && this.root.contains(cell) && cell.dataset.k) this._buy('q', cell.dataset.k);
+      return;
+    }
     if (!btn || !this.root.contains(btn)) return;
     const act = btn.dataset.act;
     if (act === 'shuffle') this._shuffle();
     else if (act === 'hint') this._hint();
+    else if (act === 'buy') this._buy(btn.dataset.kind);
+    else if (act === 'plain') this._plainHint();
+    else if (act === 'pickx') this._endPick();
     else if (act === 'extras') this._openExtras();
     else if (act === 'help') this._openHelp();
     else if (act === 'close') this._closeModal();
@@ -1271,7 +1359,7 @@ class WordWeaver {
         <p>${t('how_hints')}</p>
         <p>${t('how_extra')}</p>
         <p>${t('how_square')}</p>
-        <p>${t('how_free')}</p>
+        <p>${t('how_buy', { l: WW_PRICE.l, q: WW_PRICE.q, w: WW_PRICE.w })}</p>
         <p>${t('how_daily')}</p>
       </div>`);
   }
@@ -1301,6 +1389,7 @@ class WordWeaver {
     if (!m) return;
     m.hidden = true;
     m.innerHTML = '';
+    m.classList.remove('is-shop');
     const back = this._opener;
     this._opener = null;
     if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
@@ -1316,7 +1405,10 @@ class WordWeaver {
         get level() { return ui.level; },
         get state() { return ui.st; },
         submit: (word) => ui._resolve(word),
-        hint: () => ui._hint(),
+        hint: () => ui._plainHint(),
+        shop: () => ui._hint(),
+        buy: (kind, cell) => ui._buy(kind, cell),
+        get balance() { return ui._balance(); },
         get daily() { return ui.daily; },
       };
     } catch { /* no window */ }

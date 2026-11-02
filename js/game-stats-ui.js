@@ -25,7 +25,7 @@ import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
-import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount } from './word-weaver-points.js';
+import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount, wwCollected, wwSpent } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { backStack } from './back-stack.js';
 
@@ -50,7 +50,7 @@ const TABS = [
   { id: 'wayout', labelKey: 'game_title_wayout' },
   // devOnly matches js/hub.js (Matt, 2026-10-28: admin-only games off the leaderboard, for everyone).
   // tools/test-leaderboard-rank.mjs fails if this list and the hub's devOnly list drift apart.
-  { id: 'gridlock', labelKey: 'game_title_gridlock', devOnly: true },
+  { id: 'gridlock', labelKey: 'game_title_gridlock' },
   // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
   // sub-counter has its own screen (wordWeaverScreen).
   { id: 'wordweaver', labelKey: 'game_title_wordweaver', devOnly: true },
@@ -497,6 +497,10 @@ function wordWeaverScreen(rec) {
       <div class="gs-tally"><b>${wwStars(rec)}</b><span>${tf('lb_unit_stars', 'stars')}</span></div>
       <div class="gs-tally"><b>${wwThreeStars(rec)}</b><span>${t('gs_gl_three')}</span></div>
       <div class="gs-tally"><b>${wwExtra(rec)}</b><span>${tf('gs_ww_extra', 'Extra words')}</span></div>
+    </div>
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${wwCollected(rec)}</b><span>${tf('lb_tex_ww_bonus', 'Bonus stars collected')}</span></div>
+      <div class="gs-tally"><b>${wwSpent(rec)}</b><span>${tf('lb_tex_ww_spent', 'Bonus stars spent')}</span></div>
     </div>
     <h4 class="gs-tbl-h">${t('gs_diff_table_h')}</h4>
     <table class="gs-grid">

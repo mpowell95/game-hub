@@ -384,6 +384,9 @@ class CupPong {
     this.clearTimers();
     const first = this.settings.nextFirst;
     this.match = new Match({ first, gentlemans: this.settings.gentlemans, reracks: this.settings.reracks === 'inf' ? Infinity : this.settings.reracks });
+    // THIS player's own numbers in the match (2026-11-02, recorded with the result as withMode's detail;
+    // vs the computer has no resume, so a count from the first throw is the whole match)
+    this._tally = { throws: 0, made: 0, ballsBack: 0, onFire: 0, rack: '' };
     this.recorded = false;
     this.throwState = null;
     this.pickMode = null;
@@ -489,7 +492,7 @@ class CupPong {
     // The first throw of the match, the computer's included, arms the quit loss (2026-10-29, second
     // pass, Matt: quitting after the computer's opening throws was free).
     if (ev.length && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
-      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a], modeTag(modeOf(this.settings), this.settings.diff));
+      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a], modeTag(() => (modeOf(this.settings)), this.settings.diff));
     }
     if (ev.length && shooter === 'a' && this.lastShot) {
       this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
@@ -509,6 +512,14 @@ class CupPong {
     // An island call is for ONE ball (Matt, 2026-09-29: "It shouldn't auto apply to the second
     // ball"). Once a throw has used it, its ring comes off, hit or miss.
     if (!m.called && ev.some((e) => e.type === 'miss' || e.type === 'made')) { R.setMarks('a', null); R.setMarks('b', null); }
+    const tl = this.mp ? null : this._tally;
+    if (tl) for (const e of ev) {
+      if (e.side !== 'a') continue;
+      if (e.type === 'made' || e.type === 'miss') tl.throws++;
+      if (e.type === 'made') tl.made++;
+      else if (e.type === 'ballsBack') tl.ballsBack++;
+      else if (e.type === 'onFire') tl.onFire++;
+    }
     for (const e of ev) {
       if (e.type === 'made') {
         const side = e.side === 'a' ? 'b' : 'a';
@@ -886,7 +897,8 @@ class CupPong {
     this.waiting = false;
     const MP = this.MP;
     const ov = mp.game && mp.game.over;
-    MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), MP.modeOfMatch(mp.game));   // once per phone, whoever ended it
+    // the stored side 'a' shoots first in every challenge game (mp.js), so mp.side says who did (2026-11-02)
+    MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(MP.modeOfMatch(mp.game) || {}), first: mp.side === 'a' ? 'me' : 'them' }));   // once per phone, whoever ended it
     MP.markResultSeen(mp.id);
     this.paintHud();
     this.paintOptions();
@@ -964,7 +976,7 @@ class CupPong {
       if (!res.ok) { this.toast(res.reason === 'denied' ? t('mpDenied') : t('sendFailed'), 2400); return; }
       // Called off (nobody had answered): no loss to count.
       if (res.cancelled) { this.mpEndedNoResult(this.mpEndText(res.game, mp.side)); return; }
-      this.MP.countResult(mp.id, false, Date.now(), this.MP.modeOfMatch(mp.game));
+      this.MP.countResult(mp.id, false, Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), first: mp.side === 'a' ? 'me' : 'them' }));
       this.MP.markResultSeen(mp.id);
       this.openMultiplayer();
     });
@@ -1213,6 +1225,7 @@ class CupPong {
   /** A rerack's events: record it (a challenge), slide the cups, repaint the options. */
   applyRerack(ev, entry) {
     if (ev.length) this.mpRecord(entry);
+    if (ev.length && this._tally && !this.mp && entry && entry.key) this._tally.rack = String(entry.key);   // the last rack chosen
     for (const e of ev) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
     this.engine.rend.setMarks('b', null);
     this.paintOptions();
@@ -1349,7 +1362,9 @@ class CupPong {
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       const lost = quitLossLost('cuppong');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
       dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
-      if (!lost) try { withMode(modeOf(this.settings), this.settings.diff, () => recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a)); } catch (err) { console.error('[cup-pong] record failed', err); }
+      const tl = this._tally || {};
+      const detail = { throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, reracks: m.reracksUsed.a | 0, ...(tl.rack ? { rack: tl.rack } : {}) };
+      if (!lost) try { withMode(() => (modeOf(this.settings)), this.settings.diff, () => recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a), { detail }); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
@@ -1547,7 +1562,7 @@ class CupPong {
     const before = soloBest();
     if (!this.recorded) {
       this.recorded = true;
-      try { recordCupPongSolo(this.throws); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
+      try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { throws: this.throws | 0 } })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
     }
     const best = soloBest();
     // "New best" only when this rack actually set it (a first clear counts); otherwise the best.

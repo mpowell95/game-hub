@@ -260,7 +260,7 @@ export class LiveRoom {
     const h = entry.k === 'r' ? null : stateHash(this.canon);
     // Your own first move arms the leave (js/live-leave.js): a phone that never comes back loses.
     if (entry.k !== 'r' && !this.over && entry.by === sideOfSeat(this.seat)) {
-      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : [], modeTag(teamMode(this.canon, this.seat), 'mp'));
+      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : [], modeTag(() => (teamMode(this.canon, this.seat)), 'mp'));
     }
     this.sending = this.sending.then(async () => {
       for (let tries = 0; tries < 8 && !this.dead; tries++) {

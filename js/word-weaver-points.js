@@ -22,6 +22,8 @@
 //   ww.b = n                      BONUS SQUARES collected (2026-11-02; a counter; they earn free hints like bonus words).
 //   ww.fl = n                     FREE hints LOST (2026-11-02): earned while 3 were banked (the most).
 //   ww.fu = n                     FREE hints used (2026-11-01; a counter; every 10 bonus words earn one, wwFreeHints).
+//   ww.sp = n                     bonus stars SPENT on hints (2026-11-02; a counter; wwSpent adds fu x 10).
+//   ww.by = { l, q, w }           hints BOUGHT by kind: letter, picked square, word (2026-11-02; counters).
 //   ww.hint['L<n>'] = { c, t }    HINTS, recorded the moment Hint is tapped (2026-10-29, Matt: "Close the hint
 //   ww.esHint['L<n>'] = { c, t }  gap"): c = hints used on level n so far (only grows), t = the first hint's
 //                                 time. Before this the count lived only in the level's save, so wiping the save
@@ -219,6 +221,34 @@ export function wwFreeRaw(rec, pendingExtra = 0) {
 }
 export function wwFreeHints(rec, pendingExtra = 0) {
   return Math.max(0, Math.min(WW_FREE_MAX, wwFreeRaw(rec, pendingExtra)));
+}
+
+// --- BONUS STARS ARE A CURRENCY (Matt, 2026-11-02: "You should have to spend bonus stars to buy hints") ----------------
+// Collected = every bonus word + every star square, lifetime, both ladders and the daily (ww.x + ww.b, + this level's not
+// yet recorded). Spent = ww.sp + 10 for every FREE hint used before this (ww.fu: each one cost 10 bonuses; Matt: "of
+// course if you buy a hint and use it, it should be gone"). Free hints LOST over the old cap of 3 (ww.fl) were never
+// used, so they are not spent: those stars count again. Balance = collected - spent. Prices are Matt's ("yes to all").
+// A bought hint never lowers a level's stars; the plain hint (no stars to spend) still does.
+// The free-hint readers above stay for the stored fields (rule 5); nothing in the game reads them any more.
+export const WW_PRICE = { l: 40, q: 60, w: 120 };
+/** Hints bought, by kind, { l, q, w }. */
+export function wwBought(rec) {
+  const by = (rec && rec.ww && rec.ww.by) || {};
+  const n = (k) => { const v = Math.floor(Number(by && by[k]) || 0); return v > 0 ? v : 0; };
+  return { l: n('l'), q: n('q'), w: n('w') };
+}
+/** Bonus stars collected, lifetime (+ `pending`, this level's not yet recorded). */
+export function wwCollected(rec, pending = 0) {
+  return wwBonuses(rec, pending);
+}
+/** Bonus stars spent, lifetime: bought hints + the free hints used before (10 each). */
+export function wwSpent(rec) {
+  const sp = Math.floor(Number(rec && rec.ww && rec.ww.sp) || 0);
+  return (sp > 0 ? sp : 0) + wwFreeUsed(rec) * WW_FREE_EVERY;
+}
+/** Bonus stars to spend now. */
+export function wwBalance(rec, pending = 0) {
+  return Math.max(0, wwCollected(rec, pending) - wwSpent(rec));
 }
 
 // --- THE DAILY PUZZLE (2026-11-02, Matt: "Do 1") -----------------------------------------------------------

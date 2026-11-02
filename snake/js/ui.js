@@ -12,7 +12,7 @@
 import { Game, COLS, ROWS, TICK_MS, DIFFS } from './game.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
-import { recordSnake, loadStats } from '../../js/game-stats.js';
+import { recordSnake, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -414,7 +414,7 @@ class SnakeUI {
     // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
     if (!this.recorded) {
       this.recorded = true;
-      try { recordSnake(this.game.length, this.settings.difficulty, this.settings.walls); }
+      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0 })); }
       catch (err) { console.error('[snake] stats record failed — this run is not counted', err); }
     }
     const newBest = this.game.length > this.best;

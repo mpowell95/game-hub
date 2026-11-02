@@ -192,7 +192,7 @@ ok('C4 the clear is scored with max(carried + this try, other storages, this sto
   /const mine = \(this\._carry \| 0\) \+ \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\);/.test(ui) && /const slips = Math\.max\(mine, other, elsewhere\);/.test(ui)
   && /this\._carry = Math\.max\(this\._carry \| 0, readCarry\(this\.tier, this\.level, this\.src\)\);/.test(ui) && /woEarnedPoints\(this\.tier, slips\)/.test(ui));
 ok('C4 a replay\'s slips ride its Restart and leaving until a replay of it is cleared',
-  /this\._replayCarry = readReplaySlips\(band, miss\.n\);/.test(ui) && /slips: this\._slipsNow\(\) \}\);/.test(ui) && /else clearReplaySlips\(this\.tier, this\.level\);/.test(ui));
+  /this\._replayCarry = readReplaySlips\(band, miss\.n\);/.test(ui) && /slips: this\._slipsNow\(\) \}\)\)?;/.test(ui) && /else clearReplaySlips\(this\.tier, this\.level\);/.test(ui));
 
 console.log(`\nhint-holes tests: ${pass} passed, ${fail} failed.`);
 if (fail) process.exit(1);

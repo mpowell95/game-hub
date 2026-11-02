@@ -505,12 +505,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), r.mineEsc, g.over.at, chModeOf(g))) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), r.mineEsc, g.over.at, () => chModeOf(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), r.mineEsc, r.updated, chModeOfRow(r));
+  for (const r of todo) countResult(r.id, wonOf(r.result), r.mineEsc, r.updated, () => chModeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }

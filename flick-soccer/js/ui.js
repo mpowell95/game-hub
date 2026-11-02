@@ -804,7 +804,9 @@ class FlickSoccerUI {
     if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = withMode(modeOf(m), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0));
+      // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
+      const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
+      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0), { detail });
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -978,7 +980,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(modeOf(q.m), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false));
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1323,7 +1325,9 @@ class FlickSoccerUI {
     if (resigned) m.winner = won ? mp.mySeat : mp.mySeat ^ 1;
     const ov = mp.game && mp.game.over;
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), this.MP.modeOfMatch(mp.game));   // once per phone; the finish time keeps a fresh storage honest
+    const me = mp.mySeat === 1 ? 1 : 0;
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && (m.starter === 0 || m.starter === 1) ? { first: m.starter === me ? 'me' : 'them' } : {}) }),
+      { detail: () => (m && Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[me] | 0), ga: Math.max(0, m.scores[me ^ 1] | 0) } : null) });   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';

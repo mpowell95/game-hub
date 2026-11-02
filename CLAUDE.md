@@ -53,7 +53,16 @@ Not recording which mode/options a game was played with lost game data (Darts' C
 every online match's terms) = THE LAW broken. **Every record call goes through `withMode(mode, chosenDiff, ...)`**
 (`js/game-stats.js`; deferred results pass `modeTag(...)` to `armQuitLoss`/`armLeave`/`recordLeaveWin`), carrying
 EVERY option that defines the game, online included. Stored `games.<id>.byMode`. A new option or a new game is not
-done until it is recorded; `tools/test-game-modes.mjs` + `tools/game-modes.json` check the wiring.
+done until it is recorded. **Enforced on EVERY file (2026-11-02, Matt: "FIX THIS PERMANENTLY")**: `tools/test-game-modes.mjs`
+runs `tools/scan-game-modes.mjs`, a full scan with no list of files (Filler and Mancala were never on the old list); its
+`AUX` (= `NOT_A_RESULT` in `js/game-stats.js`) is the only exception list, each with a reason. Turn-based games carry
+`first: 'me'|'them'` (who actually went first; `went` where `first` is the setting). **Per-match numbers** go in
+`withMode(mode, diff, fn, { detail: { shots: 12, rack: 'tri10' } })`: counters ADD into `games.<id>.dt.<key>`, string
+facts count `dt.<key>.<value>`, `dt._n` = results with detail; summed per person in `players-agg.js`; in the play log as
+`d`. **Run-time net**: a result recorded outside withMode still counts, is filed under `byMode['?']`, `console.error`s
+and logs `m: '?'` (read with `tools/read-play-log.mjs`). **Mode and detail are THUNKS** (`withMode(() => modeOf(m), d,
+() => record…, { detail: () => det(m) })`, `modeTag(() => …)`): read inside withMode's own try, so a throw records the
+result anyway (mode `'?'` / no detail, play log `d._err`); the scan fails anything computed at the call site.
 
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
@@ -102,8 +111,8 @@ A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation
 
 ## Open handoff: Word Weaver (2026-11-02)
 
-**"Word Weaver, pick up where we left off"** = read **`docs/HANDOFF-WORD-WEAVER-2026-11-02.md`** first (the open task:
-bonus stars become a currency spent on 3 kinds of hints; prices to set, Matt: "too affordable"; then the release).
+**"Word Weaver, pick up where we left off"** = read **`docs/HANDOFF-WORD-WEAVER-2026-11-02.md`** first (bought hints shipped
+2026-11-02; the open item is the release).
 Delete this section once that task is done and Word Weaver is released.
 
 ## Open handoff: Leaderboard v2 (2026-11-01)
@@ -294,7 +303,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `players-agg.js` | per-person aggregation of synced devices (no `headToHeadRows`; removed 2026-08-11) |
 | `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game; tabs By Player / By Game top 3 / You, last tab remembered) |
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
-| `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band = its leaderboard number; free hints (10 bonuses = 1, at most 3 banked, `ww.fu`/`ww.fl`); bonus squares `ww.b` (2026-11-02); the DAILY puzzle `ww.dl`/`ww.dh` (`wwDaily`, `wwDailyMerge`, `wwDailyCount`; no points, 2026-11-02) |
+| `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band = its leaderboard number; bonus stars buy hints (`WW_PRICE` 40/60/120, `wwBalance`/`wwCollected`/`wwSpent`, `ww.sp`/`ww.by`, 2026-11-02; old free hints `ww.fu`/`ww.fl` kept); bonus squares `ww.b` (2026-11-02); the DAILY puzzle `ww.dl`/`ww.dh` (`wwDaily`, `wwDailyMerge`, `wwDailyCount`; no points, 2026-11-02) |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
 | `leaderboard2-ui.js` / `leaderboard2-boards.js` | Leaderboard v2 (Boards / Hall of Fame / Me), admin devices only until Matt approves. **The old board's numbers only (Matt, 2026-10-31: "an interface redesign, not a stats redesign")**: boards, medals and places come from `leaderboard-ui.js`'s `lb2*` exports; `tools/test-lb2-parity.mjs` proves it (golds 40 = 40). Status: `docs/LEADERBOARD-V2-MORNING.md` |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |
@@ -346,6 +355,8 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 ### Dev tooling (`tools/`, not deployed; run from the repo root, e.g. `node tools/validate-sw-assets.mjs`)
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
+
+- **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
   `version.json`. Commit `sw.js` after changing any game file.
@@ -444,7 +455,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Filler | module, multiplayer (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | module, immersive, released 2026-10-20; vs computer, 2 players, challenges (`flicksoccer/`); hub id `flick-soccer`, stats id `flicksoccer` | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` (+ `.save.v1`) | `recordResult('flicksoccer', …)` |
 | Golf | module, immersive | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` |
-| Gridlock | module, immersive, devOnly; 4,000-level ladder, Wood/Cars looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
+| Gridlock | module, immersive, released 2026-11-02; 4,000-level ladder, Wood/Cars/Yard/Logs looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
 | Hill Climb | module, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | module, immersive, multiplayer (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
 | Minesweeper | module, immersive (own title row), grid puzzle | `.ms-root` / `.ms-` | `gamehub.minesweeper.v1` (+ `.save.v1`) | `recordMinesweeper` |
@@ -607,6 +618,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   and pushes admins; `integrityOnUndo`; `dartsMatchCheck`/`cupPongMatchCheck`/`battleshipMatchCheck`/`hoopsMatchCheck` (`integrityAlerts`).
   2026-10-28: `playLog` rules branch (every finished game + Contexto's moves, admin-read; `js/play-log.js`).
   2026-11-02: `wwDaily` rules branch (Word Weaver's daily board, own claimed code, a finished row final; `word-weaver/CLAUDE.md`).
+  2026-11-02: `d` (string, <= 400) on `playLog` rows: a result's withMode detail (until the rules deploy, a batch holding one is refused and stays queued, never lost).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
