@@ -721,7 +721,7 @@ function personGameHTML(top) {
     bnum ? cell(bnum, unit || t2('lb2_record')) : '',
     solo ? cell(fmt(nPlayed), t2('lb2_played_col')) : cell(`${fmt(tot.won | 0)}–${fmt(tot.lost | 0)}`, t2('lb2_wl')),
   ].filter(Boolean).join('');
-  const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(nPlayed) }))}</span></span></div>
+  const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(nPlayed) }))}</span></span>${playable(top.game) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : ''}</div>
     <div class="lb2-kcells" style="grid-template-columns:repeat(${cells.split('class="lb2-kc"').length - 1},minmax(0,1fr))">${cells}</div></div>`;
   let stats = '';
   try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
