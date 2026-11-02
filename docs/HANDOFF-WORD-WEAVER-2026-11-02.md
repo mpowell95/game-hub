@@ -26,6 +26,11 @@ Built and live (all on `main`):
 
 ## THE OPEN TASK: bonus stars become a currency you SPEND on hints
 
+**Settled 2026-11-02 (Matt: "yes to all")**: prices Letter 40, Pick a square 60, Word 120 bonus stars. Broke = earn more
+or take the plain hint (costs a level star). Free hints already used count as spent (`fu` x 10). Bought hints never lower
+the level's stars; balance replaces "N/10"; no cap. Mockup sent for review: `docs/mockups/word-weaver-hint-shop.html`
+(+ `.jpg`). Next: Matt's comments on the mockup (edit the MOCKUP), build only when he says "build it".
+
 Matt, 2026-11-02, in order:
 1. "We should change the bonus structure. You should have to spend bonus stars to buy hints."
 2. On my proposal (letter 5, pick-a-square 8, word 15): **"that's too affordable. We don't want people to be able to
