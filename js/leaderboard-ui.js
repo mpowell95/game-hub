@@ -68,6 +68,7 @@ import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, uni
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 // difficulty-tiers.js is READ-path-only and out of scope for i18n edits (its TIER_LABEL is
@@ -2793,6 +2794,12 @@ function rerender({ fromData = false } = {}) {
     _lastBodyHTML = bodyHTML;
     _host.scrollTop = keepTop;
   }
+  if (_bs) _bs.sync(levelNow());
+}
+/** Screens deep, counted the way stepBack() climbs (1 = the first screen; an open select panel is one). */
+function levelNow() {
+  return 1 + (_game && _game !== _entryGame ? 1 : 0) + (_player ? 1 : 0)
+    + (_playerGame && !_game ? 1 : 0) + (_panel ? 1 : 0);
 }
 
 function renderMessage(key) {
@@ -2810,6 +2817,8 @@ function renderOffline() {
  *  button both go through this, so they can never disagree about where "back" is. */
 function stepBack() {
   if (_panel) { _panel = null; rerender(); return true; }
+  // A name tapped on a board opens that person's game in ONE step, so it closes in one too.
+  if (_playerGame && _game && _player) { _player = null; _playerGame = null; rerender(); return true; }
   if (_playerGame) { _playerGame = null; rerender(); return true; }
   if (_player) { _player = null; rerender(); return true; }
   if (_game && _game === _entryGame) return false;   // came in from that game: back = close
@@ -2819,23 +2828,15 @@ function stepBack() {
 
 function onKey(e) {
   if (e.key !== 'Escape') return;
-  if (!stepBack()) closeLeaderboard();
+  if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard();
 }
 
-// THE PHONE'S BACK BUTTON (2026-10-11 review). The hub has no routes, so Back used to leave the
-// app from inside the leaderboard (a blank page in a test browser) instead of going up a screen.
-// Opening pushes ONE history entry; each Back consumes it, steps up a level and pushes it again,
-// until the top level, where Back closes the overlay. Closing any other way (the X, Esc, the
-// scrim) pops that entry itself so it never lingers behind the launcher. The URL never changes.
-let _histArmed = false;
-function armHistory() {
-  try { history.pushState({ gamehubOverlay: 'leaderboard' }, ''); _histArmed = true; } catch { _histArmed = false; }
-}
-function onPop() {
-  if (!_host) return;
-  _histArmed = false;
-  if (stepBack()) armHistory();
-  else closeLeaderboard();
+// THE PHONE'S BACK BUTTON (2026-10-11 review; one entry per level since 2026-11-02, js/back-stack.js).
+// Each screen level holds one history entry, so the back swipe steps up exactly one; past the first
+// screen it closes. The on-screen back buttons and Esc go through history too (`_bs.back()`).
+let _bs = null;
+function onBackSteps(n) {
+  for (let i = 0; i < n && _host; i++) if (!stepBack()) { closeLeaderboard(); return; }
 }
 
 function onClick(e) {
@@ -2896,14 +2897,16 @@ function onClick(e) {
   // out onto it would drop the viewer somewhere they never chose - so from a game's board this
   // returns to that board. From By Player (no `_game`) it still steps back to the player's list.
   if (e.target.closest('[data-role="lb-pgame-back"]')) {
+    if (_bs) { _bs.back(); return; }
     if (_game) { _player = null; _playerGame = null; } else { _playerGame = null; }
     rerender(); return;
   }
   const play = e.target.closest('[data-role="lb-play"]');
   if (play) { const fn = _onPlay, hub = play.dataset.hub; closeLeaderboard(); if (fn) fn(hub); return; }
-  if (e.target.closest('[data-role="lb-player-back"]')) { _player = null; _playerGame = null; rerender(); return; }
+  if (e.target.closest('[data-role="lb-player-back"]')) { if (_bs && !_playerGame) { _bs.back(); return; } _player = null; _playerGame = null; rerender(); return; }
   // Leaving a board drops that board's own filters: they belong to the visit, not to the overlay.
   if (e.target.closest('[data-role="lb-back"]')) {
+    if (_bs && !_panel && !_player) { _bs.back(); return; }
     if (_game && _game === _entryGame) { closeLeaderboard(); return; }
     _game = null; _tier = null; _view = ''; _machine = 'all'; rerender(); return;
   }
@@ -2940,8 +2943,7 @@ export function closeLeaderboard() {
   if (typeof _unsub === 'function') { try { _unsub(); } catch { /* ignore */ } _unsub = null; }
   if (_host) { _host.remove(); _host = null; }
   document.removeEventListener('keydown', onKey);
-  window.removeEventListener('popstate', onPop);
-  if (_histArmed) { _histArmed = false; try { history.back(); } catch { /* ignore */ } }
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
   if (_onLine) { window.removeEventListener('online', _onLine); _onLine = null; }
   if (_beeOff) { _beeOff(); _beeOff = null; }
   _connected = false;
@@ -3017,8 +3019,8 @@ export async function openLeaderboard(opts = {}) {
   document.body.appendChild(host);
   _host = host;
   document.addEventListener('keydown', onKey);
-  window.addEventListener('popstate', onPop);
-  armHistory();
+  _bs = backStack(onBackSteps);
+  _bs.sync(levelNow());
   requestAnimationFrame(() => host.classList.add('is-in'));
 
   // ARM THE FALLBACK BEFORE AWAITING ANYTHING (2026-09-01, second pass).

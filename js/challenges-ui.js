@@ -29,6 +29,7 @@ import { GAME_ART } from './game-art.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './challenges-strings.js';
 import { sendNudge, nudgedAt, NUDGE_NODES } from './messages.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s)
@@ -39,6 +40,12 @@ let _onKey = null;
 let _unwatch = null;
 let _onClose = null;
 let _view = 0;                    // bumped on every render; an async render that lost the race stops
+// The phone's back gesture (js/back-stack.js): one history entry per screen level (the screen 1,
+// Records 2, a person 3, a sheet or confirm one more). `_backFn` is the shown screen's own back.
+let _bs = null;
+let _backFn = null;
+let _levelFn = null;
+let _stepFn = null;
 // WHAT WAS LAST READ, so the screen opens on it at once and catches up (2026-10-18). Matt: "sometimes
 // it takes a while to display the multiplayer screen". Filled by prime() (the hub, after its alert
 // check) and by every open; read only by this screen. Nothing stored.
@@ -60,6 +67,8 @@ export function closeChallenges() {
   _view += 1;
   if (_unwatch) { try { _unwatch(); } catch { /* gone */ } _unwatch = null; }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
+  _backFn = null; _levelFn = null; _stepFn = null;
   const wasOpen = !!_host;
   if (_host) { _host.remove(); _host = null; }
   const cb = _onClose; _onClose = null;
@@ -219,6 +228,7 @@ function mountOverlay() {
   host.innerHTML = `<div class="cx-page" role="dialog" aria-modal="true" aria-label="${esc(t('cx_title'))}"></div>`;
   document.body.appendChild(host);
   _host = host;
+  _bs = backStack((n) => { if (_stepFn) _stepFn(n); else closeChallenges(); });
   return host.querySelector('.cx-page');
 }
 
@@ -233,8 +243,11 @@ function shell(card, { title, emoji, back, rec, body, footer }) {
     </div>
     <div class="cx-scroll">${body}</div>
     ${footer ? `<div class="cx-foot">${footer}</div>` : ''}`;
-  card.querySelector('[data-role="back"]').addEventListener('click', back || closeChallenges);
+  _backFn = back || closeChallenges;
+  card.querySelector('[data-role="back"]').addEventListener('click', () => { if (_bs) _bs.back(); else _backFn(); });
+  syncLevel();
 }
+function syncLevel() { if (_bs && _levelFn) _bs.sync(_levelFn()); }
 
 // --- small render helpers -------------------------------------------------------------------------
 
@@ -385,7 +398,18 @@ export async function openChallenges(opts = {}) {
   _onClose = typeof opts.onClose === 'function' ? opts.onClose : null;
   const gen0 = _view;
   const hit = _cache && _cache.key === keyOf(ids) ? _cache : null;
-  const S = { rows: hit ? hit.rows : null, failed: hit ? hit.failed : [], live: _liveCache, view: 'home', opp: null, people: null, flash: null };
+  const S = { rows: hit ? hit.rows : null, failed: hit ? hit.failed : [], live: _liveCache, view: 'home', opp: null, people: null, flash: null, lvl: 1 };
+  _levelFn = () => S.lvl + (card.querySelector('.cx-sheet') ? 1 : 0);
+  // n screens back (the back swipe, the back button, Esc); past the first screen, close.
+  _stepFn = (n) => {
+    for (let i = 0; i < n && _host; i++) {
+      const sheet = card.querySelector('.cx-sheet');
+      dropLayers();
+      if (sheet) continue;
+      (_backFn || closeChallenges)();
+    }
+    if (_host) syncLevel();
+  };
 
   const open = (game, id) => { closeChallenges(); if (opts.onOpen) opts.onOpen(game, id); };
   const challenge = (game, them) => { closeChallenges(); if (opts.onChallenge) opts.onChallenge(game, them); };
@@ -396,8 +420,8 @@ export async function openChallenges(opts = {}) {
   // Escape closes the topmost thing: a menu or sheet, else the screen.
   _onKey = (e) => {
     if (e.key !== 'Escape') return;
-    if (dropLayers()) return;
-    closeChallenges();
+    if (!card.querySelector('.cx-sheet') && dropLayers()) return;   // the ⋯ menu is not a screen
+    if (_bs) _bs.back(); else if (!dropLayers()) closeChallenges();
   };
   document.addEventListener('keydown', _onKey);
   function dropLayers() {
@@ -464,7 +488,7 @@ export async function openChallenges(opts = {}) {
   // --- home ---
   function renderHome(noCode = false) {
     const gen = ++_view;
-    S.view = 'home';
+    S.view = 'home'; S.lvl = 1;
     const sum = summarize(S.rows || []);
     const warn = S.failed.length ? `<p class="cx-warn">${esc(t('cx_failed', { games: S.failed.map(nameOf).join(', ') }))}</p>` : '';
     let body = '';
@@ -515,7 +539,8 @@ export async function openChallenges(opts = {}) {
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="go" disabled>${esc(t('cx_challenge'))}</button>`;
     card.appendChild(dim);
     card.appendChild(sheet);
-    const shut = () => { dim.remove(); sheet.remove(); };
+    syncLevel();
+    const shut = () => { dim.remove(); sheet.remove(); syncLevel(); };
     dim.addEventListener('click', shut);
     sheet.querySelector('[data-role="x"]').addEventListener('click', shut);
     // The game itself (vs the computer, live rooms): the same as its launcher tile.
@@ -559,7 +584,7 @@ export async function openChallenges(opts = {}) {
   // --- records: everything, by person and by game ---
   function renderRecords() {
     const gen = ++_view;
-    S.view = 'records';
+    S.view = 'records'; S.lvl = 2;
     const all = records();
     const sum = summarize(S.rows || []);
     const people = all.people;
@@ -581,7 +606,7 @@ export async function openChallenges(opts = {}) {
   // --- one person: record vs them, by game, live matches with them, results, and Challenge ---
   function renderOpponent(key) {
     const gen = ++_view;
-    S.view = 'opp'; S.opp = key;
+    S.view = 'opp'; S.opp = key; S.lvl = 3;
     const o = records().people.find((p) => p.key === key)
       || { key, code: key.startsWith('code:') ? key.slice(5) : '', name: '', emoji: '🙂', won: 0, lost: 0, draw: 0, played: 0, byGame: {} };
     const name = o.name || t('cx_someone');
@@ -608,7 +633,7 @@ export async function openChallenges(opts = {}) {
   // --- challenge one person: which game (the game's own screen takes it from there) ---
   function renderPickGame(them, back) {
     const gen = ++_view;
-    S.view = 'game';
+    S.view = 'game'; S.lvl += 1;
     const name = them.name || t('cx_someone');
     const lang = getLang();
     const list = games.slice().sort((a, b) => a.name.localeCompare(b.name, lang));
@@ -630,7 +655,7 @@ export async function openChallenges(opts = {}) {
   // the second tap, and the button says what that tap does.
   async function renderEnd(game, id, back) {
     const gen = ++_view;
-    S.view = 'end';
+    S.view = 'end'; S.lvl += 1;
     const row = (S.rows || []).find((r) => r.game === game && r.id === id) || { name: '', emoji: '🙂' };
     const name = row.name || t('cx_someone');
     shell(card, { title: name, emoji: row.emoji, back, body: `<p class="cx-note">${esc(t('cx_loading'))}</p>` });
