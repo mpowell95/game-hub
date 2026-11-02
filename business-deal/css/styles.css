@@ -918,3 +918,13 @@ html, body {
 @keyframes cr-pulse { 0%,100% { transform: scale(1);} 50% { transform: scale(1.06);} }
 .credits-sub { position: relative; font-size: 13px; font-weight: 800; color: var(--ink-soft); }
 .credits-screen .cta { position: relative; max-width: 220px; }
+
+/* "Move which?" (2026-11-02): your wildcards as real cards; tap one. The strip
+   under each card is the set it sits in now, edged in that color. */
+.wild-pick-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin: 8px 0 14px; }
+.wild-pick-card { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; padding: 0; cursor: pointer; touch-action: manipulation; }
+.wild-pick-card:active { transform: scale(.95); }
+.wild-pick-card .cardface { pointer-events: none; cursor: pointer; }
+.wild-pick-now { font-size: 12px; font-weight: 900; color: #fff; padding: 2px 8px; border-radius: 999px;
+  border: 2px solid var(--pick-c); background: rgba(0,0,0,.25); }

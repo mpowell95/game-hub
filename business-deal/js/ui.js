@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v38';
+  const APP_VERSION = 'v40';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -1056,19 +1056,35 @@
 
     _reassignFlow(wilds) {
       if (wilds.length === 1) return this._reassignPickColor(wilds[0]);
-      const options = wilds.map(w => ({
-        label: `${this._wildName(w.card)} — now in ${colorLabel(w.color)}`,
-        color: w.color,
-        onPick: () => this._reassignPickColor(w),
-      }));
-      this._pickList('Move which wildcard?', options);
+      // Matt, 2026-11-02: pick the CARD by looking at it, not a sentence per card.
+      const root = this.$('overlay');
+      root.innerHTML = '<div class="scrim"></div>';
+      const sheet = elNew('div', 'sheet wild-pick');
+      sheet.append(elNew('h3', null, 'Move which?'));
+      const row = elNew('div', 'wild-pick-row');
+      wilds.forEach(w => {
+        const b = elNew('button', 'wild-pick-card');
+        b.style.setProperty('--pick-c', `var(--c-${w.color})`);
+        const f = renderCardFace(w.card);
+        f.style.setProperty('--fs', '11px');
+        b.append(f, elNew('div', 'wild-pick-now', esc(colorLabel(w.color))));
+        b.addEventListener('click', () => this._reassignPickColor(w));
+        row.append(b);
+      });
+      sheet.append(row);
+      const cancel = elNew('button', 'cta swatch-cancel', 'Cancel');
+      cancel.addEventListener('click', () => this._closeOverlay());
+      sheet.append(cancel);
+      root.append(sheet);
+      root.querySelector('.scrim').addEventListener('click', () => this._closeOverlay());
+      root.classList.add('show');
     }
     _reassignPickColor(w) {
       const valid = Deck.placeableColors(w.card).filter(c => c !== w.color);
       const moves = valid.map(color => ({ type: 'reassign', cardId: w.card.id, color }));
       // Pass the source color so the WIN/completes badge accounts for the wild
       // LEAVING w.color (its current set) — not just joining the new one.
-      this._showColorPicker(moves, `Move ${this._wildName(w.card)} to…`, { sourceColor: w.color });
+      this._showColorPicker(moves, 'Move to…', { sourceColor: w.color });
     }
 
     _renderTable() {

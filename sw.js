@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1400;
-const CACHE = 'game-hub-v1414';
+const CACHE = 'game-hub-v1415';
 
 const ASSETS = [
   './',
@@ -1049,8 +1049,8 @@ const REST_MANIFEST = {
   './gridlock/js/strings.js': 'f15ede65c4',
   './word-weaver/': '6cfc088022',
   './word-weaver/index.html': '6cfc088022',
-  './word-weaver/css/word-weaver.css': 'd5a91d681a',
-  './word-weaver/js/ui.js': 'a3bd2d819a',
+  './word-weaver/css/word-weaver.css': '03f8e9d40b',
+  './word-weaver/js/ui.js': '10a8b97461',
   './word-weaver/js/engine.js': 'fd399c2d42',
   './word-weaver/js/daily.js': '4bc8b1e063',
   './word-weaver/js/board.js': 'd23a562192',

@@ -27,7 +27,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   (the stats store's `ww.lv`, plus the pending queue). Past the data's last level: "More levels soon"; a band's
   last level done: "<Band> done" with a Back button.
 - **The setup screen is where the game opens** (Matt, 2026-10-28): title, the player's POINTS (`wwPoints`, the
-  leaderboard number; the done screen keeps stars), the four difficulties (`diffShapeSVG` + name; selected = `#ffce3a`
+  leaderboard number; the done screen keeps stars), the bonus star BALANCE beside them (star + number, `.ww-bal`; Matt, 2026-11-02: "shows how many stars you have"; = the in-game chip:
+  `pendingBonuses` counts the queue, every unrecorded ladder attempt in both languages and every unrecorded daily, each once), the four difficulties (`diffShapeSVG` + name; selected = `#ffce3a`
   outline + check), one Play button ("Play <n>"), How to play. **Nothing else** (root CLAUDE.md, "as few words as
   possible"). The pick is saved in `gamehub.wordweaver.v1`.
 - **The play screen's back arrow** to the setup screen is TOP LEFT on the row UNDER the Hub button, 16px below it
