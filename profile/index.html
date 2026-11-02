@@ -452,6 +452,7 @@
     import { getTheme, setTheme } from '../js/theme.js';
     import { getLayout, setLayout, onLayoutChange } from '../js/layout.js';
     import { watchTabBar } from '../js/tabbar-fix.js';
+    import { backDepth } from '../js/back-stack.js';
     import { diffShapeSVG } from '../js/difficulty-tiers.js';
     import { loadPalette, savePalette, ALL_EMOJIS, EMOJI_MAX, PHRASES, CUSTOM_MAX, CUSTOM_MAXLEN, reactionText } from '../js/mp-reactions.js';
     import STRINGS from '../js/strings.js';
@@ -1346,13 +1347,14 @@
         + `<button type="button" class="hub-tab is-on" data-tab="profile" aria-current="page" aria-label="${escAttr(t('hub_profile_btn'))}">${face}${badge('profile')}</button>`;
     }
     // How many screens deep this page is (the list = 0), so one history.go() reaches the list or the hub.
-    const depth = () => (curView === 'main' ? 0 : curView === 'opp' ? 2 : 1);
+    // An overlay open over it (My Stats, Messages) holds entries of its own on top (js/back-stack.js).
+    const depth = () => (curView === 'main' ? 0 : curView === 'opp' ? 2 : 1) + backDepth();
     document.addEventListener('click', (ev) => {
       const tabEl = ev.target.closest('.hub-tabs [data-tab]');
       if (!tabEl) return;
       const k = tabEl.dataset.tab;
       if (k === 'profile') {
-        if (curView !== 'main') history.go(-depth());
+        if (depth() > 0) history.go(-depth());
         else { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
         return;
       }

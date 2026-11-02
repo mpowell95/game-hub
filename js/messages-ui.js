@@ -24,6 +24,7 @@ import { loadPalette, PHRASES, reactionText } from './mp-reactions.js';
 import { GAME_ART } from './game-art.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s)
@@ -313,7 +314,22 @@ let _view = 0;
 /** True while `gen` is still the screen the player is looking at. */
 const current = (gen) => _host !== null && gen === _view;
 
+// THE PHONE'S BACK GESTURE (2026-11-02, js/back-stack.js): one history entry per screen level (the
+// list 1, a conversation or New message 2, Everyone 3). A back button tap goes through history, and
+// a step back taps the screen's own back button, so both run the same code.
+let _bs = null;
+let _stepping = false;
+function stepBack(n) {
+  for (let i = 0; i < n && _host; i++) {
+    const btn = _host.querySelector('[data-role="back"]');
+    if (!btn) { closeOverlay(); return; }
+    _stepping = true;
+    try { btn.click(); } finally { _stepping = false; }
+  }
+}
+
 function closeOverlay() {
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
   _view += 1;                                   // orphan every in-flight render
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
@@ -332,6 +348,12 @@ function mountOverlay(ariaLabel) {
        aria-label="${esc(ariaLabel)}"></div>`;
   document.body.appendChild(host);
   _host = host;
+  _bs = backStack(stepBack);
+  host.addEventListener('click', (e) => {
+    if (_stepping || !_bs || !e.target.closest('[data-role="back"]')) return;
+    e.stopPropagation();
+    _bs.back();
+  }, true);
   const mayClose = () => !_guardClose || _guardClose();
   host.addEventListener('click', (e) => { if (e.target === host && mayClose()) closeOverlay(); });
   _onKey = (e) => { if (e.key === 'Escape' && mayClose()) closeOverlay(); };
@@ -352,7 +374,8 @@ function whenText(atMs) {
   return d.toLocaleDateString(getLang() === 'es' ? 'es-ES' : 'en-GB', { day: 'numeric', month: 'short' });
 }
 
-function shellHTML(card, { title, sub, backable, body, footer, emoji, iconHTML, hide }) {
+function shellHTML(card, { title, sub, backable, body, footer, emoji, iconHTML, hide, level }) {
+  if (_bs) _bs.sync(level || (backable ? 2 : 1));
   // Back is a CHEVRON, not "‹ Back". With the word, four things competed for a 393px row - back,
   // emoji, name, Hide - and the loser was the name: "King of Games" truncated to "Kin…" while the
   // back button itself wrapped onto two lines. The word costs about 45px and says nothing the
@@ -864,7 +887,7 @@ async function renderThread(card, who) {
 function renderBroadcast(card, contacts) {
   _view += 1;
   shellHTML(card, {
-    title: t('msg_everyone'), sub: t('msg_everyone_sub', { n: contacts.length }), backable: true,
+    title: t('msg_everyone'), sub: t('msg_everyone_sub', { n: contacts.length }), backable: true, level: 3,
     body: `<p class="msg-lead">${esc(t('msg_everyone_hint'))}</p>`,
     footer: composerHTML(t('msg_placeholder', { name: t('msg_everyone') })),
   });

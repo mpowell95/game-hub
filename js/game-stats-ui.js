@@ -27,6 +27,7 @@ import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './a
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
 import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount } from './word-weaver-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
+import { backStack } from './back-stack.js';
 
 const t = makeT(STRINGS);
 /** t() with an English fallback, for a key newer than a cached js/strings.js (js/CLAUDE.md, Language support). */
@@ -2027,6 +2028,7 @@ function rerender() {
   if (!_host) return;
   const bodyEl = _host.querySelector('[data-role="gs-body"]');
   if (bodyEl) bodyEl.innerHTML = bodyHTML();
+  if (_bs) _bs.sync(_game ? 2 : 1);
 }
 
 /** Fetch every device record and re-render from THIS player's combined (code-aggregated) stats.
@@ -2046,23 +2048,33 @@ async function refreshCombined() {
   } catch { /* stay local */ }
 }
 
+// The phone's back gesture: one history entry per level (list 1, a game 2), js/back-stack.js.
+let _bs = null;
+function onBackSteps(n) {
+  for (let i = 0; i < n && _host; i++) { if (_game) { _game = null; rerender(); } else { closeStats(); return; } }
+}
+function goUp() { if (_bs) _bs.back(); else if (_game) { _game = null; rerender(); } else closeStats(); }
+
 function onKey(e) {
   if (e.key !== 'Escape') return;
-  if (_game) { _game = null; rerender(); return; }
-  closeStats();
+  goUp();
 }
 
 function onClick(e) {
   if (e.target.closest('[data-role="gs-close"]')) { closeStats(); return; }
   // The top-left back (Matt, 2026-10-15: "there's no back button... only an X on the top right"):
   // up one level, a game's page to the list, and from the list out.
-  if (e.target.closest('[data-role="gs-up"]')) { if (_game) { _game = null; rerender(); } else closeStats(); return; }
-  if (e.target.closest('[data-role="gs-back"]')) { _game = null; rerender(); return; }
+  if (e.target.closest('[data-role="gs-up"]')) { goUp(); return; }
+  if (e.target.closest('[data-role="gs-back"]')) { goUp(); return; }
   const row = e.target.closest('.gs-grow[data-game]');
   if (row) { _game = row.dataset.game; rerender(); }
 }
 
-export function closeStats() { if (_host) { _host.remove(); _host = null; } document.removeEventListener('keydown', onKey); }
+export function closeStats() {
+  if (_host) { _host.remove(); _host = null; }
+  document.removeEventListener('keydown', onKey);
+  if (_bs) { const bs = _bs; _bs = null; bs.close(); }
+}
 
 export function openStatsOverlay() {
   ensureCss();
@@ -2095,6 +2107,8 @@ export function openStatsOverlay() {
   document.body.appendChild(host);
   _host = host;
   document.addEventListener('keydown', onKey);
+  _bs = backStack(onBackSteps);
+  _bs.sync(1);
   requestAnimationFrame(() => host.classList.add('is-in'));
   refreshCombined();
   if (_s4) loadPlaces();
