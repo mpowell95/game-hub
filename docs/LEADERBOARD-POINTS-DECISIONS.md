@@ -1,7 +1,9 @@
-# Leaderboard points: Matt's decisions (2026-11-02) — the spec for the build
+# Leaderboard points: Matt's decisions (2026-11-02)
 
-Approved by Matt on 2026-11-02 ("build it" after reviewing `docs/LEADERBOARD-POINTS-TABLE.md`). Analysis behind it:
-`docs/LEADERBOARD-POINTS-PROPOSAL.md` (real win rates per level, minutes per game, proposed values, gaps).
+**Table approved, NOT cleared for players.** Matt approved the TABLE (`docs/LEADERBOARD-POINTS-TABLE.md`) and asked
+for a build. He has NOT said "release it", "ship it" or "make it live for everyone". Build it admin-only. Not cleared:
+any announcement or popup, the (i) text change, "+X pts", the stats-page tables, or any player-visible board change.
+Analysis behind it: `docs/LEADERBOARD-POINTS-PROPOSAL.md` (real win rates per level, minutes per game, proposed values, gaps).
 
 ## Status: ROLLED BACK (v1425, 2026-11-02)
 Built and shipped by a session (v1422 points, v1423 stats tables + "+X pts", v1424 popup admin-only), then rolled
