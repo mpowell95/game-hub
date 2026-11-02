@@ -20,7 +20,7 @@ import { loadProfile } from './profile-store.js';
 import { statsId, activityReport } from './game-stats.js';
 import { GAME_ART } from './game-art.js';
 import { loadFavorites, toggleFavorite } from './favorites.js';
-import { hubIdOf, isGameOnLauncher, screenFor, ensureStatsCss } from './game-stats-ui.js';
+import { hubIdOf, isGameOnLauncher, v2ScreenFor, ensureStatsCss } from './game-stats-ui.js';
 import { diffShapeSVG } from './difficulty-tiers.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -599,34 +599,9 @@ function personGameHTML(top) {
   const head = `<div class="lb2-card"><div class="lb2-row sm">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span>${plays ? `<span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(plays.plays) }))}</span>` : ''}</span>
     ${plays ? `<span class="lb2-right"><span class="lb2-rv num">${valHTML(top.game, plays)}</span>${placeHTML(defPlace(top.game, top.key))}</span>` : ''}</div></div>`;
   let stats = '';
-  try { stats = top.game === 'contexto' ? ctPersonHTML(g) : tierWords(screenFor(top.game, { games: g.games || {}, code: g.playerId })); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
+  try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
   const all = `<div class="lb2-card"><button type="button" class="lb2-row sm" data-act="pall"><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_all_games'))}</span></span>${CHEV}</button></div>`;
-  return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="lb2-pgs">${stats}</div>${all}</div></div>`;
-}
-
-/** Contexto for one person (session 3 mockup): the four medals in a row, then plain rows, then the languages.
- *  The same numbers as My Stats' contextoScreen (game-stats-ui.js), drawn the v2 way. */
-function ctPersonHTML(g) {
-  const rec = (g.games || {}).contexto || {};
-  const ct = rec.ct || {};
-  const solved = ct.solved | 0, gold = ct.noHint | 0, silver = ct.silver | 0, bronze = ct.bronze | 0;
-  const iron = Math.max(0, solved - gold - silver - bronze);
-  const avg = solved > 0 ? (Math.round(((ct.guesses | 0) / solved) * 10) / 10).toString() : '–';
-  const mc = (k, n, word) => `<div>${lb2CtImg(k, 34)}<b class="num">${fmt(n)}</b><small>${esc(word)}</small></div>`;
-  const medals = `<div class="lb2-card lb2-pmed">${mc('gold', gold, t('lb_ct_key_gold'))}${mc('silver', silver, t('lb_ct_key_silver'))}${mc('bronze', bronze, t('lb_ct_key_bronze'))}${mc('iron', iron, t('lb_ct_key_none'))}</div>`;
-  const row = (l, v) => `<div class="lb2-stat"><span>${esc(l)}</span><b class="num">${v}</b></div>`;
-  const rows = `<div class="lb2-card">${row(t('gs_ct_solved'), fmt(solved))}${row(t('gs_ct_avg'), esc(avg))}${row(t('gs_ct_fewest'), (ct.fewestNH | 0) > 0 ? fmt(ct.fewestNH | 0) : '–')}</div>`;
-  const bd = rec.byDiff || {};
-  const langs = [['en', 'gs_ct_lang_en'], ['es', 'gs_ct_lang_es']].map(([k, w]) => `<tr><th scope="row">${esc(t(w))}</th><td>${fmt((bd[k] || {}).played | 0)}</td><td>${fmt((bd[k] || {}).won | 0)}</td></tr>`).join('');
-  const tbl = `<h4 class="gs-tbl-h">${esc(t2('lb2_lang'))}</h4><table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('gs_ms_played'))}</th><th scope="col">${esc(t('gs_ct_solved'))}</th></tr></thead><tbody>${langs}</tbody></table>`;
-  return medals + rows + tbl;
-}
-/** A difficulty word heading a table row gets its shape in front (the board's shapes, Matt is colorblind). */
-function tierWords(html) {
-  const words = [[1, 'gs_diff_easy'], [2, 'gs_diff_medium'], [3, 'gs_diff_hard'], [4, 'gs_diff_expert']];
-  let out = html.replace(/<div class="gs-tally"><b>(\d{4,})<\/b>/g, (m, n) => `<div class="gs-tally"><b>${fmt(Number(n))}</b>`);
-  for (const [tr, k] of words) out = out.split(`<th scope="row">${t(k)}</th>`).join(`<th scope="row"><span class="lb2-tw">${shape(tr)}${t(k)}</span></th>`);
-  return out;
+  return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="gs-v2">${stats}</div>${all}</div></div>`;
 }
 
 // --- How rankings work (round 4): every line checked against leaderboard-ui.js ----------------------------
@@ -1102,47 +1077,6 @@ html.gh-compact .lb2-x{display:none}
 .lb2-key{flex-shrink:0;padding:0 16px 6px}
 .lb2-key .lb-h3{display:none}
 .lb2-pin[hidden]{display:none}
-.lb2-pgs{display:flex;flex-direction:column;gap:10px}
-.lb2-pgs:empty{display:none}
-.lb2-pgs .gs-tallies,.lb2-pgs .gs-tallies.is-4{display:block;background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;overflow:hidden}
-.lb2-pgs .gs-tally{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:0 14px;text-align:left;background:none;border:0;border-radius:0;box-shadow:none;border-top:1px solid var(--l2-line)}
-.lb2-pgs .gs-tally:first-child{border-top:0}
-.lb2-pgs .gs-tally b{order:2;display:block;font-size:16px;font-weight:700;color:var(--l2-text);white-space:nowrap}
-.lb2-pgs .gs-tally span{order:1;font-size:16px;font-weight:400;color:var(--l2-text);text-transform:none;letter-spacing:0}
-.lb2-pgs .gs-tbl-h{margin:6px 4px -4px;font-size:13px;font-weight:600;color:var(--l2-muted)}
-.lb2-pgs .gs-grid{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;box-shadow:none;border-collapse:separate;border-spacing:0}
-.lb2-pgs .gs-grid th,.lb2-pgs .gs-grid td{padding:0 14px;height:44px;text-align:right;font-size:15px;color:var(--l2-text)}
-.lb2-pgs .gs-grid thead th{height:36px;background:none;color:var(--l2-muted);font-size:13px;font-weight:600;text-transform:none;letter-spacing:0}
-.lb2-pgs .gs-grid th:first-child{text-align:left}
-.lb2-pgs .gs-grid tbody th{font-weight:400}
-.lb2-pgs .gs-grid tbody td{font-weight:600}
-.lb2-pgs .gs-grid tbody tr th,.lb2-pgs .gs-grid tbody tr td{border-top:1px solid var(--l2-line)}
-.lb2-pgs .lb2-tw{display:inline-flex;align-items:center;gap:8px}
-.lb2-pgs .gs-none{background:var(--l2-surf);border-color:var(--l2-line);color:var(--l2-muted)}
-.lb2-pgs .gs-tally span{display:block}
-.lb2-pgs .gs-tally span::first-letter{text-transform:uppercase}
-.lb2-pgs *{text-transform:none !important;letter-spacing:0 !important}
-.lb2-pgs .gs-cc{background:var(--l2-surf);border-color:var(--l2-line);box-shadow:none;border-radius:14px}
-.lb2-pgs .gs-cc-h{color:var(--l2-muted);font-size:13px;font-weight:600}
-.lb2-pgs .gs-cc-k{color:var(--l2-text);font-size:16px;font-weight:400}
-.lb2-pgs .gs-cc-v{color:var(--l2-text);font-size:16px;font-weight:700}
-.lb2-pgs .gs-cc-v em{color:var(--l2-muted)}
-.lb2-pgs .gs-cc-row{border-color:var(--l2-line)}
-.lb2-pgs .gs-sk-hero-a,.lb2-pgs .gs-sk-hero-b{background:var(--l2-surf);border:1px solid var(--l2-line);color:var(--l2-text)}
-.lb2-pgs .gs-sk-k{font-size:13px;font-weight:600;opacity:1;color:var(--l2-muted)}
-.lb2-pgs .gs-sk-grid{background:var(--l2-line);border-color:var(--l2-line);border-radius:14px}
-.lb2-pgs .gs-sk-cell{background:var(--l2-surf)}
-.lb2-pgs .gs-sk-cell b{color:var(--l2-text)}
-.lb2-pgs .gs-sk-cell span{color:var(--l2-muted)}
-.lb2-pgs .gs-sk-mc{background:var(--l2-surf);border-color:var(--l2-line);border-left-color:var(--mc,#8a93a3)}
-.lb2-pgs .gs-grid tbody th{white-space:normal}
-.lb2-pmed{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 6px 10px;text-align:center}
-.lb2-pmed div{display:flex;flex-direction:column;align-items:center;gap:4px}
-.lb2-pmed b{font-size:20px;font-weight:800}
-.lb2-pmed small{font-size:12px;color:var(--l2-muted)}
-.lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
-.lb2-stat:first-child{border-top:0}
-.lb2-stat b{font-weight:700}
 .lb2-sortpick svg{position:absolute;left:13px;top:50%;margin-top:-8px;pointer-events:none;color:var(--l2-text)}
 .lb2-sortpick select{padding-left:36px}
 .lb2-favseg{display:inline-flex;align-items:center;gap:5px}

@@ -19,6 +19,7 @@ import { correctStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { GAME_ART } from './game-art.js';
+import { diffShapeSVG } from './difficulty-tiers.js';
 import { SOLO } from './players-agg.js';
 import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.js';
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
@@ -1764,6 +1765,118 @@ function screenFor(id, st) {
   return recordScreen(id, rec);   // business, parchis
 }
 
+// --- The v2 look (2026-11-02, Matt: "Restyle My Stats to match") --------------------------------------
+// ONE set of rules for My Stats and the leaderboard v2 person-in-a-game page (js/leaderboard2-ui.js): rows,
+// cards, no capitals, the board's difficulty shapes. Numbers are unchanged; only the markup around them.
+const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1}
+:root.gh-dark .gs-v2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF}
+.gs-v2 .lb2-shape{display:inline-flex;width:14px;height:14px;flex-shrink:0}
+.gs-v2 .lb2-shape svg{width:100%;height:100%}
+:root.gh-dark .gs-v2 .lb2-shape{background:#fff;border-radius:4px;padding:1px;box-sizing:content-box}
+:root.gh-dark .gs-v2 .lb-dshape-t3,:root.gh-dark .gs-v2 .lb-dshape-t4{fill:#1c2430}
+.gs-v2 .lb2-shape.x2{width:24px}
+.gs-v2 .gs-ctm{position:relative;display:inline-block}
+.gs-v2 .gs-sk-mc-nums{grid-template-columns:repeat(4,auto);justify-content:space-between}
+.gs-v2 .lb2-card{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;overflow:hidden}
+.gs-v2 .gs-ctm img{display:block;width:100%;height:100%}
+.gs-panel.gs-v2{background:var(--l2-bg);color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-top{background:var(--l2-bg);border-bottom:0}
+.gs-panel.gs-v2 .gs-top h2{font-size:28px;font-weight:800;color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-hback{color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-x{background:none;border:0;color:var(--l2-muted);font-size:28px}
+.gs-panel.gs-v2 .gs-body{gap:10px}
+.gs-panel.gs-v2 .gs-overview{gap:10px}
+.gs-panel.gs-v2 .gs-ov-av{width:44px;height:44px;border-radius:50%;background:var(--l2-surf);display:flex;align-items:center;justify-content:center;font-size:24px}
+.gs-panel.gs-v2 .gs-ov-name{font-size:22px;font-weight:700;color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-glist{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px}
+.gs-panel.gs-v2 .gs-grow{min-height:62px;gap:12px;color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-grow+.gs-grow{border-top-color:var(--l2-line)}
+.gs-panel.gs-v2 .gs-grow:active{background:var(--l2-line)}
+.gs-panel.gs-v2 .gs-gart{width:62px;height:36px;border-radius:7px}
+.gs-panel.gs-v2 .gs-gname{font-size:17px;font-weight:600;color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-gnum b{font-size:16px;color:var(--l2-text)}
+.gs-panel.gs-v2 .gs-gnum span{font-size:13px;font-weight:400;color:var(--l2-muted)}
+.gs-panel.gs-v2 .gs-gchev{color:var(--l2-muted);font-size:20px}
+.gs-v2 .gs-ghead{display:flex;align-items:center;gap:12px;min-height:62px;padding:0 12px;background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px}
+.gs-v2 .gs-ghead .gs-gart{width:62px;height:36px;border-radius:7px;overflow:hidden;flex:none}
+.gs-v2 .gs-ghead b{font-size:17px;font-weight:600;display:block}
+.gs-v2 .gs-ghead small{font-size:14px;color:var(--l2-muted)}
+.gs-v2{display:flex;flex-direction:column;gap:10px}
+.gs-v2:empty{display:none}
+.gs-v2 .gs-tallies,.gs-v2 .gs-tallies.is-4{display:block;background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;overflow:hidden}
+.gs-v2 .gs-tally{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:0 14px;text-align:left;background:none;border:0;border-radius:0;box-shadow:none;border-top:1px solid var(--l2-line)}
+.gs-v2 .gs-tally:first-child{border-top:0}
+.gs-v2 .gs-tally b{order:2;display:block;font-size:16px;font-weight:700;color:var(--l2-text);white-space:nowrap}
+.gs-v2 .gs-tally span{order:1;font-size:16px;font-weight:400;color:var(--l2-text);text-transform:none;letter-spacing:0}
+.gs-v2 .gs-tbl-h{margin:6px 4px -4px;font-size:13px;font-weight:600;color:var(--l2-muted)}
+.gs-v2 .gs-grid{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;box-shadow:none;border-collapse:separate;border-spacing:0}
+.gs-v2 .gs-grid th,.gs-v2 .gs-grid td{padding:0 14px;height:44px;text-align:right;font-size:15px;color:var(--l2-text)}
+.gs-v2 .gs-grid thead th{height:36px;background:none;color:var(--l2-muted);font-size:13px;font-weight:600;text-transform:none;letter-spacing:0}
+.gs-v2 .gs-grid th:first-child{text-align:left}
+.gs-v2 .gs-grid tbody th{font-weight:400}
+.gs-v2 .gs-grid tbody td{font-weight:600}
+.gs-v2 .gs-grid tbody tr th,.gs-v2 .gs-grid tbody tr td{border-top:1px solid var(--l2-line)}
+.gs-v2 .lb2-tw{display:inline-flex;align-items:center;gap:8px}
+.gs-v2 .gs-none{background:var(--l2-surf);border-color:var(--l2-line);color:var(--l2-muted)}
+.gs-v2 .gs-tally span{display:block}
+.gs-v2 .gs-tally span::first-letter{text-transform:uppercase}
+.gs-v2 *{text-transform:none !important;letter-spacing:0 !important}
+.gs-v2 .gs-cc{background:var(--l2-surf);border-color:var(--l2-line);box-shadow:none;border-radius:14px}
+.gs-v2 .gs-cc-h{color:var(--l2-muted);font-size:13px;font-weight:600}
+.gs-v2 .gs-cc-k{color:var(--l2-text);font-size:16px;font-weight:400}
+.gs-v2 .gs-cc-v{color:var(--l2-text);font-size:16px;font-weight:700}
+.gs-v2 .gs-cc-v em{color:var(--l2-muted)}
+.gs-v2 .gs-cc-row{border-color:var(--l2-line)}
+.gs-v2 .gs-sk-hero-a,.gs-v2 .gs-sk-hero-b{background:var(--l2-surf);border:1px solid var(--l2-line);color:var(--l2-text)}
+.gs-v2 .gs-sk-k{font-size:13px;font-weight:600;opacity:1;color:var(--l2-muted)}
+.gs-v2 .gs-sk-grid{background:var(--l2-line);border-color:var(--l2-line);border-radius:14px}
+.gs-v2 .gs-sk-cell{background:var(--l2-surf)}
+.gs-v2 .gs-sk-cell b{color:var(--l2-text)}
+.gs-v2 .gs-sk-cell span{color:var(--l2-muted)}
+.gs-v2 .gs-sk-mc{background:var(--l2-surf);border-color:var(--l2-line);border-left-color:var(--mc,#8a93a3)}
+.gs-v2 .gs-grid tbody th{white-space:normal}
+.gs-v2 .lb2-pmed{display:grid;grid-template-columns:repeat(4,1fr);padding:12px 6px 10px;text-align:center}
+.gs-v2 .lb2-pmed div{display:flex;flex-direction:column;align-items:center;gap:4px}
+.gs-v2 .lb2-pmed b{font-size:20px;font-weight:800}
+.gs-v2 .lb2-pmed small{font-size:12px;color:var(--l2-muted)}
+.gs-v2 .lb2-stat{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 14px;min-height:48px;border-top:1px solid var(--l2-line);font-size:16px}
+.gs-v2 .lb2-stat:first-child{border-top:0}
+.gs-v2 .lb2-stat b{font-weight:700}`;
+const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US'); } catch { return String(n); } };
+const v2shape = (tier) => `<span class="lb2-shape${tier === 4 ? ' x2' : ''}" aria-hidden="true">${diffShapeSVG(tier)}</span>`;
+const CT_IMG = { gold: ['medal-gold.png', 115 / 180], silver: ['medal-silver.png', 114 / 180], bronze: ['medal-bronze.png', 114 / 180], iron: ['medal-iron.png', 114 / 180] };
+const ctImg = (k, h) => `<span class="gs-ctm" style="height:${h}px;width:${Math.round(h * CT_IMG[k][1])}px"><img src="${new URL('../icons/' + CT_IMG[k][0], import.meta.url).href}" alt="" draggable="false"></span>`;
+/** Commas in 4+ digit tallies; a difficulty word heading a table row gets its shape. */
+function v2Polish(html) {
+  let out = html.replace(/<div class="gs-tally"><b>(\d{4,})<\/b>/g, (m, n) => `<div class="gs-tally"><b>${v2fmt(Number(n))}</b>`)
+    .replace(/<td>(\d{4,})<\/td>/g, (m, n) => `<td>${v2fmt(Number(n))}</td>`)
+    .replace(/<span class="gs-gnum"><b>(\d{4,})<\/b>/g, (m, n) => `<span class="gs-gnum"><b>${v2fmt(Number(n))}</b>`);
+  for (const [tr, k] of [[1, 'gs_diff_easy'], [2, 'gs_diff_medium'], [3, 'gs_diff_hard'], [4, 'gs_diff_expert']]) {
+    out = out.split(`<th scope="row">${t(k)}</th>`).join(`<th scope="row"><span class="lb2-tw">${v2shape(tr)}${t(k)}</span></th>`);
+  }
+  return out;
+}
+/** Contexto, the v2 way (the session 3 mockup): four medals in a row, plain rows, the languages. Same numbers as contextoScreen. */
+function contextoV2(rec) {
+  const ct = (rec && rec.ct) || {};
+  if (!(((rec && rec.total) || {}).played | 0)) return emptyState('Contexto');
+  const solved = ct.solved | 0, gold = ct.noHint | 0, silver = ct.silver | 0, bronze = ct.bronze | 0;
+  const iron = Math.max(0, solved - gold - silver - bronze);
+  const avg = solved > 0 ? (Math.round(((ct.guesses | 0) / solved) * 10) / 10).toString() : '–';
+  const mc = (k, n, w) => `<div>${ctImg(k, 34)}<b class="num">${v2fmt(n)}</b><small>${esc(w)}</small></div>`;
+  const row = (l, v) => `<div class="lb2-stat"><span>${esc(l)}</span><b class="num">${v}</b></div>`;
+  const bd = rec.byDiff || {};
+  const langs = [['en', 'gs_ct_lang_en'], ['es', 'gs_ct_lang_es']].map(([k, w]) => `<tr><th scope="row">${esc(t(w))}</th><td>${v2fmt((bd[k] || {}).played | 0)}</td><td>${v2fmt((bd[k] || {}).won | 0)}</td></tr>`).join('');
+  return `<div class="lb2-card lb2-pmed">${mc('gold', gold, t('lb_ct_key_gold'))}${mc('silver', silver, t('lb_ct_key_silver'))}${mc('bronze', bronze, t('lb_ct_key_bronze'))}${mc('iron', iron, t('lb_ct_key_none'))}</div>
+    <div class="lb2-card">${row(t('gs_ct_solved'), v2fmt(solved))}${row(t('gs_ct_avg'), esc(avg))}${row(t('gs_ct_fewest'), (ct.fewestNH | 0) > 0 ? v2fmt(ct.fewestNH | 0) : '–')}</div>
+    <h4 class="gs-tbl-h">${esc(t('gs_lang_h'))}</h4><table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('gs_ms_played'))}</th><th scope="col">${esc(t('gs_ct_solved'))}</th></tr></thead><tbody>${langs}</tbody></table>`;
+}
+/** One game's stats in the v2 look (wrap the result in a `.gs-v2` element). */
+export function v2ScreenFor(id, st) {
+  if (id === 'contexto') return contextoV2((st.games || {}).contexto || {});
+  return v2Polish(screenFor(id, st));
+}
+
 // --- overlay shell ----------------------------------------------------------
 let _host = null;
 let _game = null;             // non-null => drilled into that game's own screenFor
@@ -1778,8 +1891,14 @@ function backRow() {
 
 function bodyHTML() {
   const st = _st || { games: {} };
-  if (_game) return backRow() + screenFor(_game, st);
-  return overviewHTML(st) + gameListHTML(st.games || {});
+  if (_game) {
+    const tab = visibleTabs().find((x) => x.id === _game);
+    const rec = (st.games || {})[_game] || {};
+    const played = ((rec.total || {}).played) | 0;
+    const head = `<div class="gs-ghead"><span class="gs-gart">${GAME_ART[hubIdOf(_game)] || ''}</span><span><b>${esc(tab ? t(tab.labelKey) : _game)}</b><small>${esc(t('lb_played_count', { n: v2fmt(played) }))}</small></span></div>`;
+    return head + v2ScreenFor(_game, st);
+  }
+  return v2Polish(overviewHTML(st) + gameListHTML(st.games || {}));
 }
 
 function rerender() {
@@ -1838,7 +1957,7 @@ export function openStatsOverlay() {
   host.setAttribute('aria-label', t('gs_dialog_aria'));
   host.innerHTML = `
     <div class="gs-scrim" data-role="gs-close"></div>
-    <div class="gs-panel">
+    <div class="gs-panel gs-v2">
       <header class="gs-top">
         <div class="gs-top-row">
           <button type="button" class="gs-hback" data-role="gs-up" aria-label="${STRINGS.en.gs_back_aria ? t('gs_back_aria') : 'Back'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
@@ -1999,6 +2118,7 @@ function ensureCss() {
     '.gs-pkc.is-red{color:#c8102e}',
     '.gs-none{margin:0;color:var(--hub-muted,#5b6b82);font-size:.9rem;font-weight:600;background:var(--hub-surface,#fff);border:1px solid var(--hub-surface-2,#eef2f8);border-radius:12px;padding:22px 16px;text-align:center}',
     '.gs-foot{text-align:center;color:var(--hub-muted,#5b6b82);font-size:.78rem;padding:10px 16px 40px;margin:0}',
+    V2_CSS,
   ].join('');
   document.head.appendChild(el);
 }
