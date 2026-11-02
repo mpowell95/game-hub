@@ -71,3 +71,13 @@ Wins / Losses / Ties / Played in that order everywhere, same headings, no repeat
   `functions/` change runs the Firebase workflow's checks (`test-boards`, `test-push`, `test-bee-server`,
   `test-integrity`); a change only in `tools/` does NOT trigger it (run `firebase-deploy.yml` by workflow_dispatch).
 - Server board rebuilds on a sync or at most every 30 min.
+
+## Session 4 results (2026-11-02)
+
+- **Task 2 LIVE v1395** (everyone): Rush weeks, New pill and announcement dates turn over at each player's local midnight
+  (`woWeekKey` local Monday; old UTC keys kept). Spelling Bee, Contexto, Skeeball were already local. `tools/test-rush-weeks.mjs`.
+- **Task 1 LIVE v1396 for ADMIN devices only** (Matt: "Just implement for admin and I'll tweak it"). Mockup:
+  `docs/mockups/lb2-session4.html` + `lb2-session4-items/item-NN.jpg`. My Stats changes gated by `_s4` (`js/game-stats-ui.js`,
+  `isAdminDevice()`; class `gs-s4`); players' My Stats unchanged. Closest = variant A (all games; B behind `__setClosestForTest('b')`).
+  Open calls for Matt: Closest A/B, "Medals" also renames the Me tile, Contexto gold shown twice, "All" pill on Bests, folds stay open.
+- **Task 3** (#11 one vocabulary): not started; mockup first.
