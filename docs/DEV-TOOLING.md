@@ -126,4 +126,5 @@
 - `tools/read-contexto-history.mjs [CODE]`: READ ONLY, every Contexto puzzle each phone uploaded from its save (`ctHistory/`); no code = one line per player (averages with hint = 1 and hint = 10 guesses, no-hint wins); a code = its puzzles one per line; no answer words.
 
 - `tools/read-lb-snapshot.mjs` (2026-11-01): read-only copy of `boards/v1/lb/z`, `adminConfig/v1`, `boards/v1/bee` into `backups/` (git-ignored). Needs `GAMEHUB_READER`.
+- `tools/lb2-review-shots.cjs` (2026-11-02): the outside-review set (35 screens dark + light/Spanish subsets, leaderboard v2 AND My Stats), named by screenshot number, into `docs/mockups/lb2-review/round5/`; navigation for each number in `docs/LEADERBOARD-V2-REVIEWER-CONTEXT-2.md`. Same harness and needs as below.
 - `tools/lb2-shots.cjs` (2026-11-01): Leaderboard v2 screenshots with real data and the network blocked (viewer *King of Games*), into `review-shots/latest/` (git-ignored). Needs the snapshot and `PORT=8177 node server.mjs`.

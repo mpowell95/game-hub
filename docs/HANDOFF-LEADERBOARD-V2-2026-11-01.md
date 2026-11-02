@@ -138,3 +138,7 @@ Contexto "Fewest guesses" = no-hint solves only (v1391 + server `ctNoHintBest`).
 listed items; Matt said release = wait.
 
 **v1393 (2026-11-02):** My Stats restyled to match v2 for EVERY player (Matt). Next: a brand-new AI chat reviews v2 again.
+
+**Round 5 review pack (2026-11-02):** `docs/LEADERBOARD-V2-REVIEWER-CONTEXT-2.md` (rules, meanings, tap-by-tap navigation, given UP FRONT
+this time) + `docs/mockups/lb2-review/round5/` (56 shots + PROMPT.txt), by `tools/lb2-review-shots.cjs`. Hall of Fame Medals' pinned row
+now hides like the others (v1394). Matt sends it to a brand-new AI chat.
