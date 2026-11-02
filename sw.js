@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1386;
-const CACHE = 'game-hub-v1396';
+const CACHE = 'game-hub-v1397';
 
 const ASSETS = [
   './',
@@ -826,7 +826,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '9a71193e36',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '8f5669da96',
+  './js/game-stats-ui.js': 'ae5897958f',
   './js/stats-net.js': 'e4990614f7',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',

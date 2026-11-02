@@ -2052,7 +2052,7 @@ export function openStatsOverlay() {
   _places = null;
   _s4 = isAdminDevice();
   const host = document.createElement('div');
-  host.className = 'gs-overlay';
+  host.className = _s4 ? 'gs-overlay gs-ov4' : 'gs-overlay';
   host.setAttribute('role', 'dialog');
   host.setAttribute('aria-modal', 'true');
   host.setAttribute('aria-label', t('gs_dialog_aria'));
@@ -2086,6 +2086,8 @@ function ensureCss() {
     // overlays are position:fixed scroll containers over a scrollable hub, so both chain without it.
     '.gs-overlay{position:fixed;inset:0;z-index:300;opacity:0;transition:opacity .2s ease;overflow-y:auto;overscroll-behavior:contain}',
     '.gs-overlay.is-in{opacity:1}',
+    // Compact (admin, session 4, Matt 2026-11-02: "Keep the navigation bar on the bottom of my stats"): stop on the tab bar, like v2.
+    'html.gh-compact .gs-overlay.gs-ov4{z-index:19;padding-bottom:calc(53px + max(6px, calc(env(safe-area-inset-bottom,0px) - 16px)))}',
     '.gs-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.gs-panel{position:relative;width:100%;max-width:560px;margin:0 auto;min-height:100%;background:var(--hub-bg,#f4f6fb);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
     '.gs-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 18px 0;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--hub-surface-2,#eef2f8)}',
