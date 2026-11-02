@@ -299,7 +299,7 @@
 import { recordBoardGame, unlockBoard } from './arcade-scores.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woRushExtras, woWeekKey, woEarnedPoints, woReplayList, woMissed, woClSet, woClMap, woShownLevel } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
-import { wwBest, wwHintBest, wwStarsFor, wwBandOf, wwDailyBest, WW_DAY_RE } from './word-weaver-points.js';
+import { wwBest, wwHintBest, wwStarsFor, wwBandOf, wwDailyBest, WW_DAY_RE, wwMerge, wwDailyMerge } from './word-weaver-points.js';
 import { isGameLive } from './admin-config.js';
 import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
@@ -1745,6 +1745,79 @@ function swapInTestGames(st) {
   normalize(st);   // fill a fresh test record's shape (total/byDiff + its sub-counter)
   return st;
 }
+// --- TEST PLAYS CARRIED INTO THE REAL RECORD (Matt, 2026-11-02, after Word Weaver's release: "go back and count all
+// me Ana and lilis games from before it went live") ----------------------------------------------------------------
+// The default stays "an admin-only game launches with 0 plays"; a game listed here is the exception Matt asked for.
+// Every real Word Weaver record was EMPTY when its test record was copied from it (checked on every record in players/
+// 2026-11-02: no real level or daily older than the release day), so real + test counts nothing twice. ONE write per
+// store: games.<id> := combine(real, test), stamped `carried.<id>` (a new field, rule 5). The test record is never
+// touched or deleted. A record not carried yet (a phone on an older build) is combined at READ time by
+// js/players-agg.js, the same function, so the boards count it now. Additive only: every number only grows.
+export const CARRY_TEST = { wordweaver: true };
+const plainObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+/** Add counters key by key (nested objects recurse); `hi` keeps the max, `lo` the least non-zero (byMode). */
+function addCounts(a, b) {
+  if (!plainObj(a)) return plainObj(b) ? clone(b) : a;
+  if (!plainObj(b)) return clone(a);
+  const out = clone(a);
+  for (const k of Object.keys(b)) {
+    const x = out[k], y = b[k];
+    if (plainObj(y)) out[k] = addCounts(plainObj(x) ? x : {}, y);
+    else if (typeof y === 'number' && Number.isFinite(y)) {
+      const xv = Number.isFinite(+x) ? +x : 0;
+      out[k] = k === 'hi' ? Math.max(xv, y) : k === 'lo' ? (xv > 0 && y > 0 ? Math.min(xv, y) : (xv || y)) : xv + y;
+    } else if (x === undefined) out[k] = y;
+  }
+  return out;
+}
+const mergeMap = (a, b, fn) => {
+  const out = plainObj(a) ? { ...a } : {};
+  if (plainObj(b)) for (const k of Object.keys(b)) { const m = fn(out[k], b[k]); if (m) out[k] = m; }
+  return out;
+};
+/** Word Weaver: two records of one person combined (pure; neither argument is changed). Levels and days merge (each
+ *  counted once, the most hints any record used: wwMerge), counters add. */
+export function combineWwRecords(real, test) {
+  const r = plainObj(real) ? real : {}, t = plainObj(test) ? test : {};
+  const out = { ...clone(r) };
+  for (const k of ['total', 'byDiff', 'byMode', 'dt']) if (r[k] !== undefined || t[k] !== undefined) out[k] = addCounts(r[k] || {}, t[k] || {});
+  const rw = plainObj(r.ww) ? r.ww : {}, tw = plainObj(t.ww) ? t.ww : {};
+  const w = { ...clone(rw) };
+  for (const k of ['lv', 'es']) if (rw[k] || tw[k]) w[k] = mergeMap(rw[k], tw[k], wwMerge);
+  for (const k of ['hint', 'esHint', 'dh']) if (rw[k] || tw[k]) w[k] = mergeMap(rw[k], tw[k], wwHintBest);
+  if (rw.dl || tw.dl) w.dl = mergeMap(rw.dl, tw.dl, wwDailyMerge);
+  for (const k of ['x', 'b', 'fu', 'fl', 'sp']) {
+    const v = (Math.max(0, Math.floor(+rw[k] || 0))) + (Math.max(0, Math.floor(+tw[k] || 0)));
+    if (v || rw[k] !== undefined) w[k] = v;
+  }
+  if (rw.by || tw.by) w.by = addCounts(rw.by || {}, tw.by || {});
+  if (Object.keys(w).length) out.ww = w;
+  for (const k of Object.keys(t)) if (out[k] === undefined) out[k] = clone(t[k]);
+  return out;
+}
+const CARRY_COMBINE = { wordweaver: combineWwRecords };
+/** The record as it COUNTS: real + test for a carried game whose store has not been stamped yet (read time). */
+export function carriedGame(stats, id) {
+  const real = stats && stats.games && stats.games[id];
+  const test = stats && stats.testGames && stats.testGames[id];
+  if (!CARRY_TEST[id] || !plainObj(test) || (plainObj(stats.carried) && stats.carried[id]) || isTestGame(id)) return real;
+  return CARRY_COMBINE[id](real, test);
+}
+/** One write per store and game: the real record becomes real + test, stamped `carried.<id>`. Verified by re-read. */
+function carryTestRecords(st) {
+  let changed = false;
+  for (const id of Object.keys(CARRY_TEST)) {
+    if (isTestGame(id) || !plainObj(st.testGames) || !plainObj(st.testGames[id])) continue;
+    if (plainObj(st.carried) && st.carried[id]) continue;
+    st.games[id] = CARRY_COMBINE[id](st.games[id], st.testGames[id]);
+    if (!plainObj(st.carried)) st.carried = {};
+    st.carried[id] = Date.now();
+    changed = true;
+  }
+  if (changed) normalize(st);
+  return changed;
+}
+
 /** The store as it is SAVED: real records under `games`/`h2h`, test records under `testGames`/`testH2h`. */
 function storedShape(st) {
   const real = st && st[REAL];
@@ -1795,6 +1868,7 @@ export function loadStats() {
   const movedAny = splitRan && st.games.escoba.esMpSplit && st.games.escoba.esMpSplit.moved.played > 0;
   // Queued results are folded in BEFORE the write below, so a queued result and a migration that
   // both land on the same load are saved together rather than one overwriting the other.
+  changed = carryTestRecords(st) || changed;   // released games' test plays, once (CARRY_TEST)
   swapInTestGames(st);   // admin-only games: the view below plays into their test record
   const drained = drainPendingResults(st);
   changed = drained || changed;
