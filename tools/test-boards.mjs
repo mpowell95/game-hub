@@ -78,6 +78,26 @@ check('synthetic: a hidden test device is left out', !Object.values(board).some(
 check('a package that cannot be unpacked reads as no board (the phone falls back)', (await unpackBoard('not-gzip')) === null && (await unpackBoard('')) === null);
 check('encKey keeps a name with dots and slashes legal and reversible', decodeURIComponent(encKey('name:matt.jr / #1')) === 'name:matt.jr / #1');
 
+{
+  // Contexto's "fewest guesses" refilled from ctHistory (functions/boards.js ctNoHintBest) must skip a phone whose
+  // Contexto is voided (2026-11-03): it used to count every phone, so a voided phone's best came back on the board.
+  const ct = (n) => ({ total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ct: { solved: 1, guesses: n, hints: 0, noHint: 1, silver: 0, bronze: 0, fewest: n, fewestNH: n } });
+  const pl = {
+    'dev-v': { profile: { name: 'Vee', playerId: 'CTVD1' }, updatedAt: T, stats: { games: { contexto: ct(3) } } },
+    'dev-h': { profile: { name: 'Vee', playerId: 'CTVD1' }, updatedAt: T + 1, stats: { games: { contexto: ct(9) } } },
+  };
+  const won = (n) => ({ n: 1, l: 'en', d: 'won', r: 1, g: Array.from({ length: n }, (_, i) => ({ w: 'w' + i })) });
+  const cth = { CTVD1: { 'dev-v': { 'en-1': won(2) }, 'dev-h': { 'en-2': won(7) } } };
+  const fewest = async (cfg) => boardList(await unpackBoard(packBoard(buildBoardParts(pl, cfg, {}, cth)))).list[0].games.contexto.ct.fewestNH;
+  check('Contexto: with no void, the saved puzzles lower fewest guesses to the best phone\'s (2)', (await fewest(null)) === 2);
+  check('Contexto: a voided phone\'s saved puzzles do not come back (7, the honest phone\'s)', (await fewest({ integrity: { void: { 'dev-v': { contexto: true } } } })) === 7);
+  // A second player on a shared phone records under <deviceId>-<CODE> (js/game-stats.js); its ctHistory is still
+  // under the bare deviceId.
+  const fork = { 'dev-v-CTVD1': pl['dev-v'], 'dev-h': pl['dev-h'] };
+  const forkFewest = async (cfg) => boardList(await unpackBoard(packBoard(buildBoardParts(fork, cfg, {}, cth)))).list[0].games.contexto.ct.fewestNH;
+  check('Contexto: a voided <device>-<CODE> record\'s puzzles are skipped too (7)', (await forkFewest({ integrity: { void: { 'dev-v-CTVD1': { contexto: true } } } })) === 7);
+}
+
 if (process.argv[2]) {
   let d = JSON.parse(readFileSync(process.argv[2], 'utf8')); d = d.data || d;
   const { board: real, parts } = await compare('real snapshot', d.players || {}, (d.adminConfig || {}).v1 || null);
