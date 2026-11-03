@@ -34,7 +34,7 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   "Shoot 5 under", "Beat 5:22"); the level's shape rides the number. Sufficient, not always the least: any score
   on a level harder than the record's also passes it, and the line does not say so. Phrases were shortened until
   no line wraps at 393 px in EN or ES.
-- (v1437) Matt: "Reach length 44 to get gold is incredibly wordy. And it doesn't tell me how close I already am...
+- (v1438) Matt: "Reach length 44 to get gold is incredibly wordy. And it doesn't tell me how close I already am...
   I want THE DIFFERENCE shown. And make the bold part gold. Convey the message in as few words as possible." So
   EVERY game now shows the difference at the record's level, plus one: "5 points for gold", "◆ 5 longer for gold",
   "2 strokes fewer for gold", "0:05 faster for gold". The difference is bold in gold (`--l2-gold`: #8A5A00 light,
