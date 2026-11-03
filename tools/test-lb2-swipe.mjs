@@ -199,7 +199,7 @@ const SCREENS = [
   { id: 'me', parent: 'games', back: 'closed', go: async (h) => h.tap('.lb2 .lb2-head [data-act="tab"][data-v="me"]'), note: 'Me tab' },
   { id: 'me-lost', parent: 'me', back: 'closed', go: async (h) => h.tap('.lb2 [data-act="melist"][data-v="lost"]'), note: 'Me tab, Lost' },
   { id: 'me-close', parent: 'me', back: 'closed', go: async (h) => h.tap('.lb2 [data-act="melist"][data-v="close"]'), note: 'Me tab, Closest' },
-  { id: 'me-board', parent: 'me', back: 'me', go: async (h) => h.tap('.lb2 .lb2-scroll [data-act="game"]'), note: 'a board opened from Me' },
+  { id: 'me-board', parent: 'me', back: 'me', go: async (h) => { await h.tap('.lb2 [data-act="melist"][data-v="gold"]'); await h.tap('.lb2 .lb2-scroll [data-act="game"]'); }, note: 'a board opened from Me (the Golds list; the list you left on is remembered)' },
 ];
 const byId = Object.fromEntries(SCREENS.map((s) => [s.id, s]));
 
