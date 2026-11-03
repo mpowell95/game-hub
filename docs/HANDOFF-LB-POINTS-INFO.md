@@ -51,6 +51,14 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   `refreshAdminDevice()` clears the admin flag on a device that is not on `admins/`, so a browser test must keep the
   cached answer (route-patch that function in the browser's copy) or the sheet vanishes mid-run.
 - Releasing to players is still Matt's words only ("release it", "ship it", "make it live for everyone").
+- (2026-11-03) BACK SWIPE: it worked "half the time on half the screens" because `onTouchMove` in `js/leaderboard2-ui.js`
+  called `preventDefault()` on every touchmove that was not over a scroll list (header, tab bar, pinned row: always) and, over a
+  list, on whichever ones drifted toward the list's end (a short list is at both ends: always), and a swipe the page cancels is
+  one the system's back gesture never gets; nothing handled a swipe starting mid-screen at all. Now a finger is classified once it
+  has moved 8 px, a sideways one is NEVER cancelled (nor anything in the 28 px edge strip the system owns), and a rightward swipe
+  that starts past that strip calls `goBack()` = the back button's step (one screen; closes from the top level). Proof, every
+  screen and sheet with real touch events at 393x852: `tools/test-lb2-swipe.mjs` (22 screens, 1,692 swipes: before 93, after all
+  1,692; the history stack itself was never the fault, 33/33 stress cases pass on both).
 
 ## Where things stood before the build (live, v1427)
 

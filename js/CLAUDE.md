@@ -59,7 +59,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | Module | Invariant |
 |---|---|
 | `profile-store.js` | `loadProfile`/`saveProfile`/`clearProfile`, `hasName()`; see "The shared profile" |
-| `back-stack.js` | **Every drill-down screen pushes ONE history entry per level through it; the back swipe = one screen back** (2026-11-02, Matt). `sync(level)` after each render, the back button/Esc call `back()` (history), any other close calls `close()` (unwinds). Never `pushState` from a popstate handler, never one re-armed entry. Dependency-free. `tools/test-swipe-back.mjs` |
+| `back-stack.js` | **Every drill-down screen pushes ONE history entry per level through it; the back swipe = one screen back** (2026-11-02, Matt). `sync(level)` after each render, the back button/Esc call `back()` (history), any other close calls `close()` (unwinds). Never `pushState` from a popstate handler, never one re-armed entry. Dependency-free. `tools/test-swipe-back.mjs`. **Leaderboard v2 also handles the swipe itself (2026-11-03)**: `onTouchStart/Move/End` in `leaderboard2-ui.js` classify a finger after 8 px, never `preventDefault` a sideways one or anything in the 28 px edge strip (that cancels the SYSTEM back gesture), and a rightward swipe from past that strip calls `goBack()`; `tools/test-lb2-swipe.mjs` drives every screen with real touch events |
 | `favorites.js` | `gamehub.favorites.v1`, HUB ids (never stats keys); a preference |
 | `layout.js` | `gamehub.layout.v1` (`comfortable`/`compact`), stamps `.gh-compact` at load; a preference; the hub re-renders on `onLayoutChange` (never under a mounted game) |
 | `new-badge.js` | pure dates, no storage/DOM |
