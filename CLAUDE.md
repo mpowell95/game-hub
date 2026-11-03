@@ -362,6 +362,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
   `version.json`. Commit `sw.js` after changing any game file.
+- **Mockup Pad** (Matt's markup artifact) lives in `tools/mockup-pad/`; its README says how to republish.
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
