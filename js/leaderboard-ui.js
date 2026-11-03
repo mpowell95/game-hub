@@ -3666,8 +3666,21 @@ export function lb2ScoreBoard(list, id, spec = {}) {
 /** The OLD board's one standing per game (gameStanding: the All tab's own order, boardMetricCmp, ties
  *  shared), read with no tab selected. Leaderboard v2's medals, Hall of Fame and records come ONLY from
  *  this (Matt, 2026-10-31: "an interface redesign, not a stats redesign"). [{ g, key, rank }]. */
-export function lb2Standing(list, id) {
-  return lb2With(id, {}, () => {
+/** Games whose LANGUAGES are each their own game for medals (Matt, 2026-11-03, after Moonis: "Leaderboard
+ *  including Spanish is completely unfair. So many more points on that one"; Matt: "Each game should be
+ *  considered its own game for gold medal leaderboard purposes"). Leaderboard v2 ONLY (admin devices until Matt
+ *  says "release it"): each language's board gives its own gold, silver and bronze; the All board gives none.
+ *  The old board (players) is unchanged. Spelling Bee only (Matt: not Contexto, not Word Weaver). */
+export const LB2_MEDAL_SPLIT = { spellingbee: ['en', 'es'] };
+/** The languages a game's medals split into right now, or null. Spelling Bee splits only once its server board
+ *  (boards/v1/bee) has loaded: without it the board falls back to a number with no language, and two copies of
+ *  one standing would hand every medal out twice. */
+export function lb2MedalLangs(id) {
+  const langs = LB2_MEDAL_SPLIT[id];
+  return langs && (id !== 'spellingbee' || beeBoard()) ? langs : null;
+}
+export function lb2Standing(list, id, st = {}) {
+  return lb2With(id, st, () => {
     const st = gameStanding(list, id);
     // Hold'em: a bankroll never used (no entry, no grant) sits on the starting stack and ties for 2nd with
     // everyone else who never sat down. The board still shows them there; it earns no medal in v2's tallies.
@@ -3779,14 +3792,15 @@ export function lb2Records(list, meKey) {
   for (const meta of gameMetaSorted()) {
     const id = meta.id;
     if (!isGameOnLauncher(id)) continue;
-    lb2With(id, {}, () => {
+    // A split game (lb2MedalLangs): one entry per language, each read on that language's board.
+    for (const lang of lb2MedalLangs(id) || [null]) lb2With(id, lang ? { lang } : {}, () => {
       const st = gameStanding(list, id);
       const rec = st.rows[0] || null;
       if (rec) out.withRecord++;
-      const played = boardPlaysOf(me, id) > 0;
+      const played = lang ? (beeRowFor(me) || {}).days > 0 : boardPlaysOf(me, id) > 0;
       const rank = st.rankOf[me.key];
       const val = (g) => ({ text: youValText(id, boardMetricOf(g, id)), tier: boardTierOf(g, id) });
-      if (rank === 1) out.held.push({ id, mine: val(me), tie: st.tiedAt(me.key) });
+      if (rank === 1) out.held.push({ id, lang, mine: val(me), tie: st.tiedAt(me.key) });
       else if (played && rec) {
         // Session 4 mockup (display only): the viewer's number read at the RECORD'S difficulty (gapText's rule),
         // and why the record ranks above when that is invisible: a harder difficulty or the no-hint rule.
@@ -3795,9 +3809,9 @@ export function lb2Records(list, meKey) {
         const why = nhRec && !nhMe ? 'nohint' : (rt || 0) > (mt || 0) ? 'tier' : '';
         const at = rt && why === 'tier' ? gameMetricAt(me, id, rt) : null;
         const mineAt = why === 'tier' ? { text: at == null ? '–' : youValText(id, at), tier: rt } : null;
-        out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), need: needOf(me, rec, id), mine: val(me), rec, recVal: val(rec), why, mineAt, whyTier: rt || null });
+        out.close.push({ id, lang, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), need: needOf(me, rec, id), mine: val(me), rec, recVal: val(rec), why, mineAt, whyTier: rt || null });
       }
-      else if (!played && rec) out.fresh.push({ id, rec, recVal: val(rec) });
+      else if (!played && rec) out.fresh.push({ id, lang, rec, recVal: val(rec) });
     });
   }
   out.close.sort((a, b) => b.c - a.c || labelOf(a.id).localeCompare(labelOf(b.id)));

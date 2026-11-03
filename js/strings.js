@@ -1086,6 +1086,8 @@ export const STRINGS = {
     lbrs_sb_t1: '{w}: points found on each puzzle\'s own day, added up',
     lbrs_sb_t2: '{w}: words found, the same way',
     lbrs_sb_t3: 'All, English, Español: which puzzles count',
+    // Medals by language (2026-11-03, Matt: each language is its own game for medals; Leaderboard v2 only).
+    lbrs_sb_t4: 'Medals: English and Español each give their own; All gives none',
     lbrs_sb_c1: 'Days you were 1st in points',
     lbrs_sb_c2: 'Days you were 2nd',
     lbrs_sb_c3: 'Days you were 3rd',
@@ -2224,6 +2226,7 @@ export const STRINGS = {
     lbrs_sb_t1: '{w}: puntos conseguidos el mismo día de cada partida, sumados',
     lbrs_sb_t2: '{w}: palabras encontradas, igual',
     lbrs_sb_t3: 'Todos, English, Español: qué partidas cuentan',
+    lbrs_sb_t4: 'Medallas: English y Español dan las suyas; Todo no da ninguna',
     lbrs_sb_c1: 'Días en 1.er puesto en puntos',
     lbrs_sb_c2: 'Días en 2.º puesto',
     lbrs_sb_c3: 'Días en 3.er puesto',

@@ -23,6 +23,13 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1449) **Spelling Bee medals by language.** Moonis (bug report): "Leaderboard including Spanish is completely unfair.
+  So many more points on that one". Matt: "Each game should be considered its own game for gold medal leaderboard
+  purposes" (Spelling Bee only; not Contexto or Word Weaver). English and Español each give a gold, silver and bronze in
+  Medal Count, Me (Golds / Lost / Closest rows "Spelling Bee · English"), and Lost records; the All board ranks with no
+  medals; the board opens on the hub's language; the Games list shows each person's best place of the two. Splits
+  only once `boards/v1/bee` has loaded (else one standing, so no medal is counted twice). Old board unchanged.
+
 ## BUILT, ADMIN DEVICES ONLY (v1429, session 6)
 
 Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." Mockup v7 is built:

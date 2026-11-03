@@ -119,7 +119,7 @@ const SHEETS = {
     { h: 'not', lines: ['lbrs_sk_n1', 'lbrs_sk_n2'] },
   ],
   spellingbee: () => [
-    { h: 'tabs', lines: [L('lbrs_sb_t1', { w: t('lb_bee_points') }), L('lbrs_sb_t2', { w: t('lb_bee_words') }), 'lbrs_sb_t3'] },
+    { h: 'tabs', lines: [L('lbrs_sb_t1', { w: t('lb_bee_points') }), L('lbrs_sb_t2', { w: t('lb_bee_words') }), 'lbrs_sb_t3', 'lbrs_sb_t4'] },
     most(),
     { h: 'chips', rows: [['🥇', 'lbrs_sb_c1'], ['🥈', 'lbrs_sb_c2'], ['🥉', 'lbrs_sb_c3'], ['🧠', 'lbrs_sb_c4'], ['🐝', 'lbrs_sb_c5'], ['📅', 'lbrs_sb_c6']].map(([ic, k]) => ({ ic, k })) },
     { h: 'not', lines: ['lbrs_sb_n'] },
