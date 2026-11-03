@@ -481,25 +481,18 @@ class SpellingBee {
 
   _cls(w) { return !this.answerSet.has(w) ? 'is-bonus' : isPangram(w, this.puzzle) ? 'is-pangram' : ''; }
 
-  /** The open word list: alphabetical, in as many columns as it takes to fit with no scrolling. */
+  /** The open word list: alphabetical, top to bottom then left to right; every word in full,
+   *  each column as wide as its longest word, scrolling sideways when it is wider than the screen. */
   _layoutPanel() {
     if (!this.open || !this.el || !this.el.panel) return;
     const words = [...this.found].sort();
     const p = this.el.panel;
     p.innerHTML = `<ul class="sb-panel-list">${words.map((w) => `<li class="${this._cls(w)}">${esc(this._show(w))}</li>`).join('')}</ul>`;
     const ul = p.firstChild;
-    const h = p.clientHeight - 24;
-    const w = p.clientWidth - 24;
-    let fs = 16;
-    let cols = 1;
-    for (; fs >= 12; fs -= 1) {
-      const lineH = Math.round(fs * 1.55);
-      const rows = Math.max(1, Math.floor(h / lineH));
-      cols = Math.max(1, Math.ceil(words.length / rows));
-      if (w / cols >= fs * 6) break;
-    }
-    ul.style.setProperty('--sb-cols', String(Math.max(cols, 2)));
-    ul.style.setProperty('--sb-pfs', fs + 'px');
+    const fit = Math.max(1, Math.floor((p.clientHeight - 24) / 26));
+    const rows = Math.max(1, Math.min(fit, Math.ceil(words.length / 2)));
+    ul.style.setProperty('--sb-rows', String(rows));
+    p.scrollLeft = 0;
   }
 
   // --- input -----------------------------------------------------------------------------------
