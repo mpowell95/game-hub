@@ -89,6 +89,13 @@ Both chances are deliberately below 1: at 1.0 the tier collapses into intermedia
 numbers came from a sweep of block x good-cell over 600 games per cell; do not raise them without
 re-measuring, and do not "simplify" beginner back to win-or-random.
 
+### Medium fell to one fork every time (2026-11-02)
+
+Matt: *"fix tic tac toe medium"*. Classic Medium (win, block, center, corner) lost to the same corner fork
+every game (King of Games 43 of 44). It now plays the perfect (Pro) move with `INTERMEDIATE_PERFECT_CHANCE`
+(0.7), its old rule otherwise. Exact best attacker: going first 34% wins (was 100%), going second 2%. Below 1 on
+purpose (at 1 Medium = Hard). Ultimate Medium unchanged.
+
 ### Autosave/resume (2026-07-23, batch 9, docs/archive/HANDOFF-FB-RESUME.md)
 
 Silent autosave/resume, same pattern as `mancala/js/ui.js`'s `saveGame`/`loadGame`/`clearGame`.
