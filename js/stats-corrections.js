@@ -247,6 +247,10 @@ export function holdemSnapshotOf(hb) {
 // Shown as Matt's rule 1 says: the games still count as PLAYED, with no win and every score, best and
 // points at 0, so the record sorts last. The raw record is untouched; Matt's undo turns it back on.
 // Per game, the score-like parts of its sub-counter to zero (counts of games or runs are kept).
+// Two kinds of number cannot be zeroed, and getting either wrong puts a voided player at the TOP:
+//   - a LOWER-is-better best kept in a per-key map (EMPTY below): 0 reads as a real, perfect score.
+//   - a second copy of a score a different tab reads (Contexto's `ct.d`, the Daily tab): zeroing only
+//     the lifetime fields leaves the Daily medals standing. List every place a board reads a score.
 const ZERO = {
   snake: { sn: ['bestLen', 'bestLenByDiff', 'bestLenByWalls', 'bestLenByDiffWalls'] },
   yahtzee: { yz: ['bestScore', 'won', 'yahtzees'] },
@@ -254,7 +258,7 @@ const ZERO = {
   battleship: { bs: ['won', 'hits', 'sunk', 'bestAccuracy', 'fewestShotsWin'] },
   tictactoe: { tt: ['classic.won', 'ultimate.won'] },
   cuppong: { cp: ['soloBest', 'soloRacks', 'soloThrows'], cr: ['*.w'] },
-  golf: { gf: ['points', 'birdies', 'eagles', 'aces', 'longestDriveYd', 'bestHole', 'bestRoundByCourse'] },
+  golf: { gf: ['points', 'birdies', 'eagles', 'aces', 'longestDriveYd'] },   // bests: see EMPTY
   hillclimb: { hc: ['bestDistance', 'bestDistanceByStage', 'bestCoins', 'coins', 'flips'] },
   sudoku: { sd: ['bestTimeMs', 'perfect'] },
   minesweeper: { ms: ['bestTimeMs', 'bestClearedPct', 'flagsRight'] },
@@ -262,13 +266,26 @@ const ZERO = {
   boggle: { bg: ['won', 'bestScore', 'words', 'longestWord'] },
   dominoes: { dm: ['won', 'points', 'bestRound'] },
   dotsboxes: { db: ['won', 'boxes', 'bestChain'] },
-  contexto: { ct: ['fewest', 'noHint', 'silver', 'bronze', 'solved', 'guesses'] },
+  // `d` is the Daily board's own copy (js/game-stats.js recordContexto): its medals and solves go too, its
+  // `played` (games) and `hints` (a count, kept at the top level as well) stay. `fewestNH` is a best.
+  contexto: { ct: ['fewest', 'fewestNH', 'noHint', 'silver', 'bronze', 'solved', 'guesses',
+    'd.solved', 'd.guesses', 'd.noHint', 'd.silver', 'd.bronze'] },
   wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush', 'cl', 'leg'] },
   brickblitz: { bz: ['bestScore', 'bestScoreByDiff', 'points', 'bestCombo'] },
   tower: { tw: ['best', 'bestByDiff', 'bestStreak', 'blocks', 'perfects'] },
   ballrun: { br: ['bestObstacles', 'bestObstaclesByDiff'], brOrbital: ['bestObstacles', 'bestObstaclesByDiff'] },
   nutsbolts: { nb: ['bestLevel', 'bestByTier'] },
   holdem: { hb: ['winnings', 'best', 'cashes'], hs: ['won', 'bigPot', 'best', 'bestCat', 'bestCards'] },
+};
+// Per-key maps of a LOWER-is-better best, EMPTIED rather than zeroed (2026-11-03). Golf's
+// `bestRoundByCourse` is { courseId: strokes }: a course never played has NO key (the lowest possible
+// round is not 0), so 0 is not "no score", it is a perfect one - golfBestAt turned it into 0 minus par,
+// "12 under", the best number on the board, and players-agg merges this map with Math.min across a
+// person's devices, so the zero also beat every real round on their OTHER phone. Absent is the only
+// honest "no best". `bestHole` is the same shape (its readers skip a 0, but a fabricated record is
+// still one). The raw record keeps every round; this is the overlay only.
+const EMPTY = {
+  golf: { gf: ['bestRoundByCourse', 'bestHole'] },
 };
 /** A copy of `v` with every number in it 0, every string '', every list emptied. */
 function zeroed(v) {
@@ -298,6 +315,13 @@ export function voidIntegrityGame(gameRec, gameId) {
     if (!g[subKey] || typeof g[subKey] !== 'object') continue;
     const sub = Object.assign({}, g[subKey]);
     for (const p of paths) zeroPath(sub, p);
+    out[subKey] = sub;
+  }
+  for (const [subKey, keys] of Object.entries(EMPTY[gameId] || {})) {
+    const cur = out[subKey] || g[subKey];
+    if (!cur || typeof cur !== 'object') continue;
+    const sub = Object.assign({}, cur);
+    for (const k of keys) if (k in sub) sub[k] = {};
     out[subKey] = sub;
   }
   return out;
