@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1425;
-const CACHE = 'game-hub-v1426';
+const CACHE = 'game-hub-v1427';
 
 const ASSETS = [
   './',
@@ -1138,7 +1138,7 @@ const REST_MANIFEST = {
   './tic-tac-toe/css/tic-tac-toe.css': '4950d82ac5',
   './tic-tac-toe/js/ui.js': 'cf74a6a4e2',
   './tic-tac-toe/js/game.js': '5dd6dfd541',
-  './tic-tac-toe/js/ai.js': 'ea779916ba',
+  './tic-tac-toe/js/ai.js': '32360ab831',
   './tic-tac-toe/js/hash.js': 'fc3c1f6bac',
   './tic-tac-toe/js/strings.js': '2f1ea870bb',
   './dots-boxes/': 'db0a41b47e',

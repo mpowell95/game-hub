@@ -43,10 +43,16 @@ function beginnerClassic(s, moves, rng) {
   return pick(moves, rng);
 }
 
+// Medium used to fall to one fork every single time (2026-11-02: King of Games 43 of 44, HDJ 52 of 56).
+// Matt: "fix tic tac toe medium". It now plays the PERFECT move most of the time and its old simple rule
+// the rest, so a fork only works when it slips. Measured (exact best attacker, 2026-11-02): going first it
+// wins 34% (was 100%), going second 2% (was 0%). Keep the chance below 1: at 1 Medium becomes Hard.
+const INTERMEDIATE_PERFECT_CHANCE = 0.7;
 function intermediateClassic(s, moves, rng) {
   const me = s.turn, opp = otherMark(me);
   for (const m of moves) if (wouldWin(s.board, m, me)) return m;
   for (const m of moves) if (wouldWin(s.board, m, opp)) return m;
+  if (rng() < INTERMEDIATE_PERFECT_CHANCE) return proClassic(s, moves);
   if (moves.includes(CENTER)) return CENTER;
   const corners = moves.filter((m) => CORNERS.includes(m));
   if (corners.length) return pick(corners, rng);
