@@ -1541,6 +1541,9 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-kc{min-width:0;min-height:84px;border-radius:12px;background:var(--l2-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px;text-align:center}
 .lb2-kc>b{font-size:26px;font-weight:800;line-height:1.1;display:flex;align-items:center;justify-content:center;max-width:100%;white-space:nowrap;overflow:hidden}
 .lb2-kc>b.lb2-kc-s{font-size:19px}
+/* A person's game page already shows the points in its top card: the stats screen's own "Points: N" line is hidden here
+   (2026-11-03, Matt: "Sure"); My Stats, which has no top card, keeps it. */
+.lb2 .gs-ptsline{display:none}
 .lb2-kc>b>*{flex-shrink:0}
 .lb2-kc>b .lb2-shape{margin-right:6px}
 .lb2-kc>b .lb2-ctv img{height:30px;width:auto}

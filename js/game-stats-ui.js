@@ -1775,7 +1775,7 @@ function ptsSectionHTML(id, st) {
   // it behind the same 'see how scores are calculated' button"; same words on every game). In Leaderboard v2 the
   // button's data-act="info" opens the board's sheet over the page; anywhere else it unfolds the copy below it.
   watchPtsButtons();
-  return `<h4 class="gs-tbl-h">${esc(t('lb_pts_total'))}: ${nf(gamePoints(rec, id).pts)}</h4>`
+  return `<h4 class="gs-tbl-h gs-ptsline">${esc(t('lb_pts_total'))}: ${nf(gamePoints(rec, id).pts)}</h4>`
     + `<button type="button" class="lb2-more gs-ptsbtn" data-act="info" aria-expanded="false">${esc(t2('lb2_pts_how'))}</button>`
     + `<div class="gs-ptsheet" hidden>${pointsSheetHTML(id)}</div>`;
 }
