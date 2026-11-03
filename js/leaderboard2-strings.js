@@ -39,6 +39,10 @@ export const STRINGS = {
     lb2_all_machines: 'All machines',
     lb2_games_tile: 'Games',
     lb2_hold_h: 'Records held',
+    // The Me tab's switcher (2026-11-03, Matt accepted these words): one list at a time.
+    lb2_me_gold: 'Golds',
+    lb2_me_lost: 'Lost',
+    lb2_me_close: 'Closest',
     lb2_close_h: 'Closest to a record',
     // How far from gold (the Me tab, 2026-11-03): `v` the number, `sh` its level's shape or ''. The difference is
     // bold and gold; as few words as possible (Matt).
@@ -116,6 +120,11 @@ export const STRINGS = {
     lb2_under: (p) => `${p.n} under`,
     lb2_over: (p) => `${p.n} over`,
     lb2_genius: 'Genius',
+    // Spelling Bee's columns under a name (2026-11-03): read aloud only (each column is an icon and a number).
+    lb2_bee_place: (p) => `${['1st', '2nd', '3rd'][p.r - 1]} on ${p.n} ${plural(p.n, 'day', 'days')}`,
+    lb2_bee_genius: (p) => `Genius on ${p.n} ${plural(p.n, 'day', 'days')}`,
+    lb2_bee_queen: (p) => `Queen Bee on ${p.n} ${plural(p.n, 'day', 'days')}`,
+    lb2_bee_days: (p) => `${p.n} ${plural(p.n, 'day', 'days')} played`,
     lb2_sk_total: 'Total',
     lb2_sk_best: 'Best game',
     lb2_sk_hundreds: 'Balls in 100',
@@ -164,6 +173,9 @@ export const STRINGS = {
     lb2_all_machines: 'Todas las máquinas',
     lb2_games_tile: 'Juegos',
     lb2_hold_h: 'Récords',
+    lb2_me_gold: 'Oros',
+    lb2_me_lost: 'Perdidos',
+    lb2_me_close: 'Más cerca',
     lb2_close_h: 'Más cerca de un récord',
     lb2_need: (p) => {
       const s = (a, b) => (Number(p.n) === 1 ? a : b);
@@ -237,6 +249,10 @@ export const STRINGS = {
     lb2_under: (p) => `${p.n} bajo par`,
     lb2_over: (p) => `${p.n} sobre par`,
     lb2_genius: 'Genio',
+    lb2_bee_place: (p) => `${['1.º', '2.º', '3.º'][p.r - 1]} en ${p.n} ${plural(p.n, 'día', 'días')}`,
+    lb2_bee_genius: (p) => `Genio en ${p.n} ${plural(p.n, 'día', 'días')}`,
+    lb2_bee_queen: (p) => `Abeja reina en ${p.n} ${plural(p.n, 'día', 'días')}`,
+    lb2_bee_days: (p) => `${p.n} ${plural(p.n, 'día jugado', 'días jugados')}`,
     lb2_sk_total: 'Total',
     lb2_sk_best: 'Mejor partida',
     lb2_sk_hundreds: 'Bolas en 100',

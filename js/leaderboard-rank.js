@@ -324,7 +324,10 @@ export const GOLF_COURSE_PAR = {
 export function golfBestAt(group, courseId = GOLF_BOARD_COURSE) {
   const gf = group && group.games && group.games.golf && group.games.golf.gf;
   const best = gf && gf.bestRoundByCourse ? gf.bestRoundByCourse[courseId] : undefined;
-  if (!Number.isFinite(best)) return null;
+  // A round is at least a stroke a hole, so a stored 0 is never a score. An integrity void used to
+  // write one (js/stats-corrections.js now EMPTIES this map instead), and 0 minus par reads "12 under",
+  // the best on the board - so a voided player ranked FIRST. Null = no number, sorts last.
+  if (!Number.isFinite(best) || best <= 0) return null;
   return best - (GOLF_COURSE_PAR[courseId] || 0);
 }
 

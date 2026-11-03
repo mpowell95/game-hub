@@ -1089,7 +1089,9 @@ function golfScreen(rec) {
   // player chooses. A record from before holes were counted shows a dash rather than a fabricated
   // average (rule 4).
   const avg = (gf.holes | 0) > 0 ? (gf.strokes / gf.holes).toFixed(1) : '–';
-  const courseIds = Object.keys(gf.bestRoundByCourse || {}).sort(compareGolfRounds);
+  // A stored 0 is not a round (a hole costs a stroke): a record an integrity void zeroed before
+  // stats-corrections.js started emptying this map would otherwise print "12 under" beside a 0.
+  const courseIds = Object.keys(gf.bestRoundByCourse || {}).filter((id) => gf.bestRoundByCourse[id] > 0).sort(compareGolfRounds);
   // TO PAR SITS BESIDE THE STROKES, IT DOES NOT REPLACE THEM (queued 2026-09-03, done 2026-09-06).
   // The leaderboard shows a best round as a score to par and this table showed raw strokes, so the
   // two screens described the same round with two different numbers. Par is subtracted at DISPLAY
