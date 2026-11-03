@@ -151,9 +151,11 @@ export function ensurePointsSheetCss() {
     '.lbps-ic{width:22px;display:flex;gap:3px;flex:none;justify-content:center;color:var(--ps-dim)}',
     '.lbps-mix{width:44px}',
     '.lbps-ppl svg{width:22px;height:20px}',
-    '.lbps-sh{display:inline-flex;width:18px;height:18px;flex:none}',
-    '.lbps-sh.x2{width:24px}',
-    '.lbps-sh svg{width:100%;height:100%}',
+    // The shape centred on its tile; the Expert double diamond the SAME height as the others, 1.7 times as wide
+    // (2026-11-03: at 24px it was smaller than a single diamond and, in dark mode, lost on its white tile).
+    '.lbps-sh{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex:none}',
+    '.lbps-sh.x2{width:31px}',
+    '.lbps-sh svg{width:100%;height:100%;display:block}',
     ':root.gh-dark .lbps-sh{background:#fff;border-radius:4px;padding:2px;box-sizing:border-box}',
     ':root.gh-dark .lbps .lbps-sh .lb-dshape-t3,:root.gh-dark .lbps .lbps-sh .lb-dshape-t4{fill:#1c2430}',
     '.lbps-lb{flex:1;min-width:0;font-size:15px}',
