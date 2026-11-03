@@ -415,6 +415,18 @@ function ctSlotsHTML(g, daily) {
   const c = lb2CtCounts(g, daily);
   return `<span class="lb2-ctslots">${CT_ORDER.map((k) => `<span class="lb2-cts${c[k] ? '' : ' z'}">${lb2CtImg(k, 16)}<b class="num">${c[k] ? fmt(c[k]) : '·'}</b></span>`).join('')}</span>`;
 }
+/** Spelling Bee (2026-11-03, Matt): under the name, FOUR fixed columns so every row lines up ("all brains aligned
+ *  in a column, all bees (or lack there of) and all calendars"): the HIGHEST daily medal and how many days it was won
+ *  (gold if any, else silver, else bronze; an empty slot with none), Genius 🧠, Queen Bee 🐝 (empty with none) and days
+ *  played 📅. Display only: the counts are the old board's (beeRowFor, via lb2Board's `bee`). */
+function beeSlotsHTML(b) {
+  const top = [['first', 1], ['second', 2], ['third', 3]].find(([k]) => (b[k] | 0) > 0);
+  const slot = (icon, n, label) => `<span class="lb2-bees" role="img" aria-label="${esc(label)}"><span class="lb2-beei" aria-hidden="true">${icon}</span><b class="num">${fmt(n | 0)}</b></span>`;
+  const none = '<span class="lb2-bees" aria-hidden="true"></span>';
+  return `<span class="lb2-beeslots">${top ? slot(lb2Medal(top[1], 18), b[top[0]], t2('lb2_bee_place', { r: top[1], n: b[top[0]] | 0 })) : none}`
+    + `${slot('🧠', b.genius, t2('lb2_bee_genius', { n: b.genius | 0 }))}${(b.queen | 0) > 0 ? slot('🐝', b.queen, t2('lb2_bee_queen', { n: b.queen | 0 })) : none}`
+    + `${slot('📅', b.days, t2('lb2_bee_days', { n: b.days | 0 }))}</span>`;
+}
 const nohintPill = () => `<span class="lb2-pill lb2-nh">${esc(t2('lb2_nohint'))}</span>`;
 /** Under the name: lifetime only ("24 played"); the difficulty went to the number and the group divider. */
 function rowSub(r) {
@@ -501,7 +513,8 @@ function boardScreenHTML(top) {
       }
       lastGroup = grp;
       const val = game === 'contexto' ? ctValHTML(r.g, ctDaily) : dispHTML(game, r.html);
-      const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>` : rowSub(r);
+      const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>`
+        : game === 'spellingbee' && r.bee ? `<span class="lb2-sub">${beeSlotsHTML(r.bee)}</span>` : rowSub(r);
       return `${div}<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
       ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
     };
@@ -1334,6 +1347,11 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 .lb2-cts b{font-size:13px;font-weight:700;color:var(--l2-text)}
 .lb2-cts.z{opacity:.45}
 .lb2-cts.z b{font-weight:600}
+.lb2-beeslots{display:grid;grid-template-columns:repeat(4,44px);gap:2px;align-items:center}
+.lb2-bees{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap}
+.lb2-beei{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+.lb2-beei .lb-ctm,.lb2-beei img{height:18px;width:auto}
+.lb2-bees b{font-size:13px;font-weight:700;color:var(--l2-text)}
 :root.gh-dark .lb2 .lb-ctm img,:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .lb2-bar h1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.1}
 html[lang="es"] .lb2-bar h1{font-size:18px}

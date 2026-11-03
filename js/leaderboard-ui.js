@@ -3750,7 +3750,10 @@ export function lb2Board(list, id, st = {}) {
     } else {
       const v = boardView(list, id);
       rows = v.rows; cmp = v.cmp; unit = v.unit || ''; empty = v.empty || t('lb_empty_game', { label: labelOf(id) });
-      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null, nohint: v.nohint ? v.nohint(g) : false });
+      // `bee` (2026-11-03, additive): Spelling Bee's own counts behind beeChipsHTML, so v2 can draw them in fixed
+      // columns (the old board's chips are unchanged). Read here, inside the borrowed tab state.
+      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null, nohint: v.nohint ? v.nohint(g) : false,
+        bee: id === 'spellingbee' && beeBoard() ? { ...beeRowFor(g) } : null });
       if (v.gap) gapFn = (me, rec) => gapParts(me, rec, id);
     }
     const { rankOf, tiedAt } = rankMap(rows, () => 0, cmp);
