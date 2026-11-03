@@ -532,7 +532,10 @@ function boardScreenHTML(top) {
   // Session 3 (Matt, 2026-11-01): the tabs sit on top and the players right under them; Contexto's medal key
   // goes with the tabs. The pinned row shows only while the viewer's own row is off screen (render()).
   const key = game === 'contexto' && bests ? `<div class="lb2-recs lb2-key">${bests}</div>` : '';
-  const recs = bests && !key ? `<div class="lb2-recs">${bests}</div>` : '';
+  // 2026-11-03, Matt: the Bests block under a board is OFF on every board ("I don't like them anywhere ... Maybe
+  // down the road we can add a 'more stats' button"). Display only: b.records and bestsHTML still build it, so a
+  // later "more stats" button can show it again; nothing stored changes. Contexto's medal key above is a legend.
+  const recs = '';
   const showHead = b.rows.length && unit && game !== 'skeeball';
   // Matt, 2026-11-02: the (i) stays on top; the same sheet also opens from a button under EVERY board ("We should
   // explain how everything is calculated and ranked").
@@ -768,7 +771,8 @@ function sheetHTML(label, inner) {
     ${inner}<button type="button" class="lb2-done" data-act="helpclose">${esc(t2('lb2_done'))}</button></div></div>`;
 }
 function helpHTML() {
-  const lines = [t2('lb2_help_harder'), t2('lb2_help_medals'), t2('lb2_help_bests'), t2('lb2_help_info')];
+  // lb2_help_bests ("Bests: every level, all time.") left the list with the Bests block (2026-11-03); the string stays.
+  const lines = [t2('lb2_help_harder'), t2('lb2_help_medals'), t2('lb2_help_info')];
   return sheetHTML(t2('lb2_help_h'), `<h2 class="lb2-shh">${esc(t2('lb2_help_h'))}</h2>
     <div class="lb2-shape-key">${[4, 3, 2, 1].map((tr) => `<span>${shape(tr)}${esc(lb2TierWord(tr))}</span>`).join('')}</div>
     <ul class="lb2-help">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`);
