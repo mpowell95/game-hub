@@ -2019,39 +2019,44 @@ function gapParts(me, rec, id) {
   if (!(d > 0)) return null;
   return { k, v, n: d };
 }
-/** Leaderboard v2's Me tab (Matt, 2026-11-02: "consolidate everything into 1 piece of info. Do not show my record
- *  and the all time record. Just show what is needed to beat the record"): what it takes to get gold, in parts for
- *  the string `lb2_need`. Two shapes:
- *  - a game ranked on a TOTAL (points, solves, wins, bankroll, Contexto's golds): how much to ADD, at the record's
- *    difficulty: the record's number there minus yours, plus one. One more always passes it, a tie the record
- *    wins on a tie-break included (Flick Soccer 91 against 95: 5 points);
- *  - a game ranked on ONE best run (a score, a distance, a length, a round, a time): the run that beats it.
- *  Sufficient, not always the least: on a game ranked hardest level first, any score on a HARDER level than the
- *  record's also passes it, and this does not offer that. null when there is no honest line. */
-const NEED_BEST = { ballrun: 'obstacles', brickblitz: 'score', snake: 'length', hillclimb: 'meters', tower: 'blocks', golf: 'golf', minesweeper: 'time' };
+/** Leaderboard v2's Me tab (Matt, 2026-11-02/03: "Just show what is needed to beat the record... I want THE
+ *  DIFFERENCE shown"): how far the viewer is from gold, as parts for the string `lb2_need` ("5 points for gold").
+ *  Always the difference between the viewer and the record AT THE RECORD'S LEVEL, plus one, so it beats it rather
+ *  than ties it (a tie the record wins on a tie-break included): points, wins, solves for a total; obstacles,
+ *  length, metres, strokes, seconds for a best run. A viewer with nothing at that level is measured from 0 there,
+ *  and the level's shape is shown, so "◆ 44 longer" reads as "on Hard". Only a time with no time of yours to
+ *  measure from (or a golf course never played) falls back to the record itself ("Beat ◆◆ 5:22").
+ *  Sufficient, not always the least: any score on a level HARDER than the record's also passes it, and this does
+ *  not say so. null when there is no honest line (a Hold'em bankroll under review). */
+const NEED_BEST = { ballrun: 'obstacles', brickblitz: 'points', snake: 'length', hillclimb: 'meters', tower: 'blocks', golf: 'golf', minesweeper: 'time' };
 function needOf(me, rec, id) {
   if (!me || !rec || me.key === rec.key) return null;
   const add = (k, n, tier = null) => ({ k, n, v: k === 'bank' ? bankText(n) : numText(n), tier });
+  // Contexto ranks golds first: one more gold than the record holder passes them.
   if (id === 'contexto') return add('nohint', Math.max(1, ctCounts(ctOf(rec)).gold - ctCounts(ctOf(me)).gold + 1));
   // Sudoku / Murdoku: no-hint solves at the record's no-hint level come first (compareNoHint).
   const nh = NOHINT_GAMES.has(id) ? noHintTierOf(rec, id) : 0;
   if (nh) return add('nohint', Math.max(1, noHintAt(rec, id, nh) - noHintAt(me, id, nh) + 1), nh);
   const best = NEED_BEST[id];
   if (best === 'time') {
+    // Minesweeper ranks to the millisecond: the whole seconds that pass the record, worked out exactly.
     const h = msHeadline(rec);
-    if (!h || !h.c) return null;
-    if (h.c.ms != null) return { k: 'mstime', v: formatTimeMetric(h.c.ms), tier: h.tier || null };
-    return h.c.pct != null ? { k: 'mspct', v: numText(h.c.pct), tier: h.tier || null } : null;
+    if (!h || !h.c || h.c.ms == null) return null;
+    const mine = msCellAt(me, h.tier);
+    if (mine && mine.ms != null && mine.ms > h.c.ms) {
+      const s = Math.ceil((mine.ms - h.c.ms + 1) / 1000);
+      return { k: 'time', n: s, v: formatTimeMetric(s * 1000), tier: h.tier || null };
+    }
+    return { k: 'beat', v: formatTimeMetric(h.c.ms), tier: h.tier || null };
   }
   const tier = boardTierOf(rec, id) || null;
   const r = gameMetricAt(rec, id, tier);
   if (r == null) return null;
-  if (best === 'golf') return { k: 'golf', v: metricText(r - 1, 'golf'), tier: null };   // one stroke better
-  if (best) return { k: best, v: numText(r + 1), tier };
   const m = gameMetricAt(me, id, tier);
+  if (best === 'golf') return m == null ? { k: 'beat', v: metricText(r, 'golf'), tier: null } : add('golf', Math.max(1, m - r + 1));
   if (m == null && id === 'holdem') return null;   // a bankroll under review has no honest number
-  const k = gapKind(id);
-  if (!['points', 'wins', 'solved', 'stars', 'words', 'bank'].includes(k)) return null;
+  const k = best || gapKind(id);
+  if (!['points', 'wins', 'solved', 'stars', 'words', 'bank', 'obstacles', 'length', 'meters', 'blocks'].includes(k)) return null;
   return add(k, Math.max(1, r - (m || 0) + 1), tier);
 }
 /** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
