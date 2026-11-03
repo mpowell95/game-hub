@@ -30,7 +30,7 @@ import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
 import { pointsSheetHTML } from './lb-points-sheet.js';
 import { rankSheetHTML } from './lb-rank-sheet.js';
-import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { GAME_META, lb2MedalLangs, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
@@ -217,14 +217,36 @@ function boardGames() {
   // The old By Game's rule exactly (isGameOnLauncher), so both boards list the same games.
   return GAME_META.map((m) => m.id).filter((id) => isGameOnLauncher(id));
 }
+// Medal keys (2026-11-03, Matt: "Each game should be considered its own game for gold medal leaderboard
+// purposes"): Spelling Bee's English and Spanish are each a medal game, `spellingbee~en` / `spellingbee~es`
+// (js/leaderboard-ui.js lb2MedalLangs); every other game's key is its id.
+const mkOf = (id, lang) => (lang ? `${id}~${lang}` : id);
+const baseOf = (mk) => String(mk).split('~')[0];
+const langOf = (mk) => String(mk).split('~')[1] || '';
+const LANG_NAME = { en: 'English', es: 'Español' };   // the board's own tab words
+const mkTitle = (mk) => (langOf(mk) ? `${title(baseOf(mk))} · ${LANG_NAME[langOf(mk)] || langOf(mk)}` : title(mk));
+const langAttr = (lang) => (lang ? ` data-lang="${esc(lang)}"` : '');
+function standingRows(id, st) {
+  try { return lb2Standing(_people, id, st).map((r) => ({ ...r, name: r.g.name || '', emoji: r.g.emoji || '' })); } catch (err) { console.error('[leaderboard2] standing failed', id, err); return []; }
+}
 function buildModel() {
   const games = boardGames();
   const standings = [];
   const byGame = {};
   for (const id of games) {
-    let rows = [];
-    try { rows = lb2Standing(_people, id).map((r) => ({ ...r, name: r.g.name || '', emoji: r.g.emoji || '' })); } catch (err) { console.error('[leaderboard2] standing failed', id, err); }
-    const st = { game: id, id: 'st~' + id, rows };
+    const langs = lb2MedalLangs(id);
+    if (langs) {
+      // One standing per language: each gives its own medals (Hall of Fame, Me, Lost records).
+      const parts = langs.map((lang) => ({ game: mkOf(id, lang), base: id, lang, id: 'st~' + mkOf(id, lang), rows: standingRows(id, { lang }) }));
+      for (const st of parts) { byGame[st.game] = st; standings.push(st); }
+      // The game's own row (Games list, a person's page): each person's best place in either language. Not a
+      // standing, so it hands out no medal of its own.
+      const best = new Map();
+      for (const st of parts) for (const r of st.rows) { const b = best.get(r.key); if (!b || r.rank < b.rank) best.set(r.key, r); }
+      byGame[id] = { game: id, id: 'st~' + id, rows: [...best.values()].sort((a, b) => a.rank - b.rank) };
+      continue;
+    }
+    const st = { game: id, id: 'st~' + id, rows: standingRows(id, {}) };
     byGame[id] = st;
     standings.push(st);
   }
@@ -235,10 +257,10 @@ function buildModel() {
   _lost = [];
   if (_meKey && meGroup()) {
     const now = {};
-    for (const id of games) {
-      const rows = byGame[id].rows;
+    for (const st of standings) {
+      const rows = st.rows;
       if (!rows.length) continue;
-      now[id] = { mine: rows.some((r) => r.key === _meKey && r.rank === 1), by: rows.filter((r) => r.rank === 1 && r.key !== _meKey).map((r) => nameOf(r.g)) };
+      now[st.game] = { mine: rows.some((r) => r.key === _meKey && r.rank === 1), by: rows.filter((r) => r.rank === 1 && r.key !== _meKey).map((r) => nameOf(r.g)) };
     }
     const st = noteHeld(_meKey, now);
     _lost = st ? st.lost : [];
@@ -373,7 +395,11 @@ function tabsOf(game) {
 function selFor(game, want) {
   const tb = tabsOf(game);
   const st = { ...tb.def };
-  const w = want && typeof want === 'object' ? want : {};
+  let w = want && typeof want === 'object' ? want : {};
+  // A medal-split game (Spelling Bee) opens on a language board, the hub's language, not on All (All gives no
+  // medals, 2026-11-03).
+  const langs = lb2MedalLangs(game);
+  if (langs && !w.lang) w = { ...w, lang: langs.includes(getLang()) ? getLang() : langs[0] };
   for (const row of tb.rows) {
     const hit = row.find((x) => Object.keys(x.st).every((k) => (w[k] ?? null) === (x.st[k] ?? null)));
     const pick = hit || row.find((x) => Object.keys(x.st).every((k) => (tb.def[k] ?? null) === (x.st[k] ?? null))) || row[0];
@@ -536,7 +562,9 @@ function boardScreenHTML(top) {
   const game = top.game;
   const st = top.sel = selFor(game, top.sel);
   const tb = tabsOf(game);
-  const b = boardOf(game, st);
+  let b = boardOf(game, st);
+  // A medal-split game's All board (both languages added) ranks everyone but gives no medal (2026-11-03).
+  if (lb2MedalLangs(game) && (st.lang || 'all') === 'all') b = { ...b, rows: b.rows.map((r) => ({ ...r, noPodium: true })) };
   const fav = loadFavorites().includes(hubIdOf(game));
   // Session 4: "N played" is the GAME'S total on every tab (the default tab's number, the old board's header).
   const total = boardOf(game, selFor(game, null)).plays;
@@ -731,8 +759,8 @@ function meHTML() {
   // list." So: the medal tiles, then ONE switcher Golds | Lost | Closest (it sticks to the top while a long list
   // scrolls), then that one list, no section titles. "Not played yet" is not drawn (lb2Records still returns R.fresh).
   // Golds = records held: the viewer's number under the game's name (full width), the gold medal at the right.
-  const held = R.held.length ? `<div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div>` : '';
+  const held = R.held.length ? `<div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}"${langAttr(x.lang)}>
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(mkOf(x.id, x.lang)))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Closest to a record: ONE line, how far you are from gold ("5 points for gold"), the difference in gold, never
   // the viewer's number beside the record's (Matt, 2026-11-02/03). The maths is needOf in js/leaderboard-ui.js.
   // Variant B (Matt picks; test-only flag): only games where the viewer is 2nd or 3rd, closest gap first.
@@ -743,15 +771,15 @@ function meHTML() {
     // The board's own number style (golf words, digit groups), the level's shape riding the number (round 4).
     return t2('lb2_need', { k: n.k, v: esc(dispText(x.id, n.v)), n: n.n, sh: n.tier ? shape(n.tier) : '' });
   };
-  const close = closeRows.length ? `<div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
+  const close = closeRows.length ? `<div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}"${langAttr(x.lang)}>
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(mkOf(x.id, x.lang)))}</span>
       <span class="lb2-t2 lb2-need num">${needLine(x)}</span></span>
-      <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
+      <span class="lb2-right">${placeHTML(defPlace(mkOf(x.id, x.lang), _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Lost records: a game the viewer held that someone else holds now; who holds it, the day it was noticed, the viewer's place.
   const day = (ms) => { try { return new Date(ms).toLocaleDateString(LOC(), { month: 'short', day: 'numeric' }); } catch { return ''; } };
-  const lostRows = _lost.filter((x) => _model.games.includes(x.game));
-  const lost = lostRows.length ? `<div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.game)}">
-      ${art(x.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.game))}</span><span class="lb2-t2">${medal(1, 'xs')}${esc(x.takenBy.join(', '))} · ${esc(day(x.at))}</span></span>
+  const lostRows = _lost.filter((x) => _model.byGame[x.game] && _model.games.includes(baseOf(x.game)));
+  const lost = lostRows.length ? `<div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(baseOf(x.game))}"${langAttr(langOf(x.game))}>
+      ${art(baseOf(x.game))}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(x.game))}</span><span class="lb2-t2">${medal(1, 'xs')}${esc(x.takenBy.join(', '))} · ${esc(day(x.at))}</span></span>
       <span class="lb2-right">${placeHTML(defPlace(x.game, _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Which list: the one picked last; else the first that has rows (Golds, Lost, Closest); else Golds.
   const lists = { gold: held, lost, close };
@@ -982,7 +1010,7 @@ function onClick(e) {
       if (_srch) { const q = _host.querySelector('[data-role="q"]'); if (q) q.focus(); }
       return;
     }
-    case 'game': openGame(el.dataset.game); return;
+    case 'game': openGame(el.dataset.game, el.dataset.lang ? { lang: el.dataset.lang } : null); return;
     case 'person': { const k = _pidx[Number(el.dataset.pi)]; if (k != null) openPerson(k); return; }
     case 'pgame': { const top = _stack[_stack.length - 1]; if (top && top.kind === 'player') pushLevel({ kind: 'pgame', key: top.key, game: el.dataset.game }); return; }
     case 'pall': {
