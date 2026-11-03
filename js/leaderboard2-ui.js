@@ -533,7 +533,9 @@ function boardScreenHTML(top) {
   const key = game === 'contexto' && bests ? `<div class="lb2-recs lb2-key">${bests}</div>` : '';
   const recs = bests && !key ? `<div class="lb2-recs">${bests}</div>` : '';
   const showHead = b.rows.length && unit && game !== 'skeeball';
-  return `${bar}${ctrl}${key}${showHead ? head : ''}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}${recs}</div></div>${pin.replace('class="lb2-pin"', `class="lb2-pin${me ? ' lb2-pin-auto' : ''}"`)}`;
+  // Matt, 2026-11-02: the (i) stays on top; the same points sheet also opens from a button under the board.
+  const how = ptsInfo(game) ? `<button type="button" class="lb2-more" data-act="info">${esc(t2('lb2_pts_how'))}</button>` : '';
+  return `${bar}${ctrl}${key}${showHead ? head : ''}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}${recs}${how}</div></div>${pin.replace('class="lb2-pin"', `class="lb2-pin${me ? ' lb2-pin-auto' : ''}"`)}`;
 }
 
 // --- Hall of Fame: medals from the old one-standing-per-game, nothing else ---------------------------------
@@ -768,10 +770,11 @@ function helpHTML() {
 /** A game's (i): "Ranked by" one line, then "Counts as" ONLY where a mode records at another level (js/lb-rules.js).
  *  A wins board on an admin device shows the points sheet instead (Matt's mockup v7, js/lb-points-sheet.js): each
  *  option's real points replace "Counts as". */
+function ptsInfo(game) { const r = rulesFor(game); return !!r && (r.by === 'wins' || r.by === 'cuppong') && isAdminDevice(); }
 function infoHTML(game) {
   const r = rulesFor(game);
   if (!r) return '';
-  if ((r.by === 'wins' || r.by === 'cuppong') && isAdminDevice()) {
+  if (ptsInfo(game)) {
     return sheetHTML(title(game), `<div class="lb2-ihd">${art(game)}<h2 class="lb2-shh">${esc(title(game))}</h2></div>${pointsSheetHTML(game)}`);
   }
   const lvl = (tr) => `<span class="lb2-lvl">${shape(tr)}${esc(lb2TierWord(tr))}</span>`;

@@ -12,6 +12,9 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
 - The board's (i) (`js/leaderboard2-ui.js infoHTML`): a wins board on an admin device shows the sheet instead of
   "Ranked by" / "Counts as". Leaderboard v2 itself opens only on admin devices.
 - The stats page (`js/game-stats-ui.js ptsSectionHTML`, already `isAdminDevice()`-gated): "Points: N" + the sheet.
+- (v1430) Matt: keep the (i) on top, and add a button under the board, "See how scores are calculated" /
+  "Ver cómo se calculan los puntos" (`lb2_pts_how`). It opens the same sheet. `ptsInfo(game)` is the one gate for
+  both, so the button is on exactly the boards whose (i) shows the sheet (admin devices, the 20 wins games).
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
   `cricket-order`). Every reader of `lb-points.js` is admin-gated, so player boards do not move.
 - Strings `lbps_*` in `js/strings.js` (EN + ES); `lb_pts_x_cuppong` / new `lb_pts_x_darts` for the old board's line.
