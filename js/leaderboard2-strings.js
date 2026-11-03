@@ -40,17 +40,20 @@ export const STRINGS = {
     lb2_games_tile: 'Games',
     lb2_hold_h: 'Records held',
     lb2_close_h: 'Closest to a record',
-    // What it takes to get gold (the Me tab, 2026-11-02). `v` is the bolded number, with its level's shape when it has one.
+    // How far from gold (the Me tab, 2026-11-03): `v` the number, `sh` its level's shape or ''. The difference is
+    // bold and gold; as few words as possible (Matt).
     lb2_need: (p) => {
       const s = (a, b) => (Number(p.n) === 1 ? a : b);
-      const head = ({
+      const g = (x) => `<b>${p.sh || ''}${x}</b>`;
+      const d = ({
         points: `${p.v} ${s('point', 'points')}`, wins: `${p.v} ${s('win', 'wins')}`, solved: `${p.v} ${s('solve', 'solves')}`,
-        stars: `${p.v} ${s('star', 'stars')}`, words: `${p.v} ${s('word', 'words')}`, bank: `${p.v}`,
-        nohint: `${p.v} no-hint ${s('solve', 'solves')}`, score: `Score ${p.v}`, obstacles: `Pass ${p.v}`,
-        length: `Reach length ${p.v}`, meters: `Drive ${p.v} m`, blocks: `Stack ${p.v} blocks`, golf: `Shoot ${p.v}`,
-        mstime: `Beat ${p.v}`, mspct: `Clear over ${p.v}%`,
+        stars: `${p.v} ${s('star', 'stars')}`, words: `${p.v} ${s('word', 'words')}`, bank: p.v,
+        nohint: `${p.v} no-hint ${s('solve', 'solves')}`, obstacles: `${p.v} ${s('obstacle', 'obstacles')}`,
+        length: `${p.v} longer`, meters: `${p.v} m`, blocks: `${p.v} ${s('block', 'blocks')}`,
+        golf: `${p.v} ${s('stroke', 'strokes')} fewer`, time: `${p.v} faster`,
       })[p.k];
-      return head ? `${head} to get gold` : '';
+      if (p.k === 'beat') return `Beat ${g(p.v)} for gold`;
+      return d ? `${g(d)} for gold` : '';
     },
     lb2_lost_h: 'Lost records',
     lb2_fresh_h: 'Not played yet',
@@ -164,14 +167,16 @@ export const STRINGS = {
     lb2_close_h: 'Más cerca de un récord',
     lb2_need: (p) => {
       const s = (a, b) => (Number(p.n) === 1 ? a : b);
-      const head = ({
+      const g = (x) => `<b>${p.sh || ''}${x}</b>`;
+      const d = ({
         points: `${p.v} ${s('punto', 'puntos')}`, wins: `${p.v} ${s('victoria', 'victorias')}`, solved: `${p.v} ${s('resuelto', 'resueltos')}`,
-        stars: `${p.v} ${s('estrella', 'estrellas')}`, words: `${p.v} ${s('palabra', 'palabras')}`, bank: `${p.v}`,
-        nohint: `${p.v} sin pistas`, score: `Haz ${p.v}`, obstacles: `Supera ${p.v}`,
-        length: `Llega a ${p.v}`, meters: `Recorre ${p.v} m`, blocks: `Apila ${p.v} bloques`, golf: `Haz ${p.v}`,
-        mstime: `Bate ${p.v}`, mspct: `Despeja más del ${p.v}%`,
+        stars: `${p.v} ${s('estrella', 'estrellas')}`, words: `${p.v} ${s('palabra', 'palabras')}`, bank: p.v,
+        nohint: `${p.v} sin pistas`, obstacles: `${p.v} ${s('obstáculo', 'obstáculos')}`,
+        length: `${p.v} más larga`, meters: `${p.v} m`, blocks: `${p.v} ${s('bloque', 'bloques')}`,
+        golf: `${p.v} ${s('golpe', 'golpes')} menos`, time: `${p.v} más rápido`,
       })[p.k];
-      return head ? `${head} para el oro` : '';
+      if (p.k === 'beat') return `Bate ${g(p.v)} para el oro`;
+      return d ? `${g(d)} para el oro` : '';
     },
     lb2_lost_h: 'Récords perdidos',
     lb2_fresh_h: 'Sin jugar',

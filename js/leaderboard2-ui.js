@@ -654,16 +654,15 @@ function meHTML() {
   // Records held: the viewer's number under the game's name (full width), the gold medal at the right.
   const held = R.held.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_hold_h'))}</h2><div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div></div>` : '';
-  // Closest to a record: ONE line, what it takes to get gold ("5 points to get gold"), never the viewer's number
-  // beside the record's (Matt, 2026-11-02). The maths is needOf in js/leaderboard-ui.js.
+  // Closest to a record: ONE line, how far you are from gold ("5 points for gold"), the difference in gold, never
+  // the viewer's number beside the record's (Matt, 2026-11-02/03). The maths is needOf in js/leaderboard-ui.js.
   // Variant B (Matt picks; test-only flag): only games where the viewer is 2nd or 3rd, closest gap first.
   const closeRows = _closeVariant === 'b' ? R.close.filter((x) => x.rank === 2 || x.rank === 3) : R.close;
   const needLine = (x) => {
     const n = x.need;
     if (!n) return '';
     // The board's own number style (golf words, digit groups), the level's shape riding the number (round 4).
-    const v = `${n.tier ? shape(n.tier) : ''}<b>${esc(dispText(x.id, n.v))}</b>`;
-    return t2('lb2_need', { k: n.k, v, n: n.n });
+    return t2('lb2_need', { k: n.k, v: esc(dispText(x.id, n.v)), n: n.n, sh: n.tier ? shape(n.tier) : '' });
   };
   const close = closeRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_close_h'))}</h2><div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
@@ -1070,8 +1069,8 @@ function ensureCss() {
   const el = document.createElement('style');
   el.id = 'lb2-css';
   el.textContent = `
-.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55}
-:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6)}
+.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55;--l2-gold:#8A5A00}
+:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6);--l2-gold:#FFCE3A}
 html.gh-lb2-open,html.gh-lb2-open body{overflow:hidden;overscroll-behavior:none}
 .lb2{position:fixed;top:0;left:0;right:0;bottom:auto;height:100vh;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
 html.gh-compact .lb2{z-index:19;padding-bottom:calc(53px + max(6px, calc(env(safe-area-inset-bottom,0px) - 16px)))}
@@ -1288,7 +1287,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-close>.lb2-chev{align-self:center}
 .lb2-close .lb2-vsr{flex-wrap:nowrap;white-space:nowrap}
 .lb2-need{display:block;color:var(--l2-text);white-space:normal;overflow:visible}
-.lb2-need b{font-weight:800}
+.lb2-need b{font-weight:800;color:var(--l2-gold)}
 .lb2-need .lb-dshape,.lb2-need svg{width:14px;height:14px;vertical-align:-2px;margin:0 3px 0 1px}
 .lb2-close .lb2-vsr .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-frow{display:flex;gap:8px;align-items:stretch}

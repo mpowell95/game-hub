@@ -34,6 +34,12 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   "Shoot 5 under", "Beat 5:22"); the level's shape rides the number. Sufficient, not always the least: any score
   on a level harder than the record's also passes it, and the line does not say so. Phrases were shortened until
   no line wraps at 393 px in EN or ES.
+- (v1437) Matt: "Reach length 44 to get gold is incredibly wordy. And it doesn't tell me how close I already am...
+  I want THE DIFFERENCE shown. And make the bold part gold. Convey the message in as few words as possible." So
+  EVERY game now shows the difference at the record's level, plus one: "5 points for gold", "◆ 5 longer for gold",
+  "2 strokes fewer for gold", "0:05 faster for gold". The difference is bold in gold (`--l2-gold`: #8A5A00 light,
+  #FFCE3A dark). Only a time with none of yours on that level (or a golf course never played) shows the record
+  ("Beat ◆◆ 5:22 for gold"). With nothing of yours on the record's level, the difference counts from 0 there.
 - Found while checking, NOT fixed (reported to Matt): a Golf integrity void sets `bestRoundByCourse` to 0, which
   `golfBestAt` reads as 12 under, so a voided Golf player would rank FIRST. Minesweeper's void is safe (0 = no time).
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
