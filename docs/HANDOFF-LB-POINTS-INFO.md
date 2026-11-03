@@ -23,6 +23,8 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1454) Every board and Medal Count show EVERY player: the tail of 0 rows no longer folds under "N players" (Matt:
+  "Remove that. ALWAYS show everybody"; `foldTail` now draws every row).
 - (v1453) REAL-DATA CHECK (Matt: "Check all data"; hearts red and the back swipe confirmed on his iPhone: "Yes and yes").
   Read-only snapshot (`tools/read-lb-snapshot.mjs`): test-stats-screens 61 real people, 788 screens, 1001/0;
   test-lb-points real top 3 ok; `tools/test-lb2-parity.mjs` 397/0 in EN and ES. Found and fixed: the Spelling Bee
