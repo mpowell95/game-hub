@@ -11,7 +11,7 @@
 
 import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
-  ballPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
+  shotPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
 import { planShot, seededRng, DIFFS } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
@@ -1544,8 +1544,22 @@ class FlickSoccerUI {
     const amp = Math.max(0, Math.min(1, (reach - full) / (reach * 0.5)));   // how much the edge squeezes this pull
     const aids = this._aids();
     const contact = aids.guide ? aimContact(m.b, d.i, dx, dy) : null;
-    const path = contact && contact.hit === BALL ? ballPath(m.b, d.i, contact, 30 + 90 * power) : null;
+    const path = contact && contact.hit === BALL ? this._shotPath(m, d.i, dx, dy, power) : null;
     this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp, gap: full - len, len };
+  }
+
+  /** Easy's bounce line: the shot that release would play, run on a copy (engine shotPath), so the
+   *  line is what the ball does. Online it is the stored, rounded flick (`_shoot`), the one that
+   *  rolls. Kept while the aim is unchanged (the view's glide re-reads the aim every frame). */
+  _shotPath(m, i, dx, dy, power) {
+    if (this.mode === 'mp' && this.mp) {
+      const r = roundShot(i - 1 - this.mp.mySeat * 5, dx, dy, power);
+      if (!r) return null;
+      dx = r.dx; dy = r.dy; power = r.p;
+    }
+    const key = `${i},${dx},${dy},${power},${m.shots}`;
+    if (this._pathKey !== key || this._pathB !== m.b) { this._pathKey = key; this._pathB = m.b; this._pathVal = shotPath(m.b, i, dx, dy, power); }
+    return this._pathVal;
   }
 
   /** Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15). */
