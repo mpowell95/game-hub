@@ -1,0 +1,85 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dominoes sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}.hd2{display:flex;align-items:center;padding:9px 0 9px 14px;font-size:14px;font-weight:700;color:#AEB5C1;border-bottom:1px solid rgba(255,255,255,.06)}.hd2 span:first-child{flex:1}.c{width:96px;text-align:center;line-height:1.2}.rr{display:flex;align-items:center;gap:12px;padding:0 0 0 14px;height:50px;border-top:1px solid rgba(255,255,255,.06)}.hd2+.rr{border-top:0}.rr .n{flex:1;font-size:16px}.rr b{width:96px;text-align:center;font-size:20px;font-weight:800}.ch:empty{display:none}.ch:empty{display:none}table.w th{width:76px}table.w td{color:#F1F3F6;font-weight:800;font-size:20px}table.w td.lv{font-weight:400;font-size:16px;white-space:nowrap}td .cap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:15px;background:#ffce3a;color:#1c1606;font-size:17px}.on{border-top:6px solid #11141b}.capn{padding:12px 14px;font-size:14px;color:#AEB5C1;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06)}table.w th{white-space:normal;line-height:1.15;font-size:12px}.note{padding:10px 14px 12px;font-size:14px;color:#AEB5C1;border-top:1px solid rgba(255,255,255,.06)}
+th{color:#E6E9EF!important;font-weight:700!important;font-size:14px!important}.hd2{color:#E6E9EF!important;font-size:14px!important}.hdr{color:#E6E9EF!important}.dim,.note,.capn{color:#C9CFD8!important}table.gl tr.grp td{color:#E6E9EF!important}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#E88A6B"/>
+            <ellipse cx="80" cy="44" rx="78" ry="44" fill="#F5A183"/>
+            <g fill="#F7EDD3" stroke="#141414" stroke-width="3" stroke-linejoin="round">
+              <g transform="translate(8 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(44 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 33)"><rect width="18" height="36" rx="4"/><line x1="0" y1="18" x2="18" y2="18"/></g>
+              <g transform="translate(100 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 5)"><rect width="18" height="26" rx="4"/><line x1="0" y1="13" x2="18" y2="13"/></g>
+            </g>
+            <g fill="#141414">
+              <circle cx="17" cy="51" r="2.6"/>
+              <circle cx="30" cy="46.5" r="2.4"/><circle cx="36" cy="55.5" r="2.4"/>
+              <circle cx="53" cy="46.5" r="2.4"/><circle cx="53" cy="55.5" r="2.4"/><circle cx="59" cy="51" r="2.4"/>
+              <circle cx="66" cy="46" r="2.2"/><circle cx="72" cy="46" r="2.2"/><circle cx="66" cy="51" r="2.2"/>
+              <circle cx="72" cy="51" r="2.2"/><circle cx="66" cy="56" r="2.2"/><circle cx="72" cy="56" r="2.2"/>
+              <circle cx="85" cy="37" r="2.2"/><circle cx="93" cy="37" r="2.2"/><circle cx="85" cy="42" r="2.2"/>
+              <circle cx="93" cy="42" r="2.2"/><circle cx="85" cy="47" r="2.2"/><circle cx="93" cy="47" r="2.2"/>
+              <circle cx="85" cy="55" r="2.2"/><circle cx="93" cy="55" r="2.2"/><circle cx="85" cy="60" r="2.2"/>
+              <circle cx="93" cy="60" r="2.2"/><circle cx="85" cy="65" r="2.2"/><circle cx="93" cy="65" r="2.2"/>
+              <circle cx="109" cy="46.5" r="2.4"/><circle cx="109" cy="55.5" r="2.4"/>
+              <circle cx="115" cy="51" r="2.4"/>
+              <circle cx="123" cy="46.5" r="2.4"/><circle cx="129" cy="55.5" r="2.4"/>
+              <circle cx="85" cy="11" r="2.2"/><circle cx="93" cy="11" r="2.2"/><circle cx="89" cy="15" r="2.2"/>
+              <circle cx="89" cy="24" r="2.4"/>
+            </g>
+          </svg></span><span class="gname">Dominoes</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#E88A6B"/>
+            <ellipse cx="80" cy="44" rx="78" ry="44" fill="#F5A183"/>
+            <g fill="#F7EDD3" stroke="#141414" stroke-width="3" stroke-linejoin="round">
+              <g transform="translate(8 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(44 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 33)"><rect width="18" height="36" rx="4"/><line x1="0" y1="18" x2="18" y2="18"/></g>
+              <g transform="translate(100 42)"><rect width="34" height="18" rx="4"/><line x1="17" y1="0" x2="17" y2="18"/></g>
+              <g transform="translate(80 5)"><rect width="18" height="26" rx="4"/><line x1="0" y1="13" x2="18" y2="13"/></g>
+            </g>
+            <g fill="#141414">
+              <circle cx="17" cy="51" r="2.6"/>
+              <circle cx="30" cy="46.5" r="2.4"/><circle cx="36" cy="55.5" r="2.4"/>
+              <circle cx="53" cy="46.5" r="2.4"/><circle cx="53" cy="55.5" r="2.4"/><circle cx="59" cy="51" r="2.4"/>
+              <circle cx="66" cy="46" r="2.2"/><circle cx="72" cy="46" r="2.2"/><circle cx="66" cy="51" r="2.2"/>
+              <circle cx="72" cy="51" r="2.2"/><circle cx="66" cy="56" r="2.2"/><circle cx="72" cy="56" r="2.2"/>
+              <circle cx="85" cy="37" r="2.2"/><circle cx="93" cy="37" r="2.2"/><circle cx="85" cy="42" r="2.2"/>
+              <circle cx="93" cy="42" r="2.2"/><circle cx="85" cy="47" r="2.2"/><circle cx="93" cy="47" r="2.2"/>
+              <circle cx="85" cy="55" r="2.2"/><circle cx="93" cy="55" r="2.2"/><circle cx="85" cy="60" r="2.2"/>
+              <circle cx="93" cy="60" r="2.2"/><circle cx="85" cy="65" r="2.2"/><circle cx="93" cy="65" r="2.2"/>
+              <circle cx="109" cy="46.5" r="2.4"/><circle cx="109" cy="55.5" r="2.4"/>
+              <circle cx="115" cy="51" r="2.4"/>
+              <circle cx="123" cy="46.5" r="2.4"/><circle cx="129" cy="55.5" r="2.4"/>
+              <circle cx="85" cy="11" r="2.2"/><circle cx="93" cy="11" r="2.2"/><circle cx="89" cy="15" r="2.2"/>
+              <circle cx="89" cy="24" r="2.4"/>
+            </g>
+          </svg></span><h2>Dominoes</h2></div><div class="card"><div class="ch"></div><table class="w"><thead><tr><th></th><th colspan="3" class="sup">Points to win</th></tr><tr><th></th><th>150</th><th>300</th><th>500</th></tr></thead><tbody><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#2e9e44"><circle cx="10" cy="10" r="8"/></svg></span><span class="n">Easy</span></td><td>1</td><td>1</td><td>2</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1F5FA8"><rect x="3" y="3" width="14" height="14" rx="3"/></svg></span><span class="n">Medium</span></td><td>1</td><td>2</td><td>4</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1c2430"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg></span><span class="n">Hard</span></td><td>2</td><td>3</td><td>6</td></tr></tbody></table></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

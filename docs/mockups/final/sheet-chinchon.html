@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chinchón sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}.hd2{display:flex;align-items:center;padding:9px 0 9px 14px;font-size:14px;font-weight:700;color:#AEB5C1;border-bottom:1px solid rgba(255,255,255,.06)}.hd2 span:first-child{flex:1}.c{width:96px;text-align:center;line-height:1.2}.rr{display:flex;align-items:center;gap:12px;padding:0 0 0 14px;height:50px;border-top:1px solid rgba(255,255,255,.06)}.hd2+.rr{border-top:0}.rr .n{flex:1;font-size:16px}.rr b{width:96px;text-align:center;font-size:20px;font-weight:800}.ch:empty{display:none}.ch:empty{display:none}table.w th{width:76px}table.w td{color:#F1F3F6;font-weight:800;font-size:20px}table.w td.lv{font-weight:400;font-size:16px;white-space:nowrap}td .cap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:15px;background:#ffce3a;color:#1c1606;font-size:17px}.on{border-top:6px solid #11141b}.capn{padding:12px 14px;font-size:14px;color:#AEB5C1;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.06)}table.w th{white-space:normal;line-height:1.15;font-size:12px}.note{padding:10px 14px 12px;font-size:14px;color:#AEB5C1;border-top:1px solid rgba(255,255,255,.06)}
+th{color:#E6E9EF!important;font-weight:700!important;font-size:14px!important}.hd2{color:#E6E9EF!important;font-size:14px!important}.hdr{color:#E6E9EF!important}.dim,.note,.capn{color:#C9CFD8!important}table.gl tr.grp td{color:#E6E9EF!important}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1f7a52"/>
+            <g transform="rotate(-28 34 50)">
+              <rect x="19" y="28" width="30" height="44" rx="4" fill="#f7edd4" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="34" cy="50" r="8" fill="#e8b53a" stroke="#a9791b" stroke-width="1.6"/>
+              <circle cx="34" cy="50" r="5" fill="none" stroke="#a9791b" stroke-width="1"/>
+            </g>
+            <g transform="rotate(-14 57 45)">
+              <rect x="42" y="23" width="30" height="44" rx="4" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.4"/>
+              <polygon points="52,40 62,40 59.5,48 54.5,48" fill="#c0392b"/>
+              <rect x="55.8" y="48" width="2.4" height="5" fill="#c0392b"/>
+              <rect x="52.5" y="53" width="9" height="2.4" rx="1.2" fill="#c0392b"/>
+            </g>
+            <g transform="rotate(14 103 45)">
+              <rect x="88" y="23" width="30" height="44" rx="4" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="103" cy="45" r="8" fill="#e8b53a" stroke="#a9791b" stroke-width="1.6"/>
+              <circle cx="103" cy="45" r="5" fill="none" stroke="#a9791b" stroke-width="1"/>
+            </g>
+            <g transform="rotate(28 126 50)">
+              <rect x="111" y="28" width="30" height="44" rx="4" fill="#f7edd4" stroke="#c9b485" stroke-width="1.4"/>
+              <path d="M119 44 L133 44 L130 53 L122 53 Z" fill="#2d6a9f"/>
+              <rect x="124.8" y="53" width="2.4" height="5" fill="#2d6a9f"/>
+              <rect x="121.5" y="58" width="9" height="2.4" rx="1.2" fill="#2d6a9f"/>
+            </g>
+            <g>
+              <rect x="65" y="20" width="30" height="44" rx="4" fill="#ffffff" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="80" cy="42" r="9" fill="#e8b53a" stroke="#a9791b" stroke-width="1.8"/>
+              <circle cx="80" cy="42" r="5.6" fill="none" stroke="#a9791b" stroke-width="1.1"/>
+              <circle cx="80" cy="42" r="1.8" fill="#a9791b"/>
+            </g>
+          </svg></span><span class="gname">Chinchón</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1f7a52"/>
+            <g transform="rotate(-28 34 50)">
+              <rect x="19" y="28" width="30" height="44" rx="4" fill="#f7edd4" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="34" cy="50" r="8" fill="#e8b53a" stroke="#a9791b" stroke-width="1.6"/>
+              <circle cx="34" cy="50" r="5" fill="none" stroke="#a9791b" stroke-width="1"/>
+            </g>
+            <g transform="rotate(-14 57 45)">
+              <rect x="42" y="23" width="30" height="44" rx="4" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.4"/>
+              <polygon points="52,40 62,40 59.5,48 54.5,48" fill="#c0392b"/>
+              <rect x="55.8" y="48" width="2.4" height="5" fill="#c0392b"/>
+              <rect x="52.5" y="53" width="9" height="2.4" rx="1.2" fill="#c0392b"/>
+            </g>
+            <g transform="rotate(14 103 45)">
+              <rect x="88" y="23" width="30" height="44" rx="4" fill="#fdf8ea" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="103" cy="45" r="8" fill="#e8b53a" stroke="#a9791b" stroke-width="1.6"/>
+              <circle cx="103" cy="45" r="5" fill="none" stroke="#a9791b" stroke-width="1"/>
+            </g>
+            <g transform="rotate(28 126 50)">
+              <rect x="111" y="28" width="30" height="44" rx="4" fill="#f7edd4" stroke="#c9b485" stroke-width="1.4"/>
+              <path d="M119 44 L133 44 L130 53 L122 53 Z" fill="#2d6a9f"/>
+              <rect x="124.8" y="53" width="2.4" height="5" fill="#2d6a9f"/>
+              <rect x="121.5" y="58" width="9" height="2.4" rx="1.2" fill="#2d6a9f"/>
+            </g>
+            <g>
+              <rect x="65" y="20" width="30" height="44" rx="4" fill="#ffffff" stroke="#c9b485" stroke-width="1.4"/>
+              <circle cx="80" cy="42" r="9" fill="#e8b53a" stroke="#a9791b" stroke-width="1.8"/>
+              <circle cx="80" cy="42" r="5.6" fill="none" stroke="#a9791b" stroke-width="1.1"/>
+              <circle cx="80" cy="42" r="1.8" fill="#a9791b"/>
+            </g>
+          </svg></span><h2>Chinchón</h2></div><div class="card"><div class="ch"></div><table class="w"><thead><tr><th></th><th colspan="2" class="sup">Game ends at</th></tr><tr><th></th><th>Under 100 points</th><th>100+ points</th></tr></thead><tbody><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#2e9e44"><circle cx="10" cy="10" r="8"/></svg></span><span class="n">Easy</span></td><td>1</td><td>1</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1F5FA8"><rect x="3" y="3" width="14" height="14" rx="3"/></svg></span><span class="n">Medium</span></td><td>1</td><td>2</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1c2430"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg></span><span class="n">Hard</span></td><td>2</td><td>4</td></tr></tbody></table><div class="rr on"><span style="width:20px;display:flex;color:#A2A9B5"><svg viewBox="0 0 22 20" width="22" height="20"><circle cx="7" cy="6.5" r="3.6" fill="currentColor"/><circle cx="15" cy="6.5" r="3.6" fill="currentColor"/><path d="M0.5 19c0-3.8 2.9-6.6 6.5-6.6s6.5 2.8 6.5 6.6zM8.5 19c0-3.8 2.9-6.6 6.5-6.6s6.5 2.8 6.5 6.6z" fill="currentColor"/></svg></span><span class="n">Online</span><b>3</b></div><div class="note"><b style="color:#E6E9EF">2 or 3 computers:</b> add up each one's points.<br>Easy + Hard = 5</div></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

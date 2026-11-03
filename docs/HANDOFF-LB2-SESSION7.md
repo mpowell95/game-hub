@@ -108,3 +108,9 @@ Scores-screen mockups sent 2026-11-03 (NOT built; Matt reviewing): `docs/mockups
 approved: "That mockup is good"), Murdoku ("Good"), Nuts & Bolts, Minesweeper, Gridlock, Word Weaver, Contexto, Spelling
 Bee, Hill Climb, Snake, Ball Run, Brick Breaker, Tower, Golf, Hold'em, Skeeball, and ONE shared layout for every wins game
 (Flick Soccer, Cup Pong, Connect Four shown): a grid of level x option, circled = under the 20-point limit, Online apart.
+**Every scores screen, current set: `docs/mockups/final/sheet-<game>.{html,jpg}`** (2026-11-03, after Matt's notes: bright
+headers on all; Battleship 8x8 / 10x10; Chinchón "Under 100 points" / "100+ points"; Darts "101 or 201"; the 20-point
+circle as "(circle) = Only your first 20 points from these count."; Hoops Hard + "Until you score" = 2 (PROPOSED points
+change, `js/lb-points.js` not touched yet); Chinchón/Escoba/Parchís 2-3 computers = each computer's points added up
+(PROPOSED; Matt: winning vs Easy + Hard is harder than 1v1 Hard; tables are saved in `byMode` `ai` since 2026-10-30,
+older wins only know the easiest level). Nuts & Bolts A (1/2/4/8) or B (+ Easy capped at 20): Matt has not picked.
