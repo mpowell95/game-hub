@@ -463,8 +463,9 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 (EN/ES in each `strings.js`; hub: `hub_confirm_loss`, "Leave? Counts as a loss.").
 - **Games that SAVE and resume**: leaving (destroy, the hub's back, closing the app) is not quitting. Only an
   explicit discard records the loss: Restart / New game / Menu / Quit to setup, or a new game started over a
-  moved-in save from the setup screen (Dominoes, Escoba, Darts, Flick Soccer, Pool, Archery, Parchís).
-- **Games with NO resume** (Yahtzee, Cup Pong, Cup Baseball, Air Hockey, Connect 4 Hoops, Monopoly Deal):
+  moved-in save from the setup screen (Dominoes, Escoba, Darts, Flick Soccer, Pool, Archery, Parchís; Cup Pong
+  since 2026-11-03, see "Cup Pong saves" at the end).
+- **Games with NO resume** (Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops, Monopoly Deal; Cup Pong until 2026-11-03):
   leaving after the first move is the loss. Closing the app runs no `destroy()`, so the game ARMS its loss in
   `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`: recorder name + the LOSS call's arguments, score
   so far, refreshed as it changes) and DROPS it in the same breath as its real result. `destroy()` and every
@@ -484,9 +485,9 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 | Escoba, Chinchón | menu New game / Quit to setup, New game over a resumable save (Escoba) | `moved` in the save |
 | Battleship | Restart, Exit | first move = first shot (placing ships is not) |
 | Boggle | Give up (two taps) | first move = first word entered |
-| Darts, Flick Soccer, Pool, Archery | Play (or Pass & play) over a moved-in saved match vs the computer | Quit keeps the save (Continue), so it is not a quit; Pool marks `m.ps` at the first shot |
+| Darts, Flick Soccer, Pool, Archery, Cup Pong (2026-11-03) | Play (or Pass & play; Cup Pong: New game, setup or menu) over a moved-in saved match vs the computer | Quit keeps the save (Continue), so it is not a quit; Pool marks `m.ps` at the first shot |
 | Battle Arena | menu New match / Home | `pm` in the save |
-| Yahtzee, Cup Pong, Cup Baseball, Air Hockey, Connect 4 Hoops | every route, leaving included (marker) | |
+| Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops | every route, leaving included (marker) | |
 | Minesweeper (solo) | the face's New board on a started board, New game over a level's paused board | **a loss at that level** (it protected a win rate); pausing a board is not quitting |
 | Monopoly Deal | New Game, both Quits, the hub, a closed page (classic marker) | its own `bd-stats` too |
 | Parchís | a new game over a rolled-in saved game vs the computer (a prompt says so) | BUILT FILE patched, see below |
@@ -756,3 +757,21 @@ games with no h2h (Air Hockey, Hold'em, Yahtzee) and the online games played bef
 match took (honest Hoops games between two people at one table end in 49 s, so time alone separates nothing);
 device fields are self-reported and look-alike phones are common in one family (most are "iPhone · iOS 18.7").
 Online play still needs Matt's yes per code: the gate is the real safeguard; these alerts tell him what to look at.
+
+## Cup Pong saves (2026-11-03, Matt: "I was playing the computer in cup pong and left to play Ana back and it made me forfeit. Why doesn't it save the game so you can continue it like the other games do??")
+
+Cup Pong vs the computer moves from the no-resume games to the games that SAVE (supersedes its place in E1, G3
+and G5 above). `cup-pong/js/ui.js` saves `gamehub.cuppong.save.v1` = `{ v: 1, at, cfg, match, tally, fly }`
+after every throw and every choice (Gentleman's, Center, rerack, island call, a cup picked, each turn); `cfg` is
+that match's own settings; the setup screen shows **Continue** + **New game**.
+- **Leaving is not quitting**: the hub's back, Change settings, a closed app, a challenge opened. No marker is
+  armed; `isInProgress()` answers false vs the computer; no `quitCostsLoss` export.
+- **Throwing it away is the loss**: New game (menu, or the setup screen over the save) once ANY throw was made in
+  it, the computer's included, asked twice ("Counts as a loss"). Recorded through the quit-loss marker armed and
+  taken at once (`takeQuit`), so the play log still says `quitLoss`. The save is cleared first.
+- **No take-backs by leaving mid-flight**: a throw in the air is saved with its launch (`fly`, either side) and
+  flown again on Continue; the physics is a fixed 1/480 s step, so it lands where it was going (the computer's
+  throw is not re-rolled). Proven headlessly (a made throw re-flown into the same cup).
+- **Counted once**: the finish clears the save BEFORE recording, so a continued match cannot be counted twice.
+- A marker armed by an older build is still taken at `init()` (that match had no save).
+Tests: `tools/test-quit-loss.mjs` (Q4 cup-pong lines), `node cup-pong/js/test.js`, `tools/test-cuppong-mp.mjs`.

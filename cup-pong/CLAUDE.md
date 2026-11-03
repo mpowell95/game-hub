@@ -208,8 +208,8 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
 | Registry | `module: '../cup-pong/js/ui.js'`, `immersive: true`, released 2026-10-26 (`released: '2026-09-28'`, the admin switch day), hub id `cuppong` |
 | Stats id | `cuppong`: `recordResult('cuppong', difficulty, won)` once per finished match vs the computer (`easy`/`medium`/`hard`; `mp` is for challenges); solo via `recordCupPongSolo` into `cp`. **Vs the computer goes through `recordCupPong(diff, won, reracksUsed)` (2026-10-28)**: a win also adds `cr[<diff>] = {w, r}` (reracks spent, a rebuttal's free ones not counted; `match.reracksUsed`). **Board tie-breaker (Matt): equal wins, fewer reracks ranks higher** (`cpReracksOf` in `js/leaderboard-ui.js`, row line "N reracks" once tracked). Counted from 2026-10-28 only; challenges not tracked (both players share one Reracks setting). Registered in `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META` (on the board even while admin-only; `OFF_THE_BOARD` stays empty), `js/game-stats-ui.js` `TABS`, label `game_title_cuppong` |
 | CSS | `.cp-root` / `.cp-` |
-| Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` (preferences; `nextFirst` alternates) |
-| `isInProgress()` | NO MID-GAME RESUME meaning: `true` while a match vs the computer / a solo rack has had a throw and is not over; a challenge answers `false` (lives in Firebase) |
+| Settings key | `gamehub.cuppong.v1`: `{ diff, gentlemans, nextFirst }` (preferences; `nextFirst` alternates). Save: `gamehub.cuppong.save.v1` (below) |
+| `isInProgress()` | Vs the computer: AUTOSAVE meaning, `false` (saved, Continue); a challenge `false` (Firebase); a SOLO rack `true` once thrown in and not cleared (not saved) |
 | Tile art | `GAME_ART.cuppong` |
 
 ## Files
@@ -296,9 +296,11 @@ side (`mp.side`), never the local-frame `'a'`.
 
 ## Quitting and easier settings (2026-10-29)
 
-No resume: vs the computer, leaving after the player's first throw (New game / Change settings, asked twice; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss axis). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss axis). The 2026-10-29 "no resume, leaving is a loss" rule was REPLACED by the save below.
 
-## Second pass (2026-10-29)
+## A match vs the computer SAVES (2026-11-03, Matt: "Why doesn't it save the game so you can continue it like the other games do??")
 
-- Vs the computer: quitting is a loss once ANY throw, the computer's included (it was the player's own first move). A marker settled while the page was frozen means no second result (`quitLossLost`).
-- Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+- `gamehub.cuppong.save.v1` = `{ v: 1, at, cfg, match: Match.toJSON(), tally, fly }`, written by `saveMatch()` after every throw, option, pick and turn start; `cfg` = that match's own settings (`this.cfg`, never the setup screen's). Setup shows **Continue** + **New game** (`resumeMatch`).
+- Leaving (hub back, Change settings, closed app, a challenge) costs nothing. **New game over a thrown-in match (any throw, the computer's included) = ONE loss**, asked twice (`quitPending`/`takeQuit`, marker armed and taken at once so the play log says `quitLoss`).
+- A throw in the AIR is saved (`fly`, either side) and flown again on Continue (`reFly`; fixed-step physics lands it the same), so leaving never takes a throw back.
+- The finish clears the save BEFORE recording (counted once). `init()` still takes an older build's marker. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Cup Pong saves"; `node tools/test-quit-loss.mjs`.

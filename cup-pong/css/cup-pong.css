@@ -205,6 +205,9 @@
 .cp-root .cp-setup .gh-seg__item { min-height: 44px; }        /* the 44px tap floor (Part 0) */
 .cp-root .cp-setup .gh-seg__item svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .cp-root .cp-setup-play { min-height: 48px; margin-top: 4px; }
+/* Continue + New game, side by side: a saved match vs the computer (2026-11-03). Same height as Play. */
+.cp-root .cp-setup-go { display: flex; gap: 8px; align-self: stretch; }
+.cp-root .cp-setup-go .cp-setup-play { flex: 1 1 0; min-width: 0; padding-left: 8px; padding-right: 8px; }
 .cp-root .cp-card-best { font-weight: 800; }
 .cp-root .cp-card-kicker { margin: 0 0 2px; font-size: 13px; font-weight: 900; letter-spacing: 0.12em; color: var(--gh-muted); }
 .cp-root .cp-card-head { margin: 0; font-size: 17px; font-weight: 900; align-self: stretch; text-align: left; }
