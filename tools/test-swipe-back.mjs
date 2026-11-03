@@ -427,11 +427,34 @@ await settle();
 ok('Bug inbox: a report = 2 entries', (await depth()) === 2, await depth());
 await stepAll('Bug inbox swipe', [['report', null], ['inbox', () => page.evaluate(() => !!document.querySelector('.bug-overlay [data-open]'))]], '.bug-overlay', swipe);
 
-// ---------- Profile page: its own views, with My Stats over them ----------
+// ---------- Profile page: its own views, with the leaderboard's Me tab and My Stats over them ----------
+// Since 2026-11-03 (#1475) the My Stats button opens Leaderboard v2 on its Me tab on an ADMIN device (this test's
+// device), and My Stats only on a player's device. Both are swiped through here: the button's admin path, then My
+// Stats opened the way the button's player path opens it (js/game-stats-ui.js openStatsOverlay).
 await page.goto(BASE + '/profile/', { waitUntil: 'load' });
 await page.waitForSelector('#pf-stats-btn', { timeout: 10000 });
 await page.evaluate(() => history.pushState({ sentinel: 1 }, ''));
 await page.click('#pf-stats-btn');
+await page.waitForSelector('.lb2 .lb2-head [data-act="tab"][data-v="me"].on', { timeout: 10000 });
+await settle();
+ok('profile (admin device): My Stats opens the leaderboard on Me = 1 entry', (await depth()) === 1, await depth());
+// This test's viewer is "test1", a name the leaderboard hides (js/hidden-players.js), so its Me tab may hold no
+// lists; then the one swipe closes it.
+let meRow = false;
+if (!(await present('.lb2 [data-act="melist"]'))) await stepAll('profile Me (empty)', [['me', null]], '.lb2', swipe);
+else for (const v of ['close', 'gold', 'lost']) {
+  await page.locator(`.lb2 [data-act="melist"][data-v="${v}"]`).click();
+  await settle();
+  if (await page.locator('.lb2 .lb2-scroll [data-act="game"]').count()) { meRow = true; break; }
+}
+if (meRow) {
+  await page.locator('.lb2 .lb2-scroll [data-act="game"]').first().click();
+  await page.waitForSelector('.lb2 .lb2-bar', { timeout: 5000 });
+  await settle();
+  ok('profile (admin device): a board from Me = 2 entries', (await depth()) === 2, await depth());
+  await stepAll('profile Me', [['board', null], ['me', () => present('.lb2 [data-act="melist"]')]], '.lb2', swipe);
+} else if (await present('.lb2')) await stepAll('profile Me (no rows)', [['me', null]], '.lb2', swipe);
+await page.evaluate(async () => { await (await import('/js/game-stats-ui.js')).openStatsOverlay(); });
 await page.waitForSelector('.gs-overlay .gs-grow[data-game]', { timeout: 10000 });
 await page.locator('.gs-overlay .gs-grow[data-game]').first().click();
 await settle();

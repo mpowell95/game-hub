@@ -52,7 +52,8 @@ export const STRINGS = {
       const d = ({
         points: `${p.v} ${s('point', 'points')}`, wins: `${p.v} ${s('win', 'wins')}`, solved: `${p.v} ${s('solve', 'solves')}`,
         stars: `${p.v} ${s('star', 'stars')}`, words: `${p.v} ${s('word', 'words')}`, bank: p.v,
-        nohint: `${p.v} no-hint ${s('solve', 'solves')}`, obstacles: `${p.v} ${s('obstacle', 'obstacles')}`,
+        // Sudoku / Murdoku: "wins", not "solves" (2026-11-03, Matt: "Fix the sudoku line wrap"; 5 px too long at 393).
+        nohint: `${p.v} no-hint ${s('win', 'wins')}`, obstacles: `${p.v} ${s('obstacle', 'obstacles')}`,
         length: `${p.v} longer`, meters: `${p.v} m`, blocks: `${p.v} ${s('block', 'blocks')}`,
         golf: `${p.v} ${s('stroke', 'strokes')} fewer`, time: `${p.v} faster`,
       })[p.k];

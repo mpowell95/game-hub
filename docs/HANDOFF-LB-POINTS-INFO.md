@@ -23,6 +23,10 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1451) Matt: "Figure out the broken test and update so the swipe back works. Fix the contexto bug. Fix the sudoku line
+  wrap." `tools/test-swipe-back.mjs` follows #1475 (admin device: My Stats button = v2 Me; My Stats itself opened as a
+  player's button does), 232/0. `functions/boards.js`: Contexto's fewest guesses from `ctHistory` skips a voided phone.
+  Me tab: "2 no-hint wins for gold" (was "solves", 5 px too long at 393).
 - (v1450) **The points sheet on a person's game page is behind the button too.** Matt: "Why is the score calculation fully
   displayed on this page? We should hide it behind the same 'see how scores are calculated' button" (same words on every
   game, his choice). `ptsSectionHTML` = "Points: N" + the button; in v2 its `data-act="info"` opens the board's sheet over

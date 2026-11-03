@@ -44,7 +44,7 @@ import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import webpush from 'web-push';
-import { buildBoardParts, ctNoHintBest, packBoard, sumOf } from './boards.js';
+import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
@@ -319,7 +319,7 @@ async function rebuildBoards(db) {
       }
     } catch (err) { logger.error('online pairs check failed', { err: String(err) }); }
   }
-  const parts = buildBoardParts(players || {}, cfg || null, flags, ctNoHintBest(cth || {}));
+  const parts = buildBoardParts(players || {}, cfg || null, flags, cth || {});
   const sum = sumOf(JSON.stringify(parts));
   const patch = { 'meta/builtAt': Date.now(), 'meta/people': Object.keys(parts.people).length };
   // The pickers' directory/ from the same read (2026-10-22: its own hourly timer had not fired

@@ -44,10 +44,12 @@ export function buildBoard(players, adminConfig, integrityFlags) {
 /** Contexto's "Fewest guesses" (no-hint solves only, 2026-11-02) from ctHistory/<CODE>/<deviceId>/<puzzle>
  *  (every puzzle each phone kept, js/contexto-history.js): { CODE: fewest typed guesses on a won, recorded,
  *  hint-free puzzle }. Pure. */
-export function ctNoHintBest(ctHistory) {
+export function ctNoHintBest(ctHistory, skipDevice) {
   const out = {};
   for (const [code, devs] of Object.entries(ctHistory || {})) {
-    for (const puzzles of Object.values(devs || {})) {
+    for (const [dev, puzzles] of Object.entries(devs || {})) {
+      // A phone whose Contexto is voided (2026-11-03): its puzzles must not put a voided best back on the board.
+      if (skipDevice && skipDevice(code, dev)) continue;
       for (const p of Object.values(puzzles || {})) {
         if (!p || p.d !== 'won' || !p.r || !Array.isArray(p.g) || !p.g.length || p.g.some((x) => x && x.h)) continue;
         const n = p.g.length;
@@ -58,12 +60,20 @@ export function ctNoHintBest(ctHistory) {
   return out;
 }
 
-export function buildBoardParts(players, adminConfig, integrityFlags, ctBest) {
+/** `ctHistory`: the ctHistory/ node (2026-11-03: the raw node, so a voided phone's puzzles are left out here;
+ *  it used to be ctNoHintBest's result, which counted every phone, voided or not). */
+export function buildBoardParts(players, adminConfig, integrityFlags, ctHistory) {
   const visible = {};
   for (const id of Object.keys(players || {})) if (!isHiddenDeviceId(id)) visible[id] = players[id];
   const corrections = resolveCorrections(adminConfig || null);
   corrections.integrity = activeVoids(integrityFlags || {}, adminConfig || {});
   const groups = aggregatePlayers(visible, corrections);
+  // A phone's ctHistory key is its deviceId; a void is keyed by statsId (`<deviceId>` or `<deviceId>-<CODE>`).
+  const ctVoided = (code, dev) => {
+    const iv = corrections.integrity || {};
+    return !!((iv[dev] && iv[dev].contexto === true) || (iv[`${dev}-${code}`] && iv[`${dev}-${code}`].contexto === true));
+  };
+  const ctBest = ctHistory ? ctNoHintBest(ctHistory, ctVoided) : null;
   const ident = buildIdentity(visible);
   const ids = new Map();
   for (const id of Object.keys(visible)) {
