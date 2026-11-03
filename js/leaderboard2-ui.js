@@ -135,6 +135,8 @@ let _canPlay = () => false;
 let _unsub = null;
 let _beeOff = null;
 let _bs = null;             // the phone's back gesture: one history entry per level (js/back-stack.js)
+let _pend = 0;              // a reopened screen is still waiting for its data to be tall enough to scroll back to (expiry, ms)
+let _pageTabs = false;      // the page this opened on (the profile page) owns the bottom tab bar
 let _boardMemo = new Map();
 let _pidx = [];           // row index -> person key (never in the DOM)
 let _offVp = null;
@@ -143,7 +145,7 @@ let _ty = 0;
  *  the launcher showed under the board. Size the page to the TRUE screen bottom, like the tab bar's repair. */
 function fitHeight() { if (_host) _host.style.height = Math.max(trueBottom(), window.innerHeight || 0) + 'px'; }
 /** Only a scroll list (or the sheet) moves under a finger; nothing chains to the page behind. */
-function onTouchStart(e) { _ty = e.touches && e.touches[0] ? e.touches[0].clientY : 0; }
+function onTouchStart(e) { _pend = 0; _ty = e.touches && e.touches[0] ? e.touches[0].clientY : 0; }
 function onTouchMove(e) {
   const t = e.touches && e.touches[0];
   if (!t || e.target.closest('input')) return;
@@ -817,6 +819,9 @@ function render({ keepScroll = false, restore = false } = {}) {
   _lastHTML = html;
   const sc = page.querySelector('[data-role="scroll"]');
   if (sc) sc.scrollTop = top;
+  // A reopened screen (Play, then Back): the scroll is applied again by each data tick until the list is
+  // tall enough to hold it, then released.
+  if (_pend && _connected && (!sc || top <= 0 || sc.scrollTop >= top - 1 || Date.now() > _pend)) _pend = 0;
   watchPin(page, sc);
   if (focused) { const q = page.querySelector('[data-role="q"]'); if (q) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch { /* type=search */ } } }
   if (_bs) _bs.sync(levelNow());
@@ -841,7 +846,7 @@ function watchPin(page, sc) {
   check();
   requestAnimationFrame(check);
 }
-function onData() { if (!_host) return; buildModel(); render({ keepScroll: true }); }
+function onData() { if (!_host) return; buildModel(); render(_pend ? { restore: true } : { keepScroll: true }); }
 
 // --- navigation ------------------------------------------------------------------------------------------
 // Matt's 12, item 12 (2026-11-02): back to a list lands exactly where it was scrolled. Each level keeps its
@@ -884,6 +889,7 @@ function onClick(e) {
   if (!el || !_host || !_host.contains(el)) return;
   const act = el.dataset.act, v = el.dataset.v;
   if (act === 'noop') return;
+  _pend = 0;   // the viewer is moving: a reopened screen's scroll is theirs now
   switch (act) {
     case 'close': closeLeaderboard2(); return;
     case 'help': _help = true; render({ keepScroll: true }); return;
@@ -938,10 +944,46 @@ function onClick(e) {
       if (to) import('./messages-ui.js').then((m) => m.openMessages({ to: to.code, toName: to.name, toEmoji: to.emoji })).catch((err) => console.error('[leaderboard2] messages failed to load', err));
       return;
     }
-    case 'play': { const fn = _onPlay, hub = hubIdOf(el.dataset.game); closeLeaderboard2(); if (fn) fn(hub); return; }
+    case 'play': { const fn = _onPlay, hub = hubIdOf(el.dataset.game), back = returnTo(); closeLeaderboard2(); if (fn) fn(hub, back); return; }
     case 'old': { const o = { ..._opts, legacy: true }; closeLeaderboard2({ keepHistory: true }); openLeaderboard(o); return; }
     default:
   }
+}
+/** PLAY, THEN BACK (2026-11-03, Matt: "press back and go back to where I was on the stats page"). Play closes
+ *  this overlay and the hub mounts the game; the hub keeps the function returned here and calls it on any way
+ *  out of the game, so the leaderboard reopens on the same tab, board, filters, person and scroll. Taken at the
+ *  moment of the tap, from this module's own state. */
+function returnTo() {
+  saveScroll();
+  let snap;
+  try {
+    snap = JSON.parse(JSON.stringify({ tab: _tab, q: _q, srch: _srch, stack: _stack, hofView: _hofView, hofCat: _hofCat, hofSort: _hofSort, hofFold: _hofFold, pSort: _pSort, info: _info, rootScroll: _rootScroll }));
+  } catch (err) { console.warn('[leaderboard2] could not keep its place for Back', err); return undefined; }
+  const opts = { ..._opts };
+  const back = () => openLeaderboard2({ ...opts, restore: snap });
+  back.state = snap;   // plain JSON: the hub parks it across a launch-out game's own page (hub.js _leaveForPage)
+  return back;
+}
+/** Put a returnTo() snapshot back, field by field, each checked (a stale or hand-edited one cannot break the open). */
+function applyRestore(s) {
+  if (!s || typeof s !== 'object') return;
+  if (['boards', 'hof', 'me'].includes(s.tab)) _tab = s.tab;
+  if (typeof s.q === 'string') _q = s.q;
+  _srch = !!s.srch;
+  if (['medals', 'wins', 'pct'].includes(s.hofView)) _hofView = s.hofView;
+  if (typeof s.hofCat === 'string' || typeof s.hofCat === 'number') _hofCat = s.hofCat;
+  if (typeof s.hofSort === 'string') _hofSort = s.hofSort;
+  _hofFold = !!s.hofFold;
+  if (['best', 'played', 'az'].includes(s.pSort)) _pSort = s.pSort;
+  if (Array.isArray(s.stack)) {
+    _stack = s.stack.filter((e) => e && typeof e === 'object'
+      && ((e.kind === 'board' && isGameOnLauncher(e.game)) || ((e.kind === 'player' || e.kind === 'pgame') && typeof e.key === 'string' && e.key !== '')));
+    // The entry game keeps its meaning (back from it closes) only while it is still the first screen.
+    if (_entryGame && !(_stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame)) _entryGame = null;
+  }
+  _info = !!s.info && !!_stack.length && _stack[_stack.length - 1].kind === 'board';
+  if (s.rootScroll && typeof s.rootScroll === 'object') Object.assign(_rootScroll, s.rootScroll);
+  _pend = Date.now() + 8000;
 }
 function onChange(e) {
   if (e.target && e.target.dataset.role === 'hofcat') { const v = e.target.value; _hofCat = /^\d$/.test(v) ? Number(v) : v; _hofFold = false; render(); return; }
@@ -988,7 +1030,8 @@ export function closeLeaderboard2({ keepHistory = false } = {}) {
   if (typeof _unsub === 'function') { try { _unsub(); } catch { /* gone */ } }
   _unsub = null;
   if (_beeOff) { try { _beeOff(); } catch { /* gone */ } _beeOff = null; }
-  if (_host) { _host.remove(); _host = null; lightTab(false); }
+  if (_host) { _host.remove(); _host = null; if (!_pageTabs) lightTab(false); }
+  _pend = 0;
   document.documentElement.classList.remove('gh-lb2-open');
   if (_offVp) { try { _offVp(); } catch { /* gone */ } _offVp = null; }
   document.removeEventListener('keydown', onKey);
@@ -1009,11 +1052,16 @@ export async function openLeaderboard2(opts = {}) {
   try { ensureStatsCss(); } catch { /* a person's game page uses My Stats' gs-* screens */ }
   _opts = { ...opts };
   delete _opts.legacy;
+  delete _opts.restore;   // one-shot; returnTo() makes a fresh one for the next Play
   _onPlay = typeof opts.onPlay === 'function' ? opts.onPlay : null;
   _canPlay = typeof opts.canPlay === 'function' ? opts.canPlay : () => false;
-  _tab = 'boards'; _q = ''; _srch = false; _hofView = 'medals'; _stack = []; _entryGame = null; _help = false; _info = false;
+  _pageTabs = !!opts.pageTabs;
+  _tab = 'boards'; _q = ''; _srch = false; _hofView = 'medals'; _stack = []; _entryGame = null; _help = false; _info = false; _pend = 0;
   for (const k of Object.keys(_rootScroll)) delete _rootScroll[k];
   if (typeof opts.game === 'string' && isGameOnLauncher(opts.game)) { _entryGame = opts.game; _stack = [{ kind: 'board', game: opts.game, sel: null }]; }
+  // Straight onto a tab (the profile page's My Stats button opens Me); a game board above wins.
+  else if (opts.tab === 'me' || opts.tab === 'hof' || opts.tab === 'boards') _tab = opts.tab;
+  if (opts.restore) applyRestore(opts.restore);
   const host = document.createElement('div');
   host.className = 'lb2';
   host.setAttribute('role', 'dialog');
@@ -1030,9 +1078,9 @@ export async function openLeaderboard2(opts = {}) {
   document.documentElement.classList.add('gh-lb2-open');
   fitHeight();
   _offVp = onViewportResize(fitHeight);
-  lightTab(true);
+  // On the profile page the tab bar is that page's: it stays on Profile and its own taps do the leaving.
+  if (!_pageTabs) { lightTab(true); document.addEventListener('click', onTabTap, true); }
   document.addEventListener('keydown', onKey);
-  document.addEventListener('click', onTabTap, true);
   _bs = backStack(onBackSteps);
   render();
   try {

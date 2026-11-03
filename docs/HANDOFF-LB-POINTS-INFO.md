@@ -50,6 +50,10 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   the stats page, and a NON-admin device (old leaderboard, no sheet anywhere). Test note: the hub's
   `refreshAdminDevice()` clears the admin flag on a device that is not on `admins/`, so a browser test must keep the
   cached answer (route-patch that function in the browser's copy) or the sheet vanishes mid-run.
+- (2026-11-03, navigation) Matt: "press back and go back to where I was on the stats page instead of having to go back
+  to the hub landing page." Play, then Back (the Hub button OR the phone's back gesture) reopens Leaderboard v2 on the
+  same tab, game board, filters or player page, at the same scroll. A game that is mid-play still asks its own "quit?"
+  question first. Details: `js/CLAUDE.md`, the `back-stack.js` row. Admin devices only (the old board is unchanged).
 - Releasing to players is still Matt's words only ("release it", "ship it", "make it live for everyone").
 
 ## Where things stood before the build (live, v1427)
