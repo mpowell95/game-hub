@@ -918,8 +918,22 @@
     // The same overlay the launcher's own button opens. Here because the top bar has room for
     // three controls and Messages took the third: this is where My Stats now lives, one tap
     // from the profile pill. Lazily imported, like every other overlay on this page.
+    //
+    // ON AN ADMIN DEVICE IT OPENS LEADERBOARD V2's ME TAB (2026-11-03, Matt): v2 is not released to
+    // players yet, so everyone else keeps the My Stats screen below, exactly as it was. The tab keeps its
+    // label, "Me". `pageTabs`: this page's own bottom tab bar stays on Profile and does the leaving
+    // (v2 opened from the launcher lights its Leaderboard tab instead). If v2 will not load, My Stats opens.
     $('#pf-stats-btn').addEventListener('click', async () => {
       try {
+        let admin = false;
+        try { admin = (await import('../js/admin-config.js')).isAdminDevice() === true; } catch { admin = false; }
+        if (admin) {
+          try {
+            const v2 = await import('../js/leaderboard2-ui.js');
+            await v2.openLeaderboard2({ tab: 'me', pageTabs: true });
+            return;
+          } catch (e) { console.error('Leaderboard v2 failed to load; opening My Stats', e); }
+        }
         const m = await import('../js/game-stats-ui.js');
         await m.openStatsOverlay();
       } catch (e) { console.error('My Stats failed to load', e); }
