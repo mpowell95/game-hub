@@ -15,6 +15,21 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
 - (v1430) Matt: keep the (i) on top, and add a button under the board, "See how scores are calculated" /
   "Ver cómo se calculan los puntos" (`lb2_pts_how`). It opens the same sheet. `ptsInfo(game)` is the one gate for
   both, so the button is on exactly the boards whose (i) shows the sheet (admin devices, the 20 wins games).
+- (v1433) Matt: "We should explain how everything is calculated and ranked." The button is now under EVERY board
+  (gate: `rulesFor(game)`), and every game that is NOT a points game has its own sheet, `js/lb-rank-sheet.js`:
+  "How it is calculated", "How it is ranked" (numbered), "Tabs", "Not counted", plus point tables where a game has
+  them (Arrow Maze, Gridlock, Word Weaver, read from their own points modules, never typed in). Same cards and CSS
+  as the points sheet. Every line was checked against the board code (gameMetricAt / boardTierOf /
+  boardMetricCmp / lb2Tabs) on 2026-11-02; `tools/test-lb-rank-sheet.mjs` pins the numbers and EN/ES. Change a
+  board's ranking and its sheet must change with it. The four unreleased wins games with no points table
+  (archery, baseball, battlearena, cupbaseball) fall back to the old "Ranked by" line.
+- (v1433) The pinned row's "N more to take the record" is back in v2 (Matt: Ana likes how the old board "shows how
+  close you are to beating someone's record"). Round 4 had dropped it because the old number only reached a TIE;
+  v2 now adds the one more that beats it (`takeParts` in js/leaderboard-ui.js; Minesweeper's time gap is worked
+  out to the millisecond). The old board's own line is unchanged. Where there is no honest number (a no-hint
+  record over a hint row, a tie broken by wins), the line falls back to "Record N".
+- Found while checking, NOT fixed (reported to Matt): a Golf integrity void sets `bestRoundByCourse` to 0, which
+  `golfBestAt` reads as 12 under, so a voided Golf player would rank FIRST. Minesweeper's void is safe (0 = no time).
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
   `cricket-order`). Every reader of `lb-points.js` is admin-gated, so player boards do not move.
 - Strings `lbps_*` in `js/strings.js` (EN + ES); `lb_pts_x_cuppong` / new `lb_pts_x_darts` for the old board's line.

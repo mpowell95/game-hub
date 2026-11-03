@@ -29,6 +29,7 @@ import LB2 from './leaderboard2-strings.js';
 import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
 import { pointsSheetHTML } from './lb-points-sheet.js';
+import { rankSheetHTML } from './lb-rank-sheet.js';
 import { GAME_META, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
@@ -393,11 +394,14 @@ function unitLabel(game, st, unit) {
   if (game === 'skeeball') return t2(st.view === 'high' ? 'lb2_sk_best' : 'lb2_sk_total');
   return unit;
 }
-/** The pinned row's line: 1st, or the record beside the viewer's own number (round 4: never "N more to take
- *  the record", which only reached a tie). */
+/** The pinned row's line: 1st; or how much more TAKES the record (Matt, 2026-11-02: Ana likes the old board's
+ *  "how close you are to beating someone's record"; the number now beats it, round 4's objection was that the old
+ *  one only tied it); or, where there is no honest number, the record beside the viewer's own number. */
 function pinLine(game, b, me, tiered) {
   if (!me) return esc(t2('lb2_not_ranked'));
   if (me.rank === 1) return esc(t2(me.tie ? 'lb2_first_tie' : 'lb2_first'));
+  const g = b.gap ? b.gap(me.key) : null;
+  if (g) return t('lb_gap', g.k === 'tier' ? { k: 'tier', v: `<b>${esc(g.v)}</b>`, tier: esc(g.tier) } : { k: g.k, v: `<b>${esc(g.v)}</b>`, n: g.n });
   const rec = b.rows[0];
   if (!rec || game === 'contexto' || !rec.text || rec.text === '—') return '';
   return `${esc(t2('lb2_record'))} ${tiered ? shape(rec.tier) : ''}<b>${esc(dispText(game, rec.text))}</b>`;
@@ -533,8 +537,9 @@ function boardScreenHTML(top) {
   const key = game === 'contexto' && bests ? `<div class="lb2-recs lb2-key">${bests}</div>` : '';
   const recs = bests && !key ? `<div class="lb2-recs">${bests}</div>` : '';
   const showHead = b.rows.length && unit && game !== 'skeeball';
-  // Matt, 2026-11-02: the (i) stays on top; the same points sheet also opens from a button under the board.
-  const how = ptsInfo(game) ? `<button type="button" class="lb2-more" data-act="info">${esc(t2('lb2_pts_how'))}</button>` : '';
+  // Matt, 2026-11-02: the (i) stays on top; the same sheet also opens from a button under EVERY board ("We should
+  // explain how everything is calculated and ranked").
+  const how = rulesFor(game) ? `<button type="button" class="lb2-more" data-act="info">${esc(t2('lb2_pts_how'))}</button>` : '';
   return `${bar}${ctrl}${key}${showHead ? head : ''}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}${recs}${how}</div></div>${pin.replace('class="lb2-pin"', `class="lb2-pin${me ? ' lb2-pin-auto' : ''}"`)}`;
 }
 
@@ -543,6 +548,11 @@ const tiedIn = (rows) => { const n = {}; for (const r of rows) n[r.rank] = (n[r.
 let _hofView = 'medals';
 /** Me > Closest: 'a' = every game (today), 'b' = only 2nd and 3rd, closest first. Test-only switch for the mockup. */
 let _closeVariant = 'a';
+/** Tests only (record gap, 2026-11-02): every row of a game's default tab, with the pinned line that row would get. */
+export function __pinLinesForTest(game) {
+  const st = selFor(game, null), b = boardOf(game, st), tiered = st.tier == null && b.rows.some((r) => r.tier);
+  return b.rows.map((r) => ({ text: r.text, rank: r.rank, gap: b.gap ? b.gap(r.key) : null, line: pinLine(game, b, r, tiered) }));
+}
 export function __setClosestForTest(v) { _closeVariant = v === 'b' ? 'b' : 'a'; if (_host) render({ keepScroll: true }); }
 /** Hall of Fame's second view: the old By Player list as it opened (category All, by Wins), unchanged. */
 /** Hall of Fame > Wins' filter and sort (2026-11-02, Matt's approved mockup): the old By Player list's categories
@@ -774,9 +784,9 @@ function ptsInfo(game) { const r = rulesFor(game); return !!r && (r.by === 'wins
 function infoHTML(game) {
   const r = rulesFor(game);
   if (!r) return '';
-  if (ptsInfo(game)) {
-    return sheetHTML(title(game), `<div class="lb2-ihd">${art(game)}<h2 class="lb2-shh">${esc(title(game))}</h2></div>${pointsSheetHTML(game)}`);
-  }
+  // Every other game: how its number is calculated and how it ranks (js/lb-rank-sheet.js, Matt 2026-11-02).
+  const body = ptsInfo(game) ? pointsSheetHTML(game) : rankSheetHTML(game);
+  if (body) return sheetHTML(title(game), `<div class="lb2-ihd">${art(game)}<h2 class="lb2-shh">${esc(title(game))}</h2></div>${body}`);
   const lvl = (tr) => `<span class="lb2-lvl">${shape(tr)}${esc(lb2TierWord(tr))}</span>`;
   const arrow = '<span class="lb2-arw" aria-hidden="true">→</span>';
   const counts = r.counts.length ? `<div class="lb2-ih">${esc(t2('lb2_counts_as'))}</div><div class="lb2-ca">${r.counts.map((c) => `<div class="lb2-cah">${esc(t2('lb2_ca_' + c.when))}</div>${
