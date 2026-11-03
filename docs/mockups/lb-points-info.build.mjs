@@ -1,4 +1,4 @@
-// Builds the (i) points-sheet mockup v6 (docs/HANDOFF-LB-POINTS-INFO.md). Run from anywhere: node docs/mockups/lb-points-info-v6.build.mjs
+// Builds the (i) points-sheet mockup v6 (docs/HANDOFF-LB-POINTS-INFO.md). Run from anywhere: node docs/mockups/lb-points-info.build.mjs (writes the current version, v7)
 // Builds the (i) points-sheet mockup v6 for all 20 wins games, EN + ES.
 // Every number comes from main's real js/lb-points.js (pointsForWin) with the record-time "one level down"
 // rule applied by hand per option (js/lb-rules.js / each game's statsDiff), plus the two fixes the handoff
@@ -8,9 +8,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const MAIN = process.argv[2] || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const OUT = process.argv[3] || path.join(MAIN, 'docs', 'mockups', 'lb-points-info-v6.html');
+const OUT = process.argv[3] || path.join(MAIN, 'docs', 'mockups', 'lb-points-info-v7.html');
 const imp = (p) => import(pathToFileURL(path.join(MAIN, p)).href);
-const { pointsForWin, pointsTable, CAP } = await imp('js/lb-points.js');
+const { pointsForWin, pointsTable, gamePoints, CAP } = await imp('js/lb-points.js');
 const { diffShapeSVG, tierOf } = await imp('js/difficulty-tiers.js');
 const { GAME_ART } = await imp('js/game-art.js');
 const { STRINGS } = await imp('js/strings.js');
@@ -28,20 +28,33 @@ const PLANNED = (id, t, mode, v) => {
 };
 const diffs = [];   // rows where the mockup shows the planned value, not main's
 
+// Is this row under the 20-point limit? Asked of the real gamePoints, never of the level alone (v6 marked Tic Tac Toe
+// Ultimate Easy/Medium as limited: gamePoints counts Ultimate wins outside the limit). 100 wins of exactly this kind:
+// recorded at recDiff (byDiff), saved with this mode at the setup level rawDiff (byMode, as withMode stores it).
+const W = 100;
+function codeSays(id, recDiff, rawDiff, mode) {
+  const gm = { total: { won: W }, byDiff: { [recDiff]: { won: W } } };
+  if (mode) gm.byMode = { [Object.entries(mode).map(([k, v]) => `${k}=${v}`).join('|')]: { [rawDiff]: { won: W } } };
+  const pts = gamePoints(gm, id).pts;
+  return { pts, perWin: pts / W };
+}
 // A row: { tier (1-4 shape, or 0), label {en,es}, pts, cap }
-function lvRow(id, tier, recDiff, mode) {
+function lvRow(id, tier, recDiff, mode, rawDiff = recDiff) {
   const code = pointsForWin(id, recDiff, mode || undefined);
   const pts = PLANNED(id, tier, mode, code);
-  const t = tierOf(recDiff);
+  const g = codeSays(id, recDiff, rawDiff, mode);
+  const cap = g.pts < W * code;
+  if (cap && g.pts !== CAP) throw new Error(`${id} ${tier}: limited, but ${W} wins give ${g.pts}`);
+  if (!cap && g.perWin !== code) throw new Error(`${id} ${tier} ${JSON.stringify(mode)}: pointsForWin ${code}, gamePoints ${g.perWin} a win`);
   if (pts !== code) diffs.push(`${id} ${JSON.stringify(mode)} ${LVW.en[tier]}: main ${code}, mockup ${pts}`);
-  return { tier, label: { en: `Win on ${LVW.en[tier]}`, es: `Victoria en ${LVW.es[tier]}` }, pts, cap: (pointsTable(id).cap || []).includes(t) };
+  return { tier, label: { en: `Win on ${LVW.en[tier]}`, es: `Victoria en ${LVW.es[tier]}` }, pts, cap };
 }
 const levels = (id, opt = {}) => {
   const n = pointsTable(id).lv.length;
   const out = [];
   for (let t = 1; t <= n; t++) {
     const d = t === 4 ? 'expert' : L3[t - 1];
-    out.push(lvRow(id, t, opt.short ? down(d) : d, opt.mode));
+    out.push(lvRow(id, t, opt.short ? down(d) : d, opt.mode, d));
   }
   return out;
 };
@@ -56,21 +69,21 @@ const cpu = (rows) => ({ kind: 'opt', title: T('Vs computer', 'Contra el ordenad
 const online = (id) => ({ kind: 'online', rows: [{ tier: 'on', label: T('Win online', 'Victoria en línea'), pts: pointsTable(id).on, cap: false }] });
 const table = (id) => ({ kind: 'table', title: T('2 or 3 computers', '2 o 3 ordenadores'),
   note: T("The easiest computer's level counts.", 'Cuenta el nivel del ordenador más fácil.'),
-  rows: [{ tier: 'mix', label: T('Easy + Hard computers', 'Fácil + Difícil'), pts: pointsForWin(id, 'easy'), cap: false }] });
-const limit = (which) => ({ kind: 'limit', which });
+  rows: [{ tier: 'mix', label: T('Easy + Hard', 'Fácil + Difícil'), pts: pointsForWin(id, 'easy'), cap: false }] });
+const limit = () => ({ kind: 'limit' });
 
 const G = [
   { id: 'airhockey', art: 'air-hockey', cards: [cpu(levels('airhockey')), online('airhockey')] },
   { id: 'battleship', art: 'battleship', cards: [
     opt(T('Quick board (8x8)', 'Tablero rápido (8x8)'), TAG.s, 's', levels('battleship', { mode: { size: 'quick' } })),
     opt(T('Classic board (10x10)', 'Tablero clásico (10x10)'), TAG.n, 'n', levels('battleship', { mode: { size: 'classic' } })),
-    online('battleship'), limit(T('Easy', 'Fácil'))] },
+    online('battleship'), limit()] },
   { id: 'boggle', art: 'boggle', cards: [
     opt(T('2-minute timer', 'Reloj de 2 min'), TAG.e, 's', levels('boggle', { short: true })),
     opt(T('1 min or 1 min 30 s timer', 'Reloj de 1 min o 1 min 30 s'), TAG.n, 'n', levels('boggle')),
     online('boggle')] },
   { id: 'chinchon', art: 'chinchon', cards: [
-    opt(T('Under 100 points or 10 rounds', 'Menos de 100 puntos o 10 rondas'), TAG.s, 's', levels('chinchon', { short: true })),
+    opt(T('Under 100 points or 10 rounds', 'Menos de 100 pts o 10 rondas'), TAG.s, 's', levels('chinchon', { short: true })),
     opt(T('100+ points or 10+ rounds', '100+ puntos o 10+ rondas'), TAG.n, 'n', levels('chinchon')),
     table('chinchon'), online('chinchon')] },
   { id: 'connect4', art: 'connect-four', cards: [cpu(levels('connect4'))] },
@@ -82,7 +95,7 @@ const G = [
     opt(T('Unlimited reracks', 'Recolocaciones ilimitadas'), TAG.e, 's', levels('cuppong', { short: true, mode: { rr: 'inf' } })),
     opt(T('1, 2 or 3 reracks', '1, 2 o 3 recolocaciones'), TAG.n, 'n', levels('cuppong', { mode: { rr: 2 } })),
     opt(T('No reracks', 'Sin recolocaciones'), TAG.h, 'h', levels('cuppong', { mode: { rr: 0 } })),
-    online('cuppong'), limit(T('Easy and Medium always; Hard only with unlimited reracks', 'Fácil y Normal siempre; Difícil solo con recolocaciones ilimitadas'))] },
+    online('cuppong'), limit()] },
   { id: 'darts', art: 'darts', cards: [
     opt(T('201 or 101', '201 o 101'), TAG.s, 's', levels('darts', { short: true, mode: { kind: '201' } })),
     opt(T('301 or Cricket', '301 o Cricket'), TAG.n, 'n', levels('darts', { mode: { kind: '301' } })),
@@ -102,7 +115,7 @@ const G = [
     opt(T('First to 1 goal', 'A 1 gol'), TAG.s, 's', levels('flicksoccer', { short: true, mode: { goals: 1 } })),
     opt(T('First to 2 goals', 'A 2 goles'), TAG.n, 'n', levels('flicksoccer', { mode: { goals: 2 } })),
     opt(T('First to 3 goals', 'A 3 goles'), TAG.l, 'h', levels('flicksoccer', { mode: { goals: 3 } })),
-    online('flicksoccer'), limit(T('Easy always; Medium only first to 1 goal', 'Fácil siempre; Normal solo a 1 gol'))] },
+    online('flicksoccer'), limit()] },
   { id: 'mancala', art: 'mancala', cards: [cpu(levels('mancala')), online('mancala')] },
   { id: 'business', art: 'business-deal', cards: [cpu(levels('business')),
     { kind: 'old', title: T('Older wins', 'Victorias antiguas'), rows: [{ tier: 0, label: T('Saved with no level', 'Guardadas sin nivel'), pts: pointsForWin('business', 'none'), cap: false }] }] },
@@ -115,7 +128,7 @@ const G = [
   { id: 'tictactoe', art: 'tic-tac-toe', cards: [
     opt(T('Classic', 'Clásico'), TAG.n, 'n', levels('tictactoe', { mode: { v: 'classic' } })),
     opt(T('Ultimate', 'Definitivo'), TAG.h, 'h', levels('tictactoe', { mode: { v: 'ultimate' } })),
-    online('tictactoe'), limit(T('Classic Easy and Medium', 'Clásico Fácil y Normal'))] },
+    online('tictactoe'), limit()] },
   { id: 'uno', art: 'uno', cards: [cpu(levels('uno'))] },
   { id: 'yahtzee', art: 'yahtzee', cards: [cpu([{ tier: 0, label: T('Win', 'Victoria'), pts: pointsForWin('yahtzee', 'normal'), cap: false }]), online('yahtzee')] },
 ];
@@ -131,17 +144,20 @@ const icon = (tier) => {
 };
 const PT = { en: (n) => `${n} ${n === 1 ? 'point' : 'points'}`, es: (n) => `${n} ${n === 1 ? 'punto' : 'puntos'}` };
 const LIM = { en: '20-point limit', es: 'Límite de 20 puntos' };
-const row = (r, L) => `<div class="r">${icon(r.tier)}<div class="t"><span class="lb">${esc(r.label[L])}</span>${r.cap ? `<span class="lim">${LIM[L]}</span>` : ''}</div><div class="p" data-pts="${r.pts}"><b>${r.pts}</b> ${esc(PT[L](r.pts).replace(/^\d+ /, ''))}</div></div>`;
+// The 20-point limit marker on a row: a yellow ball with "20" (Matt, v6 review: "a yellow 20 circle that looks kinda
+// like a pool ball"), between the row's label and its points. The words live once, in the box at the bottom.
+const BALL = (L) => `<span class="ball" role="img" aria-label="${LIM[L]}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11.4" fill="#ffce3a" stroke="#a37c12" stroke-width="1.2"/><ellipse cx="7.6" cy="6.2" rx="3.2" ry="1.7" fill="#fff" opacity=".5" transform="rotate(-35 7.6 6.2)"/><circle cx="12" cy="12" r="7.6" fill="#fff"/><text x="12" y="15.4" text-anchor="middle" font-size="9.6" font-weight="800" fill="#1c1606" font-family="system-ui, -apple-system, Segoe UI, sans-serif">${CAP}</text></svg></span>`;
+const row = (r, L) => `<div class="r">${icon(r.tier)}<div class="t"><span class="lb">${esc(r.label[L])}</span></div>${r.cap ? BALL(L) : ''}<div class="p" data-pts="${r.pts}"><b>${r.pts}</b> ${esc(PT[L](r.pts).replace(/^\d+ /, ''))}</div></div>`;
 const LIMIT_BODY = {
-  en: `These wins are nearly guaranteed. Together they earn you ${CAP} points at most. After that, they add 0.`,
-  es: `Estas victorias son casi seguras. Juntas te dan ${CAP} puntos como máximo. Después, suman 0.`,
+  en: (b) => `Wins marked ${b} are almost always won. Only your first ${CAP} points from them count.`,
+  es: (b) => `Las victorias con ${b} son casi seguras. Solo cuentan los primeros ${CAP} puntos que te dan.`,
 };
 function card(c, L) {
   if (c.kind === 'opt') return `<div class="card k-${c.tone}"><div class="ch"><span class="ct">${esc(c.title[L])}</span>${c.tag ? `<span class="tag">${esc(c.tag[L])}</span>` : ''}</div>${c.rows.map((r) => row(r, L)).join('')}</div>`;
   if (c.kind === 'online') return `<div class="card k-x"><div class="ch"><span class="ct">${L === 'en' ? 'Online' : 'En línea'}</span></div>${c.rows.map((r) => row(r, L)).join('')}</div>`;
   if (c.kind === 'table') return `<div class="card k-x"><div class="ch"><span class="ct">${esc(c.title[L])}</span></div><div class="cn">${esc(c.note[L])}</div>${c.rows.map((r) => row(r, L)).join('')}</div>`;
   if (c.kind === 'old') return `<div class="card k-x"><div class="ch"><span class="ct">${esc(c.title[L])}</span></div>${c.rows.map((r) => row(r, L)).join('')}</div>`;
-  if (c.kind === 'limit') return `<div class="card k-cap"><div class="ch"><span class="lim big">${LIM[L]}</span></div><div class="cn"><b>${esc(c.which[L])}.</b> ${esc(LIMIT_BODY[L])}</div></div>`;
+  if (c.kind === 'limit') return `<div class="card k-cap"><div class="ch"><span class="lim big">${LIM[L]}</span></div><div class="cn">${LIMIT_BODY[L](BALL(L))}</div></div>`;
   return '';
 }
 const LEAD = { en: 'Every win adds points:', es: 'Cada victoria suma puntos:' };
@@ -157,7 +173,7 @@ const groups = (L) => [ORDER.slice(0, 10), ORDER.slice(10)].map((part, i) => `<s
 
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Points info v6</title>
+<title>Points info v7</title>
 <style>
   :root { --bg:#0E1014; --sheet:#171A20; --card:#1E222A; --line:#2B313B; --ink:#F1F3F6; --dim:#A2A9B5; --accent:#7AA7FF; --gold:#ffce3a; }
   * { box-sizing:border-box; }
@@ -195,8 +211,11 @@ const html = `<!doctype html>
   .sh { display:inline-flex; width:18px; height:18px; background:#fff; border-radius:4px; padding:2px; }
   .sh.x2 { width:24px; }
   .sh svg { width:100%; height:100%; }
-  .t { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
+  .t { flex:1; min-width:0; }
   .lb { font-size:15px; }
+  .ball { display:inline-flex; width:28px; height:28px; flex:none; }
+  .ball svg { width:100%; height:100%; display:block; }
+  .cn .ball { vertical-align:middle; margin:-6px 1px -4px; }
   .lim { display:inline-block; font-size:11.5px; font-weight:800; color:#1c1606; background:var(--gold); border-radius:999px; padding:1px 8px; white-space:nowrap; }
   .lim.big { font-size:13px; padding:3px 10px; }
   .p { flex:none; min-width:86px; text-align:right; font-size:14px; color:var(--dim); white-space:nowrap; }

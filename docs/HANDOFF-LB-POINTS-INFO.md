@@ -30,19 +30,36 @@ the writing session's summary or suggestion and is **NOT cleared for players**.
 4. ANSWERED (session 6): Tic Tac Toe Classic Medium STAYS in the 20-point limit group. Matt: "Keep it limited".
    No code change (`P.tictactoe.cap` is already `[1, 2]`).
 
-## Mockup v6 (session 6): all 20 games, EN + ES. Waiting for Matt's verdict; NOT built.
+## Mockup v7 (session 6, current): all 20 games, EN + ES. Waiting for Matt's verdict; NOT built.
 
-- File: `docs/mockups/lb-points-info-v6.html` (EN/ES buttons at the top). Regenerate it with
-  `node docs/mockups/lb-points-info-v6.build.mjs`: every number comes from `js/lb-points.js` `pointsForWin`,
-  never typed by hand; it prints the rows where the mockup shows a planned fix instead of the live value (exactly 5:
-  Cup Pong no reracks Easy/Medium, Darts Cricket in order x3). `lb-points-info-v6.review.mjs` checks every sheet
-  against the rules below at 360 px in both languages and writes the images (needs `playwright-core` + Chrome).
-- Changes from v5, from the self-review: Cup Pong's middle option is "1, 2 or 3 reracks" (the game offers 0, 1, 2, 3,
-  unlimited; default 2); a coloured card ALWAYS has a tag word, so "Vs computer" cards are neutral grey and Tic Tac Toe
-  has Normal/Harder tags; "Harder/Longer" cards are purple, not green (red/green colourblind); limit boxes name the
-  rows exactly ("Easy and Medium always; Hard only with unlimited reracks"); Spanish option tag "Estándar", because
-  "Normal" is the Spanish word for the Medium level; several-computer games get a "2 or 3 computers" card with one
-  worked example.
+- File: `docs/mockups/lb-points-info-v7.html` (EN/ES buttons at the top; open it through the Pages site,
+  https://mpowell95.github.io/game-hub/docs/mockups/lb-points-info-v7.html, since a raw.githubusercontent link shows
+  the code). Regenerate with `node docs/mockups/lb-points-info.build.mjs`: every number comes from `js/lb-points.js`
+  (`pointsForWin`, cross-checked per row against `gamePoints`), and whether a row is under the limit is asked of
+  `gamePoints` with 100 such wins, never of the level alone. It prints the rows that show a planned fix instead of
+  the live value (exactly 5: Cup Pong no reracks Easy/Medium, Darts Cricket in order x3).
+  `docs/mockups/lb-points-info.review.mjs` checks every sheet against the rules below at 360 px in both languages and
+  writes the images (needs `playwright-core` + Chrome).
+- v6 -> v7, Matt's review of v6: "I don't like the 20 point limit yellow pill everywhere. i want it only at the bottom
+  as the disclaimer. Maybe make a yellow 20 circle that looks kinda like a pool ball and put it on those rows instead?
+  but don't put it under the description. Put it between the mode description and the point value where there's
+  space." / "Escoba Easy + Hard computers wraps onto 2 lines. is that necessary??" / he "still really do[es] not
+  like" the box text ("These wins are nearly guaranteed. Together they earn you 20 points at most. After that, they
+  add 0.", with or without the "Easy always; Medium only first to 1 goal" list in front). Done: a yellow "20" ball on
+  each limited row, on the label's line, before the points; the pill only as the box title; the box is the same in
+  every game: "Wins marked (ball) are almost always won. Only your first 20 points from them count." (ES: "Las
+  victorias con (ball) son casi seguras. Solo cuentan los primeros 20 puntos que te dan."); "Easy + Hard" (no
+  "computers"); no row label or card title may wrap (the review fails on it; Chinchón ES became "Menos de 100 pts o
+  10 rondas").
+- Matt also asked "why is there a limit on basically every cup pong thing?" Answer given: Cup Pong Easy and Medium
+  are both in the near-guaranteed group (`cap: [1, 2]`; Medium won 10 of 10, Easy is easier), and unlimited reracks
+  record one level down, so Unlimited Hard counts as Medium. Only Hard with 1-3 reracks and Hard with no reracks are
+  outside it (7 of 9 rows limited). No change asked.
+- v5 -> v6 (self-review): Cup Pong's middle option is "1, 2 or 3 reracks" (the game offers 0, 1, 2, 3, unlimited;
+  default 2); a coloured card ALWAYS has a tag word, so "Vs computer" cards are neutral grey and Tic Tac Toe has
+  Normal/Harder tags; "Harder/Longer" cards are purple, not green (red/green colourblind); Spanish option tag
+  "Estándar", because "Normal" is the Spanish word for the Medium level; several-computer games get a "2 or 3
+  computers" card with one worked example.
 - No Online card for Connect 4, Dominoes, Uno, Parchís, Monopoly Deal: they have no online play, so `P[id].on` can
   never be earned there.
 - Facts the sheets rely on: Pool's default is first to 1 rack and Hoops' default is "Until you score", so both
@@ -72,8 +89,9 @@ Rules that follow (session's summary; check each sheet against ALL of them):
    longer/harder), then Online, then the limit box. The same order in every game. Each card has a title and a tag
    word (not colour alone: Matt is red/green colourblind; shapes for levels: circle Easy, square Medium, diamond Hard).
 3. Shorter/easier options: list their real points per level. Never "counts as one level lower".
-4. The 20-point limit: a tag on every row it applies to, plus a box saying which levels and WHY ("nearly
-   guaranteed"). Shared limits (two levels together) say so.
+4. The 20-point limit (v7, Matt): a yellow "20" ball on every row it applies to, on the label's line between the
+   label and the points (never under the label); the words only once, in the box at the bottom, which shows the
+   ball, says WHY (almost always won) and that the 20 is a total for all of them.
 5. Few words (root CLAUDE.md, "Game screens: as few words as possible"), but never hide a caveat to save words.
 6. Spanish too (`js/strings.js`), check 360 px wide in both languages.
 
@@ -116,3 +134,6 @@ Admin-only wins games (Archery, Battle Arena, Baseball, Cup Baseball): 1 a win u
   Flag anything that looks wrong to Matt instead of building it silently.
 - The Cup Pong "no reracks" multiplier was built for Hard only, against the table.
 - Mockups were sent a few games at a time and fixed one comment at a time.
+- v6 marked Tic Tac Toe ULTIMATE Easy/Medium as under the 20-point limit (the generator decided "limited" from the
+  level alone; `gamePoints` counts Ultimate wins outside the limit). Fixed in v7 by asking `gamePoints` per row.
+- A raw.githubusercontent link to a mockup HTML shows Matt the code; send the Pages URL instead.

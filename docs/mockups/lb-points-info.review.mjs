@@ -1,5 +1,5 @@
-// Checks every sheet of the v6 mockup against the handoff's design rules, at 360 px, EN and ES,
-// then writes the screenshots to this folder (lb-points-info-v6-*.jpg). Usage: node docs/mockups/lb-points-info-v6.review.mjs
+// Checks every sheet of the points-info mockup against the handoff's design rules, at 360 px, EN and ES,
+// then writes the screenshots to this folder (lb-points-info-v7-*.jpg). Usage: node docs/mockups/lb-points-info-v7.review.mjs
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { statSync } from 'node:fs';
@@ -8,7 +8,7 @@ const require = createRequire(pathToFileURL(path.join(process.cwd(), 'x.js')).hr
 const { chromium } = require('playwright-core');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FILE = process.argv[2] || path.join(HERE, 'lb-points-info-v6.html'), OUT = process.argv[3] || HERE;
+const FILE = process.argv[2] || path.join(HERE, 'lb-points-info-v7.html'), OUT = process.argv[3] || HERE;
 const URL0 = pathToFileURL(FILE).href;
 const browser = await chromium.launch({ executablePath: process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 let fails = 0;
@@ -60,10 +60,21 @@ for (const L of ['en', 'es']) {
       // rule 3: never "one level lower"
       if (/lower|one level|level down|un nivel|nivel menos|cuenta como|counts as/i.test(txt)) s.problems.push('relative-level wording');
       // rule 4: limit tag on capped rows <=> limit box; box says why
-      const capped = ph.querySelectorAll('.r .lim').length, box = ph.querySelector('.k-cap');
+      const capped = ph.querySelectorAll('.r .ball').length, box = ph.querySelector('.k-cap');
+      if (ph.querySelectorAll('.r .lim').length) s.problems.push('yellow pill on a row (Matt: only at the bottom)');
+      if (box && (ph.querySelectorAll('.lim').length !== 1 || !box.querySelector('.ball'))) s.problems.push('limit box needs its one pill and the ball key');
+      for (const r of ph.querySelectorAll('.r')) {
+        const lb = r.querySelector('.lb'), p = r.querySelector('.p'), ball = r.querySelector('.ball');
+        const lh = parseFloat(getComputedStyle(lb).lineHeight) || 20;
+        if (lb.getBoundingClientRect().height > lh * 1.4) s.problems.push('row label wraps: ' + lb.textContent);
+        if (ball) { const a = lb.getBoundingClientRect(), bb = ball.getBoundingClientRect(), pp = p.getBoundingClientRect();
+          if (bb.left < a.right || bb.right > pp.left) s.problems.push('ball not between label and points: ' + lb.textContent);
+          if (Math.abs((bb.top + bb.bottom) / 2 - (a.top + a.bottom) / 2) > 3) s.problems.push('ball not on the label line: ' + lb.textContent); }
+      }
+      for (const ct of ph.querySelectorAll('.ct')) { const lh = parseFloat(getComputedStyle(ct).lineHeight) || 20; if (ct.getBoundingClientRect().height > lh * 1.4) s.problems.push('card title wraps: ' + ct.textContent); }
       if (!!capped !== !!box) s.problems.push(`limit rows ${capped}, box ${!!box}`);
-      if (box && !/(nearly guaranteed|casi seguras)/.test(box.textContent)) s.problems.push('limit box without why');
-      if (box && !/(Together|Juntas)/.test(box.textContent)) s.problems.push('limit box does not say shared');
+      if (box && !/(almost always won|casi seguras)/.test(box.textContent)) s.problems.push('limit box without why');
+      if (box && !/(first 20 points|primeros 20 puntos)/.test(box.textContent)) s.problems.push('limit box does not say the 20 is a total');
       s.capped = capped;
       // repo copy rules: no em dashes
       if (/\u2014/.test(txt)) s.problems.push('em dash');
@@ -89,7 +100,7 @@ const page = await browser.newPage({ viewport: { width: 1928, height: 1200 }, de
 for (const L of ['en', 'es']) {
   await page.goto(URL0 + '?lang=' + L);
   for (const i of [1, 2]) {
-    const f = path.join(OUT, `lb-points-info-v6-${L}-${i}.jpg`);
+    const f = path.join(OUT, `lb-points-info-v7-${L}-${i}.jpg`);
     await page.locator(`#${L}-${i}`).screenshot({ path: f, type: 'jpeg', quality: 90 });
     console.log('shot', path.basename(f), (statSync(f).size / 1024).toFixed(0) + ' KB');
   }
@@ -98,7 +109,7 @@ for (const L of ['en', 'es']) {
 const ph = await browser.newPage({ viewport: { width: 360, height: 800 }, deviceScaleFactor: 1 });
 for (const L of ['en', 'es']) {
   await ph.goto(URL0 + '?lang=' + L);
-  const f = path.join(OUT, `lb-points-info-v6-360-${L}-cuppong.jpg`);
+  const f = path.join(OUT, `lb-points-info-v7-360-${L}-cuppong.jpg`);
   await ph.locator(`.phone[data-lang="${L}"][data-game="cuppong"]`).screenshot({ path: f, type: 'jpeg', quality: 90 });
   console.log('shot', path.basename(f), (statSync(f).size / 1024).toFixed(0) + ' KB');
 }
