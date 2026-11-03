@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1436;
-const CACHE = 'game-hub-v1441';
+const CACHE = 'game-hub-v1442';
 
 const ASSETS = [
   './',
@@ -860,7 +860,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': 'b1834b017a',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '53b879cdbf',
+  './js/game-stats-ui.js': '0cd94b24d1',
   './js/stats-net.js': '6281c321bf',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -889,7 +889,7 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': 'e52eb805fe',
+  './js/stats-corrections.js': '2bd58db60c',
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
@@ -901,7 +901,7 @@ const REST_MANIFEST = {
   './js/leaderboard2-ui.js': 'a4f776568e',
   './js/leaderboard2-boards.js': 'afbc6ba443',
   './js/leaderboard2-strings.js': 'ce8ef9c22b',
-  './js/leaderboard-rank.js': '4fe1b42b0f',
+  './js/leaderboard-rank.js': 'aa4d6adac9',
   './js/arrow-maze-time.js': 'ab86cff936',
   './js/gridlock-points.js': '8a4fcce246',
   './js/word-weaver-points.js': 'bfccad1b76',

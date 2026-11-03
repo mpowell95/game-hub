@@ -42,6 +42,7 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   ("Beat ◆◆ 5:22 for gold"). With nothing of yours on the record's level, the difference counts from 0 there.
 - Found while checking, NOT fixed (reported to Matt): a Golf integrity void sets `bestRoundByCourse` to 0, which
   `golfBestAt` reads as 12 under, so a voided Golf player would rank FIRST. Minesweeper's void is safe (0 = no time).
+- (v1442, FIXED, the item above) A voided Golf record now has NO best round (`bestRoundByCourse`/`bestHole` emptied in `js/stats-corrections.js`; `golfBestAt` and My Stats also refuse a stored 0), so it sorts last on the old board, Leaderboard v2 and My Stats; and a voided Contexto record loses its Daily medals too (`ct.d`, `fewestNH`). Overlay only, nothing stored changes; `tools/test-stats-corrections.mjs` pins both. No real record was voided on either game when checked.
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
   `cricket-order`). Every reader of `lb-points.js` is admin-gated, so player boards do not move.
 - Strings `lbps_*` in `js/strings.js` (EN + ES); `lb_pts_x_cuppong` / new `lb_pts_x_darts` for the old board's line.
