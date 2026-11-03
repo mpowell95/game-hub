@@ -197,6 +197,8 @@ const SCREENS = [
   { id: 'player', parent: 'hof-medals', back: 'hof-medals', go: async (h) => h.tap('.lb2 .lb2-lr[data-act="person"]:not(.me)'), note: "a person's page" },
   { id: 'pgame-player', parent: 'player', back: 'player', go: async (h) => h.tap('.lb2 [data-act="pgame"]'), note: "a person's game page (from their page)" },
   { id: 'me', parent: 'games', back: 'closed', go: async (h) => h.tap('.lb2 .lb2-head [data-act="tab"][data-v="me"]'), note: 'Me tab' },
+  { id: 'me-lost', parent: 'me', back: 'closed', go: async (h) => h.tap('.lb2 [data-act="melist"][data-v="lost"]'), note: 'Me tab, Lost' },
+  { id: 'me-close', parent: 'me', back: 'closed', go: async (h) => h.tap('.lb2 [data-act="melist"][data-v="close"]'), note: 'Me tab, Closest' },
   { id: 'me-board', parent: 'me', back: 'me', go: async (h) => h.tap('.lb2 .lb2-scroll [data-act="game"]'), note: 'a board opened from Me' },
 ];
 const byId = Object.fromEntries(SCREENS.map((s) => [s.id, s]));
@@ -448,6 +450,70 @@ if (!flag('no-negatives')) {
   for (const r of neg) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}${r.detail ? '  ' + r.detail : ''}`);
 }
 
+// ------------------------------------------------------------------ flows: the other ways a leaderboard screen is reached
+// (opened from the profile page's My Stats; reopened by Play, then Back, with a whole stack restored at once)
+const flows = [];
+async function runFlows(w) {
+  const h = helpers(w);
+  const memo = {};
+  const rec = (name, cond, detail) => flows.push({ name, ok: !!cond, detail: cond ? '' : detail });
+  const inside = async (kind = 'list') => {
+    const pts = await startPoints(w);
+    const sp = SPEEDS.normal;
+    return swipe(w, { x0: IN_X, y0: pts[kind] != null ? pts[kind] : pts.list, dx: sp.dx, dy: DRIFTS.level, ms: sp.ms, steps: sp.steps });
+  };
+  // A. Profile page -> My Stats (opens the Me tab over that page) -> swipe: back on the profile page, nothing left behind.
+  await w.page.goto(BASE + '/profile/', { waitUntil: 'load' });
+  await w.page.waitForSelector('#pf-stats-btn', { timeout: 15000 });
+  await w.page.evaluate(() => history.pushState({ sentinel: 1 }, ''));
+  await h.wait(500);
+  await h.tap('#pf-stats-btn');
+  await w.page.waitForSelector('.lb2', { timeout: 10000 }).catch(() => {});
+  await h.wait(500);
+  rec('profile page: My Stats opens the Me tab', (await h.sig()) === 'me', await h.sig());
+  await inside('list');
+  await h.wait(450);
+  rec('profile page: a swipe on the Me tab closes it and leaves the profile page', (await h.sig()) === 'closed' && (await h.depth()) === 0 && /\/profile\//.test(await w.page.evaluate(() => location.pathname)), `${await h.sig()} depth ${await h.depth()}`);
+  await h.tap('#pf-stats-btn');
+  await w.page.waitForSelector('.lb2', { timeout: 10000 }).catch(() => {});
+  await h.wait(400);
+  await w.page.evaluate(() => history.back());
+  await h.wait(450);
+  rec('profile page: the system back from the Me tab closes it, nothing left behind', (await h.sig()) === 'closed' && (await h.depth()) === 0 && (await h.onSentinel()), `${await h.sig()} depth ${await h.depth()}`);
+  await w.page.goto(BASE + '/', { waitUntil: 'load' });
+  await w.page.waitForSelector('.hub-tile, .hub-grid', { timeout: 20000 });
+  await h.wait(700);
+  await w.page.evaluate(() => history.pushState({ sentinel: 1 }, ''));
+
+  // B. Play, then Back: a restored stack is pushed all at once; each screen of it must still be one swipe.
+  for (const via of ['gesture', 'hub button']) {
+    await reach(w, h, 'pgame-board', memo);
+    const hasPlay = await w.page.locator('.lb2 [data-act="play"]').count();
+    if (!hasPlay) { rec(`play-then-back (${via}): the game page offers Play`, false, 'no Play button (leaderboard not opened by the hub?)'); continue; }
+    await h.tap('.lb2 [data-act="play"]');
+    await w.page.waitForSelector('.hub-back:not([hidden])', { timeout: 10000 }).catch(() => {});
+    await h.wait(500);
+    rec(`play-then-back (${via}): the leaderboard is away while the game is mounted`, (await h.sig()) === 'closed', await h.sig());
+    if (via === 'gesture') await w.page.evaluate(() => history.back()); else await h.tap('.hub-back');
+    await w.page.waitForSelector('.lb2', { timeout: 10000 }).catch(() => {});
+    await h.wait(900);
+    rec(`play-then-back (${via}): reopens on the same screen`, (await h.sig()) === memo['pgame-board'], `${await h.sig()} wanted ${memo['pgame-board']}`);
+    rec(`play-then-back (${via}): the restored stack holds one entry per screen (3)`, (await h.depth()) === 3, await h.depth());
+    for (const want of [memo['board-grouped'], memo.games, 'closed']) {
+      await inside('list');
+      await h.wait(550);
+      rec(`play-then-back (${via}): a swipe lands on ${want === 'closed' ? 'closed' : want}`, (await h.sig()) === want, await h.sig());
+    }
+    rec(`play-then-back (${via}): nothing left behind`, (await h.depth()) === 0 && (await h.onSentinel()), `depth ${await h.depth()}`);
+  }
+}
+if (!flag('no-flows')) {
+  const w = workers[0] || (await newWorker());
+  try { await runFlows(w); } catch (err) { flows.push({ name: 'harness', ok: false, detail: String(err).split('\n')[0] }); }
+  console.log('\n=== other ways in: profile page My Stats, Play then Back ===');
+  for (const r of flows) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}${r.detail ? '  ' + r.detail : ''}`);
+}
+
 // ------------------------------------------------------------------ report
 const pad = (s, n) => String(s).padEnd(n);
 const pct = (xs) => (xs.length ? `${xs.filter((r) => r.ok).length}/${xs.length}` : '-');
@@ -472,7 +538,7 @@ console.log('by drift:  ' + ['up', 'level', 'down'].map((s) => `${s} ${pct(resul
 const why = {};
 for (const r of results.filter((x) => !x.ok)) { const k = `${r.start}: ${r.why}`; why[k] = (why[k] || 0) + 1; }
 console.log('\nfailures by cause:'); for (const [k, n] of Object.entries(why).sort((a, b) => b[1] - a[1]).slice(0, 14)) console.log(`  ${String(n).padStart(4)}  ${k}`);
-bad += hist.filter((r) => !r.ok).length + neg.filter((r) => !r.ok).length;
+bad += hist.filter((r) => !r.ok).length + neg.filter((r) => !r.ok).length + flows.filter((r) => !r.ok).length;
 const errs = workers.flatMap((w) => w.errors);
 if (errs.length) console.log('\npage errors:', [...new Set(errs)].slice(0, 5));
 console.log(`\n${total - bad}/${total} swipes went back exactly one screen (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
