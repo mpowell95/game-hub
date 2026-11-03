@@ -2019,6 +2019,16 @@ function gapParts(me, rec, id) {
   if (!(d > 0)) return null;
   return { k, v, n: d };
 }
+/** Leaderboard v2's pinned row (Matt, 2026-11-02: Ana likes how the old board "shows how close you are to beating
+ *  someone's record"): the gap as the amount that TAKES the record. gapParts' number only reaches a tie (the outside
+ *  review's item 4, which is why v2 dropped the line in round 4), so v2 adds the one more that passes it. Every
+ *  gapParts difference is a whole number of its unit (points, wins, strokes, dollars, metres, or whole seconds off
+ *  floored times), so one more always beats the record. The old board's own line is left exactly as it was. */
+function takeParts(p) {
+  if (!p || p.k === 'tier' || p.take) return p;
+  const n = p.n + 1;
+  return { ...p, n, v: p.k === 'time' ? formatTimeMetric(n * 1000) : p.k === 'bank' ? bankText(n) : numText(n) };
+}
 /** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
 function closeness(me, rec, id) {
   if (!gapText(me, rec, id)) return -1;
@@ -3702,8 +3712,11 @@ export function lb2Board(list, id, st = {}) {
         const hm = cell(me), hr = cell(rec);
         if (!hr || hr.c.ms == null) return null;
         if (hm && hm.c.ms != null && hm.tier === hr.tier) {
-          const d = Math.floor(hm.c.ms / 1000) - Math.floor(hr.c.ms / 1000);
-          return d > 0 ? { k: 'time', v: formatTimeMetric(d * 1000), n: d } : null;
+          // Times rank to the millisecond: the whole seconds that take the record, worked out exactly.
+          const behind = hm.c.ms - hr.c.ms;
+          if (!(behind > 0)) return null;
+          const s = Math.ceil((behind + 1) / 1000);
+          return { k: 'time', v: formatTimeMetric(s * 1000), n: s, take: true };
         }
         return hr.tier ? { k: 'tier', v: formatTimeMetric(hr.c.ms), tier: t(TIER_LABEL_KEY[hr.tier]) } : null;
       };
@@ -3718,7 +3731,7 @@ export function lb2Board(list, id, st = {}) {
     // The pinned row's gap = the old stand line's (standLineHTML): to the board's FIRST row, read at its
     // tier, only on the views the old board printed it on. Computed NOW (the borrowed state ends below).
     const gaps = new Map();
-    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, gapFn(me.g, out[0].g));
+    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, takeParts(gapFn(me.g, out[0].g)));
     // The board's header number (all plays, gameDetail's) and its standing records block (recordsHTML).
     const plays = id === 'contexto' && _view === 'daily' ? list.reduce((a, g) => a + (ctDailyOf(g).played | 0), 0)
       : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
