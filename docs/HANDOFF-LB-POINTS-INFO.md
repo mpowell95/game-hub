@@ -3,7 +3,26 @@
 **Written by a session, not by Matt.** Quotes marked "Matt:" are his exact words. Anything not quoted is
 the writing session's summary or suggestion and is **NOT cleared for players**.
 
-## Where things stand (live, v1427)
+## BUILT, ADMIN DEVICES ONLY (v1429, session 6)
+
+Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." Mockup v7 is built:
+- `js/lb-points-sheet.js` (new): the cards, one body for both screens. `sheetModel(id)` is pure (rows from
+  `pointsForWin`, the limit asked of `gamePoints` with 100 such wins); `pointsSheetHTML(id)` + its own light/dark CSS
+  (`#lbps-css`, classes `lbps-*`). Option facts and the online list live in its `OPTIONS` / `ONLINE` tables.
+- The board's (i) (`js/leaderboard2-ui.js infoHTML`): a wins board on an admin device shows the sheet instead of
+  "Ranked by" / "Counts as". Leaderboard v2 itself opens only on admin devices.
+- The stats page (`js/game-stats-ui.js ptsSectionHTML`, already `isAdminDevice()`-gated): "Points: N" + the sheet.
+- `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
+  `cricket-order`). Every reader of `lb-points.js` is admin-gated, so player boards do not move.
+- Strings `lbps_*` in `js/strings.js` (EN + ES); `lb_pts_x_cuppong` / new `lb_pts_x_darts` for the old board's line.
+- Tests: `tools/test-lb-points-sheet.mjs` (every row of every game against `gamePoints`), `tools/test-lb-points.mjs`
+  (+6 for the two fixes). Checked in Chromium as an admin device: all 20 games' (i) in EN/ES x light/dark at 360 px,
+  the stats page, and a NON-admin device (old leaderboard, no sheet anywhere). Test note: the hub's
+  `refreshAdminDevice()` clears the admin flag on a device that is not on `admins/`, so a browser test must keep the
+  cached answer (route-patch that function in the browser's copy) or the sheet vanishes mid-run.
+- Releasing to players is still Matt's words only ("release it", "ship it", "make it live for everyone").
+
+## Where things stood before the build (live, v1427)
 
 - **Points are ADMIN DEVICES ONLY** (`isAdminDevice()` in `js/leaderboard-ui.js isPointsBoard`,
   `js/game-stats-ui.js ptsSectionHTML`, `js/points-toast.js`). Players see the old "hardest level first" board.

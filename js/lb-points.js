@@ -25,8 +25,10 @@ const P = {
   boggle: { lv: [2, 6, 10], on: 3 },
   business: { lv: [1, 2, 3], on: 3 },
   chinchon: { lv: [1, 2, 4], on: 3 },
-  cuppong: { lv: [1, 1, 3], cap: [1, 2], on: 3, mode: (m, t, v) => (String(m.rr) === '0' && t === 3 ? v * 2 : undefined) },
-  darts: { lv: [1, 2, 3], on: 3 },
+  // Cup Pong no reracks doubles EVERY level (approved table: '0 reracks x2'; it was Hard only). Darts Cricket in
+  // order doubles (Matt: 'in order is for sure more difficult so do something'); kind 'cricket-order[-np]'.
+  cuppong: { lv: [1, 1, 3], cap: [1, 2], on: 3, mode: (m, t, v) => (String(m.rr) === '0' ? v * 2 : undefined) },
+  darts: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (String(m.kind || '').startsWith('cricket-order') ? v * 2 : undefined) },
   dominoes: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (+m.to >= 500 ? v * 2 : undefined) },
   eightball: { lv: [1, 3, 5], on: 3, mode: (m, t, v) => (+m.racks >= 3 ? v * 2 : undefined) },
   escoba: { lv: [1, 2, 4], on: 2 },
