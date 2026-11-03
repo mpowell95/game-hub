@@ -7,8 +7,9 @@
 // Easy 1; Medium 2, 1; Hard 4, 3, 2, 1; Expert 8, 5, 3, 1 (0, 1, 2, 3+ hints; a Sudoku mistake counts as a hint).
 // The help COUNT per solve is stored only from 2026-11-03 (`sd.hc` / `mu.hc`: { <level>: { h1, h2, h3 } }, h3 = 3+);
 // an older solve with help (or not proven clean) pays HALF its level, never below 1: 1, 1, 2, 4.
-// Nuts & Bolts: each level solved Easy 1, Medium 2, Hard 3, Expert 4 (levels are counted once per person by
-// players-agg's dedupeNutsBolts); a win saved before levels existed is 1. No hints exist.
+// Nuts & Bolts: each level solved Easy 1, Medium 2, Hard 4, Expert 8, Easy at most 20 points in all (Matt chose "B",
+// 2026-11-03: Easy levels never run out, so Easy is capped like the wins games' near-certain levels); levels are
+// counted once per person by players-agg's dedupeNutsBolts; a win saved before levels existed is 1. No hints exist.
 // Minesweeper: each board cleared Easy 1, Medium 3, Hard 8, Expert 20. Losses cost nothing.
 //
 // PURE and READ-TIME ONLY (THE LAW): reads one person's aggregated record (players-agg's shape), stores nothing.
@@ -19,7 +20,9 @@ export const PUZZLE_POINT_GAMES = ['sudoku', 'murdoku', 'nutsbolts', 'minesweepe
 export const HINT_STEPS = { 1: [1, 1, 1, 1], 2: [2, 1, 1, 1], 3: [4, 3, 2, 1], 4: [8, 5, 3, 1] };
 /** A helped solve from before the count was stored: half its level, never below 1. */
 export const HINT_UNKNOWN = { 1: 1, 2: 1, 3: 2, 4: 4 };
-export const LEVEL_POINTS = { nutsbolts: { 1: 1, 2: 2, 3: 3, 4: 4 }, minesweeper: { 1: 1, 2: 3, 3: 8, 4: 20 } };
+export const LEVEL_POINTS = { nutsbolts: { 1: 1, 2: 2, 3: 4, 4: 8 }, minesweeper: { 1: 1, 2: 3, 3: 8, 4: 20 } };
+/** The most points a level can add in all (Nuts & Bolts Easy: 20, the wins boards' CAP). */
+export const LEVEL_CAP = { nutsbolts: { 1: 20 } };
 export const NO_LEVEL_POINTS = 1;
 export const HELP_KEYS = ['h1', 'h2', 'h3'];
 
@@ -68,7 +71,8 @@ function levelPoints(game, id, tier) {
   let pts = 0, wins = 0;
   for (const t of [1, 2, 3, 4]) {
     if (tier != null && t !== tier) continue;
-    pts += per[t] * LEVEL_POINTS[id][t]; wins += per[t];
+    const cap = (LEVEL_CAP[id] || {})[t];
+    pts += cap != null ? Math.min(cap, per[t] * LEVEL_POINTS[id][t]) : per[t] * LEVEL_POINTS[id][t]; wins += per[t];
   }
   if (tier == null && id === 'nutsbolts') { pts += noLevel * NO_LEVEL_POINTS; wins += noLevel; }
   return { pts, wins };

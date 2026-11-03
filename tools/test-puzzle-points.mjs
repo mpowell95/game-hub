@@ -70,7 +70,9 @@ const rec = (name, code, stats) => ({ profile: { name, playerId: code }, stats, 
   const mu = { byDiff: { easy: { won: 18 }, medium: { won: 43 } }, mu: { clean: { medium: 3 } } };
   ok('murdoku: Natalia\'s shape = 64 (18 + 3 x 2 + 40 x 1)', P.puzzlePoints(mu, 'murdoku').pts === 64);
   const nb = { total: { won: 40 }, byDiff: { easy: { won: 1 }, medium: { won: 1 }, hard: { won: 1 }, extrahard: { won: 2 } } };
-  ok('nuts & bolts: 1 + 2 + 3 + 4 x 2, plus 35 with no level = 49', P.puzzlePoints(nb, 'nutsbolts').pts === 49);
+  ok('nuts & bolts: 1 + 2 + 4 + 8 x 2, plus 35 with no level = 58', P.puzzlePoints(nb, 'nutsbolts').pts === 58);
+  const farm = { total: { won: 51 }, byDiff: { easy: { won: 51 } } };
+  ok('nuts & bolts: 51 Easy levels add 20 at most', P.puzzlePoints(farm, 'nutsbolts').pts === 20 && P.puzzlePoints(farm, 'nutsbolts', 1).pts === 20 && P.puzzlePoints(farm, 'nutsbolts').wins === 51);
   ok('nuts & bolts: no-level wins only on All', P.puzzlePoints(nb, 'nutsbolts', 1).pts === 1);
   const ms = { total: { won: 4 }, byDiff: { easy: { won: 1, lost: 9 }, medium: { won: 1 }, hard: { won: 1 }, expert: { won: 1, lost: 40 } } };
   ok('minesweeper: 1 + 3 + 8 + 20 = 32, losses cost nothing', P.puzzlePoints(ms, 'minesweeper').pts === 32);

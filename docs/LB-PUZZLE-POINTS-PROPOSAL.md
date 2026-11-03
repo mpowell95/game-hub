@@ -146,3 +146,6 @@ Everything stays admin-only and unmerged until Matt says so.
 time board kept for players). Real-data check (admin board, snapshot 2026-11-03): every total and order matches the
 tables above; player boards byte-identical to before. Not done yet: the four games' (i) sheets (Matt: mock up one at a
 time), the points toast. On release: regenerate `tools/test-lb2-parity.mjs`'s golden (these boards differ by design).
+
+2026-11-03, Matt: "B" = Nuts & Bolts 1, 2, 4, 8 a level, Easy at most 20 points in all (built, admin devices only).
+Real data: Unai 3,060, Lili 1,824, MattyIce 82 (medals unchanged).
