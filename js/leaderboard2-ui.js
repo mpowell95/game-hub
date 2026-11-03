@@ -530,17 +530,9 @@ const COLS = '44px minmax(0,1fr) auto 10px';
 const DOWN = '<span class="lb2-chev lb2-down" aria-hidden="true"><svg width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5 7 6.5l5.5-5"/></svg></span>';
 /** Session 4 (display only): a board's tail of tied rows at 0 folds into ONE row, "=7 · 9 players", that opens on
  *  tap. Every row is still drawn (inside the fold), with its rank unchanged. `holder.fold` = opened. */
-function foldTail(rows, rowHTML, holder, cols, game) {
-  let k = rows.length;
-  while (k > 0 && !earned(rows[k - 1]) && rows[k - 1].rank === rows[rows.length - 1].rank && String(rows[k - 1].text ?? rows[k - 1].show ?? '').replace(/[\s,.]/g, '') === '0') k--;
-  const n = rows.length - k;
-  if (n < 3) return rows.map(rowHTML).join('');
-  const open = !!(holder && holder.fold);
-  const last = rows[rows.length - 1];
-  const head = `<button type="button" class="lb2-foldr" style="grid-template-columns:${cols}" data-act="fold" aria-expanded="${open}">
-    ${plainRank(last.rank, n > 1)}<span class="lb2-who"><span class="lb2-nm">${esc(t2('lb2_n_players', { n: fmt(n) }))}</span></span><span class="r lb2-val num">${game === 'contexto' ? '–' : '0'}</span>${open ? '' : DOWN}</button>`;
-  return rows.slice(0, k).map(rowHTML).join('') + (open ? '' : head) + `<div class="lb2-fold"${open ? '' : ' hidden'}>${rows.slice(k).map(rowHTML).join('')}</div>`;
-}
+// EVERY row, always (2026-11-03, Matt: "Remove that. ALWAYS show everybody"). The tail of 0 rows used to fold under
+// a "N players" row that had to be tapped open; it is drawn in full now, on every board and in Medal Count.
+function foldTail(rows, rowHTML) { return rows.map(rowHTML).join(''); }
 /** The shape before a row's number on a grouped board (none beside a dash: there is no number to qualify). */
 const numShape = (tiered, r) => (tiered && r.text && r.text !== '—' ? shape(r.tier) : '');
 function rushHTML(top, modeRow) {
