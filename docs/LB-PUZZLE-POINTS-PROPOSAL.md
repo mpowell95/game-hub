@@ -127,3 +127,14 @@ Ball Run, Hill Climb, Snake, Brick Breaker: runs and best score per level exist 
 would reward volume unless tied to the best score). Contexto: no levels, but each solve's gold/silver/bronze (0/1/2
 hints) is stored, so points per medal fit. Hold'em: wins per computer level + online, its Wins tab could take points.
 Tower: nothing uploaded yet (admin-only). Golf, Skeeball: no levels. Spelling Bee: already points.
+
+## Matt's decisions (2026-11-03, his words)
+
+"I'm fine with all proposals." "yes, hints should always reduce how many points you get." So: plain points (the
+2026-10-29 "no-hint solves rank first" order is replaced by hints costing points); Minesweeper 1, 3, 8, 20.
+"Sudoku and murdoku don't save? What? They should save...": both save every solve per level and whether it used help,
+but NOT how many hints each solve used. To do: a NEW additive field per level counting solves by help used (1, 2, 3+;
+Sudoku help = hints + mistakes), merged in `js/players-agg.js`; then points step down like Arrow Maze (Easy 1; Medium
+2, 1; Hard 4, 3, 2, 1; Expert 8, 5, 3, 1). Solves recorded before the field: only yes/no is known, so the approved
+half value (1, 1, 2, 4). The play log has each solve's hints since Oct 28, but it is evidence only, never read back.
+Everything stays admin-only and unmerged until Matt says so.
