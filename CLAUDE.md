@@ -307,6 +307,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
 | `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band = its leaderboard number; bonus stars buy hints (`WW_PRICE` 40/60/120, `wwBalance`/`wwCollected`/`wwSpent`, `ww.sp`/`ww.by`, 2026-11-02; old free hints `ww.fu`/`ww.fl` kept); bonus squares `ww.b` (2026-11-02); the DAILY puzzle `ww.dl`/`ww.dh` (`wwDaily`, `wwDailyMerge`, `wwDailyCount`; no points, 2026-11-02) |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
+| `puzzle-points.js` | Sudoku / Murdoku / Nuts & Bolts / Minesweeper points (Matt, 2026-11-03; ADMIN DEVICES ONLY, `isPuzzlePts` in `leaderboard-ui.js`): Sudoku/Murdoku Easy 1; Medium 2, 1; Hard 4, 3, 2, 1; Expert 8, 5, 3, 1 by help used (`sd.hc`/`mu.hc` `h1/h2/h3`, saved from 2026-11-03; older helped solves half: 1, 1, 2, 4); Nuts & Bolts 1/2/3/4 a level (no level 1); Minesweeper 1/3/8/20 a clear. `docs/LB-PUZZLE-POINTS-PROPOSAL.md`, `tools/test-puzzle-points.mjs` |
 | `leaderboard2-ui.js` / `leaderboard2-boards.js` | Leaderboard v2 (Boards / Hall of Fame / Me), admin devices only until Matt approves. **The old board's numbers only (Matt, 2026-10-31: "an interface redesign, not a stats redesign")**: boards, medals and places come from `leaderboard-ui.js`'s `lb2*` exports; `tools/test-lb2-parity.mjs` proves it on real data (2026-11-03: every tab, plus each person's gold, silver and bronze; Spelling Bee by language, Matt's split; 397/397 EN and ES). Status: `docs/LEADERBOARD-V2-MORNING.md` |
 | `game-art.js` | every tile's inline SVG, keyed by hub id |
 | `difficulty-tiers.js` | READ-path mapping of difficulties onto tiers 1-4 |
@@ -358,6 +359,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
+- **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and

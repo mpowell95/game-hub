@@ -138,3 +138,11 @@ Sudoku help = hints + mistakes), merged in `js/players-agg.js`; then points step
 2, 1; Hard 4, 3, 2, 1; Expert 8, 5, 3, 1). Solves recorded before the field: only yes/no is known, so the approved
 half value (1, 1, 2, 4). The play log has each solve's hints since Oct 28, but it is evidence only, never read back.
 Everything stays admin-only and unmerged until Matt says so.
+
+## Built (2026-11-03, branch `claude/awesome-keller-sb41sq`, NOT merged, admin devices only)
+
+`js/puzzle-points.js` (the four tables), `sd.hc` / `mu.hc` saved by `recordSudoku` / `recordMurdoku`, added up in
+`js/players-agg.js` `addHelpCounts`, the boards on points via `isPuzzlePts` in `js/leaderboard-ui.js` (Minesweeper's
+time board kept for players). Real-data check (admin board, snapshot 2026-11-03): every total and order matches the
+tables above; player boards byte-identical to before. Not done yet: the four games' (i) sheets (Matt: mock up one at a
+time), the points toast. On release: regenerate `tools/test-lb2-parity.mjs`'s golden (these boards differ by design).

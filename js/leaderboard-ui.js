@@ -65,6 +65,7 @@ import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.j
 import { WW_TIERS, wwPoints, wwCleared, wwThreeStars, wwCollected, wwSpent } from './word-weaver-points.js';
 import { loadFavorites } from './favorites.js';
 import { gamePoints, pointsKey } from './lb-points.js';
+import { PUZZLE_POINT_GAMES, puzzlePoints } from './puzzle-points.js';
 import { LB_RULES } from './lb-rules.js';
 import { screenFor, ensureStatsCss, gameListHTML as gsGameListHTML, hubIdOf, unitKeyOf,
   isGameOnLauncher, SK_MACHINES, skMachineMeta } from './game-stats-ui.js';
@@ -1011,6 +1012,8 @@ function beeChipsHTML(g) {
 }
 
 function gameMetricAt(g, id, tier) {
+  // Sudoku, Murdoku, Nuts & Bolts, Minesweeper on POINTS (Matt, 2026-11-03, js/puzzle-points.js): ADMIN DEVICES ONLY.
+  if (isPuzzlePts(id)) return puzzlePoints(((g && g.games) || {})[id], id, tier).pts;
   if (id === 'spellingbee' && beeBoard()) { const r = beeRowFor(g); return beeView().by === 'words' ? r.words : r.points; }
   if (id === 'ballrun') return brBestAt(g, tier);
   if (id === 'snake') return snBestAt(g, tier);
@@ -1048,6 +1051,12 @@ function gameMetricAt(g, id, tier) {
 // ADMIN DEVICES ONLY (Matt, 2026-11-02: "deployed to the ADMIN ONLY leaderboard for me to review and test"):
 // players' boards stay "hardest level first" until Matt says "release it" in his own words.
 function isPointsBoard(id) { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong') && isAdminDevice(); }
+/** A puzzle board on points (js/puzzle-points.js, 2026-11-03): ADMIN DEVICES ONLY, like the wins boards' points. */
+function isPuzzlePts(id) { return PUZZLE_POINT_GAMES.includes(id) && isAdminDevice(); }
+/** Lower wins (golf; Minesweeper's best time, but not while it is on points). */
+function lowerIsBetter(id) { return LOWER_IS_BETTER.has(id) && !isPuzzlePts(id); }
+/** Solves behind a puzzle row's points (the tie-break: equal points, more solves first). */
+function puzzleWinsOf(g, id) { return puzzlePoints(((g && g.games) || {})[id], id, _tier).wins; }
 /** Wins behind a row's points (the tie-break: equal points, more wins first). */
 function pointsWinsOf(g, id) { return gamePoints(g.games[id], id, _tier).wins; }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
@@ -1107,6 +1116,7 @@ function metricText(value, id) {
   // how many of the player's BEST medal they hold. Not the packed number.
   if (id === 'contexto') { const b = ctBest(value); return b.medal ? `${CT_MEDAL_GLYPH[b.medal]} ${b.n}` : '\u2014'; }
   if (id === 'holdem') return value == null ? '\u2014' : bankText(value);
+  if (isPuzzlePts(id)) return value == null ? '\u2014' : numText(value);
   const s = formatBoardMetric(value, id, t('lb_golf_even'));
   return s === null ? '\u2014' : s;
 }
@@ -1116,6 +1126,7 @@ function metricText(value, id) {
  *  still the right word. This board's golf number is a best round, so it needs its own label and
  *  My Stats must not inherit it. */
 function lbUnitKeyOf(id) {
+  if (isPuzzlePts(id)) return 'lb_unit_points';
   if (id === 'golf') return 'lb_unit_golf_best';
   // Same split as golf: this BOARD ranks on a best time, while My Stats' game list still leads
   // with boards cleared, which is the right headline for a list of every game you have played.
@@ -1174,7 +1185,7 @@ function boardTierOf(g, id) {
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
-  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver' || isPointsBoard(id)) && _tier == null) return null;
+  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver' || isPointsBoard(id) || isPuzzlePts(id)) && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -1190,6 +1201,7 @@ function boardMetricOf(g, id) { return gameMetricAt(g, id, boardTierOf(g, id)); 
 /** THE ONE comparator every metric sort on a game board goes through. Tier first, then that tier's
  *  own score via compareBoardMetric - which is what still gets golf's direction right. */
 function compareBoardRow(a, b, id) {
+  if (isPuzzlePts(id)) return ((boardMetricOf(b, id) || 0) - (boardMetricOf(a, id) || 0)) || (puzzleWinsOf(b, id) - puzzleWinsOf(a, id));
   if (isPointsBoard(id)) return compareBoardMetric(boardMetricOf(a, id), boardMetricOf(b, id), id) || (pointsWinsOf(b, id) - pointsWinsOf(a, id));
   return compareTierFirst(boardTierOf(a, id) || 0, boardTierOf(b, id) || 0,
     boardMetricOf(a, id), boardMetricOf(b, id), id);
@@ -1223,7 +1235,7 @@ function noHintAt(g, id, tier) {
 }
 /** The tier a row's no-hint solves rank at: the selected filter's, else the hardest with one. 0 = none. */
 function noHintTierOf(g, id) {
-  if (!NOHINT_GAMES.has(id)) return 0;
+  if (!NOHINT_GAMES.has(id) || isPuzzlePts(id)) return 0;
   if (_tier != null) return noHintAt(g, id, _tier) > 0 ? _tier : 0;
   for (let tier = 4; tier >= 1; tier--) if (noHintAt(g, id, tier) > 0) return tier;
   return 0;
@@ -1264,6 +1276,7 @@ function boardMetricCmp(id) {
   // Contexto: medals, then the LOWER average guesses (Matt, 2026-09-29). Only a pair equal on
   // both is tied, so the rank badges agree with the order (see the note above).
   if (id === 'contexto') return (a, b) => compareContexto(ctOf(a), ctOf(b));
+  if (isPuzzlePts(id)) return (a, b) => compareBoardRow(a, b, id);
   // Sudoku / Murdoku: no-hint solves first (2026-10-29), then every win.
   if (NOHINT_GAMES.has(id)) return (a, b) => compareNoHint(a, b, id) || compareAllWins(a, b, id);
   // Cup Pong: equal wins, FEWER RERACKS ranks higher (Matt, 2026-10-28; counted from that day).
@@ -2013,7 +2026,7 @@ function gapParts(me, rec, id) {
     d = Math.floor(m / 1000) - Math.floor(r / 1000);
     v = formatTimeMetric(d * 1000);
   } else {
-    d = LOWER_IS_BETTER.has(id) ? m - r : r - m;
+    d = lowerIsBetter(id) ? m - r : r - m;
     v = k === 'bank' ? bankText(d) : numText(d);
   }
   if (!(d > 0)) return null;
@@ -2037,7 +2050,7 @@ function needOf(me, rec, id) {
   // Sudoku / Murdoku: no-hint solves at the record's no-hint level come first (compareNoHint).
   const nh = NOHINT_GAMES.has(id) ? noHintTierOf(rec, id) : 0;
   if (nh) return add('nohint', Math.max(1, noHintAt(rec, id, nh) - noHintAt(me, id, nh) + 1), nh);
-  const best = NEED_BEST[id];
+  const best = isPuzzlePts(id) ? null : NEED_BEST[id];
   if (best === 'time') {
     // Minesweeper ranks to the millisecond: the whole seconds that pass the record, worked out exactly.
     const h = msHeadline(rec);
@@ -2065,7 +2078,7 @@ function closeness(me, rec, id) {
   const tier = boardTierOf(rec, id);
   const r = gameMetricAt(rec, id, tier);
   const m = gameMetricAt(me, id, tier);
-  if (!LOWER_IS_BETTER.has(id)) return r > 0 ? Math.max(0, m) / r : 0;
+  if (!lowerIsBetter(id)) return r > 0 ? Math.max(0, m) / r : 0;
   if (r > 0 && m > 0) return r / m;
   return 1 / (1 + Math.max(0, m - r));   // golf: scores to par can be 0 or below, so no ratio
 }
@@ -2581,7 +2594,7 @@ function gameDetail(list, id) {
     </div>
     ${playBtnHTML(id)}
   </div>`;
-  if (id === 'minesweeper') return head + msBoardHTML(list);
+  if (id === 'minesweeper' && !isPuzzlePts(id)) return head + msBoardHTML(list);
   if (id === 'spellingbee' && beeBoard()) return head + beeTabsHTML() + plainBoardHTML(list, id) + recordsHTML(list, id);
   if (id === 'wayout') return head + woModesHTML() + (woRush ? woRushHTML(list) : plainBoardHTML(list, id) + recordsHTML(list, id));
   return head + plainBoardHTML(list, id) + recordsHTML(list, id);
@@ -2676,7 +2689,7 @@ function gameDetail(list, id) {
   // lower-is-better, and what a "T" on a badge means when one is showing.
   const notes = [];
   if (byMetric && _tier == null && rows.some((g) => boardTierOf(g, id) != null)) notes.push(tx('lb_note_tier', 'Ranked by hardest difficulty first, then score.'));
-  if (byMetric && LOWER_IS_BETTER.has(id)) notes.push(tx('lb_note_low', 'Lowest score wins.'));
+  if (byMetric && lowerIsBetter(id)) notes.push(tx('lb_note_low', 'Lowest score wins.'));
   if (rows.some((g) => tiedAt(g.key))) notes.push(tx('lb_note_tie', 'T = tied.'));
   const note = notes.length ? `<p class="lb-note">${esc(notes.join(' '))}</p>` : '';
   return head + controls + note + cardsHtml + recordsHTML(list, id);
@@ -3597,10 +3610,10 @@ export function lb2ScoreBoard(list, id, spec = {}) {
     view: view.startsWith('m:') || view.startsWith('bz:') ? (id === 'skeeball' ? spec.by || '' : '') : (id === 'skeeball' ? spec.by || '' : view),
     machine: view.startsWith('m:') ? view.slice(2) : 'all' };
   return lb2With(id, st, () => {
-    let rows, cmp, kind = gapKind(id), lower = LOWER_IS_BETTER.has(id), unit = '';
+    let rows, cmp, kind = gapKind(id), lower = lowerIsBetter(id), unit = '';
     let games = (g) => boardPlaysOf(g, id), num = (g) => boardMetricOf(g, id), tierOfRow = (g) => boardTierOf(g, id);
     let html = null, text = null;
-    if (id === 'minesweeper') {
+    if (id === 'minesweeper' && !isPuzzlePts(id)) {
       const tier = _tier;
       rows = tier == null ? list.filter((g) => msHeadline(g)) : list.filter((g) => msCellAt(g, tier));
       cmp = tier == null ? msAllCmp : (a, b) => msCellCmp(msCellAt(a, tier), msCellAt(b, tier));
@@ -3738,7 +3751,7 @@ const stripTags = (h) => String(h == null ? '' : h).replace(/<[^>]*>/g, '').repl
 export function lb2Board(list, id, st = {}) {
   return lb2With(id, st, () => {
     let rows, cmp, rowOut, gapFn = null, unit = '', empty = '';
-    if (id === 'minesweeper') {
+    if (id === 'minesweeper' && !isPuzzlePts(id)) {
       const tier = _tier;
       rows = tier == null ? list.filter((g) => msHeadline(g)) : list.filter((g) => msCellAt(g, tier));
       cmp = tier == null ? msAllCmp : (a, b) => msCellCmp(msCellAt(a, tier), msCellAt(b, tier));
