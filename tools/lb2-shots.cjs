@@ -11,7 +11,10 @@ const OUT = process.env.OUT || require('path').join(ROOT, 'review-shots', 'lates
 const PORT = process.env.PORT || '8177';
 fs.mkdirSync(OUT, { recursive: true });
 const admin = fs.readFileSync(ROOT + '/backups/lb-admin.json', 'utf8');
-const bee = fs.readFileSync(ROOT + '/backups/lb-bee.json', 'utf8');
+// The node's value is a JSON STRING (functions/bee.js stores it encoded), so the file holds it quoted; the phone's cache
+// (js/bee-board.js) keeps the inner string. Storing the file text as-is hid the real Spelling Bee board (fixed 2026-11-03).
+const beeRaw = fs.readFileSync(ROOT + '/backups/lb-bee.json', 'utf8');
+const bee = (() => { try { const v = JSON.parse(beeRaw); return typeof v === 'string' ? v : beeRaw; } catch { return beeRaw; } })();
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 (async () => {
   const b = await chromium.launch({ args: ['--disable-blink-features=AutomationControlled'] });

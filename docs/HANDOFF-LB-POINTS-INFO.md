@@ -23,6 +23,13 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1453) REAL-DATA CHECK (Matt: "Check all data"; hearts red and the back swipe confirmed on his iPhone: "Yes and yes").
+  Read-only snapshot (`tools/read-lb-snapshot.mjs`): test-stats-screens 61 real people, 788 screens, 1001/0;
+  test-lb-points real top 3 ok; `tools/test-lb2-parity.mjs` 397/0 in EN and ES. Found and fixed: the Spelling Bee
+  board's "N played" counted only the open language (23, not 40; `allPlaysSel`). The parity test now knows the
+  Spelling Bee split and compares silver and bronze too (from the old board's full ranking: By Game's card cuts a
+  tie for 3rd; Hold'em's untouched bankrolls get no medal in v2, by design). `tools/lb2-shots.cjs` loaded the bee
+  board quoted (the real Spelling Bee board never showed in its shots); fixed.
 - (v1452) A person's game page no longer repeats "Points: N" under the stats (the top card shows it; Matt: "Sure").
   My Stats keeps the line (it has no top card). CSS `.lb2 .gs-ptsline{display:none}`.
 - (v1451) Matt: "Figure out the broken test and update so the swipe back works. Fix the contexto bug. Fix the sudoku line

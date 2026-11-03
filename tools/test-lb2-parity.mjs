@@ -201,6 +201,10 @@ const v2 = await pg.evaluate(async (keys) => {
   await sleep(40);
   out.hof = [...document.querySelectorAll('.lb2 .lb2-lr')].map((el) => [...el.querySelectorAll('.lb2-strong, .lb2-gm')].map((x) => Number(x.textContent)));
   out.hofNames = [...document.querySelectorAll('.lb2 .lb2-lr')].map((el) => [el.querySelector('.lb2-nmt').textContent.trim(), Number(el.querySelector('.lb2-strong').textContent)]);
+  // Gold, silver, bronze per person (2026-11-03: silver and bronze were not compared before).
+  // Hold'em's places as v2 counts them (an untouched starting bankroll earns no medal: lb2Standing `noMedal`).
+  out.holdemPlaces = L.lb2Standing(window.H.people, 'holdem').filter((r) => !r.noMedal).map((r) => [String((r.g && r.g.name) || '').trim(), r.rank]);
+  out.hofMedals = [...document.querySelectorAll('.lb2 .lb2-lr')].map((el) => [el.querySelector('.lb2-nmt').textContent.trim(), [...el.querySelectorAll('.lb2-strong, .lb2-gm')].map((x) => Number(x.textContent))]);
   const w = document.querySelector('.lb2 [data-act="hofview"][data-v="wins"]'); if (w) { w.click(); await sleep(40); }
   out.players = [...document.querySelectorAll('.lb2 [data-role="rows"] .lb2-lr')].map((el) => ({
     rank: Number(el.dataset.rank), tie: el.dataset.tie === '1', name: el.querySelector('.lb2-nmt').textContent.trim(),
@@ -243,14 +247,39 @@ ok('By Player: v2 Wins view = old By Player, row for row', same(canonRows(gold.p
 }
 // Each board's total plays (the header number).
 for (const id of Object.keys(gold.plays || {})) ok('plays header: ' + id, String(gold.plays[id]).replace(/[^\d]/g, '') === String((v2.plays || {})[id] || '').replace(/[^\d]/g, ''), { old: gold.plays[id], v2: (v2.plays || {})[id] });
-// Per-person golds: Hall of Fame = rank-1 rows in the old By Game standing.
+// Per-person golds: Hall of Fame = rank-1 rows in the old By Game standing. EXCEPT the medal-split games
+// (2026-11-03, Matt: "Each game should be considered its own game for gold medal leaderboard purposes";
+// js/leaderboard-ui.js LB2_MEDAL_SPLIT): v2 gives Spelling Bee's English and Espanol boards their own golds and
+// its All board none, so their golds are the old board's own English / Espanol tabs' rank-1 rows instead.
+const SPLIT = { spellingbee: ['en', 'es'] };
+const goldRows = (id) => SPLIT[id]
+  ? SPLIT[id].flatMap((l) => (gold.boards[`${id}|~~all~${l}~points`] || []).filter((r) => r.rank === 1))
+  : (gold.standing[id] || []).filter((r) => r.rank === 1);
 const want = {};
-for (const rows of Object.values(gold.standing)) for (const r of rows) if (r.rank === 1) want[r.name] = (want[r.name] || 0) + 1;
+for (const id of Object.keys(gold.standing)) for (const r of goldRows(id)) want[r.name] = (want[r.name] || 0) + 1;
 const have = Object.fromEntries((v2.hofNames || []).filter((x) => x[1] > 0));
 ok('golds per person: Hall of Fame = old By Game', same(Object.keys(want).sort().map((k) => [k, want[k]]), Object.keys(have).sort().map((k) => [k, have[k]])), { want, have });
-const oldGolds = Object.values(gold.standing).reduce((a, rows) => a + rows.filter((r) => r.rank === 1).length, 0);
+// Silver and bronze too: each person's [gold, silver, bronze] in v2's Medal Count = the old standing's places 1-3
+// (By Game's top 3 per game; the split games' language tabs), nobody missing, nobody extra.
+{
+  // Read from the old board's FULL ranking (its All tab), not By Game's card: the card shows 3 names, so a tie that
+  // makes a 4th is cut off there, while every tied player holds the medal. Hold'em is left out of silver/bronze:
+  // v2 gives an untouched starting bankroll no medal (lb2Standing `noMedal`), a rule of its own; its gold is checked above.
+  const placeRows = (id) => SPLIT[id]
+    ? SPLIT[id].flatMap((l) => (gold.boards[`${id}|~~all~${l}~points`] || []).filter((r) => r.rank <= 3))
+    : (gold.boards[`${id}|~~all~all~points`] || gold.standing[id] || []).filter((r) => r.rank <= 3 && (id !== 'holdem' || r.rank === 1));
+  const wantM = {};
+  for (const id of Object.keys(gold.standing)) for (const r of placeRows(id)) { const m = wantM[r.name] || (wantM[r.name] = [0, 0, 0]); m[r.rank - 1]++; }
+  // Hold'em's silver and bronze, as v2 counts them, come off v2's side too (see above).
+  const hb = (v2.holdemPlaces || []);
+  for (const [n, rank] of hb) if (rank === 2 || rank === 3) { const m = wantM[n] || (wantM[n] = [0, 0, 0]); m[rank - 1]++; }
+  const haveM = Object.fromEntries((v2.hofMedals || []).filter((x) => x[1].some((n) => n > 0)).map(([n, m]) => [n, m.slice(0, 3)]));
+  const diff = [...new Set([...Object.keys(wantM), ...Object.keys(haveM)])].filter((n) => JSON.stringify(wantM[n] || null) !== JSON.stringify(haveM[n] || null)).map((n) => ({ n, old: wantM[n] || null, v2: haveM[n] || null }));
+  ok(`gold, silver, bronze per person: Medal Count = old places 1-3 (${Object.keys(wantM).length} people)`, diff.length === 0, diff.slice(0, 4));
+}
+const oldGolds = Object.keys(gold.standing).reduce((a, id) => a + goldRows(id).length, 0);
 const v2Golds = v2.hof.reduce((a, r) => a + (r[0] || 0), 0);
-ok(`gold medals: v2 Hall of Fame ${v2Golds} = old By Game ${oldGolds}`, v2Golds === oldGolds);
+ok(`gold medals: v2 Hall of Fame ${v2Golds} = old By Game ${oldGolds} (Spelling Bee: its English and Espanol tabs)`, v2Golds === oldGolds);
 console.log(`\n${pass} passed, ${fail} failed (lang ${LANG}; old gold ${oldGolds}, v2 gold ${v2Golds})`);
 await br.close(); srv.kill();
 process.exit(fail ? 1 : 0);
