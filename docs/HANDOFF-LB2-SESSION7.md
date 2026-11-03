@@ -87,3 +87,7 @@ built: `docs/mockups/lb2-fixes-mockup-v1.{html,jpg}`. Popup: medal + NEW + title
 under it, body ONE short line in a lighter grey 18px/400, one picture per page; page 1 drops the "Computer and Online" and
 "=" lines (the Filler table shows both). Arrow Maze sheet (151 words to 45): ONE table (level x hints/hearts lost 0/1/2/3+)
 replaces the points card and the hints card; "How it is ranked" and "Tabs" cut; Rush in 3 lines. Waiting on Matt.
+Mockup v2 (Matt's notes on v1): popup table header "Difficulty" + "Points / per win" (two lines, centred over the
+column, every value centred under it; no Filler thumbnail); Arrow Maze "Hints used or lives lost"; the "counts once" and
+"Expert before 2 Nov" lines deleted; Rush = one line "Most arrows cleared wins." (Matt: "You're like explaining how to
+play, which is not the purpose of this screen"). `docs/mockups/lb2-fixes-mockup-v2.{html,jpg}`. NOT built.
