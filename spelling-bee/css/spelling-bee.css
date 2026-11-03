@@ -128,11 +128,17 @@
 .sb-root .sb-panel {
   position: absolute; inset: 0 0 0 0; z-index: 5; padding: 12px;
   background: var(--sb-bg); border: 1px solid var(--sb-line); border-top: 0; border-radius: 0 0 6px 6px;
-  overflow: hidden; margin-top: -9px;
+  overflow-x: auto; overflow-y: hidden; margin-top: -9px;
+  overscroll-behavior: contain; touch-action: pan-x; -webkit-overflow-scrolling: touch;
 }
 .sb-root .sb-panel[hidden] { display: none; }
-.sb-root .sb-panel-list { list-style: none; margin: 0; padding: 0; column-count: var(--sb-cols, 2); column-gap: 16px; column-fill: auto; height: 100%; font-size: var(--sb-pfs, 16px); }
-.sb-root .sb-panel-list li { line-height: 1.55; border-bottom: 1px solid var(--sb-line); break-inside: avoid; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Every word in full: columns as wide as their longest word, the list scrolls sideways (2026-11-03, Matt). */
+.sb-root .sb-panel-list {
+  list-style: none; margin: 0; padding: 0; font-size: 16px; width: max-content; min-width: 100%;
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--sb-rows, 1), auto);
+  grid-auto-columns: max-content; column-gap: 20px; align-content: start;
+}
+.sb-root .sb-panel-list li { line-height: 1.55; border-bottom: 1px solid var(--sb-line); white-space: nowrap; padding-right: 2px; }
 .sb-root .sb-panel-list li.is-pangram { font-weight: 800; }
 .sb-root .sb-panel-list li.is-bonus, .sb-root .sb-found-list .is-bonus { font-style: italic; }
 
