@@ -417,6 +417,18 @@ function ctSlotsHTML(g, daily) {
   const c = lb2CtCounts(g, daily);
   return `<span class="lb2-ctslots">${CT_ORDER.map((k) => `<span class="lb2-cts${c[k] ? '' : ' z'}">${lb2CtImg(k, 16)}<b class="num">${c[k] ? fmt(c[k]) : '·'}</b></span>`).join('')}</span>`;
 }
+/** Spelling Bee (2026-11-03, Matt): under the name, FOUR fixed columns so every row lines up ("all brains aligned
+ *  in a column, all bees (or lack there of) and all calendars"): the HIGHEST daily medal and how many days it was won
+ *  (gold if any, else silver, else bronze; an empty slot with none), Genius 🧠, Queen Bee 🐝 (empty with none) and days
+ *  played 📅. Display only: the counts are the old board's (beeRowFor, via lb2Board's `bee`). */
+function beeSlotsHTML(b) {
+  const top = [['first', 1], ['second', 2], ['third', 3]].find(([k]) => (b[k] | 0) > 0);
+  const slot = (icon, n, label) => `<span class="lb2-bees" role="img" aria-label="${esc(label)}"><span class="lb2-beei" aria-hidden="true">${icon}</span><b class="num">${fmt(n | 0)}</b></span>`;
+  const none = '<span class="lb2-bees" aria-hidden="true"></span>';
+  return `<span class="lb2-beeslots">${top ? slot(lb2Medal(top[1], 18), b[top[0]], t2('lb2_bee_place', { r: top[1], n: b[top[0]] | 0 })) : none}`
+    + `${slot('🧠', b.genius, t2('lb2_bee_genius', { n: b.genius | 0 }))}${(b.queen | 0) > 0 ? slot('🐝', b.queen, t2('lb2_bee_queen', { n: b.queen | 0 })) : none}`
+    + `${slot('📅', b.days, t2('lb2_bee_days', { n: b.days | 0 }))}</span>`;
+}
 const nohintPill = () => `<span class="lb2-pill lb2-nh">${esc(t2('lb2_nohint'))}</span>`;
 /** Under the name: lifetime only ("24 played"); the difficulty went to the number and the group divider. */
 function rowSub(r) {
@@ -503,7 +515,8 @@ function boardScreenHTML(top) {
       }
       lastGroup = grp;
       const val = game === 'contexto' ? ctValHTML(r.g, ctDaily) : dispHTML(game, r.html);
-      const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>` : rowSub(r);
+      const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>`
+        : game === 'spellingbee' && r.bee ? `<span class="lb2-sub">${beeSlotsHTML(r.bee)}</span>` : rowSub(r);
       return `${div}<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
       ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
     };
@@ -534,7 +547,10 @@ function boardScreenHTML(top) {
   // Session 3 (Matt, 2026-11-01): the tabs sit on top and the players right under them; Contexto's medal key
   // goes with the tabs. The pinned row shows only while the viewer's own row is off screen (render()).
   const key = game === 'contexto' && bests ? `<div class="lb2-recs lb2-key">${bests}</div>` : '';
-  const recs = bests && !key ? `<div class="lb2-recs">${bests}</div>` : '';
+  // 2026-11-03, Matt: the Bests block under a board is OFF on every board ("I don't like them anywhere ... Maybe
+  // down the road we can add a 'more stats' button"). Display only: b.records and bestsHTML still build it, so a
+  // later "more stats" button can show it again; nothing stored changes. Contexto's medal key above is a legend.
+  const recs = '';
   const showHead = b.rows.length && unit && game !== 'skeeball';
   // Matt, 2026-11-02: the (i) stays on top; the same sheet also opens from a button under EVERY board ("We should
   // explain how everything is calculated and ranked").
@@ -770,7 +786,8 @@ function sheetHTML(label, inner) {
     ${inner}<button type="button" class="lb2-done" data-act="helpclose">${esc(t2('lb2_done'))}</button></div></div>`;
 }
 function helpHTML() {
-  const lines = [t2('lb2_help_harder'), t2('lb2_help_medals'), t2('lb2_help_bests'), t2('lb2_help_info')];
+  // lb2_help_bests ("Bests: every level, all time.") left the list with the Bests block (2026-11-03); the string stays.
+  const lines = [t2('lb2_help_harder'), t2('lb2_help_medals'), t2('lb2_help_info')];
   return sheetHTML(t2('lb2_help_h'), `<h2 class="lb2-shh">${esc(t2('lb2_help_h'))}</h2>
     <div class="lb2-shape-key">${[4, 3, 2, 1].map((tr) => `<span>${shape(tr)}${esc(lb2TierWord(tr))}</span>`).join('')}</div>
     <ul class="lb2-help">${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`);
@@ -1117,8 +1134,8 @@ function ensureCss() {
   const el = document.createElement('style');
   el.id = 'lb2-css';
   el.textContent = `
-.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55;--l2-gold:#8A5A00}
-:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6);--l2-gold:#FFCE3A}
+.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55;--l2-gold:#8A5A00;--l2-heart:#E0243A;--l2-heartBg:#FCE4E7}
+:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6);--l2-gold:#FFCE3A;--l2-heart:#F2384C;--l2-heartBg:#3A1D23}
 html.gh-lb2-open,html.gh-lb2-open body{overflow:hidden;overscroll-behavior:none}
 .lb2{position:fixed;top:0;left:0;right:0;bottom:auto;height:100vh;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
 html.gh-compact .lb2{z-index:19;padding-bottom:calc(53px + max(6px, calc(env(safe-area-inset-bottom,0px) - 16px)))}
@@ -1148,9 +1165,11 @@ html.gh-compact .lb2-x{display:none}
 .lb2-gsorts{flex-wrap:nowrap;gap:6px;margin-top:10px}
 .lb2-gsorts .lb2-chip{flex:0 0 auto;min-height:40px;padding:0 13px;font-size:15px}
 .lb2-gsorts .lb2-hchip,.lb2-gsorts .lb2-morechip{width:44px;padding:0;justify-content:center;position:relative}
-.lb2-gsorts .lb2-hchip:not(.on){color:var(--l2-accent)}
+/* Every heart in v2 is RED, like the launcher's (2026-11-03, Matt): filled = on, outline = off (the shape, not the hue, is the signal). */
+.lb2-gsorts .lb2-hchip,.lb2-gsorts .lb2-hchip.on{color:var(--l2-heart)}
+.lb2-gsorts .lb2-hchip.on{background:var(--l2-heartBg)}
 .lb2-morechip select{position:absolute;inset:0;opacity:0;width:100%;height:100%;font-size:16px}
-.lb2-favh{display:inline-flex;vertical-align:-1px;margin-right:6px;color:var(--l2-accent)}
+.lb2-favh{display:inline-flex;vertical-align:-1px;margin-right:6px;color:var(--l2-heart)}
 .lb2-restcard{margin-top:18px}
 .lb2-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:16px}
 .lb2-pad{padding:4px 16px 16px}
@@ -1176,7 +1195,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-bar{min-height:60px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:4px 4px 0}
 .lb2-bar h1{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-icon{width:48px;height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--l2-text);border-radius:12px}
-.lb2-heart{color:var(--l2-accent)}
+.lb2-heart{color:var(--l2-heart)}
 .lb2-face{width:40px;height:40px;flex-shrink:0;border-radius:20px;background:var(--l2-chip);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 .lb2-pl{padding-left:8px}
 .lb2-plink{flex:1;min-width:0;display:flex;align-items:center;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;touch-action:manipulation}
@@ -1193,7 +1212,10 @@ html.gh-compact .lb2-x{display:none}
 .lb2-val{font-size:16px;font-weight:700;padding-right:8px;display:flex;align-items:center;gap:4px;white-space:nowrap}
 .lb2-val .lb-ctm{flex-shrink:0}
 .lb2-val .lb-mspct{font-size:14px}
-.lb2-shape{display:inline-flex;width:14px;height:14px;flex-shrink:0}
+/* The level-shape tile (2026-11-03, Matt: the Expert double diamond was small and off centre on its tile). ONE rule
+   sizes it: --sh is the tile's height, the shape is centred in it, and the double diamond is the same height as the
+   others, 1.7 times as wide (its own 34x20 viewBox). A place only ever sets --sh, never width/height. */
+.lb2-shape{--sh:14px;display:inline-flex;align-items:center;justify-content:center;width:var(--sh);height:var(--sh);flex-shrink:0;vertical-align:middle}
 .lb2-shape svg{width:100%;height:100%}
 .lb2-gm{font-size:14px;color:var(--l2-muted)}
 .lb2-lr.me .lb2-gm{color:inherit}
@@ -1241,7 +1263,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-sub{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--l2-muted);line-height:1.25}
 .lb2-lr.me .lb2-sub{color:inherit}
 .lb2-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px 1px 4px;border:1px solid currentColor;border-radius:10px;font-size:12px;font-weight:700;line-height:16px;white-space:nowrap;flex-shrink:0}
-.lb2-pill .lb2-shape{width:11px;height:11px;margin:0}
+.lb2-pill .lb2-shape{--sh:11px;margin:0}
 .lb2-lr{min-height:58px;padding:6px 4px}
 .lb2-val{max-width:46vw}
 .lb2-val img{flex-shrink:0}
@@ -1249,7 +1271,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-ctrlrow{display:flex;gap:8px;align-items:center}
 .lb2-ctrlrow>.lb2-seg{flex:1;min-width:0}
 .lb2-seg>button{gap:4px}
-.lb2-seg .lb2-shape{width:12px;height:12px}
+.lb2-seg .lb2-shape{--sh:13px}
 .lb2-segs{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
 .lb2-tabwrap{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:8px}
 .lb2-tabwrap .lb2-chip{min-height:44px;padding:0 14px;font-size:14px}
@@ -1259,7 +1281,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-msg{color:var(--l2-accent)}
 .lb2-tile b small{font-size:15px;color:var(--l2-muted);font-weight:600}
 .lb2-t2 .lb2-medal{display:inline-block;vertical-align:middle;margin:0 4px 0 0}
-.lb2-t2 .lb2-shape{display:inline-flex;width:12px;height:12px;vertical-align:middle;margin:0 2px}
+.lb2-t2 .lb2-shape{--sh:14px;margin:0 2px}
 .lb2-rv{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px}
 
 .lb2-shape{background:#fff;border-radius:4px;padding:1px;box-sizing:content-box}
@@ -1314,8 +1336,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-div .lb2-pill{text-transform:none;letter-spacing:0}
 .lb2-div0{min-height:8px;padding:0}
 .lb2-val .lb2-shape{margin-right:3px}
-.lb2-shape.x2{width:24px}
-.lb2-seg .lb2-shape.x2,.lb2-t2 .lb2-shape.x2{width:20px}
+.lb2 .lb2-shape.x2{width:calc(var(--sh) * 1.7)}
 .lb2-pill.lb2-nh{padding:1px 7px}
 .lb2-v{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .lb2-vline{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;color:var(--l2-text);white-space:normal;overflow:visible}
@@ -1325,8 +1346,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-recs .lb-rec span{color:var(--l2-muted)}
 .lb2-recs .lb-rec em.lb2-mine{color:var(--l2-accent)}
 .lb2-seg.stk>button{flex-direction:column;gap:2px;font-size:13px;line-height:1.1;padding:2px 1px}
-.lb2-seg.stk .lb2-shape{width:13px;height:13px}
-.lb2-seg.stk .lb2-shape.x2{width:22px}
+.lb2-seg.stk .lb2-shape{--sh:13px}
 .lb2-rushrow{justify-content:flex-end}
 .lb2-rushrow .lb2-chip{min-height:40px;padding:0 12px 0 16px;gap:8px}
 .lb2-lr.lb2-hofr{gap:6px}
@@ -1336,7 +1356,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-close .lb2-vsr{flex-wrap:nowrap;white-space:nowrap}
 .lb2-need{display:block;color:var(--l2-text);white-space:normal;overflow:visible}
 .lb2-need b{font-weight:800;color:var(--l2-gold)}
-.lb2-need .lb-dshape,.lb2-need svg{width:14px;height:14px;vertical-align:-2px;margin:0 3px 0 1px}
+.lb2-need .lb2-shape{--sh:14px;margin:0 4px 0 1px}
 .lb2-close .lb2-vsr .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-frow{display:flex;gap:8px;align-items:stretch}
 .lb2-catpick{position:relative;flex:1;min-width:0;min-height:44px;border-radius:12px;background:var(--l2-seg);display:flex;align-items:center;gap:8px;padding:0 36px 0 14px;font-size:15px;font-weight:600;color:var(--l2-text)}
@@ -1354,8 +1374,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-sortpick select{padding-left:36px}
 .lb2-favseg{display:inline-flex;align-items:center;gap:5px}
 .lb2-gap b{font-weight:700}
-.lb2-gap .lb2-shape{width:12px;height:12px;vertical-align:-2px;margin-right:3px;display:inline-flex}
-.lb2-gap .lb2-shape.x2{width:20px}
+.lb2-gap .lb2-shape{--sh:13px;margin-right:3px}
 .lb2-shh{margin:0;font-size:20px;font-weight:700}
 .lb2-help-key,.lb2-shape-key{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:15px;font-weight:600}
 .lb2-shape-key>span{display:inline-flex;align-items:center;gap:6px}
@@ -1376,16 +1395,18 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 .lb2-cts b{font-size:13px;font-weight:700;color:var(--l2-text)}
 .lb2-cts.z{opacity:.45}
 .lb2-cts.z b{font-weight:600}
+.lb2-beeslots{display:grid;grid-template-columns:repeat(4,44px);gap:2px;align-items:center}
+.lb2-bees{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap}
+.lb2-beei{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
+.lb2-beei .lb-ctm,.lb2-beei img{height:18px;width:auto}
+.lb2-bees b{font-size:13px;font-weight:700;color:var(--l2-text)}
 :root.gh-dark .lb2 .lb-ctm img,:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .lb2-bar h1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.1}
 html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-rview{flex:0 0 auto;width:46%;min-height:48px}
 .lb2-ctrlrow>.lb2-seg.stk{flex:1}
-:root:not(.gh-dark) .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;width:15px;height:15px}
-:root:not(.gh-dark) .lb2-shape.x2{width:26px}
-:root:not(.gh-dark) .lb2-seg .lb2-shape{width:13px;height:13px}
-:root:not(.gh-dark) .lb2-seg .lb2-shape.x2,:root:not(.gh-dark) .lb2-t2 .lb2-shape.x2{width:22px}
-.lb2-shape svg{width:100%;height:100%;display:block}
+:root:not(.gh-dark) .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px}
+.lb2 .lb2-shape>svg{width:100%;height:100%;display:block;margin:0;flex:none}
 @media (max-width:380px){.lb2-ic{width:48px;height:30px}.lb2-row{gap:10px;padding:8px 10px}}
 
 /* Matt's 12 (2026-11-02) */
@@ -1415,8 +1436,7 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-kc>b>*{flex-shrink:0}
 .lb2-kc>b .lb2-shape{margin-right:6px}
 .lb2-kc>b .lb2-ctv img{height:30px;width:auto}
-.lb2-kc>b .lb2-shape{width:18px;height:18px}
-.lb2-kc>b .lb2-shape.x2{width:30px}
+.lb2-kc>b .lb2-shape{--sh:18px}
 .lb2-kc>b .lb2-best{font-size:26px;color:var(--l2-text)}
 .lb2-kc>span{font-size:13px;color:var(--l2-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .lb2-backto{gap:8px}

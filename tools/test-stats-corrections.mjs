@@ -12,6 +12,10 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // setSkeeballCorrection) and the admin page's Scores section need a browser and a real database and
 // are not covered here, the same caveat test-admin-config.mjs carries.
 //
+// Since 2026-11-03 it also covers the integrity voids for Golf (a voided record has NO best round, so it sorts
+// LAST instead of first) and Contexto (the Daily tab's own counters, ct.d, are voided with the rest); the
+// last section builds those records with the games' own recorders and runs them through the real aggregation.
+//
 // THE LAW is the reason most of these assertions exist. A correction is an OVERLAY, so:
 //   rule 1  the raw record is never touched - every test below checks the input is unchanged
 //   rule 2  nothing is subtracted from a counter it cannot be attributed to (balls, 100s, 50s and
@@ -19,7 +23,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 //   rule 4  a best is not a sum and cannot be un-summed: it survives only if a later score beat the
 //           voided one, and otherwise reads 0 rather than an invented number
 
-import { correctBoard, correctSkeeballRecord, correctStats, correctionFor, snapshotOf } from '../js/stats-corrections.js';
+import { correctBoard, correctSkeeballRecord, correctStats, correctionFor, snapshotOf, voidIntegrityGame } from '../js/stats-corrections.js';
 
 let passed = 0;
 const failures = [];
@@ -134,6 +138,147 @@ console.log('\n--- practice racks never reach the record ---');
   const ui = readFileSync(new URL('./js/game-stats-ui.js', __ROOT_URL), 'utf8');
   ok('My Stats shows practice racks on their own labelled row (stored is not enough)',
     /sk\.practice/.test(ui) && /gs_sk_practice/.test(ui));
+}
+
+console.log('\n--- integrity voids: Golf must not rank first, Contexto must not keep its Daily medals (2026-11-03) ---');
+// Records are written by the games' OWN recorders (js/game-stats.js), like tools/test-integrity.mjs, so
+// the voided shape is the one a real device produces. The two bugs this pins:
+//   GOLF     the void zeroed gf.bestRoundByCourse; players-agg merges that map with Math.min, so the 0
+//            beat every real round across a person's devices, and golfBestAt read it as 0 minus par
+//            ("12 under"): a voided player ranked FIRST. (The void's own header says it "sorts last".)
+//   CONTEXTO the void zeroed ct.* but not ct.d, the Daily tab's own copy, so a voided player kept every
+//            Daily medal (and fewestNH, a best, was left too).
+{
+  const { readFileSync } = await import('node:fs');
+  const lsStore = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (lsStore.has(k) ? lsStore.get(k) : null),
+    setItem: (k, v) => void lsStore.set(k, String(v)),
+    removeItem: (k) => void lsStore.delete(k),
+    clear: () => lsStore.clear(),
+    key: (i) => Array.from(lsStore.keys())[i] ?? null,
+    get length() { return lsStore.size; },
+  };
+  const G = await import('../js/game-stats.js');
+  const AGG = await import('../js/players-agg.js');
+  const RANK = await import('../js/leaderboard-rank.js');
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const warn = console.error; console.error = () => {};   // "ran OUTSIDE withMode": true here, and not what this test is about
+
+  G.recordGolf('pinevalley', { courseId: 'pinevalley3', holes: 3, strokes: 10, points: 14, birdies: 1, longestDriveYd: 250,
+    holeScores: { 'pinevalley:1': 3, 'pinevalley:2': 3, 'pinevalley:3': 4 } });
+  G.recordGolf('pinevalley', { courseId: 'pinevalley9', holes: 9, strokes: 38, points: 20,
+    holeScores: { 'pinevalley:4': 4, 'pinevalley:5': 4 } });
+  // Contexto: a gold, a silver, a bronze and a give-up ON THEIR DAY (daily: true), then a gold from before
+  // the Daily board existed (no day recorded).
+  G.recordContexto('en', true, { guesses: 4, hints: 0, daily: true });
+  G.recordContexto('en', true, { guesses: 9, hints: 1, daily: true });
+  G.recordContexto('en', true, { guesses: 20, hints: 2, daily: true });
+  G.recordContexto('en', false, { guesses: 0, hints: 3, daily: true });
+  G.recordContexto('en', true, { guesses: 30, hints: 0 });
+  console.error = warn;
+  const stored = G.loadStoredStats();
+  const golfRaw = stored.games.golf, ctRaw = stored.games.contexto;
+  ok('the recorders wrote what this test assumes (2 golf rounds, 4 daily Contexto plays)',
+    golfRaw.gf.rounds === 2 && ctRaw.ct.d && ctRaw.ct.d.played === 4 && ctRaw.ct.d.noHint === 1 && ctRaw.ct.noHint === 2,
+    JSON.stringify([golfRaw.gf.rounds, ctRaw.ct.d, ctRaw.ct.noHint]));
+
+  console.log('\n  -- Golf --');
+  const golfBefore = JSON.stringify(golfRaw);
+  const golfV = voidIntegrityGame(golfRaw, 'golf');
+  eq('GOLF void: no best round on any course (absent, not 0)', golfV.gf.bestRoundByCourse, {});
+  eq('GOLF void: no hole records either', golfV.gf.bestHole, {});
+  ok('GOLF void: the rounds still count as PLAYED, with no win and no points',
+    golfV.gf.rounds === 2 && golfV.gf.holes === 12 && golfV.total.played === 2 && golfV.total.won === 0 && golfV.gf.points === 0);
+  eq('THE RAW GOLF RECORD IS UNTOUCHED (rule 1)', JSON.stringify(golfRaw), golfBefore);
+  eq('an honest record still reads 2 under on Pine Valley (holes 1-3)', RANK.golfBestAt({ games: { golf: golfRaw } }), -2);
+  eq('the voided record has NO number', RANK.golfBestAt({ games: { golf: golfV } }), null);
+  {
+    // A board built BEFORE this fix still carries { pinevalley3: 0 } until the server rebuilds it.
+    const old = clone(golfRaw); old.gf.bestRoundByCourse = { pinevalley3: 0, pinevalley9: 0 };
+    eq('an already-built board with best round 0 reads as no number, never "12 under"', RANK.golfBestAt({ games: { golf: old } }), null);
+  }
+  {
+    const worse = clone(golfRaw); worse.gf.bestRoundByCourse = { pinevalley3: 14 };          // 2 over
+    const rows = [['voided', golfV], ['honest', golfRaw], ['over par', worse]]
+      .map(([name, golf]) => ({ name, v: RANK.golfBestAt({ games: { golf } }) }))
+      .sort((a, b) => RANK.compareBoardMetric(a.v, b.v, 'golf'));
+    eq('the Golf board order: best honest round, worse honest round, the voided record LAST',
+      rows.map((r) => r.name), ['honest', 'over par', 'voided']);
+  }
+  {
+    // Through the real aggregation: a person with a voided phone AND an honest one, and a person whose only
+    // phone is voided. Alex's honest +1 must stand (the void must not win the cross-device Math.min).
+    const dev = (name, code, golf) => ({ profile: { name, playerId: code }, stats: { games: { golf: clone(golf) } }, updatedAt: 1 });
+    const alexOther = clone(golfRaw); alexOther.gf.bestRoundByCourse = { pinevalley3: 13 };     // 1 over
+    const caseyRec = clone(golfRaw); caseyRec.gf.bestRoundByCourse = { pinevalley3: 14 };       // 2 over
+    const players = { a1: dev('Alex', 'AAAAA', golfRaw), a2: dev('Alex', 'AAAAA', alexOther),
+      b1: dev('Blake', 'BBBBB', golfRaw), c1: dev('Casey', 'CCCCC', caseyRec) };
+    const groups = AGG.aggregatePlayers(players, { integrity: { a1: { golf: true }, b1: { golf: true } } });
+    const num = (name) => RANK.golfBestAt(groups.find((g) => g.name === name));
+    eq('aggregated: a person\'s honest phone keeps its best when the other phone is voided', num('Alex'), 1);
+    eq('aggregated: a person whose only phone is voided has no number', num('Blake'), null);
+    eq('aggregated: an honest player is unaffected', num('Casey'), 2);
+    const order = groups.map((g) => ({ name: g.name, v: RANK.golfBestAt(g) })).sort((a, b) => RANK.compareBoardMetric(a.v, b.v, 'golf')).map((r) => r.name);
+    eq('aggregated Golf board: Alex, Casey, then Blake (voided) last', order, ['Alex', 'Casey', 'Blake']);
+    ok('the voided phone is still PLAYED on the person\'s record (Blake: 2 rounds, 0 wins)',
+      groups.find((g) => g.name === 'Blake').games.golf.total.played === 2 && groups.find((g) => g.name === 'Blake').games.golf.total.won === 0);
+  }
+  {
+    const ui = readFileSync(new URL('./js/game-stats-ui.js', __ROOT_URL), 'utf8');
+    ok('My Stats\' Golf table skips a stored 0 round (no "12 under" row for a record voided before the fix)',
+      /Object\.keys\(gf\.bestRoundByCourse \|\| \{\}\)\.filter\(\(id\) => gf\.bestRoundByCourse\[id\] > 0\)/.test(ui));
+  }
+
+  console.log('\n  -- Contexto --');
+  const ctBefore = JSON.stringify(ctRaw);
+  const ctV = voidIntegrityGame(ctRaw, 'contexto');
+  ok('CONTEXTO void: every lifetime medal, solve, guess count and best is 0',
+    ['solved', 'noHint', 'silver', 'bronze', 'guesses', 'fewest', 'fewestNH'].every((k) => ctV.ct[k] === 0),
+    JSON.stringify(ctV.ct));
+  ok('CONTEXTO void: the DAILY medals, solves and guesses are 0 too (the Daily tab reads ct.d)',
+    ['solved', 'noHint', 'silver', 'bronze', 'guesses'].every((k) => ctV.ct.d[k] === 0), JSON.stringify(ctV.ct.d));
+  ok('CONTEXTO void: the daily puzzles still count as PLAYED (4) and the hints used stay (a count)',
+    ctV.ct.d.played === 4 && ctV.ct.d.hints === ctRaw.ct.d.hints && ctV.ct.hints === ctRaw.ct.hints && ctV.total.played === 5 && ctV.total.won === 0);
+  eq('THE RAW CONTEXTO RECORD IS UNTOUCHED (rule 1)', JSON.stringify(ctRaw), ctBefore);
+  ok('an honest daily record scores medals; the voided one scores 0', RANK.ctMedalScore(ctRaw.ct.d) > 0 && RANK.ctMedalScore(ctV.ct.d) === 0 && RANK.ctMedalScore(ctV.ct) === 0);
+  ok('the Daily tab: the voided player sorts BELOW an honest one', RANK.compareContexto(ctRaw.ct.d, ctV.ct.d) < 0);
+  {
+    // No Daily counters at all (plays from before the Daily board): no `d` and no `fewestNH` is invented.
+    const old = { total: { played: 3, won: 3, lost: 0 }, byDiff: {}, ct: { solved: 3, guesses: 9, hints: 0, noHint: 3, silver: 0, bronze: 0, fewest: 2 } };
+    const v = voidIntegrityGame(old, 'contexto');
+    ok('a Contexto record with no Daily counters voids without inventing any', !('d' in v.ct) && !('fewestNH' in v.ct) && v.ct.noHint === 0 && v.total.played === 3);
+  }
+  {
+    // Through the real aggregation: Dana's voided phone must not add its Daily medals to her honest phone's.
+    const dev = (name, code, contexto) => ({ profile: { name, playerId: code }, stats: { games: { contexto: clone(contexto) } }, updatedAt: 1 });
+    const honest = { total: { played: 2, won: 2, lost: 0 }, byDiff: {}, ct: { solved: 2, guesses: 10, hints: 0, noHint: 2, silver: 0, bronze: 0, fewest: 5, fewestNH: 5,
+      d: { played: 2, solved: 2, guesses: 10, hints: 0, noHint: 2, silver: 0, bronze: 0 } } };
+    const players = { d1: dev('Dana', 'DDDDD', ctRaw), d2: dev('Dana', 'DDDDD', honest), e1: dev('Eli', 'EEEEE', ctRaw), f1: dev('Fay', 'FFFFF', honest) };
+    const groups = AGG.aggregatePlayers(players, { integrity: { d1: { contexto: true }, e1: { contexto: true } } });
+    const ct = (name) => groups.find((g) => g.name === name).games.contexto.ct;
+    ok('aggregated: Dana\'s Daily medals are her honest phone\'s only (2 gold), not plus the voided phone\'s', ct('Dana').d.noHint === 2 && ct('Dana').d.solved === 2 && ct('Dana').d.silver === 0 && ct('Dana').d.bronze === 0, JSON.stringify(ct('Dana').d));
+    ok('aggregated: Eli (only phone voided) has no Daily medals but still played 4 daily puzzles',
+      ct('Eli').d.noHint === 0 && ct('Eli').d.solved === 0 && ct('Eli').d.played === 4 && !(ct('Eli').fewestNH > 0), JSON.stringify(ct('Eli')));
+    ok('aggregated Daily order: Fay and Dana (honest) both rank above Eli (voided)',
+      RANK.compareContexto(ct('Fay').d, ct('Eli').d) < 0 && RANK.compareContexto(ct('Dana').d, ct('Eli').d) < 0);
+  }
+  {
+    // The guard that makes the NEXT daily counter safe: every field players-agg sums in ct.d is zeroed by
+    // the void, except the two that are counts of games / hints.
+    const agg = readFileSync(new URL('./js/players-agg.js', __ROOT_URL), 'utf8');
+    const m = /for \(const k of (\[[^\]]*\])\) dst\.ct\.d\[k\]/.exec(agg);
+    const list = m ? JSON.parse(m[1].replace(/'/g, '"')) : [];
+    ok('players-agg\'s ct.d field list was found', list.length >= 6 && list.includes('noHint'), JSON.stringify(list));
+    const KEPT = ['played', 'hints'];
+    const probe = { total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ct: { solved: 1, d: Object.fromEntries(list.map((k) => [k, 7])) } };
+    const out = voidIntegrityGame(probe, 'contexto').ct.d;
+    const leaked = list.filter((k) => !KEPT.includes(k) && out[k] !== 0);
+    ok('every Daily counter the aggregator sums is zeroed by the void (except played, hints)', leaked.length === 0, `not zeroed: ${leaked.join(', ')}`);
+    ok('...and played / hints are the ones kept', KEPT.every((k) => out[k] === 7));
+    const lb = readFileSync(new URL('./js/leaderboard-ui.js', __ROOT_URL), 'utf8');
+    ok('the Daily tab reads ct.d (so zeroing ct.d is what empties it)', /const ctDailyOf = \(g\) => ctOf\(g\)\.d \|\| \{\}/.test(lb));
+  }
 }
 
 console.log(`\nStats corrections tests: ${passed} passed, ${failures.length} failed.`);

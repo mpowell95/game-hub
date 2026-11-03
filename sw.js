@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1436;
-const CACHE = 'game-hub-v1438';
+const CACHE = 'game-hub-v1443';
 
 const ASSETS = [
   './',
@@ -846,7 +846,7 @@ const REST_MANIFEST = {
   './js/back-stack.js': '30b257fa2a',
   './js/lb-rules.js': '229e7a9b85',
   './js/lb-points.js': '72c4ab65eb',
-  './js/lb-points-sheet.js': '66aee8f5e5',
+  './js/lb-points-sheet.js': '9a4f24449d',
   './js/lb-rank-sheet.js': '51d64b0d92',
   './js/points-toast.js': 'd4c3e9ddc0',
   './js/lb2-lost.js': '1c5e1679ff',
@@ -860,7 +860,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': 'b1834b017a',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '53b879cdbf',
+  './js/game-stats-ui.js': '0cd94b24d1',
   './js/stats-net.js': '6281c321bf',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
@@ -889,7 +889,7 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': 'e52eb805fe',
+  './js/stats-corrections.js': '2bd58db60c',
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
@@ -897,11 +897,11 @@ const REST_MANIFEST = {
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': '14c91fa70c',
-  './js/leaderboard2-ui.js': '6de93b56d2',
+  './js/leaderboard-ui.js': 'de2793c2e2',
+  './js/leaderboard2-ui.js': '7010a01568',
   './js/leaderboard2-boards.js': 'afbc6ba443',
-  './js/leaderboard2-strings.js': 'ce8ef9c22b',
-  './js/leaderboard-rank.js': '4fe1b42b0f',
+  './js/leaderboard2-strings.js': '7de03b0de3',
+  './js/leaderboard-rank.js': 'aa4d6adac9',
   './js/arrow-maze-time.js': 'ab86cff936',
   './js/gridlock-points.js': '8a4fcce246',
   './js/word-weaver-points.js': 'bfccad1b76',

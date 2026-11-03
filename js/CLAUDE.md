@@ -587,6 +587,7 @@ their statsIds); the raw record is untouched and shown. **Applied in all three:*
 (before merge), `game-stats-ui.js` (incl. first paint), `skeeball/js/ui.js`. Lifetime counters with no
 per-machine breakdown are left alone. Hold'em: `corrections.holdem.<statsId>` via `correctHoldemLedger`;
 money never `| 0`. Testing machines record to `sk.practice` (shown, counted by nothing).
+**Integrity voids (`voidIntegrityGame`) zero what a board shows and EMPTY what a 0 would win** (2026-11-03): a lower-is-better per-key map (Golf `bestRoundByCourse`, `bestHole`) is emptied, since 0 reads as a perfect round and `Math.min`-merges across a person's devices (a voided Golf player ranked first); Contexto's Daily counters (`ct.d`, the Daily tab's own copy) are voided with the lifetime ones, `played`/`hints` kept. A new score field a board reads needs a void entry the day it ships; `tools/test-stats-corrections.mjs` fails on a `ct.d` counter the void misses.
 
 ## The shared profile — contract and consumers
 
