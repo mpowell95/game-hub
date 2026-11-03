@@ -95,3 +95,7 @@ Mockup v3 (Matt: "nice", then 4 notes): a 6px gap sets Online apart from Hard; p
 button picture sits in a dark frame with a 👆 under "Each game scores differently. / Tap this on its leaderboard:" (Matt:
 a bare button "is confusing. People are going to try clicking on it"); Arrow Maze sheet hugs its content (no empty band
 above Done). `docs/mockups/lb2-fixes-mockup-v3.{html,jpg}`. NOT built.
+Mockup v4: v3's frame and 👆 on page 2 were NOT asked for (Matt: "put it back how we had it"); page 2 is back to the built
+wording "Each game is different. / Find this on its leaderboard:" + the plain button. No stretched spacing: the popup is
+as tall as its taller page (702 px vs 734 at 402 wide), centred; even gaps on both pages. Online's gap kept.
+`docs/mockups/lb2-fixes-mockup-v4.{html,jpg}`. NOT built.
