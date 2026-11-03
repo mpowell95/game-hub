@@ -3,6 +3,26 @@
 **Written by a session, not by Matt.** Quotes marked "Matt:" are his exact words. Anything not quoted is
 the writing session's summary or suggestion and is **NOT cleared for players**.
 
+## Five v2 tidy-ups, ADMIN DEVICES ONLY (2026-11-03 overnight, v1439-v1444)
+
+Players still get the old board; none of this is released.
+- (v1439, #1468) **No Bests block under any board** (`.lb2-recs`). Matt: "I don't like them anywhere ... Maybe down the
+  road we can add a 'more stats' button." Display only: `lb2Board`'s `records` and `bestsHTML` still build it, for that
+  button. Contexto's medal key under its tabs stays (a legend, not stats). The help sheet's "Bests" line went with it.
+- (v1440, #1469) **Every v2 heart is red** (`--l2-heart`, light #E0243A, dark #F2384C): Games list rows, board header,
+  favorites-first chip (filled + light red tint = on, outline = off). The launcher's ♥ is the red heart Matt sees on
+  his iPhone (its CSS says #f2b705, but iOS draws U+2665 as the red emoji).
+- (v1441, #1470) **The Expert double diamond is full size and centred.** The Me tab's need line forced every svg to
+  14x14, shrinking ◆◆ into the left of its tile. Now ONE rule sizes the tile everywhere in v2: `--sh` = its height,
+  shape centred, ◆◆ 1.7x as wide at the same height (a place sets only `--sh`). Sheets: `.lbps-sh.x2` 24 -> 31px.
+- (v1442, #1471) **Spelling Bee rows: four fixed columns** under each name: the HIGHEST daily medal (gold, else
+  silver, else bronze) and its count, 🧠, 🐝 (empty slot with none), 📅. `lb2Board` rows carry `bee` (beeRowFor,
+  additive); the old board's chips are unchanged.
+- (v1444) **Me tab: Golds | Lost | Closest**, one list at a time, under the medal tiles; the switcher sticks to the
+  top while a long list scrolls. No section titles; "Not played yet" is gone (`lb2Records` still returns `fresh`).
+  Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
+  list: "Nothing yet".
+
 ## BUILT, ADMIN DEVICES ONLY (v1429, session 6)
 
 Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." Mockup v7 is built:

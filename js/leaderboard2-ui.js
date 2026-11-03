@@ -92,6 +92,12 @@ function loadSort() { const v = readPref().sort; return SORTS.includes(v) ? v : 
 // Favorites first (Matt, 2026-11-02: the heart button on the Games tab's sort row), default on; a preference.
 function favFirst() { return readPref().favFirst !== false; }
 function saveFavFirst(on) { try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, favFirst: !!on, updatedAt: Date.now() })); } catch { /* a preference */ } }
+// Me's list (2026-11-03, Matt): Golds | Lost | Closest, one at a time; the last one picked is remembered on this
+// phone (`meList` added to gamehub.lb2.v1, a preference, try/catch both ways; kept in memory too if storage fails).
+const ME_LISTS = ['gold', 'lost', 'close'];
+let _meList = '';
+function loadMeList() { const v = readPref().meList; return ME_LISTS.includes(v) ? v : (ME_LISTS.includes(_meList) ? _meList : ''); }
+function saveMeList(v) { _meList = v; try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, meList: v, updatedAt: Date.now() })); } catch { /* a preference */ } }
 function saveSort(v) {
   try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, sort: v, updatedAt: Date.now() })); } catch { /* a preference: best effort */ }
 }
@@ -669,9 +675,14 @@ function meHTML() {
   // Three tiles = the viewer's gold, silver and bronze medals (the Hall of Fame Medals row); a tap opens Hall of Fame.
   const mp = ((_model.hof.find((x) => x.key === _meKey) || {}).p) || [0, 0, 0];
   const tiles = `<div class="lb2-tiles">${[1, 2, 3].map((n) => `<button type="button" class="lb2-tile lb2-mtile" data-act="tab" data-v="hof">${medal(n, 'sm')}<b class="num">${fmt(mp[n - 1])}</b></button>`).join('')}</div>`;
-  // Records held: the viewer's number under the game's name (full width), the gold medal at the right.
-  const held = R.held.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_hold_h'))}</h2><div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div></div>` : '';
+  // Matt, 2026-11-03: "I don't love the Closest to a Record title... it's not obvious it's a new section and it's
+  // wordy. Maybe we add a new clickable section towards the top? So you can view one of the lists at a time? Your
+  // golds, your recently lost records, and the how far away records are list. We don't need the 'haven't played'
+  // list." So: the medal tiles, then ONE switcher Golds | Lost | Closest (it sticks to the top while a long list
+  // scrolls), then that one list, no section titles. "Not played yet" is not drawn (lb2Records still returns R.fresh).
+  // Golds = records held: the viewer's number under the game's name (full width), the gold medal at the right.
+  const held = R.held.length ? `<div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Closest to a record: ONE line, how far you are from gold ("5 points for gold"), the difference in gold, never
   // the viewer's number beside the record's (Matt, 2026-11-02/03). The maths is needOf in js/leaderboard-ui.js.
   // Variant B (Matt picks; test-only flag): only games where the viewer is 2nd or 3rd, closest gap first.
@@ -682,20 +693,22 @@ function meHTML() {
     // The board's own number style (golf words, digit groups), the level's shape riding the number (round 4).
     return t2('lb2_need', { k: n.k, v: esc(dispText(x.id, n.v)), n: n.n, sh: n.tier ? shape(n.tier) : '' });
   };
-  const close = closeRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_close_h'))}</h2><div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
+  const close = closeRows.length ? `<div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
       <span class="lb2-t2 lb2-need num">${needLine(x)}</span></span>
-      <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
+      <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Lost records: a game the viewer held that someone else holds now; who holds it, the day it was noticed, the viewer's place.
   const day = (ms) => { try { return new Date(ms).toLocaleDateString(LOC(), { month: 'short', day: 'numeric' }); } catch { return ''; } };
   const lostRows = _lost.filter((x) => _model.games.includes(x.game));
-  const lost = lostRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_lost_h'))}</h2><div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.game)}">
+  const lost = lostRows.length ? `<div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.game)}">
       ${art(x.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.game))}</span><span class="lb2-t2">${medal(1, 'xs')}${esc(x.takenBy.join(', '))} · ${esc(day(x.at))}</span></span>
-      <span class="lb2-right">${placeHTML(defPlace(x.game, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
-  const fresh = R.fresh.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_fresh_h'))}</h2><div class="lb2-card">${R.fresh.map((x) => `<div class="lb2-row sm">
-      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vsr">${holderHTML(x)}<span class="lb2-rv num">${valHTML(x.id, x.recVal)}</span></span></span>
-      ${playable(x.id) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(x.id)}">${esc(t2('lb2_play'))}</button>` : ''}</div>`).join('')}</div></div>` : '';
-  const body = R.me ? tiles + held + lost + close + fresh : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
+      <span class="lb2-right">${placeHTML(defPlace(x.game, _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
+  // Which list: the one picked last; else the first that has rows (Golds, Lost, Closest); else Golds.
+  const lists = { gold: held, lost, close };
+  const which = loadMeList() || ME_LISTS.find((k) => lists[k]) || 'gold';
+  const sw = `<div class="lb2-mesw">${seg(ME_LISTS.map((v) => ({ v, label: t2('lb2_me_' + v) })), which, 'melist')}</div>`;
+  const list = lists[which] || `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
+  const body = R.me ? tiles + sw + list : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   return `${headHTML()}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${body}</div></div>`;
 }
 
@@ -932,6 +945,17 @@ function onClick(e) {
       pushLevel({ kind: 'player', key: top.key, all: false }); return;
     }
     case 'back': if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); return;
+    case 'melist': {
+      if (!ME_LISTS.includes(v)) return;
+      // Scrolled past the medal tiles (the switcher stuck on top): the new list starts right under the switcher.
+      const sc = _host.querySelector('.lb2-page [data-role="scroll"]'), tl = _host.querySelector('.lb2-tiles');
+      const stuckAt = sc && tl ? Math.round(tl.getBoundingClientRect().bottom - sc.getBoundingClientRect().top + sc.scrollTop + 8) : 0;
+      const wasStuck = !!sc && sc.scrollTop > stuckAt;
+      saveMeList(v); render({ keepScroll: true });
+      const s2 = wasStuck && _host.querySelector('.lb2-page [data-role="scroll"]');
+      if (s2) s2.scrollTop = stuckAt;
+      return;
+    }
     case 'favfirst': saveFavFirst(!favFirst()); render(); return;
     case 'gsortc': if (SORTS.includes(el.dataset.v)) { saveSort(el.dataset.v); render(); } return;
     case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
@@ -1395,6 +1419,7 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 .lb2-cts b{font-size:13px;font-weight:700;color:var(--l2-text)}
 .lb2-cts.z{opacity:.45}
 .lb2-cts.z b{font-weight:600}
+.lb2-mesw{position:sticky;top:0;z-index:2;margin:-8px 0;padding:8px 0;background:var(--l2-bg)}
 .lb2-beeslots{display:grid;grid-template-columns:repeat(4,44px);gap:2px;align-items:center}
 .lb2-bees{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap}
 .lb2-beei{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
