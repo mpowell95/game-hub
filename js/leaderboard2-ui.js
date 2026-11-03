@@ -394,14 +394,19 @@ function unitLabel(game, st, unit) {
   if (game === 'skeeball') return t2(st.view === 'high' ? 'lb2_sk_best' : 'lb2_sk_total');
   return unit;
 }
+/** "N more to take the record" (or "Beat X on Hard to take the record"), from the board's gap; '' for none. */
+function gapLine(g) {
+  if (!g) return '';
+  return t('lb_gap', g.k === 'tier' ? { k: 'tier', v: `<b>${esc(g.v)}</b>`, tier: esc(g.tier) } : { k: g.k, v: `<b>${esc(g.v)}</b>`, n: g.n });
+}
 /** The pinned row's line: 1st; or how much more TAKES the record (Matt, 2026-11-02: Ana likes the old board's
  *  "how close you are to beating someone's record"; the number now beats it, round 4's objection was that the old
  *  one only tied it); or, where there is no honest number, the record beside the viewer's own number. */
 function pinLine(game, b, me, tiered) {
   if (!me) return esc(t2('lb2_not_ranked'));
   if (me.rank === 1) return esc(t2(me.tie ? 'lb2_first_tie' : 'lb2_first'));
-  const g = b.gap ? b.gap(me.key) : null;
-  if (g) return t('lb_gap', g.k === 'tier' ? { k: 'tier', v: `<b>${esc(g.v)}</b>`, tier: esc(g.tier) } : { k: g.k, v: `<b>${esc(g.v)}</b>`, n: g.n });
+  const gl = b.gap ? gapLine(b.gap(me.key)) : '';
+  if (gl) return gl;
   const rec = b.rows[0];
   if (!rec || game === 'contexto' || !rec.text || rec.text === '—') return '';
   return `${esc(t2('lb2_record'))} ${tiered ? shape(rec.tier) : ''}<b>${esc(dispText(game, rec.text))}</b>`;
@@ -505,8 +510,12 @@ function boardScreenHTML(top) {
       lastGroup = grp;
       const val = game === 'contexto' ? ctValHTML(r.g, ctDaily) : dispHTML(game, r.html);
       const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>` : rowSub(r);
+      // Your own row says how close you are to the record (Matt, 2026-11-02, for Ana). The pinned row has the same
+      // line, but it hides while your row is on screen, which on a short board is always.
+      const gl = r.key === _meKey && r.rank > 1 && b.gap ? gapLine(b.gap(r.key)) : '';
+      const gapSub = gl ? `<span class="lb2-sub lb2-gapl num">${gl}</span>` : '';
       return `${div}<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
-      ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
+      ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}${gapSub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
     };
     list = `<div class="lb2-card" data-role="rows">${foldTail(b.rows, rowHTML, top, cols, game)}</div>`;
   }
@@ -1195,6 +1204,7 @@ html.gh-compact .lb2-x{display:none}
 
 .lb2-who{display:flex;flex-direction:column;gap:2px;min-width:0}
 .lb2-sub{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--l2-muted);line-height:1.25}
+.lb2-gapl{display:block;color:var(--l2-text)}
 .lb2-lr.me .lb2-sub{color:inherit}
 .lb2-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px 1px 4px;border:1px solid currentColor;border-radius:10px;font-size:12px;font-weight:700;line-height:16px;white-space:nowrap;flex-shrink:0}
 .lb2-pill .lb2-shape{width:11px;height:11px;margin:0}
