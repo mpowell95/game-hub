@@ -508,7 +508,11 @@ export function owedSeriesRows(rows) {
   }
   const out = [];
   for (const g of groups.values()) {
-    const last = g.reduce((x, y) => ((y.seriesNo | 0) > (x.seriesNo | 0) ? y : x));
+    // Two games with one number (Matt and Ana's two game 5s, 2026-11-02): the one that counts is the
+    // one with a result, then one still live, and a called-off spare last.
+    const rank = (r) => (r.ended ? 0 : r.result ? 2 : 1);
+    const last = g.reduce((x, y) => ((y.seriesNo | 0) > (x.seriesNo | 0)
+      || ((y.seriesNo | 0) === (x.seriesNo | 0) && rank(y) > rank(x)) ? y : x));
     if (!last.over || last.ended || last.via || (last.result !== 'won' && last.result !== 'lost')) continue;
     const won = g.filter((r) => r.result === 'won').length, lost = g.filter((r) => r.result === 'lost').length;
     const target = seriesTarget(last.series);
@@ -811,7 +815,15 @@ export async function appendLog(id, base, entries) {
  * THE NEXT GAME OF A SERIES, from a finished one (Hoops' nextInSeries). Only whoever lost the last
  * game is offered it (seriesStarter), so the two phones cannot both create it. The sides swap and
  * so does the score, and whoever did NOT shoot first last game shoots first now.
+ *
+ * MADE ONCE (2026-11-02). Matt and Ana's best-of-5 got TWO game 5s, both made by Matt's phone 22 s
+ * apart: the loser's button lives on every door (the game-over card, which reappears whenever the
+ * finished game is opened again, and the Multiplayer screen), and nothing here asked whether the
+ * next game already existed. Now a fresh read of your own index decides: a next game already made
+ * is OPENED instead ({ ok, id, game, existing: true }), and two taps in flight share one creation.
+ * createGame writes the creator's own row in both `first` modes, so the index is enough.
  */
+const nextInFlight = new Map();
 export async function nextInSeries(game) {
   const me = myCode();
   if (!game || !game.over) return fail('not-over');
@@ -819,6 +831,28 @@ export async function nextInSeries(game) {
   if (!side) return fail('not-your-game');
   const st = seriesAfter(game);
   if (st.done) return fail('series-over');
+  const of = game.seriesOf || game.id;
+  if (nextInFlight.has(of)) return nextInFlight.get(of);
+  const job = nextOnce(game, side, st, of);
+  nextInFlight.set(of, job);
+  try { return await job; } finally { nextInFlight.delete(of); }
+}
+async function nextOnce(game, side, st, of) {
+  let rows;
+  try {
+    const boot = await ready();
+    if (!boot) return fail('offline', true);
+    rows = rowsFromIndex(await readPath(boot, `${NODE}/index/${myCode()}`));
+  } catch (err) {
+    console.warn('[cup-pong] could not check for the next game', err);
+    return fail('offline', true);            // never create blind: that is how game 5 was made twice
+  }
+  const made = rows.find((r) => r.seriesOf === of && r.seriesNo > st.no);
+  if (made) {
+    if (made.ended) return fail('series-over');   // a called-off game ends the series (seriesAfter)
+    const g = await readGame(made.id);
+    return g ? { ok: true, id: made.id, game: g, existing: true } : fail('offline', true);
+  }
   return createGame({
     them: side === 'a' ? game.b : game.a,
     rules: game.rules,

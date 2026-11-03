@@ -1,11 +1,11 @@
-// sw.js — shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
+// sw.js â€” shared service worker for the Game Hub. Precaches the app shell and [docs/SW-NOTES.md #1]
 // IMPORTANT UPDATES (2026-10-22, Matt: "push this update to everyone. make sure they all download it",
 // then "flag important ones"). A phone whose page loaded a build OLDER than this number takes the new
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1425;
-const CACHE = 'game-hub-v1427';
+const CACHE = 'game-hub-v1428';
 
 const ASSETS = [
   './',
@@ -166,7 +166,7 @@ const ASSETS = [
   './connect-four/js/ai.js',
   './connect-four/js/strings.js',
   './connect-four/css/connect-four.css',
-  // Chinchón module
+  // ChinchÃ³n module
   './chinchon/index.html',
   './chinchon/css/chinchon.css',
   './chinchon/js/deck.js',
@@ -180,7 +180,7 @@ const ASSETS = [
   './chinchon/js/alert.js',
   './chinchon/js/ch-ui.js',
   './chinchon/js/strings.js',
-  // Parchís (self-contained single file)
+  // ParchÃ­s (self-contained single file)
   './parchis/',
   './parchis/index.html',
   // Filler module
@@ -653,7 +653,7 @@ const ASSETS = [
 
 // NOTE: the Add-to-Home-Screen sheet's iOS step screenshots (icons/a2hs/*.png, [docs/SW-NOTES.md #7]
 
-// Chinchón decks. [docs/SW-NOTES.md #8]
+// ChinchÃ³n decks. [docs/SW-NOTES.md #8]
 for (const s of ['oros', 'copas', 'espadas', 'bastos'])
   for (let r = 1; r <= 12; r++) ASSETS.push(`./chinchon/decks/baraja-libre/${s}-${r}.webp`);
 ASSETS.push('./chinchon/decks/baraja-libre/back.webp');
@@ -1230,7 +1230,7 @@ const REST_MANIFEST = {
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': '5e02d86512',
   './cup-pong/js/match.js': '7f0c1cf779',
-  './cup-pong/js/mp.js': '2fe7217511',
+  './cup-pong/js/mp.js': '3881090972',
   './cup-pong/js/mp-ui.js': 'b28c25cb61',
   './cup-pong/js/alert.js': '698b22f3f3',
   './cup-pong/js/cpu.js': '03725812df',
@@ -1771,7 +1771,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Immutable static assets (images, fonts) — served cache-first so re-created [docs/SW-NOTES.md #26]
+// Immutable static assets (images, fonts) â€” served cache-first so re-created [docs/SW-NOTES.md #26]
 const STATIC_RE = /\.(webp|png|jpe?g|gif|svg|woff2?|ttf)$/i;
 
 // The REST tier's own paths, for the cache-first branch below. [docs/SW-NOTES.md #27]
