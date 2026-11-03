@@ -30,6 +30,13 @@ ok('Ultimate wins with no saved mode go to Medium first', gamePoints(rec({ begin
 ok('Flick 3 goals: Hard 9', gamePoints(rec({ hard: W(1) }, { byMode: { 'goals=3|off=x': { hard: W(1) } } }), 'flicksoccer').pts === 9);
 ok('Dots Large x2', gamePoints(rec({ pro: W(1) }, { byMode: { 'size=large': { pro: W(1) } } }), 'dotsboxes').pts === 10);
 ok('Cup Pong Hard 0 reracks x2', gamePoints(rec({ hard: W(1) }, { byMode: { 'gent=1|rr=0': { hard: W(1) } } }), 'cuppong').pts === 6);
+// Session 6 (docs/HANDOFF-LB-POINTS-INFO.md): no reracks doubles EVERY level, still inside the 20-point limit.
+ok('Cup Pong Easy/Medium 0 reracks x2', gamePoints(rec({ easy: W(1), medium: W(1) }, { byMode: { 'gent=1|rr=0': { easy: W(1), medium: W(1) } } }), 'cuppong').pts === 4);
+ok('...and still capped at 20 together', gamePoints(rec({ easy: W(30) }, { byMode: { 'gent=1|rr=0': { easy: W(30) } } }), 'cuppong').pts === CAP);
+ok('Cup Pong 2 reracks: no bonus', gamePoints(rec({ hard: W(1) }, { byMode: { 'gent=1|rr=2': { hard: W(1) } } }), 'cuppong').pts === 3);
+ok('Darts Cricket in order x2 (2/4/6)', gamePoints(rec({ easy: W(1), medium: W(1), hard: W(1) }, { byMode: { 'kind=cricket-order|first=me': { easy: W(1), medium: W(1), hard: W(1) } } }), 'darts').pts === 12);
+ok('...no-points Cricket in order too', pointsForWin('darts', 'hard', { kind: 'cricket-order-np', first: 'me' }) === 6);
+ok('...plain Cricket and 301 unchanged', pointsForWin('darts', 'hard', { kind: 'cricket' }) === 3 && pointsForWin('darts', 'hard', { kind: '301' }) === 3);
 ok('a multiplier never counts more wins than the level holds', gamePoints(rec({ pro: W(1) }, { byMode: { 'size=large': { pro: W(5) } } }), 'dotsboxes').pts === 10);
 ok('online wins never take the mode bonus', gamePoints(rec({ mp: W(1) }, { byMode: { 'size=large': { mp: W(1) } } }), 'dotsboxes').pts === 3);
 ok('legacy wins (no level) = 1', gamePoints(rec({ legacy: W(4) }), 'business').pts === 4);
