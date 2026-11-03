@@ -91,3 +91,7 @@ Mockup v2 (Matt's notes on v1): popup table header "Difficulty" + "Points / per 
 column, every value centred under it; no Filler thumbnail); Arrow Maze "Hints used or lives lost"; the "counts once" and
 "Expert before 2 Nov" lines deleted; Rush = one line "Most arrows cleared wins." (Matt: "You're like explaining how to
 play, which is not the purpose of this screen"). `docs/mockups/lb2-fixes-mockup-v2.{html,jpg}`. NOT built.
+Mockup v3 (Matt: "nice", then 4 notes): a 6px gap sets Online apart from Hard; page 2 "Most points wins gold."; the
+button picture sits in a dark frame with a 👆 under "Each game scores differently. / Tap this on its leaderboard:" (Matt:
+a bare button "is confusing. People are going to try clicking on it"); Arrow Maze sheet hugs its content (no empty band
+above Done). `docs/mockups/lb2-fixes-mockup-v3.{html,jpg}`. NOT built.
