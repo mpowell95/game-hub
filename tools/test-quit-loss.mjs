@@ -205,11 +205,26 @@ W('business-deal/js/ui.js', /_takeQuitLoss\(\); this\._restartGame\(\);/, 'Monop
 W('business-deal/js/ui.js', /window\.__ghStats\.takeQuit\('business'\)\) this\._bumpBdStats\(false\)/, 'Monopoly Deal: a page that closed mid-game is a loss on the next open');
 W('parchis/index.html', /var pending = !!\(sv && sv\.cfg && sv\.cfg\.vsMode === "cpu" && sv\.cfg\.hm/, 'Parchis: a new game over a rolled-in saved game is a loss');
 // the no-resume games: arm, drop with the real result, take in destroy() and at init()
-for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-pong', 'cuppong'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
+for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
   const c = src(`${g}/js/ui.js`);
   ok(`Q4 ${g}: arms, drops at the real result, takes on a quit, at init and in destroy()`,
     c.includes(`armQuitLoss('${id}'`) && c.includes(`dropQuitLoss('${id}')`) && c.includes(`takeQuitLoss('${id}')`)
     && /destroy\(\)\s*\{[\s\S]{0,400}(takeQuit|_quitNow|takeQuitLoss)/.test(c) && /export function quitCostsLoss/.test(c));
+}
+// Cup Pong SAVES since 2026-11-03 (Matt: "Why doesn't it save the game so you can continue it like the
+// other games do??"): leaving keeps the match for Continue; throwing a thrown-in one away is the loss.
+{
+  const c = src('cup-pong/js/ui.js');
+  ok('Q4 cup-pong: leaving is not quitting (destroy() takes no loss, no quitCostsLoss export, isInProgress false vs the computer)',
+    !/destroy\(\)\s*\{[\s\S]{0,300}takeQuit\(\)/.test(c) && !/export function quitCostsLoss/.test(c)
+    && /export function isInProgress\(\) \{[\s\S]{0,200}return false;\s*\}/.test(c));
+  ok('Q4 cup-pong: a new match over a thrown-in one (live or saved) records ONE loss, the save cleared first',
+    /newMatch\(cfg = null\) \{\s*this\.takeQuit\(\);/.test(c) && /takeQuit\(\) \{[\s\S]{0,200}clearSave\(\);[\s\S]{0,300}armQuitLoss\('cuppong'[\s\S]{0,200}takeQuitLoss\('cuppong'\)/.test(c));
+  ok('Q4 cup-pong: Play over a saved thrown-in match asks twice; Change settings keeps the save',
+    /data-role="play"\]'\), 'click', \(e\) => this\.quitGate\(e\.currentTarget, \(\) => this\.start\('cpu'\)\)\)/.test(c)
+    && /data-role="setup"\]'\), 'click', \(\) => \{ el\.remove\(\); this\.renderSetup\(\); \}\);\s*\}/.test(c));
+  ok('Q4 cup-pong: the finish clears the save BEFORE recording (a continued match counts once)',
+    /this\.recorded = true;[\s\S]{0,250}clearSave\(\);[\s\S]{0,200}recordCupPong\(/.test(c));
 }
 W('js/hub.js', /settleQuitLosses\(30 \* 60 \* 1000\)/, 'Hub: settles the markers of games that died with their page');
 W('js/hub.js', /m\.quitCostsLoss\(\)[\s\S]{0,200}hub_confirm_loss/, 'Hub: its leave confirm says "Counts as a loss" when the game says so');
@@ -277,7 +292,7 @@ W('boggle/js/ui.js', /this\._found = new Map\(\);\s*\/\/ The board is SHOWN[\s\S
 W('yahtzee/js/ui.js', /async function doRoll\(\)\{[\s\S]{0,300}if\(!state\.mp\) armSoloQuitLoss\(\);/, 'G3 Yahtzee: the first roll, the computer\'s included');
 W('business-deal/js/ui.js', /this\.game = new Game\(\{ verbose: false, players \}\);[\s\S]{0,250}this\._armQuitLoss\(\);/, 'G3 Monopoly Deal: dealt = armed');
 W('parchis/index.html', /function doRoll\(\) \{[\s\S]{0,400}if \(G\.cfg && G\.cfg\.vsMode === "cpu"\) G\.cfg\.hm = true;/, 'G3 Parchis: the first roll of the game, the computer\'s included');
-W('cup-pong/js/ui.js', /if \(ev\.length && this\.mode === 'cpu' && !this\.mp && !this\.recorded && !m\.over\) \{\s*armQuitLoss\('cuppong'/, 'G3 Cup Pong: any throw arms it');
+W('cup-pong/js/ui.js', /const savedMoved = \(s\) => !!s && \(\(s\.match\.throwsTaken \| 0\) > 0 \|\| !!s\.fly\);/, 'G3 Cup Pong (saves since 2026-11-03): any throw in the saved match, the computer\'s or one still in the air included');
 W('cup-baseball/js/ui.js', /if \(this\.mode === 'cpu' && !this\.recorded && !g\.over\) armQuitLoss\('cupbaseball'/, 'G3 Cup Baseball: any throw arms it');
 W('hoops4/js/ui.js', /if \(!this\.mp && this\.match\.vsCpu && !this\.recorded\) \{\s*armQuitLoss\('hoops4'/, 'G3 Connect 4 Hoops: any shot arms it');
 W('air-hockey/js/ui.js', /this\.screen = 'game';\s*this\._showOnly\(null\);[\s\S]{0,250}this\._armQuit\(\);\s*this\._start\(\);/, 'G3 Air Hockey: the puck live = armed');
@@ -305,7 +320,7 @@ G.settleQuitLosses(30 * 60 * 1000);   // a page frozen that long: the hub took i
 ok('G5 quitLossLost: true once the hub settled this page\'s marker (the game must record nothing more)', G.quitLossLost('cuppong') === true && stats().games.cuppong.total.lost === 1);
 G.dropQuitLoss('cuppong');
 ok('G5 quitLossLost: false again once the game has dropped it', G.quitLossLost('cuppong') === false);
-for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-pong', 'cuppong'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
+for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
   ok(`G5 ${g}: its real result is skipped when the marker was settled elsewhere`, new RegExp(`quitLossLost\\('${id}'\\)`).test(src(`${g}/js/ui.js`)));
 }
 W('js/game-stats.js', /function keepFresh\(gameId\) \{[\s\S]{0,200}setInterval\(quitTick, QUIT_TICK_MS\)/, 'G5 game-stats: an armed marker is refreshed every minute while its page lives');

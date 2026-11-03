@@ -174,8 +174,8 @@ export default { init, destroy, isInProgress };
     off on return. Save keys: `escoba-save`, `gamehub.mancala.game.v1`,
     `gamehub.connect4.save.v1`, `gamehub.tictactoe.save.v1`, `gamehub.dotsboxes.save.v1`,
     `gamehub.filler.save.v1`, `gamehub.chinchon.solo.v1`, `gamehub.boggle.save.v1`,
-    `gamehub.uno.save.v1`, `gamehub.dominoes.save.v1`,
-    `gamehub.skeeball.save.v1` (Nuts & Bolts needed no new key — its existing
+    `gamehub.uno.save.v1`, `gamehub.dominoes.save.v1`, `gamehub.cuppong.save.v1` (vs the
+    computer, 2026-11-03), `gamehub.skeeball.save.v1` (Nuts & Bolts needed no new key — its existing
     `gamehub.nutsbolts.v1` kept-aside board already survived navigation). Escoba's, Chinchón's,
     Tic Tac Toe's, Mancala's, Dots and Boxes' and Boggle's MP paths are each the exception
     within the exception: `isInProgress()` returns `true` only while an active multiplayer match

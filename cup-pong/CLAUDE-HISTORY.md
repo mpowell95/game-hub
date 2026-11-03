@@ -616,3 +616,14 @@ inside that rounding box 167 of 441 vectors go into k2, 274 fly off. Re-simulati
 Oct). Fix: full precision on write and read (`appendLog`'s retry check tolerates the old rounding), and
 `replayVector` searches the rounding box (nearest first, 61 tries, 400 ms cap) for a flight that lands
 as recorded. Every throw since 2026-10-23 now replays as recorded. Test: `tools/test-cuppong-mp.mjs`.
+
+## 2026-11-03: a match vs the computer saves
+
+Matt: "I was playing the computer in cup pong and left to play Ana back and it made me forfeit. Why doesn't it
+save the game so you can continue it like the other games do??" Since 2026-10-29 Cup Pong had been a no-resume
+game: the first throw armed a quit loss, and leaving by any route recorded it. That was built wrong for a turn-based
+game: `Match` already had `toJSON`/`fromJSON` (challenges use them). Now the match is saved after every throw and
+choice and continues from the setup screen (Darts' pattern); only New game over a thrown-in match costs the loss.
+A throw in the air is saved with its launch and flown again, so leaving cannot undo a bad throw. Headless check
+(scratchpad, not in the repo): leave mid-match, Continue = byte-identical `Match.toJSON()`; a made throw left in
+the air lands in the same cup after Continue; New game = one loss after two taps; a finish = one win, no save.

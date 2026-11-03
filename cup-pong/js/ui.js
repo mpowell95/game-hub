@@ -3,11 +3,12 @@
 // THE LAW applies here. Nothing in this folder stores anything earned: `gamehub.cuppong.v1` holds
 // preferences only (difficulty, Gentleman's, who opens next). A finished match vs the computer goes
 // to the shared recorder, `recordCupPong(difficulty, won, reracksUsed)`, exactly once; a CLEARED solo
-// rack goes to `recordCupPongSolo(throws)`, exactly once. Neither is persisted mid-way - see
-// isInProgress() for which meaning of the contract that is.
+// rack goes to `recordCupPongSolo(throws)`, exactly once. A match vs the computer is SAVED as it goes
+// (`gamehub.cuppong.save.v1`, 2026-11-03) and continues from the setup screen; a solo rack is not -
+// see isInProgress() for which meaning of the contract each is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag } from '../../js/game-stats.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -21,6 +22,7 @@ const RACK_MID_Z = RACK_Z0 + 1.5 * ROW_H;
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-cuppong-css';
 const SETTINGS_KEY = 'gamehub.cuppong.v1';
+const SAVE_KEY = 'gamehub.cuppong.save.v1';
 const SETTLE_MS = 450;          // after a throw resolves, before anything else happens
 const CPU_PAUSE_MS = 900;       // before each computer throw, so it reads as a person lining up
 const TURN_PAUSE_MS = 700;      // between one side's last throw and the camera moving
@@ -48,10 +50,14 @@ const readSettings = () => {
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
 // QUITTING AND EASIER SETTINGS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
-// quitting and easier settings"). Unlimited reracks count one step down. A match against the computer
-// has no resume, so once the player has thrown, leaving it (New game, Change settings, the hub's back,
-// a closed app) is a LOSS: armed in js/game-stats.js at each of the player's throws, dropped by the
-// real result, taken by a quit.
+// quitting and easier settings"). Unlimited reracks count one step down.
+// A MATCH AGAINST THE COMPUTER IS SAVED (2026-11-03, Matt: "I was playing the computer in cup pong and
+// left to play Ana back and it made me forfeit. Why doesn't it save the game so you can continue it
+// like the other games do??"). Darts' way: saved after every throw and every choice, Continue on the
+// setup screen, so LEAVING (the hub's back, Change settings, a closed app, a challenge) costs nothing.
+// Only THROWING IT AWAY once any throw was made (New game, or Play over the saved match) is a loss,
+// asked twice. A throw still in the air is saved with its launch (`fly`) and flown again on Continue
+// (the physics is a fixed step, so it lands where it was going): leaving cannot take a throw back.
 export function statsDiff(diff, reracks) {
   return reracks === 'inf' ? oneTierDown(diff, DIFFS) : diff;
 }
@@ -59,6 +65,26 @@ export function statsDiff(diff, reracks) {
  *  2026-10-30): Gentleman's on/off, reracks per game, and who shot first (settings.nextFirst is this
  *  match's until finish() turns it over). */
 const modeOf = (s) => ({ gent: s.gentlemans ? 1 : 0, rr: s.reracks, first: s.nextFirst === 'b' ? 'them' : 'me' });
+
+/** The saved match vs the computer, or null: `{ v: 1, at, cfg, match, tally, fly }`. `cfg` is that
+ *  match's own settings (the setup screen may have changed since); `fly` a throw left in the air. */
+function readSave() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (!s || s.v !== 1 || !s.match || typeof s.match !== 'object' || s.match.over || !s.cfg) return null;
+    const c = s.cfg;
+    if (!DIFFS.includes(c.diff) || !RERACKS.includes(c.reracks)) return null;
+    return s;
+  } catch { return null; }
+}
+const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.error('[cup-pong] saved match not cleared', err); } };
+/** Any throw made in it, the computer's included: throwing it away now counts as a loss. */
+const savedMoved = (s) => !!s && ((s.match.throwsTaken | 0) > 0 || !!s.fly);
+/** THIS player's own numbers in a match, as withMode's detail. */
+const detailOf = (tl, reracks) => {
+  const x = tl || {};
+  return { mt: x.throws | 0, mm: x.made | 0, throws: x.throws | 0, made: x.made | 0, ballsBack: x.ballsBack | 0, onFire: x.onFire | 0, reracks: reracks | 0, ...(x.rack ? { rack: String(x.rack) } : {}) };
+};
 
 /** css/ui.css's primitives first (idempotent, matched by resolved href too, the same guard
  *  skeeball and hoops4 use), then this game's own sheet. Module stylesheets are never removed on
@@ -199,6 +225,7 @@ class CupPong {
     // Multiplayer as a door, then the computer card, then Solo as a door. Solo was a card with a
     // heading, a hint, a best and a button - "too many words and it's still not clear what it is".
     const best = soloBest();
+    const saved = readSave();
     this.root.innerHTML = `
       <div class="cp-setup">
         <h1 class="cp-title">${t('title')}</h1>
@@ -214,7 +241,10 @@ class CupPong {
           ${seg('gent', [['on', t('on')], ['off', t('off')]], s.gentlemans ? 'on' : 'off')}
           <p class="cp-setup-label">${t('reracks')}</p>
           ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '\u221e' : String(n)]), String(s.reracks))}
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="play">${t('play')}</button>
+          ${saved ? `<div class="cp-setup-go">
+            <button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="continue">${t('continueGame')}</button>
+            <button type="button" class="gh-btn gh-btn--ghost gh-btn--block cp-setup-play" data-role="play">${t('newGame')}</button>
+          </div>` : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="play">${t('play')}</button>`}
         </div>
         <button type="button" class="gh-card cp-row" data-role="solo">
           <span class="cp-row-text"><span class="cp-row-head">${t('solo')}</span><span class="cp-row-sub">${t('soloHint')}</span></span>
@@ -235,7 +265,9 @@ class CupPong {
     pick('diff', (v) => { this.settings.diff = v; });
     pick('gent', (v) => { this.settings.gentlemans = v === 'on'; });
     pick('rr', (v) => { this.settings.reracks = v === 'inf' ? 'inf' : Number(v); });
-    this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.start('cpu'));
+    // Play over a saved match someone has thrown in throws it away: two taps, saying it is a loss.
+    this.on(this.root.querySelector('[data-role="play"]'), 'click', (e) => this.quitGate(e.currentTarget, () => this.start('cpu')));
+    if (saved) this.on(this.root.querySelector('[data-role="continue"]'), 'click', () => this.start('cpu', { resume: true }));
     this.on(this.root.querySelector('[data-role="solo"]'), 'click', () => this.start('solo'));
     this.on(this.root.querySelector('[data-role="mp"]'), 'click', () => this.openMultiplayer());
     this.fillTurns();
@@ -258,7 +290,8 @@ class CupPong {
       this.offViewport = onViewportResize(() => this.fit());
       if (mode === 'solo') this.newRack();
       else if (mode === 'mp') this.mpBegin(opts.game);
-      else this.newMatch();
+      else if (opts.resume && !this.resumeMatch()) this.newMatch();
+      else if (!opts.resume) this.newMatch();
       this.startLoop();
       // Read-only hook for headless drivers (skeeball's `__skTest` precedent). Never read by the game.
       try { window.__cpTest = this; } catch {}
@@ -379,29 +412,99 @@ class CupPong {
   }
 
   // --- a match vs the computer -----------------------------------------------------------------
-  newMatch() {
+  /** A new match, with the setup screen's settings or `cfg` (Play again / New game: the same game). */
+  newMatch(cfg = null) {
     this.takeQuit();   // a match thrown in and not finished, replaced by a new one, is a loss
     this.clearTimers();
-    const first = this.settings.nextFirst;
-    this.match = new Match({ first, gentlemans: this.settings.gentlemans, reracks: this.settings.reracks === 'inf' ? Infinity : this.settings.reracks });
+    const s = cfg || this.settings;
+    this.cfg = { diff: s.diff, gentlemans: !!s.gentlemans, reracks: s.reracks, nextFirst: s.nextFirst === 'b' ? 'b' : 'a' };
+    const first = this.cfg.nextFirst;
+    this.match = new Match({ first, gentlemans: this.cfg.gentlemans, reracks: this.cfg.reracks === 'inf' ? Infinity : this.cfg.reracks });
     // THIS player's own numbers in the match (2026-11-02, recorded with the result as withMode's detail;
-    // vs the computer has no resume, so a count from the first throw is the whole match)
+    // saved with the match, so a continued match counts from its first throw)
     this._tally = { throws: 0, made: 0, ballsBack: 0, onFire: 0, rack: '' };
     this.recorded = false;
     this.throwState = null;
     this.pickMode = null;
+    this._fly = null;
+    this.tableUp(first === 'a' ? 'shoot' : 'defend');
+    this.toast(first === 'a' ? t('firstYou') : t('firstCpu'), 1400);
+    this.busy = true;
+    this.saveMatch();
+    this.later(() => this.beginTurn(), 900);
+  }
+
+  /** Both racks and the view as the match stands. */
+  tableUp(view) {
     const R = this.engine.rend;
     R.setRack('a', cupsXZ(this.match.racks.a));
     R.setRack('b', cupsXZ(this.match.racks.b));
-    R.setView(first === 'a' ? 'shoot' : 'defend');
+    R.setView(view);
     R.hideBall();
     const hint = this.root.querySelector('.cp-hint');
     if (hint) hint.hidden = true;
     this.paintHud();
     this.paintOptions();
-    this.toast(first === 'a' ? t('firstYou') : t('firstCpu'), 1400);
+  }
+
+  /** CONTINUE: the saved match exactly as it was left. False when there is none to continue. */
+  resumeMatch() {
+    const sv = readSave();
+    let m = null;
+    try { m = sv && Match.fromJSON(sv.match); } catch (err) { console.error('[cup-pong] saved match unreadable', err); }
+    if (!m || m.over) return false;
+    this.clearTimers();
+    this.cfg = { ...sv.cfg, gentlemans: !!sv.cfg.gentlemans, nextFirst: sv.cfg.nextFirst === 'b' ? 'b' : 'a' };
+    this.match = m;
+    const tl = sv.tally && typeof sv.tally === 'object' ? sv.tally : {};
+    this._tally = { throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, rack: tl.rack ? String(tl.rack) : '' };
+    this.recorded = false;
+    this.throwState = null;
+    this.pickMode = null;
+    this._fly = null;
     this.busy = true;
-    this.later(() => this.beginTurn(), 900);
+    this.tableUp(m.shooter === 'a' ? 'shoot' : 'defend');
+    const f = sv.fly;
+    this.later(() => {
+      const R = this.engine.rend;
+      if (m.called) R.setMarks(m.shooter === 'a' ? 'b' : 'a', [m.called], 'called');
+      if (m.pendingPick) this.askPick();
+      else if (!m.queue.length) this.beginTurn();          // between turns (or before the first)
+      else if (f && (f.s === 'a' || f.s === 'b') && f.s === m.shooter && Number.isFinite(+f.p) && Number.isFinite(+f.a)) this.reFly(f);
+      else if (m.shooter === 'a') this.serveMatchBall();
+      else if (m.turnThrows === 0) this.cpuTurnStart();
+      else this.cpuShoot();
+    }, 600);
+    return true;
+  }
+
+  /** A throw that was in the air when the match was left, flown again from its launch. */
+  reFly(f) {
+    const m = this.match;
+    const R = this.engine.rend;
+    const power = +f.p, aim = +f.a;
+    this.shooter = f.s;
+    if (f.s === 'a') {
+      R.showRestBall(m.spare !== null);
+      R.setBallHeat(m.heat('a', m.ball), m.spare !== null ? m.heat('a', m.spare) : 0);
+      this.lastShot = { power, aim };
+    } else R.setBallHeat(m.heat('b', m.ball), 0);
+    this.busy = true;
+    this.paintOptions();
+    this.throwState = this.engine.phys.startThrow({ power, aim, cups: cupsXZ(m.target()) });
+    this.saveMatch({ s: f.s, p: power, a: aim });
+  }
+
+  /** The match vs the computer, saved as it stands (`fly`: a throw in the air). Never a challenge,
+   *  never solo; a finished match leaves no save (its result is recorded once, by finish()). */
+  saveMatch(fly = null) {
+    if (this.mode !== 'cpu' || this.mp || !this.match || this.recorded || !this.cfg) return;
+    const m = this.match;
+    this._fly = fly;
+    if (m.over) { clearSave(); return; }
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), cfg: this.cfg, match: m.toJSON(), tally: this._tally || null, fly }));
+    } catch (err) { console.error('[cup-pong] match not saved', err); }
   }
 
   /** The shooter's turn starts: the rebuttal notice, then a ball for whoever throws. */
@@ -413,6 +516,7 @@ class CupPong {
       if (e.type === 'rebuttal') this.toast(e.side === 'a' ? t('rebuttalYou') : t('rebuttal'), 1600);
     }
     if (m.shooter === 'a' && m.ball === 2) this.toast(t('extraYou'), 1600);
+    this.saveMatch();
     R.setMarks('a', null); R.setMarks('b', null);
     this.paintHud();
     R.setView(m.shooter === 'a' ? 'shoot' : 'defend');
@@ -459,6 +563,7 @@ class CupPong {
       this.engine.rend.slideRack(e.side, cupsXZ(e.to));
       wait = 1300;
     }
+    this.saveMatch();
     this.later(() => this.cpuShoot(), wait);
   }
 
@@ -470,6 +575,7 @@ class CupPong {
     const isl = C.cpuIsland(m);
     if (isl && !m.called) {
       m.callIsland(isl);
+      this.saveMatch();
       this.engine.rend.setMarks('a', [isl], 'called');
       this.toast(t('cpuIsland'), 1300);
       this.paintHud();
@@ -477,10 +583,11 @@ class CupPong {
       return;
     }
     const cups = cupsXZ(m.target());
-    const th = C.cpuThrow(this.settings.diff, cups, Math.random, m.called);
+    const th = C.cpuThrow(this.cfg.diff, cups, Math.random, m.called);
     this.shooter = 'b';
     this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
     this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups });
+    this.saveMatch({ s: 'b', p: th.power, a: th.aim });
   }
 
   /** A throw has resolved: the rules decide now; the table shows it now; what comes next waits. */
@@ -489,15 +596,11 @@ class CupPong {
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
     const shooter = m.shooter;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
-    // The first throw of the match, the computer's included, arms the quit loss (2026-10-29, second
-    // pass, Matt: quitting after the computer's opening throws was free).
-    if (ev.length && this.mode === 'cpu' && !this.mp && !this.recorded && !m.over) {
-      armQuitLoss('cuppong', 'recordCupPong', [statsDiff(this.settings.diff, this.settings.reracks), false, m.reracksUsed.a], modeTag(() => (modeOf(this.settings)), this.settings.diff));
-    }
     if (ev.length && shooter === 'a' && this.lastShot) {
       this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
     }
-    this.showEvents(ev);
+    this.showEvents(ev);                 // the tally first: it is saved with the match
+    this.saveMatch();                    // the throw has landed (a finished match clears the save)
     if (m.over) { this.finish(); return; }
     this.paintHud();
     this.paintOptions();
@@ -587,6 +690,7 @@ class CupPong {
     this.engine.rend.setMarks('a', null);
     this.engine.rend.setMarks('b', null);
     this.showEvents(ev);
+    this.saveMatch();
     if (this.match.over) { this.finish(); return; }
     if (this.match.pendingPick) { this.later(() => this.askPick(), 250); return; }   // an island bounce: 2 picks
     this.paintHud();
@@ -1131,12 +1235,12 @@ class CupPong {
     const R = this.engine.rend;
     if (role === 'gent') {
       const ev = m.applyGentlemans();
-      if (ev.length) this.mpRecord({ k: 'g' });
+      if (ev.length) { this.mpRecord({ k: 'g' }); this.saveMatch(); }
       for (const e of ev) R.slideRack(e.side, cupsXZ(e.to));
       this.paintOptions();
     } else if (role === 'center') {
       const ev = m.centerLast();
-      if (ev.length) this.mpRecord({ k: 'c' });
+      if (ev.length) { this.mpRecord({ k: 'c' }); this.saveMatch(); }
       for (const e of ev) R.slideRack(e.side, cupsXZ(e.to));
       this.paintOptions();
     } else if (role === 'rerack') {
@@ -1157,7 +1261,7 @@ class CupPong {
   }
 
   callIsland(id) {
-    if (this.match.callIsland(id).length) this.mpRecord({ k: 'i', id });
+    if (this.match.callIsland(id).length) { this.mpRecord({ k: 'i', id }); this.saveMatch(); }
     this.engine.rend.setMarks('b', [id], 'called');
     this.toast(t('islandCalled'), 1200);
     this.paintHud();
@@ -1226,6 +1330,7 @@ class CupPong {
   applyRerack(ev, entry) {
     if (ev.length) this.mpRecord(entry);
     if (ev.length && this._tally && !this.mp && entry && entry.key) this._tally.rack = String(entry.key);   // the last rack chosen
+    if (ev.length) this.saveMatch();
     for (const e of ev) this.engine.rend.slideRack(e.side, cupsXZ(e.to));
     this.engine.rend.setMarks('b', null);
     this.paintOptions();
@@ -1359,13 +1464,13 @@ class CupPong {
     if (this.mp) { this.mpFinish(won); return; }
     if (!this.recorded) {
       this.recorded = true;
-      // ONCE per match: every write in the shared store is additive, so a second call inflates.
-      const lost = quitLossLost('cuppong');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
-      dropQuitLoss('cuppong');   // the real result replaces the armed quit loss
-      const tl = this._tally || {};
-      const detail = { mt: tl.throws | 0, mm: tl.made | 0, throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, reracks: m.reracksUsed.a | 0, ...(tl.rack ? { rack: tl.rack } : {}) };
-      if (!lost) try { withMode(() => (modeOf(this.settings)), this.settings.diff, () => recordCupPong(statsDiff(this.settings.diff, this.settings.reracks), won, m.reracksUsed.a), { detail }); } catch (err) { console.error('[cup-pong] record failed', err); }
-      this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
+      // ONCE per match: every write in the shared store is additive, so a second call inflates. The
+      // save goes first, so a continued match can never be finished and counted a second time.
+      clearSave();
+      const cfg = this.cfg;
+      const tl = this._tally;
+      try { withMode(() => (modeOf(cfg)), cfg.diff, () => recordCupPong(statsDiff(cfg.diff, cfg.reracks), won, m.reracksUsed.a), { detail: () => detailOf(tl, m.reracksUsed.a) }); } catch (err) { console.error('[cup-pong] record failed', err); }
+      this.settings.nextFirst = cfg.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
     this.busy = true;
@@ -1388,7 +1493,7 @@ class CupPong {
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
-    this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.newMatch(); });
+    this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.newMatch({ ...this.cfg, nextFirst: this.settings.nextFirst }); });
     this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
   }
 
@@ -1499,6 +1604,7 @@ class CupPong {
     }
     // The greyed spare stays where it is while this ball flies (it is the NEXT throw).
     this.throwState = this.engine.phys.startThrow({ power, aim, cups });
+    this.saveMatch({ s: 'a', p: power, a: aim });   // vs the computer only (it says no to the rest)
     this.paintHud();
   }
 
@@ -1613,8 +1719,8 @@ class CupPong {
     const close = () => { el.remove(); if (!this.disposed) this.startLoop(); };
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('[data-role="resume"]'), 'click', close);
-    // A new game abandons this one, and nothing is recorded until a match ENDS: a restart loses a
-    // board and no history (THE LAW rule 2).
+    // A new game throws this one away (a loss once anyone has thrown, asked twice); Change settings
+    // keeps it saved for Continue.
     if (this.mp) {
       this.on(el.querySelector('[data-role="mphome"]'), 'click', () => { el.remove(); this.openMultiplayer(); });
       this.on(el.querySelector('[data-role="resign"]'), 'click', () => { el.remove(); this.mpResign(); });
@@ -1623,25 +1729,39 @@ class CupPong {
       el.remove();
       this.clearTimers();
       this.throwState = null;
-      if (this.mode === 'solo') this.newRack(); else this.newMatch();
+      if (this.mode === 'solo') this.newRack(); else this.newMatch(this.cfg);
       if (!this.disposed) this.startLoop();
     }));
-    this.on(el.querySelector('[data-role="setup"]'), 'click', (e) => this.quitGate(e.currentTarget, () => { this.takeQuit(); el.remove(); this.renderSetup(); }));
+    this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
   }
 
-  /** A match against the computer the player has thrown in, not finished: leaving it is a loss. */
-  quitCostsLoss() {
-    return this.mode === 'cpu' && !this.mp && !!this.match && !this.match.over && !this.recorded && quitLossArmed('cuppong');
+  /** The match vs the computer a new one would THROW AWAY, once any throw was made in it: the one on
+   *  the table, or (from the setup screen) the saved one. Null when there is nothing to lose. */
+  quitPending() {
+    if (this.mp || this.mode === 'solo' || this.mode === 'mp') return null;
+    if (this.match) {
+      const m = this.match;
+      return this.mode === 'cpu' && !m.over && !this.recorded && (m.throwsTaken > 0 || !!this._fly)
+        ? { cfg: this.cfg, reracks: m.reracksUsed.a } : null;
+    }
+    const sv = readSave();
+    return savedMoved(sv) ? { cfg: sv.cfg, reracks: ((sv.match.reracksUsed || {}).a) | 0 } : null;
   }
+  quitCostsLoss() { return !!this.quitPending(); }
 
-  /** Record that loss, once (`recorded`, and the marker is dropped before the write). */
+  /** Record that loss, once: the save goes first, then the loss through the quit-loss marker (armed and
+   *  taken at once, so the play log says it was a quit), through the game's own recorder. */
   takeQuit() {
-    if (!this.quitCostsLoss()) return;
-    this.recorded = true;
-    takeQuitLoss('cuppong');
+    const q = this.quitPending();
+    if (!q) return;
+    if (this.match) this.recorded = true;
+    clearSave();
+    const cfg = q.cfg;
+    armQuitLoss('cuppong', 'recordCupPong', [statsDiff(cfg.diff, cfg.reracks), false, q.reracks], modeTag(() => (modeOf(cfg)), cfg.diff));
+    if (!takeQuitLoss('cuppong')) console.error('[cup-pong] the thrown-away match was not recorded as a loss');
   }
 
-  /** A button that would quit such a match asks twice, saying it counts as a loss. */
+  /** A button that would throw such a match away asks twice, saying it counts as a loss. */
   quitGate(btn, go) {
     if (!this.quitCostsLoss() || btn.dataset.armed === '1') { go(); return; }
     btn.dataset.armed = '1';
@@ -1670,7 +1790,7 @@ class CupPong {
   }
 
   destroy() {
-    this.takeQuit();   // leaving a thrown-in match against the computer: no resume, so it is a loss
+    // Leaving costs nothing: a match vs the computer is saved (Continue), a challenge is in Firebase.
     this.disposed = true;
     try { if (window.__cpTest === this) delete window.__cpTest; } catch {}
     clearTimeout(this._toastT);
@@ -1683,7 +1803,8 @@ class CupPong {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
-  // A match against the computer whose page closed mid-game (no destroy ran) is that match's loss.
+  // A marker armed by a build from before the save (2026-11-03): that match is gone (it had no save),
+  // so under the rule it was played by, it is a loss. This build arms none it does not take at once.
   takeQuitLoss('cuppong');
   instance = new CupPong(container);
   instance.mount();
@@ -1695,18 +1816,14 @@ export function destroy() {
   try { instance.destroy(); } finally { instance = null; }
 }
 
-/** THE "NO MID-GAME RESUME" MEANING of the contract (Hoops', Ball Run's class): a match vs the
- *  computer, or a solo rack, is not persisted, so leaving one that has started really does abandon
- *  it and the hub should say so. A challenge (stage 5) will live in Firebase, so leaving one will
- *  lose nothing and this must answer false for it. */
-/** The hub's leave confirm says "Counts as a loss" when this is true. */
-export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
-
+/** TWO MEANINGS of the contract: a match vs the computer AUTOSAVES (2026-11-03, Continue on the setup
+ *  screen) and a challenge lives in Firebase, so leaving either loses nothing: false. A SOLO rack is not
+ *  saved (only a cleared one is recorded), so leaving one that has started abandons it: true. No
+ *  `quitCostsLoss` export: the hub's back never costs a loss here. */
 export function isInProgress() {
   if (!instance) return false;
   if (instance.mode === 'solo') return instance.throws > 0 && instance.rack.length > 0;
-  const m = instance.mode === 'cpu' ? instance.match : null;
-  return !!(m && !m.over && m.throwsTaken > 0);
+  return false;
 }
 
-export default { init, destroy, isInProgress, quitCostsLoss };
+export default { init, destroy, isInProgress };
