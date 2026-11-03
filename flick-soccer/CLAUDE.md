@@ -170,10 +170,12 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   challenge card too (2026-10-20**, Matt: *"I'm never given the option to choose the # of goals"*;
   `goalsRowHTML`, the same `settings.goals` as the start menu). Display only: never on the physics path. The thin pull string from the disc to the finger shows on every level:
   it is the drag itself. The **guide** is a dotted line from the disc to the first thing it will
-  touch and a ghost circle there; the **bounce line** (`ballPath` in `engine.js`) is where the ball
-  heads from that touch, reflected off the walls up to twice, ending at the first disc in its way or
-  in a goal mouth, longer the harder the pull. It is a guide for the eye, not a prediction: no spin,
-  friction or follow-through, and it is never on the physics path. The computer's own aim always draws its
+  touch and a ghost circle there; the **bounce line** (`shotPath` in `engine.js`, since 2026-11-03)
+  is the REAL shot run on a copy with the engine's own step: a point at each turn, up to two wall
+  or post bounces, ending at the first other disc it touches, in a goal or where it stops (online:
+  the rounded flick that will roll). Matt: *"the ball doesn't do what the aim line says it will"*;
+  the old straight-line guess (`ballPath`, kept for its test) was off by 24 degrees or more one
+  glancing hit in ten and drew wall bounces as mirrors. Never on the physics path; mutates nothing. The computer's own aim always draws its
   arrow. **A replayed online flick follows the match's aiming help (2026-10-20)**, Matt: the arrow
   showed in King of Games' Hard replay though Hard hides it while aiming; now Hard replays show the
   power ring only (`_aids()` in `ui.js`).
