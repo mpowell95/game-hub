@@ -1770,8 +1770,29 @@ function ptsSectionHTML(id, st) {
   if (!r || (r.by !== 'wins' && r.by !== 'cuppong')) return '';
   if (!isAdminDevice()) return '';   // admin devices only until Matt releases the points (2026-11-02)
   const rec = (st && st.games && st.games[id]) || {};
-  // What a win is worth: the same cards as the board's (i) (Matt's mockup v7, js/lb-points-sheet.js).
-  return `<h4 class="gs-tbl-h">${esc(t('lb_pts_total'))}: ${nf(gamePoints(rec, id).pts)}</h4>${pointsSheetHTML(id)}`;
+  // What a win is worth: the same cards as the board's (i) (Matt's mockup v7, js/lb-points-sheet.js), behind the
+  // board's own button (2026-11-03, Matt: "Why is the score calculation fully displayed on this page? We should hide
+  // it behind the same 'see how scores are calculated' button"; same words on every game). In Leaderboard v2 the
+  // button's data-act="info" opens the board's sheet over the page; anywhere else it unfolds the copy below it.
+  watchPtsButtons();
+  return `<h4 class="gs-tbl-h">${esc(t('lb_pts_total'))}: ${nf(gamePoints(rec, id).pts)}</h4>`
+    + `<button type="button" class="lb2-more gs-ptsbtn" data-act="info" aria-expanded="false">${esc(t2('lb2_pts_how'))}</button>`
+    + `<div class="gs-ptsheet" hidden>${pointsSheetHTML(id)}</div>`;
+}
+/** Outside Leaderboard v2 (My Stats, the old board's player page) the points button unfolds the sheet under it.
+ *  One click listener for the page, added once; v2 handles its own (data-act="info"). */
+let _ptsWatch = false;
+function watchPtsButtons() {
+  if (_ptsWatch || typeof document === 'undefined') return;
+  _ptsWatch = true;
+  document.addEventListener('click', (e) => {
+    const b = e.target && e.target.closest ? e.target.closest('.gs-ptsbtn') : null;
+    if (!b || b.closest('.lb2')) return;
+    const sheet = b.nextElementSibling;
+    if (!sheet || !sheet.classList.contains('gs-ptsheet')) return;
+    sheet.hidden = !sheet.hidden;
+    b.setAttribute('aria-expanded', String(!sheet.hidden));
+  });
 }
 function screenFor(id, st) { return screenForBase(id, st) + ptsSectionHTML(id, st); }
 function screenForBase(id, st) {
@@ -2202,6 +2223,8 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .gs-tally b{order:2;display:block;font-size:16px;font-weight:700;color:var(--l2-text);white-space:nowrap}
 .gs-v2 .gs-tally span{order:1;font-size:16px;font-weight:400;color:var(--l2-text);text-transform:none;letter-spacing:0}
 .gs-v2 .gs-tbl-h{margin:6px 4px -4px;font-size:13px;font-weight:600;color:var(--l2-muted)}
+.gs-ptsbtn{width:100%;min-height:48px;margin:4px 0 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font:inherit;font-size:16px;font-weight:600;background:var(--l2-surf,#fff);border:1px solid var(--l2-line,#E2E5EA);color:var(--l2-accent,#1F5FD1);touch-action:manipulation;cursor:pointer}
+.gs-ptsheet{margin-top:8px}
 .gs-v2 .gs-grid{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:14px;box-shadow:none;border-collapse:separate;border-spacing:0}
 .gs-v2 .gs-grid th,.gs-v2 .gs-grid td{padding:0 14px;height:44px;text-align:right;font-size:15px;color:var(--l2-text)}
 .gs-v2 .gs-grid thead th{height:36px;background:none;color:var(--l2-muted);font-size:13px;font-weight:600;text-transform:none;letter-spacing:0}

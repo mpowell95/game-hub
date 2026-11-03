@@ -871,7 +871,9 @@ function personGameHTML(top) {
 
 // --- How rankings work: four short lines (Matt's 12, 2026-11-02: "far too wordy"); each game's own rule is its (i) --
 let _help = false;
-let _info = false;            // a game's (i) sheet is open over its board
+let _info = false;            // a game's (i) sheet is open over its board, or over a person's page in that game
+// (2026-11-03: the points button on a person's game page opens the same sheet as the board's).
+const infoOn = (top) => !!top && (top.kind === 'board' || top.kind === 'pgame');
 function sheetHTML(label, inner) {
   return `<div class="lb2-sheet" data-act="helpclose"><div class="lb2-sh" role="dialog" aria-label="${esc(label)}" data-act="noop"><span class="lb2-grab"></span>
     ${inner}<button type="button" class="lb2-done" data-act="helpclose">${esc(t2('lb2_done'))}</button></div></div>`;
@@ -908,7 +910,7 @@ function screenHTML() {
   const top = _stack[_stack.length - 1];
   if (top && top.kind === 'board') return boardScreenHTML(top) + (_info ? infoHTML(top.game) : '');
   if (top && top.kind === 'player') return playerHTML(top);
-  if (top && top.kind === 'pgame') return personGameHTML(top);
+  if (top && top.kind === 'pgame') return personGameHTML(top) + (_info ? infoHTML(top.game) : '');
   const sheet = _help ? helpHTML() : '';
   if (_tab === 'hof') return hofHTML() + sheet;
   if (_tab === 'me') return meHTML() + sheet;
@@ -938,7 +940,7 @@ function render({ keepScroll = false, restore = false } = {}) {
 function levelNow() {
   const entry = _entryGame && _stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame ? 1 : 0;
   const top = _stack[_stack.length - 1];
-  return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0) + (_info && top && top.kind === 'board' ? 1 : 0);
+  return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0) + (_info && infoOn(top) ? 1 : 0);
 }
 /** The pinned own row: hidden while the viewer's row on the board is fully on screen. */
 function watchPin(page, sc) {
@@ -971,7 +973,7 @@ function savedScroll() {
 }
 /** Every new level goes through here: the level left keeps its scroll; render() pushes the level's own
  *  history entry (back-stack sync), synchronously inside the tap. */
-function pushLevel(entry) { saveScroll(); _stack.push(entry); render(); }
+function pushLevel(entry) { saveScroll(); _info = false; _stack.push(entry); render(); }
 function openGame(game, sel) { pushLevel({ kind: 'board', game, sel: sel || null }); }
 function openPerson(key) {
   const top = _stack[_stack.length - 1];
@@ -1100,7 +1102,7 @@ function applyRestore(s) {
     // The entry game keeps its meaning (back from it closes) only while it is still the first screen.
     if (_entryGame && !(_stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame)) _entryGame = null;
   }
-  _info = !!s.info && !!_stack.length && _stack[_stack.length - 1].kind === 'board';
+  _info = !!s.info && infoOn(_stack[_stack.length - 1]);
   if (s.rootScroll && typeof s.rootScroll === 'object') Object.assign(_rootScroll, s.rootScroll);
   _pend = Date.now() + 8000;
 }
@@ -1129,7 +1131,7 @@ function onBackSteps(n) {
   _backSeq++;
   for (let i = 0; i < n && _host; i++) {
     if (_help && !_stack.length) { _help = false; render({ keepScroll: true }); continue; }
-    if (_info && _stack.length && _stack[_stack.length - 1].kind === 'board') { _info = false; render({ keepScroll: true }); continue; }
+    if (_info && infoOn(_stack[_stack.length - 1])) { _info = false; render({ keepScroll: true }); continue; }
     if (!stepBack()) { closeLeaderboard2(); return; }
   }
 }

@@ -23,6 +23,10 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1450) **The points sheet on a person's game page is behind the button too.** Matt: "Why is the score calculation fully
+  displayed on this page? We should hide it behind the same 'see how scores are calculated' button" (same words on every
+  game, his choice). `ptsSectionHTML` = "Points: N" + the button; in v2 its `data-act="info"` opens the board's sheet over
+  the person's page (`_info` now also on `pgame`, back closes it); elsewhere (My Stats) it unfolds the copy under it.
 - (v1449) **Spelling Bee medals by language.** Moonis (bug report): "Leaderboard including Spanish is completely unfair.
   So many more points on that one". Matt: "Each game should be considered its own game for gold medal leaderboard
   purposes" (Spelling Bee only; not Contexto or Word Weaver). English and Español each give a gold, silver and bronze in
