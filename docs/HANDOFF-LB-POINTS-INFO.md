@@ -27,8 +27,26 @@ the writing session's summary or suggestion and is **NOT cleared for players**.
      starting `cricket-order` (`darts/js/ui.js kindFrom`). Not in the code yet.
    - **Cup Pong "no reracks" doubles EVERY level** (approved table: "0 reracks x2"); the code wrongly does Hard only
      (`t === 3`). Easy/Medium doubled still fall under the 20-point limit.
-4. Open question for Matt: now that Tic Tac Toe Classic Medium is fixed (a perfect attacker wins ~34% going first,
-   was 100%), does it stay in the 20-point limit group?
+4. ANSWERED (session 6): Tic Tac Toe Classic Medium STAYS in the 20-point limit group. Matt: "Keep it limited".
+   No code change (`P.tictactoe.cap` is already `[1, 2]`).
+
+## Mockup v6 (session 6): all 20 games, EN + ES. Waiting for Matt's verdict; NOT built.
+
+- File: `docs/mockups/lb-points-info-v6.html` (EN/ES buttons at the top). Regenerate it with
+  `node docs/mockups/lb-points-info-v6.build.mjs`: every number comes from `js/lb-points.js` `pointsForWin`,
+  never typed by hand; it prints the rows where the mockup shows a planned fix instead of the live value (exactly 5:
+  Cup Pong no reracks Easy/Medium, Darts Cricket in order x3). `lb-points-info-v6.review.mjs` checks every sheet
+  against the rules below at 360 px in both languages and writes the images (needs `playwright-core` + Chrome).
+- Changes from v5, from the self-review: Cup Pong's middle option is "1, 2 or 3 reracks" (the game offers 0, 1, 2, 3,
+  unlimited; default 2); a coloured card ALWAYS has a tag word, so "Vs computer" cards are neutral grey and Tic Tac Toe
+  has Normal/Harder tags; "Harder/Longer" cards are purple, not green (red/green colourblind); limit boxes name the
+  rows exactly ("Easy and Medium always; Hard only with unlimited reracks"); Spanish option tag "Estándar", because
+  "Normal" is the Spanish word for the Medium level; several-computer games get a "2 or 3 computers" card with one
+  worked example.
+- No Online card for Connect 4, Dominoes, Uno, Parchís, Monopoly Deal: they have no online play, so `P[id].on` can
+  never be earned there.
+- Facts the sheets rely on: Pool's default is first to 1 rack and Hoops' default is "Until you score", so both
+  defaults record one level down; Battleship Quick Hard = 1 point (`mode` gives the level below's value).
 
 ## Design rules, from Matt's feedback (the last mockup, v5, is the starting point)
 
