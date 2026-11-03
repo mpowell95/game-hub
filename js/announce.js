@@ -27,6 +27,17 @@ const KEY = 'gamehub.announce.v1';
  *  game, where the thing being announced is a tile the player is about to go looking for. */
 export const ANNOUNCEMENTS = [
   {
+    // The new leaderboard and its points (2026-11-03, Matt's approved mockup: two pages of one height, then "Show me
+    // where"). Drawn by js/announce-ui.js showLb2Intro (`pages: 'lb2-intro'`). ADMIN DEVICES ONLY (`adminDevice`) until
+    // Matt says "release it": then drop `adminDevice` and it shows once on every phone. Matt: "set this up for just
+    // admin so next time I open the game hub I see it the same way the others will when we go live".
+    id: 'lb2-points-2026-11-03',
+    from: '2026-11-03',
+    until: '2027-01-31',
+    adminDevice: true,
+    pages: 'lb2-intro',
+  },
+  {
     // GOLF. Matt, 2026-09-09: *"I want a popup on the gamehub itself saying something like new
     // game! Golf... It should only appear once per phone. It can't be attached to the v# because
     // other sessions are updating other games and we'll be updating golf still."*

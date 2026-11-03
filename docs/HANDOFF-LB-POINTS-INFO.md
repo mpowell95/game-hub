@@ -23,6 +23,14 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1455) THE RELEASE POPUP, BUILT FOR ADMIN DEVICES (Matt: "set this up for just admin so next time I open the game hub I
+  see it the same way the others will when we go live"). Matt's approved mockup: NEW pill, "New leaderboard layout / and
+  point system"; page 1 "Points are now awarded / for every win", "Computer (robot) and (people) Online", "Harder /
+  difficulties/modes = more points" ("=" in the middle of the screen; the words shrink, never wrap), Filler's own points
+  cards; page 2 "Medals go to the players / with the most points.", an example board (made-up Player1-4), "Each game is
+  different. / Find this on its leaderboard:", the button's picture; OK (pill) | Show me where. Both pages one height.
+  "Show me where" dims all but the Leaderboard button, then a game, then "See how scores are calculated" (Skip; ends on
+  the sheet). EN/ES, light/dark, 393/360 checked. On release: drop `adminDevice` in `js/announce.js`.
 - (v1454) Every board and Medal Count show EVERY player: the tail of 0 rows no longer folds under "N players" (Matt:
   "Remove that. ALWAYS show everybody"; `foldTail` now draws every row).
 - (v1453) REAL-DATA CHECK (Matt: "Check all data"; hearts red and the back swipe confirmed on his iPhone: "Yes and yes").

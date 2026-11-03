@@ -81,6 +81,7 @@ function ensureCss() {
  * passes a handler that opens the report form for `action: 'bug-report'`). Resolves once closed.
  */
 export function showAnnouncement(a, { onAction } = {}) {
+  if (a && a.pages === 'lb2-intro') return showLb2Intro(a);
   return new Promise((resolve) => {
     if (!a || !a.id) { resolve(); return; }
     ensureCss();
@@ -145,6 +146,184 @@ export function showAnnouncement(a, { onAction } = {}) {
     const cta = host.querySelector('[data-role="cta"]');
     if (cta) cta.addEventListener('click', () => finish(a.action || 'cta'));
   });
+}
+
+// --- The new leaderboard's intro (2026-11-03, Matt's approved mockup) ------------------------------------
+// Two pages of one height (the buttons never move), then "Show me where": the screen dims around the
+// Leaderboard button, then a game, then "See how scores are calculated", and the player taps each one.
+// Strings below are constants (the only HTML here, with <br> where Matt wanted the line broken).
+const LBI = {
+  en: { title: 'New leaderboard layout<br>and point system', p1: 'Points are now awarded<br>for every win', comp: 'Computer', and: 'and', online: 'Online',
+    eqL: '<span>Harder</span><br><span>difficulties/modes</span>', eqR: '<span>more points</span>', p2: 'Medals go to the players<br>with the most points.',
+    p3: 'Each game is different.<br>Find this on its leaderboard:', how: 'See how scores are calculated', next: 'Next', ok: 'OK', where: 'Show me where',
+    tap: 'Tap here', pick: 'Pick a game', alt: 'Example leaderboard', isNew: 'NEW', skip: 'Skip' },
+  es: { title: 'Nueva clasificación<br>y sistema de puntos', p1: 'Ahora cada victoria<br>da puntos', comp: 'Ordenador', and: 'y', online: 'En línea',
+    eqL: '<span>Niveles/modos</span><br><span>más difíciles</span>', eqR: '<span>más puntos</span>', p2: 'Las medallas son para<br>quien tenga más puntos.',
+    p3: 'Cada juego es distinto.<br>Búscalo en su clasificación:', how: 'Ver cómo se calculan los puntos', next: 'Siguiente', ok: 'Vale', where: 'Muéstramelo',
+    tap: 'Toca aquí', pick: 'Elige un juego', alt: 'Ejemplo de clasificación', isNew: 'NUEVO', skip: 'Saltar' },
+};
+const MP_ICON = '<svg class="lbi-mp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/></svg>';
+function ensureLbiCss() {
+  if (document.getElementById('lbi-css')) return;
+  const el = document.createElement('style');
+  el.id = 'lbi-css';
+  el.textContent = `
+.lbi-modal{text-align:center}
+.lbi-title{font-size:min(25px,6.1vw);font-weight:800;line-height:1.2;letter-spacing:-.01em;margin:6px 0 14px;white-space:nowrap}
+.lbi-pages{display:grid}
+.lbi-page{grid-area:1/1;display:flex;flex-direction:column;min-width:0}
+.lbi-page.off{visibility:hidden;pointer-events:none}
+.lbi-mid{flex:1;display:flex;flex-direction:column;justify-content:space-evenly}
+.lbi-p{font-size:20px;font-weight:600;line-height:1.3;margin:6px 0;text-wrap:balance}
+.lbi-emo{font-size:1.25em;vertical-align:-.12em}
+.lbi-mp{width:1.25em;height:1.25em;vertical-align:-.25em}
+.lbi-eq{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:8px;margin:6px -12px;font-size:20px;font-weight:600;line-height:1.25}
+.lbi-eq span{white-space:nowrap}
+.lbi-eq-m{font-size:1.5em;line-height:1}
+.lbi-cards{text-align:left;margin:8px -12px 0}
+.lbi-cards .lbps-lb{white-space:nowrap}
+.lbi-img{width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 10px}
+.lbi-fake{min-height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;border:1px solid #E2E5EA;color:#1F5FD1;margin:0 0 4px}
+.lbi-foot{margin-top:auto}
+.lbi-dots{display:flex;gap:7px;justify-content:center;margin:14px 0 0}
+.lbi-dots span{width:8px;height:8px;border-radius:4px;background:#c9ced6}
+.lbi-dots span.on{background:#1f5fd1}
+.lbi-foot .gh-btn{font-size:17px;white-space:nowrap}
+.lbi-wide{flex:1}
+.lbi-pill{border:1.5px solid #c9ced6;border-radius:999px}
+:root.gh-dark .lbi-fake{color:#7AA7FF;border-color:#3a4150}
+:root.gh-dark .lbi-dots span{background:#4a5160}
+:root.gh-dark .lbi-dots span.on{background:#7AA7FF}
+:root.gh-dark .lbi-pill{border-color:#4a5160}
+.lbi-hole{position:fixed;z-index:1000;border-radius:12px;box-shadow:0 0 0 3px #ffce3a,0 0 0 9999px rgba(5,10,20,.55);pointer-events:none;transition:left .15s,top .15s,width .15s,height .15s}
+.lbi-tip{z-index:1001!important}
+.lbi-tip.up::after{top:-10px;bottom:auto;transform:rotate(225deg)}
+.lbi-skip{position:fixed;z-index:1002;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;min-height:40px;padding:0 16px;border-radius:20px;border:0;background:#fff;color:#111;font:inherit;font-weight:700;font-size:15px}`;
+  document.head.appendChild(el);
+}
+function showLb2Intro(a) {
+  return new Promise((resolve) => {
+    ensureCss(); ensureLbiCss();
+    const lang = getLang() === 'es' ? 'es' : 'en';
+    const L = LBI[lang];
+    const dark = resolvedTheme() === 'dark';
+    const img = new URL(`../img/lb2-intro-board-${lang}${dark ? '-dark' : ''}.png`, import.meta.url).href;
+    const dots = (n) => `<div class="lbi-dots">${[1, 2].map((i) => `<span class="${i === n ? 'on' : ''}"></span>`).join('')}</div>`;
+    const host = document.createElement('div');
+    host.className = 'gh-overlay ann-overlay';
+    host.innerHTML = `
+      <div class="gh-modal ann-modal lbi-modal" role="dialog" aria-modal="true" aria-label="${esc(t('ann_dialog_aria'))}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
+        <div><span class="ann-badge">${L.isNew}</span></div>
+        <h2 class="lbi-title">${L.title}</h2>
+        <div class="lbi-pages">
+          <div class="lbi-page" data-page="1"><div class="lbi-mid">
+            <p class="lbi-p">${L.p1}</p>
+            <p class="lbi-p">${L.comp} <span class="lbi-emo" aria-hidden="true">🤖</span> ${L.and} ${MP_ICON} ${L.online}</p>
+            <div class="lbi-eq"><div class="lbi-eq-l">${L.eqL}</div><div class="lbi-eq-m">=</div><div class="lbi-eq-r">${L.eqR}</div></div>
+            <div class="lbps lbi-cards" data-role="cards"></div>
+          </div><div class="lbi-foot">${dots(1)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="next">${L.next}</button></div></div></div>
+          <div class="lbi-page off" data-page="2" aria-hidden="true"><div class="lbi-mid">
+            <p class="lbi-p">${L.p2}</p>
+            <img class="lbi-img" src="${esc(img)}" alt="${esc(L.alt)}" width="381" height="272" decoding="async">
+            <p class="lbi-p">${L.p3}</p>
+            <div class="lbi-fake" aria-hidden="true">${L.how}</div>
+          </div><div class="lbi-foot">${dots(2)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--ghost lbi-pill" data-role="dismiss">${L.ok}</button><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="where">${L.where}</button></div></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(host);
+    // Page 1's example: Filler's own points cards (Vs computer, Online), from the same sheet the board's (i) shows.
+    import('./lb-points-sheet.js').then((S) => {
+      S.ensurePointsSheetCss();
+      const tmp = document.createElement('div');
+      tmp.innerHTML = S.pointsSheetHTML('filler');
+      const cards = [...tmp.querySelectorAll('.lbps-card')].filter((c) => !c.classList.contains('lbps-cap')).slice(0, 2);
+      const box = host.querySelector('[data-role="cards"]');
+      if (box) cards.forEach((c) => box.appendChild(c));
+    }).catch((err) => console.warn('[announce] points example failed', err));
+    // The "=" stays in the middle of the screen: both sides are equal halves, so the words shrink (never wrap) to fit.
+    // Fitted again once the popup is laid out (its stylesheet can land a moment after it opens).
+    const eq = host.querySelector('.lbi-eq');
+    const fitEq = () => {
+      if (!eq || !eq.isConnected) return;
+      for (let f = 20; f >= 13; f -= 0.5) {
+        eq.style.fontSize = f + 'px';
+        const spans = [...eq.querySelectorAll('.lbi-eq-l span, .lbi-eq-r span')];
+        const sides = [...eq.querySelectorAll('.lbi-eq-l, .lbi-eq-r')];
+        const room = Math.min(...sides.map((x) => x.getBoundingClientRect().width));
+        if (room > 0 && spans.every((x) => x.getBoundingClientRect().width <= room + 0.5)) break;
+      }
+    };
+    fitEq();
+    requestAnimationFrame(fitEq);
+    [150, 500, 1500].forEach((ms) => setTimeout(fitEq, ms));
+    let done = false;
+    const finish = (guide) => {
+      if (done) return;
+      done = true;
+      markSeen(a.id);
+      document.removeEventListener('keydown', onKey);
+      host.remove();
+      if (guide) runLbGuide(L);
+      resolve();
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+    document.addEventListener('keydown', onKey);
+    const page = (n) => host.querySelectorAll('.lbi-page').forEach((el) => {
+      const on = el.dataset.page === String(n);
+      el.classList.toggle('off', !on);
+      el.setAttribute('aria-hidden', on ? 'false' : 'true');
+    });
+    host.addEventListener('click', (e) => {
+      if (e.target === host) { finish(false); return; }
+      const r = e.target.closest('[data-role]');
+      if (!r) return;
+      if (r.dataset.role === 'close' || r.dataset.role === 'dismiss') finish(false);
+      else if (r.dataset.role === 'next') page(2);
+      else if (r.dataset.role === 'where') finish(true);
+    });
+  });
+}
+/** "Show me where": dim everything but one control, a bubble on it, the player taps it; three steps. Ends on the
+ *  points sheet, on Skip, when the leaderboard is closed mid-way, or after 3 minutes. Never taps anything itself. */
+function runLbGuide(L) {
+  const vis = (sel) => [...document.querySelectorAll(sel)].find((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }) || null;
+  const steps = [
+    { find: () => vis('.hub-tabs [data-tab="leaderboard"]') || vis('[data-role="leaderboard"]'), text: L.tap },
+    { find: () => vis('.lb2 .lb2-scroll [data-act="game"]'), text: L.pick },
+    { find: () => vis('.lb2 .lb2-more[data-act="info"]'), text: L.tap },
+  ];
+  const hole = document.createElement('div'); hole.className = 'lbi-hole';
+  const tip = document.createElement('div'); tip.className = 'hub-tip lbi-tip is-in'; tip.setAttribute('role', 'status');
+  const skip = document.createElement('button'); skip.type = 'button'; skip.className = 'lbi-skip'; skip.textContent = L.skip;
+  document.body.append(hole, tip, skip);
+  let i = 0, shownFor = -1, timer = 0;
+  const started = Date.now();
+  const end = () => { clearInterval(timer); hole.remove(); tip.remove(); skip.remove(); };
+  skip.addEventListener('click', end);
+  const tick = () => {
+    if (Date.now() - started > 180000) { end(); return; }
+    if (i >= 1 && !document.querySelector('.lb2')) { end(); return; }        // the leaderboard was closed
+    if (i === 2 && document.querySelector('.lb2 .lb2-sheet')) { end(); return; }   // the points sheet is open
+    if (i < 2 && steps[i + 1].find()) i++;                                    // they tapped the lit control
+    const el = steps[i].find();
+    if (!el) { hole.style.opacity = '0'; tip.style.opacity = '0'; return; }
+    if (shownFor !== i) { shownFor = i; if (i > 0) el.scrollIntoView({ block: 'center' }); }
+    const r = el.getBoundingClientRect();
+    hole.style.opacity = '1'; tip.style.opacity = '1';
+    Object.assign(hole.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+    tip.innerHTML = `<span class="hub-tip-head">${steps[i].text}</span><span class="hub-tip-step">${i + 1}/3</span>`;
+    const w = tip.getBoundingClientRect().width, h = tip.getBoundingClientRect().height;
+    const left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
+    tip.style.left = `${left}px`;
+    tip.style.bottom = 'auto';
+    tip.style.setProperty('--tail', `${r.left + r.width / 2 - left - 8}px`);
+    const below = r.top < window.innerHeight / 2;
+    tip.classList.toggle('up', below);
+    tip.style.top = below ? `${r.bottom + 18}px` : `${r.top - h - 18}px`;
+  };
+  timer = setInterval(tick, 150);
+  tick();
 }
 
 export default { showAnnouncement };
