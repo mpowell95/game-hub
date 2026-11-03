@@ -2029,6 +2029,19 @@ function takeParts(p) {
   const n = p.n + 1;
   return { ...p, n, v: p.k === 'time' ? formatTimeMetric(n * 1000) : p.k === 'bank' ? bankText(n) : numText(n) };
 }
+/** v2: EQUAL to the record on the board's number but ranked below it on a tie-break (Cup Pong's fewer reracks, a
+ *  points board's more wins): gapParts has no difference to give, yet one more of the unit takes the record. Same
+ *  guards as gapParts (same difficulty, same no-hint standing); never for a time (Minesweeper ranks to the ms). */
+function tieTake(me, rec, id) {
+  const k = gapKind(id);
+  if (!k || k === 'time' || !me || !rec || me.key === rec.key) return null;
+  if (!noHintTierOf(rec, id) !== !noHintTierOf(me, id)) return null;
+  const tier = boardTierOf(rec, id);
+  if ((tier || 0) !== (boardTierOf(me, id) || 0)) return null;
+  const r = gameMetricAt(rec, id, tier), m = gameMetricAt(me, id, tier);
+  if (m == null || r == null || m !== r) return null;
+  return { k, v: k === 'bank' ? bankText(1) : numText(1), n: 1 };
+}
 /** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
 function closeness(me, rec, id) {
   if (!gapText(me, rec, id)) return -1;
@@ -3731,7 +3744,7 @@ export function lb2Board(list, id, st = {}) {
     // The pinned row's gap = the old stand line's (standLineHTML): to the board's FIRST row, read at its
     // tier, only on the views the old board printed it on. Computed NOW (the borrowed state ends below).
     const gaps = new Map();
-    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, takeParts(gapFn(me.g, out[0].g)));
+    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, takeParts(gapFn(me.g, out[0].g)) || tieTake(me.g, out[0].g, id));
     // The board's header number (all plays, gameDetail's) and its standing records block (recordsHTML).
     const plays = id === 'contexto' && _view === 'daily' ? list.reduce((a, g) => a + (ctDailyOf(g).played | 0), 0)
       : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);

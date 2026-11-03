@@ -27,7 +27,11 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   close you are to beating someone's record"). Round 4 had dropped it because the old number only reached a TIE;
   v2 now adds the one more that beats it (`takeParts` in js/leaderboard-ui.js; Minesweeper's time gap is worked
   out to the millisecond). The old board's own line is unchanged. Where there is no honest number (a no-hint
-  record over a hint row, a tie broken by wins), the line falls back to "Record N".
+  record over a hint row), the line falls back to "Record N".
+- (v1434) The same line is also on YOUR OWN ROW in the list (`gapLine`, class `lb2-gapl`), under "N played": the pinned
+  row hides while your row is on screen, which on a short board (Pool, 3 players) is always, so Ana's line was
+  invisible there. Equal to the record but ranked below on a tie-break (Cup Pong reracks, a points board's wins)
+  now says "1 more point to take the record" (`tieTake`, js/leaderboard-ui.js).
 - Found while checking, NOT fixed (reported to Matt): a Golf integrity void sets `bestRoundByCourse` to 0, which
   `golfBestAt` reads as 12 under, so a voided Golf player would rank FIRST. Minesweeper's void is safe (0 = no time).
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
