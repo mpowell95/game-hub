@@ -25,6 +25,7 @@ import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { isCompact, setLayout, onLayoutChange } from './layout.js';
 import { watchTabBar } from './tabbar-fix.js';
+import { backStack } from './back-stack.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
@@ -842,6 +843,10 @@ const PUSH_OPEN_MS = 2 * 60 * 1000;
 // sessionStorage / plain keys, not gamehub.* data.
 const OPEN_TAB_KEY = 'hub.openTab';
 const OPEN_TAB_MS = 60 * 1000;
+// A leaderboard's place, parked while a launch-out game (its own page) is open: sessionStorage, a note that
+// is read once and removed, never gamehub.* data. Honoured only on a real back, within the window.
+const LB_RETURN_KEY = 'hub.lbReturn';
+const LB_RETURN_MS = 6 * 60 * 60 * 1000;
 const TABS_KEY = 'hub.tabs';
 const PUSH_GRACE_MS = 1200;
 
@@ -850,6 +855,11 @@ class Hub {
     this.root = root;
     this._destroyed = false;
     this.current = null;     // { module, id } of the mounted game
+    // PLAY, THEN BACK, RETURNS TO THE LEADERBOARD (2026-11-03, Matt). Set only when a game was opened
+    // from a leaderboard's Play button: { back: () => reopens that leaderboard exactly as it was left,
+    // bs: the back-stack owner that keeps one history entry for the open game }. See _armReturn.
+    this._ret = null;
+    this._retGesture = false;   // the hub's entry was already consumed by the phone's back gesture
     this._onBack = () => this.requestLeave();
     this.render();
     // Family-wide stats sync: best-effort, guarded, no-op offline. On load, on tab-hide, on
@@ -918,7 +928,7 @@ class Hub {
     // that check reads every challenge game's index over the network, and a Firebase read on a bad
     // connection never settles, so a cold start from a notification could sit on the launcher for
     // ever. Opening a named match needs nothing from it.
-    this._afterPaint(() => { this._openFromUrl(); this._takeTabRequest(); });
+    this._afterPaint(() => { this._openFromUrl(); this._takeTabRequest(); this._takeLbReturn(); });
     // NOT idle time (2026-10-18): requestIdleCallback could hold the "your turn" check up to 2 s
     // behind the rest of startup (Matt: "3-5 seconds"). One frame, then straight away.
     this._rightAfterPaint(() => this._checkGameAlerts());
@@ -1376,7 +1386,7 @@ class Hub {
     this.el.back.addEventListener('click', this._onBack);
     if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => this.openBugReport());
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
-      el.addEventListener('click', () => { this.el.confirm.hidden = true; }));
+      el.addEventListener('click', () => { this.el.confirm.hidden = true; this._rearmReturn(); }));
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
       this.el.confirm.hidden = true;
       // A LIVE ROOM left on purpose (2026-10-29, js/live-leave.js): the game resigns the match it is
@@ -1481,18 +1491,7 @@ class Hub {
       });
     }
 
-    this.el.leaderboard.addEventListener('click', () => {
-      import('./leaderboard-ui.js').then((m) => m.openLeaderboard({
-        // Play on a game's board (2026-10-20): the same as tapping that game's tile.
-        canPlay: (id) => this.games.some((g) => g.id === id && !g.comingSoon),
-        onPlay: (id) => {
-          const g = this.games.find((x) => x.id === id);
-          if (!g || this.current) return;
-          if (g.href) window.location.href = g.href;
-          else this.launch(id);
-        },
-      })).catch(() => {});
-    });
+    this.el.leaderboard.addEventListener('click', () => this._openLeaderboard());
 
     this.el.version.addEventListener('click', () => this._forceUpdate());
 
@@ -2302,11 +2301,12 @@ class Hub {
     // kept drawing the old golf tile while the chip honestly read v815. _onNewBuildActive carries
     // every guard this needs (page must have loaded under a worker, the version must actually have
     // MOVED, once per page, never over a mounted game), so resume just calls it again.
-    this._onResume = () => {
+    this._onResume = (e) => {
       if (document.visibilityState !== 'visible') { this._noteHidden(); return; }
       this._noteBack();   // back after AWAY_MS: a fresh open (the visibility handler asks for a build)
       this._onNewBuildActive();
       this._takeTabRequest();   // back from the profile page's tab bar (a back-forward-cache restore)
+      if (e && e.type === 'pageshow' && e.persisted) this._takeLbReturn(true);   // back from a launch-out game
     };
     document.addEventListener('visibilitychange', this._onResume);
     // pageshow fires for a back-forward-cache restore, which visibilitychange does not cover.
@@ -2805,7 +2805,9 @@ class Hub {
     return `<div class="hub-cell">${card}${overlay}</div>`;
   }
 
-  async launch(id) {
+  /** `opts.back` (2026-11-03): a function that reopens the leaderboard the game was started from. When
+   *  given, every way out of the game (the Hub button, the phone's back gesture) goes back to it. */
+  async launch(id, opts = {}) {
     const game = this.games.find((g) => g.id === id);
     if (!game || game.comingSoon) return;
     // A game held back from this player (`hideFrom`) cannot be opened by a deep link, a push or
@@ -2818,6 +2820,8 @@ class Hub {
     // AFTER the player comes back out of the game they had trouble with. Set before the import so
     // a game that fails to LOAD is still the one preselected.
     this._lastGameId = id;
+    // A return left over from an earlier game is dropped here; this launch brings its own, if any.
+    this._dropReturn();
 
     // Tear down any previously mounted game first.
     await this.unmount();
@@ -2852,11 +2856,13 @@ class Hub {
       }
       console.error(`Failed to load game "${id}"`, e);
       this._enterGameChrome(game);
+      this._armReturn(opts && opts.back);
       this.el.game.innerHTML = `<p class="hub-error">${t('hub_load_error', { title: titleText(game) })}</p>`;
       return;
     }
 
     this._enterGameChrome(game);
+    this._armReturn(opts && opts.back);
     try {
       module.init(this.el.game);
       this.current = { module, id };
@@ -2917,6 +2923,113 @@ class Hub {
     this.showLauncher();
   }
 
+  /** Open the leaderboard (v2 on an admin device, the old board for everyone else). `extra` is passed
+   *  through, so a returning player's `restore` reaches the board that knows how to use it. */
+  _openLeaderboard(extra = {}) {
+    return import('./leaderboard-ui.js').then((m) => m.openLeaderboard({
+      // Play on a game's board (2026-10-20): the same as tapping that game's tile.
+      canPlay: (id) => this.games.some((g) => g.id === id && !g.comingSoon),
+      // `back` (2026-11-03): reopens the leaderboard on the screen and scroll it was left on; a board
+      // that does not pass one gets today's behaviour (back lands on the launcher).
+      onPlay: (id, back) => {
+        const g = this.games.find((x) => x.id === id);
+        if (!g || this.current) return;
+        if (g.href) this._leaveForPage(g.href, back);
+        else this.launch(id, { back });
+      },
+      ...extra,
+    })).catch(() => {});
+  }
+
+  // --- PLAY, THEN BACK, RETURNS TO THE LEADERBOARD (2026-11-03) --------------------------------------
+  // Matt: "when I'm looking at stats in the leaderboard and I click the play button, it brings me
+  // straight to that game. I want to be able to press back and go back to where I was on the stats page
+  // instead of having to go back to the hub landing page."
+  //
+  // The leaderboard closes when Play is tapped (it is a full-screen overlay and the game mounts under
+  // the hub chrome), so what is kept is a function that REOPENS it on the same screen and scroll
+  // (`back`, built by the leaderboard from its own state at the moment of the tap). Every way out of the
+  // game already runs through showLauncher(): the Hub button and the "leave?" dialog call it directly,
+  // and the phone's back gesture is routed to the same requestLeave() by the one history entry the open
+  // game holds (js/back-stack.js, the same machinery every overlay uses). So an in-progress game asks
+  // its own "quit?" question on a gesture exactly as it does on the button.
+  _armReturn(back) {
+    this._dropReturn();
+    if (typeof back !== 'function') return;
+    const ret = { back, bs: null };
+    ret.bs = backStack(() => { this._retGesture = true; this.requestLeave(); });
+    ret.bs.sync(1);
+    this._ret = ret;
+  }
+
+  /** Forget the return (unwinding its history entry). Returns it so a caller can still use `back`. */
+  _dropReturn() {
+    const ret = this._ret;
+    this._ret = null;
+    if (ret && ret.bs) { try { ret.bs.close(); } catch (e) { console.warn('[hub] return history unwind failed', e); } }
+    return ret;
+  }
+
+  /** The "quit?" dialog was answered Cancel after a back gesture had spent the game's history entry:
+   *  put it back, from this tap (never from inside the popstate that spent it, js/back-stack.js). */
+  _rearmReturn() {
+    this._retGesture = false;
+    if (this._ret && this._ret.bs && this._ret.bs.level < 1) this._ret.bs.sync(1);
+  }
+
+  /** Reopen the leaderboard a game was started from. After a back GESTURE this waits a beat so the
+   *  leaderboard's own history entries are pushed outside the popstate that started the leave. */
+  _reopenFrom(ret, viaGesture) {
+    const go = () => {
+      if (this._destroyed || this.current) return;
+      try {
+        const p = ret.back();
+        if (p && typeof p.catch === 'function') p.catch((err) => console.warn('[hub] could not reopen the leaderboard', err));
+      } catch (err) { console.warn('[hub] could not reopen the leaderboard', err); }
+    };
+    if (viaGesture) setTimeout(go, 80); else go();
+  }
+
+  /** A launch-out game (Monopoly Deal, Parchís) is a page of its own, so the leaderboard cannot be kept
+   *  in memory: its place is parked in sessionStorage and `_takeLbReturn` reopens it if the player comes
+   *  BACK to the hub (browser back, the phone's gesture).
+   *
+   *  The navigation also waits for the leaderboard's history unwind. The leaderboard closes before this
+   *  runs and unwinds its own entries with history.go(-n); a location change made in the same breath is
+   *  CANCELLED by that traversal (measured in Chrome: Play on Monopoly Deal closed the board and went
+   *  nowhere, on main as well). */
+  _leaveForPage(href, back) {
+    try {
+      if (back && back.state) sessionStorage.setItem(LB_RETURN_KEY, JSON.stringify({ snap: back.state, at: Date.now() }));
+    } catch { /* no storage: back lands on the launcher, as it always did */ }
+    let gone = false;
+    const go = () => {
+      if (gone) return;
+      gone = true;
+      window.removeEventListener('popstate', onPop);
+      window.location.href = href;
+    };
+    const onPop = () => setTimeout(go, 0);
+    window.addEventListener('popstate', onPop);
+    setTimeout(go, 1500);   // nothing to unwind, or the traversal never reported
+  }
+
+  /** The player came back from a launch-out game that was opened from a leaderboard's Play button:
+   *  reopen that leaderboard where it was. `fromCache`: a back-forward-cache restore (only ever a back
+   *  or forward). Otherwise only a real back navigation counts: the game's own "Quit to Game Hub" link
+   *  and a fresh open land on the launcher, as they always did. The note is read once and always removed. */
+  _takeLbReturn(fromCache = false) {
+    let q = null;
+    try {
+      q = JSON.parse(sessionStorage.getItem(LB_RETURN_KEY) || 'null');
+      sessionStorage.removeItem(LB_RETURN_KEY);
+    } catch { return; }
+    if (!q || !q.snap || Date.now() - (+q.at || 0) > LB_RETURN_MS || this.current || this._destroyed || !this.el) return;
+    let back = fromCache;
+    if (!back) { try { back = performance.getEntriesByType('navigation')[0].type === 'back_forward'; } catch { back = false; } }
+    if (back) this._openLeaderboard({ restore: q.snap });
+  }
+
   async unmount() {
     if (this.current && typeof this.current.module.destroy === 'function') {
       try { this.current.module.destroy(); } catch (e) { console.warn('destroy() failed', e); }
@@ -2926,6 +3039,10 @@ class Hub {
   }
 
   async showLauncher() {
+    // Taken before anything is awaited, so a second call (a double tap) cannot reopen it twice.
+    const ret = this._dropReturn();
+    const viaGesture = this._retGesture;
+    this._retGesture = false;
     await this.unmount();
     document.documentElement.classList.remove('gh-ingame');
     this.el.game.hidden = true;
@@ -2952,11 +3069,14 @@ class Hub {
     this._checkGameAlerts();
     // A new build that landed WHILE they were playing was deliberately held (never interrupt a
     // game). They are on the launcher now, so it is safe to take it.
-    if (this._updateWaiting) { this._updateWaiting = false; this._applyUpdate(); }
+    if (this._updateWaiting) { this._updateWaiting = false; this._applyUpdate(); return; }
+    // Started from a leaderboard's Play button: put that leaderboard back where it was (_armReturn).
+    if (ret) this._reopenFrom(ret, viaGesture);
   }
 
   destroy() {
     this._destroyed = true;   // _afterPaint's callbacks check this before firing into a dead hub
+    this._dropReturn();
     this.unmount();
     this.el.back.removeEventListener('click', this._onBack);
     if (this._onVis) document.removeEventListener('visibilitychange', this._onVis);
