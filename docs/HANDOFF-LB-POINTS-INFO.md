@@ -75,6 +75,9 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   to the hub landing page." Play, then Back (the Hub button OR the phone's back gesture) reopens Leaderboard v2 on the
   same tab, game board, filters or player page, at the same scroll. A game that is mid-play still asks its own "quit?"
   question first. Details: `js/CLAUDE.md`, the `back-stack.js` row. Admin devices only (the old board is unchanged).
+- (2026-11-03, navigation) The profile page's "My Stats" button opens Leaderboard v2 on its **Me** tab on an admin
+  device (`openLeaderboard2({tab: 'me', pageTabs: true})`); a player's device still opens the My Stats screen
+  (`js/game-stats-ui.js`), because v2 is not released to players. The tab keeps its label "Me" (Matt).
 - Releasing to players is still Matt's words only ("release it", "ship it", "make it live for everyone").
 
 ## Where things stood before the build (live, v1427)
