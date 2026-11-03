@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1436;
-const CACHE = 'game-hub-v1440';
+const CACHE = 'game-hub-v1441';
 
 const ASSETS = [
   './',
@@ -846,7 +846,7 @@ const REST_MANIFEST = {
   './js/back-stack.js': '30b257fa2a',
   './js/lb-rules.js': '229e7a9b85',
   './js/lb-points.js': '72c4ab65eb',
-  './js/lb-points-sheet.js': '66aee8f5e5',
+  './js/lb-points-sheet.js': '9a4f24449d',
   './js/lb-rank-sheet.js': '51d64b0d92',
   './js/points-toast.js': 'd4c3e9ddc0',
   './js/lb2-lost.js': '1c5e1679ff',
@@ -898,7 +898,7 @@ const REST_MANIFEST = {
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
   './js/leaderboard-ui.js': '14c91fa70c',
-  './js/leaderboard2-ui.js': '4e0397a418',
+  './js/leaderboard2-ui.js': 'a4f776568e',
   './js/leaderboard2-boards.js': 'afbc6ba443',
   './js/leaderboard2-strings.js': 'ce8ef9c22b',
   './js/leaderboard-rank.js': '4fe1b42b0f',
