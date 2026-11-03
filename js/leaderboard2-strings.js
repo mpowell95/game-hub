@@ -39,6 +39,10 @@ export const STRINGS = {
     lb2_all_machines: 'All machines',
     lb2_games_tile: 'Games',
     lb2_hold_h: 'Records held',
+    // The Me tab's switcher (2026-11-03, Matt accepted these words): one list at a time.
+    lb2_me_gold: 'Golds',
+    lb2_me_lost: 'Lost',
+    lb2_me_close: 'Closest',
     lb2_close_h: 'Closest to a record',
     // How far from gold (the Me tab, 2026-11-03): `v` the number, `sh` its level's shape or ''. The difference is
     // bold and gold; as few words as possible (Matt).
@@ -169,6 +173,9 @@ export const STRINGS = {
     lb2_all_machines: 'Todas las máquinas',
     lb2_games_tile: 'Juegos',
     lb2_hold_h: 'Récords',
+    lb2_me_gold: 'Oros',
+    lb2_me_lost: 'Perdidos',
+    lb2_me_close: 'Más cerca',
     lb2_close_h: 'Más cerca de un récord',
     lb2_need: (p) => {
       const s = (a, b) => (Number(p.n) === 1 ? a : b);
