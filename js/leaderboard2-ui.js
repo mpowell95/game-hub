@@ -1151,7 +1151,10 @@ html.gh-compact .lb2-x{display:none}
 .lb2-val{font-size:16px;font-weight:700;padding-right:8px;display:flex;align-items:center;gap:4px;white-space:nowrap}
 .lb2-val .lb-ctm{flex-shrink:0}
 .lb2-val .lb-mspct{font-size:14px}
-.lb2-shape{display:inline-flex;width:14px;height:14px;flex-shrink:0}
+/* The level-shape tile (2026-11-03, Matt: the Expert double diamond was small and off centre on its tile). ONE rule
+   sizes it: --sh is the tile's height, the shape is centred in it, and the double diamond is the same height as the
+   others, 1.7 times as wide (its own 34x20 viewBox). A place only ever sets --sh, never width/height. */
+.lb2-shape{--sh:14px;display:inline-flex;align-items:center;justify-content:center;width:var(--sh);height:var(--sh);flex-shrink:0;vertical-align:middle}
 .lb2-shape svg{width:100%;height:100%}
 .lb2-gm{font-size:14px;color:var(--l2-muted)}
 .lb2-lr.me .lb2-gm{color:inherit}
@@ -1199,7 +1202,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-sub{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--l2-muted);line-height:1.25}
 .lb2-lr.me .lb2-sub{color:inherit}
 .lb2-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px 1px 4px;border:1px solid currentColor;border-radius:10px;font-size:12px;font-weight:700;line-height:16px;white-space:nowrap;flex-shrink:0}
-.lb2-pill .lb2-shape{width:11px;height:11px;margin:0}
+.lb2-pill .lb2-shape{--sh:11px;margin:0}
 .lb2-lr{min-height:58px;padding:6px 4px}
 .lb2-val{max-width:46vw}
 .lb2-val img{flex-shrink:0}
@@ -1207,7 +1210,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-ctrlrow{display:flex;gap:8px;align-items:center}
 .lb2-ctrlrow>.lb2-seg{flex:1;min-width:0}
 .lb2-seg>button{gap:4px}
-.lb2-seg .lb2-shape{width:12px;height:12px}
+.lb2-seg .lb2-shape{--sh:13px}
 .lb2-segs{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
 .lb2-tabwrap{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:8px}
 .lb2-tabwrap .lb2-chip{min-height:44px;padding:0 14px;font-size:14px}
@@ -1217,7 +1220,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-msg{color:var(--l2-accent)}
 .lb2-tile b small{font-size:15px;color:var(--l2-muted);font-weight:600}
 .lb2-t2 .lb2-medal{display:inline-block;vertical-align:middle;margin:0 4px 0 0}
-.lb2-t2 .lb2-shape{display:inline-flex;width:12px;height:12px;vertical-align:middle;margin:0 2px}
+.lb2-t2 .lb2-shape{--sh:14px;margin:0 2px}
 .lb2-rv{display:inline-flex;align-items:center;justify-content:flex-end;gap:4px}
 
 .lb2-shape{background:#fff;border-radius:4px;padding:1px;box-sizing:content-box}
@@ -1272,8 +1275,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-div .lb2-pill{text-transform:none;letter-spacing:0}
 .lb2-div0{min-height:8px;padding:0}
 .lb2-val .lb2-shape{margin-right:3px}
-.lb2-shape.x2{width:24px}
-.lb2-seg .lb2-shape.x2,.lb2-t2 .lb2-shape.x2{width:20px}
+.lb2 .lb2-shape.x2{width:calc(var(--sh) * 1.7)}
 .lb2-pill.lb2-nh{padding:1px 7px}
 .lb2-v{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
 .lb2-vline{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;color:var(--l2-text);white-space:normal;overflow:visible}
@@ -1283,8 +1285,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-recs .lb-rec span{color:var(--l2-muted)}
 .lb2-recs .lb-rec em.lb2-mine{color:var(--l2-accent)}
 .lb2-seg.stk>button{flex-direction:column;gap:2px;font-size:13px;line-height:1.1;padding:2px 1px}
-.lb2-seg.stk .lb2-shape{width:13px;height:13px}
-.lb2-seg.stk .lb2-shape.x2{width:22px}
+.lb2-seg.stk .lb2-shape{--sh:13px}
 .lb2-rushrow{justify-content:flex-end}
 .lb2-rushrow .lb2-chip{min-height:40px;padding:0 12px 0 16px;gap:8px}
 .lb2-lr.lb2-hofr{gap:6px}
@@ -1294,7 +1295,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-close .lb2-vsr{flex-wrap:nowrap;white-space:nowrap}
 .lb2-need{display:block;color:var(--l2-text);white-space:normal;overflow:visible}
 .lb2-need b{font-weight:800;color:var(--l2-gold)}
-.lb2-need .lb-dshape,.lb2-need svg{width:14px;height:14px;vertical-align:-2px;margin:0 3px 0 1px}
+.lb2-need .lb2-shape{--sh:14px;margin:0 4px 0 1px}
 .lb2-close .lb2-vsr .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-frow{display:flex;gap:8px;align-items:stretch}
 .lb2-catpick{position:relative;flex:1;min-width:0;min-height:44px;border-radius:12px;background:var(--l2-seg);display:flex;align-items:center;gap:8px;padding:0 36px 0 14px;font-size:15px;font-weight:600;color:var(--l2-text)}
@@ -1312,8 +1313,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-sortpick select{padding-left:36px}
 .lb2-favseg{display:inline-flex;align-items:center;gap:5px}
 .lb2-gap b{font-weight:700}
-.lb2-gap .lb2-shape{width:12px;height:12px;vertical-align:-2px;margin-right:3px;display:inline-flex}
-.lb2-gap .lb2-shape.x2{width:20px}
+.lb2-gap .lb2-shape{--sh:13px;margin-right:3px}
 .lb2-shh{margin:0;font-size:20px;font-weight:700}
 .lb2-help-key,.lb2-shape-key{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:15px;font-weight:600}
 .lb2-shape-key>span{display:inline-flex;align-items:center;gap:6px}
@@ -1339,11 +1339,8 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-rview{flex:0 0 auto;width:46%;min-height:48px}
 .lb2-ctrlrow>.lb2-seg.stk{flex:1}
-:root:not(.gh-dark) .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px;width:15px;height:15px}
-:root:not(.gh-dark) .lb2-shape.x2{width:26px}
-:root:not(.gh-dark) .lb2-seg .lb2-shape{width:13px;height:13px}
-:root:not(.gh-dark) .lb2-seg .lb2-shape.x2,:root:not(.gh-dark) .lb2-t2 .lb2-shape.x2{width:22px}
-.lb2-shape svg{width:100%;height:100%;display:block}
+:root:not(.gh-dark) .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px}
+.lb2 .lb2-shape>svg{width:100%;height:100%;display:block;margin:0;flex:none}
 @media (max-width:380px){.lb2-ic{width:48px;height:30px}.lb2-row{gap:10px;padding:8px 10px}}
 
 /* Matt's 12 (2026-11-02) */
@@ -1373,8 +1370,7 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-kc>b>*{flex-shrink:0}
 .lb2-kc>b .lb2-shape{margin-right:6px}
 .lb2-kc>b .lb2-ctv img{height:30px;width:auto}
-.lb2-kc>b .lb2-shape{width:18px;height:18px}
-.lb2-kc>b .lb2-shape.x2{width:30px}
+.lb2-kc>b .lb2-shape{--sh:18px}
 .lb2-kc>b .lb2-best{font-size:26px;color:var(--l2-text)}
 .lb2-kc>span{font-size:13px;color:var(--l2-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .lb2-backto{gap:8px}
