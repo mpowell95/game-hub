@@ -791,7 +791,8 @@ class SpellingBee {
     const code = myCode();
     // For fun (2026-11-01): that day's real board, plus this player's for-fun score as a row that takes no
     // place (no number, dashed, tagged). A real row of theirs (another phone) stays as it is.
-    const fun = live && this.mode === 'fun';
+    // `this.fun`, not the mode: a for-fun day whose answers were seen is look-only but still for fun.
+    const fun = live && !!this.fun;
     const rows = shownRows(serverRows.filter((r) => !live || fun || r.code !== code), { me: code, voided, own, day, puzzle, now: bestNow() }).map((r) => ({ ...r, me: r.code === code }));
     if (fun) {
       const p = (() => { try { return loadProfile() || {}; } catch { return {}; } })();
@@ -1013,7 +1014,8 @@ class SpellingBee {
   // --- past days: look-only and for fun (Matt, 2026-11-01) ---------------------------------------
 
   /** A past day you played, or whose answers you chose to see: the board, the score, and two rows that
-   *  open every answer and every bonus word, yours ticked. Nothing can be typed. */
+   *  open every answer and every bonus word, yours ticked. Nothing can be typed. The trophy (that day's
+   *  board) stays (2026-11-03: the 11-01 look-only screen dropped it, so Lili could not see past days' scores). */
   _renderReview() {
     const sc = this.score;
     const ri = this.rank();
@@ -1026,6 +1028,7 @@ class SpellingBee {
         <span class="sb-hud-fill"></span>
         <button type="button" class="sb-langbtn" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.data.lang === 'es' ? 'ES' : 'EN'}</button>
         <button type="button" class="sb-iconbtn" data-act="past" aria-label="${esc(t('past_aria'))}">${ICON.past}</button>
+        <button type="button" class="sb-iconbtn" data-act="board" aria-label="${esc(t('board_aria'))}">${ICON.rankings}</button>
         <button type="button" class="sb-iconbtn" data-act="help" aria-label="${esc(t('help_aria'))}">${ICON.help}</button>
       </div>
       <div class="sb-review">
