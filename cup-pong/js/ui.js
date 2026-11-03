@@ -12,8 +12,8 @@ import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, 
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
-import { THROW, CUP, RACK_Z0, ROW_H } from './geom.js';
-import { makeRack, cupsXZ, presetsFor, cellXZ, AREA } from './rack.js';
+import { THROW, CUP, CUP_D, RACK_Z0, ROW_H } from './geom.js';
+import { makeRack, cupsXZ, presetsFor, cellXZ, FREE, spotOf, settleSpot } from './rack.js';
 import { Match } from './match.js';
 
 /** The middle of the full rack, along the table: where aim is measured. */
@@ -128,13 +128,6 @@ function presetSVG(spots) {
   return `<svg viewBox="0 0 ${(w * sc).toFixed(1)} ${(h * sc).toFixed(1)}" width="${(w * sc).toFixed(0)}" height="${(h * sc).toFixed(0)}" aria-hidden="true">${
     pts.map((p) => `<circle cx="${((p.x - x0) * sc).toFixed(1)}" cy="${((p.z - z0) * sc).toFixed(1)}" r="${(r * sc * 0.94).toFixed(1)}"/>`).join('')}</svg>`;
 }
-
-/** Every cell of the rack area (brief 4c's grid), far row first: where a custom rack may put a cup. */
-const AREA_CELLS = (() => {
-  const out = [];
-  for (let r = 0; r <= AREA.rMax; r++) for (let c = -AREA.cMax; c <= AREA.cMax; c++) if (Math.abs(c + r) % 2 === 1) out.push({ c, r });
-  return out;
-})();
 
 /** The "make your own" icon: a triangle of dashed spots with one cup lifted off it. */
 const CUSTOM_ICON = `<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">${
@@ -1337,35 +1330,24 @@ class CupPong {
   }
 
   /**
-   * MAKE YOUR OWN (brief 4c). The rack drawn top-down on its hex grid, shooter at the bottom: drag
-   * a cup to any empty spot, or tap a cup and then a spot. Cups snap to cells, two can never share
-   * one, and the grid IS the rack area, so nothing drawn can be illegal. Cups need not touch. Done
-   * spends the rerack; Cancel goes back to the presets with it unspent.
+   * MAKE YOUR OWN (brief 4c), ANYWHERE (2026-11-03, Matt: "I want to be able to move the cups however I
+   * want. Not in this exact grid. I want a stop light with two to the left filling the gaps"). The rack
+   * area drawn top-down, shooter at the bottom: drag a cup anywhere, or tap a cup and then a place. A cup
+   * dropped near another cup or the back wall slides into contact (rack.js settleSpot), so a cup put in
+   * a gap nestles touching both sides; on top of a cup it moves to the nearest place it fits. Cups need
+   * not touch. Done spends the rerack; Cancel goes back to the presets with it unspent.
    */
   showCustomRack() {
     const m = this.match;
     const rack = m.target();
-    // Start from where the cups stand now, each on its nearest free cell (a line preset sits on
-    // exact spots, off the grid).
-    const taken = new Set();
-    const pos = rack.map((k) => {
-      const p = cellXZ(k);
-      let best = -1, bd = Infinity;
-      AREA_CELLS.forEach((cell, i) => {
-        if (taken.has(i)) return;
-        const q = cellXZ(cell), d = (q.x - p.x) ** 2 + (q.z - p.z) ** 2;
-        if (d < bd) { bd = d; best = i; }
-      });
-      taken.add(best);
-      return best;
-    });
-    const start = pos.slice();
-    const pts = AREA_CELLS.map((c) => cellXZ(c));
+    const pos = rack.map((k) => spotOf(k));              // every cup at an exact spot, cells included
+    const start = pos.map((p) => ({ ...p }));
     const R = CUP.topR, pad = 0.012;
-    const x0 = Math.min(...pts.map((p) => p.x)) - R - pad, x1 = Math.max(...pts.map((p) => p.x)) + R + pad;
-    const z0 = Math.min(...pts.map((p) => p.z)) - R - pad, z1 = Math.max(...pts.map((p) => p.z)) + R + pad;
+    const x0 = -FREE.uMax * CUP_D - R - pad, x1 = FREE.uMax * CUP_D + R + pad;
+    const z0 = RACK_Z0 - R - pad, z1 = RACK_Z0 + FREE.vMax * CUP_D + R + pad;
     const W = 1000, sc = W / (x1 - x0), H = (z1 - z0) * sc;
-    const X = (i) => ((pts[i].x - x0) * sc).toFixed(1), Y = (i) => ((pts[i].z - z0) * sc).toFixed(1);
+    const X = (p) => (p.u * CUP_D - x0) * sc, Y = (p) => (RACK_Z0 + p.v * CUP_D - z0) * sc;
+    const spotAt = (x, y) => ({ u: (x / sc + x0) / CUP_D, v: (y / sc + z0 - RACK_Z0) / CUP_D });
     const rr = (R * sc * 0.96).toFixed(1);
     const el = document.createElement('div');
     el.className = 'gh-overlay';
@@ -1375,8 +1357,8 @@ class CupPong {
         <p class="cp-custom-say">${t('rkDrag')}</p>
         <svg class="cp-grid" viewBox="0 0 ${W} ${H.toFixed(1)}" role="img" aria-label="${t('rk_custom')}">
           <rect class="cp-wall" x="0" y="0" width="${W}" height="16"/>
-          ${AREA_CELLS.map((_, i) => `<circle class="cp-spot" data-cell="${i}" cx="${X(i)}" cy="${Y(i)}" r="${rr}"/>`).join('')}
-          ${pos.map((ci, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(ci)} ${Y(ci)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}
+          <line class="cp-mid" x1="${(W / 2).toFixed(1)}" y1="16" x2="${(W / 2).toFixed(1)}" y2="${H.toFixed(1)}"/>
+          ${pos.map((p, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(p).toFixed(1)} ${Y(p).toFixed(1)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}
         </svg>
         <div class="cp-custom-btns">
           <button type="button" class="gh-btn" data-role="cancel">${t('cancel')}</button>
@@ -1394,25 +1376,18 @@ class CupPong {
       return { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * H };
     };
     const place = (k, x, y) => cups[k].setAttribute('transform', `translate(${(+x).toFixed(1)} ${(+y).toFixed(1)})`);
+    /** Where cup k would come to rest if let go at this point of the drawing (null: nowhere near). */
+    const settle = (k, x, y) => settleSpot(spotAt(x, y), pos.filter((_, i) => i !== k));
     const paint = () => {
-      pos.forEach((ci, k) => { place(k, X(ci), Y(ci)); cups[k].classList.toggle('is-sel', k === sel); });
-      // Against the back wall (Matt, 2026-09-29): the back row may not be left empty.
-      const back = !m.backRack || pos.some((ci) => AREA_CELLS[ci].r === 0);
-      done.disabled = !back || pos.every((ci, k) => ci === start[k]);
+      pos.forEach((p, k) => { place(k, X(p), Y(p)); cups[k].classList.toggle('is-sel', k === sel); cups[k].classList.remove('is-bad'); });
+      // Against the back wall (Matt, 2026-09-29): at least one cup touching it.
+      const back = !m.backRack || pos.some((p) => p.v <= 1e-6);
+      const moved = pos.some((p, k) => Math.abs(p.u - start[k].u) > 1e-9 || Math.abs(p.v - start[k].v) > 1e-9);
+      done.disabled = !back || !moved;
       say.textContent = back ? t('rkDrag') : t('rkBack');
       say.classList.toggle('is-warn', !back);
     };
     paint();
-    // The free cell nearest a point, or the cup's own cell (dropping it back where it was).
-    const nearest = (k, x, y) => {
-      let best = pos[k], bd = Infinity;
-      AREA_CELLS.forEach((_, i) => {
-        if (i !== pos[k] && pos.includes(i)) return;
-        const d = (X(i) - x) ** 2 + (Y(i) - y) ** 2;
-        if (d < bd) { bd = d; best = i; }
-      });
-      return best;
-    };
     this.on(svg, 'pointerdown', (e) => {
       const g = e.target.closest && e.target.closest('.cp-cup');
       const p = toSvg(e);
@@ -1424,10 +1399,9 @@ class CupPong {
         e.preventDefault();
         return;
       }
-      const s = e.target.closest && e.target.closest('.cp-spot');
-      if (s && sel >= 0) {
-        const i = +s.dataset.cell;
-        if (!pos.includes(i)) pos[sel] = i;
+      if (sel >= 0) {                                    // a cup picked up: put it down here
+        const to = settle(sel, p.x, p.y);
+        if (to) pos[sel] = to;
         sel = -1;
         paint();
       }
@@ -1437,24 +1411,31 @@ class CupPong {
       const p = toSvg(e);
       if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) < R * sc * 0.25) return;
       drag.moved = true;
-      place(drag.k, p.x, p.y);
+      // The cup shows where it would come to rest, so a gap is found by feel; nowhere near: dimmed.
+      const to = settle(drag.k, p.x, p.y);
+      if (to) place(drag.k, X(to), Y(to)); else place(drag.k, p.x, p.y);
+      cups[drag.k].classList.toggle('is-bad', !to);
     });
     const end = (e) => {
       if (!drag || e.pointerId !== drag.id) return;
       const { k, moved } = drag;
       cups[k].classList.remove('is-drag');
       drag = null;
-      if (moved) { const p = toSvg(e); pos[k] = nearest(k, p.x, p.y); sel = -1; }
-      else sel = sel === k ? -1 : k;              // a tap picks it up (or puts it back down)
+      if (moved) {
+        const p = toSvg(e);
+        const to = settle(k, p.x, p.y);
+        if (to) pos[k] = to;                             // nowhere near: it goes back where it was
+        sel = -1;
+      } else sel = sel === k ? -1 : k;                   // a tap picks it up (or puts it back down)
       paint();
     };
     this.on(svg, 'pointerup', end);
     this.on(svg, 'pointercancel', (e) => { if (drag && e.pointerId === drag.id) { cups[drag.k].classList.remove('is-drag'); drag = null; paint(); } });
     this.on(el.querySelector('[data-role="cancel"]'), 'click', () => { el.remove(); this.showRerack(); });
     this.on(done, 'click', () => {
-      const cells = pos.map((i) => ({ c: AREA_CELLS[i].c, r: AREA_CELLS[i].r }));
+      const spots = pos.map((p) => ({ u: p.u, v: p.v }));   // full precision: the other phone checks the same numbers
       el.remove();
-      this.applyRerack(m.rerackCustom(cells), { k: 'r', key: 'custom', cells });
+      this.applyRerack(m.rerackCustom(spots), { k: 'r', key: 'custom', spots });
     });
   }
 

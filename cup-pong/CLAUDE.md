@@ -75,10 +75,13 @@ turn's first throw:
   cups standing, owed cups not counted, in EVERY match incl. challenges begun earlier (Matt saw Moonis call it on the last
   cup in one). A replay ACCEPTS a stored call anyway (`callIsland(id, true)` in `applyEntry`): an older-build phone may
   have made one, and refusing it would refuse the whole match. `rules.i3` is a record only.
-- **Make your own** (`showCustomRack` in `ui.js`): all 28 `AREA` cells on a hex grid; drag or tap a
-  cup then a spot; snaps to the nearest free cell; **Done** (`match.rerackCustom(cells)`, which
-  re-checks `isCell` + `validRack`, keeps ids). Challenge log: `{k:'r', key:'custom', cells:[{c,r}...]}`.
-  The computer uses presets only.
+- **Make your own, ANYWHERE** (2026-11-03, Matt: "I want to be able to move the cups however I want. Not in this
+  exact grid. I want a stop light with two to the left filling the gaps"): `showCustomRack` in `ui.js`, no grid; drag
+  or tap a cup then a place; each cup is an exact spot `{u, v}`. A drop slides into contact near a cup or the back
+  wall, preferring a snug spot touching TWO things (a gap), and moves off a cup it lands on (`rack.js settleSpot`,
+  `SNAP` 0.3 cup-widths). **Done** = `match.rerackCustom(spots)` (`isSpot` + `validRack`, one cup at v = 0, ids kept).
+  Challenge log: `{k:'r', key:'custom', spots:[{u,v}...]}` at full precision; the old `cells:[{c,r}...]` still
+  replays. A phone on a build before v1432 cannot read `spots` (IMPORTANT_SINCE 1432). The computer uses presets only.
 - **Every rerack stands AGAINST THE BACK WALL** (2026-09-29): preset back row on the rack's back row
   (`shape(rows, back)`, `backLine`); custom needs at least one cup on the back row
   (`rerackCustom` refuses otherwise); Gentleman's line keeps its own placement. `rules.bk` (written on

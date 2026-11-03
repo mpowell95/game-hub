@@ -163,6 +163,29 @@ ok('...costing one rerack', lc.reracksLeft.a === 1);
 ok('a retry of the same custom rerack writes nothing twice', (await MP.appendLog(id3, 4, [rr])).ok && Object.keys(getAt(`cuppong/games/${id3}/log`)).length === 5);
 void PRESETS;
 
+// A FREE custom rerack (2026-11-03) rides the log as exact spots at full precision, and replays.
+{
+  use('A');
+  const r4 = await MP.createGame({ them: { code: 'ANABB', name: 'Ana', emoji: '🦊' }, rules: { gent: false, rr: 2 } });
+  const id4 = r4.id;
+  ok('free rerack setup: a turn each', (await MP.appendLog(id4, 0, [t('a', 'k0'), t('a', null)])).ok);
+  use('B'); ok('...', (await MP.appendLog(id4, 2, [t('b', null), t('b', null)])).ok); use('A');
+  // Matt's stop light (3 in a line from the back wall) with two to the left in the gaps; 9 cups left,
+  // so four more spread out, apart.
+  const h = Math.sqrt(3) / 2;
+  const spots = [{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }, { u: -h, v: 0.5 }, { u: -h, v: 1.5 }, { u: 2.5, v: 0 }, { u: 2.5, v: 2 }, { u: 1.4, v: 3.1 }, { u: -2.5, v: 3.2 }];
+  const fr = { by: 'a', k: 'r', key: 'custom', spots };
+  ok('cleanEntry keeps a free rerack with its spots, full precision', JSON.stringify((MP.cleanEntry(fr) || {}).spots) === JSON.stringify(spots));
+  ok('cleanEntry refuses a spot that is not a number', MP.cleanEntry({ ...fr, spots: [{ u: 'x', v: 0 }] }) === null);
+  const rs = await MP.appendLog(id4, 4, [fr]);
+  ok('a free rerack is accepted and stored', rs.ok && rs.game.log[4].key === 'custom', JSON.stringify(rs.reason || ''));
+  const lb = MP.buildLocal(await MP.readGame(id4), 'b');
+  ok('...the other phone replays exactly those spots', lb.racks.a.every((k, i) => k.u === spots[i].u && k.v === spots[i].v), JSON.stringify(lb.racks.a));
+  ok('a retry of the same free rerack writes nothing twice', (await MP.appendLog(id4, 4, [fr])).ok && Object.keys(getAt(`cuppong/games/${id4}/log`)).length === 5);
+  const bad = { by: 'a', k: 'r', key: 'custom', spots: spots.map((p, i) => (i === 1 ? { u: 0, v: 0.5 } : p)) };
+  ok('an overlapping free rerack is refused', !(await MP.appendLog(id4, 5, [bad])).ok);
+}
+
 // Bounce shots are OFF (Matt, 2026-09-28); only a challenge stored with `bo` (made while they were
 // live) replays with them on.
 {

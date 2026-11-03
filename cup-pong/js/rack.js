@@ -213,3 +213,69 @@ export function touchingPairs(cups) {
   }
   return n;
 }
+
+// --- MAKE YOUR OWN, ANYWHERE (2026-11-03, Matt: "I want to be able to move the cups however I want. Not in
+// this exact grid. I want a stop light with two to the left filling the gaps you know?") -------------------
+// A custom rack is a list of exact SPOTS ({ u, v }, cup-widths, the same spots the presets use), anywhere
+// inside the rack area, no two overlapping, at least one against the back wall (v = 0). The old hex-cell
+// custom racks still replay as cells (challenges made before). The editor drops a cup with `settleSpot`:
+// near another cup or the back wall it slides into contact (so a cup put in a gap nestles touching both
+// sides of it); on top of a cup it moves to the nearest place it fits.
+
+/** The rack area for a spot, in cup-widths: the same box the cells span. */
+export const FREE = { uMax: AREA.cMax / 2, vMax: AREA.rMax * HEX };
+const TOUCH = 1;            // centres one cup-width (the pitch) apart = touching
+const SNAP = 0.3;           // a drop this close to touching (cup-widths) slides into contact
+
+/** Any cup's place as a spot: a cell becomes the same place. */
+export function spotOf(k) {
+  return isSpot(k) ? { u: k.u, v: k.v } : { u: k.c / 2, v: k.r * HEX };
+}
+
+/** Inside the area and clear of every other cup. */
+export function freeOk(p, others) {
+  return !!p && Number.isFinite(p.u) && Number.isFinite(p.v)
+    && Math.abs(p.u) <= FREE.uMax + 1e-9 && p.v >= -1e-9 && p.v <= FREE.vMax + 1e-9
+    && others.every((q) => Math.hypot(p.u - q.u, p.v - q.v) >= TOUCH - 1e-9);
+}
+
+/** Where a cup dropped at `p` comes to rest among `others` (spots), or null if it fits nowhere near. */
+export function settleSpot(p, others, snap = SNAP) {
+  const cl = (x, a, b) => Math.min(b, Math.max(a, x));
+  const c = { u: cl(+p.u || 0, -FREE.uMax, FREE.uMax), v: cl(+p.v || 0, 0, FREE.vMax) };
+  const dist = (q) => Math.hypot(q.u - c.u, q.v - c.v);
+  const near = others.filter((q) => dist(q) < 2 * TOUCH + snap);
+  // Each place a cup could rest in contact, with how many things it touches (`n`): a snug spot
+  // (two cups, or a cup and the wall) wins over touching one thing, within the snap distance.
+  const cand = [{ u: c.u, v: 0, n: 1 }];                           // against the back wall
+  for (const q of near) {
+    const d = dist(q);
+    const du = d > 1e-9 ? (c.u - q.u) / d : 0, dv = d > 1e-9 ? (c.v - q.v) / d : 1;
+    cand.push({ u: q.u + du * TOUCH, v: q.v + dv * TOUCH, n: 1 }); // touching this cup
+    if (q.v <= TOUCH) {                                            // touching it AND the back wall
+      const w = Math.sqrt(TOUCH * TOUCH - q.v * q.v);
+      cand.push({ u: q.u - w, v: 0, n: 2 }, { u: q.u + w, v: 0, n: 2 });
+    }
+  }
+  for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) {
+    const a = near[i], b = near[j];                                // in the gap, touching both
+    const d = Math.hypot(b.u - a.u, b.v - a.v);
+    if (d < 1e-9 || d > 2 * TOUCH) continue;
+    const h = Math.sqrt(Math.max(0, TOUCH * TOUCH - (d / 2) ** 2));
+    const mu = (a.u + b.u) / 2, mv = (a.v + b.v) / 2, nu = -(b.v - a.v) / d, nv = (b.u - a.u) / d;
+    cand.push({ u: mu + nu * h, v: mv + nv * h, n: 2 }, { u: mu - nu * h, v: mv - nv * h, n: 2 });
+  }
+  const spot = (q) => ({ u: q.u, v: q.v });
+  const ok = cand.filter((q) => freeOk(q, others)).sort((x, y) => dist(x) - dist(y));
+  const close = ok.filter((q) => dist(q) <= snap).sort((x, y) => y.n - x.n || dist(x) - dist(y));
+  if (close.length) return spot(close[0]);
+  if (freeOk(c, others)) return c;
+  if (ok.length && dist(ok[0]) <= 1.2) return spot(ok[0]);
+  for (let r = 0.1; r <= 1.5 + 1e-9; r += 0.1) {                   // squeezed: the nearest free place
+    for (let s = 0; s < 24; s++) {
+      const q = { u: c.u + r * Math.cos(s * Math.PI / 12), v: c.v + r * Math.sin(s * Math.PI / 12) };
+      if (freeOk(q, others)) return q;
+    }
+  }
+  return null;
+}

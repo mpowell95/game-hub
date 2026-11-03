@@ -150,6 +150,16 @@ export function cleanEntry(e) {
       const v = String(e.k === 'r' ? e.key : e.id || '');
       if (!KEY_RE.test(v)) return null;
       if (e.k === 'r' && v === 'custom') {
+        // ANYWHERE (2026-11-03): exact spots { u, v } in cup-widths, at full precision, one per standing
+        // cup in id order (match.rerackCustom). Before that, hex cells { c, r }: still replayed.
+        const list = (x) => (Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : null));
+        if (e.spots != null) {
+          const sp = list(e.spots);
+          if (!sp || !sp.length || sp.length > 10) return null;
+          const spots = sp.map((x) => ({ u: +(x && x.u), v: +(x && x.v) }));
+          if (!spots.every((x) => Number.isFinite(x.u) && Number.isFinite(x.v))) return null;
+          return { by: e.by, k: 'r', key: v, spots, at };
+        }
         // A custom rerack carries the cells, one per standing cup in id order (match.rerackCustom).
         const src = Array.isArray(e.cells) ? e.cells : (e.cells && typeof e.cells === 'object' ? Object.values(e.cells) : null);
         if (!src || !src.length || src.length > 10) return null;
@@ -177,7 +187,7 @@ export function applyEntry(match, e) {
   if (e.k === 't') ev = match.throwResult({ made: e.m || null, bounced: !!e.b });
   else if (e.k === 'g') ev = match.applyGentlemans();
   else if (e.k === 'c') ev = match.centerLast();
-  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.cells) : match.rerack(e.key);
+  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.spots || e.cells) : match.rerack(e.key);
   else if (e.k === 'i') ev = match.callIsland(e.id, true);   // a stored call stands (match.js islandThree)
   else if (e.k === 'o') ev = match.pickOwed(e.id);
   if (!ev || !ev.length) return null;
@@ -762,7 +772,7 @@ export async function appendLog(id, base, entries) {
     // Within the old 5-decimal rounding: a throw written by an older build still matches its retry.
     const near = (u, v) => u === v || (Number.isFinite(u) && Number.isFinite(v) && Math.abs(u - v) <= 6e-6);
     const same = (x, y) => x && y && x.k === y.k && x.by === y.by && x.m === y.m && x.key === y.key && x.id === y.id && near(x.p, y.p) && near(x.a, y.a)
-      && JSON.stringify(x.cells || null) === JSON.stringify(y.cells || null);
+      && JSON.stringify(x.cells || null) === JSON.stringify(y.cells || null) && JSON.stringify(x.spots || null) === JSON.stringify(y.spots || null);
     // The OTHER person's throws after `base` are ones this phone already watched land before taking
     // its own (Matt, 2026-10-02: two cups refused as "moved on" because the base was counted before
     // King of Games' throws arrived). Step past them; the full replay below still has to accept the

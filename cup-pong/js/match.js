@@ -224,19 +224,23 @@ export class Match {
   }
 
   /**
-   * MAKE YOUR OWN (brief 4c, Matt's "custom next", 2026-09-28): the same rerack, to cells the
-   * shooter chose. `cells[i]` is where the i-th standing cup goes; they must be real hex cells,
-   * inside the rack area, one cup per cell. Cups do not have to touch (the brief: Matt did not ask
-   * for that limit). Costs one rerack, exactly like a preset.
+   * MAKE YOUR OWN (brief 4c, Matt's "custom next", 2026-09-28): the same rerack, to places the
+   * shooter chose. `cells[i]` is where the i-th standing cup goes. Since 2026-11-03 ANYWHERE (Matt:
+   * "I want to be able to move the cups however I want. Not in this exact grid"): exact spots
+   * `{ u, v }` inside the rack area, none overlapping. Hex cells `{ c, r }` (one cup per cell) are
+   * still accepted, so a challenge made before replays. Cups do not have to touch (the brief: Matt
+   * did not ask for that limit). Costs one rerack, exactly like a preset.
    */
   rerackCustom(cells) {
     if (!this.canRerack()) return [];
     const rack = this.target();
     if (!Array.isArray(cells) || cells.length !== rack.length) return [];
-    const to = rack.map((k, i) => ({ id: k.id, c: cells[i] && cells[i].c, r: cells[i] && cells[i].r }));
-    if (!to.every(isCell) || !validRack(to)) return [];
+    const free = cells.every((x) => x && Number.isFinite(x.u) && Number.isFinite(x.v));
+    const to = free ? rack.map((k, i) => ({ id: k.id, u: +cells[i].u, v: +cells[i].v }))
+      : rack.map((k, i) => ({ id: k.id, c: cells[i] && cells[i].c, r: cells[i] && cells[i].r }));
+    if (!to.every(free ? isSpot : isCell) || !validRack(to)) return [];
     // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
-    if (this.backRack && !to.some((k) => k.r === 0)) return [];
+    if (this.backRack && !to.some((k) => (free ? k.v <= 1e-6 : k.r === 0))) return [];
     this.racks[this.defender] = to;
     if (this.phase !== 'rebuttal') {
       if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
