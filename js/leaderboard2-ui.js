@@ -147,20 +147,70 @@ let _boardMemo = new Map();
 let _pidx = [];           // row index -> person key (never in the DOM)
 let _offVp = null;
 let _ty = 0;
+let _sw = null;             // the one finger being watched: see "Touch" below
+let _backSeq = 0;           // counts back steps, so a swipe can tell the system already stepped back
 /** iOS 26 can leave a fixed element's inset:0 at about half the screen (WebKit bug 297779, js/tabbar-fix.js):
  *  the launcher showed under the board. Size the page to the TRUE screen bottom, like the tab bar's repair. */
 function fitHeight() { if (_host) _host.style.height = Math.max(trueBottom(), window.innerHeight || 0) + 'px'; }
-/** Only a scroll list (or the sheet) moves under a finger; nothing chains to the page behind. */
-function onTouchStart(e) { _pend = 0; _ty = e.touches && e.touches[0] ? e.touches[0].clientY : 0; }
+// --- Touch (2026-11-03, Matt: "The swipe left to right to go back ... works half the time on about half of the
+// screens."). Two jobs, one finger:
+//  1. Only a scroll list (or the sheet) moves under a finger; nothing chains to the page behind (preventDefault).
+//     This used to run on EVERY touchmove, including a sideways swipe: over the header, the tab bar or the pinned row
+//     it cancelled all of them, and over a list it cancelled the ones whose small up/down drift pointed at the
+//     list's end (a short list is at both ends at once), which is "half the time on half the screens". A swipe
+//     cancelled by the page is a swipe the system's own back gesture never gets. Now the finger is classified
+//     first, once it has moved SWIPE_LOCK px: a mostly-sideways one is NEVER cancelled, and nothing is cancelled
+//     before it is classified. The strip at the very edge belongs to the system gesture and is never cancelled.
+//  2. A left-to-right swipe that starts anywhere past that strip goes back ONE screen (_bs.back(): the same step
+//     as the back button, the system gesture and Esc, one history entry per screen). Nothing else on a phone
+//     handles a swipe that starts mid-screen. tools/test-lb2-swipe.mjs drives it with real touch events.
+const EDGE_ZONE = 28;       // px: the system's back swipe (iOS, Android gestures) owns this strip; the page never touches it
+const SWIPE_LOCK = 8;       // px of travel before a finger is called sideways or vertical
+const SWIPE_FAR = 56;       // px a slow swipe must travel to count
+const SWIPE_FLICK = 30;     // px a quick flick (SWIPE_SPEED px/ms or more) must travel
+const SWIPE_SPEED = 0.35;
+function onTouchStart(e) {
+  _pend = 0;
+  const t = e.touches && e.touches[0];
+  _ty = t ? t.clientY : 0;
+  _sw = null;
+  if (!t || e.touches.length !== 1) return;
+  _sw = { x: t.clientX, y: t.clientY, lx: t.clientX, ly: t.clientY, t: e.timeStamp || 0, dir: '', edge: t.clientX < EDGE_ZONE, typing: !!(e.target.closest && e.target.closest('input, textarea')), seq: _backSeq };
+}
 function onTouchMove(e) {
   const t = e.touches && e.touches[0];
   if (!t || e.target.closest('input')) return;
+  if (e.touches.length > 1) _sw = null;                     // two fingers are a pinch, never a back swipe
+  const s = _sw;
+  if (s) {
+    s.lx = t.clientX; s.ly = t.clientY;
+    if (!s.dir) {
+      const dx = t.clientX - s.x, dy = t.clientY - s.y;
+      if (Math.hypot(dx, dy) < SWIPE_LOCK) return;          // not classified yet: cancel nothing
+      s.dir = Math.abs(dx) > Math.abs(dy) * 1.5 ? 'h' : 'v';
+    }
+    if (s.dir === 'h' || s.edge) return;                    // sideways, or the system's strip: never cancelled
+  }
   const sc = e.target.closest('.lb2-scroll, .lb2-sh');
   if (!sc) { e.preventDefault(); return; }
   const dy = t.clientY - _ty;
   const atTop = sc.scrollTop <= 0, atEnd = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 1;
   if ((dy > 0 && atTop) || (dy < 0 && atEnd)) e.preventDefault();
 }
+function onTouchEnd(e) {
+  const s = _sw;
+  _sw = null;
+  if (!s || s.dir !== 'h' || s.edge || s.typing || !_host) return;
+  if (s.seq !== _backSeq) return;                           // the system's own back swipe already stepped back during this touch
+  const t = e.changedTouches && e.changedTouches[0];
+  const dx = (t ? t.clientX : s.lx) - s.x, dy = (t ? t.clientY : s.ly) - s.y;
+  const dt = Math.max(1, (e.timeStamp || 0) - s.t);
+  if (dx < SWIPE_FLICK || Math.abs(dy) > dx * 0.7) return;  // rightward, and still mostly sideways at the end
+  if (dx < SWIPE_FAR && dx / dt < SWIPE_SPEED) return;      // a short drag has to be a flick
+  goBack();
+}
+/** One screen back: the back button's step. */
+function goBack() { if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); }
 
 // --- the model: the old board's one standing per game, the Hall of Fame, the viewer's places --------------
 function boardGames() {
@@ -944,7 +994,7 @@ function onClick(e) {
       if (below && below.kind === 'player' && below.key === top.key) { if (_bs) _bs.back(); else stepBack(); return; }
       pushLevel({ kind: 'player', key: top.key, all: false }); return;
     }
-    case 'back': if (_bs) _bs.back(); else if (!stepBack()) closeLeaderboard2(); return;
+    case 'back': goBack(); return;
     case 'melist': {
       if (!ME_LISTS.includes(v)) return;
       // Scrolled past the medal tiles (the switcher stuck on top): the new list starts right under the switcher.
@@ -1048,6 +1098,7 @@ function onInput(e) {
 function onKey(e) { if (e.key === 'Escape' && _host && _bs) _bs.back(); }
 /** The phone's back gesture (and the back button, Esc): n screens back; past the first, close. */
 function onBackSteps(n) {
+  _backSeq++;
   for (let i = 0; i < n && _host; i++) {
     if (_help && !_stack.length) { _help = false; render({ keepScroll: true }); continue; }
     if (_info && _stack.length && _stack[_stack.length - 1].kind === 'board') { _info = false; render({ keepScroll: true }); continue; }
@@ -1081,7 +1132,7 @@ export function closeLeaderboard2({ keepHistory = false } = {}) {
   // board opened next pushes its own once that has landed (js/back-stack.js).
   void keepHistory;
   if (_bs) { const bs = _bs; _bs = null; bs.close(); }
-  _connected = false; _model = null; _lastHTML = '';
+  _connected = false; _model = null; _lastHTML = ''; _sw = null;
 }
 
 /** Open Leaderboard v2. `opts.game` (a stats id): straight onto that game's board, back = close.
@@ -1114,6 +1165,8 @@ export async function openLeaderboard2(opts = {}) {
   host.addEventListener('change', onChange);
   host.addEventListener('touchstart', onTouchStart, { passive: true });
   host.addEventListener('touchmove', onTouchMove, { passive: false });
+  host.addEventListener('touchend', onTouchEnd, { passive: true });
+  host.addEventListener('touchcancel', () => { _sw = null; }, { passive: true });
   document.body.appendChild(host);
   _host = host;
   document.documentElement.classList.add('gh-lb2-open');
