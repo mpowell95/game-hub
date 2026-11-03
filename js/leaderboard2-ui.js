@@ -1073,8 +1073,8 @@ function ensureCss() {
   const el = document.createElement('style');
   el.id = 'lb2-css';
   el.textContent = `
-.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55;--l2-gold:#8A5A00}
-:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6);--l2-gold:#FFCE3A}
+.lb2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-muted:#596170;--l2-line:#E2E5EA;--l2-accent:#1F5FD1;--l2-accentText:#FFFFFF;--l2-chip:#E9ECF1;--l2-seg:#E4E7EC;--l2-segOn:#FFFFFF;--l2-you:#DCE7FB;--l2-youText:#0F3478;--l2-down:#B45309;--l2-scrim:rgba(10,12,16,.45);--l2-g:#E0A92E;--l2-s:#B9C0CA;--l2-b:#C98A55;--l2-gold:#8A5A00;--l2-heart:#E0243A;--l2-heartBg:#FCE4E7}
+:root.gh-dark .lb2{--l2-bg:#0E1014;--l2-surf:#171A20;--l2-text:#F1F3F6;--l2-muted:#A2A9B5;--l2-line:#272B33;--l2-accent:#7AA7FF;--l2-accentText:#0E1014;--l2-chip:#252A33;--l2-seg:#1F232A;--l2-segOn:#323844;--l2-you:#1C2D4D;--l2-youText:#D6E4FF;--l2-down:#FDBA74;--l2-scrim:rgba(0,0,0,.6);--l2-gold:#FFCE3A;--l2-heart:#F2384C;--l2-heartBg:#3A1D23}
 html.gh-lb2-open,html.gh-lb2-open body{overflow:hidden;overscroll-behavior:none}
 .lb2{position:fixed;top:0;left:0;right:0;bottom:auto;height:100vh;z-index:300;display:flex;justify-content:center;background:var(--l2-bg);color:var(--l2-text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:contain;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);-webkit-tap-highlight-color:transparent}
 html.gh-compact .lb2{z-index:19;padding-bottom:calc(53px + max(6px, calc(env(safe-area-inset-bottom,0px) - 16px)))}
@@ -1104,9 +1104,11 @@ html.gh-compact .lb2-x{display:none}
 .lb2-gsorts{flex-wrap:nowrap;gap:6px;margin-top:10px}
 .lb2-gsorts .lb2-chip{flex:0 0 auto;min-height:40px;padding:0 13px;font-size:15px}
 .lb2-gsorts .lb2-hchip,.lb2-gsorts .lb2-morechip{width:44px;padding:0;justify-content:center;position:relative}
-.lb2-gsorts .lb2-hchip:not(.on){color:var(--l2-accent)}
+/* Every heart in v2 is RED, like the launcher's (2026-11-03, Matt): filled = on, outline = off (the shape, not the hue, is the signal). */
+.lb2-gsorts .lb2-hchip,.lb2-gsorts .lb2-hchip.on{color:var(--l2-heart)}
+.lb2-gsorts .lb2-hchip.on{background:var(--l2-heartBg)}
 .lb2-morechip select{position:absolute;inset:0;opacity:0;width:100%;height:100%;font-size:16px}
-.lb2-favh{display:inline-flex;vertical-align:-1px;margin-right:6px;color:var(--l2-accent)}
+.lb2-favh{display:inline-flex;vertical-align:-1px;margin-right:6px;color:var(--l2-heart)}
 .lb2-restcard{margin-top:18px}
 .lb2-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:16px}
 .lb2-pad{padding:4px 16px 16px}
@@ -1132,7 +1134,7 @@ html.gh-compact .lb2-x{display:none}
 .lb2-bar{min-height:60px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:4px 4px 0}
 .lb2-bar h1{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-icon{width:48px;height:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--l2-text);border-radius:12px}
-.lb2-heart{color:var(--l2-accent)}
+.lb2-heart{color:var(--l2-heart)}
 .lb2-face{width:40px;height:40px;flex-shrink:0;border-radius:20px;background:var(--l2-chip);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700}
 .lb2-pl{padding-left:8px}
 .lb2-plink{flex:1;min-width:0;display:flex;align-items:center;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;touch-action:manipulation}
