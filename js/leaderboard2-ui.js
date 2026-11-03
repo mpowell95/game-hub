@@ -345,7 +345,7 @@ function boardsListHTML() {
   const sort = loadSort();
   const g = meGroup();
   const plays = (id) => ((((g && g.games) || {})[id] || {}).total || {}).played | 0;
-  const all = (id) => boardOf(id, selFor(id, null)).plays | 0;
+  const all = (id) => boardOf(id, allPlaysSel(id)).plays | 0;
   if (sort === 'rank') list.sort((a, b) => rk(a) - rk(b) || az(a, b));
   else if (sort === 'played') list.sort((a, b) => plays(b.id) - plays(a.id) || az(a, b));
   else if (sort === 'playedall') list.sort((a, b) => all(b.id) - all(a.id) || az(a, b));
@@ -408,6 +408,9 @@ function selFor(game, want) {
   if (tb.rows.length === 1) { const only = tb.rows[0].find((x) => stKeyOf(x.st) === stKeyOf({ ...tb.def, ...w })); return only ? { ...only.st } : { ...tb.def }; }
   return st;
 }
+/** The tab whose plays are "everyone's": the default one, except a medal-split game (Spelling Bee), which opens on
+ *  a language but counts its players on All, as the old board does (real-data parity check, 2026-11-03: 23 vs 40). */
+function allPlaysSel(game) { const st = selFor(game, null); return lb2MedalLangs(game) ? selFor(game, { ...st, lang: 'all' }) : st; }
 function boardOf(game, st) {
   const id = 'b~' + game + '~' + stKeyOf(st);
   let b = _boardMemo.get(id);
@@ -567,7 +570,7 @@ function boardScreenHTML(top) {
   if (lb2MedalLangs(game) && (st.lang || 'all') === 'all') b = { ...b, rows: b.rows.map((r) => ({ ...r, noPodium: true })) };
   const fav = loadFavorites().includes(hubIdOf(game));
   // Session 4: "N played" is the GAME'S total on every tab (the default tab's number, the old board's header).
-  const total = boardOf(game, selFor(game, null)).plays;
+  const total = boardOf(game, allPlaysSel(game)).plays;
   const bar = `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
     ${art(game, 'hd')}<span class="lb2-grow lb2-pl"><h1>${esc(title(game))}</h1><span class="lb2-t2 num">${esc(t('lb_played_count', { n: fmt(total) }))}</span></span>
     ${playable(game) && b.rows.length ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(game)}">${esc(t2('lb2_play'))}</button>` : ''}
