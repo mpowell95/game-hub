@@ -1,0 +1,110 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Minesweeper sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}.hd2{display:flex;align-items:center;padding:9px 0 9px 14px;font-size:14px;font-weight:700;color:#AEB5C1;border-bottom:1px solid rgba(255,255,255,.06)}.hd2 span:first-child{flex:1}.c{width:96px;text-align:center;line-height:1.2}.rr{display:flex;align-items:center;gap:12px;padding:0 0 0 14px;height:50px;border-top:1px solid rgba(255,255,255,.06)}.hd2+.rr{border-top:0}.rr .n{flex:1;font-size:16px}.rr b{width:96px;text-align:center;font-size:20px;font-weight:800}.ch:empty{display:none}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#1b2431"/>
+    <g stroke="#31405a" stroke-width="0.8">
+      <path d="M32 10 V80 M50 10 V80 M68 10 V80 M86 10 V80 M104 10 V80 M122 10 V80"/>
+      <path d="M14 24 H146 M14 38 H146 M14 52 H146 M14 66 H146"/>
+    </g>
+    <g fill="#2a3446" stroke="#3d4b64" stroke-width="0.8">
+      <rect x="14.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="86.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="104.8" y="38.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="14.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="122.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+    </g>
+    <g font-family="ui-monospace, monospace" font-size="10" font-weight="800" text-anchor="middle">
+      <text x="41" y="21" fill="#6fa8e8">1</text>
+      <text x="59" y="21" fill="#3fbfa8">2</text>
+      <text x="77" y="35" fill="#ff8a63">3</text>
+      <text x="41" y="49" fill="#6fa8e8">1</text>
+      <text x="95" y="49" fill="#3fbfa8">2</text>
+      <text x="59" y="63" fill="#a98bf0">4</text>
+      <text x="113" y="63" fill="#6fa8e8">1</text>
+      <text x="77" y="77" fill="#3fbfa8">2</text>
+    </g>
+    <g transform="translate(23 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(95 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(131 73) scale(0.5)" fill="#f2b705">
+      <rect x="-1" y="-11" width="2" height="22" rx="1"/>
+      <rect x="-11" y="-1" width="22" height="2" rx="1"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(-45)"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(45)"/>
+      <circle cx="0" cy="0" r="6.2"/>
+      <circle cx="-2.3" cy="-2.3" r="1.5" fill="rgba(255,255,255,.85)"/>
+    </g>
+  </svg></span><span class="gname">Minesweeper</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#1b2431"/>
+    <g stroke="#31405a" stroke-width="0.8">
+      <path d="M32 10 V80 M50 10 V80 M68 10 V80 M86 10 V80 M104 10 V80 M122 10 V80"/>
+      <path d="M14 24 H146 M14 38 H146 M14 52 H146 M14 66 H146"/>
+    </g>
+    <g fill="#2a3446" stroke="#3d4b64" stroke-width="0.8">
+      <rect x="14.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="86.8" y="10.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="104.8" y="38.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="14.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+      <rect x="122.8" y="66.8" width="16.4" height="12.4" rx="2"/>
+    </g>
+    <g font-family="ui-monospace, monospace" font-size="10" font-weight="800" text-anchor="middle">
+      <text x="41" y="21" fill="#6fa8e8">1</text>
+      <text x="59" y="21" fill="#3fbfa8">2</text>
+      <text x="77" y="35" fill="#ff8a63">3</text>
+      <text x="41" y="49" fill="#6fa8e8">1</text>
+      <text x="95" y="49" fill="#3fbfa8">2</text>
+      <text x="59" y="63" fill="#a98bf0">4</text>
+      <text x="113" y="63" fill="#6fa8e8">1</text>
+      <text x="77" y="77" fill="#3fbfa8">2</text>
+    </g>
+    <g transform="translate(23 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(95 17) scale(0.44)" fill="none">
+      <path d="M-9 11V-11" stroke="#e0532f" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M-8.2-9.6 4.6-5.4-8.2-1.2Z" fill="#e0532f"/>
+    </g>
+    <g transform="translate(131 73) scale(0.5)" fill="#f2b705">
+      <rect x="-1" y="-11" width="2" height="22" rx="1"/>
+      <rect x="-11" y="-1" width="22" height="2" rx="1"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(-45)"/>
+      <rect x="-1" y="-8" width="2" height="16" rx="1" transform="rotate(45)"/>
+      <circle cx="0" cy="0" r="6.2"/>
+      <circle cx="-2.3" cy="-2.3" r="1.5" fill="rgba(255,255,255,.85)"/>
+    </g>
+  </svg></span><h2>Minesweeper</h2></div><div class="card"><div class="ch"></div><div class="hd2"><span>Difficulty</span><span class="c">Points<br>per board</span></div><div class="rr"><span class="sh"><svg viewBox="0 0 20 20" fill="#2e9e44"><circle cx="10" cy="10" r="8"/></svg></span><span class="n">Easy</span><b>1</b></div><div class="rr"><span class="sh"><svg viewBox="0 0 20 20" fill="#1F5FA8"><rect x="3" y="3" width="14" height="14" rx="3"/></svg></span><span class="n">Medium</span><b>3</b></div><div class="rr"><span class="sh"><svg viewBox="0 0 20 20" fill="#1c2430"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg></span><span class="n">Hard</span><b>8</b></div><div class="rr"><span class="sh x2"><svg viewBox="0 0 34 20" fill="#1c2430"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg></span><span class="n">Expert</span><b>20</b></div></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

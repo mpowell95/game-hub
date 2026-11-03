@@ -104,3 +104,7 @@ the popup = mockup v4 (`js/announce-ui.js` `drawLb2Intro`; Filler's numbers from
 sheet = one table + one Rush line (`js/lb-rank-sheet.js` `grid`/`text` cards; strings `lbrs_h_lvl`, `lbrs_wo_sup`,
 `lbrs_wo_rush`). On merge: bump CACHE past main, `validate-sw-assets`. Next (Matt): every other game's sheet, one at a
 time, current screenshot then a mockup, same principles (151 -> 30 words on Arrow Maze).
+Scores-screen mockups sent 2026-11-03 (NOT built; Matt reviewing): `docs/mockups/sheet-<game>-v1.{html,jpg}` for Sudoku (v3
+approved: "That mockup is good"), Murdoku ("Good"), Nuts & Bolts, Minesweeper, Gridlock, Word Weaver, Contexto, Spelling
+Bee, Hill Climb, Snake, Ball Run, Brick Breaker, Tower, Golf, Hold'em, Skeeball, and ONE shared layout for every wins game
+(Flick Soccer, Cup Pong, Connect Four shown): a grid of level x option, circled = under the 20-point limit, Online apart.
