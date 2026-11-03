@@ -78,3 +78,12 @@ verify Pages. Open decisions for Matt: keep the "Old" link (session suggested ~2
 
 - A voided Golf record's person page still shows its average per hole (strokes and holes are not voided). Boards are clean.
 - The old board's By Game card shows 3 names, so a tie for 3rd beyond them is cut (v2 shows every tied player).
+
+## Session 7 progress (2026-11-03)
+
+Matt's notes (screenshots of the popup and Arrow Maze's points sheet): popup "feels chaotic... The title isn't a title...
+Everything looks the same"; the Arrow Maze sheet: "we could easily cut the number of words in half". Mockup v1 sent, NOT
+built: `docs/mockups/lb2-fixes-mockup-v1.{html,jpg}`. Popup: medal + NEW + title as a real title (27px/800, white), a rule
+under it, body ONE short line in a lighter grey 18px/400, one picture per page; page 1 drops the "Computer and Online" and
+"=" lines (the Filler table shows both). Arrow Maze sheet (151 words to 45): ONE table (level x hints/hearts lost 0/1/2/3+)
+replaces the points card and the hints card; "How it is ranked" and "Tabs" cut; Rush in 3 lines. Waiting on Matt.
