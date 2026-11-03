@@ -1,0 +1,88 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=402">
+<title>Points info mockup</title>
+<style>
+  :root { --sheet:#1a1e25; --line:#2b313b; --ink:#f2f4f7; --dim:#9aa3af; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#0e1116; font:17px/1.3 -apple-system, system-ui, "Segoe UI", sans-serif; color:var(--ink); }
+  .row { display:flex; gap:24px; padding:24px; flex-wrap:wrap; align-items:flex-start; }
+  .phone { width:402px; background:var(--sheet); border-radius:24px 24px 0 0; padding:12px 16px 24px; }
+  .grab { width:44px; height:5px; border-radius:3px; background:#3a414c; margin:0 auto 16px; }
+  .hd { display:flex; align-items:center; gap:12px; margin:0 4px 14px; }
+  .art { width:56px; height:40px; border-radius:8px; }
+  .hd h2 { margin:0; font-size:26px; }
+  .lead { font-size:19px; font-weight:700; margin:0 4px 12px; }
+  .card { border-radius:14px; overflow:hidden; margin-top:12px; border:1px solid var(--line); background:#20252e; }
+  .ch { display:flex; align-items:center; gap:8px; padding:10px 14px; font-weight:800; font-size:16px; }
+  .ch .ic { font-size:18px; }
+  .cn { padding:0 14px 12px; font-size:15px; line-height:1.35; }
+  .r { display:flex; align-items:center; gap:10px; padding:11px 14px; border-top:1px solid rgba(255,255,255,.07); }
+  .r .t { flex:1; }
+  .r .p { font-weight:800; font-size:20px; white-space:nowrap; }
+  .r .p small { font-weight:600; font-size:15px; opacity:.75; margin-left:4px; }
+  .r .p.zero { opacity:.9; }
+  /* card tones: each has a title word + icon, never colour alone */
+  .k-cpu  .ch { background:#263040; }
+  .k-on   .ch { background:#2a2f3a; }
+  .k-bon  { border-color:#2f6b52; } .k-bon .ch { background:#1f4a3a; color:#bff0d6; }
+  .k-short{ border-color:#7a5a2a; } .k-short .ch { background:#4a3720; color:#ffd9a3; }
+  .k-cap  { border:2px solid #ffce3a; background:#2a2614; } .k-cap .ch { color:#ffce3a; }
+  .k-cls  { border-color:#2b6a72; } .k-cls .ch { background:#1d4a50; color:#bdeef3; }
+  .k-ult  { border-color:#5a4a8a; } .k-ult .ch { background:#352c5a; color:#d9ccff; }
+  .tag { margin-left:auto; font-size:13px; font-weight:700; padding:3px 9px; border-radius:999px; background:rgba(255,255,255,.12); }
+  .lim { display:inline-block; margin-left:8px; font-size:12px; font-weight:700; color:#1c1606; background:#ffce3a; border-radius:999px; padding:2px 7px; vertical-align:2px; }
+  .k-s { border-color:#7a5a2a; } .k-s .ch { background:#4a3720; color:#ffd9a3; }
+  .k-n .ch { background:#263040; }
+  .k-h { border-color:#2f6b52; } .k-h .ch { background:#1f4a3a; color:#bff0d6; }
+  .done { margin-top:20px; height:52px; border-radius:14px; background:#7aa7ff; color:#0e1116; font-weight:800; font-size:20px; display:flex; align-items:center; justify-content:center; }
+  svg { display:block; flex:none; }
+</style></head><body>
+<div class="row" id="root"></div>
+<script>
+const SH = {
+  1: '<svg width="22" height="22" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#fff"/><circle cx="10" cy="10" r="6" fill="#2e9e44"/></svg>',
+  2: '<svg width="22" height="22" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#fff"/><rect x="4.5" y="4.5" width="11" height="11" rx="2" fill="#1F5FA8"/></svg>',
+  3: '<svg width="22" height="22" viewBox="0 0 20 20"><rect x="1" y="1" width="18" height="18" rx="4" fill="#fff"/><rect x="6" y="6" width="8" height="8" fill="#1c2430" transform="rotate(45 10 10)"/></svg>',
+  on: '<svg width="22" height="22" viewBox="0 0 22 20"><circle cx="7" cy="7" r="4" fill="#cfd6e0"/><circle cx="15" cy="7" r="4" fill="#cfd6e0"/><path d="M0 19c0-4 3-7 7-7s7 3 7 7zM8 19c0-4 3-7 7-7s7 3 7 7z" fill="#cfd6e0"/></svg>',
+};
+const LV = { 1: 'Easy', 2: 'Medium', 3: 'Hard' };
+const pts = (n) => `${n}<small>${n === 1 ? 'point' : 'points'}</small>`;
+// [level, points, capped]
+const r = (lv, n, cap) => `<div class="r">${SH[lv]}<div class="t">${lv === 'on' ? 'Win online' : 'Win on ' + LV[lv]}${cap ? '<span class="lim">20-point limit</span>' : ''}</div><div class="p">${pts(n)}</div></div>`;
+const card = (k, title, tag, rows) => `<div class="card ${k}"><div class="ch">${title}${tag ? `<span class="tag">${tag}</span>` : ''}</div>${rows.map((x) => r(...x)).join('')}</div>`;
+const limit = (levels, shared) => `<div class="card k-cap"><div class="ch">20-point limit: ${levels}</div><div class="cn">${
+  shared ? `${levels} wins are nearly guaranteed. Together they can earn you 20 points at most. After that, they add 0.`
+         : `${levels} wins are nearly guaranteed. They can earn you 20 points at most. After that, they add 0.`}</div></div>`;
+const online = card('k-on', 'Online', '', [['on', 3]]);
+const GAMES = [
+  { name: 'Flick Soccer', art: '#2d7a3a', body: [
+    card('k-s', 'First to 1 goal', 'Shorter', [[1, 1, 1], [2, 1, 1], [3, 3]]),
+    card('k-n', 'First to 2 goals', 'Normal', [[1, 1, 1], [2, 3], [3, 6]]),
+    card('k-h', 'First to 3 goals', 'Longer', [[1, 1, 1], [2, 4], [3, 9]]),
+    online, limit('Easy'),
+  ] },
+  { name: 'Darts', art: '#7a3b1e', body: [
+    card('k-s', '201 or 101', 'Shorter', [[1, 1], [2, 1], [3, 2]]),
+    card('k-n', '301 or Cricket', 'Normal', [[1, 1], [2, 2], [3, 3]]),
+    card('k-h', 'Cricket in order', 'Harder', [[1, 2], [2, 4], [3, 6]]),
+    online,
+  ] },
+  { name: 'Cup Pong', art: '#3a2a1a', body: [
+    card('k-s', 'Unlimited reracks', 'Easier', [[1, 1, 1], [2, 1, 1], [3, 1, 1]]),
+    card('k-n', '2 reracks', 'Normal', [[1, 1, 1], [2, 1, 1], [3, 3]]),
+    card('k-h', 'No reracks', 'Harder', [[1, 2, 1], [2, 2, 1], [3, 6]]),
+    online, limit('Easy and Medium', true),
+  ] },
+  { name: 'Tic Tac Toe', art: '#1e6b74', body: [
+    card('k-cls', 'Classic', '', [[1, 1, 1], [2, 1, 1], [3, 5]]),
+    card('k-ult', 'Ultimate', '', [[1, 1], [2, 3], [3, 10]]),
+    online, limit('Classic Easy and Medium', true),
+  ] },
+];
+document.getElementById('root').innerHTML = GAMES.map((g) => `<div class="phone"><div class="grab"></div>
+  <div class="hd"><div class="art" style="background:${g.art}"></div><h2>${g.name}</h2></div>
+  <p class="lead">Every win adds points:</p>
+  ${g.body.join('')}
+  <div class="done">Done</div></div>`).join('');
+</script>
+</body></html>
