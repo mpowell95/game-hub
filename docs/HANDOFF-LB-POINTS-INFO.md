@@ -23,6 +23,8 @@ Players still get the old board; none of this is released.
   Opens on the list picked last (`meList` in `gamehub.lb2.v1`, a preference), else the first with rows. Empty
   list: "Nothing yet".
 
+- (v1452) A person's game page no longer repeats "Points: N" under the stats (the top card shows it; Matt: "Sure").
+  My Stats keeps the line (it has no top card). CSS `.lb2 .gs-ptsline{display:none}`.
 - (v1451) Matt: "Figure out the broken test and update so the swipe back works. Fix the contexto bug. Fix the sudoku line
   wrap." `tools/test-swipe-back.mjs` follows #1475 (admin device: My Stats button = v2 Me; My Stats itself opened as a
   player's button does), 232/0. `functions/boards.js`: Contexto's fewest guesses from `ctHistory` skips a voided phone.
