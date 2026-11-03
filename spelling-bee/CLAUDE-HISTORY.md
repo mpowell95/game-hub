@@ -45,3 +45,11 @@ yours ticked; missed days "play for fun" behind a popup (Matt's wording request:
 leaderboard"); answers hidden while playing for fun but available any time from the eye; that day's leaderboard shown
 with the for-fun score clearly not counting; "no for fun playing on past days you actually played"; the Bonus list may
 scroll (Spanish days have up to ~200+ bonus words). Built the same day.
+
+## 2026-11-03: past days' boards were unreachable
+
+Lili reported she could not see the scores for previous days. The 2026-11-01 rework made a past day you played
+look-only (`_renderReview`), and that screen's top bar had only EN/ES, the calendar and How to Play: no trophy, so
+no way to open that day's board (only a never-played day, opened for fun, still had it). The trophy is back on the
+look-only screen. `_boardSection` now treats a for-fun day by `this.fun`, not the mode, so a for-fun day whose
+answers were seen still shows its own row unplaced and dashed rather than as a real placed row.
