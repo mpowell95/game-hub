@@ -286,7 +286,7 @@ Seen-list `gamehub.announce.v1` (a preference). `until` retires an entry; a malf
 (shown). **Append a NEW id; never reuse or renumber.** Text `{en, es}` on the entry. `shots` = whole
 screens per theme (`resolvedTheme()`) × language in `img/`, neutral profile with code/device id
 blanked; `tile: {art, name}` for a new game. Never over the name gate or a game; once per load.
-`adminOnly: true` previews to Matt only (checked before `showAnnouncement`). `tools/test-bug-report.mjs`
+`adminOnly: true` previews to Matt only (checked before `showAnnouncement`). `adminDevice: true` (2026-11-03) = admin devices only, and SKIPPED (not held) on every other phone so it never blocks the next entry; `pages: 'lb2-intro'` = the new leaderboard's 2-page intro + its "Show me where" guide (`announce-ui.js`). `tools/test-bug-report.mjs`
 checks paths/tiles and NOTEs gated entries.
 
 ### Privacy, stated plainly

@@ -30,7 +30,7 @@ import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
-import { pendingAnnouncement, loadSeen, markSeen } from './announce.js';
+import { pendingAnnouncement, loadSeen, markSeen, ANNOUNCEMENTS } from './announce.js';
 import { startPointsToast } from './points-toast.js';
 // "+X pts" over a result screen whenever a win is counted (2026-11-02, js/points-toast.js). Display only.
 try { startPointsToast(); } catch (err) { console.warn('[hub] points toast off', err); }
@@ -1017,7 +1017,9 @@ class Hub {
    *  over the name gate (a nameless device is mid-setup), never over a mounted game. */
   async _maybeAnnounce() {
     if (this._announced || this.current || !hasName()) return;
-    const a = pendingAnnouncement();
+    // `adminDevice` entries (the new leaderboard's intro, 2026-11-03) are SKIPPED, not held, on every other phone:
+    // they must never stand in front of the next announcement a player is owed.
+    const a = pendingAnnouncement(Date.now(), loadSeen(), ANNOUNCEMENTS.filter((x) => !x.adminDevice || isAdminDevice()));
     if (!a) return;
     // `adminOnly` entries are Matt-only previews. Returning BEFORE showAnnouncement matters: it is
     // showAnnouncement that marks an entry seen, so a gated announcement leaves every other device

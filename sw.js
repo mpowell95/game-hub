@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1436;
-const CACHE = 'game-hub-v1454';
+const CACHE = 'game-hub-v1455';
 
 const ASSETS = [
   './',
@@ -110,6 +110,10 @@ const ASSETS = [
   './img/layout-comfortable-es.jpg',
   './img/layout-comfortable-es-dark.jpg',
   './img/layout-compact.jpg',
+  './img/lb2-intro-board-en.png',
+  './img/lb2-intro-board-en-dark.png',
+  './img/lb2-intro-board-es.png',
+  './img/lb2-intro-board-es-dark.png',
   './img/layout-compact-dark.jpg',
   './img/layout-compact-es.jpg',
   './img/layout-compact-es-dark.jpg',
@@ -832,7 +836,7 @@ const REST_MANIFEST = {
   './css/hub.css': '1f4608e970',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '1cbce7aa13',
+  './js/hub.js': '4349df85b0',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -867,8 +871,8 @@ const REST_MANIFEST = {
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'e6de6b7a35',
   './js/bug-report-ui.js': '557cd3d1ed',
-  './js/announce.js': '1ffa060596',
-  './js/announce-ui.js': '0bdfcd673d',
+  './js/announce.js': '8e98aff0ce',
+  './js/announce-ui.js': '897a166f83',
   './js/messages.js': 'd12738ffad',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '3656e70d78',
@@ -947,6 +951,10 @@ const REST_MANIFEST = {
   './img/layout-comfortable-es.jpg': 'a65f1f4a83',
   './img/layout-comfortable-es-dark.jpg': 'cb3a059591',
   './img/layout-compact.jpg': 'db98bcc07f',
+  './img/lb2-intro-board-en.png': '451d1da566',
+  './img/lb2-intro-board-en-dark.png': '3fbfd2263b',
+  './img/lb2-intro-board-es.png': 'b56d3abeef',
+  './img/lb2-intro-board-es-dark.png': '0890567e31',
   './img/layout-compact-dark.jpg': '242273151d',
   './img/layout-compact-es.jpg': '24e941516f',
   './img/layout-compact-es-dark.jpg': '00c18403ea',
