@@ -394,19 +394,11 @@ function unitLabel(game, st, unit) {
   if (game === 'skeeball') return t2(st.view === 'high' ? 'lb2_sk_best' : 'lb2_sk_total');
   return unit;
 }
-/** "N more to take the record" (or "Beat X on Hard to take the record"), from the board's gap; '' for none. */
-function gapLine(g) {
-  if (!g) return '';
-  return t('lb_gap', g.k === 'tier' ? { k: 'tier', v: `<b>${esc(g.v)}</b>`, tier: esc(g.tier) } : { k: g.k, v: `<b>${esc(g.v)}</b>`, n: g.n });
-}
-/** The pinned row's line: 1st; or how much more TAKES the record (Matt, 2026-11-02: Ana likes the old board's
- *  "how close you are to beating someone's record"; the number now beats it, round 4's objection was that the old
- *  one only tied it); or, where there is no honest number, the record beside the viewer's own number. */
+/** The pinned row's line: 1st, or the record beside the viewer's own number (round 4: never "N more to take
+ *  the record", which only reached a tie). What it takes to get gold is on the Me tab (Matt, 2026-11-02). */
 function pinLine(game, b, me, tiered) {
   if (!me) return esc(t2('lb2_not_ranked'));
   if (me.rank === 1) return esc(t2(me.tie ? 'lb2_first_tie' : 'lb2_first'));
-  const gl = b.gap ? gapLine(b.gap(me.key)) : '';
-  if (gl) return gl;
   const rec = b.rows[0];
   if (!rec || game === 'contexto' || !rec.text || rec.text === '—') return '';
   return `${esc(t2('lb2_record'))} ${tiered ? shape(rec.tier) : ''}<b>${esc(dispText(game, rec.text))}</b>`;
@@ -510,12 +502,8 @@ function boardScreenHTML(top) {
       lastGroup = grp;
       const val = game === 'contexto' ? ctValHTML(r.g, ctDaily) : dispHTML(game, r.html);
       const sub = game === 'contexto' ? `<span class="lb2-sub">${ctSlotsHTML(r.g, ctDaily)}</span>` : rowSub(r);
-      // Your own row says how close you are to the record (Matt, 2026-11-02, for Ana). The pinned row has the same
-      // line, but it hides while your row is on screen, which on a short board is always.
-      const gl = r.key === _meKey && r.rank > 1 && b.gap ? gapLine(b.gap(r.key)) : '';
-      const gapSub = gl ? `<span class="lb2-sub lb2-gapl num">${gl}</span>` : '';
       return `${div}<button type="button" class="lb2-lr${pod(r)}${r.key === _meKey ? ' me' : ''}" style="grid-template-columns:${cols}" data-act="person" data-pi="${pIdx(r.key)}" data-rank="${r.rank}" data-tie="${r.tie ? 1 : 0}">
-      ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}${gapSub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
+      ${rankCell(r)}<span class="lb2-who"><span class="lb2-nm"><span class="lb2-nmt${mineCls(r.key)}">${esc(nameOf(r.g))}</span>${mv(moveOf(b.id, r))}</span>${sub}</span><span class="r lb2-val num">${numShape(tiered, r)}${val}</span>${CHEV}</button>`;
     };
     list = `<div class="lb2-card" data-role="rows">${foldTail(b.rows, rowHTML, top, cols, game)}</div>`;
   }
@@ -557,11 +545,6 @@ const tiedIn = (rows) => { const n = {}; for (const r of rows) n[r.rank] = (n[r.
 let _hofView = 'medals';
 /** Me > Closest: 'a' = every game (today), 'b' = only 2nd and 3rd, closest first. Test-only switch for the mockup. */
 let _closeVariant = 'a';
-/** Tests only (record gap, 2026-11-02): every row of a game's default tab, with the pinned line that row would get. */
-export function __pinLinesForTest(game) {
-  const st = selFor(game, null), b = boardOf(game, st), tiered = st.tier == null && b.rows.some((r) => r.tier);
-  return b.rows.map((r) => ({ text: r.text, rank: r.rank, gap: b.gap ? b.gap(r.key) : null, line: pinLine(game, b, r, tiered) }));
-}
 export function __setClosestForTest(v) { _closeVariant = v === 'b' ? 'b' : 'a'; if (_host) render({ keepScroll: true }); }
 /** Hall of Fame's second view: the old By Player list as it opened (category All, by Wins), unchanged. */
 /** Hall of Fame > Wins' filter and sort (2026-11-02, Matt's approved mockup): the old By Player list's categories
@@ -671,15 +654,20 @@ function meHTML() {
   // Records held: the viewer's number under the game's name (full width), the gold medal at the right.
   const held = R.held.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_hold_h'))}</h2><div class="lb2-card">${R.held.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span><span class="lb2-t2 lb2-vline num">${valHTML(x.id, x.mine)}</span></span><span class="lb2-right">${med(1, x.tie, 'sm')}</span>${CHEV}</button>`).join('')}</div></div>` : '';
-  // Closest to a record: "3 wins · record 5", the viewer's number beside the record; the holder on its own line.
-  // Closest (session 4): the viewer's number at the RECORD'S difficulty (the old gapText rule), and one word for why
-  // the record ranks above when the numbers alone hide it: the record's difficulty ("Hard") or "No hints".
+  // Closest to a record: ONE line, what it takes to get gold ("5 points to get gold"), never the viewer's number
+  // beside the record's (Matt, 2026-11-02). The maths is needOf in js/leaderboard-ui.js.
   // Variant B (Matt picks; test-only flag): only games where the viewer is 2nd or 3rd, closest gap first.
   const closeRows = _closeVariant === 'b' ? R.close.filter((x) => x.rank === 2 || x.rank === 3) : R.close;
-  const whyPill = (x) => (x.why === 'tier' ? `<span class="lb2-pill lb2-why">${esc(lb2TierWord(x.whyTier))}</span>` : x.why === 'nohint' ? `<span class="lb2-pill lb2-why">${esc(t2('lb2_nohint'))}</span>` : '');
+  const needLine = (x) => {
+    const n = x.need;
+    if (!n) return '';
+    // The board's own number style (golf words, digit groups), the level's shape riding the number (round 4).
+    const v = `${n.tier ? shape(n.tier) : ''}<b>${esc(dispText(x.id, n.v))}</b>`;
+    return t2('lb2_need', { k: n.k, v, n: n.n });
+  };
   const close = closeRows.length ? `<div><h2 class="lb2-h2">${esc(t2('lb2_close_h'))}</h2><div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}">
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(x.id))}</span>
-      <span class="lb2-t2 lb2-vline num">${(x.mineAt || x.mine).text === '–' ? '' : `<span class="lb2-nw"><b>${valHTML(x.id, x.mineAt || x.mine)}</b><span class="lb2-dot">·</span></span>`}<span class="lb2-nw lb2-recq"><span class="lb2-recw">${esc(t2('lb2_record'))}</span>${valHTML(x.id, x.recVal)}${whyPill(x)}</span></span></span>
+      <span class="lb2-t2 lb2-need num">${needLine(x)}</span></span>
       <span class="lb2-right">${placeHTML(defPlace(x.id, _meKey))}</span>${CHEV}</button>`).join('')}</div></div>` : '';
   // Lost records: a game the viewer held that someone else holds now; who holds it, the day it was noticed, the viewer's place.
   const day = (ms) => { try { return new Date(ms).toLocaleDateString(LOC(), { month: 'short', day: 'numeric' }); } catch { return ''; } };
@@ -1204,7 +1192,6 @@ html.gh-compact .lb2-x{display:none}
 
 .lb2-who{display:flex;flex-direction:column;gap:2px;min-width:0}
 .lb2-sub{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13px;color:var(--l2-muted);line-height:1.25}
-.lb2-gapl{display:block;color:var(--l2-text)}
 .lb2-lr.me .lb2-sub{color:inherit}
 .lb2-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 7px 1px 4px;border:1px solid currentColor;border-radius:10px;font-size:12px;font-weight:700;line-height:16px;white-space:nowrap;flex-shrink:0}
 .lb2-pill .lb2-shape{width:11px;height:11px;margin:0}
@@ -1300,6 +1287,9 @@ html.gh-compact .lb2-x{display:none}
 .lb2-nw{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .lb2-close>.lb2-chev{align-self:center}
 .lb2-close .lb2-vsr{flex-wrap:nowrap;white-space:nowrap}
+.lb2-need{display:block;color:var(--l2-text);white-space:normal;overflow:visible}
+.lb2-need b{font-weight:800}
+.lb2-need .lb-dshape,.lb2-need svg{width:14px;height:14px;vertical-align:-2px;margin:0 3px 0 1px}
 .lb2-close .lb2-vsr .lb2-nmt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb2-frow{display:flex;gap:8px;align-items:stretch}
 .lb2-catpick{position:relative;flex:1;min-width:0;min-height:44px;border-radius:12px;background:var(--l2-seg);display:flex;align-items:center;gap:8px;padding:0 36px 0 14px;font-size:15px;font-weight:600;color:var(--l2-text)}

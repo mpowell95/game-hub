@@ -2019,28 +2019,40 @@ function gapParts(me, rec, id) {
   if (!(d > 0)) return null;
   return { k, v, n: d };
 }
-/** Leaderboard v2's pinned row (Matt, 2026-11-02: Ana likes how the old board "shows how close you are to beating
- *  someone's record"): the gap as the amount that TAKES the record. gapParts' number only reaches a tie (the outside
- *  review's item 4, which is why v2 dropped the line in round 4), so v2 adds the one more that passes it. Every
- *  gapParts difference is a whole number of its unit (points, wins, strokes, dollars, metres, or whole seconds off
- *  floored times), so one more always beats the record. The old board's own line is left exactly as it was. */
-function takeParts(p) {
-  if (!p || p.k === 'tier' || p.take) return p;
-  const n = p.n + 1;
-  return { ...p, n, v: p.k === 'time' ? formatTimeMetric(n * 1000) : p.k === 'bank' ? bankText(n) : numText(n) };
-}
-/** v2: EQUAL to the record on the board's number but ranked below it on a tie-break (Cup Pong's fewer reracks, a
- *  points board's more wins): gapParts has no difference to give, yet one more of the unit takes the record. Same
- *  guards as gapParts (same difficulty, same no-hint standing); never for a time (Minesweeper ranks to the ms). */
-function tieTake(me, rec, id) {
+/** Leaderboard v2's Me tab (Matt, 2026-11-02: "consolidate everything into 1 piece of info. Do not show my record
+ *  and the all time record. Just show what is needed to beat the record"): what it takes to get gold, in parts for
+ *  the string `lb2_need`. Two shapes:
+ *  - a game ranked on a TOTAL (points, solves, wins, bankroll, Contexto's golds): how much to ADD, at the record's
+ *    difficulty: the record's number there minus yours, plus one. One more always passes it, a tie the record
+ *    wins on a tie-break included (Flick Soccer 91 against 95: 5 points);
+ *  - a game ranked on ONE best run (a score, a distance, a length, a round, a time): the run that beats it.
+ *  Sufficient, not always the least: on a game ranked hardest level first, any score on a HARDER level than the
+ *  record's also passes it, and this does not offer that. null when there is no honest line. */
+const NEED_BEST = { ballrun: 'obstacles', brickblitz: 'score', snake: 'length', hillclimb: 'meters', tower: 'blocks', golf: 'golf', minesweeper: 'time' };
+function needOf(me, rec, id) {
+  if (!me || !rec || me.key === rec.key) return null;
+  const add = (k, n, tier = null) => ({ k, n, v: k === 'bank' ? bankText(n) : numText(n), tier });
+  if (id === 'contexto') return add('nohint', Math.max(1, ctCounts(ctOf(rec)).gold - ctCounts(ctOf(me)).gold + 1));
+  // Sudoku / Murdoku: no-hint solves at the record's no-hint level come first (compareNoHint).
+  const nh = NOHINT_GAMES.has(id) ? noHintTierOf(rec, id) : 0;
+  if (nh) return add('nohint', Math.max(1, noHintAt(rec, id, nh) - noHintAt(me, id, nh) + 1), nh);
+  const best = NEED_BEST[id];
+  if (best === 'time') {
+    const h = msHeadline(rec);
+    if (!h || !h.c) return null;
+    if (h.c.ms != null) return { k: 'mstime', v: formatTimeMetric(h.c.ms), tier: h.tier || null };
+    return h.c.pct != null ? { k: 'mspct', v: numText(h.c.pct), tier: h.tier || null } : null;
+  }
+  const tier = boardTierOf(rec, id) || null;
+  const r = gameMetricAt(rec, id, tier);
+  if (r == null) return null;
+  if (best === 'golf') return { k: 'golf', v: metricText(r - 1, 'golf'), tier: null };   // one stroke better
+  if (best) return { k: best, v: numText(r + 1), tier };
+  const m = gameMetricAt(me, id, tier);
+  if (m == null && id === 'holdem') return null;   // a bankroll under review has no honest number
   const k = gapKind(id);
-  if (!k || k === 'time' || !me || !rec || me.key === rec.key) return null;
-  if (!noHintTierOf(rec, id) !== !noHintTierOf(me, id)) return null;
-  const tier = boardTierOf(rec, id);
-  if ((tier || 0) !== (boardTierOf(me, id) || 0)) return null;
-  const r = gameMetricAt(rec, id, tier), m = gameMetricAt(me, id, tier);
-  if (m == null || r == null || m !== r) return null;
-  return { k, v: k === 'bank' ? bankText(1) : numText(1), n: 1 };
+  if (!['points', 'wins', 'solved', 'stars', 'words', 'bank'].includes(k)) return null;
+  return add(k, Math.max(1, r - (m || 0) + 1), tier);
 }
 /** How close `me` is to the record, 0..1, for "Closest first". Anything with no gap sorts last. */
 function closeness(me, rec, id) {
@@ -3725,11 +3737,8 @@ export function lb2Board(list, id, st = {}) {
         const hm = cell(me), hr = cell(rec);
         if (!hr || hr.c.ms == null) return null;
         if (hm && hm.c.ms != null && hm.tier === hr.tier) {
-          // Times rank to the millisecond: the whole seconds that take the record, worked out exactly.
-          const behind = hm.c.ms - hr.c.ms;
-          if (!(behind > 0)) return null;
-          const s = Math.ceil((behind + 1) / 1000);
-          return { k: 'time', v: formatTimeMetric(s * 1000), n: s, take: true };
+          const d = Math.floor(hm.c.ms / 1000) - Math.floor(hr.c.ms / 1000);
+          return d > 0 ? { k: 'time', v: formatTimeMetric(d * 1000), n: d } : null;
         }
         return hr.tier ? { k: 'tier', v: formatTimeMetric(hr.c.ms), tier: t(TIER_LABEL_KEY[hr.tier]) } : null;
       };
@@ -3744,7 +3753,7 @@ export function lb2Board(list, id, st = {}) {
     // The pinned row's gap = the old stand line's (standLineHTML): to the board's FIRST row, read at its
     // tier, only on the views the old board printed it on. Computed NOW (the borrowed state ends below).
     const gaps = new Map();
-    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, takeParts(gapFn(me.g, out[0].g)) || tieTake(me.g, out[0].g, id));
+    if (gapFn && out.length) for (const me of out) if (me.rank > 1) gaps.set(me.key, gapFn(me.g, out[0].g));
     // The board's header number (all plays, gameDetail's) and its standing records block (recordsHTML).
     const plays = id === 'contexto' && _view === 'daily' ? list.reduce((a, g) => a + (ctDailyOf(g).played | 0), 0)
       : list.reduce((a, g) => a + boardPlaysOf(g, id), 0);
@@ -3778,7 +3787,7 @@ export function lb2Records(list, meKey) {
         const why = nhRec && !nhMe ? 'nohint' : (rt || 0) > (mt || 0) ? 'tier' : '';
         const at = rt && why === 'tier' ? gameMetricAt(me, id, rt) : null;
         const mineAt = why === 'tier' ? { text: at == null ? '–' : youValText(id, at), tier: rt } : null;
-        out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), mine: val(me), rec, recVal: val(rec), why, mineAt, whyTier: rt || null });
+        out.close.push({ id, rank, tie: st.tiedAt(me.key), c: closeness(me, rec, id), gap: gapParts(me, rec, id), need: needOf(me, rec, id), mine: val(me), rec, recVal: val(rec), why, mineAt, whyTier: rt || null });
       }
       else if (!played && rec) out.fresh.push({ id, rec, recVal: val(rec) });
     });

@@ -23,15 +23,17 @@ Matt: "Deploy to the Admin only leaderboard. DO NOT MAKE LIVE FOR ANYONE ELSE." 
   boardMetricCmp / lb2Tabs) on 2026-11-02; `tools/test-lb-rank-sheet.mjs` pins the numbers and EN/ES. Change a
   board's ranking and its sheet must change with it. The four unreleased wins games with no points table
   (archery, baseball, battlearena, cupbaseball) fall back to the old "Ranked by" line.
-- (v1433) The pinned row's "N more to take the record" is back in v2 (Matt: Ana likes how the old board "shows how
-  close you are to beating someone's record"). Round 4 had dropped it because the old number only reached a TIE;
-  v2 now adds the one more that beats it (`takeParts` in js/leaderboard-ui.js; Minesweeper's time gap is worked
-  out to the millisecond). The old board's own line is unchanged. Where there is no honest number (a no-hint
-  record over a hint row), the line falls back to "Record N".
-- (v1434) The same line is also on YOUR OWN ROW in the list (`gapLine`, class `lb2-gapl`), under "N played": the pinned
-  row hides while your row is on screen, which on a short board (Pool, 3 players) is always, so Ana's line was
-  invisible there. Equal to the record but ranked below on a tie-break (Cup Pong reracks, a points board's wins)
-  now says "1 more point to take the record" (`tieTake`, js/leaderboard-ui.js).
+- (v1435) WHAT IT TAKES TO GET GOLD lives on the ME TAB, not the board. Ana likes how the old board shows how close
+  you are to the record. v1433-v1434 put "N more to take the record" in the pinned row and then on your own row;
+  Matt: "No I don't like that layout. I want it to be here in the Me tab... consolidate everything into 1 piece of
+  info. Do not show my record and the all time record. Just show what is needed to beat the record." Both board
+  lines are OUT again (round 4's pinned row is back), and each "Closest to a record" row on Me has ONE line:
+  "5 points to get gold" (`lb2_need`, maths `needOf` in js/leaderboard-ui.js). A TOTAL game says how much to add
+  at the record's level (record minus yours plus one; a tie-break loss is "1 point"); a BEST-RUN game (Ball Run,
+  Brick Breaker, Snake, Hill Climb, Tower, Golf, Minesweeper) says the run that beats it ("Score 198,831",
+  "Shoot 5 under", "Beat 5:22"); the level's shape rides the number. Sufficient, not always the least: any score
+  on a level harder than the record's also passes it, and the line does not say so. Phrases were shortened until
+  no line wraps at 393 px in EN or ES.
 - Found while checking, NOT fixed (reported to Matt): a Golf integrity void sets `bestRoundByCourse` to 0, which
   `golfBestAt` reads as 12 under, so a voided Golf player would rank FIRST. Minesweeper's void is safe (0 = no time).
 - `js/lb-points.js`: Cup Pong no reracks doubles every level; Darts Cricket in order doubles (`kind` starting
