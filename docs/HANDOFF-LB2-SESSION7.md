@@ -99,3 +99,8 @@ Mockup v4: v3's frame and 👆 on page 2 were NOT asked for (Matt: "put it back 
 wording "Each game is different. / Find this on its leaderboard:" + the plain button. No stretched spacing: the popup is
 as tall as its taller page (702 px vs 734 at 402 wide), centred; even gaps on both pages. Online's gap kept.
 `docs/mockups/lb2-fixes-mockup-v4.{html,jpg}`. NOT built.
+**BUILT on branch `claude/awesome-keller-sb41sq` (2026-11-03), NOT merged (Matt: "build it - do not make it live yet")**:
+the popup = mockup v4 (`js/announce-ui.js` `drawLb2Intro`; Filler's numbers from `sheetModel('filler')`), Arrow Maze's
+sheet = one table + one Rush line (`js/lb-rank-sheet.js` `grid`/`text` cards; strings `lbrs_h_lvl`, `lbrs_wo_sup`,
+`lbrs_wo_rush`). On merge: bump CACHE past main, `validate-sw-assets`. Next (Matt): every other game's sheet, one at a
+time, current screenshot then a mockup, same principles (151 -> 30 words on Arrow Maze).

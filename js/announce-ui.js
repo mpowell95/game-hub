@@ -153,41 +153,55 @@ export function showAnnouncement(a, { onAction } = {}) {
 // Leaderboard button, then a game, then "See how scores are calculated", and the player taps each one.
 // Strings below are constants (the only HTML here, with <br> where Matt wanted the line broken).
 const LBI = {
-  en: { title: 'New leaderboard layout<br>and point system', p1: 'Points are now awarded<br>for every win', comp: 'Computer', and: 'and', online: 'Online',
-    eqL: '<span>Harder</span><br><span>difficulties/modes</span>', eqR: '<span>more points</span>', p2: 'Medals go to the players<br>with the most points.',
+  en: { title: 'New leaderboard layout<br>and point system', p1: 'Every win earns points.<br>Harder wins earn more.', diff: 'Difficulty',
+    per: 'Points<br>per win', online: 'Online', p2: 'Most points wins gold.',
     p3: 'Each game is different.<br>Find this on its leaderboard:', how: 'See how scores are calculated', next: 'Next', ok: 'OK', where: 'Show me where',
     tap: 'Tap here', pick: 'Pick a game', alt: 'Example leaderboard', isNew: 'NEW', skip: 'Skip' },
-  es: { title: 'Nueva clasificación<br>y sistema de puntos', p1: 'Ahora cada victoria<br>da puntos', comp: 'Ordenador', and: 'y', online: 'En línea',
-    eqL: '<span>Niveles/modos</span><br><span>más difíciles</span>', eqR: '<span>más puntos</span>', p2: 'Las medallas son para<br>quien tenga más puntos.',
+  es: { title: 'Nueva clasificación<br>y sistema de puntos', p1: 'Cada victoria da puntos.<br>Las más difíciles, más.', diff: 'Dificultad',
+    per: 'Puntos<br>por victoria', online: 'En línea', p2: 'El oro es para quien más puntos tiene.',
     p3: 'Cada juego es distinto.<br>Búscalo en su clasificación:', how: 'Ver cómo se calculan los puntos', next: 'Siguiente', ok: 'Vale', where: 'Muéstramelo',
     tap: 'Toca aquí', pick: 'Elige un juego', alt: 'Ejemplo de clasificación', isNew: 'NUEVO', skip: 'Saltar' },
 };
-const MP_ICON = '<svg class="lbi-mp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/></svg>';
+const LBI_LEVEL = ['gs_diff_beginner', 'gs_diff_intermediate', 'gs_diff_pro'];
+const PEOPLE_ICON = '<svg viewBox="0 0 22 20" aria-hidden="true"><circle cx="7" cy="6.5" r="3.6" fill="currentColor"/><circle cx="15" cy="6.5" r="3.6" fill="currentColor"/><path d="M0.5 19c0-3.8 2.9-6.6 6.5-6.6s6.5 2.8 6.5 6.6zM8.5 19c0-3.8 2.9-6.6 6.5-6.6s6.5 2.8 6.5 6.6z" fill="currentColor"/></svg>';
+// Mockup v4 (Matt, 2026-11-03: "It feels chaotic... The title isn't a title"): a medal, NEW and a real title over a rule;
+// ONE short grey line and ONE picture per page; the popup as tall as its taller page, never stretched.
 function ensureLbiCss() {
   if (document.getElementById('lbi-css')) return;
   const el = document.createElement('style');
   el.id = 'lbi-css';
   el.textContent = `
-.lbi-modal{text-align:center}
-.lbi-title{font-size:min(25px,6.1vw);font-weight:800;line-height:1.2;letter-spacing:-.01em;margin:6px 0 14px;white-space:nowrap}
+.lbi-modal{text-align:center;--lbi-dim:#596170;--lbi-line:#E2E5EA;--lbi-card:#F7F8FA;--lbi-head:#EEF0F3;--lbi-gap:#E2E5EA}
+:root.gh-dark .lbi-modal{--lbi-dim:#AEB5C1;--lbi-line:#2d333f;--lbi-card:#171b23;--lbi-head:#232834;--lbi-gap:#11141b}
+.lbi-hero{display:flex;flex-direction:column;align-items:center;padding:2px 0 14px;margin-bottom:14px;border-bottom:1px solid var(--lbi-line)}
+.lbi-medal{width:40px;height:auto;margin-bottom:8px}
+.lbi-hero .ann-badge{margin:0 0 10px}
+.lbi-modal .lbi-title{font-size:min(27px,6.6vw);font-weight:800;line-height:1.18;letter-spacing:-.015em;margin:0;white-space:nowrap}
 .lbi-pages{display:grid}
-.lbi-page{grid-area:1/1;display:flex;flex-direction:column;min-width:0}
+.lbi-page{grid-area:1/1;display:flex;flex-direction:column;align-items:center;min-width:0}
 .lbi-page.off{visibility:hidden;pointer-events:none}
-.lbi-mid{flex:1;display:flex;flex-direction:column;justify-content:space-evenly}
-.lbi-p{font-size:20px;font-weight:600;line-height:1.3;margin:6px 0;text-wrap:balance}
-.lbi-emo{font-size:1.25em;vertical-align:-.12em}
-.lbi-mp{width:1.25em;height:1.25em;vertical-align:-.25em}
-.lbi-eq{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;column-gap:8px;margin:6px -12px;font-size:20px;font-weight:600;line-height:1.25}
-.lbi-eq span{white-space:nowrap}
-.lbi-eq-m{font-size:1.5em;line-height:1}
-.lbi-cards{text-align:left;margin:8px -12px 0}
-.lbi-cards .lbps-lb{white-space:nowrap}
-.lbi-img{width:100%;height:auto;border-radius:12px;display:block;margin:2px 0 10px}
-.lbi-fake{min-height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;border:1px solid #E2E5EA;color:#1F5FD1;margin:0 0 4px}
-.lbi-foot{margin-top:auto}
-.lbi-dots{display:flex;gap:7px;justify-content:center;margin:14px 0 0}
+.lbi-p{font-size:18px;font-weight:400;line-height:1.4;color:var(--lbi-dim);margin:0 0 14px;text-wrap:balance}
+.lbi-ex{width:100%;border:1px solid var(--lbi-line);border-radius:14px;background:var(--lbi-card);text-align:left;overflow:hidden}
+.lbi-exh{display:flex;align-items:center;gap:10px;padding:9px 0 9px 16px;background:var(--lbi-head);font-size:14px;font-weight:700;color:var(--lbi-dim)}
+.lbi-exh span:first-child{flex:1}
+.lbi-col{width:96px;flex:none;text-align:center;line-height:1.2}
+.lbi-r{display:flex;align-items:center;gap:12px;padding:0 0 0 16px;height:58px;border-top:1px solid var(--lbi-line)}
+.lbi-r.on{border-top:6px solid var(--lbi-gap)}
+.lbi-r .lbi-l{flex:1;font-size:17px}
+.lbi-r b{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums}
+.lbi-sh{display:inline-flex;width:20px;height:20px;flex:none}
+.lbi-sh svg{width:100%;height:100%;display:block}
+:root.gh-dark .lbi-sh{background:#fff;border-radius:4px;padding:2px;box-sizing:border-box}
+:root.gh-dark .lbi-sh .lb-dshape-t3{fill:#1c2430}
+.lbi-ppl{width:20px;display:flex;color:var(--lbi-dim)}
+.lbi-ppl svg{width:22px;height:20px}
+.lbi-img{width:88%;height:auto;border-radius:12px;display:block;margin:0 0 14px}
+.lbi-fake{width:100%;min-height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;border:1px solid #E2E5EA;color:#1F5FD1}
+.lbi-foot{margin-top:auto;width:100%;padding-top:16px}
+.lbi-dots{display:flex;gap:7px;justify-content:center;margin:0 0 14px}
 .lbi-dots span{width:8px;height:8px;border-radius:4px;background:#c9ced6}
 .lbi-dots span.on{background:#1f5fd1}
+.lbi-foot .gh-modal__actions{margin-top:0}
 .lbi-foot .gh-btn{font-size:17px;white-space:nowrap}
 .lbi-wide{flex:1}
 .lbi-pill{border:1.5px solid #c9ced6;border-radius:999px}
@@ -202,6 +216,12 @@ function ensureLbiCss() {
   document.head.appendChild(el);
 }
 function showLb2Intro(a) {
+  // The example's numbers come from the points model (loaded only when this popup opens, as before).
+  return Promise.all([import('./lb-points-sheet.js'), import('./difficulty-tiers.js')])
+    .catch((err) => { console.warn('[announce] points example failed', err); return [null, null]; })
+    .then(([S, D]) => drawLb2Intro(a, S ? S.sheetModel : () => [], D ? D.diffShapeSVG : () => ''));
+}
+function drawLb2Intro(a, sheetModel, diffShapeSVG) {
   return new Promise((resolve) => {
     ensureCss(); ensureLbiCss();
     const lang = getLang() === 'es' ? 'es' : 'en';
@@ -209,54 +229,35 @@ function showLb2Intro(a) {
     const dark = resolvedTheme() === 'dark';
     const img = new URL(`../img/lb2-intro-board-${lang}${dark ? '-dark' : ''}.png`, import.meta.url).href;
     const dots = (n) => `<div class="lbi-dots">${[1, 2].map((i) => `<span class="${i === n ? 'on' : ''}"></span>`).join('')}</div>`;
+    const medal = new URL('../icons/medal-gold.png', import.meta.url).href;
+    // Page 1's example: Filler's points, read from the same model the board's points sheet uses.
+    const cards = sheetModel('filler');
+    const cpu = (cards.find((c) => c.kind === 'cpu') || { rows: [] }).rows;
+    const onl = ((cards.find((c) => c.kind === 'online') || { rows: [] }).rows[0] || {}).pts;
+    const shp = (tier) => `<span class="lbi-sh">${diffShapeSVG(tier)}</span>`;
+    const rows = cpu.map((r) => `<div class="lbi-r">${shp(r.tier)}<span class="lbi-l">${esc(t(LBI_LEVEL[r.tier - 1]))}</span><b class="lbi-col">${r.pts}</b></div>`).join('')
+      + (onl ? `<div class="lbi-r on"><span class="lbi-ppl">${PEOPLE_ICON}</span><span class="lbi-l">${L.online}</span><b class="lbi-col">${onl}</b></div>` : '');
     const host = document.createElement('div');
     host.className = 'gh-overlay ann-overlay';
     host.innerHTML = `
       <div class="gh-modal ann-modal lbi-modal" role="dialog" aria-modal="true" aria-label="${esc(t('ann_dialog_aria'))}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${esc(t('bug_close'))}">&times;</button>
-        <div><span class="ann-badge">${L.isNew}</span></div>
-        <h2 class="lbi-title">${L.title}</h2>
+        <div class="lbi-hero"><img class="lbi-medal" src="${esc(medal)}" alt="" width="40" height="58" decoding="async"><span class="ann-badge">${L.isNew}</span>
+          <h2 class="lbi-title">${L.title}</h2></div>
         <div class="lbi-pages">
-          <div class="lbi-page" data-page="1"><div class="lbi-mid">
+          <div class="lbi-page" data-page="1">
             <p class="lbi-p">${L.p1}</p>
-            <p class="lbi-p">${L.comp} <span class="lbi-emo" aria-hidden="true">🤖</span> ${L.and} ${MP_ICON} ${L.online}</p>
-            <div class="lbi-eq"><div class="lbi-eq-l">${L.eqL}</div><div class="lbi-eq-m">=</div><div class="lbi-eq-r">${L.eqR}</div></div>
-            <div class="lbps lbi-cards" data-role="cards"></div>
-          </div><div class="lbi-foot">${dots(1)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="next">${L.next}</button></div></div></div>
-          <div class="lbi-page off" data-page="2" aria-hidden="true"><div class="lbi-mid">
+            <div class="lbi-ex"><div class="lbi-exh"><span>${L.diff}</span><span class="lbi-col">${L.per}</span></div>${rows}</div>
+            <div class="lbi-foot">${dots(1)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="next">${L.next}</button></div></div></div>
+          <div class="lbi-page off" data-page="2" aria-hidden="true">
             <p class="lbi-p">${L.p2}</p>
             <img class="lbi-img" src="${esc(img)}" alt="${esc(L.alt)}" width="381" height="272" decoding="async">
             <p class="lbi-p">${L.p3}</p>
             <div class="lbi-fake" aria-hidden="true">${L.how}</div>
-          </div><div class="lbi-foot">${dots(2)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--ghost lbi-pill" data-role="dismiss">${L.ok}</button><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="where">${L.where}</button></div></div></div>
+            <div class="lbi-foot">${dots(2)}<div class="gh-modal__actions"><button type="button" class="gh-btn gh-btn--ghost lbi-pill" data-role="dismiss">${L.ok}</button><button type="button" class="gh-btn gh-btn--primary lbi-wide" data-role="where">${L.where}</button></div></div></div>
         </div>
       </div>`;
     document.body.appendChild(host);
-    // Page 1's example: Filler's own points cards (Vs computer, Online), from the same sheet the board's (i) shows.
-    import('./lb-points-sheet.js').then((S) => {
-      S.ensurePointsSheetCss();
-      const tmp = document.createElement('div');
-      tmp.innerHTML = S.pointsSheetHTML('filler');
-      const cards = [...tmp.querySelectorAll('.lbps-card')].filter((c) => !c.classList.contains('lbps-cap')).slice(0, 2);
-      const box = host.querySelector('[data-role="cards"]');
-      if (box) cards.forEach((c) => box.appendChild(c));
-    }).catch((err) => console.warn('[announce] points example failed', err));
-    // The "=" stays in the middle of the screen: both sides are equal halves, so the words shrink (never wrap) to fit.
-    // Fitted again once the popup is laid out (its stylesheet can land a moment after it opens).
-    const eq = host.querySelector('.lbi-eq');
-    const fitEq = () => {
-      if (!eq || !eq.isConnected) return;
-      for (let f = 20; f >= 13; f -= 0.5) {
-        eq.style.fontSize = f + 'px';
-        const spans = [...eq.querySelectorAll('.lbi-eq-l span, .lbi-eq-r span')];
-        const sides = [...eq.querySelectorAll('.lbi-eq-l, .lbi-eq-r')];
-        const room = Math.min(...sides.map((x) => x.getBoundingClientRect().width));
-        if (room > 0 && spans.every((x) => x.getBoundingClientRect().width <= room + 0.5)) break;
-      }
-    };
-    fitEq();
-    requestAnimationFrame(fitEq);
-    [150, 500, 1500].forEach((ms) => setTimeout(fitEq, ms));
     let done = false;
     const finish = (guide) => {
       if (done) return;

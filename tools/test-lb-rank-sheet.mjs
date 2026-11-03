@@ -5,7 +5,7 @@
 import { RANK_SHEET_GAMES, rankSheetModel, rankSheetHTML } from '../js/lb-rank-sheet.js';
 import { LB_RULES } from '../js/lb-rules.js';
 import { POINT_GAMES } from '../js/lb-points.js';
-import { WO_BAND_POINTS, WO_TIERS, woEarnedPoints, WO_EXPERT8_SINCE } from '../js/arrow-maze-time.js';
+import { WO_BAND_POINTS, WO_TIERS, woEarnedPoints } from '../js/arrow-maze-time.js';
 import { glLevelPoints, glBandOf } from '../js/gridlock-points.js';
 import { wwStarsFor, wwBandOf, WW_MULT } from '../js/word-weaver-points.js';
 import { setLang } from '../js/i18n.js';
@@ -38,17 +38,18 @@ for (const id of Object.keys(LB_RULES)) {
   ok('gridlock: last row runs on for ever', rows[rows.length - 1].vars.b === undefined);
 }
 
-// Arrow Maze: a clear is worth its band's points; each hint or lost heart steps down the listed values, never
-// below the last; the old Expert line is what an Expert clear before the change earns.
+// Arrow Maze (2026-11-03, one table): column 0 = a clear's full points, then 1, 2 and 3+ hints used or lives lost,
+// the last column holding for any more; every number is woEarnedPoints on today's boards.
 {
-  const [calc, slip] = rankSheetModel('wayout');
+  const [lvl, rush] = rankSheetModel('wayout');
+  ok('arrow maze: two cards, the table and Rush', lvl.grid && rush.text === 'lbrs_wo_rush');
+  ok('arrow maze: columns 0, 1, 2, 3+', lvl.grid.cols.join() === '0,1,2,3+');
   WO_TIERS.forEach((b, i) => {
-    ok(`arrow maze ${b}: a clear is ${calc.rows[i].v.pts}`, calc.rows[i].v.pts === WO_BAND_POINTS[b] && woEarnedPoints(b, 0) === WO_BAND_POINTS[b]);
-    const listed = slip.rows[i].v.txt.split(', ').map(Number);
-    ok(`arrow maze ${b}: slips ${listed.join(', ')}`, [0, 1, 2, 3, 4, 7].every((k) => woEarnedPoints(b, k) === listed[Math.min(k, listed.length - 1)]));
+    const v = lvl.grid.rows[i].vals;
+    ok(`arrow maze ${b}: a clear is ${v[0]}`, v[0] === WO_BAND_POINTS[b] && lvl.grid.rows[i].ic === i + 1);
+    ok(`arrow maze ${b}: ${v.join(', ')}`, [0, 1, 2, 3, 4, 7].every((k) => woEarnedPoints(b, k) === v[Math.min(k, 3)]));
   });
-  const old = slip.foot.vars.pts.split(', ').map(Number);
-  ok('arrow maze: Expert before the change', [0, 1, 2, 3, 5].every((k) => woEarnedPoints('expert', k, 0, WO_EXPERT8_SINCE - 1) === old[Math.min(k, old.length - 1)]));
+  ok('arrow maze: Expert row 8, 5, 3, 1', lvl.grid.rows[3].vals.join() === '8,5,3,1');
 }
 
 // Word Weaver: stars by hints, and each band's multiplier over the levels it lists.

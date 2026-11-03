@@ -7,7 +7,7 @@
 // boardTierOf, boardMetricCmp, lb2Tabs; js/leaderboard-rank.js; js/players-agg.js). Point values are READ from
 // the games' own points modules, never typed in, so a sheet cannot drift from what the board adds up.
 // tools/test-lb-rank-sheet.mjs pins the numbers and the EN/ES strings.
-import { WO_BAND_POINTS, WO_SLIP_POINTS, WO_SLIP_POINTS_OLD, WO_TIERS } from './arrow-maze-time.js';
+import { WO_TIERS, woEarnedPoints } from './arrow-maze-time.js';
 import { GL_TIERS, GL_BAND_START, glLevelPoints } from './gridlock-points.js';
 import { WW_TIERS, WW_BAND_START, WW_MULT, wwStarsFor } from './word-weaver-points.js';
 import { ensurePointsSheetCss } from './lb-points-sheet.js';
@@ -45,7 +45,6 @@ function gridlockRows() {
   });
   return out;
 }
-const SLIP = (pts) => pts.join(', ');
 
 const SHEETS = {
   ballrun: () => [{ h: 'calc', lines: ['lbrs_br_1', 'lbrs_br_2'] }, hardest('lbrs_br_r'), levelTabs(3)],
@@ -79,13 +78,12 @@ const SHEETS = {
     mostPoints,
     { h: 'tabs', lines: [L('lbrs_t_bands', { levels: levels(4) })] },
   ],
+  // Matt, 2026-11-03 (151 words to 30, mockup v4): ONE table, a level per row, points by hints used or lives lost
+  // (0, 1, 2, 3+; read from woEarnedPoints, today's boards), and Rush in one line. The old lines' strings stay.
   wayout: () => [
-    { h: 'calc', rows: WO_TIERS.map((b, i) => ({ ic: i + 1, ...L('lbrs_wo_clear', { lv: lv(i + 1) }), v: { pts: WO_BAND_POINTS[b] } })), lines: ['lbrs_wo_1'] },
-    { h: 'slip', lines: ['lbrs_wo_s0'], rows: WO_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], v: { txt: SLIP(WO_SLIP_POINTS[b]) } })),
-      foot: L('lbrs_wo_s1', { pts: SLIP(WO_SLIP_POINTS_OLD.expert), lv: lv(4) }) },
-    mostPoints,
-    { h: 'tabs', lines: [L('lbrs_t_lvpts', { levels: levels(4) })] },
-    { h: 'rush', lines: ['lbrs_wo_r1', L('lbrs_wo_r2', { w: t('lb_wo_week') }), L('lbrs_wo_r3', { w: t('lb_wo_won') }), L('lbrs_wo_r4', { w: t('lb_wo_past') }), 'lbrs_wo_r5'] },
+    { h: 'lvl', grid: { sup: 'lbrs_wo_sup', cols: ['0', '1', '2', '3+'],
+      rows: WO_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2, 3].map((n) => woEarnedPoints(b, n)) })) } },
+    { h: 'rush', text: 'lbrs_wo_rush' },
   ],
   wordweaver: () => [
     { h: 'stars', rows: [0, 1, 2].map((h) => ({ k: 'lbrs_ww_h' + h, v: { stars: wwStarsFor(h) } })) },
@@ -147,7 +145,18 @@ function value(v) {
   return `<span class="lbps-p lbrs-pt">${esc(t(v.txt))}</span>`;
 }
 const row = (r) => `<div class="lbps-r">${icon(r.ic)}<span class="lbps-lb">${esc(say(r))}</span>${value(r.v)}</div>`;
+/** A points grid: levels down the side, a count across the top (Arrow Maze). The first column is the full value. */
+function gridHTML(g) {
+  const head = `<thead><tr><th></th><th colspan="${g.cols.length}" class="lbrs-sup">${esc(t(g.sup))}</th></tr>`
+    + `<tr><th></th>${g.cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>`;
+  const body = g.rows.map((r) => `<tr><td class="lbrs-gl">${icon(r.ic)}<span>${esc(t(r.k))}</span></td>${r.vals.map((v, i) => `<td${i === 0 ? ' class="lbrs-full"' : ''}>${v}</td>`).join('')}</tr>`).join('');
+  return `<table class="lbrs-grid">${head}<tbody>${body}</tbody></table>`;
+}
 function cardHTML(c) {
+  if (c.grid || c.text) {
+    const inner = c.grid ? gridHTML(c.grid) : `<div class="lbrs-one">${esc(t(c.text))}</div>`;
+    return `<div class="lbps-card lbps-k-x"><div class="lbps-ch"><span class="lbps-ct">${esc(t('lbrs_h_' + c.h))}</span></div>${inner}</div>`;
+  }
   const lines = c.lines ? `<ul class="lbrs-ul">${c.lines.map((x) => `<li>${esc(say(x))}</li>`).join('')}</ul>` : '';
   const steps = c.steps ? `<ol class="lbrs-ol">${c.steps.map((x) => `<li>${esc(say(x))}</li>`).join('')}</ol>` : '';
   const rows = (c.rows || []).map(row).join('');
@@ -180,6 +189,16 @@ function ensureRankSheetCss() {
     '.lbrs .lbps-p{min-width:0}',
     '.lbrs-emo{font-size:18px;line-height:1}',
     '.lbrs-medal{height:24px;width:auto;display:block}',
+    '.lbrs-one{padding:12px;font-size:16px}',
+    '.lbrs-grid{width:100%;border-collapse:collapse;font-size:17px}',
+    '.lbrs-grid th{font-size:13px;font-weight:600;color:var(--ps-dim);text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}',
+    '.lbrs-grid th:first-child{width:auto}',
+    '.lbrs-grid th.lbrs-sup{padding:8px 0 2px;border-bottom:1px solid var(--ps-line);white-space:normal;line-height:1.25}',
+    '.lbrs-grid td{text-align:center;height:42px;padding:0;border-top:1px solid var(--ps-row);color:var(--ps-dim);font-variant-numeric:tabular-nums}',
+    '.lbrs-grid td.lbrs-full{color:var(--ps-ink);font-weight:800;font-size:20px}',
+    '.lbrs-grid td.lbrs-gl{text-align:left;padding-left:12px;color:var(--ps-ink)}',
+    '.lbrs-gl .lbps-ic{display:inline-flex;vertical-align:middle;width:auto;min-width:22px}',
+    '.lbrs-gl span:last-child{margin-left:10px;vertical-align:middle}',
   ].join('\n');
   document.head.appendChild(el);
 }
