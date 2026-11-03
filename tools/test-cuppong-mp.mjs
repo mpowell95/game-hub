@@ -197,6 +197,19 @@ res = await MP.nextInSeries(g1);
 const s2 = res.id;
 ok('game 2 is created: Ana is side a and shoots first, the score swapped', res.ok && res.game.a.code === 'ANABB' && res.game.seriesNo === 2 && res.game.seriesWins.b === 1 && res.game.seriesWins.a === 0 && res.game.seriesOf === s1 && res.game.rules.su === true);
 ok('...Ana shoots first, so like any challenge it reaches Matt when her first turn ends', getAt(`cuppong/index/ANABB/${s2}`).yourTurn === true && !getAt(`cuppong/index/MATTA/${s2}`));
+// [KNOWN-BUG PROBE] Matt and Ana's two game 5s (2026-11-02): game 1's card tapped again, and twice at once.
+{
+  const again = await MP.nextInSeries(g1);
+  const both = await Promise.all([MP.nextInSeries(g1), MP.nextInSeries(g1)]);
+  const g2s = Object.values(getAt('cuppong/games') || {}).filter((x) => x && x.seriesOf === s1 && x.seriesNo === 2);
+  ok('game 2 is made ONCE: tapping again (even twice at once) opens the same game', again.ok && again.id === s2 && again.existing
+    && both.every((x) => x.ok && x.id === s2) && g2s.length === 1);
+  const R = (o) => ({ with: 'KINGG', name: 'King', emoji: '🤴', updated: 5, series: 5, seriesOf: 'g1', ...o });
+  const dupes = [R({ id: 'g1', seriesNo: 1, over: true, result: 'won' }), R({ id: 'g2b', seriesNo: 2, over: false, yourTurn: true }),
+    R({ id: 'g2a', seriesNo: 2, over: true, result: 'lost' })];
+  ok('two game 2s on record: the finished one decides what is owed', MP.owedSeriesRows(dupes).some((r) => r.id === 'next:g2a')
+    && MP.owedSeriesRows([dupes[0], dupes[2], { ...dupes[1], over: true, ended: 'cancelled' }]).some((r) => r.id === 'next:g2a'));
+}
 res = await MP.appendLog(s2, 0, [t('a', null), t('a', null)]);
 ok('...and then it does, as his turn, marked game 2 of 3', res.ok && getAt(`cuppong/index/MATTA/${s2}`).yourTurn === true && getAt(`cuppong/index/MATTA/${s2}`).seriesNo === 2);
 use('A');

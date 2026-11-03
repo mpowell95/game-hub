@@ -126,6 +126,11 @@ of the soft-throw sweep).
 - **The next game is a BUTTON only for whoever LOST** (`seriesStarter`), so phones never both create
   it; `nextInSeries` swaps the sides AND the score; whoever did not shoot first last game shoots
   first (`createGame({ first: 'them' })` writes both rows at once).
+- **The next game is made ONCE (2026-11-02)**: Matt and Ana's best-of-5 got two game 5s from Matt's phone,
+  22 s apart (the game-over card reappears whenever the finished game is reopened, and nothing checked).
+  `nextInSeries` now reads your own index fresh and OPENS a next game already made (`existing: true`);
+  taps in flight share one creation; an unreadable index refuses rather than creating blind.
+  `owedSeriesRows` breaks a same-number tie toward the game with a result, then a live one, called-off last.
 - **Between games the hub's Multiplayer screen lists the series too (2026-10-29)**: `owedSeriesRows` (pure, from index rows)
   makes a `next:<id>` row (Your turn if you lost, else Their turn; no ⋯ or bell); `armOpen('next:<id>')` -> `openNext`
   re-reads and starts the next game. `myTurnCount` counts it.
