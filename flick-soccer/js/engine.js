@@ -357,3 +357,48 @@ export function ballPath(b, shooter, contact, len = 80, bounces = 2) {
   }
   return { pts, stop: 'end' };
 }
+
+/**
+ * Easy's bounce line, the REAL one (2026-11-03, Matt: "the ball doesn't do what the aim line says
+ * it will"). `ballPath` above drew a straight-line guess: the angle off a glancing hit came out up
+ * to 24 degrees wrong one time in ten (the engine's contact normal is read a step after touching),
+ * and a wall bounce was drawn as a mirror though the ball loses speed into the wall
+ * (E_WALL_BALL), so it comes off flatter. This runs the very shot (disc `i` flicked along (dx, dy)
+ * at `power`) on a copy with the engine's own step, so the line is what the ball WILL do: a point
+ * at every turn it takes, ending at its `bounces + 1`th turn off a wall or post, the first disc it
+ * touches other than the flicked one (`stop: 'disc'`), a goal (`'goal'`), or where it stops (`'end'`).
+ * Returns null if the ball is never moved. Display only: it mutates nothing it is given.
+ */
+export function shotPath(b, i, dx, dy, power, bounces = 2, maxSecs = 8) {
+  const s = cloneBodies(b);
+  flick(s, i, dx, dy, power);
+  const q = s[BALL];
+  const max = Math.round(maxSecs / DT);
+  let pts = null, turns = 0;
+  for (let k = 0; k < max; k++) {
+    const pvx = q.vx, pvy = q.vy;
+    const g = step(s);
+    if (!pts) {
+      if (q.vx === 0 && q.vy === 0) { if (atRest(s)) return null; continue; }
+      pts = [{ x: b[BALL].x, y: b[BALL].y }];
+      continue;
+    }
+    if (g >= 0) { pts.push({ x: q.x, y: q.y }); return { pts, stop: 'goal' }; }
+    if (q.vx === 0 && q.vy === 0) {
+      pts.push({ x: q.x, y: q.y });
+      return { pts, stop: q.y < 0 || q.y > H ? 'goal' : 'end' };
+    }
+    // Friction never turns the ball, so any change of heading is a touch.
+    const cr = pvx * q.vy - pvy * q.vx, dt = pvx * q.vx + pvy * q.vy;
+    if (dt > 0 && cr * cr < 1e-5 * dt * dt) continue;
+    pts.push({ x: q.x, y: q.y });
+    const near = (o) => { const rr = o.r + q.r + 0.05; return (o.x - q.x) * (o.x - q.x) + (o.y - q.y) * (o.y - q.y) <= rr * rr; };
+    // The flicked disc following through and catching the ball again is part of the kick: drawn,
+    // never an end (it stopped the line a finger's width out, then the ball shot off sideways).
+    if (near(s[i])) continue;
+    for (let j = 1; j < s.length; j++) if (j !== i && near(s[j])) return { pts, stop: 'disc' };
+    if (++turns > bounces) return { pts, stop: 'end' };
+  }
+  pts.push({ x: q.x, y: q.y });
+  return { pts, stop: 'end' };
+}

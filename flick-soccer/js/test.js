@@ -125,6 +125,20 @@ const ok = (label, cond, extra = '') => { if (!cond) { fails++; console.log('FAI
     const off = E.ballPath(L, -1, { x: 45, y: 65 }, 200, 2);
     ok('an angled one comes back off the wall', off.pts.length >= 3 && off.pts[1].x > 90, JSON.stringify(off));
   }
+  // Easy's bounce line is the shot itself (2026-11-03): every point is where the real ball goes.
+  {
+    const L = E.lineUp();
+    for (let i = 1; i < L.length; i++) { L[i].x = 4 + i * 8.5; L[i].y = 150; }
+    L[E.BALL].x = 50; L[E.BALL].y = 60;
+    L[3].x = 42; L[3].y = 75;
+    const sp = E.shotPath(L, 3, 0.45, -0.89, 0.8);
+    const sim = E.cloneBodies(L); E.flick(sim, 3, 0.45, -0.89, 0.8);
+    const seen = [];
+    for (let k = 0; k < 2000; k++) { E.step(sim); seen.push({ x: sim[0].x, y: sim[0].y }); }
+    const onPath = sp && sp.pts.slice(1).every((p) => seen.some((s) => Math.abs(s.x - p.x) < 1e-9 && Math.abs(s.y - p.y) < 1e-9));
+    ok('the bounce line follows the real ball', !!onPath && sp.pts.length >= 2, JSON.stringify(sp));
+    ok('the bounce line leaves the pitch untouched', L[3].x === 42 && L[E.BALL].vx === 0);
+  }
   // A ball rolled straight into the top goal is a goal for seat 0.
   const b = E.lineUp();
   for (let i = 1; i < b.length; i++) b[i].x = 5 + (i % 2) * 90;   // clear the middle
