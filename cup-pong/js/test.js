@@ -276,6 +276,31 @@ ok('the whole rack area is on the table',
     }
     ok('every rerack preset is a legal rack (no overlap, on the table)', illegal.length === 0, illegal.join(' '));
   }
+  // MAKE YOUR OWN, ANYWHERE (2026-11-03, Matt: "a stop light with two to the left filling the gaps").
+  {
+    const { settleSpot, freeOk, spotOf, FREE } = await import('./rack.js');
+    const light = [{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }];
+    const g1 = settleSpot({ u: -0.8, v: 0.45 }, light);
+    const g2 = settleSpot({ u: -0.95, v: 1.4 }, light.concat([g1]));
+    const touch = (p, q) => Math.abs(Math.hypot(p.u - q.u, p.v - q.v) - 1) < 1e-9;
+    ok('free rack: a cup dropped in a gap nestles touching both cups', g1 && touch(g1, light[0]) && touch(g1, light[1]), JSON.stringify(g1));
+    ok('...and the next gap too', g2 && touch(g2, light[1]) && touch(g2, light[2]), JSON.stringify(g2));
+    ok('free rack: a cup dropped on another moves to where it fits', freeOk(settleSpot({ u: 0, v: 1 }, light), light));
+    ok('free rack: near the back wall it goes against it', settleSpot({ u: -2, v: 0.2 }, light).v === 0);
+    ok('free rack: off the area it stays inside', (() => { const q = settleSpot({ u: 9, v: 9 }, light); return Math.abs(q.u) <= FREE.uMax && q.v <= FREE.vMax + 1e-9; })());
+    ok('free rack: a cell becomes the same place', (() => { const p = spotOf({ id: 'k', c: 3, r: 2 }); const a = cellXZ({ c: 3, r: 2 }), b = cellXZ(p); return Math.hypot(a.x - b.x, a.z - b.z) < 1e-9; })());
+    m = new Match({ first: 'a', reracks: 1 }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
+    const stop = light.concat([g1, g2]);
+    ev = m.rerackCustom(stop);
+    ok('free rack: the stop light with two filling the gaps is a legal rerack, ids kept, one spent',
+      ev.length === 1 && ev[0].key === 'custom' && m.racks.b.every((k, i) => k.u === stop[i].u && k.v === stop[i].v) && ids(m, 'b').join() === 'k0,k1,k2,k3,k4' && m.reracksLeft.a === 0);
+    ok('...and survives a save', JSON.stringify(Match.fromJSON(JSON.parse(JSON.stringify(m.toJSON()))).racks.b) === JSON.stringify(m.racks.b));
+    m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 3); m.startTurn();
+    ok('free rack: overlapping cups are refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 0.5, v: 0.2 }, { u: 2, v: 0 }]).length === 0 && m.reracksLeft.a === 2);
+    ok('free rack: off the table is refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 2.6, v: 0 }, { u: -2, v: 0 }]).length === 0);
+    ok('free rack: nothing against the back wall is refused', m.rerackCustom([{ u: 0, v: 0.5 }, { u: 0, v: 1.5 }, { u: 0, v: 2.5 }]).length === 0);
+    ok('free rack: cups need not touch', m.rerackCustom([{ u: -2.5, v: 0 }, { u: 0.3, v: 1.7 }, { u: 2.5, v: 3.2 }]).length === 1);
+  }
   m = new Match({ first: 'a', reracks: 2, backRack: false }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
   ok('an older challenge (no back-wall rule) still replays its forward custom rerack',
     m.rerackCustom([{ c: -2, r: 1 }, { c: 0, r: 1 }, { c: 2, r: 1 }, { c: -1, r: 2 }, { c: 1, r: 2 }]).length === 1);

@@ -627,3 +627,12 @@ choice and continues from the setup screen (Darts' pattern); only New game over 
 A throw in the air is saved with its launch and flown again, so leaving cannot undo a bad throw. Headless check
 (scratchpad, not in the repo): leave mid-match, Continue = byte-identical `Match.toJSON()`; a made throw left in
 the air lands in the same cup after Continue; New game = one loss after two taps; a finish = one win, no save.
+
+## 2026-11-03: Make your own, anywhere
+
+Matt, with a screenshot of the hex-grid editor: "I want to be able to move the cups however I want. Not in this
+exact grid. I want a stop light with two to the left filling the gaps you know?" A stop light (3 in a line toward the
+shooter) cannot live on the hex grid (hex rows are 0.866 apart). The rack model already had exact spots for the line
+presets, so a custom rack became spots: the editor shows no grid, a dropped cup settles by `rack.js settleSpot`
+(contact candidates: one cup, cup + back wall, two cups; within 0.3 cup-widths the snug ones win), and the challenge
+log carries `spots`. Headless: the stop light with two filling the gaps built by drags, Done, the 3D table shows it.
