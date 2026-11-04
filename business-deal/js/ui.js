@@ -356,7 +356,13 @@
       }
       return this.ui.promptPayment(view, ctx);
     }
-    chooseDiscards(view, count) { return this.ui.promptDiscards(view, count); }
+    // A human who tapped Pass over the hand limit already picked the discards on
+    // the Pass sheet (with Back); reuse that pick instead of asking again.
+    chooseDiscards(view, count) {
+      const c = this.ui._cachedDiscards; this.ui._cachedDiscards = null;
+      if (c && c.length === count) return c;
+      return this.ui.promptDiscards(view, count);
+    }
     assignWildColor(view, card, valid) { return this.ui.promptWildColor(view, card, valid); }
   }
 
@@ -1265,7 +1271,21 @@
       return new Promise(resolve => { this._pendingMove = { resolve }; this.render(); });
     }
 
-    _passClicked() { if (this._pendingMove) this._resolveMove({ type: 'pass' }); }
+    // Over the hand limit, Pass first opens the discard sheet WITH a Back button
+    // (Matt, 2026-11-04: a mistaken Pass left no way back to play a card). Nothing
+    // has happened yet: the engine is still waiting on this move, so Back simply
+    // closes the sheet and the turn carries on.
+    _passClicked() {
+      if (!this._pendingMove) return;
+      const view = this._view;
+      const over = view && view.me ? view.me.hand.length - 7 : 0;
+      if (over <= 0) { this._resolveMove({ type: 'pass' }); return; }
+      this.promptDiscards(view, over, true).then(ids => {
+        if (!ids || !this._pendingMove) return;
+        this._cachedDiscards = ids;
+        this._resolveMove({ type: 'pass' });
+      });
+    }
 
     _resolveMove(move) {
       const p = this._pendingMove; this._pendingMove = null;
@@ -2027,13 +2047,16 @@
       });
     }
 
-    promptDiscards(view, count) {
+    promptDiscards(view, count, canBack) {
       const hand = view.me.hand.slice();
       return new Promise(resolve => {
         const selected = new Set();
         const sheet = this._sheet(
           `<h3>Discard ${count} card${count === 1 ? '' : 's'}</h3><p>You are over the 7-card limit.</p>` +
-          '<div class="row" id="d-row"></div><button class="cta" id="d-go" disabled>Discard</button>');
+          '<div class="row" id="d-row"></div><button class="cta" id="d-go" disabled>Discard</button>' +
+          (canBack ? '<button class="cta ghost-cta" id="d-back">Back</button>' : ''));
+        const back = sheet.querySelector('#d-back');
+        if (back) back.addEventListener('click', () => { this._closeOverlay(); resolve(null); });
         const row = sheet.querySelector('#d-row');
         const go = sheet.querySelector('#d-go');
         const refresh = () => { go.disabled = selected.size !== count; };
