@@ -209,6 +209,17 @@ function nbCollect(grp, src) {
     (per[t] || (per[t] = [])).push({ lv, top });
   }
 }
+/** Sudoku / Murdoku help counts (`hc`: { <tier>: { h1, h2, h3 } }, 2026-11-03) added into `dst.hc`. */
+function addHelpCounts(dst, hc) {
+  if (!hc || typeof hc !== 'object' || Array.isArray(hc)) return;
+  if (!dst.hc || typeof dst.hc !== 'object') dst.hc = {};
+  for (const t of Object.keys(hc)) {
+    const b = hc[t];
+    if (!b || typeof b !== 'object') continue;
+    const d = dst.hc[t] || (dst.hc[t] = {});
+    for (const k of ['h1', 'h2', 'h3']) if (b[k] != null) d[k] = (d[k] | 0) + Math.max(0, b[k] | 0);
+  }
+}
 function dedupeNutsBolts(grp) {
   const dst = grp.games.nutsbolts;
   for (const t of Object.keys(grp._nb)) {
@@ -416,6 +427,8 @@ export function aggregatePlayers(all, corrections) {
         if (!dst.sd.noHint) dst.sd.noHint = {};
         const nh = sdNoHintOf(src);
         for (const k of Object.keys(nh)) dst.sd.noHint[k] = (dst.sd.noHint[k] | 0) + nh[k];
+        // Solves WITH help, by how much (2026-11-03, `sd.hc[tier].h1|h2|h3`): counters, so they add.
+        addHelpCounts(dst.sd, src.sd.hc);
       } else if (g === 'murdoku' && src.mu) {
         // Murdoku's no-hint solves (2026-10-29, js/game-stats.js recordMurdoku): counters, so they
         // add. Solves recorded before it have no hint record and are in neither count.
@@ -426,6 +439,7 @@ export function aggregatePlayers(all, corrections) {
           if (!m || typeof m !== 'object') continue;
           for (const k of Object.keys(m)) dst.mu[key][k] = (dst.mu[key][k] | 0) + Math.max(0, m[k] | 0);
         }
+        addHelpCounts(dst.mu, src.mu.hc);   // `mu.hc[tier].h1|h2|h3` (2026-11-03), counters
       } else if (g === 'minesweeper' && src.ms) {
         // The edit that gets forgotten (docs/BUILDING-A-GAME.md item 7): without this branch every
         // Minesweeper counter reads ZERO the moment a person's second device syncs, while each

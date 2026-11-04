@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sudoku sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#2a1440"/>
+    <g stroke="#6b3a86" stroke-width="0.75">
+      <path d="M44 9 V81 M52 9 V81 M60 9 V81 M76 9 V81 M84 9 V81 M100 9 V81 M108 9 V81"/>
+      <path d="M44 17 H116 M44 25 H116 M44 41 H116 M44 49 H116 M44 65 H116 M44 73 H116"/>
+    </g>
+    <g stroke="#c9a6e0" stroke-width="2">
+      <path d="M44 9 V81 M68 9 V81 M92 9 V81 M116 9 V81"/>
+      <path d="M44 9 H116 M44 33 H116 M44 57 H116 M44 81 H116"/>
+    </g>
+    <g fill="#efe3f5" font-family="system-ui, sans-serif" font-size="11" font-weight="700" text-anchor="middle">
+      <text x="48" y="30">5</text>
+      <text x="80" y="22">2</text>
+      <text x="104" y="46">9</text>
+      <text x="56" y="62">7</text>
+      <text x="112" y="78">4</text>
+    </g>
+    <rect x="68.5" y="33.5" width="15" height="15" fill="none" stroke="#ffce3a" stroke-width="2.5"/>
+  </svg></span><span class="gname">Sudoku</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+    <rect width="160" height="90" fill="#2a1440"/>
+    <g stroke="#6b3a86" stroke-width="0.75">
+      <path d="M44 9 V81 M52 9 V81 M60 9 V81 M76 9 V81 M84 9 V81 M100 9 V81 M108 9 V81"/>
+      <path d="M44 17 H116 M44 25 H116 M44 41 H116 M44 49 H116 M44 65 H116 M44 73 H116"/>
+    </g>
+    <g stroke="#c9a6e0" stroke-width="2">
+      <path d="M44 9 V81 M68 9 V81 M92 9 V81 M116 9 V81"/>
+      <path d="M44 9 H116 M44 33 H116 M44 57 H116 M44 81 H116"/>
+    </g>
+    <g fill="#efe3f5" font-family="system-ui, sans-serif" font-size="11" font-weight="700" text-anchor="middle">
+      <text x="48" y="30">5</text>
+      <text x="80" y="22">2</text>
+      <text x="104" y="46">9</text>
+      <text x="56" y="62">7</text>
+      <text x="112" y="78">4</text>
+    </g>
+    <rect x="68.5" y="33.5" width="15" height="15" fill="none" stroke="#ffce3a" stroke-width="2.5"/>
+  </svg></span><h2>Sudoku</h2></div><div class="card"><div class="ch">Points per puzzle</div><table><thead><tr><th></th><th colspan="4" class="sup">Hints or mistakes</th></tr><tr><th></th><th>0</th><th>1</th><th>2</th><th>3+</th></tr></thead><tbody><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#2e9e44"><circle cx="10" cy="10" r="8"/></svg></span><span class="n">Easy</span></td><td class="f">1</td><td>1</td><td>1</td><td>1</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1F5FA8"><rect x="3" y="3" width="14" height="14" rx="3"/></svg></span><span class="n">Medium</span></td><td class="f">2</td><td>1</td><td>1</td><td>1</td></tr><tr><td class="lv"><span class="sh"><svg viewBox="0 0 20 20" fill="#1c2430"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg></span><span class="n">Hard</span></td><td class="f">4</td><td>3</td><td>2</td><td>1</td></tr><tr><td class="lv"><span class="sh x2"><svg viewBox="0 0 34 20" fill="#1c2430"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg></span><span class="n">Expert</span></td><td class="f">8</td><td>5</td><td>3</td><td>1</td></tr></tbody></table></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

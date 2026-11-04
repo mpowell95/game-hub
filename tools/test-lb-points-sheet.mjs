@@ -5,7 +5,7 @@
 // of every game is checked against gamePoints with real-shaped records: 100 such wins must give 100 x the row's
 // points, or exactly 20 when the row shows the limit.
 //   node tools/test-lb-points-sheet.mjs
-import { sheetModel } from '../js/lb-points-sheet.js';
+import { sheetModel, pointsSheetHTML } from '../js/lb-points-sheet.js';
 import { gamePoints, POINT_GAMES, CAP } from '../js/lb-points.js';
 import STRINGS from '../js/strings.js';
 
@@ -19,12 +19,13 @@ for (const id of POINT_GAMES) {
   const cards = sheetModel(id);
   ok(`${id}: has a sheet`, cards.length > 0);
   const kinds = cards.map((c) => c.kind);
-  const rank = { opt: 0, cpu: 0, table: 1, older: 1, online: 2, limit: 3 };
-  ok(`${id}: order options, computers, online, limit`, kinds.every((k, i) => !i || rank[k] >= rank[kinds[i - 1]]), kinds);
-  const tones = cards.filter((c) => c.kind === 'opt').map((c) => ({ s: 0, n: 1, h: 2 })[c.tone]);
-  ok(`${id}: options easiest to hardest`, tones.every((x, i) => !i || x >= tones[i - 1]), tones);
+  const rank = { opt: 0, cpu: 0, online: 2, limit: 3, table: 4 };
+  ok(`${id}: order options, online, limit, tables note`, kinds.every((k, i) => !i || rank[k] >= rank[kinds[i - 1]]), kinds);
+  ok(`${id}: no "older wins" row (dropped, session 7)`, !kinds.includes('older'));
   const limited = rows(id).filter((x) => x.r.cap).length;
-  ok(`${id}: a limit box exactly when a row is limited`, (limited > 0) === kinds.includes('limit'));
+  ok(`${id}: a limit note exactly when a cell is limited`, (limited > 0) === kinds.includes('limit'));
+  const opts = cards.filter((c) => c.kind === 'opt');
+  ok(`${id}: every option column has the same levels`, opts.every((o) => o.rows.map((r) => r.tier).join() === (opts[0] || o).rows.map((r) => r.tier).join()));
   for (const { c, r } of rows(id)) ok(`${id}: ${c.key || c.kind} row ${r.tier} has points`, Number.isInteger(r.pts) && r.pts >= 1, r);
 }
 
@@ -37,6 +38,8 @@ const MODES = {   // what each option card's wins look like in a real record (wi
   fs_2: { goals: 2, off: 'x' }, eb_3: { racks: 3 }, eb_2: { racks: 2 }, dm_500: { to: 500 }, dm_300: { to: 300 },
   db_large: { size: 'large' }, db_normal: { size: 'medium' }, bs_quick: { size: 'quick' }, bs_classic: { size: 'classic' },
 };
+MODES.h4_until = { first: 'me', one: 0 }; MODES.h4_one = { first: 'me', one: 1 };
+MODES.cc_short = { vc: 'points', sl: 50 }; MODES.cc_normal = { vc: 'points', sl: 100 };
 const SHORT = new Set(['bg_2min', 'cc_short', 'h4_until', 'cp_inf', 'dt_short', 'dm_150', 'fs_1', 'eb_1']);
 for (const id of POINT_GAMES) {
   for (const c of sheetModel(id)) {
@@ -66,14 +69,37 @@ ok('Battleship Quick 1/1/1, Easy limited', card('battleship', 'bs_quick').rows.m
 ok('Connect 4: Expert row, no online', sheetModel('connect4')[0].rows.length === 4 && !sheetModel('connect4').some((c) => c.kind === 'online'));
 for (const id of ['connect4', 'dominoes', 'uno', 'parchis', 'business']) ok(`${id}: no Online card (no online play)`, !sheetModel(id).some((c) => c.kind === 'online'));
 ok('not a wins game: no sheet', sheetModel('skeeball').length === 0);
+// Session 7 (Matt, 2026-11-04): Hoops Until you score on Hard = 2; a table of computers adds up each one's points.
+ok('Hoops Until you score 1/1/2, One shot 1/3/5', card('hoops4', 'h4_until').rows.map((r) => r.pts).join() === '1,1,2' && card('hoops4', 'h4_one').rows.map((r) => r.pts).join() === '1,3,5');
+for (const id of ['chinchon', 'escoba', 'parchis']) {
+  const tb = sheetModel(id).find((c) => c.kind === 'table');
+  ok(`${id}: "Easy + Hard = 5" from the code`, tb && tb.ex.tiers.join() === '1,3' && tb.ex.pts === 5, tb);
+  const g = gamePoints({ total: won(1), byDiff: { easy: won(1) }, byMode: { [id === 'parchis' ? 'ai=beginner-pro|humans=1' : 'ai=easy-hard']: { easy: won(1) } } }, id).pts;
+  ok(`${id}: a real Easy + Hard win is worth what the note says`, g === tb.ex.pts, g);
+}
+ok('only the table games carry the note', POINT_GAMES.filter((id) => sheetModel(id).some((c) => c.kind === 'table')).sort().join() === 'chinchon,escoba,parchis');
+ok('Chinchón: Under 100 points 1/1/2, 100+ points 1/2/4', card('chinchon', 'cc_short').rows.map((r) => r.pts).join() === '1,1,2' && card('chinchon', 'cc_normal').rows.map((r) => r.pts).join() === '1,2,4');
+ok('Monopoly Deal: no older-wins row', !sheetModel('business').some((c) => c.kind === 'older'));
 
-// Strings: every key the sheet can ask for exists in EN and ES.
-const keys = new Set(['lbps_lead', 'lbps_win_on', 'lbps_win_online', 'lbps_win', 'lbps_vs_cpu', 'lbps_tables', 'lbps_tables_note', 'lbps_easy_hard',
-  'lbps_older', 'lbps_no_level', 'lbps_limit', 'lbps_limit_body', 'lbps_point', 'lbps_points', 'lb_pts_online']);
-for (const id of POINT_GAMES) for (const c of sheetModel(id)) { if (c.key) keys.add('lbps_o_' + c.key); if (c.tag) keys.add('lbps_tag_' + c.tag); }
+// Strings: every key the sheet can ask for exists in EN and ES, and the rendered sheet has nothing unfilled.
+const keys = new Set(['lbpt_diff', 'lbpt_per_win', 'lbpt_cap', 'lbpt_tables_b', 'lbpt_tables', 'lbpt_tables_ex', 'lbps_vs_cpu', 'lb_pts_online',
+  'gs_diff_beginner', 'gs_diff_intermediate', 'gs_diff_pro', 'gs_diff_expert']);
+for (const id of POINT_GAMES) for (const c of sheetModel(id)) if (c.key) { keys.add('lbpt_k_' + c.key); keys.add('lbpt_h_' + id); }
 for (const k of keys) ok(`string ${k} in EN and ES`, STRINGS.en[k] != null && STRINGS.es[k] != null);
-ok('limit text carries the ball', /\{ball\}/.test(STRINGS.en.lbps_limit_body) && /\{ball\}/.test(STRINGS.es.lbps_limit_body));
 ok('no em dashes', [...keys].every((k) => !/—/.test(String(STRINGS.en[k]) + String(STRINGS.es[k]))));
+const mem = {};
+globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
+const { setLang } = await import('../js/i18n.js');
+for (const lang of ['en', 'es']) {
+  setLang(lang);
+  for (const id of POINT_GAMES) {
+    const html = pointsSheetHTML(id), txt = html.replace(/<[^>]+>/g, ' ');
+    ok(`${id} ${lang}: renders, nothing unfilled`, html.length > 300 && !/[{}]|undefined|null|NaN|lbpt_|lbps_/.test(txt), txt.slice(0, 200));
+    ok(`${id} ${lang}: in ${lang}`, txt.includes(STRINGS[lang].gs_diff_beginner) || id === 'yahtzee');
+    ok(`${id} ${lang}: one circle per limited cell`, (html.match(/class="lbpt-cap"/g) || []).length === rows(id).filter((x) => x.r.cap).length);
+  }
+}
+setLang('en');
 
 console.log(`\nlb-points-sheet tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

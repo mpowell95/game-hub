@@ -78,3 +78,66 @@ verify Pages. Open decisions for Matt: keep the "Old" link (session suggested ~2
 
 - A voided Golf record's person page still shows its average per hole (strokes and holes are not voided). Boards are clean.
 - The old board's By Game card shows 3 names, so a tie for 3rd beyond them is cut (v2 shows every tied player).
+
+## Session 7 progress (2026-11-03)
+
+Matt's notes (screenshots of the popup and Arrow Maze's points sheet): popup "feels chaotic... The title isn't a title...
+Everything looks the same"; the Arrow Maze sheet: "we could easily cut the number of words in half". Mockup v1 sent, NOT
+built: `docs/mockups/lb2-fixes-mockup-v1.{html,jpg}`. Popup: medal + NEW + title as a real title (27px/800, white), a rule
+under it, body ONE short line in a lighter grey 18px/400, one picture per page; page 1 drops the "Computer and Online" and
+"=" lines (the Filler table shows both). Arrow Maze sheet (151 words to 45): ONE table (level x hints/hearts lost 0/1/2/3+)
+replaces the points card and the hints card; "How it is ranked" and "Tabs" cut; Rush in 3 lines. Waiting on Matt.
+Mockup v2 (Matt's notes on v1): popup table header "Difficulty" + "Points / per win" (two lines, centred over the
+column, every value centred under it; no Filler thumbnail); Arrow Maze "Hints used or lives lost"; the "counts once" and
+"Expert before 2 Nov" lines deleted; Rush = one line "Most arrows cleared wins." (Matt: "You're like explaining how to
+play, which is not the purpose of this screen"). `docs/mockups/lb2-fixes-mockup-v2.{html,jpg}`. NOT built.
+Mockup v3 (Matt: "nice", then 4 notes): a 6px gap sets Online apart from Hard; page 2 "Most points wins gold."; the
+button picture sits in a dark frame with a 👆 under "Each game scores differently. / Tap this on its leaderboard:" (Matt:
+a bare button "is confusing. People are going to try clicking on it"); Arrow Maze sheet hugs its content (no empty band
+above Done). `docs/mockups/lb2-fixes-mockup-v3.{html,jpg}`. NOT built.
+Mockup v4: v3's frame and 👆 on page 2 were NOT asked for (Matt: "put it back how we had it"); page 2 is back to the built
+wording "Each game is different. / Find this on its leaderboard:" + the plain button. No stretched spacing: the popup is
+as tall as its taller page (702 px vs 734 at 402 wide), centred; even gaps on both pages. Online's gap kept.
+`docs/mockups/lb2-fixes-mockup-v4.{html,jpg}`. NOT built.
+**BUILT on branch `claude/awesome-keller-sb41sq` (2026-11-03), NOT merged (Matt: "build it - do not make it live yet")**:
+the popup = mockup v4 (`js/announce-ui.js` `drawLb2Intro`; Filler's numbers from `sheetModel('filler')`), Arrow Maze's
+sheet = one table + one Rush line (`js/lb-rank-sheet.js` `grid`/`text` cards; strings `lbrs_h_lvl`, `lbrs_wo_sup`,
+`lbrs_wo_rush`). On merge: bump CACHE past main, `validate-sw-assets`. Next (Matt): every other game's sheet, one at a
+time, current screenshot then a mockup, same principles (151 -> 30 words on Arrow Maze).
+Scores-screen mockups sent 2026-11-03 (NOT built; Matt reviewing): `docs/mockups/sheet-<game>-v1.{html,jpg}` for Sudoku (v3
+approved: "That mockup is good"), Murdoku ("Good"), Nuts & Bolts, Minesweeper, Gridlock, Word Weaver, Contexto, Spelling
+Bee, Hill Climb, Snake, Ball Run, Brick Breaker, Tower, Golf, Hold'em, Skeeball, and ONE shared layout for every wins game
+(Flick Soccer, Cup Pong, Connect Four shown): a grid of level x option, circled = under the 20-point limit, Online apart.
+**Every scores screen, current set: `docs/mockups/final/sheet-<game>.{html,jpg}`** (2026-11-03, after Matt's notes: bright
+headers on all; Battleship 8x8 / 10x10; Chinchón "Under 100 points" / "100+ points"; Darts "101 or 201"; the 20-point
+circle as "(circle) = Only your first 20 points from these count."; Hoops Hard + "Until you score" = 2 (PROPOSED points
+change, `js/lb-points.js` not touched yet); Chinchón/Escoba/Parchís 2-3 computers = each computer's points added up
+(PROPOSED; Matt: winning vs Easy + Hard is harder than 1v1 Hard; tables are saved in `byMode` `ai` since 2026-10-30,
+older wins only know the easiest level). Nuts & Bolts A (1/2/4/8) or B (+ Easy capped at 20): Matt has not picked.
+
+## Built 2026-11-04 (Matt: "build them and put it on my phone"; ADMIN DEVICES ONLY, not merged by the building agent)
+
+- **Every scores screen = its mockup** (`docs/mockups/final/sheet-<game>.html`): wins games one table from `sheetModel`
+  (`js/lb-points-sheet.js` `pointsTableHTML`, shared with `js/lb-rank-sheet.js`); Sudoku/Murdoku/Nuts & Bolts/Minesweeper
+  points tables from `js/puzzle-points.js`; Gridlock grouped levels; Contexto, Spelling Bee, Hill Climb, Snake, Ball Run,
+  Brick Breaker, Tower, Golf, Hold'em, Skeeball, Word Weaver word for word. Removed: ranking steps, Tabs cards,
+  legacy-date lines, Monopoly Deal's "older wins" row (old strings kept). Arrow Maze unchanged (no new mockup), headers brightened.
+  Strings `lbpt_*` and new `lbrs_*` (EN/ES). Screenshots: dark 402 EN every game, Spanish 360 for 11.
+- **Points (`js/lb-points.js`, read-time)**: Hoops "Until you score" on Hard = 2 (was 3); Chinchón/Escoba/Parchís at a
+  table of 2-3 computers = each computer's 1v1 points added up ("Easy + Hard = 5", from the code). On the live board
+  snapshot (2026-11-04) no one's points change yet: nobody has a saved Hoops Until-you-score or 2-3-computer win.
+- Mockup lines not exactly true for the code: Chinchón "Under 100 points" is also "or under 10 rounds" (the column
+  counts both); Sudoku/Murdoku solves helped before 2026-11-03 pay half their level (not shown); Nuts & Bolts wins
+  saved before levels existed are 1 each (not shown).
+
+## On hold (Matt, 2026-11-04: "Not now. We'll deal with later. Don't change nuts and bolts scoring yet")
+
+- **Nuts & Bolts points**: the branch has option B (1, 2, 4, 8 a level, Easy at most 20). Matt then said "too crazy";
+  options shown: 1, 2, 3, 4 (session's pick) or 1, 1, 2, 2. Do NOT change it until Matt decides.
+- **Matt's missing Nuts & Bolts history (THE LAW, rule 8: believe him)**: Matt: "I had WAY more levels completed";
+  he ties it to the test1 / MattyIce mix-up. Facts (read-only, 2026-11-04): his records now are `dc1745bc` (app, QZCC4,
+  11 solves, matches the game's own levels: Medium 3, Hard 7, Expert 3) and `e0e63fde` ("Mattyice", no code, 30
+  solves, last sync 2026-07-17). Device **`2b0d7c05`** (his code QZCC4, renamed "test1", last sync 2026-09-13; see
+  js/CLAUDE-HISTORY.md "A code's name is its NEWEST record's name") is **no longer in `players/`**, and no doc or
+  commit records deleting it. Next: Matt's backups on his PC (`backups/rtdb-2026-09-12T22-08-55-909Z.json`, monthly
+  exports, RESTORE.md (c)) show what it held; restore by a read-time add (`HAND_ADDS`-style), then find what deleted it.

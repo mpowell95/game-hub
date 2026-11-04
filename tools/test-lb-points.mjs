@@ -46,6 +46,42 @@ ok('pointsForWin online Flick = 3', pointsForWin('flicksoccer', 'mp', null) === 
 ok('pointsForWin Ultimate Hard = 10', pointsForWin('tictactoe', 'pro', { v: 'ultimate' }) === 10);
 ok('pointsForWin Pool 3 racks Hard = 10', pointsForWin('eightball', 'hard', { racks: 3 }) === 10);
 
+// Session 7 (Matt, 2026-11-04, docs/mockups/final/sheet-hoops4 and sheet-chinchon): two read-time changes.
+// 1. Hoops "Until you score" on Hard = 2 (recorded one level down at Medium, where a win is 3). Byte for byte what the
+//    game saves: byDiff at statsDiff (one down), byMode at the chosen level, key from modeKey ('first=me|one=0').
+ok('Hoops Until you score, Hard: 2', gamePoints(rec({ medium: W(1) }, { byMode: { 'first=me|one=0': { hard: W(1) } } }), 'hoops4').pts === 2);
+ok('...on the Medium tab too', gamePoints(rec({ medium: W(1) }, { byMode: { 'first=me|one=0': { hard: W(1) } } }), 'hoops4', 2).pts === 2);
+ok('...Until you score, Medium (recorded Easy): 1', gamePoints(rec({ easy: W(1) }, { byMode: { 'first=me|one=0': { medium: W(1) } } }), 'hoops4').pts === 1);
+ok('...Until you score, Easy: 1', gamePoints(rec({ easy: W(1) }, { byMode: { 'first=me|one=0': { easy: W(1) } } }), 'hoops4').pts === 1);
+ok('...One shot unchanged 1/3/5', gamePoints(rec({ easy: W(1), medium: W(1), hard: W(1) }, { byMode: { 'first=me|one=1': { easy: W(1), medium: W(1), hard: W(1) } } }), 'hoops4').pts === 9);
+ok('...a Medium win with no saved mode stays 3', gamePoints(rec({ medium: W(1) }), 'hoops4').pts === 3);
+ok('...One shot Medium beside Until you score Hard: 3 + 2', gamePoints(rec({ medium: W(2) }, { byMode: { 'first=me|one=1': { medium: W(1) }, 'first=me|one=0': { hard: W(1) } } }), 'hoops4').pts === 5);
+ok('...online unchanged', gamePoints(rec({ mp: W(1) }, { byMode: { 'one=0': { mp: W(1) } } }), 'hoops4').pts === 3);
+ok('...pointsForWin (the +X pts): recorded Medium, one=0 = 2', pointsForWin('hoops4', 'medium', { one: 0, first: 'me' }) === 2);
+ok('...pointsForWin One shot Medium = 3', pointsForWin('hoops4', 'medium', { one: 1 }) === 3);
+// 2. Chinchón, Escoba, Parchís at a table of 2 or 3 computers: each computer's 1v1 points added up. Recorded at the
+//    easiest computer (byDiff), the table in byMode `ai` at the chosen (easiest) level.
+const cc = (ai, more = '') => `ace=0|ai=${ai}|ext=0|fig=0|jk=0|mc=3|n=${ai.split('-').length + 1}|neg=-10|place=auto|rem=1|res=1|sl=100|vc=points|wwc=1${more}`;
+ok('Chinchón Easy + Hard = 5', gamePoints(rec({ easy: W(1) }, { byMode: { [cc('easy-hard')]: { easy: W(1) } } }), 'chinchon').pts === 5);
+ok('...Hard + Normal (seat order) = 6', gamePoints(rec({ normal: W(1) }, { byMode: { [cc('hard-normal')]: { normal: W(1) } } }), 'chinchon').pts === 6);
+ok('...three Hard = 12', gamePoints(rec({ hard: W(1) }, { byMode: { [cc('hard-hard-hard')]: { hard: W(1) } } }), 'chinchon').pts === 12);
+ok('...one computer unchanged (Hard 4)', gamePoints(rec({ hard: W(1) }, { byMode: { [cc('hard')]: { hard: W(1) } } }), 'chinchon').pts === 4);
+const ccShortKey = cc('easy-hard').replace('sl=100', 'sl=50');
+ok('...short match: each one level down, Easy + Hard = 1 + 2 = 3', gamePoints(rec({ easy: W(1) }, { byMode: { [ccShortKey]: { easy: W(1) } } }), 'chinchon').pts === 3);
+ok('...short match, one Hard computer: still Medium 2', gamePoints(rec({ normal: W(1) }, { byMode: { [cc('hard').replace('sl=100', 'sl=50')]: { hard: W(1) } } }), 'chinchon').pts === 2);
+ok('...short by rounds: 2 Hard = 2 + 2', gamePoints(rec({ normal: W(1) }, { byMode: { [cc('hard-hard').replace('sl=100|vc=points', 'rl=5|vc=rounds')]: { hard: W(1) } } }), 'chinchon').pts === 4);
+ok('...on the Easy tab (the recorded level): 5', gamePoints(rec({ easy: W(1) }, { byMode: { [cc('easy-hard')]: { easy: W(1) } } }), 'chinchon', 1).pts === 5);
+ok('...no table saved (before 2026-10-30): the easiest computer, 1', gamePoints(rec({ easy: W(1) }), 'chinchon').pts === 1);
+ok('...losses add nothing', gamePoints(rec({ easy: { played: 3, won: 0, lost: 3 } }, { byMode: { [cc('easy-hard')]: { easy: { played: 3, won: 0, lost: 3 } } } }), 'chinchon').pts === 0);
+ok('...pointsForWin Easy + Hard = 5', pointsForWin('chinchon', 'easy', { ai: 'easy-hard', vc: 'points', sl: 100 }) === 5);
+ok('Escoba Easy + Hard = 5', gamePoints(rec({ easy: W(1) }, { byMode: { 'ai=easy-hard|assist=1|deck=spanish|n=3|to=21': { easy: W(1) } } }), 'escoba').pts === 5);
+ok('...Normal + Normal + Hard = 8', gamePoints(rec({ normal: W(2) }, { byMode: { 'ai=normal-normal-hard|assist=1|deck=spanish|n=4|to=21': { normal: W(2) } } }), 'escoba').pts === 16);
+ok('...online unchanged (2)', gamePoints(rec({ mp: W(1) }, { byMode: { 'assist=1|deck=spanish|n=2|to=21': { mp: W(1) } } }), 'escoba').pts === 2);
+ok('Parchís beginner + pro (sorted) = 5', gamePoints(rec({ beginner: W(1) }, { byMode: { 'ai=beginner-pro|humans=1|mode=x|players=3': { beginner: W(1) } } }), 'parchis').pts === 5);
+ok('...three computers 1 + 2 + 4 = 7', gamePoints(rec({ beginner: W(1) }, { byMode: { 'ai=beginner-intermediate-pro|humans=1|mode=x|players=4': { beginner: W(1) } } }), 'parchis').pts === 7);
+ok('...two people at the table: unchanged (easiest computer)', gamePoints(rec({ beginner: W(1) }, { byMode: { 'ai=beginner-pro|humans=2|mode=x|players=4': { beginner: W(1) } } }), 'parchis').pts === 1);
+ok('the other wins games are untouched by the table rule', pointsForWin('mancala', 'pro', { ai: 'easy-hard' }) === 6);
+
 // Real data (optional): the top 3 of every points board.
 try {
   const z = JSON.parse(fs.readFileSync(new URL('../backups/lb-z.json', import.meta.url), 'utf8'));

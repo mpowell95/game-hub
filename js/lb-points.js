@@ -14,7 +14,8 @@ import { tierOf } from './difficulty-tiers.js';
 export const CAP = 20;
 // lv: points per win at tiers 1-4 (Easy, Medium, Hard, Expert); cap: the tiers in the 20-point group;
 // on: an online win; other: a win in a bucket with no level (legacy history, Yahtzee's single level).
-// mode(m, tier): points for a win at `tier` whose saved mode is `m`, or undefined = the level's own value.
+// mode(m, tier, v, lv): points for a win RECORDED at `tier` whose saved mode is `m`, or undefined = the level's own
+// value. down(m): true when that mode is recorded one level below the level chosen (byMode keeps the chosen one).
 const P = {
   tictactoe: { lv: [1, 1, 5], cap: [1, 2], on: 3, ult: [1, 3, 10] },   // Classic; Ultimate in `ult`
   connect4: { lv: [1, 6, 8, 12], on: 5 },
@@ -24,21 +25,45 @@ const P = {
   battleship: { lv: [1, 1, 3], cap: [1], on: 3, mode: (m, t, v, lv) => (m.size === 'quick' && t > 1 ? lv[t - 2] : undefined) },
   boggle: { lv: [2, 6, 10], on: 3 },
   business: { lv: [1, 2, 3], on: 3 },
-  chinchon: { lv: [1, 2, 4], on: 3 },
+  // Chinchón, Escoba, Parchís at a table of 2 or 3 computers (Matt, 2026-11-04, mockup sheet-chinchon): a win = each
+  // computer's own 1v1 points ADDED UP, from the table saved in the mode (`ai`, since 2026-10-30). Chinchón's short
+  // match takes each computer one level down, as it does the recorded level. Wins with no table saved keep the
+  // easiest computer's level (how they were recorded).
+  chinchon: { lv: [1, 2, 4], on: 3, down: (m) => ccShort(m), mode: (m, t, v, lv) => tableSum(m, lv, ccShort(m) ? 1 : 0) },
   // Cup Pong no reracks doubles EVERY level (approved table: '0 reracks x2'; it was Hard only). Darts Cricket in
   // order doubles (Matt: 'in order is for sure more difficult so do something'); kind 'cricket-order[-np]'.
   cuppong: { lv: [1, 1, 3], cap: [1, 2], on: 3, mode: (m, t, v) => (String(m.rr) === '0' ? v * 2 : undefined) },
   darts: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (String(m.kind || '').startsWith('cricket-order') ? v * 2 : undefined) },
   dominoes: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (+m.to >= 500 ? v * 2 : undefined) },
   eightball: { lv: [1, 3, 5], on: 3, mode: (m, t, v) => (+m.racks >= 3 ? v * 2 : undefined) },
-  escoba: { lv: [1, 2, 4], on: 2 },
+  escoba: { lv: [1, 2, 4], on: 2, mode: (m, t, v, lv) => tableSum(m, lv, 0) },
   flicksoccer: { lv: [1, 3, 6], cap: [1], on: 3, mode: (m, t) => (+m.goals === 3 ? ({ 2: 4, 3: 9 })[t] : undefined) },
-  hoops4: { lv: [1, 3, 5], on: 3 },
-  parchis: { lv: [1, 2, 4], on: 2 },
+  // Hoops "Until you score" (the shortened option, recorded one level down; mode one=0): Hard = 2, not Medium's 3
+  // (Matt, 2026-11-04, mockup sheet-hoops4). Its Easy and Medium are unchanged (recorded Easy: 1).
+  hoops4: { lv: [1, 3, 5], on: 3, down: (m) => String(m.one) === '0', mode: (m, t) => (String(m.one) === '0' && t === 2 ? 2 : undefined) },
+  parchis: { lv: [1, 2, 4], on: 2, mode: (m, t, v, lv) => (String(m.humans || '1') === '1' ? tableSum(m, lv, 0) : undefined) },
   uno: { lv: [1, 2, 3], on: 2 },
   yahtzee: { lv: [1, 1, 1], on: 1 },
   airhockey: { lv: [1, 2, 5], on: 3 },
 };
+/** Chinchón's short match (the game's own isShortMatch, on the saved mode: vc / sl / rl): under 100 points or 10 rounds. */
+function ccShort(m) {
+  const pts = (+m.sl || 100) < 100, rnd = (+m.rl || 10) < 10;
+  return m.vc === 'rounds' ? rnd : m.vc === 'roundsOrPoints' ? (pts || rnd) : pts;
+}
+/** A table of 2+ computers (`ai` = their levels, '-' joined): each one's 1v1 points added up, `drop` levels down
+ *  each (Chinchón's short match). undefined for one computer or none (the level's own value). */
+function tableSum(m, lv, drop) {
+  const ai = String(m.ai || '').split('-').filter(Boolean);
+  if (ai.length < 2) return undefined;
+  let sum = 0;
+  for (const d of ai) {
+    const t = tierOf(d);
+    if (!t) return undefined;   // a level the board does not know: the recorded level stands
+    sum += lvOf({ lv }, Math.max(1, t - drop));
+  }
+  return sum;
+}
 const ONE = { lv: [1, 1, 1, 1], on: 1 };   // a wins game with no table yet (admin-only games): 1 a win
 /** Points-ranked board ids (every wins board; js/lb-rules.js `by: 'wins'` or 'cuppong'). */
 export const POINT_GAMES = Object.keys(P);
@@ -124,9 +149,12 @@ export function gamePoints(gm, id, tier = null) {
     for (const [k, ds] of Object.entries(bm)) {
       if (k === '?') continue;
       const m = parseModeKey(k);
+      const dn = spec.down && spec.down(m) ? 1 : 0;
       for (const [d, b] of Object.entries(ds || {})) {
-        const t = tierOf(d);
-        if (!t || (tier != null && t !== tier)) continue;
+        const t0 = tierOf(d);
+        if (!t0) continue;
+        const t = Math.max(1, t0 - dn);   // the level the win was RECORDED at (byMode keeps the chosen level)
+        if (tier != null && t !== tier) continue;
         const v0 = lvOf(spec, t);
         const v1 = spec.mode(m, t, v0, spec.lv);
         if (v1 == null || v1 === v0) continue;

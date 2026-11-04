@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gridlock sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}.hd2{display:flex;align-items:center;padding:9px 0 9px 14px;font-size:14px;font-weight:700;color:#AEB5C1;border-bottom:1px solid rgba(255,255,255,.06)}.hd2 span:first-child{flex:1}.c{width:96px;text-align:center;line-height:1.2}.rr{display:flex;align-items:center;gap:12px;padding:0 0 0 14px;height:50px;border-top:1px solid rgba(255,255,255,.06)}.hd2+.rr{border-top:0}.rr .n{flex:1;font-size:16px}.rr b{width:96px;text-align:center;font-size:20px;font-weight:800}.ch:empty{display:none}table.gl th.lh{text-align:left;padding:0 0 8px 46px;font-size:15px;font-weight:700;color:#F1F3F6;vertical-align:bottom}table.gl th{font-size:14px;font-weight:700;color:#F1F3F6;width:72px;padding:2px 0 8px}table.gl th.sup2{padding:10px 0 4px;font-size:15px;color:#F1F3F6;border-bottom:1px solid #3a4150}table.gl td.f2{color:#F1F3F6;font-weight:700;font-size:18px}table.gl tr.grp td{text-align:left;padding:0 14px;height:34px;background:#232834;color:#AEB5C1;font-size:14px;font-weight:700}table.gl tr.grp .sh{vertical-align:middle}table.gl tr.grp .n{margin-left:10px;vertical-align:middle}table.gl td{height:40px}table.gl td.lv{padding-left:46px}.n2{font-size:17px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}td.lv small{color:#8a93a3;font-size:13px;margin-left:6px}.med{width:26px;height:auto;vertical-align:middle}.emo{font-size:20px;width:26px;text-align:center}.rr .v{width:auto;padding-right:14px;color:#AEB5C1;font-size:15px}.ch:empty{display:none}
+th{color:#E6E9EF!important;font-weight:700!important;font-size:14px!important}.hd2{color:#E6E9EF!important;font-size:14px!important}.hdr{color:#E6E9EF!important}.dim,.note,.capn{color:#C9CFD8!important}table.gl tr.grp td{color:#E6E9EF!important}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2f5d6b"/>
+            <rect x="40" y="6" width="78" height="78" rx="7" fill="#7a4a22"/>
+            <rect x="45" y="11" width="68" height="68" rx="3" fill="#3c2614"/>
+            <rect x="112" y="35" width="7" height="9" fill="#3c2614"/>
+            <g>
+              <rect x="47" y="13" width="20" height="9" rx="2.5" fill="#d9a866"/>
+              <rect x="69" y="13" width="9" height="20" rx="2.5" fill="#c98f4e"/>
+              <rect x="80" y="46" width="9" height="31" rx="2.5" fill="#e2b878"/>
+              <rect x="47" y="68" width="31" height="9" rx="2.5" fill="#c5904f"/>
+              <rect x="102" y="13" width="9" height="20" rx="2.5" fill="#deb070"/>
+              <rect x="91" y="68" width="20" height="9" rx="2.5" fill="#d49c5c"/>
+              <rect x="47" y="46" width="9" height="20" rx="2.5" fill="#bf8a4c"/>
+              <rect x="91" y="46" width="9" height="20" rx="2.5" fill="#d6a160"/>
+              <rect x="80" y="24" width="20" height="9" rx="2.5" fill="#e0b474"/>
+            </g>
+            <g stroke="#ffce3a" stroke-width="1.6" stroke-linecap="round" opacity=".85">
+              <path d="M92 38h7M89 41h9M92 44h7"/>
+            </g>
+            <rect x="106" y="35" width="20" height="9" rx="2.5" fill="#d23b2a"/>
+            <circle cx="116" cy="39.5" r="3.4" fill="#fff"/>
+            <path d="M114 39.5h4M117 37.5l2 2-2 2" stroke="#d23b2a" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg></span><span class="gname">Gridlock</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#2f5d6b"/>
+            <rect x="40" y="6" width="78" height="78" rx="7" fill="#7a4a22"/>
+            <rect x="45" y="11" width="68" height="68" rx="3" fill="#3c2614"/>
+            <rect x="112" y="35" width="7" height="9" fill="#3c2614"/>
+            <g>
+              <rect x="47" y="13" width="20" height="9" rx="2.5" fill="#d9a866"/>
+              <rect x="69" y="13" width="9" height="20" rx="2.5" fill="#c98f4e"/>
+              <rect x="80" y="46" width="9" height="31" rx="2.5" fill="#e2b878"/>
+              <rect x="47" y="68" width="31" height="9" rx="2.5" fill="#c5904f"/>
+              <rect x="102" y="13" width="9" height="20" rx="2.5" fill="#deb070"/>
+              <rect x="91" y="68" width="20" height="9" rx="2.5" fill="#d49c5c"/>
+              <rect x="47" y="46" width="9" height="20" rx="2.5" fill="#bf8a4c"/>
+              <rect x="91" y="46" width="9" height="20" rx="2.5" fill="#d6a160"/>
+              <rect x="80" y="24" width="20" height="9" rx="2.5" fill="#e0b474"/>
+            </g>
+            <g stroke="#ffce3a" stroke-width="1.6" stroke-linecap="round" opacity=".85">
+              <path d="M92 38h7M89 41h9M92 44h7"/>
+            </g>
+            <rect x="106" y="35" width="20" height="9" rx="2.5" fill="#d23b2a"/>
+            <circle cx="116" cy="39.5" r="3.4" fill="#fff"/>
+            <path d="M114 39.5h4M117 37.5l2 2-2 2" stroke="#d23b2a" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg></span><h2>Gridlock</h2></div><div class="card"><div class="ch"></div><table class="gl"><colgroup><col><col style="width:92px"><col style="width:92px"></colgroup><thead><tr><th class="lh" rowspan="2">Levels</th><th colspan="2" class="sup2">Points</th></tr><tr><th>No hint</th><th>Hint</th></tr></thead><tbody><tr class="grp"><td colspan="3"><span class="sh"><svg viewBox="0 0 20 20" fill="#2e9e44"><circle cx="10" cy="10" r="8"/></svg></span><span class="n">Easy</span></td></tr><tr><td class="lv"><span class="n2">1-500</span></td><td class="f">1</td><td class="f2">1</td></tr><tr><td class="lv"><span class="n2">501-1000</span></td><td class="f">2</td><td class="f2">1</td></tr><tr class="grp"><td colspan="3"><span class="sh"><svg viewBox="0 0 20 20" fill="#1F5FA8"><rect x="3" y="3" width="14" height="14" rx="3"/></svg></span><span class="n">Medium</span></td></tr><tr><td class="lv"><span class="n2">1001-1500</span></td><td class="f">3</td><td class="f2">2</td></tr><tr><td class="lv"><span class="n2">1501-2000</span></td><td class="f">4</td><td class="f2">2</td></tr><tr class="grp"><td colspan="3"><span class="sh"><svg viewBox="0 0 20 20" fill="#1c2430"><rect x="4.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 10 10)"/></svg></span><span class="n">Hard</span></td></tr><tr><td class="lv"><span class="n2">2001-2500</span></td><td class="f">5</td><td class="f2">3</td></tr><tr><td class="lv"><span class="n2">2501-3000</span></td><td class="f">6</td><td class="f2">3</td></tr><tr class="grp"><td colspan="3"><span class="sh x2"><svg viewBox="0 0 34 20" fill="#1c2430"><rect x="1.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 7 10)"/><rect x="21.9" y="4.9" width="10.2" height="10.2" rx="1.6" transform="rotate(45 27 10)"/></svg></span><span class="n">Expert</span></td></tr><tr><td class="lv"><span class="n2">3001-3500</span></td><td class="f">7</td><td class="f2">4</td></tr><tr><td class="lv"><span class="n2">3501+</span></td><td class="f">8</td><td class="f2">4</td></tr></tbody></table></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

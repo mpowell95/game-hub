@@ -1,0 +1,203 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Skeeball sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07090d;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:#F1F3F6;padding:24px}
+.phone{position:relative;width:402px;height:874px;border-radius:44px;overflow:hidden;background:#11141b;border:1px solid #262b35}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:#141821;border-top:1px solid #222834;display:flex;justify-content:space-around;padding-top:16px;z-index:4}
+.tabs i{width:30px;height:28px;border-radius:7px;background:#3a4150}.tabs i.on{background:#e8b72a}
+.gamebar{position:absolute;top:56px;left:0;right:0;height:80px;display:flex;align-items:center;gap:12px;padding:0 20px}
+.art svg{width:62px;height:35px;display:block;border-radius:8px}
+.gname{flex:1;font-size:22px;font-weight:800}
+.play{background:#2b4a85;border-radius:24px;padding:12px 22px;font-weight:700}
+.scrim{position:absolute;inset:0;background:rgba(5,8,14,.55);z-index:1}
+.sheet{position:absolute;z-index:2;left:0;right:0;bottom:0;background:#191c23;border-radius:22px 22px 0 0;padding:10px 16px 108px;display:flex;flex-direction:column;gap:18px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:#3a4150}
+.hd{display:flex;align-items:center;gap:14px;padding:4px 2px 0}
+h2{font-size:24px;font-weight:800}
+.card{border:1px solid #2B313B;border-radius:14px;background:#1E222A;overflow:hidden}
+.ch{padding:11px 14px;font-weight:800;font-size:16px;background:#2a2f3a}
+.one{padding:14px;font-size:16px;line-height:1.4}
+.dim{color:#8a93a3;font-size:14px}
+ol,ul{padding:12px 14px 12px 34px;font-size:16px;line-height:1.4}
+li+li{margin-top:8px} ol li::marker{font-weight:800}
+.r{display:flex;align-items:center;gap:12px;padding:0 14px;height:46px;border-top:1px solid rgba(255,255,255,.06)}
+.ch+.r{border-top:0}
+.r .l{flex:1;font-size:16px}.r b{font-size:20px;font-weight:800;min-width:60px;text-align:center}
+.r .v{min-width:60px;text-align:center;font-size:16px}
+.hdr{display:flex;padding:8px 14px 4px;font-size:13px;font-weight:600;color:#8a93a3}.hdr span:first-child{flex:1}.hdr span+span{min-width:60px;text-align:center}
+.sh{display:inline-flex;width:20px;height:20px;background:#fff;border-radius:4px;padding:2px;flex:none}
+.sh.x2{width:34px}.sh svg{width:100%;height:100%;display:block}
+.done{margin-top:6px;width:100%;background:#7AA7FF;color:#0c1424;border-radius:16px;height:54px;font-size:18px;font-weight:700;border:0;font-family:inherit}
+table{width:100%;border-collapse:collapse;font-size:17px}th{font-size:13px;font-weight:600;color:#8a93a3;text-align:center;width:44px;padding:4px 0 6px;white-space:nowrap}th:first-child{width:auto}th.sup{padding:8px 0 2px;border-bottom:1px solid #3a4150}td{text-align:center;height:46px;border-top:1px solid rgba(255,255,255,.06);color:#A2A9B5}td.f{color:#fff;font-weight:800;font-size:20px}td.lv{text-align:left;padding-left:14px;color:#F1F3F6}td.lv .sh{vertical-align:middle}td.lv span.n{margin-left:12px;vertical-align:middle}.hd2{display:flex;align-items:center;padding:9px 0 9px 14px;font-size:14px;font-weight:700;color:#AEB5C1;border-bottom:1px solid rgba(255,255,255,.06)}.hd2 span:first-child{flex:1}.c{width:96px;text-align:center;line-height:1.2}.rr{display:flex;align-items:center;gap:12px;padding:0 0 0 14px;height:50px;border-top:1px solid rgba(255,255,255,.06)}.hd2+.rr{border-top:0}.rr .n{flex:1;font-size:16px}.rr b{width:96px;text-align:center;font-size:20px;font-weight:800}.ch:empty{display:none}table.gl th.lh{text-align:left;padding:0 0 8px 46px;font-size:15px;font-weight:700;color:#F1F3F6;vertical-align:bottom}table.gl th{font-size:14px;font-weight:700;color:#F1F3F6;width:72px;padding:2px 0 8px}table.gl th.sup2{padding:10px 0 4px;font-size:15px;color:#F1F3F6;border-bottom:1px solid #3a4150}table.gl td.f2{color:#F1F3F6;font-weight:700;font-size:18px}table.gl tr.grp td{text-align:left;padding:0 14px;height:34px;background:#232834;color:#AEB5C1;font-size:14px;font-weight:700}table.gl tr.grp .sh{vertical-align:middle}table.gl tr.grp .n{margin-left:10px;vertical-align:middle}table.gl td{height:40px}table.gl td.lv{padding-left:46px}.n2{font-size:17px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}td.lv small{color:#8a93a3;font-size:13px;margin-left:6px}.med{width:26px;height:auto;vertical-align:middle}.emo{font-size:20px;width:26px;text-align:center}.rr .v{width:auto;padding-right:14px;color:#AEB5C1;font-size:15px}.ch:empty{display:none}
+th{color:#E6E9EF!important;font-weight:700!important;font-size:14px!important}.hd2{color:#E6E9EF!important;font-size:14px!important}.hdr{color:#E6E9EF!important}.dim,.note,.capn{color:#C9CFD8!important}table.gl tr.grp td{color:#E6E9EF!important}</style></head><body>
+<div class="phone"><div class="gamebar"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+             <defs>
+               <clipPath id="skb-face"><path d="M59 22 L101 22 L108 56 L52 56 Z"/></clipPath>
+               <clipPath id="skb-l"><path d="M-5 23 L30 23 L37 54 L-12 54 Z"/></clipPath>
+               <clipPath id="skb-r"><path d="M130 23 L165 23 L172 54 L123 54 Z"/></clipPath>
+             </defs>
+             <rect width="160" height="90" fill="#140d0a"/>
+             <g opacity="0.32">
+               <rect x="-8" y="7" width="41" height="6" rx="2" fill="#3a2416"/>
+               <rect x="-6" y="13" width="37" height="10" fill="#241610"/>
+               <path d="M-5 23 L30 23 L37 54 L-12 54 Z" fill="#7a4520"/>
+               <g clip-path="url(#skb-l)" opacity="0.75">
+                 <path d="M-10.02 40.35 A 22.52 11.79 0 0 0 35.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M-10.02 38.72 A 22.52 11.79 0 0 0 35.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="12.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="12.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="-1.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="26.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+               </g>
+               <path d="M-12 54 L37 54 L47 90 L-24 90 Z" fill="#5e3d1f"/>
+               <rect x="127" y="7" width="41" height="6" rx="2" fill="#3a2416"/>
+               <rect x="129" y="13" width="37" height="10" fill="#241610"/>
+               <path d="M130 23 L165 23 L172 54 L123 54 Z" fill="#7a4520"/>
+               <g clip-path="url(#skb-r)" opacity="0.75">
+                 <path d="M124.98 40.35 A 22.52 11.79 0 0 0 170.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M124.98 38.72 A 22.52 11.79 0 0 0 170.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="147.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="147.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="133.08" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="161.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+               </g>
+               <path d="M123 54 L172 54 L184 90 L113 90 Z" fill="#5e3d1f"/>
+             </g>
+             <rect x="54" y="3" width="52" height="8" rx="2" fill="#28150b" stroke="#6b4526" stroke-width="1"/>
+             <g fill="#ffd977">
+               <circle cx="61" cy="7" r="1"/><circle cx="70" cy="7" r="1"/><circle cx="80" cy="7" r="1"/>
+               <circle cx="90" cy="7" r="1"/><circle cx="99" cy="7" r="1"/>
+             </g>
+             <rect x="56" y="11" width="48" height="11" fill="#2a1c14" stroke="#54301a" stroke-width="0.8"/>
+             <g opacity="0.55">
+               <path d="M80 13 L80 21 M58 17 L102 17" stroke="#54301a" stroke-width="0.6"/>
+               <g fill="#ffd977">
+                 <rect x="66" y="14.4" width="5" height="1.2"/><rect x="89" y="14.4" width="5" height="1.2"/>
+                 <rect x="66" y="18.6" width="5" height="1.2"/><rect x="89" y="18.6" width="5" height="1.2"/>
+               </g>
+             </g>
+             <path d="M59 22 L101 22 L108 56 L52 56 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
+             <g clip-path="url(#skb-face)">
+                 <path d="M53.8 41.02 A 26.2 12.93 0 0 0 106.2 41.02" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <path d="M53.8 39.23 A 26.2 12.93 0 0 0 106.2 39.23" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="39.76" rx="17.85" ry="8.91" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <ellipse cx="80" cy="37.97" rx="17.85" ry="8.91" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="59.13" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="62.78" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="97.22" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="93.57" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="97.22" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="97.22" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="80" cy="30.8" rx="4.96" ry="2.76" fill="#ded7ca"/>
+                 <rect x="75.04" y="27.51" width="9.92" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="27.51" rx="4.96" ry="2.76" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="27.51" rx="2.88" ry="1.6" fill="#1a120c"/>
+                 <ellipse cx="80" cy="36.91" rx="5.67" ry="2.98" fill="#ded7ca"/>
+                 <rect x="74.33" y="33.62" width="11.34" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="33.62" rx="5.67" ry="2.98" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="33.62" rx="3.29" ry="1.73" fill="#1a120c"/>
+                 <ellipse cx="80" cy="43.69" rx="6.91" ry="3.43" fill="#ded7ca"/>
+                 <rect x="73.09" y="40.4" width="13.82" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="40.4" rx="6.91" ry="3.43" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="40.4" rx="4.01" ry="1.99" fill="#1a120c"/>
+             </g>
+             <path d="M52 56 L108 56 L114 90 L46 90 Z" fill="#a86f38"/>
+             <path d="M52 56 L46 90 L39 90 L47 56 Z" fill="#54301a"/>
+             <path d="M108 56 L114 90 L121 90 L113 56 Z" fill="#54301a"/>
+             <path d="M54 57 L106 57 L107 60 L53 60 Z" fill="#c98a49"/>
+             <circle cx="80" cy="76" r="5.2" fill="#f6ecda"/>
+             <circle cx="78.3" cy="74.3" r="1.7" fill="#fffdf5"/>
+           </svg></span><span class="gname">Skeeball</span><span class="play">Play</span></div><div class="scrim"></div>
+<div class="sheet"><span class="grab"></span><div class="hd"><span class="art"><svg viewBox="0 0 160 90" aria-hidden="true">
+             <defs>
+               <clipPath id="skb-face"><path d="M59 22 L101 22 L108 56 L52 56 Z"/></clipPath>
+               <clipPath id="skb-l"><path d="M-5 23 L30 23 L37 54 L-12 54 Z"/></clipPath>
+               <clipPath id="skb-r"><path d="M130 23 L165 23 L172 54 L123 54 Z"/></clipPath>
+             </defs>
+             <rect width="160" height="90" fill="#140d0a"/>
+             <g opacity="0.32">
+               <rect x="-8" y="7" width="41" height="6" rx="2" fill="#3a2416"/>
+               <rect x="-6" y="13" width="37" height="10" fill="#241610"/>
+               <path d="M-5 23 L30 23 L37 54 L-12 54 Z" fill="#7a4520"/>
+               <g clip-path="url(#skb-l)" opacity="0.75">
+                 <path d="M-10.02 40.35 A 22.52 11.79 0 0 0 35.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M-10.02 38.72 A 22.52 11.79 0 0 0 35.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="12.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="12.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="-1.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="26.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="12.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+               </g>
+               <path d="M-12 54 L37 54 L47 90 L-24 90 Z" fill="#5e3d1f"/>
+               <rect x="127" y="7" width="41" height="6" rx="2" fill="#3a2416"/>
+               <rect x="129" y="13" width="37" height="10" fill="#241610"/>
+               <path d="M130 23 L165 23 L172 54 L123 54 Z" fill="#7a4520"/>
+               <g clip-path="url(#skb-r)" opacity="0.75">
+                 <path d="M124.98 40.35 A 22.52 11.79 0 0 0 170.02 40.35" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <path d="M124.98 38.72 A 22.52 11.79 0 0 0 170.02 38.72" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="147.5" cy="39.19" rx="15.32" ry="8.12" fill="none" stroke="#f7f2e8" stroke-width="3.26"/>
+                 <ellipse cx="147.5" cy="37.56" rx="15.32" ry="8.12" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="133.08" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="161.92" cy="25.35" rx="3.06" ry="1.9" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="28.03" rx="4.18" ry="2.51" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="33.59" rx="4.82" ry="2.72" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+                 <ellipse cx="147.5" cy="39.77" rx="5.93" ry="3.13" fill="none" stroke="#f7f2e8" stroke-width="2.61"/>
+               </g>
+               <path d="M123 54 L172 54 L184 90 L113 90 Z" fill="#5e3d1f"/>
+             </g>
+             <rect x="54" y="3" width="52" height="8" rx="2" fill="#28150b" stroke="#6b4526" stroke-width="1"/>
+             <g fill="#ffd977">
+               <circle cx="61" cy="7" r="1"/><circle cx="70" cy="7" r="1"/><circle cx="80" cy="7" r="1"/>
+               <circle cx="90" cy="7" r="1"/><circle cx="99" cy="7" r="1"/>
+             </g>
+             <rect x="56" y="11" width="48" height="11" fill="#2a1c14" stroke="#54301a" stroke-width="0.8"/>
+             <g opacity="0.55">
+               <path d="M80 13 L80 21 M58 17 L102 17" stroke="#54301a" stroke-width="0.6"/>
+               <g fill="#ffd977">
+                 <rect x="66" y="14.4" width="5" height="1.2"/><rect x="89" y="14.4" width="5" height="1.2"/>
+                 <rect x="66" y="18.6" width="5" height="1.2"/><rect x="89" y="18.6" width="5" height="1.2"/>
+               </g>
+             </g>
+             <path d="M59 22 L101 22 L108 56 L52 56 Z" fill="#c96f2e" stroke="#8f4c1d" stroke-width="1"/>
+             <g clip-path="url(#skb-face)">
+                 <path d="M53.8 41.02 A 26.2 12.93 0 0 0 106.2 41.02" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <path d="M53.8 39.23 A 26.2 12.93 0 0 0 106.2 39.23" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="39.76" rx="17.85" ry="8.91" fill="none" stroke="#f7f2e8" stroke-width="3.58"/>
+                 <ellipse cx="80" cy="37.97" rx="17.85" ry="8.91" fill="none" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="59.13" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="62.78" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="62.78" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="97.22" cy="27.86" rx="3.65" ry="2.09" fill="#ded7ca"/>
+                 <rect x="93.57" y="24.57" width="7.3" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="97.22" cy="24.57" rx="3.65" ry="2.09" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="97.22" cy="24.57" rx="2.12" ry="1.21" fill="#1a120c"/>
+                 <ellipse cx="80" cy="30.8" rx="4.96" ry="2.76" fill="#ded7ca"/>
+                 <rect x="75.04" y="27.51" width="9.92" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="27.51" rx="4.96" ry="2.76" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="27.51" rx="2.88" ry="1.6" fill="#1a120c"/>
+                 <ellipse cx="80" cy="36.91" rx="5.67" ry="2.98" fill="#ded7ca"/>
+                 <rect x="74.33" y="33.62" width="11.34" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="33.62" rx="5.67" ry="2.98" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="33.62" rx="3.29" ry="1.73" fill="#1a120c"/>
+                 <ellipse cx="80" cy="43.69" rx="6.91" ry="3.43" fill="#ded7ca"/>
+                 <rect x="73.09" y="40.4" width="13.82" height="3.29" fill="#efe9dd"/>
+                 <ellipse cx="80" cy="40.4" rx="6.91" ry="3.43" fill="#f7f2e8" stroke="#2b5ea7" stroke-width="0.6"/>
+                 <ellipse cx="80" cy="40.4" rx="4.01" ry="1.99" fill="#1a120c"/>
+             </g>
+             <path d="M52 56 L108 56 L114 90 L46 90 Z" fill="#a86f38"/>
+             <path d="M52 56 L46 90 L39 90 L47 56 Z" fill="#54301a"/>
+             <path d="M108 56 L114 90 L121 90 L113 56 Z" fill="#54301a"/>
+             <path d="M54 57 L106 57 L107 60 L53 60 Z" fill="#c98a49"/>
+             <circle cx="80" cy="76" r="5.2" fill="#f6ecda"/>
+             <circle cx="78.3" cy="74.3" r="1.7" fill="#fffdf5"/>
+           </svg></span><h2>Skeeball</h2></div><div class="card"><div class="ch">Total</div><div class="one">Every game added up.</div></div><div class="card"><div class="ch">Best game</div><div class="one">Highest single game.</div></div><button class="done">Done</button></div>
+<div class="tabs"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></body></html>

@@ -212,6 +212,7 @@
 //                                                   // convention as battleship's fewestShotsWin) --
 //                                                   // never a real elapsed time. See recordSudoku
 //         sd.clean: { <tier>: n }, sd.pre: { hints, won: { <tier>: n } }
+//         sd.hc: { <tier>: { h1, h2, h3 } }  (2026-11-03) solves with 1, 2, 3+ hints + mistakes
 //                                                   // (2026-10-29) no-hint solves since hint use was
 //                                                   // tracked per solve; pre = the record before
 //                                                   // that, snapshotted once (players-agg sdNoHintOf)
@@ -2199,6 +2200,15 @@ export function recordSudoku(tier, extras = {}) {
   // the moment it is placed, so guessing and watching it is help. Solves recorded before that date
   // keep the bucket they were given (never re-bucketed).
   if (t && hints === 0 && mistakes === 0) g.sd.clean[t] = (g.sd.clean[t] | 0) + 1;
+  // HOW MUCH HELP a solve used (2026-11-03, Matt: "hints should always reduce how many points you get"): solves
+  // with help counted per level by 1, 2, or 3+ hints and mistakes (`sd.hc[tier].h1|h2|h3`), so points can step
+  // down the Arrow Maze way (js/puzzle-points.js). New field; additive; nothing before it is re-bucketed.
+  if (t && hints + mistakes > 0) {
+    if (!g.sd.hc || typeof g.sd.hc !== 'object' || Array.isArray(g.sd.hc)) g.sd.hc = {};
+    const b = g.sd.hc[t] && typeof g.sd.hc[t] === 'object' ? g.sd.hc[t] : (g.sd.hc[t] = {});
+    const k = hints + mistakes === 1 ? 'h1' : hints + mistakes === 2 ? 'h2' : 'h3';
+    b[k] = (b[k] | 0) + 1;
+  }
   g.total.played += 1;
   g.total.won += 1;
   noteMode(g, true, t || normDiff(tier));
@@ -2239,6 +2249,13 @@ export function recordMurdoku(tier, { hints } = {}) {
   const h = Number.isInteger(hints) && hints >= 0 ? hints : null;
   if (h === 0) g.mu.clean[d] = (g.mu.clean[d] | 0) + 1;
   else if (h > 0) { g.mu.hinted[d] = (g.mu.hinted[d] | 0) + 1; g.mu.hints += h; }
+  // How many hints, per level (2026-11-03, the same as Sudoku's `sd.hc`): `mu.hc[tier].h1|h2|h3` (3 = 3 or more).
+  if (h > 0) {
+    if (!g.mu.hc || typeof g.mu.hc !== 'object' || Array.isArray(g.mu.hc)) g.mu.hc = {};
+    const b = g.mu.hc[d] && typeof g.mu.hc[d] === 'object' ? g.mu.hc[d] : (g.mu.hc[d] = {});
+    const k = h === 1 ? 'h1' : h === 2 ? 'h2' : 'h3';
+    b[k] = (b[k] | 0) + 1;
+  }
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
