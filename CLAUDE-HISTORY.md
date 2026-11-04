@@ -1664,5 +1664,5 @@ Also: Connect 4 Hoops vs the computer, "shoot until you score" records one level
 Matt, about the account "sk" (Windows PC, India time zone, never let online): "add something that gets more info
 on them next time they open the app because I'm confused". `js/stats-net.js` `WHOIS_CODES` (only `65CNF`) adds
 `whois` to that device's mirror: user agent, languages, locale, the URL and referrer the hub was opened with,
-cores/memory/touch, connection type, UTC offset, and the browser's high-entropy platform hints. No third party, no IP.
+cores/memory/touch, connection type, UTC offset, the browser's high-entropy platform hints, and (v1464, Matt: "we want silent") `geo`: IP, city, region, country, provider from ipwho.is (fallback ipinfo.io), one lookup per page load.
 A report only; read by no phone. Remove the code from the list once Matt knows.

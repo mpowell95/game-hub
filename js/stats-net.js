@@ -191,7 +191,7 @@ function writeSyncSig(v) { try { localStorage.setItem(SYNC_SIG_KEY, JSON.stringi
 
 // WHO IS THIS? (2026-11-04, Matt, about "sk": "add something that gets more info on them next time
 // they open the app because I'm confused"). Only the codes listed here send it. Everything the
-// browser itself will say about the device and how the hub was opened; no third party, no IP. A
+// browser itself will say about the device and how the hub was opened, plus `geo` below. A
 // REPORT (`players/<id>/whois`), read by no phone; it rides the mirror this device already does.
 const WHOIS_CODES = ['65CNF'];   // sk
 async function whoisReport(code) {
@@ -215,7 +215,33 @@ async function whoisReport(code) {
       r.uad = JSON.stringify({ p: h.platform, pv: h.platformVersion, m: h.model, a: h.architecture, b: (h.fullVersionList || []).map((x) => `${x.brand} ${x.version}`) }).slice(0, 400);
     }
   } catch { /* skip */ }
+  const geo = await whoisGeo();
+  if (geo) r.geo = geo;
   return r;
+}
+// Rough location from the internet address (Matt, 2026-11-04: "we want silent"). ipwho.is, then
+// ipinfo.io; one lookup per page load, 5 s cap, a failure just leaves `geo` out.
+let _geo;
+async function whoisGeo() {
+  if (_geo !== undefined) return _geo;
+  const get = async (url) => {
+    const c = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = c && setTimeout(() => c.abort(), 5000);
+    try { const res = await fetch(url, { signal: c && c.signal, cache: 'no-store' }); return res.ok ? await res.json() : null; }
+    catch { return null; } finally { if (t) clearTimeout(t); }
+  };
+  let g = null;
+  const a = await get('https://ipwho.is/');
+  if (a && a.success) {
+    const cn = a.connection || {};
+    g = { src: 'ipwho.is', ip: a.ip, city: a.city, region: a.region, country: a.country, postal: a.postal, lat: a.latitude, lon: a.longitude, org: cn.org, isp: cn.isp, domain: cn.domain };
+  } else {
+    const b = await get('https://ipinfo.io/json');
+    if (b && b.ip) g = { src: 'ipinfo.io', ip: b.ip, city: b.city, region: b.region, country: b.country, postal: b.postal, loc: b.loc, org: b.org, host: b.hostname };
+  }
+  if (g) for (const k of Object.keys(g)) { if (g[k] === undefined || g[k] === null || g[k] === '') delete g[k]; else if (typeof g[k] === 'string') g[k] = g[k].slice(0, 120); }
+  _geo = g;
+  return g;
 }
 
 export async function syncMyStats() {
