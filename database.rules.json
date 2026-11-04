@@ -287,6 +287,6 @@
         "$side": { "started": { "$leg": {
         ".validate": "$leg.matches(/^[0-9]{1,2}$/) && newData.hasChildren(['at', 'k']) && newData.child('k').isString() && newData.child('k').val().length <= 40 && ((data.exists() && newData.child('at').val() === data.child('at').val() && newData.child('k').val() === data.child('k').val()) || (!data.exists() && newData.child('at').val() === now && ($side === 'a' || $side === 'b') && root.child('msgAuth').child(auth.uid).val() === root.child('skeeChallenges').child('games').child($id).child($side).child('code').val()))"
       } } } } } },
-    "usernames":      { ".read": "auth != null", "$name": { ".write": "auth != null && (newData.exists() || data.child('code').val() === root.child('msgAuth').child(auth.uid).val() || root.child('admins').child(auth.uid).val() === true)" } }
+    "usernames":      { ".read": "auth != null", "$name": { ".write": "auth != null && (newData.exists() || (root.child('msgAuth').child(auth.uid).exists() && data.child('code').val() === root.child('msgAuth').child(auth.uid).val()) || root.child('admins').child(auth.uid).val() === true)" } }
   }
 }
