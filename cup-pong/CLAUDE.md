@@ -49,7 +49,10 @@ shapes), Gentleman's On/Off, **Reracks** (0/1/2/3/unlimited, default 2), **Play*
 - **The last cup stays on the table while a ball is left to throw at it** (`lastCup`; "Last cup!
   Same cup wins"): both balls in it wins with NO rebuttal. **Balls back count as balls left**
   (2026-09-29); frozen per challenge as `rules.lc` (`Match({ lastCupBack })`), so a finished match is
-  never re-scored.
+  never re-scored. **A challenge's OWED cups count as already gone (Matt, 2026-11-04: island with 3 cups left, then the
+  last real cup went straight to the rebuttal; "I was cheated out of two throws")**: a plain make that leaves only owed
+  cups is the last cup (owed cups go now, the made cup stands, balls back/ball in hand apply). `rules.ol`, written on
+  every new challenge (`Match({ owedLast })`); older challenges replay as played. IMPORTANT_SINCE 1456.
 - **The rebuttal**: 2 shots, each ball shooting until it misses. Clear everything = overtime; both
   missed = the side that cleared wins.
 - **Overtime**: 3 cups a side, 2-1 triangle on the BACK rows (`OVERTIME_CELLS`), streaks reset, the
@@ -188,7 +191,7 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
 - **This phone is always side `'a'` locally** (`buildLocal`, `toLocal`/`toStored`).
 - **The island's second cup is OWED** (`async: true` counts `owed[side]`; taken at the defender's
   next turn, `askOwed`); owed cups that are every cup left clear the rack at once.
-- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `i3`, `lapse`); an older
+- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `i3`, `ol`, `lapse`); an older
   challenge replays as it was played.
 - **Results**: `recordResult('cuppong', 'mp', won)` once per phone (`gamehub.cuppong.counted.v1`); a
   match ended while away shows a GAME OVER popup (`gamehub.cuppong.unseenResults.v1`) and the 'over'
