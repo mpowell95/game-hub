@@ -253,9 +253,16 @@ ok('the whole rack area is on the table',
   ok('custom rerack: a cell off the grid is refused', m.rerackCustom([{ c: 0, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0 && m.reracksLeft.a === 1);
   ok('custom rerack: two cups on one cell is refused', m.rerackCustom([{ c: 1, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
   ok('custom rerack: outside the rack area is refused', m.rerackCustom([{ c: 7, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
-  ev = m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]);
-  ok('custom rerack: cups need not touch, keep their ids, and it costs a rerack',
-    ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 3 && m.reracksLeft.a === 0 && !m.canRerack());
+  // ALL CUPS TOUCHING (Matt, 2026-11-04): a rack with a cup apart is refused; a stored one still replays.
+  ok('custom rerack: cups not all touching are refused', m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]).length === 0 && m.reracksLeft.a === 1);
+  ok('custom rerack: two touching and one apart is refused too', m.rerackCustom([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 3 }]).length === 0);
+  {
+    const old = Match.fromJSON(JSON.parse(JSON.stringify(m.toJSON())));
+    ok('...but a STORED one (a challenge move from an older build) replays', old.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }], true).length === 1);
+  }
+  ev = m.rerackCustom([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 1 }]);
+  ok('custom rerack: touching cups keep their ids, and it costs a rerack',
+    ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 1 && m.reracksLeft.a === 0 && !m.canRerack());
   // AGAINST THE BACK WALL (Matt, 2026-09-29): no rerack can pull the cups closer.
   m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
   ok('custom rerack: an empty back row is refused (Matt\'s 3-2 one row forward)',
@@ -278,7 +285,7 @@ ok('the whole rack area is on the table',
   }
   // MAKE YOUR OWN, ANYWHERE (2026-11-03, Matt: "a stop light with two to the left filling the gaps").
   {
-    const { settleSpot, freeOk, spotOf, FREE } = await import('./rack.js');
+    const { settleSpot, freeOk, spotOf, FREE, RERACKS: RERACKS_ALL } = await import('./rack.js');
     const light = [{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }];
     const g1 = settleSpot({ u: -0.8, v: 0.45 }, light);
     const g2 = settleSpot({ u: -0.95, v: 1.4 }, light.concat([g1]));
@@ -299,7 +306,23 @@ ok('the whole rack area is on the table',
     ok('free rack: overlapping cups are refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 0.5, v: 0.2 }, { u: 2, v: 0 }]).length === 0 && m.reracksLeft.a === 2);
     ok('free rack: off the table is refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 2.6, v: 0 }, { u: -2, v: 0 }]).length === 0);
     ok('free rack: nothing against the back wall is refused', m.rerackCustom([{ u: 0, v: 0.5 }, { u: 0, v: 1.5 }, { u: 0, v: 2.5 }]).length === 0);
-    ok('free rack: cups need not touch', m.rerackCustom([{ u: -2.5, v: 0 }, { u: 0.3, v: 1.7 }, { u: 2.5, v: 3.2 }]).length === 1);
+    ok('free rack: cups not all touching are refused', m.rerackCustom([{ u: -2.5, v: 0 }, { u: 0.3, v: 1.7 }, { u: 2.5, v: 3.2 }]).length === 0 && m.reracksLeft.a === 2);
+    ok('free rack: a straight line of 3 from the back wall is fine', m.rerackCustom([{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }]).length === 1);
+    // STRAIGHT LINES ARE EASY (Matt, 2026-11-04): a drop near the next place in a line goes there.
+    const two = [{ u: 0, v: 0 }, { u: 0, v: 1 }];
+    const exact = (q, u, v) => q && Math.abs(q.u - u) < 1e-9 && Math.abs(q.v - v) < 1e-9;
+    ok('free rack: dropped near the end of a line, a cup lines up behind it', exact(settleSpot({ u: 0.3, v: 1.8 }, two), 0, 2));
+    ok('free rack: ...or beside a cup, in a row', exact(settleSpot({ u: 1.2, v: 0.1 }, two), 1, 0) && exact(settleSpot({ u: 1.25, v: 1.15 }, two), 1, 1));
+    const diag = settleSpot({ u: 1.1, v: 1.6 }, [{ u: 0, v: 0 }, { u: 0.5, v: Math.sqrt(3) / 2 }]);
+    ok('free rack: ...and a slanted line carries on', exact(diag, 1, Math.sqrt(3)), JSON.stringify(diag));
+    const { allTouching } = await import('./rack.js');
+    ok('all touching: one group of cells or spots, none apart', allTouching([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 1 }]) && allTouching(two)
+      && !allTouching([{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2.2 }]) && !allTouching([{ u: -2, v: 0 }, { u: -1, v: 0 }, { u: 1, v: 0 }, { u: 2, v: 0 }]));
+    ok('every rerack preset has all its cups touching', (() => {
+      const bad = [];
+      for (const [n, list] of Object.entries(RERACKS_ALL)) for (const pr of list) if (!allTouching(pr.spots)) bad.push(n + ':' + pr.key);
+      return bad.length === 0 || (console.log('   not touching:', bad.join(' ')), false);
+    })());
   }
   m = new Match({ first: 'a', reracks: 2, backRack: false }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
   ok('an older challenge (no back-wall rule) still replays its forward custom rerack',

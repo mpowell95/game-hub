@@ -198,10 +198,30 @@ export function applyPreset(cups, spots) {
   return cups.map((k, i) => ({ id: k.id, u: spots[i].u, v: spots[i].v }));
 }
 
+/** Two cups count as TOUCHING when their centres are closer than this (metres): one cup across, with
+ *  8% slack. The island test, the computer's tidy-rack count and the all-touching rule share it. */
+const TOUCHING = CUP_D * 1.08;
+
 /** Cups with no other cup touching them (brief: "island"). Touching = centres one cup apart. */
 export function islandsOf(cups) {
   const pts = cups.map((k) => ({ id: k.id, ...cellXZ(k) }));
-  return pts.filter((p) => !pts.some((o) => o !== p && Math.hypot(o.x - p.x, o.z - p.z) < CUP_D * 1.08)).map((p) => p.id);
+  return pts.filter((p) => !pts.some((o) => o !== p && Math.hypot(o.x - p.x, o.z - p.z) < TOUCHING)).map((p) => p.id);
+}
+
+/** ALL CUPS TOUCHING (Matt, 2026-11-04: "we need to add a rule so that all cups are touching"): every
+ *  cup joined to every other through cups that touch, one group, no cup or group standing apart. */
+export function allTouching(cups) {
+  if (!Array.isArray(cups) || cups.length <= 1) return true;
+  const pts = cups.map((k) => cellXZ(k));
+  const seen = new Set([0]);
+  const todo = [0];
+  while (todo.length) {
+    const i = todo.pop();
+    for (let j = 0; j < pts.length; j++) {
+      if (!seen.has(j) && Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z) < TOUCHING) { seen.add(j); todo.push(j); }
+    }
+  }
+  return seen.size === pts.length;
 }
 
 /** How many touching pairs a rack has - the computer's measure of a tidy rack. */
@@ -209,7 +229,7 @@ export function touchingPairs(cups) {
   const pts = cups.map(cellXZ);
   let n = 0;
   for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
-    if (Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z) < CUP_D * 1.08) n++;
+    if (Math.hypot(pts[i].x - pts[j].x, pts[i].z - pts[j].z) < TOUCHING) n++;
   }
   return n;
 }
@@ -226,6 +246,7 @@ export function touchingPairs(cups) {
 export const FREE = { uMax: AREA.cMax / 2, vMax: AREA.rMax * HEX };
 const TOUCH = 1;            // centres one cup-width (the pitch) apart = touching
 const SNAP = 0.3;           // a drop this close to touching (cup-widths) slides into contact
+const SNUG = 0.4;           // ...and this close to a snug or straight-line place, into that
 
 /** Any cup's place as a spot: a cell becomes the same place. */
 export function spotOf(k) {
@@ -239,41 +260,50 @@ export function freeOk(p, others) {
     && others.every((q) => Math.hypot(p.u - q.u, p.v - q.v) >= TOUCH - 1e-9);
 }
 
-/** Where a cup dropped at `p` comes to rest among `others` (spots), or null if it fits nowhere near. */
+/** Where a cup dropped at `p` comes to rest among `others` (spots), or null if it fits nowhere near.
+ *  SNUG places pull from further (`SNUG`): touching two things (two cups, or a cup and the back wall),
+ *  or IN A STRAIGHT LINE (Matt, 2026-11-04: "I'd like the new one to be easier to put them in a straight
+ *  line"): right in front of, behind or beside a cup, or carrying on the line two touching cups make.
+ *  Otherwise a drop near one cup or the back wall slides into contact (`snap`); else it stays put. */
 export function settleSpot(p, others, snap = SNAP) {
   const cl = (x, a, b) => Math.min(b, Math.max(a, x));
   const c = { u: cl(+p.u || 0, -FREE.uMax, FREE.uMax), v: cl(+p.v || 0, 0, FREE.vMax) };
   const dist = (q) => Math.hypot(q.u - c.u, q.v - c.v);
-  const near = others.filter((q) => dist(q) < 2 * TOUCH + snap);
-  // Each place a cup could rest in contact, with how many things it touches (`n`): a snug spot
-  // (two cups, or a cup and the wall) wins over touching one thing, within the snap distance.
-  const cand = [{ u: c.u, v: 0, n: 1 }];                           // against the back wall
+  const near = others.filter((q) => dist(q) < 2 * TOUCH + SNUG);
+  const snug = [];
+  const one = [{ u: c.u, v: 0 }];                                  // against the back wall
   for (const q of near) {
+    snug.push({ u: q.u, v: q.v + TOUCH }, { u: q.u, v: q.v - TOUCH }, { u: q.u + TOUCH, v: q.v }, { u: q.u - TOUCH, v: q.v });
     const d = dist(q);
     const du = d > 1e-9 ? (c.u - q.u) / d : 0, dv = d > 1e-9 ? (c.v - q.v) / d : 1;
-    cand.push({ u: q.u + du * TOUCH, v: q.v + dv * TOUCH, n: 1 }); // touching this cup
+    one.push({ u: q.u + du * TOUCH, v: q.v + dv * TOUCH });       // touching this cup
     if (q.v <= TOUCH) {                                            // touching it AND the back wall
       const w = Math.sqrt(TOUCH * TOUCH - q.v * q.v);
-      cand.push({ u: q.u - w, v: 0, n: 2 }, { u: q.u + w, v: 0, n: 2 });
+      snug.push({ u: q.u - w, v: 0 }, { u: q.u + w, v: 0 });
     }
   }
-  for (let i = 0; i < near.length; i++) for (let j = i + 1; j < near.length; j++) {
-    const a = near[i], b = near[j];                                // in the gap, touching both
+  for (let i = 0; i < others.length; i++) for (let j = i + 1; j < others.length; j++) {
+    const a = others[i], b = others[j];
     const d = Math.hypot(b.u - a.u, b.v - a.v);
     if (d < 1e-9 || d > 2 * TOUCH) continue;
-    const h = Math.sqrt(Math.max(0, TOUCH * TOUCH - (d / 2) ** 2));
-    const mu = (a.u + b.u) / 2, mv = (a.v + b.v) / 2, nu = -(b.v - a.v) / d, nv = (b.u - a.u) / d;
-    cand.push({ u: mu + nu * h, v: mv + nv * h, n: 2 }, { u: mu - nu * h, v: mv - nv * h, n: 2 });
+    const eu = (b.u - a.u) / d, ev = (b.v - a.v) / d;
+    if (d < TOUCHING / CUP_D) {                                    // a touching pair: carry its line on
+      snug.push({ u: b.u + eu * TOUCH, v: b.v + ev * TOUCH }, { u: a.u - eu * TOUCH, v: a.v - ev * TOUCH });
+    }
+    const h = Math.sqrt(Math.max(0, TOUCH * TOUCH - (d / 2) ** 2));  // in the gap, touching both
+    const mu = (a.u + b.u) / 2, mv = (a.v + b.v) / 2;
+    snug.push({ u: mu - ev * h, v: mv + eu * h }, { u: mu + ev * h, v: mv - eu * h });
   }
-  const spot = (q) => ({ u: q.u, v: q.v });
-  const ok = cand.filter((q) => freeOk(q, others)).sort((x, y) => dist(x) - dist(y));
-  const close = ok.filter((q) => dist(q) <= snap).sort((x, y) => y.n - x.n || dist(x) - dist(y));
-  if (close.length) return spot(close[0]);
+  const fit = (list) => list.filter((q) => freeOk(q, others)).sort((x, y) => dist(x) - dist(y));
+  const okS = fit(snug), okO = fit(one);
+  if (okS.length && dist(okS[0]) <= SNUG) return okS[0];
+  if (okO.length && dist(okO[0]) <= snap) return okO[0];
   if (freeOk(c, others)) return c;
-  if (ok.length && dist(ok[0]) <= 1.2) return spot(ok[0]);
+  const any = okS.concat(okO).sort((x, y) => dist(x) - dist(y));
+  if (any.length && dist(any[0]) <= 1.2) return any[0];
   for (let r = 0.1; r <= 1.5 + 1e-9; r += 0.1) {                   // squeezed: the nearest free place
-    for (let s = 0; s < 24; s++) {
-      const q = { u: c.u + r * Math.cos(s * Math.PI / 12), v: c.v + r * Math.sin(s * Math.PI / 12) };
+    for (let k = 0; k < 24; k++) {
+      const q = { u: c.u + r * Math.cos(k * Math.PI / 12), v: c.v + r * Math.sin(k * Math.PI / 12) };
       if (freeOk(q, others)) return q;
     }
   }
