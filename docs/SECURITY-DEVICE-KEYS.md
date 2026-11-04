@@ -28,14 +28,18 @@ The PIN items below are replaced by this once Matt approves the mockup.
 A new device that links with a code plays at once as a full player. The player's other devices get a notification /
 popup "New sign in" with Remove / OK; Matt can Remove from Admin > Now. Remove signs that device out (its local data
 stays on it, nothing deleted). Limit, said plainly: the code alone gets someone in again; this only tells the owner and
-lets them remove it after. Mockup v3: `docs/mockups/new-phone-approval.html` (NOT approved yet).
+lets them remove it after. Mockup v3: `docs/mockups/new-phone-approval.html` (Matt, 2026-11-04: "looks good"; not yet "build it").
+**KEEP "That's me"** (Matt, same day: "Don't overwrite the change ... that allows someone to use the same username for a
+specified amount of time"; people named themselves, saved the app to the Home Screen, and were forced to make a new name).
+It stays exactly as is (a name claimed in the last 24 h links to its code); it counts as a sign in like Link, so the other
+devices get the New sign in notice. Step B's "Remove 'That's me'" item below is CANCELLED.
 
 ## Step B (NOT built; player-visible, needs Matt's "ship it")
 1. Server: t `pin` (6 digits, 10 min, 5 tries), t `fresh` (a brand-new unused code: no `codeKeys`, no
    `directory/`, no `players` record with it), `pinMake` (claimed phone or admin makes a PIN), admin any.
    Push Matt "new phone linked to X".
 2. Screens: Profile > Your devices > Add a phone (shows PIN); name gate's link asks code + PIN;
-   Admin > People > a person > Make a PIN. Remove "That's me" by name.
+   Admin > People > a person > Make a PIN. ~~Remove "That's me" by name.~~ CANCELLED by Matt, 2026-11-04.
 3. Rules: `msgAuth` `.write: false` (server only); `players/$id` write only if admin, or new record with
    `own === auth.uid`, or `data.own === auth.uid`, or (no `own`) `data.profile.playerId === msgAuth[uid]`.
 4. Before the lock: count `codeKeys` against active codes (`players` updated in last 30 days); every active
