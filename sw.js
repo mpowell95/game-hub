@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1457;
-const CACHE = 'game-hub-v1457';
+const CACHE = 'game-hub-v1458';
 
 const ASSETS = [
   './',
@@ -849,19 +849,19 @@ const REST_MANIFEST = {
   './js/layout.js': '2517577123',
   './js/back-stack.js': '30b257fa2a',
   './js/lb-rules.js': '229e7a9b85',
-  './js/lb-points.js': '72c4ab65eb',
-  './js/lb-points-sheet.js': '9a4f24449d',
-  './js/lb-rank-sheet.js': '35508ab24a',
+  './js/lb-points.js': 'e6ba4afd9f',
+  './js/lb-points-sheet.js': '2450f51ed7',
+  './js/lb-rank-sheet.js': 'd55cae0f4d',
   './js/points-toast.js': 'd4c3e9ddc0',
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'eeeb461e3f',
+  './js/strings.js': 'c5351240b7',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'b1834b017a',
+  './js/game-stats.js': 'd95e2b8d83',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': '5724e71df7',
@@ -872,7 +872,7 @@ const REST_MANIFEST = {
   './js/bug-report.js': 'e6de6b7a35',
   './js/bug-report-ui.js': '557cd3d1ed',
   './js/announce.js': '8e98aff0ce',
-  './js/announce-ui.js': '897a166f83',
+  './js/announce-ui.js': '4ba8cf86ba',
   './js/messages.js': 'd12738ffad',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '3656e70d78',
@@ -897,11 +897,11 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': 'e95682434c',
+  './js/players-agg.js': '2429faf243',
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': 'f97bc0b39b',
+  './js/leaderboard-ui.js': '8f1c3a6bb5',
   './js/leaderboard2-ui.js': '03cf44ee99',
   './js/leaderboard2-boards.js': 'afbc6ba443',
   './js/leaderboard2-strings.js': '4c9b106552',
