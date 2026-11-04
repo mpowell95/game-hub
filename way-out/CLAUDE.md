@@ -363,6 +363,18 @@ away, no trains, ~45-60 arrows (generator 8's Hard: ~45 arrows, ~2 free at a tim
 (`b10Slot` from 101). Unlike Expert, a Hard level in progress on a generator-8 board FINISHES on that board, and
 a missed generator-8 Hard level replays on its own board (Matt asked only for harder Hard). Points unchanged (4).
 
+## More boards, mixed styles (2026-11-04)
+
+Matt: *"Do the hard and expert arrow levels repeat? They feel very repetitive"* (he was on Hard 215 = board 115
+mirrored, Expert 310 = board 210 mirrored), then *"Yes. And yes to mixing up board styles"*. Each list grows from
+100 to 400 boards, APPENDED (boards 1-100 untouched, still pinned): no repeat until Hard 501 / Expert 601. From board
+101 the style turns with the board number (`tools/arrow-styles.mjs`, `B10_STYLE` / `B11_STYLE` in the board files):
+**curly** (twisting arrows), **long** (fewer, longer snakes), **pairs** (two arrows free at some steps, never more),
+**classic**. All keep the far jumps and no trains (what made boards slow for Matt; noise and many free arrows made
+them easier, Impossible rounds 2-5). A level in progress keeps its board (`m`); a new level uses the full list.
+Points unchanged. `test.js` `styleCheck` plays every board by its style. Build: the two `build-arrow-boards1x.mjs`
+(`--part k --parts 4 --count 400`, then `--merge --count 400`; merge copies the shipped boards and appends parts).
+
 ## Impossible test boards (2026-10-28, admin only, not yet published)
 
 Matt: *"an 'impossible' category ... 70+ arrows and there's exactly 1 way to solve it ... only one arrow can be
