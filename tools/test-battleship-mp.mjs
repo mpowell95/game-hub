@@ -468,7 +468,7 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
 {
   const src = (p) => readFileSync(p, 'utf8');
   const rules = JSON.parse(src('database.rules.json'));
-  ok('`battleship` is in database.rules.json, signed-in read and write (darts\' shape)', rules.rules.battleship && rules.rules.battleship['.read'] === 'auth != null' && rules.rules.battleship['.write'] === 'auth != null');
+  ok('`battleship` is in database.rules.json, signed-in read and write (darts\' shape)', rules.rules.battleship && rules.rules.battleship['.read'] === 'auth != null' && rules.rules.battleship.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.battleship.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.battleship.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
   ok('`battleship` is in the backup branch list', /\n\s*'battleship',/.test(src('backups/rtdb-backup.mjs')));
   ok('the Remind bell may name battleship matches', /battleship\)~/.test(JSON.stringify(rules.rules.nudges)) && /battleship: 'battleship'/.test(src('js/messages.js')));
   const hub = src('js/hub.js');

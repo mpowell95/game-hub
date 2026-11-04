@@ -390,7 +390,7 @@ ok('...and sent by the drain', (await MP.drainOutbox(res.id)) === 1 && !MP.pendi
 
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
-ok('`flicksoccer` is in database.rules.json, signed-in read and write', rules.rules.flicksoccer && rules.rules.flicksoccer['.read'] === 'auth != null' && rules.rules.flicksoccer['.write'] === 'auth != null');
+ok('`flicksoccer` is in database.rules.json, signed-in read and write (2026-11-04: writes granted per match, index row and chat line, never a delete; tools/test-no-deletes-rules.mjs)', rules.rules.flicksoccer && rules.rules.flicksoccer['.read'] === 'auth != null' && rules.rules.flicksoccer.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.flicksoccer.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.flicksoccer.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
 ok('`flicksoccer` is in the backup branch list', /\n\s*'flicksoccer',/.test(readFileSync('./backups/rtdb-backup.mjs', 'utf8')));
 // Cross-device determinism: the physics path may only use operations IEEE 754 rounds exactly.
 const engineSrc = readFileSync('./flick-soccer/js/engine.js', 'utf8').replace(/\/\/[^\n]*/g, '');

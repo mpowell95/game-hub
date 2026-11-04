@@ -135,8 +135,10 @@ Oct 5 with live, every other person is whole (Bego, Andrew and the unnamed ones 
 `js/stats-corrections.js` (Boggle 3, Mancala 1, Ball Run 1), **admin devices only** (Matt: "Admin only still";
 `isAdminDevice()` in both leaderboards, not in `functions/boards.js`). His 3 September Skeeball plays have no copy.
 Release = apply `withRestoredRecords` in `functions/boards.js` and drop the gates. `tools/test-restored-records.mjs`.
-**Open:** `players/` still lets any signed-in client delete a whole record (`database.rules.json`); proposed
-`newData.exists()` on `players/$id`, Matt has not decided.
+**Devices can no longer delete records (2026-11-04, Matt: "only legitimate deletes are allowed")**: every
+open `".write": "auth != null"` moved down onto the record with `newData.exists()`. Full list, what is still
+allowed and why: `database.rules.README.md`, "No deletes from a device". Rules deploy on merge (firebase-deploy.yml).
+`tools/test-no-deletes-rules.mjs`. The delete scripts in `tools/` are now refused; deletes go through the console.
 
 ## Open handoff (2026-10-30)
 
