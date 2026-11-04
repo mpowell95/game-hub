@@ -636,3 +636,15 @@ shooter) cannot live on the hex grid (hex rows are 0.866 apart). The rack model 
 presets, so a custom rack became spots: the editor shows no grid, a dropped cup settles by `rack.js settleSpot`
 (contact candidates: one cup, cup + back wall, two cups; within 0.3 cup-widths the snug ones win), and the challenge
 log carries `spots`. Headless: the stop light with two filling the gaps built by drags, Done, the 3D table shows it.
+
+## 2026-11-04: Make your own, Grid or Free, and every cup touching
+
+Matt: "Ana misses the old system we had with the preselected placement things. So let's have both something because I
+like the new one. But I'd like the new one to be easier to put them in a straight line, it was kinda tough. Also, we need
+to add a rule so that all cups are touching." Read "preselected placement" as the first editor's dashed grid spots (the
+preset sheet was never removed). The editor got a Grid | Free switch, remembered per phone. Free's settle now ranks
+snug places first within 0.4 cup-widths: the four places in line with each cup (front, back, sides), the next place
+along any touching pair's line, a gap between two cups, a cup and the back wall. The all-touching rule is checked live
+only; a stored challenge rack replays without it. Switching Free to Grid can break a shape the grid cannot hold (an
+up-and-down line), and the warning says so. Headless: rough drops built an exact line of 4 + 1 beside; Grid showed its
+28 spots, warned on a cup apart, and stood the cups on cells once joined; the mode was remembered.

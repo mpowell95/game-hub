@@ -253,9 +253,16 @@ ok('the whole rack area is on the table',
   ok('custom rerack: a cell off the grid is refused', m.rerackCustom([{ c: 0, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0 && m.reracksLeft.a === 1);
   ok('custom rerack: two cups on one cell is refused', m.rerackCustom([{ c: 1, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
   ok('custom rerack: outside the rack area is refused', m.rerackCustom([{ c: 7, r: 0 }, { c: 1, r: 0 }, { c: 3, r: 0 }]).length === 0);
-  ev = m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]);
-  ok('custom rerack: cups need not touch, keep their ids, and it costs a rerack',
-    ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 3 && m.reracksLeft.a === 0 && !m.canRerack());
+  // ALL CUPS TOUCHING (Matt, 2026-11-04): a rack with a cup apart is refused; a stored one still replays.
+  ok('custom rerack: cups not all touching are refused', m.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }]).length === 0 && m.reracksLeft.a === 1);
+  ok('custom rerack: two touching and one apart is refused too', m.rerackCustom([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 3 }]).length === 0);
+  {
+    const old = Match.fromJSON(JSON.parse(JSON.stringify(m.toJSON())));
+    ok('...but a STORED one (a challenge move from an older build) replays', old.rerackCustom([{ c: -5, r: 0 }, { c: 5, r: 0 }, { c: 0, r: 3 }], true).length === 1);
+  }
+  ev = m.rerackCustom([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 1 }]);
+  ok('custom rerack: touching cups keep their ids, and it costs a rerack',
+    ev.length === 1 && ev[0].key === 'custom' && ids(m, 'b').join() === 'k0,k1,k2' && m.racks.b[2].r === 1 && m.reracksLeft.a === 0 && !m.canRerack());
   // AGAINST THE BACK WALL (Matt, 2026-09-29): no rerack can pull the cups closer.
   m = new Match({ first: 'a', reracks: 2 }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
   ok('custom rerack: an empty back row is refused (Matt\'s 3-2 one row forward)',
@@ -278,7 +285,7 @@ ok('the whole rack area is on the table',
   }
   // MAKE YOUR OWN, ANYWHERE (2026-11-03, Matt: "a stop light with two to the left filling the gaps").
   {
-    const { settleSpot, freeOk, spotOf, FREE } = await import('./rack.js');
+    const { settleSpot, freeOk, spotOf, FREE, RERACKS: RERACKS_ALL } = await import('./rack.js');
     const light = [{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }];
     const g1 = settleSpot({ u: -0.8, v: 0.45 }, light);
     const g2 = settleSpot({ u: -0.95, v: 1.4 }, light.concat([g1]));
@@ -299,7 +306,23 @@ ok('the whole rack area is on the table',
     ok('free rack: overlapping cups are refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 0.5, v: 0.2 }, { u: 2, v: 0 }]).length === 0 && m.reracksLeft.a === 2);
     ok('free rack: off the table is refused', m.rerackCustom([{ u: 0, v: 0 }, { u: 2.6, v: 0 }, { u: -2, v: 0 }]).length === 0);
     ok('free rack: nothing against the back wall is refused', m.rerackCustom([{ u: 0, v: 0.5 }, { u: 0, v: 1.5 }, { u: 0, v: 2.5 }]).length === 0);
-    ok('free rack: cups need not touch', m.rerackCustom([{ u: -2.5, v: 0 }, { u: 0.3, v: 1.7 }, { u: 2.5, v: 3.2 }]).length === 1);
+    ok('free rack: cups not all touching are refused', m.rerackCustom([{ u: -2.5, v: 0 }, { u: 0.3, v: 1.7 }, { u: 2.5, v: 3.2 }]).length === 0 && m.reracksLeft.a === 2);
+    ok('free rack: a straight line of 3 from the back wall is fine', m.rerackCustom([{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2 }]).length === 1);
+    // STRAIGHT LINES ARE EASY (Matt, 2026-11-04): a drop near the next place in a line goes there.
+    const two = [{ u: 0, v: 0 }, { u: 0, v: 1 }];
+    const exact = (q, u, v) => q && Math.abs(q.u - u) < 1e-9 && Math.abs(q.v - v) < 1e-9;
+    ok('free rack: dropped near the end of a line, a cup lines up behind it', exact(settleSpot({ u: 0.3, v: 1.8 }, two), 0, 2));
+    ok('free rack: ...or beside a cup, in a row', exact(settleSpot({ u: 1.2, v: 0.1 }, two), 1, 0) && exact(settleSpot({ u: 1.25, v: 1.15 }, two), 1, 1));
+    const diag = settleSpot({ u: 1.1, v: 1.6 }, [{ u: 0, v: 0 }, { u: 0.5, v: Math.sqrt(3) / 2 }]);
+    ok('free rack: ...and a slanted line carries on', exact(diag, 1, Math.sqrt(3)), JSON.stringify(diag));
+    const { allTouching } = await import('./rack.js');
+    ok('all touching: one group of cells or spots, none apart', allTouching([{ c: -1, r: 0 }, { c: 1, r: 0 }, { c: 0, r: 1 }]) && allTouching(two)
+      && !allTouching([{ u: 0, v: 0 }, { u: 0, v: 1 }, { u: 0, v: 2.2 }]) && !allTouching([{ u: -2, v: 0 }, { u: -1, v: 0 }, { u: 1, v: 0 }, { u: 2, v: 0 }]));
+    ok('every rerack preset has all its cups touching', (() => {
+      const bad = [];
+      for (const [n, list] of Object.entries(RERACKS_ALL)) for (const pr of list) if (!allTouching(pr.spots)) bad.push(n + ':' + pr.key);
+      return bad.length === 0 || (console.log('   not touching:', bad.join(' ')), false);
+    })());
   }
   m = new Match({ first: 'a', reracks: 2, backRack: false }); m.racks.b = m.racks.b.slice(0, 5); m.startTurn();
   ok('an older challenge (no back-wall rule) still replays its forward custom rerack',
@@ -391,6 +414,33 @@ ok('the whole rack area is on the table',
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9' });
   ok('challenge: owed cups that are all the cups left clear the rack at once', types(ev).includes('owedCleared') && types(ev).includes('rackCleared') && m.phase === 'rebuttal');
+  // OWED CUPS ARE ALREADY GONE (Matt, 2026-11-04): 3 cups, island with ball 1, the next make with
+  // ball 2 is the LAST cup = balls back, two throws at it, same cup wins with no rebuttal.
+  const owed3 = (o = {}) => {
+    const mm = new Match({ first: 'a', async: true, ...o });
+    mm.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k1', c: 0, r: 0 }, { id: 'k2', c: 4, r: 0 }]; mm.startTurn();
+    mm.callIsland('k0'); mm.throwResult({ made: 'k0' });
+    return mm;
+  };
+  m = owed3();
+  ev = m.throwResult({ made: 'k1' });
+  ok('challenge: island then the last real cup = balls back, that cup stands (Matt)', types(ev).includes('ballsBack') && m.lastCup === 'k1'
+    && ids(m, 'b').join() === 'k1' && m.owed.b === 0 && m.phase === 'normal' && m.queue.join() === '0,1' && m.shooter === 'a');
+  m.throwResult(miss); ev = m.throwResult({ made: 'k1' });
+  ok('...and the same cup with either ball back wins outright, no rebuttal', m.over && m.winner === 'a' && m.how === 'sameCup');
+  m = owed3(); m.throwResult({ made: 'k1' }); m.throwResult(miss); m.throwResult(miss);
+  ok('...miss both and the cup goes, then the rebuttal', m.phase === 'rebuttal' && ids(m, 'b').length === 0 && m.shooter === 'b');
+  m = owed3(); m.throwResult(miss);   // island, then a miss: the turn passes, the cup still owed
+  ok('...an island then a miss still owes the cup as before', m.owed.b === 1 && ids(m, 'b').join() === 'k1,k2' && m.shooter === 'b');
+  m = new Match({ first: 'a', async: true });   // 4 cups: island, a make (balls back), then ball 1 leaves only the owed cup
+  m.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k1', c: 0, r: 0 }, { id: 'k2', c: 4, r: 0 }, { id: 'k3', c: -2, r: 4 }]; m.startTurn();
+  m.callIsland('k0'); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' });
+  ev = m.throwResult({ made: 'k2' });
+  ok('...owed cups also count as gone with a ball still in hand (the made cup stands)', m.lastCup === 'k2' && ids(m, 'b').join() === 'k2' && m.queue.join() === '1' && m.owed.b === 0);
+  m = owed3({ owedLast: false });
+  ev = m.throwResult({ made: 'k1' });
+  ok('an older challenge (no `ol`) replays as it was played: owed cleared, rebuttal', types(ev).includes('owedCleared') && m.phase === 'rebuttal');
+  ok('owedLast survives a save', Match.fromJSON(new Match().toJSON()).owedLast && !Match.fromJSON(new Match({ owedLast: false }).toJSON()).owedLast && !Match.fromJSON({}).owedLast);
   // BOUNCE SHOTS (brief 5d): table first, then in = 2 cups, the defender picks the second.
   m = new Match({ first: 'a' }); m.startTurn();
   m.throwResult({ made: 'k0', bounced: true });

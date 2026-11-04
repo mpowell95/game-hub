@@ -49,7 +49,10 @@ shapes), Gentleman's On/Off, **Reracks** (0/1/2/3/unlimited, default 2), **Play*
 - **The last cup stays on the table while a ball is left to throw at it** (`lastCup`; "Last cup!
   Same cup wins"): both balls in it wins with NO rebuttal. **Balls back count as balls left**
   (2026-09-29); frozen per challenge as `rules.lc` (`Match({ lastCupBack })`), so a finished match is
-  never re-scored.
+  never re-scored. **A challenge's OWED cups count as already gone (Matt, 2026-11-04: island with 3 cups left, then the
+  last real cup went straight to the rebuttal; "I was cheated out of two throws")**: a plain make that leaves only owed
+  cups is the last cup (owed cups go now, the made cup stands, balls back/ball in hand apply). `rules.ol`, written on
+  every new challenge (`Match({ owedLast })`); older challenges replay as played. IMPORTANT_SINCE 1456.
 - **The rebuttal**: 2 shots, each ball shooting until it misses. Clear everything = overtime; both
   missed = the side that cleared wins.
 - **Overtime**: 3 cups a side, 2-1 triangle on the BACK rows (`OVERTIME_CELLS`), streaks reset, the
@@ -75,13 +78,17 @@ turn's first throw:
   cups standing, owed cups not counted, in EVERY match incl. challenges begun earlier (Matt saw Moonis call it on the last
   cup in one). A replay ACCEPTS a stored call anyway (`callIsland(id, true)` in `applyEntry`): an older-build phone may
   have made one, and refusing it would refuse the whole match. `rules.i3` is a record only.
-- **Make your own, ANYWHERE** (2026-11-03, Matt: "I want to be able to move the cups however I want. Not in this
-  exact grid. I want a stop light with two to the left filling the gaps"): `showCustomRack` in `ui.js`, no grid; drag
-  or tap a cup then a place; each cup is an exact spot `{u, v}`. A drop slides into contact near a cup or the back
-  wall, preferring a snug spot touching TWO things (a gap), and moves off a cup it lands on (`rack.js settleSpot`,
-  `SNAP` 0.3 cup-widths). **Done** = `match.rerackCustom(spots)` (`isSpot` + `validRack`, one cup at v = 0, ids kept).
-  Challenge log: `{k:'r', key:'custom', spots:[{u,v}...]}` at full precision; the old `cells:[{c,r}...]` still
-  replays. A phone on a build before v1432 cannot read `spots` (IMPORTANT_SINCE 1432). The computer uses presets only.
+- **Make your own: Grid | Free** (2026-11-04, Matt: "Ana misses the old system we had with the preselected placement
+  things. So let's have both"): a switch at the top, the last one used kept per phone (`gamehub.cuppong.v1` `rackMode`,
+  default Free). **Grid** = the first way: the 28 dashed `AREA` spots, a drop goes to the nearest free spot, stored as
+  `cells:[{c,r}...]`. **Free** (2026-11-03, "move the cups however I want"): exact spots `{u, v}` anywhere, stored as
+  `spots:[{u,v}...]` at full precision; a drop near a SNUG or STRAIGHT-LINE place (a gap, in front of / behind / beside a
+  cup, or carrying on a line, any angle) goes there within `SNUG` 0.4 cup-widths (Matt: "easier to put them in a straight
+  line"), else into contact within `SNAP` 0.3, else stays put (`rack.js settleSpot`). A phone before v1432 cannot read `spots`.
+- **ALL CUPS TOUCHING** (Matt, 2026-11-04: "we need to add a rule so that all cups are touching"): a custom rerack is one
+  group, none apart (`rack.js allTouching`, the island test's 1.08 cup-widths). Done stays off with "All cups must touch".
+  A STORED challenge rack replays without it (`rerackCustom(list, true)` in `applyEntry`, like a stored island call), so
+  an older build's move never refuses a match. Every preset already touches (`test.js` checks). The computer uses presets only.
 - **Every rerack stands AGAINST THE BACK WALL** (2026-09-29): preset back row on the rack's back row
   (`shape(rows, back)`, `backLine`); custom needs at least one cup on the back row
   (`rerackCustom` refuses otherwise); Gentleman's line keeps its own placement. `rules.bk` (written on
@@ -188,7 +195,7 @@ Files: `js/mp.js` (data), `js/mp-ui.js` (screens), `js/alert.js` (launcher), the
 - **This phone is always side `'a'` locally** (`buildLocal`, `toLocal`/`toStored`).
 - **The island's second cup is OWED** (`async: true` counts `owed[side]`; taken at the defender's
   next turn, `askOwed`); owed cups that are every cup left clear the rack at once.
-- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `i3`, `lapse`); an older
+- **Rules are frozen per challenge** (`rules.fb`, `lc`, `io`, `bk`, `bo`, `su`, `i3`, `ol`, `lapse`); an older
   challenge replays as it was played.
 - **Results**: `recordResult('cuppong', 'mp', won)` once per phone (`gamehub.cuppong.counted.v1`); a
   match ended while away shows a GAME OVER popup (`gamehub.cuppong.unseenResults.v1`) and the 'over'

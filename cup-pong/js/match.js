@@ -18,6 +18,10 @@
 //     end the game"): sink the last cup with the pair's second ball after the first also went in,
 //     and the balls come back with that cup still standing - hit it and win, miss both and it goes
 //     and the rebuttal follows. `lastCupBack` switches it; old challenges replay without it.
+//     A CHALLENGE'S OWED CUPS ARE ALREADY GONE (Matt, 2026-11-04: "If we were playing live, the second
+//     cup would've been taken away when I hit the island, then if I hit the last cup, that should be
+//     balls back and I get 2 chances to hit the last cup"): a make that leaves only owed cups is the
+//     last cup; the owed cups go now, the made cup stands. `owedLast` switches it (`rules.ol`).
 //   - THE REBUTTAL (2026-09-28): "rebuttals is 2 shots as well - each person gets to shoot. And if
 //     the first ball hits a cup, they get that ball back". Both balls, each shooting until it misses.
 //     Clear everything and it goes to OVERTIME (3 cups each, 2-1); otherwise the side that cleared
@@ -62,7 +66,7 @@
 // is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
 // round so the phone playing it is always side 'a'.
 
-import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, GENT_BACK } from './rack.js';
+import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, allTouching, GENT_BACK } from './rack.js';
 
 export const BALLS = 2;
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -79,7 +83,7 @@ export class Match {
    * @param {boolean} [o.gentlemans=true] Gentleman's exists in this match
    * @param {number}  [o.reracks=2]       reracks per player per game (Infinity = unlimited)
    */
-  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true, gentBack = true, islandThree = true } = {}) {
+  constructor({ first = 'a', gentlemans = true, reracks = 2, async = false, bounce = false, backRack = true, lastCupBack = true, fireBallsBack = true, straight = false, islandOnly = true, gentBack = true, islandThree = true, owedLast = true } = {}) {
     this.async = !!async;
     this.straight = !!straight;
     if (this.straight) { gentlemans = false; reracks = 0; }
@@ -87,6 +91,7 @@ export class Match {
     this.backRack = backRack !== false;
     this.gentBack = gentBack !== false;   // Gentleman's line against the back wall (2026-10-23)
     this.lastCupBack = lastCupBack !== false;
+    this.owedLast = owedLast !== false;   // challenge only: owed cups count as gone for the last cup (2026-11-04)
     this.fireBallsBack = fireBallsBack !== false;
     this.islandOnly = islandOnly !== false;
     // No island on the last cup or the last two (Matt, 2026-10-29): only OFFERED with 3+ cups standing,
@@ -228,10 +233,12 @@ export class Match {
    * shooter chose. `cells[i]` is where the i-th standing cup goes. Since 2026-11-03 ANYWHERE (Matt:
    * "I want to be able to move the cups however I want. Not in this exact grid"): exact spots
    * `{ u, v }` inside the rack area, none overlapping. Hex cells `{ c, r }` (one cup per cell) are
-   * still accepted, so a challenge made before replays. Cups do not have to touch (the brief: Matt
-   * did not ask for that limit). Costs one rerack, exactly like a preset.
+   * still accepted, so a challenge made before replays. ALL CUPS TOUCHING (Matt, 2026-11-04: "we need
+   * to add a rule so that all cups are touching"): one group, none apart. `replay` (a stored challenge
+   * move) accepts a rack without it, like a stored island call: a phone on an older build may have made
+   * one, and refusing it would refuse the whole match. Costs one rerack, exactly like a preset.
    */
-  rerackCustom(cells) {
+  rerackCustom(cells, replay = false) {
     if (!this.canRerack()) return [];
     const rack = this.target();
     if (!Array.isArray(cells) || cells.length !== rack.length) return [];
@@ -241,6 +248,7 @@ export class Match {
     if (!to.every(free ? isSpot : isCell) || !validRack(to)) return [];
     // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
     if (this.backRack && !to.some((k) => (free ? k.v <= 1e-6 : k.r === 0))) return [];
+    if (!replay && !allTouching(to)) return [];
     this.racks[this.defender] = to;
     if (this.phase !== 'rebuttal') {
       if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
@@ -369,6 +377,18 @@ export class Match {
       const flags = { ...(island ? { island: true } : {}), ...(bounce ? { bounce: true } : {}) };
       // THE LAST CUP with a ball still to throw - in hand, or coming back as balls back: it stands.
       const ballsBack = this.lastCupBack && !this.queue.length && this.pairRes[0] === true && this.pairRes[1] === true;
+      // A CHALLENGE: owed cups are as good as gone. A plain make that leaves only owed cups is the last
+      // cup: the owed cups go now and the made cup stands for the balls left.
+      const owedLeft = this.async && this.owedLast && !extra ? (this.owed[this.defender] | 0) : 0;
+      if (owedLeft > 0 && leftAfter > 0 && leftAfter <= owedLeft && (this.queue.length || ballsBack)) {
+        const ids = rack.filter((k) => k.id !== made).map((k) => k.id);
+        this.racks[this.defender] = rack.filter((k) => k.id === made);
+        this.owed[this.defender] = 0;
+        this.lastCup = made;
+        ev.push({ type: 'owedCleared', side: this.defender, ids, keep: made });
+        ev.push({ type: 'made', side, ball, id: made, bounced, lastCup: true, left: 1 });
+        return ballsBack ? ev.concat(this._afterThrow()) : ev;
+      }
       if (leftAfter === 0 && (this.queue.length || ballsBack)) {
         this.lastCup = made;
         ev.push({ type: 'made', side, ball, id: made, bounced, lastCup: true, left: 1 });
@@ -465,7 +485,7 @@ export class Match {
     const enc = (n) => (Number.isFinite(n) ? n : 'inf');
     const cups = (r) => r.map((k) => ({ ...k }));
     return {
-      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, islandThree: this.islandThree, gentBack: this.gentBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
+      v: 1, async: this.async, bounce: this.bounce, backRack: this.backRack, lastCupBack: this.lastCupBack, owedLast: this.owedLast, fireBallsBack: this.fireBallsBack, islandOnly: this.islandOnly, islandThree: this.islandThree, gentBack: this.gentBack, straight: this.straight, gentlemans: this.gentlemans, reracks: enc(this.reracks),
       racks: { a: cups(this.racks.a), b: cups(this.racks.b) },
       shooter: this.shooter, phase: this.phase, clearedBy: this.clearedBy,
       streak: { a: this.streak.a.slice(), b: this.streak.b.slice() },
@@ -481,7 +501,7 @@ export class Match {
 
   static fromJSON(o) {
     const dec = (n) => (n === 'inf' || n === null ? Infinity : Number(n) || 0);
-    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, islandThree: o.islandThree !== false, gentBack: o.gentBack !== false, straight: o.straight === true });
+    const m = new Match({ gentlemans: o.gentlemans, reracks: dec(o.reracks), async: o.async, bounce: o.bounce === true, backRack: o.backRack !== false, lastCupBack: o.lastCupBack !== false, owedLast: o.owedLast === true, fireBallsBack: o.fireBallsBack !== false, islandOnly: o.islandOnly !== false, islandThree: o.islandThree !== false, gentBack: o.gentBack !== false, straight: o.straight === true });
     const cups = (r) => (Array.isArray(r) ? r : Object.values(r || {})).map((k) => ({ ...k }));
     const arr = (a, n, d) => { const x = Array.isArray(a) ? a.slice() : Object.values(a || {}); while (x.length < n) x.push(d); return x; };
     m.racks = { a: cups((o.racks || {}).a), b: cups((o.racks || {}).b) };

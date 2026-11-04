@@ -118,6 +118,7 @@ export function cleanRules(r) {
     io: !!(r && r.io === true),
     gb: !!(r && r.gb === true),                          // Gentleman's against the back wall (2026-10-23)
     i3: !!(r && r.i3 === true),                          // made after the 3-cup island rule (2026-10-29); a record only, every match offers it
+    ol: !!(r && r.ol === true),                          // owed cups count as gone for the last cup (2026-11-04)
     su: !!(r && r.su === true) };                        // STRAIGHT UP: no assists at all (match.js)
 }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
@@ -125,7 +126,7 @@ const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
 export function freshMatch(rules) {
   const r = cleanRules(rules);
-  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb, islandOnly: r.io, gentBack: r.gb, straight: r.su });
+  return new Match({ first: 'a', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, owedLast: r.ol, fireBallsBack: r.fb, islandOnly: r.io, gentBack: r.gb, straight: r.su });
 }
 
 /** One log entry, cleaned, or null if it is not a well-formed action. */
@@ -187,7 +188,7 @@ export function applyEntry(match, e) {
   if (e.k === 't') ev = match.throwResult({ made: e.m || null, bounced: !!e.b });
   else if (e.k === 'g') ev = match.applyGentlemans();
   else if (e.k === 'c') ev = match.centerLast();
-  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.spots || e.cells) : match.rerack(e.key);
+  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.spots || e.cells, true) : match.rerack(e.key);   // a stored rack stands (match.js all-touching)
   else if (e.k === 'i') ev = match.callIsland(e.id, true);   // a stored call stands (match.js islandThree)
   else if (e.k === 'o') ev = match.pickOwed(e.id);
   if (!ev || !ev.length) return null;
@@ -204,7 +205,7 @@ export const toStored = (e, mySide) => ({ ...e, by: e.by === 'a' ? mySide : othe
  */
 export function buildLocal(game, mySide, upto = game.log.length) {
   const r = cleanRules(game.rules);
-  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, fireBallsBack: r.fb, islandOnly: r.io, gentBack: r.gb, straight: r.su });
+  const m = new Match({ first: mySide === 'a' ? 'a' : 'b', gentlemans: r.gent, reracks: reracksOf(r), async: true, bounce: r.bo, backRack: r.bk, lastCupBack: r.lc, owedLast: r.ol, fireBallsBack: r.fb, islandOnly: r.io, gentBack: r.gb, straight: r.su });
   for (let i = 0; i < upto; i++) {
     if (!applyEntry(m, toLocal(game.log[i], mySide))) break;   // validateGame already proved it replays
   }
@@ -710,7 +711,7 @@ export async function createGame({ them, rules, series = 1, seriesNo = 1, series
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: 0, updated: 0, lapse: true,
-    rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, io: true, gb: true, i3: true, ...(r.su ? { su: true } : {}) },
+    rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, io: true, gb: true, i3: true, ol: true, ...(r.su ? { su: true } : {}) },
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
