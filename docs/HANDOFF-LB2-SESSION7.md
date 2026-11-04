@@ -115,6 +115,21 @@ change, `js/lb-points.js` not touched yet); Chinchón/Escoba/Parchís 2-3 comput
 (PROPOSED; Matt: winning vs Easy + Hard is harder than 1v1 Hard; tables are saved in `byMode` `ai` since 2026-10-30,
 older wins only know the easiest level). Nuts & Bolts A (1/2/4/8) or B (+ Easy capped at 20): Matt has not picked.
 
+## Built 2026-11-04 (Matt: "build them and put it on my phone"; ADMIN DEVICES ONLY, not merged by the building agent)
+
+- **Every scores screen = its mockup** (`docs/mockups/final/sheet-<game>.html`): wins games one table from `sheetModel`
+  (`js/lb-points-sheet.js` `pointsTableHTML`, shared with `js/lb-rank-sheet.js`); Sudoku/Murdoku/Nuts & Bolts/Minesweeper
+  points tables from `js/puzzle-points.js`; Gridlock grouped levels; Contexto, Spelling Bee, Hill Climb, Snake, Ball Run,
+  Brick Breaker, Tower, Golf, Hold'em, Skeeball, Word Weaver word for word. Removed: ranking steps, Tabs cards,
+  legacy-date lines, Monopoly Deal's "older wins" row (old strings kept). Arrow Maze unchanged (no new mockup), headers brightened.
+  Strings `lbpt_*` and new `lbrs_*` (EN/ES). Screenshots: dark 402 EN every game, Spanish 360 for 11.
+- **Points (`js/lb-points.js`, read-time)**: Hoops "Until you score" on Hard = 2 (was 3); Chinchón/Escoba/Parchís at a
+  table of 2-3 computers = each computer's 1v1 points added up ("Easy + Hard = 5", from the code). On the live board
+  snapshot (2026-11-04) no one's points change yet: nobody has a saved Hoops Until-you-score or 2-3-computer win.
+- Mockup lines not exactly true for the code: Chinchón "Under 100 points" is also "or under 10 rounds" (the column
+  counts both); Sudoku/Murdoku solves helped before 2026-11-03 pay half their level (not shown); Nuts & Bolts wins
+  saved before levels existed are 1 each (not shown).
+
 ## On hold (Matt, 2026-11-04: "Not now. We'll deal with later. Don't change nuts and bolts scoring yet")
 
 - **Nuts & Bolts points**: the branch has option B (1, 2, 4, 8 a level, Easy at most 20). Matt then said "too crazy";
