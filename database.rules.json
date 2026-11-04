@@ -46,6 +46,17 @@
       }
     },
 
+    "claimReq": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && newData.exists()",
+        ".validate": "newData.hasChildren(['t', 'code']) && newData.child('code').isString() && newData.child('code').val().matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && (newData.child('t').val() === 'reg' || newData.child('t').val() === 'key')"
+      }
+    },
+    "claimRes": {
+      "$uid": { ".read": "auth != null && auth.uid === $uid", ".write": false }
+    },
+    "codeKeys": { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true", ".write": false },
     "admins": { ".read": "auth != null", ".write": false },
     "readers": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",

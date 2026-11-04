@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1462;
-const CACHE = 'game-hub-v1464';
+const CACHE = 'game-hub-v1465';
 
 const ASSETS = [
   './',
@@ -32,6 +32,7 @@ const ASSETS = [
   './js/lb-points.js',
   './js/lb-points-sheet.js',
   './js/lb-rank-sheet.js',
+  './js/puzzle-points.js',
   './js/points-toast.js',
   './js/lb2-lost.js',
   './js/tabbar-fix.js',
@@ -63,6 +64,7 @@ const ASSETS = [
   // is imported by the launcher on every load (the profile pill's badge, and the outbox drain), and
   // a message written offline has to be able to queue itself on the device that is offline.
   './js/messages.js',
+  './js/device-key.js',
   './js/live-read.js',
   './js/messages-ui.js',
   './js/hub-messages.js',
@@ -852,6 +854,7 @@ const REST_MANIFEST = {
   './js/lb-points.js': 'e6ba4afd9f',
   './js/lb-points-sheet.js': '2450f51ed7',
   './js/lb-rank-sheet.js': '7fd13c0d50',
+  './js/puzzle-points.js': 'b474d8114f',
   './js/points-toast.js': '5e92b93a23',
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
@@ -865,7 +868,7 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': 'c11c0affaa',
-  './js/stats-net.js': 'c9163444d4',
+  './js/stats-net.js': 'ea53661d41',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
@@ -873,7 +876,8 @@ const REST_MANIFEST = {
   './js/bug-report-ui.js': '557cd3d1ed',
   './js/announce.js': '9386a76d9c',
   './js/announce-ui.js': '4ba8cf86ba',
-  './js/messages.js': 'd12738ffad',
+  './js/messages.js': '0a7c38fb0a',
+  './js/device-key.js': '4a749275f3',
   './js/live-read.js': '0c8419185d',
   './js/messages-ui.js': '3656e70d78',
   './js/hub-messages.js': 'c91ce9936a',

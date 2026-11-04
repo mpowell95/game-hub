@@ -49,6 +49,7 @@ import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
+import { handleClaim } from './claim.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -436,4 +437,13 @@ export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ..
     logger.info('integrity alert', { node: 'contexto', code: a.code, k: a.k, rule: a.rule, v: a.v });
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-contexto-${a.code}-${a.k}`, { game: 'admin' });
   }
+});
+
+// DEVICE KEYS (2026-11-04, functions/claim.js): a phone's claim request is answered here. STEP A only
+// registers keys for phones that already hold a claim; nothing about who may play changes yet.
+export const claimOnRequest = onValueWritten({ ref: '/claimReq/{uid}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 }, async (event) => {
+  const v = event.data.after.val();
+  if (!v) return;
+  const res = await handleClaim(getDatabase(), event.params.uid, v);
+  logger.info('claim', { uid: event.params.uid, t: res.t, code: res.code, ok: res.ok, why: res.why });
 });
