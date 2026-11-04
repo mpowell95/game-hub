@@ -1658,3 +1658,11 @@ for. Now `withMode` and `modeTag` take thunks and evaluate them inside their own
 detail throws: recorded without it; the play log's `d` carries `_err`), every call site passes thunks (also the
 challenge `countResult`/`countFinished` mode arguments), and the scan fails a computed mode or detail argument.
 Also: Connect 4 Hoops vs the computer, "shoot until you score" records one level lower (Matt approved).
+
+## 2026-11-04: "who is sk?" report (`players/<id>/whois`)
+
+Matt, about the account "sk" (Windows PC, India time zone, never let online): "add something that gets more info
+on them next time they open the app because I'm confused". `js/stats-net.js` `WHOIS_CODES` (only `65CNF`) adds
+`whois` to that device's mirror: user agent, languages, locale, the URL and referrer the hub was opened with,
+cores/memory/touch, connection type, UTC offset, and the browser's high-entropy platform hints. No third party, no IP.
+A report only; read by no phone. Remove the code from the list once Matt knows.
