@@ -59,6 +59,8 @@ export const BRANCHES = [
   // bugReplyShots/ (2026-10-28): screenshots on Matt's bug-report replies, <reportId>/<replyAtMs>/<i>.
   'bugReplyShots',
   'skeeballThrows', 'challenge', 'flight', 'selfies',
+  // claimReq/, claimRes/, codeKeys/ (2026-11-04): device keys (functions/claim.js). Not anonymously readable.
+  'claimReq', 'claimRes', 'codeKeys',
   // hoops/ (2026-09-22): Connect 4 Hoops' turn-by-turn matches and their per-player index. Same
   // auth shape as players/ - readable by any signed-in anonymous session.
   'hoops',

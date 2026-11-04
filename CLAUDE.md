@@ -126,6 +126,12 @@ the rebuilt scores sheets, the My Stats v2 look, the restored records (`RESTORED
 players see its old ranking and a two-line sheet). The "Old" link stays for now (Matt: "Leave for now"). History:
 `docs/HANDOFF-LB2-SESSION7.md` and the older handoffs it names.
 
+## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
+
+A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key
+(`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. Step B (PINs for a new phone, rules
+lock on `msgAuth` and `players/`) is planned, NOT built, player-visible: needs Matt's "ship it". `docs/SECURITY-DEVICE-KEYS.md`.
+
 ## Open handoff (2026-10-30)
 
 "Let's pick up where we just left off" = **`docs/HANDOFF-KING-OF-GAMES-2026-10-30.md`** (reader key, King of Games'
@@ -361,6 +367,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
+- **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 

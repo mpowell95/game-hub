@@ -31,6 +31,7 @@
 // Both are PREFERENCES (THE LAW rule 2's carve-out) - one-tap recreatable, never earned history.
 // The messages themselves are neither: they are only ever added.
 
+import { ensureDeviceKey } from './device-key.js';
 import { loadProfile } from './profile-store.js';
 import { isHiddenName as isTestName } from './hidden-players.js';
 import { getStatsApp } from './firebase-boot.js';
@@ -216,6 +217,9 @@ export async function ensureAuthClaim(boot) {
       await api.set(api.ref(db, `msgAuth/${uid}`), me);
     }
     _claimed = me;
+    // DEVICE KEY (2026-11-04, js/device-key.js): register this phone's key for its code, in the
+    // background. Never awaited here, never able to fail the claim.
+    ensureDeviceKey(boot, me, writesAllowed).catch(() => {});
     return me;
   } catch (err) {
     console.warn('[messages] could not claim this device for ' + me + '; messages will read as empty', err);

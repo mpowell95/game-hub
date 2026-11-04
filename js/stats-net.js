@@ -28,10 +28,13 @@ let _db = null, _api = null;
 let _bootForTest = null;
 export function __setNetBootForTest(fn) { _bootForTest = fn || null; _db = null; _api = null; }
 
+// This phone's anonymous sign-in id, stamped on its players/ record as `own` (2026-11-04, privacy and
+// security step A): the record's owner, so the rules can later let only that phone (or Matt) change it.
+let _uid = null;
 export async function init() {
   const r = _bootForTest ? await _bootForTest() : await getStatsApp();
   if (!r) return false;
-  _db = r.db; _api = r.api;
+  _db = r.db; _api = r.api; _uid = r.uid || null;
   return true;
 }
 
@@ -305,6 +308,8 @@ export async function syncMyStats() {
       rate: rateReport(),
       updatedAt: _api.serverTimestamp(),
     };
+    // OWNER (2026-11-04): additive, a report until step B's rules read it. Omitted with no sign-in.
+    if (_uid) rec.own = _uid;
     // WHEN EACH GAME WAS PLAYED (2026-10-11): game-stats.js's activityReport(). Same additive
     // REPORT shape as `rate`, read by `read-activity.mjs` only. Omitted (never sent as null) while
     // this player has nothing local yet, so a fresh or cleared phone cannot blank what is there.
