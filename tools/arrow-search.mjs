@@ -88,6 +88,9 @@ function score(m, S) {
     - (S.train || 0) * m.trains + (S.jump || 0) * m.jump - (S.near || 0) * m.near;
 }
 
+/** The style score, for a scorer that adds to it (tools/arrow-styles.mjs, 2026-11-04). Same maths as search(). */
+export function scoreOf(m, S) { return score(m, S); }
+
 function clone(a) { return a.map((c) => c.slice()); }
 function occOf(arrows) { const o = new Int16Array(W * H).fill(-1); arrows.forEach((c, id) => { for (const p of c) o[p] = id; }); return o; }
 function walk(R, occ, start, len) {
