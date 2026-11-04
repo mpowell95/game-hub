@@ -124,10 +124,19 @@ and continue that conversation as if it were the same session (where it stopped,
 tools). **v1458 (2026-11-04, admin devices only): the popup rebuilt (mockup v4), every game's scores sheet rebuilt from `docs/mockups/final/`, puzzle points (`js/puzzle-points.js`), Hoops / 2-3-computer points changes; Nuts & Bolts points and Matt's missing record ON HOLD (handoff, end).** **The release popup is BUILT, admin devices only (2026-11-03, v1455, Matt's approved 2-page mockup + "Show me where"): `js/announce.js` `lb2-points-2026-11-03` (`adminDevice: true`, `pages: 'lb2-intro'`; drawn by `js/announce-ui.js` `showLb2Intro`/`runLbGuide`; pictures `img/lb2-intro-board-*.png`). On "release it": drop `adminDevice` with the v2/points switch.** Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
 released or abandoned.
 
-## Open handoff: Matt's missing Nuts & Bolts history (2026-11-04)
+## Matt's deleted records, restored read-time (2026-11-04)
 
-"Find my Nuts & Bolts score" (or Matt's missing levels) = **`docs/HANDOFF-NUTS-BOLTS-MISSING-RECORD.md`** FIRST (record
-`2b0d7c05`, his code, is gone from `players/`; his backups; restore read-time). Delete this section once restored.
+Nuts & Bolts: **nothing was lost.** Matt is 41 (11 + 30) in all 13 backups on his PC (Jul 23 - Aug 31) and in the
+"Game Hub Plays" artifact built from all 289 records on 2026-10-05, after `2b0d7c05` last synced; `2b0d7c05` (his
+iPhone Safari tab) never held a Nuts & Bolts play. **What WAS lost:** about 188 `players/` records deleted between
+Oct 5 and Nov 3, by nothing in the repo or local transcripts (a cloud session or the console; not found). Comparing
+Oct 5 with live, every other person is whole (Bego, Andrew and the unnamed ones only moved rows); Matt lost 8 plays.
+5 are back at read time from `backups/rtdb-2026-08-31T13-17-01-416Z.json`: `RESTORED_RECORDS` in
+`js/stats-corrections.js` (Boggle 3, Mancala 1, Ball Run 1), **admin devices only** (Matt: "Admin only still";
+`isAdminDevice()` in both leaderboards, not in `functions/boards.js`). His 3 September Skeeball plays have no copy.
+Release = apply `withRestoredRecords` in `functions/boards.js` and drop the gates. `tools/test-restored-records.mjs`.
+**Open:** `players/` still lets any signed-in client delete a whole record (`database.rules.json`); proposed
+`newData.exists()` on `players/$id`, Matt has not decided.
 
 ## Open handoff (2026-10-30)
 

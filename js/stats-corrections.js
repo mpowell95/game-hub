@@ -372,4 +372,90 @@ export function snapshotOf(board, day) {
   };
 }
 
-export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, voidedCodesFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf, voidIntegrityGame };
+// --- restored deleted records (2026-11-03) -----------------------------------------------------------
+// Matt: "Restore mine yes. Admin only still". Between 2026-10-05 and 2026-11-03 about 188 records were
+// deleted from players/ with no log (js/CLAUDE.md, "Deleted records"). Two of them were Matt's, and the
+// 2026-08-31 backup (backups/rtdb-2026-08-31T13-17-01-416Z.json on Matt's PC) still holds what they had:
+//   2b0d7c05  iPhone Safari tab, QZCC4: Boggle 3 (0-2, 1 tie), Mancala 1 (1-0)
+//   50bf8077  MattyIce, no code: Ball Run 1
+// They come back at READ TIME only, exactly as the backup holds them (THE LAW rule 4: nothing guessed).
+// Nothing is written to players/. A restored record is used only when its id is NOT on the live data, so
+// a device that comes back and syncs its own record is never counted twice. Its 3 Skeeball plays from
+// September have no copy anywhere and are not restored.
+// ADMIN DEVICES ONLY until Matt releases it (the callers gate on isAdminDevice(); functions/boards.js,
+// which builds the board everyone else reads, does not use this).
+export const RESTORED_RECORDS = {
+  '2b0d7c05-e4c2-4a2f-8317-dac42424338a': {
+    profile: { emoji: '🦖', message: '', messageAt: 0, name: 'MattyIce', playerId: 'QZCC4' },
+    updatedAt: 1787077418512,
+    stats: { games: {
+      boggle: { bg: { bestScore: 30, longestWord: { len: 5, word: 'CRANE' }, lost: 2, played: 3, tied: 1, won: 0, words: 46 },
+        byDiff: { beginner: { lost: 2, played: 3, won: 0 } }, total: { lost: 2, played: 3, won: 0 } },
+      mancala: { byDiff: { intermediate: { lost: 0, played: 1, won: 1 } }, total: { lost: 0, played: 1, won: 1 } },
+    } },
+  },
+  '50bf8077-ce91-4a14-8ce5-010e5b1f0d76': {
+    profile: { emoji: '🙂', message: '', messageAt: 0, name: 'MattyIce', playerId: '' },
+    updatedAt: 0,
+    stats: { games: {
+      ballrun: { _brMetricMigrated: true, _brRunsRefolded: true,
+        br: { bestObstacles: 2, bestObstaclesByDiff: { easy: 0, hard: 0, medium: 2 }, runs: 1 },
+        brOrbital: { bestObstacles: 0, bestObstaclesByDiff: { easy: 0, hard: 0, medium: 0 }, runs: 0 },
+        byDiff: { medium: { lost: 0, played: 1, won: 1 } }, total: { lost: 0, played: 1, won: 1 } },
+    } },
+  },
+};
+
+/** players/ records plus every restored record whose id is not among them. `all` is never changed. */
+export function withRestoredRecords(all) {
+  const out = { ...(all || {}) };
+  for (const [id, rec] of Object.entries(RESTORED_RECORDS)) if (!out[id]) out[id] = rec;
+  return out;
+}
+
+// One merged counter object into another: a `best...` or `longest...` value keeps the larger, every
+// other number adds (plays, wins, words, runs). Flags and strings are left as they are.
+function _mergeInto(dst, src, keep) {
+  for (const [k, v] of Object.entries(src || {})) {
+    const max = keep || /^(best|longest|fewest)/i.test(k);
+    if (typeof v === 'number') dst[k] = max ? Math.max(+dst[k] || 0, v) : (+dst[k] || 0) + v;
+    else if (v && typeof v === 'object' && Number.isFinite(v.len) && typeof v.word === 'string') {
+      if (!dst[k] || (+dst[k].len || 0) < v.len) dst[k] = { ...v };
+    } else if (v && typeof v === 'object') { if (!dst[k] || typeof dst[k] !== 'object') dst[k] = {}; _mergeInto(dst[k], v, max); }
+  }
+}
+
+/** The server-built board ({ list, idsByKey }) with the restored records added to their owner's row,
+ *  the same numbers aggregating players/ plus withRestoredRecords() gives. `agg` = { aggregatePlayers,
+ *  buildIdentity } from players-agg.js (passed in: players-agg imports this file). A record already on
+ *  the board, or whose owner has no row, adds nothing (a row is never invented). `board` is not changed. */
+export function withRestoredBoard(board, agg) {
+  if (!board || !board.list || !agg) return board;
+  const present = new Set();
+  for (const ids of (board.idsByKey || new Map()).values()) for (const id of ids || []) present.add(id);
+  const missing = {};
+  for (const [id, rec] of Object.entries(RESTORED_RECORDS)) if (!present.has(id)) missing[id] = rec;
+  if (!Object.keys(missing).length) return board;
+  const ident = agg.buildIdentity(missing);
+  const list = board.list.slice(), idsByKey = new Map(board.idsByKey || []);
+  for (const d of agg.aggregatePlayers(missing)) {
+    const i = list.findIndex((g) => (d.playerId && g.playerId === d.playerId) || g.key === d.key);
+    if (i < 0) continue;
+    const row = JSON.parse(JSON.stringify(list[i]));
+    for (const [g, v] of Object.entries(d.games || {})) {
+      if (!((v.total || {}).played > 0)) continue;
+      if (!row.games[g]) row.games[g] = { total: { played: 0, won: 0, lost: 0 }, byDiff: {} };
+      _mergeInto(row.games[g], v, false);
+    }
+    if (row.comp && d.comp) _mergeInto(row.comp, d.comp, false);
+    if (row.solo && d.solo) row.solo.solved = (row.solo.solved | 0) + (d.solo.solved | 0);
+    row.totalPlays = (row.totalPlays | 0) + (d.totalPlays | 0);
+    row.devices = (row.devices | 0) + (d.devices | 0);
+    list[i] = row;
+    const ids = Object.keys(missing).filter((id) => ident.keyFor((missing[id] || {}).profile || {}, id) === d.key);
+    idsByKey.set(row.key, [...(idsByKey.get(row.key) || []), ...ids]);
+  }
+  return { ...board, list, idsByKey };
+}
+
+export default { VOIDED_MATCHES, isVoidedMatch, voidedResultFor, voidedCodesFor, correctVoidedResults, correctionFor, correctBoard, correctSkeeballRecord, correctStats, snapshotOf, correctHoldemLedger, holdemSnapshotOf, voidIntegrityGame, RESTORED_RECORDS, withRestoredRecords, withRestoredBoard };

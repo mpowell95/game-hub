@@ -12,6 +12,7 @@
 // exactly as the old board does), the same hidden-row filter. Nothing here writes anything.
 // Rows carry an index into an in-memory list, never a player code (tools/test-no-codes.mjs).
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
+import { withRestoredRecords, withRestoredBoard } from './stats-corrections.js';   // Matt's deleted records, admin devices only (2026-11-03)
 import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { corrections, isAdminDevice } from './admin-config.js';
 import { watchPlayers, watchBoard, readPlayersForMe } from './stats-net.js';
@@ -1205,7 +1206,8 @@ export async function openLeaderboard2(opts = {}) {
   try {
     _beeOff = watchBeeBoard(() => { if (_host && _connected) onData(); });
     const sid = statsId(), code = String((loadProfile() || {}).playerId || '').toUpperCase();
-    const off = await watchBoard((b) => {
+    const off = await watchBoard((b0) => {
+      const b = isAdminDevice() ? withRestoredBoard(b0, { aggregatePlayers, buildIdentity }) : b0;
       _people = b.list.filter((g) => !isHiddenName(g && g.name));
       const mine = b.list.find((g) => (b.idsByKey.get(g.key) || []).includes(sid)) || (code ? b.list.find((g) => g.playerId === code) : null);
       _meKey = mine ? mine.key : '';
@@ -1214,7 +1216,8 @@ export async function openLeaderboard2(opts = {}) {
     });
     if (off) _unsub = off;
     else {
-      _unsub = await watchPlayers((all) => {
+      _unsub = await watchPlayers((all0) => {
+        const all = isAdminDevice() ? withRestoredRecords(all0) : all0;
         const recs = {};
         for (const id of Object.keys(all || {})) if (!HIDDEN_DEVICE_PREFIX.some((p) => id.startsWith(p))) recs[id] = all[id];
         _people = aggregatePlayers(recs, corrections()).filter((g) => !isHiddenName(g && g.name));

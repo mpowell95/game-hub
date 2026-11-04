@@ -50,6 +50,7 @@
 
 import { isHiddenName, HIDDEN_DEVICE_PREFIX } from './hidden-players.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
+import { withRestoredRecords, withRestoredBoard } from './stats-corrections.js';   // Matt's deleted records, admin devices only (2026-11-03)
 import { corrections, isAdminDevice } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
@@ -3166,9 +3167,9 @@ export async function openLeaderboard(opts = {}) {
     // yet, or unreadable: the whole players/ node, as it always was.
     _beeBy = 'points'; _beeLang = 'all';
     _beeOff = watchBeeBoard(() => { if (_host && _connected) rerender({ fromData: true }); });
-    const offBoard = await watchBoard((b) => { _board = b; _connected = true; rerender({ fromData: true }); });
+    const offBoard = await watchBoard((b) => { _board = isAdminDevice() ? withRestoredBoard(b, { aggregatePlayers, buildIdentity }) : b; _connected = true; rerender({ fromData: true }); });
     if (offBoard) _unsub = offBoard;
-    else _unsub = await watchPlayers((all) => { _board = null; _all = all || {}; _connected = true; rerender({ fromData: true }); });
+    else _unsub = await watchPlayers((all) => { _board = null; _all = isAdminDevice() ? withRestoredRecords(all) : (all || {}); _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
   } catch { renderOffline(); }
 }
