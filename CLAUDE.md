@@ -170,6 +170,12 @@ worth N points" footnotes, no explanatory sentences. Names, numbers and one acti
 Explanations belong in How to play, nowhere else. Before showing Matt any screen, delete every word
 you can and look again. Worked example: `gridlock/js/ui.js` `_homeHTML`.
 
+## Text big, bright, and never split badly (Matt, 2026-11-04: "Stop making me give you this comment")
+
+Every screen and mockup: body text at least 17px, secondary at least 15px, light text near white on dark (never a
+dim grey like `#9fb0c6`), titles at least 24px, real spacing between lines. No line may wrap one key word onto its own
+row ("Leaderboard" alone on line 2): measure it and fit it. Check both before showing Matt anything.
+
 ## Send the Claude.ai handoff files WITHOUT being asked
 
 Matt reviews work in a second Claude.ai chat that cannot open artifact URLs. Whenever a turn

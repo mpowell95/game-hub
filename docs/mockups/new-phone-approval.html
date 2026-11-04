@@ -3,58 +3,60 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>New phone approval</title>
+<title>New device sign in</title>
 <style>
-body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e8eef7}
-.wrap{display:flex;gap:40px;padding:40px;align-items:flex-start;width:max-content}
-.col{display:flex;flex-direction:column;gap:14px;align-items:center}
-.cap{font-size:20px;font-weight:800;color:#cfdcec}
-.cap small{display:block;font-size:14px;font-weight:600;color:#7f90a8;text-align:center;margin-top:2px}
+body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#f2f6fb}
+.wrap{display:flex;gap:44px;padding:44px;align-items:flex-start;width:max-content}
+.col{display:flex;flex-direction:column;gap:16px;align-items:center}
+.cap{font-size:24px;font-weight:800;color:#f2f6fb;text-align:center}
+.cap small{display:block;font-size:18px;font-weight:600;color:#c4d0e0;margin-top:4px}
 .phone{position:relative;width:402px;height:874px;border-radius:48px;overflow:hidden;border:6px solid #2a3442;box-sizing:border-box;background:#0f1724}
 .launch{position:absolute;inset:0;padding:64px 18px 0}
-.lt{font-size:28px;font-weight:800;margin:0 0 18px}
+.lt{font-size:30px;font-weight:800;margin:0 0 18px}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .tile{aspect-ratio:1;border-radius:18px;background:#1e2b3d}
-.scrim{position:absolute;inset:0;background:rgba(9,24,48,.58)}
-.card{position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);padding:20px;background:#16202f;color:#e8eef7;border-radius:16px;box-shadow:0 16px 50px rgba(0,0,0,.5)}
-.h{margin:0 0 6px;font-size:17px;font-weight:800}
-.lead{margin:0 0 14px;font-size:14px;font-weight:600;color:#9fb0c6}
-.row{display:flex;gap:8px;align-items:center}
-.in{flex:1 1 auto;min-width:0;padding:10px 12px;font:inherit;font-size:16px;color:#e8eef7;background:#101828;border:1px solid #2b3a4f;border-radius:10px}
-.btn{flex:0 0 auto;padding:10px 14px;font:inherit;font-weight:700;font-size:16px;border:1px solid transparent;border-radius:10px}
+.scrim{position:absolute;inset:0;background:rgba(9,24,48,.62)}
+.card{position:absolute;left:12px;right:12px;top:50%;transform:translateY(-50%);padding:22px 18px;background:#18233a;color:#f2f6fb;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.5)}
+.h{margin:0 0 10px;font-size:26px;font-weight:800;line-height:1.2}
+.lead{margin:0 0 18px;font-size:17px;font-weight:600;line-height:1.4;color:#d6e0ee}
+.row{display:flex;gap:10px;align-items:center}
+.in{flex:1 1 auto;min-width:0;padding:12px 14px;font:inherit;font-size:18px;color:#f2f6fb;background:#0f1828;border:1px solid #3a4b63;border-radius:12px}
+.in::placeholder{color:#9aabc2}
+.btn{flex:0 0 auto;padding:12px 18px;font:inherit;font-weight:800;font-size:18px;border:1px solid transparent;border-radius:12px}
 .pri{background:#1769d4;color:#fff}
-.gh{background:#1e2b3d;color:#cfdcec;border-color:#2b3a4f}
-.or{text-align:center;color:#9fb0c6;font-size:13px;font-weight:700;margin:12px 0}
-.wide .btn{flex:1 1 0;padding:12px 14px}
-.spin{width:40px;height:40px;margin:18px auto;border-radius:50%;border:4px solid #2b3a4f;border-top-color:#1769d4}
-.dev{display:flex;gap:12px;align-items:center;margin:4px 0 18px}
+.gh{background:#24324a;color:#f2f6fb;border-color:#3a4b63}
+.or{text-align:center;color:#d6e0ee;font-size:16px;font-weight:700;margin:14px 0}
+.wide .btn{flex:1 1 0;padding:14px 18px}
+.rule{height:1px;background:#33445c;margin:20px 0 18px}
+.note2{margin:14px 0 0;text-align:center;font-size:16px;font-weight:600;color:#d6e0ee}
+.dev{display:flex;gap:14px;align-items:center;margin:6px 0 22px}
 .dev svg{flex:0 0 auto}
-.dev b{display:block;font-size:16px}
-.dev span{font-size:14px;font-weight:600;color:#9fb0c6}
+.dev b{display:block;font-size:19px}
+.dev span{display:block;font-size:17px;font-weight:600;color:#d6e0ee;margin-top:2px}
 .lock{position:absolute;inset:0;background:linear-gradient(#1b2a44,#0c1220);text-align:center}
 .clock{margin-top:120px;font-size:84px;font-weight:300;letter-spacing:-2px}
-.date{font-size:18px;font-weight:600;color:#c9d6e8}
-.note{position:absolute;left:12px;right:12px;top:330px;display:flex;gap:12px;padding:14px;border-radius:22px;background:rgba(40,52,72,.86);text-align:left}
-.ico{width:38px;height:38px;border-radius:9px;background:#1769d4;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;color:#fff}
+.date{font-size:19px;font-weight:600;color:#dbe4f0}
+.note{position:absolute;left:10px;right:10px;top:330px;display:flex;gap:12px;padding:16px;border-radius:22px;background:rgba(44,58,80,.92);text-align:left}
+.ico{width:42px;height:42px;border-radius:10px;background:#1769d4;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;color:#fff}
 .nt{flex:1;min-width:0}
-.nt .top{display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#aebbd0}
-.nt b{display:block;font-size:15px;margin:2px 0}
-.nt span{font-size:14px;color:#d7e1ef}
+.nt .top{display:flex;justify-content:space-between;font-size:15px;font-weight:700;color:#d6e0ee}
+.nt b{display:block;font-size:18px;margin:4px 0 2px}
+.nt span{font-size:17px;color:#e6edf6}
 .admin{position:absolute;inset:0;padding:60px 0 0;background:#0f1724}
-.ahd{display:flex;align-items:center;justify-content:space-between;padding:0 18px 12px}
-.ahd h2{margin:0;font-size:28px;font-weight:800}
-.tabs{display:flex;gap:6px;padding:0 18px 16px}
-.tab{padding:8px 14px;border-radius:999px;font-weight:700;font-size:15px;background:#1e2b3d;color:#cfdcec}
+.ahd{display:flex;align-items:center;justify-content:space-between;padding:0 18px 14px}
+.ahd h2{margin:0;font-size:30px;font-weight:800}
+.tabs{display:flex;gap:6px;padding:0 18px 18px}
+.tab{padding:8px 14px;border-radius:999px;font-weight:700;font-size:16px;background:#24324a;color:#f2f6fb}
 .tab.on{background:#ffce3a;color:#14202f}
-.sec{padding:6px 18px;font-size:13px;font-weight:800;color:#7f90a8;text-transform:uppercase;letter-spacing:.06em}
-.list{margin:0 12px;border-radius:14px;background:#16202f}
-.r{display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid #243246}
+.sec{padding:6px 18px 8px;font-size:15px;font-weight:800;color:#d6e0ee;text-transform:uppercase;letter-spacing:.06em}
+.list{margin:0 12px;border-radius:14px;background:#18233a}
+.r{display:flex;align-items:center;gap:10px;padding:14px;border-top:1px solid #2c3b52}
 .r:first-child{border-top:0}
 .r .t{flex:1;min-width:0}
-.r .t b{display:block;font-size:16px}
-.r .t span{font-size:13px;font-weight:600;color:#9fb0c6}
-.sm{padding:8px 12px;font-size:15px}
-.toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);padding:12px 20px;border-radius:999px;background:#e8eef7;color:#14202f;font-weight:800;font-size:16px;white-space:nowrap}
+.r .t b{display:block;font-size:19px}
+.r .t span{display:block;font-size:16px;font-weight:600;color:#d6e0ee;margin-top:2px}
+.sm{padding:10px 14px;font-size:17px}
+.toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);padding:14px 22px;border-radius:999px;background:#f2f6fb;color:#14202f;font-weight:800;font-size:18px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -67,11 +69,13 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="scrim"></div>
       <div class="card">
         <h2 class="h">Choose a name</h2>
-        <p class="lead">This is how you will appear on the Leaderboard. It can be changed later.</p>
-        <div class="row" style="margin-bottom:14px"><button class="btn gh" style="flex:1">English</button><button class="btn gh" style="flex:1">Español</button></div>
+        <p class="lead">This is your name on the Leaderboard.</p>
         <div class="row"><input class="in" placeholder="Your name" aria-label="Your name"><button class="btn pri">Save</button></div>
         <div class="or">or</div>
         <div class="row"><input class="in" value="K7MPQ" aria-label="Code" style="letter-spacing:.16em"><button class="btn pri">Link</button></div>
+        <div class="rule"></div>
+        <div class="row wide"><button class="btn gh">English</button><button class="btn gh">Español</button></div>
+        <p class="note2">Name and language can be changed later.</p>
       </div>
     </div>
     <div class="cap">1. New device<small>types code, taps Link</small></div>
@@ -81,15 +85,9 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
   <div class="col">
     <div class="phone">
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
-      <div class="scrim"></div>
-      <div class="card" style="text-align:center">
-        <h2 class="h">Approve on other device or browser</h2>
-        <div class="spin" role="img" aria-label="Waiting"></div>
-        <p class="lead" style="text-align:left;margin:0 0 14px">You will get a notification to approve sign in. If you don't have notifications turned on, open the Game Hub on your other device/browser.</p>
-        <div class="row wide"><button class="btn gh">Cancel</button></div>
-      </div>
+      <div class="toast">Signed in as Alex</div>
     </div>
-    <div class="cap">2. New device<small>waits</small></div>
+    <div class="cap">2. New device<small>plays at once, a full player</small></div>
   </div>
 
   <!-- 3 -->
@@ -100,11 +98,11 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="date">Wednesday, November 4</div>
         <div class="note">
           <div class="ico">GH</div>
-          <div class="nt"><div class="top"><span>GAME HUB</span><span>now</span></div><b>Allow sign in on another device?</b><span>Tap to answer</span></div>
+          <div class="nt"><div class="top"><span>GAME HUB</span><span>now</span></div><b>New sign in for Alex</b><span>Android · Chrome</span></div>
         </div>
       </div>
     </div>
-    <div class="cap">3. Alex's other device, app closed<small>notification</small></div>
+    <div class="cap">3. Alex's other device<small>app closed: notification</small></div>
   </div>
 
   <!-- 4 -->
@@ -113,52 +111,43 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
       <div class="scrim"></div>
       <div class="card">
-        <h2 class="h">Allow sign in on other device/browser?</h2>
+        <h2 class="h">New sign in</h2>
         <div class="dev">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9fb0c6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
-          <div><b>Android · Chrome</b><span>2:14 PM</span></div>
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#d6e0ee" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
+          <div><b>Android · Chrome</b><span>Today, 2:14 PM</span></div>
         </div>
-        <div class="row wide"><button class="btn gh">Deny</button><button class="btn pri">Allow</button></div>
+        <div class="row wide"><button class="btn gh">Remove</button><button class="btn pri">OK</button></div>
       </div>
     </div>
-    <div class="cap">4. Alex's other device, app open<small>or after tapping the notification</small></div>
+    <div class="cap">4. Alex's other device<small>app open, or after the notification</small></div>
   </div>
 
   <!-- 5 -->
   <div class="col">
     <div class="phone">
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
-      <div class="toast">Signed in as Alex</div>
+      <div class="scrim"></div>
+      <div class="card" style="text-align:center">
+        <h2 class="h">Signed out</h2>
+        <div class="row wide" style="margin-top:16px"><button class="btn pri">OK</button></div>
+      </div>
     </div>
-    <div class="cap">5. New device, allowed<small>straight into the Game Hub</small></div>
+    <div class="cap">5. New device, if removed<small>back to Choose a name</small></div>
   </div>
 
   <!-- 6 -->
   <div class="col">
     <div class="phone">
-      <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
-      <div class="scrim"></div>
-      <div class="card" style="text-align:center">
-        <h2 class="h">Not approved</h2>
-        <div class="row wide" style="margin-top:14px"><button class="btn pri">OK</button></div>
-      </div>
-    </div>
-    <div class="cap">6. New device, denied<small>&nbsp;</small></div>
-  </div>
-
-  <!-- 7 -->
-  <div class="col">
-    <div class="phone">
       <div class="admin">
-        <div class="ahd"><h2>Admin</h2><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#cfdcec" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></div>
+        <div class="ahd"><h2>Admin</h2><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f2f6fb" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></div>
         <div class="tabs"><span class="tab on">Now</span><span class="tab">Games</span><span class="tab">People</span><span class="tab">Sent</span></div>
-        <div class="sec">New devices</div>
+        <div class="sec">New sign ins</div>
         <div class="list">
-          <div class="r"><div class="t"><b>Alex</b><span>Android · Chrome · 2:14 PM</span></div><button class="btn gh sm">No</button><button class="btn pri sm">Allow</button></div>
+          <div class="r"><div class="t"><b>Alex</b><span>Android · Chrome · 2:14 PM</span></div><button class="btn gh sm">Remove</button></div>
         </div>
       </div>
     </div>
-    <div class="cap">7. Matt's Admin page<small>for a lost only phone</small></div>
+    <div class="cap">6. Matt's Admin page<small>remove any sign in</small></div>
   </div>
 
 </div>
