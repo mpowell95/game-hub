@@ -63,6 +63,38 @@ export const HAND_ADDS = {
     { code: 'QZCC4', puzzle: 'g:ailnvz', day: '2026-10-29', word: 'niggling', words: 1, points: 8, from: Date.UTC(2026, 9, 30, 3, 59) },   // 11:59 PM EDT
   ],
 };
+// ASSUMED MODES: how a player's wins from before a game saved its options were played, on that player's own word.
+// Read time only, for POINTS (js/lb-points.js gamePoints): nothing stored changes. Monopoly Deal saved the computer
+// count from 2026-10-30. Matt, 2026-11-04: "I only ever play monopoly deal against 2 robots. so 3 people total" and,
+// of his 4 wins saved with no level ('legacy'), "yes count them as medium".
+export const ASSUMED_MODES = {
+  business: [{ code: 'QZCC4', mode: 'ai=2', legacy: 'normal' }],
+};
+/** `gm` (one person's record in game `id`) with ASSUMED_MODES applied for `code`; `gm` itself when none applies. */
+export function assumedRecord(gm, id, code) {
+  const c = String(code || '').trim().toUpperCase();
+  const a = c && gm ? (ASSUMED_MODES[id] || []).find((x) => x.code === c) : null;
+  if (!a) return gm;
+  const out = JSON.parse(JSON.stringify(gm));
+  const bd = out.byDiff || (out.byDiff = {});
+  const add = (dst, src) => { for (const k of ['played', 'won', 'lost']) dst[k] = (dst[k] | 0) + (src[k] | 0); };
+  if (a.legacy && bd.legacy) { add(bd[a.legacy] || (bd[a.legacy] = {}), bd.legacy); delete bd.legacy; }
+  if (a.mode) {
+    const bm = out.byMode || (out.byMode = {});
+    for (const [d, b] of Object.entries(bd)) {
+      if (d === 'mp' || !b) continue;
+      let saved = 0;
+      for (const ds of Object.values(bm)) saved += ((ds && ds[d] && ds[d].won) | 0);
+      const n = Math.max(0, (b.won | 0) - saved);
+      if (!n) continue;
+      const row = (bm[a.mode] || (bm[a.mode] = {}))[d] || (bm[a.mode][d] = {});
+      row.won = (row.won | 0) + n;
+      row.played = (row.played | 0) + n;
+    }
+  }
+  return out;
+}
+
 /** { words, points } Matt has added by hand to `code`'s day on `puzzle`, as of `now`. */
 export function handAddFor(gameId, puzzle, code, now = Date.now()) {
   let words = 0, points = 0;

@@ -1,7 +1,7 @@
 # Handoff: more opponents = more points (2026-11-04)
 
-Written by a session, not by Matt. NOT cleared for players: Matt said "hold onto it for rn. I want to ship multiple
-changes at once." Build nothing player-visible until he says "ship it".
+Written by a session, not by Matt. SHIPPED 2026-11-04 on Matt's "ship it" (v1466). Before that he had said "hold onto
+it for rn. I want to ship multiple changes at once."
 
 Matt's words: "Games are more difficult when more people play. So that needs to be rewarded in all games." and
 "So we need to update Monopoly Deal, Uno, Pool Cutthroat, and online games."

@@ -7,6 +7,7 @@
 //   node tools/test-lb-points-sheet.mjs
 import { sheetModel, pointsSheetHTML } from '../js/lb-points-sheet.js';
 import { gamePoints, POINT_GAMES, CAP } from '../js/lb-points.js';
+import { ASSUMED_MODES } from '../js/stats-corrections.js';
 import STRINGS from '../js/strings.js';
 
 let pass = 0, fail = 0;
@@ -19,7 +20,7 @@ for (const id of POINT_GAMES) {
   const cards = sheetModel(id);
   ok(`${id}: has a sheet`, cards.length > 0);
   const kinds = cards.map((c) => c.kind);
-  const rank = { opt: 0, cpu: 0, online: 2, limit: 3, table: 4 };
+  const rank = { opt: 0, count: 0, cpu: 0, online: 2, limit: 3, table: 4, cutthroat: 5 };
   ok(`${id}: order options, online, limit, tables note`, kinds.every((k, i) => !i || rank[k] >= rank[kinds[i - 1]]), kinds);
   ok(`${id}: no "older wins" row (dropped, session 7)`, !kinds.includes('older'));
   const limited = rows(id).filter((x) => x.r.cap).length;
@@ -101,5 +102,44 @@ for (const lang of ['en', 'es']) {
 }
 setLang('en');
 
+// More opponents pay more (Matt, 2026-11-04, docs/mockups/opponents/): every cell checked against gamePoints with a
+// real-shaped record (the mode withMode saves), as above.
+const CNT_MODE = { business: (n) => `ai=${n}`, uno: (n) => `n=${n + 1}` };
+for (const id of Object.keys(CNT_MODE)) {
+  const cs = sheetModel(id).filter((c) => c.kind === 'count');
+  ok(`${id}: one column per number of computers`, cs.map((c) => c.n).join() === (id === 'business' ? '1,2,3,4' : '1,2,3'));
+  for (const c of cs) for (const r of c.rows) {
+    const d = id === 'business' ? ['easy', 'normal', 'hard'][r.tier - 1] : LV(id, r.tier);
+    const got = gamePoints({ total: won(W), byDiff: { [d]: won(W) }, byMode: { [CNT_MODE[id](c.n)]: { [d]: won(W) } } }, id).pts;
+    ok(`${id} ${c.n} computers tier ${r.tier}: ${r.pts} a win`, got === W * r.pts && r.pts === [1, 2, 3][r.tier - 1] * c.n, { got, row: r });
+  }
+}
+ok('Monopoly Deal Hard: 3/6/9/12', sheetModel('business').filter((c) => c.kind === 'count').map((c) => c.rows[2].pts).join() === '3,6,9,12');
+ok('Uno Hard: 3/6/9', sheetModel('uno').filter((c) => c.kind === 'count').map((c) => c.rows[2].pts).join() === '3,6,9');
+const OPP_MODE = { chinchon: (n) => `n=${n + 1}|vc=points|sl=100`, escoba: (n) => `n=${n + 1}|to=21`, eightball: (n) => `game=${n === 2 ? 'ct' : '8'}|racks=1` };
+for (const id of Object.keys(OPP_MODE)) {
+  const on = sheetModel(id).find((c) => c.kind === 'online');
+  ok(`${id}: online by opponents`, on && on.opp && on.opp.length >= 2, on);
+  for (const o of on.opp) {
+    const got = gamePoints({ total: won(W), byDiff: { mp: won(W) }, byMode: { [OPP_MODE[id](o.n)]: { mp: won(W) } } }, id).pts;
+    ok(`${id} online ${o.n} opponents: ${o.pts} a win`, got === W * o.pts && o.pts === on.rows[0].pts * o.n, { got, o });
+  }
+}
+ok('online with no saved seats = the plain online points', gamePoints({ total: won(1), byDiff: { mp: won(1) } }, 'chinchon').pts === 3);
+const ct = sheetModel('eightball').find((c) => c.kind === 'cutthroat');
+ok('Pool Cutthroat: Hard, 3 racks = 20', ct && ct.ex.pts === 20, ct);
+ok('Pool Cutthroat Hard 3 racks, real record', gamePoints({ total: won(1), byDiff: { hard: won(1) }, byMode: { 'game=ct|racks=3': { hard: won(1) } } }, 'eightball').pts === 20);
+ok('Pool Cutthroat Hard 1 rack (recorded Medium): 6', gamePoints({ total: won(1), byDiff: { medium: won(1) }, byMode: { 'game=ct|racks=1': { hard: won(1) } } }, 'eightball').pts === 6);
+ok('Pool 8-ball 1 rack unchanged (Hard -> Medium 3)', gamePoints({ total: won(1), byDiff: { medium: won(1) }, byMode: { 'game=8|racks=1': { hard: won(1) } } }, 'eightball').pts === 3);
+// ASSUMED_MODES (js/stats-corrections.js): Matt's own word on his Monopoly Deal history, read time only, his code only.
+const md = { total: { played: 16, won: 11, lost: 5 }, byDiff: { hard: { played: 1, won: 0, lost: 1 }, normal: { played: 11, won: 7, lost: 4 }, legacy: { played: 4, won: 4, lost: 0 } },
+  byMode: { 'ai=2': { hard: { played: 1, won: 0, lost: 1 }, normal: { played: 1, won: 1, lost: 0 } } } };
+const before = JSON.stringify(md);
+const WHO = ASSUMED_MODES.business[0].code;   // read from the config: no player code typed into a test
+ok('assumed: 11 Medium wins against 2 computers = 44', gamePoints(md, 'business', null, WHO).pts === 44);
+ok('assumed: the record itself is untouched', JSON.stringify(md) === before);
+ok('assumed: nobody else gets it (same record, another code)', gamePoints(md, 'business', null, 'AAAAA').pts === 20);
+ok('assumed: no code, no assumption', gamePoints(md, 'business').pts === 20);
+ok('assumed: other games untouched', gamePoints(md, 'uno', null, WHO).pts === gamePoints(md, 'uno').pts);
 console.log(`\nlb-points-sheet tests: ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+if (fail) process.exit(1);

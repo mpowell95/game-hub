@@ -54,6 +54,20 @@ const ONLINE = new Set(['airhockey', 'battleship', 'boggle', 'chinchon', 'cuppon
 // A table of 2 or 3 computers: each computer's own points added up (js/lb-points.js tableSum, lb-rules `table`).
 const TABLE = new Set(['chinchon', 'escoba', 'parchis']);
 const TABLE_EX = [1, 3];   // the example under the table: Easy + Hard
+// More opponents pay more (Matt, 2026-11-04, docs/mockups/opponents/): one column per number of computers (every
+// computer at the one level chosen), and online one column per number of opponents. `mode(n)` = the mode a win
+// against n of them saves (js/lb-points.js reads it).
+const COUNTS = {
+  business: { n: [1, 2, 3, 4], mode: (n) => ({ ai: n }) },
+  uno: { n: [1, 2, 3], mode: (n) => ({ n: n + 1 }) },
+};
+const ONLINE_OPP = {
+  chinchon: { n: [1, 2, 3], mode: (n) => ({ n: n + 1 }) },
+  escoba: { n: [1, 2, 3], mode: (n) => ({ n: n + 1 }) },
+  eightball: { n: [1, 2], mode: (n) => ({ game: n === 2 ? 'ct' : '8' }) },
+};
+// Pool's Cutthroat: 2 computers, every number x2; the example is Hard at 3 racks.
+const CUTTHROAT = { id: 'eightball', tier: 3, mode: { racks: 3, game: 'ct' } };
 
 const W = 100;
 /** One cell's points and limit, from the real maths: 100 wins recorded at `rec`, saved with `mode` at `raw`. */
@@ -73,16 +87,23 @@ const levelCells = (id, o = {}) => {
   return out;
 };
 
-/** The sheet as data: [{ kind: 'opt'|'cpu'|'table'|'online'|'limit', key?, rows?, ex? }]. 'opt' / 'cpu' rows:
- *  { tier (1-4, 0 = a win with no level), pts, cap }; 'online' one row { tier: 'on', pts }; 'table' ex:
- *  { tiers: [a, b], pts } (a win against those two computers). Pure: no DOM, no strings. */
+/** The sheet as data: [{ kind: 'opt'|'count'|'cpu'|'table'|'online'|'cutthroat'|'limit', key?, n?, rows?, opp?, ex? }].
+ *  'opt' / 'count' (n computers) / 'cpu' rows: { tier (1-4, 0 = a win with no level), pts, cap }; 'online' one row
+ *  { tier: 'on', pts }, plus `opp` [{ n, pts }] where a bigger online table pays more; 'table' ex: { tiers: [a, b],
+ *  pts } (a win against those two computers); 'cutthroat' ex: { tier, racks, pts }. Pure: no DOM, no strings. */
 export function sheetModel(id) {
   if (!POINT_GAMES.includes(id)) return [];
   const cards = [];
   if (id === 'yahtzee') cards.push({ kind: 'cpu', rows: [{ tier: 0, pts: pointsForWin(id, 'normal'), cap: false, win: true }] });
+  else if (COUNTS[id]) for (const n of COUNTS[id].n) cards.push({ kind: 'count', n, rows: levelCells(id, { mode: COUNTS[id].mode(n) }) });
   else if (OPTIONS[id]) for (const o of OPTIONS[id]) cards.push({ kind: 'opt', key: o.k, rows: levelCells(id, o) });
   else cards.push({ kind: 'cpu', rows: levelCells(id) });
-  if (ONLINE.has(id)) cards.push({ kind: 'online', rows: [{ tier: 'on', pts: pointsTable(id).on, cap: false }] });
+  if (ONLINE.has(id)) {
+    const oo = ONLINE_OPP[id];
+    cards.push(oo ? { kind: 'online', opp: oo.n.map((n) => ({ n, pts: pointsForWin(id, 'mp', oo.mode(n)) })), rows: [{ tier: 'on', pts: pointsTable(id).on, cap: false }] }
+      : { kind: 'online', rows: [{ tier: 'on', pts: pointsTable(id).on, cap: false }] });
+  }
+  if (id === CUTTHROAT.id) cards.push({ kind: 'cutthroat', ex: { tier: CUTTHROAT.tier, racks: CUTTHROAT.mode.racks, pts: pointsForWin(id, L3[CUTTHROAT.tier - 1], CUTTHROAT.mode) } });
   if (cards.some((c) => c.rows && c.rows.some((r) => r.cap))) cards.push({ kind: 'limit' });
   if (TABLE.has(id)) {
     const ai = TABLE_EX.map((x) => L3[x - 1]).join('-');
@@ -104,14 +125,14 @@ export const capNoteHTML = (n = CAP) => `<div class="lbpt-capn"><span class="lbp
 /** The table: { left: header over the labels, sup: a header over every value column, cols: each value column's
  *  header ('\n' = a line break), rows: [{ ic, label, vals: [{ v, cap, txt }] }], online: { v } | null }.
  *  Two-column tables (one value column) get the wider value column of the mockups' Difficulty | Points per win. */
-export function pointsTableHTML({ left = '', sup = '', cols = [], rows = [], online = null }) {
+export function pointsTableHTML({ left = '', sup = '', cols = [], rows = [], online = null, cls = '' }) {
   const n = cols.length;
   const head = (sup ? `<tr><th></th><th colspan="${n}" class="lbpt-sup">${esc(sup)}</th></tr>` : '')
     + `<tr><th class="lbpt-lh">${esc(left)}</th>${cols.map((c) => `<th class="lbpt-ch">${lines(c)}</th>`).join('')}</tr>`;
   const cell = (x) => `<td${x.txt ? ' class="lbpt-txt"' : ''}>${x.cap ? capCell(x.v) : esc(x.v)}</td>`;
   const body = rows.map((r) => `<tr><td class="lbpt-lv">${icon(r.ic)}<span class="lbpt-n">${esc(r.label)}</span></td>${r.vals.map(cell).join('')}</tr>`).join('')
     + (online ? `<tr class="lbpt-on"><td class="lbpt-lv">${icon('on')}<span class="lbpt-n">${esc(t('lb_pts_online'))}</span></td>${n > 1 ? `<td colspan="${n - 1}"></td>` : ''}<td>${esc(online.v)}</td></tr>` : '');
-  return `<table class="lbpt-t ${n > 1 ? 'lbpt-w' : 'lbpt-2'}"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  return `<table class="lbpt-t ${n > 1 ? 'lbpt-w' : 'lbpt-2'}${cls ? ' ' + cls : ''}"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
 /** The sheet's body: one card holding the table and its notes. '' for a game that is not a wins board. */
@@ -120,28 +141,43 @@ export function pointsSheetHTML(id) {
   if (!cards.length) return '';
   ensurePointsSheetCss();
   const opts = cards.filter((c) => c.kind === 'opt');
+  const counts = cards.filter((c) => c.kind === 'count');
   const cpu = cards.find((c) => c.kind === 'cpu');
   const onl = cards.find((c) => c.kind === 'online');
   const lvLabel = (r) => (r.win ? t('lbps_vs_cpu') : t(LEVEL_KEY[r.tier]));
   let table;
-  if (opts.length) {
+  const onlineRow = onl && !onl.opp ? { v: onl.rows[0].pts } : null;
+  if (counts.length) {
+    table = pointsTableHTML({
+      sup: t('lbpt_h_computers'), cols: counts.map((c) => String(c.n)), cls: 'lbpt-cnt',
+      rows: counts[0].rows.map((r, i) => ({ ic: r.tier, label: lvLabel(r), vals: counts.map((c) => ({ v: c.rows[i].pts, cap: c.rows[i].cap })) })),
+      online: onlineRow,
+    });
+  } else if (opts.length) {
     table = pointsTableHTML({
       sup: t('lbpt_h_' + id), cols: opts.map((o) => t('lbpt_k_' + o.key)),
       rows: opts[0].rows.map((r, i) => ({ ic: r.tier, label: lvLabel(r), vals: opts.map((o) => ({ v: o.rows[i].pts, cap: o.rows[i].cap })) })),
-      online: onl ? { v: onl.rows[0].pts } : null,
+      online: onlineRow,
     });
   } else {
     table = pointsTableHTML({
       left: t('lbpt_diff'), cols: [t('lbpt_per_win')],
       rows: cpu.rows.map((r) => ({ ic: r.tier, label: lvLabel(r), vals: [{ v: r.pts, cap: r.cap }] })),
-      online: onl ? { v: onl.rows[0].pts } : null,
+      online: onlineRow,
     });
   }
   const cap = cards.some((c) => c.kind === 'limit') ? capNoteHTML() : '';
   const tb = cards.find((c) => c.kind === 'table');
   const note = tb ? `<div class="lbpt-note"><b>${esc(t('lbpt_tables_b'))}</b> ${esc(t('lbpt_tables'))}<br>${esc(t('lbpt_tables_ex', {
     a: t(LEVEL_KEY[tb.ex.tiers[0]]), b: t(LEVEL_KEY[tb.ex.tiers[1]]), n: tb.ex.pts }))}</div>` : '';
-  return `<div class="lbps"><div class="lbps-card">${table}${cap}${note}</div></div>`;
+  const ct = cards.find((c) => c.kind === 'cutthroat');
+  const ctNote = ct ? `<div class="lbpt-note"><b>${esc(t('lbpt_ct_b'))}</b> ${esc(t('lbpt_ct'))}<br>${esc(t('lbpt_ct_ex', {
+    a: t(LEVEL_KEY[ct.ex.tier]), r: ct.ex.racks, n: ct.ex.pts }))}</div>` : '';
+  const opp = onl && onl.opp ? pointsTableHTML({
+    sup: t('lbpt_h_opponents'), cols: onl.opp.map((o) => String(o.n)), cls: 'lbpt-gap',
+    rows: [{ ic: 'on', label: t('lb_pts_online'), vals: onl.opp.map((o) => ({ v: o.pts })) }],
+  }) : '';
+  return `<div class="lbps"><div class="lbps-card">${table}${cap}${note}${ctNote}${opp}</div></div>`;
 }
 
 // Light and dark (`.gh-dark` on <html>, js/theme.js). Headers bright (Matt, 2026-11-03: "all those column headers
@@ -166,27 +202,30 @@ export function ensurePointsSheetCss() {
     ':root.gh-dark .lbps .lbps-sh .lb-dshape-t3,:root.gh-dark .lbps .lbps-sh .lb-dshape-t4{fill:#1c2430}',
     // The table (wins games, Nuts & Bolts, Minesweeper, Hill Climb).
     '.lbpt-t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}',
-    '.lbpt-t th{color:var(--ps-th);font-weight:700;font-size:14px;line-height:1.2;text-align:center;padding:4px 2px 7px;vertical-align:bottom}',
+    '.lbpt-t th{color:var(--ps-th);font-weight:700;font-size:15px;line-height:1.2;text-align:center;padding:4px 2px 7px;vertical-align:bottom}',
     '.lbpt-t th.lbpt-lh{text-align:left;padding-left:14px}',
     '.lbpt-t th.lbpt-sup{padding:9px 0 3px;border-bottom:1px solid var(--ps-line)}',
     // Options: the level column hugs its words, the option columns share the rest (Chinchón's "Under 100 points"
     // on two lines, as in the mockup, not three).
-    '.lbpt-w th.lbpt-ch{min-width:64px}',
+    '.lbpt-w th.lbpt-ch{min-width:58px}',
     '.lbpt-w td.lbpt-lv{width:1%;padding-right:10px}',
+    // Number columns (computers 1-4, online opponents): narrow, so four fit beside the levels on a 360 px phone.
+    '.lbpt-cnt th.lbpt-ch,.lbpt-gap th.lbpt-ch{min-width:44px}',
     '.lbpt-2 th{padding-top:9px;padding-bottom:9px;vertical-align:middle}',
     '.lbpt-2 th.lbpt-ch{width:96px}',
-    '.lbpt-t td{text-align:center;height:46px;padding:0 2px;border-top:1px solid var(--ps-row);color:var(--ps-ink);font-weight:800;font-size:20px}',
+    '.lbpt-t td{text-align:center;height:46px;padding:0 2px;border-top:1px solid var(--ps-row);color:var(--ps-ink);font-weight:800;font-size:22px}',
     '.lbpt-2 td{height:50px}',
-    '.lbpt-t td.lbpt-lv{text-align:left;padding-left:14px;font-weight:400;font-size:16px;white-space:nowrap}',
+    '.lbpt-t td.lbpt-lv{text-align:left;padding-left:14px;font-weight:400;font-size:17px;white-space:nowrap}',
     '.lbpt-n{margin-left:12px;vertical-align:middle}',
-    '.lbpt-t td.lbpt-txt{font-size:16px;font-weight:500}',
+    '.lbpt-t td.lbpt-txt{font-size:17px;font-weight:500}',
     '.lbpt-t tr.lbpt-on td{border-top:6px solid var(--ps-gap)}',
+    '.lbpt-t.lbpt-gap{border-top:6px solid var(--ps-gap)}',
     '.lbpt-cap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:15px;background:#ffce3a;color:#1c1606;font-size:17px;font-weight:800}',
-    '.lbpt-capn{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:14px;color:var(--ps-note);border-top:1px solid var(--ps-row)}',
+    '.lbpt-capn{display:flex;align-items:center;gap:8px;padding:12px 14px;font-size:15px;color:var(--ps-note);border-top:1px solid var(--ps-row)}',
     '.lbpt-capn b{font-size:18px;color:var(--ps-th)}',
     '.lbpt-dot{display:inline-flex;width:26px;height:26px;border-radius:13px;background:#ffce3a;flex:none}',
     ':root:not(.gh-dark) .lbpt-cap,:root:not(.gh-dark) .lbpt-dot{box-shadow:inset 0 0 0 1px #d9a400}',
-    '.lbpt-note{padding:10px 14px 12px;font-size:14px;line-height:1.45;color:var(--ps-note);border-top:1px solid var(--ps-row)}',
+    '.lbpt-note{padding:12px 14px 14px;font-size:17px;line-height:1.4;color:var(--ps-note);border-top:1px solid var(--ps-row)}',
     '.lbpt-note b{color:var(--ps-th)}',
   ].join('\n');
   document.head.appendChild(el);
