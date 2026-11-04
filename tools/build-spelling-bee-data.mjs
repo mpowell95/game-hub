@@ -11,6 +11,8 @@
 //     CEORL, ORLE, OCREA as words to find, so 60.)
 //   * boggle/data/words.txt (ENABLE, public domain): a SCOWL word must also be here, which drops
 //     proper nouns, abbreviations and odd spellings.
+//   * BONUS words since 2026-11-04 (Matt: "Make it fun") = EVERY other ENABLE word, minus first names, bad
+//     words (ADULT_KEEP aside) and NOT_WORDS. Before that (kept below for the record):
 //   * BONUS words (`extra`: accepted and scored, never in hints or ranks) = ENABLE words that are ALSO
 //     in SCOWL size 70, not a first name, AND on the hand-checked BONUS_KEEP list. (The candidates read
 //     for BONUS_KEEP were picked by how often FrequencyWords en 2018 (Hermit Dave, OpenSubtitles, CC BY-SA
@@ -91,6 +93,8 @@ const BONUS_KEEP = new Set(`
   pantaloon peacoat peplum perlite phyllo piercer pomelo precut propylene puffery qualia ragtop rebook recode
   recoded redbud redlined repro retune rewrap rocketeer tahini tamari tamarin tannic tartlet taurine techy
   tefillin tempeh terraform trinary tuatara unglue unlink untaxed updo varicella wildling wobbler`.split(/\s+/).filter(Boolean));
+// Matt named these (2026-10-26): never bonus words, even with the whole of ENABLE in.
+const NOT_WORDS = new Set(['cratch', 'cranch', 'hant']);
 const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt';
 const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
   'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
@@ -168,8 +172,12 @@ async function main() {
   const fits = (w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && enable.has(w) && !bad.has(w) && bits(maskOf(w)) <= 7;
   const words = [...level.keys()].filter((w) => level.get(w) <= LEVELS[LEVELS.length - 1] && fits(w)).sort();
   const answerSet = new Set(words);
-  const extra = [...level.keys()]
-    .filter((w) => !answerSet.has(w) && level.get(w) <= BONUS_LEVEL && !names.has(w) && BONUS_KEEP.has(w) && fits(w))
+  // 2026-11-04 (Matt: "Widen English man come on. Make it fun"): every ENABLE word is a bonus word now, as
+  // Spanish takes its whole dictionary. English had ~1 bonus word a puzzle, Spanish ~290. Still out: first
+  // names (ANNA, CARL), bad words (ADULT_KEEP aside), and NOT_WORDS (Matt, 2026-10-26: "aren't words").
+  // BONUS_KEEP and BONUS_LEVEL stay for the record; every word on them is in ENABLE too.
+  const extra = [...enable]
+    .filter((w) => !answerSet.has(w) && !names.has(w) && !NOT_WORDS.has(w) && fits(w))
     .concat([...ADULT_KEEP].filter((w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && bits(maskOf(w)) <= 7 && !answerSet.has(w)))
     .filter((w, i, a) => a.indexOf(w) === i)
     .sort();
