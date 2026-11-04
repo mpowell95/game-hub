@@ -114,3 +114,15 @@ circle as "(circle) = Only your first 20 points from these count."; Hoops Hard +
 change, `js/lb-points.js` not touched yet); Chinchón/Escoba/Parchís 2-3 computers = each computer's points added up
 (PROPOSED; Matt: winning vs Easy + Hard is harder than 1v1 Hard; tables are saved in `byMode` `ai` since 2026-10-30,
 older wins only know the easiest level). Nuts & Bolts A (1/2/4/8) or B (+ Easy capped at 20): Matt has not picked.
+
+## On hold (Matt, 2026-11-04: "Not now. We'll deal with later. Don't change nuts and bolts scoring yet")
+
+- **Nuts & Bolts points**: the branch has option B (1, 2, 4, 8 a level, Easy at most 20). Matt then said "too crazy";
+  options shown: 1, 2, 3, 4 (session's pick) or 1, 1, 2, 2. Do NOT change it until Matt decides.
+- **Matt's missing Nuts & Bolts history (THE LAW, rule 8: believe him)**: Matt: "I had WAY more levels completed";
+  he ties it to the test1 / MattyIce mix-up. Facts (read-only, 2026-11-04): his records now are `dc1745bc` (app, QZCC4,
+  11 solves, matches the game's own levels: Medium 3, Hard 7, Expert 3) and `e0e63fde` ("Mattyice", no code, 30
+  solves, last sync 2026-07-17). Device **`2b0d7c05`** (his code QZCC4, renamed "test1", last sync 2026-09-13; see
+  js/CLAUDE-HISTORY.md "A code's name is its NEWEST record's name") is **no longer in `players/`**, and no doc or
+  commit records deleting it. Next: Matt's backups on his PC (`backups/rtdb-2026-09-12T22-08-55-909Z.json`, monthly
+  exports, RESTORE.md (c)) show what it held; restore by a read-time add (`HAND_ADDS`-style), then find what deleted it.
