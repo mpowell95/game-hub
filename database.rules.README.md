@@ -98,19 +98,40 @@ device's auth id when it is NOT on the list, ready to copy.
 
 ## Deploy
 
-The rules are NOT deployed by any script in this repo, and a working session cannot publish
-them. They are published by hand:
+**Since 2026-10-18 the rules deploy automatically** when a change to `database.rules.json` is merged to
+`main`: `.github/workflows/firebase-deploy.yml` runs `firebase deploy --only functions,database`. Check that
+workflow's run for the merge commit, the same way as the Pages deploy. (This section used to say "published
+by hand"; that stopped being true on 2026-10-18 and misled a session on 2026-11-04.)
 
-1. Open the [Firebase console](https://console.firebase.google.com/) and pick this project.
-2. Left sidebar → **Build** → **Realtime Database**.
-3. The **Rules** tab, along the top.
-4. Select everything in the editor and paste in the whole contents of `database.rules.json`.
-5. **Publish**, top right. Confirm if it asks.
+## No deletes from a device (2026-11-04)
 
-**Deploy the app first, the rules second.** A device claims its `msgAuth` entry the first time
-it loads the hub on a build that has `js/messages.js`. Publishing the rules before that build
-is live just means Messages reads as empty until each device next opens the app - it heals
-itself, but there is no reason to cause it.
+Matt: *"Make it so devices cannot delete anything"*, then *"change the rules so only legitimate deletes are
+allowed"*. Before this, `players/`, `usernames/`, `rooms/`, the bug-report nodes, `archive/`, `challenge/`
+and every online-match node were `".write": "auth != null"`. Every phone signs in anonymously, so any device
+(or a script with the public config) could delete one player's record or all of `players/` in one request,
+and ~188 records did vanish between 2026-10-05 and 2026-11-03 with no log.
+
+Now every one of those grants sits ONE LEVEL DOWN, on the record, and requires the record to still exist
+afterwards (`newData.exists()`). A grant on a parent cascades to every child and cannot be taken back below,
+which is why it had to move down rather than gain a condition. What that means:
+
+- A record is never removed: a player (which must also keep `profile` and `stats`), a room, a match, its
+  index rows, a chat line, a message, an inbox row, a bug report and its screenshots, a device report, an
+  archived player, a career save, a course draft, a msgAuth claim.
+- Fields INSIDE a live record may still be cleared, because the app does that: a vacated seat or
+  `recovery` in a room, Hold'em's `pk/pub`, flick-soccer's `pick`, a bug report's soft-delete flags, the
+  sync's `rate` report.
+- The only whole-entry deletes still allowed are the app's own: your own push subscription
+  (`pushSubs/<your code>`), your own old username on rename, and admin-only resets (`usernames`
+  force-release, `challenge` tester reset, `adminConfig`, `readers`).
+- Server code (`functions/`, admin SDK) is not bound by rules: `roomsCleanup` still clears dead rooms.
+- **The Matt-only node scripts that delete** (`tools/delete-test-players.mjs`, `tools/delete-device-record.mjs`,
+  `tools/clear-skeeball-stats.mjs`) sign in anonymously and are now REFUSED. That is deliberate. A delete
+  Matt really wants is done in the Firebase console, after a backup.
+
+`tools/test-no-deletes-rules.mjs` evaluates the real rule strings against every write the app sends (all
+must pass) and every delete it does not (all must be refused), and fails if any rule is a bare
+`".write": "auth != null"` again. Adding a node or a new kind of delete: add it to that test first.
 
 ## Backups
 

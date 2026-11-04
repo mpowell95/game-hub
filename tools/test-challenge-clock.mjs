@@ -157,7 +157,7 @@ for (const gdir of GAMES) {
     ok(`F1 rules ${n}: a new ${logKey} entry, created and updated must be the server's time (2 min either way); old ones stay valid`,
       gm && tight(gm.updated && gm.updated['.validate']) && /data\.val\(\)/.test(gm.updated['.validate']) && tight(gm.created && gm.created['.validate'])
       && tight(gm[logKey] && gm[logKey].$k && gm[logKey].$k['.validate']) && /^data\.exists\(\) \|\|/.test(gm[logKey].$k['.validate'])
-      && rules[n]['.read'] === 'auth != null' && rules[n]['.write'] === 'auth != null');
+      && rules[n]['.read'] === 'auth != null' && rules[n].games.$id['.write'] === 'auth != null && newData.exists()');
   }
   const sk = rules.skeeChallenges.games.$id;
   ok('F1 rules skeeChallenges: updated and created are the server\'s time; the start marker rule is kept', /now - 120000/.test(sk.updated['.validate']) && /now - 120000/.test(sk.created['.validate']) && !!sk.$side.started.$leg['.validate']);

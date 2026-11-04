@@ -223,7 +223,7 @@ ok('L4 net.js: the forfeit is written in the SAME update as the end, only when g
   /export async function leaveRoom\(code, role, forfeit\)[\s\S]{0,700}if \(forfeit && forfeit\.seat != null\) patch\[`forfeit\//.test(net));
 ok('L4 net.js: readRoom races a timeout (a dead connection never settles)', /export async function readRoom[\s\S]{0,500}setTimeout/.test(net));
 const rules = JSON.parse(src('database.rules.json'));
-ok('L4 rules: rooms/ takes the forfeit child with no rules change', rules.rules.rooms['.write'] === 'auth != null' && !Object.keys(rules.rules.rooms).some((k) => k.startsWith('$')));
+ok('L4 rules: rooms/<code> takes the forfeit child (any write that leaves the room in place; 2026-11-04 no-deletes)', rules.rules.rooms.$code['.write'] === 'auth != null && newData.exists()' && Object.keys(rules.rules.rooms.$code).length === 1);
 
 // Strings
 const S = LL.STRINGS;

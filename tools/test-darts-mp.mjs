@@ -456,7 +456,7 @@ ok('...which misses: the cricket match is won', res.ok && res.game.over && res.g
 
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
-ok('`darts` is in database.rules.json, signed-in read and write', rules.rules.darts && rules.rules.darts['.read'] === 'auth != null' && rules.rules.darts['.write'] === 'auth != null');
+ok('`darts` is in database.rules.json, signed-in read and write (2026-11-04: writes granted per match, index row and chat line, never a delete; tools/test-no-deletes-rules.mjs)', rules.rules.darts && rules.rules.darts['.read'] === 'auth != null' && rules.rules.darts.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.darts.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.darts.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
 ok('`darts` is in the backup branch list', /\n\s*'darts',/.test(readFileSync('./backups/rtdb-backup.mjs', 'utf8')));
 
 console.log(`\n${pass} passed, ${fail} failed`);

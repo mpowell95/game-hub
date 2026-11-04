@@ -400,7 +400,7 @@ ok('a whole match to 11 plays to its end over several hands, both phones identic
 
 // --- 3. structural ---------------------------------------------------------------------------------
 const rules = JSON.parse(src('database.rules.json'));
-ok('`escoba` is in database.rules.json, signed-in read and write', rules.rules.escoba && rules.rules.escoba['.read'] === 'auth != null' && rules.rules.escoba['.write'] === 'auth != null');
+ok('`escoba` is in database.rules.json, signed-in read and write (2026-11-04: writes granted per match, index row and chat line, never a delete; tools/test-no-deletes-rules.mjs)', rules.rules.escoba && rules.rules.escoba['.read'] === 'auth != null' && rules.rules.escoba.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.escoba.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.escoba.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
 ok('`escoba` is in the backup branch list', /\n\s*'escoba',/.test(src('backups/rtdb-backup.mjs')));
 ok('the hub entry declares the alerts module', /id: 'escoba',[\s\S]{0,900}alerts: \(\) => import\('\.\.\/escoba\/js\/alert\.js'\)/.test(src('js/hub.js')));
 ok('the Multiplayer screen reads Escoba challenges', /\n\s*escoba: \{\s*\n\s*load: \(\) => import\('\.\.\/escoba\/js\/mp\.js'\)/.test(src('js/challenges.js')));

@@ -223,7 +223,7 @@ ok('alert: armChallenge hands over the person', pk && pk.kind === 'pick' && pk.t
 
 // --- structure --------------------------------------------------------------------------------------
 const rules = JSON.parse(readFileSync(new URL('database.rules.json', __ROOT_URL), 'utf8'));
-ok('`eightball` is in database.rules.json, signed-in read and write', rules.rules.eightball && rules.rules.eightball['.read'] === 'auth != null' && rules.rules.eightball['.write'] === 'auth != null');
+ok('`eightball` is in database.rules.json, signed-in read and write (2026-11-04: writes granted per match, index row and chat line, never a delete; tools/test-no-deletes-rules.mjs)', rules.rules.eightball && rules.rules.eightball['.read'] === 'auth != null' && rules.rules.eightball.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.eightball.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.eightball.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
 ok('`eightball` is in the backup branch list', /\n\s*'eightball',/.test(readFileSync(new URL('backups/rtdb-backup.mjs', __ROOT_URL), 'utf8')));
 // The physics path (step, settle and what they call) may use no Math function but sqrt and imul.
 const engineSrc = readFileSync(new URL('eight-ball/js/engine.js', __ROOT_URL), 'utf8').replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');

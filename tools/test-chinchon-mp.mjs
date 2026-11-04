@@ -392,7 +392,7 @@ ok('...ending once somebody is over 50, lowest wins', end50 && (end50.over.why =
 
 // Structural.
 const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8'));
-ok('`chinchon` is in database.rules.json, signed-in read and write', rules.rules.chinchon && rules.rules.chinchon['.read'] === 'auth != null' && rules.rules.chinchon['.write'] === 'auth != null');
+ok('`chinchon` is in database.rules.json, signed-in read and write (2026-11-04: writes granted per match, index row and chat line, never a delete; tools/test-no-deletes-rules.mjs)', rules.rules.chinchon && rules.rules.chinchon['.read'] === 'auth != null' && rules.rules.chinchon.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.chinchon.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.chinchon.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
 ok('`chinchon` is in the backup branch list', /\n\s*'chinchon',/.test(readFileSync('./backups/rtdb-backup.mjs', 'utf8')));
 const mpSrc = readFileSync('./chinchon/js/mp.js', 'utf8');
 ok('challenges never call recordHeadToHead', !/recordHeadToHead\s*\(/.test(mpSrc));
