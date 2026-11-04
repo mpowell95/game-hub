@@ -124,6 +124,11 @@ and continue that conversation as if it were the same session (where it stopped,
 tools). **v1458 (2026-11-04, admin devices only): the popup rebuilt (mockup v4), every game's scores sheet rebuilt from `docs/mockups/final/`, puzzle points (`js/puzzle-points.js`), Hoops / 2-3-computer points changes; Nuts & Bolts points and Matt's missing record ON HOLD (handoff, end).** **The release popup is BUILT, admin devices only (2026-11-03, v1455, Matt's approved 2-page mockup + "Show me where"): `js/announce.js` `lb2-points-2026-11-03` (`adminDevice: true`, `pages: 'lb2-intro'`; drawn by `js/announce-ui.js` `showLb2Intro`/`runLbGuide`; pictures `img/lb2-intro-board-*.png`). On "release it": drop `adminDevice` with the v2/points switch.** Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
 released or abandoned.
 
+## Open handoff: Matt's missing Nuts & Bolts history (2026-11-04)
+
+"Find my Nuts & Bolts score" (or Matt's missing levels) = **`docs/HANDOFF-NUTS-BOLTS-MISSING-RECORD.md`** FIRST (record
+`2b0d7c05`, his code, is gone from `players/`; his backups; restore read-time). Delete this section once restored.
+
 ## Open handoff (2026-10-30)
 
 "Let's pick up where we just left off" = **`docs/HANDOFF-KING-OF-GAMES-2026-10-30.md`** (reader key, King of Games'
