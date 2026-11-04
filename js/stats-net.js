@@ -189,6 +189,35 @@ export function syncSignature(rec) {
 function readSyncSig() { try { return JSON.parse(localStorage.getItem(SYNC_SIG_KEY) || 'null'); } catch { return null; } }
 function writeSyncSig(v) { try { localStorage.setItem(SYNC_SIG_KEY, JSON.stringify(v)); } catch { /* syncs next time */ } }
 
+// WHO IS THIS? (2026-11-04, Matt, about "sk": "add something that gets more info on them next time
+// they open the app because I'm confused"). Only the codes listed here send it. Everything the
+// browser itself will say about the device and how the hub was opened; no third party, no IP. A
+// REPORT (`players/<id>/whois`), read by no phone; it rides the mirror this device already does.
+const WHOIS_CODES = ['65CNF'];   // sk
+async function whoisReport(code) {
+  if (!WHOIS_CODES.includes(code)) return null;
+  const n = typeof navigator !== 'undefined' ? navigator : {};
+  const r = {};
+  const put = (k, f) => { try { const v = f(); if (v !== undefined && v !== null && v !== '') r[k] = v; } catch { /* skip */ } };
+  put('ua', () => String(n.userAgent || '').slice(0, 300));
+  put('langs', () => Array.from(n.languages || [n.language]).slice(0, 8).join(','));
+  put('locale', () => Intl.DateTimeFormat().resolvedOptions().locale);
+  put('url', () => String(location.href).slice(0, 300));
+  put('ref', () => String(document.referrer || '').slice(0, 300));
+  put('cores', () => n.hardwareConcurrency);
+  put('mem', () => n.deviceMemory);
+  put('touch', () => n.maxTouchPoints);
+  put('net', () => n.connection && [n.connection.effectiveType, n.connection.type].filter(Boolean).join('/'));
+  put('utcOffMin', () => -new Date().getTimezoneOffset());
+  try {
+    if (n.userAgentData && n.userAgentData.getHighEntropyValues) {
+      const h = await n.userAgentData.getHighEntropyValues(['platform', 'platformVersion', 'model', 'architecture', 'fullVersionList']);
+      r.uad = JSON.stringify({ p: h.platform, pv: h.platformVersion, m: h.model, a: h.architecture, b: (h.fullVersionList || []).map((x) => `${x.brand} ${x.version}`) }).slice(0, 400);
+    }
+  } catch { /* skip */ }
+  return r;
+}
+
 export async function syncMyStats() {
   // statsId(), not deviceId(): the node is per (device, player). For the device's owner the two are
   // the same string, so every record that already exists keeps its exact key; a SECOND person playing
@@ -264,6 +293,8 @@ export async function syncMyStats() {
     // REPORT shape: read by no phone, omitted while there is nothing slow to report.
     const perf = perfReport();
     if (perf) rec.perf = perf;
+    const whois = await whoisReport(rec.profile.playerId);
+    if (whois) rec.whois = whois;
     const sig = syncSignature(rec);
     const last = readSyncSig();
     if (last && last.id === id && last.sig === sig && Date.now() - (+last.at || 0) < SYNC_HEARTBEAT_MS) return true;   // nothing new
