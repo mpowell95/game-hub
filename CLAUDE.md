@@ -117,28 +117,14 @@ is true, every Firebase writer refuses (no override), online play is refused, an
 A new writer must ask `writesAllowed`/`automationBlocks`; `tools/test-automation-guard.mjs` scans for one that does not.
 **How to test safely (localhost, test1/DREG5, fakes not the real database): `VISUAL-PROCESS.md`, section 0.**
 
-## Open handoff: Leaderboard v2 (2026-11-01)
+## Leaderboard v2: RELEASED to everyone (2026-11-04, v1462, Matt: "release it. Including the popup")
 
-**"leaderboard session 7" (or "pick up the leaderboard popup") = read `docs/HANDOFF-LB2-SESSION7.md` FIRST** (2026-11-03: where v2 stands at v1455, the intro popup Matt says "still needs work", the release checklist; ask Matt which screens need work before building). **Points: ADMIN DEVICES ONLY (v1426, Matt's review; `isAdminDevice()` in `isPointsBoard`, `ptsSectionHTML`, `points-toast.js`). Players keep the old ranking until Matt says "release it" in his own words.** **"leaderboard session 6" / "redo the points info"** = **`docs/HANDOFF-LB-POINTS-INFO.md`** (the (i) sheet redesign; mockup v7 BUILT admin-only, v1429, `js/lb-points-sheet.js`; since v1433 every other board has its own "how it is calculated and ranked" sheet, `js/lb-rank-sheet.js`, and the Me tab says what it takes to get gold, e.g. "5 points for gold", the difference in gold). **"leaderboard session 5" / "build the points"** = **`docs/LEADERBOARD-POINTS-DECISIONS.md`** (Matt's approved per-game points, then the (i) text and "+X pts"). **"leaderboard session 4"** = **`docs/HANDOFF-LEADERBOARD-V2-SESSION4.md`** (the review's items 1-10 mockup, time zones = each player's own clock, then #11). **"leaderboard session 3"** (or "pick up the leaderboard") = read **`docs/HANDOFF-LEADERBOARD-V2-2026-11-01.md`** first
-and continue that conversation as if it were the same session (where it stopped, Matt's decisions, open questions,
-tools). **v1458 (2026-11-04, admin devices only): the popup rebuilt (mockup v4), every game's scores sheet rebuilt from `docs/mockups/final/`, puzzle points (`js/puzzle-points.js`), Hoops / 2-3-computer points changes; Nuts & Bolts points and Matt's missing record ON HOLD (handoff, end).** **The release popup is BUILT, admin devices only (2026-11-03, v1455, Matt's approved 2-page mockup + "Show me where"): `js/announce.js` `lb2-points-2026-11-03` (`adminDevice: true`, `pages: 'lb2-intro'`; drawn by `js/announce-ui.js` `showLb2Intro`/`runLbGuide`; pictures `img/lb2-intro-board-*.png`). On "release it": drop `adminDevice` with the v2/points switch.** Player names are not sensitive: real-name screenshots may go in the repo. Delete this section once v2 is
-released or abandoned.
-
-## Matt's deleted records, restored read-time (2026-11-04)
-
-Nuts & Bolts: **nothing was lost.** Matt is 41 (11 + 30) in all 13 backups on his PC (Jul 23 - Aug 31) and in the
-"Game Hub Plays" artifact built from all 289 records on 2026-10-05, after `2b0d7c05` last synced; `2b0d7c05` (his
-iPhone Safari tab) never held a Nuts & Bolts play. **What WAS lost:** about 188 `players/` records deleted between
-Oct 5 and Nov 3, by nothing in the repo or local transcripts (a cloud session or the console; not found). Comparing
-Oct 5 with live, every other person is whole (Bego, Andrew and the unnamed ones only moved rows); Matt lost 8 plays.
-5 are back at read time from `backups/rtdb-2026-08-31T13-17-01-416Z.json`: `RESTORED_RECORDS` in
-`js/stats-corrections.js` (Boggle 3, Mancala 1, Ball Run 1), **admin devices only** (Matt: "Admin only still";
-`isAdminDevice()` in both leaderboards, not in `functions/boards.js`). His 3 September Skeeball plays have no copy.
-Release = apply `withRestoredRecords` in `functions/boards.js` and drop the gates. `tools/test-restored-records.mjs`.
-**Devices can no longer delete records (2026-11-04, Matt: "only legitimate deletes are allowed")**: every
-open `".write": "auth != null"` moved down onto the record with `newData.exists()`. Full list, what is still
-allowed and why: `database.rules.README.md`, "No deletes from a device". Rules deploy on merge (firebase-deploy.yml).
-`tools/test-no-deletes-rules.mjs`. The delete scripts in `tools/` are now refused; deletes go through the console.
+v2 (Games / Medal Count / Me), points on every wins board and on Sudoku, Murdoku, Minesweeper (`js/puzzle-points.js`),
+the rebuilt scores sheets, the My Stats v2 look, the restored records (`RESTORED_RECORDS`) and the intro popup
+(`lb2-points-2026-11-04`, a new id so every phone shows it once) are on for every device; `IMPORTANT_SINCE` 1462.
+**Still admin-only, HELD by Matt: Nuts & Bolts points** (`isPuzzlePts` keeps `nutsbolts` behind `isAdminDevice()`;
+players see its old ranking and a two-line sheet). The "Old" link stays for now (Matt: "Leave for now"). History:
+`docs/HANDOFF-LB2-SESSION7.md` and the older handoffs it names.
 
 ## Open handoff (2026-10-30)
 

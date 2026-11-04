@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1457;
-const CACHE = 'game-hub-v1461';
+const IMPORTANT_SINCE = 1462;
+const CACHE = 'game-hub-v1462';
 
 const ASSETS = [
   './',
@@ -851,12 +851,12 @@ const REST_MANIFEST = {
   './js/lb-rules.js': '229e7a9b85',
   './js/lb-points.js': 'e6ba4afd9f',
   './js/lb-points-sheet.js': '2450f51ed7',
-  './js/lb-rank-sheet.js': 'd55cae0f4d',
-  './js/points-toast.js': 'd4c3e9ddc0',
+  './js/lb-rank-sheet.js': '7fd13c0d50',
+  './js/points-toast.js': '5e92b93a23',
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'c5351240b7',
+  './js/strings.js': '3b609d01b0',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -864,14 +864,14 @@ const REST_MANIFEST = {
   './js/game-stats.js': 'd95e2b8d83',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '5724e71df7',
+  './js/game-stats-ui.js': 'c11c0affaa',
   './js/stats-net.js': '6281c321bf',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'e6de6b7a35',
   './js/bug-report-ui.js': '557cd3d1ed',
-  './js/announce.js': '8e98aff0ce',
+  './js/announce.js': '9386a76d9c',
   './js/announce-ui.js': '4ba8cf86ba',
   './js/messages.js': 'd12738ffad',
   './js/live-read.js': '0c8419185d',
@@ -901,8 +901,8 @@ const REST_MANIFEST = {
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': 'f6905d4649',
-  './js/leaderboard2-ui.js': '997d984a93',
+  './js/leaderboard-ui.js': 'b9611921a7',
+  './js/leaderboard2-ui.js': '49f757f5ed',
   './js/leaderboard2-boards.js': 'afbc6ba443',
   './js/leaderboard2-strings.js': '4c9b106552',
   './js/leaderboard-rank.js': 'aa4d6adac9',

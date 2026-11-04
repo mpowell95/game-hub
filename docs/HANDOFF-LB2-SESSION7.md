@@ -141,3 +141,11 @@ older wins only know the easiest level). Nuts & Bolts A (1/2/4/8) or B (+ Easy c
   js/CLAUDE-HISTORY.md "A code's name is its NEWEST record's name") is **no longer in `players/`**, and no doc or
   commit records deleting it. Next: Matt's backups on his PC (`backups/rtdb-2026-09-12T22-08-55-909Z.json`, monthly
   exports, RESTORE.md (c)) show what it held; restore by a read-time add (`HAND_ADDS`-style), then find what deleted it.
+
+## RELEASED 2026-11-04 (v1462)
+
+Matt: "release it. Including the popup. Force the update so the next time someone opens the app they see it".
+Gates dropped: `isPointsBoard`, the v2 gate in `openLeaderboard`, `ptsInfo`, `ptsSectionHTML`, My Stats `_s4`,
+`points-toast.js`, the profile page's My Stats button, the restored-records gates (Matt: "Yes, obviously"), the popup's
+`adminDevice` (new id `lb2-points-2026-11-04`). `IMPORTANT_SINCE` = 1462. Nuts & Bolts points stay admin-only (Matt:
+"Change the layouts only for now. Hold it."). Matt's missing Nuts & Bolts history: CLOSED by another session (nothing lost).

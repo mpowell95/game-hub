@@ -12,6 +12,12 @@ import { wwStarsFor, WW_MULT } from '../js/word-weaver-points.js';
 const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 import { setLang } from '../js/i18n.js';
 import STRINGS from '../js/strings.js';
+import { readFileSync } from 'node:fs';
+
+// The sheets as an ADMIN device draws them (Nuts & Bolts' points table is admin-only since the 2026-11-04 release);
+// the player's Nuts & Bolts sheet is checked from the source below.
+const _ls = new Map([['gamehub.adminDevice.v1', '1']]);
+globalThis.localStorage = { getItem: (k) => (_ls.has(k) ? _ls.get(k) : null), setItem: (k, v) => _ls.set(k, String(v)), removeItem: (k) => _ls.delete(k) };
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) { pass++; console.log('ok  ', name); } else { fail++; console.log('FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); } };
@@ -90,6 +96,7 @@ for (const [id, per] of [['nutsbolts', 'lbpt_per_level'], ['minesweeper', 'lbpt_
 ok('nuts & bolts values untouched: 1, 2, 4, 8, Easy at most 20', LEVEL_POINTS.nutsbolts[1] === 1 && LEVEL_POINTS.nutsbolts[2] === 2 && LEVEL_POINTS.nutsbolts[3] === 4 && LEVEL_POINTS.nutsbolts[4] === 8 && LEVEL_CAP.nutsbolts[1] === 20);
 ok('nuts & bolts html: one circle + the 20 note', (() => { const h = rankSheetHTML('nutsbolts'); return (h.match(/lbpt-cap"/g) || []).length === 1 && h.includes('first 20 points'); })());
 ok('minesweeper html: no circle, no note', !/lbpt-cap/.test(rankSheetHTML('minesweeper')));
+ok('nuts & bolts on a player phone: the old ranking (points held)', /nutsbolts: \(\) => \(isAdminDevice\(\) \? \[levelTable\('nutsbolts', 'lbpt_per_level'\)\] : \[hardest\('lbrs_nb_by'\)\]\)/.test(readFileSync(new URL('../js/lb-rank-sheet.js', import.meta.url), 'utf8')) && !!STRINGS.en.lbrs_nb_by && !!STRINGS.es.lbrs_nb_by);
 // The mockups' words, card by card (EN).
 const words = (id) => rankSheetModel(id).map((c) => [c.h || '', ...(c.steps || []), ...[].concat(c.text || []), ...(c.rows || []).map((r) => r.k)].map((k) => (k ? STRINGS.en[k] : '')).join('|')).join(' / ');
 const WORDS = {

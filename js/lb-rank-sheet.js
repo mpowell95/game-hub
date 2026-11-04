@@ -15,6 +15,7 @@ import { WW_TIERS, WW_MULT, wwStarsFor } from './word-weaver-points.js';
 import { HINT_STEPS, LEVEL_POINTS, LEVEL_CAP } from './puzzle-points.js';
 import { ensurePointsSheetCss, pointsTableHTML, capNoteHTML, shapeHTML, LEVEL_KEY } from './lb-points-sheet.js';
 import { makeT } from './i18n.js';
+import { isAdminDevice } from './admin-config.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -76,7 +77,8 @@ const SHEETS = {
     rows: WW_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2].map((h) => wwStarsFor(h) * WW_MULT[b]) })) }, foot: 'lbrs_ww_foot' }],
   holdem: () => [{ h: 'gs_hb_bank', text: ['lbrs_hb_by1', 'lbrs_hb_by2'] }, { h: 'lbrs_h_wins', text: 'lbrs_hb_by3' }],
   minesweeper: () => [levelTable('minesweeper', 'lbpt_per_board')],
-  nutsbolts: () => [levelTable('nutsbolts', 'lbpt_per_level')],
+  // Points held for players (2026-11-04): the points table only where the board is on points (admin devices).
+  nutsbolts: () => (isAdminDevice() ? [levelTable('nutsbolts', 'lbpt_per_level')] : [hardest('lbrs_nb_by')]),
   murdoku: () => [helpGrid('lbrs_mk_sup')],
   sudoku: () => [helpGrid('lbrs_su_sup')],
   skeeball: () => [{ h: 'lbrs_total', text: 'lbrs_sk_by1' }, { h: 'gs_sk_best_game', text: 'lbrs_sk_by2' }],

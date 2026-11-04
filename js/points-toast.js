@@ -77,7 +77,6 @@ export function startPointsToast() {
     try {
       const det = e && e.detail;
       if (!det || isTestGame(det.id)) return;
-      if (!isAdminDevice()) return;   // admin devices only until Matt releases the points (2026-11-02)
       const r = winPoints(det);
       if (r && r.pts > 0) showPoints(r.pts);
     } catch (err) { console.warn('[points-toast]', err); }
