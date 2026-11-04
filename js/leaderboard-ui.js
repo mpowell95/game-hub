@@ -1045,7 +1045,7 @@ function gameMetricAt(g, id, tier) {
   if (NOHINT_GAMES.has(id) && noHintTierOf(g, id)) return noHintAt(g, id, tier);
   // Every wins board ranks on POINTS (Matt, 2026-11-02, js/lb-points.js): every win adds, harder levels
   // pay more, near-guaranteed levels at most 20. At a tier, that level's own points.
-  if (isPointsBoard(id)) return gamePoints(g.games[id], id, tier).pts;
+  if (isPointsBoard(id)) return gamePoints(g.games[id], id, tier, g.playerId).pts;
   return winsAtTier(g, [id], tier);
 }
 /** A board ranked on points per win (js/lb-rules.js `wins` / `cuppong`; Hold'em's Wins tab is not one). */
@@ -1060,7 +1060,7 @@ function lowerIsBetter(id) { return LOWER_IS_BETTER.has(id) && !isPuzzlePts(id);
 /** Solves behind a puzzle row's points (the tie-break: equal points, more solves first). */
 function puzzleWinsOf(g, id) { return puzzlePoints(((g && g.games) || {})[id], id, _tier).wins; }
 /** Wins behind a row's points (the tie-break: equal points, more wins first). */
-function pointsWinsOf(g, id) { return gamePoints(g.games[id], id, _tier).wins; }
+function pointsWinsOf(g, id) { return gamePoints(g.games[id], id, _tier, g.playerId).wins; }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
  *  always did; golf takes a sign and shows level par as "E" (js/leaderboard-rank.js does the
  *  maths, this supplies the translated word). A player with no number gets the same em-dash

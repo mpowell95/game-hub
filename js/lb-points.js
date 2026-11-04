@@ -10,10 +10,11 @@
 // PURE and READ-TIME ONLY (THE LAW): reads one person's aggregated game record (players-agg's shape:
 // total / byDiff / byMode / tt), stores nothing. No DOM, no storage, no network.
 import { tierOf } from './difficulty-tiers.js';
+import { assumedRecord } from './stats-corrections.js';
 
 export const CAP = 20;
 // lv: points per win at tiers 1-4 (Easy, Medium, Hard, Expert); cap: the tiers in the 20-point group;
-// on: an online win; other: a win in a bucket with no level (legacy history, Yahtzee's single level).
+// on: an online win; opp(m): opponents at an online table (each one past the first adds `on` again); other: a win in a bucket with no level (legacy history, Yahtzee's single level).
 // mode(m, tier, v, lv): points for a win RECORDED at `tier` whose saved mode is `m`, or undefined = the level's own
 // value. down(m): true when that mode is recorded one level below the level chosen (byMode keeps the chosen one).
 const P = {
@@ -24,25 +25,32 @@ const P = {
   mancala: { lv: [1, 2, 6], on: 3 },
   battleship: { lv: [1, 1, 3], cap: [1], on: 3, mode: (m, t, v, lv) => (m.size === 'quick' && t > 1 ? lv[t - 2] : undefined) },
   boggle: { lv: [2, 6, 10], on: 3 },
-  business: { lv: [1, 2, 3], on: 3 },
+  // More opponents pay more (Matt, 2026-11-04: "Games are more difficult when more people play. So that needs to be
+  // rewarded in all games"): each opponent beaten adds the level's points. Monopoly Deal saves the computer count
+  // (`ai`, 1-4), Uno the players (`n`, 2-4); every computer plays at the one level chosen. Saved since 2026-10-30.
+  business: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (+m.ai >= 2 ? v * +m.ai : undefined) },
   // Chinchón, Escoba, Parchís at a table of 2 or 3 computers (Matt, 2026-11-04, mockup sheet-chinchon): a win = each
   // computer's own 1v1 points ADDED UP, from the table saved in the mode (`ai`, since 2026-10-30). Chinchón's short
   // match takes each computer one level down, as it does the recorded level. Wins with no table saved keep the
   // easiest computer's level (how they were recorded).
-  chinchon: { lv: [1, 2, 4], on: 3, down: (m) => ccShort(m), mode: (m, t, v, lv) => tableSum(m, lv, ccShort(m) ? 1 : 0) },
+  // Online (Matt, 2026-11-04): the online points x the opponents at the table (`opp`, from the saved seats `n`).
+  chinchon: { lv: [1, 2, 4], on: 3, opp: (m) => (+m.n || 2) - 1, down: (m) => ccShort(m), mode: (m, t, v, lv) => tableSum(m, lv, ccShort(m) ? 1 : 0) },
   // Cup Pong no reracks doubles EVERY level (approved table: '0 reracks x2'; it was Hard only). Darts Cricket in
   // order doubles (Matt: 'in order is for sure more difficult so do something'); kind 'cricket-order[-np]'.
   cuppong: { lv: [1, 1, 3], cap: [1, 2], on: 3, mode: (m, t, v) => (String(m.rr) === '0' ? v * 2 : undefined) },
   darts: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (String(m.kind || '').startsWith('cricket-order') ? v * 2 : undefined) },
   dominoes: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (+m.to >= 500 ? v * 2 : undefined) },
-  eightball: { lv: [1, 3, 5], on: 3, mode: (m, t, v) => (+m.racks >= 3 ? v * 2 : undefined) },
-  escoba: { lv: [1, 2, 4], on: 2, mode: (m, t, v, lv) => tableSum(m, lv, 0) },
+  // Pool: 3 racks x2; Cutthroat (`game` 'ct', 2 opponents) x2 more, against the computer and online (2026-11-04). A
+  // one-rack match is recorded one level down (eight-ball statsDiff), so its mode is read at that level.
+  eightball: { lv: [1, 3, 5], on: 3, opp: (m) => (m.game === 'ct' ? 2 : 1), down: (m) => +m.racks === 1,
+    mode: (m, t, v) => { const x = v * (+m.racks >= 3 ? 2 : 1) * (m.game === 'ct' ? 2 : 1); return x === v ? undefined : x; } },
+  escoba: { lv: [1, 2, 4], on: 2, opp: (m) => (+m.n || 2) - 1, mode: (m, t, v, lv) => tableSum(m, lv, 0) },
   flicksoccer: { lv: [1, 3, 6], cap: [1], on: 3, mode: (m, t) => (+m.goals === 3 ? ({ 2: 4, 3: 9 })[t] : undefined) },
   // Hoops "Until you score" (the shortened option, recorded one level down; mode one=0): Hard = 2, not Medium's 3
   // (Matt, 2026-11-04, mockup sheet-hoops4). Its Easy and Medium are unchanged (recorded Easy: 1).
   hoops4: { lv: [1, 3, 5], on: 3, down: (m) => String(m.one) === '0', mode: (m, t) => (String(m.one) === '0' && t === 2 ? 2 : undefined) },
   parchis: { lv: [1, 2, 4], on: 2, mode: (m, t, v, lv) => (String(m.humans || '1') === '1' ? tableSum(m, lv, 0) : undefined) },
-  uno: { lv: [1, 2, 3], on: 2 },
+  uno: { lv: [1, 2, 3], on: 2, mode: (m, t, v) => (+m.n >= 3 ? v * (+m.n - 1) : undefined) },
   yahtzee: { lv: [1, 1, 1], on: 1 },
   airhockey: { lv: [1, 2, 5], on: 3 },
 };
@@ -125,8 +133,10 @@ function ttSplit(gm, byT) {
 }
 
 /** One person's points in one game: `tier` null = everything (every level, online, level-less), 1-4 = that
- *  level only. Returns { pts, wins } (wins = the wins those points came from). */
-export function gamePoints(gm, id, tier = null) {
+ *  level only. `code` = that person's player code, for ASSUMED_MODES (js/stats-corrections.js). Returns
+ *  { pts, wins } (wins = the wins those points came from). */
+export function gamePoints(gm, id, tier = null, code = null) {
+  gm = assumedRecord(gm, id, code);
   const spec = pointsTable(id);
   const s = winsSplit(gm);
   const capSet = new Set(spec.cap || []);
@@ -168,6 +178,16 @@ export function gamePoints(gm, id, tier = null) {
   if (tier == null) {
     free += s.mp * spec.on + s.other * 1;
     wins += s.mp + s.other;
+    // Online at a bigger table: each opponent beyond the first adds the online points again (saved mode, `opp`).
+    if (spec.opp) {
+      let left = s.mp;
+      for (const [k, ds] of Object.entries((gm && gm.byMode) || {})) {
+        if (k === '?' || !ds || !ds.mp) continue;
+        const n = Math.min(won(ds.mp), left);
+        const opp = Math.max(1, Math.floor(spec.opp(parseModeKey(k))) || 1);
+        if (n > 0 && opp > 1) { free += n * spec.on * (opp - 1); left -= n; }
+      }
+    }
   }
   return { pts: Math.min(CAP, Math.max(0, capped)) + free, wins };
 }
@@ -175,7 +195,12 @@ export function gamePoints(gm, id, tier = null) {
  *  `mode` = the mode object withMode saved. Near-guaranteed levels give 1 (the 20-point cap is lifetime). */
 export function pointsForWin(id, diff, mode) {
   const spec = pointsTable(id);
-  if (diff === 'mp') return spec.on;
+  if (diff === 'mp') {
+    if (!spec.opp || !mode || typeof mode !== 'object') return spec.on;
+    const m = {};
+    for (const k of Object.keys(mode)) m[k] = String(mode[k]);
+    return spec.on * Math.max(1, Math.floor(spec.opp(m)) || 1);
+  }
   const t = tierOf(diff);
   if (!t) return 1;
   if (id === 'tictactoe' && mode && mode.v === 'ultimate') return spec.ult[Math.min(t, 3) - 1];
