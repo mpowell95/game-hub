@@ -391,6 +391,33 @@ ok('the whole rack area is on the table',
   m.callIsland('k9');
   ev = m.throwResult({ made: 'k9' });
   ok('challenge: owed cups that are all the cups left clear the rack at once', types(ev).includes('owedCleared') && types(ev).includes('rackCleared') && m.phase === 'rebuttal');
+  // OWED CUPS ARE ALREADY GONE (Matt, 2026-11-04): 3 cups, island with ball 1, the next make with
+  // ball 2 is the LAST cup = balls back, two throws at it, same cup wins with no rebuttal.
+  const owed3 = (o = {}) => {
+    const mm = new Match({ first: 'a', async: true, ...o });
+    mm.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k1', c: 0, r: 0 }, { id: 'k2', c: 4, r: 0 }]; mm.startTurn();
+    mm.callIsland('k0'); mm.throwResult({ made: 'k0' });
+    return mm;
+  };
+  m = owed3();
+  ev = m.throwResult({ made: 'k1' });
+  ok('challenge: island then the last real cup = balls back, that cup stands (Matt)', types(ev).includes('ballsBack') && m.lastCup === 'k1'
+    && ids(m, 'b').join() === 'k1' && m.owed.b === 0 && m.phase === 'normal' && m.queue.join() === '0,1' && m.shooter === 'a');
+  m.throwResult(miss); ev = m.throwResult({ made: 'k1' });
+  ok('...and the same cup with either ball back wins outright, no rebuttal', m.over && m.winner === 'a' && m.how === 'sameCup');
+  m = owed3(); m.throwResult({ made: 'k1' }); m.throwResult(miss); m.throwResult(miss);
+  ok('...miss both and the cup goes, then the rebuttal', m.phase === 'rebuttal' && ids(m, 'b').length === 0 && m.shooter === 'b');
+  m = owed3(); m.throwResult(miss);   // island, then a miss: the turn passes, the cup still owed
+  ok('...an island then a miss still owes the cup as before', m.owed.b === 1 && ids(m, 'b').join() === 'k1,k2' && m.shooter === 'b');
+  m = new Match({ first: 'a', async: true });   // 4 cups: island, a make (balls back), then ball 1 leaves only the owed cup
+  m.racks.b = [{ id: 'k0', c: -4, r: 0 }, { id: 'k1', c: 0, r: 0 }, { id: 'k2', c: 4, r: 0 }, { id: 'k3', c: -2, r: 4 }]; m.startTurn();
+  m.callIsland('k0'); m.throwResult({ made: 'k0' }); m.throwResult({ made: 'k1' });
+  ev = m.throwResult({ made: 'k2' });
+  ok('...owed cups also count as gone with a ball still in hand (the made cup stands)', m.lastCup === 'k2' && ids(m, 'b').join() === 'k2' && m.queue.join() === '1' && m.owed.b === 0);
+  m = owed3({ owedLast: false });
+  ev = m.throwResult({ made: 'k1' });
+  ok('an older challenge (no `ol`) replays as it was played: owed cleared, rebuttal', types(ev).includes('owedCleared') && m.phase === 'rebuttal');
+  ok('owedLast survives a save', Match.fromJSON(new Match().toJSON()).owedLast && !Match.fromJSON(new Match({ owedLast: false }).toJSON()).owedLast && !Match.fromJSON({}).owedLast);
   // BOUNCE SHOTS (brief 5d): table first, then in = 2 cups, the defender picks the second.
   m = new Match({ first: 'a' }); m.startTurn();
   m.throwResult({ made: 'k0', bounced: true });

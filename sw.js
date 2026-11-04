@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1436;
-const CACHE = 'game-hub-v1455';
+const IMPORTANT_SINCE = 1456;
+const CACHE = 'game-hub-v1456';
 
 const ASSETS = [
   './',
@@ -1241,8 +1241,8 @@ const REST_MANIFEST = {
   './cup-pong/js/physics.js': '108758b93f',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': '7148aec521',
-  './cup-pong/js/match.js': '721e1e2aae',
-  './cup-pong/js/mp.js': '3124a19088',
+  './cup-pong/js/match.js': '406a5185df',
+  './cup-pong/js/mp.js': '652c67a64c',
   './cup-pong/js/mp-ui.js': 'b28c25cb61',
   './cup-pong/js/alert.js': '698b22f3f3',
   './cup-pong/js/cpu.js': '03725812df',
