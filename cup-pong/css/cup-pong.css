@@ -366,6 +366,9 @@
    with nowhere to rest near the finger shown dimmed (it goes back if let go there). */
 .cp-root .cp-mid { stroke: rgba(255, 255, 255, 0.28); stroke-width: 4; stroke-dasharray: 14 14; pointer-events: none; }
 .cp-root .cp-cup.is-bad { opacity: 0.45; }
+/* Make your own: Grid | Free (2026-11-04), the hub's segmented control at the 44px tap floor. */
+.cp-root .cp-rk-mode { margin: 0 auto 2px; }
+.cp-root .cp-rk-mode .gh-seg__item { min-height: 44px; min-width: 104px; }
 .cp-root .cp-custom-btns { display: flex; gap: 10px; margin-top: 12px; }
 .cp-root .cp-custom-btns .gh-btn { flex: 1; min-height: 44px; }
 /* The back wall along the top of the Make your own grid; the warning when the back row is empty

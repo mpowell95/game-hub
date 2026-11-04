@@ -188,7 +188,7 @@ export function applyEntry(match, e) {
   if (e.k === 't') ev = match.throwResult({ made: e.m || null, bounced: !!e.b });
   else if (e.k === 'g') ev = match.applyGentlemans();
   else if (e.k === 'c') ev = match.centerLast();
-  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.spots || e.cells) : match.rerack(e.key);
+  else if (e.k === 'r') ev = e.key === 'custom' ? match.rerackCustom(e.spots || e.cells, true) : match.rerack(e.key);   // a stored rack stands (match.js all-touching)
   else if (e.k === 'i') ev = match.callIsland(e.id, true);   // a stored call stands (match.js islandThree)
   else if (e.k === 'o') ev = match.pickOwed(e.id);
   if (!ev || !ev.length) return null;

@@ -78,13 +78,17 @@ turn's first throw:
   cups standing, owed cups not counted, in EVERY match incl. challenges begun earlier (Matt saw Moonis call it on the last
   cup in one). A replay ACCEPTS a stored call anyway (`callIsland(id, true)` in `applyEntry`): an older-build phone may
   have made one, and refusing it would refuse the whole match. `rules.i3` is a record only.
-- **Make your own, ANYWHERE** (2026-11-03, Matt: "I want to be able to move the cups however I want. Not in this
-  exact grid. I want a stop light with two to the left filling the gaps"): `showCustomRack` in `ui.js`, no grid; drag
-  or tap a cup then a place; each cup is an exact spot `{u, v}`. A drop slides into contact near a cup or the back
-  wall, preferring a snug spot touching TWO things (a gap), and moves off a cup it lands on (`rack.js settleSpot`,
-  `SNAP` 0.3 cup-widths). **Done** = `match.rerackCustom(spots)` (`isSpot` + `validRack`, one cup at v = 0, ids kept).
-  Challenge log: `{k:'r', key:'custom', spots:[{u,v}...]}` at full precision; the old `cells:[{c,r}...]` still
-  replays. A phone on a build before v1432 cannot read `spots` (IMPORTANT_SINCE 1432). The computer uses presets only.
+- **Make your own: Grid | Free** (2026-11-04, Matt: "Ana misses the old system we had with the preselected placement
+  things. So let's have both"): a switch at the top, the last one used kept per phone (`gamehub.cuppong.v1` `rackMode`,
+  default Free). **Grid** = the first way: the 28 dashed `AREA` spots, a drop goes to the nearest free spot, stored as
+  `cells:[{c,r}...]`. **Free** (2026-11-03, "move the cups however I want"): exact spots `{u, v}` anywhere, stored as
+  `spots:[{u,v}...]` at full precision; a drop near a SNUG or STRAIGHT-LINE place (a gap, in front of / behind / beside a
+  cup, or carrying on a line, any angle) goes there within `SNUG` 0.4 cup-widths (Matt: "easier to put them in a straight
+  line"), else into contact within `SNAP` 0.3, else stays put (`rack.js settleSpot`). A phone before v1432 cannot read `spots`.
+- **ALL CUPS TOUCHING** (Matt, 2026-11-04: "we need to add a rule so that all cups are touching"): a custom rerack is one
+  group, none apart (`rack.js allTouching`, the island test's 1.08 cup-widths). Done stays off with "All cups must touch".
+  A STORED challenge rack replays without it (`rerackCustom(list, true)` in `applyEntry`, like a stored island call), so
+  an older build's move never refuses a match. Every preset already touches (`test.js` checks). The computer uses presets only.
 - **Every rerack stands AGAINST THE BACK WALL** (2026-09-29): preset back row on the rack's back row
   (`shape(rows, back)`, `backLine`); custom needs at least one cup on the back row
   (`rerackCustom` refuses otherwise); Gentleman's line keeps its own placement. `rules.bk` (written on

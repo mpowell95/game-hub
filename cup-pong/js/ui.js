@@ -13,7 +13,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
 import { THROW, CUP, CUP_D, RACK_Z0, ROW_H } from './geom.js';
-import { makeRack, cupsXZ, presetsFor, cellXZ, FREE, spotOf, settleSpot } from './rack.js';
+import { makeRack, cupsXZ, presetsFor, cellXZ, AREA, FREE, spotOf, settleSpot, allTouching } from './rack.js';
 import { Match } from './match.js';
 
 /** The middle of the full rack, along the table: where aim is measured. */
@@ -44,8 +44,10 @@ const readSettings = () => {
       reracks: RERACKS.includes(raw.reracks) ? raw.reracks : 2,   // per player per game, default 2
       // Turn-based games alternate who opens (docs/BUILDING-A-GAME.md, setup defaults).
       nextFirst: raw.nextFirst === 'b' ? 'b' : 'a',
+      // Make your own: the Grid (cups on spots, the first way) or Free (anywhere), as last used (2026-11-04).
+      rackMode: raw.rackMode === 'grid' ? 'grid' : 'free',
     };
-  } catch { return { diff: 'medium', gentlemans: true, reracks: 2, nextFirst: 'a' }; }
+  } catch { return { diff: 'medium', gentlemans: true, reracks: 2, nextFirst: 'a', rackMode: 'free' }; }
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
@@ -128,6 +130,13 @@ function presetSVG(spots) {
   return `<svg viewBox="0 0 ${(w * sc).toFixed(1)} ${(h * sc).toFixed(1)}" width="${(w * sc).toFixed(0)}" height="${(h * sc).toFixed(0)}" aria-hidden="true">${
     pts.map((p) => `<circle cx="${((p.x - x0) * sc).toFixed(1)}" cy="${((p.z - z0) * sc).toFixed(1)}" r="${(r * sc * 0.94).toFixed(1)}"/>`).join('')}</svg>`;
 }
+
+/** Every cell of the rack area (brief 4c's grid), far row first: the Grid's spots in Make your own. */
+const AREA_CELLS = (() => {
+  const out = [];
+  for (let r = 0; r <= AREA.rMax; r++) for (let c = -AREA.cMax; c <= AREA.cMax; c++) if (Math.abs(c + r) % 2 === 1) out.push({ c, r });
+  return out;
+})();
 
 /** The "make your own" icon: a triangle of dashed spots with one cup lifted off it. */
 const CUSTOM_ICON = `<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">${
@@ -1330,18 +1339,42 @@ class CupPong {
   }
 
   /**
-   * MAKE YOUR OWN (brief 4c), ANYWHERE (2026-11-03, Matt: "I want to be able to move the cups however I
-   * want. Not in this exact grid. I want a stop light with two to the left filling the gaps"). The rack
-   * area drawn top-down, shooter at the bottom: drag a cup anywhere, or tap a cup and then a place. A cup
-   * dropped near another cup or the back wall slides into contact (rack.js settleSpot), so a cup put in
-   * a gap nestles touching both sides; on top of a cup it moves to the nearest place it fits. Cups need
-   * not touch. Done spends the rerack; Cancel goes back to the presets with it unspent.
+   * MAKE YOUR OWN (brief 4c), two ways (Matt, 2026-11-04: "Ana misses the old system we had with the
+   * preselected placement things. So let's have both"), the last one used remembered on this phone:
+   *  - GRID, the first way: dashed spots on the hex grid; a cup dropped anywhere goes to the nearest
+   *    free spot. Stored as cells, so any build replays it.
+   *  - FREE (2026-11-03, Matt: "I want to be able to move the cups however I want"): anywhere. A drop
+   *    near a cup or the back wall slides into contact; near a SNUG or STRAIGHT-LINE place (a gap, in
+   *    front of, behind or beside a cup, or carrying on a line) it goes there (rack.js settleSpot).
+   * Drag a cup, or tap a cup and then a place. Done needs a cup against the back wall and ALL CUPS
+   * TOUCHING (Matt, same day: "we need to add a rule so that all cups are touching"); it spends the
+   * rerack. Cancel goes back to the presets with it unspent.
    */
   showCustomRack() {
     const m = this.match;
     const rack = m.target();
-    const pos = rack.map((k) => spotOf(k));              // every cup at an exact spot, cells included
-    const start = pos.map((p) => ({ ...p }));
+    const GRID = AREA_CELLS.map((c) => spotOf(c));
+    const orig = rack.map((k) => spotOf(k));          // every cup as an exact spot, cells included
+    let mode = this.settings.rackMode === 'grid' ? 'grid' : 'free';
+    let pos = orig.map((p) => ({ ...p }));
+    let cell = null;                                    // the Grid: each cup's AREA_CELLS index
+    let touched = false;                                // a cup has been moved by hand
+    /** The Grid: each cup onto its nearest free spot, in order. */
+    const toGrid = () => {
+      const taken = new Set();
+      cell = pos.map((p) => {
+        let best = -1, bd = Infinity;
+        GRID.forEach((q, i) => {
+          if (taken.has(i)) return;
+          const d = (q.u - p.u) ** 2 + (q.v - p.v) ** 2;
+          if (d < bd) { bd = d; best = i; }
+        });
+        taken.add(best);
+        return best;
+      });
+      pos = cell.map((i) => ({ ...GRID[i] }));
+    };
+    if (mode === 'grid') toGrid();
     const R = CUP.topR, pad = 0.012;
     const x0 = -FREE.uMax * CUP_D - R - pad, x1 = FREE.uMax * CUP_D + R + pad;
     const z0 = RACK_Z0 - R - pad, z1 = RACK_Z0 + FREE.vMax * CUP_D + R + pad;
@@ -1349,17 +1382,18 @@ class CupPong {
     const X = (p) => (p.u * CUP_D - x0) * sc, Y = (p) => (RACK_Z0 + p.v * CUP_D - z0) * sc;
     const spotAt = (x, y) => ({ u: (x / sc + x0) / CUP_D, v: (y / sc + z0 - RACK_Z0) / CUP_D });
     const rr = (R * sc * 0.96).toFixed(1);
+    const board = () => `<rect class="cp-wall" x="0" y="0" width="${W}" height="16"/>${mode === 'grid'
+      ? GRID.map((q) => `<circle class="cp-spot" cx="${X(q).toFixed(1)}" cy="${Y(q).toFixed(1)}" r="${rr}"/>`).join('')
+      : `<line class="cp-mid" x1="${(W / 2).toFixed(1)}" y1="16" x2="${(W / 2).toFixed(1)}" y2="${H.toFixed(1)}"/>`}${
+      pos.map((p, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(p).toFixed(1)} ${Y(p).toFixed(1)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}`;
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
       <div class="gh-modal cp-card cp-rerack cp-custom" role="dialog" aria-modal="true" aria-label="${t('rk_custom')}">
         <h2 class="cp-card-title">${t('rk_custom')}</h2>
+        <div class="gh-seg cp-rk-mode" role="group" data-role="mode">${['grid', 'free'].map((v) => `<button type="button" class="gh-seg__item" data-v="${v}" aria-pressed="${v === mode}"><span>${t(v === 'grid' ? 'rkGrid' : 'rkFree')}</span></button>`).join('')}</div>
         <p class="cp-custom-say">${t('rkDrag')}</p>
-        <svg class="cp-grid" viewBox="0 0 ${W} ${H.toFixed(1)}" role="img" aria-label="${t('rk_custom')}">
-          <rect class="cp-wall" x="0" y="0" width="${W}" height="16"/>
-          <line class="cp-mid" x1="${(W / 2).toFixed(1)}" y1="16" x2="${(W / 2).toFixed(1)}" y2="${H.toFixed(1)}"/>
-          ${pos.map((p, k) => `<g class="cp-cup" data-cup="${k}" transform="translate(${X(p).toFixed(1)} ${Y(p).toFixed(1)})"><circle r="${rr}"/><circle class="cp-cup-in" r="${(R * sc * 0.62).toFixed(1)}"/></g>`).join('')}
-        </svg>
+        <svg class="cp-grid" viewBox="0 0 ${W} ${H.toFixed(1)}" role="img" aria-label="${t('rk_custom')}">${board()}</svg>
         <div class="cp-custom-btns">
           <button type="button" class="gh-btn" data-role="cancel">${t('cancel')}</button>
           <button type="button" class="gh-btn gh-btn--primary" data-role="done" disabled>${t('rkDone')}</button>
@@ -1367,7 +1401,7 @@ class CupPong {
       </div>`;
     this.root.appendChild(el);
     const svg = el.querySelector('.cp-grid');
-    const cups = [...el.querySelectorAll('.cp-cup')];
+    let cups = [...el.querySelectorAll('.cp-cup')];
     const done = el.querySelector('[data-role="done"]');
     const say = el.querySelector('.cp-custom-say');
     let sel = -1, drag = null;
@@ -1376,18 +1410,48 @@ class CupPong {
       return { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * H };
     };
     const place = (k, x, y) => cups[k].setAttribute('transform', `translate(${(+x).toFixed(1)} ${(+y).toFixed(1)})`);
-    /** Where cup k would come to rest if let go at this point of the drawing (null: nowhere near). */
+    /** Free: where cup k would come to rest if let go at this point of the drawing (null: nowhere near). */
     const settle = (k, x, y) => settleSpot(spotAt(x, y), pos.filter((_, i) => i !== k));
+    /** Grid: the free spot nearest a point, or the cup's own spot. */
+    const nearestCell = (k, x, y) => {
+      let best = cell[k], bd = Infinity;
+      GRID.forEach((q, i) => {
+        if (i !== cell[k] && cell.includes(i)) return;
+        const d = (X(q) - x) ** 2 + (Y(q) - y) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      });
+      return best;
+    };
+    /** Put cup k down at this point of the drawing (nowhere near, in Free: it stays where it was). */
+    const dropAt = (k, x, y) => {
+      if (mode === 'grid') { cell[k] = nearestCell(k, x, y); pos[k] = { ...GRID[cell[k]] }; touched = true; return; }
+      const to = settle(k, x, y);
+      if (to) { pos[k] = to; touched = true; }
+    };
     const paint = () => {
       pos.forEach((p, k) => { place(k, X(p), Y(p)); cups[k].classList.toggle('is-sel', k === sel); cups[k].classList.remove('is-bad'); });
-      // Against the back wall (Matt, 2026-09-29): at least one cup touching it.
+      // Against the back wall (Matt, 2026-09-29) and every cup touching (2026-11-04).
       const back = !m.backRack || pos.some((p) => p.v <= 1e-6);
-      const moved = pos.some((p, k) => Math.abs(p.u - start[k].u) > 1e-9 || Math.abs(p.v - start[k].v) > 1e-9);
-      done.disabled = !back || !moved;
-      say.textContent = back ? t('rkDrag') : t('rkBack');
-      say.classList.toggle('is-warn', !back);
+      const joined = allTouching(pos.map((p, k) => ({ id: 'k' + k, u: p.u, v: p.v })));
+      const moved = touched && pos.some((p, k) => Math.abs(p.u - orig[k].u) > 1e-9 || Math.abs(p.v - orig[k].v) > 1e-9);
+      done.disabled = !back || !joined || !moved;
+      say.textContent = !back ? t('rkBack') : !joined ? t('rkTouch') : t('rkDrag');
+      say.classList.toggle('is-warn', !back || !joined);
     };
     paint();
+    this.on(el.querySelector('[data-role="mode"]'), 'click', (e) => {
+      const b = e.target.closest('.gh-seg__item');
+      if (!b || b.dataset.v === mode) return;
+      mode = b.dataset.v === 'grid' ? 'grid' : 'free';
+      for (const x of el.querySelectorAll('[data-role="mode"] .gh-seg__item')) x.setAttribute('aria-pressed', String(x === b));
+      this.settings.rackMode = mode;
+      writeSettings(this.settings);
+      if (mode === 'grid') toGrid(); else cell = null;
+      sel = -1;
+      svg.innerHTML = board();
+      cups = [...svg.querySelectorAll('.cp-cup')];
+      paint();
+    });
     this.on(svg, 'pointerdown', (e) => {
       const g = e.target.closest && e.target.closest('.cp-cup');
       const p = toSvg(e);
@@ -1400,8 +1464,7 @@ class CupPong {
         return;
       }
       if (sel >= 0) {                                    // a cup picked up: put it down here
-        const to = settle(sel, p.x, p.y);
-        if (to) pos[sel] = to;
+        dropAt(sel, p.x, p.y);
         sel = -1;
         paint();
       }
@@ -1411,7 +1474,8 @@ class CupPong {
       const p = toSvg(e);
       if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) < R * sc * 0.25) return;
       drag.moved = true;
-      // The cup shows where it would come to rest, so a gap is found by feel; nowhere near: dimmed.
+      if (mode === 'grid') { place(drag.k, p.x, p.y); return; }
+      // Free: the cup shows where it would come to rest, so a gap or a line is found by feel; dimmed: nowhere.
       const to = settle(drag.k, p.x, p.y);
       if (to) place(drag.k, X(to), Y(to)); else place(drag.k, p.x, p.y);
       cups[drag.k].classList.toggle('is-bad', !to);
@@ -1421,21 +1485,22 @@ class CupPong {
       const { k, moved } = drag;
       cups[k].classList.remove('is-drag');
       drag = null;
-      if (moved) {
-        const p = toSvg(e);
-        const to = settle(k, p.x, p.y);
-        if (to) pos[k] = to;                             // nowhere near: it goes back where it was
-        sel = -1;
-      } else sel = sel === k ? -1 : k;                   // a tap picks it up (or puts it back down)
+      if (moved) { const p = toSvg(e); dropAt(k, p.x, p.y); sel = -1; }
+      else sel = sel === k ? -1 : k;                     // a tap picks it up (or puts it back down)
       paint();
     };
     this.on(svg, 'pointerup', end);
     this.on(svg, 'pointercancel', (e) => { if (drag && e.pointerId === drag.id) { cups[drag.k].classList.remove('is-drag'); drag = null; paint(); } });
     this.on(el.querySelector('[data-role="cancel"]'), 'click', () => { el.remove(); this.showRerack(); });
     this.on(done, 'click', () => {
-      const spots = pos.map((p) => ({ u: p.u, v: p.v }));   // full precision: the other phone checks the same numbers
       el.remove();
-      this.applyRerack(m.rerackCustom(spots), { k: 'r', key: 'custom', spots });
+      if (mode === 'grid') {
+        const cells = cell.map((i) => ({ c: AREA_CELLS[i].c, r: AREA_CELLS[i].r }));   // cells: any build replays them
+        this.applyRerack(m.rerackCustom(cells), { k: 'r', key: 'custom', cells });
+      } else {
+        const spots = pos.map((p) => ({ u: p.u, v: p.v }));   // full precision: the other phone checks the same numbers
+        this.applyRerack(m.rerackCustom(spots), { k: 'r', key: 'custom', spots });
+      }
     });
   }
 

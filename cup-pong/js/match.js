@@ -66,7 +66,7 @@
 // is saved and restored whole (`toJSON` / `Match.fromJSON`), and `swapSides` turns a saved match
 // round so the phone playing it is always side 'a'.
 
-import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, GENT_BACK } from './rack.js';
+import { makeRack, PRESETS, isSpot, isCell, validRack, presetsFor, applyPreset, islandsOf, allTouching, GENT_BACK } from './rack.js';
 
 export const BALLS = 2;
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -233,10 +233,12 @@ export class Match {
    * shooter chose. `cells[i]` is where the i-th standing cup goes. Since 2026-11-03 ANYWHERE (Matt:
    * "I want to be able to move the cups however I want. Not in this exact grid"): exact spots
    * `{ u, v }` inside the rack area, none overlapping. Hex cells `{ c, r }` (one cup per cell) are
-   * still accepted, so a challenge made before replays. Cups do not have to touch (the brief: Matt
-   * did not ask for that limit). Costs one rerack, exactly like a preset.
+   * still accepted, so a challenge made before replays. ALL CUPS TOUCHING (Matt, 2026-11-04: "we need
+   * to add a rule so that all cups are touching"): one group, none apart. `replay` (a stored challenge
+   * move) accepts a rack without it, like a stored island call: a phone on an older build may have made
+   * one, and refusing it would refuse the whole match. Costs one rerack, exactly like a preset.
    */
-  rerackCustom(cells) {
+  rerackCustom(cells, replay = false) {
     if (!this.canRerack()) return [];
     const rack = this.target();
     if (!Array.isArray(cells) || cells.length !== rack.length) return [];
@@ -246,6 +248,7 @@ export class Match {
     if (!to.every(free ? isSpot : isCell) || !validRack(to)) return [];
     // Against the back wall: at least one cup on the back row, so the rack cannot be pulled closer.
     if (this.backRack && !to.some((k) => (free ? k.v <= 1e-6 : k.r === 0))) return [];
+    if (!replay && !allTouching(to)) return [];
     this.racks[this.defender] = to;
     if (this.phase !== 'rebuttal') {
       if (Number.isFinite(this.reracksLeft[this.shooter])) this.reracksLeft[this.shooter]--;
