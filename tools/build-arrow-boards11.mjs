@@ -68,9 +68,10 @@ export const B11_STYLE = ${JSON.stringify(styles)};
 } else {
   mkdirSync(PARTS_DIR, { recursive: true });
   const part = arg('--part', 0), parts = arg('--parts', 1);
+  const from = arg('--from', 0);   // e.g. --from 100: only the boards past the shipped ones
   for (let k = part; k < COUNT; k += parts) {
     const f = new URL(`b${k}.json`, PARTS_DIR);
-    if (existsSync(f)) continue;   // resumable
+    if (k < from || existsSync(f)) continue;   // resumable
     const t0 = Date.now();
     const b = boardAt(k);
     writeFileSync(f, JSON.stringify(b));
