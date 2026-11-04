@@ -11,7 +11,7 @@
 //     CEORL, ORLE, OCREA as words to find, so 60.)
 //   * boggle/data/words.txt (ENABLE, public domain): a SCOWL word must also be here, which drops
 //     proper nouns, abbreviations and odd spellings.
-//   * BONUS words since 2026-11-04 (Matt: "Make it fun") = EVERY other ENABLE word, minus first names, bad
+//   * BONUS words since 2026-11-04 (Matt: "Make it fun") = EVERY other ENABLE or Collins Scrabble Words 2019 word, minus first names, bad
 //     words (ADULT_KEEP aside) and NOT_WORDS. Before that (kept below for the record):
 //   * BONUS words (`extra`: accepted and scored, never in hints or ranks) = ENABLE words that are ALSO
 //     in SCOWL size 70, not a first name, AND on the hand-checked BONUS_KEEP list. (The candidates read
@@ -95,6 +95,9 @@ const BONUS_KEEP = new Set(`
   tefillin tempeh terraform trinary tuatara unglue unlink untaxed updo varicella wildling wobbler`.split(/\s+/).filter(Boolean));
 // Matt named these (2026-10-26): never bonus words, even with the whole of ENABLE in.
 const NOT_WORDS = new Set(['cratch', 'cranch', 'hant']);
+// Collins Scrabble Words 2019 (HarperCollins, copyright; Matt, 2026-11-04: "We can absolutely use any
+// dictionary"): ~279,000 words, every one a bonus word too (never an answer).
+const CSW_URL = 'https://raw.githubusercontent.com/scrabblewords/scrabblewords/main/words/British/CSW19.txt';
 const FREQ_URL = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt';
 const NAME_URLS = ['https://raw.githubusercontent.com/dominictarr/random-name/master/first-names.txt',
   'https://raw.githubusercontent.com/smashew/NameDatabases/master/NamesDatabases/first%20names/us.txt'];
@@ -170,14 +173,22 @@ async function main() {
     for (const n of fs.readFileSync(await cached(u, `names-${i}.txt`), 'utf8').split(/\r?\n/)) if (n.trim()) names.add(n.trim().toLowerCase());
   }
   const fits = (w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && enable.has(w) && !bad.has(w) && bits(maskOf(w)) <= 7;
+  const csw = new Set();
+  for (const line of fs.readFileSync(await cached(CSW_URL, 'csw19.txt'), 'utf8').split('\n')) {
+    if (line.startsWith('#')) continue;
+    const w = line.split(/\s/)[0].toLowerCase();
+    if (w) csw.add(w);
+  }
+  const shape = (w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && !bad.has(w) && bits(maskOf(w)) <= 7;
+  const fitsBonus = (w) => (enable.has(w) || csw.has(w)) && shape(w);
   const words = [...level.keys()].filter((w) => level.get(w) <= LEVELS[LEVELS.length - 1] && fits(w)).sort();
   const answerSet = new Set(words);
   // 2026-11-04 (Matt: "Widen English man come on. Make it fun"): every ENABLE word is a bonus word now, as
   // Spanish takes its whole dictionary. English had ~1 bonus word a puzzle, Spanish ~290. Still out: first
   // names (ANNA, CARL), bad words (ADULT_KEEP aside), and NOT_WORDS (Matt, 2026-10-26: "aren't words").
   // BONUS_KEEP and BONUS_LEVEL stay for the record; every word on them is in ENABLE too.
-  const extra = [...enable]
-    .filter((w) => !answerSet.has(w) && !names.has(w) && !NOT_WORDS.has(w) && fits(w))
+  const extra = [...new Set([...enable, ...csw])]
+    .filter((w) => !answerSet.has(w) && !names.has(w) && !NOT_WORDS.has(w) && fitsBonus(w))
     .concat([...ADULT_KEEP].filter((w) => /^[a-z]{4,}$/.test(w) && !w.includes('s') && bits(maskOf(w)) <= 7 && !answerSet.has(w)))
     .filter((w, i, a) => a.indexOf(w) === i)
     .sort();
