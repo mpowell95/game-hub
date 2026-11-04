@@ -884,7 +884,7 @@ function helpHTML() {
 /** A game's (i): "Ranked by" one line, then "Counts as" ONLY where a mode records at another level (js/lb-rules.js).
  *  A wins board on an admin device shows the points sheet instead (Matt's mockup v7, js/lb-points-sheet.js): each
  *  option's real points replace "Counts as". */
-function ptsInfo(game) { const r = rulesFor(game); return !!r && (r.by === 'wins' || r.by === 'cuppong') && isAdminDevice(); }
+function ptsInfo(game) { const r = rulesFor(game); return !!r && (r.by === 'wins' || r.by === 'cuppong'); }   // released 2026-11-04
 function infoHTML(game) {
   const r = rulesFor(game);
   if (!r) return '';
@@ -1207,7 +1207,7 @@ export async function openLeaderboard2(opts = {}) {
     _beeOff = watchBeeBoard(() => { if (_host && _connected) onData(); });
     const sid = statsId(), code = String((loadProfile() || {}).playerId || '').toUpperCase();
     const off = await watchBoard((b0) => {
-      const b = isAdminDevice() ? withRestoredBoard(b0, { aggregatePlayers, buildIdentity }) : b0;
+      const b = withRestoredBoard(b0, { aggregatePlayers, buildIdentity });   // everyone since 2026-11-04 (Matt: "Yes, obviously")
       _people = b.list.filter((g) => !isHiddenName(g && g.name));
       const mine = b.list.find((g) => (b.idsByKey.get(g.key) || []).includes(sid)) || (code ? b.list.find((g) => g.playerId === code) : null);
       _meKey = mine ? mine.key : '';
@@ -1217,7 +1217,7 @@ export async function openLeaderboard2(opts = {}) {
     if (off) _unsub = off;
     else {
       _unsub = await watchPlayers((all0) => {
-        const all = isAdminDevice() ? withRestoredRecords(all0) : all0;
+        const all = withRestoredRecords(all0);
         const recs = {};
         for (const id of Object.keys(all || {})) if (!HIDDEN_DEVICE_PREFIX.some((p) => id.startsWith(p))) recs[id] = all[id];
         _people = aggregatePlayers(recs, corrections()).filter((g) => !isHiddenName(g && g.name));

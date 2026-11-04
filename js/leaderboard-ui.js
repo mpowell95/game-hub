@@ -1051,9 +1051,10 @@ function gameMetricAt(g, id, tier) {
 /** A board ranked on points per win (js/lb-rules.js `wins` / `cuppong`; Hold'em's Wins tab is not one). */
 // ADMIN DEVICES ONLY (Matt, 2026-11-02: "deployed to the ADMIN ONLY leaderboard for me to review and test"):
 // players' boards stay "hardest level first" until Matt says "release it" in his own words.
-function isPointsBoard(id) { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong') && isAdminDevice(); }
+function isPointsBoard(id) { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong'); }   // RELEASED 2026-11-04 (Matt: "release it")
 /** A puzzle board on points (js/puzzle-points.js, 2026-11-03): ADMIN DEVICES ONLY, like the wins boards' points. */
-function isPuzzlePts(id) { return PUZZLE_POINT_GAMES.includes(id) && isAdminDevice(); }
+// Released 2026-11-04 for everyone, EXCEPT Nuts & Bolts: its points stay admin-only (Matt: "Change the layouts only for now. Hold it.").
+function isPuzzlePts(id) { return PUZZLE_POINT_GAMES.includes(id) && (id !== 'nutsbolts' || isAdminDevice()); }
 /** Lower wins (golf; Minesweeper's best time, but not while it is on points). */
 function lowerIsBetter(id) { return LOWER_IS_BETTER.has(id) && !isPuzzlePts(id); }
 /** Solves behind a puzzle row's points (the tie-break: equal points, more solves first). */
@@ -3051,7 +3052,7 @@ export async function openLeaderboard(opts = {}) {
   // (js/leaderboard2-ui.js) opens instead, so Matt reviews it with real data; every other device
   // takes the path below, unchanged. `legacy: true` is its "Old" link back here. Arrow Maze's Rush
   // board exists only here, so a Rush button keeps opening it.
-  if (!(opts && opts.legacy) && !(opts && opts.woMode === 'rush') && isAdminDevice()) {
+  if (!(opts && opts.legacy) && !(opts && opts.woMode === 'rush')) {   // v2 for everyone since 2026-11-04 (Matt: "release it")
     try { const m = await import('./leaderboard2-ui.js'); m.openLeaderboard2(opts || {}); return; }
     catch (err) { console.error('[leaderboard] v2 failed to load; opening the old one', err); }
   }
@@ -3167,9 +3168,9 @@ export async function openLeaderboard(opts = {}) {
     // yet, or unreadable: the whole players/ node, as it always was.
     _beeBy = 'points'; _beeLang = 'all';
     _beeOff = watchBeeBoard(() => { if (_host && _connected) rerender({ fromData: true }); });
-    const offBoard = await watchBoard((b) => { _board = isAdminDevice() ? withRestoredBoard(b, { aggregatePlayers, buildIdentity }) : b; _connected = true; rerender({ fromData: true }); });
+    const offBoard = await watchBoard((b) => { _board = withRestoredBoard(b, { aggregatePlayers, buildIdentity }); _connected = true; rerender({ fromData: true }); });
     if (offBoard) _unsub = offBoard;
-    else _unsub = await watchPlayers((all) => { _board = null; _all = isAdminDevice() ? withRestoredRecords(all) : (all || {}); _connected = true; rerender({ fromData: true }); });
+    else _unsub = await watchPlayers((all) => { _board = null; _all = withRestoredRecords(all || {}); _connected = true; rerender({ fromData: true }); });
     if (!_host) { if (typeof _unsub === 'function') _unsub(); return; }
   } catch { renderOffline(); }
 }

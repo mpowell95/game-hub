@@ -1768,7 +1768,6 @@ function baseballScreen(rec) {
 function ptsSectionHTML(id, st) {
   const r = LB_RULES[id];
   if (!r || (r.by !== 'wins' && r.by !== 'cuppong')) return '';
-  if (!isAdminDevice()) return '';   // admin devices only until Matt releases the points (2026-11-02)
   const rec = (st && st.games && st.games[id]) || {};
   // What a win is worth: the same cards as the board's (i) (Matt's mockup v7, js/lb-points-sheet.js), behind the
   // board's own button (2026-11-03, Matt: "Why is the score calculation fully displayed on this page? We should hide
@@ -2522,7 +2521,7 @@ export function openStatsOverlay() {
   _st = correctStats(loadStoredStats(), statsId(), corrections());
   _combinedDevices = 1;
   _places = null;
-  _s4 = isAdminDevice();
+  _s4 = true;   // the v2 look for everyone since 2026-11-04 (Matt: "release it")
   const host = document.createElement('div');
   host.className = _s4 ? 'gs-overlay gs-ov4' : 'gs-overlay';
   host.setAttribute('role', 'dialog');

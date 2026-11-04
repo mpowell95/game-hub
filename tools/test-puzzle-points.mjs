@@ -84,7 +84,7 @@ const rec = (name, code, stats) => ({ profile: { name, playerId: code }, stats, 
 {
   const { readFileSync } = await import('node:fs');
   const ui = readFileSync(new URL('../js/leaderboard-ui.js', import.meta.url), 'utf8');
-  ok('leaderboard: puzzle points only on an admin device', /function isPuzzlePts\(id\) \{ return PUZZLE_POINT_GAMES\.includes\(id\) && isAdminDevice\(\); \}/.test(ui));
+  ok('leaderboard: puzzle points for everyone, Nuts & Bolts still admin-only (held, 2026-11-04)', /function isPuzzlePts\(id\) \{ return PUZZLE_POINT_GAMES\.includes\(id\) && \(id !== 'nutsbolts' \|\| isAdminDevice\(\)\); \}/.test(ui));
 }
 
 console.log(`\npuzzle-points tests: ${pass} passed, ${fail} failed`);

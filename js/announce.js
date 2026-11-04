@@ -31,10 +31,11 @@ export const ANNOUNCEMENTS = [
     // where"). Drawn by js/announce-ui.js showLb2Intro (`pages: 'lb2-intro'`). ADMIN DEVICES ONLY (`adminDevice`) until
     // Matt says "release it": then drop `adminDevice` and it shows once on every phone. Matt: "set this up for just
     // admin so next time I open the game hub I see it the same way the others will when we go live".
-    id: 'lb2-points-2026-11-03',
+    // Released 2026-11-04 (Matt: "release it. Including the popup"); a NEW id so every phone shows it once,
+    // Matt's too (the 11-03 id was dismissed on admin devices; seen-lists are by id).
+    id: 'lb2-points-2026-11-04',
     from: '2026-11-03',
     until: '2027-01-31',
-    adminDevice: true,
     pages: 'lb2-intro',
   },
   {

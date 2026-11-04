@@ -926,7 +926,7 @@
     $('#pf-stats-btn').addEventListener('click', async () => {
       try {
         let admin = false;
-        try { admin = (await import('../js/admin-config.js')).isAdminDevice() === true; } catch { admin = false; }
+        admin = true;   // the new leaderboard's Me tab for everyone since 2026-11-04 (Matt: "release it")
         if (admin) {
           try {
             const v2 = await import('../js/leaderboard2-ui.js');
