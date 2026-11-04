@@ -54,6 +54,7 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
 .r .t b{display:block;font-size:16px}
 .r .t span{font-size:13px;font-weight:600;color:#9fb0c6}
 .sm{padding:8px 12px;font-size:15px}
+.toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);padding:12px 20px;border-radius:999px;background:#e8eef7;color:#14202f;font-weight:800;font-size:16px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -66,14 +67,14 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="scrim"></div>
       <div class="card">
         <h2 class="h">Choose a name</h2>
-        <p class="lead">Your name goes on the leaderboard with every game you play.</p>
+        <p class="lead">This is how you will appear on the Leaderboard. It can be changed later.</p>
         <div class="row" style="margin-bottom:14px"><button class="btn gh" style="flex:1">English</button><button class="btn gh" style="flex:1">Español</button></div>
         <div class="row"><input class="in" placeholder="Your name" aria-label="Your name"><button class="btn pri">Save</button></div>
         <div class="or">or</div>
         <div class="row"><input class="in" value="K7MPQ" aria-label="Code" style="letter-spacing:.16em"><button class="btn pri">Link</button></div>
       </div>
     </div>
-    <div class="cap">1. New phone<small>types code, taps Link</small></div>
+    <div class="cap">1. New device<small>types code, taps Link</small></div>
   </div>
 
   <!-- 2 -->
@@ -82,12 +83,13 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
       <div class="scrim"></div>
       <div class="card" style="text-align:center">
-        <h2 class="h">Approve on Alex's other phone</h2>
+        <h2 class="h">Approve on other device or browser</h2>
         <div class="spin" role="img" aria-label="Waiting"></div>
+        <p class="lead" style="text-align:left;margin:0 0 14px">You will get a notification to approve sign in. If you don't have notifications turned on, open the Game Hub on your other device/browser.</p>
         <div class="row wide"><button class="btn gh">Cancel</button></div>
       </div>
     </div>
-    <div class="cap">2. New phone<small>waits</small></div>
+    <div class="cap">2. New device<small>waits</small></div>
   </div>
 
   <!-- 3 -->
@@ -98,11 +100,11 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="date">Wednesday, November 4</div>
         <div class="note">
           <div class="ico">GH</div>
-          <div class="nt"><div class="top"><span>GAME HUB</span><span>now</span></div><b>New phone wants to join as Alex</b><span>Tap to answer</span></div>
+          <div class="nt"><div class="top"><span>GAME HUB</span><span>now</span></div><b>Allow sign in on another device?</b><span>Tap to answer</span></div>
         </div>
       </div>
     </div>
-    <div class="cap">3. Alex's phone, app closed<small>notification</small></div>
+    <div class="cap">3. Alex's other device, app closed<small>notification</small></div>
   </div>
 
   <!-- 4 -->
@@ -111,7 +113,7 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
       <div class="scrim"></div>
       <div class="card">
-        <h2 class="h">New phone</h2>
+        <h2 class="h">Allow sign in on other device/browser?</h2>
         <div class="dev">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#9fb0c6" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
           <div><b>Android · Chrome</b><span>2:14 PM</span></div>
@@ -119,10 +121,19 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="row wide"><button class="btn gh">Deny</button><button class="btn pri">Allow</button></div>
       </div>
     </div>
-    <div class="cap">4. Alex's phone, app open<small>or after tapping the notification</small></div>
+    <div class="cap">4. Alex's other device, app open<small>or after tapping the notification</small></div>
   </div>
 
   <!-- 5 -->
+  <div class="col">
+    <div class="phone">
+      <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
+      <div class="toast">Signed in as Alex</div>
+    </div>
+    <div class="cap">5. New device, allowed<small>straight into the Game Hub</small></div>
+  </div>
+
+  <!-- 6 -->
   <div class="col">
     <div class="phone">
       <div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div>
@@ -132,22 +143,22 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="row wide" style="margin-top:14px"><button class="btn pri">OK</button></div>
       </div>
     </div>
-    <div class="cap">5. New phone, if denied<small>Allow = straight into the Game Hub as Alex</small></div>
+    <div class="cap">6. New device, denied<small>&nbsp;</small></div>
   </div>
 
-  <!-- 6 -->
+  <!-- 7 -->
   <div class="col">
     <div class="phone">
       <div class="admin">
         <div class="ahd"><h2>Admin</h2><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#cfdcec" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></div>
         <div class="tabs"><span class="tab on">Now</span><span class="tab">Games</span><span class="tab">People</span><span class="tab">Sent</span></div>
-        <div class="sec">New phones</div>
+        <div class="sec">New devices</div>
         <div class="list">
           <div class="r"><div class="t"><b>Alex</b><span>Android · Chrome · 2:14 PM</span></div><button class="btn gh sm">No</button><button class="btn pri sm">Allow</button></div>
         </div>
       </div>
     </div>
-    <div class="cap">6. Matt's Admin page<small>for a lost only phone</small></div>
+    <div class="cap">7. Matt's Admin page<small>for a lost only phone</small></div>
   </div>
 
 </div>
