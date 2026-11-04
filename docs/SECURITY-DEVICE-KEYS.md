@@ -19,6 +19,11 @@ Matt: "Yes start on 1-3" (lock `players/`, stop anyone claiming any code, stop e
 - Rules: `claimReq/<uid>` own write, `claimRes/<uid>` own read, `codeKeys` admin read. Nothing else changed.
 - `tools/test-device-key.mjs`.
 
+## Design change (2026-11-04, Matt: "Can we make it a popup? Like if trying to log into another device, you get a notification from the game hub asking to confirm?")
+No PIN. The new phone asks; the player's other phones get a popup (app open) or a push (app closed) with Allow / Deny;
+Matt can Allow from Admin > Now (a lost only phone). Mockup: `docs/mockups/new-phone-approval.html` (NOT approved yet).
+The PIN items below are replaced by this once Matt approves the mockup.
+
 ## Step B (NOT built; player-visible, needs Matt's "ship it")
 1. Server: t `pin` (6 digits, 10 min, 5 tries), t `fresh` (a brand-new unused code: no `codeKeys`, no
    `directory/`, no `players` record with it), `pinMake` (claimed phone or admin makes a PIN), admin any.
