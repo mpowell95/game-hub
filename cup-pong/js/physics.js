@@ -91,7 +91,7 @@ export function innerR(y) {
 //     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
 //  2. POWER IS GENTLER: the same swipe changes the speed less (TEST.spread), so each row of cups is a
 //     wider band of swipe speeds. Centred on TEST.p0, so a mid-rack swipe flies where it did.
-export const TEST = { rest: 0.80, restLater: 0.60, skid: 0.55, spread: 1.5, p0: 0.57 };
+export const TEST = { rest: 0.66, restLater: 0.53, skid: 0.55, spread: 1.5, p0: 0.57 };   // rest tuned 2026-11-05: best-aim bounce 63% vs direct 67% on the 12 most-played real racks (real game: 61% vs 54%)
 const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
 
 function launchSpeedTest(power) {
