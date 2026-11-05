@@ -159,6 +159,13 @@ of the soft-throw sweep).
   OPENS on it; equal bests share a rank; no tier chip/difficulty filter. Wins / Games / Name list
   match players as before.
 
+## Every throw goes in the play log (2026-11-05, Matt: "you should also be recording data in solo mode obviously")
+
+`logThrow` (ui.js): each of THIS player's throws in every mode (solo, `cpu@<diff>`, `mp` + match id in `k`) is a
+`playLog` entry `e: 'throw'`, `d` = JSON `{p, a, v (swipe speed), sw: {len, dx, dy, ms, w, h} (px/ms), o, mc, b, n
+(solo throw no.), rf (re-flown), r: [[id, u, v]...] (cups standing, cup-widths)}`. Read with `tools/read-play-log.mjs`.
+Evidence only, never read back. Before this, only challenge throws (p, a) were stored.
+
 ## The setup screen (2026-09-28, second layout)
 
 Hoops' layout: **Your turn** card (only when a match waits), **Multiplayer**, **Play the computer**
