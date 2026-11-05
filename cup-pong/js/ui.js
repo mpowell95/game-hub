@@ -8,7 +8,8 @@
 // see isInProgress() for which meaning of the contract each is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag, activeCode } from '../../js/game-stats.js';
+import { appendPlayLog } from '../../js/play-log-queue.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -489,7 +490,7 @@ class CupPong {
     if (f.s === 'a') {
       R.showRestBall(m.spare !== null);
       R.setBallHeat(m.heat('a', m.ball), m.spare !== null ? m.heat('a', m.spare) : 0);
-      this.lastShot = { power, aim };
+      this.lastShot = { power, aim, cups: cupsXZ(m.target()), refly: 1 };
     } else R.setBallHeat(m.heat('b', m.ball), 0);
     this.busy = true;
     this.paintOptions();
@@ -1591,7 +1592,13 @@ class CupPong {
       const perH = swipeSpeed(list, Math.max(320, window.innerHeight));
       if (perH === null) return;
       const power = powerOf(perH);
-      this.shoot(power, this.aimFromSwipe(first, last), { perH });
+      // The swipe itself, for the play log (Matt, 2026-11-05: "you should also be recording data"):
+      // its path length, how far across and up, how long, and the screen it was on, in CSS px / ms.
+      let len = 0;
+      for (let i = 1; i < list.length; i++) len += Math.hypot(list[i].x - list[i - 1].x, list[i].y - list[i - 1].y);
+      const sw = { len: Math.round(len), dx: Math.round(last.x - first.x), dy: Math.round(first.y - last.y),
+        ms: Math.round(last.t - first.t), w: Math.round(window.innerWidth), h: Math.round(window.innerHeight) };
+      this.shoot(power, this.aimFromSwipe(first, last), { perH, sw });
     };
     const cancel = () => { samples = null; touchId = null; };
     this.on(pad, 'touchstart', start, { passive: true });
@@ -1637,7 +1644,7 @@ class CupPong {
     }
     this.busy = true;
     this.shooter = 'a';
-    this.lastShot = { power, aim, ...info };
+    this.lastShot = { power, aim, ...info, cups };
     this.paintOptions();                 // the options are for before a throw
     const hint = this.root.querySelector('.cp-hint');
     if (hint) hint.hidden = true;
@@ -1698,9 +1705,36 @@ class CupPong {
       const o = ev.outcome;
       const wait = o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS;
       if (this.replaying) { this.throwState = null; this.later(() => this.replayThrowDone(), wait); return; }
+      if (this.shooter === 'a') this.logThrow(o);
       if (this.mode === 'solo') this.later(() => this.serve(), wait);
       else { this.throwState = { done: true, ball: this.throwState && this.throwState.ball, outcome: o }; this.applyThrow(o, wait); }
     }
+  }
+
+  /**
+   * EVERY THROW OF THIS PLAYER'S, IN EVERY MODE, INTO THE PLAY LOG (Matt, 2026-11-05: "you should also
+   * be recording data in solo mode obviously"): power, aim, swipe speed, the swipe itself (length, across,
+   * up, time, screen), the cups standing (cup-widths: u across, v from the back row), the cup made, bounced,
+   * and the mode. Evidence for reading later (tools/read-play-log.mjs), never read back; the stats store
+   * is untouched. Once per throw; the computer's throws and replays of the other person's are not logged.
+   */
+  logThrow(o) {
+    const s = this.lastShot;
+    if (!s || s.logged) return;
+    s.logged = true;
+    try {
+      const r6 = (x) => Math.round(x * 1e6) / 1e6, r2 = (x) => Math.round(x * 100) / 100;
+      const mode = this.mode === 'solo' ? 'solo' : this.mp ? 'mp' : 'cpu@' + ((this.cfg && this.cfg.diff) || '?');
+      const d = { p: r6(s.power), a: r6(s.aim), o: (o && o.kind) || '?', mc: o && o.kind === 'made' ? o.id : '', b: o && o.bounced ? 1 : 0 };
+      if (s.perH != null) d.v = Math.round(s.perH * 1000) / 1000;
+      if (s.sw) d.sw = s.sw;
+      if (s.refly) d.rf = 1;
+      if (this.mode === 'solo') d.n = this.throws | 0;
+      d.r = (s.cups || []).map((k) => [k.id, r2(k.x / CUP_D), r2((k.z - RACK_Z0) / CUP_D)]);
+      let txt = JSON.stringify(d);
+      if (txt.length > 400) { delete d.r; txt = JSON.stringify(d); }
+      appendPlayLog(activeCode(), { g: 'cuppong', e: 'throw', m: mode, k: this.mp ? String(this.mp.id) : null, d: txt });
+    } catch (err) { console.error('[cup-pong] throw not logged', err); }
   }
 
   serve() {
