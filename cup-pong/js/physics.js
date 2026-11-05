@@ -91,7 +91,11 @@ export function innerR(y) {
 //     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
 //  2. POWER IS GENTLER: the same swipe changes the speed less (TEST.spread), so each row of cups is a
 //     wider band of swipe speeds. Centred on TEST.p0, so a mid-rack swipe flies where it did.
-export const TEST = { rest: 0.66, restLater: 0.53, skid: 0.55, spread: 1.5, p0: 0.57 };   // rest tuned 2026-11-05: best-aim bounce 63% vs direct 67% on the 12 most-played real racks (real game: 61% vs 54%)
+// Tuned 2026-11-05 (Matt: 0.66 "feels dead... I want it to look normal, just have the same chance at going in as a
+// regular throw"): a LIVELY bounce (0.88 of the falling speed) that keeps 65.5% of its forward speed, so a bounced
+// ball comes in flatter. Best-aim bounce ~67% = best-aim direct 67% on the 12 most-played real racks (real game:
+// bounce 61%, direct 54%). Lower skid = the ball stops more and drops in more; the odds move fast with it.
+export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.655, spread: 1.5, p0: 0.57 };
 const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
 
 function launchSpeedTest(power) {

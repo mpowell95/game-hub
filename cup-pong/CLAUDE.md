@@ -171,7 +171,8 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 - A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
 - Test games use `physics.js` `model: 'test'` (`TEST`): the table is a plane that reflects the ball itself
   (`testTable`), because the solver's bounce kept 75-104% of the falling speed depending only on where in a
-  1/480 s step the ball met the table; and gentler power (`TEST.spread`, rows 1.5x wider in swipe speed,
+  1/480 s step the ball met the table (bounce 0.88, later 0.65, forward speed kept 0.655: lively, and an aimed bounce
+  goes in as often as an aimed direct shot; 0.66 felt dead to Matt); and gentler power (`TEST.spread`, rows 1.5x wider in swipe speed,
   centred on `TEST.p0`). The computer throws the real game's SPEED (`testPowerFor`), so its accuracy is unchanged.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
