@@ -23,6 +23,7 @@ import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme
 import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 
 const t = makeT(STRINGS);
 const STATS_ID = 'flicksoccer';
@@ -1565,6 +1566,9 @@ class FlickSoccerUI {
   /** Vs the computer: its difficulty. A challenge: the aiming help its sender chose (2026-10-15). */
   _aids() {
     const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
+    // Admin devices only (Matt, 2026-11-05: "Add the regular aim arrow (the one medium uses) to hard
+    // for admin only"): Hard vs the computer shows Medium's aim arrow. Players and online unchanged.
+    if (this.mode === 'cpu' && level === 'hard' && isAdminDevice()) return AIDS.medium;
     return AIDS[level] || AIDS.medium;
   }
 

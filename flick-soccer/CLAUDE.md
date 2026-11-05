@@ -161,6 +161,10 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
   | Medium | yes | yes | no |
   | Hard | yes | no | no |
 
+  **Admin devices only (2026-11-05, Matt: "Add the regular aim arrow (the one medium uses) to hard for
+  admin only")**: Hard vs the computer shows Medium's aim arrow on an admin device (`isAdminDevice()` in
+  `_aids`); players and online challenges are unchanged.
+
   **Pass and play is Medium. A challenge uses the aiming help its SENDER chose (2026-10-15)**, Matt:
   *"We only assigned those by difficulty. But I want to be able to choose"*: an **Aiming help** row
   (Easy / Medium / Hard, with what each shows) on the challenge card, saved as `settings.aimHelp`,
