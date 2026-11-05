@@ -10,6 +10,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag, activeCode } from '../../js/game-stats.js';
 import { appendPlayLog } from '../../js/play-log-queue.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
@@ -254,6 +255,13 @@ class CupPong {
           ${best ? `<span class="cp-row-best"><b>${best}</b><span>${t('soloBestShort')}</span></span>` : ''}
           <span class="cp-row-chev" aria-hidden="true">\u203A</span>
         </button>
+        ${isAdminDevice() ? `<div class="gh-card cp-setup-card cp-test">
+          <p class="cp-card-head">${t('test')}</p>
+          <div class="cp-test-row">
+            <button type="button" class="gh-btn" data-role="test-solo">${t('solo')}</button>
+            <button type="button" class="gh-btn" data-role="test-cpu">${t('testCpu')}</button>
+          </div>
+        </div>` : ''}
       </div>`;
     const pick = (role, fn) => {
       const g = this.root.querySelector(`[data-role="${role}"]`);
@@ -272,6 +280,12 @@ class CupPong {
     this.on(this.root.querySelector('[data-role="play"]'), 'click', (e) => this.quitGate(e.currentTarget, () => this.start('cpu')));
     if (saved) this.on(this.root.querySelector('[data-role="continue"]'), 'click', () => this.start('cpu', { resume: true }));
     this.on(this.root.querySelector('[data-role="solo"]'), 'click', () => this.start('solo'));
+    // TEST MODE (admin devices only, 2026-11-05): the test physics (physics.js TEST), nothing recorded,
+    // nothing saved, no loss for leaving; the real saved match and every stat are left alone.
+    if (isAdminDevice()) {
+      this.on(this.root.querySelector('[data-role="test-solo"]'), 'click', () => this.start('solo', { test: true }));
+      this.on(this.root.querySelector('[data-role="test-cpu"]'), 'click', () => this.start('cpu', { test: true }));
+    }
     this.on(this.root.querySelector('[data-role="mp"]'), 'click', () => this.openMultiplayer());
     this.fillTurns();
   }
@@ -282,6 +296,7 @@ class CupPong {
     this.unbindAll();
     this.clearTimers();
     this.mode = mode;
+    this.test = !!opts.test && mode !== 'mp' && isAdminDevice();
     this.recorded = false;
     this.renderPlay();
     try {
@@ -293,7 +308,7 @@ class CupPong {
       this.offViewport = onViewportResize(() => this.fit());
       if (mode === 'solo') this.newRack();
       else if (mode === 'mp') this.mpBegin(opts.game);
-      else if (opts.resume && !this.resumeMatch()) this.newMatch();
+      else if (opts.resume && !this.test && !this.resumeMatch()) this.newMatch();
       else if (!opts.resume) this.newMatch();
       this.startLoop();
       // Read-only hook for headless drivers (skeeball's `__skTest` precedent). Never read by the game.
@@ -317,6 +332,7 @@ class CupPong {
       <div class="cp-play">
         <div class="cp-hud">
           <div class="cp-status" aria-live="polite">
+            ${this.test ? `<span class="cp-testtag">${t('test')}</span>` : ''}
             <span class="cp-mode"></span>
             <span class="cp-sub"></span>
           </div>
@@ -501,7 +517,7 @@ class CupPong {
   /** The match vs the computer, saved as it stands (`fly`: a throw in the air). Never a challenge,
    *  never solo; a finished match leaves no save (its result is recorded once, by finish()). */
   saveMatch(fly = null) {
-    if (this.mode !== 'cpu' || this.mp || !this.match || this.recorded || !this.cfg) return;
+    if (this.test || this.mode !== 'cpu' || this.mp || !this.match || this.recorded || !this.cfg) return;
     const m = this.match;
     this._fly = fly;
     if (m.over) { clearSave(); return; }
@@ -589,7 +605,9 @@ class CupPong {
     const th = C.cpuThrow(this.cfg.diff, cups, Math.random, m.called);
     this.shooter = 'b';
     this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
-    this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups });
+    // Test mode: the same SPEED the real game would throw, so the computer is exactly as accurate.
+    const cpuPower = this.test ? this.engine.phys.testPowerFor(th.power) : th.power;
+    this.throwState = this.engine.phys.startThrow({ power: cpuPower, aim: th.aim, cups, model: this.test ? 'test' : null });
     this.saveMatch({ s: 'b', p: th.power, a: th.aim });
   }
 
@@ -1509,6 +1527,7 @@ class CupPong {
     const m = this.match;
     const won = m.winner === 'a';
     if (this.mp) { this.mpFinish(won); return; }
+    if (this.test) this.recorded = true;                 // test mode: nothing recorded, the real save untouched
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates. The
@@ -1656,7 +1675,7 @@ class CupPong {
       });
     }
     // The greyed spare stays where it is while this ball flies (it is the NEXT throw).
-    this.throwState = this.engine.phys.startThrow({ power, aim, cups });
+    this.throwState = this.engine.phys.startThrow({ power, aim, cups, model: this.test ? 'test' : null });
     this.saveMatch({ s: 'a', p: power, a: aim });   // vs the computer only (it says no to the rest)
     this.paintHud();
   }
@@ -1724,7 +1743,7 @@ class CupPong {
     s.logged = true;
     try {
       const r6 = (x) => Math.round(x * 1e6) / 1e6, r2 = (x) => Math.round(x * 100) / 100;
-      const mode = this.mode === 'solo' ? 'solo' : this.mp ? 'mp' : 'cpu@' + ((this.cfg && this.cfg.diff) || '?');
+      const mode = (this.test ? 'test-' : '') + (this.mode === 'solo' ? 'solo' : this.mp ? 'mp' : 'cpu@' + ((this.cfg && this.cfg.diff) || '?'));
       const d = { p: r6(s.power), a: r6(s.aim), o: (o && o.kind) || '?', mc: o && o.kind === 'made' ? o.id : '', b: o && o.bounced ? 1 : 0 };
       if (s.perH != null) d.v = Math.round(s.perH * 1000) / 1000;
       if (s.sw) d.sw = s.sw;
@@ -1746,13 +1765,14 @@ class CupPong {
 
   showCleared() {
     const before = soloBest();
+    if (this.test) this.recorded = true;                 // test mode: a clear counts for nothing
     if (!this.recorded) {
       this.recorded = true;
       try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { soloThrows: this.throws | 0 } })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
     }
     const best = soloBest();
     // "New best" only when this rack actually set it (a first clear counts); otherwise the best.
-    const line2 = best && best === this.throws && (!before || this.throws < before)
+    const line2 = this.test ? '' : best && best === this.throws && (!before || this.throws < before)
       ? t('soloNewBest') : (best ? t('soloBest', { n: best }) : '');
     const el = document.createElement('div');
     el.className = 'gh-overlay';
@@ -1818,7 +1838,7 @@ class CupPong {
   /** The match vs the computer a new one would THROW AWAY, once any throw was made in it: the one on
    *  the table, or (from the setup screen) the saved one. Null when there is nothing to lose. */
   quitPending() {
-    if (this.mp || this.mode === 'solo' || this.mode === 'mp') return null;
+    if (this.test || this.mp || this.mode === 'solo' || this.mode === 'mp') return null;
     if (this.match) {
       const m = this.match;
       return this.mode === 'cpu' && !m.over && !this.recorded && (m.throwsTaken > 0 || !!this._fly)

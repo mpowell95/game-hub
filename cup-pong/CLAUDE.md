@@ -166,6 +166,18 @@ of the soft-throw sweep).
 (solo throw no.), rf (re-flown), r: [[id, u, v]...] (cups standing, cup-widths)}`. Read with `tools/read-play-log.mjs`.
 Evidence only, never read back. Before this, only challenge throws (p, a) were stored.
 
+## Test mode: admin devices only (2026-11-05, Matt: "Build the fixes and add a test mode for admin only. Don't touch the real game players have")
+
+- A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
+- Test games use `physics.js` `model: 'test'` (`TEST`): the table is a plane that reflects the ball itself
+  (`testTable`), because the solver's bounce kept 75-104% of the falling speed depending only on where in a
+  1/480 s step the ball met the table; and gentler power (`TEST.spread`, rows 1.5x wider in swipe speed,
+  centred on `TEST.p0`). The computer throws the real game's SPEED (`testPowerFor`), so its accuracy is unchanged.
+- **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
+  mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
+- `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
+  physics to players needs Matt's words, and a per-challenge rules flag so older challenges replay as played.
+
 ## The setup screen (2026-09-28, second layout)
 
 Hoops' layout: **Your turn** card (only when a match waits), **Multiplayer**, **Play the computer**

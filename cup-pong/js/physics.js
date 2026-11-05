@@ -80,7 +80,53 @@ export function innerR(y) {
   return CUP.botR + (CUP.topR - CUP.botR) * f;
 }
 
-function buildWorld(cups) {
+// --- THE TEST MODEL (admin-only test mode, 2026-11-05; Matt: "Build the fixes and add a test mode for
+// admin only. Don't touch the real game players have") ------------------------------------------------
+// Everything players use above and below is unchanged: `model` absent = the real game, bit for bit.
+// With `model: 'test'`:
+//  1. THE TABLE IS A PLANE, NOT A SOLVER CONTACT. Measured 2026-11-05: the solver's bounce kept anywhere
+//     from 75% to 104% of the ball's falling speed depending only on WHERE IN A 1/480 s STEP the ball met
+//     the table (a 0.002 power change flipped it), so the same throw bounced high or low at random. The
+//     test table reflects the ball itself, at the moment it touches: up speed = TEST.rest x down speed
+//     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
+//  2. POWER IS GENTLER: the same swipe changes the speed less (TEST.spread), so each row of cups is a
+//     wider band of swipe speeds. Centred on TEST.p0, so a mid-rack swipe flies where it did.
+export const TEST = { rest: 0.66, restLater: 0.53, skid: 0.55, spread: 1.5, p0: 0.57 };   // rest tuned 2026-11-05: best-aim bounce 63% vs direct 67% on the 12 most-played real racks (real game: 61% vs 54%)
+const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
+
+function launchSpeedTest(power) {
+  const a = THROW.minSpeed, b = THROW.maxSpeed, D = b * b - a * a;
+  const p = Math.max(-1, power);
+  return Math.sqrt(Math.max(1, a * a + TEST.p0 * D + (p - TEST.p0) * D / TEST.spread));
+}
+/** Test-model power that throws exactly as fast as `power` does in the real game (the computer's
+ *  throws in test mode, so its accuracy in SPEED is what it is in the real game). */
+export function testPowerFor(power) {
+  const a = THROW.minSpeed, b = THROW.maxSpeed, D = b * b - a * a;
+  const v2 = Math.max(1, a * a + Math.max(-1, power) * D);
+  return TEST.p0 + (v2 - a * a - TEST.p0 * D) * TEST.spread / D;
+}
+
+/** The test table (model 'test'), after each step: the ball meeting the table top is reflected here. */
+function testTable(st) {
+  const { ball } = st;
+  const p = ball.position, v = ball.velocity;
+  if (Math.abs(p.x) > TABLE.width / 2 || Math.abs(p.z) > TABLE.len / 2) return;
+  const r = BALL.r;
+  if (p.y >= r || v.y >= 0) { if (p.y < r && p.y > r - 0.002 && Math.abs(v.y) < 1e-9) p.y = r; return; }
+  // came from above this step? (a ball inside a cup never gets this low: the base holds it)
+  const down = -v.y;
+  if (down < TEST_STOP_V) { p.y = r; v.y = 0; return; }   // settling: it rolls (ROLL_DECEL does the rest)
+  const tc = (r - p.y) / down;                              // how long ago, this step, it touched
+  const e = st.tableHits === 0 ? TEST.rest : TEST.restLater;
+  v.y = down * e;
+  v.x *= TEST.skid; v.z *= TEST.skid;
+  p.y = r + v.y * Math.min(tc, H);
+  st.tableHits++;
+  st.events.push({ type: 'table', v: down, x: p.x, z: p.z });
+}
+
+function buildWorld(cups, model) {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
   world.broadphase = new CANNON.NaiveBroadphase();   // ~12 bodies: nothing to gain, and stable order
   world.allowSleep = false;
@@ -94,11 +140,13 @@ function buildWorld(cups) {
   world.addContactMaterial(cmTable);
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matCup, { friction: MAT.cupFric, restitution: MAT.cupRest }));
 
-  const table = new CANNON.Body({ mass: 0, material: matTable });
-  table.addShape(new CANNON.Box(new CANNON.Vec3(TABLE.width / 2, TABLE.thick / 2, TABLE.len / 2)));
-  table.position.set(0, -TABLE.thick / 2, 0);
-  table.userData = { kind: 'table' };
-  world.addBody(table);
+  if (model !== 'test') {                            // the test table is a plane (testTable), not a body
+    const table = new CANNON.Body({ mass: 0, material: matTable });
+    table.addShape(new CANNON.Box(new CANNON.Vec3(TABLE.width / 2, TABLE.thick / 2, TABLE.len / 2)));
+    table.position.set(0, -TABLE.thick / 2, 0);
+    table.userData = { kind: 'table' };
+    world.addBody(table);
+  }
 
   const cupBodies = [];
   for (const k of cups) {
@@ -133,9 +181,10 @@ export const heading = (aim) => Math.max(-THROW.aimMax, Math.min(THROW.aimMax, a
  * Start one throw. `cups` is [{ id, x, z }] - the cups still standing on the rack being shot at.
  * `power` and `aim` come from the swipe (ui.js); `aim` is the HEADING in radians.
  */
-export function startThrow({ power = 0.5, aim = 0, cups = [] } = {}) {
-  const { world, ball, cupBodies, cmTable } = buildWorld(cups);
-  const v = launchSpeed(power);
+export function startThrow({ power = 0.5, aim = 0, cups = [], model = null } = {}) {
+  const test = model === 'test';
+  const { world, ball, cupBodies, cmTable } = buildWorld(cups, test ? 'test' : null);
+  const v = test ? launchSpeedTest(power) : launchSpeed(power);
   const a = heading(aim);
   ball.position.set(0, THROW.y0, THROW.z0);
   const horiz = v * Math.cos(THROW.elev);
@@ -149,7 +198,7 @@ export function startThrow({ power = 0.5, aim = 0, cups = [] } = {}) {
     restT: 0,
     tableHits: 0,        // table contacts BEFORE a cup is made - stage 4 reads this for bounce shots
     touchedCup: false,
-    power, aim: a, speed: v,
+    power, aim: a, speed: v, test,
   };
   ball.addEventListener('collide', (e) => {
     const u = e.body && e.body.userData;
@@ -191,6 +240,7 @@ function substep(st) {
     ball.velocity.set(vx * f, vy * f, vz * f);
   }
   world.step(H);
+  if (st.test) testTable(st);
   st.t += H;
   const p = ball.position;
   if (p.y < BALL.r + 0.002 && Math.abs(ball.velocity.y) < 0.2 && Math.abs(p.x) < TABLE.width / 2
