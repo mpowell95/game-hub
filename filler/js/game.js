@@ -96,6 +96,19 @@ export function generateColors(rng = Math.random) {
   };
   debiasNeighborPair(idx(1, ROWS - 1), idx(0, ROWS - 2));   // P1's two neighbors (right, top)
   debiasNeighborPair(idx(COLS - 2, 0), idx(COLS - 1, 1));   // P2's two neighbors (left, bottom)
+  // FILLER-3 (2026-11-05, Matt's screenshot: "I only have 1 opening move because he already is
+  // one of colors next to me"): a corner's neighbor must not be the OTHER player's color either.
+  // That color can never be picked, so the neighbor is locked and the opening has one real choice.
+  // Re-picked avoiding the opponent's color AND the sibling neighbor's (keeps FILLER-2), plus the
+  // tile's own four neighbors (recolorAvoiding). An edge tile has at most 3 neighbors, so at most
+  // 5 of the 6 colors are banned and a pick always exists. Both corners, even-handed.
+  const avoidOpponent = (corner, nbA, nbB, oppColor) => {
+    for (const [nb, sib] of [[nbA, nbB], [nbB, nbA]]) {
+      if (colors[nb] === oppColor) colors[nb] = recolorAvoiding(colors, nb, [oppColor, colors[sib]], rng);
+    }
+  };
+  avoidOpponent(P1_START, idx(1, ROWS - 1), idx(0, ROWS - 2), colors[P2_START]);
+  avoidOpponent(P2_START, idx(COLS - 2, 0), idx(COLS - 1, 1), colors[P1_START]);
   return colors;
 }
 
