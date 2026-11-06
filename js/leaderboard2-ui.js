@@ -31,7 +31,7 @@ import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
 import { pointsSheetHTML } from './lb-points-sheet.js';
 import { rankSheetHTML } from './lb-rank-sheet.js';
-import { GAME_META, lb2MedalLangs, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { GAME_META, lb2MedalLangs, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2PlayedOf, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
@@ -251,7 +251,7 @@ function buildModel() {
     byGame[id] = st;
     standings.push(st);
   }
-  const hof = B.hallOfFame(standings);
+  const hof = B.hallOfFame(standings, lb2PlayedOf);
   _boardMemo = new Map();
   _model = { games, byGame, standings, hof, me: B.personPlaces(standings, _meKey) };
   // Lost records: note the golds held now (rank 1, ties hold) against the last set this device saw. Names only.

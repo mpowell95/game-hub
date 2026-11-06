@@ -580,7 +580,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     && !/lb-psubline">\$\{esc\(t\('lb_played_count'[^}]*\}\)\)\}\$\{tierChipHTML/.test(src),
     '"22 played  MEDIUM" reads as "22 games played on Medium"');
   ok('compareBoardRow: points boards by points then wins (2026-11-02), every other board tier-first over the tier\'s OWN score',
-    /function compareBoardRow\(a, b, id\) \{\s*\n\s*if \(isPointsBoard\(id\)\) return [^\n]+\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
+    /function compareBoardRow\(a, b, id\) \{\s*\n\s*if \(isPuzzlePts\(id\)\) return [^\n]+\n\s*if \(isPointsBoard\(id\)\) return [^\n]+\n\s*return compareTierFirst\(boardTierOf\(a, id\) \|\| 0, boardTierOf\(b, id\) \|\| 0,\s*\n\s*boardMetricOf\(a, id\), boardMetricOf\(b, id\), id\);/.test(src));
   ok('[KNOWN-BUG PROBE] the card headline is still the metric at the row\'s own tier',
     /const metric = boardMetricOf\(g, id\);/.test(src));
   ok('a row\'s tier is decided by the tested pure function, not re-derived here',
@@ -670,7 +670,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     /const tier = boardTierOf\(rec, id\);\s*\n\s*const r = gameMetricAt\(rec, id, tier\);\s*\n\s*const m = gameMetricAt\(me, id, tier\);/.test(src));
   ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
   ok('Tic Tac Toe ranks on the generic difficulty-first order (2026-11-01)',
-    /const cmp = id === 'tictactoe' \? \(a, b\) => compareBoardRow\(a, b, id\) : boardMetricCmp\(id\);/.test(src));
+    /const base = id === 'tictactoe' \? \(a, b\) => compareBoardRow\(a, b, id\) : boardMetricCmp\(id\);/.test(src));
+  ok('every tie: same number, FEWER plays ranks higher (Matt, 2026-11-06)',
+    /return \(a, b\) => base\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\);/.test(src)
+    && /const cmp = \(a, b\) => base\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\);/.test(src));
   // FIVE, not three, since 2026-09-11: the generic card, plus Tic Tac Toe's and Snake's cards in
   // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
   // Drop the chip from any one of them and this fails, which is the point.
