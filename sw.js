@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1462;
-const CACHE = 'game-hub-v1478';
+const IMPORTANT_SINCE = 1479;
+const CACHE = 'game-hub-v1479';
 
 const ASSETS = [
   './',
@@ -864,7 +864,7 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '5d38a5b0a3',
+  './js/game-stats.js': 'aa63f4a517',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': 'af4a400e66',
@@ -901,11 +901,11 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '2429faf243',
+  './js/players-agg.js': 'c8f5cf094d',
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': '148511741b',
+  './js/leaderboard-ui.js': '746782504d',
   './js/leaderboard2-ui.js': '79b0f91f97',
   './js/leaderboard2-boards.js': '97be9b11eb',
   './js/leaderboard2-strings.js': '4c9b106552',

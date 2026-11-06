@@ -707,7 +707,7 @@ function boardView(list, id) {
   } else if (_view === 'off' || _view === 'on') {
     const w = _view;
     const rows = list.filter((g) => snWallsCell(g, w));
-    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v); };
+    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v) || cmpAvgGame(a, b, 'snake', x.tier || null, 'walls=' + w); };
     rows.sort((a, b) => cmp(a, b) || recent(a, b));
     v = { rows, cmp, unit: unitTextOf('snake', null),
       val: (g) => `<span>${snWallsCell(g, w).v}</span>`,
@@ -1293,8 +1293,33 @@ function avgGameOf(g, id) {
   if (id === 'tower') { const w = gm.tw || {}; return (w.games | 0) > 0 ? (w.blocks | 0) / w.games : null; }
   return null;
 }
-function cmpAvgGame(a, b, id) { const x = avgGameOf(a, id), y = avgGameOf(b, id); return x == null || y == null ? 0 : (y - x); }
-function tieByAverage(a, b, id) { return BEST_BOARDS.has(id) ? cmpAvgGame(a, b, id) : (boardPlaysOf(a, id) - boardPlaysOf(b, id)); }
+/** The average game from EVERY score saved per mode (byMode `hs`/`hn` or `ls`/`ln`, saved from 2026-11-06), at the
+ *  board's own course (golf) or difficulty, HIGHER = better; `want` = a mode part every counted mode must have
+ *  (Snake's walls, Brick Breaker's mode). Null when no score has been saved there yet. */
+function modeAvg(g, id, tier, want = '') {
+  const bm = ((((g && g.games) || {})[id] || {}).byMode) || {};
+  let sum = 0, n = 0, lower = false;
+  for (const mk of Object.keys(bm)) {
+    const parts = mk.split('|');
+    if (id === 'golf' && !parts.includes('round=' + GOLF_BOARD_COURSE)) continue;
+    if (want && !parts.includes(want)) continue;
+    for (const dk of Object.keys(bm[mk] || {})) {
+      if (id !== 'golf' && tier != null && tierOf(dk) !== tier) continue;
+      const b = bm[mk][dk] || {};
+      if (+b.ln > 0) { sum += +b.ls || 0; n += +b.ln; lower = true; } else if (+b.hn > 0) { sum += +b.hs || 0; n += +b.hn; }
+    }
+  }
+  return n > 0 ? (lower ? -(sum / n) : sum / n) : null;
+}
+/** The better AVERAGE game first: at the board's course/difficulty when both have scores saved there, else the
+ *  all-time average (golf, Brick Breaker, Tower keep one), else 0 (tied; fewer plays never decides it). */
+function cmpAvgGame(a, b, id, tier = null, want = '') {
+  const x = modeAvg(a, id, tier, want), y = modeAvg(b, id, tier, want);
+  if (x != null && y != null) return y - x;
+  const p = avgGameOf(a, id), q = avgGameOf(b, id);
+  return p == null || q == null ? 0 : (q - p);
+}
+function tieByAverage(a, b, id) { return BEST_BOARDS.has(id) ? cmpAvgGame(a, b, id, boardTierOf(a, id)) : (boardPlaysOf(a, id) - boardPlaysOf(b, id)); }
 /** Skeeball's average rack (points / racks) on a machine; Cup Pong's average throws a cleared solo rack. */
 function skAvgAt(g, m) { const n = skPlaysAt(g, m); return n > 0 ? skPointsAt(g, m) / n : 0; }
 function cpSoloAvg(g) { const c = ((g.games.cuppong || {}).cp) || {}; return (c.soloRacks | 0) > 0 ? (c.soloThrows | 0) / c.soloRacks : Infinity; }
@@ -3664,7 +3689,7 @@ export function lb2ScoreBoard(list, id, spec = {}) {
       const m = view.slice(3);
       const at = (g) => lb2BzModeRow(g, m, _tier);
       rows = list.filter((g) => at(g));
-      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi) || cmpAvgGame(a, b, 'brickblitz');
+      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi) || cmpAvgGame(a, b, 'brickblitz', at(a).tier || null, 'm=' + m);
       rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
       num = (g) => at(g).hi; tierOfRow = (g) => at(g).tier; games = (g) => at(g).played;
       text = (g) => numText(at(g).hi); kind = 'points'; lower = false; unit = t('lb_unit_points');

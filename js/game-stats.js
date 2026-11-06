@@ -1297,6 +1297,11 @@ function noteModeOnly(g, won, d) {
     const sc = _mode.score;
     if (sc && Number.isFinite(+sc.hi) && +sc.hi > 0) b.hi = Math.max(+b.hi || 0, +sc.hi);
     if (sc && Number.isFinite(+sc.lo) && +sc.lo > 0) b.lo = +b.lo > 0 ? Math.min(+b.lo, +sc.lo) : +sc.lo;
+    // EVERY SCORE, not only the best (Matt, 2026-11-06: "You should be saving all data related to all games
+    // played"): a running total and count per mode and difficulty/course, so an AVERAGE game can be read
+    // (`hs`/`hn` for a higher-is-better score, `ls`/`ln` lower-is-better). Counters only add (THE LAW rule 2).
+    if (sc && Number.isFinite(+sc.hi) && +sc.hi >= 0) { b.hs = (+b.hs || 0) + (+sc.hi); b.hn = (b.hn | 0) + 1; }
+    if (sc && Number.isFinite(+sc.lo) && +sc.lo > 0) { b.ls = (+b.ls || 0) + (+sc.lo); b.ln = (b.ln | 0) + 1; }
   } catch (err) { console.error('[game-stats] mode not noted', err); }
 }
 

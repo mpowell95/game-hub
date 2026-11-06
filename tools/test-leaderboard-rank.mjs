@@ -674,7 +674,7 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('every tie: the better AVERAGE game ranks higher (Matt, 2026-11-06); a best-game board never by fewer plays',
     /return \(a, b\) => base\(a, b\) \|\| tieByAverage\(a, b, id\);/.test(src)
     && /const cmp = \(a, b\) => base\(a, b\) \|\| tieByAverage\(a, b, id\);/.test(src)
-    && /BEST_BOARDS\.has\(id\) \? cmpAvgGame\(a, b, id\)/.test(src));
+    && /BEST_BOARDS\.has\(id\) \? cmpAvgGame\(a, b, id, boardTierOf\(a, id\)\)/.test(src));
   // FIVE, not three, since 2026-09-11: the generic card, plus Tic Tac Toe's and Snake's cards in
   // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
   // Drop the chip from any one of them and this fails, which is the point.
