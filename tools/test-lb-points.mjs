@@ -90,7 +90,7 @@ try {
   const people = Object.values(o.people).map((s) => JSON.parse(s)).filter((g) => g.name && !isHiddenName(g.name));
   for (const id of POINT_GAMES) {
     const rows = people.map((g) => ({ n: g.name, ...gamePoints((g.games || {})[id] || {}, id) })).filter((r) => r.pts > 0)
-      .sort((a, b) => b.pts - a.pts || b.wins - a.wins);
+      .sort((a, b) => b.pts - a.pts || a.wins - b.wins);
     console.log('  ', id.padEnd(12), rows.slice(0, 3).map((r) => `${r.n} ${r.pts}`).join(' | '));
   }
 } catch { console.log('  (no backups/lb-z.json: real-data top 3 skipped)'); }

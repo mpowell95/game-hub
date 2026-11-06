@@ -1057,9 +1057,9 @@ function isPointsBoard(id) { const r = LB_RULES[id]; return !!r && (r.by === 'wi
 function isPuzzlePts(id) { return PUZZLE_POINT_GAMES.includes(id) && (id !== 'nutsbolts' || isAdminDevice()); }
 /** Lower wins (golf; Minesweeper's best time, but not while it is on points). */
 function lowerIsBetter(id) { return LOWER_IS_BETTER.has(id) && !isPuzzlePts(id); }
-/** Solves behind a puzzle row's points (the tie-break: equal points, more solves first). */
+/** Solves behind a puzzle row's points (the tie-break: equal points, FEWER solves first; Matt, 2026-11-06). */
 function puzzleWinsOf(g, id) { return puzzlePoints(((g && g.games) || {})[id], id, _tier).wins; }
-/** Wins behind a row's points (the tie-break: equal points, more wins first). */
+/** Wins behind a row's points (the tie-break: equal points, FEWER wins first: more points per win; Matt, 2026-11-06). */
 function pointsWinsOf(g, id) { return gamePoints(g.games[id], id, _tier, g.playerId).wins; }
 /** How a board metric is PRINTED here. Everything more-is-better prints as the bare number it
  *  always did; golf takes a sign and shows level par as "E" (js/leaderboard-rank.js does the
@@ -1203,8 +1203,8 @@ function boardMetricOf(g, id) { return gameMetricAt(g, id, boardTierOf(g, id)); 
 /** THE ONE comparator every metric sort on a game board goes through. Tier first, then that tier's
  *  own score via compareBoardMetric - which is what still gets golf's direction right. */
 function compareBoardRow(a, b, id) {
-  if (isPuzzlePts(id)) return ((boardMetricOf(b, id) || 0) - (boardMetricOf(a, id) || 0)) || (puzzleWinsOf(b, id) - puzzleWinsOf(a, id));
-  if (isPointsBoard(id)) return compareBoardMetric(boardMetricOf(a, id), boardMetricOf(b, id), id) || (pointsWinsOf(b, id) - pointsWinsOf(a, id));
+  if (isPuzzlePts(id)) return ((boardMetricOf(b, id) || 0) - (boardMetricOf(a, id) || 0)) || (puzzleWinsOf(a, id) - puzzleWinsOf(b, id));
+  if (isPointsBoard(id)) return compareBoardMetric(boardMetricOf(a, id), boardMetricOf(b, id), id) || (pointsWinsOf(a, id) - pointsWinsOf(b, id));
   return compareTierFirst(boardTierOf(a, id) || 0, boardTierOf(b, id) || 0,
     boardMetricOf(a, id), boardMetricOf(b, id), id);
 }
