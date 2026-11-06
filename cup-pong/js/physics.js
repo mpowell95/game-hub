@@ -91,7 +91,11 @@ export function innerR(y) {
 //     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
 //  2. POWER IS THE REAL GAME'S (Matt, 2026-11-06: "change test mode to normal throws. only keep the bounce
 //     changes"). The gentler power (rows 1.5x wider) tried on 2026-11-05 is gone.
-export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.655 };
+// Tuned 2026-11-06 with the real game's power (Matt: "make sure they make sense and do not increase the balls
+// likelihood of going in a cup"): a normal-looking bounce (0.88 of the falling speed, 0.65 after) keeping 70% of
+// its forward speed. 12 most-played real racks: best aim for a bounce 51% vs direct 54%, best aim overall 58% vs
+// the real game's 61%; all 2,691 real challenge throws replayed: 33.4% in vs the real game's 34.6%.
+export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.70 };
 const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
 
 /** The test table (model 'test'), after each step: the ball meeting the table top is reflected here. */

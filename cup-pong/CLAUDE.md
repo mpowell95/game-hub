@@ -169,11 +169,11 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 ## Test mode: admin devices only (2026-11-05, Matt: "Build the fixes and add a test mode for admin only. Don't touch the real game players have")
 
 - A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
-- Test games use `physics.js` `model: 'test'` (`TEST`): the table is a plane that reflects the ball itself
-  (`testTable`), because the solver's bounce kept 75-104% of the falling speed depending only on where in a
-  1/480 s step the ball met the table (bounce 0.88, later 0.65, forward speed kept 0.655: lively, and an aimed bounce
-  goes in as often as an aimed direct shot; 0.66 felt dead to Matt); and gentler power (`TEST.spread`, rows 1.5x wider in swipe speed,
-  centred on `TEST.p0`). The computer throws the real game's SPEED (`testPowerFor`), so its accuracy is unchanged.
+- Test games use `physics.js` `model: 'test'` (`TEST`): the real game's power and aim; only the table changes. It is a
+  plane that reflects the ball itself (`testTable`), because the solver's bounce kept 75-104% of the falling speed
+  depending only on where in a 1/480 s step the ball met the table. Bounce 0.88 (0.65 after), forward speed kept 0.70
+  (2026-11-06, Matt: normal-looking, and must NOT raise the chance of a make): aimed bounce 51% vs direct 54%; all
+  2,691 real throws replayed 33.4% in vs 34.6% real. Gentler power (1.5x) was tried 2026-11-05 and removed 2026-11-06.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
 - `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
