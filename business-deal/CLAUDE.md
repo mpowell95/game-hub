@@ -200,3 +200,15 @@ No resume: after the player's first move, New Game / either Quit / the hub recor
 
 - Quitting is a loss once DEALT (armed in `newGame`). The marker is refreshed every turn (`__ghStats.touchQuit`) and every minute, and a game whose marker the hub settled while the page was frozen records nothing more (`quitLost`). `game-stats-global.js` copied verbatim again. **Bump `sw.js` CACHE (and `APP_VERSION`) at deploy.**
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Resume (2026-11-06, Matt: "yes build it")
+
+The game SAVES to `gamehub.bd.save.v1` at every move choice, any player's (`game.js` `onCheckpoint`, `saveState`/`loadState`;
+`playTurn` re-enters a loaded turn without drawing, with the saved plays left). The start screen shows **Continue** while a game
+is saved or open; Start becomes **New Game**, asked twice ("Counts as a loss.", `_discardAndStart`: a saved game not loaded on
+this page is recorded from the save, an open one by `_takeQuitLoss`, never both). Leaving (both Quits, the hub, a closed page)
+is NOT a loss any more and arms no marker; the open-time `takeQuit` still settles a marker an older build armed. The save is
+removed once the result is recorded. A save taken mid-action is never written (only at checkpoints), so closing during an
+attack replays from that computer's move choice (it may choose again). Test: Q5-style browser run in the session's scratchpad
+(save, reload, Continue, a computer turn resumed, one loss per discard, save gone at game end); `tools/test-quit-loss.mjs` G5.
+`APP_VERSION` and `sw.js` CACHE are v43.

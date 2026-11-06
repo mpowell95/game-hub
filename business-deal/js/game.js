@@ -77,6 +77,32 @@
       this.discard = [];   // discard pile (face-up)
     }
 
+    /* ---- save / resume (2026-11-06) --------------------------------------
+     * A plain-data copy (saveState) of everything the engine holds (cards are plain objects).
+     * Taken at a checkpoint, i.e. just before a move is chosen, so loadState()
+     * re-enters that turn with the draw done and the same plays left. */
+    saveState() {
+      return JSON.parse(JSON.stringify({
+        turn: this.turn, currentPlayerIndex: this.currentPlayerIndex,
+        playsRemaining: this.playsRemaining, phase: this.phase,
+        deck: this.deck, discard: this.discard, logs: this.logs.slice(-60),
+        players: this.players.map(p => ({ name: p.name, hand: p.hand, bank: p.bank, properties: p.properties })),
+      }));
+    }
+    /** Load a saveState() into this game (its players and agents already made). */
+    loadState(s) {
+      this.turn = s.turn; this.currentPlayerIndex = s.currentPlayerIndex;
+      this.playsRemaining = s.playsRemaining; this.phase = s.phase || 'play';
+      this.deck = s.deck; this.discard = s.discard; this.logs = s.logs || [];
+      this.winner = null;
+      s.players.forEach((sp, i) => {
+        const p = this.players[i];
+        p.hand = sp.hand; p.bank = sp.bank; p.properties = sp.properties;
+      });
+      this._resumeMidTurn = true;
+      return this;
+    }
+
     /* ---- logging -------------------------------------------------------- */
     log(msg) {
       this.logs.push(msg);
@@ -245,15 +271,19 @@
       // A player who reached 3 sets on someone else's turn declares now.
       if (this._checkWin(player)) return this.winner;
 
-      // 1. Draw (5 if you start your turn empty-handed, else 2).
-      const n = player.hand.length === 0 ? DRAW_EMPTY : DRAW_NORMAL;
-      const drew = this.drawCards(player, n);
-      this.log(`-- Turn ${this.turn}: ${player.name} draws ${drew.length} (hand ${player.hand.length}).`);
-      if (typeof this.onTurnStart === 'function') await this.onTurnStart(player);
-      if (this._checkWin(player)) return this.winner;
-
-      // 2. Play up to 3 cards.
-      this.playsRemaining = MAX_PLAYS;
+      // A loaded save (loadState()) re-enters the turn it was saved in: the draw already
+      // happened and playsRemaining is the saved count.
+      const resuming = this._resumeMidTurn; this._resumeMidTurn = false;
+      if (!resuming) {
+        // 1. Draw (5 if you start your turn empty-handed, else 2).
+        const n = player.hand.length === 0 ? DRAW_EMPTY : DRAW_NORMAL;
+        const drew = this.drawCards(player, n);
+        this.log(`-- Turn ${this.turn}: ${player.name} draws ${drew.length} (hand ${player.hand.length}).`);
+        if (typeof this.onTurnStart === 'function') await this.onTurnStart(player);
+        if (this._checkWin(player)) return this.winner;
+        // 2. Play up to 3 cards.
+        this.playsRemaining = MAX_PLAYS;
+      } else if (typeof this.onResume === 'function') await this.onResume(player);
       let guard = 0;
       // The turn ends only when the player PASSES — it does NOT auto-end when the
       // 3 plays are spent (#2: a human must tap Pass). At 0 plays the only legal
@@ -262,6 +292,8 @@
       while (!this.winner) {
         if (++guard > 120) break; // safety: never spin forever (free reassigns allowed)
         const legal = this.enumerateMoves(player);
+        // Every move choice is a stable point: the UI saves the game here (resume).
+        if (typeof this.onCheckpoint === 'function') { try { this.onCheckpoint(player); } catch (e) {} }
         let move;
         try {
           move = await player.agent.chooseMove(this.getView(player.id), legal);

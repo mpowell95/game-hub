@@ -336,7 +336,10 @@ ok('G5 Monopoly Deal: touchQuit refreshes the classic marker', GS6.touchQuit('bu
 const q9 = JSON.parse(store.get('gamehub.quitLoss.v1')); q9.business.t -= 40 * 60 * 1000; store.set('gamehub.quitLoss.v1', JSON.stringify(q9));
 G.settleQuitLosses(30 * 60 * 1000);
 ok('G5 Monopoly Deal: quitLost says the hub took it (one loss, no second result)', GS6.quitLost('business') === true && stats().games.business.total.played === 1);
-W('business-deal/js/ui.js', /if \(this\._qArmed\) \{ try \{ if \(window\.__ghStats && window\.__ghStats\.touchQuit\) window\.__ghStats\.touchQuit\('business'\);/, 'G5 Monopoly Deal: the armed marker is touched on every arm call');
+// 2026-11-06: Monopoly Deal SAVES (gamehub.bd.save.v1), so leaving is not quitting: it arms no marker;
+// a discard (Settings > New Game, or New Game over a save, confirmed) records the one loss.
+ok('G5 Monopoly Deal saves: it never arms the closed-page marker', !/__ghStats\.armQuit\(/.test(src('business-deal/js/ui.js')));
+W('business-deal/js/ui.js', /_discardAndStart\(numAI, diff\) \{[\s\S]{0,400}this\._recordResult\(false\);[\s\S]{0,120}this\.newGame\(numAI, diff\);/, 'G5 Monopoly Deal: New Game over a saved game is one loss');
 W('business-deal/js/ui.js', /onTurnStart = async \(pl\) => \{\s*this\._armQuitLoss\(\);/, 'G5 Monopoly Deal: ...which runs every turn');
 W('business-deal/js/ui.js', /window\.__ghStats\.quitLost\('business'\)[\s\S]{0,250}if \(!lost\) this\._recordResult\(w\.id === 0\);/, 'G5 Monopoly Deal: a game whose marker was settled elsewhere records nothing more');
 
