@@ -140,6 +140,15 @@ guarding its goal mouth.
 | Easy | 26 | 0.11 rad | 14% | no; and 45% of the time picks from its top third instead of the best |
 | Medium | 80 | 0.04 rad | 7% | partly |
 | Hard | 190 | 0.013 rad | 2.5% | yes |
+| **Expert** (admin devices only) | Hard's 190, then every flick that touches the ball (5 discs x straight + 2 wall banks x 61 angles x 8 strengths), stopping at the first goal | none | none | yes |
+
+**Expert (2026-11-06, Matt: "Add an expert level for admin only that's the perfect one")**: `LEVEL.expert` +
+`sweep()` in `ai.js`; `EXPERT` is NOT in `DIFFS` (that list also feeds the online aiming-help row). It plays the exact
+flick it simulated (no angle round trip, no clamp), so a goal it finds is a goal scored. Measured on all 1,302 real
+online positions: it scored 688 of the 701 where any goal existed (every chance whose scoring window is 0.5 degrees or
+wider), 0 own goals; plan up to ~1.7 s on a desktop (median ~0.5 s), run in 12 ms slices (`CPU_SLICE_MS_EXPERT`).
+On the setup card only when `isAdminDevice()` (`cpuDiffs()`; four pills stack the shape above the word, `fs-seg--four`);
+aiming help as Hard plus the admin arrow.
 
 Measured (`node flick-soccer/js/test.js`): Hard beat Easy 10/10, Medium beat Easy 9/10, ~15 turns
 for a first-to-2 match, slowest Hard plan ~140 ms (run in 7 ms slices between frames, so the
@@ -246,6 +255,9 @@ until a choice is saved.
 
 ## Stats
 
+**Expert's results (admin only) go to `recordFlickSoccerTest('expert', won)`**, inside the same `withMode`: kept with
+their mode in `games.flicksoccer.fx` (`byDiff.expert`, `byMode`), counted by NOTHING (no total, no points, no
+leaderboard) until Matt releases the level (`tools/test-game-modes.mjs`, section 9).
 `recordResult('flicksoccer', difficulty, won)`, **vs the computer only** (two players on one phone
 is not recorded, as in Darts), once per match (`match.recorded`). `total`/`byDiff` only: no
 sub-counter, so the generic My Stats screen draws it and `players-agg.js` needs no branch.

@@ -12,12 +12,43 @@ import {
 } from './engine.js';
 
 export const DIFFS = ['easy', 'medium', 'hard'];
+/** Expert (Matt, 2026-11-06: "Add an expert level for admin only that's the perfect one"): ADMIN DEVICES ONLY,
+ *  so it is not in DIFFS (which also feeds the online aiming-help row). */
+export const EXPERT = 'expert';
 const LEVEL = {
   //       shots to try  angle noise (rad)  power noise  how much it fears the reply  keeps a keeper
   easy:   { budget: 26, aim: 0.11, pow: 0.14, fear: 0, keeper: 0 },
   medium: { budget: 80, aim: 0.04, pow: 0.07, fear: 0.6, keeper: 12 },
   hard:   { budget: 190, aim: 0.013, pow: 0.025, fear: 1, keeper: 22 },
+  // Expert: Hard's shots, then EVERY flick that touches the ball (each disc, straight or off either side wall,
+  // across the whole cone, at SWEEP_POW strengths), no aim or strength error, and it shoots the first goal it
+  // finds. The physics is deterministic, so a goal found is a goal scored. Defence as Hard when none exists.
+  expert: { budget: 190, aim: 0, pow: 0, fear: 1, keeper: 22, sweep: true },
 };
+const SWEEP_ANGLES = 61;
+const SWEEP_POW = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
+/** Expert's sweep, nearest disc first and straight at the ball before the banks. */
+function* sweep(b, seat) {
+  const ball = b[BALL];
+  const targets = [[ball.x, ball.y], [2 * DISC_R - ball.x, ball.y], [2 * (W - DISC_R) - ball.x, ball.y]];
+  const discs = discsOf(seat).slice().sort((p, q) => Math.hypot(b[p].x - ball.x, b[p].y - ball.y) - Math.hypot(b[q].x - ball.x, b[q].y - ball.y));
+  for (let t = 0; t < targets.length; t++) {
+    for (const i of discs) {
+      const d = b[i];
+      const [tx, ty] = targets[t];
+      const dist = Math.hypot(tx - d.x, ty - d.y);
+      if (dist < 1e-6) continue;
+      const a0 = Math.atan2(ty - d.y, tx - d.x);
+      let hw = Math.asin(Math.min(1, (DISC_R + BALL_R) / dist));
+      if (t > 0) hw *= 1.6;   // a wall bounce loses speed, so the mirror image is only roughly right
+      for (let k = 0; k < SWEEP_ANGLES; k++) {
+        const a = a0 - hw + (2 * hw * k) / (SWEEP_ANGLES - 1);
+        for (const power of SWEEP_POW) yield { i, dx: Math.cos(a), dy: Math.sin(a), power };
+      }
+    }
+  }
+}
 
 /** A small seeded RNG so a test can replay a computer's choices. */
 export function rngFrom(seed) {
@@ -136,7 +167,7 @@ export function* planShot(bodies, seat, diff, rng = Math.random) {
   const list = candidates(bodies, seat, rng, lv.budget);
   let best = null, bestScore = -Infinity;
   const scored = [];
-  for (const c of list) {
+  const tryOne = (c) => {
     const b = cloneBodies(bodies);
     flick(b, c.i, c.dx, c.dy, c.power);
     const r = runToRest(b, 9);
@@ -146,8 +177,23 @@ export function* planShot(bodies, seat, diff, rng = Math.random) {
     else s = judge(b, seat, lv);
     scored.push([s, c]);
     if (s > bestScore) { bestScore = s; best = c; }
+    return r.scorer === seat;
+  };
+  let goal = false;
+  for (const c of list) {
+    goal = tryOne(c) || goal;
     yield;
+    if (goal && lv.sweep) break;
   }
+  if (lv.sweep && !goal) {
+    for (const c of sweep(bodies, seat)) {
+      const hit = tryOne(c);
+      yield;
+      if (hit) break;
+    }
+  }
+  // Expert's hand is exact: the very flick it simulated, untouched (no angle round trip, no clamp).
+  if (lv.sweep) return { i: best.i, dx: best.dx, dy: best.dy, power: best.power };
   // Easy is not only shaky, it also does not always see the best shot.
   if (diff === 'easy' && scored.length > 3 && rng() < 0.45) {
     scored.sort((a, b2) => b2[0] - a[0]);
