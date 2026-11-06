@@ -13,14 +13,14 @@ import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
   shotPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
 } from './engine.js';
-import { planShot, seededRng, DIFFS } from './ai.js';
+import { planShot, seededRng, DIFFS, EXPERT } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
 import { roundShot } from './mp.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordFlickSoccerTest, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -88,6 +88,7 @@ const MIN_POWER = 0.04;
 const MAX_STEPS = 24;
 /** The computer's thinking budget per frame (ms), and the least time it takes to "decide". */
 const CPU_SLICE_MS = 7;
+const CPU_SLICE_MS_EXPERT = 12;   // Expert tries up to ~5,000 flicks a turn
 const CPU_MIN_THINK = 0.55;
 const CPU_AIM_SECS = 0.5;
 
@@ -97,11 +98,15 @@ function writeJSON(k, v) {
   catch (err) { console.error('[flick-soccer] save failed: ' + k, err); return false; }
 }
 function profile() { try { return loadProfile(); } catch { return null; } }
+/** The levels on the setup card: Expert only on an admin device (Matt, 2026-11-06). */
+const cpuDiffs = () => (isAdminDevice() ? [...DIFFS, EXPERT] : DIFFS);
+/** A saved match's level: any of the four (a save is only made where the level was offered). */
+const savedDiff = (d) => (DIFFS.includes(d) || d === EXPERT ? d : 'medium');
 
 /** Saved choices beat the profile's first opponent skill (1/2/3 -> easy/medium/hard) beat Medium. */
 function loadSettings() {
   const s = readJSON(SETTINGS_KEY) || {};
-  let difficulty = DIFFS.includes(s.difficulty) ? s.difficulty : null;
+  let difficulty = cpuDiffs().includes(s.difficulty) ? s.difficulty : null;
   if (!difficulty) {
     const p = profile();
     const skill = p && p.opponents && p.opponents[0] ? p.opponents[0].skill : 2;
@@ -159,6 +164,7 @@ const AIDS = {
   easy: { arrow: true, guide: true },
   medium: { arrow: true, guide: false },
   hard: { arrow: false, guide: false },
+  expert: { arrow: false, guide: false },   // admin devices only; the admin arrow below applies to it too
 };
 
 /** How to play: a disc pulled back, the flick, the ball on its way to goal. Shape and arrows carry
@@ -402,7 +408,8 @@ class FlickSoccerUI {
       el.setAttribute('aria-label', t(key));
       el.innerHTML = ids.map((id) => `<button type="button" class="gh-seg__item fs-seg-item" data-${role.toLowerCase()}="${id}" aria-pressed="${cur === id}">${extra ? extra(id) : ''}<span>${esc(label(id))}</span></button>`).join('');
     };
-    seg('diffs', 'difficulty', DIFFS, s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
+    seg('diffs', 'difficulty', cpuDiffs(), s.difficulty, (id) => t('diff_' + id), (id) => diffShapeSVG(tierOf(id)));
+    this.root.querySelector('[data-role="diffs"]').classList.toggle('fs-seg--four', cpuDiffs().length > 3);   // Expert: shape above the word
     seg('goalsSeg', 'goals', GOAL_OPTIONS.map(String), String(s.goals), (id) => id);
     this._paintLineups();
     seg('firsts', 'first', FIRSTS, s.first, (id) => (id === 'alt' ? t('first_alt') : id === 'me' ? t('first_me') : t('first_them_cpu')));
@@ -574,7 +581,7 @@ class FlickSoccerUI {
       settle(m, runToRest(m.b).scorer);
       replayed = true;
     }
-    this._begin({ mode: sv.mode, diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', match: m, aiSeed: sv.aiSeed });
+    this._begin({ mode: sv.mode, diff: savedDiff(sv.diff), match: m, aiSeed: sv.aiSeed });
     if (replayed && m.winner != null) this._finish();
   }
 
@@ -684,7 +691,7 @@ class FlickSoccerUI {
     const c = this.cpu;
     if (!c) return;
     if (!c.shot) {
-      const until = performance.now() + CPU_SLICE_MS;
+      const until = performance.now() + (this.diff === EXPERT ? CPU_SLICE_MS_EXPERT : CPU_SLICE_MS);
       while (performance.now() < until) {
         const r = c.gen.next();
         if (r.done) { c.shot = r.value; break; }
@@ -807,7 +814,7 @@ class FlickSoccerUI {
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
       const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
-      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0), { detail });
+      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(EXPERT, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert: its own test bucket, counted by nothing (2026-11-06)
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -971,7 +978,7 @@ class FlickSoccerUI {
     if (this.match && this.screen !== 'setup') return null;
     const sv = this._savedMatch();
     return sv && sv.mode === 'cpu' && !sv.match.recorded && playerShot(sv.match)
-      ? { diff: DIFFS.includes(sv.diff) ? sv.diff : 'medium', m: sv.match } : null;
+      ? { diff: savedDiff(sv.diff), m: sv.match } : null;
   }
 
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
@@ -981,7 +988,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(EXPERT, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1568,7 +1575,7 @@ class FlickSoccerUI {
     const level = this.mode === 'cpu' ? this.diff : this.mode === 'mp' && this.mp && this.mp.game ? this.mp.game.aids : 'medium';
     // Admin devices only (Matt, 2026-11-05: "Add the regular aim arrow (the one medium uses) to hard
     // for admin only"): Hard vs the computer shows Medium's aim arrow. Players and online unchanged.
-    if (this.mode === 'cpu' && level === 'hard' && isAdminDevice()) return AIDS.medium;
+    if (this.mode === 'cpu' && (level === 'hard' || level === EXPERT) && isAdminDevice()) return AIDS.medium;
     return AIDS[level] || AIDS.medium;
   }
 

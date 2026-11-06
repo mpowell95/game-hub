@@ -2078,6 +2078,33 @@ export function oneTierDown(diff, ladder) {
   return i > 0 ? ladder[i - 1] : diff;
 }
 
+/** Flick Soccer's ADMIN-ONLY Expert computer (Matt, 2026-11-06): its results are KEPT, with their mode, in a test
+ *  bucket of their own, `games.flicksoccer.fx = { byDiff: {expert: {played, won, lost}}, byMode: {<mode key>:
+ *  {expert: {...}}} }` (a new field, rule 5), and counted by NOTHING else: no total, no byDiff, no byMode, no
+ *  points, no leaderboard (like Skeeball's `sk.practice`), so an unreleased level never reaches players' screens.
+ *  Called inside withMode like every result; the play log carries the mode and detail as usual. */
+export function recordFlickSoccerTest(difficulty, won) {
+  if (tooFast('flicksoccer')) return null;
+  notePlay('flicksoccer', 'recordFlickSoccerTest', arguments);
+  const st = loadStats();
+  const g = st.games.flicksoccer;
+  const d = normDiff(difficulty);
+  if (!g.fx || typeof g.fx !== 'object' || Array.isArray(g.fx)) g.fx = {};
+  const fx = g.fx;
+  const bump = (b) => { b.played = (b.played | 0) + 1; if (won === true) b.won = (b.won | 0) + 1; else if (won === false) b.lost = (b.lost | 0) + 1; };
+  if (!fx.byDiff || typeof fx.byDiff !== 'object') fx.byDiff = {};
+  bump(fx.byDiff[d] && typeof fx.byDiff[d] === 'object' ? fx.byDiff[d] : (fx.byDiff[d] = bucket()));
+  const key = _mode ? _mode.key : NO_MODE;
+  if (!_mode) console.error('[game-stats] recordFlickSoccerTest ran OUTSIDE withMode: filed under mode \'?\'');
+  if (!fx.byMode || typeof fx.byMode !== 'object') fx.byMode = {};
+  const m = fx.byMode[key] && typeof fx.byMode[key] === 'object' ? fx.byMode[key] : (fx.byMode[key] = {});
+  bump(m[d] && typeof m[d] === 'object' ? m[d] : (m[d] = bucket()));
+  if (_mode) _mode.noted = true;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export function recordResult(gameId, difficulty, won) {
   if (tooFast(gameId)) return null;
   notePlay(gameId, 'recordResult', arguments);

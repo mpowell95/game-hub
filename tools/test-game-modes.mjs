@@ -249,5 +249,26 @@ const gsSrc = readFileSync(new URL('../js/game-stats.js', import.meta.url), 'utf
 const nar = gsSrc.slice(gsSrc.indexOf('const NOT_A_RESULT'), gsSrc.indexOf(']);', gsSrc.indexOf('const NOT_A_RESULT')));
 for (const name of Object.keys(SCAN.AUX)) ok(`${name} is in both AUX (scan) and NOT_A_RESULT (run time)`, nar.includes(`'${name}'`));
 
+// 9. Flick Soccer's admin-only Expert (2026-11-06): kept with its mode in games.flicksoccer.fx, counted by nothing
+{
+  const { gamePoints } = await import('../js/lb-points.js');
+  GS.withMode({ goals: 2 }, 'easy', () => GS.recordResult('flicksoccer', 'easy', true));
+  const before = JSON.parse(JSON.stringify(GS.loadStoredStats().games.flicksoccer));
+  GS.withMode(() => ({ goals: 3, off: 'attack', def: 'defend', first: 'me' }), 'expert', () => GS.recordFlickSoccerTest('expert', true), { detail: () => ({ gf: 3, ga: 1, flicks: 20 }) });
+  GS.withMode(() => ({ goals: 3, off: 'attack', def: 'defend', first: 'me' }), 'expert', () => GS.recordFlickSoccerTest('expert', false));
+  const fsg = GS.loadStoredStats().games.flicksoccer;
+  const key = 'def=defend|first=me|goals=3|off=attack';
+  ok('Expert: kept in fx.byDiff.expert (played 2, won 1, lost 1)', fsg.fx && fsg.fx.byDiff.expert.played === 2 && fsg.fx.byDiff.expert.won === 1 && fsg.fx.byDiff.expert.lost === 1, JSON.stringify(fsg.fx));
+  ok('Expert: its mode kept in fx.byMode', fsg.fx.byMode[key] && fsg.fx.byMode[key].expert.played === 2);
+  ok('Expert: total, byDiff and byMode untouched', JSON.stringify(fsg.total) === JSON.stringify(before.total) && JSON.stringify(fsg.byDiff) === JSON.stringify(before.byDiff) && JSON.stringify(fsg.byMode) === JSON.stringify(before.byMode));
+  const lg = readQueue().filter((x) => x.g === 'flicksoccer' && x.f === 'recordFlickSoccerTest').pop();
+  ok('Expert: the play log carries the mode', lg && String(lg.m).startsWith(key + '@expert'), JSON.stringify(lg));
+  const rec = { profile: { name: 'test1', playerId: 'DREG5' }, stats: { games: { flicksoccer: fsg } } };
+  const person = aggregatePlayers({ 'dev-x': rec }).find((x) => x.playerId === 'DREG5');
+  const pg = person.games.flicksoccer;
+  ok('Expert: the leaderboard person counts only the Easy win', pg.total.won === before.total.won && pg.total.played === before.total.played && !pg.byDiff.expert);
+  ok('Expert: no points', gamePoints(pg, 'flicksoccer').pts === gamePoints(before, 'flicksoccer').pts);
+}
+
 console.log(`\n${fail ? 'FAILED' : 'ALL PASS'} (${pass} passed, ${fail} failed)`);
 if (fail) process.exit(1);

@@ -254,6 +254,9 @@ html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
 .fs-root .fs-seg .fs-seg-item[aria-pressed="true"] { background: #fff; color: var(--fs-ink); box-shadow: 0 0 0 2px var(--fs-green); }
 .fs-root .fs-seg .fs-seg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-root .fs-seg .lb-dshape { width: 14px; height: 14px; flex: 0 0 auto; }
+/* Four levels (Expert, admin devices only, 2026-11-06): the shape sits above the word so every word fits. */
+.fs-root .fs-seg.fs-seg--four .fs-seg-item { flex-direction: column; gap: 2px; padding: 4px 2px; min-height: 44px; border-radius: 14px; }
+.fs-root .fs-seg.fs-seg--four { border-radius: 16px; }
 /* Line-ups: a little picture of the five discs over the word, so four fit across a narrow phone. */
 /* Offense and defense line-ups (2026-10-14): two buttons, each its role, its little pitch and its
    name; a tap opens the picker. On the start menu and both challenge cards. */

@@ -191,5 +191,18 @@ function playMatch(diffs, seed, goals = 2) {
   ok('medium beats easy more often than not', medWins >= 6);
 }
 
+{
+  // Expert (admin only, 2026-11-06): its plan is exact (no error), so a goal it finds goes in. Against Hard, first to 1.
+  let wins = 0, worst = 0;
+  for (let k = 0; k < 4; k++) {
+    const seat = k & 1;
+    const { m, worstMs } = playMatch(seat ? ['hard', 'expert'] : ['expert', 'hard'], 500 + k, 1);
+    if (m.winner === seat) wins++;
+    worst = Math.max(worst, worstMs);
+  }
+  console.log(`expert v hard: expert won ${wins}/4, slowest plan ${worst.toFixed(0)} ms`);
+  ok('expert beats hard', wins >= 3);
+}
+
 console.log(fails ? `${fails} FAILED` : 'flick-soccer: all checks passed');
 process.exit(fails ? 1 : 0);
