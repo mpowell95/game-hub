@@ -40,7 +40,7 @@ import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { stateHash } from './hash.js';
-import { deviceId, recordYahtzee, withMode, modeTag, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost } from '../../js/game-stats.js';
+import { deviceId, recordYahtzee, withMode, modeTag, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost } from '../../js/game-stats.js';
 import { howToHtml, createHowTo } from './howto.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import STRINGS from './strings.js';
@@ -51,6 +51,12 @@ const t = makeT(STRINGS);
 const MODE = 'ai'; // 'ai' | 'hotseat' -- solo-mode default; irrelevant once in MP
 const MP_RECOVERY_MAX_ATTEMPTS = 3;
 const MP_CODE_LEN = 4;
+// THE GAME VS THE COMPUTER IS SAVED (2026-11-06, Matt: "We should add resume to the other games that
+// don't save"): `gamehub.yahtzee.save.v1`, written at every stable point (a roll's dice as soon as
+// they are decided, a hold, a commit, the computer's holds) and removed before the result is
+// recorded. Holds no earned history. Leaving is not quitting; only New game over a game someone has
+// rolled in is ONE loss (asked twice). Multiplayer is never saved.
+const SAVE_KEY = 'gamehub.yahtzee.save.v1';
 
 const UPPER_KEYS = ['ones','twos','threes','fours','fives','sixes'];
 const LEFT_CATS = UPPER_KEYS;
@@ -223,6 +229,7 @@ function newGame(mpInfo){
     yahtzeeBonusCount: [0,0],
     gameOver: false,
     statsCommitted: false,
+    aiHeldAt: 0,          // the computer's roll its holds were chosen after (save/continue, 2026-11-06)
     mp: mpInfo ? {
       role: mpInfo.role, code: mpInfo.code, localSeat: mpInfo.role==='host' ? 0 : 1,
       opp: mpInfo.opp, appliedSeq: 0, movesById: new Map(), maxKnownSeq: 0,
@@ -314,10 +321,6 @@ function totalScore(p){
 function isGameOver(){
   return state.players.every(p => CATEGORIES.every(c => p.scores[c]!=null));
 }
-function hasProgress(){
-  if(!state) return false;
-  return state.rollsUsed>0 || state.players.some(p => CATEGORIES.some(c => p.scores[c]!=null));
-}
 
 /* ---------- TURN / COMMIT FLOW ---------- */
 function isHumanTurn(){
@@ -348,12 +351,12 @@ function applyRollResult(values){
 // call this function at all (mpApplyNextEntry mutates state directly).
 async function doRoll(){
   if(state.phase==='gameOver' || state.rollsUsed>=3) return;
-  // The FIRST roll of the game, whoever makes it, arms the quit loss (2026-10-29, second pass, Matt):
-  // quitting after the computer's opening roll used to be free.
-  if(!state.mp) armSoloQuitLoss();
   const values = state.dice.map(d => d.held ? d.value : 1+Math.floor(Math.random()*6));
   const heldMaskBefore = applyRollResult(values);
   if(state.mp) mpAfterLocalMove({ t:'roll', dice: values });
+  // Saved the moment the dice are decided (2026-11-06), the computer's rolls too: leaving during the
+  // tumble cannot take a roll back.
+  else saveGame();
   renderHeader(); renderScorecard(); renderControls(); renderOverlay();
   await animateRoll(heldMaskBefore);
   if(destroyed) return;
@@ -366,6 +369,7 @@ function toggleHold(i){
   if(state.rollsUsed<1 || state.rollsUsed>=3 || state.phase==='gameOver') return;
   state.dice[i].held = !state.dice[i].held;
   if(state.mp) mpAfterLocalMove({ t:'hold', i });
+  else saveGame();
   render();
   const liftY = state.dice[i].held ? -10 : 0;
   const dieEl = $('dieWrap'+i);
@@ -466,6 +470,7 @@ function commitSelection(){
 function commitStatsOnce(){
   if(!state || state.statsCommitted) return;
   state.statsCommitted = true;
+  if(!state.mp) clearSave();   // first, so a continued game can never be finished and counted twice
   const lost = !state.mp && quitLossLost('yahtzee');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
   if(!state.mp) dropQuitLoss('yahtzee');   // the real result replaces the armed quit loss
   if(lost) return;
@@ -483,21 +488,75 @@ function commitStatsOnce(){
   catch(e){ /* never block the result */ }
 }
 
-// QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
-// and easier settings"). This game has no resume, so once the player has rolled, leaving a solo game
-// (the hub's back, any unmount, or a closed app) records it as a loss at its score so far. Armed in
-// js/game-stats.js on each of the player's rolls; the real result drops it; destroy() takes it.
+// QUITTING (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md). Since 2026-11-06 the game vs the computer
+// SAVES (SAVE_KEY), so leaving it is not quitting and arms no marker; New game over a rolled-in save
+// is the one loss (takeSavedLoss). init() still takes a marker an older build armed.
 /** WHICH game this was (2026-11-02, js/game-stats.js withMode): who rolled first, from this seat. */
 function ytzMode(){
   const o = state && state.opener;
   return o === 0 || o === 1 ? { first: o === localSeat() ? 'me' : 'them' } : {};
 }
 
-function armSoloQuitLoss(){
-  if(!state || state.mp || state.statsCommitted || state.phase==='gameOver') return;
-  const me = state.players[0];
-  const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[0]||0);
-  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(() => (ytzMode()), MODE));
+/* ---------- SAVE / CONTINUE (2026-11-06) ---------- */
+/** The saved game vs the computer, or null. Only what the rules need; names come from t() at load. */
+function readSave(){
+  try{
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if(!s || s.v!==1 || !Array.isArray(s.players) || s.players.length!==2 || !Array.isArray(s.dice) || s.dice.length!==5) return null;
+    if(!(s.current===0 || s.current===1) || !(s.rollsUsed>=0 && s.rollsUsed<=3)) return null;
+    for(const p of s.players){
+      if(!p || typeof p.scores!=='object' || !p.scores) return null;
+      for(const k of Object.keys(p.scores)) if(!CATEGORIES.includes(k) || !Number.isFinite(p.scores[k])) return null;
+    }
+    if(s.players.every(p => CATEGORIES.every(c => p.scores[c]!=null))) return null;   // a finished game is never continued
+    if(!s.dice.every(d => d && d.value>=1 && d.value<=6)) return null;
+    return s;
+  }catch(e){ return null; }
+}
+function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){ console.error('[yahtzee] saved game not cleared', e); } }
+/** Anyone has rolled in it (the computer's opening included): throwing it away counts as a loss. */
+function savedMoved(s){ return !!s && (s.rollsUsed>0 || s.players.some(p => Object.keys(p.scores).length>0)); }
+/** The game vs the computer as it stands. Never multiplayer, never a finished or counted game. */
+function saveGame(){
+  if(!state || state.mp || state.statsCommitted || state.phase==='gameOver' || state.gameOver) return;
+  const data = {
+    v: 1, at: Date.now(),
+    players: state.players.map(p => ({ scores: { ...p.scores }, bonusTotal: p.bonusTotal||0 })),
+    current: state.current, opener: state.opener,
+    dice: state.dice.map(d => ({ value: d.value, held: !!d.held })),
+    rollsUsed: state.rollsUsed, yahtzeeBonusCount: state.yahtzeeBonusCount.slice(),
+    aiHeldAt: state.aiHeldAt|0,
+  };
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+  catch(e){ console.error('[yahtzee] game not saved', e); }
+}
+/** CONTINUE: the saved game exactly as it was left (the computer carries on with its turn). */
+function resumeGame(sv){
+  newGame();
+  sv.players.forEach((p, i) => { state.players[i].scores = { ...p.scores }; state.players[i].bonusTotal = p.bonusTotal|0; });
+  state.current = sv.current;
+  state.opener = sv.opener===1 ? 1 : 0;
+  state.dice = sv.dice.map(d => ({ value: d.value|0, held: !!d.held }));
+  state.rollsUsed = sv.rollsUsed|0;
+  state.yahtzeeBonusCount = Array.isArray(sv.yahtzeeBonusCount) ? [sv.yahtzeeBonusCount[0]|0, sv.yahtzeeBonusCount[1]|0] : [0,0];
+  state.aiHeldAt = sv.aiHeldAt|0;
+  state.phase = state.rollsUsed>0 ? 'awaitingPick' : 'idle';
+  view = 'game';
+  mountGameScreen();
+  render();
+  if(MODE==='ai' && state.current===1) scheduleTimeout(aiTakeTurn, 700);
+}
+/** New game over a saved game someone has rolled in: that game is ONE loss, recorded through the
+ *  quit-loss marker (armed and taken at once, so the play log says it was a quit). Save cleared first. */
+function takeSavedLoss(){
+  const sv = readSave();
+  clearSave();
+  if(!savedMoved(sv)) return;
+  const me = sv.players[0];
+  const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + ((sv.yahtzeeBonusCount && sv.yahtzeeBonusCount[0])|0);
+  const opener = sv.opener===1 ? 1 : 0;
+  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(() => ({ first: opener===0 ? 'me' : 'them' }), MODE));
+  if(!takeQuitLoss('yahtzee')) console.error('[yahtzee] the thrown-away game was not recorded as a loss');
 }
 
 function endTurn(effects){
@@ -513,6 +572,8 @@ function endTurn(effects){
   } else {
     state.current = 1 - state.current;
     state.phase = 'idle';
+    state.aiHeldAt = 0;
+    saveGame();
   }
 
   render();
@@ -646,6 +707,14 @@ function pickCategoryForAI(scores, dice){
 async function aiTakeTurn(){
   if(destroyed || state.mp || state.current!==1 || state.phase==='gameOver') return;
   state.phase = 'rolling';
+  // A continued game left after one of the computer's rolls, before it chose what to keep.
+  if(state.rollsUsed>0 && state.rollsUsed<3 && state.aiHeldAt!==state.rollsUsed){
+    const holdVals = aiChooseHolds(state.dice, state.players[1].scores);
+    state.dice.forEach(d=>{ d.held = holdVals.has(d.value); });
+    state.aiHeldAt = state.rollsUsed;
+    saveGame();
+    render();
+  }
   while(state.rollsUsed<3){
     await wait(300);
     if(destroyed) return;
@@ -656,6 +725,8 @@ async function aiTakeTurn(){
     if(state.rollsUsed<3){
       const holdVals = aiChooseHolds(state.dice, state.players[1].scores);
       state.dice.forEach(d=>{ d.held = holdVals.has(d.value); });
+      state.aiHeldAt = state.rollsUsed;
+      saveGame();
       render();
     }
   }
@@ -1554,7 +1625,10 @@ function setupScreenHTML(){
     ${hosting
       ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?t('creating'):t('create_and_share')))}</p>
          <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>${t('create_room')}</button>`
-      : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">${t('play')}</button>`}
+      : readSave()
+        ? `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="continue-solo">${t('continue_game')}</button>
+           <button type="button" class="yz-setup-btn yz-setup-btn-ghost" data-action="start-solo">${t('new_game')}</button>`
+        : `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="start-solo">${t('play')}</button>`}
     <button type="button" class="yz-howto-btn" data-action="howto">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
            stroke-linecap="round" stroke-linejoin="round">
@@ -1644,8 +1718,16 @@ function onRootClick(e){
     renderSetupScreen();
     return;
   }
+  if(e.target.closest('[data-action="continue-solo"]')){
+    const sv = readSave();
+    if(sv) resumeGame(sv); else renderSetupScreen();
+    return;
+  }
   const startSolo = e.target.closest('[data-action="start-solo"]');
   if(startSolo){
+    // New game over a saved game someone has rolled in throws it away: two taps, saying it is a loss.
+    if(savedMoved(readSave()) && startSolo.dataset.armed!=='1'){ startSolo.dataset.armed = '1'; startSolo.textContent = t('quit_loss'); return; }
+    takeSavedLoss();
     newGame();
     view = 'game';
     mountGameScreen();
@@ -1668,7 +1750,6 @@ function onRootClick(e){
   if(!state) return;
   if(e.target.closest('#rollBtn')){
     if(!isHumanTurn() || state.rollsUsed>=3 || state.phase==='gameOver') return;
-    armSoloQuitLoss();
     doRoll();
     return;
   }
@@ -1723,7 +1804,8 @@ function ensureCss(){
 export function init(container){
   if(!destroyed) destroy();
   destroyed = false;
-  // A solo game left armed by a page that closed mid-game (no destroy ran) is that game's loss.
+  // A marker armed by a build from before the save (2026-11-06): that game is gone (it had no save),
+  // so under the rule it was played by, it is a loss. This build arms none it does not take at once.
   takeQuitLoss('yahtzee');
   LL.settleLeave('yahtzee');   // a live game whose page closed mid-game (no rejoin here): its armed loss
 
@@ -1764,7 +1846,7 @@ export function init(container){
     getState: () => state,
     render, newGame, doRoll, toggleHold, selectCategory, commitSelection, endTurn,
     categoryScore, previewScore, availableCategories, totalScore, upperSum, upperBonus,
-    isGameOver, aiChooseHolds, pickCategoryForAI, localSeat, remoteSeat,
+    isGameOver, aiChooseHolds, pickCategoryForAI, localSeat, remoteSeat, readSave,
     startSolo(){
       newGame();
       view = 'game';
@@ -1783,11 +1865,7 @@ export function init(container){
 }
 
 export function destroy(){
-  // Leaving a solo game the player has rolled in: the armed loss is recorded, once.
-  if(state && !state.mp && !state.statsCommitted && state.phase!=='gameOver' && quitLossArmed('yahtzee')){
-    state.statsCommitted = true;
-    takeQuitLoss('yahtzee');
-  }
+  // Leaving a game vs the computer costs nothing: it is saved (Continue on the setup screen).
   destroyed = true;
   if(offViewport){ offViewport(); offViewport = null; } resizeHandler = null;
   pendingTimeouts.forEach(id => clearTimeout(id));
@@ -1825,17 +1903,20 @@ export function destroy(){
   delete window.__yzTest;
 }
 
-/** The hub's leave confirm says "Counts as a loss" when this is true. */
+/** The hub's leave confirm says "Counts as a loss" when this is true: a live room only. A game vs
+ *  the computer is saved (2026-11-06), so leaving it never costs. */
 export function quitCostsLoss(){
   if(!destroyed && state && state.mp) return mpLeaveCosts();
-  return !destroyed && !!state && !state.mp && !state.statsCommitted && state.phase!=='gameOver' && quitLossArmed('yahtzee');
+  return false;
 }
 
+/** TWO MEANINGS of the contract: a game vs the computer AUTOSAVES (2026-11-06, Continue on the setup
+ *  screen), so leaving it loses nothing: false. A live room has no rejoin, so leaving one abandons it. */
 export function isInProgress(){
   if(destroyed) return false;
   if(lobby) return true;             // mid-lobby: leaving abandons a room the other side may have joined
   if(state && state.mp) return state.phase !== 'gameOver' && !state.mp.ended;
-  return hasProgress() && !!state && state.phase !== 'gameOver';
+  return false;
 }
 
 export default { init, destroy, isInProgress, quitCostsLoss };

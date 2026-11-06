@@ -14,14 +14,9 @@ session wrote, `always-wire-new-games-into-hub`, for the standing instruction th
 
 Hub integration: in-hub `module:` (`yahtzee/js/ui.js`), **immersive** — the game draws its own
 full-bleed header/scorecard/dice chrome exactly like Escoba/Mancala/Ball Run, so the hub's own
-header row is wasted space while it's mounted. `isInProgress()` uses the **"no mid-game resume"**
-literal meaning (same class as Ball Run/Snake, not the autosave/resume convention every other
-module game follows): `true` once any roll has happened or any category has been filled, `false`
-once the game reaches `gameOver` or hasn't started. **There is no save/resume key** — leaving
-mid-game is a real abandonment, matching Ball Run's reasoning that a live-action/in-progress round
-can't meaningfully pause across a hub navigation. If autosave/resume is ever added here, add a
-`gamehub.yahtzee.save.v1` key and update this line — don't leave the next session to guess (per the
-root CLAUDE.md's explicit instruction for this decision).
+header row is wasted space while it's mounted. **Since 2026-11-06 the game vs the computer SAVES**
+(`gamehub.yahtzee.save.v1`, see "Resume (2026-11-06)" at the end), so `isInProgress()` is `false` vs
+the computer (autosave meaning) and `true` only in a live room or its lobby (no rejoin there).
 
 ## Full-bleed sizing (position:fixed, not flowed)
 
@@ -424,9 +419,16 @@ force.
 
 ## Quitting and easier settings (2026-10-29)
 
-No resume, so leaving a solo game after the player's first roll is ONE loss (hub back, any unmount, a closed app): armed in `gamehub.quitLoss.v1` at each roll, dropped by the real result, taken in `destroy()` and at `init()`; `quitCostsLoss()` makes the hub's confirm say so. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Superseded for solo by "Resume (2026-11-06)" below (leaving is no longer a loss). Was: no resume, so leaving a solo game after the first roll was ONE loss via `gamehub.quitLoss.v1`; `init()` still takes a marker an older build armed. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
 
 ## Second pass (2026-10-29)
 
-- Live room (`js/live-leave.js`): after your first roll, Leave (two taps), the hub or any unmount (no rejoin here) = your loss (`'mp'`, no head-to-head) and the other phone's win; a closed app arms it; 90 s silent = "Claim win". Solo: the first roll by EITHER side arms the quit loss; a marker settled while the page was frozen means no second result (`quitLossLost`).
+- Live room (`js/live-leave.js`): after your first roll, Leave (two taps), the hub or any unmount (no rejoin here) = your loss (`'mp'`, no head-to-head) and the other phone's win; a closed app arms it; 90 s silent = "Claim win". Solo (superseded 2026-11-06, the game saves): the first roll by EITHER side armed the quit loss; `quitLossLost` still guards the result.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Resume (2026-11-06)
+
+Matt: "We should add resume to the other games that don't save". Vs the computer only: `gamehub.yahtzee.save.v1` = `{ v: 1, at, players: [{scores, bonusTotal}], current, opener, dice, rollsUsed, yahtzeeBonusCount, aiHeldAt }`, written when a roll's dice are decided (before the tumble, the computer's too), on a hold, a commit and the computer's holds; removed BEFORE the result is recorded (`commitStatsOnce`).
+- Setup shows **Continue** + **New game**; New game over a save anyone has rolled in asks twice ("Counts as a loss", `quit_loss`) and records ONE loss (`takeSavedLoss`: marker armed and taken at once, mode `first` from the save).
+- Leaving (hub, unmount, a closed app) is not quitting: no marker armed, solo `quitCostsLoss()`/`isInProgress()` false. A continued computer turn picks its holds if the save was left before it chose (`aiHeldAt`).
+- Tests: `node tools/test-quit-loss.mjs [--browser]` (Yahtzee lines), `node tools/test-yahtzee-ai.mjs`.
