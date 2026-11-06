@@ -119,6 +119,37 @@ export class Game {
     this.winner = side;
     ev.push({ type: 'win', side });
   }
+
+  /** The game as plain data (ui.js saves it, 2026-11-06). */
+  toJSON() {
+    return {
+      innings: this.innings, first: this.first, inning: this.inning, half: this.half, outs: this.outs,
+      strikes: this.strikes, bases: this.bases.slice(), runs: { ...this.runs },
+      line: { a: (this.line.a || []).slice(), b: (this.line.b || []).slice() }, hits: { ...this.hits },
+      throws: this.throws, over: this.over, winner: this.winner,
+    };
+  }
+
+  /** A game from toJSON()'s data, exactly as it stood; throws on anything malformed. */
+  static fromJSON(o) {
+    const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+    const runsOk = (r) => r && int(r.a, 0, 1e6) && int(r.b, 0, 1e6);
+    const lineOk = (L) => Array.isArray(L) && L.length <= 1000 && L.every((v) => int(v, 0, 1e6));
+    if (!o || !INNINGS.includes(o.innings) || !(o.first === 'a' || o.first === 'b')
+      || !int(o.inning, 1, 1000) || !int(o.half, 0, 1) || !int(o.outs, 0, OUTS - 1) || !int(o.strikes, 0, STRIKES - 1)
+      || !Array.isArray(o.bases) || o.bases.length !== 3 || !runsOk(o.runs) || !runsOk(o.hits)
+      || !o.line || !lineOk(o.line.a) || !lineOk(o.line.b) || !int(o.throws, 0, 1e6)) throw new Error('bad saved game');
+    const g = new Game({ innings: o.innings, first: o.first });
+    g.inning = o.inning; g.half = o.half; g.outs = o.outs; g.strikes = o.strikes;
+    g.bases = o.bases.map((b) => !!b);
+    g.runs = { a: o.runs.a, b: o.runs.b };
+    g.line = { a: o.line.a.slice(), b: o.line.b.slice() };
+    g.hits = { a: o.hits.a, b: o.hits.b };
+    g.throws = o.throws;
+    g.over = !!o.over;
+    g.winner = o.winner === 'a' || o.winner === 'b' ? o.winner : null;
+    return g;
+  }
 }
 
 export default { Game, OUTS, STRIKES, HITS, INNINGS };

@@ -208,7 +208,7 @@ check('a player code is normalised and validated',
 {
   const ui = readFileSync(new URL('./hoops4/js/ui.js', __ROOT_URL), 'utf8');
   check('shooting goes through ONE turn gate', /isMyShot\(\)/.test(ui)
-    && /shoot\(power, aim\) \{[\s\S]{0,240}?if \(!this\.isMyShot\(\)\) return;/.test(ui));
+    && /shoot\(power, aim(, seedIn = null)?\) \{[\s\S]{0,240}?if \(!this\.isMyShot\(\)\) return;/.test(ui));
   check('the gate reads THIS DEVICE\'s side, not RED',
     /return this\.match\.turn === this\.myPlayer;/.test(ui));
   check('a remote move is applied strictly in sequence, exactly once',

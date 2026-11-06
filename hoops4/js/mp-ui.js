@@ -552,10 +552,11 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
   }
 
   /** TWO PEOPLE, ONE PHONE. No room, no match document, no network - `ui.start()` with vsCpu
-   *  false and no `mp` is exactly the game the setup screen's "Two players" used to start. */
+   *  false and no `mp` is exactly the game the setup screen's "Two players" used to start. A saved
+   *  pass-and-play match (2026-11-06) is picked up where it was left; Menu > New game starts afresh. */
   function startPassPlay() {
     el.remove();
-    ui.start({ vsCpu: false });
+    ui.start({ vsCpu: false, resume: true });
   }
 
   // The hub's Challenges screen hands over a person: straight onto their terms (Back goes to the list).

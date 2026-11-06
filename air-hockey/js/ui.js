@@ -20,10 +20,13 @@
 // peer who leaves (room status 'ended') ends it for both, no result. Leaving (Back, hub back,
 // closing the game) calls leaveRoom, which is what tells the other phone.
 //
-// isInProgress(): the LITERAL meaning (no mid-game resume, Hoops' / Snake's class): true while a
-// match is under way (playing, between goals, or paused). Nothing is persisted mid-match.
+// RESUME (2026-11-06, Matt: "We should add resume to the other games that don't save"): a match vs
+// the computer is SAVED (`gamehub.airhockey.save.v1`: level, score, who serves, fastest shot so far) at
+// its start and after every goal, and the start card offers Continue: a fresh face-off at that score.
+// Closing mid-rally replays from the last goal. Leaving is not quitting; only Play (New game) over a
+// saved match is a loss, asked twice. isInProgress(): true only for an online match.
 
-import { TABLE, createMatch, resetMatch, advance, clampTarget } from './physics.js';
+import { TABLE, PHYS, createMatch, resetMatch, advance, clampTarget } from './physics.js';
 import { createCpu, cpuThink, DIFFS } from './ai.js';
 import { createRenderer, TABLES } from './render.js';
 import { STRINGS } from './strings.js';
@@ -31,7 +34,7 @@ import * as LL from '../../js/live-leave.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, takeQuitLoss, withMode, modeTag } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30). The table
  *  is a look; the only thing that defines a match is its length, first to 7 (physics.js PHYS.WIN). */
 const AH_MODE = { to: 7 };
@@ -44,6 +47,9 @@ import { getStatsApp } from '../../js/firebase-boot.js';
 const t = makeT(STRINGS);
 const { H } = TABLE;
 const SETTINGS_KEY = 'gamehub.airhockey.v1';
+/** The match vs the computer in progress (2026-11-06): `{ v: 1, at, diff, score: [me, cpu], serve, best }`.
+ *  Holds nothing earned; removed before the finished match is recorded. */
+const SAVE_KEY = 'gamehub.airhockey.save.v1';
 /** A Join tapped on an invite in Messages hands the code over here (session only, never kept). */
 export const JOIN_KEY = 'gamehub.airhockey.join';
 
@@ -74,6 +80,18 @@ function loadSettings() {
   } catch { /* no profile is fine */ }
   return { difficulty: d || 'medium', table };
 }
+/** The saved match vs the computer, or null. Every saved match had the puck live: throwing it away is a loss. */
+function readSave() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (!s || s.v !== 1 || !DIFFS.includes(s.diff) || !Array.isArray(s.score) || (s.serve !== 0 && s.serve !== 1)) return null;
+    const [a, b] = s.score;
+    const okGoal = (n) => Number.isInteger(n) && n >= 0 && n < PHYS.WIN;
+    if (!okGoal(a) || !okGoal(b)) return null;
+    return { diff: s.diff, score: [a, b], serve: s.serve, best: Number.isFinite(+s.best) && +s.best > 0 ? +s.best : 0 };
+  } catch { return null; }
+}
+const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.error('[airhockey] saved match not cleared', err); } };
 /** The Air Hockey records (the `ah` sub-counter) as stored, for the result card. */
 function ahRecord() {
   try { return (loadStats().games.airhockey || {}).ah || {}; } catch { return {}; }
@@ -231,7 +249,8 @@ class AirHockeyUI {
             </div>
             <p class="ah-rec" data-role="rec"></p>
             <div class="ah-actions">
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"><span data-l="play"></span></button>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="continue" hidden><span data-l="continue"></span></button>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="online"><span data-l="play_online"></span></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="howto"><span data-l="howto"></span></button>
             </div>
@@ -378,6 +397,7 @@ class AirHockeyUI {
         <i class="ah-swatch ah-swatch-${id}" aria-hidden="true"></i></button>`).join('');
     this._syncTableLabel();
     this._syncRec();
+    this._syncMenu();
     this._syncScore();
     if (this.screen === 'over') this._fillOver();
     if (this.screen === 'help') this._fitHelp();
@@ -390,6 +410,16 @@ class AirHockeyUI {
     const d = this.settings.difficulty, r = recordVs(d), o = recordVs('mp');
     this.root.querySelector('[data-role="rec"]').textContent = t('rec_vs', { diff: t('diff_' + d), w: r.won, l: r.lost });
     this.root.querySelector('[data-role="recOnline"]').textContent = t('rec_online', { w: o.won, l: o.lost });
+  }
+  /** Continue when a match vs the computer is saved; Play then reads New game. */
+  _syncMenu() {
+    const sv = readSave();
+    const c = this.root.querySelector('[data-act="continue"]'), p = this.root.querySelector('[data-act="play"]');
+    c.hidden = !sv;
+    c.classList.toggle('gh-btn--primary', !!sv);
+    p.classList.toggle('gh-btn--primary', !sv);
+    p.dataset.armed = '';
+    p.innerHTML = `<span>${esc(t(sv ? 'new_game' : 'play'))}</span>`;
   }
   /** The opponent's label in the score row: CPU, or the other player's name online. */
   _syncOpp() {
@@ -435,8 +465,7 @@ class AirHockeyUI {
 
   // --- match lifecycle ---------------------------------------------------------------------------
   _play() {
-    this._quitNow();   // a match the player was in, replaced by a new one, is a loss
-    this._qArmed = false;
+    this._takeDiscard();   // a saved match thrown away for a new one is a loss
     resetMatch(this.match, 0);
     this.cpu = createCpu(this.settings.difficulty, 1, (Date.now() & 0xffff) + 1);
     this.difficulty = this.settings.difficulty;
@@ -445,9 +474,27 @@ class AirHockeyUI {
     this._syncScore();
     this.screen = 'game';
     this._showOnly(null);
-    // The puck is live and the computer moves at once: quitting is a loss from the first frame
-    // (2026-10-29, second pass, Matt). It used to wait for the player's first touch.
-    this._armQuit();
+    // The puck is live and the computer moves at once: saved from the first frame, so throwing it
+    // away (New game) is a loss from the first frame (2026-10-29, second pass, Matt).
+    this._saveMatch();
+    this._start();
+  }
+  /** CONTINUE: the saved match at a fresh face-off, at its score, the saved side serving. */
+  _continue() {
+    const sv = readSave();
+    if (!sv) { this._play(); return; }
+    this._stop();
+    resetMatch(this.match, sv.serve);
+    this.match.score[0] = sv.score[0];
+    this.match.score[1] = sv.score[1];
+    this.match.lastGoal = sv.score[0] + sv.score[1] > 0 ? 1 - sv.serve : -1;
+    this.cpu = createCpu(sv.diff, 1, (Date.now() & 0xffff) + 1);
+    this.difficulty = sv.diff;
+    this._resetFx();
+    this.matchBest = sv.best;
+    this._syncScore();
+    this.screen = 'game';
+    this._showOnly(null);
     this._start();
   }
   _pause() {
@@ -465,7 +512,7 @@ class AirHockeyUI {
     this._start();
   }
   _toMenu() {
-    this._quitNow();   // quitting a match against the computer the player has played in: a loss
+    // Leaving a match vs the computer keeps it saved (Continue); nothing is recorded.
     this._stop();
     this.screen = 'menu';
     this._syncOpp();
@@ -474,6 +521,7 @@ class AirHockeyUI {
     this._syncScore();
     this.renderer.render(this.match, this.fx);
     this._syncRec();
+    this._syncMenu();
     this._showOnly('menu');
   }
   _over() {
@@ -485,13 +533,13 @@ class AirHockeyUI {
     // Recorded once, when the match ENDS at 7. Rule 6: a refused or failed write is said loudly.
     try {
       const [gf, ga] = this.match.score;
-      const lost = !this.online && quitLossLost('airhockey');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
-      if (!this.online) { dropQuitLoss('airhockey'); this._qArmed = false; }   // the real result replaces the armed loss
+      // The save goes first, so a continued match can never be finished and counted a second time.
+      if (!this.online) clearSave();
       this._bestBefore = ahRecord().bestShot | 0;
       // Online: a round already decided by a leave on this phone (js/live-leave.js) counts once, as that.
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
-      const st = counted || lost ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
+      const st = counted ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
         { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }));
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
@@ -523,29 +571,32 @@ class AirHockeyUI {
     q('overNote').textContent = theyAsked ? t('rematch_asked', { name: on.oppName }) : '';
   }
 
-  // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
-  // and easier settings"). A match against the computer has no resume: once the player has touched
-  // their mallet, leaving it (Quit, the hub's back, a closed app) records a loss at the score so far.
-  // Armed in js/game-stats.js (refreshed at every goal), dropped by the real result, taken by a quit.
-  _armQuit() {
-    if (this.online || (this.screen !== 'game' && this.screen !== 'paused') || this.match.phase === 'over') return;
-    const [gf, ga] = this.match.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [this.difficulty, false, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }], modeTag(AH_MODE, this.difficulty));
-    this._qArmed = true;
+  // A MATCH VS THE COMPUTER IS SAVED (2026-11-06; docs/INTEGRITY-CHECKS-SPEC.md "Games that SAVE and
+  // resume"). Leaving it (Quit, the hub's back, a closed app) costs nothing: it is there to Continue.
+  // Only THROWING IT AWAY (Play over a saved match, asked twice) is a loss, at the saved score.
+  _saveMatch() {
+    if (this.online || !this.difficulty || this.match.phase === 'over') return;
+    const [a, b] = this.match.score;
+    const serve = a + b === 0 ? 0 : 1 - this.match.lastGoal;   // the player who was scored on serves
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), diff: this.difficulty, score: [a, b], serve, best: this.matchBest || 0 })); }
+    catch (err) { console.error('[airhockey] match not saved', err); }
   }
-  quitCostsLoss() {
-    if (this.online) return this._liveCosts();
-    return !!this._qArmed && !this.online && (this.screen === 'game' || this.screen === 'paused') && this.match.phase !== 'over';
-  }
-  _quitNow() {
-    if (!this.quitCostsLoss()) return;
-    this._qArmed = false;
-    takeQuitLoss('airhockey');
+  /** Online only: leaving a live round after your first touch is a loss (js/live-leave.js). */
+  quitCostsLoss() { return this.online ? this._liveCosts() : false; }
+  /** The saved match, thrown away: ONE loss through the quit-loss marker (armed and taken at once, so
+   *  the play log says it was a quit), the save cleared first. */
+  _takeDiscard() {
+    const sv = readSave();
+    if (!sv) return;
+    clearSave();
+    const [gf, ga] = sv.score;
+    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff));
+    if (!takeQuitLoss('airhockey')) console.error('[airhockey] the thrown-away match was not recorded as a loss');
   }
 
   _goal(scorer) {
     const [a, b] = this.match.score;
-    if (this._qArmed && this.match.phase !== 'over') this._armQuit();   // keep the loss at the score so far
+    if (this.match.phase !== 'over') this._saveMatch();   // the score so far, the scored-on side to serve
     if (this.online && this.online.armed === this.online.rd && this.match.phase !== 'over') this._liveArm();
     this._syncScore();
     this.liveEl.textContent = scorer === 0 ? t('say_goal_you', { a, b })
@@ -611,6 +662,9 @@ class AirHockeyUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'rematch' && this.online) { this.online.session.rematch(performance.now()); this._fillOver(); }
+    else if (act === 'continue') this._continue();
+    // New game over a saved match throws it away: two taps, the second saying it is a loss.
+    else if (act === 'play' && readSave() && b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = t('quit_loss'); }
     else if (act === 'play' || act === 'rematch') { saveSettings(this.settings); this._play(); }
     else if (act === 'online') this._openOnline();
     else if (act === 'onlineClose') { this._cancelRoom(); this._toMenu(); }
@@ -640,7 +694,6 @@ class AirHockeyUI {
   }
   _pointerDown(e) {
     if (this.screen !== 'game') return;
-    if (!this._qArmed && !this.online) this._armQuit();
     if (this.online && this.online.armed !== this.online.rd) this._liveArm();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     // Touch anywhere in your half (with a little grace above the centre line) to grab the mallet.
@@ -652,7 +705,6 @@ class AirHockeyUI {
   }
   _pointerMove(e) {
     if (this.screen !== 'game') return;
-    if (!this._qArmed && !this.online && e.pointerType === 'mouse') this._armQuit();
     if (this.online && this.online.armed !== this.online.rd && e.pointerType === 'mouse') this._liveArm();
     if (e.pointerType === 'mouse') { this._aim(e, false); return; }
     if (e.pointerId === this.drag.id) this._aim(e, true);
@@ -995,7 +1047,7 @@ class AirHockeyUI {
   }
 
   destroy() {
-    this._quitNow();   // leaving a match against the computer mid-play: no resume, so it is a loss
+    // Leaving a match vs the computer costs nothing: it is saved (Continue).
     this._leaveOnline();
     this._cancelRoom();
     this._stop();
@@ -1012,11 +1064,13 @@ class AirHockeyUI {
 
 export function init(container) {
   if (instance) destroy();
-  takeQuitLoss('airhockey');   // a match whose page closed mid-play (no destroy ran) is that match's loss
+  // A marker armed by a build from before the save (2026-11-06): that match had no save, so under the
+  // rule it was played by, it is a loss. This build arms none it does not take at once.
+  takeQuitLoss('airhockey');
   LL.settleLeave('airhockey');  // the same for an online match (js/live-leave.js; no rejoin here)
   instance = new AirHockeyUI(container);
 }
-/** The hub's leave confirm says "Counts as a loss" when this is true. */
+/** The hub's leave confirm says "Counts as a loss" when this is true (online only). */
 export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
 export function destroy() {
   if (!instance) return;
@@ -1024,8 +1078,8 @@ export function destroy() {
   instance = null;
   i.destroy();
 }
-/** Literal meaning: a match under way (playing, between goals or paused) would be lost by leaving. */
+/** Only an ONLINE match is lost by leaving; a match vs the computer is saved (Continue, 2026-11-06). */
 export function isInProgress() {
-  return !!(instance && (instance.screen === 'game' || instance.screen === 'paused' || instance.screen === 'wait'));
+  return !!(instance && instance.online && (instance.screen === 'game' || instance.screen === 'paused' || instance.screen === 'wait'));
 }
 export default { init, destroy, isInProgress, quitCostsLoss };

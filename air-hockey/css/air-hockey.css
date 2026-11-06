@@ -147,6 +147,8 @@
 .ah-root .ah-help-svg { display: block; width: auto; max-width: 100%; height: min(200px, 27dvh); margin: 2px auto 4px; color: var(--gh-ink, #16243a); }
 .ah-root .ah-final { margin: 0 0 18px; font-size: 34px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .ah-root .ah-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+/* Continue adds a fourth button (2026-11-06): on a 568px-tall phone the card would scroll by 6px. */
+@media (max-height: 620px) { .ah-root .ah-actions { gap: 6px; } }
 
 .ah-root .ah-sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);

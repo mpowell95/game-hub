@@ -464,8 +464,10 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 - **Games that SAVE and resume**: leaving (destroy, the hub's back, closing the app) is not quitting. Only an
   explicit discard records the loss: Restart / New game / Menu / Quit to setup, or a new game started over a
   moved-in save from the setup screen (Dominoes, Escoba, Darts, Flick Soccer, Pool, Archery, Parchís; Cup Pong
-  since 2026-11-03, see "Cup Pong saves" at the end).
-- **Games with NO resume** (Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops; Cup Pong until 2026-11-03; Monopoly Deal until 2026-11-06):
+  since 2026-11-03, see "Cup Pong saves" at the end; Monopoly Deal, Air Hockey, Connect 4 Hoops, Yahtzee and Cup
+  Baseball since 2026-11-06, see their sections at the end).
+- **Games with NO resume** (none since 2026-11-06; Cup Pong until 2026-11-03; Monopoly Deal, Air Hockey, Connect 4 Hoops,
+  Yahtzee and Cup Baseball until 2026-11-06):
   leaving after the first move is the loss. Closing the app runs no `destroy()`, so the game ARMS its loss in
   `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`: recorder name + the LOSS call's arguments, score
   so far, refreshed as it changes) and DROPS it in the same breath as its real result. `destroy()` and every
@@ -487,7 +489,8 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 | Boggle | Give up (two taps) | first move = first word entered |
 | Darts, Flick Soccer, Pool, Archery, Cup Pong (2026-11-03) | Play (or Pass & play; Cup Pong: New game, setup or menu) over a moved-in saved match vs the computer | Quit keeps the save (Continue), so it is not a quit; Pool marks `m.ps` at the first shot |
 | Battle Arena | menu New match / Home | `pm` in the save |
-| Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops | every route, leaving included (marker) | |
+| Air Hockey, Connect 4 Hoops (vs the computer; both SAVE since 2026-11-06) | New game over the saved match (setup/menu, or Hoops' Menu), asked twice ("Counts as a loss"); Quit, Back to setup, the hub and a closed app keep the save (Continue) | Air Hockey: every save had the puck live, so always a loss; Hoops: once any shot was taken (either side, or one in the air) |
+| Yahtzee, Cup Baseball (2026-11-06) | New game over a moved-in saved game vs the computer (Cup Baseball: also Play / 2 players over it, and the pause menu's New game), asked twice | they SAVE: leaving keeps the game (Continue) |
 | Minesweeper (solo) | the face's New board on a started board, New game over a level's paused board | **a loss at that level** (it protected a win rate); pausing a board is not quitting |
 | Monopoly Deal | Settings > New Game, or New Game over a saved game (asked: "Counts as a loss."); since 2026-11-06 it SAVES (`gamehub.bd.save.v1`), so Quit, the hub and a closed page are not losses | its own `bd-stats` too |
 | Parchís | a new game over a rolled-in saved game vs the computer (a prompt says so) | BUILT FILE patched, see below |
@@ -775,3 +778,42 @@ that match's own settings; the setup screen shows **Continue** + **New game**.
 - **Counted once**: the finish clears the save BEFORE recording, so a continued match cannot be counted twice.
 - A marker armed by an older build is still taken at `init()` (that match had no save).
 Tests: `tools/test-quit-loss.mjs` (Q4 cup-pong lines), `node cup-pong/js/test.js`, `tools/test-cuppong-mp.mjs`.
+
+## Air Hockey and Connect 4 Hoops save (2026-11-06, Matt: "We should add resume to the other games that don't save")
+
+Both move from the no-resume games to the games that SAVE vs the computer (supersedes their places in E1, G3 and
+G5 above), Cup Pong's shape. The setup screen shows **Continue** (Play reads **New game**); Continue plays the
+SAVED match's own level and rule, whatever the setup screen now says.
+- **Air Hockey** `gamehub.airhockey.save.v1` = `{ v: 1, at, diff, score, serve, best }`, written when the puck goes
+  live and after every goal; Continue is a fresh face-off at that score, the scored-on side serving. A closed app
+  replays from the last goal (the rally since is not kept; nothing in it was recorded).
+- **Connect 4 Hoops** `gamehub.hoops4.save.v1` (vs the computer) and `gamehub.hoops4.passSave.v1` (pass and play,
+  records nothing; Pass & play picks it up, Menu > New game starts afresh) = `{ v: 1, at, vsCpu, skill, one, first,
+  turn, sit, shots, moves, fly }`, written at the start, at every launch (`fly`: power, aim, seed) and after every
+  settled shot. A shot left in the air is flown again on Continue (same seed, fixed physics step), so leaving
+  cannot take a shot back; a winning shot's save stays until `finish()` clears it.
+- **Leaving is not quitting**: no marker is armed; `isInProgress()` is false vs the computer, `quitCostsLoss()`
+  answers only for live rooms (unchanged, `js/live-leave.js`).
+- **Throwing it away is the loss**: New game over the save, asked twice, records ONE loss at the saved match's
+  level (Hoops: `statsDiff`, one level lower for "shoot until you score"), through the quit-loss marker armed and
+  taken at once (the play log says `quitLoss`). The save is cleared first.
+- **Counted once**: the finish clears the save BEFORE recording. A marker an older build armed is still taken at mount.
+Tests: `tools/test-quit-loss.mjs` (Q4 air-hockey / hoops4 lines), `node air-hockey/js/test.js`, `node hoops4/js/test.js`,
+`tools/test-hoops4-mp.mjs`; headless browser probe (save, reload, Continue, finish, New game = one loss) run 2026-11-06.
+
+## Yahtzee and Cup Baseball save (2026-11-06, Matt: "We should add resume to the other games that don't save")
+
+Both move from the no-resume games to the games that SAVE (supersedes their place in E1, G2, G3 and G5 above), Cup
+Pong's way. **Yahtzee** (vs the computer): `gamehub.yahtzee.save.v1` = `{ v: 1, at, players, current, opener, dice,
+rollsUsed, yahtzeeBonusCount, aiHeldAt }`, written the moment a roll's dice are decided (either side), on a hold, a
+commit and the computer's holds. **Cup Baseball** (vs the computer and 2 players): `gamehub.cupbaseball.save.v1` =
+`{ v: 1, at, mode, cfg: {diff}, game, fly }`, written at a new game, at every throw's launch (`fly`, either side,
+re-flown on Continue) and when it lands.
+- **Leaving is not quitting**: no marker armed; `isInProgress()` false vs the computer; Yahtzee's `quitCostsLoss()`
+  answers only for a live room, Cup Baseball exports none.
+- **Throwing it away is the loss**: New game over a save anyone has moved in, asked twice ("Counts as a loss"),
+  ONE loss through the game's own recorder with the saved game's mode and difficulty (marker armed and taken at once,
+  so the play log says `quitLoss`). The save is cleared first.
+- **Counted once**: the result clears the save BEFORE recording. `init()` still takes a marker an older build armed.
+Tests: `tools/test-quit-loss.mjs` (Q4 yahtzee / cup-baseball lines, Q5 Yahtzee), `node cup-baseball/js/test.js`,
+`node tools/test-yahtzee-ai.mjs`.
