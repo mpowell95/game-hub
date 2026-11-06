@@ -2131,7 +2131,8 @@ function freshScreenForBase(id, stt) {
         facts: [['st_shots', sumOf(dt, 'shots')], ['st_made', sumOf(dt, 'made')], ['st_missed', sumOf(dt, 'missed')], ['st_make_pct', make]] });
     }
     case 'mancala': return stdScreen(id, rec, { facts: [['st_stones', sumOf(dt, 'mine')], ['st_avg_stones', avgOf(dt, 'mine')], ['st_avg_their_stones', avgOf(dt, 'theirs')]] });
-    case 'filler': return stdScreen(id, rec, { facts: [['st_squares', sumOf(dt, 'mine')], ['st_avg_squares', avgOf(dt, 'mine')], ['st_avg_their_squares', avgOf(dt, 'theirs')], ['st_avg_moves', avgOf(dt, 'moves')],
+    // No Went first / Went second table (Matt, 2026-11-06: the opener alternates; admin devices always open).
+    case 'filler': return stdScreen(id, rec, { first: false, facts: [['st_squares', sumOf(dt, 'mine')], ['st_avg_squares', avgOf(dt, 'mine')], ['st_avg_their_squares', avgOf(dt, 'theirs')], ['st_avg_moves', avgOf(dt, 'moves')],
       ...['yellow', 'blue', 'vermilion', 'teal', 'purple', 'pink'].map((c) => ['st_sq_' + c, sumOf(dt, 'sq_' + c)])] });
     case 'dotsboxes': {
       const db = rec.db || {};

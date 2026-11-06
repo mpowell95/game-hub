@@ -230,4 +230,4 @@ Solo Restart / New game after the player's first colour (`state.moves`) = ONE lo
 
 ### Admin devices always go first vs the computer (2026-11-06)
 
-Matt: "Keep the alternative first move for all player besides admin. Let me start every game." `startGame()`: on `isAdminDevice()` the human opens every solo game and `nextStarter` is not flipped; everyone else alternates. Online play unchanged. Results still record `first: 'me'` honestly.
+Matt: "Keep the alternative first move for all player besides admin. Let me start every game." `startGame()`: on `isAdminDevice()` the human opens every solo game and `nextStarter` is not flipped; everyone else alternates. Online play unchanged. Results still record `first: 'me'` honestly. **Its Went first / Went second stats table is removed** (`first: false` on Filler's `stdScreen` in `js/game-stats-ui.js`, Matt: "If it's alternating first moves then remove that table"); `first` is still recorded.
