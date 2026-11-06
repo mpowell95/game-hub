@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v41';
+  const APP_VERSION = 'v43';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -106,6 +106,18 @@
   // holds no earned history. Before this the choice lived only in memory, so
   // every fresh open of the app silently reset the difficulty.
   const SETUP_KEY = 'gamehub.bd.setup.v1';
+  // The game in progress (2026-11-06, Matt: "yes build it"): written at every move choice,
+  // removed once the result is recorded. Holds no earned history (results live in gamehub.stats).
+  const SAVE_KEY = 'gamehub.bd.save.v1';
+  function loadSave() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      const ok = s && s.v === 1 && s.game && Array.isArray(s.game.players) && Array.isArray(s.names)
+        && s.game.players.length === s.names.length && (s.numAI | 0) >= 1 && (s.numAI | 0) <= 4
+        && s.game.players.length === (s.numAI | 0) + 1;
+      return ok ? s : null;
+    } catch (e) { return null; }
+  }
   // Computer speed (2026-09-28, Matt: "Add a setting for fast computer moves. like we
   // just did for texas hold em"). Scales only the pauses that wait on a COMPUTER: its
   // "X's turn" beat, the pause after each of its plays, and the pause after its Just Say
@@ -386,17 +398,14 @@
     }
 
     /* ---- quitting is a loss (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29:
-     *  quitting and easier settings"). This game has no resume, so once the player has made a move,
-     *  leaving the game (New Game, either Quit, the hub, closing the page) records a loss, once
-     *  (`_resultRecorded`). The marker (__ghStats.armQuit) is what catches a closed page. ---------- */
+     *  quitting and easier settings"). Since 2026-11-06 the game SAVES (SAVE_KEY), so leaving it
+     *  (either Quit, the hub, closing the page) is not quitting and arms no marker. Only an explicit
+     *  discard of a dealt game (Settings > New Game, or Start over a saved game) records ONE loss
+     *  (`_resultRecorded`). The open-time takeQuit below still settles a marker an older build armed. */
     _quitCostsLoss() { return !!(this._qArmed && this.game && !this.game.winner && !this._resultRecorded); }
     _armQuitLoss() {
       if (this._resultRecorded || !this.game || this.game.winner) return;
-      // Already armed: keep the marker fresh while the game is played (2026-10-29, second pass), so
-      // the hub's 30-minute settle never takes a game that is still going.
-      if (this._qArmed) { try { if (window.__ghStats && window.__ghStats.touchQuit) window.__ghStats.touchQuit('business'); } catch (e) {} return; }
-      this._qArmed = true;
-      try { if (window.__ghStats && window.__ghStats.armQuit) window.__ghStats.armQuit('business', this.difficulty, this._statsMode()); } catch (e) {}
+      this._qArmed = true;   // dealt: a discard from here is a loss (no marker: the game saves)
     }
     _takeQuitLoss() {
       if (!this._quitCostsLoss()) return;
@@ -404,6 +413,32 @@
       this._qArmed = false;
       try { if (window.__ghStats && window.__ghStats.dropQuit) window.__ghStats.dropQuit('business'); } catch (e) {}
       this._recordResult(false);
+      this._clearSave();
+    }
+
+    /* ---- save / resume (2026-11-06) ------------------------------------- */
+    _saveGame() {
+      const g = this.game;
+      if (!g || g.winner || this._resultRecorded) return;
+      const data = { v: 1, at: Date.now(), numAI: this._lastNumAI | 0, difficulty: this.difficulty,
+        names: g.players.map(p => p.name), meta: this.meta, game: g.saveState() };
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+      catch (e) { console.error('[business-deal] game save FAILED', e); }
+    }
+    _clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+    /** A dealt game is open on this page (not over, not counted). */
+    _liveGame() { return !!(this.game && !this.game.winner && !this._resultRecorded && this._qArmed); }
+    /** Start a new game over the one in progress: that one is ONE loss, counted once. */
+    _discardAndStart(numAI, diff) {
+      if (!this._liveGame()) {
+        const sv = loadSave();
+        if (sv) {   // saved on an earlier visit, not loaded here: record it from the save
+          this.difficulty = sv.difficulty || 'normal'; this._lastNumAI = sv.numAI | 0;
+          this._recordResult(false);
+          this._clearSave();
+        }
+      }
+      this.newGame(numAI, diff);   // takes the in-page game's loss itself (_takeQuitLoss)
     }
 
     /** Return to the Game Hub launcher (root-relative — mirrors how the hub links
@@ -435,8 +470,8 @@
         '<div class="menu-list">' +
           this._menuItem('set-new', '🔄', 'New Game', this._quitCostsLoss() ? 'Counts as a loss' : 'Restart with the same opponents') +
           this._menuItem('set-stats', '📊', 'Stats', 'All-time wins, losses and win rate') +
-          this._menuItem('set-setup', '↩️', 'Quit to New Game screen', this._quitCostsLoss() ? 'Counts as a loss' : 'Change opponents or difficulty') +
-          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', this._quitCostsLoss() ? 'Counts as a loss' : 'Leave Monopoly Deal') +
+          this._menuItem('set-setup', '↩️', 'Quit to New Game screen', 'Change opponents or difficulty') +
+          this._menuItem('set-hub', '🏠', 'Quit to Game Hub', 'Leave Monopoly Deal') +
           this._menuItem('set-credits', '🎉', 'Credits', '') +
         '</div>' +
         '<button class="cta ghost-cta" id="set-close">Close</button>');
@@ -446,8 +481,8 @@
       }));
       sheet.querySelector('#set-new').addEventListener('click', () => { this._takeQuitLoss(); this._restartGame(); });
       sheet.querySelector('#set-stats').addEventListener('click', () => this.showStats('settings'));
-      sheet.querySelector('#set-setup').addEventListener('click', () => { this._takeQuitLoss(); this.showSetup(); });
-      sheet.querySelector('#set-hub').addEventListener('click', () => { this._takeQuitLoss(); this._toHub(); });
+      sheet.querySelector('#set-setup').addEventListener('click', () => this.showSetup());
+      sheet.querySelector('#set-hub').addEventListener('click', () => this._toHub());
       sheet.querySelector('#set-credits').addEventListener('click', () => this._showCredits());
       sheet.querySelector('#set-close').addEventListener('click', () => this._closeOverlay());
       this._scrimCloses();
@@ -455,14 +490,14 @@
 
     _quitDialog() {
       const sheet = this._sheet(
-        '<h3>Where do you wanna go?</h3><p>' + (this._quitCostsLoss() ? 'Counts as a loss.' : 'Your current game will be lost') + '</p>' +
+        '<h3>Where do you wanna go?</h3><p>' + (this._liveGame() ? 'Game saved.' : '') + '</p>' +
         '<div class="menu-list">' +
           this._menuItem('q-setup', '↩️', 'New Game screen', 'Pick opponents and difficulty') +
           this._menuItem('q-hub', '🏠', 'Game Hub', 'Leave Monopoly Deal') +
         '</div>' +
         '<button class="cta ghost-cta" id="q-cancel">Keep playing</button>');
-      sheet.querySelector('#q-setup').addEventListener('click', () => { this._takeQuitLoss(); this.showSetup(); });
-      sheet.querySelector('#q-hub').addEventListener('click', () => { this._takeQuitLoss(); this._toHub(); });
+      sheet.querySelector('#q-setup').addEventListener('click', () => this.showSetup());
+      sheet.querySelector('#q-hub').addEventListener('click', () => this._toHub());
       sheet.querySelector('#q-cancel').addEventListener('click', () => this._closeOverlay());
       this._scrimCloses();
     }
@@ -520,6 +555,7 @@
       let diff = this._lastDiff || saved.difficulty
         || (prof && prof.opponents[0] ? SKILL_TO_DIFF[prof.opponents[0].skill] : 'normal');
       let pace = this.pace;
+      let confirming = false;
       const root = this.$('setup');
       // Hidden challenge: while unwon, force the qualifying config (2+ opponents at
       // Normal/Hard), gray out the choices, and show a "Begin challenge" bar. Once won,
@@ -528,6 +564,20 @@
       const live = !!(bd && bd.live && bd.live());
       const done = !!(bd && bd.active && bd.active() && bd.done && bd.done());
       const render = () => {
+        const inPage = this._liveGame();
+        const saved = inPage ? null : loadSave();
+        const hasGame = inPage || !!saved;
+        if (confirming) {
+          root.innerHTML = '<div class="scrim"></div><div class="sheet"><h3>New game?</h3><p>Counts as a loss.</p>' +
+            '<button class="cta" id="cf-yes">New Game</button><button class="cta ghost-cta" id="cf-no">Back</button></div>';
+          root.querySelector('#cf-yes').addEventListener('click', () => {
+            root.classList.remove('show');
+            saveSetupPrefs({ numAI: chosen, difficulty: diff, pace });
+            this._discardAndStart(chosen, diff);
+          });
+          root.querySelector('#cf-no').addEventListener('click', () => { confirming = false; render(); });
+          return;
+        }
         if (live) { if (chosen < 2) chosen = 3; if (diff === 'easy') diff = 'normal'; }
         const lock = live ? ' bd-locked' : '';
         root.innerHTML =
@@ -536,7 +586,8 @@
           '<button class="tb-btn" id="setup-back-btn" type="button" aria-label="Back to Game Hub">‹</button>' +
           '<div class="scrim"></div><div class="sheet">' +
           (done ? '<p class="bd-challenge-note">Monopoly Deal challenge completed. Play anyways?</p>' : '') +
-          "<h3>Monopoly Deal</h3><p>How many AI opponents?</p>" +
+          "<h3>Monopoly Deal</h3>" +
+          (hasGame ? '<button class="cta" id="continue-btn">Continue</button><p style="margin-top:14px">How many AI opponents?</p>' : '<p>How many AI opponents?</p>') +
           '<div class="count-row' + lock + '">' +
           [1, 2, 3, 4].map(n => `<button class="count-btn${n === chosen ? ' sel' : ''}" data-n="${n}">${n}</button>`).join('') +
           '</div><p style="margin-top:14px">Difficulty</p><div class="count-row' + lock + '">' +
@@ -545,7 +596,7 @@
             diffShapeSVG(DIFF_TIER[d]) + `<span>${DIFF_LABEL[d]}</span></button>`).join('') +
           '</div><p style="margin-top:14px">Computer speed</p><div class="count-row">' +
           PACES.map(k => `<button class="count-btn pace${k === pace ? ' sel' : ''}" data-p="${k}">${PACE_LABEL[k]}</button>`).join('') +
-          '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : 'Start Game') + '</button>' +
+          '</div><button class="cta' + (live ? ' bd-cta-challenge' : '') + (hasGame ? ' ghost-cta' : '') + '" id="start-btn">' + (live ? 'Begin challenge' : hasGame ? 'New Game' : 'Start Game') + '</button>' +
           '<button class="cta ghost-cta" id="setup-stats">Stats</button>' +
           `<div class="setup-version">${APP_VERSION}</div></div>`;
         if (!live) {
@@ -558,9 +609,15 @@
         root.querySelectorAll('.count-btn[data-p]').forEach(b =>
           b.addEventListener('click', () => { pace = b.dataset.p; this._setPace(pace); render(); }));
         this.$('start-btn').addEventListener('click', () => {
+          if (hasGame) { confirming = true; render(); return; }
           root.classList.remove('show');
           saveSetupPrefs({ numAI: chosen, difficulty: diff, pace });
           this.newGame(chosen, diff);
+        });
+        const cont = root.querySelector('#continue-btn');
+        if (cont) cont.addEventListener('click', () => {
+          root.classList.remove('show');
+          if (!inPage) this.newGame(saved.numAI, saved.difficulty, saved);
         });
         this.$('setup-stats').addEventListener('click', () => this.showStats('setup'));
         this.$('setup-back-btn').addEventListener('click', () => this._toHub());
@@ -571,7 +628,8 @@
     }
 
     /* ---- lifecycle ----------------------------------------------------- */
-    newGame(numAI, difficulty) {
+    /** `save` (loadSave()) resumes that game instead of dealing a new one. */
+    newGame(numAI, difficulty, save) {
       this._closeDetail(); this._closeOverlay();
       this.$('setup').classList.remove('show');
       this.$('winner').classList.remove('show');
@@ -594,9 +652,10 @@
       const aiAvatar = (i) => (prof && prof.opponents[i] && prof.opponents[i].emoji) || AI_AVATARS[i % AI_AVATARS.length];
       const players = [{ name: 'You', agent: new HumanAgent(this) }];
       for (let i = 0; i < numAI; i++) {
+        const nm = save ? save.names[i + 1] : aiName(i);
         players.push({
-          name: aiName(i),
-          agent: new AI.AIAgent({ name: aiName(i), difficulty: this.difficulty }),
+          name: nm,
+          agent: new AI.AIAgent({ name: nm, difficulty: this.difficulty }),
         });
       }
       this.game = new Game({ verbose: false, players });
@@ -604,7 +663,7 @@
       // player's first move, so a bad hand could be re-dealt for free.
       this._armQuitLoss();
       this.meta = players.map((p, i) => ({
-        avatar: i === 0 ? ((prof && prof.emoji) || '🧑') : aiAvatar(i - 1),
+        avatar: i === 0 ? ((prof && prof.emoji) || '🧑') : ((save && save.meta && save.meta[i] && save.meta[i].avatar) || aiAvatar(i - 1)),
         tint: i === 0 ? '#0f59c8' : OPP_TINTS[(i - 1) % OPP_TINTS.length],
       }));
 
@@ -654,8 +713,15 @@
         await delay(info.responder.id === 0 ? 1500 : this._aiMs(1500));
       };
       this.game.onTurnEnd = () => this.render();
+      this.game.onCheckpoint = () => this._saveGame();
+      this.game.onResume = async (pl) => {
+        this._bubbles = {}; this._seenLogs = this.game.logs.length; this.render();
+        this.toast(pl.id === 0 ? 'Your turn' : `${pl.name}'s turn…`);
+        if (pl.id !== 0) await delay(this._aiMs(1100));
+      };
 
-      this.game.setup();
+      if (save) { this.game.loadState(save.game); this._owners = undefined; }   // no deal animation
+      else this.game.setup();
       this._seenLogs = this.game.logs.length;
       const app = document.getElementById('app');
       app.classList.add('playing'); app.classList.remove('game-over'); // reveal the board
@@ -2132,6 +2198,7 @@
         this._qArmed = false;
         if (!lost) this._recordResult(w.id === 0);
         this._resultRecorded = true;
+        this._clearSave();
       }
       const s = this._loadStats();
       root.innerHTML =

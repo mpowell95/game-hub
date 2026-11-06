@@ -465,7 +465,7 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
   explicit discard records the loss: Restart / New game / Menu / Quit to setup, or a new game started over a
   moved-in save from the setup screen (Dominoes, Escoba, Darts, Flick Soccer, Pool, Archery, Parchís; Cup Pong
   since 2026-11-03, see "Cup Pong saves" at the end).
-- **Games with NO resume** (Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops, Monopoly Deal; Cup Pong until 2026-11-03):
+- **Games with NO resume** (Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops; Cup Pong until 2026-11-03; Monopoly Deal until 2026-11-06):
   leaving after the first move is the loss. Closing the app runs no `destroy()`, so the game ARMS its loss in
   `gamehub.quitLoss.v1` (`js/game-stats.js armQuitLoss`: recorder name + the LOSS call's arguments, score
   so far, refreshed as it changes) and DROPS it in the same breath as its real result. `destroy()` and every
@@ -489,7 +489,7 @@ untouched. A quit that costs a loss asks twice and the armed button or the sheet
 | Battle Arena | menu New match / Home | `pm` in the save |
 | Yahtzee, Cup Baseball, Air Hockey, Connect 4 Hoops | every route, leaving included (marker) | |
 | Minesweeper (solo) | the face's New board on a started board, New game over a level's paused board | **a loss at that level** (it protected a win rate); pausing a board is not quitting |
-| Monopoly Deal | New Game, both Quits, the hub, a closed page (classic marker) | its own `bd-stats` too |
+| Monopoly Deal | Settings > New Game, or New Game over a saved game (asked: "Counts as a loss."); since 2026-11-06 it SAVES (`gamehub.bd.save.v1`), so Quit, the hub and a closed page are not losses | its own `bd-stats` too |
 | Parchís | a new game over a rolled-in saved game vs the computer (a prompt says so) | BUILT FILE patched, see below |
 | Hold'em | already: Give up / Leave record a loss (2026-09-28) | left alone |
 | Baseball (admin only) | already: a career game forfeit is a loss | left alone |
