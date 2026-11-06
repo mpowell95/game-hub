@@ -48,8 +48,8 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 | Registry | `module: '../cup-baseball/js/ui.js'`, `immersive: true`, `devOnly: true`, hub id `cup-baseball`, no `released` date |
 | Stats id | `cupbaseball`: `recordResult('cupbaseball', diff, won)` once per finished game vs the computer. In `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META`, `js/game-stats-ui.js` `TABS` + `HUB_ID`, label `game_title_cupbaseball` |
 | CSS | `.cb-root` / `.cb-` (every rule under `.cb-root`) |
-| Settings key | `gamehub.cupbaseball.v1`: `{ diff, innings, nextFirst }` (preferences only) |
-| `isInProgress()` | NO MID-GAME RESUME: `true` once a game has had a throw and is not over |
+| Settings key | `gamehub.cupbaseball.v1`: `{ diff, innings, nextFirst }` (preferences only). Save: `gamehub.cupbaseball.save.v1` (below) |
+| `isInProgress()` | AUTOSAVE meaning since 2026-11-06: always `false` (saved, Continue); no `quitCostsLoss` export |
 | Tile art | `GAME_ART['cup-baseball']` |
 
 ## Tests
@@ -59,9 +59,16 @@ The drinking game "baseball" (beer pong's cousin) on **Cup Pong's table**: `cup-
 
 ## Quitting and easier settings (2026-10-29)
 
-No resume: vs the computer, leaving after the player's first throw is ONE loss (`gamehub.quitLoss.v1`, taken in `destroy()` / `init()`); New game / Change settings ask twice. Innings unchanged (3 is the shortest and the default). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Superseded by "Resume (2026-11-06)" below (leaving is no longer a loss; Change settings keeps the save). Innings unchanged (3 is the shortest and the default). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
 
 ## Second pass (2026-10-29)
 
-- Vs the computer: quitting is a loss once ANY throw, the computer's included (it was the player's own first move). `quitLossLost` stops a second result.
+- Vs the computer (superseded 2026-11-06, the game saves): quitting was a loss once ANY throw, the computer's included. `quitLossLost` still guards the result.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Resume (2026-11-06)
+
+Matt: "We should add resume to the other games that don't save". Vs the computer AND 2 players: `gamehub.cupbaseball.save.v1` = `{ v: 1, at, mode, cfg: {diff}, game: Game.toJSON(), fly }`, written at a new game, at every throw's launch (`fly` = `{s, p, a}`, the computer's too; re-flown on Continue, fixed-step physics lands it the same) and when it lands; cleared BEFORE the result is recorded. `cfg.diff` is that game's own difficulty.
+- Setup shows **Continue** over Play / 2 players. Leaving (hub, Change settings, a closed app) is not quitting.
+- New game (pause menu), or Play / 2 players over a computer save anyone has thrown in = ONE loss, asked twice (`quitPending`/`takeQuit`, marker armed and taken at once). 2-player games record nothing, as before.
+- `init()` still takes an older build's marker. Tests: `node tools/test-quit-loss.mjs` (Cup Baseball lines), `node cup-baseball/js/test.js`.

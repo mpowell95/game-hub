@@ -5,10 +5,17 @@
 // THE LAW applies here. `gamehub.cupbaseball.v1` holds preferences only (difficulty, innings, who
 // bats first next). A finished game vs the computer goes to the shared recorder,
 // `recordResult('cupbaseball', difficulty, won)`, exactly once. Two players on one phone records
-// nothing (there is no second profile to credit). Nothing is persisted mid-game: see isInProgress().
+// nothing (there is no second profile to credit).
+// A GAME IN PROGRESS IS SAVED (2026-11-06, Matt: "We should add resume to the other games that don't
+// save"): `gamehub.cupbaseball.save.v1` = { v: 1, at, mode, cfg: {diff}, game: Game.toJSON(), fly },
+// vs the computer and two players alike, after every throw resolves, at each throw's launch (`fly`,
+// flown again on Continue: the physics is a fixed step, so it lands where it was going) and at a new
+// game. Removed before the result is recorded. Holds no earned history. Leaving (the hub, Change
+// settings, a closed app) is not quitting; New game over a computer game anyone has thrown in is ONE
+// loss, asked twice.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, myName } from '../../js/i18n.js';
-import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossLost, withMode, modeTag } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): innings
  *  and who batted first. */
 const modeOf = (g) => ({ inn: g && g.innings, first: g && g.first === 'b' ? 'them' : 'me' });
@@ -23,6 +30,7 @@ import { CUPS, hitOf, MID_Z } from './field.js';
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-cupbaseball-css';
 const SETTINGS_KEY = 'gamehub.cupbaseball.v1';
+const SAVE_KEY = 'gamehub.cupbaseball.save.v1';
 const SETTLE_MS = 450;          // after a throw resolves, before anything else happens
 const CPU_PAUSE_MS = 1000;      // before each computer throw, so it reads as a person lining up
 const SWITCH_MS = 1300;         // the "Out! Switch" word, before the camera moves
@@ -42,6 +50,22 @@ const readSettings = () => {
   } catch { return { diff: 'medium', innings: 3, nextFirst: 'a' }; }
 };
 const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
+
+/** The saved game, or null. `cfg` is that game's own settings (the setup screen may have changed). */
+function readSave() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    if (!s || s.v !== 1 || !(s.mode === 'cpu' || s.mode === 'pass') || !s.cfg || !DIFFS.includes(s.cfg.diff)) return null;
+    const g = Game.fromJSON(s.game);
+    if (g.over) return null;
+    return s;
+  } catch { return null; }
+}
+const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.error('[cup-baseball] saved game not cleared', err); } };
+/** A game vs the computer anyone has thrown in (one still in the air included): throwing it away is a loss. */
+const savedMoved = (s) => !!s && s.mode === 'cpu' && ((s.game.throws | 0) > 0 || !!s.fly);
+/** A throw left in the air: `{ s, p, a }` (shooter, power, aim). */
+const flyOk = (f) => !!f && (f.s === 'a' || f.s === 'b') && Number.isFinite(+f.p) && Number.isFinite(+f.a);
 
 /** css/ui.css's primitives first (idempotent), then this game's own sheet (Cup Pong's guard). */
 function ensureCSS() {
@@ -108,6 +132,8 @@ class CupBaseball {
     this.engine = null;      // { phys, rend, cpu }
     this.mode = null;        // 'cpu' | 'pass'
     this.game = null;
+    this.cfg = null;         // THIS game's settings ({ diff }); the setup screen's may change meanwhile
+    this._fly = null;        // the throw in the air, as saved
     this.names = { a: '', b: '' };
     this.throwState = null;
     this.shooter = 'a';      // render frame of the ball in the air ('b' = from the far end)
@@ -153,7 +179,10 @@ class CupBaseball {
     this.unbindAll();
     this.mode = null;
     this.game = null;
+    this.cfg = null;
+    this._fly = null;
     const s = this.settings;
+    const saved = readSave();
     const seg = (role, items, cur) => `<div class="gh-seg" role="group" data-role="${role}">${items.map(([v, label, icon]) =>
       `<button type="button" class="gh-seg__item" data-v="${v}" aria-pressed="${v === cur}">${icon || ''}<span>${label}</span></button>`).join('')}</div>`;
     this.root.innerHTML = `
@@ -164,7 +193,8 @@ class CupBaseball {
           ${seg('inn', INNINGS.map((n) => [String(n), String(n)]), String(s.innings))}
           <p class="cb-setup-label">${t('computer')}</p>
           ${seg('diff', DIFFS.map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block cb-setup-play" data-role="play">${t('play')}</button>
+          ${saved ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block cb-setup-play" data-role="continue">${t('continueGame')}</button>` : ''}
+          <button type="button" class="gh-btn ${saved ? 'gh-btn--ghost' : 'gh-btn--primary'} gh-btn--block cb-setup-play" data-role="play">${t('play')}</button>
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block cb-setup-play" data-role="pass">${t('twoPlayers')}</button>
         </div>
         <button type="button" class="cb-link" data-role="help">${t('help')}</button>
@@ -181,8 +211,10 @@ class CupBaseball {
     };
     pick('inn', (v) => { this.settings.innings = Number(v); });
     pick('diff', (v) => { this.settings.diff = v; });
-    this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.start('cpu'));
-    this.on(this.root.querySelector('[data-role="pass"]'), 'click', () => this.start('pass'));
+    // A new game over a saved computer game someone has thrown in throws it away: two taps, a loss.
+    this.on(this.root.querySelector('[data-role="play"]'), 'click', (e) => this.quitGate(e.currentTarget, () => this.start('cpu')));
+    this.on(this.root.querySelector('[data-role="pass"]'), 'click', (e) => this.quitGate(e.currentTarget, () => this.start('pass')));
+    if (saved) this.on(this.root.querySelector('[data-role="continue"]'), 'click', () => this.start(saved.mode, { resume: true }));
     this.on(this.root.querySelector('[data-role="help"]'), 'click', () => this.showHelp());
   }
 
@@ -205,7 +237,7 @@ class CupBaseball {
   }
 
   // --- starting a game -------------------------------------------------------------------------
-  async start(mode) {
+  async start(mode, opts = {}) {
     this.teardownEngine();
     this.unbindAll();
     this.clearTimers();
@@ -219,22 +251,22 @@ class CupBaseball {
       this.engine = { phys, cpu, rend: new rend.Renderer(canvas, { reducedMotion: reducedMotion() }) };
       this.fit();
       this.offViewport = onViewportResize(() => this.fit());
-      this.newGame();
+      if (!opts.resume || !this.resumeGame()) this.newGame();
       this.startLoop();
       // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
       try { window.__cbTest = this; } catch {}
     } catch (err) {
       // Land somewhere recoverable, never on a dead canvas (skeeball, 2026-09-01).
       console.error('[cup-baseball] engine failed to load', err);
-      if (!this.disposed) this.renderLoadError(mode);
+      if (!this.disposed) this.renderLoadError(mode, opts);
     }
   }
 
-  renderLoadError(mode) {
+  renderLoadError(mode, opts = {}) {
     this.teardownEngine();
     this.root.innerHTML = `<div class="cb-error"><p>${t('loadError')}</p>
       <button type="button" class="gh-btn gh-btn--primary" data-role="retry">${t('retry')}</button></div>`;
-    this.on(this.root.querySelector('[data-role="retry"]'), 'click', () => this.start(mode));
+    this.on(this.root.querySelector('[data-role="retry"]'), 'click', () => this.start(mode, opts));
   }
 
   renderPlay() {
@@ -304,20 +336,79 @@ class CupBaseball {
     this.clearTimers();
     this.throwState = null;
     this.recorded = false;
-    const p = (() => { try { return loadProfile(); } catch { return null; } })();
-    const me = myName();
-    const o = p && Array.isArray(p.opponents) ? p.opponents[0] : null;
-    this.names = { a: me, b: this.mode === 'pass' ? t('player2') : ((o && o.name) || t('computer')) };
+    this.names = this.namesFor(this.mode);
     this.game = new Game({ innings: this.settings.innings, first: this.settings.nextFirst });
+    this.cfg = { diff: this.settings.diff };
+    this._fly = null;
     const R = this.engine.rend;
     R.flash('a', null); R.flash('b', null);
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = false;
     this.paintHud();
     this.busy = true;
+    this.saveGame();
     if (this.mode === 'pass') { this.askPass(); return; }
     this.toast(t('up', { name: this.names[this.game.batting] }), 1400);
     this.later(() => this.beginTurn(), 900);
+  }
+
+  namesFor(mode) {
+    const p = (() => { try { return loadProfile(); } catch { return null; } })();
+    const o = p && Array.isArray(p.opponents) ? p.opponents[0] : null;
+    return { a: myName(), b: mode === 'pass' ? t('player2') : ((o && o.name) || t('computer')) };
+  }
+
+  /** CONTINUE: the saved game exactly as it was left. False when there is none to continue. */
+  resumeGame() {
+    const sv = readSave();
+    let g = null;
+    try { g = sv && sv.mode === this.mode && Game.fromJSON(sv.game); } catch (err) { console.error('[cup-baseball] saved game unreadable', err); }
+    if (!g || g.over) return false;
+    this.clearTimers();
+    this.throwState = null;
+    this.recorded = false;
+    this.cfg = { diff: sv.cfg.diff };
+    this.game = g;
+    this.names = this.namesFor(this.mode);
+    this._fly = null;
+    const R = this.engine.rend;
+    R.flash('a', null); R.flash('b', null);
+    const hint = this.root.querySelector('.cb-hint');
+    if (hint) hint.hidden = true;
+    this.paintHud();
+    this.busy = true;
+    const f = sv.fly;
+    // whose throw it can be: the computer bats from the far end, everyone else from this one
+    const shooter = this.mode === 'cpu' && g.batting === 'b' ? 'b' : 'a';
+    this.later(() => {
+      if (flyOk(f) && f.s === shooter) { this.reFly(f); return; }
+      if (this.mode === 'pass') { this.askPass(); return; }
+      this.toast(t('up', { name: this.names[g.batting] }), 1400);
+      this.beginTurn();
+    }, 600);
+    return true;
+  }
+
+  /** A throw that was in the air when the game was left, flown again from its launch. */
+  reFly(f) {
+    const R = this.engine.rend;
+    R.setView(f.s === 'b' ? 'defend' : 'shoot');
+    if (f.s === 'b') R.hideBall();
+    this.busy = true;
+    this.shooter = f.s;
+    this.throwState = this.engine.phys.startThrow({ power: +f.p, aim: +f.a, cups: CUPS });
+    this.saveGame({ s: f.s, p: +f.p, a: +f.a });
+  }
+
+  /** The game as it stands (`fly`: a throw in the air). A finished game leaves no save. */
+  saveGame(fly = null) {
+    const g = this.game;
+    if (!g || !this.cfg || this.recorded || !(this.mode === 'cpu' || this.mode === 'pass')) return;
+    this._fly = fly;
+    if (g.over) { clearSave(); return; }
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), mode: this.mode, cfg: this.cfg, game: g.toJSON(), fly }));
+    } catch (err) { console.error('[cup-baseball] game not saved', err); }
   }
 
   /** The batter's next throw: the player's ball on the table, or the computer lining up. */
@@ -358,9 +449,10 @@ class CupBaseball {
   cpuShoot() {
     const g = this.game;
     if (!g || g.over || g.batting !== 'b' || this.mode !== 'cpu' || !this.engine) return;
-    const th = this.engine.cpu.cpuThrow(this.settings.diff);
+    const th = this.engine.cpu.cpuThrow(this.cfg.diff);
     this.shooter = 'b';
     this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups: CUPS });
+    this.saveGame({ s: 'b', p: th.power, a: th.aim });   // leaving cannot take the computer's throw back
   }
 
   /** Whose cups a throw in the air is going at: the computer throws from the far end at side a's. */
@@ -374,11 +466,7 @@ class CupBaseball {
     const batting = g.batting;
     const ev = g.throwResult(made ? hitOf(made) : 0, !!touched);
     this.throwState = null;
-    // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
-    // and easier settings"): no resume, so once the player has thrown against the computer, leaving
-    // the game (New game, Change settings, the hub's back, a closed app) records it as a loss.
-    // Any throw, the computer's included (2026-10-29, second pass, Matt).
-    if (this.mode === 'cpu' && !this.recorded && !g.over) armQuitLoss('cupbaseball', 'recordResult', ['cupbaseball', this.settings.diff, false], modeTag(() => (modeOf(g)), this.settings.diff));
+    this.saveGame();   // the throw has landed (a finished game clears the save)
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = true;
     const hit = ev.find((e) => e.type === 'hit');
@@ -413,17 +501,20 @@ class CupBaseball {
     const g = this.game;
     this.busy = true;
     if (!this.recorded) {
+      // The save goes first, so a continued game can never be finished and counted a second time.
+      clearSave();
       this.recorded = true;
       if (this.mode === 'cpu') {
         const lost = quitLossLost('cupbaseball');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
         dropQuitLoss('cupbaseball');   // the real result replaces the armed quit loss
         // ONCE per game: every write in the shared store is additive, so a second call inflates.
         if (!lost) try {
-          const st = withMode(() => (modeOf(g)), this.settings.diff, () => recordResult('cupbaseball', this.settings.diff, g.winner === 'a'));
+          const diff = this.cfg.diff;
+          const st = withMode(() => (modeOf(g)), diff, () => recordResult('cupbaseball', diff, g.winner === 'a'));
           if (!st) console.warn('[cup-baseball] result not recorded (rate gate or store refused it)');
         } catch (err) { console.error('[cup-baseball] record failed', err); }
       }
-      this.settings.nextFirst = this.settings.nextFirst === 'a' ? 'b' : 'a';
+      this.settings.nextFirst = g.first === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
     this.paintHud();
@@ -541,6 +632,7 @@ class CupBaseball {
     const hint = this.root.querySelector('.cb-hint');
     if (hint) hint.hidden = true;
     this.throwState = this.engine.phys.startThrow({ power, aim, cups: CUPS });
+    this.saveGame({ s: 'a', p: power, a: aim });   // saved at launch: leaving cannot take a throw back
   }
 
   // --- the loop --------------------------------------------------------------------------------
@@ -610,7 +702,8 @@ class CupBaseball {
     const close = () => { el.remove(); if (!this.disposed) this.startLoop(); };
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
     this.on(el.querySelector('[data-role="resume"]'), 'click', close);
-    // A new game abandons this one; nothing is recorded until a game ENDS (THE LAW rule 2).
+    // A new game throws this one away (a loss once anyone has thrown vs the computer, asked twice);
+    // Change settings keeps it saved for Continue.
     this.on(el.querySelector('[data-role="new"]'), 'click', (e) => this.quitGate(e.currentTarget, () => {
       this.takeQuit();
       el.remove();
@@ -619,19 +712,32 @@ class CupBaseball {
       if (this.engine) this.newGame();
       if (!this.disposed) this.startLoop();
     }));
-    this.on(el.querySelector('[data-role="setup"]'), 'click', (e) => this.quitGate(e.currentTarget, () => { this.takeQuit(); el.remove(); this.renderSetup(); }));
+    this.on(el.querySelector('[data-role="setup"]'), 'click', () => { el.remove(); this.renderSetup(); });
   }
 
-  /** A game against the computer the player has thrown in, not finished: leaving it is a loss. */
-  quitCostsLoss() {
-    return this.mode === 'cpu' && !!this.game && !this.game.over && !this.recorded && quitLossArmed('cupbaseball');
+  /** The game vs the computer a new one would THROW AWAY, once any throw was made in it: the one on the
+   *  table, or (from the setup screen) the saved one. Null when there is nothing to lose. */
+  quitPending() {
+    const g = this.game;
+    if (g) {
+      return this.mode === 'cpu' && !g.over && !this.recorded && this.cfg && (g.throws > 0 || !!this._fly)
+        ? { diff: this.cfg.diff, g } : null;
+    }
+    const sv = readSave();
+    return savedMoved(sv) ? { diff: sv.cfg.diff, g: Game.fromJSON(sv.game) } : null;
   }
+  quitCostsLoss() { return !!this.quitPending(); }
 
-  /** Record that loss, once (`recorded`, and the marker is dropped before the write). */
+  /** Record that loss, once: the save goes first, then the loss through the quit-loss marker (armed and
+   *  taken at once, so the play log says it was a quit), through the game's own recorder. */
   takeQuit() {
-    if (!this.quitCostsLoss()) return;
-    this.recorded = true;
-    takeQuitLoss('cupbaseball');
+    const q = this.quitPending();
+    clearSave();   // every caller starts a new game at once, which saves itself
+    if (!q) return;
+    if (this.game) this.recorded = true;
+    const qg = q.g;
+    armQuitLoss('cupbaseball', 'recordResult', ['cupbaseball', q.diff, false], modeTag(() => (modeOf(qg)), q.diff));
+    if (!takeQuitLoss('cupbaseball')) console.error('[cup-baseball] the thrown-away game was not recorded as a loss');
   }
 
   /** A button that would quit such a game asks twice, saying it counts as a loss. */
@@ -658,7 +764,7 @@ class CupBaseball {
   }
 
   destroy() {
-    this.takeQuit();   // leaving a thrown-in game against the computer: no resume, so it is a loss
+    // Leaving costs nothing: the game is saved (Continue on the setup screen).
     this.disposed = true;
     try { if (window.__cbTest === this) delete window.__cbTest; } catch {}
     clearTimeout(this._toastT);
@@ -671,7 +777,9 @@ class CupBaseball {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
-  takeQuitLoss('cupbaseball');   // a game whose page closed mid-game (no destroy ran) is that game's loss
+  // A marker armed by a build from before the save (2026-11-06): that game is gone (it had no save),
+  // so under the rule it was played by, it is a loss. This build arms none it does not take at once.
+  takeQuitLoss('cupbaseball');
   instance = new CupBaseball(container);
   instance.mount();
   return instance;
@@ -682,15 +790,11 @@ export function destroy() {
   try { instance.destroy(); } finally { instance = null; }
 }
 
-/** THE "NO MID-GAME RESUME" MEANING of the contract (Cup Pong's): a game is not persisted, so
- *  leaving one that has had a throw and is not over really does abandon it. */
+/** THE AUTOSAVE MEANING of the contract (2026-11-06): a game in progress is saved (Continue on the
+ *  setup screen), so leaving loses nothing: false. No `quitCostsLoss` export: the hub's back never
+ *  costs a loss here. */
 export function isInProgress() {
-  if (!instance || !instance.game) return false;
-  const g = instance.game;
-  return !g.over && g.throws > 0;
+  return false;
 }
 
-/** The hub's leave confirm says "Counts as a loss" when this is true. */
-export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
-
-export default { init, destroy, isInProgress, quitCostsLoss };
+export default { init, destroy, isInProgress };

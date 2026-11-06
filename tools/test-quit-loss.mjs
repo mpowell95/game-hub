@@ -19,7 +19,7 @@
 //   Q5  (--browser, needs `node server.mjs`): Connect Four, Tic Tac Toe, Dots and Boxes,
 //       Minesweeper and Yahtzee in a real page: a quit before the first move records nothing, after
 //       it exactly one loss; leaving a game that saves (destroy) records nothing and resumes; Yahtzee
-//       (no resume) records one loss on leaving and one on a page that died mid-game.
+//       (saves since 2026-11-06) records nothing on leaving and one loss for New game over its save.
 //
 // Node only for Q1-Q4, no deps, a fake localStorage (never the real database). Q5 uses a made-up
 // player code with gamehub.devAllowSync.v1 = '0' (root CLAUDE.md: never Matt's name or code).
@@ -205,7 +205,7 @@ W('business-deal/js/ui.js', /_takeQuitLoss\(\); this\._restartGame\(\);/, 'Monop
 W('business-deal/js/ui.js', /window\.__ghStats\.takeQuit\('business'\)\) this\._bumpBdStats\(false\)/, 'Monopoly Deal: a page that closed mid-game is a loss on the next open');
 W('parchis/index.html', /var pending = !!\(sv && sv\.cfg && sv\.cfg\.vsMode === "cpu" && sv\.cfg\.hm/, 'Parchis: a new game over a rolled-in saved game is a loss');
 // the no-resume games: arm, drop with the real result, take in destroy() and at init()
-for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-baseball', 'cupbaseball'], ['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
+for (const [g, id] of [['air-hockey', 'airhockey'], ['hoops4', 'hoops4']]) {
   const c = src(`${g}/js/ui.js`);
   ok(`Q4 ${g}: arms, drops at the real result, takes on a quit, at init and in destroy()`,
     c.includes(`armQuitLoss('${id}'`) && c.includes(`dropQuitLoss('${id}')`) && c.includes(`takeQuitLoss('${id}')`)
@@ -226,6 +226,42 @@ for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-baseball', 'cupbaseball'], 
   ok('Q4 cup-pong: the finish clears the save BEFORE recording (a continued match counts once)',
     /this\.recorded = true;[\s\S]{0,250}clearSave\(\);[\s\S]{0,200}recordCupPong\(/.test(c));
 }
+// Yahtzee and Cup Baseball SAVE since 2026-11-06 (Matt: "We should add resume to the other games that
+// don't save"): leaving keeps the game for Continue; New game over a thrown-in / rolled-in one is the loss.
+{
+  const c = src('yahtzee/js/ui.js');
+  ok('Q4 yahtzee saves: leaving is not quitting (destroy() takes no loss, solo quitCostsLoss false, isInProgress false vs the computer)',
+    !/export function destroy\(\)\{[\s\S]{0,300}takeQuitLoss/.test(c)
+    && /export function quitCostsLoss\(\)\{\s*if\(!destroyed && state && state\.mp\) return mpLeaveCosts\(\);\s*return false;\s*\}/.test(c)
+    && /export function isInProgress\(\)\{[\s\S]{0,300}return false;\s*\}/.test(c));
+  ok('Q4 yahtzee saves: it never arms the marker except to take it at once (New game over a rolled-in save)',
+    (c.match(/armQuitLoss\(/g) || []).length === 1 && /function takeSavedLoss\(\)\{\s*const sv = readSave\(\);\s*clearSave\(\);\s*if\(!savedMoved\(sv\)\) return;[\s\S]{0,500}armQuitLoss\('yahtzee'[\s\S]{0,250}takeQuitLoss\('yahtzee'\)/.test(c));
+  ok('Q4 yahtzee saves: New game over a rolled-in save asks twice, then records it',
+    /savedMoved\(readSave\(\)\) && startSolo\.dataset\.armed!=='1'\)\{[^}]*t\('quit_loss'\); return; \}\s*takeSavedLoss\(\);\s*newGame\(\);/.test(c));
+  ok('Q4 yahtzee saves: the result clears the save BEFORE recording (a continued game counts once)',
+    /state\.statsCommitted = true;\s*if\(!state\.mp\) clearSave\(\);[\s\S]{0,1400}recordYahtzee\(difficulty/.test(c));
+  ok('Q4 yahtzee saves: a roll is saved the moment its dice are decided (no take-backs by leaving)',
+    /applyRollResult\(values\);\s*if\(state\.mp\) mpAfterLocalMove\(\{ t:'roll', dice: values \}\);[\s\S]{0,200}else saveGame\(\);/.test(c));
+  ok('Q4 yahtzee saves: init still takes a marker an older build armed', /export function init\(container\)\{[\s\S]{0,400}takeQuitLoss\('yahtzee'\);/.test(c));
+}
+{
+  const c = src('cup-baseball/js/ui.js');
+  ok('Q4 cup-baseball saves: leaving is not quitting (destroy() takes no loss, no quitCostsLoss export, isInProgress false)',
+    !/destroy\(\) \{[\s\S]{0,300}takeQuit\(\)/.test(c) && !/export function quitCostsLoss/.test(c)
+    && /export function isInProgress\(\) \{\s*return false;\s*\}/.test(c));
+  ok('Q4 cup-baseball saves: a new game over a thrown-in one (live or saved) records ONE loss, the save cleared first',
+    /newGame\(\) \{\s*this\.takeQuit\(\);/.test(c) && /takeQuit\(\) \{\s*const q = this\.quitPending\(\);\s*clearSave\(\);[\s\S]{0,300}armQuitLoss\('cupbaseball'[\s\S]{0,200}takeQuitLoss\('cupbaseball'\)/.test(c)
+    && (c.match(/armQuitLoss\(/g) || []).length === 1);
+  ok('Q4 cup-baseball saves: Play / 2 players over a saved thrown-in game ask twice; Change settings keeps the save',
+    /data-role="play"\]'\), 'click', \(e\) => this\.quitGate\(e\.currentTarget, \(\) => this\.start\('cpu'\)\)\)/.test(c)
+    && /data-role="pass"\]'\), 'click', \(e\) => this\.quitGate\(e\.currentTarget, \(\) => this\.start\('pass'\)\)\)/.test(c)
+    && /data-role="setup"\]'\), 'click', \(\) => \{ el\.remove\(\); this\.renderSetup\(\); \}\);/.test(c));
+  ok('Q4 cup-baseball saves: the finish clears the save BEFORE recording (a continued game counts once)',
+    /clearSave\(\);\s*this\.recorded = true;[\s\S]{0,700}recordResult\('cupbaseball'/.test(c));
+  ok('Q4 cup-baseball saves: every throw is saved at launch, the computer\'s included (no take-backs by leaving)',
+    /this\.saveGame\(\{ s: 'b', p: th\.power, a: th\.aim \}\)/.test(c) && /this\.saveGame\(\{ s: 'a', p: power, a: aim \}\)/.test(c));
+  ok('Q4 cup-baseball saves: init still takes a marker an older build armed', /export function init\(container\) \{[\s\S]{0,400}takeQuitLoss\('cupbaseball'\);/.test(c));
+}
 W('js/hub.js', /settleQuitLosses\(30 \* 60 \* 1000\)/, 'Hub: settles the markers of games that died with their page');
 W('js/hub.js', /m\.quitCostsLoss\(\)[\s\S]{0,200}hub_confirm_loss/, 'Hub: its leave confirm says "Counts as a loss" when the game says so');
 // strings
@@ -238,6 +274,7 @@ const STR = [
   ['flick-soccer/js/strings.js', ['quit_loss']], ['eight-ball/js/strings.js', ['quit_loss']], ['archery/js/strings.js', ['quit_loss']],
   ['air-hockey/js/strings.js', ['quit_loss']], ['battle-arena/js/strings.js', ['quitLoss']], ['cup-pong/js/strings.js', ['quitLoss']],
   ['cup-baseball/js/strings.js', ['quitLoss']], ['hoops4/js/strings.js', ['quitLoss']], ['minesweeper/js/strings.js', ['quit_loss']],
+  ['yahtzee/js/strings.js', ['quit_loss', 'continue_game', 'new_game']], ['cup-baseball/js/strings.js', ['continueGame']],
 ];
 for (const [file, keys] of STR) {
   const c = src(file);
@@ -289,11 +326,11 @@ W('dominoes/js/ui.js', /clearSave\(\);\s*this\._moved = true;/, 'G3 Dominoes: de
 W('uno/js/ui.js', /function savedMoved\(raw\) \{\s*return !!\(raw && raw\.snap\);/, 'G3 Uno: every saved hand was dealt');
 W('uno/js/ui.js', /this\.closeOverlays\(\);\s*this\._moved = true;/, 'G3 Uno: dealt = quitting costs');
 W('boggle/js/ui.js', /this\._found = new Map\(\);\s*\/\/ The board is SHOWN[\s\S]{0,200}this\._moved = true;/, 'G3 Boggle: the board shown = giving up is a loss (before the first word too)');
-W('yahtzee/js/ui.js', /async function doRoll\(\)\{[\s\S]{0,300}if\(!state\.mp\) armSoloQuitLoss\(\);/, 'G3 Yahtzee: the first roll, the computer\'s included');
+W('yahtzee/js/ui.js', /function savedMoved\(s\)\{ return !!s && \(s\.rollsUsed>0 \|\| s\.players\.some\(p => Object\.keys\(p\.scores\)\.length>0\)\); \}/, 'G3 Yahtzee (saves since 2026-11-06): any roll in the saved game, the computer\'s included');
 W('business-deal/js/ui.js', /this\.game = new Game\(\{ verbose: false, players \}\);[\s\S]{0,250}this\._armQuitLoss\(\);/, 'G3 Monopoly Deal: dealt = armed');
 W('parchis/index.html', /function doRoll\(\) \{[\s\S]{0,400}if \(G\.cfg && G\.cfg\.vsMode === "cpu"\) G\.cfg\.hm = true;/, 'G3 Parchis: the first roll of the game, the computer\'s included');
 W('cup-pong/js/ui.js', /const savedMoved = \(s\) => !!s && \(\(s\.match\.throwsTaken \| 0\) > 0 \|\| !!s\.fly\);/, 'G3 Cup Pong (saves since 2026-11-03): any throw in the saved match, the computer\'s or one still in the air included');
-W('cup-baseball/js/ui.js', /if \(this\.mode === 'cpu' && !this\.recorded && !g\.over\) armQuitLoss\('cupbaseball'/, 'G3 Cup Baseball: any throw arms it');
+W('cup-baseball/js/ui.js', /const savedMoved = \(s\) => !!s && s\.mode === 'cpu' && \(\(s\.game\.throws \| 0\) > 0 \|\| !!s\.fly\);/, 'G3 Cup Baseball (saves since 2026-11-06): any throw in the saved game, the computer\'s or one still in the air included');
 W('hoops4/js/ui.js', /if \(!this\.mp && this\.match\.vsCpu && !this\.recorded\) \{\s*armQuitLoss\('hoops4'/, 'G3 Connect 4 Hoops: any shot arms it');
 W('air-hockey/js/ui.js', /this\.screen = 'game';\s*this\._showOnly\(null\);[\s\S]{0,250}this\._armQuit\(\);\s*this\._start\(\);/, 'G3 Air Hockey: the puck live = armed');
 W('archery/js/ui.js', /m\.shots\.some\(\(s\) => s && s\.length > 0\)/, 'G3 Archery: any arrow, the computer\'s included');
@@ -440,32 +477,32 @@ async function browserPart() {
   ok('Q5 Minesweeper: the New board question says it counts as a loss', /loss/i.test(sub || ''), sub);
   ok('Q5 Minesweeper: a started board thrown away records exactly one loss', one(t1), JSON.stringify(t1));
 
-  // Yahtzee (no resume): leaving after a roll = one loss; a page that died mid-game = one more, next open.
+  // Yahtzee (saves since 2026-11-06): leaving keeps the game (Continue); New game over it = one loss.
   await fresh('yahtzee/');
   await click('[data-action="start-solo"]');
   await page.waitForTimeout(600);
-  await page.evaluate(() => import('./js/ui.js').then((m) => m.destroy()));
-  ok('Q5 Yahtzee: leaving before the first roll records nothing', (await st('yahtzee')).played === 0);
-  await page.reload(); await page.waitForTimeout(800);
-  await click('[data-action="start-solo"]');
-  await page.waitForTimeout(600);
   await click('#rollBtn');
   await page.waitForTimeout(1800);
-  const costs = await page.evaluate(() => import('./js/ui.js').then((m) => m.quitCostsLoss()));
-  ok('Q5 Yahtzee: after a roll the hub would say "Counts as a loss"', costs === true);
+  const ysave = await page.evaluate(() => JSON.parse(localStorage.getItem('gamehub.yahtzee.save.v1') || 'null'));
+  ok('Q5 Yahtzee: a roll is saved', !!ysave && ysave.rollsUsed === 1);
+  const costs = await page.evaluate(() => import('./js/ui.js').then((m) => m.quitCostsLoss() || m.isInProgress()));
+  ok('Q5 Yahtzee: the hub asks nothing on leaving (the game is saved)', costs === false);
   await page.evaluate(() => import('./js/ui.js').then((m) => m.destroy()));
-  t1 = await st('yahtzee');
-  ok('Q5 Yahtzee: leaving after the first roll records exactly one loss', one(t1), JSON.stringify(t1));
-  await page.reload(); await page.waitForTimeout(800);
-  ok('Q5 Yahtzee: opening it again records nothing more', (await st('yahtzee')).played === 1);
-  await click('[data-action="start-solo"]');
+  await page.reload(); await page.waitForTimeout(1200);   // and a page that dies: no destroy() runs
+  ok('Q5 Yahtzee: leaving after a roll records nothing', (await st('yahtzee')).played === 0);
+  await click('[data-action="continue-solo"]');
   await page.waitForTimeout(600);
-  await click('#rollBtn');
-  await page.waitForTimeout(1800);
-  await page.reload();   // the page dies: no destroy() runs
-  await page.waitForTimeout(1200);
+  const back = await page.evaluate(() => { const s = window.__yzTest.getState(); return { r: s.rollsUsed, d: s.dice.map((x) => x.value) }; });
+  ok('Q5 Yahtzee: Continue restores the dice as they were', back.r === 1 && back.d.join() === ysave.dice.map((x) => x.value).join(), JSON.stringify(back));
+  await page.reload(); await page.waitForTimeout(1000);
+  await click('[data-action="start-solo"]');
+  const yArmed = await page.textContent('[data-action="start-solo"]');
+  await click('[data-action="start-solo"]');
+  await page.waitForTimeout(400);
   t1 = await st('yahtzee');
-  ok('Q5 Yahtzee: a page that died mid-game is that game\'s loss on the next open, once', t1.played === 2 && t1.lost === 2, JSON.stringify(t1));
+  ok('Q5 Yahtzee: New game over the save asks twice, then records exactly one loss', /loss/i.test(yArmed || '') && one(t1), yArmed + ' ' + JSON.stringify(t1));
+  await page.reload(); await page.waitForTimeout(1000);
+  ok('Q5 Yahtzee: opening it again records nothing more and offers no Continue', (await st('yahtzee')).played === 1 && !(await page.$('[data-action="continue-solo"]')));
 
   ok('Q5 no page errors', errs.length === 0, errs.join(' | '));
   await browser.close();
