@@ -126,6 +126,9 @@ the rebuilt scores sheets, the My Stats v2 look, the restored records (`RESTORED
 players see its old ranking and a two-line sheet). The "Old" link stays for now (Matt: "Leave for now"). History:
 `docs/HANDOFF-LB2-SESSION7.md` and the older handoffs it names.
 
+**Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: same number,
+FEWER plays ranks higher (points boards: fewer wins, then fewer plays). Only equal on both is tied. `boardMetricCmp`.
+
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
 A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key
