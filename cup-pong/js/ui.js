@@ -605,9 +605,7 @@ class CupPong {
     const th = C.cpuThrow(this.cfg.diff, cups, Math.random, m.called);
     this.shooter = 'b';
     this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
-    // Test mode: the same SPEED the real game would throw, so the computer is exactly as accurate.
-    const cpuPower = this.test ? this.engine.phys.testPowerFor(th.power) : th.power;
-    this.throwState = this.engine.phys.startThrow({ power: cpuPower, aim: th.aim, cups, model: this.test ? 'test' : null });
+    this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups, model: this.test ? 'test' : null });
     this.saveMatch({ s: 'b', p: th.power, a: th.aim });
   }
 

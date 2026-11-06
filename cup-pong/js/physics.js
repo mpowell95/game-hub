@@ -89,27 +89,14 @@ export function innerR(y) {
 //     the table (a 0.002 power change flipped it), so the same throw bounced high or low at random. The
 //     test table reflects the ball itself, at the moment it touches: up speed = TEST.rest x down speed
 //     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
-//  2. POWER IS GENTLER: the same swipe changes the speed less (TEST.spread), so each row of cups is a
-//     wider band of swipe speeds. Centred on TEST.p0, so a mid-rack swipe flies where it did.
-// Tuned 2026-11-05 (Matt: 0.66 "feels dead... I want it to look normal, just have the same chance at going in as a
-// regular throw"): a LIVELY bounce (0.88 of the falling speed) that keeps 65.5% of its forward speed, so a bounced
-// ball comes in flatter. Best-aim bounce ~67% = best-aim direct 67% on the 12 most-played real racks (real game:
-// bounce 61%, direct 54%). Lower skid = the ball stops more and drops in more; the odds move fast with it.
-export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.655, spread: 1.5, p0: 0.57 };
+//  2. POWER IS THE REAL GAME'S (Matt, 2026-11-06: "change test mode to normal throws. only keep the bounce
+//     changes"). The gentler power (rows 1.5x wider) tried on 2026-11-05 is gone.
+// Tuned 2026-11-06 with the real game's power (Matt: "make sure they make sense and do not increase the balls
+// likelihood of going in a cup"): a normal-looking bounce (0.88 of the falling speed, 0.65 after) keeping 70% of
+// its forward speed. 12 most-played real racks: best aim for a bounce 51% vs direct 54%, best aim overall 58% vs
+// the real game's 61%; all 2,691 real challenge throws replayed: 33.4% in vs the real game's 34.6%.
+export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.70 };
 const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
-
-function launchSpeedTest(power) {
-  const a = THROW.minSpeed, b = THROW.maxSpeed, D = b * b - a * a;
-  const p = Math.max(-1, power);
-  return Math.sqrt(Math.max(1, a * a + TEST.p0 * D + (p - TEST.p0) * D / TEST.spread));
-}
-/** Test-model power that throws exactly as fast as `power` does in the real game (the computer's
- *  throws in test mode, so its accuracy in SPEED is what it is in the real game). */
-export function testPowerFor(power) {
-  const a = THROW.minSpeed, b = THROW.maxSpeed, D = b * b - a * a;
-  const v2 = Math.max(1, a * a + Math.max(-1, power) * D);
-  return TEST.p0 + (v2 - a * a - TEST.p0 * D) * TEST.spread / D;
-}
 
 /** The test table (model 'test'), after each step: the ball meeting the table top is reflected here. */
 function testTable(st) {
@@ -188,7 +175,7 @@ export const heading = (aim) => Math.max(-THROW.aimMax, Math.min(THROW.aimMax, a
 export function startThrow({ power = 0.5, aim = 0, cups = [], model = null } = {}) {
   const test = model === 'test';
   const { world, ball, cupBodies, cmTable } = buildWorld(cups, test ? 'test' : null);
-  const v = test ? launchSpeedTest(power) : launchSpeed(power);
+  const v = launchSpeed(power);
   const a = heading(aim);
   ball.position.set(0, THROW.y0, THROW.z0);
   const horiz = v * Math.cos(THROW.elev);
