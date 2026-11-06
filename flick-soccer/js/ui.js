@@ -12,6 +12,7 @@
 import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
   shotPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
+  GOAL_D, OPEN_GOAL_D,
 } from './engine.js';
 import { planShot, seededRng, DIFFS, EXPERT } from './ai.js';
 import { createRenderer, TEAM } from './render.js';
@@ -46,7 +47,7 @@ export function statsDiff(diff, goals) {
  *  the player's two line-ups (kick-off, defending), and who kicked off. */
 const modeOf = (m) => {
   const p = m && Array.isArray(m.pairs) && Array.isArray(m.pairs[0]) ? m.pairs[0] : [];
-  return { goals: m && m.goals, off: p[0], def: p[1], first: m && m.starter === 1 ? 'them' : 'me' };
+  return { goals: m && m.goals, off: p[0], def: p[1], first: m && m.starter === 1 ? 'them' : 'me', ...(m && m.test ? { test: 1 } : {}) };
 };
 /** Has anybody flicked in this match? Quitting is a loss once the first flick is made, the
  *  computer's included (2026-10-29, second pass, Matt). (The name is kept: it was "has the PLAYER
@@ -123,6 +124,7 @@ function loadSettings() {
     defense: FORM_IDS.includes(s.defense) ? s.defense : FORM_IDS.includes(s.lineup) ? s.lineup : 'defend',
     nextStarter: s.nextStarter === 1 ? 1 : 0,
     aimHelp: DIFFS.includes(s.aimHelp) ? s.aimHelp : 'medium',   // a challenge's aiming help (2026-10-15)
+    test: s.test === true,   // admin Test mode (2026-11-06): read only on an admin device
   };
 }
 
@@ -269,6 +271,7 @@ class FlickSoccerUI {
       <div class="fs-root">
         <canvas class="fs-canvas" role="img"></canvas>
         <div class="fs-top" data-role="top">
+          <span class="fs-testtag" data-role="testTag" data-l="test_tag" hidden></span>
           <button type="button" class="fs-ibtn" data-act="menu" data-la="aria_menu">${MENU_SVG}</button>
         </div>
         <div class="fs-board" data-role="board">
@@ -315,6 +318,7 @@ class FlickSoccerUI {
               <span class="fs-label" data-l="first"></span>
               <div class="gh-seg fs-seg" role="group" data-role="firsts"></div>
             </div>
+            <button type="button" class="fs-testbtn" data-act="test" data-role="testBtn" aria-pressed="false" hidden><span data-l="test"></span></button>
             <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-act="play"><span data-l="play"></span></button>
           </div>
@@ -403,6 +407,10 @@ class FlickSoccerUI {
     this.root.querySelectorAll('[data-l]').forEach((el) => { el.textContent = t(el.dataset.l); });
     this.root.querySelectorAll('[data-la]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.la)); });
     const s = this.settings;
+    const tb = this.root.querySelector('[data-role="testBtn"]');
+    if (tb) { tb.hidden = !isAdminDevice(); tb.setAttribute('aria-pressed', String(!!s.test)); }
+    const tag = this.root.querySelector('[data-role="testTag"]');
+    if (tag) tag.hidden = !this._open();
     const seg = (role, key, ids, cur, label, extra) => {
       const el = this.root.querySelector(`[data-role="${role}"]`);
       el.setAttribute('aria-label', t(key));
@@ -460,6 +468,7 @@ class FlickSoccerUI {
     this.phase = 'idle';
     this.aim = null;
     this.drag = null;
+    this._setNet();   // back to the usual net behind the card
     this.cpu = null;
     this.banner.classList.remove('is-show');
     this._relabel();
@@ -472,6 +481,14 @@ class FlickSoccerUI {
   _setFlip(on) {
     this.r.flip = !!on;
     this.root.classList.toggle('is-flip', !!on);
+  }
+
+  /** Test mode's deeper, open nets are drawn only for a Test match; every other match the usual net. */
+  _setNet() {
+    const d = this._open() ? OPEN_GOAL_D : GOAL_D;
+    if (this.r.netD === d) return;
+    this.r.setNet(d);
+    this._layout();
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -566,8 +583,13 @@ class FlickSoccerUI {
     const pick = () => FORM_IDS[Math.floor(Math.random() * FORM_IDS.length)];
     const mine = [s.offense, s.defense];
     const theirs = s.mode === 'cpu' ? [pick(), pick()] : mine;
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.goals, starter, null, [mine, theirs]) });
+    const m = newMatch(s.goals, starter, null, [mine, theirs]);
+    if (s.test && isAdminDevice()) m.test = 1;   // admin Test mode: open nets + the Test computer; saved with the match
+    this._begin({ mode: s.mode, diff: s.difficulty, match: m });
   }
+
+  /** Admin Test mode for THIS match (never online: both phones must play the same physics). */
+  _open() { return this.mode !== 'mp' && !!(this.match && this.match.test); }
 
   _continue() {
     const sv = this._savedMatch();
@@ -578,7 +600,7 @@ class FlickSoccerUI {
     let replayed = false;
     if (sh && Number.isInteger(sh.i) && teamOf(sh.i) === m.turn && [sh.dx, sh.dy, sh.power].every(Number.isFinite)) {
       flick(m.b, sh.i, sh.dx, sh.dy, sh.power);
-      settle(m, runToRest(m.b).scorer);
+      settle(m, runToRest(m.b, undefined, sv.mode !== 'mp' && !!m.test).scorer);
       replayed = true;
     }
     this._begin({ mode: sv.mode, diff: savedDiff(sv.diff), match: m, aiSeed: sv.aiSeed });
@@ -595,6 +617,7 @@ class FlickSoccerUI {
     freeze(this.match.b);
     this.seats = g.seats || this._seatsFor(g.mode, g.diff);
     this._setFlip(g.mode === 'mp' && this.mp && this.mp.mySeat === 1);
+    this._setNet();
     this._relabel();
     this.screen = 'play';
     this.timers = [];
@@ -681,7 +704,8 @@ class FlickSoccerUI {
       this.phase = 'aim';
     } else {
       this.phase = 'cpu';
-      this.cpu = { gen: planShot(m.b, m.turn, this.diff, seededRng(this.aiSeed, m.b, m.turn)), started: this.clock, shot: null };
+      const test = this._open();
+      this.cpu = { gen: planShot(m.b, m.turn, this.diff, seededRng(this.aiSeed, m.b, m.turn), test ? { test: true, open: true } : undefined), started: this.clock, shot: null };
     }
     this._status();
   }
@@ -748,7 +772,7 @@ class FlickSoccerUI {
       this.acc -= DT; n++;
       const ball = m.b[BALL];
       const bx = ball.x, by = ball.y;
-      const g = step(m.b);
+      const g = step(m.b, this._open());
       this.spin += Math.hypot(ball.x - bx, ball.y - by) / BALL_R;
       this.shotSteps++;
       if (g >= 0) { this._goal(g); return; }
@@ -794,7 +818,7 @@ class FlickSoccerUI {
     const m = this.match;
     if (!m || m.winner != null) return;
     if (this.phase === 'moving') {
-      const r = runToRest(m.b);
+      const r = runToRest(m.b, undefined, this._open());
       this.phase = 'idle';
       const res = settle(m, r.scorer);
       if (res === 'win') this._record();
@@ -814,7 +838,7 @@ class FlickSoccerUI {
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
       const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
-      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(EXPERT, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert: its own test bucket, counted by nothing (2026-11-06)
+      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT || m.test ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert and Test mode: their own test bucket, counted by nothing (2026-11-06)
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -905,6 +929,7 @@ class FlickSoccerUI {
     if (act === 'play') this._quitGate(b, () => { this.settings.mode = 'cpu'; this._newMatch(); });
     else if (act === 'multi') this._openOnline();
     else if (act === 'continue') this._continue();
+    else if (act === 'test' && isAdminDevice()) { this.settings.test = !this.settings.test; writeJSON(SETTINGS_KEY, this.settings); this._relabel(); }
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
     else if (act === 'helpClose') {
       if (this._helpFrom === 'menu') { this.screen = 'menu'; this._showOnly('menu'); }
@@ -988,7 +1013,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(EXPERT, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT || q.m.test ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1551,7 +1576,7 @@ class FlickSoccerUI {
     const power = Math.min(1, (len - dead) / (full - dead));
     const amp = Math.max(0, Math.min(1, (reach - full) / (reach * 0.5)));   // how much the edge squeezes this pull
     const aids = this._aids();
-    const contact = aids.guide ? aimContact(m.b, d.i, dx, dy) : null;
+    const contact = aids.guide ? aimContact(m.b, d.i, dx, dy, 70, this._open()) : null;
     const path = contact && contact.hit === BALL ? this._shotPath(m, d.i, dx, dy, power) : null;
     this.aim = { i: d.i, dx, dy, power, fx: fp.x, fy: fp.y, contact, path, arrow: aids.arrow, amp, gap: full - len, len };
   }
@@ -1566,7 +1591,7 @@ class FlickSoccerUI {
       dx = r.dx; dy = r.dy; power = r.p;
     }
     const key = `${i},${dx},${dy},${power},${m.shots}`;
-    if (this._pathKey !== key || this._pathB !== m.b) { this._pathKey = key; this._pathB = m.b; this._pathVal = shotPath(m.b, i, dx, dy, power); }
+    if (this._pathKey !== key || this._pathB !== m.b) { this._pathKey = key; this._pathB = m.b; this._pathVal = shotPath(m.b, i, dx, dy, power, 2, 8, this._open()); }
     return this._pathVal;
   }
 

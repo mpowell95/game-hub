@@ -158,6 +158,33 @@ grows for `CPU_AIM_SECS` (0.5 s) before it flicks, so a player sees what it chos
 **Not tuned against people yet.** If Hard is unbeatable or Easy too easy, the knobs are the
 `LEVEL` table in `ai.js`.
 
+## Admin Test mode (2026-11-06)
+
+Matt: *"winning a first to 3 game against hard can't be done by a person. It should be difficult, but it's not
+possible right now"* and *"the pieces need to be able to go in the net... there's no way to get at it from the other
+side to knock it out"*, then *"make the changes only in Test mode for admin"*. A **Test** toggle on the setup card
+(admin devices only, `settings.test`); a Test match carries `match.test = 1` (saved, so Continue keeps it) and shows a
+TEST tag by the menu. Vs the computer and pass and play only, **never online** (both phones must run the same physics).
+
+- **Open nets**: `step(b, open)` / `runToRest(b, secs, open)` / `aimContact`/`shotPath` take an `open` flag; open =
+  `OPEN_SEGS` (no disc-only goal lines, nets `OPEN_GOAL_D` 18 deep instead of 9, so a disc fits BEHIND a ball on the
+  line). Absent = closed, byte-identical to before (`mp.js` never passes it). `render.js` `setNet(d)` draws and fits
+  the deeper net. Measured with a ball resting on the line: at depth 9 a disc can never get behind it; at 16+ a disc
+  slips into the net beside it and, from there, most flicks clear it.
+- **The Test computer** (`TEST_LEVEL`, `planTest` in `ai.js`): sees what a person lining up a shot sees. A goal counts
+  only if CLEAN (`traceShot`: the disc touches the ball first, the ball touches no other piece, and goes in straight
+  for Easy or off at most one wall or post for Medium/Hard); each seen goal is tried `tries` times with the level's own
+  wobble and the SUREST is taken if it goes in at least `minP` of the time, else the best safe shot (`judge`); `sloppy`
+  = how often it takes a decent shot instead. No random flicks. Expert is unchanged (sees everything), on open nets.
+- **Tuned against a stand-in player** (the same planner at sight 1, aim wobble 0.06 rad), calibrated so that against
+  TODAY's levels it wins first to 3 about as often as Matt and King of Games really do (real: Easy ~99%, Medium ~22%,
+  Hard ~5%, from their first to 1/2/3 records since 2026-10-30; stand-in: ~95%, ~30%, ~5%). Test levels, 200 first-to-3
+  games each vs the stand-in: **Easy 92%, Medium 54%, Hard 24%** (targets 90/50/25; Matt's proposal table). Samples of
+  40-60 games swung by 15 points, so tune with 200+.
+- **Recording**: a Test match's result goes to `recordFlickSoccerTest(diff, won)` (the `fx` test bucket, counted by
+  nothing) with `test: 1` in its mode. Players' levels, physics and stats are unchanged.
+- Tests: `node flick-soccer/js/test.js` (open vs closed nets, Test matches finish, Test Hard beats Test Easy).
+
 ## The screen
 
 - **Aiming help depends on the difficulty (2026-10-11)**, Matt: *"on easy it should show the power,

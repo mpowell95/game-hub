@@ -12,6 +12,8 @@ export const TEAM = [
 const ACCENT = '#ffce3a';
 /** The pitch plus a margin and both goals: the box that must fit on screen. */
 export const VIEW = { x0: -3, y0: -GOAL_D - 3, w: W + 6, h: H + 2 * GOAL_D + 6 };
+/** The same box for a net `d` deep (admin Test mode's deeper nets, 2026-11-06). */
+const viewFor = (d) => (d === GOAL_D ? VIEW : { x0: -3, y0: -d - 3, w: W + 6, h: H + 2 * d + 6 });
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
@@ -20,7 +22,13 @@ export function createRenderer(canvas) {
   // the pieces and the input need to know.
   // `s0/ox0/oy0` is the fitted layout; `s/ox/oy` is what is drawn, which differs only while ui.js's
   // edge zoom has the view pulled back (setCam).
-  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0, s0: 1, ox0: 0, oy0: 0, box: null, flip: false };
+  const r = { w: 0, h: 0, dpr: 1, s: 1, ox: 0, oy: 0, s0: 1, ox0: 0, oy0: 0, box: null, flip: false, netD: GOAL_D };
+  /** How deep the nets are drawn (Test mode's open nets are deeper); re-fits if it changes. */
+  r.setNet = (d) => {
+    if (d === r.netD) return;
+    r.netD = d; r._pitchKey = '';
+    if (r.box) r.layout(r.w, r.h, r.box);
+  };
 
   /** The canvas covers (cssW x cssH); the pitch is drawn inside `box` {x, y, w, h} (CSS px). */
   r.layout = (cssW, cssH, box) => {
@@ -28,9 +36,10 @@ export function createRenderer(canvas) {
     r.w = cssW; r.h = cssH;
     canvas.width = Math.round(cssW * r.dpr);
     canvas.height = Math.round(cssH * r.dpr);
-    r.s0 = r.s = Math.min(box.w / VIEW.w, box.h / VIEW.h);
-    r.ox0 = r.ox = box.x + (box.w - VIEW.w * r.s) / 2 - VIEW.x0 * r.s;
-    r.oy0 = r.oy = box.y + (box.h - VIEW.h * r.s) / 2 - VIEW.y0 * r.s;
+    const V = viewFor(r.netD);
+    r.s0 = r.s = Math.min(box.w / V.w, box.h / V.h);
+    r.ox0 = r.ox = box.x + (box.w - V.w * r.s) / 2 - V.x0 * r.s;
+    r.oy0 = r.oy = box.y + (box.h - V.h * r.s) / 2 - V.y0 * r.s;
     r.box = box;
     r._pitch = null;
   };
@@ -54,7 +63,7 @@ export function createRenderer(canvas) {
 
   // The static pitch is drawn once per size (and per camera) into an offscreen canvas.
   function pitchLayer() {
-    const key = r.s + ',' + r.ox + ',' + r.oy;
+    const key = r.s + ',' + r.ox + ',' + r.oy + ',' + r.netD;
     if (r._pitch && r._pitchKey === key) return r._pitch;
     const c = r._pitch || document.createElement('canvas');
     c.width = canvas.width; c.height = canvas.height;
@@ -88,6 +97,7 @@ export function createRenderer(canvas) {
       g.beginPath(); g.arc(W / 2, y + d * 15, 0.8, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.arc(W / 2, y + d * 15, 11, top ? 0.2 * Math.PI : 1.2 * Math.PI, top ? 0.8 * Math.PI : 1.8 * Math.PI); g.stroke();
       // Net: the goal box, cross-hatched.
+      const GOAL_D = r.netD;
       const gy = top ? -GOAL_D : H;
       g.fillStyle = 'rgba(255,255,255,0.12)';
       g.fillRect(GX0, gy, GX1 - GX0, GOAL_D);

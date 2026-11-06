@@ -204,5 +204,39 @@ function playMatch(diffs, seed, goals = 2) {
   ok('expert beats hard', wins >= 3);
 }
 
+{
+  // Admin Test mode (2026-11-06): open, deeper nets for discs ONLY when asked; closed (online) is unchanged.
+  const shoot = (open) => {
+    const c = E.newMatch(2, 0, ['balanced', 'balanced']).b;
+    for (let i = 1; i < c.length; i++) { c[i].x = 5 + (i % 2) * 90; c[i].y = 80; }
+    c[0].x = 15; c[0].y = 140;                          // the ball out of the way
+    c[4].x = E.W / 2; c[4].y = 30; c[4].vx = 0; c[4].vy = -240;
+    let minY = Infinity;
+    for (let k = 0; k < 240 * 14 && !(k && E.atRest(c)); k++) { E.step(c, open); minY = Math.min(minY, c[4].y); }
+    return minY;
+  };
+  ok('closed nets: a disc stops at the line', shoot(false) >= E.DISC_R - 0.6);
+  const d = shoot(true);
+  ok('open nets: a disc goes into the net', d < 0, `${d}`);
+  ok('open nets: and never past the back of the deeper net', d >= -E.OPEN_GOAL_D + E.DISC_R - 0.6, `${d}`);
+  // The Test computer finishes matches, and Hard beats Easy.
+  let wins = 0;
+  for (let k = 0; k < 4; k++) {
+    const seat = k & 1, rng = rngFrom(700 + k);
+    const m = E.newMatch(1, k & 1);
+    let n = 0;
+    while (m.winner == null && n++ < 300) {
+      const s = plan(m.b, m.turn, m.turn === seat ? 'hard' : 'easy', rng, { test: true, open: true });
+      ok('test plan: its own disc', E.teamOf(s.i) === m.turn);
+      E.flick(m.b, s.i, s.dx, s.dy, s.power);
+      E.settle(m, E.runToRest(m.b, 14, true).scorer);
+    }
+    ok('test match finishes', m.winner != null);
+    if (m.winner === seat) wins++;
+  }
+  console.log(`test mode: hard beat easy ${wins}/4 (first to 1)`);
+  ok('test hard beats test easy most of the time', wins >= 3);
+}
+
 console.log(fails ? `${fails} FAILED` : 'flick-soccer: all checks passed');
 process.exit(fails ? 1 : 0);

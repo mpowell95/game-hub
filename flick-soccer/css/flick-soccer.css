@@ -72,6 +72,12 @@
   z-index: 3;
 }
 .fs-root.is-setup .fs-top { visibility: hidden; }
+/* Admin Test mode (2026-11-06): a tag beside the menu while a Test match is on, and the toggle on the setup
+   card (admin devices only). Pressed = filled AND ticked, never colour alone. */
+.fs-root .fs-testtag { margin-right: 8px; padding: 3px 10px; border-radius: 999px; background: #ffce3a; color: #1b1b1b; font: 800 15px/1.2 system-ui, sans-serif; letter-spacing: 0.06em; }
+.fs-root .fs-testbtn { display: block; width: 100%; min-height: 44px; margin: 4px 0 8px; border: 2px dashed var(--fs-line); border-radius: 12px; background: transparent; color: var(--fs-muted); font: 700 17px/1.2 system-ui, sans-serif; touch-action: manipulation; cursor: pointer; }
+.fs-root .fs-testbtn[aria-pressed="true"] { border-style: solid; border-color: #c99a00; background: #ffce3a; color: #1b1b1b; }
+.fs-root .fs-testbtn[aria-pressed="true"]::before { content: '\2713  '; }
 .fs-root .fs-ibtn {
   width: 44px;
   height: 44px;

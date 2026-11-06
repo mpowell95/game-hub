@@ -45,14 +45,20 @@ const E_WALL_BALL = 0.78;
 /** The walls, as segments. Their end points are the corners and the goal posts (a circle meeting an
  *  end point bounces off it like a post). The two goal LINES are disc-only: a disc cannot go into a
  *  goal (no keeper parked in the net), the ball can. */
-export const SEGS = [
+const wallsFor = (d) => [
   [0, 0, 0, H], [W, 0, W, H],
   [0, 0, GX0, 0], [GX1, 0, W, 0],
   [0, H, GX0, H], [GX1, H, W, H],
-  [GX0, 0, GX0, -GOAL_D], [GX0, -GOAL_D, GX1, -GOAL_D], [GX1, -GOAL_D, GX1, 0],
-  [GX0, H, GX0, H + GOAL_D], [GX0, H + GOAL_D, GX1, H + GOAL_D], [GX1, H + GOAL_D, GX1, H],
+  [GX0, 0, GX0, -d], [GX0, -d, GX1, -d], [GX1, -d, GX1, 0],
+  [GX0, H, GX0, H + d], [GX0, H + d, GX1, H + d], [GX1, H + d, GX1, H],
   [GX0, 0, GX1, 0, 1], [GX0, H, GX1, H, 1],
 ].map(([ax, ay, bx, by, discOnly]) => ({ ax, ay, bx, by, discOnly: !!discOnly }));
+export const SEGS = wallsFor(GOAL_D);
+/** Admin Test mode's walls (2026-11-06): no disc-only goal lines, and nets deep enough for a disc to
+ *  get BEHIND a ball sitting on the line (a disc is 12.4 across; the normal net is 9 deep). */
+export let OPEN_GOAL_D = 18;
+export let OPEN_SEGS = wallsFor(OPEN_GOAL_D).filter((s) => !s.discOnly);
+export function __setOpenDepth(d) { OPEN_GOAL_D = d; OPEN_SEGS = wallsFor(d).filter((s) => !s.discOnly); }   // tests only
 
 /** Starting line-ups, as seat 0 stands them (bottom half). Seat 1 mirrors its own choice. Every
  *  one has a keeper, keeps each disc in its own half and clear of the centre circle, so a kick-off
@@ -144,8 +150,11 @@ export function flick(b, i, dx, dy, power) {
   b[i].vy = (dy / len) * p;
 }
 
-/** One physics step. Returns the seat that just SCORED (the ball wholly over a goal line), or -1. */
-export function step(b) {
+/** One physics step. Returns the seat that just SCORED (the ball wholly over a goal line), or -1.
+ *  `open` (admin Test mode only, 2026-11-06, Matt: "the pieces need to be able to go in the net"): the
+ *  goal lines stop no disc, so a defender can get into the net. Absent = closed, exactly as before
+ *  (online replays never pass it). */
+export function step(b, open) {
   const n = b.length;
   // Move.
   for (let i = 0; i < n; i++) {
@@ -182,7 +191,7 @@ export function step(b) {
     const o = b[i];
     if (o.vx === 0 && o.vy === 0) continue;
     const ball = i === BALL;
-    for (const s of SEGS) {
+    for (const s of (open ? OPEN_SEGS : SEGS)) {
       if (s.discOnly && ball) continue;
       const ex = s.bx - s.ax, ey = s.by - s.ay;
       let tt = ((o.x - s.ax) * ex + (o.y - s.ay) * ey) / (ex * ex + ey * ey);
@@ -224,10 +233,10 @@ export function step(b) {
 
 /** Run a shot to the end on bodies `b` (mutated). Returns { scorer: seat or -1, steps }.
  *  Stops the moment a goal goes in, or when everything is at rest, or at MAX_SHOT_SECS. */
-export function runToRest(b, maxSecs = MAX_SHOT_SECS) {
+export function runToRest(b, maxSecs = MAX_SHOT_SECS, open) {
   const max = Math.round(maxSecs / DT);
   for (let k = 1; k <= max; k++) {
-    const g = step(b);
+    const g = step(b, open);
     if (g >= 0) return { scorer: g, steps: k };
     if (atRest(b)) { freeze(b); return { scorer: restScorer(b), steps: k }; }
   }
@@ -282,7 +291,7 @@ export function discAt(b, seat, x, y, reach) {
 /** The aim guide: disc `i` sent along unit (dx, dy). Where it first touches something, as
  *  { x, y, hit } with the body index hit (or -1 for a wall), or null if it touches nothing within
  *  `range`. The disc is swept as a circle, so the point is where its CENTRE will be. */
-export function aimContact(b, i, dx, dy, range = 70) {
+export function aimContact(b, i, dx, dy, range = 70, open) {
   const o = b[i];
   let best = range, hit = -2;
   for (let j = 0; j < b.length; j++) {
@@ -300,7 +309,7 @@ export function aimContact(b, i, dx, dy, range = 70) {
   for (let t = 0.5; t < best; t += 0.5) {
     const x = o.x + dx * t, y = o.y + dy * t;
     let touch = false;
-    for (const s of SEGS) {
+    for (const s of (open ? OPEN_SEGS : SEGS)) {
       const ex = s.bx - s.ax, ey = s.by - s.ay;
       let u = ((x - s.ax) * ex + (y - s.ay) * ey) / (ex * ex + ey * ey);
       u = u < 0 ? 0 : u > 1 ? 1 : u;
@@ -369,7 +378,7 @@ export function ballPath(b, shooter, contact, len = 80, bounces = 2) {
  * touches other than the flicked one (`stop: 'disc'`), a goal (`'goal'`), or where it stops (`'end'`).
  * Returns null if the ball is never moved. Display only: it mutates nothing it is given.
  */
-export function shotPath(b, i, dx, dy, power, bounces = 2, maxSecs = 8) {
+export function shotPath(b, i, dx, dy, power, bounces = 2, maxSecs = 8, open) {
   const s = cloneBodies(b);
   flick(s, i, dx, dy, power);
   const q = s[BALL];
@@ -377,7 +386,7 @@ export function shotPath(b, i, dx, dy, power, bounces = 2, maxSecs = 8) {
   let pts = null, turns = 0;
   for (let k = 0; k < max; k++) {
     const pvx = q.vx, pvy = q.vy;
-    const g = step(s);
+    const g = step(s, open);
     if (!pts) {
       if (q.vx === 0 && q.vy === 0) { if (atRest(s)) return null; continue; }
       pts = [{ x: b[BALL].x, y: b[BALL].y }];
