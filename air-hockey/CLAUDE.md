@@ -68,8 +68,8 @@ it should not make any sound ever."*
   `streak` is the one field a loss sets to 0 (live state; the earned part is `bestStreak`, and
   `players-agg` does not add it up). All three sub-counter surfaces are wired: `ensureAh` +
   recorder, `airHockeyScreen` in My Stats, the `ah` branch in `js/players-agg.js`
-  (`tools/players-agg.test.mjs` has its case). **A match left before 7 is a LOSS once the player has
-  touched their mallet** (2026-10-29, below); before that it records nothing. A refused write logs loudly (rule 6).
+  (`tools/players-agg.test.mjs` has its case). **A match vs the computer is SAVED and continues** (2026-11-06,
+  "Resume" below); only New game over it is a loss. A refused write logs loudly (rule 6).
 - Wired in all four registries: `GAMES` in `js/game-stats.js`, `TABS` in `js/game-stats-ui.js`
   (no `devOnly` since the 2026-10-26 release)
   plus `HUB_ID` `airhockey -> air-hockey`, `GAME_META` in `js/leaderboard-ui.js`, and
@@ -88,8 +88,8 @@ it should not make any sound ever."*
   `tools/test-visual.mjs`) launch a game by its folder name. The stats id stays `airhockey` (Brick
   Breaker's split: hub `brick-blitz`, stats `brickblitz`), so stage 2 maps it in `HUB_ID`
   (`js/game-stats-ui.js`). Tile art is `GAME_ART['air-hockey']`.
-- `isInProgress()`: the LITERAL meaning (no mid-game resume, Snake/Hoops class): true while a
-  match is playing, between goals or paused. Nothing is persisted mid-match.
+- `isInProgress()`: true only for an ONLINE match (playing or waiting); a match vs the computer is saved
+  (2026-11-06, "Resume").
 - Root is `position: fixed; inset: 0` (Brick Breaker / Pinball pattern, avoids the `.hub-game`
   height trap). The score row starts at `max(safe-top, 46px)` with 96px clear on the left for the
   hub's floating back button; overlays pad their top by 96px for the same reason.
@@ -291,9 +291,13 @@ A chat button during an ONLINE match (`_mountChat` in `js/ui.js`, torn down in `
 
 ## Quitting and easier settings (2026-10-29)
 
-No resume: once the player has touched their mallet, leaving a match vs the computer (Quit, asked twice; the hub's back; a closed app) is ONE loss at the score so far, armed in `gamehub.quitLoss.v1` (refreshed at each goal), dropped by the real result, taken in `destroy()` / `init()`. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Superseded vs the computer by "Resume (2026-11-06)" below. Was: no resume: once the player has touched their mallet, leaving a match vs the computer (Quit, asked twice; the hub's back; a closed app) is ONE loss at the score so far, armed in `gamehub.quitLoss.v1` (refreshed at each goal), dropped by the real result, taken in `destroy()` / `init()`. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
 
 ## Second pass (2026-10-29)
 
 - Online (`js/live-leave.js`): after your first mallet touch in a round, leaving (Back, End match while the other is still there, the hub) = your loss and their win, per round; a closed app arms it; 90 s quiet = "Claim win"; quiet 30 s (End match showing) = leaving is free. Vs the computer: armed as soon as the puck is live; `quitLossLost` stops a second result.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Resume (2026-11-06)
+
+Matt: "We should add resume to the other games that don't save". Vs the computer, `gamehub.airhockey.save.v1` = `{ v: 1, at, diff, score, serve, best }` is written when the puck goes live and after every goal; the start card shows **Continue** (Play reads **New game**), a fresh face-off at the saved score, the scored-on side serving, at the SAVED level. **Closing mid-rally replays from the last goal** (the rally is not saved). Leaving (Quit, the hub, a closed app) costs nothing and arms no marker; New game over a save is ONE loss at its score, asked twice ("Counts as a loss"); the finish clears the save before recording. Online unchanged. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Air Hockey and Connect 4 Hoops save".

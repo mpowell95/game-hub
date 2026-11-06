@@ -218,7 +218,7 @@
 .h4-root .h4-opt-check { margin-right: 4px; }
 .h4-root .h4-note { margin: 0; font-size: 11px; line-height: 1.5; color: var(--h4s-muted); }
 
-.h4-root .h4-play { width: min(420px, 100%); min-height: 48px; font-size: 16px; }
+.h4-root .h4-play, .h4-root .h4-cont { width: min(420px, 100%); min-height: 48px; font-size: 16px; }
 .h4-root .h4-mp {
   appearance: none; width: min(420px, 100%); box-sizing: border-box;
   /* the computer card's closed height: its toggle row is 44px with -6px margins = 32px of content */

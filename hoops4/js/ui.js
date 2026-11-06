@@ -1,12 +1,13 @@
 // hoops4/js/ui.js - CONNECT 4 HOOPS: the shell, the swipe, and the module contract.
 //
 // THE LAW applies here. Nothing in this folder stores anything earned: `gamehub.hoops4.v1` holds
-// one preference (the opponent) and nothing else. The match itself is not persisted - see
-// isInProgress() below for which meaning of the contract that is, and why.
+// one preference (the opponent) and nothing else. A match vs the computer, and a pass-and-play match,
+// is SAVED after every settled shot (2026-11-06, `gamehub.hoops4.save.v1` / `.passSave.v1`) and
+// continues; see isInProgress() below for which meaning of the contract that is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult, armQuitLoss, dropQuitLoss, takeQuitLoss, quitLossArmed, quitLossLost, withMode, modeTag, oneTierDown } from '../../js/game-stats.js';
+import { recordResult, armQuitLoss, takeQuitLoss, withMode, modeTag, oneTierDown } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the shot
  *  rule (one shot, or until you sink one). A live room's rule is the host's (room config), on the
  *  Match either way. The player always shoots first vs the computer; the caption is words, not a rule. */
@@ -36,6 +37,38 @@ const t = makeT(STRINGS);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const SETTINGS_KEY = 'gamehub.hoops4.v1';
 const CSS_MARK = 'data-hoops4-css';
+// THE MATCH IN PROGRESS (2026-11-06, Matt: "We should add resume to the other games that don't save").
+// Vs the computer and two on one phone, one slot each, never a multiplayer match. Written at the start,
+// at every launch (`fly`: the shot's power, aim and seed, so a throw left in the air is flown again on
+// Continue and lands where it was going: leaving cannot take a shot back) and after every settled shot.
+// Holds nothing earned; removed before the finished match is recorded.
+const SAVE_KEY = 'gamehub.hoops4.save.v1';
+const PASS_SAVE_KEY = 'gamehub.hoops4.passSave.v1';
+const saveKeyOf = (vsCpu) => (vsCpu ? SAVE_KEY : PASS_SAVE_KEY);
+/** The saved match of that kind, rebuilt, or null: `{ match, fly }`. */
+function readSave(vsCpu) {
+  try {
+    const s = JSON.parse(localStorage.getItem(saveKeyOf(vsCpu)) || 'null');
+    if (!s || s.v !== 1 || !!s.vsCpu !== !!vsCpu || ![1, 2, 3].includes(s.skill) || !Array.isArray(s.moves) || !Array.isArray(s.shots)) return null;
+    const m = new Match({ vsCpu: !!vsCpu, cpuSkill: s.skill, oneShot: !!s.one, first: s.first === 1 ? 1 : 0 });
+    for (const x of s.moves) {
+      if (!x || (x.by !== RED && x.by !== YELLOW) || !Number.isInteger(x.col) || x.col < 0 || x.col >= COLS || !m.board.canPlay(x.col)) return null;
+      m.board.play(x.col, x.by);
+      m.moves.push({ by: x.by, col: x.col, shots: x.shots | 0 });
+      if (m.board.isWin(x.by) || m.board.isFull()) return null;   // a finished match is never saved
+    }
+    if (s.turn !== RED && s.turn !== YELLOW) return null;
+    m.turn = s.turn;
+    m.shotsThisTurn = Math.max(0, s.sit | 0);
+    m.shots = [Math.max(0, s.shots[0] | 0), Math.max(0, s.shots[1] | 0)];
+    const f = s.fly;
+    const fly = f && Number.isFinite(+f.p) && Number.isFinite(+f.a) && Number.isInteger(f.s) ? { p: +f.p, a: +f.a, s: f.s } : null;
+    return { match: m, fly };
+  } catch { return null; }
+}
+const clearSave = (vsCpu) => { try { localStorage.removeItem(saveKeyOf(vsCpu)); } catch (err) { console.error('[hoops4] saved match not cleared', err); } };
+/** Any shot taken in it, the computer's included (or one in the air): throwing it away is a loss. */
+const savedMoved = (sv) => !!sv && (sv.match.moves.length > 0 || sv.match.shots[0] + sv.match.shots[1] > 0 || !!sv.fly);
 
 let instance = null;
 
@@ -353,6 +386,7 @@ class Hoops4 {
     // shows its nearest meaning (Medium) until the player picks something; `start()` reads the
     // same fallback, so a device that never touches this screen keeps behaving sensibly.
     const cpuPick = s.opponent === 'two' ? 2 : s.opponent;
+    const saved = readSave(true);
     // "Let me collapse the computer game section too" (2026-09-24). A one-tap view preference in
     // its own key, never in the settings object (THE LAW rule 2's exemption: nothing earned).
     let cpuOpen = true;
@@ -414,7 +448,9 @@ class Hoops4 {
               ${shotOpt('until', t('shotsUntil'))}${shotOpt('one', t('shotsOne'))}
             </div>
           </div>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>
+          ${saved ? `<button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-cont">${t('continueGame')}</button>
+          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block h4-play">${t('newGame')}</button>`
+    : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>`}
           </div>
         </div>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
@@ -436,7 +472,14 @@ class Hoops4 {
     }
     // Play means play the computer now, whatever `opponent` happens to hold - the row above can
     // no longer select 'two', so an old stored 'two' must not silently start a pass-and-play game.
-    this.on(this.root.querySelector('.h4-play'), 'click', () => this.start({ vsCpu: true }));
+    // New game over a saved match someone has shot in throws it away: two taps, saying it is a loss.
+    const play = this.root.querySelector('.h4-play');
+    this.on(play, 'click', () => {
+      if (this.discardCostsLoss() && play.dataset.armed !== '1') { play.dataset.armed = '1'; play.textContent = t('quitLoss'); return; }
+      this.start({ vsCpu: true });
+    });
+    const cont = this.root.querySelector('.h4-cont');
+    if (cont) this.on(cont, 'click', () => this.start({ vsCpu: true, resume: true }));
     this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
     this.on(this.root.querySelector('.h4-card-toggle'), 'click', () => {
@@ -1100,38 +1143,73 @@ class Hoops4 {
   }
 
   // --- the match --------------------------------------------------------------------------------
-  // QUITTING IS A LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md "Holes closed 2026-10-29: quitting
-  // and easier settings"). A match against the computer has no resume: once the player has shot,
-  // leaving it (New game, Back to setup, the hub's back, a closed app) records a loss. Armed in
-  // js/game-stats.js at the player's shots, dropped by the real result, taken by a quit.
-  cpuDiff() { return ['easy', 'medium', 'hard'][this.settings.opponent - 1] || 'medium'; }
+  // A MATCH VS THE COMPUTER IS SAVED (2026-11-06; docs/INTEGRITY-CHECKS-SPEC.md "Games that SAVE and
+  // resume"). Leaving it (Back to setup, the hub's back, a closed app, a challenge opened) costs
+  // nothing: it is there to Continue. Only THROWING IT AWAY once any shot was taken (New game, from
+  // the Menu or the setup screen) is a loss, asked twice. Pass and play saves too and records nothing.
+  /** The level of the computer in `m` (its own, so a continued match keeps it), else the setting's. */
+  cpuDiff(m = this.match) {
+    const skill = m && m.vsCpu ? m.cpuSkill : this.settings.opponent;
+    return ['easy', 'medium', 'hard'][skill - 1] || 'medium';
+  }
   /** The RECORDED difficulty vs the computer (Matt, 2026-11-02): "shoot until you score" is easier, so
    *  it counts one level LOWER than chosen; "one shot" counts at the chosen level (Easy stays Easy).
    *  The mode keeps the CHOSEN level (withMode / modeTag's diff); online ('mp') is unchanged. */
-  statsDiff(m) { const d = this.cpuDiff(); return m && m.oneShot ? d : oneTierDown(d, ['easy', 'medium', 'hard']); }
+  statsDiff(m) { const d = this.cpuDiff(m); return m && m.oneShot ? d : oneTierDown(d, ['easy', 'medium', 'hard']); }
+  /** Live rooms only (js/live-leave.js): a saved match loses nothing by leaving. */
   quitCostsLoss() {
     if (this.mp && this.mp.kind === 'live') return this._liveCosts();
-    return !this.mp && !!this.match && this.match.vsCpu && !this.match.over && !this.recorded && quitLossArmed('hoops4');
+    return false;
   }
-  takeQuit() {
-    if (!this.quitCostsLoss()) return;
-    this.recorded = true;
-    takeQuitLoss('hoops4');
+  /** Would a new match vs the computer throw away a saved one someone has shot in? */
+  discardCostsLoss() { return savedMoved(readSave(true)); }
+  /** Throw the saved match vs the computer away: the save first, then ONE loss through the quit-loss
+   *  marker (armed and taken at once, so the play log says it was a quit), at that match's own level. */
+  takeDiscard() {
+    const sv = readSave(true);
+    clearSave(true);
+    if (!savedMoved(sv)) return;
+    const m = sv.match;
+    armQuitLoss('hoops4', 'recordResult', ['hoops4', this.statsDiff(m), false], modeTag(() => (modeFor(m, RED)), this.cpuDiff(m)));
+    if (!takeQuitLoss('hoops4')) console.error('[hoops4] the thrown-away match was not recorded as a loss');
   }
+  /** The match as it stands, saved (vs the computer or pass and play; `fly`: a shot in the air). A
+   *  finished match keeps the save it had until finish() clears it, then records. */
+  saveMatch(fly = null) {
+    const m = this.match;
+    if (this.mp || !m || this.recorded || m.over) return;
+    const save = { v: 1, at: Date.now(), vsCpu: m.vsCpu ? 1 : 0, skill: m.cpuSkill, one: m.oneShot ? 1 : 0, first: m.first, turn: m.turn,
+      sit: m.shotsThisTurn, shots: [m.shots[0] | 0, m.shots[1] | 0], moves: m.moves.map((x) => ({ by: x.by, col: x.col, shots: x.shots | 0 })), fly };
+    try { localStorage.setItem(saveKeyOf(m.vsCpu), JSON.stringify(save)); } catch (err) { console.error('[hoops4] match not saved', err); }
+  }
+  /** Play again / New game: the same game again (its opponent, level and shot rule). */
+  _sameGame() { const m = this.match; return m ? { vsCpu: m.vsCpu, oneShot: m.oneShot, skill: m.cpuSkill } : {}; }
 
   async start(opts = {}) {
-    this.takeQuit();   // a match the player has shot in, replaced by a new one, is a loss
     // A fresh solo match clears any multiplayer state; startLive/startAsync pass keepMp so their
     // own setup survives. Without that, "Play again" after a live match would silently keep
     // appending to a room nobody is in.
     if (!opts.keepMp) { this.mp = null; this.myPlayer = RED; this._stopRoom(); }
     const vsCpu = opts.vsCpu === undefined ? this.settings.opponent !== 'two' : !!opts.vsCpu;
+    // CONTINUE picks the saved match of that kind up; anything else over a saved one throws it away
+    // (vs the computer a loss once anyone has shot; pass and play records nothing). A multiplayer
+    // match leaves both saves alone.
+    let resumed = null;
+    if (!opts.keepMp) {
+      if (opts.resume) resumed = readSave(vsCpu);
+      if (!resumed) { if (vsCpu) this.takeDiscard(); else clearSave(false); }
+    }
     const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
-    const skill = this.settings.opponent === 'two' ? 2 : this.settings.opponent;
-    this.match = new Match({ vsCpu, cpuSkill: vsCpu ? skill : 2, oneShot });
+    const skill = resumed ? resumed.match.cpuSkill
+      : [1, 2, 3].includes(opts.skill) ? opts.skill : this.settings.opponent === 'two' ? 2 : this.settings.opponent;
+    this.match = resumed ? resumed.match : new Match({ vsCpu, cpuSkill: vsCpu ? skill : 2, oneShot });
     if (typeof opts.replay === 'function') opts.replay(this.match);
     this.cpu = vsCpu ? new Cpu(skill) : null;
     this.recorded = false;
+    // Nothing of the board it replaces carries over: not a ball in the air, not a computer about to shoot.
+    this.throwState = null; this.busy = false;
+    if (this._cpuT) { clearTimeout(this._cpuT); this._cpuT = 0; }
+    if (!resumed) this.saveMatch();
     // A new match cannot inherit the last one's falling disc, or _whenLanded would hold its first
     // move for a drop that will never land.
     this._dropping = false; this._afterDrop = null; this._predicted = null;
@@ -1152,7 +1230,9 @@ class Hoops4 {
       if (this.mp) this.rend.setPlayerTint(this.myPlayer === RED ? BOARD.look.red : BOARD.look.yellow);
       this.offViewport = onViewportResize(() => this.fit());
       this.startLoop();
-      this.maybeCpu();
+      // A continued match whose shot was in the air: that shot, flown again (same power, aim, seed).
+      if (resumed && resumed.fly) this.shoot(resumed.fly.p, resumed.fly.a, resumed.fly.s);
+      else this.maybeCpu();
       // Read-only hook for the headless drivers (skeeball's `window.__skTest` precedent). The
       // game itself never reads it; `reference/hoops/check-display.mjs` projects the display and
       // the hoops through the real play camera with it.
@@ -1317,8 +1397,8 @@ class Hoops4 {
     // restart loses a board and no history (THE LAW rule 2).
     if (nw) this.on(nw, 'click', () => {
       // Two taps when it counts as a loss, the button saying so.
-      if (this.quitCostsLoss() && nw.dataset.armed !== '1') { nw.dataset.armed = '1'; nw.textContent = t('quitLoss'); return; }
-      if (el.parentNode) el.parentNode.removeChild(el); this.start();
+      if (this.match && this.match.vsCpu && this.discardCostsLoss() && nw.dataset.armed !== '1') { nw.dataset.armed = '1'; nw.textContent = t('quitLoss'); return; }
+      if (el.parentNode) el.parentNode.removeChild(el); this.start(this._sameGame());
     });
     this.on(el.querySelector('[data-role="leave"]'), 'click', () => {
       if (el.parentNode) el.parentNode.removeChild(el);
@@ -1367,17 +1447,17 @@ class Hoops4 {
    *
    *  A TURN-BY-TURN match leaves with no question asked, because there is nothing to lose: the
    *  move log lives in `hoops/games/<id>` and re-opening replays it, so it goes straight to the
-   *  multiplayer screen where the rest of your matches are. Everything else (solo, two on one
-   *  phone, a live room) really does end when you walk away, so it asks first. */
+   *  multiplayer screen where the rest of your matches are. A match vs the computer or two on one
+   *  phone is SAVED (2026-11-06), so it leaves with no question too. Only a live room really ends
+   *  when you walk away, so it asks first. */
   leaveMatch() {
     const isAsync = !!(this.mp && this.mp.kind === 'async');
     const midGame = !!(this.match && !this.match.over && this.match.moves.length > 0);
     const go = () => {
-      this.takeQuit();
       this.teardownEngine();
       if (isAsync) this.showMultiplayer(); else this.renderSetup();
     };
-    if (isAsync || !midGame) { go(); return; }
+    if (isAsync || !midGame || !this.mp) { go(); return; }
     const el = document.createElement('div');
     el.className = 'gh-overlay';
     el.innerHTML = `
@@ -1405,7 +1485,7 @@ class Hoops4 {
       return (other && other.name) || t('theirTurn');
     }
     if (this.match && this.match.vsCpu) {
-      return t('cpu' + (this.settings.opponent === 'two' ? 2 : this.settings.opponent));   // see cpuPick
+      return t('cpu' + this.match.cpuSkill);   // the match's own level (a continued match keeps it)
     }
     return t('theirTurn');
   }
@@ -1541,17 +1621,14 @@ class Hoops4 {
     this.on(pad, 'mouseup', end);
   }
 
-  shoot(power, aim) {
+  /** `seedIn`: a continued match's shot that was in the air, flown again exactly. */
+  shoot(power, aim, seedIn = null) {
     if (this.busy || !this.engine || !this.match || this.match.over) return;
     if (!this.isMyShot()) return;
     this.busy = true;
-    // Any shot, the computer's included (2026-10-29, second pass, Matt): quitting after its opening was free.
-    if (!this.mp && this.match.vsCpu && !this.recorded) {
-      armQuitLoss('hoops4', 'recordResult', ['hoops4', this.statsDiff(this.match), false], modeTag(() => (modeFor(this.match, RED)), this.cpuDiff()));
-    }
     // A FRESH SEED PER SHOT is what makes the release imperfect (boarddef's jitter*). Passing a
     // seed is opt-in at the engine, so every headless probe stays exactly deterministic.
-    const seed = (Math.random() * 0x7fffffff) | 0;
+    const seed = Number.isInteger(seedIn) ? seedIn : (Math.random() * 0x7fffffff) | 0;
     // THE BALL IS THE SHOOTER'S COLOUR. Matt: "the ball needs to be different colors. right now
     // it's the same color ball that both players throw, then it changes color on the board."
     // `setBallColor` has existed since the first build and was called EXACTLY ONCE, at match
@@ -1564,6 +1641,9 @@ class Hoops4 {
     // off it and cannot score there. The same list paints the lids (paintHud -> setClosed).
     this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed, closed: this.closedHoles() });
     this.captured = null;
+    // Saved WITH the shot in the air, either side's (vs the computer, pass and play): leaving now
+    // flies it again on Continue, so a shot can never be taken back by leaving.
+    if (!this.mp) this.saveMatch({ p: power, a: aim, s: seed });
     // The throw is KEPT for the other person's replay (mp.js trailFrom): sent with the move.
     if (this.mp && this.mp.kind === 'async') {
       (this._trail || (this._trail = [])).push({ p: power, a: aim, s: seed });
@@ -1649,6 +1729,7 @@ class Hoops4 {
       res = m.miss();
     }
     this.busy = false;
+    if (!this.mp && !m.over) this.saveMatch();   // the shot has settled (a finished match: finish() clears it)
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
     if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], [], modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp'));
@@ -1745,6 +1826,8 @@ class Hoops4 {
     // the play count rather than failing loudly.
     if (!this.recorded) {
       this.recorded = true;
+      // The save goes first, so a continued match can never be finished and counted a second time.
+      if (!this.mp) clearSave(m.vsCpu);
       const r = m.result();
       try {
         // 'mp' is the repo's own difficulty for a multiplayer match (js/game-stats.js) - it is
@@ -1768,9 +1851,7 @@ class Hoops4 {
           // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
         } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); withMode(() => (modeFor(m, this.myPlayer)), 'mp', () => recordResult('hoops4', 'mp', m.winner === this.myPlayer), { detail: () => (hoopsDetail(m, this.myPlayer)) }); }
         else if (m.vsCpu) {
-          const lost = quitLossLost('hoops4');   // already counted as a loss (its armed marker was settled while this page was frozen 30+ minutes, 2026-10-29)
-          dropQuitLoss('hoops4');
-          if (!lost) withMode(() => (modeFor(m, RED)), this.cpuDiff(), () => recordResult('hoops4', this.statsDiff(m), r.won), { detail: () => (hoopsDetail(m, RED)) });
+          withMode(() => (modeFor(m, RED)), this.cpuDiff(m), () => recordResult('hoops4', this.statsDiff(m), r.won), { detail: () => (hoopsDetail(m, RED)) });
         }
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
@@ -1808,7 +1889,7 @@ class Hoops4 {
     const again = card.querySelector('.h4-again');
     // "Play again" restarts a SOLO match. In multiplayer there is nobody on the other end of it -
     // a rematch is a new room or a new challenge - so the button quits to the setup screen.
-    if (again) this.on(again, 'click', () => { card.remove(); if (this.mp) { this.teardownEngine(); this.renderSetup(); } else this.start(); });
+    if (again) this.on(again, 'click', () => { card.remove(); if (this.mp) { this.teardownEngine(); this.renderSetup(); } else this.start(this._sameGame()); });
     this.on(card.querySelector('.h4-quit'), 'click', () => { card.remove(); this.teardownEngine(); this.renderSetup(); });
   }
 
@@ -1871,7 +1952,7 @@ class Hoops4 {
   }
 
   destroy() {
-    this.takeQuit();   // leaving a match against the computer mid-play: no resume, so it is a loss
+    // Leaving costs nothing: a match vs the computer (or pass and play) is saved, a challenge is in Firebase.
     this.disposed = true;
     try { if (window.__h4Test === this) delete window.__h4Test; } catch {}
     clearTimeout(this._toastT);
@@ -1884,7 +1965,9 @@ class Hoops4 {
 
 export function init(container) {
   if (instance) { try { instance.destroy(); } catch {} }
-  takeQuitLoss('hoops4');   // a match whose page closed mid-play (no destroy ran) is that match's loss
+  // A marker armed by a build from before the save (2026-11-06): that match had no save, so under the
+  // rule it was played by, it is a loss. This build arms none it does not take at once.
+  takeQuitLoss('hoops4');
   LL.settleLeave('hoops4');  // the same for a live room (js/live-leave.js; no rejoin here)
   instance = new Hoops4(container);
   instance.mount();
@@ -1896,18 +1979,13 @@ export function destroy() {
   try { instance.destroy(); } finally { instance = null; }
 }
 
-/** THE "NO MID-GAME RESUME" MEANING of the contract (Ball Run / Snake's class, not
- *  Escoba's): nothing about a match is persisted, so leaving really does abandon it and the hub
- *  should say so. A 3D throw mid-flight and a turn that is mid-shoot-until-you-make-it are not
- *  states worth snapshotting, and skeeball deliberately removed its own mid-rack resume for the
- *  same reason (Matt: "you either finish or quit"). */
+/** ONLY A LIVE ROOM is abandoned by leaving. A match vs the computer and pass and play AUTOSAVE
+ *  (2026-11-06, Continue), and a turn-by-turn match lives in `hoops/games/<id>` and re-opening
+ *  replays it: saying "in progress" there would make the hub warn about losing something that cannot
+ *  be lost (Matt: "you should be able to leave the game and play a regular game until the opponent plays"). */
 export function isInProgress() {
   if (!(instance && instance.match && !instance.match.over && instance.match.moves.length > 0)) return false;
-  // EXCEPT A TURN-BY-TURN MATCH, which is not abandoned by leaving: the move log lives in
-  // `hoops/games/<id>` and re-opening replays it. Saying "in progress" there makes the hub warn
-  // about losing something that cannot be lost, which is exactly the friction Matt hit - "you
-  // should be able to leave the game and play a regular game until the opponent plays."
-  return !(instance.mp && instance.mp.kind === 'async');
+  return !!(instance.mp && instance.mp.kind === 'live');
 }
 
 /** A tiny basketball in a player's colour, for the turn pill - the same ball as on the lane. */
@@ -1917,7 +1995,7 @@ function ballSVG(fill, dark) {
     + `<path d="M1 10h18M10 1v18M4 3.5c3 3 3 10 0 13M16 3.5c-3 3-3 10 0 13" fill="none" stroke="${seam}" stroke-width="1.3"/></svg>`;
 }
 
-/** The hub's leave confirm says "Counts as a loss" when this is true. */
+/** The hub's leave confirm says "Counts as a loss" when this is true (a live room only). */
 export function quitCostsLoss() { return !!(instance && instance.quitCostsLoss()); }
 
 export default { init, destroy, isInProgress, quitCostsLoss };

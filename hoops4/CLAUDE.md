@@ -3,8 +3,8 @@
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
 > and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
 > alongside this file. Nothing below overrides them. **Nothing in this folder stores anything
-> earned**: `gamehub.hoops4.v1` holds one preference (the opponent) and nothing else, and the
-> match itself is not persisted at all. Results go through the shared `recordResult('hoops4', …)`
+> earned**: `gamehub.hoops4.v1` holds one preference (the opponent) and nothing else; a match vs the
+> computer or pass and play is saved only to be continued (2026-11-06, "Resume"). Results go through the shared `recordResult('hoops4', …)`
 > like every other game.
 
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md`.
@@ -23,9 +23,9 @@ since 2026-09-22 (rules PUBLISHED by Matt 2026-09-22). Open items: "Still open" 
 | CSS root / prefix | `.h4-root` / `.h4-` |
 | Settings key | `gamehub.hoops4.v1` (two preferences: the opponent, and `shots`: `'until'` \| `'one'`) |
 | Multiplayer | LIVE via `js/net.js` (`rooms/<CODE>`); TURN BY TURN via `hoops4/js/mp.js` (`hoops/games/<id>`, a NEW top-level node) |
-| Other keys (all conveniences, never history) | `gamehub.hoops4.outbox.v1` (moves waiting on a signal), `.shown.v1` (moves replayed per match), `.cerShown.v1` (card shown once per match), `.chatSeen.v1` (newest 60 matches), `.unshot.v1`, `.counted.v1` (result ledger), `.unseenResults.v1`, `.pushAsk.v1`, `.cpuOpen.v1` |
+| Other keys (all conveniences, never history) | `gamehub.hoops4.outbox.v1` (moves waiting on a signal), `.shown.v1` (moves replayed per match), `.cerShown.v1` (card shown once per match), `.chatSeen.v1` (newest 60 matches), `.unshot.v1`, `.counted.v1` (result ledger), `.unseenResults.v1`, `.pushAsk.v1`, `.cpuOpen.v1`, `.save.v1` + `.passSave.v1` (the match in progress, 2026-11-06) |
 | Difficulty axis | CPU skill `easy`/`medium`/`hard`, plus `'mp'` for a multiplayer match (unmapped in `js/difficulty-tiers.js`, so `tierOf('mp')` is null). A two-players-on-one-phone match records nothing |
-| `isInProgress()` | the **no mid-game resume** meaning; true while a match has a disc and is not over; false for `mp.kind === 'async'` (nothing can be lost; entering a challenge toasts that the match is saved) |
+| `isInProgress()` | true only for a LIVE room with a disc, not over; false vs the computer and pass and play (saved, 2026-11-06) and for `mp.kind === 'async'` (nothing can be lost; entering a challenge toasts that the match is saved) |
 
 - **Released 2026-10-26** in code (`released: '2026-09-22'`, the admin switch day).
 - It **has** a `GAME_META` row in `js/leaderboard-ui.js` even while admin-only (`OFF_THE_BOARD` in
@@ -424,7 +424,7 @@ Open items: see the root TODO.md, "Connect 4 Hoops".
 
 ## Quitting and easier settings (2026-10-29)
 
-No resume: vs the computer, leaving after the player's first shot (New game, asked twice; Back to setup, whose sheet says so; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Pass and play and online untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Superseded by "Resume (2026-11-06)" below. Was: no resume: vs the computer, leaving after the player's first shot (New game, asked twice; Back to setup, whose sheet says so; the hub's back; a closed app) is ONE loss, armed in `gamehub.quitLoss.v1`, taken in `destroy()` / `init()`. Pass and play and online untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
 
 ## Second pass (2026-10-29)
 
@@ -434,3 +434,7 @@ No resume: vs the computer, leaving after the player's first shot (New game, ask
 ## Shoot until you score counts one level lower (2026-11-02, Matt)
 
 Vs the computer, a "shoot until you score" match records one level LOWER than chosen (`statsDiff(m)`, `oneTierDown`; Easy stays Easy); "one shot" records at the chosen level. The mode (withMode / modeTag) keeps the CHOSEN level; online (`'mp'`) unchanged. `docs/INTEGRITY-CHECKS-SPEC.md` E2 (b).
+
+## Resume (2026-11-06)
+
+Matt: "We should add resume to the other games that don't save". `gamehub.hoops4.save.v1` (vs the computer) and `gamehub.hoops4.passSave.v1` (pass and play) = `{ v: 1, at, vsCpu, skill, one, first, turn, sit, shots, moves, fly }`, written at the start, at each launch (`fly` = power, aim, seed: a shot left in the air is flown again, so leaving cannot take it back) and after every settled shot. Setup: **Continue** + New game; Continue keeps the match's OWN level and shot rule (`cpuDiff(m)` reads `m.cpuSkill`). Pass & play picks its save up; Menu > New game starts afresh. Leaving costs nothing and arms no marker; New game over a shot-in save vs the computer is ONE loss at its `statsDiff`, asked twice; Play again / New game replay the same kind of match. The finish clears the save before recording. Live rooms and challenges untouched. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Air Hockey and Connect 4 Hoops save".
