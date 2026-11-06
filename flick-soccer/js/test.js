@@ -218,7 +218,20 @@ function playMatch(diffs, seed, goals = 2) {
   ok('closed nets: a disc stops at the line', shoot(false) >= E.DISC_R - 0.6);
   const d = shoot(true);
   ok('open nets: a disc goes into the net', d < 0, `${d}`);
-  ok('open nets: and never past the back of the deeper net', d >= -E.OPEN_GOAL_D + E.DISC_R - 0.6, `${d}`);
+  ok('open nets: the same size as always', E.OPEN_GOAL_D === E.GOAL_D);
+  ok('open nets: never past the back of the net', d >= -E.OPEN_GOAL_D + E.DISC_R - 0.6, `${d}`);
+  // A piece left in the OTHER team's net is moved out when the play ends; one in its own net stays.
+  const m = E.newMatch(2, 0, ['balanced', 'balanced']); m.test = 1;
+  const att = E.discsOf(0)[3], def = E.discsOf(1)[0];
+  m.b[att].x = 44; m.b[att].y = -2;                     // a blue attacker in the top (red) net
+  m.b[def].x = 57; m.b[def].y = -2;                     // a red defender in its own top net
+  E.settle(m, -1);
+  ok('test: an attacker in the other net is moved out', m.b[att].y - E.DISC_R >= 0, `${m.b[att].y}`);
+  ok('test: moved out only a bit', m.b[att].y < E.DISC_R + 4, `${m.b[att].y}`);
+  ok('test: a defender may stay in its own net', m.b[def].y === -2);
+  const m2 = E.newMatch(2, 0, ['balanced', 'balanced']);
+  m2.b[att].x = 44; m2.b[att].y = -2; E.settle(m2, -1);
+  ok('not a test match: nothing is moved', m2.b[att].y === -2);
   // The Test computer finishes matches, and Hard beats Easy.
   let wins = 0;
   for (let k = 0; k < 4; k++) {

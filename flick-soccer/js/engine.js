@@ -54,9 +54,9 @@ const wallsFor = (d) => [
   [GX0, 0, GX1, 0, 1], [GX0, H, GX1, H, 1],
 ].map(([ax, ay, bx, by, discOnly]) => ({ ax, ay, bx, by, discOnly: !!discOnly }));
 export const SEGS = wallsFor(GOAL_D);
-/** Admin Test mode's walls (2026-11-06): no disc-only goal lines, and nets deep enough for a disc to
- *  get BEHIND a ball sitting on the line (a disc is 12.4 across; the normal net is 9 deep). */
-export let OPEN_GOAL_D = 18;
+/** Admin Test mode's walls (2026-11-06): no disc-only goal lines, so a disc can go into a net. The nets
+ *  are the SAME size as always (Matt: "I didn't want anything to change size"; they were 18 deep for a day). */
+export let OPEN_GOAL_D = GOAL_D;
 export let OPEN_SEGS = wallsFor(OPEN_GOAL_D).filter((s) => !s.discOnly);
 export function __setOpenDepth(d) { OPEN_GOAL_D = d; OPEN_SEGS = wallsFor(d).filter((s) => !s.discOnly); }   // tests only
 
@@ -274,8 +274,33 @@ export function settle(m, scorer) {
     return 'goal';
   }
   freeze(m.b);
+  if (m.test) ejectFromNets(m.b);
   m.turn ^= 1;
   return 'turn';
+}
+
+/** Admin Test mode (2026-11-06, Matt: "they can go in and back out, but if the play ends and any piece is in
+ *  the other team's net, it should be automatically moved out a bit"). When a shot ends with no goal, a disc
+ *  with any part over the goal line of the net it ATTACKS is put back on the pitch just in front of that line
+ *  (same x, kept inside the mouth), stepped further out until it overlaps nothing. A disc in its OWN net
+ *  stays (that is how a defender gets at a ball on the line). Deterministic; mutates `b`. */
+export function ejectFromNets(b) {
+  for (let i = 1; i < b.length; i++) {
+    const o = b[i], top = teamOf(i) === 0;              // seat 0 attacks the top goal
+    if (top ? o.y - o.r >= 0 : o.y + o.r <= H) continue;
+    if (o.x < GX0 - o.r || o.x > GX1 + o.r) continue;   // not at the mouth (cannot happen: walls)
+    const x = Math.max(o.r, Math.min(W - o.r, o.x));
+    for (let k = 0; k < 400; k++) {
+      const y = top ? o.r + 1.5 + k * 0.5 : H - o.r - 1.5 - k * 0.5;
+      let clear = true;
+      for (let j = 0; j < b.length && clear; j++) {
+        if (j === i) continue;
+        const q = b[j], rr = o.r + q.r + 0.1;
+        if ((q.x - x) * (q.x - x) + (q.y - y) * (q.y - y) < rr * rr) clear = false;
+      }
+      if (clear) { o.x = x; o.y = y; break; }
+    }
+  }
 }
 
 /** Which of `seat`'s discs is nearest (x, y) within `reach`, or -1. */
