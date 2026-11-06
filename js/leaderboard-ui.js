@@ -623,8 +623,9 @@ function boardView(list, id) {
     const rows = list.filter((g) => boardPlaysOf(g, id) > 0);
     // Tic Tac Toe's own comparator orders Ultimate -> Classic, which is what its tabs now show;
     // its All tab is the generic difficulty-first wins number, so it takes the generic comparator.
-    const cmp = id === 'tictactoe' ? (a, b) => compareBoardRow(a, b, id) : boardMetricCmp(id);
-    rows.sort((a, b) => cmp(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)) || recent(a, b));
+    const base = id === 'tictactoe' ? (a, b) => compareBoardRow(a, b, id) : boardMetricCmp(id);
+    const cmp = (a, b) => base(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id));
+    rows.sort((a, b) => cmp(a, b) || recent(a, b));
     const unit = id === 'contexto' ? t('lb_unit_ct_medals') : unitTextOf(id, null);
     return {
       rows, cmp, unit, gap: true,
@@ -651,8 +652,10 @@ function boardView(list, id) {
       ...(id === 'contexto' ? { val: (g) => ctBigHTML(ctOf(g)), unit: '', sub: () => '', gap: false } : {}),
     };
   };
-  const simple = (rows, f, unit, played, cmp) => {
-    const c = cmp || byDesc(f);
+  // `n` = this view's plays: same number, FEWER plays ranks higher (Matt, 2026-11-06: every tie, hub-wide).
+  const simple = (rows, f, unit, played, cmp, n) => {
+    const c0 = cmp || byDesc(f);
+    const c = n ? (a, b) => c0(a, b) || (n(a) - n(b)) : c0;
     rows.sort((a, b) => c(a, b) || recent(a, b));
     return { rows, cmp: c, unit, val: (g) => `<span>${esc(String(f(g)))}</span>`, sub: (g) => played(g) };
   };
@@ -669,15 +672,15 @@ function boardView(list, id) {
     const rows = list.filter((g) => skPlaysAt(g, _machine) > 0);
     const played = (g) => t('lb_played_count', { n: skPlaysAt(g, _machine) });
     v = _view === 'high'
-      ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played)
-      : { ...simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played), gap: true };
+      ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played, null, (g) => skPlaysAt(g, _machine))
+      : { ...simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played, null, (g) => skPlaysAt(g, _machine)), gap: true };
   } else if (id === 'contexto') {
     // Daily | All (2026-10-30): Daily = puzzles finished on their own day (ct.d), ranked the same way.
     const vtab = (view, label) => `<button type="button" class="lb-pill lb-mstab${(_view === 'daily' ? 'daily' : 'all') === view ? ' is-sel' : ''}" data-lbview="${view === 'all' ? 'ctall' : view}" aria-pressed="${(_view === 'daily' ? 'daily' : 'all') === view}">${esc(label)}</button>`;
     tabs = `<div class="lb-pills lb-mstabs" role="group">${vtab('daily', tx('lb_ct_daily', 'Daily'))}${vtab('all', t('lb_diff_all'))}</div>`;
     if (_view === 'daily') {
       const rows = list.filter((g) => (ctDailyOf(g).played | 0) > 0);
-      const cmp = (a, b) => compareContexto(ctDailyOf(a), ctDailyOf(b));
+      const cmp = (a, b) => compareContexto(ctDailyOf(a), ctDailyOf(b)) || ((ctDailyOf(a).played | 0) - (ctDailyOf(b).played | 0));
       rows.sort((a, b) => cmp(a, b) || recent(a, b));
       v = { rows, cmp, unit: '', empty: tx('lb_ct_daily_none', 'No daily wins yet.'),
         val: (g) => ctBigHTML(ctDailyOf(g)),
@@ -690,21 +693,21 @@ function boardView(list, id) {
     const vtab = (view, label) => `<button type="button" class="lb-pill lb-mstab${(_view || 'bank') === view ? ' is-sel' : ''}" data-lbview="${view}" aria-pressed="${(_view || 'bank') === view}">${esc(label)}</button>`;
     tabs = `<div class="lb-pills lb-mstabs" role="group">${vtab('bank', t('lb_sort_bank'))}${vtab('wins', t('lb_sort_wins'))}</div>`;
     v = _view === 'wins'
-      ? simple(list.filter((g) => boardPlaysOf(g, id) > 0), (g) => winsAtTier(g, ['holdem'], null), t('lb_unit_wins'), (g) => t('lb_played_count', { n: boardPlaysOf(g, id) }))
+      ? simple(list.filter((g) => boardPlaysOf(g, id) > 0), (g) => winsAtTier(g, ['holdem'], null), t('lb_unit_wins'), (g) => t('lb_played_count', { n: boardPlaysOf(g, id) }), null, (g) => boardPlaysOf(g, id))
       : plain();
   } else if (_view === 'mp') {
-    v = simple(list.filter((g) => mpPlaysOf(g, id) > 0), (g) => mpWinsOf(g, id), t('lb_unit_wins'), (g) => t('lb_played_count', { n: mpPlaysOf(g, id) }));
+    v = simple(list.filter((g) => mpPlaysOf(g, id) > 0), (g) => mpWinsOf(g, id), t('lb_unit_wins'), (g) => t('lb_played_count', { n: mpPlaysOf(g, id) }), null, (g) => mpPlaysOf(g, id));
   } else if (_view === 'solo') {
     v = simple(list.filter((g) => cpSoloBest(g) !== null), cpSoloBest, t('lb_unit_fewest'),
-      (g) => `${cpSoloRacks(g)} ${t('lb_unit_cleared')}`, (a, b) => cmpCpFewest(a, b));
+      (g) => `${cpSoloRacks(g)} ${t('lb_unit_cleared')}`, (a, b) => cmpCpFewest(a, b), cpSoloRacks);
   } else if (_view === 'ultimate' || _view === 'classic') {
     const k = _view;
     v = simple(list.filter((g) => ((ttOf(g)[k] || {}).played | 0) > 0), (g) => ttVariantWins(ttOf(g)[k]), t('lb_unit_wins'),
-      (g) => t('lb_played_count', { n: (ttOf(g)[k] || {}).played | 0 }));
+      (g) => t('lb_played_count', { n: (ttOf(g)[k] || {}).played | 0 }), null, (g) => (ttOf(g)[k] || {}).played | 0);
   } else if (_view === 'off' || _view === 'on') {
     const w = _view;
     const rows = list.filter((g) => snWallsCell(g, w));
-    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v); };
+    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)); };
     rows.sort((a, b) => cmp(a, b) || recent(a, b));
     v = { rows, cmp, unit: unitTextOf('snake', null),
       val: (g) => `<span>${snWallsCell(g, w).v}</span>`,
@@ -779,8 +782,9 @@ function woRushHTML(list) {
     }
     const rows = list.filter((g) => won[g.key] > 0);
     const val = (g) => won[g.key];
-    rows.sort((a, b) => val(b) - val(a) || (played[a.key] - played[b.key]) || rankName(a).localeCompare(rankName(b)));
-    const { rankOf, tiedAt } = rankMap(rows, val);
+    const wcmp = (a, b) => val(b) - val(a) || (played[a.key] - played[b.key]);
+    rows.sort((a, b) => wcmp(a, b) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val, wcmp);
     body = rows.length ? `<div class="lb-unith">${esc(tx('lb_wo_won_unit', 'weeks won'))}</div><div class="lb-plist is-board">${rows.map((g) => playerCardHTML(g,
       rankChipHTML(rankOf[g.key], tiedAt(g.key)), { cls: 'lb-msval', val: `<span>${val(g)}</span>`, unit: tx('lb_wo_of', 'of {n}', { n: played[g.key] }) }, '', '', '', '')).join('')}</div>`
       : emptyState(tx('lb_wo_none_past', 'No finished weeks yet'));
@@ -1271,6 +1275,13 @@ function compareAllWins(a, b, id) {
  *  Deliberately WITHOUT the plays/recency tie-breaks `sortRows` adds after it: those decide which
  *  of two equally-ranked rows is drawn first, and a rank badge must call that pair TIED. */
 function boardMetricCmp(id) {
+  // EVERY TIE: the same number from FEWER plays ranks higher (Matt, 2026-11-06: "all ties across the gamehub
+  // should be treated this way"). Only a pair equal on both is tied. This replaces the note above: plays used
+  // to only order a tied pair, with both badges calling it tied.
+  const base = boardOrder(id);
+  return (a, b) => base(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id));
+}
+function boardOrder(id) {
   // Tic Tac Toe (2026-11-01, Matt: "You choose"): the standing, its medals and the game list follow the
   // board's All tab (every win, difficulty first), so the top of the board holds the record. Until then the
   // standing ranked Ultimate wins first and named a different leader than the board. Ultimate and Classic
@@ -1890,7 +1901,8 @@ function playerListHTML(list) {
   // list is literally in order of most played), so a badge frozen to the wins order sat beside it
   // reading 1, 2, 6, 3, 5, 4. Matt, from the live board: "Why did that break?"
   // Alphabetical is not a ranking, so it keeps the wins podium exactly as before.
-  const { rankOf, tiedAt } = rankMap(rows, pSort === 'played' ? (g) => playedOf(g, null) : value);
+  const { rankOf, tiedAt } = pSort === 'played' ? rankMap(rows, (g) => playedOf(g, null))
+    : rankMap(rows, value, (a, b) => (value(b) - value(a)) || (playedOf(a, null) - playedOf(b, null)));
   if (pSort === 'alpha') {
     rows.sort((a, b) => {
       const n = (a.name || '').localeCompare(b.name || '');
@@ -2513,15 +2525,15 @@ function sortRows(rows, id, sort) {
     return;
   }
   if (sort === 'high') {
-    rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || metric(a, b) || recent(a, b));
+    rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skPlaysAt(a, _machine) - skPlaysAt(b, _machine)) || metric(a, b) || recent(a, b));
     return;
   }
   if (sort === 'fewest') {
-    rows.sort((a, b) => cmpCpFewest(a, b) || (cpSoloRacks(b) - cpSoloRacks(a)) || recent(a, b));
+    rows.sort((a, b) => cmpCpFewest(a, b) || (cpSoloRacks(a) - cpSoloRacks(b)) || recent(a, b));
     return;
   }
   if (sort === 'hwins') {
-    rows.sort((a, b) => (winsAtTier(b, ['holdem'], null) - winsAtTier(a, ['holdem'], null)) || metric(a, b) || recent(a, b));
+    rows.sort((a, b) => (winsAtTier(b, ['holdem'], null) - winsAtTier(a, ['holdem'], null)) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)) || metric(a, b) || recent(a, b));
     return;
   }
   // The game's own metric: difficulty first (that is the half Matt does want tiered), then this
@@ -2615,7 +2627,11 @@ function gameDetail(list, id) {
   const bSort = effectiveSort(id);
   const byMetric = bSort !== 'played' && bSort !== 'high' && bSort !== 'hwins';
   // Cup Pong's solo board is its own order (fewest first), so it takes its own comparator.
-  const { rankOf, tiedAt } = bSort === 'fewest' ? rankMap(rows, cpSoloBest, cmpCpFewest) : rankMap(rows, bSort === 'played'
+  const tieCmp = bSort === 'fewest' ? (a, b) => cmpCpFewest(a, b) || (cpSoloRacks(a) - cpSoloRacks(b))
+    : bSort === 'high' ? (a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skPlaysAt(a, _machine) - skPlaysAt(b, _machine))
+      : bSort === 'hwins' ? (a, b) => (winsAtTier(b, ['holdem'], null) - winsAtTier(a, ['holdem'], null)) || (boardPlaysOf(a, id) - boardPlaysOf(b, id))
+        : null;
+  const { rankOf, tiedAt } = tieCmp ? rankMap(rows, () => 0, tieCmp) : rankMap(rows, bSort === 'played'
     ? (g) => boardPlaysOf(g, id)
     : bSort === 'high'
       ? (g) => skBestAt(g, _machine)
@@ -3631,7 +3647,7 @@ export function lb2ScoreBoard(list, id, spec = {}) {
       const m = view.slice(3);
       const at = (g) => lb2BzModeRow(g, m, _tier);
       rows = list.filter((g) => at(g));
-      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi);
+      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi) || ((at(a).played | 0) - (at(b).played | 0));
       rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
       num = (g) => at(g).hi; tierOfRow = (g) => at(g).tier; games = (g) => at(g).played;
       text = (g) => numText(at(g).hi); kind = 'points'; lower = false; unit = t('lb_unit_points');
@@ -3854,11 +3870,14 @@ export function lb2PlayerGames(list, key) {
 }
 /** The old By Player list as it opens (category All, sorted by Wins: playerListHTML's own order and
  *  rankMap ties): [{ g, key, rank, tie, wins, played }], everyone with any play. */
+/** Every play a person has (Hall of Fame's tie-break: same medals from fewer plays ranks higher). */
+export function lb2PlayedOf(g) { return playedOf(g, null); }
 export function lb2Players(list, cat = 'all') {
   const rows = list.filter((g) => playedOf(g, null) > 0);
   const value = (g) => catValueOf(g, cat);
-  const { rankOf, tiedAt } = rankMap(rows, value);
-  rows.sort((a, b) => (value(b) - value(a)) || (playedOf(a, null) - playedOf(b, null)) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
+  const pcmp = (a, b) => (value(b) - value(a)) || (playedOf(a, null) - playedOf(b, null));
+  const { rankOf, tiedAt } = rankMap(rows, value, pcmp);
+  rows.sort((a, b) => pcmp(a, b) || ((b.updatedAt || 0) - (a.updatedAt || 0)));
   // `cat` = the old card's line under the name (catInlineHTML: wins per tier shape, runs, VS wins), as HTML.
   return rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), wins: value(g), played: playedOf(g, null), cat: catInlineHTML(g) }));
 }
@@ -3911,8 +3930,9 @@ export function lb2Rush(list, mode = 'easy', view = 'week') {
     }
     const rows = list.filter((g) => won[g.key] > 0);
     const val = (g) => won[g.key];
-    rows.sort((a, b) => val(b) - val(a) || (played[a.key] - played[b.key]) || rankName(a).localeCompare(rankName(b)));
-    const { rankOf, tiedAt } = rankMap(rows, val);
+    const wcmp = (a, b) => val(b) - val(a) || (played[a.key] - played[b.key]);
+    rows.sort((a, b) => wcmp(a, b) || rankName(a).localeCompare(rankName(b)));
+    const { rankOf, tiedAt } = rankMap(rows, val, wcmp);
     return { head: '', unit: tx('lb_wo_won_unit', 'weeks won'), empty: tx('lb_wo_none_past', 'No finished weeks yet'),
       rows: rows.map((g) => ({ g, key: g.key, rank: rankOf[g.key], tie: tiedAt(g.key), val: val(g), sub: tx('lb_wo_of', 'of {n}', { n: played[g.key] }) })) };
   }

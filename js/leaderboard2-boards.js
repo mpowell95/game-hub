@@ -16,7 +16,7 @@ export function rankInPlace(rows, same) {
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
 
 /** `standings` = [{ game, rows: [{ key, g, name, emoji, rank, noMedal }] }] (one per game). */
-export function hallOfFame(standings) {
+export function hallOfFame(standings, playsOf = null) {
   const tally = new Map();
   for (const st of standings || []) {
     for (const r of st.rows) {
@@ -27,7 +27,9 @@ export function hallOfFame(standings) {
     }
   }
   const rows = [...tally.values()].map((t) => ({ ...t, firsts: t.p[0], seconds: t.p[1], thirds: t.p[2] }));
-  const cmp = (a, b) => (b.firsts - a.firsts) || (b.seconds - a.seconds) || (b.thirds - a.thirds);
+  // Same medals: FEWER plays ranks higher (Matt, 2026-11-06: every tie, hub-wide).
+  const cmp = (a, b) => (b.firsts - a.firsts) || (b.seconds - a.seconds) || (b.thirds - a.thirds)
+    || (playsOf ? playsOf(a.g) - playsOf(b.g) : 0);
   rows.sort((a, b) => cmp(a, b) || byName(a, b));
   return rankInPlace(rows, (a, b) => cmp(a, b) === 0);
 }
