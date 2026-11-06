@@ -23,6 +23,7 @@ import { enableCodeCopy } from '../../js/mp-code-copy.js';
 import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
 import * as LL from '../../js/live-leave.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 
 const t = makeT(STRINGS);
 const SETTINGS_KEY = 'gamehub.filler.v1';
@@ -544,9 +545,15 @@ class FillerUI {
     // mancala/js/ui.js's startGame()). The engine itself always constructs
     // state with P1 to move; when the AI is due to open, we hand it the
     // turn right after construction and kick off its move automatically.
-    const starter = this.nextStarter === P2 ? P2 : P1;
-    this.nextStarter = starter === P1 ? P2 : P1;
-    saveSettings(this.level, this.nextStarter);
+    // Admin devices always open vs the computer (Matt, 2026-11-06: "Let me start every game");
+    // everyone else keeps the alternation. The saved alternation is left untouched on admin.
+    let admin = false;
+    try { admin = isAdminDevice(); } catch { admin = false; }
+    const starter = admin ? P1 : (this.nextStarter === P2 ? P2 : P1);
+    if (!admin) {
+      this.nextStarter = starter === P1 ? P2 : P1;
+      saveSettings(this.level, this.nextStarter);
+    }
     clearGame();                 // a new game replaces any saved one
     this.state = newGame();
     if (starter === P2) this.state.turn = P2;

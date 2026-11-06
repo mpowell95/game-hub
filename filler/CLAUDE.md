@@ -227,3 +227,7 @@ Solo Restart / New game after the player's first colour (`state.moves`) = ONE lo
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first colour = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per game of the series (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - Vs the computer: quitting is a loss once any colour is picked (`state.moves >= 1`) (it was the player's own first move).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+### Admin devices always go first vs the computer (2026-11-06)
+
+Matt: "Keep the alternative first move for all player besides admin. Let me start every game." `startGame()`: on `isAdminDevice()` the human opens every solo game and `nextStarter` is not flipped; everyone else alternates. Online play unchanged. Results still record `first: 'me'` honestly.
