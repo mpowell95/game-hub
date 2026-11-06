@@ -350,6 +350,8 @@ export function aggregatePlayers(all, corrections) {
             // The mode's best (2026-11-02, read by the stats screens): `hi` the most, `lo` the least non-zero.
             if (Number.isFinite(+b.hi) && +b.hi > 0) d.hi = Math.max(+d.hi || 0, +b.hi);
             if (Number.isFinite(+b.lo) && +b.lo > 0) d.lo = +d.lo > 0 ? Math.min(+d.lo, +b.lo) : +b.lo;
+            // Every score's running total and count (2026-11-06): summed, like played.
+            for (const k of ['hs', 'hn', 'ls', 'ln']) if (Number.isFinite(+b[k]) && +b[k] > 0) d[k] = (+d[k] || 0) + (+b[k]);
           }
         }
       }

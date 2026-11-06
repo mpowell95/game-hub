@@ -624,7 +624,7 @@ function boardView(list, id) {
     // Tic Tac Toe's own comparator orders Ultimate -> Classic, which is what its tabs now show;
     // its All tab is the generic difficulty-first wins number, so it takes the generic comparator.
     const base = id === 'tictactoe' ? (a, b) => compareBoardRow(a, b, id) : boardMetricCmp(id);
-    const cmp = (a, b) => base(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id));
+    const cmp = (a, b) => base(a, b) || tieByAverage(a, b, id);
     rows.sort((a, b) => cmp(a, b) || recent(a, b));
     const unit = id === 'contexto' ? t('lb_unit_ct_medals') : unitTextOf(id, null);
     return {
@@ -672,7 +672,7 @@ function boardView(list, id) {
     const rows = list.filter((g) => skPlaysAt(g, _machine) > 0);
     const played = (g) => t('lb_played_count', { n: skPlaysAt(g, _machine) });
     v = _view === 'high'
-      ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played, null, (g) => skPlaysAt(g, _machine))
+      ? simple(rows, (g) => skBestAt(g, _machine), t('lb_unit_high'), played, (a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skAvgAt(b, _machine) - skAvgAt(a, _machine)))
       : { ...simple(rows, (g) => skPointsAt(g, _machine), t('lb_unit_points'), played, null, (g) => skPlaysAt(g, _machine)), gap: true };
   } else if (id === 'contexto') {
     // Daily | All (2026-10-30): Daily = puzzles finished on their own day (ct.d), ranked the same way.
@@ -699,7 +699,7 @@ function boardView(list, id) {
     v = simple(list.filter((g) => mpPlaysOf(g, id) > 0), (g) => mpWinsOf(g, id), t('lb_unit_wins'), (g) => t('lb_played_count', { n: mpPlaysOf(g, id) }), null, (g) => mpPlaysOf(g, id));
   } else if (_view === 'solo') {
     v = simple(list.filter((g) => cpSoloBest(g) !== null), cpSoloBest, t('lb_unit_fewest'),
-      (g) => `${cpSoloRacks(g)} ${t('lb_unit_cleared')}`, (a, b) => cmpCpFewest(a, b), cpSoloRacks);
+      (g) => `${cpSoloRacks(g)} ${t('lb_unit_cleared')}`, (a, b) => cmpCpFewest(a, b) || (cpSoloAvg(a) - cpSoloAvg(b)));
   } else if (_view === 'ultimate' || _view === 'classic') {
     const k = _view;
     v = simple(list.filter((g) => ((ttOf(g)[k] || {}).played | 0) > 0), (g) => ttVariantWins(ttOf(g)[k]), t('lb_unit_wins'),
@@ -707,7 +707,7 @@ function boardView(list, id) {
   } else if (_view === 'off' || _view === 'on') {
     const w = _view;
     const rows = list.filter((g) => snWallsCell(g, w));
-    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)); };
+    const cmp = (a, b) => { const x = snWallsCell(a, w); const y = snWallsCell(b, w); return ((y.tier || 0) - (x.tier || 0)) || (y.v - x.v) || cmpAvgGame(a, b, 'snake', x.tier || null, 'walls=' + w); };
     rows.sort((a, b) => cmp(a, b) || recent(a, b));
     v = { rows, cmp, unit: unitTextOf('snake', null),
       val: (g) => `<span>${snWallsCell(g, w).v}</span>`,
@@ -1275,12 +1275,54 @@ function compareAllWins(a, b, id) {
  *  Deliberately WITHOUT the plays/recency tie-breaks `sortRows` adds after it: those decide which
  *  of two equally-ranked rows is drawn first, and a rank badge must call that pair TIED. */
 function boardMetricCmp(id) {
-  // EVERY TIE: the same number from FEWER plays ranks higher (Matt, 2026-11-06: "all ties across the gamehub
-  // should be treated this way"). Only a pair equal on both is tied. This replaces the note above: plays used
-  // to only order a tied pair, with both badges calling it tied.
+  // EVERY TIE: the better AVERAGE game ranks higher (Matt, 2026-11-06: "whoever has the highest average points
+  // per win"; golf: "their typical game is way better"). A board of TOTALS (points, wins, medals): the same total
+  // from fewer plays is the higher average. A board of one BEST game (golf, snake...): the better stored average,
+  // and where no average is stored the pair stays tied (fewer plays must NOT win it). Only equal on both is tied.
   const base = boardOrder(id);
-  return (a, b) => base(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id));
+  return (a, b) => base(a, b) || tieByAverage(a, b, id);
 }
+/** Boards ranked by ONE best game, not a total. */
+const BEST_BOARDS = new Set(['golf', 'snake', 'ballrun', 'hillclimb', 'brickblitz', 'tower']);
+/** A person's average game, HIGHER = better, or null when the store keeps no total to divide (snake, ball run,
+ *  hill climb keep only bests). Across every difficulty: no per-difficulty totals are stored. */
+function avgGameOf(g, id) {
+  const gm = ((g && g.games) || {})[id] || {};
+  if (id === 'golf') { const f = gm.gf || {}; return (f.holes | 0) > 0 ? -((f.strokes | 0) / f.holes) : null; }   // fewer strokes a hole
+  if (id === 'brickblitz') { const z = gm.bz || {}; return (z.games | 0) > 0 ? (z.points | 0) / z.games : null; }
+  if (id === 'tower') { const w = gm.tw || {}; return (w.games | 0) > 0 ? (w.blocks | 0) / w.games : null; }
+  return null;
+}
+/** The average game from EVERY score saved per mode (byMode `hs`/`hn` or `ls`/`ln`, saved from 2026-11-06), at the
+ *  board's own course (golf) or difficulty, HIGHER = better; `want` = a mode part every counted mode must have
+ *  (Snake's walls, Brick Breaker's mode). Null when no score has been saved there yet. */
+function modeAvg(g, id, tier, want = '') {
+  const bm = ((((g && g.games) || {})[id] || {}).byMode) || {};
+  let sum = 0, n = 0, lower = false;
+  for (const mk of Object.keys(bm)) {
+    const parts = mk.split('|');
+    if (id === 'golf' && !parts.includes('round=' + GOLF_BOARD_COURSE)) continue;
+    if (want && !parts.includes(want)) continue;
+    for (const dk of Object.keys(bm[mk] || {})) {
+      if (id !== 'golf' && tier != null && tierOf(dk) !== tier) continue;
+      const b = bm[mk][dk] || {};
+      if (+b.ln > 0) { sum += +b.ls || 0; n += +b.ln; lower = true; } else if (+b.hn > 0) { sum += +b.hs || 0; n += +b.hn; }
+    }
+  }
+  return n > 0 ? (lower ? -(sum / n) : sum / n) : null;
+}
+/** The better AVERAGE game first: at the board's course/difficulty when both have scores saved there, else the
+ *  all-time average (golf, Brick Breaker, Tower keep one), else 0 (tied; fewer plays never decides it). */
+function cmpAvgGame(a, b, id, tier = null, want = '') {
+  const x = modeAvg(a, id, tier, want), y = modeAvg(b, id, tier, want);
+  if (x != null && y != null) return y - x;
+  const p = avgGameOf(a, id), q = avgGameOf(b, id);
+  return p == null || q == null ? 0 : (q - p);
+}
+function tieByAverage(a, b, id) { return BEST_BOARDS.has(id) ? cmpAvgGame(a, b, id, boardTierOf(a, id)) : (boardPlaysOf(a, id) - boardPlaysOf(b, id)); }
+/** Skeeball's average rack (points / racks) on a machine; Cup Pong's average throws a cleared solo rack. */
+function skAvgAt(g, m) { const n = skPlaysAt(g, m); return n > 0 ? skPointsAt(g, m) / n : 0; }
+function cpSoloAvg(g) { const c = ((g.games.cuppong || {}).cp) || {}; return (c.soloRacks | 0) > 0 ? (c.soloThrows | 0) / c.soloRacks : Infinity; }
 function boardOrder(id) {
   // Tic Tac Toe (2026-11-01, Matt: "You choose"): the standing, its medals and the game list follow the
   // board's All tab (every win, difficulty first), so the top of the board holds the record. Until then the
@@ -2525,11 +2567,11 @@ function sortRows(rows, id, sort) {
     return;
   }
   if (sort === 'high') {
-    rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skPlaysAt(a, _machine) - skPlaysAt(b, _machine)) || metric(a, b) || recent(a, b));
+    rows.sort((a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skAvgAt(b, _machine) - skAvgAt(a, _machine)) || metric(a, b) || recent(a, b));
     return;
   }
   if (sort === 'fewest') {
-    rows.sort((a, b) => cmpCpFewest(a, b) || (cpSoloRacks(a) - cpSoloRacks(b)) || recent(a, b));
+    rows.sort((a, b) => cmpCpFewest(a, b) || (cpSoloAvg(a) - cpSoloAvg(b)) || recent(a, b));
     return;
   }
   if (sort === 'hwins') {
@@ -2539,7 +2581,7 @@ function sortRows(rows, id, sort) {
   // The game's own metric: difficulty first (that is the half Matt does want tiered), then this
   // board's own score order - Tic Tac Toe's Ultimate -> Classic, everyone else's single number.
   // Fewer plays breaks a dead-equal pair, as it always did, and the badges call that pair tied.
-  rows.sort((a, b) => metric(a, b) || (boardPlaysOf(a, id) - boardPlaysOf(b, id)) || recent(a, b));
+  rows.sort((a, b) => metric(a, b) || (BEST_BOARDS.has(id) ? 0 : boardPlaysOf(a, id) - boardPlaysOf(b, id)) || recent(a, b));
 }
 
 /** Which machines this field has actually played, in the game's own chain order. Only these are
@@ -2627,8 +2669,8 @@ function gameDetail(list, id) {
   const bSort = effectiveSort(id);
   const byMetric = bSort !== 'played' && bSort !== 'high' && bSort !== 'hwins';
   // Cup Pong's solo board is its own order (fewest first), so it takes its own comparator.
-  const tieCmp = bSort === 'fewest' ? (a, b) => cmpCpFewest(a, b) || (cpSoloRacks(a) - cpSoloRacks(b))
-    : bSort === 'high' ? (a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skPlaysAt(a, _machine) - skPlaysAt(b, _machine))
+  const tieCmp = bSort === 'fewest' ? (a, b) => cmpCpFewest(a, b) || (cpSoloAvg(a) - cpSoloAvg(b))
+    : bSort === 'high' ? (a, b) => (skBestAt(b, _machine) - skBestAt(a, _machine)) || (skAvgAt(b, _machine) - skAvgAt(a, _machine))
       : bSort === 'hwins' ? (a, b) => (winsAtTier(b, ['holdem'], null) - winsAtTier(a, ['holdem'], null)) || (boardPlaysOf(a, id) - boardPlaysOf(b, id))
         : null;
   const { rankOf, tiedAt } = tieCmp ? rankMap(rows, () => 0, tieCmp) : rankMap(rows, bSort === 'played'
@@ -3647,7 +3689,7 @@ export function lb2ScoreBoard(list, id, spec = {}) {
       const m = view.slice(3);
       const at = (g) => lb2BzModeRow(g, m, _tier);
       rows = list.filter((g) => at(g));
-      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi) || ((at(a).played | 0) - (at(b).played | 0));
+      cmp = (a, b) => ((at(b).tier || 0) - (at(a).tier || 0)) || (at(b).hi - at(a).hi) || cmpAvgGame(a, b, 'brickblitz', at(a).tier || null, 'm=' + m);
       rows.sort((a, b) => cmp(a, b) || rankName(a).localeCompare(rankName(b)));
       num = (g) => at(g).hi; tierOfRow = (g) => at(g).tier; games = (g) => at(g).played;
       text = (g) => numText(at(g).hi); kind = 'points'; lower = false; unit = t('lb_unit_points');
