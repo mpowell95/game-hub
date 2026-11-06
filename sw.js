@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1479;
-const CACHE = 'game-hub-v1479';
+const CACHE = 'game-hub-v1480';
 
 const ASSETS = [
   './',
@@ -1201,12 +1201,12 @@ const REST_MANIFEST = {
   './brick-blitz/js/strings.js': '00a75d8c6d',
   './air-hockey/': 'c4f7eb7ae7',
   './air-hockey/index.html': 'c4f7eb7ae7',
-  './air-hockey/css/air-hockey.css': '4a9868313e',
-  './air-hockey/js/ui.js': '2730581265',
+  './air-hockey/css/air-hockey.css': '1590ba026a',
+  './air-hockey/js/ui.js': 'bcd4854616',
   './air-hockey/js/physics.js': 'a8e3192cef',
   './air-hockey/js/ai.js': '05aee99aee',
   './air-hockey/js/render.js': 'b056ca690e',
-  './air-hockey/js/strings.js': '37cd8d651a',
+  './air-hockey/js/strings.js': '7e05a75095',
   './air-hockey/js/live.js': '94988ac956',
   './air-hockey/js/net-test.js': '7037b18203',
   './air-hockey/net-test.html': 'c50ec11a90',
@@ -1251,8 +1251,8 @@ const REST_MANIFEST = {
   './cup-pong/js/alert.js': '698b22f3f3',
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': '533fd79845',
-  './hoops4/css/hoops4.css': '38efeef410',
-  './hoops4/js/ui.js': '59dadcd528',
+  './hoops4/css/hoops4.css': '0fa9dbe37c',
+  './hoops4/js/ui.js': 'b799fea686',
   './hoops4/js/boarddef.js': 'd1214c250c',
   './hoops4/js/machine.js': '657e6330a1',
   './hoops4/js/physics.js': 'a5793407ee',
@@ -1261,9 +1261,9 @@ const REST_MANIFEST = {
   './hoops4/js/cpu.js': 'f1b8a3e68b',
   './hoops4/js/mp.js': '3124f37b2e',
   './hoops4/js/replay.js': 'a5a39bdf6d',
-  './hoops4/js/mp-ui.js': '46f4fd4f8d',
+  './hoops4/js/mp-ui.js': '15b573d3e0',
   './hoops4/js/alert.js': '18b6a02ae3',
-  './hoops4/js/strings.js': '4c2da6fa4e',
+  './hoops4/js/strings.js': '09c982596a',
   './skeeball/js/game.js': '47f5932aaf',
   './skeeball/js/goals.js': '02bbd7fe9c',
   './skeeball/js/challenge.js': '63bade3e88',
@@ -1335,8 +1335,8 @@ const REST_MANIFEST = {
   './yahtzee/index.html': '8a3981aec3',
   './yahtzee/css/yahtzee.css': 'c091c6a113',
   './yahtzee/js/howto.js': '6b8bb92ca6',
-  './yahtzee/js/strings.js': 'ce61d552c4',
-  './yahtzee/js/ui.js': '602a3baf9b',
+  './yahtzee/js/strings.js': 'e571ad85c9',
+  './yahtzee/js/ui.js': '6e859ee20b',
   './yahtzee/js/hash.js': '14b905be65',
   './battleship/': 'e96682ec6b',
   './battleship/index.html': 'e96682ec6b',
