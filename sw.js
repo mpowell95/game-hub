@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1479;
-const CACHE = 'game-hub-v1481';
+const CACHE = 'game-hub-v1482';
 
 const ASSETS = [
   './',
@@ -1099,12 +1099,12 @@ const REST_MANIFEST = {
   './word-weaver/data/es/daily.json': 'd5f8928f0e',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
-  './flick-soccer/css/flick-soccer.css': '7b1925ba81',
-  './flick-soccer/js/ui.js': '694fa2c445',
-  './flick-soccer/js/engine.js': 'e77b6e2625',
-  './flick-soccer/js/ai.js': '20bb24c184',
-  './flick-soccer/js/render.js': 'e9222e7e77',
-  './flick-soccer/js/strings.js': '48347c8760',
+  './flick-soccer/css/flick-soccer.css': '449b0043dd',
+  './flick-soccer/js/ui.js': 'ee4536d454',
+  './flick-soccer/js/engine.js': '1858703c78',
+  './flick-soccer/js/ai.js': 'ada469fb1f',
+  './flick-soccer/js/render.js': 'ea9cf2297b',
+  './flick-soccer/js/strings.js': '9aae3daa67',
   './flick-soccer/js/mp.js': 'b539f61e22',
   './flick-soccer/js/mp-ui.js': '661dd25d09',
   './flick-soccer/js/alert.js': 'a8ca6b0b9e',

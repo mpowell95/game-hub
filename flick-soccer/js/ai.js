@@ -9,6 +9,7 @@
 
 import {
   W, H, GX0, GX1, DISC_R, BALL_R, BALL, discsOf, attackGoal, ownGoal, cloneBodies, flick, runToRest,
+  step, atRest, restScorer, SEGS, OPEN_SEGS,
 } from './engine.js';
 
 export const DIFFS = ['easy', 'medium', 'hard'];
@@ -162,7 +163,10 @@ export function seededRng(seed, bodies, seat) {
 }
 
 /** Generator: yields between candidates, returns the chosen { i, dx, dy, power } (noise applied). */
-export function* planShot(bodies, seat, diff, rng = Math.random) {
+export function* planShot(bodies, seat, diff, rng = Math.random, opts = {}) {
+  const open = !!opts.open;
+  if (opts.level) return yield* planTest(bodies, seat, opts.level, rng, open);   // tests and tuning only
+  if (opts.test && TEST_LEVEL[diff]) return yield* planTest(bodies, seat, TEST_LEVEL[diff], rng, open);
   const lv = LEVEL[diff] || LEVEL.medium;
   const list = candidates(bodies, seat, rng, lv.budget);
   let best = null, bestScore = -Infinity;
@@ -170,7 +174,7 @@ export function* planShot(bodies, seat, diff, rng = Math.random) {
   const tryOne = (c) => {
     const b = cloneBodies(bodies);
     flick(b, c.i, c.dx, c.dy, c.power);
-    const r = runToRest(b, 9);
+    const r = runToRest(b, 9, open);
     let s;
     if (r.scorer === seat) s = 10000 - r.steps * 0.01;
     else if (r.scorer === (seat ^ 1)) s = -20000;
@@ -207,7 +211,130 @@ export function* planShot(bodies, seat, diff, rng = Math.random) {
 }
 
 /** Run planShot to the end. */
-export function plan(bodies, seat, diff, rng) {
-  const g = planShot(bodies, seat, diff, rng);
+export function plan(bodies, seat, diff, rng, opts) {
+  const g = planShot(bodies, seat, diff, rng, opts);
   for (;;) { const r = g.next(); if (r.done) return r.value; }
+}
+
+// --- ADMIN TEST MODE (2026-11-06) ---------------------------------------------------------------------
+// Matt: "winning a first to 3 game against hard can't be done by a person. It should be difficult, but it's
+// not possible right now". In Test mode Easy, Medium and Hard see only what a person lining up a shot sees:
+//   - a GOAL counts as seen only if it is CLEAN: the flicked disc touches the ball first, the ball then touches
+//     no other piece, and it goes in straight (Easy) or off at most one wall or post (Medium, Hard). A goal
+//     that needs a chain reaction is not seen, so it is never chosen (it can still happen by luck);
+//   - each seen goal is tried with the level's OWN wobble (`tries` times) and the SUREST one is taken, but only
+//     if it goes in often enough (`minP`); otherwise the best safe shot (judge(), as today);
+//   - Easy (and a little Medium) sometimes just takes a decent shot instead of the best (`sloppy`).
+// Expert is unchanged (it sees everything). The knobs were tuned against a stand-in player (docs in CLAUDE.md).
+export const TEST_LEVEL = {
+  easy:   { sight: 0, aim: 0.095, pow: 0.13, fear: 0, keeper: 0, sloppy: 0.45, minP: 0.1, tries: 6 },
+  medium: { sight: 1, aim: 0.045, pow: 0.07, fear: 0.5, keeper: 10, sloppy: 0.3, minP: 0.15, tries: 8 },
+  hard:   { sight: 1, aim: 0.032, pow: 0.05, fear: 0.8, keeper: 18, sloppy: 0, minP: 0.2, tries: 8 },
+};
+
+/** The shots a person would line up: each disc behind the ball at the left, middle and right of the goal,
+ *  straight (and, with sight 1, off either side wall), at three strengths; two clearances through the ball;
+ *  one drop back toward its own goal. */
+function testCandidates(b, seat, rng, sight) {
+  const ball = b[BALL], goal = attackGoal(seat), mine = ownGoal(seat), out = [];
+  const gy = goal.y + goal.dir * 3, aims = [];
+  for (const x of [GX0 + 5, (GX0 + GX1) / 2, GX1 - 5]) { aims.push([x, gy]); if (sight >= 1) aims.push([-x, gy], [2 * W - x, gy]); }
+  for (const i of discsOf(seat)) {
+    const d = b[i];
+    for (const [tx, ty] of aims) {
+      let ux = tx - ball.x, uy = ty - ball.y;
+      const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+      const dx = ball.x - ux * (BALL_R + DISC_R) - d.x, dy = ball.y - uy * (BALL_R + DISC_R) - d.y;
+      if (dx * ux + dy * uy <= 0) continue;
+      for (const power of [0.5, 0.75, 1]) out.push({ i, dx, dy, power });
+    }
+    const cx = ball.x - d.x, cy = ball.y - d.y;
+    out.push({ i, dx: cx, dy: cy, power: 1 }, { i, dx: cx, dy: cy, power: 0.6 });
+    const hx = (mine.x + (rng() - 0.5) * 20) - d.x, hy = (mine.y - mine.dir * (14 + rng() * 14)) - d.y;
+    out.push({ i, dx: hx, dy: hy, power: Math.min(1, Math.hypot(hx, hy) / 150 + 0.1) });
+  }
+  return out;
+}
+
+const touchesWall = (o, walls, ball) => {
+  for (const s of walls) {
+    if (s.discOnly && ball) continue;
+    const ex = s.bx - s.ax, ey = s.by - s.ay;
+    let t = ((o.x - s.ax) * ex + (o.y - s.ay) * ey) / (ex * ex + ey * ey);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = s.ax + ex * t - o.x, qy = s.ay + ey * t - o.y;
+    if (qx * qx + qy * qy <= (o.r + 0.05) * (o.r + 0.05)) return true;
+  }
+  return false;
+};
+const near = (p, q) => { const rr = p.r + q.r + 0.05; return (p.x - q.x) ** 2 + (p.y - q.y) ** 2 <= rr * rr; };
+
+/** Play one flick on a copy, watching what touches what. Returns { scorer, steps, b, clean } where `clean`
+ *  says whether a person could have seen this goal coming (see TEST_LEVEL). */
+export function traceShot(bodies, seat, c, sight, open, maxSecs = 9) {
+  const b = cloneBodies(bodies);
+  flick(b, c.i, c.dx, c.dy, c.power);
+  const walls = open ? OPEN_SEGS : SEGS, me = b[c.i], q = b[BALL];
+  let first = null, other = false, bounces = 0, onWall = false;
+  const max = Math.round(maxSecs * 240);
+  let g = -1, k = 0;
+  for (; k < max; k++) {
+    g = step(b, open);
+    if (first === null) {
+      if (near(me, q)) first = 'ball';
+      else if (touchesWall(me, walls, false)) first = 'wall';
+      else for (let j = 1; j < b.length; j++) if (j !== c.i && near(me, b[j])) { first = 'piece'; break; }
+    }
+    if (first === 'ball') {
+      for (let j = 1; j < b.length; j++) if (j !== c.i && near(q, b[j])) other = true;
+      const w = touchesWall(q, walls, true);
+      if (w && !onWall) bounces++;
+      onWall = w;
+    }
+    if (g >= 0) break;
+    if (atRest(b)) { g = restScorer(b); break; }
+  }
+  if (k >= max) { for (const o of b) { o.vx = 0; o.vy = 0; } g = restScorer(b); }
+  return { scorer: g, steps: k, b, clean: first === 'ball' && !other && bounces <= sight };
+}
+
+function noisy(c, lv, rng) {
+  const a = Math.atan2(c.dy, c.dx) + gauss(rng) * lv.aim;
+  return { i: c.i, dx: Math.cos(a), dy: Math.sin(a), power: Math.max(0.2, Math.min(1, c.power * (1 + gauss(rng) * lv.pow))) };
+}
+
+function* planTest(bodies, seat, lv, rng, open) {
+  const list = testCandidates(bodies, seat, rng, lv.sight);
+  const scored = [], goals = [], safe = [];
+  for (const c of list) {
+    const r = traceShot(bodies, seat, c, lv.sight, open);
+    if (r.scorer === (seat ^ 1)) scored.push([-20000, c]);
+    else if (r.scorer === seat) { if (r.clean) goals.push({ c, steps: r.steps }); }   // an unseen goal is not a choice
+    else { const j = judge(r.b, seat, lv); scored.push([j, c]); safe.push([j, c]); }
+    yield;
+  }
+  // How often each seen goal goes in with this level's own hand.
+  let bestGoal = null;
+  for (const gl of goals) {
+    let n = 0;
+    for (let t = 0; t < lv.tries; t++) {
+      const s = noisy(gl.c, lv, rng);
+      const b = cloneBodies(bodies);
+      flick(b, s.i, s.dx, s.dy, s.power);
+      if (runToRest(b, 9, open).scorer === seat) n++;
+      yield;
+    }
+    gl.p = n / lv.tries;
+    if (!bestGoal || gl.p > bestGoal.p || (gl.p === bestGoal.p && gl.steps < bestGoal.steps)) bestGoal = gl;
+    scored.push([10000 * gl.p, gl.c]);
+  }
+  scored.sort((a, b2) => b2[0] - a[0]);
+  let pick;
+  if (lv.sloppy && scored.length > 3 && rng() < lv.sloppy) {
+    const pool = scored.slice(0, Math.max(2, Math.ceil(scored.length / 3)));
+    pick = pool[Math.floor(rng() * pool.length)][1];
+  } else if (bestGoal && bestGoal.p >= lv.minP) pick = bestGoal.c;
+  else if (safe.length) pick = safe.reduce((a, x) => (x[0] > a[0] ? x : a))[1];
+  else pick = (scored[0] || [0, list[0]])[1];
+  return noisy(pick, lv, rng);
 }
