@@ -563,8 +563,8 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
     !/if \(id === 'tictactoe'\) \{\s*\n\s*rows\.sort/.test(src)
     && !/function boardMetricCmp\(id\) \{\s*\n\s*if \(id === 'tictactoe'\)/.test(src),
     'ordering the rows Ultimate-first while numbering the badges on generic wins read 3,2,1,T4,T4,7,6,T8');
-  ok('the badge comparator carries no plays or recency tie-break, so an equal pair ties',
-    /rows\.sort\(\(a, b\) => metric\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\) \|\| recent\(a, b\)\);/.test(src)
+  ok('the badge comparator carries no recency tie-break, and a best-game board is never drawn by fewer plays (2026-11-06)',
+    /rows\.sort\(\(a, b\) => metric\(a, b\) \|\| \(BEST_BOARDS\.has\(id\) \? 0 : boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\) \|\| recent\(a, b\)\);/.test(src)
     && /byMetric \? boardMetricCmp\(id\) : null\);/.test(src));
   ok('[KNOWN-BUG PROBE] GAMES PLAYED knows nothing about difficulty, not even as a tie-break',
     /\(boardPlaysOf\(b, id\) - boardPlaysOf\(a, id\)\)\s*\n\s*\|\| comparePlainMetric\(a, b, id\) \|\| recent\(a, b\)\);/.test(src)
@@ -671,9 +671,10 @@ eq('every other board prints the bare number it always did', formatBoardMetric(7
   ok('the tier chip exists at all', /function tierChipHTML\(tier\)/.test(src));
   ok('Tic Tac Toe ranks on the generic difficulty-first order (2026-11-01)',
     /const base = id === 'tictactoe' \? \(a, b\) => compareBoardRow\(a, b, id\) : boardMetricCmp\(id\);/.test(src));
-  ok('every tie: same number, FEWER plays ranks higher (Matt, 2026-11-06)',
-    /return \(a, b\) => base\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\);/.test(src)
-    && /const cmp = \(a, b\) => base\(a, b\) \|\| \(boardPlaysOf\(a, id\) - boardPlaysOf\(b, id\)\);/.test(src));
+  ok('every tie: the better AVERAGE game ranks higher (Matt, 2026-11-06); a best-game board never by fewer plays',
+    /return \(a, b\) => base\(a, b\) \|\| tieByAverage\(a, b, id\);/.test(src)
+    && /const cmp = \(a, b\) => base\(a, b\) \|\| tieByAverage\(a, b, id\);/.test(src)
+    && /BEST_BOARDS\.has\(id\) \? cmpAvgGame\(a, b, id\)/.test(src));
   // FIVE, not three, since 2026-09-11: the generic card, plus Tic Tac Toe's and Snake's cards in
   // BOTH of their shapes (the split card, and the "Games" shape that leads with the play count).
   // Drop the chip from any one of them and this fails, which is the point.

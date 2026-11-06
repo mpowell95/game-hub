@@ -126,8 +126,11 @@ the rebuilt scores sheets, the My Stats v2 look, the restored records (`RESTORED
 players see its old ranking and a two-line sheet). The "Old" link stays for now (Matt: "Leave for now"). History:
 `docs/HANDOFF-LB2-SESSION7.md` and the older handoffs it names.
 
-**Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: same number,
-FEWER plays ranks higher (points boards: fewer wins, then fewer plays). Only equal on both is tied. `boardMetricCmp`.
+**Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: the BETTER
+AVERAGE game ranks higher. Totals (points, wins, medals): fewer plays/wins = higher average. A best-game board (golf,
+snake...): the stored average (golf strokes a hole, Brick/Tower/Skeeball/Cup Pong solo); none stored (Snake, Ball Run,
+Hill Climb) = stays tied, NEVER fewer plays (Matt: "It should NOT go to player B because they have fewer rounds").
+Only equal on both is tied. `boardMetricCmp` / `tieByAverage`.
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
