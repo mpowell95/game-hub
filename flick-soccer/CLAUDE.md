@@ -167,10 +167,15 @@ side to knock it out"*, then *"make the changes only in Test mode for admin"*. A
 TEST tag by the menu. Vs the computer and pass and play only, **never online** (both phones must run the same physics).
 
 - **Open nets**: `step(b, open)` / `runToRest(b, secs, open)` / `aimContact`/`shotPath` take an `open` flag; open =
-  `OPEN_SEGS` (no disc-only goal lines, nets `OPEN_GOAL_D` 18 deep instead of 9, so a disc fits BEHIND a ball on the
-  line). Absent = closed, byte-identical to before (`mp.js` never passes it). `render.js` `setNet(d)` draws and fits
-  the deeper net. Measured with a ball resting on the line: at depth 9 a disc can never get behind it; at 16+ a disc
-  slips into the net beside it and, from there, most flicks clear it.
+  `OPEN_SEGS` (no disc-only goal lines). **Same size nets** (`OPEN_GOAL_D` = `GOAL_D`, 9): Matt, 2026-11-06, *"I didn't
+  want anything to change size. I just wanted the pieces to be able to go into the net"* (v1482 made them 18 deep for a
+  day; `render.js` `setNet` is now always the normal net). Absent = closed, byte-identical to before (`mp.js` never
+  passes it). Honest limit: a disc (12.4 across) cannot fit behind a ball sitting on the line in a 9-deep net; it can
+  reach it from the side.
+- **Pieces don't stay in the other team's net** (Matt, same day: *"if the play ends and any piece is in the other
+  team's net, it should be automatically moved out a bit"*): `settle()` on a `m.test` match calls `ejectFromNets(b)`
+  when a shot ends with no goal: a disc with any part over the line of the net it ATTACKS goes back just in front of
+  that line (same x, stepped out until it overlaps nothing). A disc in its OWN net stays.
 - **The Test computer** (`TEST_LEVEL`, `planTest` in `ai.js`): sees what a person lining up a shot sees. A goal counts
   only if CLEAN (`traceShot`: the disc touches the ball first, the ball touches no other piece, and goes in straight
   for Easy or off at most one wall or post for Medium/Hard); each seen goal is tried `tries` times with the level's own
@@ -179,11 +184,11 @@ TEST tag by the menu. Vs the computer and pass and play only, **never online** (
 - **Tuned against a stand-in player** (the same planner at sight 1, aim wobble 0.06 rad), calibrated so that against
   TODAY's levels it wins first to 3 about as often as Matt and King of Games really do (real: Easy ~99%, Medium ~22%,
   Hard ~5%, from their first to 1/2/3 records since 2026-10-30; stand-in: ~95%, ~30%, ~5%). Test levels, 200 first-to-3
-  games each vs the stand-in: **Easy 92%, Medium 54%, Hard 24%** (targets 90/50/25; Matt's proposal table). Samples of
+  games each vs the stand-in: **Easy 92%, Medium 54%, Hard 24%** (targets 90/50/25; Matt's proposal table); re-checked on normal-size nets with the move-out rule: **93%, 52%, 21%**. Samples of
   40-60 games swung by 15 points, so tune with 200+.
 - **Recording**: a Test match's result goes to `recordFlickSoccerTest(diff, won)` (the `fx` test bucket, counted by
   nothing) with `test: 1` in its mode. Players' levels, physics and stats are unchanged.
-- Tests: `node flick-soccer/js/test.js` (open vs closed nets, Test matches finish, Test Hard beats Test Easy).
+- Tests: `node flick-soccer/js/test.js` (open vs closed nets, same size, the move-out rule, Test matches finish, Test Hard beats Test Easy).
 
 ## The screen
 
