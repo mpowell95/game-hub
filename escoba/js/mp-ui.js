@@ -38,8 +38,8 @@ const head = (title) => `<div class="eb-ch-head">
 const matchRow = (r) => `<button type="button" class="eb-ch-row${r.yourTurn ? ' is-mine' : ''}" data-action="ch-open" data-id="${esc(r.id)}">
     <span class="eb-ch-face" aria-hidden="true">${esc(r.emoji)}</span>
     <span class="eb-ch-text"><span class="eb-ch-name">${esc(r.name)}</span>
-      <span class="eb-ch-sub">${esc(lenText(r.len))} · ${r.mine | 0}-${r.theirs | 0}</span></span>
-    ${r.yourTurn ? `<span class="eb-ch-pill"><span aria-hidden="true">▶</span> ${esc(t('ch_play'))}</span>` : '<span class="eb-ch-wait" aria-hidden="true">⏳</span>'}
+      <span class="eb-ch-sub">${esc([r.yourTurn ? '' : t('ch_their_turn', { name: r.name }), lenText(r.len), `${r.mine | 0}-${r.theirs | 0}`].filter(Boolean).join(' · '))}</span></span>
+    ${r.yourTurn ? `<span class="eb-ch-pill">${esc(t('ch_play'))}</span>` : '<span class="eb-ch-chev" aria-hidden="true">›</span>'}
   </button>`;
 
 const personRow = (o, src) => `<button type="button" class="eb-ch-row" data-action="ch-pick" data-oi="${src.indexOf(o)}">
@@ -58,7 +58,7 @@ export function paint(ui) {
       <input type="search" class="eb-ch-search" data-role="ch-search" placeholder="${esc(t('ch_search'))}"
         aria-label="${esc(t('ch_search'))}" autocomplete="off" value="${esc(v.q || '')}">
       <div class="eb-ch-list" data-role="ch-list">${peopleHTML(v)}</div>`;
-  } else if (v.screen === 'len') {
+  } else {
     const them = v.them || {};
     // THE DECK IS CHOSEN HERE TOO (2026-10-27, Matt: "fix every other game that's like this"): the
     // challenge carries the sender's card numbering, which used to come silently from the setup
@@ -69,22 +69,42 @@ export function paint(ui) {
         ${['1', '11', '21'].map((l) => `<button type="button" class="eb-btn eb-btn-primary eb-ch-len" data-action="ch-len" data-v="${l}" ${v.busy ? 'disabled' : ''}>${esc(lenText(l))}</button>`).join('')}
       </div>
       ${msg}`;
-  } else {
-    body = `${head(esc(t('ch_entry')))}
-      <button type="button" class="eb-btn eb-btn-primary" data-action="ch-new">${esc(t('ch_new'))}</button>
-      ${msg}
-      <div class="eb-ch-list" data-role="ch-list">${homeListHTML(v)}</div>`;
   }
   ui.el.setup.innerHTML = `<div class="eb-panel eb-ch">${body}</div>`;
   fit(ui);
 }
 
-function homeListHTML(v) {
-  if (!v.rows) return `<p class="eb-ch-note">${esc(t('ch_loading'))}</p>`;
+const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, the Cup Pong shape): the matches going (your turn first,
+ * with Play), then Challenge: the people played most recently, one tap each, and Anyone (the full
+ * list). Paints into `box` from the rows already read (`ui._chv.rows`); the people are kept in
+ * `ui._chv.recent` and the page carries only an index into it, never a code.
+ */
+export function paintOnline(ui, box) {
+  const v = ui._chv;
+  if (!box.isConnected) return;
+  const msg = `<p class="eb-mp-msg" data-role="ch-msg" aria-live="polite">${esc(v.msg || '')}</p>`;
+  if (!v.rows) { box.innerHTML = `<p class="eb-ch-note">${esc(t('ch_loading'))}</p>${msg}`; return; }
   const live = v.rows.filter((r) => !r.over);
-  if (!live.length) return `<p class="eb-ch-note">${esc(t('ch_none'))}</p>`;
-  return live.slice(0, 12).map(matchRow).join('')
-    + (live.length > 12 ? `<p class="eb-ch-note eb-ch-more">${esc(t('ch_more', { n: live.length - 12 }))}</p>` : '');
+  const seen = new Set();
+  v.recent = v.rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  box.innerHTML = (live.length ? `
+      <div class="eb-on-card">
+        <div class="eb-on-head">${esc(t('ch_matches'))}</div>
+        <div class="eb-ch-list" data-role="ch-list">${live.map(matchRow).join('')}</div>
+      </div>` : '') + `
+      <div class="eb-on-card">
+        <div class="eb-on-head">${esc(t('ch_challenge'))}</div>
+        <div class="eb-faces">
+          <button type="button" class="eb-face is-any" data-action="ch-new"><span class="eb-face-dot" aria-hidden="true">+</span><span class="eb-face-name">${esc(t('ch_anyone'))}</span></button>
+          ${v.recent.map((o, i) => `<button type="button" class="eb-face" data-action="ch-recent" data-oi="${i}"><span class="eb-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="eb-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>${msg}`;
+  fit(ui);
 }
 function peopleHTML(v) {
   if (!v.opps) return `<p class="eb-ch-note">${esc(t('ch_loading'))}</p>`;
@@ -109,6 +129,7 @@ export function fit(ui) {
   const list = ui.el.setup.querySelector('[data-role="ch-list"]');
   const panel = ui.el.setup.querySelector('.eb-panel');
   if (!list || !panel) return;
+  // Online tab: matches are cut to what fits, then say how many are not shown.
   const de = document.documentElement;
   const over = () => de.scrollHeight > window.innerHeight + 1 || panel.getBoundingClientRect().bottom > window.innerHeight - 4;
   let rows = [...list.querySelectorAll('.eb-ch-row')];
@@ -145,4 +166,4 @@ export function resultHTML({ title, sub, players, actions, close = 'ch-close-res
   </div>`;
 }
 
-export default { paint, repaintPeople, fit, say, resultHTML, reasonText, lenText };
+export default { paint, paintOnline, repaintPeople, fit, say, resultHTML, reasonText, lenText };

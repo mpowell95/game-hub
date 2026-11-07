@@ -822,5 +822,35 @@
 .cc-root .cc-ch-lens { display: flex; flex-direction: column; gap: 10px; }
 .cc-root .cc-ch-len { width: 100%; min-height: 52px; font-size: 1.05rem; }
 .cc-root .cc-ch-score { margin: -4px 0 0; text-align: center; font-weight: 700; }
+
+/* SETUP TABS (2026-11-07): Online | Solo. The panel sits at the top (never centred), so the tabs stay
+   put whichever tab is open. Selected = the raised pill AND the bold label, never colour alone. */
+.cc-root .cc-tabs .cc-seg, .hub-main .cc-root .cc-tabs .cc-seg {
+  font-size: 17px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+}
+.cc-root .cc-tabs .cc-seg.is-selected { font-weight: 800; color: var(--cc-ink); }
+.cc-root .cc-tabs .cc-seg:not(.is-selected) { color: var(--cc-ink); }
+.cc-root .cc-card-panel.cc-tabs-panel { padding: 18px 12px; }
+.cc-root .cc-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.cc-root .cc-tab-n[hidden] { display: none; }
+.cc-root .cc-on-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; border-radius: 14px; border: 1px solid var(--cc-surface-2); background: var(--cc-surface); }
+.cc-root .cc-on-head { padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.cc-root .cc-on-card .cc-ch-name { font-size: 17px; }
+.cc-root .cc-on-card .cc-ch-sub { font-size: 15px; color: var(--cc-ink); opacity: 0.85; }
+.cc-root .cc-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.cc-root .cc-faces { display: flex; gap: 4px; justify-content: space-between; }
+.cc-root .cc-face {
+  appearance: none; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--cc-ink); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.cc-root .cc-face.is-any { flex: 1.5 1 0; }
+.cc-root .cc-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--cc-surface-2); }
+.cc-root .cc-face.is-any .cc-face-dot { background: none; border: 2px dashed var(--cc-muted); font-size: 28px; font-weight: 400; box-sizing: border-box; }
+.cc-root .cc-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-root .cc-room-row { display: flex; gap: 10px; }
+.cc-root .cc-room-row .cc-btn { flex: 1 1 0; font-size: 17px; min-height: 48px; }
 /* The quick-chat layer (js/match-chat-ui.js) is absolutely placed in the root. */
 .cc-root.cc-ch-on { position: relative; }

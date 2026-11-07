@@ -530,3 +530,40 @@
    root's user-select: none (iOS Safari will not type into an input that has it). */
 .dt-root .ghc-panel { touch-action: pan-y; }
 .dt-root .ghc-input { -webkit-user-select: text; user-select: text; }
+
+/* TABS: Online | Computer (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
+   label, never colour alone. The setup card is pinned to the top so the tabs never move between panels. */
+.dt-root .dt-ov-setup > .dt-card { margin-block: 0 auto; }
+.dt-root .dt-tabs { display: flex; width: 100%; padding: 2px; background: #efe3cb; border-color: #e0cfae; }
+.dt-root .dt-tabs .dt-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: #6b5440; font-size: 17px; }
+.dt-root .dt-tabs .dt-tab[aria-pressed="true"] { background: #fff; color: var(--dt-ink); font-weight: 800; box-shadow: 0 0 0 2px #b8282d; }
+.dt-root .dt-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.dt-root .dt-tab-n[hidden] { display: none; }
+.dt-root .dt-panel { display: flex; flex-direction: column; gap: 9px; }
+.dt-root .dt-panel[hidden] { display: none; }
+.dt-root .dt-online { display: flex; flex-direction: column; gap: 10px; }
+.dt-root .dt-on-sec { display: flex; flex-direction: column; gap: 6px; }
+.dt-root .dt-on-rows { display: flex; flex-direction: column; gap: 6px; }
+.dt-root .dt-on-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 18px; font-weight: 900; color: var(--dt-ink); }
+.dt-root .dt-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 2px solid #e0cfae;
+  background: #fff; color: var(--dt-ink); font: inherit; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.dt-root .dt-online .dt-mrow-name { font-size: 17px; }
+.dt-root .dt-online .dt-mrow-sub { font-size: 15px; color: var(--dt-ink); opacity: 0.85; }
+.dt-root .dt-online .dt-mrow.is-mine { box-shadow: inset 4px 0 0 #ffce3a, 0 0 0 1px #b8282d inset; }
+.dt-root .dt-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.dt-root .dt-faces { display: flex; gap: 6px; justify-content: space-between; }
+.dt-root .dt-face {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--dt-ink); font: inherit;
+}
+.dt-root .dt-face-dot { width: 48px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: #efe3cb; }
+.dt-root .dt-face.is-any .dt-face-dot { background: none; border: 2px dashed #7a6048; font-size: 28px; box-sizing: border-box; }
+.dt-root .dt-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dt-root .dt-online .dt-mp-note { font-size: 15px; color: var(--dt-ink); }
+.dt-root .dt-face.is-any { flex: 1.4 1 0; }
+.dt-root .dt-more { min-height: 44px; border: 0; background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; cursor: pointer; touch-action: manipulation; }

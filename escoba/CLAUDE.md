@@ -110,8 +110,9 @@ solo-only player); the leaderboard's Escoba board shows an **MP** chip per playe
 in all multiplayer games too."* Two players, Darts' model; live rooms are untouched (no `js/net.js` change).
 
 - **Files**: `js/mp.js` (data + the replay), `js/mp-ui.js` (screens, lazy), `js/alert.js` (launcher;
-  `alerts:` on the hub entry). Entry: the **Challenges** link beside How to play (same row: the setup
-  screen had 6px to spare at 390x664). Home (New challenge, your matches, "▶ Play" on yours), pick a
+  `alerts:` on the hub entry). Entry: the setup screen's **Online | Solo** tabs (2026-11-07, the Cup Pong shape: `renderSetup`,
+  `_tab`, `mp-ui.js` `paintOnline`; Online opens when a match is going, else Solo; badge = your turn; Host and Join sit under the
+  matches and open the old host card / code entry inside Online). No separate home screen: every back lands on Online. Then pick a
   person (search), pick the length (**1 hand / To 11 / To 21**, the sender's choice), then the table.
 - **Node** `escoba/games/<id>` + `escoba/index/<CODE>/<id>` + `escoba/chat/<id>`; in
   `database.rules.json` and the backup `BRANCHES`. Rules live 2026-10-18; `escobaTurnPush` deployed

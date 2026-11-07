@@ -184,7 +184,11 @@ class BattleshipUI {
     this.view = 'setup';   // 'setup' | 'placement' | 'botplace' | 'battle'
     this._setupExpanded = null;
     this._setup = this._loadSetup();
-    this._mode = 'solo';   // 'solo' | 'host' | 'join'
+    this._mode = 'solo';   // 'solo' | 'join' | 'ch' (Online's home and its picker); 'host' is the old Host view, no longer offered
+    // SETUP TABS (2026-11-07, Matt: "Do the same tabs for the other multiplayer games"): Online | Computer.
+    // `_tab` = the tab the player tapped (wins until the game is closed); without it the card opens on
+    // Online when a match is going, else Computer (_paintMpBadge, once the matches have been read).
+    this._tab = null;
     this._lobby = null;    // null | 'host' | 'join'
     this._mpBusy = false;
     this._mpError = '';
@@ -238,6 +242,7 @@ class BattleshipUI {
 
     // Challenges (the `_ch*` methods). `ch` is the open match's link, null off the battle screen.
     this.ch = null;
+    this._chTurns = 0;         // matches on your turn (the Online tab's number)
     this._chRows = null;       // your matches (mp.js readMyGames), null while loading
     this._chNote = '';         // one line on the list: why we came back to it
     this._chPick = null;       // the pick-a-person view: { opps|null, q }
@@ -456,18 +461,22 @@ class BattleshipUI {
       <h1 class="bs-logo">${esc(title)}</h1>`;
   }
 
-  /** Multiplayer: Host / Join / Challenge, the EXISTING lobby and challenge list (no second path). */
+  /** Multiplayer sub-cards: the EXISTING lobby, the join code entry, the person picker and the
+   *  board/shots choice (no second path). Online's home itself is `_onlineHTML`. */
   _friendHTML() {
     if (this._lobby) return this._lobbyHTML();
     if (this._mode === 'ch' && this._chChoose) return this._chChooseHTML();
     if (this._mode === 'ch' && this._chPick) return this._chPickerHTML();
-    const seg = this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')], ['ch', t('mode_ch')]]);
-    if (this._mode === 'join') return `${seg}${this._joinBodyHTML()}`;
-    if (this._mode === 'ch') return `${seg}${this._chHTML()}`;
+    if (this._mode === 'join') return this._joinBodyHTML();
     const msg = this._mpError || (this._mpBusy ? t('mp_creating_room') : '');
-    return `${seg}
-      ${msg ? `<p class="bs-mp-msg">${esc(msg)}</p>` : ''}
+    return `${msg ? `<p class="bs-mp-msg">${esc(msg)}</p>` : ''}
       <button type="button" class="bs-go" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`;
+  }
+
+  /** The tab bar: Online (with the number of matches on your turn) | Computer. */
+  _tabsHTML(cur) {
+    const tab = (v, label) => `<button type="button" class="bs-segbtn" data-action="set-tab" data-v="${v}" aria-pressed="${v === cur}"><span>${esc(label)}</span>${v === 'online' ? `<b class="bs-tab-n" data-role="mp-badge" ${this._chTurns ? '' : 'hidden'}>${this._chTurns | 0}</b>` : ''}</button>`;
+    return `<div class="bs-seg bs-tabs" role="group">${tab('online', t('tab_online'))}${tab('cpu', t('computer'))}</div>`;
   }
 
   /** SCREEN 1, THE SETUP CARD (rebuilt 2026-10-27). Matt: "make it be more in line with other gamehub
@@ -494,11 +503,23 @@ class BattleshipUI {
     const id = this._identity();
     const s = this._setup;
 
-    if (this._lobby || this._mode === 'host' || this._mode === 'join' || this._mode === 'ch') {
-      const back = this._lobby ? 'mp-cancel' : this._chChoose ? 'ch-choose-back' : this._chPick ? 'ch-pick-back' : 'mode-solo';
+    const subCard = this._lobby || this._mode === 'host' || this._mode === 'join' || (this._mode === 'ch' && (this._chChoose || this._chPick));
+    if (subCard) {
+      const back = this._lobby ? 'mp-cancel' : this._chChoose ? 'ch-choose-back' : this._chPick ? 'ch-pick-back' : 'mp-online';
       this.shell.innerHTML = `<div class="bs-setup"><div class="bs-setcard bs-setcard-mp">
         ${this._cardTop(t('multiplayer'), { back })}
         ${this._friendHTML()}
+      </div></div>`;
+      this._fitScene();
+      return;
+    }
+
+    // Online's home (matches, who to challenge, Host / Join) is the same card, the Online tab lit.
+    if (this._mode === 'ch') {
+      this.shell.innerHTML = `<div class="bs-setup"><div class="bs-setcard">
+        ${this._cardTop(t('title'))}
+        ${this._tabsHTML('online')}
+        ${this._onlineHTML()}
       </div></div>`;
       this._fitScene();
       return;
@@ -508,11 +529,7 @@ class BattleshipUI {
     const firstName = (n) => `<span class="bs-seg-name">${esc(n)}</span>`;
     this.shell.innerHTML = `<div class="bs-setup"><div class="bs-setcard">
       ${this._cardTop(t('title'))}
-      <button type="button" class="bs-mprow" data-action="play-friend">
-        <b>${esc(t('multiplayer'))}</b>
-        <span class="bs-mprow-badge" data-role="mp-badge" hidden></span>
-        <span class="bs-mprow-chev" aria-hidden="true">›</span>
-      </button>
+      ${this._tabsHTML('cpu')}
       ${this._seg('set-diff', s.difficulty, diffs, t('row_difficulty'))}
       <div class="bs-field">
         <span class="bs-label">${esc(t('grid_size'))}</span>
@@ -532,17 +549,21 @@ class BattleshipUI {
     this._paintMpBadge();
   }
 
-  /** "N" on the Multiplayer row: challenges waiting on you (the index, one small read). */
+  /** The matches, read once while the Computer tab shows: "N" on the Online tab (your turn), and Online
+   *  opening by itself when a match is going and no tab was tapped. */
   _paintMpBadge() {
     const gen = this._chGen;
     Promise.resolve().then(() => CH.readMyGames()).then((rows) => {
       if (this._dead || gen !== this._chGen || this.view !== 'setup') return;
-      const n = (rows || []).filter((r) => !r.over && r.yourTurn).length;
+      const list = rows || [];
+      this._chTurns = list.filter((r) => !r.over && r.yourTurn).length;
       const el = this.shell && this.shell.querySelector('[data-role="mp-badge"]');
-      if (!el) return;
-      el.textContent = String(n);
-      el.setAttribute('aria-label', t('ch_your_turn'));
-      el.hidden = !n;
+      if (el) {
+        el.textContent = String(this._chTurns);
+        el.setAttribute('aria-label', t('ch_your_turn'));
+        el.hidden = !this._chTurns;
+      }
+      if (!this._tab && this._mode === 'solo' && !this._lobby && list.some((r) => !r.over)) this._chHome();
     }).catch(() => { /* no badge offline */ });
   }
 
@@ -2983,7 +3004,7 @@ class BattleshipUI {
     else if (mp && this._mpInGame()) LL.disarmLeave(STATS_ID);
     this.mp = null;
     this._mpClearSave();
-    this._lobby = null; this._mode = 'solo';
+    this._lobby = null; this._mode = 'ch'; this._tab = 'online';   // back on the Online tab, where the room was made
     this._mpPendingCode = null; this._mpJoinedCode = null; this._mpLobbyRoom = null;
     this._mpStatusMsg = '';
     if (mp && mp.code && costs) LL.leaveWithForfeit(net, mp.code, mp.role, mp.role, mp.gameNum).catch(() => {});
@@ -3230,6 +3251,7 @@ class BattleshipUI {
     this._chChoose = null;
     this._lobby = null;
     this._mode = 'ch';
+    this._tab = 'online';
     this._chNote = note;
     this.closeOverlays();
     this.renderSetup();
@@ -3261,6 +3283,7 @@ class BattleshipUI {
   _chApplyRows(rows) {
     try { CH.recordFinished(rows); } catch (err) { console.warn('[battleship] recordFinished', err); }
     this._chRows = rows;
+    this._chTurns = (rows || []).filter((r) => !r.over && r.yourTurn).length;
     if (this._chOnList()) { this.renderSetup(); this._chShowUnseen(rows); }
   }
 
@@ -3321,45 +3344,62 @@ class BattleshipUI {
     </div>`;
   }
 
-  _chHTML() {
-    const note = this._chNote ? `<p class="bs-mp-msg" aria-live="polite">${esc(this._chNote)}</p>` : '';
-    const rows = this._chRows;
-    let list;
-    if (!rows) list = '<p class="bs-ch-note">…</p>';
-    else {
-      const live = rows.filter((r) => !r.over);
-      const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-      // NO SCROLLING (root CLAUDE.md): at most four rows, one fewer for a note and one fewer for
-      // Notify me (measured in the hub at 390x664), then "+N more". The Multiplayer screen lists
-      // every match.
-      let left = 4 - (this._chNote ? 1 : 0) - (this._chPushOff ? 1 : 0);
-      const take = (arr) => { const out = arr.slice(0, left); left -= out.length; return out; };
-      const m = take(mine), th = take(theirs);
-      const more = live.length - m.length - th.length;
-      list = (m.length ? `<h3 class="bs-ch-h">${esc(t('ch_your_turn'))} <span>${mine.length}</span></h3>${m.map((r) => this._chRowHTML(r)).join('')}` : '')
-        + (th.length ? `<h3 class="bs-ch-h">${esc(t('ch_their_turn'))} <span>${theirs.length}</span></h3>${th.map((r) => this._chRowHTML(r)).join('')}` : '')
-        + (more > 0 ? `<p class="bs-ch-note">${esc(t('ch_more', { n: more }))}</p>` : '')
-        + (live.length ? '' : `<p class="bs-ch-note">${esc(t('ch_none'))}</p>`);
-    }
-    const notify = this._chPushOff
-      ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="ch-notify">${esc(t('ch_notify'))}</button>` : '';
+  /** THE ONLINE TAB (the Cup Pong shape): the matches going (your turn first, with Play), then
+   *  Challenge: the people played most recently, one tap each, and Anyone (the person list), then Host
+   *  and Join (the live rooms). The people are kept in `_chRecent`; the page carries only an index. */
+  _onlineHTML() {
     // An mp.js from an older build (mid-update, see CH_SHOTS above): no challenge can be played
     // with it, so the only button is the update. Never a crash.
     if (this._chStale()) {
       return `<button type="button" class="bs-go bs-ch-newbtn" data-action="mp-update-required">${esc(t('mp_update_required'))}</button>`;
     }
-    return `<button type="button" class="bs-go bs-ch-newbtn" data-action="ch-new">${esc(t('ch_new'))}</button>
-      ${note}
-      <div class="bs-ch-list">${list}</div>
+    const msgText = this._chNote || this._mpError;
+    const note = msgText ? `<p class="bs-mp-msg" aria-live="polite">${esc(msgText)}</p>` : '';
+    const rows = this._chRows;
+    let matches = '';
+    if (!rows) matches = '<p class="bs-ch-note">…</p>';
+    else {
+      const live = rows.filter((r) => !r.over);
+      const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
+      // NO SCROLLING (root CLAUDE.md): at most three rows (measured in the hub at 390x664), one fewer
+      // for a note and one fewer for Notify me, then "+N more". The Multiplayer screen lists every match.
+      let left = 3 - (msgText ? 1 : 0) - (this._chPushOff ? 1 : 0);
+      const take = (arr) => { const out = arr.slice(0, left); left -= out.length; return out; };
+      const shown = take(mine).concat(take(theirs));
+      const more = live.length - shown.length;
+      matches = live.length ? `<div class="bs-on-card">
+          <div class="bs-on-head">${esc(t('ch_matches'))}</div>
+          <div class="bs-ch-list">${shown.map((r) => this._chRowHTML(r)).join('')}${more > 0 ? `<p class="bs-ch-note">${esc(t('ch_more', { n: more }))}</p>` : ''}</div>
+        </div>` : '';
+    }
+    const seen = new Set();
+    this._chRecent = (rows || []).slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+      .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+    const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+    const notify = this._chPushOff
+      ? `<button type="button" class="bs-btn bs-btn-ghost bs-btn-small" data-action="ch-notify">${esc(t('ch_notify'))}</button>` : '';
+    return `${note}${matches}
+      <div class="bs-on-card">
+        <div class="bs-on-head">${esc(t('ch_challenge'))}</div>
+        <div class="bs-faces">
+          <button type="button" class="bs-face is-any" data-action="ch-new"><span class="bs-face-dot" aria-hidden="true">+</span><span class="bs-face-name">${esc(t('ch_anyone'))}</span></button>
+          ${this._chRecent.map((o, i) => `<button type="button" class="bs-face" data-action="ch-recent" data-oi="${i}"><span class="bs-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="bs-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>
+      <div class="bs-room-row">
+        <button type="button" class="bs-btn bs-btn-ghost" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${esc(t('mode_host'))}</button>
+        <button type="button" class="bs-btn bs-btn-ghost" data-action="set-mode" data-v="join">${esc(t('mode_join'))}</button>
+      </div>
       ${notify}`;
   }
 
   _chRowHTML(r) {
-    const sub = r.mine || r.theirs ? `${myName()} ${r.mine} · ${r.name || '?'} ${r.theirs}` : '';
+    const sub = [r.yourTurn ? '' : t('ch_their_turn_of', { name: String(r.name || '?').trim().split(/\s+/)[0] }), r.mine || r.theirs ? `${r.mine}-${r.theirs}` : ''].filter(Boolean).join(' · ');
     return `<button type="button" class="bs-ch-row${r.yourTurn ? ' is-mine' : ''}" data-action="ch-open" data-id="${esc(r.id)}">
       <span class="bs-ch-face" aria-hidden="true">${esc(r.emoji)}</span>
       <span class="bs-ch-text"><span class="bs-ch-name">${esc(r.name || '?')}</span>${sub ? `<span class="bs-ch-sub">${esc(sub)}</span>` : ''}</span>
-      <span class="bs-ch-chev" aria-hidden="true">${r.yourTurn ? '▶' : '›'}</span>
+      ${r.yourTurn ? `<span class="bs-play-pill">${esc(t('ch_play'))}</span>` : '<span class="bs-ch-chev" aria-hidden="true">›</span>'}
     </button>`;
   }
 
@@ -4081,6 +4121,20 @@ class BattleshipUI {
     } else if (action === 'set-first') {
       const v = btn.dataset.v;
       if (v === 'you' || v === 'opponent' || v === 'alternate') { this._setup.firstMode = v; this._saveSetup(); this.renderSetup(); }
+    } else if (action === 'set-tab') {
+      this._mpError = '';
+      if (btn.dataset.v === 'online') { this._tab = 'online'; this._chHome(); return; }
+      this._tab = 'cpu';
+      this._mode = 'solo'; this._mpJoinCode = ''; this._chPick = null; this._chChoose = null; this._chNote = ''; this._chGen++; this.renderSetup();
+    } else if (action === 'ch-recent') {
+      const o = (this._chRecent || [])[Number(btn.dataset.oi)];
+      if (o && o.code) {
+        const gate = onlineGate();
+        if (gate) { this._chNote = onlineGateText(gate); this.renderSetup(); return; }
+        this._chChooseFor(o);
+      }
+    } else if (action === 'mp-online') {
+      this._mpError = ''; this._mpJoinCode = ''; this._chHome();
     } else if (action === 'set-mode') {
       this._mode = btn.dataset.v; this._setupExpanded = null; this._mpError = '';
       if (this._mode === 'ch') { this._chHome(); return; }

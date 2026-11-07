@@ -640,3 +640,28 @@
   .ar-root .ar-hint, .ar-root .ar-hintdot { transition: none; }
 }
 @keyframes ar-banner-still { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* SETUP TABS (2026-11-07): Online | Computer | 2 players, the Cup Pong way. Pinned to the top so the tabs never
+   move between panels. Light card, so ink on white; the chosen tab is the raised pill AND a bolder label. */
+.ar-root .ar-ov-setup > .ar-card { margin-block: 0 auto; }
+.ar-root .ar-tabs { display: flex; width: 100%; }
+.ar-root .ar-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 17px; gap: 6px; }
+.ar-root .ar-tabs .gh-seg__item > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-root .ar-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }
+.ar-root .ar-tab-n { min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900; }
+.ar-root .ar-tab-n[hidden] { display: none; }
+.ar-root .ar-panel { display: flex; flex-direction: column; gap: 9px; }
+.ar-root .ar-panel[hidden] { display: none; }
+.ar-root .ar-online { display: flex; flex-direction: column; gap: 10px; }
+.ar-root .ar-on-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; background: #fff; border: 2px solid #cbd9ee; }
+.ar-root .ar-on-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 18px; font-weight: 900; }
+.ar-root .ar-rec-chip { margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 2px solid #cbd9ee; background: none; color: var(--ar-ink); font: inherit; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; touch-action: manipulation; }
+.ar-root .ar-mrow-on .ar-mrow-name { font-size: 17px; }
+.ar-root .ar-mrow-on .ar-mrow-sub { font-size: 15px; color: var(--ar-ink); }
+.ar-root .ar-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.ar-root .ar-faces { display: flex; gap: 6px; justify-content: space-between; }
+.ar-root .ar-face { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: none; padding: 4px 0; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation; }
+.ar-root .ar-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: #e3ecf8; }
+.ar-root .ar-face.is-any .ar-face-dot { background: none; border: 2px dashed #6b7c99; font-size: 28px; font-weight: 400; color: var(--ar-ink); box-sizing: border-box; }
+.ar-root .ar-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-root .ar-face.is-any { flex: 1.6 1 0; }

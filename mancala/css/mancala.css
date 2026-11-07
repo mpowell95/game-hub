@@ -957,3 +957,7 @@
     transition:none;
   }
 }
+
+/* TABS: Online | Solo (2026-11-07). Appended so file:line KNOWN_GAPS entries stay put. */
+.mancala .mc-tabs .mc-segbtn { font-size: 17px; }
+.mancala .mc-tabs { width: 100%; box-sizing: border-box; }

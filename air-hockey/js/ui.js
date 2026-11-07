@@ -237,56 +237,58 @@ class AirHockeyUI {
           </div>
         </div>
 
-        <div class="ah-ov" data-ov="menu" hidden>
+        <div class="ah-ov ah-ov-top" data-ov="menu" hidden>
           <div class="gh-modal ah-card">
             <h2 class="ah-title" data-l="title"></h2>
             <p class="ah-tag" data-l="tagline"></p>
-            <p class="ah-label" data-l="difficulty"></p>
-            <div class="gh-seg ah-seg" role="group" data-role="diffs"></div>
-            <div class="ah-tablerow">
-              <span class="ah-label" data-role="tableLabel"></span>
-              <div class="ah-swatches" role="group" data-role="tables"></div>
+            <div class="gh-seg ah-tabs" role="group" data-role="tabs">
+              <button type="button" class="gh-seg__item" data-tab="online" aria-pressed="false"><span data-l="tab_online"></span></button>
+              <button type="button" class="gh-seg__item" data-tab="cpu" aria-pressed="true"><span data-l="tab_cpu"></span></button>
             </div>
-            <p class="ah-rec" data-role="rec"></p>
+            <div class="ah-panel" data-panel="online" hidden>
+              <div data-role="lobbyMain">
+                <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="invite"><span data-l="invite_player"></span></button>
+                <button type="button" class="gh-btn gh-btn--block ah-mt" data-act="create"><span data-l="create_game"></span></button>
+                <p class="ah-label" data-l="or_join"></p>
+                <div class="ah-joinrow">
+                  <input class="gh-input ah-code" data-role="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" data-lp="code_ph">
+                  <button type="button" class="gh-btn" data-act="join"><span data-l="join"></span></button>
+                </div>
+              </div>
+              <div data-role="lobbyInvite" hidden>
+                <label class="ah-label" for="ah-who" data-l="invite_who"></label>
+                <select class="gh-input ah-select" id="ah-who" data-role="who"></select>
+                <div class="ah-actions">
+                  <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="sendInvite"><span data-l="send_invite"></span></button>
+                  <button type="button" class="gh-btn gh-btn--block" data-act="inviteBack"><span data-l="back"></span></button>
+                </div>
+              </div>
+              <div data-role="lobbyWait" hidden>
+                <p class="ah-note" data-role="invitedLine" hidden></p>
+                <p class="ah-label" data-l="share_code"></p>
+                <p class="ah-bigcode" data-role="bigCode"></p>
+                <p class="ah-rec" data-l="waiting_join"></p>
+                <button type="button" class="gh-btn gh-btn--block" data-act="cancelRoom"><span data-l="cancel"></span></button>
+              </div>
+              <p class="ah-err" data-role="lobbyErr" role="alert"></p>
+              <p class="ah-rec" data-role="recOnline"></p>
+            </div>
+            <div class="ah-panel" data-panel="cpu">
+              <p class="ah-label" data-l="difficulty"></p>
+              <div class="gh-seg ah-seg" role="group" data-role="diffs"></div>
+              <div class="ah-tablerow">
+                <span class="ah-label" data-role="tableLabel"></span>
+                <div class="ah-swatches" role="group" data-role="tables"></div>
+              </div>
+              <p class="ah-rec" data-role="rec"></p>
+              <div class="ah-actions">
+                <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="continue" hidden><span data-l="continue"></span></button>
+                <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"></button>
+              </div>
+            </div>
             <div class="ah-actions">
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="continue" hidden><span data-l="continue"></span></button>
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="play"></button>
-              <button type="button" class="gh-btn gh-btn--block" data-act="online"><span data-l="play_online"></span></button>
               <button type="button" class="gh-btn gh-btn--block" data-act="howto"><span data-l="howto"></span></button>
             </div>
-          </div>
-        </div>
-
-        <div class="ah-ov" data-ov="online" hidden>
-          <div class="gh-modal ah-card" role="dialog" aria-modal="true">
-            <button type="button" class="gh-modal__close" data-act="onlineClose" data-la="aria_close">${X_SVG}</button>
-            <h2 class="ah-title ah-title-sm" data-l="play_online"></h2>
-            <div data-role="lobbyMain">
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="invite"><span data-l="invite_player"></span></button>
-              <button type="button" class="gh-btn gh-btn--block ah-mt" data-act="create"><span data-l="create_game"></span></button>
-              <p class="ah-label" data-l="or_join"></p>
-              <div class="ah-joinrow">
-                <input class="gh-input ah-code" data-role="codeIn" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" data-lp="code_ph">
-                <button type="button" class="gh-btn" data-act="join"><span data-l="join"></span></button>
-              </div>
-            </div>
-            <div data-role="lobbyInvite" hidden>
-              <label class="ah-label" for="ah-who" data-l="invite_who"></label>
-              <select class="gh-input ah-select" id="ah-who" data-role="who"></select>
-              <div class="ah-actions">
-                <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="sendInvite"><span data-l="send_invite"></span></button>
-                <button type="button" class="gh-btn gh-btn--block" data-act="inviteBack"><span data-l="back"></span></button>
-              </div>
-            </div>
-            <div data-role="lobbyWait" hidden>
-              <p class="ah-note" data-role="invitedLine" hidden></p>
-              <p class="ah-label" data-l="share_code"></p>
-              <p class="ah-bigcode" data-role="bigCode"></p>
-              <p class="ah-rec" data-l="waiting_join"></p>
-              <button type="button" class="gh-btn gh-btn--block" data-act="cancelRoom"><span data-l="cancel"></span></button>
-            </div>
-            <p class="ah-err" data-role="lobbyErr" role="alert"></p>
-            <p class="ah-rec" data-role="recOnline"></p>
           </div>
         </div>
 
@@ -658,16 +660,18 @@ class AirHockeyUI {
       this._syncRec();
       return;
     }
+    const tabB = e.target.closest('[data-tab]');
+    if (tabB) { this._showTab(tabB.dataset.tab); return; }
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
+    // Starting a match vs the computer closes a room still waiting for a guest.
+    if ((act === 'play' || act === 'continue') && this._pending) this._cancelRoom();
     if (act === 'rematch' && this.online) { this.online.session.rematch(performance.now()); this._fillOver(); }
     else if (act === 'continue') this._continue();
     // New game over a saved match throws it away: two taps, the second saying it is a loss.
     else if (act === 'play' && readSave() && b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = t('quit_loss'); }
     else if (act === 'play' || act === 'rematch') { saveSettings(this.settings); this._play(); }
-    else if (act === 'online') this._openOnline();
-    else if (act === 'onlineClose') { this._cancelRoom(); this._toMenu(); }
     else if (act === 'create') this._createRoom();
     else if (act === 'invite') this._openInvite();
     else if (act === 'sendInvite') this._sendInvite();
@@ -768,18 +772,26 @@ class AirHockeyUI {
     this.root.querySelector('[data-role="lobbyErr"]').textContent = t('connecting');
     this.root.querySelectorAll('[data-act="create"], [data-act="join"], [data-act="invite"], [data-act="sendInvite"]').forEach((b) => { b.disabled = true; });
   }
+  _atSetup() { return this.screen === 'online' || this.screen === 'menu'; }
+  /** Setup tabs (2026-11-07): Online | Computer. The online lobby lives in the menu card's Online panel. */
+  _showTab(k) {
+    this._tab = k;
+    this.root.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === k)));
+    this.root.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== k; });
+  }
   _openOnline() {
-    this.screen = 'online';
+    this.screen = 'menu';
     this._lobbyView('main');
     this._lobbyError('');
     this._syncRec();
-    this._showOnly('online');
+    this._showTab('online');
+    this._showOnly('menu');
   }
   async _createRoom() {
     this._lobbyBusy();
     const net = await this._net();
     const r = await net.createRoom(ROOM_GAME, {}, this._me());
-    if (instance !== this || this.screen !== 'online') { if (r && r.code) net.leaveRoom(r.code, 'host'); return null; }
+    if (instance !== this || !this._atSetup()) { if (r && r.code) net.leaveRoom(r.code, 'host'); return null; }
     if (!r || r.error) { this._lobbyError(r && r.error === 'busy' ? 'err_busy' : 'err_offline', onlineGateText(r && r.error)); return null; }
     this._lobbyError('');
     this._lobbyView('wait', r.code);
@@ -809,7 +821,7 @@ class AirHockeyUI {
     try { list = await (await import('../../js/messages.js')).readContacts(); } catch { list = []; }
     // Only people who may play online (js/online-gate.js): an invite to anyone else could never be joined.
     list = list.filter((c) => c && codeMayPlayOnline(c.code));
-    if (instance !== this || this.screen !== 'online') return;
+    if (instance !== this || !this._atSetup()) return;
     this._contacts = list;
     if (!list.length) { sel.innerHTML = ''; this._lobbyError('invite_none'); return; }
     // Starts on "Choose a player" so the box reads as a list, not as one fixed name.
@@ -861,7 +873,7 @@ class AirHockeyUI {
       if (g !== ROOM_GAME) { this._lobbyError('err_not_found'); return; }
     } catch { this._lobbyError('err_offline'); return; }
     const r = await net.joinRoom(code, this._me());
-    if (instance !== this || this.screen !== 'online') return;
+    if (instance !== this || !this._atSetup()) return;
     if (!r || r.error) {
       const k = { 'not-found': 'err_not_found', full: 'err_full', version: 'err_version' }[r && r.error] || 'err_offline';
       this._lobbyError(k, onlineGateText(r && r.error));

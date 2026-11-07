@@ -432,3 +432,9 @@ Matt: "We should add resume to the other games that don't save". Vs the computer
 - Setup shows **Continue** + **New game**; New game over a save anyone has rolled in asks twice ("Counts as a loss", `quit_loss`) and records ONE loss (`takeSavedLoss`: marker armed and taken at once, mode `first` from the save).
 - Leaving (hub, unmount, a closed app) is not quitting: no marker armed, solo `quitCostsLoss()`/`isInProgress()` false. A continued computer turn picks its holds if the save was left before it chose (`aiHeldAt`).
 - Tests: `node tools/test-quit-loss.mjs [--browser]` (Yahtzee lines), `node tools/test-yahtzee-ai.mjs`.
+
+## Setup tabs (2026-11-07, Matt: "Do the same tabs for the other multiplayer games")
+
+Setup is **Online | Vs Computer** tabs (`setupHeadHTML`; `mpMode` is `'solo'` or `'host'` = the Online tab). Online holds Create Room and the
+room-code Join, moved from the old Host/Join segments, handlers unchanged. Live rooms only (no challenges), so it opens on Vs Computer.
+Screen pinned to the top. Layout only: no recorder or save touched.

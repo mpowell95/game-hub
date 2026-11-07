@@ -483,8 +483,8 @@ class BoggleUI {
 
   // --- setup screen -----------------------------------------------------------
 
-  _seg(action, value, ids, labelKeys, shapes) {
-    return `<div class="bg-seg">${ids.map((v) => {
+  _seg(action, value, ids, labelKeys, shapes, cls = '') {
+    return `<div class="bg-seg ${cls}">${ids.map((v) => {
       const shape = shapes ? diffShapeSVG(tierOf(v)) : '';
       return `<button type="button" class="bg-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${shape}${esc(t(labelKeys[v]))}</button>`;
     }).join('')}</div>`;
@@ -521,8 +521,11 @@ class BoggleUI {
     return this._seg('set-wordlang', this._setup.wordLang, WORD_LANGS, WORD_LANG_LABEL_KEY);
   }
 
+  /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
   _modeSeg() {
-    return this._seg('set-mode', this._mode, ['solo', 'host', 'join'], { solo: 'mode_solo', host: 'mode_host', join: 'mode_join' });
+    const on = this._mode !== 'solo';
+    return this._seg('set-tab', on ? 'online' : 'solo', ['online', 'solo'], { online: 'tab_online', solo: 'mode_solo' }, false, 'bg-tabs')
+      + (on ? this._seg('set-mode', this._mode, ['host', 'join'], { host: 'mode_host', join: 'mode_join' }) : '');
   }
 
   renderSetup() {
@@ -2097,7 +2100,13 @@ class BoggleUI {
       this._setup.wordLang = btn.dataset.v;
       this._saveSetup();
       this.renderSetup();
+    } else if (action === 'set-tab') {
+      this._mode = btn.dataset.v === 'solo' ? 'solo' : (this._lastOnline || 'host');
+      this._setupExpanded = null;
+      this._mpError = '';
+      this.renderSetup();
     } else if (action === 'set-mode') {
+      this._lastOnline = btn.dataset.v;
       this._mode = btn.dataset.v;
       this._setupExpanded = null;
       this._mpError = '';

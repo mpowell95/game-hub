@@ -167,7 +167,7 @@ let pendingFrames = new Set();
 
 // --- setup / lobby screen state (module-level: exists before any `state`) ---
 let view = 'setup';           // 'setup' | 'game'
-let mpMode = 'solo';          // 'solo' | 'host' | 'join' -- deliberately not persisted
+let mpMode = 'solo';          // 'solo' | 'host' (= the Online tab) -- deliberately not persisted
 let lobby = null;             // null | 'host' | 'join'
 let mpBusy = false;
 let mpError = '';
@@ -1564,24 +1564,26 @@ function fitStage(){
 
 /* ---------- SETUP / LOBBY SCREEN ---------- */
 function setupHeadHTML(){
+  // TABS (2026-11-07): Online | Vs Computer. Online holds create + join (they used to be two
+  // segments); mpMode is 'solo' or 'host' (= the Online tab). Opens on the computer: live rooms only.
   return `
     <div class="yz-setup-title">${t('title')}</div>
-    <div class="yz-seg" data-role="mode-seg">
-      <button type="button" class="yz-seg-btn ${mpMode==='solo'?'yz-seg-active':''}" data-mode="solo">${t('mode_solo')}</button>
-      <button type="button" class="yz-seg-btn ${mpMode==='host'?'yz-seg-active':''}" data-mode="host">${t('mode_host')}</button>
-      <button type="button" class="yz-seg-btn ${mpMode==='join'?'yz-seg-active':''}" data-mode="join">${t('mode_join')}</button>
+    <div class="yz-seg yz-tabs" data-role="mode-seg">
+      <button type="button" class="yz-seg-btn ${mpMode!=='solo'?'yz-seg-active':''}" data-mode="host" aria-pressed="${mpMode!=='solo'}">${t('tab_online')}</button>
+      <button type="button" class="yz-seg-btn ${mpMode==='solo'?'yz-seg-active':''}" data-mode="solo" aria-pressed="${mpMode==='solo'}">${t('mode_solo')}</button>
     </div>`;
 }
 
-function joinBodyHTML(){
-  const msg = mpError || (mpBusy ? t('joining') : t('enter_code'));
+function onlineBodyHTML(){
+  const msg = mpError || (mpBusy ? t('creating') : '');
   return `<div class="yz-mp-lobby">
-    <span class="yz-mp-label">${t('room_code')}</span>
-    <input class="yz-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}" value="${esc(mpJoinCode)}"
-      autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('room_code')}">
-    <p class="yz-mp-msg" data-role="mp-msg">${esc(msg)}</p>
-    <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-join-submit">${t('join')}</button>
-  </div>`;
+      <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>${t('create_room')}</button>
+      <span class="yz-mp-label">${t('room_code')}</span>
+      <input class="yz-mp-code-input" data-role="mp-code-input" maxlength="${MP_CODE_LEN}" value="${esc(mpJoinCode)}"
+        autocapitalize="characters" autocomplete="off" spellcheck="false" aria-label="${t('room_code')}">
+      <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-join-submit">${t('join')}</button>
+      <p class="yz-mp-msg" data-role="mp-msg">${esc(msg)}</p>
+    </div>`;
 }
 
 function lobbyHTML(){
@@ -1619,12 +1621,10 @@ function lobbyHTML(){
 
 function setupScreenHTML(){
   if(lobby) return `<div class="yz-setup">${setupHeadHTML()}${lobbyHTML()}</div>`;
-  if(mpMode === 'join') return `<div class="yz-setup">${setupHeadHTML()}${joinBodyHTML()}</div>`;
   const hosting = mpMode === 'host';
   return `<div class="yz-setup">${setupHeadHTML()}
     ${hosting
-      ? `<p class="yz-mp-msg">${esc(mpError || (mpBusy?t('creating'):t('create_and_share')))}</p>
-         <button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="mp-host" ${mpBusy?'disabled':''}>${t('create_room')}</button>`
+      ? onlineBodyHTML()
       : readSave()
         ? `<button type="button" class="yz-setup-btn yz-setup-btn-primary" data-action="continue-solo">${t('continue_game')}</button>
            <button type="button" class="yz-setup-btn yz-setup-btn-ghost" data-action="start-solo">${t('new_game')}</button>`

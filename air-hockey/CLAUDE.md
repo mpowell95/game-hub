@@ -301,3 +301,7 @@ Superseded vs the computer by "Resume (2026-11-06)" below. Was: no resume: once 
 ## Resume (2026-11-06)
 
 Matt: "We should add resume to the other games that don't save". Vs the computer, `gamehub.airhockey.save.v1` = `{ v: 1, at, diff, score, serve, best }` is written when the puck goes live and after every goal; the start card shows **Continue** (Play reads **New game**), a fresh face-off at the saved score, the scored-on side serving, at the SAVED level. **Closing mid-rally replays from the last goal** (the rally is not saved). Leaving (Quit, the hub, a closed app) costs nothing and arms no marker; New game over a save is ONE loss at its score, asked twice ("Counts as a loss"); the finish clears the save before recording. Online unchanged. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Air Hockey and Connect 4 Hoops save".
+
+## Setup tabs (2026-11-07)
+
+The start card is **Online | Computer** tabs (`_showTab`); the old "Play online" overlay is gone, its lobby (invite, create, join, wait) is the Online panel, same handlers. Opens on Computer (live rooms only); a tapped tab wins. `_atSetup()` (menu or online) guards the lobby callbacks. Starting a match vs the computer closes a waiting room. Layout only.

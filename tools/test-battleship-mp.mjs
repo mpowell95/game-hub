@@ -480,8 +480,8 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   ok('challenges never write head-to-head', !/recordHeadToHead/.test(src('battleship/js/mp.js')));
   ok('the pickers read the small directory, never all of players/', /readOpponentProfiles/.test(src('battleship/js/mp.js')) && !/readPlayersOnce|ref\([^)]*'players'/.test(src('battleship/js/mp.js')));
   ok('ui.js: a pick opens the board + shots choice for that person; a match id opens the match', /o\.kind === 'pick'[\s\S]{0,200}this\._chChooseFor\(o\.them\)/.test(src('battleship/js/ui.js')) && /if \(o\.id\) \{ this\._chHome\(\); this\._chOpen\(o\.id\); \}/.test(src('battleship/js/ui.js')));
-  ok('ui.js: every new challenge goes through the board + shots choice (tab picker, Multiplayer screen, Rematch)',
-    (src('battleship/js/ui.js').match(/this\._chChooseFor\(/g) || []).length === 3 && !/_chStartPlacement\(\{ kind: 'new', them: (o|them|o\.them), size: this/.test(src('battleship/js/ui.js')));
+  ok('ui.js: every new challenge goes through the board + shots choice (tab picker, a recent face, Multiplayer screen, Rematch)',
+    (src('battleship/js/ui.js').match(/this\._chChooseFor\(/g) || []).length === 4 && !/_chStartPlacement\(\{ kind: 'new', them: (o|them|o\.them), size: this/.test(src('battleship/js/ui.js')));
   ok('ui.js: nothing from mp.js is called while the game is being built (an older mp.js mid-update cannot crash it)',
     !/CH\.asShots|CH\.SHOTS/.test(src('battleship/js/ui.js')) && /_chStale\(\)/.test(src('battleship/js/ui.js')));
   ok('ui.js: the chat button is placed on the turn bar (never the corner under the status bar)', /_chPlaceChat\(\)/.test(src('battleship/js/ui.js')) && /querySelector\('\.bs-turnbar'\)/.test(src('battleship/js/ui.js')) && !/place: \{ top: '6px'/.test(src('battleship/js/ui.js')));

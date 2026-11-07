@@ -171,6 +171,12 @@ class EscobaUI {
     this._chTurns = 0;
 
     this._setup = this._loadSetup();
+    // SETUP TABS (2026-11-07, Matt: "Do the same tabs for the other multiplayer games"): Online | Solo.
+    // `_tab` is the tab the player tapped (wins until the game is closed); without it the screen opens
+    // on Online when a match is going and on Solo when none is. The saved Host/Join mode is a view
+    // INSIDE Online now, so every visit starts at Online's home.
+    this._tab = null;
+    this._setup.mode = 'solo';
 
     const ui = this;
     this.humanAgent = {
@@ -568,35 +574,45 @@ class EscobaUI {
     const resumeBtn = save
       ? `<button class="eb-btn eb-btn-primary" data-action="resume-game">${esc(t('btn_resume'))}</button>` : '';
 
-    const modeSeg = this._seg('set-mode', s.mode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]]);
-
-    // How to play and Challenges share ONE row, so the turn-by-turn challenges (2026-10-18) cost the
-    // setup screen no height: it had 6px to spare at 390x664 in the hub.
-    const linkRow = `<div class="eb-link-row">
+    const howto = `<div class="eb-link-row">
         <button class="eb-howto-link" data-action="open-howto">📖 ${esc(t('howto_label'))}</button>
-        ${this._chEntryHTML()}
       </div>`;
+    const rows = this._chv.rows;
+    const cur = this._tab || (rows && rows.some((r) => !r.over) ? 'online' : 'solo');
+    const n = this._chTurns | 0;
+    const tabBtn = (v, label) => `<button class="eb-seg ${v === cur ? 'is-selected' : ''}" data-action="set-tab" data-v="${v}" aria-pressed="${v === cur}">${esc(label)}${v === 'online' ? `<span class="eb-ch-count" data-role="ch-count" ${n ? '' : 'hidden'}>${n}</span>` : ''}</button>`;
+    const tabs = `<div class="eb-segmented eb-tabs" role="group">${tabBtn('online', t('tab_online'))}${tabBtn('solo', t('mode_solo'))}</div>`;
     let body;
-    if (s.mode === 'join') {
+    let onlineHome = false;
+    if (cur === 'solo') {
+      body = `${resumeBtn}
+        ${statsLine}
+        ${this._renderSettingsCard(false)}
+        ${howto}
+        <button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? esc(t('btn_new_game')) : esc(t('btn_start_game'))}</button>`;
+    } else if (s.mode === 'join') {
       body = `${this._renderJoinModeBody()}
-        ${linkRow}`;
+        ${howto}`;
+    } else if (s.mode === 'host') {
+      body = `${this._renderSettingsCard(true)}
+        ${howto}
+        <button class="eb-btn eb-btn-ghost" data-action="mp-host">${esc(t('btn_host_game'))}</button>`;
     } else {
-      const isHost = s.mode === 'host';
-      const actionBtn = isHost
-        ? `<button class="eb-btn eb-btn-ghost" data-action="mp-host">${esc(t('btn_host_game'))}</button>`
-        : `<button class="eb-btn ${save ? 'eb-btn-ghost' : 'eb-btn-primary'}" data-action="start">${save ? esc(t('btn_new_game')) : esc(t('btn_start_game'))}</button>`;
-      body = `${this._renderSettingsCard(isHost)}
-        ${linkRow}
-        ${actionBtn}`;
+      onlineHome = true;
+      // Matches and who to challenge (escoba/js/mp-ui.js onlineHTML), then the live-room controls.
+      body = `<div class="eb-online" data-role="ch-online"></div>
+        <div class="eb-room-row">
+          <button class="eb-btn eb-btn-ghost" data-action="set-mode" data-v="host">${esc(t('mode_host'))}</button>
+          <button class="eb-btn eb-btn-ghost" data-action="set-mode" data-v="join">${esc(t('mode_join'))}</button>
+        </div>`;
     }
 
     this.el.setup.innerHTML = `
-      <div class="eb-panel">
-        ${resumeBtn}
-        ${statsLine}
-        ${modeSeg}
+      <div class="eb-panel eb-tabs-panel">
+        ${tabs}
         <div class="eb-setup-content">${body}</div>
       </div>`;
+    if (onlineHome) this._chPaintOnline();
   }
 
   // --- multiplayer lobby (M1 pilot) ------------------------------------------
@@ -1966,6 +1982,8 @@ class EscobaUI {
     if (!a) return;
     switch (a.dataset.action) {
       // setup
+      case 'set-tab': this.syncSetupInputs(); this._tab = a.dataset.v === 'online' ? 'online' : 'solo'; this._setup.mode = 'solo'; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
+      case 'ch-recent': { const them = (this._chv.recent || [])[Number(a.dataset.oi)]; if (them) this._chOpenLen(them, 'home'); break; }
       case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._saveSetup(); this.renderSetup(); break;
       case 'toggle-row': { this.syncSetupInputs(); const row = a.dataset.row; this._setupExpanded = this._setupExpanded === row ? null : row; this.renderSetup(); break; }
       case 'set-count': this.syncSetupInputs(); this._setup.count = +a.dataset.v; this._saveSetup(); this.renderSetup(); break;
@@ -2012,7 +2030,6 @@ class EscobaUI {
       case 'menu-newgame': this._menuAction('newgame'); break;
       case 'menu-quit': this._menuAction('quit'); break;
       // turn-by-turn challenges
-      case 'ch-open-home': this.syncSetupInputs(); this._saveSetup(); this._chOpenHome(); break;
       case 'ch-back': this._chBack(); break;
       case 'ch-new': this._chOpenPick(); break;
       case 'ch-pick': this._chPickPerson(a.dataset.oi); break;
@@ -2896,31 +2913,41 @@ class EscobaUI {
     return this.MP;
   }
 
-  /** The "Challenges" link beside How to play, with how many matches are waiting on this player. */
-  _chEntryHTML() {
-    const n = this._chTurns | 0;
-    return `<button type="button" class="eb-howto-link eb-ch-entry" data-action="ch-open-home">
-      <svg class="eb-ch-entry-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="16.5" cy="9" r="2.6"/><path d="M15.5 13.6A5 5 0 0 1 21 18.5"/></svg>
-      <span>${esc(t('ch_entry'))}</span>
-      <span class="eb-ch-count" data-role="ch-count" ${n ? '' : 'hidden'}>${n}</span>
-    </button>`;
-  }
-
-  /** Re-read how many challenge matches are waiting on this player (and count any that finished
-   *  while this phone was away). Paints the setup row's number in place, never re-rendering it. */
+  /** Re-read the challenge matches (and count any that finished while this phone was away). Keeps
+   *  them in `_chv.rows` and paints the Online tab in place, never re-rendering the whole screen,
+   *  except once: with no tab tapped, Online opens by itself when a match is going. */
   async _chCountTurns() {
-    if (this._chCounting) return;
+    if (this._chCounting) { this._chRecount = true; return; }
     this._chCounting = true;
     try {
       const MP = await this._chLoad();
-      if (this._dead || !MP.myCode()) return;
+      if (this._dead || !MP.myCode()) { if (!this._dead) { this._chv.rows = []; this._chPaintOnline(); } return; }
+      try { await MP.drainOutbox(); } catch { /* sent next time */ }
       const rows = await MP.readMyGames();
       if (this._dead) return;
       try { MP.recordFinished(rows); } catch (err) { console.warn('[escoba] recordFinished', err); }
+      const hadRows = !!this._chv.rows;
+      this._chv.rows = rows;
       this._chTurns = rows.filter((r) => !r.over && r.yourTurn).length;
       const el = this.el && this.el.setup && this.el.setup.querySelector('[data-role="ch-count"]');
       if (el) { el.textContent = String(this._chTurns); el.hidden = !this._chTurns; }
-    } catch { /* offline: no number */ } finally { this._chCounting = false; }
+      if (this._screen === 'setup' && this.el.game.hidden) {
+        if (!this._tab && !hadRows && rows.some((r) => !r.over)) { this.syncSetupInputs(); this.renderSetup(); }
+        else this._chPaintOnline();
+        this._chShowUnseen(rows);
+      }
+    } catch { /* offline: no number */ } finally {
+      this._chCounting = false;
+      if (this._chRecount && !this._dead) { this._chRecount = false; this._chCountTurns(); }
+    }
+  }
+
+  /** The Online tab's matches and who to challenge, from the rows already read. */
+  async _chPaintOnline() {
+    await this._chLoad();
+    if (this._dead || !this.CH) return;
+    const box = this.el && this.el.setup && this.el.setup.querySelector('[data-role="ch-online"]');
+    if (box) this.CH.paintOnline(this, box);
   }
 
   /** Show one challenge screen ('home' | 'pick' | 'len') in the setup panel. */
@@ -2930,22 +2957,13 @@ class EscobaUI {
     this.renderSetup();
   }
 
+  /** Back to the setup screen's Online tab (there is no separate challenges home any more). */
   async _chOpenHome(msg = '') {
     await this._chLoad();
     if (this._dead) return;
-    this._chLeave();
-    this._chScreen('home', { rows: null, q: '', them: null, msg });
-    const MP = this.MP;
-    if (!MP.myCode()) { this._chv.rows = []; this.renderSetup(); this.CH.say(this, t('ch_no_code')); return; }
-    try { await MP.drainOutbox(); } catch { /* sent next time */ }
-    const rows = await MP.readMyGames();
-    if (this._dead || this._screen !== 'ch' || this._chv.screen !== 'home') return;
-    try { MP.recordFinished(rows); } catch (err) { console.warn('[escoba] recordFinished', err); }
-    this._chv.rows = rows;
-    this._chTurns = rows.filter((r) => !r.over && r.yourTurn).length;
-    this.renderSetup();
-    if (msg) this.CH.say(this, msg);
-    this._chShowUnseen(rows);
+    this._tab = 'online';
+    this._chv.msg = msg || '';
+    this.showSetup();
   }
 
   _chBack() {

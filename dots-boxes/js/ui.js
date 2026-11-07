@@ -472,8 +472,8 @@ class DotsBoxesUI {
 
   // --- setup screen -----------------------------------------------------------
 
-  _seg(action, value, opts) {
-    return `<div class="db-seg">${opts.map(([v, lbl]) =>
+  _seg(action, value, opts, cls = '') {
+    return `<div class="db-seg ${cls}">${opts.map(([v, lbl]) =>
       `<button type="button" class="db-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${esc(lbl)}</button>`).join('')}</div>`;
   }
 
@@ -524,10 +524,11 @@ class DotsBoxesUI {
 
   // --- multiplayer lobby ------------------------------------------------------
 
+  /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
   _modeSeg() {
-    return this._seg('set-mode', this._mode, [
-      ['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')],
-    ]);
+    const on = this._mode !== 'solo';
+    return this._seg('set-tab', on ? 'online' : 'solo', [['online', t('tab_online')], ['solo', t('mode_solo')]], 'db-tabs')
+      + (on ? this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')]]) : '');
   }
 
   /** Join mode's body: the code input lives on the setup screen itself, never its own pre-join
@@ -1198,7 +1199,13 @@ class DotsBoxesUI {
       this._setup.firstMode = btn.dataset.v;
       this._saveSetup();
       this.renderSetup();
+    } else if (action === 'set-tab') {
+      this._mode = btn.dataset.v === 'solo' ? 'solo' : (this._lastOnline || 'host');
+      this._setupExpanded = null;
+      this._mpError = '';
+      this.renderSetup();
     } else if (action === 'set-mode') {
+      this._lastOnline = btn.dataset.v;
       this._mode = btn.dataset.v;
       this._setupExpanded = null;
       this._mpError = '';

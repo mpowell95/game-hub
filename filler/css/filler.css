@@ -496,3 +496,8 @@
 :root.gh-dark .filler .fl-help-bullets li { color: var(--fl-muted); }
 :root.gh-dark .filler .lb-dshape-t3,
 :root.gh-dark .filler .lb-dshape-t4 { fill: #e6e9f0; }
+
+/* TABS: Online | Solo (2026-11-07). Appended so the KNOWN_GAPS file:line entries above stay put. */
+.fl-seg2 { grid-template-columns: repeat(2, 1fr); }
+.fl-tabs { width: 100%; box-sizing: border-box; }
+.fl-tabs .fl-segbtn { font-size: 17px; }

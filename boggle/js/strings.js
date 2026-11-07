@@ -72,6 +72,7 @@ export const STRINGS = {
     tile_dead: 'Letter {face}, not touching the current letter',
     tile_live: 'Letter {face}, row {row} column {col}',
     // --- multiplayer (2026-07-28) ---
+    tab_online: 'Online',
     mode_solo: 'Solo',
     mode_host: 'Host',
     mode_join: 'Join',
@@ -168,6 +169,7 @@ export const STRINGS = {
     tile_dead: 'Letra {face}, no toca la letra actual',
     tile_live: 'Letra {face}, fila {row} columna {col}',
     // --- multiplayer (2026-07-28) ---
+    tab_online: 'En línea',
     mode_solo: 'Solo',
     mode_host: 'Anfitrión',
     mode_join: 'Unirse',

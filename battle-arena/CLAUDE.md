@@ -154,3 +154,7 @@ The menu's New match / Home after the player's first move (`pm` in the save) = O
 
 - Live rooms: the leave is now ARMED at your first move too (`js/live-leave.js`), so a phone that never comes back loses (before, only a rejoin replayed the claim); `countLive` checks the shared ledger, and a rejoin whose loss was already settled resigns. Vs the computer: quitting is a loss from the board shown (`pm` true at start); a new match over a set-aside save records it first (`settleSavedMatch`: the loss, or the win its last move owed), Fight asks twice.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Home tabs (2026-11-07, the Cup Pong way)
+
+Home = **Online | Computer** tabs (`renderHome(tab, note)`, `showTab`, `fillOnline`); Monsters and How to play sit under both. Online = Matches (Play pill on your turn; rows dropped until the screen fits, the rest counted) + Challenge (Anyone = picker, then the 4 most recent people, one tap = draft for that person) + Host / Join (their own screens, unchanged); `fillOnline` in `js/online-ui.js`. The old Online screen is gone: every "back" is `home(ui, note)` = `renderHome('online', note)`. Opens on Online when a match is going, else Computer; a tapped tab wins (`this._tab`). Badge = matches on your turn. TEST tag kept. Layout only.

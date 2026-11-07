@@ -455,12 +455,16 @@ class MancalaUI {
     </div>`;
   }
 
+  /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
   _modeSeg() {
-    return `<div class="mc-seg" role="radiogroup" aria-label="${t('title')}">
-      ${[['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]].map(([v, lbl]) => `
-        <button type="button" class="mc-segbtn${this._mode === v ? ' is-active' : ''}"
-          data-action="set-mode" data-v="${v}" role="radio" aria-checked="${this._mode === v}">${lbl}</button>`).join('')}
+    const on = this._mode !== 'solo';
+    const seg = (items, cls, action, cur, label) => `<div class="mc-seg ${cls}" role="radiogroup" aria-label="${label}">
+      ${items.map(([v, lbl]) => `
+        <button type="button" class="mc-segbtn${cur(v) ? ' is-active' : ''}"
+          data-action="${action}" data-v="${v}" role="radio" aria-checked="${cur(v)}">${lbl}</button>`).join('')}
     </div>`;
+    return seg([['online', t('tab_online')], ['solo', t('mode_solo')]], 'mc-tabs', 'set-tab', (v) => (v === 'online') === on, t('title'))
+      + (on ? seg([['host', t('mode_host')], ['join', t('mode_join')]], 'mc-subseg', 'set-mode', (v) => this._mode === v, t('tab_online')) : '');
   }
 
   renderSetup() {
@@ -2009,7 +2013,12 @@ class MancalaUI {
       if (this._howTo) this._howTo.first();
     } else if (action === 'close-overlay') {
       this.closeOverlays();
+    } else if (action === 'set-tab') {
+      this._mode = btn.dataset.v === 'solo' ? 'solo' : (this._lastOnline || 'host');
+      this._mpError = '';
+      this.renderSetup();
     } else if (action === 'set-mode') {
+      this._lastOnline = btn.dataset.v;
       this._mode = btn.dataset.v;
       this._mpError = '';
       this.renderSetup();
