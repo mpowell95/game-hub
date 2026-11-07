@@ -579,3 +579,43 @@ html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
   .fs-root .fs-mp-top { grid-template-columns: 44px 1fr 24px; gap: 4px; }
   .fs-root .fs-mp-title { font-size: 19px; }
 }
+
+/* TABS: Online | Computer (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
+   label, never colour alone. The setup card is pinned to the top so the tabs never move between panels. */
+.fs-root .fs-ov-setup > .fs-card { margin-block: 0 auto; }
+.fs-root .fs-tabs { display: flex; width: 100%; padding: 2px; background: #e6efe8; border-color: var(--fs-line); }
+.fs-root .fs-tabs .fs-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: var(--fs-muted); font-size: 17px; }
+.fs-root .fs-tabs .fs-tab[aria-pressed="true"] { background: #fff; color: var(--fs-ink); font-weight: 800; box-shadow: 0 0 0 2px var(--fs-green); }
+.fs-root .fs-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.fs-root .fs-tab-n[hidden] { display: none; }
+.fs-root .fs-panel { display: flex; flex-direction: column; gap: 10px; }
+.fs-root .fs-panel[hidden] { display: none; }
+.fs-root .fs-online { display: flex; flex-direction: column; gap: 10px; }
+.fs-root .fs-on-sec { display: flex; flex-direction: column; gap: 6px; }
+.fs-root .fs-on-rows { display: flex; flex-direction: column; gap: 6px; }
+.fs-root .fs-on-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 18px; font-weight: 900; color: var(--fs-ink); }
+.fs-root .fs-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--fs-line);
+  background: none; color: var(--fs-ink); font: inherit; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.fs-root .fs-online .fs-mrow-name { font-size: 17px; }
+.fs-root .fs-online .fs-mrow-sub { font-size: 15px; color: var(--fs-ink); opacity: 0.85; }
+.fs-root .fs-online .fs-mrow.is-mine { box-shadow: inset 4px 0 0 #ffce3a; }
+.fs-root .fs-online .fs-mp-note { font-size: 15px; color: var(--fs-ink); }
+.fs-root .fs-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.fs-root .fs-more { min-height: 44px; border: 0; background: none; color: var(--fs-ink); font: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; }
+.fs-root .fs-faces { display: flex; gap: 6px; justify-content: space-between; }
+.fs-root .fs-face {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--fs-ink); font: inherit;
+}
+.fs-root .fs-face.is-any { flex: 1.4 1 0; }
+.fs-root .fs-face-dot { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: #e6efe8; }
+.fs-root .fs-face.is-any .fs-face-dot { background: none; border: 2px dashed var(--fs-muted); font-size: 28px; box-sizing: border-box; }
+.fs-root .fs-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root.gh-dark .fs-root .fs-tabs { background: #0d1711; }
+:root.gh-dark .fs-root .fs-tabs .fs-tab[aria-pressed="true"] { background: #24392c; }
+:root.gh-dark .fs-root .fs-face-dot { background: #24392c; }

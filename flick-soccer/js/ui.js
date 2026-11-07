@@ -191,6 +191,8 @@ function helpSvg() {
 }
 
 let instance = null;
+/** Whether this player had a match going at the last look (this page's life only): the first paint opens on the tab it will settle on. */
+let ACTIVE_HINT = false;
 
 /** Where the quick-chat button sits (js/match-chat-ui.js `place`): on the top row, left of the
  *  Menu button (which is `right: 10px`, 44px wide), exactly the default spot. The bubbles come
@@ -300,11 +302,12 @@ class FlickSoccerUI {
             <button type="button" class="fs-x" data-act="exit" data-la="aria_close">${X_SVG}</button>
             <h2 class="fs-logo" data-l="title"></h2>
             <p class="fs-tag" data-l="tagline"></p>
-            <button type="button" class="fs-mprow" data-act="multi">
-              <b data-l="multiplayer"></b>
-              <span class="fs-mprow-badge" data-role="onlineNote" hidden></span>
-              <span class="fs-mprow-chev" aria-hidden="true">›</span>
-            </button>
+            <div class="gh-seg fs-tabs" role="group" data-role="stabs">
+              <button type="button" class="gh-seg__item fs-tab" data-act="tab" data-tab="online" aria-pressed="false"><span data-l="tab_online"></span><b class="fs-tab-n" hidden></b></button>
+              <button type="button" class="gh-seg__item fs-tab" data-act="tab" data-tab="cpu" aria-pressed="true"><span data-l="tab_cpu"></span></button>
+            </div>
+            <div class="fs-panel" data-panel="online" hidden><div class="fs-online" data-role="online"><p class="fs-mp-note" data-l="mp_loading"></p></div></div>
+            <div class="fs-panel" data-panel="cpu">
             <div class="fs-field" data-role="diffField">
               <span class="fs-label" data-l="difficulty"></span>
               <div class="gh-seg fs-seg" role="group" data-role="diffs"></div>
@@ -321,6 +324,7 @@ class FlickSoccerUI {
             <button type="button" class="fs-testbtn" data-act="test" data-role="testBtn" aria-pressed="false" hidden><span data-l="test"></span></button>
             <button type="button" class="gh-btn gh-btn--block fs-alt" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-act="play"><span data-l="play"></span></button>
+            </div>
           </div>
         </div>
 
@@ -455,7 +459,8 @@ class FlickSoccerUI {
     this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || (name === 'help' && !this.match));
   }
 
-  _showSetup() {
+  _showSetup(tab) {
+    if (tab) this._tab = tab;
     const leftOnline = !!this.mp;
     this._mpLeave();
     if (leftOnline) this._drainAll();
@@ -927,7 +932,7 @@ class FlickSoccerUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') this._quitGate(b, () => { this.settings.mode = 'cpu'; this._newMatch(); });
-    else if (act === 'multi') this._openOnline();
+    else if (act === 'tab') { this._tab = b.dataset.tab; this._showTab(b.dataset.tab); }
     else if (act === 'continue') this._continue();
     else if (act === 'test' && isAdminDevice()) { this.settings.test = !this.settings.test; writeJSON(SETTINGS_KEY, this.settings); this._relabel(); }
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
@@ -972,22 +977,39 @@ class FlickSoccerUI {
     this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
   }
 
-  /** "2 waiting on you" on the Multiplayer row. Re-read every time the setup screen shows. */
+  /** The Online tab's badge: matches on your turn. Painted from the last count. */
   _paintOnlineNote() {
-    const el = this.root.querySelector('[data-role="onlineNote"]');
+    const el = this.root.querySelector('.fs-tab-n');
+    if (!el) return;
     const n = this._onlineWaiting | 0;
     el.hidden = !n;
-    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+    el.textContent = n ? String(n) : '';
   }
+  /** Show one tab's panel (no re-render: the Online list and the chosen options stay as they are). */
+  _showTab(k) {
+    const card = this.root.querySelector('[data-ov="setup"]');
+    if (!card) return;
+    for (const b of card.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of card.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+    if (this.UI && this.UI.fitOnline) this.UI.fitOnline(this);
+  }
+  /** Fill the Online tab (mp-ui.js fillOnline), then pick the tab: Online when a match is going, else
+   *  Computer, unless the player has tapped one (Matt, 2026-11-07). */
   async _countOnline() {
+    this._showTab(this._tab || (ACTIVE_HINT ? 'online' : 'cpu'));
     try {
-      const MP = await this._loadMP();
-      const rows = await MP.readMyGames();
-      if (instance !== this) return;
-      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
-      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+      const box = this.root.querySelector('[data-role="online"]');
+      if (instance !== this || !box || this.screen !== 'setup') return;
+      this.UI = UI;
+      const res = await UI.fillOnline(this, MP, box);
+      if (!res || instance !== this || this.screen !== 'setup') return;
+      ACTIVE_HINT = res.active;
+      this._onlineWaiting = res.mine;
       this._paintOnlineNote();
-    } catch { /* offline: no count */ }
+      if (!this._tab) this._showTab(res.active ? 'online' : 'cpu');
+      UI.fitOnline(this);
+    } catch { /* offline: the tab stays as it was */ }
   }
 
   /** Pass & play, from the Multiplayer screen: two people, this phone. */
@@ -1051,6 +1073,7 @@ class FlickSoccerUI {
   }
 
   async _openOnline(pickFor = null) {
+    if (!(pickFor && pickFor.code)) { this._showSetup('online'); return; }
     this._mpLeave();
     this.preview = null;
     this._drainAll();                  // after leaving: the match just left may be the one waiting
@@ -1063,7 +1086,7 @@ class FlickSoccerUI {
     if (instance !== this) return;
     this.UI = UI;
     if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
-    else UI.home(this, MP);
+    else this._showSetup('online');
   }
 
   /** Open one stored match. Flicks still waiting on this phone go first, so none is lost. */
