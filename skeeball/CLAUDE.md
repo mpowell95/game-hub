@@ -538,6 +538,8 @@ _shadowMovers || _celebrateT` and it disposes through `disposeMat()`. POPONGO de
 
 ## Challenges: "beat my score" (2026-09-24, v2 the same day)
 
+**Setup tabs (2026-11-07, the Cup Pong shape)**: **Online | Solo** (`_renderSetup`, `_tab`, `_renderOnline`/`_paintOnline`). Online = Matches (your turn first with Play, then waiting; the W-L chip opens the sheet's list of every result) and Challenge (Anyone = the person list, the 4 most recent people = one tap to the terms); Solo = the machine gallery and Play, untouched (every machine and unlock as before). Opens on Online when a challenge is going (once the index has been read), else Solo; the tab's number = your turn. The Challenges button is gone; `openChallenges` sets `ui._tab = 'online'` and, opened from Online (`open`/`pickFor`/`start: 'pick'`), its Back closes the sheet.
+
 Matt: *"challenge someone to a game for the higher score?"*; *"You should not get to try again. It's 1
 attempt only."*; *"send their score as is if they leave in the middle of a game."* Files: `js/challenge.js`
 (`skeeChallenges/games/<id>` + `skeeChallenges/index/<CODE>/<id>`, validation, `decide`, rows, expiry, seen

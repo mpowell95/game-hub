@@ -135,6 +135,12 @@ const STRINGS = {
 
     // Challenges (2026-09-24): one rack each, the higher score wins
     ch_btn: 'Challenge',
+    tab_online: 'Online',
+    tab_solo: 'Solo',
+    ch_matches: 'Matches',
+    ch_challenge: 'Challenge',
+    ch_anyone: 'Anyone',
+    ch_their_turn: "{name}'s turn",
     ch_badge_aria: '{n} waiting on you',
     ch_title: 'Challenges',
     ch_new: 'New challenge',
@@ -332,6 +338,12 @@ const STRINGS = {
     aria_lane: 'Máquina de skeeball. Desliza hacia arriba en la pista para lanzar la bola.',
 
     ch_btn: 'Retar',
+    tab_online: 'En línea',
+    tab_solo: 'Solo',
+    ch_matches: 'Partidas',
+    ch_challenge: 'Retar',
+    ch_anyone: 'Cualquiera',
+    ch_their_turn: 'Turno de {name}',
     ch_badge_aria: '{n} esperando tu turno',
     ch_title: 'Retos',
     ch_new: 'Nuevo reto',

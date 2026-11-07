@@ -112,7 +112,10 @@ function legsTable(g, side) {
  * precedent): index rows to show instead of reading Firebase, which a local browser cannot reach.
  * The game never passes it.
  */
-export function openChallenges(ui, { focus = null, open = null, pickFor = null, seed = null, seedGame = null } = {}) {
+export function openChallenges(ui, { focus = null, open = null, pickFor = null, start = null, seed = null, seedGame = null } = {}) {
+  // From the Online tab the sheet is one step over it: its Back closes it (landing on Online). Opened
+  // plain (the record chip) it is the list of every result, and Back goes there.
+  ui._tab = 'online';
   const el = document.createElement('div');
   el.className = 'gh-overlay sk-ch-veil';
   const state = { rows: null, players: null, recs: null, board: null, caption: '', count: 1, all: false, scoring: 'games', busy: false, view: null, err: '' };
@@ -143,6 +146,8 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     if (b) b.addEventListener('click', back);
   };
   const note = (s) => `<p class="sk-ch-note">${esc(s)}</p>`;
+  const entry = pickFor ? 'terms' : open ? 'match' : start === 'pick' ? 'pick' : 'list';
+  const toHome = () => (entry === 'list' ? viewList() : close());
 
   // --- list ---
   const rowHtml = (r, i) => {
@@ -213,13 +218,13 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   const viewPick = async () => {
     state.view = 'pick';
     if (!ui.challenge) ui._chatUnmount();
-    shell(t('ch_pick'), note(t('ch_loading')), viewList);
+    shell(t('ch_pick'), note(t('ch_loading')), toHome);
     const list = await loadPlayers();
     if (closed || state.view !== 'pick') return;
     shell(t('ch_pick'), list.length ? `<div class="sk-ch-list">${list.map((o, i) => `
       <button type="button" class="sk-ch-row is-go" data-who="${i}">
         <span class="sk-ch-who"><span aria-hidden="true">${esc(o.emoji)}</span> ${esc(o.name)}</span>
-      </button>`).join('')}</div>` : note(t('ch_no_players')), viewList);
+      </button>`).join('')}</div>` : note(t('ch_no_players')), toHome);
     for (const b of el.querySelectorAll('[data-who]')) {
       b.addEventListener('click', () => viewTerms(list[+b.dataset.who]));
     }
@@ -230,7 +235,8 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
     if (!them) return viewList();
     state.view = 'terms';
     if (!ui.challenge) ui._chatUnmount();
-    if (!state.recs) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), viewPick); await loadPlayers(); }
+    const termsBack = () => (entry === 'terms' ? toHome() : viewPick());
+    if (!state.recs) { shell(t('ch_to', { name: them.name }), note(t('ch_loading')), termsBack); await loadPlayers(); }
     if (closed || state.view !== 'terms') return;
     const mine = new Set([...localUnlocked(), ...unlockedFrom(state.recs, CH.myCode())]);
     const boards = challengeBoards(mine);
@@ -261,7 +267,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       ${note(t('ch_terms_note', { name: them.name }))}
       ${err ? `<p class="sk-ch-err" role="alert">${esc(err)}</p>` : ''}
       <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-act="start">${esc(t('ch_start'))}</button>`
-      : note(t('ch_no_machine')), viewPick);
+      : note(t('ch_no_machine')), termsBack);
     const keep = () => { const box = el.querySelector('[data-role="caption"]'); if (box) state.caption = box.value; };
     for (const b of el.querySelectorAll('[data-count]')) b.addEventListener('click', () => {
       keep();
@@ -302,13 +308,13 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   // --- one match: where it stands, and the next game to play ---
   const viewMatch = async (id, fallbackRow = null) => {
     state.view = 'match';
-    shell(t('ch_title'), note(t('ch_loading')), viewList);
+    shell(t('ch_title'), note(t('ch_loading')), toHome);
     const raw = (seedGame && seedGame.id === id) ? seedGame : await CH.readChallenge(id);
     if (closed || state.view !== 'match') return;
-    if (!raw) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
+    if (!raw) { shell(t('ch_title'), note(t('ch_err_read')), toHome); return; }
     const g = CH.withLocal(raw);
     const side = CH.sideOf(g, CH.myCode());
-    if (!side) { shell(t('ch_title'), note(t('ch_err_read')), viewList); return; }
+    if (!side) { shell(t('ch_title'), note(t('ch_err_read')), toHome); return; }
     CH.markSeen(id, raw.updated);
     // A game started and never sent counts 0 after 30 minutes on every phone (derived on read): store it.
     if (raw.timedOut && raw.timedOut.length) CH.settleTimedOut(id).catch(() => {});
@@ -357,7 +363,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
       ${play}
       ${endKind ? `<p class="sk-ch-err" role="alert" data-role="enderr" hidden></p>
         <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="end">${esc(t(`ch_end_${endKind}`))}</button>` : ''}
-      ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, viewList, true);
+      ${g.over ? `<button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-act="again">${esc(t('ch_rematch'))}</button>` : ''}`, toHome, true);
     // The chat button sits beside this card's own close X (and the title leaves room for it).
     ui._chatDockTo(el);
     const end = el.querySelector('[data-act="end"]');
@@ -420,6 +426,7 @@ export function openChallenges(ui, { focus = null, open = null, pickFor = null, 
   };
   if (pickFor) viewTerms(pickFor);
   else if (open) viewMatch(open);
+  else if (start === 'pick') viewPick();
   else viewList();
   if (Array.isArray(seed)) { onRows(CH.sortRows(seed)); return el; }
   // A score still owed from an earlier game goes first, so the list it paints is already true.
