@@ -142,6 +142,8 @@ function annulus(cx, cy, r0, r1) {
 }
 
 let instance = null;
+/** Whether this player had a match going at the last look (this page's life only): the first paint opens on the tab it will settle on. */
+let ACTIVE_HINT = false;
 
 /** Where the quick-chat button sits (js/match-chat-ui.js `place`): on the top row, LEFT of the
  *  darts-left icons and the menu button (the row is `right: 10px`, icons 42px + gap 10 + menu 44),
@@ -237,11 +239,12 @@ class DartsUI {
             <button type="button" class="dt-x dt-q" data-act="howto" data-la="howto">?</button>
             <h2 class="dt-logo" data-l="title"></h2>
             <p class="dt-tag" data-role="tagline"></p>
-            <button type="button" class="dt-mprow" data-act="multi">
-              <b data-l="multiplayer"></b>
-              <span class="dt-mprow-badge" data-role="onlineNote" hidden></span>
-              <span class="dt-mprow-chev" aria-hidden="true">›</span>
-            </button>
+            <div class="gh-seg dt-tabs" role="group" data-role="stabs">
+              <button type="button" class="gh-seg__item dt-tab" data-act="tab" data-tab="online" aria-pressed="false"><span data-l="tab_online"></span><b class="dt-tab-n" hidden></b></button>
+              <button type="button" class="gh-seg__item dt-tab" data-act="tab" data-tab="cpu" aria-pressed="true"><span data-l="tab_cpu"></span></button>
+            </div>
+            <div class="dt-panel" data-panel="online" hidden><div class="dt-online" data-role="online"><p class="dt-mp-note" data-l="mp_loading"></p></div></div>
+            <div class="dt-panel" data-panel="cpu">
             <div class="dt-field">
               <span class="dt-label" data-l="game"></span>
               <div class="gh-seg dt-seg" role="group" data-role="games"></div>
@@ -272,6 +275,7 @@ class DartsUI {
             <div class="dt-go-row">
               <button type="button" class="gh-btn gh-btn--block dt-alt" data-act="practice"><span data-l="practice"></span></button>
               <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-act="play" data-role="playBtn"><span data-l="play"></span></button>
+            </div>
             </div>
           </div>
         </div>
@@ -441,7 +445,8 @@ class DartsUI {
     for (const k of Object.keys(this.ov)) this.ov[k].hidden = k !== name;
     this.root.classList.toggle('is-setup', name === 'setup' || name === 'mp' || name === 'practice' || (name === 'help' && !this.match));
   }
-  _showSetup() {
+  _showSetup(tab) {
+    if (tab) this._tab = tab;
     this._mpLeave();
     this.screen = 'setup';
     this.match = null;
@@ -1015,7 +1020,7 @@ class DartsUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') this._quitGate(b, () => { this.settings.mode = 'cpu'; this._newMatch(); });
-    else if (act === 'multi') this._openOnline();
+    else if (act === 'tab') { this._tab = b.dataset.tab; this._showTab(b.dataset.tab); }
     else if (act === 'practice') { this.screen = 'practice'; this._showOnly('practice'); }
     else if (act === 'practiceClose') this._showSetup();
     else if (act === 'practiceSelf') this._practice('self');
@@ -1058,28 +1063,45 @@ class DartsUI {
     this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
   }
 
-  /** "2 waiting on you" under the Online matches button. Painted from the last count; the count is
-   *  re-read every time the setup screen shows (`_countOnline`). */
+  /** The Online tab's badge: matches on your turn. Painted from the last count. */
   _paintOnlineNote() {
-    const el = this.root.querySelector('[data-role="onlineNote"]');
+    const el = this.root.querySelector('.dt-tab-n');
+    if (!el) return;
     const n = this._onlineWaiting | 0;
     el.hidden = !n;
-    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+    el.textContent = n ? String(n) : '';
   }
+  /** Show one tab's panel (no re-render: the Online list and the chosen options stay as they are). */
+  _showTab(k) {
+    const card = this.root.querySelector('[data-ov="setup"]');
+    if (!card) return;
+    for (const b of card.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of card.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+    if (this.UI && this.UI.fitOnline) this.UI.fitOnline(this);
+  }
+  /** Fill the Online tab (mp-ui.js fillOnline), then pick the tab: Online when a match is going, else
+   *  Computer, unless the player has tapped one (Matt, 2026-11-07). */
   async _countOnline() {
+    this._showTab(this._tab || (ACTIVE_HINT ? 'online' : 'cpu'));
     try {
-      const MP = await this._loadMP();
-      const rows = await MP.readMyGames();
-      if (instance !== this) return;
-      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
-      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+      const box = this.root.querySelector('[data-role="online"]');
+      if (instance !== this || !box || this.screen !== 'setup') return;
+      this.UI = UI;
+      const res = await UI.fillOnline(this, MP, box);
+      if (!res || instance !== this || this.screen !== 'setup') return;
+      ACTIVE_HINT = res.active;
+      this._onlineWaiting = res.mine;
       this._paintOnlineNote();
-    } catch { /* offline: no count */ }
+      if (!this._tab) this._showTab(res.active ? 'online' : 'cpu');
+      UI.fitOnline(this);
+    } catch { /* offline: the tab stays as it was */ }
   }
 
   /** `pickFor` ({code, name, emoji}, from the hub's Challenges screen) opens straight onto the
    *  "challenge them" card instead of the online home. */
   async _openOnline(pickFor = null) {
+    if (!(pickFor && pickFor.code)) { this._showSetup('online'); return; }
     this._mpLeave();
     this.match = null; this.seats = null; this.mode = null;
     this.hand = null; this.flying = null; this.falling = null; this.flash = null;
@@ -1093,7 +1115,7 @@ class DartsUI {
     if (instance !== this) return;
     this.UI = UI;
     if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
-    else UI.home(this, MP);
+    else this._showSetup('online');
   }
 
   /** Open one stored match. Darts still waiting on this phone go first, so none is lost. */

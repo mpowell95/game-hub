@@ -610,3 +610,43 @@
 :root.gh-dark .ep-root .ep-mp-err { color: #ff9b9b; }
 :root.gh-dark .ep-root .ep-mprow-badge,
 :root.gh-dark .ep-root .ep-mp-h span { background: #1f6b3d; }
+
+/* TABS: Online | Play (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
+   label, never colour alone. The setup card is pinned to the top so the tabs never move between panels. */
+.ep-root .ep-ov-setup > .ep-card { margin-block: 0 auto; }
+.ep-root .ep-tabs { display: flex; width: 100%; padding: 2px; background: #f1e6d6; border-color: var(--ep-line); }
+.ep-root .ep-tabs .ep-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: var(--ep-muted); font-size: 17px; }
+.ep-root .ep-tabs .ep-tab[aria-pressed="true"] { background: #fff; color: var(--ep-ink); font-weight: 800; box-shadow: 0 0 0 2px var(--ep-brand); }
+.ep-root .ep-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.ep-root .ep-tab-n[hidden] { display: none; }
+.ep-root .ep-panel { display: flex; flex-direction: column; gap: 10px; }
+.ep-root .ep-panel[hidden] { display: none; }
+.ep-root .ep-online { display: flex; flex-direction: column; gap: 10px; }
+.ep-root .ep-on-sec { display: flex; flex-direction: column; gap: 6px; }
+.ep-root .ep-on-rows { display: flex; flex-direction: column; gap: 6px; }
+.ep-root .ep-on-head { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 18px; font-weight: 900; color: var(--ep-ink); }
+.ep-root .ep-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--ep-line);
+  background: none; color: var(--ep-ink); font: inherit; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.ep-root .ep-online .ep-mrow-name { font-size: 17px; }
+.ep-root .ep-online .ep-mrow-sub { font-size: 15px; color: var(--ep-ink); opacity: 0.85; }
+.ep-root .ep-online .ep-mrow.is-mine { box-shadow: inset 4px 0 0 #ffce3a; }
+.ep-root .ep-online .ep-mp-note { font-size: 15px; color: var(--ep-ink); }
+.ep-root .ep-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.ep-root .ep-more { min-height: 44px; border: 0; background: none; color: var(--ep-ink); font: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; }
+.ep-root .ep-faces { display: flex; gap: 6px; justify-content: space-between; }
+.ep-root .ep-face {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--ep-ink); font: inherit;
+}
+.ep-root .ep-face.is-any { flex: 1.4 1 0; }
+.ep-root .ep-face-dot { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: #f1e6d6; }
+.ep-root .ep-face.is-any .ep-face-dot { background: none; border: 2px dashed var(--ep-muted); font-size: 28px; box-sizing: border-box; }
+.ep-root .ep-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root.gh-dark .ep-root .ep-tabs { background: #17110e; }
+:root.gh-dark .ep-root .ep-tabs .ep-tab[aria-pressed="true"] { background: #3a2c23; }
+:root.gh-dark .ep-root .ep-face-dot { background: #3a2c23; }

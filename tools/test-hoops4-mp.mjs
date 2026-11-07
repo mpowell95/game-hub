@@ -611,8 +611,9 @@ check('a player code is normalised and validated',
   check('finish() counts an async match through the ledger, from the STORED winner',
     /countFinished\(this\.mp\.id, won/.test(ui) && /g\.over\.winner === this\.mp\.side/.test(ui));
   const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', __ROOT_URL), 'utf8');
-  check('every active game row has a Quit that resigns (and asks first)',
-    /data-quit=/.test(mpui) && /MP\.resignGame\(id\)/.test(mpui) && /mpQuitQ/.test(mpui));
+  // 2026-11-07: the sheet's home list is gone (setup's Online tab); quitting is the pause sheet's (next check).
+  check('the Online tab lists matches and opens one on a tap',
+    /export async function fillOnline/.test(mpui) && /\.h4-mrow\[data-id\]/.test(mpui));
   check('the multiplayer screen counts finished matches when it loads', /MP\.recordFinished\(rows\)/.test(mpui));
   check('the pause sheet can quit a turn-by-turn match', /data-role="quit"/.test(ui) && /resignGame\(mp\.id\)/.test(ui));
   // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY (2026-09-24): "the game just disappears".
@@ -694,7 +695,7 @@ check('a player code is normalised and validated',
 {
   const mpui = readFileSync(new URL('./hoops4/js/mp-ui.js', __ROOT_URL), 'utf8');
   check('a series owed its next game is listed, and only the loser of the last game can start it',
-    /async function owedSeries\(rows\)/.test(mpui) && /const starter = w === 'a' \? 'b' : w === 'b' \? 'a' : 'b';/.test(mpui)
+    /MP\.readOwedSeries\(rows\)/.test(mpui) && /const starter = w === 'a' \? 'b' : w === 'b' \? 'a' : 'b';/.test(readFileSync(new URL('./hoops4/js/mp.js', __ROOT_URL), 'utf8'))
     && /MP\.nextInSeries\(g\)/.test(mpui));
 }
 

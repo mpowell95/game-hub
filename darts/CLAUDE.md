@@ -239,3 +239,7 @@ Play (or Pass & play) over a saved match vs the computer the player has thrown i
 
 - Vs the computer: quitting is a loss once ANY dart has flown, the computer's included (`playerThrew`) (it was the player's own first move).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup tabs (2026-11-07)
+
+The setup card is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill; record chip opens History), Challenge (Anyone + the 4 most recent people), Pass & play (`mp-ui.js fillOnline`); Computer = the old Game / Difficulty / Speed / First / Practice / Play. Opens on Online when a match is going, else Computer; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is pinned to the top.

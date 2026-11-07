@@ -39,7 +39,7 @@ function page(ui, title, back, body) {
       <div class="fs-mp-body">${body}</div>
     </div>`;
   ov.querySelector('[data-mp="back"]').addEventListener('click', () => {
-    if (back === 'setup') ui._showSetup(); else home(ui, ui.MP);
+    ui._showSetup('online');       // both lead to the setup screen's Online tab (2026-11-07)
   });
   ui.screen = 'mp';
   ui._showOnly('mp');
@@ -97,54 +97,106 @@ const rowHTML = (r) => `
     <span class="fs-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 
-/** The online home. */
-export async function home(ui, MP) {
-  const body = page(ui, t('mp_title'), 'setup', `
-    <button type="button" class="gh-btn gh-btn--primary gh-btn--block fs-go" data-mp="challenge">${esc(t('mp_challenge'))}</button>
-    <button type="button" class="gh-btn gh-btn--block fs-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
-    <div class="fs-mp-push" hidden></div>
-    <div class="fs-mp-list"><p class="fs-mp-note">${esc(t('mp_loading'))}</p></div>
-    <button type="button" class="gh-btn gh-btn--block fs-alt" data-mp="history">${esc(t('mp_history'))}</button>`);
-  body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
-  body.querySelector('[data-mp="pass"]').addEventListener('click', (e) => {
-    // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
-    if (ui._quitGate) ui._quitGate(e.currentTarget, () => ui._passPlay()); else ui._passPlay();
-  });
-  body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
-  let repaint = null;
-  pushRow(body.querySelector('.fs-mp-push'), () => { if (repaint) repaint(); else fitList(cardOf(body), body.querySelector('.fs-mp-list')); });
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, Cup Pong's tabs, Matt: "Do the same tabs for the other
+ * multiplayer games"): the matches going (your turn first, with Play), then Challenge: Anyone (the full
+ * list) and the people played most recently, one tap each; Pass & play stays here, where it always was.
+ * The record chip opens History. Fills `box`; returns { active, mine } or null if the screen moved on.
+ */
+export async function fillOnline(ui, MP, box) {
   const rows = await MP.readMyGames();
-  if (!body.isConnected) return;
+  if (!box.isConnected) return null;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[flick-soccer] recordFinished', err); }
   const live = rows.filter((r) => !r.over);
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
   const all = mine.concat(theirs);
-  const list = body.querySelector('.fs-mp-list');
-  list.dataset.pages = '1';
-  // Pages, not a scroll (the card never scrolls): as many rows as fit, then "+N more" shows the
-  // next page, and the last page's button goes back to the first. Every match is reachable.
+  const seen = new Set();
+  // Most recent first, one face per person; an index into this list, never a code, in the page.
+  const recent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  let won = 0, lost = 0;
+  try { for (const o of MP.recordsFrom(rows, MP.myCode()).opponents) { won += o.won | 0; lost += o.lost | 0; } } catch { /* no chip */ }
+  const chip = won + lost ? `<button type="button" class="fs-rec-chip" data-mp="history">${won}-${lost}</button>` : '';
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const liveRow = (r) => `
+    <button type="button" class="fs-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+      <span class="fs-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="fs-mrow-text"><span class="fs-mrow-name">${esc(r.name)}</span>
+        <span class="fs-mrow-sub">${esc(r.yourTurn ? scoreLine(r) : t('mp_turn_of', { name: r.name }) + ' · ' + t('mp_first_to', { n: r.goals || 2 }))}</span></span>
+      ${r.yourTurn ? `<span class="fs-play-pill">${esc(t('mp_play'))}</span>` : '<span class="fs-mrow-chev" aria-hidden="true">›</span>'}
+    </button>`;
+  box.innerHTML = (live.length ? `
+      <div class="fs-on-sec">
+        <div class="fs-on-head"><span>${esc(t('mp_matches'))}</span>${chip}</div>
+        <div class="fs-on-rows"></div>
+      </div>` : '') + `
+      <div class="fs-on-sec">
+        <div class="fs-on-head"><span>${esc(t('mp_challenge_h'))}</span>${live.length ? '' : chip}</div>
+        <div class="fs-faces">
+          <button type="button" class="fs-face is-any" data-mp="anyone"><span class="fs-face-dot" aria-hidden="true">+</span><span class="fs-face-name">${esc(t('mp_anyone'))}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="fs-face" data-oi="${i}"><span class="fs-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="fs-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>
+      <button type="button" class="gh-btn gh-btn--block fs-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
+      <div class="fs-mp-push" hidden></div>`;
+  // Pages, not a scroll (the setup card never scrolls): as many rows as fit, then "+N more" shows the
+  // next page, and the last page goes back to the first. Every match is reachable.
+  const rowsEl = box.querySelector('.fs-on-rows');
   let start = 0;
-  const paint = () => {
-    const page = all.slice(start);
-    const pm = page.filter((r) => r.yourTurn), pt = page.filter((r) => !r.yourTurn);
-    list.innerHTML = (pm.length ? `<h3 class="fs-mp-h">${esc(t('mp_your_turn'))} <span>${mine.length}</span></h3>${pm.map(rowHTML).join('')}` : '')
-      + (pt.length ? `<h3 class="fs-mp-h">${esc(t('mp_their_turn'))} <span>${theirs.length}</span></h3>${pt.map(rowHTML).join('')}` : '')
-      + (live.length ? '' : `<p class="fs-mp-note">${esc(t('mp_none'))}</p>`);
-    fitList(cardOf(body), list, start);
+  box._paint = () => {
+    if (!rowsEl) return;
+    const ov = box.closest('[data-ov="setup"]'), card = ov && ov.querySelector('.fs-card');
+    rowsEl.innerHTML = all.slice(start).map(liveRow).join('');
+    const els = [...rowsEl.querySelectorAll('.fs-mrow')];
+    const over = () => card && card.getBoundingClientRect().bottom > ov.clientHeight - 8;
+    const room = () => { while (over() && els.length > 1) els.pop().remove(); };
+    room();
+    let shown = els.length;
+    if (start > 0 || start + shown < all.length) {
+      const more = document.createElement('button');
+      more.type = 'button'; more.className = 'fs-more'; more.dataset.mp = 'more';
+      more.textContent = t('mp_more', { n: all.length - shown });
+      rowsEl.appendChild(more);
+      if (over() && els.length > 1) { els.pop().remove(); shown--; more.textContent = t('mp_more', { n: all.length - shown }); }
+    }
+    rowsEl.dataset.shown = String(shown);
   };
-  paint();
-  repaint = paint;
-  list.addEventListener('click', (e) => {
-    if (e.target.closest('[data-mp="more"]')) {
-      const shown = list.querySelectorAll('.fs-mrow').length;
-      start = start + shown >= all.length ? 0 : start + shown;
-      paint();
+  box.onclick = (e) => {
+    const m = e.target.closest('.fs-mrow[data-id]');
+    if (m) { ui._openMatch(m.dataset.id); return; }
+    const a = e.target.closest('[data-mp]');
+    if (a) {
+      const k = a.dataset.mp;
+      if (k === 'history') history(ui, MP);
+      else if (k === 'anyone') picker(ui, MP);
+      else if (k === 'more') {
+        const shown = Number(rowsEl.dataset.shown) || 1;
+        start = start + shown >= all.length ? 0 : start + shown;
+        box._paint();
+      } else if (k === 'pass') {
+        // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
+        if (ui._quitGate) ui._quitGate(a, () => ui._passPlay()); else ui._passPlay();
+      }
       return;
     }
-    const b = e.target.closest('.fs-mrow[data-id]');
-    if (b) ui._openMatch(b.dataset.id);
-  });
+    const f = e.target.closest('.fs-face[data-oi]');
+    const them = f && recent[Number(f.dataset.oi)];
+    if (them) confirm(ui, MP, them);
+  };
+  pushRow(box.querySelector('.fs-mp-push'), () => fitOnline(ui));
   showUnseen(ui, MP, rows);
+  fitOnline(ui);
+  return { active: live.length > 0, mine: mine.length };
+}
+
+/** NO SCROLLING: re-lay the matches list so the setup card fits (only while the Online tab is shown). */
+export function fitOnline(ui) {
+  const ov = ui.root.querySelector('[data-ov="setup"]');
+  const box = ov && ov.querySelector('[data-role="online"]');
+  const panel = ov && ov.querySelector('[data-panel="online"]');
+  if (!box || !box._paint || ov.hidden || panel.hidden) return;
+  box._paint();
 }
 
 /** "Notify me when it is my turn" - only while notifications are off on this phone. */
@@ -298,4 +350,4 @@ export function showUnseen(ui, MP, rows) {
   el.querySelector('[data-mp="close"]').addEventListener('click', done);
 }
 
-export default { home, showUnseen, reasonText };
+export default { fillOnline, fitOnline, showUnseen, reasonText };

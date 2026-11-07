@@ -3,6 +3,7 @@
 export const STRINGS = {
   en: {
     title: 'Connect 4 Hoops',
+    tabOnline: 'Online', tabCpu: 'Computer', matches: 'Matches', challengeH: 'Challenge', anyone: 'Anyone', loading: 'Loading...',
     // THE HUB'S OWN DIFFICULTY WORDS, not this game's. They were 'Beginner / Steady /
     // Sharpshooter' - invented here and nowhere else in the repo. Matt: "you created brand new
     // terminology for the difficulties. Don't do that."
@@ -151,6 +152,7 @@ export const STRINGS = {
   },
   es: {
     title: 'Connect 4 Hoops',
+    tabOnline: 'En línea', tabCpu: 'Computadora', matches: 'Partidas', challengeH: 'Retar', anyone: 'Cualquiera', loading: 'Cargando...',
     cpu1: 'Fácil', cpu2: 'Normal', cpu3: 'Difícil',
     play: 'Jugar',
     howto: 'Cómo se juega',
