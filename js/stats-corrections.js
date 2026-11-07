@@ -117,6 +117,50 @@ export function fullLevelStats(st, code) {
   }
   return games ? Object.assign({}, st, { games }) : st;
 }
+// ADJUSTMENTS (Matt, 2026-11-07: "I want to edit firebase directly and have it stick"). Numbers Matt types in the
+// Firebase console at adminConfig/v1/corrections/adjust/<CODE>/<stats game id>/<level>/{played, won, lost} are ADDED to
+// that person's record at read time (a negative number takes away; a result never goes below 0). `total` moves with the
+// level. No phone ever writes adminConfig, so an edit sticks; players/ records are untouched; deleting the entry undoes
+// it. Only played/won/lost: a game's own extra counters (points, bests) are not touched.
+const ADJ_F = ['played', 'won', 'lost'];
+const ADJ_KEY = /^[A-Za-z0-9_-]{1,24}$/;
+const adjNum = (v) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : 0; };
+/** `gm` (one person's record in one game) plus `adj` ({ <level>: { played, won, lost } }); `gm` itself when nothing applies. */
+export function adjustGame(gm, adj) {
+  if (!adj || typeof adj !== 'object' || Array.isArray(adj)) return gm;
+  let out = null;
+  for (const lvl of Object.keys(adj)) {
+    const a = adj[lvl];
+    if (!ADJ_KEY.test(lvl) || !a || typeof a !== 'object') continue;
+    const d = {};
+    let any = false;
+    for (const f of ADJ_F) { d[f] = adjNum(a[f]); if (d[f]) any = true; }
+    if (!any) continue;
+    if (!out) {
+      const g = gm || {};
+      out = Object.assign({}, g, { total: Object.assign({ played: 0, won: 0, lost: 0 }, g.total), byDiff: Object.assign({}, g.byDiff) });
+    }
+    const b = Object.assign({ played: 0, won: 0, lost: 0 }, out.byDiff[lvl]);
+    for (const f of ADJ_F) {
+      const before = b[f] | 0, after = Math.max(0, before + d[f]);
+      b[f] = after;
+      out.total[f] = Math.max(0, (out.total[f] | 0) + (after - before));
+    }
+    out.byDiff[lvl] = b;
+  }
+  return out || gm;
+}
+/** A whole stats store with `adjByGame` ({ <game id>: { <level>: {...} } }, one person's adjust entry) applied. */
+export function adjustStats(st, adjByGame) {
+  if (!st || !st.games || !adjByGame || typeof adjByGame !== 'object') return st;
+  let games = null;
+  for (const id of Object.keys(adjByGame)) {
+    if (!st.games[id]) continue;
+    const f = adjustGame(st.games[id], adjByGame[id]);
+    if (f !== st.games[id]) (games || (games = Object.assign({}, st.games)))[id] = f;
+  }
+  return games ? Object.assign({}, st, { games }) : st;
+}
 export const ASSUMED_MODES = {
   business: [{ code: 'QZCC4', mode: 'ai=2', legacy: 'normal' }],
 };

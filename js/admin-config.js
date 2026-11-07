@@ -104,6 +104,7 @@ export function normalizeConfig(raw) {
   const corr = (src.corrections && typeof src.corrections === 'object') ? src.corrections : {};
   const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
   const hbCorr = (corr.holdem && typeof corr.holdem === 'object') ? corr.holdem : {};
+  const adjCorr = (corr.adjust && typeof corr.adjust === 'object') ? corr.adjust : {};   // Matt's console edits (js/stats-corrections.js adjustGame)
   const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
   const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
@@ -114,7 +115,7 @@ export function normalizeConfig(raw) {
   const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
   const integVoid = (integ.void && typeof integ.void === 'object') ? integ.void : {};
   const reviewed = (src.reviewed && typeof src.reviewed === 'object') ? src.reviewed : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed };
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
