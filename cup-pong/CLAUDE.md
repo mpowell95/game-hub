@@ -179,11 +179,15 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 - `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
   physics to players needs Matt's words, and a per-challenge rules flag so older challenges replay as played.
 
-## The setup screen (2026-09-28, second layout)
+## The setup screen (2026-11-07, tabs: Matt's approved mockup B, `docs/mockups/cuppong-setup.html`)
 
-Hoops' layout: **Your turn** card (only when a match waits), **Multiplayer**, **Play the computer**
-(difficulty, Gentleman's, Reracks, Play), **Solo** (best on the right). Must fit 390x664
-(`tools/check-no-scroll.mjs cup-pong`); Your turn can scroll inside itself, contained.
+Matt: "I don't like having to click into multiplayer." Tabs **Online | Computer | Solo** (`renderSetup(tab)`, `showTab`):
+Online = Matches (your turn first with Play, then theirs; owed series games; the W-L chip opens History) and Challenge
+(+ Anyone = the full list, then the 4 people played most recently, first names, one tap = their terms), from
+`mp-ui.js fillOnline`. **Opens on Online when any match is going, else Computer** (decided after the read; a tapped tab
+wins; `ACTIVE_HINT` keeps the first paint from jumping). The Online badge = matches on your turn. Pinned to the top so the
+tabs never move. The old Multiplayer home is gone: every "back to multiplayer" lands on the Online tab.
+(2026-09-28 layout, replaced: Your turn card, Multiplayer door, computer card, Solo door.)
 
 ## Challenges: turn by turn, by player code (2026-09-28)
 

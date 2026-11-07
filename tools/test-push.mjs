@@ -129,8 +129,12 @@ check('the hub takes a tapped notification to its game, and never from inside an
 // sessionStorage before anything else and cleared only once the game is mounted.
 check('a tapped notification survives a reload (queued first, cleared only once the game is open)',
   /this\._queuePushOpen\(e\.data\.game, e\.data\);\n\s*this\._openPushedGame/.test(hub)
-  && /await this\.launch\(id\);\n\s*if \(this\.current && this\.current\.id === id\) this\._clearPushOpen\(\);/.test(hub)
+  && /await this\.(?:launch|_launchOverMp)\(id\);\n\s*if \(this\.current && this\.current\.id === id\) this\._clearPushOpen\(\);/.test(hub)
   && /const q = this\._peekPushOpen\(\);/.test(hub));
+// (2026-11-07, Matt: "it should continue bringing you to the game... But the backdrop should be the multiplayer
+// screen") A tapped game notification opens the game over the Multiplayer screen, and leaving it lands there.
+check('a tapped game notification opens the game with Multiplayer behind it',
+  /async _launchOverMp\(id\) \{[\s\S]{0,1200}this\.openChallenges\(\);[\s\S]{0,400}this\._closeMultiplayer\(\);\n\s*await this\.launch\(id, \{ back \}\);/.test(hub));
 check('a cold start opens the notified game without waiting on the network alert check',
   /this\._afterPaint\(\(\) => (?:this\._openFromUrl\(\)|\{ this\._openFromUrl\(\);[^}]*\})\);/.test(hub));
 check('the launcher refresh gives a tapped notification a moment to open its game first',

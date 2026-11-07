@@ -17,13 +17,14 @@ function page(game, title, backRole, body) {
   game.root.innerHTML = `
     <div class="cp-mp">
       <div class="cp-mp-top">
-        <button type="button" class="cp-back" data-role="${backRole}">‹ ${esc(backRole === 'setup' ? t('title') : t('multiplayer'))}</button>
+        <button type="button" class="cp-back" data-role="${backRole}">‹ ${esc(backRole === 'setup' ? t('title') : t('tabOnline'))}</button>
         <h1 class="cp-mp-title">${esc(title)}</h1>
       </div>
       <div class="cp-mp-body">${body}</div>
     </div>`;
   game.on(game.root.querySelector('.cp-back'), 'click', () => {
-    if (backRole === 'setup') game.renderSetup(); else home(game, game.MP);
+    // Multiplayer lives on the setup screen's Online tab since 2026-11-07 (fillOnline below).
+    if (backRole === 'setup') game.renderSetup(); else game.renderSetup('online');
   });
   return game.root.querySelector('.cp-mp-body');
 }
@@ -120,6 +121,73 @@ export async function home(game, MP) {
     if (b) game.openMatch(b.dataset.id);
   });
   showUnseen(game, MP, rows);
+}
+
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, Matt's approved mockup B): the matches going (your turn
+ * first, with Play), then Challenge: the people played most recently, one tap each, and Anyone (the
+ * full list). The record chip opens History. Fills `box`; returns { active, mine } for the tab.
+ */
+export async function fillOnline(game, MP, box) {
+  const rows = await MP.readMyGames();
+  if (!box.isConnected) return null;
+  try { MP.recordFinished(rows); } catch (err) { console.warn('[cup-pong] recordFinished', err); }
+  const live = rows.filter((r) => !r.over);
+  const owed = await owedSeries(MP, rows);
+  if (!box.isConnected) return null;
+  const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
+  const oMine = owed.filter((o) => o.mine), oTheirs = owed.filter((o) => !o.mine);
+  const nMatches = live.length + owed.length;
+  // Most recent first, one face per person; an index into this list, never a code, in the page.
+  const seen = new Set();
+  const recent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  let won = 0, lost = 0;
+  try { for (const o of MP.recordsFrom(rows, MP.myCode()).opponents) { won += o.won | 0; lost += o.lost | 0; } } catch { /* no chip */ }
+  const chip = won + lost ? `<button type="button" class="cp-rec-chip" data-role="history">${won}-${lost}</button>` : '';
+  const sub = (r) => esc([r.rebuttal ? t('rebuttal') : t('cupsTo', { a: r.mine, b: r.theirs }), ...tags(r)].join(' · '));
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const liveRow = (r) => `
+    <button type="button" class="cp-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+      <span class="cp-trow-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="cp-mrow-text"><span class="cp-mrow-name">${esc(r.name)}</span>
+        <span class="cp-mrow-sub">${r.yourTurn ? sub(r) : `${esc(t('theirTurn', { name: r.name }))} · ${sub(r)}`}</span></span>
+      ${r.yourTurn ? `<span class="cp-play-pill">${t('play')}</span>` : '<span class="cp-row-chev" aria-hidden="true">›</span>'}
+    </button>`;
+  box.innerHTML = (nMatches ? `
+      <div class="gh-card cp-on-card">
+        <div class="cp-on-head"><span>${t('matches')}</span>${chip}</div>
+        ${oMine.map(owedHTML).join('')}${mine.map(liveRow).join('')}${oTheirs.map(owedHTML).join('')}${theirs.map(liveRow).join('')}
+      </div>` : '') + `
+      <div class="gh-card cp-on-card">
+        <div class="cp-on-head"><span>${t('challengeH')}</span>${nMatches ? '' : chip}</div>
+        <div class="cp-faces">
+          <button type="button" class="cp-face is-any" data-role="anyone"><span class="cp-face-dot" aria-hidden="true">+</span><span class="cp-face-name">${t('anyone')}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="cp-face" data-oi="${i}"><span class="cp-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="cp-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>
+      <div class="cp-mp-push" hidden></div>`;
+  game.on(box, 'click', async (e) => {
+    const nx = e.target.closest('[data-next]');
+    if (nx) {
+      const o = owed.find((x) => x.game.id === nx.dataset.next);
+      nx.disabled = true;
+      const res = o && await game.startNextGame(o.game);
+      if (res && !res.ok) { nx.disabled = false; game.toast(reasonText(res.reason), 2400); }
+      return;
+    }
+    const m = e.target.closest('.cp-mrow[data-id]');
+    if (m) { game.openMatch(m.dataset.id); return; }
+    if (e.target.closest('[data-role="history"]')) { history(game, MP); return; }
+    if (e.target.closest('[data-role="anyone"]')) { picker(game, MP); return; }
+    const f = e.target.closest('.cp-face[data-oi]');
+    const them = f && recent[Number(f.dataset.oi)];
+    if (them) terms(game, MP, them);
+  });
+  pushRow(game, box.querySelector('.cp-mp-push'));
+  showUnseen(game, MP, rows);
+  return { active: nMatches > 0, mine: mine.length + oMine.length };
 }
 
 /** "Notify me when it's my turn" - only while notifications are off on this phone. */
@@ -272,4 +340,4 @@ export function showUnseen(game, MP, rows) {
   game.on(el.querySelector('[data-role="close"]'), 'click', done);
 }
 
-export default { home, showUnseen, challengeTo };
+export default { home, showUnseen, challengeTo, fillOnline };

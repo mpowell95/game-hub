@@ -687,7 +687,7 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **App icon badge** (2026-10-14): `sw.js` `syncBadge()` sets it to the number of our notifications
   showing, only after one shows; `clearShownNotifications()` clears it. iPhone Home Screen app,
   installed desktop Chrome/Edge; a no-op elsewhere.
-- **A tap opens THAT match** and survives a reload: the tap is written to sessionStorage
+- **A tap opens THAT match, with the Multiplayer screen behind it (2026-11-07, `_launchOverMp`)**, and survives a reload: the tap is written to sessionStorage
   (`hub.pushOpen`, 2 min) before acting, cleared only once mounted; same game open → `openArmed()`.
 - If notifications stop around late December 2026, check whether Blaze's free-trial billing needs
   activating first (not certain).
@@ -731,11 +731,11 @@ None of this makes the hub cheat-proof; never describe it that way.
   Escoba's deck were also setup-only). Every option a challenge carries is choosable on that screen.
 - **A series between games is listed** via an optional `owed(M, rows)` (may be async) on its `SOURCES` entry (Cup Pong
   and Hoops, 2026-10-29): a `next:<id>` row, no ⋯ or bell; the game's `armOpen('next:<id>')` starts the next game.
-- **Your-turn bubble on the tab bar (2026-11-07, ADMIN DEVICES ONLY, Matt: "Build D for admin only")**: compact layout: each
-  waiting tile gets a yellow ring + swords, ONE bubble points at the Multiplayer tab (tap = Multiplayer screen); `js/hub.js`
-  `_paintDock`. Players and the comfortable layout keep the old bubble/pills. Mockup: `docs/mockups/turn-alerts.html`, D.
-  **A tapped turn notification opens the Multiplayer screen, not the match (same day, admin devices only;**
-  `_openPushedGameNow`). Players still go straight into the match.
+- **Your-turn bubble on the tab bar (2026-11-07, EVERY device, Matt: "Build it. Both. The new notification screen too.")**:
+  compact layout: each waiting tile gets a yellow ring + swords, ONE bubble points at the Multiplayer tab (tap = Multiplayer
+  screen); `js/hub.js` `_paintDock`. The comfortable layout (no tab bar) keeps the old bubble/pills. Mockup: `docs/mockups/turn-alerts.html`, D.
+- **A tapped game notification opens the game OVER the Multiplayer screen (2026-11-07, every device)**: `_launchOverMp`
+  shows Multiplayer, opens the match, and leaving the game (Hub or back gesture) lands on Multiplayer (`_armReturn`).
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).
