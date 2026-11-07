@@ -736,6 +736,10 @@ None of this makes the hub cheat-proof; never describe it that way.
   screen); `js/hub.js` `_paintDock`. The comfortable layout (no tab bar) keeps the old bubble/pills. Mockup: `docs/mockups/turn-alerts.html`, D.
 - **A tapped game notification opens the game OVER the Multiplayer screen (2026-11-07, every device)**: `_launchOverMp`
   shows Multiplayer, opens the match, and leaving the game (Hub or back gesture) lands on Multiplayer (`_armReturn`).
+- **Every multiplayer game's setup screen has TABS, Online first (2026-11-07, Matt: "Do the same tabs for the other
+  multiplayer games")**: Cup Pong's shape (`cup-pong/CLAUDE.md`, "The setup screen"). Challenge games: Matches (Play on your
+  turn) + Challenge (Anyone + 4 recent first names); opens on Online when a match is going, else the next tab. Live-room-only
+  games: Online holds Host/Join, opens on the offline tab. Each game's CLAUDE.md has its own "Setup tabs" note.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

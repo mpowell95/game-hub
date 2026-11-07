@@ -194,7 +194,8 @@ W('chinchon/js/ui.js', /this\._recordQuitLoss\(\);\s*if \(which === 'newgame'\) 
 W('battleship/js/ui.js', /return !this\.ch && this\.view === 'battle' && !!s && !s\.over && !this\._statsCommitted;/, 'Battleship (second pass): the battle on screen arms it (placing still is not a move)');
 W('boggle/js/ui.js', /action === 'change-settings'\) \{[\s\S]{0,260}this\._recordQuitLoss\(\);/, 'Boggle: Give up records the loss');
 W('darts/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Darts: a new match over a thrown-in one records it');
-W('darts/js/mp-ui.js', /ui\._quitGate\(e\.currentTarget, \(\) => ui\._passPlay\(\)\)/, 'Darts: Pass & play asks first too');
+// (2026-11-07) Pass & play moved onto the setup screen's Online tab; the tapped button is passed directly.
+W('darts/js/mp-ui.js', /ui\._quitGate\((?:e\.currentTarget|a), \(\) => ui\._passPlay\(\)\)/, 'Darts: Pass & play asks first too');
 W('flick-soccer/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Flick Soccer: a new match over a flicked-in one records it');
 W('eight-ball/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Pool: a new match over a shot-in one records it');
 W('eight-ball/js/ui.js', /if \(this\.mode === 'cpu' && !opts\.replay\) m\.ps = 1;/, 'Pool (second pass): the first shot of the match arms it, the computer\'s break included');
