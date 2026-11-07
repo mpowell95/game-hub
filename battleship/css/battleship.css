@@ -923,6 +923,43 @@
   border: 1px solid var(--bs-surface-2); background: var(--bs-surface); color: var(--bs-ink);
 }
 
+/* --- SETUP TABS (2026-11-07): Online | Computer. The card is pinned to the top of the water (never
+   centred), so the tabs stay put whichever tab is open. Selected = the ringed pill AND the bold label,
+   never colour alone. --- */
+.bs-shell-scene { align-items: flex-start; }
+.bs-root .bs-tabs .bs-segbtn { font-size: 17px; min-height: 40px; gap: 8px; color: var(--bs-ink); }
+.bs-root .bs-tabs .bs-segbtn[aria-pressed="true"] { font-weight: 900; }
+.bs-root .bs-tabs .bs-segbtn span { overflow: visible; }
+.bs-tab-n {
+  flex: none; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.bs-tab-n[hidden] { display: none; }
+.bs-on-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; border-radius: 14px; border: 2px solid var(--bs-surface-2); background: var(--bs-surface); }
+.bs-on-head { padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.bs-setcard .bs-ch-name { font-size: 17px; }
+.bs-setcard .bs-ch-sub { font-size: 15px; color: var(--bs-ink); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-setcard .bs-ch-row { min-height: 52px; }
+.bs-setcard .bs-ch-note { font-size: 15px; }
+.bs-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.bs-faces { display: flex; gap: 4px; justify-content: space-between; }
+.bs-face {
+  appearance: none; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--bs-ink); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.bs-face.is-any { flex: 1.5 1 0; }
+.bs-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--bs-surface-2); }
+.bs-face.is-any .bs-face-dot { background: none; border: 2px dashed var(--bs-muted); font-size: 28px; font-weight: 400; box-sizing: border-box; }
+.bs-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bs-room-row { display: flex; gap: 10px; }
+.bs-room-row .bs-btn { flex: 1 1 0; font-size: 17px; min-height: 48px; border-width: 2px; }
+@media (max-width: 380px) {
+  .bs-shell-scene { padding: 12px 8px; }
+  .bs-setcard { padding: 18px 10px 14px; }
+  .bs-on-card { padding: 10px 4px; }
+  .bs-face.is-any { flex: 1.7 1 0; }
+}
+
 /* --- reduced motion: every animation becomes an instant state change --------------------------- */
 /* NEVER `display: none` here. That is exactly how this game shipped a blank screen: a decoration
    rule landing on a structural class, hidden outright for anyone with Reduce Motion on. Everything
