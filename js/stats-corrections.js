@@ -67,6 +67,56 @@ export const HAND_ADDS = {
 // Read time only, for POINTS (js/lb-points.js gamePoints): nothing stored changes. Monopoly Deal saved the computer
 // count from 2026-10-30. Matt, 2026-11-04: "I only ever play monopoly deal against 2 robots. so 3 people total" and,
 // of his 4 wins saved with no level ('legacy'), "yes count them as medium".
+// FULL LEVEL: a shortened match the game counts one level down (Flick Soccer first to 1, 2026-10-29) counts at the
+// level PICKED, for the codes listed only. Matt, 2026-11-07: "Change this for me only. Fix my stats" (his Hard, first to
+// 1 games had been going under Medium). Read time only, like ASSUMED_MODES: byDiff stays exactly as recorded. byMode
+// keeps the PICKED level, so it says which games they were, past and future alike; at most what byDiff holds is moved.
+// Results from before 2026-10-30 saved no mode and stay where they were recorded.
+export const FULL_LEVEL = {
+  flicksoccer: [{ code: 'QZCC4', level: 'hard', from: 'medium', short: (m) => m.goals === '1' }],
+};
+const modeParts = (k) => {
+  const m = {};
+  for (const p of String(k || '').split('|')) { const i = p.indexOf('='); if (i > 0) m[p.slice(0, i)] = p.slice(i + 1); }
+  return m;
+};
+/** `gm` (one record's game `id`) with FULL_LEVEL applied for `code`; `gm` itself when none applies. Never mutates. */
+export function fullLevelGame(gm, id, code) {
+  const c = String(code || '').trim().toUpperCase();
+  const rules = c && gm && gm.byDiff && gm.byMode && typeof gm.byMode === 'object' ? (FULL_LEVEL[id] || []).filter((r) => r.code === c) : [];
+  let out = null;
+  for (const r of rules) {
+    const n = { played: 0, won: 0, lost: 0 };
+    for (const [k, ds] of Object.entries(gm.byMode)) {
+      const b = k !== '?' && ds && typeof ds === 'object' && r.short(modeParts(k)) ? ds[r.level] : null;
+      if (b && typeof b === 'object') for (const f of Object.keys(n)) n[f] += Math.max(0, b[f] | 0);
+    }
+    const src = (out || gm).byDiff[r.from];
+    if (!src || typeof src !== 'object') continue;
+    const mv = {};
+    let any = false;
+    for (const f of Object.keys(n)) { mv[f] = Math.min(n[f], Math.max(0, src[f] | 0)); if (mv[f]) any = true; }
+    if (!any) continue;
+    if (!out) out = Object.assign({}, gm, { byDiff: Object.assign({}, gm.byDiff) });
+    const from = Object.assign({}, out.byDiff[r.from]);
+    const to = Object.assign({ played: 0, won: 0, lost: 0 }, out.byDiff[r.level]);
+    for (const f of Object.keys(mv)) { from[f] = (from[f] | 0) - mv[f]; to[f] = (to[f] | 0) + mv[f]; }
+    out.byDiff[r.from] = from;
+    out.byDiff[r.level] = to;
+  }
+  return out || gm;
+}
+/** A whole stats store with FULL_LEVEL applied for `code`; `st` itself when nothing changes. */
+export function fullLevelStats(st, code) {
+  if (!st || !st.games) return st;
+  let games = null;
+  for (const id of Object.keys(FULL_LEVEL)) {
+    const g = st.games[id];
+    const f = g ? fullLevelGame(g, id, code) : g;
+    if (f !== g) (games || (games = Object.assign({}, st.games)))[id] = f;
+  }
+  return games ? Object.assign({}, st, { games }) : st;
+}
 export const ASSUMED_MODES = {
   business: [{ code: 'QZCC4', mode: 'ai=2', legacy: 'normal' }],
 };
