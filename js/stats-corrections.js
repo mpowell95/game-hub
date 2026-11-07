@@ -106,6 +106,24 @@ export function fullLevelGame(gm, id, code) {
   }
   return out || gm;
 }
+/** The wins FULL_LEVEL moved for `code` in `gm` (a record it was ALREADY applied to): [{ level, from, won }]. Points
+ *  stay those of the level the game counted them at (Matt, 2026-11-07: Hard, first to 1 is "worth 3 points per win",
+ *  as the sheet says), so js/lb-points.js gamePoints prices these wins at `from`. */
+export function fullLevelWins(gm, id, code) {
+  const c = String(code || '').trim().toUpperCase();
+  const rules = c && gm && gm.byDiff && gm.byMode && typeof gm.byMode === 'object' ? (FULL_LEVEL[id] || []).filter((r) => r.code === c) : [];
+  const out = [];
+  for (const r of rules) {
+    let n = 0;
+    for (const [k, ds] of Object.entries(gm.byMode)) {
+      const b = k !== '?' && ds && typeof ds === 'object' && r.short(modeParts(k)) ? ds[r.level] : null;
+      if (b && typeof b === 'object') n += Math.max(0, b.won | 0);
+    }
+    n = Math.min(n, Math.max(0, ((gm.byDiff[r.level] || {}).won) | 0));
+    if (n) out.push({ level: r.level, from: r.from, won: n });
+  }
+  return out;
+}
 /** A whole stats store with FULL_LEVEL applied for `code`; `st` itself when nothing changes. */
 export function fullLevelStats(st, code) {
   if (!st || !st.games) return st;
