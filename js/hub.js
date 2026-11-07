@@ -1808,7 +1808,7 @@ class Hub {
   openChallenges() {
     if (this.current) return;
     this._mpTabOn(true);
-    import('./challenges-ui.js')
+    return import('./challenges-ui.js')
       .then((m) => {
         this._mpMod = m;
         return m.openChallenges({
@@ -2011,17 +2011,6 @@ class Hub {
       await this._warmGame(id);
       if (this.current) { this._clearPushOpen(); return; }
     }
-    // ONTO THE MULTIPLAYER SCREEN (2026-11-07, ADMIN DEVICES ONLY until Matt ships it). Matt: "We need to
-    // make the notifications take you to the multiplayer screen then. Start making that more of a place
-    // people live." A turn/challenge notification opens Multiplayer, where every turn waits, like the tab
-    // bar's bubble (_onDockTap). A Game Hub message's Play button (`fresh`) still opens its game.
-    if (!extra.fresh && isAdminDevice() && (typeof g.alerts === 'function' || LIVE_MP_GAMES.has(id))) {
-      this._clearPushOpen();
-      const st = this._alertFor(id);
-      if (st && st.alert.kind !== 'over') this._dismissGameAlert(id);
-      this.openChallenges();
-      return;
-    }
     // STRAIGHT INTO THE MATCH THE NOTIFICATION IS ABOUT (2026-09-24), when it names one and the
     // game's alerts module can open a match directly (hoops4 `armOpen`). Before this a tap only
     // reached the match when a launcher bubble happened to be up for it; otherwise it landed on the
@@ -2036,7 +2025,7 @@ class Hub {
           const st = this._alertFor(id);
           if (st && st.alert.kind !== 'over') this._dismissGameAlert(id);
           // Cleared only once the game is MOUNTED: a reload while it downloads must still find it.
-          await this.launch(id);
+          await this._launchOverMp(id);
           if (this.current && this.current.id === id) this._clearPushOpen();
           return;
         }
@@ -2045,9 +2034,35 @@ class Hub {
     }
     await this._checkGameAlerts();
     if (this.current) { this._clearPushOpen(); return; }
-    if (this._alertFor(id)) await this._openAlertGame(id);
+    const overMp = typeof g.alerts === 'function' || LIVE_MP_GAMES.has(id);
+    if (this._alertFor(id)) await this._openAlertGame(id, overMp);
+    else if (overMp) await this._launchOverMp(id);
     else await this.launch(id);
     this._clearPushOpen();
+  }
+
+  /**
+   * A TAPPED NOTIFICATION OPENS THE GAME WITH THE MULTIPLAYER SCREEN BEHIND IT (2026-11-07, Matt: "it
+   * should continue bringing you to the game like it's supposed to now. But the backdrop should be the
+   * multiplayer screen"). Multiplayer shows while the game downloads, the game opens over it, and
+   * leaving the game (Hub button or the phone's back gesture) lands on Multiplayer, not the launcher
+   * (the leaderboard's own return path, _armReturn).
+   */
+  async _launchOverMp(id) {
+    const g = GAMES.find((x) => x.id === id);
+    if (!g || this.current) return;
+    const back = () => { if (!this.current) return this.openChallenges(); };
+    if (!this._challengeGames().length && !this._liveGames().length) { await this.launch(id); return; }
+    // The screen's module first, so it is MOUNTED (synchronously, once imported) before the game
+    // replaces it; its lists keep loading behind and are simply dropped when it closes.
+    try { await import('./challenges-ui.js'); } catch { await this.launch(id); return; }
+    if (this.current) return;
+    this.openChallenges();
+    if (g.module) { try { await import(g.module); } catch { /* launch() reports it */ } }
+    await new Promise((r) => setTimeout(r, 0));
+    if (this.current) return;
+    this._closeMultiplayer();
+    await this.launch(id, { back });
   }
 
   /** The grid cell holding a game's tile. A favourited game is drawn twice; the first is the
@@ -2141,7 +2156,8 @@ class Hub {
   }
 
   /**
-   * THE BUBBLE ON THE MULTIPLAYER TAB (2026-11-07, ADMIN DEVICES ONLY until Matt says otherwise).
+   * THE BUBBLE ON THE MULTIPLAYER TAB (2026-11-07; admin devices first, then everyone the same day:
+   * Matt, "Build it. Both. The new notification screen too.").
    * Matt: the one-game bubble was "too big and the top can cut it off and it blocks most of the game
    * it's for", the many-game pills "too small and get cut off"; then, of a full list on the launcher,
    * "that's what we have on the multiplayer tab, isn't it? So why duplicate it?" He picked mockup D
@@ -2151,7 +2167,7 @@ class Hub {
    * Only in the compact layout with a Multiplayer tab; everywhere else the old bubble/pills.
    */
   _dockTab() {
-    if (!this._compact || !this.root || !isAdminDevice()) return null;
+    if (!this._compact || !this.root) return null;
     return this.root.querySelector('[data-role="tabs"] [data-tab="challenges"]');
   }
 
@@ -2238,7 +2254,7 @@ class Hub {
   }
 
   /** Tapping the bubble (or the tile it points at) arms the full-screen card and opens the game. */
-  _openAlertGame(id) {
+  _openAlertGame(id, overMp = false) {
     const state = id ? this._alertFor(id) : (this._gameAlerts || [])[0];
     if (!state) return;
     try { state.mod.armCeremony(state.alert); } catch {}
@@ -2248,6 +2264,7 @@ class Hub {
       this._gameAlerts = (this._gameAlerts || []).filter((x) => x !== state);
       this._paintGameAlert();
     } else this._dismissGameAlert(state.game);
+    if (overMp) return this._launchOverMp(state.game);
     this.launch(state.game);
   }
 

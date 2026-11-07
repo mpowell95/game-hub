@@ -248,6 +248,43 @@
 .cp-root .cp-trow-go { padding: 6px 14px; border-radius: 999px; background: #1769d4; color: #fff; font-weight: 800; font-size: 14px; }
 .cp-root .cp-trow-more { border: 0; background: none; color: var(--cps-muted); font: inherit; font-weight: 700; min-height: 40px; cursor: pointer; }
 
+/* TABS: Online | Computer | Solo (2026-11-07, Matt's approved mockup B). Each panel holds the cards
+   it used to; the selected tab is the raised pill AND its bold label, never colour alone. */
+/* Pinned to the top, never centred: the tabs stay put whichever panel is open. */
+.cp-root .cp-setup > .cp-title:first-child { margin-top: 0; }
+.cp-root .cp-setup > .cp-panel:last-child { margin-bottom: 0; }
+.cp-root .cp-tabs { width: min(380px, 100%); box-sizing: border-box; display: flex; }
+.cp-root .cp-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; font-size: 17px; gap: 6px; }
+.cp-root .cp-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }
+.cp-root .cp-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.cp-root .cp-tab-n[hidden] { display: none; }
+.cp-root .cp-panel { width: min(380px, 100%); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.cp-root .cp-panel[hidden] { display: none; }
+.cp-root .cp-online { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.cp-root .cp-on-card { width: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.cp-root .cp-on-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.cp-root .cp-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--cps-surface-2);
+  background: none; color: var(--cps-ink); font: inherit; font-size: 16px; font-weight: 800;
+  font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-online .cp-mrow-name { font-size: 17px; }
+.cp-root .cp-online .cp-mrow-sub { font-size: 15px; color: var(--cps-ink); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-root .cp-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.cp-root .cp-faces { display: flex; gap: 6px; justify-content: space-between; }
+.cp-root .cp-face {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.cp-root .cp-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--cps-surface-2); }
+.cp-root .cp-face.is-any .cp-face-dot { background: none; border: 2px dashed var(--cps-muted); font-size: 28px; font-weight: 400; color: var(--cps-ink); box-sizing: border-box; }
+.cp-root .cp-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-root .cp-solo-top { align-self: stretch; display: flex; align-items: center; gap: 12px; text-align: left; }
+.cp-root .cp-solo-top .cp-row-sub { font-size: 15px; }
+
 /* --- the multiplayer screens (mp-ui.js) --------------------------------------------------------- */
 .cp-root .cp-mp {
   --gh-surface: var(--cps-surface);

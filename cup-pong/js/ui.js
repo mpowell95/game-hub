@@ -32,6 +32,10 @@ const DIFFS = ['easy', 'medium', 'hard'];
 const RERACKS = [0, 1, 2, 3, 'inf'];
 let instance = null;
 
+/** Whether this player had a match going at the last look (this page's life only): the first paint
+ *  opens on the tab it will most likely settle on, so the screen does not jump once the list is read. */
+let ACTIVE_HINT = false;
+
 /** This player's fewest throws to clear a solo rack, from their own stats store; 0 = never. */
 function soloBest() {
   try { return ((((loadStats().games || {}).cuppong || {}).cp || {}).soloBest) | 0; } catch { return 0; }
@@ -216,8 +220,12 @@ class CupPong {
   // A HUB screen on css/ui.css's primitives (the light/dark hub skin), like Hoops' and Skeeball's.
   // The selected option is marked by the segmented control's raised pill AND a shape for each
   // difficulty, never colour alone (Matt is red/green colourblind).
-  renderSetup() {
+  /** `tab` ('online' | 'cpu' | 'solo') opens on that tab. Without it: the tab last tapped, else Online
+   *  when a match is going and Computer when none is (Matt, 2026-11-07), decided again once the
+   *  matches have been read (fillOnline), unless the player has tapped a tab by then. */
+  renderSetup(tab) {
     if (this.disposed) return;
+    if (tab) { this._tab = tab; }
     this.teardownEngine();
     this.unbindAll();
     this.mode = null;
@@ -225,36 +233,42 @@ class CupPong {
     const s = this.settings;
     const seg = (role, items, cur) => `<div class="gh-seg" role="group" data-role="${role}">${items.map(([v, label, icon]) =>
       `<button type="button" class="gh-seg__item" data-v="${v}" aria-pressed="${v === cur}">${icon || ''}<span>${label}</span></button>`).join('')}</div>`;
-    // HOOPS' LAYOUT (Matt, 2026-09-28: "just like connect 4 hoops"): your turns first, then
-    // Multiplayer as a door, then the computer card, then Solo as a door. Solo was a card with a
-    // heading, a hint, a best and a button - "too many words and it's still not clear what it is".
+    // TABS (Matt, 2026-11-07, his approved mockup B, docs/mockups/cuppong-setup.html: "I don't like
+    // having to click into multiplayer"): Online | Computer | Solo. Online holds the matches and who
+    // to challenge (cup-pong/js/mp-ui.js fillOnline); Computer and Solo are the old cards.
     const best = soloBest();
     const saved = readSave();
+    const cur = this._tab || (ACTIVE_HINT ? 'online' : 'cpu');
+    const tabBtn = (k, label) => `<button type="button" class="gh-seg__item" data-tab="${k}" aria-pressed="${k === cur}"><span>${label}</span>${k === 'online' ? '<b class="cp-tab-n" hidden></b>' : ''}</button>`;
     this.root.innerHTML = `
       <div class="cp-setup">
         <h1 class="cp-title">${t('title')}</h1>
-        <div class="gh-card cp-turns" hidden></div>
-        <button type="button" class="gh-card cp-row" data-role="mp">
-          <span class="cp-row-head">${t('multiplayer')}</span>
-          <span class="cp-row-chev" aria-hidden="true">\u203A</span>
-        </button>
+        <div class="gh-seg cp-tabs" role="group" data-role="tabs">${tabBtn('online', t('tabOnline'))}${tabBtn('cpu', t('tabCpu'))}${tabBtn('solo', t('solo'))}</div>
+        <div class="cp-panel" data-panel="online"${cur === 'online' ? '' : ' hidden'}>
+          <div class="cp-online"><p class="cp-mp-note">${t('loading')}</p></div>
+        </div>
+        <div class="cp-panel" data-panel="cpu"${cur === 'cpu' ? '' : ' hidden'}>
         <div class="gh-card cp-setup-card">
           <p class="cp-card-head">${t('vsCpu')}</p>
           ${seg('diff', DIFFS.map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
           <p class="cp-setup-label">${t('gentlemans')} <span class="cp-setup-hint">${t('gentlemansHint')}</span></p>
           ${seg('gent', [['on', t('on')], ['off', t('off')]], s.gentlemans ? 'on' : 'off')}
           <p class="cp-setup-label">${t('reracks')}</p>
-          ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '\u221e' : String(n)]), String(s.reracks))}
+          ${seg('rr', RERACKS.map((n) => [String(n), n === 'inf' ? '∞' : String(n)]), String(s.reracks))}
           ${saved ? `<div class="cp-setup-go">
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="continue">${t('continueGame')}</button>
             <button type="button" class="gh-btn gh-btn--ghost gh-btn--block cp-setup-play" data-role="play">${t('newGame')}</button>
           </div>` : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="play">${t('play')}</button>`}
         </div>
-        <button type="button" class="gh-card cp-row" data-role="solo">
-          <span class="cp-row-text"><span class="cp-row-head">${t('solo')}</span><span class="cp-row-sub">${t('soloHint')}</span></span>
-          ${best ? `<span class="cp-row-best"><b>${best}</b><span>${t('soloBestShort')}</span></span>` : ''}
-          <span class="cp-row-chev" aria-hidden="true">\u203A</span>
-        </button>
+        </div>
+        <div class="cp-panel" data-panel="solo"${cur === 'solo' ? '' : ' hidden'}>
+        <div class="gh-card cp-setup-card">
+          <div class="cp-solo-top">
+            <span class="cp-row-text"><span class="cp-row-head">${t('solo')}</span><span class="cp-row-sub">${t('soloHint')}</span></span>
+            ${best ? `<span class="cp-row-best"><b>${best}</b><span>${t('soloBestShort')}</span></span>` : ''}
+          </div>
+          <button type="button" class="gh-btn gh-btn--primary gh-btn--block cp-setup-play" data-role="solo">${t('play')}</button>
+        </div>
         ${isAdminDevice() ? `<div class="gh-card cp-setup-card cp-test">
           <p class="cp-card-head">${t('test')}</p>
           <div class="cp-test-row">
@@ -262,7 +276,13 @@ class CupPong {
             <button type="button" class="gh-btn" data-role="test-cpu">${t('testCpu')}</button>
           </div>
         </div>` : ''}
+        </div>
       </div>`;
+    const tabs = this.root.querySelector('[data-role="tabs"]');
+    this.on(tabs, 'click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (b) { this._tab = b.dataset.tab; this.showTab(b.dataset.tab); }
+    });
     const pick = (role, fn) => {
       const g = this.root.querySelector(`[data-role="${role}"]`);
       this.on(g, 'click', (e) => {
@@ -286,8 +306,15 @@ class CupPong {
       this.on(this.root.querySelector('[data-role="test-solo"]'), 'click', () => this.start('solo', { test: true }));
       this.on(this.root.querySelector('[data-role="test-cpu"]'), 'click', () => this.start('cpu', { test: true }));
     }
-    this.on(this.root.querySelector('[data-role="mp"]'), 'click', () => this.openMultiplayer());
-    this.fillTurns();
+    this.fillOnline();
+  }
+
+  /** Show one tab's panel (no re-render: the Online list and the chosen options stay as they are). */
+  showTab(k) {
+    const box = this.root.querySelector('.cp-setup');
+    if (!box) return;
+    for (const b of box.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of box.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
   }
 
   // --- starting a game -------------------------------------------------------------------------
@@ -1117,7 +1144,7 @@ class CupPong {
     const [MP, UI] = await Promise.all([this.loadMP(), import('./mp-ui.js')]);
     if (this.disposed) return;
     if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
-    else UI.home(this, MP);
+    else this.renderSetup('online');
   }
 
   /** Open one stored match. Throws still waiting on this phone go first, so none is lost. */
@@ -1199,35 +1226,19 @@ class CupPong {
   }
 
   /** YOUR TURN, on the setup screen (Hoops' 2026-09-24 card): every match waiting on you. */
-  async fillTurns() {
-    let MP;
-    try {
-      const { loadProfile } = await import('../../js/profile-store.js');
-      const p = loadProfile();
-      if (!p || !p.playerId) return;
-      MP = await this.loadMP();
-    } catch { return; }
-    const rows = await MP.readMyGames();
-    if (this.disposed || this.mode !== null) return;
-    try { MP.recordFinished(rows); } catch (err) { console.warn('[cup-pong] recordFinished', err); }
-    const box = this.root.querySelector('.cp-turns');
-    const mine = rows.filter((r) => !r.over && r.yourTurn);
-    if (box && mine.length) {
-      box.innerHTML = `<p class="cp-card-head">${t('yourTurn')}</p>` + mine.slice(0, 4).map((r) => `
-        <button type="button" class="cp-trow" data-id="${r.id}">
-          <span class="cp-trow-face" aria-hidden="true">${escapeHTML(r.emoji)}</span>
-          <span class="cp-trow-name">${escapeHTML(r.name)}${r.rebuttal || r.su || r.series > 1 ? `<small>${escapeHTML([r.rebuttal ? t('rebuttal') : '', r.series > 1 ? t('gameOf', { n: r.seriesNo, m: r.series }) : '', r.su ? t('straightUp') : ''].filter(Boolean).join(' · '))}</small>` : ''}</span>
-          <span class="cp-trow-go">${t('play')}</span>
-        </button>`).join('')
-        + (mine.length > 4 ? `<button type="button" class="cp-trow-more" data-role="more">${t('moreN', { n: mine.length - 4 })}</button>` : '');
-      box.hidden = false;
-      this.on(box, 'click', (e) => {
-        const b = e.target.closest('.cp-trow');
-        if (b) this.openMatch(b.dataset.id);
-        else if (e.target.closest('[data-role="more"]')) this.openMultiplayer();
-      });
-    }
-    import('./mp-ui.js').then((UI) => { if (!this.disposed && this.mode === null) UI.showUnseen(this, MP, rows); }).catch(() => {});
+  /** The Online tab: matches and who to challenge (mp-ui.js fillOnline), then the default tab. */
+  async fillOnline() {
+    const box = this.root.querySelector('.cp-online');
+    if (!box) return;
+    let MP, UI;
+    try { [MP, UI] = await Promise.all([this.loadMP(), import('./mp-ui.js')]); } catch { return; }
+    if (this.disposed || this.mode !== null || !box.isConnected) return;
+    const res = await UI.fillOnline(this, MP, box);
+    if (!res || this.disposed || this.mode !== null || !box.isConnected) return;
+    ACTIVE_HINT = res.active;
+    const n = this.root.querySelector('.cp-tab-n');
+    if (n) { n.textContent = res.mine ? String(res.mine) : ''; n.hidden = !res.mine; }
+    if (!this._tab) this.showTab(res.active ? 'online' : 'cpu');
   }
 
   // --- the shooter's options: buttons on the left, only while on offer -----------------------
