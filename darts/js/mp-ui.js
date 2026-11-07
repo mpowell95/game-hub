@@ -37,7 +37,7 @@ function page(ui, title, back, body) {
       <div class="dt-mp-body">${body}</div>
     </div>`;
   ov.querySelector('[data-mp="back"]').addEventListener('click', () => {
-    if (back === 'setup') ui._showSetup(); else home(ui, ui.MP);
+    ui._showSetup('online');       // both lead to the setup screen's Online tab (2026-11-07)
   });
   ui.screen = 'mp';
   ui._showOnly('mp');
@@ -94,39 +94,95 @@ const rowHTML = (r) => `
     <span class="dt-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 
-/** The online home. */
-export async function home(ui, MP) {
-  const body = page(ui, t('mp_title'), 'setup', `
-    <button type="button" class="gh-btn gh-btn--primary gh-btn--block dt-go" data-mp="challenge">${esc(t('mp_challenge'))}</button>
-    <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
-    <div class="dt-mp-push" hidden></div>
-    <div class="dt-mp-list"><p class="dt-mp-note">${esc(t('mp_loading'))}</p></div>
-    <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="history">${esc(t('mp_history'))}</button>`);
-  body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
-  body.querySelector('[data-mp="pass"]').addEventListener('click', (e) => {
-    // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
-    if (ui._quitGate) ui._quitGate(e.currentTarget, () => ui._passPlay()); else ui._passPlay();
-  });
-  body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
-  pushRow(body.querySelector('.dt-mp-push'), () => fitList(cardOf(body), body.querySelector('.dt-mp-list')));
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, Cup Pong's tabs, Matt: "Do the same tabs for the other
+ * multiplayer games"): the matches going (your turn first, with Play), then Challenge: Anyone (the full
+ * list) and the people played most recently, one tap each; Pass & play stays here, where it always was.
+ * The record chip opens History. Fills `box`; returns { active, mine } or null if the screen moved on.
+ */
+export async function fillOnline(ui, MP, box) {
   const rows = await MP.readMyGames();
-  if (!body.isConnected) return;
+  if (!box.isConnected) return null;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[darts] recordFinished', err); }
   const live = rows.filter((r) => !r.over);
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-  // At most 12 drawn; fitList then trims to what the screen holds.
-  const showMine = mine.slice(0, 8), showTheirs = theirs.slice(0, 12 - showMine.length);
-  const hidden = live.length - showMine.length - showTheirs.length;
-  const list = body.querySelector('.dt-mp-list');
-  list.innerHTML = (mine.length ? `<h3 class="dt-mp-h">${esc(t('mp_your_turn'))} <span>${mine.length}</span></h3>${showMine.map(rowHTML).join('')}` : '')
-    + (theirs.length ? `<h3 class="dt-mp-h">${esc(t('mp_their_turn'))} <span>${theirs.length}</span></h3>${showTheirs.map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<p class="dt-mp-note">${esc(t('mp_none'))}</p>`);
-  fitList(cardOf(body), list, hidden);
-  list.addEventListener('click', (e) => {
-    const b = e.target.closest('.dt-mrow[data-id]');
-    if (b) ui._openMatch(b.dataset.id);
-  });
+  const seen = new Set();
+  // Most recent first, one face per person; an index into this list, never a code, in the page.
+  const recent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  let won = 0, lost = 0;
+  try { for (const o of MP.recordsFrom(rows, MP.myCode()).opponents) { won += o.won | 0; lost += o.lost | 0; } } catch { /* no chip */ }
+  const chip = won + lost ? `<button type="button" class="dt-rec-chip" data-mp="history">${won}-${lost}</button>` : '';
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const liveRow = (r) => `
+    <button type="button" class="dt-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+      <span class="dt-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="dt-mrow-text"><span class="dt-mrow-name">${esc(r.name)}</span>
+        <span class="dt-mrow-sub">${esc(r.yourTurn ? gameName(r.kind) + ' · ' + scoreLine(r) : t('mp_turn_of', { name: r.name }) + ' · ' + gameName(r.kind))}</span></span>
+      ${r.yourTurn ? `<span class="dt-play-pill">${esc(t('mp_play'))}</span>` : '<span class="dt-mrow-chev" aria-hidden="true">›</span>'}
+    </button>`;
+  box.innerHTML = (live.length ? `
+      <div class="dt-on-sec" data-role="matches">
+        <div class="dt-on-head"><span>${esc(t('mp_matches'))}</span>${chip}</div>
+        <div class="dt-on-rows">${mine.map(liveRow).join('')}${theirs.map(liveRow).join('')}</div>
+      </div>` : '') + `
+      <div class="dt-on-sec">
+        <div class="dt-on-head"><span>${esc(t('mp_challenge_h'))}</span>${live.length ? '' : chip}</div>
+        <div class="dt-faces">
+          <button type="button" class="dt-face is-any" data-mp="anyone"><span class="dt-face-dot" aria-hidden="true">+</span><span class="dt-face-name">${esc(t('mp_anyone'))}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="dt-face" data-oi="${i}"><span class="dt-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="dt-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>
+      <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
+      <div class="dt-mp-push" hidden></div>`;
+  box.dataset.hidden = String(Math.max(0, live.length));
+  box.onclick = (e) => {
+    const m = e.target.closest('.dt-mrow[data-id]');
+    if (m) { ui._openMatch(m.dataset.id); return; }
+    const a = e.target.closest('[data-mp]');
+    if (a) {
+      const k = a.dataset.mp;
+      if (k === 'history') history(ui, MP);
+      else if (k === 'anyone') picker(ui, MP);
+      else if (k === 'pass') {
+        // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
+        if (ui._quitGate) ui._quitGate(a, () => ui._passPlay()); else ui._passPlay();
+      }
+      return;
+    }
+    const f = e.target.closest('.dt-face[data-oi]');
+    const them = f && recent[Number(f.dataset.oi)];
+    if (them) confirm(ui, MP, them);
+  };
+  pushRow(box.querySelector('.dt-mp-push'), () => fitOnline(ui));
   showUnseen(ui, MP, rows);
+  fitOnline(ui);
+  return { active: live.length > 0, mine: mine.length };
+}
+
+/** NO SCROLLING: drop match rows from the end until the setup card fits, and say how many are not shown. */
+export function fitOnline(ui) {
+  const ov = ui.root.querySelector('[data-ov="setup"]');
+  const rowsEl = ov && ov.querySelector('.dt-on-rows');
+  const card = ov && ov.querySelector('.dt-card');
+  if (!rowsEl || !card || ov.hidden) return;
+  const panel = ov.querySelector('[data-panel="online"]');
+  if (panel.hidden) return;                // measured only while shown (the tab may be open later)
+  const total = rowsEl.querySelectorAll('.dt-mrow').length;
+  const over = () => card.getBoundingClientRect().bottom > ov.clientHeight - 8;
+  let dropped = 0;
+  const rows = [...rowsEl.querySelectorAll('.dt-mrow')];
+  while (over() && rows.length > 1) {
+    rows.pop().remove(); dropped++;
+  }
+  if (dropped) {
+    const n = document.createElement('p');
+    n.className = 'dt-mp-note';
+    n.textContent = t('mp_more', { n: dropped });
+    rowsEl.appendChild(n);
+  }
+  rowsEl.dataset.total = String(total);
 }
 
 /** "Notify me when it is my turn" - only while notifications are off on this phone. */
@@ -271,4 +327,4 @@ export function showUnseen(ui, MP, rows) {
   el.querySelector('[data-mp="close"]').addEventListener('click', done);
 }
 
-export default { home, showUnseen, reasonText };
+export default { fillOnline, fitOnline, showUnseen, reasonText };
