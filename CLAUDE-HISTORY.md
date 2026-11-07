@@ -1666,3 +1666,11 @@ on them next time they open the app because I'm confused". `js/stats-net.js` `WH
 `whois` to that device's mirror: user agent, languages, locale, the URL and referrer the hub was opened with,
 cores/memory/touch, connection type, UTC offset, the browser's high-entropy platform hints, and (v1464, Matt: "we want silent") `geo`: IP, city, region, country, provider from ipwho.is (fallback ipinfo.io), one lookup per page load.
 A report only; read by no phone. Remove the code from the list once Matt knows.
+
+## 2026-11-07: a Pages deploy stuck at "syncing_files"
+
+The `pages build and deployment` run for #1532 (v1486) timed out three times in a row in its deploy job
+("Current status: syncing_files" for 10 minutes, then "Timeout reached, aborting!"), with no GitHub
+incident posted and the site at 143 MB / 2,173 files. Re-running the same run did not help (the same commit
+failed each time; the same thing happened on 2026-11-04). A new commit to `main` starts a fresh deployment;
+that is what to try after one failed re-run.
