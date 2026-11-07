@@ -566,3 +566,4 @@
 .dt-root .dt-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dt-root .dt-online .dt-mp-note { font-size: 15px; color: var(--dt-ink); }
 .dt-root .dt-face.is-any { flex: 1.4 1 0; }
+.dt-root .dt-more { min-height: 44px; border: 0; background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; cursor: pointer; touch-action: manipulation; }

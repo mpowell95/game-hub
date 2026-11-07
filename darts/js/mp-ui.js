@@ -137,6 +137,9 @@ export async function fillOnline(ui, MP, box) {
       <button type="button" class="gh-btn gh-btn--block dt-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
       <div class="dt-mp-push" hidden></div>`;
   box.dataset.hidden = String(Math.max(0, live.length));
+  // Every match stays reachable: fitOnline shows a page of rows and "+N more" turns the page.
+  const rowsEl0 = box.querySelector('.dt-on-rows');
+  if (rowsEl0) { rowsEl0._all = mine.concat(theirs).map(liveRow); rowsEl0._start = 0; }
   box.onclick = (e) => {
     const m = e.target.closest('.dt-mrow[data-id]');
     if (m) { ui._openMatch(m.dataset.id); return; }
@@ -144,6 +147,10 @@ export async function fillOnline(ui, MP, box) {
     if (a) {
       const k = a.dataset.mp;
       if (k === 'history') history(ui, MP);
+      else if (k === 'more') {
+        const rl = box.querySelector('.dt-on-rows');
+        if (rl && rl._all) { const st = (rl._start | 0) + (Number(rl.dataset.shown) || 1); rl._start = st >= rl._all.length ? 0 : st; fitOnline(ui); }
+      }
       else if (k === 'anyone') picker(ui, MP);
       else if (k === 'pass') {
         // A saved match against the computer that this would throw away counts as a loss: two taps (2026-10-29).
@@ -161,7 +168,8 @@ export async function fillOnline(ui, MP, box) {
   return { active: live.length > 0, mine: mine.length };
 }
 
-/** NO SCROLLING: drop match rows from the end until the setup card fits, and say how many are not shown. */
+/** NO SCROLLING: a page of match rows that fits the setup card, then "+N more" (a button) turns to the
+ *  next page, the last page back to the first, so every match is reachable (Pool's way). */
 export function fitOnline(ui) {
   const ov = ui.root.querySelector('[data-ov="setup"]');
   const rowsEl = ov && ov.querySelector('.dt-on-rows');
@@ -169,20 +177,22 @@ export function fitOnline(ui) {
   if (!rowsEl || !card || ov.hidden) return;
   const panel = ov.querySelector('[data-panel="online"]');
   if (panel.hidden) return;                // measured only while shown (the tab may be open later)
-  const total = rowsEl.querySelectorAll('.dt-mrow').length;
+  const all = rowsEl._all || [];
+  const start = Math.min(rowsEl._start | 0, Math.max(0, all.length - 1));
+  rowsEl.innerHTML = all.slice(start).join('');
   const over = () => card.getBoundingClientRect().bottom > ov.clientHeight - 8;
-  let dropped = 0;
   const rows = [...rowsEl.querySelectorAll('.dt-mrow')];
-  while (over() && rows.length > 1) {
-    rows.pop().remove(); dropped++;
+  while (over() && rows.length > 1) rows.pop().remove();
+  let shown = rows.length;
+  if (start > 0 || start + shown < all.length) {
+    const more = document.createElement('button');
+    more.type = 'button'; more.className = 'dt-more'; more.dataset.mp = 'more';
+    rowsEl.appendChild(more);
+    if (over() && rows.length > 1) { rows.pop().remove(); shown--; }
+    more.textContent = t('mp_more', { n: all.length - shown });
   }
-  if (dropped) {
-    const n = document.createElement('p');
-    n.className = 'dt-mp-note';
-    n.textContent = t('mp_more', { n: dropped });
-    rowsEl.appendChild(n);
-  }
-  rowsEl.dataset.total = String(total);
+  rowsEl.dataset.shown = String(shown);
+  rowsEl.dataset.total = String(all.length);
 }
 
 /** "Notify me when it is my turn" - only while notifications are off on this phone. */
