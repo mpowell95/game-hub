@@ -127,6 +127,12 @@ the rebuilt scores sheets, the My Stats v2 look, the restored records (`RESTORED
 players see its old ranking and a two-line sheet). The "Old" link stays for now (Matt: "Leave for now"). History:
 `docs/HANDOFF-LB2-SESSION7.md` and the older handoffs it names.
 
+**A person's page in one game, the rows look (2026-11-07, Matt: "Build it. thats WAY better"; `docs/mockups/lb2-player-game.html`)**:
+ADMIN DEVICES ONLY until Matt says "release it": Play in the top bar, a standing card (medal, "2nd of 5", board number) + gold holder
+and gap (`lb2Gap`), then Record / Opponent (difficulties + Online) / modes / Turn / Numbers as rows with bars (`game-stats-ui.js` `_rows`,
+set in `v2ScreenFor` from `isAdminDevice()`; My Stats' game pages on admin devices too). Display only. Custom screens (Golf, Skeeball,
+Arrow Maze) keep their own layout, text bumped.
+
 **Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: the BETTER
 AVERAGE game ranks higher. Totals (points, wins, medals): fewer plays/wins = higher average. A best-game board (golf,
 snake...): the average at the board's course/difficulty (byMode `hs`/`ls`), else the all-time average (golf strokes a

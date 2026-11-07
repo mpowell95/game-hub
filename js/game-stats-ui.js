@@ -1886,16 +1886,49 @@ function topOf(map) {
   for (const k of Object.keys(map || {})) if (n0(map[k]) > n) { n = n0(map[k]); best = k; }
   return best;
 }
-const fh = (k) => `<h4 class="gs-tbl-h">${esc(t(k))}</h4>`;
-/** 1. Wins / Losses / Ties / Played (Ties only when there are some). */
-function recCard(r, ties) {
+// --- The rows look (2026-11-07, Matt: "Build it. thats WAY better"; docs/mockups/lb2-player-game.html) -------------
+// ADMIN DEVICES ONLY until Matt says "release it" (`_rows`, set by v2ScreenFor from isAdminDevice()). DISPLAY ONLY:
+// the same stored numbers as the tables, drawn as one card per section, each row = label, "W wins · L losses", a bar
+// and the win %. Online joins the difficulty rows ("Opponent"); a game's numbers are tiles ("Numbers").
+let _rows = false;
+const pctNum = (r) => { const d = n0(r.won) + n0(r.lost); return d ? Math.round((n0(r.won) * 100) / d) : null; };
+const barHTML = (p) => `<div class="gs-bar"><i style="width:${p == null ? 0 : p}%"></i></div>`;
+const rh = (txt) => `<h4 class="gs-rh">${esc(txt)}</h4>`;
+const RT_EN = { st_record: 'Record', st_opponent: 'Opponent', st_turn: 'Turn', st_numbers: 'Numbers' };
+/** A section title in the rows look: the short form ("Formation") where one exists, else the table's own. */
+const rowTitle = (k) => tf(k + '_s', tf(k, RT_EN[k] || k));
+const wlLine = (r) => t('st_wl_line', { w: nf(r.won), wn: n0(r.won), l: nf(r.lost), ln: n0(r.lost), t: nf(tiesOf(r)), tn: tiesOf(r) });
+const GLOBE = '<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="13" cy="13" r="10"/><ellipse cx="13" cy="13" rx="4.5" ry="10"/><path d="M3 13h20M5 7.5h16M5 18.5h16"/></svg>';
+/** Rows: { label (HTML), icon? (HTML), won, lost, played }. */
+function wlRowsHTML(title, rows) {
+  if (!rows.length) return '';
+  const body = rows.map((r) => {
+    const p = pctNum(r);
+    // Each clause ("21 wins ·", "2 losses", "Best 1:17") wraps whole, never one word alone (Spanish at 360).
+    const parts = wlLine(r).split(' · ').concat(r.best ? [`${t('st_best')} ${r.best}`] : []);
+    const line = parts.map((x, i) => `<i class="gs-cl">${esc(x)}${i < parts.length - 1 ? ' ·' : ''}</i>`).join(' ');
+    return `<div class="gs-rr">${r.icon ? `<span class="gs-ri">${r.icon}</span>` : ''}<div class="gs-rm"><b>${r.label}</b><span>${line}</span>${barHTML(p)}</div><b class="gs-rp">${p == null ? '–' : p + '%'}</b></div>`;
+  }).join('');
+  return `${title ? rh(title) : ''}<div class="gs-rl">${body}</div>`;
+}
+/** The Record card: wins, win %, losses, a bar, "N played" (and ties). */
+function recRowsHTML(r, tie, head) {
+  const p = pctNum(r);
+  const sub = t('lb_played_count', { n: nf(r.played) }) + (tie > 0 ? ` · ${t('st_ties_n', { t: nf(tie), tn: tie })}` : '');
+  return `${head ? rh(rowTitle('st_record')) : ''}<div class="gs-rc"><div class="gs-rc-n"><div><b>${nf(r.won)}</b><span>${esc(t('st_wins'))}</span></div><div class="gs-rc-p"><b>${p == null ? '–' : p + '%'}</b><span>${esc(t('st_pct'))}</span></div><div class="gs-rc-r"><b>${nf(r.lost)}</b><span>${esc(t('st_losses'))}</span></div></div>${barHTML(p)}<p>${esc(sub)}</p></div>`;
+}
+const fh = (k) => (_rows ? rh(rowTitle(k)) : `<h4 class="gs-tbl-h">${esc(t(k))}</h4>`);
+/** 1. Wins / Losses / Ties / Played (Ties only when there are some). `head`: the rows look's "Record" title. */
+function recCard(r, ties, head) {
   const tie = ties != null ? n0(ties) : tiesOf(r);
+  if (_rows) return recRowsHTML(r, tie, head);
   const cells = [[r.won, 'st_wins'], [r.lost, 'st_losses']].concat(tie > 0 ? [[tie, 'st_ties']] : [], [[r.played, 'st_played']]);
   return `<div class="gs-rec is-${cells.length}">${cells.map(([v, k]) => `<div><b>${nf(v)}</b><span>${esc(t(k))}</span></div>`).join('')}</div>`;
 }
 /** A record table: label | W–L (–T when any row tied) | Win %. Rows: { label (HTML), won, lost, played }. */
 function wlTable(titleKey, rows) {
   if (!rows.length) return '';
+  if (_rows) return wlRowsHTML(titleKey ? rowTitle(titleKey) : '', rows);
   const anyT = rows.some((r) => tiesOf(r) > 0);
   const body = rows.map((r) => `<tr><th scope="row">${r.label}</th><td>${nf(r.won)}–${nf(r.lost)}${anyT ? `–${nf(tiesOf(r))}` : ''}</td><td>${pctOf(r)}</td></tr>`).join('');
   return `${titleKey ? fh(titleKey) : ''}<table class="gs-grid gs-wl"><thead><tr><th scope="col"></th><th scope="col">${esc(t(anyT ? 'st_wlt' : 'st_wl'))}</th><th scope="col">${esc(t('st_pct'))}</th></tr></thead><tbody>${body}</tbody></table>`;
@@ -1903,7 +1936,7 @@ function wlTable(titleKey, rows) {
 /** 2. Online: the 'mp' bucket, near the top. */
 function onlineHTML(rec) {
   const mp = ((rec && rec.byDiff) || {}).mp;
-  if (!mp || !n0(mp.played)) return '';
+  if (!mp || !n0(mp.played) || _rows) return '';   // the rows look: a row under Opponent (diffHTML)
   return fh('st_online') + recCard(mp);
 }
 /** 3. Went first / went second, from byMode (or rows handed in, Connect 4's grid). */
@@ -1911,7 +1944,7 @@ function firstHTML(entriesOrRows, rowsGiven) {
   const rows = rowsGiven ? entriesOrRows : groupModes(entriesOrRows, (o) => wentOf(o));
   const pick = (k) => rows.find((r) => r.key === k);
   const out = [['me', 'st_first'], ['them', 'st_second']].map(([k, w]) => { const r = pick(k); return r && n0(r.played) ? { ...r, label: esc(t(w)) } : null; }).filter(Boolean);
-  return wlTable(null, out);
+  return wlTable(_rows ? 'st_turn' : null, out);
 }
 /** A difficulty as the board shows it: its shape and word; a bucket with no tier keeps its own name. */
 function diffLabelHTML(k) {
@@ -1922,22 +1955,42 @@ function diffLabelHTML(k) {
 }
 const diffOrder = (k) => tierOf(k) || ((DIFF_META[k] || {}).order) || 8;
 /** 4. By difficulty (online is its own card, so 'mp' is not a row). */
-function diffHTML(byDiff) {
+function diffHTML(byDiff, withMp = true) {
   const bd = byDiff || {};
   const rows = Object.keys(bd).filter((k) => k !== 'mp' && n0((bd[k] || {}).played) > 0).sort((a, b) => diffOrder(a) - diffOrder(b))
-    .map((k) => ({ label: diffLabelHTML(k), won: bd[k].won, lost: bd[k].lost, played: bd[k].played }));
-  return wlTable('st_by_diff', rows);
+    .map((k) => ({ label: _rows ? diffWordHTML(k) : diffLabelHTML(k), icon: _rows && tierOf(k) ? v2shape(tierOf(k)) : '', won: bd[k].won, lost: bd[k].lost, played: bd[k].played }));
+  if (!_rows) return wlTable('st_by_diff', rows);
+  const mp = bd.mp;
+  if (withMp && mp && n0(mp.played)) rows.push({ label: esc(t('st_online')), icon: GLOBE, won: mp.won, lost: mp.lost, played: mp.played });
+  return wlTable('st_opponent', rows);
+}
+/** The rows look: a difficulty's word alone (its shape is the row's icon). */
+function diffWordHTML(k) {
+  const tr = tierOf(k);
+  if (tr) return esc(t(['', 'gs_diff_easy', 'gs_diff_medium', 'gs_diff_hard', 'gs_diff_expert'][tr]));
+  return diffLabelHTML(k);
 }
 /** 5. A mode table from byMode: `fn(options, diff)` names the row, `labelOf(key)` prints it. */
 function modeHTML(titleKey, entries, fn, labelOf, order) {
   let rows = groupModes(entries, fn);
   if (order) rows = rows.sort((a, b) => order(a.key) - order(b.key));
+  else if (_rows) rows = rows.sort((a, b) => b.played - a.played);
   return wlTable(titleKey, rows.map((r) => ({ ...r, label: esc(labelOf(r.key)) })));
 }
 /** 6. Named numbers: [labelKey or text, value]; a null value is not drawn. */
-function factsHTML(list) {
+function factsHTML(list, head) {
   const rows = list.filter((x) => x && x[1] != null && x[1] !== '');
   if (!rows.length) return '';
+  if (_rows) {
+    // Short numbers are tiles (3 across; 2 for 2 or 4); anything long (a word, a hand) is a row: label, value.
+    const lab = (k) => esc(String(k).startsWith('st_') || String(k).startsWith('gs_') ? t(k) : k);
+    const short = rows.filter(([, v]) => String(v).replace(/<[^>]*>/g, '').length <= 7);
+    const long = rows.filter((x) => !short.includes(x));
+    const cols = short.length === 1 ? 1 : short.length === 2 || short.length === 4 ? 2 : 3;
+    const tiles = short.length ? `<div class="gs-nt" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${short.map(([k, v]) => `<div><b>${v}</b><span>${lab(k)}</span></div>`).join('')}</div>` : '';
+    const list2 = long.length ? `<div class="gs-rl">${long.map(([k, v]) => `<div class="gs-rr gs-rv"><span>${lab(k)}</span><b>${v}</b></div>`).join('')}</div>` : '';
+    return (head ? rh(rowTitle(head)) : '') + tiles + list2;
+  }
   return `<div class="gs-tallies">${rows.map(([k, v]) => `<div class="gs-tally"><b>${v}</b><span>${esc(String(k).startsWith('st_') || String(k).startsWith('gs_') ? t(k) : k)}</span></div>`).join('')}</div>`;
 }
 /** The usual competitive screen, in the themes' order. `o.total` overrides rec.total (a game whose own counter is
@@ -1946,15 +1999,21 @@ function stdScreen(id, rec, o = {}) {
   const tot = o.total || (rec && rec.total) || {};
   if (!n0(tot.played)) return o.top ? o.top + (o.tail || '') : emptyState(gameLabel(id));
   const E = modeEntries(rec);
+  const bdAll = (rec && rec.byDiff) || {};
+  const bdUse = o.diff === false ? {} : (o.byDiff || bdAll);
+  // The rows look: Opponent = the difficulties + Online (even where the game has no difficulty table); Turn after the modes.
+  const opp = _rows ? diffHTML(bdAll.mp ? { ...bdUse, mp: bdAll.mp } : bdUse) : '';
+  const first = o.first === false ? '' : (o.firstRows ? firstHTML(o.firstRows, true) : firstHTML(E));
   return [
     o.onlineFirst ? onlineHTML(rec) : '',
     o.top || '',
-    recCard(tot, o.ties),
+    recCard(tot, o.ties, true),
     o.onlineFirst ? '' : onlineHTML(rec),
-    o.first === false ? '' : (o.firstRows ? firstHTML(o.firstRows, true) : firstHTML(E)),
-    o.diff === false ? '' : diffHTML(o.byDiff || (rec && rec.byDiff)),
+    _rows ? opp : first,
+    _rows ? '' : (o.diff === false ? '' : diffHTML(bdUse)),
     ...(o.modes ? o.modes(E) : []),
-    factsHTML(o.facts || []),
+    _rows ? first : '',
+    factsHTML(o.facts || [], 'st_numbers'),
     o.tail || '',
   ].join('');
 }
@@ -1994,7 +2053,9 @@ function freshTicTacToe(rec) {
     return fh(key) + recCard(r, r.tied) + wlTable(null, rows);
   };
   const parts = variant('ultimate', 'gs_tt_ultimate') + variant('classic', 'gs_tt_classic');
-  return stdScreen('tictactoe', rec, { diff: false, tail: parts + (anyDiff ? '' : diffHTML(rec && rec.byDiff)) });
+  // The rows look: no per-variant difficulties = the one Opponent card (difficulties + Online) above the variants.
+  if (_rows && !anyDiff) return stdScreen('tictactoe', rec, { tail: parts });
+  return stdScreen('tictactoe', rec, { diff: false, tail: parts + (anyDiff ? '' : diffHTML(rec && rec.byDiff, false)) });
 }
 function freshHoldem(rec) {
   const hb = (rec && rec.hb) || {}, hs = (rec && rec.hs) || {};
@@ -2017,7 +2078,7 @@ function freshHoldem(rec) {
   return stdScreen('holdem', rec, {
     top, diff: false, first: false,
     modes: () => [wlTable('st_by_table', tables.sort((a, b) => HD_TABLES.indexOf(a.key) - HD_TABLES.indexOf(b.key)).map((r) => ({ ...r, label: esc(tableWord(r.key)) })))],
-    facts: [['st_most_table', most ? esc(tableWord(most.key)) : null]],
+    facts: [['st_most_table', most && !_rows ? esc(tableWord(most.key)) : null]],
   });
 }
 function freshCupPong(rec) {
@@ -2069,6 +2130,12 @@ function freshMinesweeper(rec) {
   const ms = (rec && rec.ms) || {}, tot = (rec && rec.total) || {};
   if (!n0(tot.played)) return emptyState('Minesweeper');
   const bd = (rec && rec.byDiff) || {};
+  if (_rows) {
+    // The rows look: each level's record, its best (time, else best % cleared) on the second line.
+    const best = (k) => { const tm = (ms.bestTimeMs || {})[k] | 0, p = ((ms.bestClearedPct || {})[k] | 0); return tm > 0 ? fmtMmSs(tm) : p > 0 ? `${p}%` : ''; };
+    const rr = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => ({ label: diffWordHTML(k), icon: tierOf(k) ? v2shape(tierOf(k)) : '', won: bd[k].won, lost: bd[k].lost, played: bd[k].played, best: best(k) }));
+    return recCard(tot, undefined, true) + wlRowsHTML(rowTitle('st_by_diff'), rr) + factsHTML([['gs_ms_flags', nf(ms.flagsRight)]], 'st_numbers');
+  }
   const rows = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => {
     const b = bd[k], best = (ms.bestTimeMs || {})[k] | 0, p = ((ms.bestClearedPct || {})[k] | 0);
     return `<tr><th scope="row">${diffLabelHTML(k)}</th><td>${nf(b.won)}–${nf(b.lost)}</td><td>${best > 0 ? fmtMmSs(best) : p > 0 ? `${p}%` : '–'}</td></tr>`;
@@ -2118,11 +2185,12 @@ function freshScreenForBase(id, stt) {
     case 'flicksoccer': {
       const E = modeEntries(rec);
       const forms = groupModes(E, (o) => (o.off && o.def ? `${o.off}|${o.def}` : null));
+      if (_rows) forms.sort((a, b) => b.played - a.played);
       const lab = (k) => k.split('|').map(formWord).join(' / ');
       const most = forms.slice().sort((a, b) => b.played - a.played)[0];
       return stdScreen(id, rec, {
         modes: () => [wlTable('st_by_form', forms.map((r) => ({ ...r, label: esc(lab(r.key)) })))],
-        facts: [['st_most_form', most && forms.length > 1 ? esc(lab(most.key)) : null], ['st_goals_for', sumOf(dt, 'gf')], ['st_goals_against', sumOf(dt, 'ga')], ['st_flicks', sumOf(dt, 'flicks')]] });
+        facts: [['st_most_form', most && forms.length > 1 && !_rows ? esc(lab(most.key)) : null], ['st_goals_for', sumOf(dt, 'gf')], ['st_goals_against', sumOf(dt, 'ga')], ['st_flicks', sumOf(dt, 'flicks')]] });
     }
     case 'hoops4': {
       const make = n0(dt.shots) ? `${Math.round((n0(dt.made) * 100) / n0(dt.shots))}%` : null;
@@ -2297,7 +2365,53 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .gs-rec b{font-size:22px;font-weight:800;color:var(--l2-text);font-variant-numeric:tabular-nums;line-height:1.1}
 .gs-v2 .gs-rec span{font-size:13px;color:var(--l2-muted);overflow-wrap:anywhere}
 .gs-v2 .gs-wl td{font-variant-numeric:tabular-nums;white-space:nowrap}
-.gs-v2 .gs-grid tbody th .lb2-tw{color:var(--l2-text)}`;
+.gs-v2 .gs-grid tbody th .lb2-tw{color:var(--l2-text)}
+.gs-v2{--l2-sub:#3A414D;--l2-track:#E2E5EA}
+:root.gh-dark .gs-v2{--l2-sub:#DCE1E8;--l2-track:#2A2F38}
+.gs-v2 .gs-rh{margin:14px 4px 0;font-size:20px;font-weight:800;line-height:1.2;color:var(--l2-text)}
+.gs-v2 .gs-rc{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:16px;padding:16px 18px 18px}
+.gs-v2 .gs-rc-n{display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+.gs-v2 .gs-rc-n div{display:flex;flex-direction:column;min-width:0}
+.gs-v2 .gs-rc-n b{font-size:34px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--l2-text)}
+.gs-v2 .gs-rc-n span{font-size:16px;color:var(--l2-sub)}
+.gs-v2 .gs-rc-n .gs-rc-p{align-items:center}
+.gs-v2 .gs-rc-n .gs-rc-p b{color:var(--l2-accent)}
+.gs-v2 .gs-rc-n .gs-rc-r{align-items:flex-end}
+.gs-v2 .gs-rc p{margin:12px 0 0;text-align:center;font-size:16px;color:var(--l2-sub)}
+.gs-v2 .gs-bar{height:10px;border-radius:5px;background:var(--l2-track);overflow:hidden;margin-top:14px}
+.gs-v2 .gs-bar i{display:block;height:100%;background:var(--l2-accent);border-radius:5px}
+.gs-v2 .gs-rl{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:16px;overflow:hidden}
+.gs-v2 .gs-rr{display:flex;align-items:center;gap:14px;padding:14px 18px;border-top:1px solid var(--l2-line)}
+.gs-v2 .gs-rr:first-child{border-top:0}
+.gs-v2 .gs-ri{width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--l2-text)}
+.gs-v2 .gs-ri svg{width:24px;height:24px}
+.gs-v2 .gs-ri .lb2-shape{width:20px;height:20px}
+.gs-v2 .gs-ri .lb2-shape svg{width:100%;height:100%}
+.gs-v2 .gs-ri .lb2-shape.x2{width:26px}
+.gs-v2 .gs-rm{flex:1;min-width:0}
+.gs-v2 .gs-rm>b{display:flex;align-items:center;gap:8px;font-size:19px;font-weight:700;line-height:1.25;color:var(--l2-text)}
+.gs-v2 .gs-rm>span{display:block;margin-top:2px;font-size:16px;color:var(--l2-sub);font-variant-numeric:tabular-nums}
+.gs-v2 .gs-rm .gs-bar{height:6px;margin-top:10px}
+.gs-v2 .gs-rp{flex:none;min-width:62px;text-align:right;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--l2-text)}
+.gs-v2 .gs-rv{justify-content:space-between;min-height:56px;padding:10px 18px}
+.gs-v2 .gs-rv span{font-size:17px;color:var(--l2-text)}
+.gs-v2 .gs-rv b{font-size:19px;font-weight:800;text-align:right;color:var(--l2-text)}
+.gs-v2 .gs-nt{display:grid;gap:10px}
+.gs-v2 .gs-nt>div{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:16px;padding:14px 6px;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0}
+.gs-v2 .gs-nt b{font-size:28px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--l2-text);white-space:nowrap}
+.gs-v2 .gs-nt span{font-size:15px;line-height:1.25;color:var(--l2-sub);overflow-wrap:normal}
+.gs-v2 .gs-rows{display:flex;flex-direction:column;gap:10px}
+.gs-v2 .gs-cl{font-style:normal;white-space:nowrap;display:inline-block}
+@media (max-width:380px){.gs-v2 .gs-rr{gap:10px;padding:14px 14px}.gs-v2 .gs-rp{min-width:52px;font-size:22px}.gs-v2 .gs-rc{padding:16px 14px 18px}.gs-v2 .gs-rc-n b{font-size:30px}}
+.gs-v2 .gs-rows .gs-tbl-h{margin:14px 4px 0;font-size:20px;font-weight:800;color:var(--l2-text)}
+.gs-v2 .gs-rows .gs-tally{min-height:54px;padding:0 18px}
+.gs-v2 .gs-rows .gs-tally span{font-size:17px}
+.gs-v2 .gs-rows .gs-tally b{font-size:19px;font-weight:800}
+.gs-v2 .gs-rows .gs-tallies,.gs-v2 .gs-rows .gs-grid,.gs-v2 .gs-rows .gs-cc{border-radius:16px}
+.gs-v2 .gs-rows .gs-grid th,.gs-v2 .gs-rows .gs-grid td{height:50px;font-size:17px}
+.gs-v2 .gs-rows .gs-grid thead th{height:40px;font-size:15px;color:var(--l2-sub)}
+.gs-v2 .gs-rows .gs-cc-k,.gs-v2 .gs-rows .gs-cc-v{font-size:17px}
+.gs-v2 .gs-rows .gs-cc-h,.gs-v2 .gs-rows .gs-sk-k{font-size:15px;color:var(--l2-sub)}`;
 // Session 4 (2026-11-02): admin devices only until Matt approves (`_s4`, set at open): ranks, one close, 4.481, one dash.
 let _s4 = false;
 const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', _s4 ? { useGrouping: 'always' } : undefined); } catch { return String(n); } };
@@ -2355,7 +2469,11 @@ function spellingBeeV2(rec, code) {
 export function v2ScreenFor(id, st, opts) {
   if (id === 'contexto') return contextoV2((st.games || {}).contexto || {});
   if (id === 'spellingbee') return spellingBeeV2((st.games || {}).spellingbee || {}, st.code);
-  if (opts && opts.fresh) return v2Polish(freshScreenFor(id, st));
+  if (opts && opts.fresh) {
+    // The rows look: admin devices only until Matt says "release it" (2026-11-07).
+    _rows = (() => { try { return isAdminDevice(); } catch { return false; } })();
+    try { const h = v2Polish(freshScreenFor(id, st)); return _rows && h ? `<div class="gs-rows">${h}</div>` : h; } finally { _rows = false; }
+  }
   return v2Polish(screenFor(id, st));
 }
 

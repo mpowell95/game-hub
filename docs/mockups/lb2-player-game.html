@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Player Game Page</title>
+<style>
+:root{--bg:#0E1014;--surf:#171A20;--line:#272B33;--text:#F4F6F9;--sub:#DCE1E8;--accent:#7AA7FF;--track:#2A2F38;--silver:#C9CED6}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;width:402px;margin:0 auto;padding:0 16px 120px}
+.status{height:54px}
+/* top */
+.top{display:flex;align-items:center;gap:12px;padding:8px 0 20px}
+.back{width:36px;height:44px;display:flex;align-items:center;justify-content:center}
+.back svg{width:14px;height:24px}
+.ava{width:52px;height:52px;border-radius:50%;background:#232833;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0}
+.who{flex:1;min-width:0}
+.who h1{font-size:26px;line-height:1.15;font-weight:800;color:var(--accent);white-space:nowrap}
+.who .g{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:17px;color:var(--sub);white-space:nowrap}
+.who .g img,.who .g svg{width:34px;height:22px;border-radius:5px}
+.play{background:var(--accent);color:#0B1430;font-weight:800;font-size:19px;border-radius:999px;padding:12px 24px}
+/* standing */
+.stand{display:flex;align-items:center;gap:16px;background:linear-gradient(90deg,#262A31,#1B1E24);border:1px solid #343944;border-left:5px solid var(--silver);border-radius:16px;padding:18px 18px}
+.stand .medal{width:58px;height:70px;flex-shrink:0}
+.stand .pl{flex:1}
+.stand .pl b{display:block;font-size:30px;line-height:1.1;font-weight:800}
+.stand .pl span{font-size:17px;color:var(--sub)}
+.stand .pts{text-align:right}
+.stand .pts b{display:block;font-size:34px;line-height:1.1;font-weight:800}
+.stand .pts span{font-size:16px;color:var(--sub)}
+.gap{margin:10px 4px 0;font-size:17px;color:var(--sub)}
+.gap b{color:var(--text)}
+/* record */
+.h{font-size:20px;font-weight:800;margin:30px 4px 12px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.rec{padding:18px 18px 20px}
+.rec .nums{display:flex;justify-content:space-between;align-items:flex-end}
+.rec .n b{display:block;font-size:34px;line-height:1.1;font-weight:800}
+.rec .n span{font-size:16px;color:var(--sub)}
+.rec .n.r{text-align:right}
+.rec .pct{text-align:center}
+.rec .pct b{display:block;font-size:34px;line-height:1.1;font-weight:800;color:var(--accent)}
+.rec .pct span{font-size:16px;color:var(--sub)}
+.bar{height:10px;border-radius:5px;background:var(--track);overflow:hidden;margin-top:14px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:5px}
+.rec .played{margin-top:12px;font-size:16px;color:var(--sub);text-align:center}
+/* rows */
+.row{display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .ic{width:26px;height:26px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.row .ic svg{width:26px;height:26px}
+.row .mid{flex:1;min-width:0}
+.row .mid b{display:block;font-size:19px;font-weight:700;white-space:nowrap}
+.row .mid span{display:block;font-size:16px;color:var(--sub);margin-top:2px;white-space:nowrap}
+.row .mid .bar{height:6px;margin-top:10px}
+.row .p{font-size:24px;font-weight:800;min-width:62px;text-align:right}
+.div{height:8px;background:var(--bg);border-top:1px solid var(--line)}
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:16px 8px;text-align:center}
+.tile b{display:block;font-size:28px;line-height:1.15;font-weight:800}
+.tile span{font-size:15px;color:var(--sub)}
+.how{margin-top:28px;border:1px solid var(--line);border-radius:16px;padding:18px;text-align:center;color:var(--accent);font-size:19px;font-weight:600}
+/* tab bar */
+.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:402px;height:84px;background:#12151A;border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-start;padding-top:14px}
+.tabbar svg{width:30px;height:30px}
+.tabbar .on{position:relative}
+.tabbar .on:after{content:"";position:absolute;left:3px;right:3px;bottom:-12px;height:3px;border-radius:2px;background:#F2B705}
+</style>
+</head>
+<body>
+<div class="status"></div>
+
+<div class="top">
+  <div class="back"><svg viewBox="0 0 14 24"><path d="M12 2 2 12l10 10" fill="none" stroke="#F4F6F9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="ava">🧊</div>
+  <div class="who">
+    <h1>MattyIce</h1>
+    <div class="g">
+      <svg viewBox="0 0 34 22"><rect width="34" height="22" rx="4" fill="#2E8B3E"/><rect x="2" y="2" width="30" height="18" fill="none" stroke="#fff" stroke-width=".8" opacity=".8"/><line x1="17" y1="2" x2="17" y2="20" stroke="#fff" stroke-width=".8" opacity=".8"/><circle cx="17" cy="11" r="3.4" fill="none" stroke="#fff" stroke-width=".8" opacity=".8"/><circle cx="9" cy="8" r="2" fill="#1F5FA8" stroke="#fff" stroke-width=".6"/><circle cx="12" cy="14" r="2" fill="#1F5FA8" stroke="#fff" stroke-width=".6"/><rect x="22" y="6" width="3.6" height="3.6" fill="#E0532F" stroke="#fff" stroke-width=".6"/><rect x="25" y="12" width="3.6" height="3.6" fill="#E0532F" stroke="#fff" stroke-width=".6"/></svg>
+      Flick Soccer
+    </div>
+  </div>
+  <div class="play">Play</div>
+</div>
+
+<div class="stand">
+  <svg class="medal" viewBox="0 0 58 70"><path d="M14 0h12l7 22H21z" fill="#2F6FD6"/><path d="M44 0H32l-7 22h12z" fill="#4C8BF0"/><circle cx="29" cy="44" r="23" fill="#B9BEC6"/><circle cx="29" cy="44" r="18" fill="#DDE1E6" stroke="#9AA0A8" stroke-width="2"/><text x="29" y="52" text-anchor="middle" font-size="22" font-weight="800" fill="#4A4F57" font-family="-apple-system,Segoe UI,sans-serif">2</text></svg>
+  <div class="pl"><b>2nd</b><span>of 6</span></div>
+  <div class="pts"><b>167</b><span>points</span></div>
+</div>
+<p class="gap"><b>21</b> behind *King of Games*</p>
+
+<h2 class="h">Record</h2>
+<div class="card rec">
+  <div class="nums">
+    <div class="n"><b>65</b><span>wins</span></div>
+    <div class="pct"><b>36%</b><span>win %</span></div>
+    <div class="n r"><b>117</b><span>losses</span></div>
+  </div>
+  <div class="bar"><i style="width:36%"></i></div>
+  <p class="played">182 played</p>
+</div>
+
+<h2 class="h">Opponent</h2>
+<div class="card">
+  <div class="row">
+    <div class="ic"><svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><circle cx="13" cy="13" r="8" fill="#2E9B47"/></svg></div>
+    <div class="mid"><b>Easy</b><span>21 wins · 2 losses</span><div class="bar"><i style="width:91%"></i></div></div>
+    <div class="p">91%</div>
+  </div>
+  <div class="row">
+    <div class="ic"><svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><rect x="5.5" y="5.5" width="15" height="15" rx="2.5" fill="#1F5FA8"/></svg></div>
+    <div class="mid"><b>Medium</b><span>19 wins · 80 losses</span><div class="bar"><i style="width:19%"></i></div></div>
+    <div class="p">19%</div>
+  </div>
+  <div class="row">
+    <div class="ic"><svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><path d="M13 3.5 22.5 13 13 22.5 3.5 13z" fill="#1c2430"/></svg></div>
+    <div class="mid"><b>Hard</b><span>5 wins · 22 losses</span><div class="bar"><i style="width:19%"></i></div></div>
+    <div class="p">19%</div>
+  </div>
+  <div class="row">
+    <div class="ic"><svg viewBox="0 0 26 26" fill="none" stroke="#F4F6F9" stroke-width="2"><circle cx="13" cy="13" r="10"/><ellipse cx="13" cy="13" rx="4.5" ry="10"/><path d="M3 13h20M5 7.5h16M5 18.5h16"/></svg></div>
+    <div class="mid"><b>Online</b><span>20 wins · 13 losses</span><div class="bar"><i style="width:61%"></i></div></div>
+    <div class="p">61%</div>
+  </div>
+</div>
+
+<h2 class="h">Formation</h2>
+<div class="card">
+  <div class="row">
+    <div class="mid"><b>Attack / Diamond</b><span>16 wins · 8 losses</span><div class="bar"><i style="width:67%"></i></div></div>
+    <div class="p">67%</div>
+  </div>
+  <div class="row">
+    <div class="mid"><b>Balanced / Defend</b><span>9 wins · 15 losses</span><div class="bar"><i style="width:38%"></i></div></div>
+    <div class="p">38%</div>
+  </div>
+  <div class="row">
+    <div class="mid"><b>Attack / Defend</b><span>14 wins · 66 losses</span><div class="bar"><i style="width:18%"></i></div></div>
+    <div class="p">18%</div>
+  </div>
+</div>
+
+<h2 class="h">Turn</h2>
+<div class="card">
+  <div class="row">
+    <div class="mid"><b>Went first</b><span>25 wins · 40 losses</span><div class="bar"><i style="width:38%"></i></div></div>
+    <div class="p">38%</div>
+  </div>
+  <div class="row">
+    <div class="mid"><b>Went second</b><span>14 wins · 49 losses</span><div class="bar"><i style="width:22%"></i></div></div>
+    <div class="p">22%</div>
+  </div>
+</div>
+
+<h2 class="h">Totals</h2>
+<div class="tiles">
+  <div class="tile"><b>62</b><span>Goals for</span></div>
+  <div class="tile"><b>115</b><span>Goals against</span></div>
+  <div class="tile"><b>1,606</b><span>Flicks</span></div>
+</div>
+
+<div class="how">See how scores are calculated</div>
+
+<nav class="tabbar">
+  <svg viewBox="0 0 30 30" fill="none" stroke="#8C95A3" stroke-width="2.4"><rect x="3" y="3" width="10" height="10" rx="1.5"/><rect x="17" y="3" width="10" height="10" rx="1.5"/><rect x="3" y="17" width="10" height="10" rx="1.5"/><rect x="17" y="17" width="10" height="10" rx="1.5"/></svg>
+  <svg viewBox="0 0 30 30" fill="none" stroke="#8C95A3" stroke-width="2.4"><circle cx="11" cy="10" r="5"/><circle cx="21" cy="10" r="4"/><path d="M2 26c0-5 4-8 9-8s9 3 9 8M20 18c4 0 8 2 8 7"/></svg>
+  <svg viewBox="0 0 30 30" fill="none" stroke="#8C95A3" stroke-width="2.4"><path d="M4 5h22v15H11l-6 5v-5H4z" stroke-linejoin="round"/></svg>
+  <svg class="on" viewBox="0 0 30 30" fill="none" stroke="#F2B705" stroke-width="2.4"><path d="M9 4h12v8a6 6 0 0 1-12 0zM9 7H4c0 4 2 6 5 6M21 7h5c0 4-2 6-5 6M15 18v5M10 26h10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span style="font-size:28px;line-height:30px">🧊</span>
+</nav>
+</body>
+</html>

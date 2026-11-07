@@ -31,7 +31,7 @@ import * as B from './leaderboard2-boards.js';
 import { rulesFor } from './lb-rules.js';
 import { pointsSheetHTML } from './lb-points-sheet.js';
 import { rankSheetHTML } from './lb-rank-sheet.js';
-import { GAME_META, lb2MedalLangs, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2PlayerGames, lb2Players, lb2PlayedOf, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
+import { GAME_META, lb2MedalLangs, lb2CtImg, lb2CtCounts, lb2Rush, lb2Standing, lb2Tabs, lb2Board, lb2Records, lb2Gap, lb2PlayerGames, lb2Players, lb2PlayedOf, lb2WinPct, lb2TierWord, lb2Medal, ensureLeaderboardCss, openLeaderboard } from './leaderboard-ui.js';
 import { noteHeld } from './lb2-lost.js';
 import { trueBottom } from './tabbar-fix.js';
 import { onViewportResize } from './viewport.js';
@@ -734,6 +734,13 @@ function hofHTML() {
     <span class="c num lb2-strong">${me ? fmt(me.firsts) : ''}</span><span class="c num">${me ? fmt(me.seconds) : ''}</span><span class="c num">${me ? fmt(me.thirds) : ''}</span><span></span></div>`;
   return `${headHTML(hofSeg())}${head}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body">${list}</div></div>${pin}`;
 }
+/** "5 points for gold": the board's own number style (golf words, digit groups), the level's shape riding the
+ *  number (round 4). `x` = { id, need } (lb2Records' Closest rows, lb2Gap). */
+function needLine(x) {
+  const n = x.need;
+  if (!n) return '';
+  return t2('lb2_need', { k: n.k, v: esc(dispText(x.id, n.v)), n: n.n, sh: n.tier ? shape(n.tier) : '' });
+}
 function hofRankOf(key) { const r = _model.hof.find((x) => x.key === key); return r ? r.rank : null; }
 
 // --- Me: the old You tab in the new look ------------------------------------------------------------------
@@ -761,12 +768,6 @@ function meHTML() {
   // the viewer's number beside the record's (Matt, 2026-11-02/03). The maths is needOf in js/leaderboard-ui.js.
   // Variant B (Matt picks; test-only flag): only games where the viewer is 2nd or 3rd, closest gap first.
   const closeRows = _closeVariant === 'b' ? R.close.filter((x) => x.rank === 2 || x.rank === 3) : R.close;
-  const needLine = (x) => {
-    const n = x.need;
-    if (!n) return '';
-    // The board's own number style (golf words, digit groups), the level's shape riding the number (round 4).
-    return t2('lb2_need', { k: n.k, v: esc(dispText(x.id, n.v)), n: n.n, sh: n.tier ? shape(n.tier) : '' });
-  };
   const close = closeRows.length ? `<div class="lb2-card">${closeRows.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}"${langAttr(x.lang)}>
       ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(mkOf(x.id, x.lang)))}</span>
       <span class="lb2-t2 lb2-need num">${needLine(x)}</span></span>
@@ -790,7 +791,7 @@ function meHTML() {
 const _msgTo = [];
 let _pSort = 'best';   // a person's page: best place first (Matt, 2026-11-02), Most played, A to Z
 /** The person's top bar (back, face, name, a second line, Message). Shared by their page and their game page. */
-function personBarHTML(g, key, sub, link = false) {
+function personBarHTML(g, key, sub, link = false, o = {}) {
   const face = String(g.emoji || '').trim() || esc(nameOf(g).slice(0, 1).toUpperCase());
   const code = typeof g.playerId === 'string' ? g.playerId.trim().toUpperCase() : '';
   let msg = '';
@@ -799,8 +800,8 @@ function personBarHTML(g, key, sub, link = false) {
     const mi = _msgTo.push({ code, name: nameOf(g), emoji: g.emoji || '🙂' }) - 1;
     msg = `<button type="button" class="lb2-icon lb2-msg" data-act="msg" data-mi="${mi}" aria-label="${esc(t2('lb2_message'))}">${SVG.chat}</button>`;
   }
-  return `<div class="lb2-bar"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
-    ${link ? '<button type="button" class="lb2-plink" data-act="pall">' : ''}<span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${sub ? esc(sub) : ''}</span></span>${link ? '</button>' : ''}${msg}</div>`;
+  return `<div class="lb2-bar${o.art ? ' lb2-bar-big' : ''}"><button type="button" class="lb2-icon" data-act="back" aria-label="${esc(t2('lb2_back'))}">${SVG.back}</button>
+    ${link ? '<button type="button" class="lb2-plink" data-act="pall">' : ''}<span class="lb2-face">${esc(face)}</span><span class="lb2-grow lb2-pl"><h1 class="${mineCls(key).trim()}">${esc(nameOf(g))}</h1><span class="lb2-t2 num">${o.art ? `<span class="lb2-bart">${art(o.art)}</span><span class="lb2-bsub">${sub ? esc(sub) : ''}</span>` : (sub ? esc(sub) : '')}</span></span>${link ? '</button>' : ''}${msg}${o.play || ''}</div>`;
 }
 function playerHTML(top) {
   const pg = lb2PlayerGames(_people, top.key);
@@ -858,11 +859,30 @@ function personGameHTML(top) {
   ].filter(Boolean).join('');
   const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span></span>${playable(top.game) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : ''}</div>
     <div class="lb2-kcells" style="grid-template-columns:repeat(${cells.split('class="lb2-kc"').length - 1},minmax(0,1fr))">${cells}</div></div>`;
+  // The rows look (2026-11-07, Matt: "Build it. thats WAY better"; docs/mockups/lb2-player-game.html), ADMIN DEVICES
+  // ONLY until Matt says "release it": Play in the top bar, one standing card (medal, "2nd of 6", the board number),
+  // the gold holder and the gap under it; the details below draw themselves as rows (game-stats-ui.js `_rows`).
+  const rowsLook = (() => { try { return isAdminDevice(); } catch { return false; } })();
+  let topBar = bar, topCard = head;
+  if (rowsLook) {
+    const play = playable(top.game) ? `<button type="button" class="lb2-play sm lb2-bplay" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : '';
+    topBar = personBarHTML(g, top.key, title(top.game), true, { art: top.game, play });
+    let gp = null;
+    try { gp = lb2Gap(_people, top.key, top.game); } catch (err) { console.error('[leaderboard2] gap failed', err); }
+    const rk = place && place.rank ? place.rank : 0;
+    const of = gp && gp.of ? gp.of : ((_model.byGame[top.game] || {}).rows || []).length;
+    const left = rk ? `<div class="lb2-sl">${rk <= 3 && !place.noMedal ? medal(rk, 'big') : ''}<span><b>${esc(t2('lb2_ord', { n: rk }))}</b>${of ? `<small>${esc(t2('lb2_of_n', { n: fmt(of) }))}</small>` : ''}</span></div>` : '';
+    const right = bnum ? `<div class="lb2-sr"><b class="num">${bnum}</b><small>${esc(unit || t2('lb2_record'))}</small></div>`
+      : nPlayed > 0 ? `<div class="lb2-sr"><b class="num">${fmt(nPlayed)}</b><small>${esc(t2('lb2_played_col'))}</small></div>` : '';
+    const tierCls = rk >= 1 && rk <= 3 && !place.noMedal ? ` pod${rk}` : '';
+    const gap = gp && gp.rec ? `<p class="lb2-sgap">${medal(1, 'xs')}<span class="lb2-nmt">${esc(nameOf(gp.rec))}</span>${gp.need ? ` · <span class="num lb2-sneed">${needLine({ id: top.game, need: gp.need })}</span>` : ''}</p>` : '';
+    topCard = left || right ? `<div class="lb2-stand${tierCls}">${left}${right}</div>${gap}` : gap;
+  }
   let stats = '';
   try { stats = v2ScreenFor(top.game, { games: g.games || {}, code: g.playerId }, { fresh: true }); } catch (err) { console.error('[leaderboard2] player game screen failed', err); }
   // Matt's 12 (item 10): the way back to the person, arrow on the LEFT: "Back to <name>".
   const all = `<div class="lb2-card"><button type="button" class="lb2-row sm lb2-backto" data-act="pall"><span class="lb2-chev lb2-chevl" aria-hidden="true">${SVG.back}</span><span class="lb2-grow"><span class="lb2-t1">${esc(t2('lb2_back_to', { name: nameOf(g) }))}</span></span></button></div>`;
-  return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${head}<div class="gs-v2 gs-s4">${stats}</div>${all}</div></div>`;
+  return `${topBar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${topCard}<div class="gs-v2 gs-s4">${stats}</div>${all}</div></div>`;
 }
 
 // --- How rankings work: four short lines (Matt's 12, 2026-11-02: "far too wordy"); each game's own rule is its (i) --
@@ -1296,6 +1316,33 @@ html.gh-compact .lb2-x{display:none}
 .lb2-lr.pod1 .lb2-nm{font-weight:700}
 .lb2-lr.pod2{box-shadow:inset 5px 0 0 #b9c0c9}
 .lb2-lr.pod3{box-shadow:inset 5px 0 0 #c27a42}
+.lb2-stand{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:96px;padding:14px 18px;border-radius:16px;background:var(--l2-surf);border:1px solid var(--l2-line);box-shadow:inset 5px 0 0 var(--l2-line)}
+.lb2-stand.pod1{background:linear-gradient(90deg,rgba(245,200,66,.24),rgba(245,200,66,.06) 70%),var(--l2-surf);box-shadow:inset 5px 0 0 #f5c842}
+.lb2-stand.pod2{background:linear-gradient(90deg,rgba(185,192,201,.22),rgba(185,192,201,.05) 70%),var(--l2-surf);box-shadow:inset 5px 0 0 #b9c0c9}
+.lb2-stand.pod3{background:linear-gradient(90deg,rgba(194,122,66,.22),rgba(194,122,66,.05) 70%),var(--l2-surf);box-shadow:inset 5px 0 0 #c27a42}
+.lb2-sl{display:flex;align-items:center;gap:14px;min-width:0}
+.lb2-sl>span,.lb2-sr{display:flex;flex-direction:column;min-width:0}
+.lb2-sl b{font-size:30px;font-weight:800;line-height:1.1}
+.lb2-sr{align-items:flex-end;text-align:right;margin-left:auto}
+.lb2-sr b{font-size:32px;font-weight:800;line-height:1.1;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.lb2-sr b .lb2-shape{width:20px;height:20px}
+.lb2-sr b .lb2-ctv img{height:34px;width:auto}
+.lb2-sl small,.lb2-sr small{font-size:16px;color:var(--l2-text);opacity:.88}
+.lb2-sgap{display:flex;align-items:center;gap:6px;margin:-2px 4px 4px;font-size:17px;line-height:1.3;color:var(--l2-text);min-width:0;flex-wrap:wrap}
+.lb2-sgap b{font-weight:800;color:var(--l2-gold)}
+.lb2-sgap .lb2-medal{margin:0}
+.lb2-bart{display:inline-flex;vertical-align:middle;margin-right:8px}
+.lb2-bart>*{width:34px !important;height:22px !important;border-radius:5px;overflow:hidden}
+.lb2-bplay{flex-shrink:0;margin-left:4px}
+.lb2-bsub{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb2-sneed{white-space:nowrap}
+@media (max-width:420px){.lb2-bar-big .lb2-bart{display:none}}
+@media (max-width:380px){.lb2-bar.lb2-bar-big .lb2-face{display:none}.lb2-bar-big .lb2-play.sm{padding:0 16px}}
+.lb2-bar.lb2-bar-big{min-height:72px}
+.lb2-bar.lb2-bar-big h1{font-size:24px;line-height:1.15}
+html[lang="es"] .lb2-bar.lb2-bar-big h1{font-size:24px}
+.lb2-bar.lb2-bar-big .lb2-face{width:48px;height:48px;border-radius:24px;font-size:26px}
+.lb2-bar.lb2-bar-big .lb2-t2{font-size:17px;display:flex;align-items:center;white-space:nowrap}
 .lb2-old{align-self:center;min-height:44px;padding:0 20px;border:0;background:transparent;color:var(--l2-muted);font-size:14px;font-weight:600;text-decoration:underline}
 .lb2-bar{min-height:60px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:4px 4px 0}
 .lb2-bar h1{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

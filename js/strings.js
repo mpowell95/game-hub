@@ -520,6 +520,12 @@ export const STRINGS = {
     // The one-vocabulary stats screens (2026-11-02, Matt's themes; admin devices until he releases them).
     st_wins: 'Wins', st_losses: 'Losses', st_ties: 'Ties', st_played: 'Played',
     st_online: 'Online', st_first: 'Went first', st_second: 'Went second',
+    // The rows look (2026-11-07, admin devices until Matt releases it; docs/mockups/lb2-player-game.html).
+    st_record: 'Record', st_opponent: 'Opponent', st_turn: 'Turn', st_numbers: 'Numbers',
+    st_by_form_s: 'Formation', st_by_game_s: 'Game', st_by_table_s: 'Table', st_by_players_s: 'Players',
+    st_by_board_s: 'Board', st_by_timer_s: 'Timer', st_by_mode_s: 'Mode', st_by_diff_s: 'Difficulty',
+    st_wl_line: (p) => `${p.w} ${Number(p.wn) === 1 ? 'win' : 'wins'} · ${p.l} ${Number(p.ln) === 1 ? 'loss' : 'losses'}${p.tn ? ` · ${p.t} ${Number(p.tn) === 1 ? 'tie' : 'ties'}` : ''}`,
+    st_ties_n: (p) => `${p.t} ${Number(p.tn) === 1 ? 'tie' : 'ties'}`,
     st_wl: 'W–L', st_wlt: 'W–L–T', st_pct: 'Win %', st_by_diff: 'By difficulty',
     st_by_game: 'By game', st_by_form: 'By formation', st_by_table: 'By table', st_by_players: 'By players',
     st_by_board: 'By board', st_by_target: 'By target', st_by_timer: 'By timer', st_by_mode: 'By mode',
@@ -1781,6 +1787,11 @@ export const STRINGS = {
     // Las pantallas de estadísticas con un solo vocabulario (2026-11-02).
     st_wins: 'Victorias', st_losses: 'Derrotas', st_ties: 'Empates', st_played: 'Jugadas',
     st_online: 'En línea', st_first: 'Salió primero', st_second: 'Salió segundo',
+    st_record: 'Récord', st_opponent: 'Rival', st_turn: 'Turno', st_numbers: 'Números',
+    st_by_form_s: 'Formación', st_by_game_s: 'Juego', st_by_table_s: 'Mesa', st_by_players_s: 'Jugadores',
+    st_by_board_s: 'Tablero', st_by_timer_s: 'Tiempo', st_by_mode_s: 'Modo', st_by_diff_s: 'Dificultad',
+    st_wl_line: (p) => `${p.w} ${Number(p.wn) === 1 ? 'victoria' : 'victorias'} · ${p.l} ${Number(p.ln) === 1 ? 'derrota' : 'derrotas'}${p.tn ? ` · ${p.t} ${Number(p.tn) === 1 ? 'empate' : 'empates'}` : ''}`,
+    st_ties_n: (p) => `${p.t} ${Number(p.tn) === 1 ? 'empate' : 'empates'}`,
     st_wl: 'V–D', st_wlt: 'V–D–E', st_pct: '% victorias', st_by_diff: 'Por dificultad',
     st_by_game: 'Por juego', st_by_form: 'Por formación', st_by_table: 'Por mesa', st_by_players: 'Por jugadores',
     st_by_board: 'Por tablero', st_by_target: 'Por meta', st_by_timer: 'Por tiempo', st_by_mode: 'Por modo',
