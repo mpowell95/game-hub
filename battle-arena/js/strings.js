@@ -104,6 +104,7 @@ export const STRINGS = {
     sp_prismote: 'Rainbow Beam', sp_prismote_evo: 'Prism Nova',
     // Online (2026-10-24): challenges and live rooms. Fewest words.
     online: 'Online',
+    tabCpu: 'Computer', anyone: 'Anyone', matchesH: 'Matches',
     challenge: 'Challenge',
     host: 'Host',
     join: 'Join',
@@ -240,6 +241,7 @@ export const STRINGS = {
     sp_hexowl: 'Maldición', sp_hexowl_evo: 'Tormenta Maldita',
     sp_prismote: 'Rayo Arcoíris', sp_prismote_evo: 'Nova Prisma',
     online: 'En línea',
+    tabCpu: 'Máquina', anyone: 'Cualquiera', matchesH: 'Partidas',
     challenge: 'Retar',
     host: 'Crear',
     join: 'Unirse',

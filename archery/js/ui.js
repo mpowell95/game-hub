@@ -118,6 +118,9 @@ let instance = null;
  *  round pill and tiles in the middle and of the hub's chip on the left, on a 320px phone too. */
 const CHAT_PLACE = { top: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 54px)', right: '10px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 108px)' };
 
+/** Whether this player had a match going at the last look (this page's life only), so the first paint opens on the tab it settles on. */
+let ACTIVE_HINT = false;
+
 class ArcheryUI {
   constructor(container) {
     this.host = container;
@@ -208,22 +211,30 @@ class ArcheryUI {
           <div class="ar-card">
             <button type="button" class="ar-x ar-q" data-act="howto" data-la="howto">?</button>
             <h2 class="ar-logo" data-l="title"></h2>
-            <button type="button" class="ar-mprow" data-act="multi">
-              <b data-l="multiplayer"></b>
-              <span class="ar-mprow-badge" data-role="onlineNote" hidden></span>
-              <span class="ar-mprow-chev" aria-hidden="true">›</span>
-            </button>
-            <div class="ar-field">
-              <div class="gh-seg ar-seg" role="group" data-role="diffs"></div>
+            <div class="gh-seg ar-tabs" role="group" data-role="tabs">
+              <button type="button" class="gh-seg__item" data-tab="online" aria-pressed="false"><span data-l="tabOnline"></span><b class="ar-tab-n" data-role="onlineNote" hidden></b></button>
+              <button type="button" class="gh-seg__item" data-tab="cpu" aria-pressed="false"><span data-l="tabCpu"></span></button>
+              <button type="button" class="gh-seg__item" data-tab="two" aria-pressed="false"><span data-l="tabTwo"></span></button>
             </div>
-            <div class="ar-field">
-              <span class="ar-label" data-l="first"></span>
-              <div class="gh-seg ar-seg" role="group" data-role="firsts"></div>
+            <div class="ar-panel" data-panel="online" hidden>
+              <div class="ar-online"><p class="ar-mp-note" data-l="mp_loading"></p></div>
             </div>
-            <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
-            <div class="ar-go-row">
-              <button type="button" class="gh-btn gh-btn--block ar-alt" data-act="practice"><span data-l="practice"></span></button>
-              <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-act="play"><span data-l="play"></span></button>
+            <div class="ar-panel" data-panel="cpu" hidden>
+              <div class="ar-field">
+                <div class="gh-seg ar-seg" role="group" data-role="diffs"></div>
+              </div>
+              <div class="ar-field">
+                <span class="ar-label" data-l="first"></span>
+                <div class="gh-seg ar-seg" role="group" data-role="firsts"></div>
+              </div>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
+              <div class="ar-go-row">
+                <button type="button" class="gh-btn gh-btn--block ar-alt" data-act="practice"><span data-l="practice"></span></button>
+                <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-act="play"><span data-l="play"></span></button>
+              </div>
+            </div>
+            <div class="ar-panel" data-panel="two" hidden>
+              <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-act="pass"><span data-l="play"></span></button>
             </div>
           </div>
         </div>
@@ -382,7 +393,10 @@ class ArcheryUI {
     this._bottom(null);
   }
 
-  _showSetup() {
+  /** `tab` ('online' | 'cpu' | 'two') opens on that tab. Without it: the tab last tapped, else Online when a
+   *  match is going and Computer when none is (2026-11-07), decided again once the matches are read. */
+  _showSetup(tab) {
+    if (tab) this._tab = tab;
     this._mpLeave();
     this._clearPlay();
     this.screen = 'setup';
@@ -393,7 +407,12 @@ class ArcheryUI {
     this.root.classList.remove('is-playing');
     this._relabel();
     this._showOnly('setup');
-    this._countOnline();
+    this._showTab(this._tab || (ACTIVE_HINT ? 'online' : 'cpu'));
+    this._fillOnline();
+  }
+  _showTab(k) {
+    this.root.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === k)));
+    this.root.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== k; });
   }
 
   // --- layout ----------------------------------------------------------------------------------
@@ -1006,6 +1025,8 @@ class ArcheryUI {
 
   // --- input ---------------------------------------------------------------------------------------
   _click(e) {
+    const tabB = e.target.closest('[data-tab]');
+    if (tabB) { this._tab = tabB.dataset.tab; this._showTab(tabB.dataset.tab); return; }
     const seg = e.target.closest('[data-diffs], [data-firsts]');
     if (seg) {
       if (seg.dataset.diffs) this.settings.difficulty = seg.dataset.diffs;
@@ -1018,7 +1039,7 @@ class ArcheryUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') this._quitGate(b, () => this._newMatch('cpu'));
-    else if (act === 'multi') this._openOnline();
+    else if (act === 'pass') this._passPlay();
     else if (act === 'practice') this._practiceStart();
     else if (act === 'continue') this._continue();
     else if (act === 'howto') { this._helpFrom = this.screen; this.screen = 'help'; this._showOnly('help'); this._fitHelp(); }
@@ -1066,17 +1087,23 @@ class ArcheryUI {
     const el = this.root.querySelector('[data-role="onlineNote"]');
     const n = this._onlineWaiting | 0;
     el.hidden = !n;
-    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+    el.textContent = n ? String(n) : '';
   }
-  async _countOnline() {
+  /** The Online tab: matches and who to challenge (mp-ui.js fillOnline), then the default tab. */
+  async _fillOnline() {
+    const box = this.root.querySelector('.ar-online');
+    if (!box) return;
     try {
-      const MP = await this._loadMP();
-      const rows = await MP.readMyGames();
-      if (instance !== this) return;
-      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
-      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+      if (instance !== this || this.screen !== 'setup' || !box.isConnected) return;
+      this.UI = UI;
+      const res = await UI.fillOnline(this, MP, box);
+      if (!res || instance !== this || this.screen !== 'setup' || !box.isConnected) return;
+      ACTIVE_HINT = res.active;
+      this._onlineWaiting = res.mine;
       this._paintOnlineNote();
-    } catch { /* offline: no count */ }
+      if (!this._tab) this._showTab(res.active ? 'online' : 'cpu');
+    } catch { /* offline: the tab stays as it was */ }
   }
 
   async _openOnline(pickFor = null) {
@@ -1088,7 +1115,7 @@ class ArcheryUI {
     if (instance !== this) return;
     this.UI = UI;
     if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
-    else UI.home(this, MP);
+    else this._showSetup('online');
   }
 
   async _openMatch(id) {

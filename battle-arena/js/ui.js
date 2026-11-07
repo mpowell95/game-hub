@@ -174,6 +174,9 @@ function fitText(el, max = 15) {
   }
 }
 
+/** Whether this player had a match going at the last look (this page's life only), so the first paint opens on the tab it settles on. */
+let ACTIVE_HINT = false;
+
 class BattleArena {
   constructor(root) {
     this.root = root;
@@ -282,7 +285,10 @@ class BattleArena {
   }
 
   // --- home -------------------------------------------------------------------------------------
-  renderHome() {
+  /** `tab` ('online' | 'cpu') opens on that tab. Without it: the tab last tapped, else Online when a match is
+   *  going and Computer when none is (2026-11-07), decided again once the matches are read. */
+  renderHome(tab, note = '') {
+    if (tab) this._tab = tab;
     this.newScreen('home');
     const s = this.settings;
     const wins = totalWins();
@@ -291,6 +297,7 @@ class BattleArena {
     const pool = open.slice();
     const pair = [0, 1].map(() => pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
     const seg = DIFFS.map((d) => `<button type="button" class="gh-seg__item" data-v="${d}" aria-pressed="${d === s.diff}">${diffShapeSVG(tierOf(d))}<span>${t(d)}</span></button>`).join('');
+    const cur = this._tab || (ACTIVE_HINT ? 'online' : 'cpu');
     const words = t('title').split(' ');
     const last = words.pop();
     this.root.innerHTML = `
@@ -305,12 +312,16 @@ class BattleArena {
           </div>
         </div>
         <div class="ba-home-menu">
-          <div class="gh-seg ba-seg" role="group" data-role="diff">${seg}</div>
-          <button type="button" class="ba-bigbtn" data-role="play">${t('play')}</button>
-          <div class="ba-home-pair">
-            <button type="button" class="ba-steelbtn ba-online-btn" data-role="online">${ICONS.online}<span>${t('online')}</span><span class="ba-badge-n" hidden></span></button>
-            <button type="button" class="ba-steelbtn" data-role="dex" aria-label="${t('monsters')} ${open.length}/${MONSTERS.length}">${ICONS.paw}<span>${t('monsters')}</span><span class="ba-count-n">${open.length}/${MONSTERS.length}</span></button>
+          <div class="gh-seg ba-seg ba-tabs" role="group" data-role="tabs">
+            <button type="button" class="gh-seg__item" data-tab="online" aria-pressed="${cur === 'online'}"><span>${t('online')}</span><b class="ba-tab-n" hidden></b></button>
+            <button type="button" class="gh-seg__item" data-tab="cpu" aria-pressed="${cur === 'cpu'}"><span>${t('tabCpu')}</span></button>
           </div>
+          <div class="ba-panel" data-panel="online"${cur === 'online' ? '' : ' hidden'}><div class="ba-onbox"></div></div>
+          <div class="ba-panel" data-panel="cpu"${cur === 'cpu' ? '' : ' hidden'}>
+            <div class="gh-seg ba-seg" role="group" data-role="diff">${seg}</div>
+            <button type="button" class="ba-bigbtn" data-role="play">${t('play')}</button>
+          </div>
+          <button type="button" class="ba-steelbtn" data-role="dex" aria-label="${t('monsters')} ${open.length}/${MONSTERS.length}">${ICONS.paw}<span>${t('monsters')}</span><span class="ba-count-n">${open.length}/${MONSTERS.length}</span></button>
           <button type="button" class="ba-link" data-role="help">${t('help')}</button>
         </div>
       </div>`;
@@ -326,10 +337,40 @@ class BattleArena {
       writeJSON(SETTINGS_KEY, this.settings);          // persist on selection, not only at start
     });
     this.on(this.root.querySelector('[data-role="play"]'), 'click', () => this.renderDraft());
-    this.on(this.root.querySelector('[data-role="online"]'), 'click', () => this.openOnline());
+    const tabs = this.root.querySelector('[data-role="tabs"]');
+    this.on(tabs, 'click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
+      this._tab = b.dataset.tab;
+      this.showTab(b.dataset.tab);
+    });
     this.on(this.root.querySelector('[data-role="dex"]'), 'click', () => this.renderMonsters());
     this.on(this.root.querySelector('[data-role="help"]'), 'click', () => this.showHelp());
     this.paintOnlineBadge();
+    this.fillOnline(note);
+  }
+
+  /** Show one home tab's panel (no re-render: the Online list and the chosen level stay as they are). */
+  showTab(k) {
+    for (const b of this.root.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of this.root.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+  }
+
+  /** The Online tab (online-ui.js fillOnline), then the default tab. */
+  async fillOnline(note) {
+    const gen = this.gen;
+    const box = this.root.querySelector('.ba-onbox');
+    if (!box) return;
+    let O;
+    try { O = await import('./online-ui.js'); } catch (err) { console.error('[battle-arena] online did not load', err); return; }
+    if (this.disposed || gen !== this.gen) return;
+    let res;
+    try { res = await O.fillOnline(this, box, note); } catch (err) { console.warn('[battle-arena] online tab', err); return; }
+    if (!res || this.disposed || gen !== this.gen) return;
+    ACTIVE_HINT = res.active;
+    const n = this.root.querySelector('.ba-tab-n');
+    if (n) { n.textContent = res.mine ? String(res.mine) : ''; n.hidden = !res.mine; }
+    if (!this._tab) this.showTab(res.active ? 'online' : 'cpu');
   }
 
   /** "Online 2": how many challenges wait on this player (alert.js, one small read). */
@@ -338,7 +379,7 @@ class BattleArena {
     let n = 0;
     try { const A = await import('./alert.js'); await A.check(); n = A.myTurnCount(); } catch { return; }
     if (gen !== this.gen) return;
-    const b = this.root.querySelector('.ba-online-btn .ba-badge-n');
+    const b = this.root.querySelector('.ba-tab-n');
     if (!b) return;
     b.hidden = !n;
     b.textContent = String(n);

@@ -55,7 +55,7 @@ export async function open(ui, { armed = false } = {}) {
     if (save) return resumeLive(ui, save);
     return false;
   }
-  home(ui);
+  ui.renderHome('online');
   return true;
 }
 
@@ -109,37 +109,86 @@ function rowHTML(r) {
   </button>`;
 }
 
-/** The online home: Challenge, Host / Join, then the challenges (yours first). */
-export async function home(ui, note = '') {
+/** The old Online screen is the home screen's Online tab since 2026-11-07: back to it, with a note. */
+export function home(ui, note = '') {
   ui.leaveOnline();
-  const box = frame(ui, 'online', esc(t('online')), `
-    <button type="button" class="ba-bigbtn" data-role="new">${ICON.swords}<span>${esc(t('challenge'))}</span></button>
+  ui.renderHome('online', note);
+}
+
+/**
+ * THE HOME SCREEN'S ONLINE TAB (2026-11-07, the Cup Pong way): Matches (your turn first with Play, then
+ * their turn), Challenge (Anyone = the full list, then the 4 people played most recently), then the live-room
+ * buttons Host / Join. Fills `box`; returns { active, mine }.
+ */
+export async function fillOnline(ui, box, note = '') {
+  const gen = ui.gen;
+  box.innerHTML = `
+    <div class="ba-ol-live"><p class="ba-ol-note">…</p></div>
     <div class="ba-ol-pair">
       <button type="button" class="ba-steelbtn" data-role="host">${ICON.host}<span>${esc(t('host'))}</span></button>
       <button type="button" class="ba-steelbtn" data-role="join">${ICON.join}<span>${esc(t('join'))}</span></button>
     </div>
     <p class="ba-ol-note ba-ol-err" aria-live="polite"${note ? '' : ' hidden'}>${esc(note)}</p>
-    <div class="ba-ol-push" hidden></div>
-    <div class="ba-ol-list"><p class="ba-ol-note">…</p></div>`);
-  const gen = ui.gen;
-  ui.on(box.querySelector('[data-role="back"]'), 'click', () => ui.renderHome());
-  ui.on(box.querySelector('[data-role="new"]'), 'click', () => picker(ui));
+    <div class="ba-ol-push" hidden></div>`;
   ui.on(box.querySelector('[data-role="host"]'), 'click', () => hostDraft(ui));
   ui.on(box.querySelector('[data-role="join"]'), 'click', () => joinCode(ui));
-  const list = box.querySelector('.ba-ol-list');
-  ui.on(list, 'click', (e) => { const b = e.target.closest('.ba-ol-row'); if (b) openChallenge(ui, b.dataset.id); });
   pushRow(ui, box);
   try { await MP.drainOutbox(); } catch { /* sent next time */ }
   const rows = await MP.readMyGames();
-  if (gen !== ui.gen) return;
+  if (gen !== ui.gen || !box.isConnected) return null;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[battle-arena] recordFinished', err); }
   const live = rows.filter((r) => !r.over);
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-  list.innerHTML = (mine.length ? `<h3 class="ba-ol-h">${esc(t('yourTurn'))} <span>${mine.length}</span></h3>${mine.slice(0, 8).map(rowHTML).join('')}` : '')
-    + (theirs.length ? `<h3 class="ba-ol-h">${esc(t('theirTurnH'))} <span>${theirs.length}</span></h3>${theirs.slice(0, 8).map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<div class="ba-ol-empty"><div class="ba-ol-empty-art" aria-hidden="true">${monsterSVG('gloomite')}</div><p class="ba-ol-note">${esc(t('noMatches'))}</p></div>`);
-  fitList(box, list, Math.max(0, mine.length - 8) + Math.max(0, theirs.length - 8));
+  const all = mine.concat(theirs);
+  let nShow = Math.min(all.length, 4);
+  // Most recent first, one face per person; an index into this list, never a code, in the page.
+  const seen = new Set();
+  const recent = rows.slice().sort((x, y) => (y.updated || 0) - (x.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const liveRow = (r) => `
+    <button type="button" class="ba-ol-row${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+      <span class="ba-ol-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="ba-ol-text"><span class="ba-ol-name">${esc(r.name || '?')}</span>
+        <span class="ba-ol-sub">${esc(r.yourTurn ? `${r.mine} - ${r.theirs}` : t('turnOf', { name: r.name || '?' }).replace(/\.$/, ''))}</span></span>
+      ${r.yourTurn ? `<span class="ba-play-pill">${esc(t('play'))}</span>` : '<span class="ba-ol-chev" aria-hidden="true">›</span>'}
+    </button>`;
+  const matchesCard = () => `
+      <div class="ba-on-card">
+        <div class="ba-on-head">${esc(t('matchesH'))}</div>
+        ${all.slice(0, nShow).map(liveRow).join('')}${all.length > nShow ? `<p class="ba-ol-note">${esc(t('more', { n: all.length - nShow }))}</p>` : ''}
+      </div>`;
+  const paint = () => { box.querySelector('.ba-ol-live').innerHTML = (live.length ? matchesCard() : '') + challengeCard; };
+  const challengeCard = `
+      <div class="ba-on-card">
+        <div class="ba-on-head">${esc(t('challenge'))}</div>
+        <div class="ba-faces">
+          <button type="button" class="ba-face is-any" data-role="anyone"><span class="ba-face-dot" aria-hidden="true">+</span><span class="ba-face-name">${esc(t('anyone'))}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="ba-face" data-oi="${i}"><span class="ba-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="ba-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>`;
+  paint();
+  // Nothing scrolls: drop matches from the end until the whole home screen fits, and count them.
+  const menu = box.closest('.ba-home-menu');
+  if (menu) {
+    // Measured with the Online panel showing (it may be the hidden tab right now), then put back.
+    const panels = [...menu.querySelectorAll('[data-panel]')], was = panels.map((p) => p.hidden);
+    panels.forEach((p) => { p.hidden = p.dataset.panel !== 'online'; });
+    while (nShow > 1 && menu.scrollHeight > menu.clientHeight + 1) { nShow--; paint(); }
+    panels.forEach((p, i) => { p.hidden = was[i]; });
+  }
+  const live_ = box.querySelector('.ba-ol-live');
+  ui.on(live_, 'click', (e) => {
+    const m = e.target.closest('.ba-ol-row[data-id]');
+    if (m) { openChallenge(ui, m.dataset.id); return; }
+    if (e.target.closest('[data-role="anyone"]')) { picker(ui); return; }
+    const f = e.target.closest('.ba-face[data-oi]');
+    const them = f && recent[Number(f.dataset.oi)];
+    if (them) pickTeamFor(ui, them);
+  });
   showUnseen(ui, rows);
+  return { active: live.length > 0, mine: mine.length };
 }
 
 /** "Notify me": only while notifications are off on this phone. */
@@ -582,4 +631,4 @@ async function sendChallengeChat(link, p) {
 }
 
 export { sideOfSeat };
-export default { open, home, openChallenge, reasonText };
+export default { open, home, fillOnline, openChallenge, reasonText };

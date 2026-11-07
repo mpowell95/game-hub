@@ -219,3 +219,10 @@
    may scroll on a very short phone under the root's touch-action: none. */
 .ah-root .ghc-input { -webkit-user-select: text; user-select: text; }
 .ah-root .ghc-panel { touch-action: pan-y; }
+
+/* SETUP TABS (2026-11-07): Online | Computer. Pinned to the top so the tabs never move between panels. */
+.ah-root .ah-ov-top { align-items: flex-start; overflow-y: auto; }
+.ah-root .ah-tabs { display: flex; width: 100%; margin: 6px 0 8px; }
+.ah-root .ah-tabs .gh-seg__item { flex: 1 1 0; min-height: 44px; font-size: 17px; min-width: 0; }
+.ah-root .ah-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }
+.ah-root .ah-panel[hidden] { display: none; }
