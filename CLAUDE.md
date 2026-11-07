@@ -734,6 +734,8 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Your-turn bubble on the tab bar (2026-11-07, ADMIN DEVICES ONLY, Matt: "Build D for admin only")**: compact layout: each
   waiting tile gets a yellow ring + swords, ONE bubble points at the Multiplayer tab (tap = Multiplayer screen); `js/hub.js`
   `_paintDock`. Players and the comfortable layout keep the old bubble/pills. Mockup: `docs/mockups/turn-alerts.html`, D.
+  **A tapped turn notification opens the Multiplayer screen, not the match (same day, admin devices only;**
+  `_openPushedGameNow`). Players still go straight into the match.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

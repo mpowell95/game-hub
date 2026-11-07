@@ -2011,6 +2011,17 @@ class Hub {
       await this._warmGame(id);
       if (this.current) { this._clearPushOpen(); return; }
     }
+    // ONTO THE MULTIPLAYER SCREEN (2026-11-07, ADMIN DEVICES ONLY until Matt ships it). Matt: "We need to
+    // make the notifications take you to the multiplayer screen then. Start making that more of a place
+    // people live." A turn/challenge notification opens Multiplayer, where every turn waits, like the tab
+    // bar's bubble (_onDockTap). A Game Hub message's Play button (`fresh`) still opens its game.
+    if (!extra.fresh && isAdminDevice() && (typeof g.alerts === 'function' || LIVE_MP_GAMES.has(id))) {
+      this._clearPushOpen();
+      const st = this._alertFor(id);
+      if (st && st.alert.kind !== 'over') this._dismissGameAlert(id);
+      this.openChallenges();
+      return;
+    }
     // STRAIGHT INTO THE MATCH THE NOTIFICATION IS ABOUT (2026-09-24), when it names one and the
     // game's alerts module can open a match directly (hoops4 `armOpen`). Before this a tap only
     // reached the match when a launcher bubble happened to be up for it; otherwise it landed on the
