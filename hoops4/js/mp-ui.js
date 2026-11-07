@@ -31,12 +31,12 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => (
  * `on()` (so every listener is unbound by destroy()), `settings`, `startLive()` and
  * `startAsync()`.
  */
-export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
+export function openMultiplayer(ui, { pickFor = null, view = '' } = {}) {
   const el = document.createElement('div');
   el.className = 'gh-overlay h4-sheet';
   ui.root.appendChild(el);
 
-  const state = { view: 'home', busy: false, error: '', games: [], opponents: [], room: null };
+  const state = { view: 'home', busy: false, error: '', games: [], opponents: [], room: null, owed: [] };
   let stopWatch = null;
   let closed = false;
   // ONCE. `shell()` re-renders in place and re-binds the backdrop each time, so by the third view
@@ -74,225 +74,6 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
   function note(msg, kind) {
     if (!msg) return '';
     return `<p class="h4-mp-note${kind ? ' is-' + kind : ''}">${esc(msg)}</p>`;
-  }
-
-  // --- "tell me when it's my turn" (2026-09-23, js/push.js) ---------------------------------
-  // Matt: "are you sure there's no way to have real notifications or something close to it?" This
-  // is the screen where a turn-by-turn match is started, so it is where the offer belongs. Shown
-  // only while it would DO something: nothing once it is on, and on an iPhone in a Safari tab it
-  // says what is actually needed (the Home Screen app) instead of a button that cannot work.
-  async function paintPush(msg) {
-    const box = el.querySelector('[data-role="push"]');
-    if (!box) return;
-    let P;
-    try { P = await import('../../js/push.js'); } catch { return; }
-    const st = await P.pushState().catch(() => 'unsupported');
-    if (!box.isConnected) return;
-    if (st === 'off') {
-      box.innerHTML = `<button type="button" class="h4-mp-act h4-mp-push" data-act="push-on"><span aria-hidden="true">&#128276;</span> ${esc(t('pushOn'))}</button>${note(msg, 'warn')}`;
-      const b = box.querySelector('[data-act="push-on"]');
-      // enablePush asks permission FIRST, inside this tap - iOS only prompts for a user gesture.
-      ui.on(b, 'click', async () => {
-        b.disabled = true;
-        const res = await P.enablePush().catch(() => ({ ok: false, reason: 'subscribe-failed' }));
-        if (!box.isConnected) return;
-        if (res.ok) { box.innerHTML = note(t('pushDone')); return; }
-        paintPush(res.reason === 'denied' ? t('pushDenied')
-          : res.reason === 'dismissed' ? '' : t('pushFailed'));
-      });
-    } else if (st === 'install') box.innerHTML = note(t('pushInstall'));
-    else if (st === 'denied') box.innerHTML = note(t('pushDenied'));
-    else box.innerHTML = '';
-  }
-
-  // --- home ---------------------------------------------------------------------------------
-  async function viewHome() {
-    if (!MP.myCode()) {
-      shell(t('mp'), note(t('mpNeedName'), 'warn'));
-      return;
-    }
-    // FOUR WAYS TWO PEOPLE PLAY, AS FOUR ROWS THAT SAY WHAT THEY DO. Matt: "within multiplayer
-    // options, there's a Host game option, a pass and play option, a challenge option and a Live
-    // Challenges section that shows the active games and if it's your turn or their turn."
-    //
-    // Each row carries ONE line of what it is - not the two-paragraph section headers this screen
-    // used to have. "Pass and play" has moved here from the setup screen's opponent row, where it
-    // was labelled "Two players" and read as a mode of the computer game.
-    // NAMES ONLY. The one-line hints under each of these went the way of the setup screen's
-    // tagline - Matt: "Delete all the subtitles on the Multiplayer screen as well". Four buttons
-    // whose names say what they are do not need four sentences explaining them.
-    // (2026-09-23) ONE BIG ACTION, THREE SMALL ONES, THEN YOUR GAMES SPLIT BY WHOSE MOVE IT IS.
-    // Matt, with two screenshots of this screen: "Make this page better/easier to navigate. And
-    // let people quit games." It was five full-width rows before the first game, so the list
-    // scrolled off a phone; every row said "Waiting on <name>" beside the same name; names and
-    // "Game 1 of 3" wrapped onto four lines. Now: Challenge is the one primary button, Host / Join
-    // / Pass and play share a row, "Your turn" comes first, History is a link, and every game has
-    // a Quit (a resignation - nothing is deleted, see MP.resignGame).
-    const tile = (go, icon, label) => `
-      <button type="button" class="h4-mp-tile" data-go="${go}"><span class="h4-mp-ico" aria-hidden="true">${icon}</span><span>${esc(label)}</span></button>`;
-    // What just happened to the match you left (cancelled, declined, expired), said once on top.
-    const flashNote = flash ? note(flash) : '';
-    flash = '';
-    shell(t('mpHome'), `${flashNote}
-      <button type="button" class="h4-mp-act is-primary h4-mp-big" data-go="pick"><span aria-hidden="true">&#9876;&#65039;</span> ${esc(t('mpChallengeBig'))}</button>
-      <div class="h4-mp-tiles">
-        ${tile('host', '&#128225;', t('mpHostShort'))}
-        ${tile('join', '&#128273;', t('mpJoinShort'))}
-        ${tile('pass', '&#128241;', t('mpPassShort'))}
-      </div>
-      <div data-role="push"></div>
-      <div data-role="games"><p class="h4-mp-sub">${t('mpGames')}...</p></div>
-      <button type="button" class="h4-mp-link" data-go="history">${esc(t('mpHistory'))} &rsaquo;</button>`);
-    for (const b of el.querySelectorAll('[data-go]')) ui.on(b, 'click', () => go(b.dataset.go));
-    paintPush();
-    // The list is filled in behind the painted screen rather than in front of it, the repo's own
-    // rule for a screen that waits on a read: name what replaces it, and when.
-    MP.drainOutbox().catch(() => {});
-    const rows = await MP.readMyGames();
-    const box = el.querySelector('[data-role="games"]');
-    if (!box) return;                                   // the sheet closed while the read was out
-    state.games = rows;
-    // Every finished match this device has not yet counted is counted now, once (see
-    // MP.recordFinished) - including a game the other person won, or quit.
-    try { MP.recordFinished(rows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
-    const live = rows.filter((r) => r && !r.over);
-    // A SERIES THAT IS OWED ITS NEXT GAME (2026-09-23). Matt, after two series were mis-scored
-    // "2-0" (really 1-1): "can you fix the two series the game incorrectly said i lost". The
-    // score was already right on read; what was missing was a way BACK to them - a finished game
-    // leaves this list, so game 3 was only reachable through History. Now a finished series game
-    // with no later game, whose series is not over, is listed here. ONE person gets the button so
-    // the two phones cannot both create game 3: the one who LOST the last game (on a draw, the
-    // side that was 'b'). The other sees it waiting.
-    const owed = await owedSeries(rows);
-    if (!el.isConnected) return;
-    const mine = live.filter((r) => r.yourTurn);
-    const theirs = live.filter((r) => !r.yourTurn);
-    const sec = (title, list, extra = []) => (list.length + extra.length) ? `
-      <section class="h4-mp-sec"><h3>${esc(title)} <span class="h4-mp-count">${list.length + extra.length}</span></h3>
-        <div class="h4-mp-games">${extra.join('')}${list.map(gameRow).join('')}</div></section>` : '';
-    const owedMine = owed.filter((o) => o.mine).map(owedRow);
-    const owedTheirs = owed.filter((o) => !o.mine).map(owedRow);
-    box.innerHTML = (live.length || owed.length)
-      ? sec(t('mpSecYours'), mine, owedMine) + sec(t('mpSecTheirs'), theirs, owedTheirs)
-      : `<p class="h4-mp-sub">${t('mpNoActive')}</p>`;
-    // A MATCH THAT ENDED WHILE THIS PHONE WAS AWAY gets the Game Over popup, on top of this sheet.
-    showUnseenResults(ui, rows);
-    for (const b of box.querySelectorAll('[data-next]')) ui.on(b, 'click', () => startNext(b.dataset.next, b));
-    for (const b of box.querySelectorAll('[data-game]')) ui.on(b, 'click', () => openGame(b.dataset.game));
-    for (const b of box.querySelectorAll('[data-quit]')) ui.on(b, 'click', (e) => { e.stopPropagation(); confirmQuit(b.dataset.quit); });
-  }
-
-  function gameRow(r) {
-    const cls = r.yourTurn ? 'is-yours' : 'is-theirs';
-    // Only a real series says so - "Game 1 of 1" is noise on a one-off.
-    const bits = [];
-    if (r.series > 1) bits.push(t('gameOf', { n: r.seriesNo, m: r.series }));
-    if (r.oneShot) bits.push(t('shotsOne'));            // the default rule goes unsaid
-    // NO STATUS CHIP: the section heading ("Your turn" / "Waiting on them") already says it in
-    // words, and a chip repeating it squeezed every name to an ellipsis.
-    return `<div class="h4-mp-game ${cls}">
-        <button type="button" class="h4-mp-open" data-game="${esc(r.id)}">
-          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
-          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
-            <span class="h4-mp-meta">${esc(bits.join(' · '))}</span></span>
-        </button>
-        <button type="button" class="h4-mp-quit" data-quit="${esc(r.id)}" aria-label="${esc(t(r.open === 'sent' ? 'mpCancelAria' : r.open === 'got' ? 'mpDeclineAria' : 'mpQuitAria', { who: r.name || '?' }))}">${esc(t(r.open === 'sent' ? 'mpCancel' : r.open === 'got' ? 'mpDecline' : 'mpQuit'))}</button>
-      </div>`;
-  }
-
-  /** Finished series games that are owed a next game. Reads each candidate match (there are
-   *  only ever a handful), because the index row does not carry the running score. */
-  async function owedSeries(rows) {
-    const me = MP.myCode();
-    const cands = (rows || []).filter((r) => r && r.over && r.series > 1
-      && !(rows || []).some((x) => x && x.seriesOf === r.seriesOf && (x.seriesNo | 0) > (r.seriesNo | 0)));
-    const out = [];
-    for (const r of cands.slice(0, 8)) {
-      let g = null;
-      try { g = await MP.readGame(r.id); } catch { g = null; }
-      if (!g || !g.over) continue;
-      const st = MP.seriesAfter(g);
-      if (st.done) continue;
-      const side = MP.sideOf(g, me);
-      if (!side) continue;
-      const w = g.over.winner;
-      const starter = w === 'a' ? 'b' : w === 'b' ? 'a' : 'b';
-      const mineW = side === 'a' ? st.wins.a : st.wins.b;
-      const theirW = side === 'a' ? st.wins.b : st.wins.a;
-      out.push({ id: g.id, row: r, next: st.no + 1, len: st.len, mine: side === starter, score: `${mineW}-${theirW}` });
-    }
-    state.owed = out;
-    return out;
-  }
-
-  function owedRow(o) {
-    const r = o.row;
-    const meta = `${t('gameOf', { n: o.next, m: o.len })} \u00b7 ${t('mpSeriesAt', { s: o.score })}`;
-    const right = o.mine
-      ? `<button type="button" class="h4-mp-quit h4-mp-start" data-next="${esc(o.id)}">${esc(t('mpStartN', { n: o.next }))}</button>`
-      : '';
-    return `<div class="h4-mp-game ${o.mine ? 'is-yours' : 'is-theirs'}">
-        <div class="h4-mp-open" role="group">
-          <span class="h4-mp-emo" aria-hidden="true">${esc(r.emoji)}</span>
-          <span class="h4-mp-txt"><span class="h4-mp-name">${esc(r.name || '?')}</span>
-            <span class="h4-mp-meta">${esc(meta)}${o.mine ? '' : ' \u00b7 ' + esc(t('mpTheyStart'))}</span></span>
-        </div>${right}
-      </div>`;
-  }
-
-  async function startNext(id, btn) {
-    if (state.busy) return;
-    state.busy = true; btn.disabled = true;
-    const g = await MP.readGame(id);
-    const res = g ? await MP.nextInSeries(g) : { ok: false };
-    state.busy = false;
-    if (!res || !res.ok) { btn.disabled = false; btn.textContent = t('mpOffline'); return; }
-    el.remove();
-    ui.startAsync(res.game);
-  }
-
-  /** QUITTING IS RESIGNING. It asks first, says it counts as a loss, and writes `over` on the
-   *  match through MP.resignGame - it deletes nothing. The other person sees "Won, they
-   *  resigned" in their history. */
-  function confirmQuit(id) {
-    const row = (state.games || []).find((r) => r && r.id === id);
-    const who = (row && row.name) || '?';
-    // Nobody has shot back yet (2026-10-13, js/challenge-life.js): the same button CANCELS a
-    // challenge you sent or DECLINES one sent to you, and it counts for nobody. mp.js decides
-    // again from the match itself, so a row a turn behind can never turn a resignation into a cancel.
-    const kind = row && row.open === 'sent' ? 'cancel' : row && row.open === 'got' ? 'decline' : 'resign';
-    const q = kind === 'resign' ? t('mpQuitQ') : t(kind === 'cancel' ? 'mpCancelQ' : 'mpDeclineQ');
-    // After the sender's first shot a cancel or decline is a loss for whoever does it (2026-10-29).
-    const body = kind === 'resign' ? t('mpQuitBody', { who }) : t(row && row.pl ? 'mpLossBody' : 'mpNobodyBody');
-    const yesText = kind === 'resign' ? t('mpQuitYes') : t(kind === 'cancel' ? 'mpCancelCh' : 'mpDeclineCh');
-    const ov = document.createElement('div');
-    ov.className = 'gh-overlay';
-    ov.innerHTML = `
-      <div class="gh-modal" role="dialog" aria-modal="true" aria-label="${esc(q)}">
-        <h2 class="gh-modal__title">${esc(q)}</h2>
-        <p class="h4-sheet-body">${esc(body)}</p>
-        <p class="h4-mp-note" data-role="err" hidden></p>
-        <div class="gh-modal__actions">
-          <button type="button" class="gh-btn gh-btn--block" data-role="no">${esc(t('mpQuitNo'))}</button>
-          <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="yes">${esc(yesText)}</button>
-        </div>
-      </div>`;
-    ui.root.appendChild(ov);
-    const close = () => ov.remove();
-    ui.on(ov.querySelector('[data-role="no"]'), 'click', close);
-    ui.on(ov.querySelector('[data-role="yes"]'), 'click', async () => {
-      const yes = ov.querySelector('[data-role="yes"]');
-      yes.disabled = true;
-      const res = await MP.resignGame(id);
-      if (!res || !res.ok) {
-        yes.disabled = false;
-        const err = ov.querySelector('[data-role="err"]');
-        err.hidden = false; err.textContent = t('mpQuitFail');
-        return;
-      }
-      close();
-      viewHome();
-    });
   }
 
   // --- live: host ----------------------------------------------------------------------------
@@ -548,7 +329,7 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
     if (view === 'terms') return viewTerms(state.them);
     if (view === 'pass') return startPassPlay();
     if (view === 'history') return viewHistory();
-    return viewHome();
+    return close();           // 'home' is the setup screen's Online tab (2026-11-07), underneath
   }
 
   /** TWO PEOPLE, ONE PHONE. No room, no match document, no network - `ui.start()` with vsCpu
@@ -560,8 +341,9 @@ export function openMultiplayer(ui, { pickFor = null, flash = '' } = {}) {
   }
 
   // The hub's Challenges screen hands over a person: straight onto their terms (Back goes to the list).
-  if (pickFor && pickFor.code && MP.myCode()) { state.view = 'terms'; state.them = pickFor; viewTerms(pickFor); }
-  else go('home');
+  if (!MP.myCode()) shell(t('mp'), note(t('mpNeedName'), 'warn'));
+  else if (pickFor && pickFor.code) { state.view = 'terms'; state.them = pickFor; viewTerms(pickFor); }
+  else go(view || 'home');
   // Read-only hook for the headless drivers, the same precedent as `window.__skTest` and
   // `window.__h4Test`. The opponent list comes from Firebase, which a local probe has no access
   // to, so there is no other way to reach the terms screen and LOOK at it. The game never reads
@@ -815,7 +597,155 @@ export function createMatchChat({ root, send, them, failText }) {
   return { add, onReactions, setOpen, destroy, get log() { return log.slice(); } };
 }
 
-export default { openMultiplayer, createMatchChat };
+
+// --- THE SETUP SCREEN'S ONLINE TAB (2026-11-07, Cup Pong's tabs, Matt: "Do the same tabs for the other
+// multiplayer games") ------------------------------------------------------------------------------
+// Matches (your turn first, Play pill), Challenge (Anyone = the full list, then the four people played
+// most recently), then the live-room tiles (Host, Join, Pass & play) unchanged. The sheet above stays
+// for the pick list, the terms, History and the live room; its old home screen is gone.
+
+/** Finished series games owed a next game (the hub's Multiplayer screen shows the same rule). */
+async function owedSeriesOf(rows) {
+  const out = [];
+  try {
+    for (const o of await MP.readOwedSeries(rows)) {
+      out.push({ id: o.id.replace(/^next:/, ''), row: o, next: o.seriesNo, len: o.series, mine: !!o.yourTurn });
+    }
+  } catch (err) { console.warn('[hoops4] owed series', err); }
+  return out;
+}
+
+function note(msg, kind) {
+  if (!msg) return '';
+  return `<p class="h4-mp-note${kind ? ' is-' + kind : ''}">${esc(msg)}</p>`;
+}
+
+/** "Notify me when it's my turn" - only while notifications are off on this phone. */
+async function pushRow(ui, box) {
+  if (!box) return;
+  let P;
+  try { P = await import('../../js/push.js'); } catch { return; }
+  const st = await P.pushState().catch(() => 'unsupported');
+  if (!box.isConnected) return;
+  const say = (m, kind) => { box.innerHTML = note(m, kind); };
+  if (st === 'off') {
+    box.innerHTML = `<button type="button" class="h4-mp-act h4-mp-push" data-act="push-on"><span aria-hidden="true">&#128276;</span> ${esc(t('pushOn'))}</button>`;
+    const b = box.querySelector('[data-act="push-on"]');
+    ui.on(b, 'click', async () => {
+      b.disabled = true;
+      const res = await P.enablePush().catch(() => ({ ok: false, reason: 'subscribe-failed' }));
+      if (!box.isConnected) return;
+      if (res.ok) { say(t('pushDone')); return; }
+      if (res.reason === 'dismissed') { b.disabled = false; return; }
+      say(res.reason === 'denied' ? t('pushDenied') : t('pushFailed'), 'warn');
+    });
+  } else if (st === 'install') say(t('pushInstall'));
+  else if (st === 'denied') say(t('pushDenied'));
+  else box.innerHTML = '';
+}
+
+/**
+ * Fills `box` (the Online panel). Returns { active, mine } for the tab (any match going, matches on
+ * your turn), or null when the screen moved on. Rows and faces carry an index, never a code.
+ */
+export async function fillOnline(ui, box, flash = '') {
+  const tiles = `
+      <div class="h4-mp-tiles">
+        <button type="button" class="h4-mp-tile" data-go="host"><span class="h4-mp-ico" aria-hidden="true">&#128225;</span><span>${esc(t('mpHostShort'))}</span></button>
+        <button type="button" class="h4-mp-tile" data-go="join"><span class="h4-mp-ico" aria-hidden="true">&#128273;</span><span>${esc(t('mpJoinShort'))}</span></button>
+        <button type="button" class="h4-mp-tile" data-go="pass"><span class="h4-mp-ico" aria-hidden="true">&#128241;</span><span>${esc(t('mpPassShort'))}</span></button>
+      </div>`;
+  const goTo = (g) => {
+    if (g === 'pass') ui.start({ vsCpu: false, resume: true });
+    else openMultiplayer(ui, { view: g });
+  };
+  if (!MP.myCode()) {
+    box.innerHTML = tiles;
+    ui.on(box, 'click', (e) => { const g = e.target.closest('[data-go]'); if (g) goTo(g.dataset.go); });
+    return { active: false, mine: 0 };
+  }
+  MP.drainOutbox().catch(() => {});
+  const rows = await MP.readMyGames();
+  if (!box.isConnected) return null;
+  try { MP.recordFinished(rows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
+  const live = rows.filter((r) => r && !r.over);
+  const owed = await owedSeriesOf(rows);
+  if (!box.isConnected) return null;
+  const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
+  const oMine = owed.filter((o) => o.mine), oTheirs = owed.filter((o) => !o.mine);
+  const nMatches = live.length + owed.length;
+  const seen = new Set();
+  const recent = rows.slice().sort((a, b) => (+b.updated || 0) - (+a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  let won = 0, lost = 0;
+  try { for (const o of MP.recordsFrom(rows, MP.myCode()).opponents) { won += o.won | 0; lost += o.lost | 0; } } catch { /* no chip */ }
+  const chip = won + lost ? `<button type="button" class="h4-rec-chip" data-go="history">${won}-${lost}</button>` : '';
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const sub = (r) => [r.series > 1 ? t('gameOf', { n: r.seriesNo, m: r.series }) : '', r.oneShot ? t('shotsOne') : ''].filter(Boolean).join(' · ');
+  const liveRow = (r) => {
+    const line = r.yourTurn ? sub(r) : [t('turnOf', { name: r.name || someone() }), sub(r)].filter(Boolean).join(' · ');
+    return `<button type="button" class="h4-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+        <span class="h4-mrow-face" aria-hidden="true">${esc(r.emoji || '\u{1F642}')}</span>
+        <span class="h4-mrow-text"><span class="h4-mrow-name">${esc(r.name || someone())}</span>${line ? `<span class="h4-mrow-sub">${esc(line)}</span>` : ''}</span>
+        ${r.yourTurn ? `<span class="h4-play-pill">${esc(t('turnGo'))}</span>` : '<span class="h4-mrow-chev" aria-hidden="true">›</span>'}
+      </button>`;
+  };
+  const owedRow = (o) => {
+    const r = o.row;
+    return `<div class="h4-mrow${o.mine ? ' is-mine' : ''}">
+        <span class="h4-mrow-face" aria-hidden="true">${esc(r.emoji || '\u{1F642}')}</span>
+        <span class="h4-mrow-text"><span class="h4-mrow-name">${esc(r.name || someone())}</span>
+          <span class="h4-mrow-sub">${esc(t('gameOf', { n: o.next, m: o.len }))}</span></span>
+        ${o.mine ? `<button type="button" class="h4-play-pill" data-next="${esc(o.id)}">${esc(t('mpStartN', { n: o.next }))}</button>` : '<span class="h4-mrow-chev" aria-hidden="true">›</span>'}
+      </div>`;
+  };
+  box.innerHTML = note(flash) + (nMatches ? `
+      <div class="gh-card h4-on-card">
+        <div class="h4-on-head"><span>${esc(t('matches'))}</span>${chip}</div>
+        ${oMine.map(owedRow).join('')}${mine.map(liveRow).join('')}${oTheirs.map(owedRow).join('')}${theirs.map(liveRow).join('')}
+      </div>` : '') + `
+      <div class="gh-card h4-on-card">
+        <div class="h4-on-head"><span>${esc(t('challengeH'))}</span>${nMatches ? '' : chip}</div>
+        <div class="h4-faces">
+          <button type="button" class="h4-face is-any" data-go="pick"><span class="h4-face-dot" aria-hidden="true">+</span><span class="h4-face-name">${esc(t('anyone'))}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="h4-face" data-oi="${i}"><span class="h4-face-dot" aria-hidden="true">${esc(o.emoji || '\u{1F642}')}</span><span class="h4-face-name">${esc(first(o.name) || someone())}</span></button>`).join('')}
+        </div>
+      </div>${tiles}
+      <div data-role="push"></div>`;
+  ui.on(box, 'click', async (e) => {
+    const nx = e.target.closest('[data-next]');
+    if (nx) {
+      if (nx.disabled) return;
+      nx.disabled = true;
+      const g = await MP.readGame(nx.dataset.next);
+      const res = g ? await MP.nextInSeries(g) : { ok: false };
+      if (!res || !res.ok) { nx.disabled = false; nx.textContent = t('mpOffline'); return; }
+      ui.startAsync(res.game);
+      return;
+    }
+    const m = e.target.closest('.h4-mrow[data-id]');
+    if (m) {
+      if (m.disabled) return;
+      m.disabled = true;
+      try {
+        const game = await MP.readGame(m.dataset.id);
+        if (game) { ui.startAsync(game); return; }
+      } catch (err) { console.error('[hoops4] could not open the match', err); }
+      m.disabled = false;
+      return;
+    }
+    const f = e.target.closest('.h4-face[data-oi]');
+    if (f) { openMultiplayer(ui, { pickFor: recent[Number(f.dataset.oi)] }); return; }
+    const g = e.target.closest('[data-go]');
+    if (g) goTo(g.dataset.go);
+  });
+  pushRow(ui, box.querySelector('[data-role="push"]'));
+  showUnseenResults(ui, rows);
+  return { active: nMatches > 0, mine: mine.length + oMine.length };
+}
+
+export default { openMultiplayer, createMatchChat, fillOnline };
 
 /**
  * THE GAME OVER POPUP FOR A MATCH THAT ENDED WHILE YOU WERE AWAY (2026-09-24). Matt, first: "there

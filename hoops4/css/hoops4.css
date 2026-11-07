@@ -1023,3 +1023,51 @@
 .h4-root .h4-mp-games { min-width: 0; }
 /* "Start game 3" on a series row that is owed its next game - a real action, so it reads as one. */
 .h4-root .h4-mp-start { min-width: 86px; color: var(--h4s-ink); font-weight: 800; }
+
+/* TABS: Online | Computer (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
+   label, never colour alone. Pinned to the top so the tabs never move between panels. */
+.h4-root .h4-setup > :first-child { margin-top: 0; }
+.h4-root .h4-setup > :last-child { margin-bottom: 0; }
+.h4-root .h4-tabs { width: min(420px, 100%); box-sizing: border-box; display: flex; }
+.h4-root .h4-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; font-size: 17px; gap: 6px; }
+.h4-root .h4-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }
+.h4-root .h4-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.h4-root .h4-tab-n[hidden] { display: none; }
+.h4-root .h4-panel { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.h4-root .h4-panel[hidden] { display: none; }
+.h4-root .h4-online { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.h4-root .h4-online .h4-mp-tiles { margin: 0; }
+.h4-root .h4-online .h4-mp-tile { font-size: 15px; }
+.h4-root .h4-online .h4-mp-note { margin: 0; font-size: 15px; color: var(--h4s-ink); }
+.h4-root .h4-on-card { width: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.h4-root .h4-on-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.h4-root .h4-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--h4s-line);
+  background: none; color: var(--h4s-ink); font: inherit; font-size: 16px; font-weight: 800;
+  font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-mrow {
+  display: flex; align-items: center; gap: 10px; min-height: 52px; width: 100%; box-sizing: border-box;
+  padding: 6px 10px; border: 0; border-radius: 12px; background: var(--h4s-surface-2); color: inherit;
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-mrow.is-mine { box-shadow: inset 4px 0 0 #ffce3a; }
+.h4-root .h4-mrow-face { font-size: 26px; width: 34px; text-align: center; flex: none; }
+.h4-root .h4-mrow-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.h4-root .h4-mrow-name { font-weight: 800; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.h4-root .h4-mrow-sub { font-size: 15px; color: var(--h4s-ink); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h4-root .h4-mrow-chev { font-size: 22px; font-weight: 700; color: var(--h4s-muted); }
+.h4-root .h4-play-pill { flex: none; padding: 8px 16px; border: 0; border-radius: 999px; background: #ffce3a; color: #111; font: inherit; font-weight: 900; font-size: 16px; }
+.h4-root .h4-faces { display: flex; gap: 6px; justify-content: space-between; }
+.h4-root .h4-face {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: inherit; font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.h4-root .h4-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--h4s-surface-2); }
+.h4-root .h4-face.is-any .h4-face-dot { background: none; border: 2px dashed var(--h4s-muted); font-size: 28px; color: var(--h4s-ink); box-sizing: border-box; }
+.h4-root .h4-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The hub chip owns the top left: start below it so the tabs are never under it. */
+.h4-root .h4-setup { padding-top: 56px; }

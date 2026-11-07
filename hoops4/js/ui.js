@@ -24,7 +24,6 @@ const hoopsDetail = (m, me) => {
 import * as LL from '../../js/live-leave.js';
 import { swipeSpeed, powerOf, MIN_UP_PX } from '../../skeeball/js/swipe.js';
 import { STRINGS } from './strings.js';
-import { GAME_ART } from '../../js/game-art.js';
 import { BOARD, COLS } from './boarddef.js';
 import { Match, RED, YELLOW } from './game.js';
 import { Cpu } from './cpu.js';
@@ -71,6 +70,8 @@ const clearSave = (vsCpu) => { try { localStorage.removeItem(saveKeyOf(vsCpu)); 
 const savedMoved = (sv) => !!sv && (sv.match.moves.length > 0 || sv.match.shots[0] + sv.match.shots[1] > 0 || !!sv.fly);
 
 let instance = null;
+/** Whether this player had a match going at the last look (this page's life only), so the first paint opens on the tab it will settle on. */
+let ACTIVE_HINT = false;
 
 const readSettings = () => {
   try {
@@ -204,7 +205,7 @@ class Hoops4 {
         if (this.disposed) return;
         if (res && res.ok) { this.startAsync(res.game); return; }
         const mod = await import('./mp-ui.js');
-        if (!this.disposed) mod.openMultiplayer(this);
+        if (!this.disposed) this.renderSetup('online');
       } catch (err) { console.error('[hoops4] could not start the next game', err); }
       return;
     }
@@ -374,8 +375,10 @@ class Hoops4 {
   // (light --h4s-* tokens on .h4-root, :root.gh-dark override, hoops4.css's own header) exactly
   // like skeeball's gallery/how-to; the PLAY screen below keeps its own dark arcade look in both
   // themes, unchanged.
-  renderSetup() {
+  renderSetup(tab, flash) {
     if (this.disposed) return;
+    if (tab) this._tab = tab;
+    this._flash = flash || this._flash || '';
     this.stopLoop();
     const s = this.settings;
     // The selected option is marked by a BORDER, A WEIGHT AND A CHECKMARK, never colour alone
@@ -406,30 +409,18 @@ class Hoops4 {
     // "Two players" is gone from this row - it was pass-and-play wearing a label that read like
     // a mode of the computer game, which is exactly what made him ask what it was. It is now
     // "Pass and play" inside the multiplayer sheet, beside the other two ways two people play.
+    const cur = this._tab || (ACTIVE_HINT ? 'online' : 'cpu');
+    const tabBtn = (k, label) => `<button type="button" class="gh-seg__item" data-tab="${k}" aria-pressed="${k === cur}"><span>${label}</span>${k === 'online' ? '<b class="h4-tab-n" hidden></b>' : ''}</button>`;
     this.root.innerHTML = `
       <div class="h4-setup">
         <h1 class="h4-title">${t('title')}</h1>
-        <!-- A PICTURE OF THE THING. Matt: the setup screen "looks nothing like the others. it's
-             not on the theme or on brand of the game hub at all" - and what every other machine's
-             setup screen leads with is a picture of the machine (skeeball's gallery is a rendered
-             one per cabinet). This is the SAME art the launcher tile uses, from js/game-art.js,
-             so the screen you tap and the screen you land on are the same picture. It is inline
-             SVG already in the hub's bundle: no WebGL, no readback, no placeholder to correct
-             later, and nothing to go wrong offline. -->
-        <div class="h4-hero" aria-hidden="true">${GAME_ART['hoops4'] || ''}</div>
-        <!-- YOUR TURN, ON THE SETUP SCREEN (2026-09-24). Matt: "if I have multiplayer games where
-             it's my turn, please show them... above Multiplayer... so you can have a few games
-             going at once". Filled in behind the painted screen by _fillTurns(); hidden until it
-             has something to show, and the hero picture steps aside while it does. -->
-        <div class="gh-card h4-turns" hidden></div>
-        <!-- THE SAME CARD AS THE COMPUTER ONE (2026-09-24). Matt: the multiplayer and computer
-             controls "don't look like buttons on the same page, they look like two unrelated
-             things". A card row: bold heading left, an arrow right (\u203A opens a sheet, the
-             computer card's \u25BE/\u25B8 folds). -->
-        <button type="button" class="gh-card h4-mp">
-          <span class="h4-card-head">${t('multiplayer')}</span>
-          <span class="h4-card-chev" aria-hidden="true">\u203A</span>
-        </button>
+        <!-- TABS (2026-11-07, Cup Pong's way, Matt: "Do the same tabs for the other multiplayer games"):
+             Online first (matches, who to challenge, the live-room tiles), then the computer card. -->
+        <div class="gh-seg h4-tabs" role="group" data-role="tabs">${tabBtn('online', t('tabOnline'))}${tabBtn('cpu', t('tabCpu'))}</div>
+        <div class="h4-panel" data-panel="online"${cur === 'online' ? '' : ' hidden'}>
+          <div class="h4-online"><p class="h4-mp-note">${t('loading')}</p></div>
+        </div>
+        <div class="h4-panel" data-panel="cpu"${cur === 'cpu' ? '' : ' hidden'}>
         <div class="gh-card h4-card${cpuOpen ? '' : ' is-shut'}">
           <button type="button" class="h4-card-toggle" aria-expanded="${cpuOpen}">
             <span class="h4-card-head">${t('vsCpu')}</span>
@@ -452,6 +443,7 @@ class Hoops4 {
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block h4-play">${t('newGame')}</button>`
     : `<button type="button" class="gh-btn gh-btn--primary gh-btn--block h4-play">${t('play')}</button>`}
           </div>
+        </div>
         </div>
         <button type="button" class="h4-howto-link">${t('howto')}</button>
       </div>`;
@@ -480,7 +472,10 @@ class Hoops4 {
     });
     const cont = this.root.querySelector('.h4-cont');
     if (cont) this.on(cont, 'click', () => this.start({ vsCpu: true, resume: true }));
-    this.on(this.root.querySelector('.h4-mp'), 'click', () => this.showMultiplayer());
+    this.on(this.root.querySelector('[data-role="tabs"]'), 'click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (b) { this._tab = b.dataset.tab; this.showTab(b.dataset.tab); }
+    });
     this.on(this.root.querySelector('.h4-howto-link'), 'click', () => this.showHowto());
     this.on(this.root.querySelector('.h4-card-toggle'), 'click', () => {
       const card = this.root.querySelector('.h4-card');
@@ -492,80 +487,37 @@ class Hoops4 {
       tg.querySelector('.h4-card-chev').textContent = open ? '\u25BE' : '\u25B8';
       try { localStorage.setItem(CPU_OPEN_KEY, open ? '1' : '0'); } catch { /* not remembered */ }
     });
-    this._fillTurns();
+    this._fillOnline();
   }
 
-  /**
-   * The matches waiting on this player, as a card on the setup screen. Only for a player with a
-   * code (so a solo-only device never loads the multiplayer module); the read happens behind the
-   * painted screen, and a screen that has moved on by the time it lands is left alone.
-   */
-  async _fillTurns() {
-    const box = this.root.querySelector('.h4-turns');
+  /** Show one tab's panel (no re-render: the Online list and the chosen options stay as they are). */
+  showTab(k) {
+    const box = this.root.querySelector('.h4-setup');
     if (!box) return;
-    let MP, rows;
-    try {
-      MP = await import('./mp.js');
-      if (!MP.myCode()) return;
-      rows = await MP.readMyGames();
-    } catch { return; }
-    this._paintTurns(rows, MP);
+    for (const b of box.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of box.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
   }
 
-  /** Paint the Your-turn card from index rows (split out so a probe can paint it offline). */
-  _paintTurns(rows, MP) {
-    const box = this.root.querySelector('.h4-turns');
-    if (this.disposed || !box || !box.isConnected) return;
-    const mine = (rows || []).filter((r) => r && !r.over && r.yourTurn)
-      .sort((a, b) => (+b.updated || 0) - (+a.updated || 0));
-    if (!mine.length) return;
-    const SHOW = 4;
-    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const row = (r) => {
-      const bits = [];
-      if (r.series > 1) bits.push(t('gameOf', { n: r.seriesNo, m: r.series }));
-      if (r.oneShot) bits.push(t('shotsOne'));
-      return `<button type="button" class="h4-trow" data-turn="${esc(r.id)}">
-          <span class="h4-trow-emo" aria-hidden="true">${esc(r.emoji || '\u{1F642}')}</span>
-          <span class="h4-trow-txt"><span class="h4-trow-name">${esc(r.name || '?')}</span>
-            ${bits.length ? `<span class="h4-trow-meta">${esc(bits.join(' \u00b7 '))}</span>` : ''}</span>
-          <span class="h4-trow-go">${esc(t('turnGo'))} \u203A</span>
-        </button>`;
-    };
-    box.innerHTML = `<p class="h4-turns-head"><span>${esc(t('turnYou'))}</span><span class="h4-turns-count">${mine.length}</span></p>
-      <div class="h4-turns-list">${mine.slice(0, SHOW).map(row).join('')}</div>
-      ${mine.length > SHOW ? `<button type="button" class="h4-turns-more">${esc(t('nMore', { n: mine.length - SHOW }))}</button>` : ''}`;
-    box.hidden = false;
-    const hero = this.root.querySelector('.h4-hero');
-    if (hero) hero.hidden = true;                 // room for the list on a phone
-    for (const b of box.querySelectorAll('[data-turn]')) {
-      this.on(b, 'click', async () => {
-        if (b.disabled) return;
-        b.disabled = true;
-        try {
-          const game = await MP.readGame(b.dataset.turn);
-          if (this.disposed) return;
-          if (game) { this.startAsync(game); return; }
-        } catch (err) { console.error('[hoops4] could not open the match', err); }
-        b.disabled = false;
-        this.showMultiplayer();                   // it moved on: the full list is the truth
-      });
-    }
-    const more = box.querySelector('.h4-turns-more');
-    if (more) this.on(more, 'click', () => this.showMultiplayer());
+  /** The Online tab: matches, who to challenge and the live-room tiles (mp-ui.js fillOnline), then the
+   *  default tab. Online when a match is going, else Computer, unless the player has tapped a tab. */
+  async _fillOnline() {
+    const box = this.root.querySelector('.h4-online');
+    if (!box) return;
+    let UI;
+    try { UI = await import('./mp-ui.js'); } catch { return; }
+    if (this.disposed || !box.isConnected) return;
+    const flash = this._flash; this._flash = '';
+    const res = await UI.fillOnline(this, box, flash);
+    if (!res || this.disposed || !box.isConnected) return;
+    ACTIVE_HINT = res.active;
+    const n = this.root.querySelector('.h4-tab-n');
+    if (n) { n.textContent = res.mine ? String(res.mine) : ''; n.hidden = !res.mine; }
+    if (!this._tab) this.showTab(res.active ? 'online' : 'cpu');
   }
 
-  /** The multiplayer sheet: host or join a live game, or hand a turn-by-turn match over.
-   *  Lazily imported so a solo player never downloads it. */
+  /** Back to the Online tab (the old multiplayer sheet's home), with an optional note on top. */
   async showMultiplayer(flash = '') {
-    try {
-      const mod = await import('./mp-ui.js');
-      if (this.disposed) return;
-      mod.openMultiplayer(this, { flash });
-    } catch (err) {
-      console.error('[hoops4] could not open multiplayer', err);
-      this.toast(t('mpLost'));
-    }
+    this.renderSetup('online', flash);
   }
 
   // --- multiplayer: the two ways two people play it -------------------------------------------
