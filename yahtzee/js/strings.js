@@ -21,6 +21,7 @@ const STRINGS = {
     title: 'Yahtzee',
 
     // --- setup / lobby ---
+    tab_online: 'Online',
     mode_solo: 'Vs Computer',
     mode_host: 'Host Online',
     mode_join: 'Join Online',
@@ -109,6 +110,7 @@ const STRINGS = {
   es: {
     title: 'Yahtzee',
 
+    tab_online: 'En línea',
     mode_solo: 'Vs máquina',
     mode_host: 'Crear partida',
     mode_join: 'Unirse',
