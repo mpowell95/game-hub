@@ -1,0 +1,94 @@
+<title>Cup Pong Setup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* phones side by side (stacking on a narrow screen), each the real 402-wide Cup Pong setup screen */
+:root { color-scheme: dark; --bg:#0a0f18; --page:#0f1520; --card:#161e2b; --line:#2a3547; --seg:#1d2737; --segon:#0e141e;
+  --ink:#f4f7fc; --ink2:#dbe3ee; --blue:#1a6ed8; --acc:#ffce3a; --turn:#7cc3ef; }
+body { background: var(--bg); color: var(--ink); font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+.opt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-bottom: 44px; }
+.opt h2 { margin: 0; font-size: 26px; font-weight: 800; }
+.opt h2 span { color: var(--acc); }
+.pair { display: flex; flex-wrap: wrap; gap: 24px; }
+.pair > div { min-width: 0; }
+.cap { font-size: 17px; font-weight: 700; color: var(--ink2); margin: 0 0 8px; }
+.phone { width: 402px; background: var(--page); border: 1px solid var(--line); border-radius: 34px; padding: 20px 18px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; align-items: center; justify-content: space-between; }
+.back { font-size: 19px; font-weight: 700; padding: 9px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.ttl { font-size: 34px; font-weight: 900; text-align: center; margin: 4px 0 2px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.h { font-size: 21px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+.h .rec { margin-left: auto; font-size: 17px; font-weight: 800; color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+.row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
+.row + .row { border-top: 1px solid var(--line); padding-top: 12px; }
+.face { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; background: var(--seg); display: grid; place-items: center; font-size: 26px; }
+.who { flex: 1; min-width: 0; }
+.nm { font-size: 19px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { font-size: 15px; font-weight: 600; color: var(--ink2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.play { flex: 0 0 auto; background: var(--acc); color: #111; font-size: 17px; font-weight: 800; border-radius: 999px; padding: 10px 20px; }
+.wait { flex: 0 0 auto; font-size: 15px; font-weight: 700; color: var(--ink2); }
+.faces { display: flex; gap: 10px; align-items: flex-start; }
+.pick { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 62px; }
+.pick .face { width: 52px; height: 52px; font-size: 30px; }
+.pick span { font-size: 15px; font-weight: 600; color: var(--ink2); max-width: 62px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick.add .face { border: 2px dashed #6b7c96; background: none; color: var(--ink); font-size: 30px; font-weight: 300; }
+.seg { display: flex; background: var(--seg); border: 1px solid var(--line); border-radius: 999px; padding: 5px; align-self: center; }
+.seg b { font-size: 18px; font-weight: 600; color: var(--ink2); padding: 10px 18px; border-radius: 999px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.seg b.on { background: var(--segon); color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.seg.wide { align-self: stretch; } .seg.wide b { flex: 1; justify-content: center; padding: 10px 6px; }
+.lbl { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: -6px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: #2bb24c; }
+.sq { width: 13px; height: 13px; background: #2f6fd0; border-radius: 2px; }
+.dia { width: 11px; height: 11px; background: #fff; transform: rotate(45deg); }
+.btns { display: flex; align-items: center; gap: 12px; }
+.cont { flex: 1; background: var(--blue); color: #fff; font-size: 19px; font-weight: 700; text-align: center; border-radius: 999px; padding: 14px 0; }
+.ghost { flex: 1; text-align: center; font-size: 19px; font-weight: 600; color: var(--ink2); padding: 14px 0; }
+.line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.big { text-align: right; } .big b { display: block; font-size: 28px; font-weight: 900; line-height: 1; } .big span { font-size: 15px; font-weight: 700; color: var(--ink2); letter-spacing: .06em; }
+.chev { width: 20px; height: 20px; flex: 0 0 auto; color: var(--ink2); }
+.summary { font-size: 17px; font-weight: 600; color: var(--ink2); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pills { display: flex; gap: 10px; justify-content: center; }
+.pills b { font-size: 18px; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 10px 20px; }
+.tag { font-size: 15px; font-weight: 800; color: #111; background: var(--acc); border-radius: 999px; min-width: 24px; height: 24px; display: inline-grid; place-items: center; padding: 0 6px; }
+</style>
+<script>
+/* building blocks, so the three options share one source */
+const chev = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>';
+const TOP = '<div class="top"><span class="back">‹ Hub</span></div><div class="ttl">Cup Pong</div>';
+const MATCHES = `
+  <div class="row"><span class="face">🌻</span><div class="who"><div class="nm">Anita Bonita</div><div class="sub">6 cups to 4 · Game 2 of 3</div></div><span class="play">Play</span></div>
+  <div class="row"><span class="face">🦉</span><div class="who"><div class="nm">Abuela</div><div class="sub">10 cups to 8</div></div><span class="play">Play</span></div>
+  <div class="row"><span class="face">🐙</span><div class="who"><div class="nm">Moonis</div><div class="sub">Moonis’s turn · 3 cups to 5</div></div></div>`;
+const FACES = `<div class="faces">
+  <div class="pick add"><span class="face">+</span><span>Anyone</span></div>
+  <div class="pick"><span class="face">🌻</span><span>Anita</span></div>
+  <div class="pick"><span class="face">🦉</span><span>Abuela</span></div>
+  <div class="pick"><span class="face">🐙</span><span>Moonis</span></div>
+  <div class="pick"><span class="face">🦊</span><span>Ana</span></div></div>`;
+const DIFF = '<div class="seg"><b class="on"><i class="dot"></i>Easy</b><b><i class="sq"></i>Medium</b><b><i class="dia"></i>Hard</b></div>';
+const OPTIONS = `${DIFF}
+  <div class="lbl">Gentleman's</div><div class="seg"><b class="on">On</b><b>Off</b></div>
+  <div class="lbl">Reracks</div><div class="seg"><b class="on">0</b><b>1</b><b>2</b><b>3</b><b>∞</b></div>
+  <div class="btns"><span class="cont">Continue</span><span class="ghost">New game</span></div>`;
+const SOLO = `<div class="card"><div class="line"><div><div class="h">Solo</div><div class="sub" style="font-size:17px">Clear all 10 cups</div></div><div class="line"><div class="big"><b>28</b><span>BEST</span></div>${chev}</div></div></div>`;
+const TEST = '<div class="card"><div class="h">Test</div><div class="pills"><b>Solo</b><b>Computer</b></div></div>';
+const ONLINE = `<div class="card"><div class="h">Multiplayer <span class="tag">2</span><span class="rec">12-5</span></div>${MATCHES}</div>`;
+const CHALLENGE = `<div class="card"><div class="h">Challenge</div>${FACES}</div>`;
+const CPU_FULL = `<div class="card"><div class="h">Play the computer</div>${OPTIONS}</div>`;
+const CPU_SHORT = `<div class="card"><div class="h">Play the computer</div>
+  <div class="summary"><i class="dot"></i>Easy · Gentleman's on · 0 reracks</div>
+  <div class="btns"><span class="cont">Continue</span><span class="ghost">Change</span></div></div>`;
+const TABS = (on) => `<div class="seg wide">${['Online', 'Computer', 'Solo'].map((k) => `<b class="${k === on ? 'on' : ''}">${k}${k === 'Online' ? ' <span class="tag">2</span>' : ''}</b>`).join('')}</div>`;
+const phone = (inner) => `<div class="phone">${TOP}${inner}</div>`;
+const OPTS = [
+  ['A', 'Everything on one screen', [['Top', phone(ONLINE + CHALLENGE + CPU_FULL)], ['Scrolled down', phone(CPU_FULL + SOLO + TEST)]]],
+  ['B', 'Tabs', [['Online', phone(TABS('Online') + ONLINE.replace('<div class="h">Multiplayer <span class="tag">2</span>', '<div class="h">Matches') + CHALLENGE)], ['Computer', phone(TABS('Computer') + CPU_FULL)]]],
+  ['C', 'Computer folded up', [['Top', phone(ONLINE + CHALLENGE + CPU_SHORT + SOLO)]]],
+];
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('out').innerHTML = OPTS.map(([k, t, ps]) => `<section class="opt"><h2><span>${k}</span> ${t}</h2><div class="pair">${ps.map(([c, h]) => `<div><p class="cap">${c}</p>${h}</div>`).join('')}</div></section>`).join('');
+  const fit = () => { const z = Math.min(1, (document.documentElement.clientWidth - 32) / 402); document.querySelectorAll('.phone').forEach((p) => { p.style.zoom = z; }); };
+  fit(); addEventListener('resize', fit);
+});
+</script>
+<div id="out"></div>
