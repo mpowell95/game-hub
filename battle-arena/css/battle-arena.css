@@ -812,3 +812,29 @@
 }
 /* In a match the top rows are the two teams and MOVES; the tag sits on the stage just under them. */
 .ba-root.is-test:has(.ba-battle)::after { top: calc(env(safe-area-inset-top, 0px) + 106px); }
+
+/* HOME TABS (2026-11-07): Online | Computer. The hero keeps its own height and the floor menu fills the rest from the
+   top, so the tabs sit in one place whichever panel is open. */
+.ba-root .ba-home-hero { flex: 0 0 auto; gap: 8px; padding-bottom: 8px; }
+.ba-root .ba-home-menu { flex: 1 1 auto; min-height: 0; justify-content: flex-start; gap: 10px; }
+.ba-root .ba-tabs .gh-seg__item { font-size: 17px; min-height: 44px; }
+.ba-root .ba-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 900; }
+.ba-root .ba-tab-n { min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900; }
+.ba-root .ba-tab-n[hidden] { display: none; }
+.ba-root .ba-panel { display: flex; flex-direction: column; gap: 10px; }
+.ba-root .ba-panel[hidden] { display: none; }
+.ba-root .ba-onbox, .ba-root .ba-ol-live { display: flex; flex-direction: column; gap: 8px; }
+.ba-root .ba-on-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; background: rgba(0, 0, 0, .45); border: 2px solid #0f0c0a; }
+.ba-root .ba-on-head { padding: 0 2px; font-size: 18px; font-weight: 900; color: #fff; }
+.ba-root .ba-on-card .ba-ol-row { min-height: 52px; padding: 6px 12px; }
+.ba-root .ba-on-card .ba-ol-name { font-size: 17px; color: #fff; }
+.ba-root .ba-on-card .ba-ol-sub { font-size: 15px; color: #f4efe6; }
+.ba-root .ba-on-card .ba-ol-note, .ba-root .ba-onbox .ba-ol-note { color: #f4efe6; }
+.ba-root .ba-play-pill { flex: none; padding: 7px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.ba-root .ba-faces { display: flex; gap: 6px; justify-content: space-between; }
+.ba-root .ba-face { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 0; color: #fff; font: inherit; cursor: pointer; touch-action: manipulation; }
+.ba-root .ba-face.is-any { flex: 1.6 1 0; }
+.ba-root .ba-face-dot { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: #353b45; }
+.ba-root .ba-face.is-any .ba-face-dot { background: none; border: 2px dashed #e9dccb; font-size: 28px; box-sizing: border-box; }
+.ba-root .ba-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ba-root .ba-home { --ba-hm: min(104px, 13vh, 30vw); }
