@@ -39,7 +39,7 @@ function page(ui, title, back, body) {
       <div class="ar-mp-body">${body}</div>
     </div>`;
   ov.querySelector('[data-mp="back"]').addEventListener('click', () => {
-    if (back === 'setup') ui._showSetup(); else home(ui, ui.MP);
+    if (back === 'setup') ui._showSetup(); else ui._showSetup('online');
   });
   ui.screen = 'mp';
   ui._showOnly('mp');
@@ -83,35 +83,63 @@ const rowHTML = (r) => `
     <span class="ar-mrow-chev" aria-hidden="true">›</span>
   </button>`;
 
-/** The online home. */
-export async function home(ui, MP) {
-  const body = page(ui, t('mp_title'), 'setup', `
-    <button type="button" class="gh-btn gh-btn--primary gh-btn--block ar-gobtn" data-mp="challenge">${esc(t('mp_challenge'))}</button>
-    <button type="button" class="gh-btn gh-btn--block ar-alt" data-mp="pass">${esc(t('mp_pass'))}</button>
-    <div class="ar-mp-push" hidden></div>
-    <div class="ar-mp-list"><p class="ar-mp-note">${esc(t('mp_loading'))}</p></div>
-    <button type="button" class="gh-btn gh-btn--block ar-alt" data-mp="history">${esc(t('mp_history'))}</button>`);
-  body.querySelector('[data-mp="challenge"]').addEventListener('click', () => picker(ui, MP));
-  body.querySelector('[data-mp="pass"]').addEventListener('click', () => ui._passPlay());
-  body.querySelector('[data-mp="history"]').addEventListener('click', () => history(ui, MP));
-  pushRow(body.querySelector('.ar-mp-push'), () => fitList(cardOf(body), body.querySelector('.ar-mp-list')));
+/** The old Multiplayer home is the setup screen's Online tab since 2026-11-07. */
+export function home(ui) { ui._showSetup('online'); }
+
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, the Cup Pong way): Matches (your turn first with Play, then
+ * their turn; the record chip opens History), then Challenge (Anyone = the full list, then the people
+ * played most recently, one tap each). Nothing scrolls: matches past the fifth are counted, not drawn.
+ * Fills `box`; returns { active, mine }.
+ */
+export async function fillOnline(ui, MP, box) {
   const rows = await MP.readMyGames();
-  if (!body.isConnected) return;
+  if (!box.isConnected) return null;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[archery] recordFinished', err); }
   const live = rows.filter((r) => !r.over);
   const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-  const showMine = mine.slice(0, 8), showTheirs = theirs.slice(0, 12 - showMine.length);
-  const hidden = live.length - showMine.length - showTheirs.length;
-  const list = body.querySelector('.ar-mp-list');
-  list.innerHTML = (mine.length ? `<h3 class="ar-mp-h">${esc(t('mp_your_turn'))} <span>${mine.length}</span></h3>${showMine.map(rowHTML).join('')}` : '')
-    + (theirs.length ? `<h3 class="ar-mp-h">${esc(t('mp_their_turn'))} <span>${theirs.length}</span></h3>${showTheirs.map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<p class="ar-mp-note">${esc(t('mp_none'))}</p>`);
-  fitList(cardOf(body), list, hidden);
-  list.addEventListener('click', (e) => {
-    const b = e.target.closest('.ar-mrow[data-id]');
-    if (b) ui._openMatch(b.dataset.id);
-  });
+  const shown = mine.concat(theirs).slice(0, 5);
+  const hidden = live.length - shown.length;
+  const seen = new Set();
+  const recent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+    .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+    .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+  let won = 0, lost = 0;
+  try { for (const o of MP.recordsFrom(rows, MP.myCode()).opponents) { won += o.won | 0; lost += o.lost | 0; } } catch { /* no chip */ }
+  const chip = won + lost ? `<button type="button" class="ar-rec-chip" data-mp="history">${won}-${lost}</button>` : '';
+  const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+  const liveRow = (r) => `
+    <button type="button" class="ar-mrow ar-mrow-on${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
+      <span class="ar-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
+      <span class="ar-mrow-text"><span class="ar-mrow-name">${esc(r.name)}</span>
+        <span class="ar-mrow-sub">${esc(r.yourTurn ? t('round_n', { r: Math.min(r.round, 3), a: r.mine, b: r.theirs }) : t('their_turn_n', { name: r.name }))}</span></span>
+      ${r.yourTurn ? `<span class="ar-play-pill">${esc(t('play'))}</span>` : '<span class="ar-mrow-chev" aria-hidden="true">›</span>'}
+    </button>`;
+  box.innerHTML = (live.length ? `
+      <div class="ar-on-card">
+        <div class="ar-on-head"><span>${esc(t('mp_matches'))}</span>${chip}</div>
+        ${shown.map(liveRow).join('')}${hidden > 0 ? `<p class="ar-mp-note">${esc(t('mp_more', { n: hidden }))}</p>` : ''}
+      </div>` : '') + `
+      <div class="ar-on-card">
+        <div class="ar-on-head"><span>${esc(t('challengeH'))}</span>${live.length ? '' : chip}</div>
+        <div class="ar-faces">
+          <button type="button" class="ar-face is-any" data-mp="anyone"><span class="ar-face-dot" aria-hidden="true">+</span><span class="ar-face-name">${esc(t('anyone'))}</span></button>
+          ${recent.map((o, i) => `<button type="button" class="ar-face" data-oi="${i}"><span class="ar-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="ar-face-name">${esc(first(o.name))}</span></button>`).join('')}
+        </div>
+      </div>
+      <div class="ar-mp-push" hidden></div>`;
+  box.onclick = (e) => {   // assigned, not added: the box outlives each fill
+    const m = e.target.closest('.ar-mrow[data-id]');
+    if (m) { ui._openMatch(m.dataset.id); return; }
+    if (e.target.closest('[data-mp="history"]')) { history(ui, MP); return; }
+    if (e.target.closest('[data-mp="anyone"]')) { picker(ui, MP); return; }
+    const f = e.target.closest('.ar-face[data-oi]');
+    const them = f && recent[Number(f.dataset.oi)];
+    if (them) confirm(ui, MP, them);
+  };
+  pushRow(box.querySelector('.ar-mp-push'));
   showUnseen(ui, MP, rows);
+  return { active: live.length > 0, mine: mine.length };
 }
 
 /** "Notify me when it is my turn" - only while notifications are off on this phone. */
@@ -231,4 +259,4 @@ export function showUnseen(ui, MP, rows) {
   el.querySelector('[data-mp="close"]').addEventListener('click', done);
 }
 
-export default { home, showUnseen, reasonText };
+export default { home, showUnseen, reasonText, fillOnline };

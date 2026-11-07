@@ -71,6 +71,7 @@ export const STRINGS = {
     say_win: '{name} wins',
     // online
     mp_title: 'Multiplayer',
+    tabOnline: 'Online', tabCpu: 'Computer', tabTwo: '2 players', challengeH: 'Challenge', anyone: 'Anyone', their_turn_n: "{name}'s turn", round_n: 'Round {r} · {a}-{b}',
     mp_challenge: 'Challenge someone',
     mp_pass: 'Pass & play',
     mp_history: 'History',
@@ -195,6 +196,7 @@ export const STRINGS = {
     say_turn: 'Turno de {name}',
     say_win: 'Gana {name}',
     mp_title: 'Multijugador',
+    tabOnline: 'En línea', tabCpu: 'Máquina', tabTwo: '2 jugadores', challengeH: 'Retar', anyone: 'Cualquiera', their_turn_n: 'Turno de {name}', round_n: 'Ronda {r} · {a}-{b}',
     mp_challenge: 'Retar a alguien',
     mp_pass: 'Pasar el móvil',
     mp_history: 'Historial',

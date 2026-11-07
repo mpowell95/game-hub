@@ -216,3 +216,7 @@ Play over a saved match vs the computer the player has shot in = ONE loss, asked
 
 - Vs the computer: quitting is a loss once ANY arrow, the computer's included (it was the player's own first move).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup tabs (2026-11-07, the Cup Pong way)
+
+Setup = **Online | Computer | 2 players** tabs. Online = Matches (Play pill on your turn, then their turn; record chip opens History) + Challenge (Anyone = the picker, then the 4 most recent people, one tap = the send screen); `fillOnline` in `js/mp-ui.js`, `_fillOnline` in `ui.js`. The Multiplayer home is gone: every "back" lands on `_showSetup('online')`. Opens on Online when a match is going, else Computer; a tapped tab wins (`this._tab`). 2 players = pass and play. Badge = matches on your turn. `armOpen`/`armChallenge` hand-offs unchanged. Layout only.
