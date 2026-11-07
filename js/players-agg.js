@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats, isVoidedMatch, fullLevelStats } from './stats-corrections.js';
+import { correctStats, isVoidedMatch, fullLevelStats, adjustGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
@@ -1010,6 +1010,9 @@ export function aggregatePlayers(all, corrections) {
       if (wo) for (const tier of Object.keys(grp._wo)) { const c = woCapCl(grp._wo[tier], tier); if (c) wo.cl[tier] = c; }
       delete grp._wo;
     }
+    // Matt's console ADJUSTMENTS (js/stats-corrections.js adjustGame, 2026-11-07): per PERSON, after every merge.
+    const adj = grp.playerId && corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null;
+    if (adj && typeof adj === 'object') for (const g of Object.keys(adj)) { if (grp.games[g]) grp.games[g] = adjustGame(grp.games[g], adj[g]); }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }
     const nb = grp.games.nutsbolts.nb;
