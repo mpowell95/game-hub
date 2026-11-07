@@ -305,3 +305,7 @@ Related suites: `tools/players-agg.test.mjs`, `tools/test-rate-guard.mjs`, `tool
 ## Shoving was re-measured at every skill (2026-10-29)
 
 All-in-every-hand against 1, 2, 4 and 7 Easy, Medium or Hard computers (3000 tournaments each): wins 45% heads-up and under fair share everywhere, ROI -22% to -47% at the game's own prizes. Easy and Medium are NOT softer to it than Hard, so no cap was added. `test.js` fails if any skill at 2, 4 or 7 computers is beaten by it. Numbers: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29".
+
+## Setup tabs (2026-11-07)
+
+Setup tabs are **Online table | Vs computer** (Online first; Hold'em already had tabs). It has a computer mode, so it opens on Vs computer, or on Online when a table is waiting to be rejoined (`_mpSave`); the stored tab no longer decides, a tap this visit wins. Screen pinned to the top. Layout only.

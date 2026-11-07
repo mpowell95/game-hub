@@ -292,6 +292,9 @@ class Game {
   constructor(root) {
     this.root = root;
     this.settings = loadSettings();
+    // Setup tabs (2026-11-07): opens on Online only when a table is waiting to be rejoined, else Solo.
+    // The stored tab no longer decides; a tab tapped in this visit wins (set/_stepAway below).
+    this.settings.tab = this._mpSave() ? 'online' : 'solo';
     this.kind = null;           // 'solo' | 'host' | 'guest'
     this.screen = 'setup';      // 'setup' | 'lobby' | 'table'
     this.table = null;          // Table (solo / host)
@@ -416,8 +419,8 @@ class Game {
           <button type="button" class="pk-bankchip" data-act="bank"><span class="pk-bankicon" aria-hidden="true">$</span>${esc(t('bankroll'))} <b>${esc(bigMoney(this.bank()))}</b><span class="pk-bankgo">${esc(t('bank_see'))} &#x203A;</span></button>
         </div>
         <div class="pk-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected="${s.tab === 'solo'}" class="pk-tab${s.tab === 'solo' ? ' is-on' : ''}" data-act="set" data-k="tab" data-v="solo">${esc(t('tab_solo'))}</button>
           <button type="button" role="tab" aria-selected="${s.tab === 'online'}" class="pk-tab${s.tab === 'online' ? ' is-on' : ''}" data-act="set" data-k="tab" data-v="online">${esc(t('tab_online'))}</button>
+          <button type="button" role="tab" aria-selected="${s.tab === 'solo'}" class="pk-tab${s.tab === 'solo' ? ' is-on' : ''}" data-act="set" data-k="tab" data-v="solo">${esc(t('tab_solo'))}</button>
         </div>
         <div class="pk-panel">${s.tab === 'solo' ? solo : online}</div>
         ${this.error ? `<p class="pk-error" role="alert">${esc(this.error)}</p>` : ''}
