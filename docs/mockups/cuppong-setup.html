@@ -78,12 +78,17 @@ const CPU_FULL = `<div class="card"><div class="h">Play the computer</div>${OPTI
 const CPU_SHORT = `<div class="card"><div class="h">Play the computer</div>
   <div class="summary"><i class="dot"></i>Easy · Gentleman's on · 0 reracks</div>
   <div class="btns"><span class="cont">Continue</span><span class="ghost">Change</span></div></div>`;
-const TABS = (on) => `<div class="seg wide">${['Online', 'Computer', 'Solo'].map((k) => `<b class="${k === on ? 'on' : ''}">${k}${k === 'Online' ? ' <span class="tag">2</span>' : ''}</b>`).join('')}</div>`;
+const TABS = (on, n) => `<div class="seg wide">${['Online', 'Computer', 'Solo'].map((k) => `<b class="${k === on ? 'on' : ''}">${k}${k === 'Online' && n ? ` <span class="tag">${n}</span>` : ''}</b>`).join('')}</div>`;
+const MATCH_CARD = ONLINE.replace('<div class="h">Multiplayer <span class="tag">2</span>', '<div class="h">Matches');
+const SOLO_TAB = `<div class="card"><div class="line"><div><div class="h">Solo</div><div class="sub" style="font-size:17px">Clear all 10 cups</div></div><div class="big"><b>28</b><span>BEST</span></div></div><div class="btns"><span class="cont">Play</span></div></div>`;
 const phone = (inner) => `<div class="phone">${TOP}${inner}</div>`;
 const OPTS = [
-  ['A', 'Everything on one screen', [['Top', phone(ONLINE + CHALLENGE + CPU_FULL)], ['Scrolled down', phone(CPU_FULL + SOLO + TEST)]]],
-  ['B', 'Tabs', [['Online', phone(TABS('Online') + ONLINE.replace('<div class="h">Multiplayer <span class="tag">2</span>', '<div class="h">Matches') + CHALLENGE)], ['Computer', phone(TABS('Computer') + CPU_FULL)]]],
-  ['C', 'Computer folded up', [['Top', phone(ONLINE + CHALLENGE + CPU_SHORT + SOLO)]]],
+  ['B', 'Tabs', [
+    ['Matches going: opens on Online', phone(TABS('Online', 2) + MATCH_CARD + CHALLENGE)],
+    ['No matches: opens on Computer', phone(TABS('Computer', 0) + CPU_FULL)],
+    ['Online, no matches', phone(TABS('Online', 0) + CHALLENGE)],
+    ['Solo', phone(TABS('Solo', 0) + SOLO_TAB + TEST)],
+  ]],
 ];
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('out').innerHTML = OPTS.map(([k, t, ps]) => `<section class="opt"><h2><span>${k}</span> ${t}</h2><div class="pair">${ps.map(([c, h]) => `<div><p class="cap">${c}</p>${h}</div>`).join('')}</div></section>`).join('');
