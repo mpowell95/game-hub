@@ -398,14 +398,24 @@ class FillerUI {
       <p class="fl-sub">${t('tagline')}</p>`;
   }
 
+  /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
+  _tabSeg() {
+    const on = this._mode !== 'solo';
+    return `<div class="fl-seg fl-seg2 fl-tabs" role="radiogroup" aria-label="${t('title')}">
+        ${[['online', t('tab_online'), on], ['solo', t('mode_solo'), !on]].map(([v, lbl, act]) => `
+          <button type="button" class="fl-segbtn${act ? ' is-active' : ''}"
+            data-action="set-tab" data-v="${v}" role="radio" aria-checked="${act}">${lbl}</button>`).join('')}
+      </div>`;
+  }
+
   _modeSeg() {
-    return `<div class="fl-field">
-      <div class="fl-seg" role="radiogroup" aria-label="${t('title')}">
-        ${[['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')]].map(([v, lbl]) => `
+    return `${this._tabSeg()}${this._mode === 'solo' ? '' : `<div class="fl-field">
+      <div class="fl-seg fl-seg2" role="radiogroup" aria-label="${t('tab_online')}">
+        ${[['host', t('mode_host')], ['join', t('mode_join')]].map(([v, lbl]) => `
           <button type="button" class="fl-segbtn${this._mode === v ? ' is-active' : ''}"
             data-action="set-mode" data-v="${v}" role="radio" aria-checked="${this._mode === v}">${lbl}</button>`).join('')}
       </div>
-    </div>`;
+    </div>`}`;
   }
 
   renderSetup() {
@@ -1678,7 +1688,12 @@ class FillerUI {
       this.openHelp();
     } else if (action === 'close-overlay') {
       this.closeOverlays();
+    } else if (action === 'set-tab') {
+      this._mode = btn.dataset.v === 'solo' ? 'solo' : (this._lastOnline || 'host');
+      this._mpError = '';
+      this.renderSetup();
     } else if (action === 'set-mode') {
+      this._lastOnline = btn.dataset.v;
       this._mode = btn.dataset.v;
       this._mpError = '';
       this.renderSetup();

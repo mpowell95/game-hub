@@ -377,3 +377,7 @@
 :root.gh-dark .bg-root .lb-dshape-t3,
 :root.gh-dark .bg-root .lb-dshape-t4 { fill: #e6e9f0; }
 :root.gh-dark .bg-root .bg-mp-code { background: #232d40; }
+
+/* TABS: Online | Solo (2026-11-07). Appended so file:line KNOWN_GAPS entries stay put. */
+.bg-root .bg-tabs .bg-segbtn { font-size: 17px; }
+.bg-root .bg-tabs, .bg-root .bg-tabs + .bg-seg { width: 100%; box-sizing: border-box; }

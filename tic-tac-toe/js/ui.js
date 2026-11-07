@@ -366,8 +366,8 @@ class TicTacToeUI {
   // name in _firstContent, or a diffShapeSVG() shape prefix) -- _seg must
   // not re-escape it, or a caller's own esc() call turns into visible
   // "&lt;svg&gt;" markup instead of rendering.
-  _seg(action, value, opts) {
-    return `<div class="ttt-seg">${opts.map(([v, lbl]) =>
+  _seg(action, value, opts, cls = '') {
+    return `<div class="ttt-seg ${cls}">${opts.map(([v, lbl]) =>
       `<button type="button" class="ttt-segbtn ${String(v) === String(value) ? 'is-selected' : ''}" data-action="${action}" data-v="${v}">${lbl}</button>`).join('')}</div>`;
   }
 
@@ -449,10 +449,11 @@ class TicTacToeUI {
 
   // --- multiplayer lobby ------------------------------------------------------
 
+  /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
   _modeSeg() {
-    return this._seg('set-mode', this._mode, [
-      ['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')],
-    ]);
+    const on = this._mode !== 'solo';
+    return this._seg('set-tab', on ? 'online' : 'solo', [['online', t('tab_online')], ['solo', t('mode_solo')]], 'ttt-tabs')
+      + (on ? this._seg('set-mode', this._mode, [['host', t('mode_host')], ['join', t('mode_join')]]) : '');
   }
 
   /** Join mode's body: the code input lives on the setup screen itself, never
@@ -1687,7 +1688,13 @@ class TicTacToeUI {
       this._setup.firstMode = btn.dataset.v;
       this._saveSetup();
       this.renderSetup();
+    } else if (action === 'set-tab') {
+      this._mode = btn.dataset.v === 'solo' ? 'solo' : (this._lastOnline || 'host');
+      this._setupExpanded = null;
+      this._mpError = '';
+      this.renderSetup();
     } else if (action === 'set-mode') {
+      this._lastOnline = btn.dataset.v;
       this._mode = btn.dataset.v;
       this._setupExpanded = null;
       this._mpError = '';

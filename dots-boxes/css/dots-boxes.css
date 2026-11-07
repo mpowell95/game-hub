@@ -690,3 +690,7 @@
 :root.gh-dark .db-root .lb-dshape-t3,
 :root.gh-dark .db-root .lb-dshape-t4 { fill: #e6e9f0; }
 :root.gh-dark .db-root .db-mp-code { background: #232d40; }
+
+/* TABS: Online | Solo (2026-11-07). Appended so file:line KNOWN_GAPS entries stay put. */
+.db-root .db-tabs .db-segbtn { font-size: 17px; }
+.db-root .db-tabs, .db-root .db-tabs + .db-seg { width: 100%; box-sizing: border-box; }
