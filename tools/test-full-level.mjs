@@ -56,3 +56,30 @@ assert.deepEqual(them.games.flicksoccer.byDiff.hard, { played: 4, won: 2, lost: 
 assert.deepEqual(me.games.flicksoccer.total, { played: 28, won: 10, lost: 18 }); n++;
 ok(JSON.stringify(all) === snap, 'raw records untouched by aggregation');
 console.log(`test-full-level: ${n} checks passed`);
+
+// --- ADJUSTMENTS (adminConfig/v1/corrections/adjust, Matt 2026-11-07: "edit firebase directly and have it stick") ---
+const { adjustGame, adjustStats } = await import('../js/stats-corrections.js');
+const { normalizeConfig } = await import('../js/admin-config.js');
+let m = 0;
+const g0 = { total: { played: 10, won: 4, lost: 6 }, byDiff: { hard: { played: 10, won: 4, lost: 6 } } };
+const g0s = JSON.stringify(g0);
+const a1 = adjustGame(g0, { hard: { won: 3, played: 3 } });
+assert.deepEqual(a1.byDiff.hard, { played: 13, won: 7, lost: 6 }); m++;
+assert.deepEqual(a1.total, { played: 13, won: 7, lost: 6 }); m++;
+assert.equal(JSON.stringify(g0), g0s); m++;                                         // never mutates
+const a2 = adjustGame(g0, { hard: { lost: -100 }, easy: { won: 2, played: '2' } });  // floor 0, new level, strings
+assert.deepEqual(a2.byDiff.hard, { played: 10, won: 4, lost: 0 }); m++;
+assert.deepEqual(a2.byDiff.easy, { played: 2, won: 2, lost: 0 }); m++;
+assert.deepEqual(a2.total, { played: 12, won: 6, lost: 0 }); m++;
+assert.equal(adjustGame(g0, null), g0); m++;
+assert.equal(adjustGame(g0, { hard: { won: 'x' } }), g0); m++;
+assert.equal(adjustGame(g0, { 'bad key!': { won: 1 } }), g0); m++;
+assert.equal(adjustStats({ games: { flicksoccer: g0 } }, { flicksoccer: { hard: { won: 1 } } }).games.flicksoccer.byDiff.hard.won, 5); m++;
+// Through the config and aggregation: only the named code changes, once per PERSON (not per device).
+const cfg = normalizeConfig({ corrections: { adjust: { [WHO]: { flicksoccer: { hard: { won: 2, played: 2 } } } } } });
+const ag = aggregatePlayers(all, cfg.corrections);
+const meA = ag.find((g) => g.playerId === WHO), themA = ag.find((g) => g.playerId === OTHER);
+assert.deepEqual(meA.games.flicksoccer.byDiff.hard, { played: 22, won: 10, lost: 12 }); m++;
+assert.deepEqual(themA.games.flicksoccer.byDiff.hard, { played: 4, won: 2, lost: 2 }); m++;
+assert.equal(JSON.stringify(all), snap); m++;
+console.log(`test-full-level (adjustments): ${m} checks passed`);

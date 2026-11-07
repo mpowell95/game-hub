@@ -583,7 +583,7 @@ and is gated by `writesAllowed()`. Documents are built with `newCareerDoc()`; th
 
 ## Score corrections: "that machine was broken" (2026-08-24)
 
-**`FULL_LEVEL` (2026-11-07, Matt: "Change this for me only. Fix my stats")**: a listed code's shortened matches (Flick Soccer Hard, first to 1) count at the level PICKED, read time, moved by byMode (which keeps the picked level) from byDiff, clamped; applied per record in `players-agg.js` and My Stats' first paint. `tools/test-full-level.mjs`.
+**`FULL_LEVEL` (2026-11-07, Matt: "Change this for me only. Fix my stats")**: a listed code's shortened matches (Flick Soccer Hard, first to 1) count at the level PICKED, read time, moved by byMode (which keeps the picked level) from byDiff, clamped; applied per record in `players-agg.js` and My Stats' first paint. **Console adjustments (same day, Matt: "I want to edit firebase directly and have it stick")**: `adminConfig/v1/corrections/adjust/<CODE>/<game id>/<level>/{played,won,lost}` = numbers ADDED per PERSON at read time (negative subtracts, floor 0, `total` moves with it; `adjustGame`/`adjustStats`); Matt types them in the console, `boardsOnConfig` rebuilds the board; a session never writes them. `tools/test-full-level.mjs`.
 
 Editing `players/<id>` cannot work. A void is an OVERLAY, a BASELINE snapshot at
 `adminConfig/v1/corrections/skeeball/<statsId>/<boardId>`, applied at display time, per PERSON (all
