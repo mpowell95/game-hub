@@ -83,3 +83,15 @@ assert.deepEqual(meA.games.flicksoccer.byDiff.hard, { played: 22, won: 10, lost:
 assert.deepEqual(themA.games.flicksoccer.byDiff.hard, { played: 4, won: 2, lost: 2 }); m++;
 assert.equal(JSON.stringify(all), snap); m++;
 console.log(`test-full-level (adjustments): ${m} checks passed`);
+
+// --- POINTS: moved wins keep the sheet's price (Hard, first to 1 = 3), Matt 2026-11-07 ---
+const { gamePoints } = await import('../js/lb-points.js');
+let q = 0;
+const pr = rec();   // byDiff medium 3 won, hard 2 won; goals=1 Hard (moved) 2 won
+const rawPts = gamePoints(pr, 'flicksoccer', null, OTHER).pts;               // nobody moved: medium 3x3 + hard 2x6 = 21
+assert.equal(rawPts, 21); q++;
+const moved = fullLevelGame(pr, 'flicksoccer', WHO);
+assert.equal(gamePoints(moved, 'flicksoccer', null, WHO).pts, 21); q++;          // same points once moved
+assert.equal(gamePoints(moved, 'flicksoccer', 3, WHO).pts, 4 * 6 - 2 * 3); q++;  // Hard tab: 2 real Hard (12) + 2 moved (6)
+assert.equal(gamePoints(moved, 'flicksoccer', 2, WHO).pts, 1 * 3); q++;          // Medium tab: what is left there
+console.log(`test-full-level (points): ${q} checks passed`);
