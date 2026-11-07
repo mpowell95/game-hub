@@ -60,6 +60,9 @@ export const STRINGS = {
       if (p.k === 'beat') return `Beat ${g(p.v)} for gold`;
       return d ? `${g(d)} for gold` : '';
     },
+    // The rows look's top card (2026-11-07): "2nd", "of 6".
+    lb2_ord: (p) => { const n = Number(p.n); const m = n % 100; return `${n}${m >= 11 && m <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' })[n % 10] || 'th'}`; },
+    lb2_of_n: 'of {n}',
     lb2_lost_h: 'Lost records',
     lb2_fresh_h: 'Not played yet',
     lb2_games_h: 'Games',
@@ -155,6 +158,8 @@ export const STRINGS = {
     lb2_col_rank: '#',
     lb2_col_player: 'Jugador',
     lb2_play: 'Jugar',
+    lb2_ord: (p) => `${p.n}.º`,
+    lb2_of_n: 'de {n}',
     lb2_first: '1.º',
     lb2_first_tie: 'Empate en 1.º',
     lb2_not_ranked: 'Sin puesto',

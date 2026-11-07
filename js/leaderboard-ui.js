@@ -3858,6 +3858,21 @@ export function lb2Board(list, id, st = {}) {
 }
 /** The old You tab's three lists for `meKey` (youHTML, same order and same lines): records held, closest to
  *  breaking (closeness order, gap to the record at the record's tier), not played yet (the record + holder). */
+/** One person in one game (2026-11-07, the rows look's top card): their place and how far from gold, the SAME
+ *  maths as lb2Records' Closest list (needOf on the game's own standing). `null` when the game has no board. */
+export function lb2Gap(list, key, id) {
+  const me = list.find((g) => g.key === key);
+  if (!me) return null;
+  let out = null;
+  lb2With(id, {}, () => {
+    const st = gameStanding(list, id);
+    const rec = st.rows[0] || null;
+    const rank = st.rankOf[key];
+    if (!rec || !rank) return;
+    out = { rank, of: st.rows.length, rec: rank === 1 ? null : rec, need: rank === 1 ? null : needOf(me, rec, id) };
+  });
+  return out;
+}
 export function lb2Records(list, meKey) {
   const me = list.find((g) => g.key === meKey);
   const out = { held: [], close: [], fresh: [], withRecord: 0, me: me || null };
