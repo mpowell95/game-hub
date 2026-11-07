@@ -287,8 +287,8 @@ const EXTRA_SCREENS = {
       name: 'multiplayer',
       async open(page) {
         await page.click('[data-ov="result"] .fs-x');
-        await page.click('[data-ov="setup"] [data-act="multi"]');
-        await page.waitForSelector('[data-ov="mp"]:not([hidden])', { timeout: 8000 });
+        await page.click('[data-ov="setup"] [data-tab="online"]');
+        await page.waitForSelector('[data-ov="setup"]:not([hidden]) [data-panel="online"]:not([hidden])', { timeout: 8000 });
         await page.waitForTimeout(600);
       },
     },
@@ -335,8 +335,8 @@ const EXTRA_SCREENS = {
       name: 'multiplayer',
       async open(page) {
         await page.click('[data-ov="result"] .ep-x');
-        await page.click('[data-ov="setup"] [data-act="multi"]');
-        await page.waitForSelector('[data-ov="mp"]:not([hidden])', { timeout: 8000 });
+        await page.click('[data-ov="setup"] [data-tab="online"]');
+        await page.waitForSelector('[data-ov="setup"]:not([hidden]) [data-panel="online"]:not([hidden])', { timeout: 8000 });
         await page.waitForTimeout(600);
       },
     },

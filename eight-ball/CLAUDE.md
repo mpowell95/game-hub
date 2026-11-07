@@ -311,3 +311,7 @@ Play over a saved match vs the computer the player has shot in (`m.ps`) = ONE lo
 
 - Vs the computer: quitting is a loss once the first shot of the match, the computer's break included (`m.ps`) (it was the player's own first move).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup tabs (2026-11-07)
+
+The setup card is tabs **Online | Play** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill, paged "+N more"; record chip opens History; a 3-player row names both others) and Challenge (Anyone + the 4 most recent two-person opponents; a face opens the challenge card, Cutthroat adds the second player there) (`mp-ui.js fillOnline`); Play = the old Game / Computer-or-2-players / Difficulty / options / Racks / Continue / Play. Opens on Online when a match is going, else Play; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is pinned to the top.

@@ -159,6 +159,8 @@ function helpSvg() {
 }
 
 let instance = null;
+/** Whether this player had a match going at the last look (this page's life only): the first paint opens on the tab it will settle on. */
+let ACTIVE_HINT = false;
 /** Everybody in an online match but this phone's player, as {code, name, emoji} (Challenge again). */
 const othersOfMine = (mp) => mp.game.p.filter((_, k) => k !== mp.seat).map((x) => ({ code: x.code, name: x.name, emoji: x.emoji }));
 /** Where the quick-chat button sits (js/match-chat-ui.js `place`): the top row, left of the spin and
@@ -261,11 +263,12 @@ class PoolUI {
             <button type="button" class="ep-x ep-q" data-act="howto" data-la="howto">?</button>
             <button type="button" class="ep-x" data-act="exit" data-la="aria_close">${X_SVG}</button>
             <h2 class="ep-logo" data-l="title"></h2>
-            <button type="button" class="ep-mprow" data-act="multi">
-              <b data-l="multiplayer"></b>
-              <span class="ep-mprow-badge" data-role="onlineNote" hidden></span>
-              <span class="ep-mprow-chev" aria-hidden="true">›</span>
-            </button>
+            <div class="gh-seg ep-tabs" role="group" data-role="stabs">
+              <button type="button" class="gh-seg__item ep-tab" data-act="tab" data-tab="online" aria-pressed="false"><span data-l="tab_online"></span><b class="ep-tab-n" hidden></b></button>
+              <button type="button" class="gh-seg__item ep-tab" data-act="tab" data-tab="cpu" aria-pressed="true"><span data-l="play"></span></button>
+            </div>
+            <div class="ep-panel" data-panel="online" hidden><div class="ep-online" data-role="online"><p class="ep-mp-note" data-l="mp_loading"></p></div></div>
+            <div class="ep-panel" data-panel="cpu">
             <div class="gh-seg ep-seg ep-seg-big" role="group" data-role="games"></div>
             <div class="gh-seg ep-seg" role="group" data-role="modes"></div>
             <div class="gh-seg ep-seg" role="group" data-role="diffs"></div>
@@ -277,6 +280,7 @@ class PoolUI {
             </div>
             <button type="button" class="gh-btn gh-btn--block ep-alt" data-act="continue" data-role="continueBtn" hidden><span data-l="continue"></span></button>
             <button type="button" class="gh-btn gh-btn--primary gh-btn--block ep-go" data-act="play"><span data-l="play"></span></button>
+            </div>
           </div>
         </div>
 
@@ -476,7 +480,8 @@ class PoolUI {
     this._paintOk();
   }
 
-  _showSetup() {
+  _showSetup(tab) {
+    if (tab) this._tab = tab;
     const leftOnline = !!this.mp;
     this._mpLeave();
     if (leftOnline) this._drainAll();
@@ -1053,7 +1058,7 @@ class PoolUI {
     if (!b) return;
     const act = b.dataset.act;
     if (act === 'play') this._quitGate(b, () => this._newMatch());
-    else if (act === 'multi') this._openOnline();
+    else if (act === 'tab') { this._tab = b.dataset.tab; this._showTab(b.dataset.tab); }
     else if (act === 'mpHome') this._openOnline();
     else if (act === 'skip') this._mpSkip();
     else if (act === 'resign') { this._paintResign(); this.screen = 'resign'; this._showOnly('resign'); }
@@ -1110,23 +1115,39 @@ class PoolUI {
     this._toastTimer = setTimeout(() => { el.hidden = true; }, ms);
   }
 
-  /** "2 waiting on you" on the Multiplayer row. Re-read every time the setup screen shows. */
+  /** The Online tab's badge: matches on your turn. Painted from the last count. */
   _paintOnlineNote() {
-    const el = this.root.querySelector('[data-role="onlineNote"]');
+    const el = this.root.querySelector('.ep-tab-n');
     if (!el) return;
     const n = this._onlineWaiting | 0;
     el.hidden = !n;
-    el.textContent = n === 1 ? t('online_waiting1') : t('online_waiting', { n });
+    el.textContent = n ? String(n) : '';
   }
+  /** Show one tab's panel (no re-render: the Online list and the chosen options stay as they are). */
+  _showTab(k) {
+    const card = this.root.querySelector('[data-ov="setup"]');
+    if (!card) return;
+    for (const b of card.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
+    for (const p of card.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+    if (this.UI && this.UI.fitOnline) this.UI.fitOnline(this);
+  }
+  /** Fill the Online tab (mp-ui.js fillOnline), then pick the tab: Online when a match is going, else
+   *  the play tab, unless the player has tapped one (Matt, 2026-11-07). */
   async _countOnline() {
+    this._showTab(this._tab || (ACTIVE_HINT ? 'online' : 'cpu'));
     try {
-      const MP = await this._loadMP();
-      const rows = await MP.readMyGames();
-      if (instance !== this) return;
-      try { MP.recordFinished(rows); } catch { /* counted on the next open instead */ }
-      this._onlineWaiting = rows.filter((r) => !r.over && r.yourTurn).length;
+      const [MP, UI] = await Promise.all([this._loadMP(), import('./mp-ui.js')]);
+      const box = this.root.querySelector('[data-role="online"]');
+      if (instance !== this || !box || this.screen !== 'setup') return;
+      this.UI = UI;
+      const res = await UI.fillOnline(this, MP, box);
+      if (!res || instance !== this || this.screen !== 'setup') return;
+      ACTIVE_HINT = res.active;
+      this._onlineWaiting = res.mine;
       this._paintOnlineNote();
-    } catch { /* offline: no count */ }
+      if (!this._tab) this._showTab(res.active ? 'online' : 'cpu');
+      UI.fitOnline(this);
+    } catch { /* offline: the tab stays as it was */ }
   }
 
   /** Send shots still queued on this phone for ANY match, not just the one open. */
@@ -1149,6 +1170,7 @@ class PoolUI {
   /** The Multiplayer home. `pickFor` ({code, name, emoji}, from the hub's Multiplayer screen) opens
    *  straight onto "challenge them". */
   async _openOnline(pickFor = null) {
+    if (!(pickFor && pickFor.code)) { this._showSetup('online'); return; }
     this._mpLeave();
     this._drainAll();
     this.match = null; this.seats = null; this.mode = null;
@@ -1160,7 +1182,7 @@ class PoolUI {
     if (instance !== this) return;
     this.UI = UI;
     if (pickFor && pickFor.code) UI.challengeTo(this, MP, pickFor);
-    else UI.home(this, MP);
+    else this._showSetup('online');
   }
 
   /** A notification for a match was tapped while Pool is ALREADY open: open that match unless a
