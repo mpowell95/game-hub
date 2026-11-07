@@ -731,6 +731,9 @@ None of this makes the hub cheat-proof; never describe it that way.
   Escoba's deck were also setup-only). Every option a challenge carries is choosable on that screen.
 - **A series between games is listed** via an optional `owed(M, rows)` (may be async) on its `SOURCES` entry (Cup Pong
   and Hoops, 2026-10-29): a `next:<id>` row, no ⋯ or bell; the game's `armOpen('next:<id>')` starts the next game.
+- **Your-turn bubble on the tab bar (2026-11-07, ADMIN DEVICES ONLY, Matt: "Build D for admin only")**: compact layout: each
+  waiting tile gets a yellow ring + swords, ONE bubble points at the Multiplayer tab (tap = Multiplayer screen); `js/hub.js`
+  `_paintDock`. Players and the comfortable layout keep the old bubble/pills. Mockup: `docs/mockups/turn-alerts.html`, D.
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).
