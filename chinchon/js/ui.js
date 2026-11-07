@@ -195,6 +195,14 @@ class ChinchonUI {
     this._justDragged = false;
 
     this._setup = this._loadSetup();
+    // SETUP TABS (2026-11-07, Matt: "Do the same tabs for the other multiplayer games"): Online | Solo.
+    // `_tab` = the tab the player tapped (wins until the game is closed); without it the screen opens
+    // on Online when a match is going, else Solo. The saved Host/Join/Challenge mode is a view INSIDE
+    // Online now, so every visit starts at Online's home. `_chRows` = the matches last read.
+    this._setup.mode = 'solo';
+    this._tab = null;
+    this._chRows = null;
+    this._chTurns = 0;
     // One-time seed (theme unification, HANDOFF-FB-THEME.md): promote Chinchón's own
     // legacy `dark` flag into the shared global theme the first time this device has
     // no global preference yet. Read-only migration - the legacy chinchon-settings.dark
@@ -425,6 +433,34 @@ class ChinchonUI {
     this.el.modal.hidden = true; this.el.modal.innerHTML = '';
     this.el.game.hidden = true; this.el.header.hidden = false; this.el.setup.hidden = false;
     this.renderSetup();
+    if (this._setup.mode === 'solo' && !this.challengeActive && !this.el.setup.querySelector('[data-role="ch"]')) this._chCountTurns();
+  }
+
+  /** The matches, read while Solo is showing: the Online tab's badge, and Online opening by itself
+   *  when a match is going and no tab was tapped. (With Online showing, ch-ui.js `home` reads them.) */
+  async _chCountTurns() {
+    if (this._chCounting) return;
+    this._chCounting = true;
+    try {
+      const { MP } = await this._chLoad();
+      if (this._dead || !MP.myCode()) return;
+      const rows = await MP.readMyGames();
+      if (this._dead) return;
+      try { MP.recordFinished(rows); } catch (err) { console.warn('[chinchon] recordFinished', err); }
+      const first = !this._chRows;
+      this._chSetRows(rows);
+      if (first && !this._tab && this._setup.mode === 'solo' && rows.some((r) => !r.over) && this._screen === 'setup' && !this.el.setup.hidden) {
+        this.syncSetupInputs(); this.renderSetup();
+      }
+    } catch { /* offline: no number */ } finally { this._chCounting = false; }
+  }
+
+  /** Keep the matches last read, and the number on the Online tab (your turn). */
+  _chSetRows(rows) {
+    this._chRows = rows;
+    this._chTurns = rows.filter((r) => !r.over && r.yourTurn).length;
+    const el = this.el && this.el.setup && this.el.setup.querySelector('[data-role="ch-count"]');
+    if (el) { el.textContent = String(this._chTurns); el.hidden = !this._chTurns; }
   }
 
   /** Still working on the Chinchón challenge? (active AND not yet won). Once won, the game
@@ -592,32 +628,44 @@ class ChinchonUI {
     // Multiplayer (M2b): a Solo/Host online/Join selector, absent entirely in
     // challenge mode (that hidden feature is solo-only by construction, and
     // MP would only complicate its locked/qualifying setup for no benefit).
-    const mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
-    const modeSeg = this.challengeActive ? '' : this._seg('set-mode', mpMode, [['solo', t('mode_solo')], ['host', t('mode_host')], ['join', t('mode_join')], ['turns', t('mode_turns')]]);
+    let mpMode = this.challengeActive ? 'solo' : (s.mode || 'solo');
+    if (mpMode === 'solo' && !this.challengeActive && !this._tab && this._chRows && this._chRows.some((r) => !r.over)) mpMode = 'turns';
+    const onlineTab = mpMode !== 'solo';
+    const nTurns = this._chTurns | 0;
+    const tabBtn = (v, label) => `<button class="cc-seg ${(v === 'online') === onlineTab ? 'is-selected' : ''}" data-action="set-tab" data-v="${v}" aria-pressed="${(v === 'online') === onlineTab}">${label}${v === 'online' ? `<span class="cc-tab-n" data-role="ch-count" ${nTurns ? '' : 'hidden'}>${nTurns}</span>` : ''}</button>`;
+    const modeSeg = this.challengeActive ? '' : `<div class="cc-segmented cc-tabs" role="group">${tabBtn('online', t('tab_online'))}${tabBtn('solo', t('mode_solo'))}</div>`;
 
     // Turn-by-turn challenges (2026-10-18): the list, the picker and the lengths live here, under
     // the same switch, painted by chinchon/js/ch-ui.js.
     if (mpMode === 'turns') {
-      this.el.setup.innerHTML = `<div class="cc-card-panel cc-ch-panel">${modeSeg}<div class="cc-ch" data-role="ch"></div></div>`;
+      // Online's home also holds the live-room controls (Host, Join) under the matches; the picker and
+      // the lengths are the same pane, one screen deeper.
+      const rooms = (this._chView || 'home') === 'home' ? `<div class="cc-room-row">
+          <button class="cc-btn cc-btn-ghost" data-action="set-mode" data-v="host">${t('mode_host')}</button>
+          <button class="cc-btn cc-btn-ghost" data-action="set-mode" data-v="join">${t('mode_join')}</button>
+        </div>` : '';
+      this.el.setup.innerHTML = `<div class="cc-card-panel cc-tabs-panel cc-ch-panel">${modeSeg}<div class="cc-ch" data-role="ch"></div>${rooms}</div>`;
       this._chPaint();
       return;
     }
 
     if (mpMode === 'join') {
-      this.el.setup.innerHTML = `<div class="cc-card-panel">${statsLine}${modeSeg}${this._renderMpJoinBody()}</div>`;
+      this.el.setup.innerHTML = `<div class="cc-card-panel cc-tabs-panel">${modeSeg}${this._renderMpJoinBody()}</div>`;
       return;
     }
 
     const isHost = mpMode === 'host';
+    // Solo only: Online (Host included) carries no stats line.
+    const soloStats = isHost ? '' : statsLine;
     const actionBtn = isHost
       ? `<button class="cc-btn cc-btn-ghost" data-action="mp-host">${t('action_host_game')}</button>`
       : `<button class="cc-btn cc-btn-primary ${live ? 'cc-btn-challenge' : ''}" data-action="start">${live ? t('action_begin_challenge') : t('action_start_game')}</button>`;
 
     this.el.setup.innerHTML = `
-      <div class="cc-card-panel ${live ? 'cc-locked' : ''}">
+      <div class="cc-card-panel cc-tabs-panel ${live ? 'cc-locked' : ''}">
         ${done ? `<p class="cc-challenge-note">${t('challenge_completed_note')}</p>` : ''}
-        ${statsLine}
         ${modeSeg}
+        ${soloStats}
         ${this._renderSettingsCard(isHost)}
         <div class="cc-setup-foot">
           ${actionBtn}
@@ -2016,7 +2064,8 @@ class ChinchonUI {
       case 'menu-help': this._closeMenu(); this._openHelp(); break;
       case 'close-help': this._closeHelp(); break;
       // multiplayer lobby (M2b)
-      case 'set-mode': this.syncSetupInputs(); this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._chView = 'home'; this._saveSetup(); this.renderSetup(); break;
+      case 'set-tab': this.syncSetupInputs(); this._tab = a.dataset.v === 'online' ? 'online' : 'solo'; this._setup.mode = this._tab === 'online' ? 'turns' : 'solo'; this._setupExpanded = null; this._mpError = ''; this._chView = 'home'; this._saveSetup(); this.renderSetup(); break;
+      case 'set-mode': this.syncSetupInputs(); this._tab = 'online'; this._setup.mode = a.dataset.v; this._setupExpanded = null; this._mpError = ''; this._chView = 'home'; this._saveSetup(); this.renderSetup(); break;
       case 'mp-host': this.syncSetupInputs(); this._screen = 'host-lobby'; this._mpError = ''; this.renderSetup(); this._mpHostCreate(); break;
       case 'mp-join-submit': this._mpJoinSubmit(); break;
       case 'mp-start': this._mpHostStart(); break;
@@ -3237,6 +3286,7 @@ class ChinchonUI {
     if (them !== undefined) this._chThem = them;
     if (view === 'home') this._chFromHub = false;
     this._setup.mode = 'turns';
+    this._tab = 'online';
     this._saveSetup();
     if (this.ch || this.game || this.el.setup.hidden) this.showSetup(); else this.renderSetup();
   }
@@ -3248,6 +3298,11 @@ class ChinchonUI {
       case 'pick': {
         const o = (this._chPeople || [])[Number(el.dataset.oi)];
         if (o) this._chGo('len', o);
+        return true;
+      }
+      case 'recent': {
+        const o = (this._chRecent || [])[Number(el.dataset.oi)];
+        if (o) { this._chGo('len', o); this._chFromHub = true; }   // Back from the lengths lands on Online, not the picker
         return true;
       }
       case 'len': this._chSend(el.dataset.v); return true;

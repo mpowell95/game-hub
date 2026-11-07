@@ -239,8 +239,10 @@ screen. Always."*
 Matt: *"You should be able to challenge someone to turn by turn games in all multiplayer games too."*
 Darts' challenges are the model (structure only). Story: `CLAUDE-HISTORY.md`, same heading.
 
-- **Where**: the setup switch's fourth choice, **Challenge** (`mode: 'turns'` in `chinchon-settings`):
-  New challenge, Your turn, Waiting (lists cut to fit). New challenge -> person -> length (**1 hand /
+- **Where (2026-11-07, setup TABS, the Cup Pong shape)**: **Online | Solo** (`renderSetup`, `_tab`, `set-tab`). Online = Matches
+  (your turn first with Play) and Challenge (Anyone = the person list, the 4 most recent people = one tap to the lengths; `ch-ui.js`
+  `home`), then Host / Join under them (the old host card and code entry, inside Online). Opens on Online when a match is going,
+  else Solo; badge = your turn. `mode: 'turns'` in `chinchon-settings` is the Online view. Person -> length (**1 hand /
   50 points / 100 points**, one tap sends). Live rooms (Host / Join) are unchanged. Files:
   `js/mp.js` (data), `js/ch-ui.js` (screens, lazy), `js/alert.js` (launcher; `alerts:` on the hub
   entry), the `this.ch` block in `js/ui.js`. 2 players only.
