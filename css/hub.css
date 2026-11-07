@@ -918,6 +918,52 @@ html.gh-compact:not(.gh-ingame) .hub-tabs {
 :root.gh-dark.gh-compact:not(.gh-ingame) .hub-tabs { background: rgba(18, 26, 40, 0.97); }
 :root.gh-dark .hub-tab.is-on { color: #ffce3a; }
 
+/* THE BUBBLE ON THE MULTIPLAYER TAB (js/hub.js `_paintDock`, 2026-11-07, admin devices only; Matt's
+   mockup D, docs/mockups/turn-alerts.html). Lives INSIDE the fixed tab bar, so it rides with it (and
+   with js/tabbar-fix.js's repair). Shown only while Games is the open tab and no screen is up. */
+.hub-dock {
+  position: absolute; left: 8px; right: 8px; bottom: calc(100% + 12px);
+  display: flex; align-items: center; gap: 12px; padding: 10px 6px 10px 12px;
+  background: #7cc3ef; color: #0b1626; border-radius: 16px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.3);
+  cursor: pointer; touch-action: manipulation; text-align: left;
+  animation: hub-alert-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.hub-dock::after {
+  content: ''; position: absolute; bottom: -11px;
+  left: calc(var(--tail, 30) * (100% + 16px) / 100 - 20px);
+  border: 12px solid transparent; border-bottom: 0; border-top-color: #7cc3ef;
+}
+.hub-dock-thumbs { display: flex; flex: 0 0 auto; }
+.hub-dock-th { display: block; width: 64px; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; border: 2px solid #7cc3ef; }
+.hub-dock-th svg { display: block; width: 100%; height: 100%; }
+.hub-dock.is-many .hub-dock-th { width: 44px; margin-right: -14px; }
+.hub-dock.is-many .hub-dock-th:last-child { margin-right: 0; }
+.hub-dock-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hub-dock-l1, .hub-dock-l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hub-dock-l1 { font-size: 17px; font-weight: 800; line-height: 1.2; }
+.hub-dock-l2 { font-size: 15px; font-weight: 600; line-height: 1.2; }
+.hub-dock-l2 b { font-weight: 800; }
+.hub-dock-x {
+  flex: 0 0 auto; width: 44px; height: 44px; appearance: none; border: 0; border-radius: 50%;
+  background: none; color: #0b1626; font-size: 26px; font-weight: 700; line-height: 1;
+  display: grid; place-items: center; cursor: pointer; touch-action: manipulation;
+}
+.hub-tabs:has([data-tab="games"]:not(.is-on)) .hub-dock,
+html.gh-touring .hub-dock,
+body:has(.gs-overlay, .lb2, .cx-overlay, .gh-overlay, .ann-overlay) .hub-dock { display: none; }
+@media (prefers-reduced-motion: reduce) { .hub-dock { animation: none; } }
+/* Each waiting tile: a yellow ring AND crossed swords (shape as well as colour). */
+.hub-cell.is-turnring .hub-card-art { outline: 3px solid #ffce3a; outline-offset: 2px; }
+.hub-turnmark {
+  position: absolute; bottom: 4px; left: 4px; z-index: 1; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: #ffce3a; color: #111; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.hub-turnmark svg { width: 15px; height: 15px; }
+/* Room under the last row of tiles, so the bubble never sits over it at the bottom of the page. */
+html.gh-compact:not(.gh-ingame) body:has(.hub-dock) .hub-main { padding-bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+
 /* The compact layout's bottom-bar tips (js/hub.js `_runTour`, 2026-10-17): the launcher's "your
    turn" bubble look (black outline, hard shadow, tail), one tab at a time, over a dimmed page. The
    tab being described stays lit; the rest fade. Words say what it is, never colour alone. */

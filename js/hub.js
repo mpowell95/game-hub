@@ -1480,6 +1480,7 @@ class Hub {
     const tabs = this.root.querySelector('[data-role="tabs"]');
     if (tabs) {
       tabs.addEventListener('click', (e) => {
+        if (e.target.closest('[data-role="alert-dock"]')) { e.preventDefault(); this._onDockTap(e); return; }
         const tab = e.target.closest('[data-tab]');
         if (!tab) return;
         const k = tab.dataset.tab;
@@ -2053,9 +2054,13 @@ class Hub {
   }
 
   _paintGameAlert() {
-    if (this.root) for (const prev of this.root.querySelectorAll('.hub-alert')) prev.remove();
+    if (this.root) {
+      for (const prev of this.root.querySelectorAll('.hub-alert, .hub-dock, .hub-turnmark')) prev.remove();
+      for (const c of this.root.querySelectorAll('.hub-cell.is-turnring')) c.classList.remove('is-turnring');
+    }
     const list = (this._gameAlerts || []).filter((x) => x && x.alert && this._cellFor(x.game));
     if (!list.length) return;
+    if (this._dockTab()) { this._paintDock(list); return; }
     // TWO OR MORE: a small pill on each tile instead of one big bubble, so every game waiting on
     // the player is visible at once without covering the launcher. The tile under it opens the
     // game exactly as the pill does, so the pill does not have to carry the tap target alone.
@@ -2122,6 +2127,90 @@ class Hub {
       <span class="hub-alert-line">${line}</span>
       ${a.count > 1 && a.kind !== 'over' ? `<span class="hub-alert-count">${t('hub_alert_more', { n: a.count })}</span>` : ''}`;
     cell.appendChild(el);
+  }
+
+  /**
+   * THE BUBBLE ON THE MULTIPLAYER TAB (2026-11-07, ADMIN DEVICES ONLY until Matt says otherwise).
+   * Matt: the one-game bubble was "too big and the top can cut it off and it blocks most of the game
+   * it's for", the many-game pills "too small and get cut off"; then, of a full list on the launcher,
+   * "that's what we have on the multiplayer tab, isn't it? So why duplicate it?" He picked mockup D
+   * (docs/mockups/turn-alerts.html): each waiting tile gets a yellow ring + crossed swords (shape, not
+   * hue alone), and ONE short bubble sits on the compact tab bar pointing at Multiplayer. It never
+   * covers a tile's top or the screen's top; the full list stays on the Multiplayer screen.
+   * Only in the compact layout with a Multiplayer tab; everywhere else the old bubble/pills.
+   */
+  _dockTab() {
+    if (!this._compact || !this.root || !isAdminDevice()) return null;
+    return this.root.querySelector('[data-role="tabs"] [data-tab="challenges"]');
+  }
+
+  _paintDock(list) {
+    const mpTab = this._dockTab();
+    const tabs = mpTab && mpTab.closest('[data-role="tabs"]');
+    if (!tabs) return;
+    const swords = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6"
+        stroke-linecap="round"><path d="M5 4 L16 16"/><path d="M19 4 L8 16"/><path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>`;
+    const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    for (const st of list) {
+      const cell = this._cellFor(st.game);
+      cell.classList.add('is-turnring');
+      const art = cell.querySelector('.hub-card-art') || cell.querySelector('.hub-card') || cell;
+      const mark = document.createElement('span');
+      mark.className = 'hub-turnmark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.innerHTML = swords;
+      art.appendChild(mark);
+    }
+    const me = esc(myName());
+    const gameOf = (id) => GAMES.find((g) => g.id === id);
+    let l1, l2;
+    if (list.length === 1) {
+      const a = list[0].alert;
+      const game = esc(titleText(gameOf(list[0].game)) || '');
+      const who = esc((Array.isArray(a.names) && a.names.find(Boolean)) || a.name || t('hub_alert_someone'));
+      if (a.kind === 'over') {
+        l1 = t('hub_alert_over_short');
+        l2 = t(a.result === 'won' ? 'hub_alert_won_vs' : a.result === 'lost' ? 'hub_alert_lost_vs' : 'hub_alert_draw_vs', { who, me });
+      } else if (a.kind === 'challenge') {
+        l1 = t('hub_alert_challenged', { who, me });
+        l2 = game;
+      } else {
+        const more = (a.count | 0) - 1;
+        l1 = t('hub_dock_turn', { me });
+        l2 = t('hub_dock_vs', { game, who }) + (more > 0 ? ` <b>+${more}</b>` : '');
+      }
+    } else {
+      l1 = list.some((x) => x.alert.kind !== 'over') ? t('hub_dock_turn', { me }) : t('hub_alert_over_short');
+      l2 = t('hub_dock_games', { n: list.length });
+    }
+    const thumbs = list.slice(0, 3).map((x) => `<span class="hub-dock-th">${(gameOf(x.game) || {}).art || ''}</span>`).join('');
+    const el = document.createElement('div');
+    el.className = 'hub-dock' + (list.length > 1 ? ' is-many' : '');
+    el.dataset.role = 'alert-dock';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    // The tail points at the Multiplayer tab, measured, as a share of the bar's width (the tabs are
+    // equal columns, so it stays right through a rotate without re-measuring).
+    const w = tabs.clientWidth || 1;
+    el.style.setProperty('--tail', String(((mpTab.offsetLeft + mpTab.offsetWidth / 2) / w) * 100));
+    el.innerHTML = `<span class="hub-dock-thumbs">${thumbs}</span>
+      <span class="hub-dock-tx"><span class="hub-dock-l1">${l1}</span><span class="hub-dock-l2">${l2}</span></span>
+      <button type="button" class="hub-dock-x" data-role="dock-x" aria-label="${t('hub_alert_dismiss')}">&times;</button>`;
+    tabs.appendChild(el);
+  }
+
+  /** The bubble on the tab bar: X puts every alert away; anywhere else opens Multiplayer (a lone
+   *  Game Over opens its game, whose popup is what acknowledges it). Turns are marked seen on the way. */
+  _onDockTap(e) {
+    const list = (this._gameAlerts || []).filter((x) => x && x.alert);
+    if (e.target.closest('[data-role="dock-x"]')) {
+      for (const st of list) this._dismissGameAlert(st.game);
+      this._paintGameAlert();
+      return;
+    }
+    if (list.length === 1 && list[0].alert.kind === 'over') { this._openAlertGame(list[0].game); return; }
+    for (const st of list) if (st.alert.kind !== 'over') this._dismissGameAlert(st.game);
+    this.openChallenges();
   }
 
   /** "Your turn vs A", "vs A and B", "vs A, B and 2 more" - WHO is waiting, not just that
