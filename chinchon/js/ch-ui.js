@@ -63,37 +63,58 @@ const top = (title) => `<div class="cc-ch-top">
     <button type="button" class="cc-ch-back" data-ch="back" aria-label="${esc(t('ch_back_aria'))}">${BACK_SVG}</button>
     <h2 class="cc-ch-title">${title}</h2></div>`;
 
-/** One match on the list. Your turn: an accent border AND a "›" play arrow (never colour alone). */
+/** One match on the list. Your turn: an accent border AND a "Play" pill (never colour alone). */
 function rowHTML(r) {
-  const me = myName();
   const scored = r.mine || r.theirs || r.round > 1;
-  const sub = [lenLabel(r.kind)].concat(scored ? [`${me} ${r.mine} · ${r.name || '?'} ${r.theirs}`] : []).join(' · ');
+  const sub = [r.yourTurn ? lenLabel(r.kind) : t('ch_their_turn', { name: firstName(r.name || '?') })].concat(scored ? [`${r.mine}-${r.theirs}`] : []).join(' · ');
   return `<button type="button" class="cc-ch-row${r.yourTurn ? ' is-mine' : ''}" data-ch="open" data-id="${esc(r.id)}">
     <span class="cc-ch-face" aria-hidden="true">${esc(r.emoji)}</span>
     <span class="cc-ch-text"><span class="cc-ch-name">${esc(r.name || '?')}</span><span class="cc-ch-sub">${esc(sub)}</span></span>
-    <span class="cc-ch-chev" aria-hidden="true">${r.yourTurn ? '▶' : '›'}</span>
+    ${r.yourTurn ? `<span class="cc-play-pill">${esc(t('ch_play'))}</span>` : '<span class="cc-ch-chev" aria-hidden="true">\u203a</span>'}
   </button>`;
 }
 
-/** The home: New challenge, then your matches (yours first). */
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+
+/**
+ * THE SETUP SCREEN'S ONLINE TAB (2026-11-07, the Cup Pong shape): the matches going (your turn first,
+ * with Play), then Challenge: the people played most recently, one tap each, and Anyone (the full
+ * list). Painted at once from the matches last read (`ui._chRows`), then again from a fresh read.
+ * The people are kept in `ui._chRecent`; the page carries only an index into it, never a code.
+ */
 export async function home(ui, MP, box) {
-  box.innerHTML = `
-    <button type="button" class="cc-btn cc-btn-primary cc-ch-go" data-ch="new">${esc(t('ch_new'))}</button>
-    <div class="cc-ch-push" hidden></div>
-    <div class="cc-ch-list"><p class="cc-ch-note">…</p></div>`;
-  const list = box.querySelector('.cc-ch-list');
-  pushRow(box.querySelector('.cc-ch-push'));
+  const paint = (rows) => {
+    if (!box.isConnected) return;
+    const live = rows.filter((r) => !r.over);
+    const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
+    const seen = new Set();
+    ui._chRecent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+      .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+    box.innerHTML = (live.length ? `
+        <div class="cc-on-card">
+          <div class="cc-on-head">${esc(t('ch_matches'))}</div>
+          <div class="cc-ch-list">${mine.concat(theirs).map(rowHTML).join('')}</div>
+        </div>` : '') + `
+        <div class="cc-on-card">
+          <div class="cc-on-head">${esc(t('ch_challenge'))}</div>
+          <div class="cc-faces">
+            <button type="button" class="cc-face is-any" data-ch="new"><span class="cc-face-dot" aria-hidden="true">+</span><span class="cc-face-name">${esc(t('ch_anyone'))}</span></button>
+            ${ui._chRecent.map((o, i) => `<button type="button" class="cc-face" data-ch="recent" data-oi="${i}"><span class="cc-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="cc-face-name">${esc(firstName(o.name))}</span></button>`).join('')}
+          </div>
+        </div>
+        <div class="cc-ch-push" hidden></div>`;
+    const list = box.querySelector('.cc-ch-list');
+    if (list) fitList(list, 0);
+    pushRow(box.querySelector('.cc-ch-push'));
+  };
+  if (ui._chRows) paint(ui._chRows);
+  else box.innerHTML = '<p class="cc-ch-note">\u2026</p>';
   const rows = await MP.readMyGames();
   if (!box.isConnected) return;
   try { MP.recordFinished(rows); } catch (err) { console.warn('[chinchon] recordFinished', err); }
-  const live = rows.filter((r) => !r.over);
-  const mine = live.filter((r) => r.yourTurn), theirs = live.filter((r) => !r.yourTurn);
-  const showMine = mine.slice(0, 8), showTheirs = theirs.slice(0, 10 - showMine.length);
-  const hidden = live.length - showMine.length - showTheirs.length;
-  list.innerHTML = (mine.length ? `<h3 class="cc-ch-h">${esc(t('ch_your_turn'))} <span>${mine.length}</span></h3>${showMine.map(rowHTML).join('')}` : '')
-    + (theirs.length ? `<h3 class="cc-ch-h">${esc(t('ch_waiting_h'))} <span>${theirs.length}</span></h3>${showTheirs.map(rowHTML).join('')}` : '')
-    + (live.length ? '' : `<p class="cc-ch-note">${esc(t('ch_none'))}</p>`);
-  fitList(list, hidden);
+  ui._chSetRows(rows);
+  paint(rows);
   showUnseen(ui, MP, rows);
 }
 

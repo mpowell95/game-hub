@@ -922,6 +922,32 @@
 .eb-ch-len { width: 100%; min-height: 56px; font-size: 1.1rem; }
 .eb-ch-result .eb-sheet-title { padding: 0 34px; }
 
+/* --- SETUP TABS (2026-11-07): Online | Solo. The panel sits at the top (it never centres), so the tabs
+   stay put whichever tab is open. Selected = the raised pill AND the bold label, never colour alone. --- */
+.eb-tabs .eb-seg { font-size: 17px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+.eb-tabs .eb-seg.is-selected { font-weight: 800; }
+.eb-tabs .eb-seg:not(.is-selected) { color: var(--eb-ink); }
+.eb-online { display: flex; flex-direction: column; gap: 10px; }
+.eb-on-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 8px; border-radius: 14px; border: 1px solid var(--eb-surface-2); background: var(--eb-surface); }
+.eb-on-head { padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.eb-online .eb-ch-name { font-size: 17px; }
+.eb-online .eb-ch-sub { font-size: 15px; color: var(--eb-ink); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; }
+.eb-online .eb-ch-pill { font-size: 16px; padding: 8px 16px; background: var(--eb-attn); color: #111; font-weight: 900; }
+.eb-online .eb-ch-note { font-size: 15px; }
+.eb-online .eb-mp-msg:empty { min-height: 0; }
+.eb-panel.eb-tabs-panel { padding: 18px 12px; }
+.eb-faces { display: flex; gap: 4px; justify-content: space-between; }
+.eb-face.is-any { flex: 1.5 1 0; }
+.eb-face {
+  appearance: none; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--eb-ink); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.eb-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--eb-surface-2); }
+.eb-face.is-any .eb-face-dot { background: none; border: 2px dashed var(--eb-muted); font-size: 28px; font-weight: 400; }
+.eb-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eb-room-row { display: flex; gap: 10px; }
+.eb-room-row .eb-btn { flex: 1 1 0; font-size: 17px; min-height: 48px; }
+
 /* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
    js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN custom
    properties. --eb-felt/--eb-felt-edge (the table) and --eb-gold/--eb-attn (the colorblind-

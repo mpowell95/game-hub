@@ -393,7 +393,7 @@ Two-phone browser check (2026-10-27): `js/firebase-boot.js` routed to a fake dat
 Matt: *"make it be more in line with other gamehub setup screens"* and cut the words. Darts'/Archery's card
 (`.bs-setcard`) centred on enemy water edge to edge (`_shellMode('scene')`, `_fitScene`: shell stretched to the
 screen minus host chrome, then `_bleedToEdges`; never scrolls, fits the hub at 390x664): ? top-right, title,
-**Multiplayer ›** (opens Host / Join / Challenge on Challenge, a "your turn" count badge from the index),
+**Online | Computer tabs (2026-11-07, the Cup Pong shape; `_tabsHTML`, `_onlineHTML`, `_tab`)**: Online = Matches (your turn first, Play) + Challenge (Anyone = the person list, the 4 most recent people) + Host / Join; opens on Online when a match is going, else Computer; the tab's number = your turn. Host makes the room at once. Below is the Computer tab:
 Easy/Medium/Hard (shapes), Grid size 8×8 / 10×10 (small first, Matt), Shots per turn 1/3/5, First shot
 Alternate/Me/<bot>, Play. The challenge chooser uses the same labels and order. Sub-cards use
 the top-left ‹ instead of Back buttons. Gone: tagline, avatar, slider, chips, stats line, Bonus shot chip.

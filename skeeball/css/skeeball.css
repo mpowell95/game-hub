@@ -1561,3 +1561,51 @@
    X 44px + gap 4px + chat 44px + gap 4px. Smaller type, so a name still fits on one line at 320. */
 .sk-root .sk-ch-title--chat { margin-right: 96px; font-size: 17px; }
 .sk-root .sk-ch-over .sk-over-title { margin: 0 96px 0 0; font-size: 20px; }
+
+/* --- SETUP TABS (2026-11-07): Online | Solo. The title and tabs stay put (the panel starts at the top,
+   never centred) whichever tab is open. Selected = the raised pill AND the bold label. --- */
+.sk-root .sk-tabs { width: 100%; box-sizing: border-box; display: flex; flex: 0 0 auto; }
+.sk-root .sk-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; font-size: 17px; gap: 8px; }
+.sk-root .sk-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }
+.sk-root .sk-tab-n {
+  min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
+  display: inline-grid; place-items: center; background: #ffce3a; color: #111; font-size: 14px; font-weight: 900;
+}
+.sk-root .sk-tab-n[hidden] { display: none; }
+.sk-root .sk-online { display: flex; flex-direction: column; gap: 10px; }
+.sk-root .sk-on-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px;
+  border: 1px solid var(--sks-line); background: var(--sks-surface); color: var(--sks-ink);
+}
+.sk-root .sk-on-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
+.sk-root .sk-rec-chip {
+  margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--sks-line);
+  background: none; color: var(--sks-ink); font: inherit; font-size: 16px; font-weight: 800;
+  font-variant-numeric: tabular-nums; cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-on-row {
+  appearance: none; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 6px 12px;
+  border: 2px solid transparent; border-radius: 12px; background: var(--sks-surface-2); color: var(--sks-ink);
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-on-row.is-mine { border-color: #ffce3a; }
+.sk-root .sk-on-face { flex: 0 0 auto; font-size: 1.5rem; line-height: 1; }
+.sk-root .sk-on-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sk-root .sk-on-name { font-size: 17px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-root .sk-on-sub { font-size: 15px; color: var(--sks-ink); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-root .sk-on-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; font-weight: 800; color: var(--sks-muted); }
+.sk-root .sk-play-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: #ffce3a; color: #111; font-weight: 900; font-size: 16px; }
+.sk-root .sk-faces { display: flex; gap: 6px; justify-content: space-between; }
+.sk-root .sk-face {
+  appearance: none; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 0; background: none; padding: 4px 0; color: var(--sks-ink); font: inherit; cursor: pointer; touch-action: manipulation;
+}
+.sk-root .sk-face.is-any { flex: 1.3 1 0; }
+.sk-root .sk-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--sks-surface-2); }
+.sk-root .sk-face.is-any .sk-face-dot { background: none; border: 2px dashed var(--sks-muted); font-size: 28px; font-weight: 400; box-sizing: border-box; }
+.sk-root .sk-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 380px) {
+  .sk-root .sk-on-card { padding: 12px 6px; }
+  .sk-root .sk-faces { gap: 2px; }
+  .sk-root .sk-face.is-any { flex: 1.6 1 0; }
+}

@@ -36,7 +36,7 @@ import { loadProfile } from '../../js/profile-store.js';
 // CHALLENGES (2026-09-24): "beat my score" against another player. challenge.js is the data,
 // challenge-ui.js the screens; this file only starts a challenge rack and ends it.
 import * as CH from './challenge.js';
-import { openChallenges, showChallengeOver } from './challenge-ui.js';
+import { openChallenges, showChallengeOver, formatLine } from './challenge-ui.js';
 
 const t = makeT(STRINGS);
 
@@ -426,6 +426,14 @@ export class SkeeballUI {
     // cleared by the ordinary Play button and the challenge card.
     this.challenge = null;
     this._challengeRows = [];
+    // SETUP TABS (2026-11-07, Matt: "Do the same tabs for the other multiplayer games"): Online | Solo.
+    // `_tab` = the tab the player tapped, or the one a challenge screen sets (wins until the game is
+    // closed); without it the screen opens on Online when a challenge is going, else Solo (decided
+    // once the matches have been read, `_rowsSeen`).
+    this._tab = null;
+    this._rowsSeen = false;
+    this._onlineList = [];
+    this._onlineRecent = [];
     this._stopChallengeWatch = null;
     this._chat = null;                 // { chat, host, stop } while a challenge's quick chat is up
     this._chatCtx = null;              // { id, side, game } of that challenge
@@ -486,27 +494,119 @@ export class SkeeballUI {
     try { CH.finalizeStale(); } catch (err) { console.error('[skeeball] could not finalise an unfinished challenge game', err); }
     CH.flushOutbox().catch(() => {});
     CH.watchMyChallenges((rows) => {
+      const first = !this._rowsSeen;
+      this._rowsSeen = true;
       this._challengeRows = rows;
-      this._paintChallengeBadge();
+      if (first && !this._tab && this.screen === 'setup' && !this.overlay && this._liveChallenges().length) this._renderSetup();
+      else this._paintChallengeBadge();
     }).then((stop) => {
       if (this.disposed) { try { stop(); } catch { /* fine */ } } else this._stopChallengeWatch = stop;
     });
   }
 
-  /** The number on the gallery's Challenges button: challenges waiting on you. */
+  /** Challenges going: yours to play first, then waiting on them (the Online tab's Matches). */
+  _liveChallenges() {
+    const g = CH.groupRows(this._challengeRows || []);
+    return g.toPlay.concat(g.sent);
+  }
+
+  /** The number on the Online tab: challenges waiting on you. Repaints the Online panel in place when
+   *  it is the one showing (the list is live). */
   _paintChallengeBadge() {
-    const btn = this.root && this.root.querySelector('[data-role="challenges"]');
-    if (!btn) return;
+    if (!this.root) return;
     const n = CH.groupRows(this._challengeRows || []).toPlay.length;
-    const badge = btn.querySelector('.sk-ch-badge');
-    if (badge) badge.remove();
-    if (n > 0) {
-      const b = document.createElement('span');
-      b.className = 'sk-ch-badge';
-      b.textContent = String(n);
-      b.setAttribute('aria-label', t('ch_badge_aria', { n }));
-      btn.appendChild(b);
+    const el = this.root.querySelector('[data-role="ch-count"]');
+    if (el) {
+      el.textContent = String(n);
+      el.setAttribute('aria-label', t('ch_badge_aria', { n }));
+      el.hidden = !n;
     }
+    const box = this.root.querySelector('[data-role="online"]');
+    if (box && this.screen === 'setup') this._paintOnline(box);
+  }
+
+  /** The tab bar: Online (with the number waiting on you) | Solo. */
+  _tabsHTML(cur) {
+    const n = CH.groupRows(this._challengeRows || []).toPlay.length;
+    const tab = (k, label) => `<button type="button" class="gh-seg__item" data-tab="${k}" aria-pressed="${k === cur}"><span>${esc(label)}</span>${k === 'online' ? `<b class="sk-tab-n" data-role="ch-count" aria-label="${esc(t('ch_badge_aria', { n }))}" ${n ? '' : 'hidden'}>${n}</b>` : ''}</button>`;
+    return `<div class="gh-seg sk-tabs" role="group" data-role="tabs">${tab('online', t('tab_online'))}${tab('solo', t('tab_solo'))}</div>`;
+  }
+
+  /** THE ONLINE TAB (the Cup Pong shape): the challenges going (your turn first, with Play), then
+   *  Challenge: the people played most recently, one tap each, and Anyone (the person list). The
+   *  record chip opens the sheet's list (every result, as before). Rows and faces carry an index into
+   *  `_onlineList` / `_onlineRecent`, never a code. */
+  _paintOnline(box) {
+    const rows = this._challengeRows || [];
+    const live = this._liveChallenges();
+    this._onlineList = live;
+    const seen = new Set();
+    this._onlineRecent = rows.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0))
+      .filter((r) => r.with && !seen.has(r.with) && seen.add(r.with))
+      .slice(0, 4).map((r) => ({ code: r.with, name: r.name, emoji: r.emoji }));
+    let won = 0, lost = 0;
+    for (const r of rows) if (r.over && !r.ended) { if (r.result === 'won') won++; else if (r.result === 'lost') lost++; }
+    const chip = won + lost ? `<button type="button" class="sk-rec-chip" data-act="history">${won}-${lost}</button>` : '';
+    const first = (n) => String(n || '').trim().split(/\s+/)[0] || n;
+    const short = (r) => (r.all ? t('ch_all_machines') : r.n > 1 ? t('ch_n_games', { n: r.n }) : formatLine(r));
+    const rowHTML = (r, i) => {
+      const sub = r.yourTurn
+        ? [short(r)].concat(r.n <= 1 && !r.all && !r.sent && r.theirs != null ? [t('ch_beat', { n: r.theirs })] : [])
+        : [t('ch_their_turn', { name: first(r.name) || t('ch_someone') })];
+      return `<button type="button" class="sk-on-row${r.yourTurn ? ' is-mine' : ''}" data-i="${i}">
+        <span class="sk-on-face" aria-hidden="true">${esc(r.emoji)}</span>
+        <span class="sk-on-text"><span class="sk-on-name">${esc(r.name || t('ch_someone'))}</span><span class="sk-on-sub">${esc(sub.join(' · '))}</span></span>
+        ${r.yourTurn ? `<span class="sk-play-pill">${esc(t('play'))}</span>` : '<span class="sk-on-chev" aria-hidden="true">&#8250;</span>'}
+      </button>`;
+    };
+    box.innerHTML = (live.length ? `
+        <div class="sk-on-card">
+          <div class="sk-on-head"><span>${esc(t('ch_matches'))}</span>${chip}</div>
+          ${live.map(rowHTML).join('')}
+        </div>` : '') + `
+        <div class="sk-on-card">
+          <div class="sk-on-head"><span>${esc(t('ch_challenge'))}</span>${live.length ? '' : chip}</div>
+          <div class="sk-faces">
+            <button type="button" class="sk-face is-any" data-act="anyone"><span class="sk-face-dot" aria-hidden="true">+</span><span class="sk-face-name">${esc(t('ch_anyone'))}</span></button>
+            ${this._onlineRecent.map((o, i) => `<button type="button" class="sk-face" data-oi="${i}"><span class="sk-face-dot" aria-hidden="true">${esc(o.emoji)}</span><span class="sk-face-name">${esc(first(o.name))}</span></button>`).join('')}
+          </div>
+        </div>`;
+  }
+
+  /** The Online tab's whole screen: title, tabs, the panel. (The Solo tab is the gallery below.) */
+  _renderOnline() {
+    this._cancelPrewarm();
+    this.root.innerHTML = `
+      <div class="sk-setup">
+        <div class="sk-setup-inner">
+          <h1 class="sk-title">${esc(t('title'))}</h1>
+          ${this._tabsHTML('online')}
+          <div class="sk-online" data-role="online"></div>
+        </div>
+      </div>`;
+    const box = this.root.querySelector('[data-role="online"]');
+    this._paintOnline(box);
+    this._bindTabs();
+    box.addEventListener('click', (e) => {
+      const row = e.target.closest('.sk-on-row');
+      if (row) { const r = this._onlineList[Number(row.dataset.i)]; if (r) openChallenges(this, { open: r.id }); return; }
+      if (e.target.closest('[data-act="history"]')) { openChallenges(this); return; }
+      if (e.target.closest('[data-act="anyone"]')) { openChallenges(this, { start: 'pick' }); return; }
+      const f = e.target.closest('.sk-face[data-oi]');
+      const them = f && this._onlineRecent[Number(f.dataset.oi)];
+      if (them) openChallenges(this, { pickFor: them });
+    });
+  }
+
+  _bindTabs() {
+    const tabs = this.root.querySelector('[data-role="tabs"]');
+    if (!tabs) return;
+    tabs.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
+      this._tab = b.dataset.tab;
+      this._renderSetup();
+    });
   }
 
   /** Start one game of a challenge on its own machine, whatever the carousel is showing.
@@ -516,6 +616,7 @@ export class SkeeballUI {
     const leg = ctx && ctx.game && ctx.game.legs[ctx.leg];
     if (!leg) return;
     this.challenge = { ...ctx, board: leg.board };
+    this._tab = 'online';   // back from the rack and its card: the Online tab
     this._chatDockTo(null);
     this._chatMount({ id: ctx.id, side: ctx.side, game: ctx.game });
     this._startGame(null, leg.board);
@@ -890,6 +991,9 @@ export class SkeeballUI {
     releaseRenderer(this.renderer);
     this.renderer = null;
 
+    // Online | Solo: the Online tab is its own panel; Solo is the machine gallery below, untouched.
+    if ((this._tab || (this._liveChallenges().length ? 'online' : 'solo')) === 'online') { this._renderOnline(); return; }
+
     let sk = {};
     try { sk = (loadStats().games.skeeball || {}).sk || {}; } catch { sk = {}; }
     const board = boardById(this.settings.board);
@@ -977,6 +1081,7 @@ export class SkeeballUI {
       <div class="sk-setup">
         <div class="sk-setup-inner">
           <h1 class="sk-title">${esc(t('title'))}</h1>
+          ${this._tabsHTML('solo')}
           <div class="sk-carwrap">
             <div class="sk-car" data-role="car">${slides}</div>
             ${multi ? `<button type="button" class="sk-car-chev l" data-role="prev" aria-label="${esc(t('prev_machine'))}">&#8249;</button>
@@ -993,9 +1098,6 @@ export class SkeeballUI {
           <button type="button" class="gh-btn gh-btn--ghost gh-btn--block" data-role="howto">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5c-1.6-1-4.2-1.5-6.2-1.5-1 0-1.8.1-1.8.1v12s.8-.1 1.8-.1c2 0 4.6.5 6.2 1.5 1.6-1 4.2-1.5 6.2-1.5 1 0 1.8.1 1.8.1v-12s-.8-.1-1.8-.1c-2 0-4.6.5-6.2 1.5z"/><path d="M12 6.5V18.6"/></svg>
             ${esc(t('howto'))}</button>
-          <button type="button" class="gh-btn gh-btn--ghost gh-btn--block sk-ch-btn" data-role="challenges">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 4 L16 16"/><path d="M19 4 L8 16"/><path d="M14 19 L19 14"/><path d="M5 14 L10 19"/></svg>
-            ${esc(t('ch_btn'))}</button>
           </div>
           <button type="button" class="gh-btn gh-btn--primary gh-btn--block" data-role="play"></button>
         </div>
@@ -1122,7 +1224,7 @@ export class SkeeballUI {
     // rebind on a swipe. Both re-read the save at click time rather than closing over the one
     // this render saw.
     this.root.querySelector('[data-role="howto"]').addEventListener('click', () => this._showHowTo());
-    this.root.querySelector('[data-role="challenges"]').addEventListener('click', () => openChallenges(this));
+    this._bindTabs();
     this._paintChallengeBadge();
     this.root.querySelector('[data-role="play"]').addEventListener('click', () => {
       this.challenge = null;
