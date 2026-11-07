@@ -63,6 +63,7 @@ export const STRINGS = {
     help_classic_caption: 'Three in a row across, down, or diagonally wins.',
     // --- multiplayer. Protocol values (host/guest, the room code alphabet,
     // the seat numbers) are never translated; only these labels are.
+    tab_online: 'Online',
     mode_solo: 'Solo',
     mode_host: 'Host',
     mode_join: 'Join',
@@ -154,6 +155,7 @@ export const STRINGS = {
     help_classic_lead: 'Consigue tres en línea.',
     help_classic_diagram_aria: 'Tres marcas X en línea diagonal, resaltadas',
     help_classic_caption: 'Tres en línea en fila, columna o diagonal gana.',
+    tab_online: 'En línea',
     mode_solo: 'Solo',
     mode_host: 'Crear',
     mode_join: 'Unirse',
