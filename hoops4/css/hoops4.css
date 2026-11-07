@@ -1071,3 +1071,4 @@
 .h4-root .h4-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* The hub chip owns the top left: start below it so the tabs are never under it. */
 .h4-root .h4-setup { padding-top: 56px; }
+.h4-root .h4-face.is-any { flex: 1.7 1 0; }
