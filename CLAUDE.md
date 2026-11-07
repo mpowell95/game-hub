@@ -381,6 +381,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
+- **Full level (2026-11-07):** `tools/test-full-level.mjs` (Matt's Flick Soccer Hard, first to 1 at Hard, read time).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 

@@ -583,6 +583,8 @@ and is gated by `writesAllowed()`. Documents are built with `newCareerDoc()`; th
 
 ## Score corrections: "that machine was broken" (2026-08-24)
 
+**`FULL_LEVEL` (2026-11-07, Matt: "Change this for me only. Fix my stats")**: a listed code's shortened matches (Flick Soccer Hard, first to 1) count at the level PICKED, read time, moved by byMode (which keeps the picked level) from byDiff, clamped; applied per record in `players-agg.js` and My Stats' first paint. `tools/test-full-level.mjs`.
+
 Editing `players/<id>` cannot work. A void is an OVERLAY, a BASELINE snapshot at
 `adminConfig/v1/corrections/skeeball/<statsId>/<boardId>`, applied at display time, per PERSON (all
 their statsIds); the raw record is untouched and shown. **Applied in all three:** `players-agg.js`

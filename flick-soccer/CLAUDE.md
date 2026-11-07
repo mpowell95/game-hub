@@ -476,7 +476,7 @@ A chat button on every online challenge (`_mpMountChat` in `js/ui.js`, torn down
 
 ## Quitting and easier settings (2026-10-29)
 
-Play (or Pass & play) over a saved match vs the computer the player has flicked in = ONE loss, asked twice (`playerShot`, `recorded`); Quit keeps the save. First to 1 records one step down (`statsDiff`). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
+Play (or Pass & play) over a saved match vs the computer the player has flicked in = ONE loss, asked twice (`playerShot`, `recorded`); Quit keeps the save. First to 1 records one step down (`statsDiff`); **except Matt's Hard, first to 1, which counts at Hard at READ time** (`FULL_LEVEL`, `js/stats-corrections.js`, 2026-11-07, Matt: "Change this for me only. Fix my stats"; stored byDiff unchanged). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.
 
 ## Second pass (2026-10-29)
 
