@@ -1814,9 +1814,11 @@ class Hub {
         return m.openChallenges({
           games: this._challengeGames(),
           live: this._liveGames(),
-          onOpen: (game, id) => this.openChallengeMatch(game, id),
-          onChallenge: (game, them) => this.challengeIn(game, them),
-          onLaunch: (game) => { if (!this.current) this.launch(game); },
+          // Anything opened FROM this screen comes back TO it (Matt, 2026-11-07, screen recording:
+          // Multiplayer, Play vs Joe, played, Hub, and he landed on the Games page).
+          onOpen: (game, id) => this.openChallengeMatch(game, id, true),
+          onChallenge: (game, them) => this.challengeIn(game, them, true),
+          onLaunch: (game) => { if (!this.current) this.launch(game, { back: this._mpBack() }); },
           onClose: () => this._mpTabOn(false),
         });
       })
@@ -1872,7 +1874,10 @@ class Hub {
 
   /** Straight into one match: the game's alerts module arms it, the game opens it on mount (the same
    *  handoff a tapped notification uses). A bubble for that very match is answered by this. */
-  async openChallengeMatch(gameId, matchId) {
+  /** The return path for a game opened from the Multiplayer screen: leaving the game reopens it. */
+  _mpBack() { return () => { if (!this.current) return this.openChallenges(); }; }
+
+  async openChallengeMatch(gameId, matchId, fromMp = false) {
     if (this.current) return;
     const g = GAMES.find((x) => x.id === gameId);
     if (!g || typeof g.alerts !== 'function') return;
@@ -1888,12 +1893,12 @@ class Hub {
         } else this._dismissGameAlert(gameId);
       }
     } catch (err) { console.warn('[hub] could not arm the challenge', err); }
-    if (!this.current) this.launch(gameId);
+    if (!this.current) this.launch(gameId, fromMp ? { back: this._mpBack() } : undefined);
   }
 
   /** A new challenge to `them` in `gameId`: the game opens on its own challenge screen with that
    *  person already picked, so every rule and option stays the game's. */
-  async challengeIn(gameId, them) {
+  async challengeIn(gameId, them, fromMp = false) {
     if (this.current) return;
     const g = GAMES.find((x) => x.id === gameId);
     if (!g || typeof g.alerts !== 'function') return;
@@ -1901,7 +1906,7 @@ class Hub {
       const mod = await g.alerts();
       if (typeof mod.armChallenge === 'function') mod.armChallenge(them);
     } catch (err) { console.warn('[hub] could not arm the new challenge', err); }
-    if (!this.current) this.launch(gameId);
+    if (!this.current) this.launch(gameId, fromMp ? { back: this._mpBack() } : undefined);
   }
 
   /** A notification tapped with no hub open arrives as `?open=<game>`: take it once, then drop the
@@ -2051,7 +2056,7 @@ class Hub {
   async _launchOverMp(id) {
     const g = GAMES.find((x) => x.id === id);
     if (!g || this.current) return;
-    const back = () => { if (!this.current) return this.openChallenges(); };
+    const back = this._mpBack();
     if (!this._challengeGames().length && !this._liveGames().length) { await this.launch(id); return; }
     // The screen's module first, so it is MOUNTED (synchronously, once imported) before the game
     // replaces it; its lists keep loading behind and are simply dropped when it closes.
