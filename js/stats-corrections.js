@@ -69,11 +69,48 @@ export const HAND_ADDS = {
 // game's own recorder would have filed it (`diff` = the RECORDED bucket, `chosen` + `mode` = its byMode row, `detail`
 // = its dt numbers), BEFORE the full-level move and the points, so it shows and scores like any other such win.
 export const HAND_RESULTS = {
-  flicksoccer: [
-    // Sun Nov 8 2026, 2:22 AM Eastern: Test mode, Hard, first to 1, won 1-0 in 6 flicks (play log recordFlickSoccerTest).
-    { code: 'QZCC4', diff: 'medium', chosen: 'hard', mode: 'def=defend|first=them|goals=1|off=balanced|test=1', won: true, detail: { gf: 1, ga: 0, flicks: 6 } },
-  ],
+  // Matt's Nov 8 2:22 AM Test mode win was the first entry here; it now counts through FLICK_TEST_COUNTS below with
+  // every other Test game (Matt, 2026-11-08: "count all test games"), so it is not listed twice.
+  flicksoccer: [],
 };
+// FLICK SOCCER TEST GAMES COUNT (Matt, 2026-11-08: "count all test games"; "it's the same thing, just with the next
+// change"). Builds from v1507 record a Test mode game like any other result (its mode carries test=1). Games played
+// before that sit in the test bucket games.flicksoccer.fx (recordFlickSoccerTest): every fx byMode row whose mode has
+// test=1 is added here, per RECORD at read time, as the recorder would have filed it (first to 1 one level down, as
+// statsDiff does), wins AND losses. Expert games stay in fx, counted by nothing. The stored record is untouched.
+const FLICK_LEVELS = ['easy', 'medium', 'hard'];
+const isTestKey = (k) => /(^|\|)test=1(\||$)/.test(String(k || ''));
+/** One record's Flick Soccer game with its pre-v1507 Test games (fx) counted; `gm` itself when there are none. */
+export function flickTestGame(gm) {
+  const fx = gm && gm.fx && gm.fx.byMode && typeof gm.fx.byMode === 'object' ? gm.fx.byMode : null;
+  if (!fx) return gm;
+  let out = null;
+  for (const [k, ds] of Object.entries(fx)) {
+    if (!isTestKey(k) || !ds || typeof ds !== 'object') continue;
+    const short = modeParts(k).goals === '1';
+    for (const lvl of FLICK_LEVELS) {
+      const b = ds[lvl];
+      if (!b || typeof b !== 'object') continue;
+      const n = { played: Math.max(0, b.played | 0), won: Math.max(0, b.won | 0), lost: Math.max(0, b.lost | 0) };
+      if (!n.played && !n.won && !n.lost) continue;
+      if (!out) out = Object.assign({}, gm, { total: Object.assign({ played: 0, won: 0, lost: 0 }, gm.total), byDiff: Object.assign({}, gm.byDiff), byMode: Object.assign({}, gm.byMode) });
+      const rec = short ? FLICK_LEVELS[Math.max(0, FLICK_LEVELS.indexOf(lvl) - 1)] : lvl;
+      const add = (o) => { const x = Object.assign({ played: 0, won: 0, lost: 0 }, o); for (const f of Object.keys(n)) x[f] = (x[f] | 0) + n[f]; return x; };
+      out.total = add(out.total);
+      out.byDiff[rec] = add(out.byDiff[rec]);
+      const row = Object.assign({}, out.byMode[k]);
+      row[lvl] = add(row[lvl]);
+      out.byMode[k] = row;
+    }
+  }
+  return out || gm;
+}
+/** A whole stats store with its Flick Soccer Test games counted (My Stats' first paint). */
+export function flickTestStats(st) {
+  const g = st && st.games && st.games.flicksoccer;
+  const f = g ? flickTestGame(g) : g;
+  return f === g ? st : Object.assign({}, st, { games: Object.assign({}, st.games, { flicksoccer: f }) });
+}
 /** `gm` (one person's record in game `id`) with that person's HAND_RESULTS added; `gm` itself when none. Never mutates. */
 export function handResultsGame(gm, id, code) {
   const list = (HAND_RESULTS[id] || []).filter((r) => r && r.code === code);

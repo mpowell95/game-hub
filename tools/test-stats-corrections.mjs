@@ -284,7 +284,8 @@ console.log('\n--- integrity voids: Golf must not rank first, Contexto must not 
 // HAND RESULTS (2026-11-08, Matt: "That test win should count"): filed as the recorder would, before the full-level move.
 {
   const SC = await import('../js/stats-corrections.js');
-  const e = SC.HAND_RESULTS.flicksoccer[0];
+  const e = { code: 'TSTX1', diff: 'medium', chosen: 'hard', mode: 'def=defend|first=them|goals=1|off=balanced|test=1', won: true, detail: { gf: 1, ga: 0, flicks: 6 } };
+  SC.HAND_RESULTS.flicksoccer.push(e);
   const gm = { total: { played: 2, won: 1, lost: 1 }, byDiff: { medium: { played: 2, won: 1, lost: 1 } }, byMode: {}, dt: { gf: 1, ga: 1, flicks: 9, _n: 2 } };
   const out = SC.handResultsGame(gm, 'flicksoccer', e.code);
   ok('hand result: one more win in the recorded bucket and the total', out.byDiff.medium.won === 2 && out.total.won === 2 && out.total.played === 3);
@@ -294,6 +295,26 @@ console.log('\n--- integrity voids: Golf must not rank first, Contexto must not 
   ok('hand result: nobody else gets it', SC.handResultsGame(gm, 'flicksoccer', 'ZZZZZ') === gm);
   const shown = SC.fullLevelGame(out, 'flicksoccer', e.code);
   ok('hand result: a first-to-1 Hard win shows at Hard', shown.byDiff.hard && shown.byDiff.hard.won === 1);
+  SC.HAND_RESULTS.flicksoccer.pop();
+}
+// FLICK SOCCER TEST GAMES COUNT (2026-11-08, Matt: "count all test games"): fx rows with test=1, wins and losses.
+{
+  const SC = await import('../js/stats-corrections.js');
+  const gm = { total: { played: 1, won: 1, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 } }, byMode: {},
+    fx: { byDiff: { hard: { played: 3, won: 2, lost: 1 }, expert: { played: 4, won: 0, lost: 4 } }, byMode: {
+      'def=defend|first=me|goals=1|off=attack|test=1': { hard: { played: 1, won: 1, lost: 0 } },
+      'def=defend|first=them|goals=1|off=attack|test=1': { hard: { played: 1, won: 0, lost: 1 } },
+      'def=defend|first=me|goals=2|off=attack|test=1': { hard: { played: 1, won: 1, lost: 0 } },
+      'def=defend|first=me|goals=1|off=attack': { expert: { played: 4, won: 0, lost: 4 } } } } };
+  const out = SC.flickTestGame(gm);
+  ok('test games: total adds every Test game, wins and losses', out.total.played === 4 && out.total.won === 3 && out.total.lost === 1, JSON.stringify(out.total));
+  ok('test games: first to 1 filed one level down (as recorded)', out.byDiff.medium.played === 2 && out.byDiff.medium.won === 1);
+  ok('test games: first to 2 at its own level', out.byDiff.hard.played === 1 && out.byDiff.hard.won === 1);
+  ok('test games: Expert stays out', !out.byDiff.expert);
+  ok('test games: the record passed in is not changed', gm.total.played === 1 && !gm.byDiff.medium);
+  ok('test games: a record with no Test games is returned as is', SC.flickTestGame({ total: { played: 1 } }).total.played === 1);
+  const shown = SC.fullLevelGame(out, 'flicksoccer', 'X');
+  ok('test games: first-to-1 Hard ones show at Hard', shown.byDiff.hard.played === 3 && shown.byDiff.hard.won === 2, JSON.stringify(shown.byDiff));
 }
 
 console.log(`\nStats corrections tests: ${passed} passed, ${failures.length} failed.`);
