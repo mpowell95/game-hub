@@ -10,7 +10,7 @@
 // PURE and READ-TIME ONLY (THE LAW): reads one person's aggregated game record (players-agg's shape:
 // total / byDiff / byMode / tt), stores nothing. No DOM, no storage, no network.
 import { tierOf } from './difficulty-tiers.js';
-import { assumedRecord, fullLevelWins } from './stats-corrections.js';
+import { assumedRecord, fullLevelWins, fullLevelRaw } from './stats-corrections.js';
 
 export const CAP = 20;
 // lv: points per win at tiers 1-4 (Easy, Medium, Hard, Expert); cap: the tiers in the 20-point group;
@@ -136,6 +136,27 @@ function ttSplit(gm, byT) {
  *  level only. `code` = that person's player code, for ASSUMED_MODES (js/stats-corrections.js). Returns
  *  { pts, wins } (wins = the wins those points came from). */
 export function gamePoints(gm, id, tier = null, code = null) {
+  // FULL_LEVEL (js/stats-corrections.js, 2026-11-08): a game SHOWN at the level picked keeps the points of the level it
+  // was RECORDED at (each game's sheet). Everything: priced on the record as recorded, so no total ever changes. At a
+  // level: what is still recorded there, plus each moved group that SHOWS there at exactly what it was worth below.
+  const fl = fullLevelWins(gm);
+  if (fl.length) {
+    const raw = fullLevelRaw(gm);
+    if (tier == null) return recordedPoints(raw, id, null, code);
+    const rest = recordedPoints(fullLevelRaw(gm, fl), id, tier, code);
+    let pts = rest.pts, wins = rest.wins;
+    for (const x of fl) {
+      if (tierOf(x.level) !== tier) continue;
+      const f = tierOf(x.from);
+      if (!f) continue;
+      const a = recordedPoints(raw, id, f, code), b = recordedPoints(fullLevelRaw(gm, [x]), id, f, code);
+      pts += a.pts - b.pts; wins += a.wins - b.wins;
+    }
+    return { pts, wins };
+  }
+  return recordedPoints(gm, id, tier, code);
+}
+function recordedPoints(gm, id, tier, code) {
   gm = assumedRecord(gm, id, code);
   const spec = pointsTable(id);
   const s = winsSplit(gm);
@@ -188,16 +209,6 @@ export function gamePoints(gm, id, tier = null, code = null) {
         if (n > 0 && opp > 1) { free += n * spec.on * (opp - 1); left -= n; }
       }
     }
-  }
-  // FULL_LEVEL (js/stats-corrections.js): wins moved up a level for a listed code keep the points of the level the game
-  // counted them at (Matt, 2026-11-07: Hard, first to 1 is worth 3, as the sheet says; they only SHOW at Hard). Easy's 20-point limit still
-  // takes a Medium, first-to-1 win (the sheet's yellow circle).
-  for (const x of fullLevelWins(gm)) {
-    const t = tierOf(x.level), f = tierOf(x.from);
-    if (!t || !f || (tier != null && t !== tier)) continue;
-    const vt = x.won * lvOf(spec, t), vf = x.won * lvOf(spec, f);   // out at the shown level, in at the recorded one
-    if (capSet.has(t)) capped -= vt; else free -= vt;
-    if (capSet.has(f)) capped += vf; else free += vf;
   }
   return { pts: Math.min(CAP, Math.max(0, capped)) + free, wins };
 }
