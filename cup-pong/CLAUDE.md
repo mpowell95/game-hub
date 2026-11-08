@@ -171,10 +171,15 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 - A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
 - Test games use `physics.js` `model: 'test'` (`TEST`): the real game's power and aim; only the table changes. It is a
   plane that reflects the ball itself (`testTable`), because the solver's bounce kept 75-104% of the falling speed
-  depending only on where in a 1/480 s step the ball met the table. Bounce 0.88 (0.65 after), forward speed kept 0.76
-  (Matt, 2026-11-06: normal-looking, and must NOT raise the chance of a make; 0.70 failed on a full rack, 2026-11-08):
-  full rack bounce shots 30.0% in vs live 30.7%, full shots 31.2% vs 31.1%; all 2,691 real throws 33.2% vs 34.6%.
-  Check every bounce change on the FULL rack too (a grid of every power and aim at it, split by first contact). Gentler power (1.5x) was tried 2026-11-05 and removed 2026-11-06.
+  depending only on where in a 1/480 s step the ball met the table. **Since 2026-11-08 it is a real bounce, not tuned
+  numbers** (Matt: "Make it mimic reality exactly"): up speed 0.90 x down speed on every bounce, never more (ITTF: a ball
+  dropped 30 cm rises ~23 cm, air drag taken out); the table's grip (`mu` 0.25) slows and spins the ball's bottom until it
+  rolls; a hollow ball (inertia 2/3 m r^2, test games only). This lob lands at ~59 degrees, so it grips and keeps 3/5 of its
+  forward speed (any mu above ~0.13 gives the same); a rolling ball keeps it all. Settles under 0.15 m/s (at 0.08 a
+  ball against a cup's side hopped to the 6 s cap). Measured (in = made / reached a cup): full rack grid, bounce 22.4%
+  vs live 34.3%, full 41.3% both; random 1-10 cup racks (mulberry32 5151, 20k), bounce 15.7% vs live 24.8%, full
+  28.8% both, but 2x the bounced balls reach a cup (they keep bouncing), so more bounce makes overall (1,031 vs 819).
+  The 0.88/0.65/0.76 tuning before it: CLAUDE-HISTORY.md. Check every bounce change on the FULL rack too.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
 - `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test

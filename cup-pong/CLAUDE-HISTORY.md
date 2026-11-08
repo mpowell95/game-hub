@@ -648,3 +648,23 @@ along any touching pair's line, a gap between two cups, a cup and the back wall.
 only; a stored challenge rack replays without it. Switching Free to Grid can break a shape the grid cannot hold (an
 up-and-down line), and the warning says so. Headless: rough drops built an exact line of 4 + 1 beside; Grid showed its
 28 spots, warned on a cup apart, and stood the cups on cells once joined; the mode was remembered.
+
+
+## 2026-11-08: test mode's table becomes a real bounce
+
+Matt: "Modify the test version so that the bounce works like real life would. Don't take off an unrealistic amount of
+forward speed, and certainly do not ever allow it to bounce 104% of its speed. Make it mimic reality exactly. Again this
+is for only test mode admin only."
+
+Replaced in `physics.js` `TEST`: `{ rest: 0.88, restLater: 0.65, skid: 0.76 }` (tuned so the odds matched the live game,
+2026-11-06/08) with `{ rest: 0.90, mu: 0.25 }`, a rigid hollow ball with Coulomb friction (`tableGrip`): the friction
+impulse is at most mu x the normal impulse and never more than starts the ball rolling; it also spins the ball. The
+same on every bounce and while lying on the table. e: ITTF Law 2.1.3 (30 cm drop, ~23 cm rise) gives 0.876 with no
+air; solving with air drag (terminal speed 8-9.5 m/s) gives 0.90-0.91. mu 0.25 is a typical figure (not measured
+here); it makes no difference for this game's steep lob (0.15 and 0.4 gave identical random-rack results). With no
+launch spin, a gripping hollow ball keeps exactly 3/5 of its forward speed, so the live game's `tableSkid` 0.6 was
+already the real value for the FIRST bounce; what was unreal was the 0.95 (up to 1.04 by the solver) height and the
+dead later bounces. Bounces after the first now keep their speed (the ball is rolling), and a ball whose spin
+outlasts the air drag gets a 1-2% forward kick, as a real topspin ball does. `TEST_STOP_V` 0.08 -> 0.15 (a ball resting
+against a cup's slanted side hopped at 0.10 m/s forever). Numbers: cup-pong/CLAUDE.md, "Test mode". The live game is
+untouched (grid identical to main, 814/2370 bounce, 1332/3225 full).

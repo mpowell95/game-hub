@@ -87,17 +87,39 @@ export function innerR(y) {
 //  1. THE TABLE IS A PLANE, NOT A SOLVER CONTACT. Measured 2026-11-05: the solver's bounce kept anywhere
 //     from 75% to 104% of the ball's falling speed depending only on WHERE IN A 1/480 s STEP the ball met
 //     the table (a 0.002 power change flipped it), so the same throw bounced high or low at random. The
-//     test table reflects the ball itself, at the moment it touches: up speed = TEST.rest x down speed
-//     (TEST.restLater after the first bounce), forward speed x TEST.skid, the same for every throw.
+//     test table reflects the ball itself, at the moment it touches (how: 2026-11-08 below).
 //  2. POWER IS THE REAL GAME'S (Matt, 2026-11-06: "change test mode to normal throws. only keep the bounce
 //     changes"). The gentler power (rows 1.5x wider) tried on 2026-11-05 is gone.
-// Tuned with the real game's power (Matt, 2026-11-06: "make sure they make sense and do not increase the balls
-// likelihood of going in a cup"): a normal-looking bounce (0.88 of the falling speed, 0.65 after) keeping 76% of its
-// forward speed. 2026-11-08: 0.70 failed on a FULL rack (bounce shots 32.0% in vs the live game's 30.7%), so 0.76:
-// full rack, every throw at it on a fine grid: bounce shots 30.0% in (live 30.7%), full shots 31.2% (live 31.1%);
-// all 2,691 real challenge throws replayed: 33.2% in vs the live game's 34.6%.
-export const TEST = { rest: 0.88, restLater: 0.65, skid: 0.76 };
-const TEST_STOP_V = 0.08;          // a smaller bounce than this is the ball settling: it rolls
+// 2026-11-08 (Matt: "Make it mimic reality exactly... do not ever allow it to bounce 104% of its speed"): the
+// table is now a REAL ping pong ball bounce, not tuned numbers. A rigid hollow ball meeting a table with friction:
+//  - UP SPEED = TEST.rest x down speed, every bounce, every throw: never more. 0.90 is a standard 40 mm ball
+//    on a regulation table (the ITTF rule: dropped from 30 cm it rises about 23 cm; 0.876 with no air, ~0.90
+//    once the air drag on the way down and up is taken out).
+//  - FORWARD SPEED is not a fixed share. The table's grip (TEST.mu) pushes back on the bottom of the ball for
+//    as long as it slides, and that same push spins it. It stops pushing the moment the ball rolls. A ball with
+//    no spin that grips keeps 3/5 of its forward speed (a hollow ball: 2/3 m r^2); a low skimming ball, or one
+//    already rolling, keeps more (up to all of it). Lying on the table, it slides until it rolls the same way.
+//  - THE BALL IS HOLLOW in test games (inertia 2/3 m r^2, a thin shell), so its spin is right off cups too.
+// No first-bounce / later-bounce split: a real table bounces the same every time.
+export const TEST = { rest: 0.90, mu: 0.25 };
+// A smaller bounce than this is the ball settling: it rolls. 0.15 m/s is a hop under 2 mm, too small to see; at
+// 0.08 a ball resting against a cup's side never stopped (the cup's slanted wall kept pressing it into the table,
+// and each press came back as a 0.1 m/s hop, to the 6 s cap).
+const TEST_STOP_V = 0.15;
+const SHELL = 2 / 3;               // I / (m r^2) of a thin hollow sphere
+
+/** The table's grip on the ball for one contact: `jn` is the push up through the ball (per kg, m/s).
+ *  Friction pushes against the slip of the ball's bottom point, at most mu x jn, and never past rolling. */
+function tableGrip(ball, jn) {
+  const v = ball.velocity, w = ball.angularVelocity, r = BALL.r;
+  const ux = v.x + r * w.z, uz = v.z - r * w.x;      // how fast the bottom of the ball slides on the table
+  const u = Math.hypot(ux, uz);
+  if (u < 1e-9) return;
+  const j = Math.min(TEST.mu * jn, u * SHELL / (1 + SHELL));   // the second: exactly enough to start it rolling
+  const fx = -j * ux / u, fz = -j * uz / u;
+  v.x += fx; v.z += fz;
+  w.x += -fz / (SHELL * r); w.z += fx / (SHELL * r);
+}
 
 /** The test table (model 'test'), after each step: the ball meeting the table top is reflected here. */
 function testTable(st) {
@@ -108,11 +130,10 @@ function testTable(st) {
   if (p.y >= r || v.y >= 0) { if (p.y < r && p.y > r - 0.002 && Math.abs(v.y) < 1e-9) p.y = r; return; }
   // came from above this step? (a ball inside a cup never gets this low: the base holds it)
   const down = -v.y;
-  if (down < TEST_STOP_V) { p.y = r; v.y = 0; return; }   // settling: it rolls (ROLL_DECEL does the rest)
+  if (down < TEST_STOP_V) { p.y = r; v.y = 0; tableGrip(ball, down); return; }   // lying on it: slides, then rolls
   const tc = (r - p.y) / down;                              // how long ago, this step, it touched
-  const e = st.tableHits === 0 ? TEST.rest : TEST.restLater;
-  v.y = down * e;
-  v.x *= TEST.skid; v.z *= TEST.skid;
+  v.y = down * TEST.rest;
+  tableGrip(ball, down * (1 + TEST.rest));
   p.y = r + v.y * Math.min(tc, H);
   st.tableHits++;
   st.events.push({ type: 'table', v: down, x: p.x, z: p.z });
@@ -153,6 +174,12 @@ function buildWorld(cups, model) {
   const ball = new CANNON.Body({ mass: BALL.mass, material: matBall, shape: new CANNON.Sphere(BALL.r) });
   ball.linearDamping = 0;          // drag is applied by hand below: it is quadratic, not linear
   ball.angularDamping = 0.05;
+  if (model === 'test') {          // a ping pong ball is a thin shell, not cannon's solid sphere (2/5)
+    const I = SHELL * BALL.mass * BALL.r * BALL.r;
+    ball.inertia.set(I, I, I);
+    ball.invInertia.set(1 / I, 1 / I, 1 / I);
+    ball.updateInertiaWorld(true);
+  }
   world.addBody(ball);
   return { world, ball, cupBodies, cmTable };
 }
