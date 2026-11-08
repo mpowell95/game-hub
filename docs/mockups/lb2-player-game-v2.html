@@ -79,6 +79,22 @@ body{background:#2B2F36;font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro T
 .sub .mid>span{font-size:16px}
 .sub .bar{height:4px;margin-top:8px}
 .sub .rt b{font-size:20px}
+/* collapsible level groups (Flick Soccer) */
+.grp .row{cursor:pointer}
+.grp .chev{width:20px;height:20px;flex:none;color:var(--sub);transition:transform .15s}
+.grp.open .chev{transform:rotate(90deg)}
+.grp .sub{display:none}
+.grp.open .sub{display:flex}
+.grp.open>.row{background:#1C2027}
+/* difficulty strip: one card, a column per level */
+.strip{display:grid;background:var(--surf);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.strip>div{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 14px;border-left:1px solid var(--line);text-align:center;min-width:0}
+.strip>div:first-child{border-left:0}
+.strip .sh{height:22px;display:flex;align-items:center}
+.strip .sh svg{height:20px;width:auto}
+.strip .w{font-size:15px;color:var(--sub);white-space:nowrap}
+.strip b{font-size:28px;font-weight:800;line-height:1.15;margin-top:4px;white-space:nowrap}
+.strip small{font-size:15px;color:var(--sub);line-height:1.25;white-space:nowrap}
 /* golf holes */
 .holes{padding:12px 14px 16px}
 .holes h5{font-size:17px;font-weight:700;margin:6px 4px 10px}
@@ -134,20 +150,29 @@ const msgTo = (n) => `<div class="card back2">${MSG.replace('class="msg"', 'clas
 const backTo = (n) => `<div class="card back2"><svg width="10" height="18" viewBox="0 0 10 18"><path d="M8 2 2 9l6 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Back to ${n}</div>`;
 const how = '<div class="card how">See how scores are calculated</div>';
 // A level with its "first to" lines under it (Flick Soccer: the level picked + first to 1 / 2 / 3).
-const grp = (icon, label, w, l, subs) => `<div class="grp">${row({ icon, label, sub: wl(w, l), bar: pc(w, l), right: pc(w, l) + '%' })}${subs.map(([lab, sw, sl]) => `<div class="sub"><div class="mid"><b>${lab}</b><span>${clauses(wl(sw, sl))}</span><div class="bar"><i style="width:${pc(sw, sl)}%"></i></div></div><div class="rt"><b>${pc(sw, sl)}%</b></div></div>`).join('')}</div>`;
+const CHEV = '<svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>';
+// A level row; its "first to" lines stay folded until the row is tapped (Matt, 2026-11-08).
+const grp = (icon, label, w, l, subs, open) => `<div class="grp${open ? ' open' : ''}" onclick="this.classList.toggle('open')">${row({ icon, label, sub: wl(w, l), bar: pc(w, l), right: pc(w, l) + '%' }).replace(/<\/div>$/, subs.length ? CHEV + '</div>' : '<span style="width:20px"></span></div>')}${subs.map(([lab, sw, sl]) => `<div class="sub"><div class="mid"><b>${lab}</b><span>${clauses(wl(sw, sl))}</span><div class="bar"><i style="width:${pc(sw, sl)}%"></i></div></div><div class="rt"><b>${pc(sw, sl)}%</b></div></div>`).join('')}</div>`;
 const spark = (vals) => { const mx = Math.max(...vals), n = vals.length; const pts = vals.map((v, i) => `${(i * 300) / (n - 1)},${38 - (v / mx) * 34}`).join(' '); return `<svg viewBox="0 0 300 40" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#7AA7FF" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`; };
 const mach = (color, name, q, days, vals) => `<div class="card mc"><h5><i style="background:${color}"></i>${name}</h5><div class="q">${q.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div><div class="sp"><span>Best a day</span>${spark(vals)}<span>${days} days</span></div></div>`;
+const WORD = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Expert' };
+// strip([[tier or label, big, small, small2?], ...]): the level's shape and word, the number, a caption.
+const strip = (cells) => `<div class="strip" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">${cells.map(([t, big, sm, sm2]) => {
+  const tier = typeof t === 'number' ? t : (Array.isArray(t) ? t[0] : 0);
+  const word = Array.isArray(t) ? t[1] : (tier ? WORD[tier] : t);
+  return `<div><span class="sh">${tier ? SH[tier] : ''}</span><span class="w">${word}</span><b>${big}</b>${sm ? `<small>${sm}</small>` : ''}${sm2 ? `<small>${sm2}</small>` : ''}</div>`;
+}).join('')}</div>`;
 const holes = (course, list) => `<h5>${course}</h5><div class="hg">${list.map(([n, s]) => `<div class="hc"><b>${s}</b><span>${n}</span></div>`).join('')}</div>`;
 
 const MATTY = ['MattyIce', '🧊'];
 const P = [];
-// 1. Flick Soccer: Opponent becomes the level PICKED, each with first to 1 / 2 / 3 (byMode).
-P.push(topBar(...MATTY, 'Flick Soccer', true) + stand(2, 5, '167', 'Points') + gap('*King of Games*', '<b>22 points</b> for gold')
+// 1. Flick Soccer: Opponent = the level PICKED; tap a level for first to 1 / 2 / 3 (byMode). Folded by default.
+const flick = (openHard) => topBar(...MATTY, 'Flick Soccer', true) + stand(2, 5, '167', 'Points') + gap('*King of Games*', '<b>22 points</b> for gold')
   + h('Record') + record(65, 117, 182)
   + h('Opponent') + `<div class="card">${[
     grp(SH[1], 'Easy', 18, 1, [['First to 1', 12, 0], ['First to 2', 4, 1], ['First to 3', 2, 0]]),
     grp(SH[2], 'Medium', 5, 14, [['First to 1', 0, 1], ['First to 2', 5, 13]]),
-    grp(SH[3], 'Hard', 16, 74, [['First to 1', 14, 64], ['First to 2', 2, 9], ['First to 3', 0, 1]]),
+    grp(SH[3], 'Hard', 16, 74, [['First to 1', 14, 64], ['First to 2', 2, 9], ['First to 3', 0, 1]], openHard),
     grp(GLOBE, 'Online', 20, 13, [['First to 1', 3, 1], ['First to 2', 0, 1], ['First to 3', 4, 0], ['Earlier games', 13, 11]]),
     grp('', 'Earlier games', 6, 15, []),
   ].join('')}</div>`
@@ -157,58 +182,35 @@ P.push(topBar(...MATTY, 'Flick Soccer', true) + stand(2, 5, '167', 'Points') + g
     { label: 'Attack / Diamond', sub: wl(16, 8), bar: 67, right: '67%' },
   ])
   + h('Turn') + rows([{ label: 'Went first', sub: wl(25, 40), bar: 38, right: '38%' }, { label: 'Went second', sub: wl(14, 49), bar: 22, right: '22%' }])
-  + h('Numbers') + tiles([['62', 'Goals for'], ['115', 'Goals against'], ['1,606', 'Flicks']]) + how + backTo('MattyIce'));
+  + h('Numbers') + tiles([['62', 'Goals for'], ['115', 'Goals against'], ['1,606', 'Flicks']]) + how + backTo('MattyIce');
+P.push(flick(false));
+P.push(flick(true));
 // 2. Gridlock
 P.push(topBar(...MATTY, 'Gridlock', true) + stand(2, 6, '70', 'Points') + gap('*King of Games*', '<b>98 points</b> for gold')
-  + tiles([['26', 'Levels cleared'], ['11', '3 stars'], ['26', 'No hints']])
-  + h('Difficulty') + rows([
-    { icon: SH[1], label: 'Easy', sub: '10 cleared · 9 with 3 stars', right: '10', unit: 'points' },
-    { icon: SH[2], label: 'Medium', sub: '11 cleared · 2 with 3 stars', right: '33', unit: 'points' },
-    { icon: SH[3], label: 'Hard', sub: '4 cleared', right: '20', unit: 'points' },
-    { icon: SH[4], label: 'Expert', sub: '1 cleared', right: '7', unit: 'points' },
-  ]) + how + backTo('MattyIce'));
-// 3. Word Weaver (the split headers are gone: no table)
+  + tiles([['26', 'Levels'], ['11', '3 stars'], ['26', 'No hints']])
+  + h('Points') + strip([[1, '10', '10 levels'], [2, '33', '11 levels'], [3, '20', '4 levels'], [4, '7', '1 level']]) + how + backTo('MattyIce'));
+// 3. Word Weaver
 P.push(topBar(...MATTY, 'Word Weaver', true) + stand(2, 5, '160', 'Points') + gap('*King of Games*', '<b>228 points</b> for gold')
   + tiles([['29', 'Levels'], ['86', 'Stars'], ['28', '3 stars']])
-  + h('Difficulty') + rows([
-    { icon: SH[1], label: 'Easy', sub: '10 cleared · 30 stars · 10 with 3 stars', right: '30', unit: 'points' },
-    { icon: SH[2], label: 'Medium', sub: '13 cleared · 38 stars · 12 with 3 stars', right: '76', unit: 'points' },
-    { icon: SH[3], label: 'Hard', sub: '6 cleared · 18 stars · 6 with 3 stars', right: '54', unit: 'points' },
-  ])
-  + h('Numbers') + lrows([['Extra words', '168'], ['Daily puzzles', '2'], ['Bonus stars collected', '213'], ['Bonus stars spent', '0']]) + how + backTo('MattyIce'));
+  + h('Points') + strip([[1, '30', '10 levels'], [2, '76', '13 levels'], [3, '54', '6 levels']])
+  + h('Numbers') + tiles([['168', 'Extra words'], ['2', 'Daily'], ['213', 'Bonus stars', '0 spent']]) + how + backTo('MattyIce'));
 // 4. Arrow Maze
 P.push(topBar(...MATTY, 'Arrow Maze', true) + stand(2, 7, '1,198', 'Points') + gap('*King of Games*', '<b>80 points</b> for gold')
-  + tiles([['331', 'Levels cleared'], ['19,357', 'Arrows cleared']])
-  + h('Difficulty') + rows([
-    { icon: SH[1], label: 'Easy', sub: '43 cleared', right: '43', unit: 'points' },
-    { icon: SH[2], label: 'Medium', sub: '52 cleared', right: '92', unit: 'points' },
-    { icon: SH[3], label: 'Hard', sub: '124 cleared', right: '457', unit: 'points' },
-    { icon: SH[4], label: 'Expert', sub: '112 cleared', right: '606', unit: 'points' },
-  ])
-  + h('Rush') + rows([
-    { icon: SH[1], label: 'Easy', sub: 'Best week 175 · 10 runs', right: '68', unit: 'this week' },
-    { icon: SH[3], label: 'Hard', sub: 'Best week 59 · 4 runs', right: '–', unit: 'this week' },
-  ]) + how + backTo('MattyIce'));
+  + tiles([['331', 'Levels'], ['19,357', 'Arrows']])
+  + h('Points') + strip([[1, '43', '43 levels'], [2, '92', '52 levels'], [3, '457', '124 levels'], [4, '606', '112 levels']])
+  + h('Rush this week') + strip([[1, '68', 'Best 175', '10 runs'], [3, '–', 'Best 59', '4 runs']]) + how + backTo('MattyIce'));
 // 5. Sudoku (*King of Games*: MattyIce has none)
 P.push(topBar('*King of Games*', '🤴', 'Sudoku') + stand(1, 3, '5', 'Points')
   + tiles([['2', 'Solved'], ['0', 'Perfect'], ['26', 'Hints'], ['9', 'Mistakes']], 4)
-  + h('Difficulty') + rows([
-    { icon: SH[1], label: 'Easy', sub: '1 solved', right: '6:20', unit: 'best' },
-    { icon: SH[4], label: 'Expert', sub: '1 solved', right: '9:12', unit: 'best' },
-  ]) + how + msgTo('*King of Games*').replace('margin-top:22px', '') + backTo('*King of Games*').replace('class="card back2"', 'class="card back2" style="margin-top:10px"'));
+  + h('Best time') + strip([[1, '6:20', '1 solved'], [4, '9:12', '1 solved']])
+  + how + msgTo('*King of Games*') + backTo('*King of Games*').replace('class="card back2"', 'class="card back2" style="margin-top:10px"'));
 // 6. Murdoku
 P.push(topBar(...MATTY, 'Murdoku', true) + stand(4, 4, '4', 'Points') + gap('Natalia', '<b>62 points</b> for gold')
-  + h('Difficulty') + rows([{ icon: SH[1], label: 'Easy', right: '4', unit: 'solved' }]) + how + backTo('MattyIce'));
+  + h('Solved') + strip([[1, '4']]) + how + backTo('MattyIce'));
 // 7. Nuts & Bolts
 P.push(topBar(...MATTY, 'Nuts &amp; Bolts', true) + stand(3, 12, '82', 'Points') + gap('Unai', '<b>2,979 points</b> for gold')
-  + tiles([['41', 'Levels solved'], ['30', 'Best level'], ['16', 'Avg moves']])
-  + h('Difficulty') + rows([
-    { icon: SH[2], label: 'Medium', right: '2', unit: 'solved' },
-    { icon: SH[3], label: 'Hard', right: '6', unit: 'solved' },
-    { icon: SH[4], label: 'Extra hard', right: '3', unit: 'solved' },
-    { label: 'Earlier games', right: '30', unit: 'solved' },
-  ])
-  + h('Numbers') + lrows([['Total moves', '658']]) + how + backTo('MattyIce'));
+  + tiles([['41', 'Levels'], ['30', 'Best level'], ['16', 'Avg moves'], ['658', 'Moves']], 2)
+  + h('Solved') + strip([[2, '2'], [3, '6'], [[4, 'Extra hard'], '3'], ['Earlier', '30']]) + how + backTo('MattyIce'));
 // 8. Snake
 P.push(topBar(...MATTY, 'Snake', true) + stand(1, 16, '43', 'Length', 3)
   + tiles([['16', 'Runs'], ['43', 'Longest snake']])
