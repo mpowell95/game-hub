@@ -95,6 +95,22 @@ body{background:#2B2F36;font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro T
 .strip .w{font-size:15px;color:var(--sub);white-space:nowrap}
 .strip b{font-size:28px;font-weight:800;line-height:1.15;margin-top:4px;white-space:nowrap}
 .strip small{font-size:15px;color:var(--sub);line-height:1.25;white-space:nowrap}
+/* Flick Soccer level strip */
+.lvstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.lv{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 0;background:var(--surf);border:1px solid var(--line);border-radius:16px;overflow:hidden;text-align:center;font:inherit;color:var(--text)}
+.lv .sh{height:30px;display:flex;align-items:center}
+.lv .sh svg{height:28px;width:auto}
+.lv .w{font-size:15px;color:var(--sub);white-space:nowrap}
+.lv b{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px}
+.lv small{font-size:15px;color:var(--sub);margin-bottom:12px}
+.lv .lvbar{display:block;align-self:stretch;height:6px;background:var(--track)}
+.lv .lvbar i{display:block;height:100%;background:var(--accent)}
+.lv.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:#1C2433}
+.lvcard{margin-top:10px}
+.lvh{display:flex;align-items:center;gap:10px;padding:14px 18px 4px;font-size:19px;font-weight:800}
+.lvh .sh svg{height:22px;width:auto}
+.lvp .row:first-of-type{border-top:0}
+.lv-earlier{margin:10px 4px 0;font-size:16px;color:var(--sub)}
 /* golf holes */
 .holes{padding:12px 14px 16px}
 .holes h5{font-size:17px;font-weight:700;margin:6px 4px 10px}
@@ -156,6 +172,19 @@ const grp = (icon, label, w, l, subs, open) => `<div class="grp${open ? ' open' 
 const spark = (vals) => { const mx = Math.max(...vals), n = vals.length; const pts = vals.map((v, i) => `${(i * 300) / (n - 1)},${38 - (v / mx) * 34}`).join(' '); return `<svg viewBox="0 0 300 40" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#7AA7FF" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`; };
 const mach = (color, name, q, days, vals) => `<div class="card mc"><h5><i style="background:${color}"></i>${name}</h5><div class="q">${q.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div><div class="sp"><span>Best a day</span>${spark(vals)}<span>${days} days</span></div></div>`;
 const WORD = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Expert' };
+// Flick Soccer's levels (Matt, 2026-11-08: "they all look identical at a glance"): a strip of columns, each level's
+// big shape, name, win % and record; tap one to open its "first to" lines under the strip. Folded by default.
+const levels = (L, open) => {
+  const cells = L.map(([t, name, w, l], i) => `<button class="lv${i === open ? ' on' : ''}" data-i="${i}" onclick="lvTap(this)"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span><span class="w">${name}</span><b>${pc(w, l)}%</b><small>${w}–${l}</small><i class="lvbar"><i style="width:${pc(w, l)}%"></i></i></button>`).join('');
+  const panels = L.map(([t, name, w, l, subs], i) => `<div class="lvp" data-i="${i}"${i === open ? '' : ' hidden'}><div class="lvh"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span>${name}</div>${subs.map(([lab, sw, sl]) => row({ label: lab, sub: wl(sw, sl), bar: pc(sw, sl), right: pc(sw, sl) + '%' })).join('')}</div>`).join('');
+  return `<div class="lvs"><div class="lvstrip">${cells}</div><div class="card lvcard"${open >= 0 ? '' : ' hidden'}>${panels}</div></div>`;
+};
+function lvTap(btn) {
+  const box = btn.closest('.lvs'), i = btn.dataset.i, was = btn.classList.contains('on');
+  box.querySelectorAll('.lv').forEach((b) => b.classList.toggle('on', !was && b === btn));
+  box.querySelector('.lvcard').hidden = was;
+  box.querySelectorAll('.lvp').forEach((p) => { p.hidden = was || p.dataset.i !== i; });
+}
 // strip([[tier or label, big, small, small2?], ...]): the level's shape and word, the number, a caption.
 const strip = (cells) => `<div class="strip" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">${cells.map(([t, big, sm, sm2]) => {
   const tier = typeof t === 'number' ? t : (Array.isArray(t) ? t[0] : 0);
@@ -169,13 +198,12 @@ const P = [];
 // 1. Flick Soccer: Opponent = the level PICKED; tap a level for first to 1 / 2 / 3 (byMode). Folded by default.
 const flick = (openHard) => topBar(...MATTY, 'Flick Soccer', true) + stand(2, 5, '167', 'Points') + gap('*King of Games*', '<b>22 points</b> for gold')
   + h('Record') + record(65, 117, 182)
-  + h('Opponent') + `<div class="card">${[
-    grp(SH[1], 'Easy', 18, 1, [['First to 1', 12, 0], ['First to 2', 4, 1], ['First to 3', 2, 0]]),
-    grp(SH[2], 'Medium', 5, 14, [['First to 1', 0, 1], ['First to 2', 5, 13]]),
-    grp(SH[3], 'Hard', 16, 74, [['First to 1', 14, 64], ['First to 2', 2, 9], ['First to 3', 0, 1]], openHard),
-    grp(GLOBE, 'Online', 20, 13, [['First to 1', 3, 1], ['First to 2', 0, 1], ['First to 3', 4, 0], ['Earlier games', 13, 11]]),
-    grp('', 'Earlier games', 6, 15, []),
-  ].join('')}</div>`
+  + h('Opponent') + levels([
+    [1, 'Easy', 18, 1, [['First to 1', 12, 0], ['First to 2', 4, 1], ['First to 3', 2, 0]]],
+    [2, 'Medium', 5, 14, [['First to 1', 0, 1], ['First to 2', 5, 13]]],
+    [3, 'Hard', 16, 74, [['First to 1', 14, 64], ['First to 2', 2, 9], ['First to 3', 0, 1]]],
+    ['online', 'Online', 20, 13, [['First to 1', 3, 1], ['First to 2', 0, 1], ['First to 3', 4, 0], ['Earlier games', 13, 11]]],
+  ], openHard ? 2 : -1) + `<p class="lv-earlier">Earlier games · ${wl(6, 15)}</p>`
   + h('Formation') + rows([
     { label: 'Attack / Defend', sub: wl(14, 66), bar: 18, right: '18%' },
     { label: 'Balanced / Defend', sub: wl(9, 15), bar: 38, right: '38%' },
