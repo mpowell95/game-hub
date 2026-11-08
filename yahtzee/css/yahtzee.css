@@ -752,5 +752,8 @@
 /* Setup TABS (2026-11-07), at the end so the line numbers KNOWN_GAPS names stay put. */
 /* Pinned to the top (2026-11-07 tabs): the tab bar never moves between tabs. */
 .yz-root #screenHost:has(> .yz-setup){ place-items:start center; place-content:start unsafe center; }
+/* ...and BELOW the floating "‹ Hub" button and the status bar (2026-11-08: the title sat beside it, under the
+   iPhone clock). Hub button = max(safe top, 54px) + 36px tall. */
+.yz-root #screenHost > .yz-setup{ padding-top:calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
 .yz-root .yz-tabs .yz-seg-btn{ font-size:17px; padding:12px 6px; }
 .yz-root .yz-tabs .yz-seg-btn.yz-seg-active{ font-weight:800; }

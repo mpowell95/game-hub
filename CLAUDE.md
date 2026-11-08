@@ -749,6 +749,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   multiplayer games")**: Cup Pong's shape (`cup-pong/CLAUDE.md`, "The setup screen"). Challenge games: Matches (Play on your
   turn) + Challenge (Anyone + 4 recent first names); opens on Online when a match is going, else the next tab. Live-room-only
   games: Online holds Host/Join, opens on the offline tab. Each game's CLAUDE.md has its own "Setup tabs" note.
+  **Pinned to the top means BELOW the floating "‹ Hub"** (it sits at `max(safe top, 54px)`, 36px tall): v1487 put 7 games'
+  cards under it on iPhones (fixed v1495). Check with an emulated 62px safe area (CDP `Emulation.setSafeAreaInsetsOverride`).
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).

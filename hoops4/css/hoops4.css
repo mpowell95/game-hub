@@ -1069,6 +1069,7 @@
 .h4-root .h4-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--h4s-surface-2); }
 .h4-root .h4-face.is-any .h4-face-dot { background: none; border: 2px dashed var(--h4s-muted); font-size: 28px; color: var(--h4s-ink); box-sizing: border-box; }
 .h4-root .h4-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* The hub chip owns the top left: start below it so the tabs are never under it. */
-.h4-root .h4-setup { padding-top: 56px; }
+/* The hub chip owns the top left: start below it so the tabs are never under it. The chip is at max(safe top,
+   54px), 36px tall, so this follows the safe area (2026-11-08: a flat 56px put the tabs against it on an iPhone). */
+.h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 4px); }
 .h4-root .h4-face.is-any { flex: 1.7 1 0; }

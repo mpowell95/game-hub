@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1494';
+const CACHE = 'game-hub-v1495';
 
 const ASSETS = [
   './',
@@ -1099,7 +1099,7 @@ const REST_MANIFEST = {
   './word-weaver/data/es/daily.json': 'd5f8928f0e',
   './flick-soccer/': 'a15237aabc',
   './flick-soccer/index.html': 'a15237aabc',
-  './flick-soccer/css/flick-soccer.css': '9053c399fd',
+  './flick-soccer/css/flick-soccer.css': '4acd9331fd',
   './flick-soccer/js/ui.js': '6fd893a2bd',
   './flick-soccer/js/engine.js': 'fed4d75e36',
   './flick-soccer/js/ai.js': 'ada469fb1f',
@@ -1112,7 +1112,7 @@ const REST_MANIFEST = {
   './archery/js/mp.js': 'f660bf1441',
   './eight-ball/': '91e30df217',
   './eight-ball/index.html': '91e30df217',
-  './eight-ball/css/eight-ball.css': '3bf84e962e',
+  './eight-ball/css/eight-ball.css': '9d85d0ab42',
   './eight-ball/js/ui.js': '2af59ea319',
   './eight-ball/js/engine.js': '79a8c4ab1f',
   './eight-ball/js/ai.js': '58865ccd2c',
@@ -1127,7 +1127,7 @@ const REST_MANIFEST = {
   './battle-arena/js/mp.js': '985763049f',
   './darts/': '9565b5b35f',
   './darts/index.html': '9565b5b35f',
-  './darts/css/darts.css': 'ad13a958a5',
+  './darts/css/darts.css': 'b386e17f17',
   './darts/js/ui.js': '071ba40d62',
   './darts/js/engine.js': '2d603f0ee2',
   './darts/js/render.js': 'd05671e727',
@@ -1201,7 +1201,7 @@ const REST_MANIFEST = {
   './brick-blitz/js/strings.js': '00a75d8c6d',
   './air-hockey/': 'c4f7eb7ae7',
   './air-hockey/index.html': 'c4f7eb7ae7',
-  './air-hockey/css/air-hockey.css': 'ec9f0443c6',
+  './air-hockey/css/air-hockey.css': 'a6b2c91ad4',
   './air-hockey/js/ui.js': '69af9f524a',
   './air-hockey/js/physics.js': 'a8e3192cef',
   './air-hockey/js/ai.js': '05aee99aee',
@@ -1251,7 +1251,7 @@ const REST_MANIFEST = {
   './cup-pong/js/alert.js': '698b22f3f3',
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': '533fd79845',
-  './hoops4/css/hoops4.css': '7c0f853ba4',
+  './hoops4/css/hoops4.css': '17ec0f9582',
   './hoops4/js/ui.js': '0d1a1ff731',
   './hoops4/js/boarddef.js': 'd1214c250c',
   './hoops4/js/machine.js': '657e6330a1',
@@ -1333,7 +1333,7 @@ const REST_MANIFEST = {
   './uno/js/strings.js': 'f0064e6bb9',
   './yahtzee/': '8a3981aec3',
   './yahtzee/index.html': '8a3981aec3',
-  './yahtzee/css/yahtzee.css': '71c1b9ddfd',
+  './yahtzee/css/yahtzee.css': 'a2f4bef57a',
   './yahtzee/js/howto.js': '6b8bb92ca6',
   './yahtzee/js/strings.js': '5888e417db',
   './yahtzee/js/ui.js': 'f3c4c0a474',
