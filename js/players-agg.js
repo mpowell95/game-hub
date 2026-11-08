@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats, isVoidedMatch, fullLevelStats, adjustGame } from './stats-corrections.js';
+import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
@@ -316,9 +316,7 @@ export function aggregatePlayers(all, corrections) {
     // path in this file. See js/stats-corrections.js. A missing corrections argument (every caller
     // that predates this, and every test) leaves the record exactly as it was.
     const corrected = corrections ? correctStats(rec.stats, id, corrections) : rec.stats;
-    // FULL LEVEL (js/stats-corrections.js, Matt 2026-11-07): a listed player's shortened matches at the level picked.
-    const leveled = fullLevelStats(corrected, playerId);
-    let games = (leveled && leveled.games) || {};
+    let games = (corrected && corrected.games) || {};
     // A released game's TEST plays count too where Matt asked (js/game-stats.js CARRY_TEST, 2026-11-02): a record
     // whose phone has not stamped `carried` yet is combined here, at read time; `rec` is never changed.
     for (const cg of Object.keys(CARRY_TEST)) {
@@ -1010,6 +1008,9 @@ export function aggregatePlayers(all, corrections) {
       if (wo) for (const tier of Object.keys(grp._wo)) { const c = woCapCl(grp._wo[tier], tier); if (c) wo.cl[tier] = c; }
       delete grp._wo;
     }
+    // FULL LEVEL (js/stats-corrections.js, 2026-11-08): shortened matches SHOWN at the level picked, per PERSON, after
+    // every merge (the result carries `fl`, which js/lb-points.js reads so the points stay the sheet's).
+    for (const g of Object.keys(FULL_LEVEL)) { if (grp.games[g]) grp.games[g] = fullLevelGame(grp.games[g], g, grp.playerId); }
     // Matt's console ADJUSTMENTS (js/stats-corrections.js adjustGame, 2026-11-07): per PERSON, after every merge.
     const adj = grp.playerId && corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null;
     if (adj && typeof adj === 'object') for (const g of Object.keys(adj)) { if (grp.games[g]) grp.games[g] = adjustGame(grp.games[g], adj[g]); }

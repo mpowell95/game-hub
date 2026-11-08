@@ -190,12 +190,14 @@ export function gamePoints(gm, id, tier = null, code = null) {
     }
   }
   // FULL_LEVEL (js/stats-corrections.js): wins moved up a level for a listed code keep the points of the level the game
-  // counted them at (Matt, 2026-11-07: Hard, first to 1 is worth 3, as the sheet says; they only SHOW at Hard).
-  for (const x of fullLevelWins(gm, id, code)) {
+  // counted them at (Matt, 2026-11-07: Hard, first to 1 is worth 3, as the sheet says; they only SHOW at Hard). Easy's 20-point limit still
+  // takes a Medium, first-to-1 win (the sheet's yellow circle).
+  for (const x of fullLevelWins(gm)) {
     const t = tierOf(x.level), f = tierOf(x.from);
     if (!t || !f || (tier != null && t !== tier)) continue;
-    const d = x.won * (lvOf(spec, f) - lvOf(spec, t));
-    if (capSet.has(t)) capped += d; else free += d;
+    const vt = x.won * lvOf(spec, t), vf = x.won * lvOf(spec, f);   // out at the shown level, in at the recorded one
+    if (capSet.has(t)) capped -= vt; else free -= vt;
+    if (capSet.has(f)) capped += vf; else free += vf;
   }
   return { pts: Math.min(CAP, Math.max(0, capped)) + free, wins };
 }

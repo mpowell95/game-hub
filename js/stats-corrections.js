@@ -67,23 +67,30 @@ export const HAND_ADDS = {
 // Read time only, for POINTS (js/lb-points.js gamePoints): nothing stored changes. Monopoly Deal saved the computer
 // count from 2026-10-30. Matt, 2026-11-04: "I only ever play monopoly deal against 2 robots. so 3 people total" and,
 // of his 4 wins saved with no level ('legacy'), "yes count them as medium".
-// FULL LEVEL: a shortened match the game counts one level down (Flick Soccer first to 1, 2026-10-29) counts at the
-// level PICKED, for the codes listed only. Matt, 2026-11-07: "Change this for me only. Fix my stats" (his Hard, first to
-// 1 games had been going under Medium). Read time only, like ASSUMED_MODES: byDiff stays exactly as recorded. byMode
+// FULL LEVEL: a shortened match the game RECORDS one level down (Flick Soccer first to 1, 2026-10-29) SHOWS at the level
+// PICKED. Matt, 2026-11-07: "Change this for me only. Fix my stats" (his Hard, first to 1 games had been going under
+// Medium); then, for every player (2026-11-08, "that's not correct": a Hard game is a Hard game). `code: '*'` = everyone.
+// Points stay the sheet's (the level it was recorded at): fullLevelWins below, js/lb-points.js gamePoints. Read time only, like ASSUMED_MODES: byDiff stays exactly as recorded. byMode
 // keeps the PICKED level, so it says which games they were, past and future alike; at most what byDiff holds is moved.
 // Results from before 2026-10-30 saved no mode and stay where they were recorded.
 export const FULL_LEVEL = {
-  flicksoccer: [{ code: 'QZCC4', level: 'hard', from: 'medium', short: (m) => m.goals === '1' }],
+  flicksoccer: [   // Hard first, so Medium still holds the Hard games when they are taken out of it
+    { code: '*', level: 'hard', from: 'medium', short: (m) => m.goals === '1' },
+    { code: '*', level: 'medium', from: 'easy', short: (m) => m.goals === '1' },
+  ],
 };
 const modeParts = (k) => {
   const m = {};
   for (const p of String(k || '').split('|')) { const i = p.indexOf('='); if (i > 0) m[p.slice(0, i)] = p.slice(i + 1); }
   return m;
 };
-/** `gm` (one record's game `id`) with FULL_LEVEL applied for `code`; `gm` itself when none applies. Never mutates. */
+/** `gm` (one person's game `id`) with FULL_LEVEL applied for `code`; `gm` itself when none applies. Never mutates.
+ *  The result carries `fl` = [{ level, from, won }] (what was moved), read by fullLevelWins; a record that already has
+ *  `fl` is returned as it is, so nothing is ever moved twice. */
 export function fullLevelGame(gm, id, code) {
+  if (gm && Array.isArray(gm.fl)) return gm;
   const c = String(code || '').trim().toUpperCase();
-  const rules = c && gm && gm.byDiff && gm.byMode && typeof gm.byMode === 'object' ? (FULL_LEVEL[id] || []).filter((r) => r.code === c) : [];
+  const rules = gm && gm.byDiff && gm.byMode && typeof gm.byMode === 'object' ? (FULL_LEVEL[id] || []).filter((r) => r.code === '*' || (c && r.code === c)) : [];
   let out = null;
   for (const r of rules) {
     const n = { played: 0, won: 0, lost: 0 };
@@ -103,26 +110,15 @@ export function fullLevelGame(gm, id, code) {
     for (const f of Object.keys(mv)) { from[f] = (from[f] | 0) - mv[f]; to[f] = (to[f] | 0) + mv[f]; }
     out.byDiff[r.from] = from;
     out.byDiff[r.level] = to;
+    out.fl = (out.fl || []).concat([{ level: r.level, from: r.from, won: mv.won }]);
   }
   return out || gm;
 }
-/** The wins FULL_LEVEL moved for `code` in `gm` (a record it was ALREADY applied to): [{ level, from, won }]. Points
- *  stay those of the level the game counted them at (Matt, 2026-11-07: Hard, first to 1 is "worth 3 points per win",
- *  as the sheet says), so js/lb-points.js gamePoints prices these wins at `from`. */
-export function fullLevelWins(gm, id, code) {
-  const c = String(code || '').trim().toUpperCase();
-  const rules = c && gm && gm.byDiff && gm.byMode && typeof gm.byMode === 'object' ? (FULL_LEVEL[id] || []).filter((r) => r.code === c) : [];
-  const out = [];
-  for (const r of rules) {
-    let n = 0;
-    for (const [k, ds] of Object.entries(gm.byMode)) {
-      const b = k !== '?' && ds && typeof ds === 'object' && r.short(modeParts(k)) ? ds[r.level] : null;
-      if (b && typeof b === 'object') n += Math.max(0, b.won | 0);
-    }
-    n = Math.min(n, Math.max(0, ((gm.byDiff[r.level] || {}).won) | 0));
-    if (n) out.push({ level: r.level, from: r.from, won: n });
-  }
-  return out;
+/** The wins FULL_LEVEL moved in `gm` ([{ level, from, won }], from fullLevelGame's `fl`; [] for a record it was not
+ *  applied to). Points stay those of the level the game counted them at (Matt, 2026-11-07: Hard, first to 1 is "worth
+ *  3 points per win", as the sheet says), so js/lb-points.js gamePoints prices these wins at `from`. */
+export function fullLevelWins(gm) {
+  return gm && Array.isArray(gm.fl) ? gm.fl.filter((x) => x && (x.won | 0) > 0) : [];
 }
 /** A whole stats store with FULL_LEVEL applied for `code`; `st` itself when nothing changes. */
 export function fullLevelStats(st, code) {

@@ -1,10 +1,10 @@
-// tools/test-full-level.mjs - FULL_LEVEL (js/stats-corrections.js, Matt 2026-11-07): a listed player's Flick Soccer
-// Hard, first-to-1 games count at Hard, read time only. Run: node tools/test-full-level.mjs
+// tools/test-full-level.mjs - FULL_LEVEL (js/stats-corrections.js, Matt 2026-11-07, everyone 2026-11-08): Flick Soccer
+// first-to-1 games SHOW at the level picked, read time only; points stay the sheet's. Run: node tools/test-full-level.mjs
 import assert from 'node:assert/strict';
 import { FULL_LEVEL, fullLevelGame, fullLevelStats } from '../js/stats-corrections.js';
 import { aggregatePlayers } from '../js/players-agg.js';
 
-const WHO = FULL_LEVEL.flicksoccer[0].code;   // read from the config: no player code typed into a test
+const WHO = 'ABCD1';   // made-up codes: the rule is for everyone
 const OTHER = 'ZZZZ9';
 const rec = () => ({
   total: { played: 14, won: 5, lost: 9 },
@@ -27,9 +27,10 @@ assert.deepEqual(f.byDiff.hard, { played: 10, won: 4, lost: 6 }); n++;
 assert.deepEqual(f.total, raw.total); n++;
 ok(f.byMode === raw.byMode, 'byMode untouched');
 // 2. Nobody else, no other game.
-ok(fullLevelGame(raw, 'flicksoccer', OTHER) === raw, 'other player unchanged');
+ok(FULL_LEVEL.flicksoccer.every((r) => r.code === '*'), 'for everyone');
+assert.deepEqual(fullLevelGame(raw, 'flicksoccer', OTHER).byDiff, f.byDiff); n++;   // any player
+assert.deepEqual(fullLevelGame(raw, 'flicksoccer', '').byDiff, f.byDiff); n++;      // no code too
 ok(fullLevelGame(raw, 'hoops4', WHO) === raw, 'other game unchanged');
-ok(fullLevelGame(raw, 'flicksoccer', '') === raw, 'no code unchanged');
 // 3. Never moves more than Medium holds (clamp), never below zero.
 const thin = rec(); thin.byDiff.medium = { played: 2, won: 0, lost: 2 };
 const t = fullLevelGame(thin, 'flicksoccer', WHO);
@@ -40,7 +41,6 @@ const old = rec(); delete old.byMode;
 ok(fullLevelGame(old, 'flicksoccer', WHO) === old, 'no byMode unchanged');
 // 5. Through the whole-store helper and the leaderboard's aggregation (two devices, one person).
 const st = { games: { flicksoccer: rec() } };
-ok(fullLevelStats(st, OTHER) === st, 'store: other player unchanged');
 ok(fullLevelStats(st, WHO).games.flicksoccer.byDiff.hard.played === 10, 'store: moved');
 const all = {
   devA: { profile: { name: 'Matty', playerId: WHO }, stats: { games: { flicksoccer: rec() } }, updatedAt: 1 },
@@ -52,7 +52,7 @@ const agg = aggregatePlayers(all);
 const me = agg.find((g) => g.playerId === WHO), them = agg.find((g) => g.playerId === OTHER);
 assert.deepEqual(me.games.flicksoccer.byDiff.hard, { played: 20, won: 8, lost: 12 }); n++;
 assert.deepEqual(me.games.flicksoccer.byDiff.medium, { played: 8, won: 2, lost: 6 }); n++;
-assert.deepEqual(them.games.flicksoccer.byDiff.hard, { played: 4, won: 2, lost: 2 }); n++;
+assert.deepEqual(them.games.flicksoccer.byDiff.hard, { played: 10, won: 4, lost: 6 }); n++;   // everyone moved
 assert.deepEqual(me.games.flicksoccer.total, { played: 28, won: 10, lost: 18 }); n++;
 ok(JSON.stringify(all) === snap, 'raw records untouched by aggregation');
 console.log(`test-full-level: ${n} checks passed`);
@@ -80,7 +80,7 @@ const cfg = normalizeConfig({ corrections: { adjust: { [WHO]: { flicksoccer: { h
 const ag = aggregatePlayers(all, cfg.corrections);
 const meA = ag.find((g) => g.playerId === WHO), themA = ag.find((g) => g.playerId === OTHER);
 assert.deepEqual(meA.games.flicksoccer.byDiff.hard, { played: 22, won: 10, lost: 12 }); m++;
-assert.deepEqual(themA.games.flicksoccer.byDiff.hard, { played: 4, won: 2, lost: 2 }); m++;
+assert.deepEqual(themA.games.flicksoccer.byDiff.hard, { played: 10, won: 4, lost: 6 }); m++;   // moved, not adjusted
 assert.equal(JSON.stringify(all), snap); m++;
 console.log(`test-full-level (adjustments): ${m} checks passed`);
 
@@ -95,3 +95,23 @@ assert.equal(gamePoints(moved, 'flicksoccer', null, WHO).pts, 21); q++;         
 assert.equal(gamePoints(moved, 'flicksoccer', 3, WHO).pts, 4 * 6 - 2 * 3); q++;  // Hard tab: 2 real Hard (12) + 2 moved (6)
 assert.equal(gamePoints(moved, 'flicksoccer', 2, WHO).pts, 1 * 3); q++;          // Medium tab: what is left there
 console.log(`test-full-level (points): ${q} checks passed`);
+
+// Medium, first to 1 SHOWS at Medium, priced at Easy's 1 and inside Easy's 20-point limit (the sheet's yellow circle).
+{
+  const mg = { total: { played: 30, won: 30, lost: 0 }, byDiff: { easy: { played: 30, won: 30, lost: 0 } },
+    byMode: { 'goals=1': { easy: { played: 20, won: 20, lost: 0 }, medium: { played: 10, won: 10, lost: 0 } } } };
+  const mm = fullLevelGame(mg, 'flicksoccer', OTHER);
+  assert.deepEqual(mm.byDiff.easy, { played: 20, won: 20, lost: 0 });
+  assert.deepEqual(mm.byDiff.medium, { played: 10, won: 10, lost: 0 });
+  assert.equal(gamePoints(mg, 'flicksoccer').pts, 20);                     // raw: 30 Easy wins, capped at 20
+  assert.equal(gamePoints(mm, 'flicksoccer', null, OTHER).pts, 20);        // shown at Medium, still 1 each, still capped
+  console.log('test-full-level (medium, first to 1): 4 checks passed');
+}
+// Never moved twice; a record it was not applied to is priced as stored.
+{
+  const once = fullLevelGame(rec(), 'flicksoccer', OTHER);
+  assert.equal(fullLevelGame(once, 'flicksoccer', OTHER), once);
+  assert.deepEqual(once.fl, [{ level: 'hard', from: 'medium', won: 2 }]);
+  assert.equal(gamePoints(rec(), 'flicksoccer').pts, 21);
+  console.log('test-full-level (once only): 3 checks passed');
+}
