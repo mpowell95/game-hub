@@ -171,9 +171,10 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 - A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
 - Test games use `physics.js` `model: 'test'` (`TEST`): the real game's power and aim; only the table changes. It is a
   plane that reflects the ball itself (`testTable`), because the solver's bounce kept 75-104% of the falling speed
-  depending only on where in a 1/480 s step the ball met the table. Bounce 0.88 (0.65 after), forward speed kept 0.70
-  (2026-11-06, Matt: normal-looking, and must NOT raise the chance of a make): aimed bounce 51% vs direct 54%; all
-  2,691 real throws replayed 33.4% in vs 34.6% real. Gentler power (1.5x) was tried 2026-11-05 and removed 2026-11-06.
+  depending only on where in a 1/480 s step the ball met the table. Bounce 0.88 (0.65 after), forward speed kept 0.76
+  (Matt, 2026-11-06: normal-looking, and must NOT raise the chance of a make; 0.70 failed on a full rack, 2026-11-08):
+  full rack bounce shots 30.0% in vs live 30.7%, full shots 31.2% vs 31.1%; all 2,691 real throws 33.2% vs 34.6%.
+  Check every bounce change on the FULL rack too (a grid of every power and aim at it, split by first contact). Gentler power (1.5x) was tried 2026-11-05 and removed 2026-11-06.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
 - `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
