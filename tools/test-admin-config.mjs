@@ -265,6 +265,20 @@ console.log('\n-- online play (js/online-gate.js) --');
   ok('skeeball challenges check both people', /onlineGate\(\)/.test(sk) && /codeMayPlayOnline\(to\b/.test(sk));
 }
 
+console.log('\n-- stats adjustments (corrections/adjust, 2026-11-08) --');
+{
+  const cfg = { corrections: { adjust: { ABCDE: { flicksoccer: { hard: { won: 2, played: 3, lost: 1, at: 5, by: 'x' } } } } } };
+  eq('an adjustment reads back', A.resolveAdjust(cfg, 'abcde', 'flicksoccer', 'hard'), { played: 3, won: 2, lost: 1 });
+  eq('none reads as zeros', A.resolveAdjust(cfg, 'ABCDE', 'flicksoccer', 'easy'), { played: 0, won: 0, lost: 0 });
+  eq('junk config reads as zeros', A.resolveAdjust({ corrections: 5 }, 'ABCDE', 'flicksoccer', 'hard'), { played: 0, won: 0, lost: 0 });
+  eq('the leaderboard gets it', A.resolveCorrections(cfg).adjust.ABCDE.flicksoccer.hard.won, 2);
+  const bad = await A.setAdjust('no!', 'flicksoccer', 'hard', 1, 0);
+  eq('a bad code is refused before any write', !!(bad && bad.ok === false), true);
+  const bad2 = await A.setAdjust('ABCDE', 'Flick Soccer', 'hard', 1, 0);
+  eq('a bad game id is refused', !!(bad2 && bad2.ok === false), true);
+  const src = (await import('node:fs')).readFileSync(new URL('../js/admin-ui.js', import.meta.url), 'utf8');
+  eq('wired: the admin page writes it through setAdjust', /setAdjust\(code, sid, k, /.test(src) && /adjustHTML\(cfg, p, sid\)/.test(src), true);
+}
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }
 
