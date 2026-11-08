@@ -842,7 +842,7 @@ class FlickSoccerUI {
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
       const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
-      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT || m.test ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert and Test mode: their own test bucket, counted by nothing (2026-11-06)
+      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert: its own test bucket, counted by nothing (2026-11-06); Test mode counts like any game, its mode says test=1 (Matt, 2026-11-08: "count all test games")
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -1034,7 +1034,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT || q.m.test ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }

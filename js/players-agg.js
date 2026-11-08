@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, HAND_RESULTS, handResultsGame } from './stats-corrections.js';
+import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
@@ -317,6 +317,8 @@ export function aggregatePlayers(all, corrections) {
     // that predates this, and every test) leaves the record exactly as it was.
     const corrected = corrections ? correctStats(rec.stats, id, corrections) : rec.stats;
     let games = (corrected && corrected.games) || {};
+    // Flick Soccer's pre-v1507 Test games (games.flicksoccer.fx) count, per record (Matt, 2026-11-08: "count all test games").
+    if (games.flicksoccer) { const f = flickTestGame(games.flicksoccer); if (f !== games.flicksoccer) games = { ...games, flicksoccer: f }; }
     // A released game's TEST plays count too where Matt asked (js/game-stats.js CARRY_TEST, 2026-11-02): a record
     // whose phone has not stamped `carried` yet is combined here, at read time; `rec` is never changed.
     for (const cg of Object.keys(CARRY_TEST)) {
