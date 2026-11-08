@@ -644,6 +644,9 @@
 /* SETUP TABS (2026-11-07): Online | Computer | 2 players, the Cup Pong way. Pinned to the top so the tabs never
    move between panels. Light card, so ink on white; the chosen tab is the raised pill AND a bolder label. */
 .ar-root .ar-ov-setup > .ar-card { margin-block: 0 auto; }
+/* Pinned to the top means BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
+   same clearance as the multiplayer screen (ar-ov-mp). */
+.ar-root .ar-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
 .ar-root .ar-tabs { display: flex; width: 100%; }
 .ar-root .ar-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 17px; gap: 6px; }
 .ar-root .ar-tabs .gh-seg__item > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
