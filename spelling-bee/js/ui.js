@@ -498,6 +498,19 @@ class SpellingBee {
   // --- input -----------------------------------------------------------------------------------
 
   _handleDown(ev) {
+    // Delete / shuffle / Enter act on the touch itself, like the letters (2026-11-08, Matt: "they don't
+    // always register"). A `click` is dropped by iOS when the finger slides a little or taps come fast.
+    // The click that follows is ignored (`_ctlDown`); a click with no touch before it (keyboard,
+    // VoiceOver) still works.
+    const ctl = ev.target.closest && ev.target.closest('.sb-controls [data-act]');
+    this._ctlDown = null;
+    if (ctl) {
+      if (this._overlay || ev.button > 0) return;
+      ev.preventDefault();
+      this._ctlDown = ctl;
+      this._control(ctl.dataset.act);
+      return;
+    }
     const cell = ev.target.closest && ev.target.closest('.sb-cell');
     if (!cell || this._overlay || this.mode === 'review') return;
     ev.preventDefault();
@@ -516,9 +529,11 @@ class SpellingBee {
     const btn = ev.target.closest('[data-act]');
     if (!btn || !this.root.contains(btn)) return;
     const a = btn.dataset.act;
-    if (a === 'delete') this.backspace();
-    else if (a === 'shuffle') this.shuffle();
-    else if (a === 'enter') this.submit();
+    if (a === 'delete' || a === 'shuffle' || a === 'enter') {
+      const done = this._ctlDown === btn;
+      this._ctlDown = null;
+      if (!done) this._control(a);
+    }
     else if (a === 'toggle') { this.open = !this.open; this._paintFound(); if (this.open) this._log('list'); }
     else if (a === 'hints') this._openHints();
     else if (a === 'yesterday') this._openYesterday();
@@ -531,6 +546,12 @@ class SpellingBee {
     else if (a === 'rv-words') this._openList('words');
     else if (a === 'rv-bonus') this._openList('bonus');
     else if (a === 'retry') this._load();
+  }
+
+  _control(a) {
+    if (a === 'delete') this.backspace();
+    else if (a === 'shuffle') this.shuffle();
+    else if (a === 'enter') this.submit();
   }
 
   _handleKey(ev) {
