@@ -756,6 +756,34 @@ export function setReviewed(kind, a, b, on) {
   return writeNode(`reviewed/${kind}/${a}`, { [b]: on ? true : null }, (cfg) => resolveReviewed(cfg, kind, a, b) === !!on, { stamp: false });
 }
 
+/** Matt's stats ADJUSTMENT for one person, game and level (js/stats-corrections.js adjustGame), or zeros. */
+export function resolveAdjust(cfg, code, gameId, level) {
+  const c = codeOf(code);
+  const row = (((normalizeConfig(cfg).corrections.adjust[c] || {})[gameId]) || {})[level];
+  const n = (v) => { const x = Math.trunc(Number(v)); return Number.isFinite(x) ? x : 0; };
+  return { played: n(row && row.played), won: n(row && row.won), lost: n(row && row.lost) };
+}
+/**
+ * Add `dWon` wins and `dLost` losses (either may be negative) to a person's adjustment for one game and level
+ * (Matt, 2026-11-08: the admin page's Adjust, the same numbers he could type in the console). `played` moves with
+ * them. Back to all zero = the entry is removed. Read time only: players/ is never touched. Verified by re-read.
+ */
+export function setAdjust(code, gameId, level, dWon, dLost) {
+  const c = codeOf(code);
+  if (!/^[A-Z0-9]{3,12}$/.test(c) || !/^[a-z0-9]{2,24}$/.test(String(gameId || '')) || !/^[A-Za-z0-9_-]{1,24}$/.test(String(level || ''))) {
+    return Promise.resolve(fail(`not a player, game and level: ${code} ${gameId} ${level}`));
+  }
+  const cur = resolveAdjust(readCachedConfig(), c, gameId, level);
+  const w = cur.won + (Math.trunc(+dWon) || 0), l = cur.lost + (Math.trunc(+dLost) || 0);
+  const want = { won: w, lost: l, played: cur.played + (Math.trunc(+dWon) || 0) + (Math.trunc(+dLost) || 0) };
+  const zero = !want.won && !want.lost && !want.played;
+  const fields = zero ? { played: null, won: null, lost: null } : want;
+  return writeNode(`corrections/adjust/${c}/${gameId}/${level}`, fields, (cfg) => {
+    const got = resolveAdjust(cfg, c, gameId, level);
+    return got.won === (zero ? 0 : want.won) && got.lost === (zero ? 0 : want.lost) && got.played === (zero ? 0 : want.played);
+  });
+}
+
 export function setOnlineAllowed(code, on) {
   const c = codeOf(code);
   if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));

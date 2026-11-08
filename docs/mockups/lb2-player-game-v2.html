@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player Game Pages</title>
+<style>
+:root{--bg:#0E1014;--surf:#171A20;--line:#272B33;--text:#F4F6F9;--sub:#DCE1E8;--accent:#7AA7FF;--track:#2A2F38;--gold:#FFCE3A}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2B2F36;font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;color:var(--text);padding:24px}
+#wall{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.ph{width:402px;background:var(--bg);border-radius:28px;padding:14px 16px 28px;flex:none}
+/* top bar */
+.top{display:flex;align-items:center;gap:8px;padding:2px 0 16px}
+.back{width:22px;height:44px;display:flex;align-items:center}
+.back svg{width:13px;height:22px}
+.ava{width:48px;height:48px;border-radius:50%;background:#232833;display:flex;align-items:center;justify-content:center;font-size:26px;flex:none}
+.who{flex:1;min-width:0}
+.who h1{font-size:24px;line-height:1.15;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who h1.me{color:var(--accent)}
+.who p{font-size:17px;color:var(--sub);white-space:nowrap}
+.msg{width:32px;height:32px;color:var(--accent);flex:none}
+.play{background:var(--accent);color:#0B1430;font-weight:800;font-size:17px;border-radius:999px;padding:11px 18px;flex:none}
+/* standing */
+.stand{display:flex;align-items:center;gap:14px;min-height:92px;background:linear-gradient(90deg,#262A31,#1B1E24);border:1px solid #343944;border-radius:16px;padding:12px 18px;box-shadow:inset 5px 0 0 #3a3f48}
+.stand.p1{background:linear-gradient(90deg,rgba(245,200,66,.24),rgba(245,200,66,.06) 70%),var(--surf);box-shadow:inset 5px 0 0 #f5c842}
+.stand.p2{background:linear-gradient(90deg,rgba(185,192,201,.22),rgba(185,192,201,.05) 70%),var(--surf);box-shadow:inset 5px 0 0 #b9c0c9}
+.stand.p3{background:linear-gradient(90deg,rgba(194,122,66,.22),rgba(194,122,66,.05) 70%),var(--surf);box-shadow:inset 5px 0 0 #c27a42}
+.stand .md{width:50px;height:62px;flex:none}
+.stand .pl{flex:1}
+.stand .pl b{display:block;font-size:30px;line-height:1.1;font-weight:800}
+.stand .pl span,.stand .pt span{font-size:16px;color:var(--sub)}
+.stand .pt{text-align:right}
+.stand .pt b{display:flex;align-items:center;justify-content:flex-end;gap:6px;font-size:32px;line-height:1.1;font-weight:800;white-space:nowrap}
+.gap{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 4px 0;font-size:17px}
+.stand+.tiles,.gap+.tiles{margin-top:16px}
+.gap b{color:var(--gold);font-weight:800;white-space:nowrap}
+.gap .nw{white-space:nowrap}
+.gap svg{width:18px;height:22px}
+/* sections */
+.h{font-size:20px;font-weight:800;margin:26px 4px 10px;line-height:1.2}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.tiles{display:grid;gap:10px}
+.tile{background:var(--surf);border:1px solid var(--line);border-radius:16px;padding:14px 6px;text-align:center}
+.tile b{display:block;font-size:28px;line-height:1.15;font-weight:800;white-space:nowrap}
+.tile span{display:block;font-size:15px;line-height:1.25;color:var(--sub)}
+.tile small{display:block;font-size:15px;color:var(--accent);margin-top:2px}
+.lr{display:flex;justify-content:space-between;align-items:center;min-height:56px;padding:10px 18px;border-top:1px solid var(--line);font-size:17px}
+.lr:first-child{border-top:0}
+.lr b{font-size:19px;font-weight:800}
+.row{display:flex;align-items:center;gap:14px;padding:14px 18px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.ic{width:26px;height:26px;flex:none;display:flex;align-items:center;justify-content:center}
+.ic svg{height:22px;width:auto}
+.mid{flex:1;min-width:0}
+.mid>b{display:block;font-size:19px;font-weight:700;line-height:1.25}
+.mid>span{display:block;font-size:16px;color:var(--sub);margin-top:2px}
+.mid>span i{font-style:normal;white-space:nowrap;display:inline-block}
+.bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.rt{flex:none;text-align:right;min-width:56px}
+.rt b{display:block;font-size:24px;font-weight:800;line-height:1.1;white-space:nowrap}
+.rt small{display:block;font-size:15px;color:var(--sub)}
+/* record */
+.rec{padding:16px 18px 18px}
+.rec .n{display:flex;justify-content:space-between;align-items:flex-end}
+.rec .n div{display:flex;flex-direction:column}
+.rec .n b{font-size:34px;line-height:1.1;font-weight:800}
+.rec .n span{font-size:16px;color:var(--sub)}
+.rec .n .c{align-items:center}.rec .n .c b{color:var(--accent)}
+.rec .n .r{align-items:flex-end}
+.rec .bar{height:10px;border-radius:5px;margin-top:14px}
+.rec p{margin-top:12px;text-align:center;font-size:16px;color:var(--sub)}
+/* grouped (Flick Soccer levels) */
+.grp{border-top:1px solid var(--line)}
+.grp:first-child{border-top:0}
+.sub{display:flex;align-items:center;gap:12px;padding:10px 18px 12px 58px;border-top:1px solid #20242B}
+.sub .mid>b{font-size:17px;font-weight:600}
+.sub .mid>span{font-size:16px}
+.sub .bar{height:4px;margin-top:8px}
+.sub .rt b{font-size:20px}
+/* collapsible level groups (Flick Soccer) */
+.grp .row{cursor:pointer}
+.grp .chev{width:20px;height:20px;flex:none;color:var(--sub);transition:transform .15s}
+.grp.open .chev{transform:rotate(90deg)}
+.grp .sub{display:none}
+.grp.open .sub{display:flex}
+.grp.open>.row{background:#1C2027}
+/* difficulty strip: one card, a column per level */
+.strip{display:grid;gap:8px}
+.strip>div{display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 14px;text-align:center;min-width:0;border-radius:16px;background:linear-gradient(180deg,rgba(var(--t),.20),rgba(var(--t),.07)),var(--surf);border:1px solid rgba(var(--t),.38)}
+.lv-none{--t:150,156,168;--tf:#9AA1AD}
+.strip .sh{height:22px;display:flex;align-items:center}
+.strip .sh svg{height:24px;width:auto}
+.strip .sh{height:28px}
+.strip .w{font-size:15px;color:var(--sub);white-space:nowrap}
+.strip b{font-size:28px;font-weight:800;line-height:1.15;margin-top:4px;white-space:nowrap}
+.strip small{font-size:15px;color:var(--sub);line-height:1.25;white-space:nowrap}
+/* Flick Soccer level strip */
+.lvstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+/* muted level tints: --t = the tint (backgrounds), --tb = its border, --tf = bar fill */
+.lv-easy{--t:46,155,71;--tf:#4FA866}
+.lv-med{--t:58,120,205;--tf:#5B8FD6}
+.lv-hard{--t:190,196,206;--tf:#B4BAC4}
+.lv-exp{--t:150,120,200;--tf:#9C86C8}
+.lv-online{--t:32,150,135;--tf:#3AA595}
+.lv{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 0;background:linear-gradient(180deg,rgba(var(--t),.20),rgba(var(--t),.07)),var(--surf);border:1px solid rgba(var(--t),.38);border-radius:16px;overflow:hidden;text-align:center;font:inherit;color:var(--text)}
+.lv .sh{height:30px;display:flex;align-items:center}
+.lv .sh svg{height:28px;width:auto}
+.lv .w{font-size:15px;color:var(--sub);white-space:nowrap}
+.lv b{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px}
+.lv small{font-size:15px;color:var(--sub);margin-bottom:12px}
+.lv .lvbar{display:block;align-self:stretch;height:6px;background:var(--track)}
+.lv .lvbar{background:rgba(var(--t),.16)}
+.lv .lvbar i{display:block;height:100%;background:var(--tf)}
+.lv.on{border-color:var(--tf);box-shadow:inset 0 0 0 1px var(--tf);background:linear-gradient(180deg,rgba(var(--t),.32),rgba(var(--t),.14)),var(--surf)}
+.lvcard[class*="lv-"]{border-color:rgba(var(--t),.45);background:linear-gradient(180deg,rgba(var(--t),.12),rgba(var(--t),.03) 120px),var(--surf)}
+.lvcard[class*="lv-"] .bar{background:rgba(var(--t),.16)}
+.lvcard[class*="lv-"] .bar i{background:var(--tf)}
+.lvcard[class*="lv-"] .row{border-top-color:rgba(var(--t),.18)}
+.lvcard{margin-top:10px}
+.lvh{display:flex;align-items:center;gap:10px;padding:14px 18px 4px;font-size:19px;font-weight:800}
+.lvh .sh svg{height:22px;width:auto}
+.lvp .row:first-of-type{border-top:0}
+.lv-earlier{margin:10px 4px 0;font-size:16px;color:var(--sub)}
+/* golf holes */
+.holes{padding:12px 14px 16px}
+.holes h5{font-size:17px;font-weight:700;margin:6px 4px 10px}
+.hg{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px}
+.hc{background:#1F232B;border:1px solid #2E333C;border-radius:10px;text-align:center;padding:6px 0}
+.hc b{display:block;font-size:20px;font-weight:800;line-height:1.1}
+.hc span{display:block;font-size:15px;color:var(--sub)}
+/* skeeball */
+.mc{padding:14px 16px 16px}
+.mc h5{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:700}
+.mc h5 i{width:14px;height:14px;border-radius:4px;flex:none}
+.mc .q{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 10px;margin-top:12px}
+.mc .q b{display:block;font-size:24px;font-weight:800;white-space:nowrap;line-height:1.1}
+.mc .q span{display:block;font-size:15px;color:var(--sub);line-height:1.2}
+.mc .sp{margin-top:12px;display:flex;align-items:center;gap:10px}
+.mc .sp span{font-size:15px;color:var(--sub);white-space:nowrap}
+.mc .sp svg{flex:1;height:40px}
+.back2{display:flex;align-items:center;gap:10px;margin-top:22px;padding:16px 18px;color:var(--accent);font-size:17px;font-weight:600}
+.how{margin-top:22px;padding:16px;text-align:center;color:var(--accent);font-size:17px;font-weight:600}
+</style>
+</head>
+<body>
+<div id="wall"></div>
+<script>
+const SH = {
+  1: '<svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><circle cx="13" cy="13" r="8" fill="#2E9B47"/></svg>',
+  2: '<svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><rect x="5.5" y="5.5" width="15" height="15" rx="2.5" fill="#1F5FA8"/></svg>',
+  3: '<svg viewBox="0 0 26 26"><rect width="26" height="26" rx="6" fill="#fff"/><path d="M13 3.5 22.5 13 13 22.5 3.5 13z" fill="#1c2430"/></svg>',
+  4: '<svg viewBox="0 0 44 26"><rect width="44" height="26" rx="6" fill="#fff"/><path d="M12 4 21 13 12 22 3 13zM32 4 41 13 32 22 23 13z" fill="#1c2430"/></svg>',
+};
+const SHS = (t) => SH[t].replace('<svg ', '<svg style="height:22px;width:auto" ');
+const GLOBE = '<svg viewBox="0 0 26 26" fill="none" stroke="#F4F6F9" stroke-width="2"><circle cx="13" cy="13" r="10"/><ellipse cx="13" cy="13" rx="4.5" ry="10"/><path d="M3 13h20M5 7.5h16M5 18.5h16"/></svg>';
+const MED = { 1: ['#E9B53A', '#F7D774', '#9A6B10'], 2: ['#B9BEC6', '#DDE1E6', '#4A4F57'], 3: ['#C27A42', '#E3A06A', '#5E3315'] };
+const medal = (n, cls = 'md') => { const [a, b, c] = MED[n]; return `<svg class="${cls}" viewBox="0 0 58 70"><path d="M14 0h12l7 22H21z" fill="#2F6FD6"/><path d="M44 0H32l-7 22h12z" fill="#4C8BF0"/><circle cx="29" cy="44" r="23" fill="${a}"/><circle cx="29" cy="44" r="18" fill="${b}" stroke="${a}" stroke-width="2"/><text x="29" y="52" text-anchor="middle" font-size="22" font-weight="800" fill="${c}" font-family="-apple-system,Segoe UI,sans-serif">${n}</text></svg>`; };
+const ORD = (n) => n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n] || 'th');
+const BACK = '<div class="back"><svg viewBox="0 0 14 24"><path d="M12 2 2 12l10 10" fill="none" stroke="#F4F6F9" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+const MSG = '<svg class="msg" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 6h20v13H12l-5 4v-4H5z" stroke-linejoin="round"/></svg>';
+const topBar = (name, emoji, game, me) => `<div class="top">${BACK}<div class="ava">${emoji}</div><div class="who"><h1 class="${me ? 'me' : ''}">${name}</h1><p>${game}</p></div><div class="play">Play</div></div>`;
+const stand = (rk, of, num, unit, tier) => `<div class="stand${rk <= 3 ? ' p' + rk : ''}">${rk <= 3 ? medal(rk) : ''}<div class="pl"><b>${ORD(rk)}</b><span>of ${of}</span></div><div class="pt"><b>${tier ? SHS(tier) : ''}${num}</b><span>${unit}</span></div></div>`;
+const gap = (holder, need) => `<p class="gap">${medal(1, '')}<span>${holder} ·</span><span class="nw">${need}</span></p>`;
+const h = (t) => `<h2 class="h">${t}</h2>`;
+const tiles = (list, cols) => `<div class="tiles" style="grid-template-columns:repeat(${cols || list.length},1fr)">${list.map(([v, l, s]) => `<div class="tile"><b>${v}</b><span>${l}</span>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>`;
+const lrows = (list) => `<div class="card">${list.map(([l, v]) => `<div class="lr"><span>${l}</span><b>${v}</b></div>`).join('')}</div>`;
+const clauses = (s) => s.split(' · ').map((x, i, a) => `<i>${x}${i < a.length - 1 ? ' ·' : ''}</i>`).join(' ');
+const row = (r) => `<div class="row">${r.icon ? `<span class="ic">${r.icon}</span>` : ''}<div class="mid"><b>${r.label}</b>${r.sub ? `<span>${clauses(r.sub)}</span>` : ''}${r.bar != null ? `<div class="bar"><i style="width:${r.bar}%"></i></div>` : ''}</div><div class="rt"><b>${r.right}</b>${r.unit ? `<small>${r.unit}</small>` : ''}</div></div>`;
+const rows = (list) => `<div class="card">${list.map(row).join('')}</div>`;
+const wl = (w, l, t) => `${w} ${w === 1 ? 'win' : 'wins'} · ${l} ${l === 1 ? 'loss' : 'losses'}${t ? ` · ${t} ${t === 1 ? 'tie' : 'ties'}` : ''}`;
+const pc = (w, l) => (w + l ? Math.round((w * 100) / (w + l)) : 0);
+const wrow = (icon, label, w, l) => row({ icon, label, sub: wl(w, l), bar: pc(w, l), right: pc(w, l) + '%' });
+const record = (w, l, played) => `<div class="card rec"><div class="n"><div><b>${w}</b><span>Wins</span></div><div class="c"><b>${pc(w, l)}%</b><span>Win %</span></div><div class="r"><b>${l}</b><span>Losses</span></div></div><div class="bar"><i style="width:${pc(w, l)}%"></i></div><p>${played} played</p></div>`;
+// Someone else's page: Message moves from the top bar to the bottom, so a long name fits on one line.
+const msgTo = (n) => `<div class="card back2">${MSG.replace('class="msg"', 'class="msg" style="width:24px;height:24px"')}Message ${n}</div>`;
+const backTo = (n) => `<div class="card back2"><svg width="10" height="18" viewBox="0 0 10 18"><path d="M8 2 2 9l6 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Back to ${n}</div>`;
+const how = '<div class="card how">See how scores are calculated</div>';
+// A level with its "first to" lines under it (Flick Soccer: the level picked + first to 1 / 2 / 3).
+const CHEV = '<svg class="chev" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4l6 6-6 6"/></svg>';
+// A level row; its "first to" lines stay folded until the row is tapped (Matt, 2026-11-08).
+const grp = (icon, label, w, l, subs, open) => `<div class="grp${open ? ' open' : ''}" onclick="this.classList.toggle('open')">${row({ icon, label, sub: wl(w, l), bar: pc(w, l), right: pc(w, l) + '%' }).replace(/<\/div>$/, subs.length ? CHEV + '</div>' : '<span style="width:20px"></span></div>')}${subs.map(([lab, sw, sl]) => `<div class="sub"><div class="mid"><b>${lab}</b><span>${clauses(wl(sw, sl))}</span><div class="bar"><i style="width:${pc(sw, sl)}%"></i></div></div><div class="rt"><b>${pc(sw, sl)}%</b></div></div>`).join('')}</div>`;
+const spark = (vals) => { const mx = Math.max(...vals), n = vals.length; const pts = vals.map((v, i) => `${(i * 300) / (n - 1)},${38 - (v / mx) * 34}`).join(' '); return `<svg viewBox="0 0 300 40" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="#7AA7FF" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`; };
+const RGB = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(',');
+const mach = (color, name, q, days, vals) => `<div class="card mc" style="--t:${RGB(color)};background:linear-gradient(180deg,rgba(var(--t),.16),rgba(var(--t),.04) 110px),var(--surf);border-color:rgba(var(--t),.38)"><h5><i style="background:${color}"></i>${name}</h5><div class="q">${q.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div><div class="sp"><span>Best a day</span>${spark(vals)}<span>${days} days</span></div></div>`;
+const WORD = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Expert' };
+// Flick Soccer's levels (Matt, 2026-11-08: "they all look identical at a glance"): a strip of columns, each level's
+// big shape, name, win % and record; tap one to open its "first to" lines under the strip. Folded by default.
+// Each level wears a muted tint of its own colour (Matt: "match them to the difficulty color. But not too vibrant").
+const TINT = { 1: 'lv-easy', 2: 'lv-med', 3: 'lv-hard', 4: 'lv-exp', online: 'lv-online' };
+const levels = (L, open) => {
+  const cells = L.map(([t, name, w, l], i) => `<button class="lv ${TINT[t]}${i === open ? ' on' : ''}" data-i="${i}" onclick="lvTap(this)"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span><span class="w">${name}</span><b>${pc(w, l)}%</b><small>${w}–${l}</small><i class="lvbar"><i style="width:${pc(w, l)}%"></i></i></button>`).join('');
+  const panels = L.map(([t, name, w, l, subs], i) => `<div class="lvp ${TINT[t]}" data-i="${i}"${i === open ? '' : ' hidden'}><div class="lvh"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span>${name}</div>${subs.map(([lab, sw, sl]) => row({ label: lab, sub: wl(sw, sl), bar: pc(sw, sl), right: pc(sw, sl) + '%' })).join('')}</div>`).join('');
+  return `<div class="lvs"><div class="lvstrip">${cells}</div><div class="card lvcard ${open >= 0 ? TINT[L[open][0]] : ''}"${open >= 0 ? '' : ' hidden'}>${panels}</div></div>`;
+};
+function lvTap(btn) {
+  const box = btn.closest('.lvs'), i = btn.dataset.i, was = btn.classList.contains('on');
+  box.querySelectorAll('.lv').forEach((b) => b.classList.toggle('on', !was && b === btn));
+  const card = box.querySelector('.lvcard');
+  card.hidden = was;
+  card.className = 'card lvcard ' + (was ? '' : [...btn.classList].find((c) => c.startsWith('lv-')));
+  box.querySelectorAll('.lvp').forEach((p) => { p.hidden = was || p.dataset.i !== i; });
+}
+// strip([[tier or label, big, small, small2?], ...]): the level's shape and word, the number, a caption.
+// Every level column wears its muted tint, like Flick Soccer's (Matt, 2026-11-08: "do that for everything").
+const strip = (cells) => `<div class="strip" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">${cells.map(([t, big, sm, sm2]) => {
+  const tier = typeof t === 'number' ? t : (Array.isArray(t) ? t[0] : 0);
+  const word = Array.isArray(t) ? t[1] : (tier ? WORD[tier] : t);
+  return `<div class="${tier ? TINT[tier] : 'lv-none'}"><span class="sh">${tier ? SH[tier] : ''}</span><span class="w">${word}</span><b>${big}</b>${sm ? `<small>${sm}</small>` : ''}${sm2 ? `<small>${sm2}</small>` : ''}</div>`;
+}).join('')}</div>`;
+const holes = (course, list) => `<h5>${course}</h5><div class="hg">${list.map(([n, s]) => `<div class="hc"><b>${s}</b><span>${n}</span></div>`).join('')}</div>`;
+
+const MATTY = ['MattyIce', '🧊'];
+const P = [];
+// 1. Flick Soccer: Opponent = the level PICKED; tap a level for first to 1 / 2 / 3 (byMode). Folded by default.
+const flick = (openHard) => topBar(...MATTY, 'Flick Soccer', true) + stand(2, 5, '167', 'Points') + gap('*King of Games*', '<b>22 points</b> for gold')
+  + h('Record') + record(65, 117, 182)
+  + h('Opponent') + levels([
+    [1, 'Easy', 18, 1, [['First to 1', 12, 0], ['First to 2', 4, 1], ['First to 3', 2, 0]]],
+    [2, 'Medium', 5, 14, [['First to 1', 0, 1], ['First to 2', 5, 13]]],
+    [3, 'Hard', 16, 74, [['First to 1', 14, 64], ['First to 2', 2, 9], ['First to 3', 0, 1]]],
+    ['online', 'Online', 20, 13, [['First to 1', 3, 1], ['First to 2', 0, 1], ['First to 3', 4, 0], ['Earlier games', 13, 11]]],
+  ], openHard ? 2 : -1) + `<p class="lv-earlier">Earlier games · ${wl(6, 15)}</p>`
+  + h('Formation') + rows([
+    { label: 'Attack / Defend', sub: wl(14, 66), bar: 18, right: '18%' },
+    { label: 'Balanced / Defend', sub: wl(9, 15), bar: 38, right: '38%' },
+    { label: 'Attack / Diamond', sub: wl(16, 8), bar: 67, right: '67%' },
+  ])
+  + h('Turn') + rows([{ label: 'Went first', sub: wl(25, 40), bar: 38, right: '38%' }, { label: 'Went second', sub: wl(14, 49), bar: 22, right: '22%' }])
+  + h('Numbers') + tiles([['62', 'Goals for'], ['115', 'Goals against'], ['1,606', 'Flicks']]) + how + backTo('MattyIce');
+P.push(flick(false));
+P.push(flick(true));
+// 2. Gridlock
+P.push(topBar(...MATTY, 'Gridlock', true) + stand(2, 6, '70', 'Points') + gap('*King of Games*', '<b>98 points</b> for gold')
+  + tiles([['26', 'Levels'], ['11', '3 stars'], ['26', 'No hints']])
+  + h('Points') + strip([[1, '10', '10 levels'], [2, '33', '11 levels'], [3, '20', '4 levels'], [4, '7', '1 level']]) + how + backTo('MattyIce'));
+// 3. Word Weaver
+P.push(topBar(...MATTY, 'Word Weaver', true) + stand(2, 5, '160', 'Points') + gap('*King of Games*', '<b>228 points</b> for gold')
+  + tiles([['29', 'Levels'], ['86', 'Stars'], ['28', '3 stars']])
+  + h('Points') + strip([[1, '30', '10 levels'], [2, '76', '13 levels'], [3, '54', '6 levels']])
+  + h('Numbers') + tiles([['168', 'Extra words'], ['2', 'Daily'], ['213', 'Bonus stars', '0 spent']]) + how + backTo('MattyIce'));
+// 4. Arrow Maze
+P.push(topBar(...MATTY, 'Arrow Maze', true) + stand(2, 7, '1,198', 'Points') + gap('*King of Games*', '<b>80 points</b> for gold')
+  + tiles([['331', 'Levels'], ['19,357', 'Arrows']])
+  + h('Points') + strip([[1, '43', '43 levels'], [2, '92', '52 levels'], [3, '457', '124 levels'], [4, '606', '112 levels']])
+  + h('Rush this week') + strip([[1, '68', 'Best 175', '10 runs'], [3, '–', 'Best 59', '4 runs']]) + how + backTo('MattyIce'));
+// 5. Sudoku (*King of Games*: MattyIce has none)
+P.push(topBar('*King of Games*', '🤴', 'Sudoku') + stand(1, 3, '5', 'Points')
+  + tiles([['2', 'Solved'], ['0', 'Perfect'], ['26', 'Hints'], ['9', 'Mistakes']], 4)
+  + h('Best time') + strip([[1, '6:20', '1 solved'], [4, '9:12', '1 solved']])
+  + how + msgTo('*King of Games*') + backTo('*King of Games*').replace('class="card back2"', 'class="card back2" style="margin-top:10px"'));
+// 6. Murdoku
+P.push(topBar(...MATTY, 'Murdoku', true) + stand(4, 4, '4', 'Points') + gap('Natalia', '<b>62 points</b> for gold')
+  + h('Solved') + strip([[1, '4']]) + how + backTo('MattyIce'));
+// 7. Nuts & Bolts
+P.push(topBar(...MATTY, 'Nuts &amp; Bolts', true) + stand(3, 12, '82', 'Points') + gap('Unai', '<b>2,979 points</b> for gold')
+  + tiles([['41', 'Levels'], ['30', 'Best level'], ['16', 'Avg moves'], ['658', 'Moves']], 2)
+  + h('Solved') + strip([[2, '2'], [3, '6'], [[4, 'Extra hard'], '3'], ['Earlier', '30']]) + how + backTo('MattyIce'));
+// 8. Snake
+P.push(topBar(...MATTY, 'Snake', true) + stand(1, 16, '43', 'Length', 3)
+  + tiles([['16', 'Runs'], ['43', 'Longest snake']])
+  + h('Longest · walls off') + strip([[1, '21', '7 runs'], [2, '18', '2 runs'], [3, '43', '7 runs']]) + how + backTo('MattyIce'));
+// 9. Ball Run
+P.push(topBar(...MATTY, 'Ball Run', true) + stand(1, 19, '129', 'Obstacles', 3)
+  + tiles([['81', 'Runs'], ['164', 'Most obstacles']])
+  + h('Classic · 53 runs') + strip([[1, '164'], [2, '109'], [3, '129']])
+  + h('Orbital · 28 runs') + strip([[1, '9'], [2, '38'], [3, '122']]) + how + backTo('MattyIce'));
+// 10. Hill Climb
+P.push(topBar(...MATTY, 'Hill Climb', true) + stand(3, 10, '328', 'Meters', 2) + gap('*TP*', `<b>${SHS(2).replace('height:22px', 'height:16px;vertical-align:-2px;margin-right:4px')}1,643 m</b> for gold`)
+  + tiles([['26', 'Runs'], ['2,884 m', 'Furthest'], ['11,900', 'Coins']])
+  + h('Stage') + rows([
+    { label: 'Countryside', right: '2,884 m', unit: 'furthest' },
+    { label: 'Desert', right: '328 m', unit: 'furthest' },
+  ])
+  + h('Runs') + strip([[1, '16'], [2, '10']])
+  + h('Numbers') + lrows([['Flips', '0']]) + how + backTo('MattyIce'));
+// 11. Brick Breaker
+P.push(topBar(...MATTY, 'Brick Breaker', true) + stand(2, 7, '166,100', 'Points', 3) + gap('*King of Games*', `<b>${SHS(3).replace('height:22px', 'height:16px;vertical-align:-2px;margin-right:4px')}32,731 points</b> for gold`)
+  + tiles([['3', 'Played'], ['96,577', 'Average'], ['x29', 'Best combo']])
+  + h('Best score') + strip([[2, '69,160', '2 played'], [3, '166,100', '1 played']])
+  + h('Numbers') + lrows([['Bricks', '572'], ['Stages cleared', '8'], ['Circuits', '1']]) + how + backTo('MattyIce'));
+// 12. Golf
+P.push(topBar(...MATTY, 'Golf', true) + stand(3, 3, '2 under', 'Best round') + gap('*King of Games*', '<b>3 strokes fewer</b> for gold')
+  + tiles([['11', 'Rounds'], ['3.5', 'Avg a hole'], ['+32', 'Skill level']])
+  + `<div style="margin-top:10px">${tiles([['19', 'Birdies'], ['0', 'Eagles'], ['0', 'Aces']])}</div>`
+  + `<div style="margin-top:10px">${lrows([['Longest drive', '269 yd']])}</div>`
+  + h('Best rounds') + `<div class="card">${[
+    ['Coral Keys', 'Holes 1–3 · 8 strokes', '−3'],
+    ['Pine Valley', 'Holes 4–6 · 8 strokes', '−3'],
+    ['Pine Valley', 'Holes 1–3 · 10 strokes', '−2'],
+    ['Pine Valley', 'Holes 7–9 · 11 strokes', '−2'],
+    ['Pine Valley', 'Holes 13–15 · 11 strokes', '−2'],
+    ['Pine Valley', 'Holes 10–12 · 12 strokes', 'E'],
+    ['Red Mesa', 'Holes 4–6 · 9 strokes', '−3'],
+    ['Red Mesa', 'Holes 1–3 · 9 strokes', '−2'],
+  ].map(([c, s, r]) => row({ label: c, sub: s, right: r, unit: 'to par' })).join('')}</div>`
+  + h('Best on each hole') + `<div class="card holes">${
+    holes('Coral Keys', [[1, 3], [2, 3], [3, 2]])
+    + holes('Pine Valley', [[1, 3], [2, 3], [3, 4], [4, 3], [5, 3], [6, 2], [7, 4], [8, 4], [9, 3], [10, 4], [11, 5], [12, 3], [13, 3], [14, 4], [15, 4]])
+    + holes('Red Mesa', [[1, 3], [2, 4], [3, 2], [4, 4], [5, 3], [6, 2], [7, 7]])
+    + holes('Tutorial', [[1, 3]])}</div>` + backTo('MattyIce'));
+// 13. Skeeball
+P.push(topBar(...MATTY, 'Skeeball', true) + stand(2, 12, '154,510', 'Total') + gap('*King of Games*', '<b>316,191 points</b> for gold')
+  + tiles([['820', 'Best game', 'Hot Shot'], ['100', 'Best throw', '161 times']])
+  + `<div style="margin-top:10px">${tiles([['776', 'Games'], ['6,657', 'Balls thrown']])}</div>`
+  + h('Every ball') + tiles([['1,350', '10 cups'], ['357', '20 cups'], ['127', '30 cups'], ['244', '40 cups'], ['75', '50 cups'], ['161', '100 cups']], 3)
+  + h('Machines') + [
+    mach('#E0532F', 'The Classic', [['450', 'Best game'], ['38,960', 'Points'], ['205', 'Games'], ['100', 'Best throw']], 13, [230, 450, 350, 180, 450, 360, 450, 360, 130, 270, 200, 190, 360]),
+    mach('#F2B705', 'Hot Shot', [['820', 'Best game'], ['66,630', 'Points'], ['182', 'Games'], ['–', 'Best throw']], 11, [680, 430, 760, 580, 0, 820, 720, 360, 570, 370, 800]),
+    mach('#178A7A', 'Hot Shot: Brick City', [['540', 'Best game'], ['41,670', 'Points'], ['324', 'Games'], ['100', 'Best throw']], 12, [100, 270, 290, 280, 540, 340, 460, 340, 310, 100, 0, 190]),
+    mach('#1F5FA8', 'Hot Shot: Runaway', [['430', 'Best game'], ['7,250', 'Points'], ['65', 'Games'], ['100', 'Best throw']], 11, [180, 120, 220, 430, 160, 420, 260, 190, 150, 60, 160]),
+  ].join('<div style="height:10px"></div>') + how + backTo('MattyIce'));
+document.getElementById('wall').innerHTML = P.map((x) => `<section class="ph">${x}</section>`).join('');
+</script>
+</body>
+</html>
