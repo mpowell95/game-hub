@@ -233,17 +233,14 @@ const EXTRA_SCREENS = {
       },
     },
   ],
-  // Battleship (2026-10-27): Play vs. Friend's Challenge tab. With this run's profile (no player
-  // code) it is the board chip, New challenge and "No matches"; with matches it shows at most four
-  // rows (battleship/js/ui.js _chHTML), measured full in the hub at 390x664 when it was built.
+  // Battleship: the setup card's Online tab (2026-11-07 tabs replaced Play vs. Friend's Challenge tab,
+  // which this used to open by a button that no longer exists).
   battleship: [
     {
-      name: 'challenge tab',
+      name: 'online tab',
       async open(page) {
-        await page.click('[data-action="play-friend"]');
-        await page.click('[data-action="set-mode"][data-v="ch"]');
-        await page.waitForSelector('[data-action="ch-new"]', { timeout: 8000 });
-        await page.waitForTimeout(400);
+        await page.click('[data-action="set-tab"][data-v="online"]');
+        await page.waitForTimeout(600);
       },
     },
   ],

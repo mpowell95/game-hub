@@ -185,8 +185,8 @@ Matt: "I don't like having to click into multiplayer." Tabs **Online | Computer 
 Online = Matches (your turn first with Play, then theirs; owed series games; the W-L chip opens History) and Challenge
 (+ Anyone = the full list, then the 4 people played most recently, first names, one tap = their terms), from
 `mp-ui.js fillOnline`. **Opens on Online when any match is going, else Computer** (decided after the read; a tapped tab
-wins; `ACTIVE_HINT` keeps the first paint from jumping). The Online badge = matches on your turn. Pinned to the top so the
-tabs never move. The old Multiplayer home is gone: every "back to multiplayer" lands on the Online tab.
+wins; `ACTIVE_HINT` keeps the first paint from jumping). The Online badge = matches on your turn. Centred (2026-11-08, Matt:
+"centered and balanced"; it was pinned to the top). The old Multiplayer home is gone: every "back to multiplayer" lands on the Online tab.
 (2026-09-28 layout, replaced: Your turn card, Multiplayer door, computer card, Solo door.)
 
 ## Challenges: turn by turn, by player code (2026-09-28)

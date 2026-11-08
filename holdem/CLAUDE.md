@@ -308,4 +308,4 @@ All-in-every-hand against 1, 2, 4 and 7 Easy, Medium or Hard computers (3000 tou
 
 ## Setup tabs (2026-11-07)
 
-Setup tabs are **Online table | Vs computer** (Online first; Hold'em already had tabs). It has a computer mode, so it opens on Vs computer, or on Online when a table is waiting to be rejoined (`_mpSave`); the stored tab no longer decides, a tap this visit wins. Screen pinned to the top. Layout only.
+Setup tabs are **Online table | Vs computer** (Online first; Hold'em already had tabs). It has a computer mode, so it opens on Vs computer, or on Online when a table is waiting to be rejoined (`_mpSave`); the stored tab no longer decides, a tap this visit wins. Screen centred (2026-11-08, Matt). Layout only.

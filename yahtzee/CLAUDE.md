@@ -437,4 +437,4 @@ Matt: "We should add resume to the other games that don't save". Vs the computer
 
 Setup is **Online | Vs Computer** tabs (`setupHeadHTML`; `mpMode` is `'solo'` or `'host'` = the Online tab). Online holds Create Room and the
 room-code Join, moved from the old Host/Join segments, handlers unchanged. Live rooms only (no challenges), so it opens on Vs Computer.
-Screen pinned to the top. Layout only: no recorder or save touched.
+Screen centred (2026-11-08, Matt; it was pinned to the top). Layout only: no recorder or save touched.
