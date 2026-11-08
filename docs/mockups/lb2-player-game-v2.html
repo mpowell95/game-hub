@@ -97,15 +97,26 @@ body{background:#2B2F36;font:17px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro T
 .strip small{font-size:15px;color:var(--sub);line-height:1.25;white-space:nowrap}
 /* Flick Soccer level strip */
 .lvstrip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.lv{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 0;background:var(--surf);border:1px solid var(--line);border-radius:16px;overflow:hidden;text-align:center;font:inherit;color:var(--text)}
+/* muted level tints: --t = the tint (backgrounds), --tb = its border, --tf = bar fill */
+.lv-easy{--t:46,155,71;--tf:#4FA866}
+.lv-med{--t:58,120,205;--tf:#5B8FD6}
+.lv-hard{--t:190,196,206;--tf:#B4BAC4}
+.lv-exp{--t:150,120,200;--tf:#9C86C8}
+.lv-online{--t:32,150,135;--tf:#3AA595}
+.lv{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 4px 0;background:linear-gradient(180deg,rgba(var(--t),.20),rgba(var(--t),.07)),var(--surf);border:1px solid rgba(var(--t),.38);border-radius:16px;overflow:hidden;text-align:center;font:inherit;color:var(--text)}
 .lv .sh{height:30px;display:flex;align-items:center}
 .lv .sh svg{height:28px;width:auto}
 .lv .w{font-size:15px;color:var(--sub);white-space:nowrap}
 .lv b{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px}
 .lv small{font-size:15px;color:var(--sub);margin-bottom:12px}
 .lv .lvbar{display:block;align-self:stretch;height:6px;background:var(--track)}
-.lv .lvbar i{display:block;height:100%;background:var(--accent)}
-.lv.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:#1C2433}
+.lv .lvbar{background:rgba(var(--t),.16)}
+.lv .lvbar i{display:block;height:100%;background:var(--tf)}
+.lv.on{border-color:var(--tf);box-shadow:inset 0 0 0 1px var(--tf);background:linear-gradient(180deg,rgba(var(--t),.32),rgba(var(--t),.14)),var(--surf)}
+.lvcard[class*="lv-"]{border-color:rgba(var(--t),.45);background:linear-gradient(180deg,rgba(var(--t),.12),rgba(var(--t),.03) 120px),var(--surf)}
+.lvcard[class*="lv-"] .bar{background:rgba(var(--t),.16)}
+.lvcard[class*="lv-"] .bar i{background:var(--tf)}
+.lvcard[class*="lv-"] .row{border-top-color:rgba(var(--t),.18)}
 .lvcard{margin-top:10px}
 .lvh{display:flex;align-items:center;gap:10px;padding:14px 18px 4px;font-size:19px;font-weight:800}
 .lvh .sh svg{height:22px;width:auto}
@@ -174,15 +185,19 @@ const mach = (color, name, q, days, vals) => `<div class="card mc"><h5><i style=
 const WORD = { 1: 'Easy', 2: 'Medium', 3: 'Hard', 4: 'Expert' };
 // Flick Soccer's levels (Matt, 2026-11-08: "they all look identical at a glance"): a strip of columns, each level's
 // big shape, name, win % and record; tap one to open its "first to" lines under the strip. Folded by default.
+// Each level wears a muted tint of its own colour (Matt: "match them to the difficulty color. But not too vibrant").
+const TINT = { 1: 'lv-easy', 2: 'lv-med', 3: 'lv-hard', 4: 'lv-exp', online: 'lv-online' };
 const levels = (L, open) => {
-  const cells = L.map(([t, name, w, l], i) => `<button class="lv${i === open ? ' on' : ''}" data-i="${i}" onclick="lvTap(this)"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span><span class="w">${name}</span><b>${pc(w, l)}%</b><small>${w}–${l}</small><i class="lvbar"><i style="width:${pc(w, l)}%"></i></i></button>`).join('');
-  const panels = L.map(([t, name, w, l, subs], i) => `<div class="lvp" data-i="${i}"${i === open ? '' : ' hidden'}><div class="lvh"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span>${name}</div>${subs.map(([lab, sw, sl]) => row({ label: lab, sub: wl(sw, sl), bar: pc(sw, sl), right: pc(sw, sl) + '%' })).join('')}</div>`).join('');
-  return `<div class="lvs"><div class="lvstrip">${cells}</div><div class="card lvcard"${open >= 0 ? '' : ' hidden'}>${panels}</div></div>`;
+  const cells = L.map(([t, name, w, l], i) => `<button class="lv ${TINT[t]}${i === open ? ' on' : ''}" data-i="${i}" onclick="lvTap(this)"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span><span class="w">${name}</span><b>${pc(w, l)}%</b><small>${w}–${l}</small><i class="lvbar"><i style="width:${pc(w, l)}%"></i></i></button>`).join('');
+  const panels = L.map(([t, name, w, l, subs], i) => `<div class="lvp ${TINT[t]}" data-i="${i}"${i === open ? '' : ' hidden'}><div class="lvh"><span class="sh">${t === 'online' ? GLOBE : SH[t]}</span>${name}</div>${subs.map(([lab, sw, sl]) => row({ label: lab, sub: wl(sw, sl), bar: pc(sw, sl), right: pc(sw, sl) + '%' })).join('')}</div>`).join('');
+  return `<div class="lvs"><div class="lvstrip">${cells}</div><div class="card lvcard ${open >= 0 ? TINT[L[open][0]] : ''}"${open >= 0 ? '' : ' hidden'}>${panels}</div></div>`;
 };
 function lvTap(btn) {
   const box = btn.closest('.lvs'), i = btn.dataset.i, was = btn.classList.contains('on');
   box.querySelectorAll('.lv').forEach((b) => b.classList.toggle('on', !was && b === btn));
-  box.querySelector('.lvcard').hidden = was;
+  const card = box.querySelector('.lvcard');
+  card.hidden = was;
+  card.className = 'card lvcard ' + (was ? '' : [...btn.classList].find((c) => c.startsWith('lv-')));
   box.querySelectorAll('.lvp').forEach((p) => { p.hidden = was || p.dataset.i !== i; });
 }
 // strip([[tier or label, big, small, small2?], ...]): the level's shape and word, the number, a caption.
