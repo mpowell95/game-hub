@@ -130,8 +130,11 @@ players see its old ranking and a two-line sheet). The "Old" link stays for now 
 **A person's page in one game, the rows look (2026-11-07, Matt: "Build it. thats WAY better"; `docs/mockups/lb2-player-game.html`)**:
 ADMIN DEVICES ONLY until Matt says "release it": Play in the top bar, a standing card (medal, "2nd of 5", board number) + gold holder
 and gap (`lb2Gap`), then Record / Opponent (difficulties + Online) / modes / Turn / Numbers as rows with bars (`game-stats-ui.js` `_rows`,
-set in `v2ScreenFor` from `isAdminDevice()`; My Stats' game pages on admin devices too). Display only. Custom screens (Golf, Skeeball,
-Arrow Maze) keep their own layout, text bumped.
+set in `v2ScreenFor` from `isAdminDevice()`; My Stats' game pages on admin devices too). Display only.
+**Level columns (2026-11-08, Matt: "nice, build it"; `docs/mockups/lb2-player-game-v2.html`)**: every level is a tinted column in its
+own muted colour (`levelStripHTML`, `gs-t1..4`/`gs-tmp`); Flick Soccer's columns open first to 1/2/3 on tap (byMode `goals`, the rest =
+"Earlier games"); Gridlock, Word Weaver, Arrow Maze, Sudoku, Murdoku, Nuts & Bolts, Snake, Ball Run, Hill Climb, Brick Breaker, Golf
+have their own rows screens (`rowsScreenFor`); Skeeball machine cards tinted. Still admin devices only until "release it".
 
 **Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: the BETTER
 AVERAGE game ranks higher. Totals (points, wins, medals): fewer plays/wins = higher average. A best-game board (golf,

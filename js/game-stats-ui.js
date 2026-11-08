@@ -1262,8 +1262,10 @@ function skMachineCardHTML(id, b) {
     [skNum(b.plays | 0), t('gs_sk_games')],
     [skNum(b.bestThrow | 0), t('gs_sk_best_throw')],
   ].map(([v, l]) => `<div class="gs-sk-mn"><b>${v}</b><span>${esc(l)}</span></div>`).join('');
+  // The rows look: names as words ("Hot Shot: Brick City"), not capitals (display only; ids and stored names unchanged).
+  const nm = _rows ? String(meta.name).toLowerCase().replace(/(^|[\s:(-])([a-z])/g, (m0, a, b) => a + b.toUpperCase()) : meta.name;
   return `<div class="gs-sk-mc" style="--mc:${meta.color}">
-    <div class="gs-sk-mc-id"><span class="gs-sk-mark"></span><span class="gs-sk-nm">${esc(meta.name)}</span></div>
+    <div class="gs-sk-mc-id"><span class="gs-sk-mark"></span><span class="gs-sk-nm">${esc(nm)}</span></div>
     <div class="gs-sk-mc-nums">${nums}</div>
     ${skSparkHTML(b.daily)}
   </div>`;
@@ -1902,14 +1904,16 @@ const GLOBE = '<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke
 /** Rows: { label (HTML), icon? (HTML), won, lost, played }. */
 function wlRowsHTML(title, rows) {
   if (!rows.length) return '';
-  const body = rows.map((r) => {
+  return `${title ? rh(title) : ''}<div class="gs-rl">${wlRowsBody(rows)}</div>`;
+}
+function wlRowsBody(rows) {
+  return rows.map((r) => {
     const p = pctNum(r);
     // Each clause ("21 wins ·", "2 losses", "Best 1:17") wraps whole, never one word alone (Spanish at 360).
     const parts = wlLine(r).split(' · ').concat(r.best ? [`${t('st_best')} ${r.best}`] : []);
     const line = parts.map((x, i) => `<i class="gs-cl">${esc(x)}${i < parts.length - 1 ? ' ·' : ''}</i>`).join(' ');
     return `<div class="gs-rr">${r.icon ? `<span class="gs-ri">${r.icon}</span>` : ''}<div class="gs-rm"><b>${r.label}</b><span>${line}</span>${barHTML(p)}</div><b class="gs-rp">${p == null ? '–' : p + '%'}</b></div>`;
   }).join('');
-  return `${title ? rh(title) : ''}<div class="gs-rl">${body}</div>`;
 }
 /** The Record card: wins, win %, losses, a bar, "N played" (and ties). */
 function recRowsHTML(r, tie, head) {
@@ -1955,8 +1959,17 @@ function diffLabelHTML(k) {
 }
 const diffOrder = (k) => tierOf(k) || ((DIFF_META[k] || {}).order) || 8;
 /** 4. By difficulty (online is its own card, so 'mp' is not a row). */
-function diffHTML(byDiff, withMp = true) {
+function diffHTML(byDiff, withMp = true, splits = null) {
   const bd = byDiff || {};
+  if (_rows) {
+    // Level columns (2026-11-08): each level a tinted column, Online last; a bucket with no level (earlier games)
+    // is a line under the strip. `splits[key]` = rows a tap opens under that column (Flick Soccer's first to N).
+    const keys = Object.keys(bd).filter((k) => k !== 'mp' && n0((bd[k] || {}).played) > 0).sort((a, b) => diffOrder(a) - diffOrder(b));
+    const cells = keys.filter((k) => tierOf(k)).map((k) => wlCell(tierOf(k), diffWordHTML(k), bd[k], splits && splits[k]));
+    if (withMp && bd.mp && n0(bd.mp.played)) cells.push(wlCell('mp', esc(t('st_online')), bd.mp, splits && splits.mp));
+    const lines = keys.filter((k) => !tierOf(k)).map((k) => `<p class="gs-lx">${diffLabelHTML(k)} · ${wlLine(bd[k])}</p>`).join('');
+    return cells.length || lines ? rh(rowTitle('st_opponent')) + levelStripHTML(cells) + lines : '';
+  }
   const rows = Object.keys(bd).filter((k) => k !== 'mp' && n0((bd[k] || {}).played) > 0).sort((a, b) => diffOrder(a) - diffOrder(b))
     .map((k) => ({ label: _rows ? diffWordHTML(k) : diffLabelHTML(k), icon: _rows && tierOf(k) ? v2shape(tierOf(k)) : '', won: bd[k].won, lost: bd[k].lost, played: bd[k].played }));
   if (!_rows) return wlTable('st_by_diff', rows);
@@ -2002,7 +2015,7 @@ function stdScreen(id, rec, o = {}) {
   const bdAll = (rec && rec.byDiff) || {};
   const bdUse = o.diff === false ? {} : (o.byDiff || bdAll);
   // The rows look: Opponent = the difficulties + Online (even where the game has no difficulty table); Turn after the modes.
-  const opp = _rows ? diffHTML(bdAll.mp ? { ...bdUse, mp: bdAll.mp } : bdUse) : '';
+  const opp = _rows ? diffHTML(bdAll.mp ? { ...bdUse, mp: bdAll.mp } : bdUse, true, o.splits || null) : '';
   const first = o.first === false ? '' : (o.firstRows ? firstHTML(o.firstRows, true) : firstHTML(E));
   return [
     o.onlineFirst ? onlineHTML(rec) : '',
@@ -2133,8 +2146,12 @@ function freshMinesweeper(rec) {
   if (_rows) {
     // The rows look: each level's record, its best (time, else best % cleared) on the second line.
     const best = (k) => { const tm = (ms.bestTimeMs || {})[k] | 0, p = ((ms.bestClearedPct || {})[k] | 0); return tm > 0 ? fmtMmSs(tm) : p > 0 ? `${p}%` : ''; };
-    const rr = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => ({ label: diffWordHTML(k), icon: tierOf(k) ? v2shape(tierOf(k)) : '', won: bd[k].won, lost: bd[k].lost, played: bd[k].played, best: best(k) }));
-    return recCard(tot, undefined, true) + wlRowsHTML(rowTitle('st_by_diff'), rr) + factsHTML([['gs_ms_flags', nf(ms.flagsRight)]], 'st_numbers');
+    const cells = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => {
+      const c = wlCell(LV_TIER[k], lvWord(k), bd[k]);
+      if (best(k)) c.sm.push(esc(t('st_best_n', { n: best(k) })));
+      return c;
+    });
+    return recCard(tot, undefined, true) + (cells.length ? rh(rowTitle('st_by_diff')) + levelStripHTML(cells) : '') + factsHTML([['gs_ms_flags', nf(ms.flagsRight)]], 'st_numbers');
   }
   const rows = MS_LEVELS_UI.filter(([k]) => n0((bd[k] || {}).played) > 0).map(([k]) => {
     const b = bd[k], best = (ms.bestTimeMs || {})[k] | 0, p = ((ms.bestClearedPct || {})[k] | 0);
@@ -2156,11 +2173,233 @@ function freshBrickBlitz(rec) {
   return html + `${fh('st_by_mode')}<table class="gs-grid"><thead><tr><th scope="col"></th><th scope="col">${esc(t('st_played'))}</th><th scope="col">${esc(t('st_best'))}</th></tr></thead><tbody>${modes.map((g) => `<tr><th scope="row">${esc(t(g.key === 'endless' ? 'st_bz_endless' : 'st_bz_arcade'))}</th><td>${nf(g.played)}</td><td>${g.hi ? nf(g.hi) : '–'}</td></tr>`).join('')}</tbody></table>`;
 }
 
+
+// --- Level columns (2026-11-08, Matt: "nice, build it"; docs/mockups/lb2-player-game-v2.html) -----------------------
+// The rows look's levels: one tinted column per level (its shape, word, number, caption; a bar for a win %), muted in
+// the level's own colour (Matt: "match them to the difficulty color. But not too vibrant"). A column with a `panel`
+// is a button: a tap opens that panel under the strip (Flick Soccer's first to 1 / 2 / 3), folded by default.
+// DISPLAY ONLY: every number is the one the tables showed.
+const LV_CLS = { 1: 'gs-t1', 2: 'gs-t2', 3: 'gs-t3', 4: 'gs-t4', mp: 'gs-tmp' };
+/** cells: [{ tier: 1-4 | 'mp' | 0, word (HTML), big (HTML), sm: [HTML...], bar: % | null, panel: HTML | '' }] */
+function levelStripHTML(cells) {
+  if (!cells.length) return '';
+  const cols = cells.length === 5 ? 3 : Math.min(cells.length, 4);
+  const iconOf = (c) => (c.tier === 'mp' ? GLOBE : (c.tier >= 1 && c.tier <= 4 ? v2shape(c.tier) : ''));
+  const clsOf = (c) => LV_CLS[c.tier] || 'gs-t0';
+  const body = (c) => `<span class="gs-lc-sh">${iconOf(c)}</span><span class="gs-lc-w">${c.word}</span><b>${c.big}</b>${(c.sm || []).filter(Boolean).map((x) => `<small>${x}</small>`).join('')}${c.bar != null ? `<i class="gs-lc-bar"><i style="width:${c.bar}%"></i></i>` : ''}`;
+  const cellHTML = (c, i) => (c.panel
+    ? `<button type="button" class="gs-lc ${clsOf(c)}" data-lv="${i}" aria-expanded="false">${body(c)}</button>`
+    : `<div class="gs-lc ${clsOf(c)}">${body(c)}</div>`);
+  const panels = cells.map((c, i) => (c.panel ? `<div class="gs-lp ${clsOf(c)}" data-lv="${i}" hidden><div class="gs-lp-h">${iconOf(c)}<span>${c.word}</span></div>${c.panel}</div>` : '')).join('');
+  return `<div class="gs-ls"><div class="gs-lsg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${cells.map(cellHTML).join('')}</div>${panels}</div>`;
+}
+/** One tap listener for every level strip (the leaderboard's and My Stats' overlays alike), wired once. */
+let _lvWired = false;
+function wireLevelTaps() {
+  if (_lvWired || typeof document === 'undefined') return;
+  _lvWired = true;
+  document.addEventListener('click', (e) => {
+    const b = e.target && e.target.closest ? e.target.closest('button.gs-lc[data-lv]') : null;
+    const box = b && b.closest('.gs-ls');
+    if (!box) return;
+    const on = b.getAttribute('aria-expanded') !== 'true';
+    box.querySelectorAll('button.gs-lc').forEach((x) => { const me = on && x === b; x.classList.toggle('on', me); x.setAttribute('aria-expanded', me ? 'true' : 'false'); });
+    box.querySelectorAll('.gs-lp').forEach((pn) => { pn.hidden = !(on && pn.dataset.lv === b.dataset.lv); });
+  });
+}
+/** A win column: big win %, "W–L" (–T with ties), the bar; `panel` rows open under it. */
+function wlCell(tier, word, r, panelRows) {
+  const p = pctNum(r);
+  const tie = tiesOf(r);
+  return { tier, word, big: p == null ? '–' : `${p}%`, sm: [`${nf(r.won)}–${nf(r.lost)}${tie ? `–${nf(tie)}` : ''}`], bar: p == null ? 0 : p, panel: panelRows && panelRows.length ? wlRowsBody(panelRows) : '' };
+}
+/** Tiles: [[value (HTML), label (text), small (text)?], ...]; 3 across (2 for 2 or 4). */
+function tilesHTML(list) {
+  const rows = list.filter((x) => x && x[0] != null && x[0] !== '');
+  if (!rows.length) return '';
+  const cols = rows.length === 1 ? 1 : rows.length === 2 || rows.length === 4 ? 2 : 3;
+  return `<div class="gs-nt" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${rows.map(([v, l, sm]) => `<div><b>${v}</b><span>${esc(l)}</span>${sm ? `<small>${esc(sm)}</small>` : ''}</div>`).join('')}</div>`;
+}
+/** Label / value rows. */
+function lrowsHTML(list) {
+  const rows = list.filter((x) => x && x[1] != null && x[1] !== '');
+  return rows.length ? `<div class="gs-rl">${rows.map(([k, v]) => `<div class="gs-rr gs-rv"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}</div>` : '';
+}
+const levelsN = (n) => t('st_levels_n', { n: nf(n), nn: n0(n) });
+const runsN = (n) => t('st_runs_n', { n: nf(n), nn: n0(n) });
+const LV_TIER = { easy: 1, medium: 2, hard: 3, expert: 4 };
+const lvWord = (k) => esc(t(['', 'gs_diff_easy', 'gs_diff_medium', 'gs_diff_hard', 'gs_diff_expert'][LV_TIER[k] || tierOf(k) || 0] || 'gs_diff_legacy'));
+
+function rowsGridlock(rec) {
+  if (!n0(((rec && rec.total) || {}).won) && !Object.keys(((rec && rec.gl) || {}).lv || {}).length) return gridlockScreen(rec);
+  const cells = GL_TIERS.filter((k) => glCleared(rec, k) > 0 || glPoints(rec, k) > 0)
+    .map((k) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(glPoints(rec, k)), sm: [levelsN(glCleared(rec, k))] }));
+  return tilesHTML([[nf(glCleared(rec)), t('st_levels')], [nf(glThreeStars(rec)), t('gs_gl_three')], [nf(glNoHint(rec)), t('gs_gl_nohint')]])
+    + (cells.length ? rh(t('lb_sort_points')) + levelStripHTML(cells) : '');
+}
+function rowsWordWeaver(rec) {
+  const ww = (rec && rec.ww) || {};
+  if (!n0(((rec && rec.total) || {}).won) && !Object.keys(ww.lv || {}).length && !Object.keys(ww.es || {}).length && !wwExtra(rec) && !wwDailyCount(rec)) return wordWeaverScreen(rec);
+  const cells = WW_TIERS.filter((k) => wwCleared(rec, k) > 0 || wwPoints(rec, k) > 0)
+    .map((k) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(wwPoints(rec, k)), sm: [levelsN(wwCleared(rec, k))] }));
+  return tilesHTML([[nf(wwCleared(rec)), t('st_levels')], [nf(wwStars(rec)), tf('lb_sort_stars', 'Stars')], [nf(wwThreeStars(rec)), t('gs_gl_three')]])
+    + (cells.length ? rh(t('lb_sort_points')) + levelStripHTML(cells) : '')
+    + rh(rowTitle('st_numbers')) + tilesHTML([[nf(wwExtra(rec)), tf('gs_ww_extra', 'Extra words')], [nf(wwDailyCount(rec)), t('st_daily')], [nf(wwCollected(rec)), t('st_bonus'), t('st_spent_n', { n: nf(wwSpent(rec)) })]]);
+}
+function rowsWayout(rec) {
+  const solved = n0(((rec && rec.total) || {}).won);
+  const wo = (rec && rec.wo) || {};
+  const rush = wo.rush || null;
+  const runsOf = (m) => woRushRuns(((rush || {}).runs || {})[m]);
+  const hasRush = RUSH_MODES.some((m) => runsOf(m).length > 0);
+  if (!solved && !hasRush) return emptyState(t('game_title_wayout'));
+  let arrows = 0;
+  for (const k of Object.keys(wo.log || {})) for (const e of woList(wo.log[k])) arrows += n0(e && e.a);
+  for (const m of RUSH_MODES) for (const r of runsOf(m)) arrows += n0(r.s);
+  const byDiff = (rec && rec.byDiff) || {};
+  const cells = SD_DIFFS.filter(([k]) => n0((byDiff[k] || {}).won) > 0 || woPoints(rec, k) > 0)
+    .map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(woPoints(rec, k)), sm: [levelsN((byDiff[k] || {}).won)] }));
+  const rushCells = RUSH_MODES.filter((m) => runsOf(m).length).map((m) => {
+    const wk = woRushBest(rec, m), all = Object.values(woRushBestMap(((rush || {}).best || {})[m]));
+    const k = m === 'hard' ? 'hard' : 'easy';
+    return { tier: LV_TIER[k], word: lvWord(k), big: wk == null ? '–' : nf(wk), sm: [all.length ? t('st_best_n', { n: nf(Math.max(...all)) }) : '', runsN(runsOf(m).length)] };
+  });
+  return tilesHTML([[nf(solved), t('st_levels')], [arrows ? nf(arrows) : null, t('st_arrows')]])
+    + (cells.length ? rh(t('lb_sort_points')) + levelStripHTML(cells) : '')
+    + (rushCells.length ? rh(t('st_rush_week')) + levelStripHTML(rushCells) : '');
+}
+function rowsSudoku(rec) {
+  const sd = (rec && rec.sd) || {};
+  if (!n0(sd.solved)) return sudokuScreen(rec);
+  const bd = (rec && rec.byDiff) || {}, bt = sd.bestTimeMs || {};
+  const cells = SD_DIFFS.filter(([k]) => n0((bd[k] || {}).won) > 0)
+    .map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: (bt[k] | 0) > 0 ? fmtMmSs(bt[k] | 0) : '–', sm: [t('st_solved_n', { n: nf((bd[k] || {}).won) })] }));
+  return tilesHTML([[nf(sd.solved), t('gs_sd_solved')], [nf(sd.perfect), t('gs_sd_perfect')], [nf(sd.hints), t('gs_sd_hints')], [nf(sd.mistakes), t('gs_sd_mistakes')]])
+    + (cells.length ? rh(t('gs_sd_best_time')) + levelStripHTML(cells) : '');
+}
+function rowsMurdoku(rec) {
+  if (!n0(((rec && rec.total) || {}).won)) return murdokuScreen(rec);
+  const bd = (rec && rec.byDiff) || {};
+  const best = {};
+  for (const g of groupModes(modeEntries(rec), (o, d) => (tierOf(d) ? d : null))) if (g.lo > 0) best[g.key] = g.lo;
+  const cells = SD_DIFFS.filter(([k]) => n0((bd[k] || {}).won) > 0)
+    .map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf((bd[k] || {}).won), sm: [best[k] ? t('st_best_n', { n: fmtMmSs(best[k]) }) : ''] }));
+  return rh(t('gs_pi_solved')) + levelStripHTML(cells);
+}
+function rowsNutsBolts(rec) {
+  const nb = (rec && rec.nb) || {};
+  const solved = n0(nb.solved);
+  if (!solved) return nutsBoltsScreen(rec);
+  const bd = (rec && rec.byDiff) || {};
+  const keys = Object.keys(bd).filter((k) => n0((bd[k] || {}).won) > 0).sort((a, b) => diffOrder(a) - diffOrder(b));
+  let inTiers = 0;
+  const cells = keys.map((k) => { inTiers += n0(bd[k].won); return { tier: tierOf(k) || 0, word: tierOf(k) ? lvWord(k) : diffLabelHTML(k), big: nf(bd[k].won) }; });
+  // Levels solved before levels were recorded by difficulty: their own column, never dropped (rule 1).
+  if (solved > inTiers) cells.push({ tier: 0, word: esc(t('st_earlier')), big: nf(solved - inTiers) });
+  return tilesHTML([[nf(solved), t('st_levels')], [nf(nb.bestLevel), t('gs_nb_best')], [nf(Math.round(n0(nb.moves) / solved)), t('gs_nb_avg_moves')], [nf(nb.moves), t('gs_nb_moves')]])
+    + (cells.length ? rh(t('gs_pi_solved')) + levelStripHTML(cells) : '');
+}
+function rowsSnake(rec) {
+  const sn = (rec && rec.sn) || {};
+  if (!n0(sn.runs)) return snakeScreen(rec);
+  const bdw = sn.bestLenByDiffWalls || {};
+  const rw = sn.runsByWalls || {};
+  const bd = (rec && rec.byDiff) || {};
+  const played = ['off', 'on'].filter((w) => n0(rw[w]) > 0 || Object.values(bdw[w] || {}).some((v) => n0(v) > 0));
+  const strip = (w) => {
+    const cells = SN_DIFFS.filter(([k]) => n0((bdw[w] || {})[k]) > 0)
+      .map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(bdw[w][k]), sm: [played.length === 1 && n0((bd[k] || {}).played) ? runsN((bd[k] || {}).played) : ''] }));
+    return cells.length ? rh(`${t('st_longest')} · ${t(w === 'on' ? 'gs_sn_walls_on' : 'gs_sn_walls_off').toLowerCase()}`) + levelStripHTML(cells) : '';
+  };
+  return tilesHTML([[nf(sn.runs), t('gs_runs')], [nf(sn.bestLen), t('gs_sn_longest')]]) + played.map(strip).join('');
+}
+function rowsBallRun(rec) {
+  const br = (rec && rec.br) || {}, bo = (rec && rec.brOrbital) || {};
+  const runs = n0(br.runs) + n0(bo.runs);
+  if (!runs) return ballRunScreen(rec);   // only pre-change (meters) history: the old screen shows it, labelled
+  const strip = (b, nameKey) => {
+    const by = b.bestObstaclesByDiff || {};
+    const cells = BR_DIFFS.filter(([k]) => n0(by[k]) > 0).map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(by[k]) }));
+    return n0(b.runs) && cells.length ? rh(`${t(nameKey)} · ${runsN(b.runs)}`) + levelStripHTML(cells) : '';
+  };
+  // Scores from before the scoring change (meters) stay shown, in their own table, exactly as before (rule 1, 3).
+  const old = ballRunScreen(rec);
+  const legacyAt = old.indexOf(`<h4 class="gs-tbl-h">${t('gs_br_legacy_h')}</h4>`);
+  return tilesHTML([[nf(runs), t('gs_runs')], [nf(Math.max(n0(br.bestObstacles), n0(bo.bestObstacles))), t('gs_br_best')]])
+    + strip(br, 'st_br_classic') + strip(bo, 'st_br_orbital') + (legacyAt >= 0 ? old.slice(legacyAt) : '');
+}
+function rowsHillClimb(rec) {
+  const hc = (rec && rec.hc) || {};
+  if (!n0(hc.runs)) return hillClimbScreen(rec);
+  const bs = hc.bestDistanceByStage || {};
+  const bd = (rec && rec.byDiff) || {};
+  const m = (v) => `${nf(v)} m`;
+  const cells = Object.keys(bd).filter((k) => n0((bd[k] || {}).played) > 0).sort((a, b) => diffOrder(a) - diffOrder(b))
+    .map((k) => ({ tier: tierOf(k) || 0, word: tierOf(k) ? lvWord(k) : diffLabelHTML(k), big: nf(bd[k].played) }));
+  return tilesHTML([[nf(hc.runs), t('gs_runs')], [m(hc.bestDistance), t('gs_hc_furthest')], [nf(hc.coins), t('gs_hc_coins')]])
+    + (HC_STAGES.some(([k]) => n0(bs[k]) > 0) ? rh(t('gs_hc_by_stage')) + lrowsHTML(HC_STAGES.filter(([k]) => n0(bs[k]) > 0).map(([k, lk]) => [t(lk), m(bs[k])])) : '')
+    + (cells.length ? rh(t('gs_runs')) + levelStripHTML(cells) : '')
+    + rh(rowTitle('st_numbers')) + lrowsHTML([[t('gs_hc_flips'), nf(hc.flips)]]);
+}
+function rowsBrickBlitz(rec) {
+  const bz = (rec && rec.bz) || {};
+  const games = n0(bz.games);
+  if (!games) return brickBlitzScreen(rec);
+  const by = bz.bestScoreByDiff || {}, bd = (rec && rec.byDiff) || {};
+  const cells = SN_DIFFS.filter(([k]) => n0((bd[k] || {}).played) > 0 || n0(by[k]) > 0)
+    .map(([k]) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(by[k]), sm: [t('lb_played_count', { n: nf((bd[k] || {}).played) })] }));
+  const modes = groupModes(modeEntries(rec), (o) => o.m || null);
+  return tilesHTML([[nf(games), t('gs_played')], [nf(Math.round(n0(bz.points) / games)), t('gs_bz_avg')], [`x${n0(bz.bestCombo)}`, t('gs_bz_combo')]])
+    + (cells.length ? rh(t('gs_bz_best')) + levelStripHTML(cells) : '')
+    + (modes.length >= 2 ? rh(t('st_by_mode_s')) + lrowsHTML(modes.map((g) => [t(g.key === 'endless' ? 'st_bz_endless' : 'st_bz_arcade'), g.hi ? nf(g.hi) : '–'])) : '')
+    + rh(rowTitle('st_numbers')) + lrowsHTML([[t('gs_bz_bricks'), nf(bz.bricks)], [t('gs_bz_stages'), nf(bz.stages)], [t('gs_bz_circuits'), nf(bz.circuits)]]);
+}
+function rowsGolf(rec) {
+  const gf = (rec && rec.gf) || {};
+  if (!n0(gf.rounds)) return golfScreen(rec);
+  const pts = gf.points | 0;
+  const avg = n0(gf.holes) > 0 ? (gf.strokes / gf.holes).toFixed(1) : '–';
+  const ids = Object.keys(gf.bestRoundByCourse || {}).filter((id) => gf.bestRoundByCourse[id] > 0).sort(compareGolfRounds);
+  const rounds = ids.map((id) => {
+    const strokes = gf.bestRoundByCourse[id] | 0;
+    const par = GOLF_COURSE_PAR[id];
+    const toPar = Number.isFinite(par) ? formatBoardMetric(strokes - par, 'golf', t('lb_golf_even')) : '–';
+    const name = golfCourseName(id);
+    const m = /^(.*?)\s*\((.*)\)\s*$/.exec(name);
+    const label = m ? m[1] : name;
+    const sub = `${m ? titleCase(m[2]) + ' · ' : ''}${nf(strokes)} ${t('gs_golf_strokes').toLowerCase()}`;
+    return `<div class="gs-rr"><div class="gs-rm"><b>${esc(label)}</b><span><i class="gs-cl">${esc(sub)}</i></span></div><div class="gs-rt"><b>${esc(toPar)}</b><small>${esc(t('gs_golf_topar').toLowerCase())}</small></div></div>`;
+  }).join('');
+  return tilesHTML([[nf(gf.rounds), t('gs_golf_rounds')], [avg, t('gs_golf_avg')], [esc(pts >= 0 ? `+${pts}` : String(pts)), t('gs_golf_skill')]])
+    + tilesHTML([[nf(gf.birdies), t('gs_golf_birdies')], [nf(gf.eagles), t('gs_golf_eagles')], [nf(gf.aces), t('gs_golf_aces')]])
+    + lrowsHTML([[t('gs_golf_drive'), t('st_yd_n', { n: nf(Math.round(gf.longestDriveYd | 0)) })]])
+    + (rounds ? rh(t('gs_golf_courses_h')) + `<div class="gs-rl">${rounds}</div>` : '')
+    + golfHolesHTML(gf) + golfPracticeHTML(gf);
+}
+/** The rows look's own screen for a game, or null (the game keeps its fresh screen). */
+function rowsScreenFor(id, rec) {
+  switch (id) {
+    case 'gridlock': return rowsGridlock(rec);
+    case 'wordweaver': return rowsWordWeaver(rec);
+    case 'wayout': return rowsWayout(rec);
+    case 'sudoku': return rowsSudoku(rec);
+    case 'murdoku': return rowsMurdoku(rec);
+    case 'nutsbolts': return rowsNutsBolts(rec);
+    case 'snake': return rowsSnake(rec);
+    case 'ballrun': return rowsBallRun(rec);
+    case 'hillclimb': return rowsHillClimb(rec);
+    case 'brickblitz': return rowsBrickBlitz(rec);
+    case 'golf': return rowsGolf(rec);
+    default: return null;
+  }
+}
+
 /** The new screen for one game (admin devices only for now; see the block comment above). */
 function freshScreenFor(id, stt) { return freshScreenForBase(id, stt) + ptsSectionHTML(id, stt); }
 function freshScreenForBase(id, stt) {
   const rec = (stt.games && stt.games[id]) || {};
   const dt = rec.dt || {};
+  if (_rows) { const r = rowsScreenFor(id, rec); if (r != null) return r; }
   switch (id) {
     case 'connect4': return freshConnect4(rec);
     case 'tictactoe': return freshTicTacToe(rec);
@@ -2186,9 +2425,25 @@ function freshScreenForBase(id, stt) {
       const E = modeEntries(rec);
       const forms = groupModes(E, (o) => (o.off && o.def ? `${o.off}|${o.def}` : null));
       if (_rows) forms.sort((a, b) => b.played - a.played);
+      // The rows look: tap a level for first to 1 / 2 / 3 there (Matt, 2026-11-08). byMode keeps the level PICKED, as the
+      // level columns now show it (FULL_LEVEL); what byMode lacks (results from before modes were saved) is "Earlier games".
+      let splits = null;
+      if (_rows) {
+        splits = {};
+        const bd = rec.byDiff || {};
+        for (const d of Object.keys(bd)) {
+          const g = groupModes(E.filter((e) => e.d === d), (o) => (o.goals ? String(o.goals) : null)).sort((a, b) => byNum(a.key) - byNum(b.key));
+          if (!g.length) continue;
+          const rows = g.map((x) => ({ ...x, label: esc(t('st_first_to_n', { n: x.key })) }));
+          const rest = { won: n0(bd[d].won) - g.reduce((a, x) => a + x.won, 0), lost: n0(bd[d].lost) - g.reduce((a, x) => a + x.lost, 0) };
+          if (rest.won >= 0 && rest.lost >= 0 && rest.won + rest.lost > 0) rows.push({ label: esc(t('gs_diff_legacy')), won: rest.won, lost: rest.lost, played: rest.won + rest.lost });
+          splits[d] = rows;
+        }
+      }
       const lab = (k) => k.split('|').map(formWord).join(' / ');
       const most = forms.slice().sort((a, b) => b.played - a.played)[0];
       return stdScreen(id, rec, {
+        splits,
         modes: () => [wlTable('st_by_form', forms.map((r) => ({ ...r, label: esc(lab(r.key)) })))],
         facts: [['st_most_form', most && forms.length > 1 && !_rows ? esc(lab(most.key)) : null], ['st_goals_for', sumOf(dt, 'gf')], ['st_goals_against', sumOf(dt, 'ga')], ['st_flicks', sumOf(dt, 'flicks')]] });
     }
@@ -2411,7 +2666,63 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 .gs-v2 .gs-rows .gs-grid th,.gs-v2 .gs-rows .gs-grid td{height:50px;font-size:17px}
 .gs-v2 .gs-rows .gs-grid thead th{height:40px;font-size:15px;color:var(--l2-sub)}
 .gs-v2 .gs-rows .gs-cc-k,.gs-v2 .gs-rows .gs-cc-v{font-size:17px}
-.gs-v2 .gs-rows .gs-cc-h,.gs-v2 .gs-rows .gs-sk-k{font-size:15px;color:var(--l2-sub)}`;
+.gs-v2 .gs-rows .gs-cc-h,.gs-v2 .gs-rows .gs-sk-k{font-size:15px;color:var(--l2-sub)}
+.gs-v2 .gs-nt small{display:block;font-size:15px;color:var(--l2-accent);margin-top:2px}
+.gs-v2 .gs-t1{--t:46,155,71;--tf:#3F9A57}
+.gs-v2 .gs-t2{--t:58,120,205;--tf:#4F84CF}
+.gs-v2 .gs-t3{--t:150,158,172;--tf:#8E96A3}
+.gs-v2 .gs-t4{--t:130,100,190;--tf:#8A72C0}
+.gs-v2 .gs-tmp{--t:32,150,135;--tf:#2E9C8C}
+.gs-v2 .gs-t0{--t:150,156,168;--tf:#8E96A3}
+:root.gh-dark .gs-v2 .gs-t1{--tf:#4FA866}
+:root.gh-dark .gs-v2 .gs-t2{--tf:#5B8FD6}
+:root.gh-dark .gs-v2 .gs-t3{--t:190,196,206;--tf:#B4BAC4}
+:root.gh-dark .gs-v2 .gs-t4{--t:150,120,200;--tf:#9C86C8}
+:root.gh-dark .gs-v2 .gs-tmp{--tf:#3AA595}
+:root.gh-dark .gs-v2 .gs-t0{--tf:#9AA1AD}
+.gs-v2 .gs-ls{display:flex;flex-direction:column;gap:10px}
+.gs-v2 .gs-lsg{display:grid;gap:8px}
+.gs-v2 .gs-lc{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;padding:14px 4px 14px;border-radius:16px;text-align:center;overflow:hidden;color:var(--l2-text);font-family:inherit;background:linear-gradient(180deg,rgba(var(--t),.20),rgba(var(--t),.07)),var(--l2-surf);border:1px solid rgba(var(--t),.38)}
+.gs-v2 button.gs-lc{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.gs-v2 .gs-lc:has(.gs-lc-bar){padding-bottom:0}
+.gs-v2 .gs-lc-sh{height:28px;display:flex;align-items:center;justify-content:center;color:var(--l2-text)}
+.gs-v2 .gs-lc-sh .lb2-shape{width:22px;height:22px}
+.gs-v2 .gs-lc-sh .lb2-shape.x2{width:32px}
+.gs-v2 .gs-lc-sh>svg{width:24px;height:24px}
+.gs-v2 .gs-lc-w{font-size:15px;color:var(--l2-sub);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.gs-v2 .gs-lc>b{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--l2-text)}
+.gs-v2 .gs-lc small{font-size:15px;line-height:1.25;color:var(--l2-sub);font-variant-numeric:tabular-nums;overflow-wrap:normal}
+.gs-v2 .gs-lc-bar{display:block;align-self:stretch;height:6px;margin-top:12px;background:rgba(var(--t),.16)}
+.gs-v2 .gs-lc-bar>i{display:block;height:100%;background:var(--tf)}
+.gs-v2 .gs-lc.on{border-color:var(--tf);box-shadow:inset 0 0 0 1px var(--tf);background:linear-gradient(180deg,rgba(var(--t),.32),rgba(var(--t),.14)),var(--l2-surf)}
+.gs-v2 .gs-lp{border-radius:16px;overflow:hidden;border:1px solid rgba(var(--t),.45);background:linear-gradient(180deg,rgba(var(--t),.12),rgba(var(--t),.03) 120px),var(--l2-surf)}
+.gs-v2 .gs-lp[hidden]{display:none}
+.gs-v2 .gs-lp-h{display:flex;align-items:center;gap:10px;padding:14px 18px 4px;font-size:19px;font-weight:800;color:var(--l2-text)}
+.gs-v2 .gs-lp-h .lb2-shape{width:20px;height:20px}
+.gs-v2 .gs-lp-h>svg{width:22px;height:22px}
+.gs-v2 .gs-lp .gs-rr{border-top-color:rgba(var(--t),.18)}
+.gs-v2 .gs-lp .gs-rr:first-of-type{border-top:0}
+.gs-v2 .gs-lp .gs-bar{background:rgba(var(--t),.16)}
+.gs-v2 .gs-lp .gs-bar i{background:var(--tf)}
+.gs-v2 .gs-lx{margin:0 4px;font-size:16px;color:var(--l2-sub)}
+.gs-v2 .gs-rt{flex:none;text-align:right;min-width:56px}
+.gs-v2 .gs-rt b{display:block;font-size:24px;font-weight:800;line-height:1.1;color:var(--l2-text)}
+.gs-v2 .gs-rt small{display:block;font-size:15px;color:var(--l2-sub)}
+.gs-v2 .gs-rows .gs-sk-mc{border:1px solid color-mix(in srgb,var(--mc) 40%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--mc) 16%,transparent),color-mix(in srgb,var(--mc) 4%,transparent) 110px),var(--l2-surf);border-radius:16px}
+.gs-v2 .gs-rows .gs-sk-nm{font-size:19px;font-weight:700;color:var(--l2-text)}
+.gs-v2 .gs-rows .gs-sk-mc-nums{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}
+.gs-v2 .gs-rows .gs-sk-mn b{font-size:24px;font-weight:800}
+.gs-v2 .gs-rows .gs-sk-mn span{font-size:15px;color:var(--l2-sub)}
+.gs-v2 .gs-rows .gs-sk-spark-h,.gs-v2 .gs-rows .gs-sk-spark-hi,.gs-v2 .gs-rows .gs-sk-spark-lo{font-size:15px}
+.gs-v2 .gs-rows .gs-sk-cell b{font-size:24px}
+.gs-v2 .gs-rows .gs-sk-cell span{font-size:15px}
+.gs-v2 .gs-rows .gs-sk-hero-a b,.gs-v2 .gs-rows .gs-sk-hero-b b{font-size:30px}
+.gs-v2 .gs-rows .gs-gf-holes{background:var(--l2-surf);border:1px solid var(--l2-line);border-radius:16px;padding:12px 14px}
+.gs-v2 .gs-rows .gs-gf-hname{font-size:17px;font-weight:700;margin-bottom:10px;color:var(--l2-text)}
+.gs-v2 .gs-rows .gs-gf-row{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.gs-v2 .gs-rows .gs-gf-cell{padding:6px 0;border-radius:10px}
+.gs-v2 .gs-rows .gs-gf-cell b{font-size:20px}
+.gs-v2 .gs-rows .gs-gf-cell i{font-size:15px;font-style:normal}`;
 // Session 4 (2026-11-02): admin devices only until Matt approves (`_s4`, set at open): ranks, one close, 4.481, one dash.
 let _s4 = false;
 const v2fmt = (n) => { try { return Number(n).toLocaleString(getLang() === 'es' ? 'es-ES' : 'en-US', _s4 ? { useGrouping: 'always' } : undefined); } catch { return String(n); } };
@@ -2472,6 +2783,7 @@ export function v2ScreenFor(id, st, opts) {
   if (opts && opts.fresh) {
     // The rows look: admin devices only until Matt says "release it" (2026-11-07).
     _rows = (() => { try { return isAdminDevice(); } catch { return false; } })();
+    if (_rows) wireLevelTaps();
     try { const h = v2Polish(freshScreenFor(id, st)); return _rows && h ? `<div class="gs-rows">${h}</div>` : h; } finally { _rows = false; }
   }
   return v2Polish(screenFor(id, st));
