@@ -187,6 +187,7 @@ const G = 6;
 const DY = 86.6 + G;
 const DX = 75 + G * 0.866;
 const SPOTS = [[0, 0], [0, -DY], [DX, -DY / 2], [DX, DY / 2], [0, DY], [-DX, DY / 2], [-DX, -DY / 2]];
+const NEAR = 72;   // how far from a letter's centre a touch still counts for it (_nearCell)
 
 const ICON = {
   hints: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>',
@@ -511,11 +512,25 @@ class SpellingBee {
       this._control(ctl.dataset.act);
       return;
     }
-    const cell = ev.target.closest && ev.target.closest('.sb-cell');
+    const cell = ev.target.closest && (ev.target.closest('.sb-cell') || this._nearCell(ev));
     if (!cell || this._overlay || this.mode === 'review') return;
     ev.preventDefault();
     this._press(cell);
     this.type(cell.dataset.letter);
+  }
+
+  /** A touch in the gaps between the letters, or just outside the hive, goes to the nearest letter
+   *  (2026-11-08, Matt: make the letters easier to press). Up to NEAR units from its centre (the
+   *  hexagon itself reaches 43-50). Never on a button or the open word list, so Delete / shuffle / Enter keep theirs. */
+  _nearCell(ev) {
+    const hive = this.el && this.el.hive;
+    if (!hive || !hive.getScreenCTM || !ev.target.closest('.sb-main') || ev.target.closest('.sb-controls, .sb-panel, button')) return null;
+    const m = hive.getScreenCTM();
+    if (!m) return null;
+    const pt = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse());
+    let best = -1, bestD = Infinity;
+    SPOTS.forEach(([x, y], i) => { const d = Math.hypot(pt.x - x, pt.y - y); if (d < bestD) { bestD = d; best = i; } });
+    return best >= 0 && bestD <= NEAR ? this.el.cells[best] : null;
   }
 
   _press(cell) {
