@@ -111,7 +111,46 @@ console.log(`test-full-level (points): ${q} checks passed`);
 {
   const once = fullLevelGame(rec(), 'flicksoccer', OTHER);
   assert.equal(fullLevelGame(once, 'flicksoccer', OTHER), once);
-  assert.deepEqual(once.fl, [{ level: 'hard', from: 'medium', won: 2 }]);
+  assert.deepEqual(once.fl.map(({ level, from, won }) => ({ level, from, won })), [{ level: 'hard', from: 'medium', won: 2 }]);
   assert.equal(gamePoints(rec(), 'flicksoccer').pts, 21);
   console.log('test-full-level (once only): 3 checks passed');
+}
+
+// --- EVERY game with a "one level down" rule SHOWS at the level picked (Matt, 2026-11-08: "FIX THIS ALL PERMANENTLY") ---
+{
+  const { FULL_LEVEL_GAMES } = await import('../js/stats-corrections.js');
+  const { LB_RULES } = await import('../js/lb-rules.js');
+  let c = 0;
+  // Permanent: a game whose shortened setting records one level down (tools/test-lb-rules.mjs makes it list `short`)
+  // must be shown at the level picked, on the same ladder.
+  for (const [id, r] of Object.entries(LB_RULES)) {
+    if (!r.short) continue;
+    assert.ok(FULL_LEVEL_GAMES[id], `${id}: has a FULL_LEVEL entry`); c++;
+    assert.deepEqual(FULL_LEVEL_GAMES[id].ladder, r.short.ladder, `${id}: same ladder`); c++;
+    assert.equal(r.shown, 'picked', `${id}: lb-rules shown: 'picked'`); c++;
+  }
+  // Each game's own saved mode keys (its modeOf, js/game-stats.js modeKey strips '.'): shortened vs standard.
+  const CASES = {
+    flicksoccer: [['goals=1'], ['goals=2', 'goals=3']],
+    eightball: [['racks=1|game=8'], ['racks=3|game=8', 'racks=5']],
+    cuppong: [['first=me|gent=1|rr=inf'], ['first=me|gent=1|rr=0', 'rr=2']],
+    darts: [['kind=201', 'kind=101'], ['kind=301', 'kind=cricket']],
+    dominoes: [['to=150'], ['to=300', 'to=500']],
+    boggle: [['lang=en|min=2'], ['lang=es|min=15', 'lang=en|min=1']],
+    hoops4: [['first=me|one=0'], ['first=me|one=1', 'one=1']],
+    chinchon: [['ai=normal|sl=50|vc=points', 'ai=hard|rl=5|vc=rounds', 'rl=5|sl=100|vc=roundsOrPoints'], ['ai=normal|sl=100|vc=points', 'rl=10|sl=50|vc=rounds']],
+  };
+  for (const [id, [shortKeys, stdKeys]] of Object.entries(CASES)) {
+    const lad = FULL_LEVEL_GAMES[id].ladder;
+    for (const k of [...shortKeys, ...stdKeys]) {
+      const isShort = shortKeys.includes(k);
+      // One win picked at the top level: recorded one down when short (the game's statsDiff), at the top otherwise.
+      const rec0 = isShort ? lad[lad.length - 2] : lad[lad.length - 1];
+      const g = { total: { played: 1, won: 1, lost: 0 }, byDiff: { [rec0]: { played: 1, won: 1, lost: 0 } }, byMode: { [k]: { [lad[lad.length - 1]]: { played: 1, won: 1, lost: 0 } } } };
+      const m = fullLevelGame(g, id, 'ZZZZ1');
+      assert.equal(((m.byDiff[lad[lad.length - 1]] || {}).won) | 0, 1, `${id} ${k}: shown at the level picked`); c++;
+      assert.equal(gamePoints(m, id, null, 'ZZZZ1').pts, gamePoints(g, id, null, 'ZZZZ1').pts, `${id} ${k}: points unchanged`); c++;
+    }
+  }
+  console.log(`test-full-level (every game): ${c} checks passed`);
 }
