@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame } from './stats-corrections.js';
+import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, HAND_RESULTS, handResultsGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
@@ -1010,6 +1010,8 @@ export function aggregatePlayers(all, corrections) {
     }
     // FULL LEVEL (js/stats-corrections.js, 2026-11-08): shortened matches SHOWN at the level picked, per PERSON, after
     // every merge (the result carries `fl`, which js/lb-points.js reads so the points stay the sheet's).
+    // Matt's HAND RESULTS (js/stats-corrections.js, 2026-11-08): added before the full-level move, filed as the recorder would.
+    for (const g of Object.keys(HAND_RESULTS)) { if (grp.games[g]) grp.games[g] = handResultsGame(grp.games[g], g, grp.playerId); }
     for (const g of Object.keys(FULL_LEVEL)) { if (grp.games[g]) grp.games[g] = fullLevelGame(grp.games[g], g, grp.playerId); }
     // Matt's console ADJUSTMENTS (js/stats-corrections.js adjustGame, 2026-11-07): per PERSON, after every merge.
     const adj = grp.playerId && corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null;

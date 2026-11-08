@@ -63,6 +63,49 @@ export const HAND_ADDS = {
     { code: 'QZCC4', puzzle: 'g:ailnvz', day: '2026-10-29', word: 'niggling', words: 1, points: 8, from: Date.UTC(2026, 9, 30, 3, 59) },   // 11:59 PM EDT
   ],
 };
+// HAND RESULTS: one result Matt counts by hand that the game filed somewhere that counts for nothing (Matt, 2026-11-08,
+// of his Flick Soccer Test mode win: "That test win should count"). Read time only, like HAND_ADDS: the player's stored
+// record (the win sits in games.flicksoccer.fx) and play log stay exactly as they are. Each entry is added the way the
+// game's own recorder would have filed it (`diff` = the RECORDED bucket, `chosen` + `mode` = its byMode row, `detail`
+// = its dt numbers), BEFORE the full-level move and the points, so it shows and scores like any other such win.
+export const HAND_RESULTS = {
+  flicksoccer: [
+    // Sun Nov 8 2026, 2:22 AM Eastern: Test mode, Hard, first to 1, won 1-0 in 6 flicks (play log recordFlickSoccerTest).
+    { code: 'QZCC4', diff: 'medium', chosen: 'hard', mode: 'def=defend|first=them|goals=1|off=balanced|test=1', won: true, detail: { gf: 1, ga: 0, flicks: 6 } },
+  ],
+};
+/** `gm` (one person's record in game `id`) with that person's HAND_RESULTS added; `gm` itself when none. Never mutates. */
+export function handResultsGame(gm, id, code) {
+  const list = (HAND_RESULTS[id] || []).filter((r) => r && r.code === code);
+  if (!list.length) return gm;
+  const g = gm || {};
+  const out = Object.assign({}, g, {
+    total: Object.assign({ played: 0, won: 0, lost: 0 }, g.total),
+    byDiff: Object.assign({}, g.byDiff),
+    byMode: Object.assign({}, g.byMode),
+    dt: Object.assign({}, g.dt),
+  });
+  const bump = (b, won) => { const o = Object.assign({ played: 0, won: 0, lost: 0 }, b); o.played += 1; if (won === true) o.won += 1; else if (won === false) o.lost += 1; return o; };
+  for (const r of list) {
+    out.total = bump(out.total, r.won);
+    out.byDiff[r.diff] = bump(out.byDiff[r.diff], r.won);
+    const row = Object.assign({}, out.byMode[r.mode]);
+    row[r.chosen] = bump(row[r.chosen], r.won);
+    out.byMode[r.mode] = row;
+    if (r.detail) { for (const [k, v] of Object.entries(r.detail)) out.dt[k] = (+out.dt[k] || 0) + v; out.dt._n = (+out.dt._n || 0) + 1; }
+  }
+  return out;
+}
+/** A whole stats store with `code`'s HAND_RESULTS added (My Stats' first paint). */
+export function handResultsStats(st, code) {
+  if (!st || !st.games || !code) return st;
+  let games = null;
+  for (const id of Object.keys(HAND_RESULTS)) {
+    const f = handResultsGame(st.games[id], id, code);
+    if (f !== st.games[id]) (games || (games = Object.assign({}, st.games)))[id] = f;
+  }
+  return games ? Object.assign({}, st, { games }) : st;
+}
 // FULL LEVEL: a shortened or easier setting the game RECORDS one level down (docs/INTEGRITY-CHECKS-SPEC.md, "Holes closed
 // 2026-10-29: quitting and easier settings") SHOWS at the level PICKED. Matt, 2026-11-07 (Flick Soccer, him only), then
 // everyone ("Yes. Of course. Obviously."), then every game with such a rule (2026-11-08, "FIX THIS ALL PERMANENTLY"):

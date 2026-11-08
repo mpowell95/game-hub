@@ -187,7 +187,8 @@ TEST tag by the menu. Vs the computer and pass and play only, **never online** (
   games each vs the stand-in: **Easy 92%, Medium 54%, Hard 24%** (targets 90/50/25; Matt's proposal table); re-checked on normal-size nets with the move-out rule: **93%, 52%, 21%**. Samples of
   40-60 games swung by 15 points, so tune with 200+.
 - **Recording**: a Test match's result goes to `recordFlickSoccerTest(diff, won)` (the `fx` test bucket, counted by
-  nothing) with `test: 1` in its mode. Players' levels, physics and stats are unchanged.
+  nothing) with `test: 1` in its mode. Matt counts one by hand when he says so: `HAND_RESULTS` in `js/stats-corrections.js`
+  (his Nov 8 2:22 AM Hard win, 2026-11-08: "That test win should count"). Players' levels, physics and stats are unchanged.
 - Tests: `node flick-soccer/js/test.js` (open vs closed nets, same size, the move-out rule, Test matches finish, Test Hard beats Test Easy).
 
 ## The screen
