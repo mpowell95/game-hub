@@ -227,8 +227,13 @@ function playMatch(diffs, seed, goals = 2) {
   m.b[def].x = 57; m.b[def].y = -2;                     // a red defender in its own top net
   E.settle(m, -1);
   ok('test: an attacker in the other net is moved out', m.b[att].y - E.DISC_R >= 0, `${m.b[att].y}`);
-  ok('test: moved out only a bit', m.b[att].y < E.DISC_R + 4, `${m.b[att].y}`);
-  ok('test: a defender may stay in its own net', m.b[def].y === -2);
+  ok('test: moved out only a bit', m.b[att].y < E.DISC_R + 6, `${m.b[att].y}`);
+  ok('test: a defender in its own net is moved out too (2026-11-08)', m.b[def].y - E.DISC_R >= 0, `${m.b[def].y}`);
+  ok('test: the two moved pieces do not overlap', Math.hypot(m.b[att].x - m.b[def].x, m.b[att].y - m.b[def].y) >= 2 * E.DISC_R);
+  const m3 = E.newMatch(2, 0, ['balanced', 'balanced']); m3.test = 1;
+  const k0 = E.discsOf(0)[0]; m3.b[k0].x = 50; m3.b[k0].y = E.H + 2;   // a blue keeper parked in its own (bottom) net
+  E.settle(m3, -1);
+  ok('test: a keeper parked in its own bottom net is moved out', m3.b[k0].y + E.DISC_R <= E.H, `${m3.b[k0].y}`);
   const m2 = E.newMatch(2, 0, ['balanced', 'balanced']);
   m2.b[att].x = 44; m2.b[att].y = -2; E.settle(m2, -1);
   ok('not a test match: nothing is moved', m2.b[att].y === -2);
