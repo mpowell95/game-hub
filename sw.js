@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1503';
+const CACHE = 'game-hub-v1504';
 
 const ASSETS = [
   './',
@@ -1035,7 +1035,7 @@ const REST_MANIFEST = {
   './spelling-bee/': 'ef847ee9c2',
   './spelling-bee/index.html': 'ef847ee9c2',
   './spelling-bee/css/spelling-bee.css': '03c3a4c420',
-  './spelling-bee/js/ui.js': 'f52d9ad805',
+  './spelling-bee/js/ui.js': 'bbbb3bd98e',
   './spelling-bee/js/engine.js': '87146a700c',
   './spelling-bee/js/strings.js': 'e6e6993414',
   './spelling-bee/js/board.js': '476c0bbf77',
