@@ -285,3 +285,7 @@ Solo: the menu's New game / Quit to setup after the player's first decision = ON
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first decision = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per match (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - 3-4 seats: only the leaver records; the table ends as before. Solo: quitting is a loss once DEALT; Start game over a match set aside by `_takeArmed` asks twice and records its loss (`_recordSavedQuitLoss`, both stats places).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup centred (2026-11-08)
+
+Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.

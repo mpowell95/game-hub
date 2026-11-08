@@ -114,6 +114,10 @@
   font-size: 64px; letter-spacing: .02em; color: var(--ba-hl);
   text-shadow: 3px 0 0 #1f1a14, -3px 0 0 #1f1a14, 0 3px 0 #1f1a14, 0 -3px 0 #1f1a14, 2px 2px 0 #1f1a14, -2px 2px 0 #1f1a14, 2px -2px 0 #1f1a14, -2px -2px 0 #1f1a14, 0 7px 0 #1f1a14, 0 10px 18px rgba(0, 0, 0, .6);
 }
+.ba-root .ba-home-art[hidden] { display: none; }
+/* fitHome's last steps on a short phone (2026-11-08): the logo level with the Hub button, tighter gaps. */
+.ba-root .ba-home.is-tight .ba-home-hero { padding-top: max(env(safe-area-inset-top, 0px), 50px); }
+.ba-root .ba-home.is-tight .ba-home-menu { padding-top: 20px; gap: 8px; }
 .ba-root .ba-home-art { display: flex; align-items: flex-end; justify-content: center; gap: 4px; margin-bottom: calc(var(--ba-hm) * -.1); }
 .ba-root .ba-home-mon svg { width: var(--ba-hm); height: var(--ba-hm); }
 .ba-root .ba-home-mon:first-child { animation: ba-bob 2.4s ease-in-out infinite; }

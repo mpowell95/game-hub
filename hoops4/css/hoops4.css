@@ -1041,6 +1041,8 @@
 .h4-root .h4-online .h4-mp-tile { font-size: 15px; }
 .h4-root .h4-online .h4-mp-note { margin: 0; font-size: 15px; color: var(--h4s-ink); }
 .h4-root .h4-on-card { width: 100%; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.h4-root .h4-on-rows { display: flex; flex-direction: column; gap: 6px; }
+.h4-root .h4-online .h4-more { text-align: center; }
 .h4-root .h4-on-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; font-size: 18px; font-weight: 900; }
 .h4-root .h4-rec-chip {
   margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--h4s-line);
@@ -1067,7 +1069,9 @@
 .h4-root .h4-face-dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--h4s-surface-2); }
 .h4-root .h4-face.is-any .h4-face-dot { background: none; border: 2px dashed var(--h4s-muted); font-size: 28px; color: var(--h4s-ink); box-sizing: border-box; }
 .h4-root .h4-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* The hub chip owns the top left: start below it so the tabs are never under it. The chip is at max(safe top,
-   54px), 36px tall, so this follows the safe area (2026-11-08: a flat 56px put the tabs against it on an iPhone). */
-.h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 4px); }
+/* The hub chip owns the top left: everything starts below it (max(safe top, 54px), 36px tall), as in every other
+   game, so the centred card is balanced under it (2026-11-08; a flat 56px put the tabs against it on an iPhone). */
+.h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
+/* A short screen (a browser tab, a small Android): the title goes up level with the chip, clear of it. */
+@media (max-height: 720px) { .h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 4px); } }
 .h4-root .h4-face.is-any { flex: 1.7 1 0; }

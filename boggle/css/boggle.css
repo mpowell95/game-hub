@@ -381,3 +381,11 @@
 /* TABS: Online | Solo (2026-11-07). Appended so file:line KNOWN_GAPS entries stay put. */
 .bg-root .bg-tabs .bg-segbtn { font-size: 17px; }
 .bg-root .bg-tabs, .bg-root .bg-tabs + .bg-seg { width: 100%; box-sizing: border-box; }
+
+/* SETUP CENTRED in the page (Matt, 2026-11-08: "they should look centered and balanced"). Only while the
+   setup shows (the one screen with the Online tabs): the page area stretches to the screen and the card,
+   at its own height, sits in the middle (auto margins, so a taller card still starts at the top). Every
+   other screen is untouched. */
+.hub-main:has(> .hub-game > .bg-root > .bg-shell > .bg-tabs) { display: flex; flex-direction: column; }
+.hub-main:has(> .hub-game > .bg-root > .bg-shell > .bg-tabs) > .hub-game { flex: 1 0 auto; display: flex; flex-direction: column; }
+.hub-game > .bg-root:has(> .bg-shell > .bg-tabs) { flex: none; min-height: 0; margin-block: auto; }

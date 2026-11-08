@@ -414,7 +414,6 @@ class TicTacToeUI {
     const stats = this._statsLine();
     const head = `
       <h1 class="ttt-title">${t('title')}</h1>
-      <p class="ttt-sub">${t('tagline')}</p>
       ${stats ? `<p class="ttt-stats">${esc(stats)}</p>` : ''}
       ${this._modeSeg()}`;
 
@@ -441,7 +440,7 @@ class TicTacToeUI {
           this._firstContent())}
       </div>
       ${hosting
-        ? `<p class="ttt-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+        ? `<p class="ttt-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : ''))}</p>
            <button type="button" class="ttt-btn ttt-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`
         : `<button type="button" class="ttt-btn ttt-btn-primary" data-action="start">${t('start')}</button>`}
       <button type="button" class="ttt-link" data-action="help">${t('howto')}</button>`;

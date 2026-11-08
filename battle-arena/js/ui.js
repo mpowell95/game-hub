@@ -348,12 +348,46 @@ class BattleArena {
     this.on(this.root.querySelector('[data-role="help"]'), 'click', () => this.showHelp());
     this.paintOnlineBadge();
     this.fillOnline(note);
+    this.fitHome();
+  }
+
+  /** NO SCROLLING on a short phone (2026-11-08: on a 360x668 Android the Online tab ran off the bottom and,
+   *  on every iPhone, How to play sat on the home bar): the monster art shrinks until the menu fits, down to
+   *  64px, then goes; then the spacing tightens; then the logo shrinks (to half at most). Buttons never change. Re-run on every tab switch and resize. */
+  fitHome() {
+    const home = this.root.querySelector('.ba-home');
+    if (!home) return;
+    const art = home.querySelector('.ba-home-art');
+    const mon = home.querySelector('.ba-home-mon svg');
+    home.style.removeProperty('--ba-hm');
+    home.classList.remove('is-tight');
+    if (art) art.hidden = false;
+    fitText(home.querySelector('.ba-title-a'), 30);
+    fitText(home.querySelector('.ba-title-b'), 64);
+    const menu = home.querySelector('.ba-home-menu');
+    const hero = home.querySelector('.ba-home-hero');
+    // The menu (its padding holds the home bar's space) must end on screen, and the hero must hold the logo.
+    const over = () => (menu && menu.getBoundingClientRect().bottom > Math.min(window.innerHeight, this.root.getBoundingClientRect().bottom) + 1)
+      || (menu && menu.lastElementChild && menu.lastElementChild.getBoundingClientRect().bottom
+        > menu.getBoundingClientRect().bottom - parseFloat(getComputedStyle(menu).paddingBottom) + 1)
+      || (hero && hero.scrollHeight > hero.clientHeight + 1);
+    if (!over() || !mon) return;
+    let hm = Math.round(mon.getBoundingClientRect().width);
+    while (over() && hm > 64) { hm -= 8; home.style.setProperty('--ba-hm', hm + 'px'); }
+    if (over() && art) art.hidden = true;
+    // Then tighter spacing: the logo up level with the Hub button (it is centred, clear of it), smaller gaps.
+    if (over()) home.classList.add('is-tight');
+    // Still too tall (a short phone's Online tab): the logo's two lines shrink together, to at most half.
+    const lines = [...home.querySelectorAll('.ba-title-a, .ba-title-b')];
+    const base = lines.map((el) => parseFloat(el.style.fontSize) || parseFloat(getComputedStyle(el).fontSize));
+    for (let f = 0.9; over() && f >= 0.5; f -= 0.1) lines.forEach((el, i) => { el.style.fontSize = (base[i] * f).toFixed(1) + 'px'; });
   }
 
   /** Show one home tab's panel (no re-render: the Online list and the chosen level stay as they are). */
   showTab(k) {
     for (const b of this.root.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
     for (const p of this.root.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+    this.fitHome();
   }
 
   /** The Online tab (online-ui.js fillOnline), then the default tab. */
@@ -371,6 +405,7 @@ class BattleArena {
     const n = this.root.querySelector('.ba-tab-n');
     if (n) { n.textContent = res.mine ? String(res.mine) : ''; n.hidden = !res.mine; }
     if (!this._tab) this.showTab(res.active ? 'online' : 'cpu');
+    else this.fitHome();
   }
 
   /** "Online 2": how many challenges wait on this player (alert.js, one small read). */
@@ -775,6 +810,7 @@ class BattleArena {
 
   /** Board cell size and monster size, measured from the space really there. */
   fit() {
+    this.fitHome();
     const battle = this.root.querySelector('.ba-battle');
     const field = this.root.querySelector('.ba-field');
     if (!battle || !field) return;

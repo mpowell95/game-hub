@@ -442,3 +442,7 @@ Matt: "We should add resume to the other games that don't save". `gamehub.hoops4
 ## Setup tabs (2026-11-07)
 
 Setup is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`). Online = Matches (your turn first, Play pill; owed series games), Challenge (Anyone + the 4 most recent people), then the Host / Join / Pass & play tiles (`mp-ui.js fillOnline`); opens on Online when a match is going, else Computer; tapped tab wins; badge = your turns. The sheet's old home list is gone (its pick, terms, History, host and join views stay, closing lands on the tab); a match is quit from its pause sheet. The hero picture and the Your turn card were replaced by the tab.
+
+## Fits on a short phone (2026-11-08)
+
+`mp-ui.js fitOnline`: match rows come off the end until the setup fits (at least one kept), then "+N more" (every match is on the Multiplayer screen); re-run by `showTab`. The setup starts below the Hub button like every other game (`max(safe top, 54px) + 44px`), except on a screen under 720px tall, where the title sits level with the Hub button. `tools/review-setup-cards.cjs hoops4`.

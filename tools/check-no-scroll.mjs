@@ -88,18 +88,18 @@ const EXTRA_SCREENS = {
       },
     },
     {
-      // Online (2026-10-24): the online home (Challenge, Host / Join, the list) and the Join code.
-      name: 'online home',
+      // Online: the home's Online tab (2026-11-07 tabs replaced the separate online home) and the Join code.
+      name: 'online tab',
       async open(page) {
-        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.openOnline(); });
-        await page.waitForSelector('.ba-online [data-role="join"]', { timeout: 8000 });
+        await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.renderHome('online'); });
+        await page.waitForSelector('.ba-onbox [data-role="join"]', { timeout: 8000 });
         await page.waitForTimeout(400);
       },
     },
     {
       name: 'online join',
       async open(page) {
-        await page.click('.ba-online [data-role="join"]');
+        await page.click('.ba-onbox [data-role="join"]');
         await page.waitForSelector('.ba-ol-input', { timeout: 8000 });
         await page.waitForTimeout(250);
       },
@@ -225,11 +225,11 @@ const EXTRA_SCREENS = {
   // rows cut themselves to fit (chinchon/js/ch-ui.js fitList).
   chinchon: [
     {
-      name: 'challenge home',
+      // The Online tab (2026-11-07 tabs replaced the Turn by turn mode button this used to press).
+      name: 'online tab',
       async open(page) {
-        await page.click('[data-action="set-mode"][data-v="turns"]');
-        await page.waitForSelector('[data-role="ch"] [data-ch="new"]', { timeout: 8000 });
-        await page.waitForTimeout(400);
+        await page.click('[data-action="set-tab"][data-v="online"]');
+        await page.waitForTimeout(800);
       },
     },
   ],

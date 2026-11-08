@@ -394,8 +394,7 @@ class FillerUI {
     return `<div class="fl-logo" aria-hidden="true">
         ${[0, 2, 4, 1, 3].map((c) => `<span class="fl-swatch fl-logo-tile" data-color="${c}"></span>`).join('')}
       </div>
-      <h2 class="fl-title">${t('title')}</h2>
-      <p class="fl-sub">${t('tagline')}</p>`;
+      <h2 class="fl-title">${t('title')}</h2>`;
   }
 
   /** TABS (2026-11-07): Online | Solo. Online holds the old Host / Join choice, unchanged. */
@@ -463,7 +462,7 @@ class FillerUI {
           </div>`}
 
           ${hosting
-            ? `<p class="fl-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+            ? `<p class="fl-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : ''))}</p>
                <button type="button" class="fl-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`
             : `<button type="button" class="fl-primary" data-action="start">${t('start')}</button>`}
           <button type="button" class="fl-ghost" data-action="help">${t('howto')}</button>

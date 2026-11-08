@@ -186,3 +186,7 @@ The known gap above is closed: hidden mid-round, the moment and time left are st
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first word of the round = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per round (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - A claim cannot see whether the other found a word (words are private). Solo: giving up is a loss once the board is SHOWN (before the first word too).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup centred (2026-11-08)
+
+Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.

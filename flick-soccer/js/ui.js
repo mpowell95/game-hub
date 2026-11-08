@@ -301,7 +301,6 @@ class FlickSoccerUI {
             <button type="button" class="fs-x fs-q" data-act="howto" data-la="howto">?</button>
             <button type="button" class="fs-x" data-act="exit" data-la="aria_close">${X_SVG}</button>
             <h2 class="fs-logo" data-l="title"></h2>
-            <p class="fs-tag" data-l="tagline"></p>
             <div class="gh-seg fs-tabs" role="group" data-role="stabs">
               <button type="button" class="gh-seg__item fs-tab" data-act="tab" data-tab="online" aria-pressed="false"><span data-l="tab_online"></span><b class="fs-tab-n" hidden></b></button>
               <button type="button" class="gh-seg__item fs-tab" data-act="tab" data-tab="cpu" aria-pressed="true"><span data-l="tab_cpu"></span></button>

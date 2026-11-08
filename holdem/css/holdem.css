@@ -735,5 +735,7 @@
 }
 
 /* SETUP TABS (2026-11-07): Online | Solo. Centred (Matt, 2026-11-08: "centered and balanced"). */
+/* A short screen (a browser tab, a small Android, 2026-11-08): How to play ran off the bottom of Vs computer. */
+@media (max-height: 720px) { .pk-root .pk-setup { gap: 8px; } }
 .pk-root .pk-tab { font-size: 17px; }
 .pk-root .pk-tab.is-on { font-weight: 800; }

@@ -539,7 +539,6 @@ class BoggleUI {
     const stats = this._statsLine();
     const head = `
       <h1 class="bg-title">${esc(t('title'))}</h1>
-      <p class="bg-sub">${esc(t('tagline'))}</p>
       ${stats ? `<p class="bg-stats">${esc(stats)}</p>` : ''}
       ${this._modeSeg()}`;
 
@@ -564,7 +563,7 @@ class BoggleUI {
         ${hosting ? '' : this._row('difficulty', esc(t('row_difficulty')), t(DIFF_LABEL_KEY[s.difficulty]), this._diffContent())}
       </div>
       ${hosting
-        ? `<p class="bg-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+        ? `<p class="bg-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : ''))}</p>
            <button type="button" class="bg-btn bg-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${esc(t('mp_host_btn'))}</button>`
         : `<button type="button" class="bg-btn bg-btn-primary" data-action="start">${esc(t('start'))}</button>`}
       <button type="button" class="bg-link" data-action="help">${esc(t('howto'))}</button>`;

@@ -596,3 +596,11 @@
 /* TABS: Online | Solo (2026-11-07). Appended so file:line KNOWN_GAPS entries stay put. */
 .ttt-root .ttt-tabs .ttt-segbtn { font-size: 17px; }
 .ttt-root .ttt-seg + .ttt-seg { margin-top: 0; }
+
+/* SETUP CENTRED in the page (Matt, 2026-11-08: "they should look centered and balanced"). Only while the
+   setup shows (the one screen with the Online tabs): the page area stretches to the screen and the card,
+   at its own height, sits in the middle (auto margins, so a taller card still starts at the top). Every
+   other screen is untouched. */
+.hub-main:has(> .hub-game > .ttt-root > .ttt-shell > .ttt-tabs) { display: flex; flex-direction: column; }
+.hub-main:has(> .hub-game > .ttt-root > .ttt-shell > .ttt-tabs) > .hub-game { flex: 1 0 auto; display: flex; flex-direction: column; }
+.hub-game > .ttt-root:has(> .ttt-shell > .ttt-tabs) { flex: none; min-height: 0; margin-block: auto; }

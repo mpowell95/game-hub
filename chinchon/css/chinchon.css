@@ -854,3 +854,12 @@
 .cc-root .cc-room-row .cc-btn { flex: 1 1 0; font-size: 17px; min-height: 48px; }
 /* The quick-chat layer (js/match-chat-ui.js) is absolutely placed in the root. */
 .cc-root.cc-ch-on { position: relative; }
+
+/* SETUP CENTRED in the page (Matt, 2026-11-08: "they should look centered and balanced"). Only while the
+   setup shows (the one screen with the Online tabs): the page area stretches to the screen and the card sits
+   in the middle of it, auto margins, so a taller card still starts at the top. Every other screen is untouched. */
+.hub-main:has(> .hub-game > .cc-root > .cc-setup) { display: flex; flex-direction: column; }
+.hub-main:has(> .hub-game > .cc-root > .cc-setup) > .hub-game { flex: 1 0 auto; display: flex; flex-direction: column; }
+.hub-game > .cc-root:has(> .cc-setup) { flex: 1 0 auto; display: flex; flex-direction: column; }
+.hub-game > .cc-root:has(> .cc-setup) > .cc-header { margin-top: auto; }
+.hub-game > .cc-root > .cc-setup { margin-bottom: auto; }

@@ -281,3 +281,7 @@ Vs the computer only: Restart / Setup after the player's first sowing (`hm` in t
 - Vs the computer: quitting is a loss once any sowing has happened (`hm`) (it was the player's own first move).
 - **The computer is deterministic**: Intermediate and Pro stop on a NODE budget (`PRO_NODES` 640,000, `INTERMEDIATE_NODES` 400,000), not the clock, so a resumed position gets the same move on every phone (this supersedes "Timed searches are not seeded" above). Measured: new Pro vs the old timed one 11-12-1 over 24 games; ~300 ms a move, longest 622 ms on the test machine (slower on an old phone). `tools/test-ai-resume-seeds.mjs`.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Setup centred (2026-11-08)
+
+Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
