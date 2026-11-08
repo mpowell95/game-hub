@@ -614,6 +614,9 @@
 /* TABS: Online | Play (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
    label, never colour alone. The setup card is pinned to the top so the tabs never move between panels. */
 .ep-root .ep-ov-setup > .ep-card { margin-block: 0 auto; }
+/* Pinned to the top means BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
+   same clearance as the multiplayer screen (ep-ov-mp). */
+.ep-root .ep-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
 .ep-root .ep-tabs { display: flex; width: 100%; padding: 2px; background: #f1e6d6; border-color: var(--ep-line); }
 .ep-root .ep-tabs .ep-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: var(--ep-muted); font-size: 17px; }
 .ep-root .ep-tabs .ep-tab[aria-pressed="true"] { background: #fff; color: var(--ep-ink); font-weight: 800; box-shadow: 0 0 0 2px var(--ep-brand); }

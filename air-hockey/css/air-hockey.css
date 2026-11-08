@@ -222,6 +222,8 @@
 
 /* SETUP TABS (2026-11-07): Online | Computer. Pinned to the top so the tabs never move between panels. */
 .ah-root .ah-ov-top { align-items: flex-start; overflow-y: auto; }
+/* ...below the floating "‹ Hub" button (max(safe top, 54px), 36px tall; 2026-11-08: a flat 96px touched it on an iPhone). */
+.ah-root .ah-ov-top { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
 .ah-root .ah-tabs { display: flex; width: 100%; margin: 6px 0 8px; }
 .ah-root .ah-tabs .gh-seg__item { flex: 1 1 0; min-height: 44px; font-size: 17px; min-width: 0; }
 .ah-root .ah-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }

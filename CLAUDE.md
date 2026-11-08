@@ -387,7 +387,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
-- **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (Flick Soccer first-to-1 games shown at the level picked, everyone, points unchanged; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks).
+- **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
@@ -749,6 +749,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   multiplayer games")**: Cup Pong's shape (`cup-pong/CLAUDE.md`, "The setup screen"). Challenge games: Matches (Play on your
   turn) + Challenge (Anyone + 4 recent first names); opens on Online when a match is going, else the next tab. Live-room-only
   games: Online holds Host/Join, opens on the offline tab. Each game's CLAUDE.md has its own "Setup tabs" note.
+  **Pinned to the top means BELOW the floating "‹ Hub"** (it sits at `max(safe top, 54px)`, 36px tall): v1487 put 7 games'
+  cards under it on iPhones (fixed v1495). Check with an emulated 62px safe area (CDP `Emulation.setSafeAreaInsetsOverride`).
 - **A new challenge game needs** `armOpen(id)`, `armChallenge({code,name,emoji})`,
   `myTurnCount()` in its alerts module, plus a `SOURCES` entry in `js/challenges.js`
   (`tools/test-challenges.mjs` checks).
