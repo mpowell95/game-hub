@@ -47,9 +47,9 @@ import {
   resolveGameAllowed, gameAllowList, setGameAllowed, setBoardMode, resolveBoardCorrections,
   setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
   resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
-  setIntegrityVoided, resolveReviewed, setReviewed,
+  setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust,
 } from './admin-config.js';
-import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES } from './stats-corrections.js';
+import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
@@ -936,8 +936,32 @@ function gamePlayerPage(cfg, sid, key) {
       title: (voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')),
       acts: [voided ? btn(tx('adm_undo', 'Undo'), gameVoid(key, sid, false)) : btn(tx('adm_void', 'Void'), gameVoid(key, sid, true), 'x')] })]);
   }
+  body += adjustHTML(cfg, p, sid);
   body += playsHTML(p, sid);
   return { title: p.name, body };
+}
+
+/** ADJUST (Matt, 2026-11-08): add or take away wins and losses per level, read time only
+ *  (adminConfig/v1/corrections/adjust, js/stats-corrections.js adjustGame). The numbers above already include it. */
+function adjustHTML(cfg, p, sid) {
+  const code = (p.playerId || '').toUpperCase();
+  if (!code || SOLO.has(sid)) return '';
+  const adj = obj(obj(obj(obj(cfg).corrections).adjust)[code])[sid];
+  const levels = new Set([...Object.keys(obj(obj(obj(p.games)[sid]).byDiff)), ...Object.keys(obj(adj)), ...((FULL_LEVEL_GAMES[sid] || {}).ladder || [])]);
+  const order = ['easy', 'beginner', 'medium', 'normal', 'intermediate', 'hard', 'pro', 'expert', 'mp'];
+  const lv = [...levels].filter((k) => /^[A-Za-z0-9_-]{1,24}$/.test(k)).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+  const sign = (n) => (n > 0 ? `+${n}` : String(n));
+  const rows = lv.map((k) => {
+    const a = resolveAdjust(cfg, code, sid, k);
+    const sub = a.won || a.lost ? `${tx('adm_won_l', 'Won')} ${sign(a.won)} · ${tx('adm_lost_l', 'Lost')} ${sign(a.lost)}` : '';
+    return row({ title: diffLabel(k), sub, acts: [
+      btn(tx('adm_adj_w_minus', 'W −'), () => setAdjust(code, sid, k, -1, 0)),
+      btn(tx('adm_adj_w_plus', 'W +'), () => setAdjust(code, sid, k, 1, 0)),
+      btn(tx('adm_adj_l_minus', 'L −'), () => setAdjust(code, sid, k, 0, -1)),
+      btn(tx('adm_adj_l_plus', 'L +'), () => setAdjust(code, sid, k, 0, 1)),
+    ] });
+  });
+  return rows.length ? gh(tx('adm_adjust', 'Adjust')) + grp(rows) : '';
 }
 
 /** A difficulty bucket's name: the stored id, readable (ids stay canonical; only the label changes). */

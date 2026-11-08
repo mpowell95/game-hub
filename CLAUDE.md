@@ -387,7 +387,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
-- **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks).
+- **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
