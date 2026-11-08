@@ -281,5 +281,20 @@ console.log('\n--- integrity voids: Golf must not rank first, Contexto must not 
   }
 }
 
+// HAND RESULTS (2026-11-08, Matt: "That test win should count"): filed as the recorder would, before the full-level move.
+{
+  const SC = await import('../js/stats-corrections.js');
+  const e = SC.HAND_RESULTS.flicksoccer[0];
+  const gm = { total: { played: 2, won: 1, lost: 1 }, byDiff: { medium: { played: 2, won: 1, lost: 1 } }, byMode: {}, dt: { gf: 1, ga: 1, flicks: 9, _n: 2 } };
+  const out = SC.handResultsGame(gm, 'flicksoccer', e.code);
+  ok('hand result: one more win in the recorded bucket and the total', out.byDiff.medium.won === 2 && out.total.won === 2 && out.total.played === 3);
+  ok('hand result: its byMode row at the chosen level', out.byMode[e.mode][e.chosen].won === 1);
+  ok('hand result: its detail added', out.dt.gf === 2 && out.dt._n === 3);
+  ok('hand result: the record passed in is not changed', gm.total.won === 1 && !gm.byMode[e.mode]);
+  ok('hand result: nobody else gets it', SC.handResultsGame(gm, 'flicksoccer', 'ZZZZZ') === gm);
+  const shown = SC.fullLevelGame(out, 'flicksoccer', e.code);
+  ok('hand result: a first-to-1 Hard win shows at Hard', shown.byDiff.hard && shown.byDiff.hard.won === 1);
+}
+
 console.log(`\nStats corrections tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }
