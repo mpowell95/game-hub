@@ -187,7 +187,8 @@ Online = Matches (your turn first with Play, then theirs; owed series games; the
 (+ Anyone = the full list, then the 4 people played most recently, first names, one tap = their terms), from
 `mp-ui.js fillOnline`. **Opens on Online when any match is going, else Computer** (decided after the read; a tapped tab
 wins; `ACTIVE_HINT` keeps the first paint from jumping). The Online badge = matches on your turn. Centred (2026-11-08, Matt:
-"centered and balanced"; it was pinned to the top). The old Multiplayer home is gone: every "back to multiplayer" lands on the Online tab.
+"centered and balanced"; it was pinned to the top). The SHOWN panel carries the bottom auto margin
+(`.cp-panel:not([hidden])`): the last child is the hidden Solo panel, so `:last-child` sank the card to the bottom. The old Multiplayer home is gone: every "back to multiplayer" lands on the Online tab.
 (2026-09-28 layout, replaced: Your turn card, Multiplayer door, computer card, Solo door.)
 
 ## Challenges: turn by turn, by player code (2026-09-28)
