@@ -172,10 +172,11 @@ TEST tag by the menu. Vs the computer and pass and play only, **never online** (
   day; `render.js` `setNet` is now always the normal net). Absent = closed, byte-identical to before (`mp.js` never
   passes it). Honest limit: a disc (12.4 across) cannot fit behind a ball sitting on the line in a 9-deep net; it can
   reach it from the side.
-- **Pieces don't stay in the other team's net** (Matt, same day: *"if the play ends and any piece is in the other
-  team's net, it should be automatically moved out a bit"*): `settle()` on a `m.test` match calls `ejectFromNets(b)`
-  when a shot ends with no goal: a disc with any part over the line of the net it ATTACKS goes back just in front of
-  that line (same x, stepped out until it overlaps nothing). A disc in its OWN net stays.
+- **No piece stays in a net** (Matt: *"we can't let pieces stay in the net. they can go in and back out"*; 2026-11-08:
+  *"pieces can stay in the net currently and block any and all shots"*): `settle()` on a `m.test` match calls
+  `ejectFromNets(b)` when a shot ends with no goal: EVERY disc with any part over EITHER goal line goes back just in front
+  of that line (same x, stepped out until it overlaps nothing). Until 2026-11-08 a disc in its OWN net stayed (my
+  addition, not Matt's), so a parked keeper blocked every shot. Test levels re-checked after: Easy 89%, Medium 48%, Hard 23%.
 - **The Test computer** (`TEST_LEVEL`, `planTest` in `ai.js`): sees what a person lining up a shot sees. A goal counts
   only if CLEAN (`traceShot`: the disc touches the ball first, the ball touches no other piece, and goes in straight
   for Easy or off at most one wall or post for Medium/Hard); each seen goal is tried `tries` times with the level's own

@@ -279,15 +279,16 @@ export function settle(m, scorer) {
   return 'turn';
 }
 
-/** Admin Test mode (2026-11-06, Matt: "they can go in and back out, but if the play ends and any piece is in
- *  the other team's net, it should be automatically moved out a bit"). When a shot ends with no goal, a disc
- *  with any part over the goal line of the net it ATTACKS is put back on the pitch just in front of that line
- *  (same x, kept inside the mouth), stepped further out until it overlaps nothing. A disc in its OWN net
- *  stays (that is how a defender gets at a ball on the line). Deterministic; mutates `b`. */
+/** Admin Test mode (2026-11-06, Matt: "we can't let pieces stay in the net. they can go in and back out, but if the play
+ *  ends and any piece is in the other team's net, it should be automatically moved out a bit"; 2026-11-08: "pieces can stay
+ *  in the net currently and block any and all shots"). When a shot ends with no goal, EVERY disc with any part over EITHER
+ *  goal line is put back on the pitch just in front of that line (same x), stepped further out until it overlaps
+ *  nothing. (Until 2026-11-08 a disc in its OWN net stayed, and a keeper parked there blocked every shot.) Deterministic. */
 export function ejectFromNets(b) {
   for (let i = 1; i < b.length; i++) {
-    const o = b[i], top = teamOf(i) === 0;              // seat 0 attacks the top goal
-    if (top ? o.y - o.r >= 0 : o.y + o.r <= H) continue;
+    const o = b[i];
+    const top = o.y - o.r < 0, bottom = o.y + o.r > H;   // any part over the top or the bottom goal line
+    if (!top && !bottom) continue;
     if (o.x < GX0 - o.r || o.x > GX1 + o.r) continue;   // not at the mouth (cannot happen: walls)
     const x = Math.max(o.r, Math.min(W - o.r, o.x));
     for (let k = 0; k < 400; k++) {
