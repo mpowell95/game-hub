@@ -532,9 +532,10 @@
 .dt-root .ghc-input { -webkit-user-select: text; user-select: text; }
 
 /* TABS: Online | Computer (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
-   label, never colour alone. The setup card is pinned to the top so the tabs never move between panels. */
-.dt-root .dt-ov-setup > .dt-card { margin-block: 0 auto; }
-/* Pinned to the top means BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
+   label, never colour alone. */
+/* CENTRED again below the Hub button (Matt, 2026-11-08: "they should look centered and balanced"). */
+.dt-root .dt-ov-setup > .dt-card { margin-block: auto; }
+/* The card starts BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
    same clearance as the multiplayer screen (dt-ov-mp). */
 .dt-root .dt-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
 .dt-root .dt-tabs { display: flex; width: 100%; padding: 2px; background: #efe3cb; border-color: #e0cfae; }

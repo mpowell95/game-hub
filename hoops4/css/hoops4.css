@@ -1025,9 +1025,7 @@
 .h4-root .h4-mp-start { min-width: 86px; color: var(--h4s-ink); font-weight: 800; }
 
 /* TABS: Online | Computer (2026-11-07, Cup Pong's tabs). The selected tab is the raised pill AND its bold
-   label, never colour alone. Pinned to the top so the tabs never move between panels. */
-.h4-root .h4-setup > :first-child { margin-top: 0; }
-.h4-root .h4-setup > :last-child { margin-bottom: 0; }
+   label, never colour alone. Centred (Matt, 2026-11-08: "centered and balanced"). */
 .h4-root .h4-tabs { width: min(420px, 100%); box-sizing: border-box; display: flex; }
 .h4-root .h4-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; font-size: 17px; gap: 6px; }
 .h4-root .h4-tabs .gh-seg__item[aria-pressed="true"] { font-weight: 800; }

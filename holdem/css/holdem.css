@@ -734,7 +734,6 @@
   .pk-root .pk-switch i { transition: none; }
 }
 
-/* SETUP TABS (2026-11-07): Online | Solo. Pinned to the top so the tabs never move between panels. */
-.pk-root .pk-setup { justify-content: flex-start; }
+/* SETUP TABS (2026-11-07): Online | Solo. Centred (Matt, 2026-11-08: "centered and balanced"). */
 .pk-root .pk-tab { font-size: 17px; }
 .pk-root .pk-tab.is-on { font-weight: 800; }
