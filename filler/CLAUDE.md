@@ -231,3 +231,7 @@ Solo Restart / New game after the player's first colour (`state.moves`) = ONE lo
 ### Admin devices always go first vs the computer (2026-11-06)
 
 Matt: "Keep the alternative first move for all player besides admin. Let me start every game." `startGame()`: on `isAdminDevice()` the human opens every solo game and `nextStarter` is not flipped; everyone else alternates. Online play unchanged. Results still record `first: 'me'` honestly. **Its Went first / Went second stats table is removed** (`first: false` on Filler's `stdScreen` in `js/game-stats-ui.js`, Matt: "If it's alternating first moves then remove that table"); `first` is still recorded.
+
+## Setup centred (2026-11-08)
+
+Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.

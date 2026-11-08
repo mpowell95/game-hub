@@ -477,7 +477,7 @@ class MancalaUI {
     // Coming here from a live game (e.g. to change the speed) must not lose it:
     // the saved game is still on disk, so offer to go straight back to it.
     const paused = !!loadGame();
-    const head = `${this._logoHtml()}<h2 class="mc-title">${t('title')}</h2><p class="mc-sub">${t('tagline')}</p>${this._modeSeg()}`;
+    const head = `${this._logoHtml()}<h2 class="mc-title">${t('title')}</h2>${this._modeSeg()}`;
 
     if (this._lobby) {
       this.container.innerHTML = `<div class="mancala"><div class="mc-shell mc-setup">${head}${this._lobbyHTML()}</div></div>`;
@@ -528,7 +528,7 @@ class MancalaUI {
           </div>
 
           ${hosting
-            ? `<p class="mc-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+            ? `<p class="mc-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : ''))}</p>
                <button type="button" class="mc-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`
             : `${paused ? `
           <button type="button" class="mc-primary" data-action="resume">${t('resume_game')}</button>

@@ -621,7 +621,6 @@ class DotsBoxesUI {
     const stats = this._statsLine();
     const head = `
       <h1 class="db-title">${t('title')}</h1>
-      <p class="db-sub">${t('tagline')}</p>
       ${stats ? `<p class="db-stats">${esc(stats)}</p>` : ''}
       ${this._modeSeg()}`;
 
@@ -646,7 +645,7 @@ class DotsBoxesUI {
         ${this._row('first', t('row_first'), this._firstLabel(), this._firstContent())}
       </div>
       ${hosting
-        ? `<p class="db-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : t('mp_host_hint')))}</p>
+        ? `<p class="db-mp-msg">${esc(this._mpError || (this._mpBusy ? t('mp_creating_room') : ''))}</p>
            <button type="button" class="db-btn db-btn-primary" data-action="mp-host" ${this._mpBusy ? 'disabled' : ''}>${t('mp_host_btn')}</button>`
         : `<button type="button" class="db-btn db-btn-primary" data-action="start">${t('start')}</button>`}
       <button type="button" class="db-link" data-action="help">${t('howto')}</button>`;

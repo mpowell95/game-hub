@@ -579,7 +579,27 @@ class BattleshipUI {
     this.shell.style.minHeight = `${h}px`;
     const over = document.documentElement.scrollHeight - vh;
     if (over > 1) { h = Math.max(0, h - over); this.shell.style.minHeight = `${h}px`; }
+    this._trimMatches(h);
     this._bleedToEdges();
+  }
+
+  /** NO SCROLLING on a short screen (2026-11-08: a Safari tab or a 360x668 Android ran Host / Join off the bottom
+   *  with three matches): match rows come off the end, at least one kept, and "+N more" counts them (the
+   *  Multiplayer screen lists every match). Only ever FEWER rows than _onlineHTML drew. */
+  _trimMatches(h) {
+    const list = this.shell && this.shell.querySelector('.bs-ch-list');
+    if (!list) return;
+    // The shell is min-height h (the screen it may use); a card taller than that makes it taller.
+    const over = () => this.shell.offsetHeight > h + 1;
+    const rows = [...list.querySelectorAll('.bs-ch-row')];
+    let note = list.querySelector('.bs-ch-note');
+    let more = note ? Number((note.textContent.match(/\d+/) || [0])[0]) : 0;
+    while (over() && rows.length > 1) {
+      rows.pop().remove();
+      more++;
+      if (!note) { note = document.createElement('p'); note.className = 'bs-ch-note'; list.appendChild(note); }
+      note.textContent = t('ch_more', { n: more });
+    }
   }
 
   // --- multiplayer lobby (Tic Tac Toe's shape) --------------------------------------------------

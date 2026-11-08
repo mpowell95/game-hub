@@ -496,6 +496,7 @@ class Hoops4 {
     if (!box) return;
     for (const b of box.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === k));
     for (const p of box.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== k;
+    if (k === 'online' && this._mpUI) this._mpUI.fitOnline(this.root.querySelector('.h4-online'));
   }
 
   /** The Online tab: matches, who to challenge and the live-room tiles (mp-ui.js fillOnline), then the
@@ -506,6 +507,7 @@ class Hoops4 {
     let UI;
     try { UI = await import('./mp-ui.js'); } catch { return; }
     if (this.disposed || !box.isConnected) return;
+    this._mpUI = UI;
     const flash = this._flash; this._flash = '';
     const res = await UI.fillOnline(this, box, flash);
     if (!res || this.disposed || !box.isConnected) return;

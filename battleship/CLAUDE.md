@@ -429,3 +429,7 @@ Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move)
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first SHOT = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per game of the series (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - Vs the bot: quitting is a loss once the BATTLE is on screen (placing is still not a move). A solo battle set aside by a challenge or notification is kept; Play over it asks twice and records its loss (`_recordSavedQuitLoss`); a live room no longer clears it.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Fits on a short phone (2026-11-08)
+
+`_trimMatches` (after `_fitScene`'s height): on a Safari tab or a 360x668 Android three matches pushed Host / Join off the card; rows now come off the end (at least one kept) and "+N more" counts them. `tools/review-setup-cards.cjs battleship`.

@@ -158,3 +158,7 @@ The menu's New match / Home after the player's first move (`pm` in the save) = O
 ## Home tabs (2026-11-07, the Cup Pong way)
 
 Home = **Online | Computer** tabs (`renderHome(tab, note)`, `showTab`, `fillOnline`); Monsters and How to play sit under both. Online = Matches (Play pill on your turn; rows dropped until the screen fits, the rest counted) + Challenge (Anyone = picker, then the 4 most recent people, one tap = draft for that person) + Host / Join (their own screens, unchanged); `fillOnline` in `js/online-ui.js`. The old Online screen is gone: every "back" is `home(ui, note)` = `renderHome('online', note)`. Opens on Online when a match is going, else Computer; a tapped tab wins (`this._tab`). Badge = matches on your turn. TEST tag kept. Layout only.
+
+## Fits on a short phone (2026-11-08)
+
+`fitHome()` (ui.js): on a short phone the Online tab ran off the bottom (Unai's 360x668 Android) and How to play sat on the iPhone home bar. Step by step until the menu fits: the monster art shrinks to 64px, then goes; then `.ba-home.is-tight` (logo level with the Hub button, smaller gaps); then the logo shrinks to half at most. Buttons never change. Re-run on every tab switch, the Online list filling, and resize. `tools/review-setup-cards.cjs battle-arena`.

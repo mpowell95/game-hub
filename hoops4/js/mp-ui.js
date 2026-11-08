@@ -703,7 +703,7 @@ export async function fillOnline(ui, box, flash = '') {
   box.innerHTML = note(flash) + (nMatches ? `
       <div class="gh-card h4-on-card">
         <div class="h4-on-head"><span>${esc(t('matches'))}</span>${chip}</div>
-        ${oMine.map(owedRow).join('')}${mine.map(liveRow).join('')}${oTheirs.map(owedRow).join('')}${theirs.map(liveRow).join('')}
+        <div class="h4-on-rows"></div>
       </div>` : '') + `
       <div class="gh-card h4-on-card">
         <div class="h4-on-head"><span>${esc(t('challengeH'))}</span>${nMatches ? '' : chip}</div>
@@ -713,6 +713,8 @@ export async function fillOnline(ui, box, flash = '') {
         </div>
       </div>${tiles}
       <div data-role="push"></div>`;
+  box._rows = oMine.map(owedRow).concat(mine.map(liveRow), oTheirs.map(owedRow), theirs.map(liveRow));
+  fitOnline(box);
   ui.on(box, 'click', async (e) => {
     const nx = e.target.closest('[data-next]');
     if (nx) {
@@ -745,7 +747,27 @@ export async function fillOnline(ui, box, flash = '') {
   return { active: nMatches > 0, mine: mine.length + oMine.length };
 }
 
-export default { openMultiplayer, createMatchChat, fillOnline };
+/** NO SCROLLING (2026-11-08: on a 360x668 Android or a Safari tab three matches pushed How to play off the
+ *  screen): rows are dropped from the end until the setup fits, at least one kept, then "+N more" (every
+ *  match is on the Multiplayer screen). Measured only while the Online tab shows; ui.js showTab re-runs it. */
+export function fitOnline(box) {
+  const list = box && box.querySelector('.h4-on-rows');
+  const setup = box && box.closest('.h4-setup');
+  if (!list || !setup || !Array.isArray(box._rows)) return;
+  const panel = box.closest('[data-panel]');
+  list.innerHTML = box._rows.join('');
+  if (panel && panel.hidden) return;
+  const over = () => setup.scrollHeight > setup.clientHeight + 1;
+  const rows = [...list.children];
+  let note = null;
+  while (over() && rows.length > 1) {
+    rows.pop().remove();
+    if (!note) { note = document.createElement('p'); note.className = 'h4-mp-note h4-more'; list.appendChild(note); }
+    note.textContent = t('nMore', { n: box._rows.length - rows.length });
+  }
+}
+
+export default { openMultiplayer, createMatchChat, fillOnline, fitOnline };
 
 /**
  * THE GAME OVER POPUP FOR A MATCH THAT ENDED WHILE YOU WERE AWAY (2026-09-24). Matt, first: "there
