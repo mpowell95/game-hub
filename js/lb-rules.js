@@ -35,7 +35,7 @@ export const LB_RULES = {
   eightball: { by: 'wins', short: { when: 'eightball', ladder: L3 } },
   escoba: { by: 'wins', table: true },
   filler: { by: 'wins' },
-  flicksoccer: { by: 'wins', short: { when: 'flicksoccer', ladder: L3 } },
+  flicksoccer: { by: 'wins', short: { when: 'flicksoccer', ladder: L3 }, shown: 'picked' },   // recorded one down, SHOWN as picked (FULL_LEVEL, 2026-11-08): no "Counts as" rows
   golf: { by: 'golf' },
   gridlock: { by: 'points' },
   hillclimb: { by: 'best' },
@@ -64,7 +64,7 @@ export function rulesFor(id) {
   const r = LB_RULES[id];
   if (!r) return null;
   const counts = [];
-  if (r.short) {
+  if (r.short && r.shown !== 'picked') {
     const rows = r.short.ladder.map((d) => ({ from: tierOf(d), to: tierOf(oneTierDown(d, r.short.ladder)) })).filter((x) => x.from !== x.to).reverse();
     if (rows.length) counts.push({ when: r.short.when, rows });
   }

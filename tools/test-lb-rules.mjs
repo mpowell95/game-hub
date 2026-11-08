@@ -41,7 +41,9 @@ const check = (id, f, shortArgs, stdArgs) => {
     for (const a of shortArgs) ok(`${id}: ${d} shortened (${a}) counts one down`, f(d, a) === oneTierDown(d, lad), [d, a, f(d, a)]);
     for (const a of stdArgs) ok(`${id}: ${d} standard (${a}) counts as itself`, f(d, a) === d, [d, a, f(d, a)]);
   }
-  ok(`${id}: shows rows`, rulesFor(id).counts.some((c) => c.when === LB_RULES[id].short.when && c.rows.length));
+  const shows = rulesFor(id).counts.some((c) => c.when === LB_RULES[id].short.when && c.rows.length);
+  // shown: 'picked' (Flick Soccer, js/stats-corrections.js FULL_LEVEL): recorded one down but SHOWN at the level picked.
+  ok(`${id}: ${LB_RULES[id].shown === 'picked' ? 'shows no rows (shown as picked)' : 'shows rows'}`, LB_RULES[id].shown === 'picked' ? !shows : shows);
 };
 check('flicksoccer', (await imp('flick-soccer/js/ui.js')).statsDiff, [1], [2, 3]);
 check('eightball', (await imp('eight-ball/js/ui.js')).statsDiff, [1], [2, 3]);

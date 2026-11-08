@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1492;
-const CACHE = 'game-hub-v1492';
+const IMPORTANT_SINCE = 1493;
+const CACHE = 'game-hub-v1493';
 
 const ASSETS = [
   './',
@@ -850,8 +850,8 @@ const REST_MANIFEST = {
   './js/theme.js': 'e8b40b1bc2',
   './js/layout.js': '2517577123',
   './js/back-stack.js': '30b257fa2a',
-  './js/lb-rules.js': '229e7a9b85',
-  './js/lb-points.js': 'a4071ff279',
+  './js/lb-rules.js': '878640326a',
+  './js/lb-points.js': '7ac64fa801',
   './js/lb-points-sheet.js': 'af0526a996',
   './js/lb-rank-sheet.js': '7fd13c0d50',
   './js/puzzle-points.js': 'b474d8114f',
@@ -897,11 +897,11 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': '772354b97e',
+  './js/stats-corrections.js': 'a399cccacc',
   './js/bee-fairplay.js': '0bed676c4b',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '66d164d54d',
+  './js/players-agg.js': 'b7f1fb0dea',
   './js/game-art.js': 'a3d7660359',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
