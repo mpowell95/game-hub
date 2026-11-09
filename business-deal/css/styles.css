@@ -483,7 +483,7 @@ html, body {
 }
 .act-btn .lbl { font-size: 12px; color: #fff; }
 .act-btn.flip .ic { background: #2b7fd6; }
-.act-btn.bank .ic { background: linear-gradient(180deg,#36c06a,#1d9a4f); }
+.act-btn.bank .ic { background: linear-gradient(180deg,#f5c542,#d49a0c); } /* gold: never the same green as Play (2026-11-09) */
 .act-btn.play .ic { background: linear-gradient(180deg,#36c06a,#1d9a4f); }
 .act-btn.pass .ic { background: radial-gradient(circle at 40% 35%, #ff9a4a, var(--pass) 70%); }
 .act-btn:disabled { opacity: .35; cursor: default; }

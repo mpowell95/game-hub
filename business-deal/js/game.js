@@ -211,8 +211,13 @@
     stealableProps(player) {
       const out = [];
       for (const color of Object.keys(player.properties)) {
-        if (this.isSetComplete(player, color)) continue; // can't take from a full set
-        for (const card of player.properties[color].cards) {
+        // A full set can't be taken from, but cards BEYOND it can (Matt,
+        // 2026-11-09: a 3rd Dark Blue beside a full set, drawn as its own pile,
+        // could not be Sly/Forced Dealt). The set is the first REQ cards, the
+        // same ones the board rings and Deal Breaker takes; the rest are extras.
+        const cards = player.properties[color].cards;
+        const from = this.isSetComplete(player, color) ? REQ[color] : 0;
+        for (const card of cards.slice(from)) {
           out.push({ cardId: card.id, color });
         }
       }
