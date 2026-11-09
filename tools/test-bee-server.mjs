@@ -283,6 +283,8 @@ ok('the push says who, when, which rules', n1.title === 'Spelling Bee' && n1.bod
   db2.tree.beeDaily[bkD].LATE1 = { name: 'Late', words: 30, points: 150, rank: 8, dw: 30, dp: 150, dr: 8, at: D0 + 6 * 24 * H };
   db2.tree.beeLog[bkD].LATE1 = lg([0, 1, 2].map((i) => ({ t: at(15) + i * 1000, s: D0 + 6 * 24 * H, w: word(i) })));
   db2.tree.beeDaily[bkD].LATE2 = { name: 'Late2', words: 30, points: 150, rank: 8, at: D0 + 6 * 24 * H };
+  // What index.js beeLogTouch does for each new log line (2026-11-09 log cache).
+  db2.tree.boards.v1.beeMeta.touched = { [bkD]: Date.now() };
   await B.rebuildBee(db2, D0 + 6 * 24 * H + H);
   const dd2 = JSON.parse(db2.tree.boards.v1.bee).days.find((x) => x.d === D && x.l === 'en');
   ok('late post with the phone set back: not played on the long-term board', !dd2.r.find((r) => r[0] === 'LATE1'));
