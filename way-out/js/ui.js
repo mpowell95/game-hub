@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, noteWayOutSlips, withMode, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
-import { woSlipsOf, woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woClMap, woSlipsOf, woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildB11, hasB11, B11_GEN, B11_COUNT, buildB12, hasB12, B12_GEN, B12_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -102,6 +102,18 @@ function ladderFromLegacy(levels, band) {
  *  what `ladder` means below. A band with no `ladder2` yet is carried from the first ladder (same
  *  place in the band), else from the old tiers. It only ever goes up (Math.max): a level reached is
  *  progress, and progress is never taken back. */
+/** The level after the highest one this player's stats show cleared in band `k` (0 if none):
+ *  the level set `wo.cl` and the legacy clears before it (`wo.leg[k].e` = the first level the set holds). */
+function clearedFloor(k) {
+  try {
+    const wo = ((loadStats().games || {}).wayout || {}).wo || {};
+    let next = 0;
+    const leg = wo.leg && wo.leg[k];
+    if (leg && Number(leg.e) >= 1) next = Math.floor(Number(leg.e));
+    for (const n of woClMap(wo.cl && wo.cl[k]).keys()) next = Math.max(next, n + 1);
+    return next;
+  } catch { return 0; }
+}
 function loadSettings() {
   const v = readSettingsRaw();
   const levels = {};
@@ -116,6 +128,11 @@ function loadSettings() {
     ladder[k] = Number.isInteger(n2) && n2 >= BAND_START[k] && n2 <= MAX_LEVEL ? n2
       : Number.isInteger(n1) && n1 >= V1_START[k] && n1 <= MAX_LEVEL ? Math.min(MAX_LEVEL, v1ToV2(k, n1))
       : ladderFromLegacy(levels, k);
+    // NEVER BELOW WHAT THE STATS SAY WAS CLEARED (2026-11-09, Matt re-added the app: Expert opened on
+    // 201 though he had cleared to 344). The ladder position lives only in these settings; the stats
+    // (synced, restorable) hold every cleared level. Only ever raises it.
+    const floor = clearedFloor(k);
+    if (floor > ladder[k] && floor <= MAX_LEVEL) ladder[k] = floor;
   }
   // Which mode the setup screen shows (Levels or Rush, 2026-10-14) and which Rush version: a
   // remembered choice, not progress.
