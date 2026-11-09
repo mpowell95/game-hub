@@ -60,7 +60,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--gh-st, env(safe-area-inset-top));
 }
 /* IN FLOW: the stage is flex:1 and the renderer fits the table to what is left, so the bar can
    never cover the table. 96px either side keeps the label clear of the hub's floating chip (top
@@ -83,7 +83,7 @@
 .cp-root .cp-menu {
   appearance: none;
   position: absolute;
-  top: max(10px, env(safe-area-inset-top, 0px));
+  top: max(10px, var(--gh-st, env(safe-area-inset-top, 0px)));
   right: 12px;
   z-index: 4;
   width: 44px;
@@ -182,7 +182,7 @@
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  padding: calc(56px + env(safe-area-inset-top)) 18px calc(14px + env(safe-area-inset-bottom));
+  padding: calc(56px + var(--gh-st, env(safe-area-inset-top))) 18px calc(14px + env(safe-area-inset-bottom));
   /* The turns card can make it taller than a short phone: it scrolls, contained (Hoops' rule). */
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -295,7 +295,7 @@
   --gh-muted: var(--cps-muted);
   height: 100%; box-sizing: border-box;
   display: flex; flex-direction: column;
-  padding: calc(56px + env(safe-area-inset-top)) 0 0;
+  padding: calc(56px + var(--gh-st, env(safe-area-inset-top))) 0 0;
   background: var(--cps-bg); color: var(--cps-ink);
 }
 .cp-root .cp-mp-top { padding: 0 18px 8px; }

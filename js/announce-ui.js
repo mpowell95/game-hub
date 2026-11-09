@@ -30,7 +30,7 @@ function ensureCss() {
   const style = document.createElement('style');
   style.id = 'ann-css';
   style.textContent = `
-  .ann-overlay { z-index: 290; padding: max(var(--gh-sp-4), env(safe-area-inset-top)) var(--gh-sp-4)
+  .ann-overlay { z-index: 290; padding: max(var(--gh-sp-4), var(--gh-st, env(safe-area-inset-top))) var(--gh-sp-4)
                  max(var(--gh-sp-4), env(safe-area-inset-bottom)); align-content: center; }
   .ann-modal { width: min(420px, 100%); text-align: center; }
   .ann-icon { font-size: 42px; line-height: 1; }
@@ -212,7 +212,7 @@ function ensureLbiCss() {
 .lbi-hole{position:fixed;z-index:1000;border-radius:12px;box-shadow:0 0 0 3px #ffce3a,0 0 0 9999px rgba(5,10,20,.55);pointer-events:none;transition:left .15s,top .15s,width .15s,height .15s}
 .lbi-tip{z-index:1001!important}
 .lbi-tip.up::after{top:-10px;bottom:auto;transform:rotate(225deg)}
-.lbi-skip{position:fixed;z-index:1002;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;min-height:40px;padding:0 16px;border-radius:20px;border:0;background:#fff;color:#111;font:inherit;font-weight:700;font-size:15px}`;
+.lbi-skip{position:fixed;z-index:1002;top:calc(var(--gh-st, env(safe-area-inset-top,0px)) + 10px);right:12px;min-height:40px;padding:0 16px;border-radius:20px;border:0;background:#fff;color:#111;font:inherit;font-weight:700;font-size:15px}`;
   document.head.appendChild(el);
 }
 function showLb2Intro(a) {

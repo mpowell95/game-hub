@@ -120,7 +120,7 @@ function ensureCss() {
   html.gh-dark .adm-page { --a-bg:#0d1422; --a-card:#182132; --a-ink:#eef2f8; --a-mut:#8a97ab; --a-line:rgba(190,214,244,.12);
     --a-blue:#5aa2ff; --a-red:#ff8a65; --a-bar:#111a2a; --a-chev:#56637a; --a-on:#ffce3a; --a-field:#1f2a3d; --a-sheet:#121a29; }
   .adm-page button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
-  .adm-nav { flex: none; box-sizing: content-box; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .adm-nav { flex: none; box-sizing: content-box; height: 44px; padding: var(--gh-st, env(safe-area-inset-top, 0px)) 16px 0; margin-top: 6px; display: flex; align-items: center; justify-content: space-between; }
   .adm-nb { display: inline-flex; align-items: center; gap: 1px; height: 44px; margin-left: -9px; padding: 0 8px 0 0; background: none; border: 0; color: var(--a-blue) !important; font-size: 17px !important; font-weight: 500; max-width: 70%; }
   .adm-nb span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .adm-ni { width: 44px; height: 44px; margin-right: -10px; display: flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--a-blue) !important; }
@@ -180,9 +180,9 @@ function ensureCss() {
   .adm-toast.on { opacity: 1; transform: none; }
   .adm-toast.err { background: #7a2410; }
   .adm-dim { position: absolute; inset: 0; z-index: 4; background: rgba(3,7,14,.55); }
-  .adm-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: calc(100% - env(safe-area-inset-top, 0px) - 20px); display: flex; flex-direction: column;
+  .adm-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: calc(100% - var(--gh-st, env(safe-area-inset-top, 0px)) - 20px); display: flex; flex-direction: column;
     background: var(--a-sheet); border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
-  .adm-sheet.tall { top: calc(env(safe-area-inset-top, 0px) + 20px); }
+  .adm-sheet.tall { top: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 20px); }
   .adm-sh { flex: none; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
   .adm-sh b { font-size: 17px; }
   .adm-sh button { min-height: 44px; background: none; border: 0; color: var(--a-blue) !important; font-size: 17px !important; font-weight: 700; padding: 0; }

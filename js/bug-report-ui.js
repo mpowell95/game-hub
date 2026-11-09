@@ -51,7 +51,7 @@ function ensureCss() {
   const style = document.createElement('style');
   style.id = 'bug-css';
   style.textContent = `
-  .bug-overlay { z-index: 300; padding: max(var(--gh-sp-4), env(safe-area-inset-top)) var(--gh-sp-4)
+  .bug-overlay { z-index: 300; padding: max(var(--gh-sp-4), var(--gh-st, env(safe-area-inset-top))) var(--gh-sp-4)
                  max(var(--gh-sp-4), env(safe-area-inset-bottom)); align-content: center; }
   .bug-modal { width: min(460px, 100%); }
   .bug-modal--wide { width: min(680px, 100%); max-height: 90vh; }

@@ -31,6 +31,9 @@
       if (t !== 'light' && (t === 'dark' || matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.className += ' gh-dark';
       }
+      // iOS 26 top-edge blur test (2026-11-09, Matt: "yes build the blur test, admin only"): every top
+      // row sits 48px lower on an admin device (css/hub.css --gh-st). Cached admin answer, same key as isAdminDevice().
+      if (localStorage.getItem('gamehub.adminDevice.v1') === '1') document.documentElement.className += ' gh-edgepad';
     } catch (e) { /* private mode: the deferred module still themes it a moment later */ }
   </script>
   <style>

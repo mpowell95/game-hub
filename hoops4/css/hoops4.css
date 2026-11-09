@@ -242,7 +242,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--gh-st, env(safe-area-inset-top));
 }
 /* IN FLOW, deliberately. The stage is flex:1 and the renderer fits the machine to whatever height
    is left, so a bar above it can never cover the machine at any size - the same reason skeeball's
@@ -255,7 +255,7 @@
   gap: 10px;
   /* 76px ON THE LEFT IS FOR THE HUB'S FLOATING CHIP, and removing it was a mistake this file
      already knew about - the original comment said exactly what it was for. It was dropped on a
-     measurement taken in a browser with NO NOTCH, where `env(safe-area-inset-top)` is 0: the HUD
+     measurement taken in a browser with NO NOTCH, where `var(--gh-st, env(safe-area-inset-top))` is 0: the HUD
      sat at y 9-42 and the chip at 54+, so they looked like separate rows. On a real iPhone the
      inset is ~59px, `.h4-play-wrap` pushes this row down by it, and the chip (whose own top is
      `max(inset, 54px)`) lands in the SAME BAND - with the hub's chrome painting above the game.
@@ -290,7 +290,7 @@
    TOP RIGHT IS NOT A STYLE CHOICE, it is the fix for a real bug this game already had once. The
    hub's floating "Hub" chip owns the top LEFT, and a Menu button that shares its band is hidden
    behind it on a notched phone - which is what happened, and which a headless measurement could
-   not see because `env(safe-area-inset-top)` is 0 there and ~59px on an iPhone. Horizontal
+   not see because `var(--gh-st, env(safe-area-inset-top))` is 0 there and ~59px on an iPhone. Horizontal
    separation is the axis a notch cannot move. Skeeball has sat here for a month without
    colliding.
 
@@ -298,7 +298,7 @@
 .h4-root .h4-menu {
   appearance: none;
   position: absolute;
-  top: max(10px, env(safe-area-inset-top, 0px));
+  top: max(10px, var(--gh-st, env(safe-area-inset-top, 0px)));
   right: 12px;
   z-index: 4;
   width: 44px;
@@ -682,7 +682,7 @@
 /* SKIP (2026-09-24): there from the first frame, top right, above the veil. */
 .h4-root .h4-cer-skip {
   position: absolute; z-index: 2;
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 4px); right: 12px;
+  top: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 4px); right: 12px;
   min-height: 44px; padding: 0 16px; border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.6); background: rgba(0, 0, 0, 0.45);
   color: #fff; font: inherit; font-size: 16px; font-weight: 800;
@@ -814,7 +814,7 @@
 .h4-root .h4-chat-btn {
   appearance: none;
   position: absolute;
-  top: max(10px, env(safe-area-inset-top, 0px));
+  top: max(10px, var(--gh-st, env(safe-area-inset-top, 0px)));
   right: 64px;
   z-index: 4;
   width: 44px; height: 44px;
@@ -838,7 +838,7 @@
 
 .h4-root .h4-chat {
   position: absolute;
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 52px);
+  top: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 52px);
   right: 12px;
   z-index: 5;
   width: min(330px, calc(100% - 24px));
@@ -895,7 +895,7 @@
    left-aligned bubbles landed behind it. */
 .h4-root .h4-chat-pops {
   position: absolute;
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 54px);
+  top: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 54px);
   left: 96px; right: 12px;
   z-index: 5;
   display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
@@ -928,7 +928,7 @@
 /* THEIR LINE IS BIG AND CENTRED (2026-09-24). Matt: "when someone sends you a chat, it's easy to
    miss. it needs to be much larger and just appear." Yours stays the small corner bubble; theirs
    is a card across the top of the machine, whole (it wraps, never ellipsed), with no slide-in. */
-.h4-root .h4-chat-pops { align-items: center; left: 12px; top: calc(max(10px, env(safe-area-inset-top, 0px)) + 92px); } /* under the 3-line HUD */
+.h4-root .h4-chat-pops { align-items: center; left: 12px; top: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 92px); } /* under the 3-line HUD */
 .h4-root .h4-chat-pop.is-mine { align-self: flex-end; }
 .h4-root .h4-chat-pop:not(.is-mine) {
   flex-direction: column; align-items: center; gap: 4px;
@@ -1071,7 +1071,7 @@
 .h4-root .h4-face-name { max-width: 100%; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* The hub chip owns the top left: everything starts below it (max(safe top, 54px), 36px tall), as in every other
    game, so the centred card is balanced under it (2026-11-08; a flat 56px put the tabs against it on an iPhone). */
-.h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
+.h4-root .h4-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 44px); }
 /* A short screen (a browser tab, a small Android): the title goes up level with the chip, clear of it. */
-@media (max-height: 720px) { .h4-root .h4-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 4px); } }
+@media (max-height: 720px) { .h4-root .h4-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 4px); } }
 .h4-root .h4-face.is-any { flex: 1.7 1 0; }

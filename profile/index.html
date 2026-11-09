@@ -30,6 +30,9 @@
       if (t !== 'light' && (t === 'dark' || matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.className += ' gh-dark';
       }
+      // iOS 26 top-edge blur test (2026-11-09, Matt: "yes build the blur test, admin only"): every top
+      // row sits 48px lower on an admin device (css/hub.css --gh-st). Cached admin answer, same key as isAdminDevice().
+      if (localStorage.getItem('gamehub.adminDevice.v1') === '1') document.documentElement.className += ' gh-edgepad';
     } catch (e) { /* private mode: the deferred module still themes it a moment later */ }
   </script>
   <style>
@@ -57,7 +60,7 @@
     html.gh-compact .pf-app { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
     /* content-box: hub.css's global border-box made a 44px row swallow the notch padding, and the
        title rode up under the status bar (the admin page's same fix, 2026-10-29). */
-    .pf-nav { box-sizing: content-box; height: 44px; padding: env(safe-area-inset-top, 0px) 16px 0; margin-top: 6px;
+    .pf-nav { box-sizing: content-box; height: 44px; padding: var(--gh-st, env(safe-area-inset-top, 0px)) 16px 0; margin-top: 6px;
       display: flex; align-items: center; justify-content: space-between; }
     .pf-nb { display: inline-flex; align-items: center; gap: 1px; height: 44px; margin-left: -9px; padding: 0 8px 0 0;
       background: none; border: 0; color: var(--p-blue) !important; font-size: 17px; font-weight: 500; text-decoration: none; }

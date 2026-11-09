@@ -10,7 +10,7 @@
   <style>
     html, body { margin: 0; height: 100%; background: #0a1322; color: #e8eef8; font: 15px system-ui, sans-serif; }
     body { display: flex; flex-direction: column; overflow: hidden; touch-action: none;
-      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); box-sizing: border-box; }
+      padding: var(--gh-st, env(safe-area-inset-top)) 0 env(safe-area-inset-bottom); box-sizing: border-box; }
     .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; }
     .bar button, .bar input { font: inherit; min-height: 44px; border-radius: 22px; border: 1px solid #3a5582; background: #16233a; color: inherit; padding: 0 16px; }
     .bar button { cursor: pointer; touch-action: manipulation; }

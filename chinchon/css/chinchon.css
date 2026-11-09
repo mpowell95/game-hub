@@ -196,7 +196,7 @@
 }
 .cc-zoom-cap { color: #fff; font-weight: 800; font-size: 1.1rem; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
 .cc-zoom-close {
-  position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; z-index: 1;
+  position: absolute; top: max(14px, var(--gh-st, env(safe-area-inset-top))); right: 16px; z-index: 1;
   appearance: none; cursor: pointer; width: 44px; height: 44px; border-radius: 50%;
   border: none; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 1.3rem; font-weight: 700;
 }

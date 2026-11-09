@@ -116,7 +116,7 @@ let instance = null;
 /** Where the quick-chat button sits (js/match-chat-ui.js `place`): under the menu button on the
  *  right edge (the menu is `right: 10px` at the top row, 44px tall, then a 10px gap), clear of the
  *  round pill and tiles in the middle and of the hub's chip on the left, on a 320px phone too. */
-const CHAT_PLACE = { top: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 54px)', right: '10px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 108px)' };
+const CHAT_PLACE = { top: 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 54px)', right: '10px', popsTop: 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 108px)' };
 
 /** Whether this player had a match going at the last look (this page's life only), so the first paint opens on the tab it settles on. */
 let ACTIVE_HINT = false;

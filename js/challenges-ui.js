@@ -97,7 +97,7 @@ function ensureCss() {
      under it, so the tabs stay usable. */
   .cx-overlay { position: fixed; inset: 0; z-index: 300; display: flex; justify-content: center;
                 background: var(--gh-bg); color: var(--gh-ink); overscroll-behavior: contain;
-                padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+                padding: var(--gh-st, env(safe-area-inset-top, 0px)) 0 env(safe-area-inset-bottom, 0px); }
   html.gh-compact .cx-overlay { z-index: 19; padding-bottom: calc(64px + max(0px, env(safe-area-inset-bottom, 0px) - 16px)); }
   .cx-page { position: relative; width: min(560px, 100%); height: 100%; display: flex; flex-direction: column;
              font-family: var(--gh-font); }

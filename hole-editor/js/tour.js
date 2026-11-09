@@ -7,7 +7,7 @@
 // sentence. A step with `done` moves on by itself when the player has actually done it; the rest
 // have a Next button. Nothing here changes the editor; it only reads `window.__he` and the DOM.
 
-/** env(safe-area-inset-top) in px: the notch / Dynamic Island band of an installed iPhone app. */
+/** var(--gh-st, env(safe-area-inset-top)) in px: the notch / Dynamic Island band of an installed iPhone app. */
 /** env(safe-area-inset-bottom) in px: the home bar of an installed iPhone app. */
 function safeBottom() {
   const d = document.createElement('div');
@@ -16,7 +16,7 @@ function safeBottom() {
 }
 function safeTop() {
   const d = document.createElement('div');
-  d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none';
+  d.style.cssText = 'position:fixed;top:0;left:0;width:0;height:var(--gh-st, env(safe-area-inset-top, 0px));visibility:hidden;pointer-events:none';
   document.body.appendChild(d); const h = d.offsetHeight || 0; d.remove(); return h;
 }
 

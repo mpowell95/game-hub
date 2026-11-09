@@ -3256,7 +3256,7 @@ function ensureCss() {
     '.lb-overlay.is-in{opacity:1}',
     '.lb-scrim{position:fixed;inset:0;background:rgba(9,24,48,.5)}',
     '.lb-panel{position:relative;width:100%;max-width:620px;margin:0 auto;min-height:100%;background:var(--lb-bg);color:var(--lb-ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
-    '.lb-top{position:sticky;top:0;z-index:2;padding:max(env(safe-area-inset-top,0px),8px) 16px 0;background:var(--lb-surface);border-bottom:1px solid var(--lb-line)}',
+    '.lb-top{position:sticky;top:0;z-index:2;padding:max(var(--gh-st, env(safe-area-inset-top,0px)),8px) 16px 0;background:var(--lb-surface);border-bottom:1px solid var(--lb-line)}',
     // css/hub.css carries its own :root.gh-dark .lb-top background; this one is more specific so
     // the header follows THESE tokens in both themes rather than two sources disagreeing.
     ':root.gh-dark .lb-panel .lb-top{background:var(--lb-surface)}',

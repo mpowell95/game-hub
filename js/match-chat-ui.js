@@ -303,7 +303,7 @@ function injectCss() {
   s.id = 'ghc-css';
   s.textContent = `
 .ghc { position: absolute; inset: 0; pointer-events: none; z-index: 40;
-  --ghc-top: max(10px, env(safe-area-inset-top, 0px)); --ghc-right: 64px;
+  --ghc-top: max(10px, var(--gh-st, env(safe-area-inset-top, 0px))); --ghc-right: 64px;
   --ghc-pops-top: calc(var(--ghc-top) + 54px);
   --ghc-bg: rgb(20, 22, 28); --ghc-see: rgba(20, 22, 28, 0.42); --ghc-ink: #f4f5f7; --ghc-dim: #b9bec8;
   --ghc-edge: rgba(255, 255, 255, 0.24); --ghc-accent: #ffce3a;

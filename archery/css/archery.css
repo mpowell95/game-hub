@@ -119,7 +119,7 @@
    (top-left) and of the menu button (top-right). */
 .ar-root .ar-top {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 50px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -177,7 +177,7 @@
 
 .ar-root .ar-ibtn {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 50px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px);
   right: 10px;
   z-index: 4;
   width: 44px;
@@ -434,7 +434,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(env(safe-area-inset-top, 0px), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
   background: rgba(8, 20, 40, 0.45);
   overscroll-behavior: contain;
 }
@@ -536,7 +536,7 @@
 .ar-root .ar-mprow-chev { flex: 0 0 auto; font-size: 24px; line-height: 1; color: var(--ar-blue); }
 
 /* Clear of the hub's floating back button (top-left): the card starts below it. */
-.ar-root .ar-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.ar-root .ar-ov-mp { align-items: flex-start; padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .ar-root .ar-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
 .ar-root .ar-mp-top { display: flex; align-items: center; gap: 6px; }
 .ar-root .ar-mp-back {
@@ -646,7 +646,7 @@
 .ar-root .ar-ov-setup > .ar-card { margin-block: auto; }
 /* The card starts BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
    same clearance as the multiplayer screen (ar-ov-mp). */
-.ar-root .ar-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.ar-root .ar-ov-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .ar-root .ar-tabs { display: flex; width: 100%; }
 .ar-root .ar-tabs .gh-seg__item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 17px; gap: 6px; }
 .ar-root .ar-tabs .gh-seg__item > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

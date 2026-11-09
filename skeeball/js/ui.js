@@ -707,7 +707,7 @@ export class SkeeballUI {
         return { top: `${Math.round(r.top + 8)}px`, right: `${Math.round(window.innerWidth - r.right + 8 + 44 + 4)}px`, popsTop: `${Math.round(r.top + 60)}px` };
       }
     }
-    return { top: 'max(10px, env(safe-area-inset-top, 0px))', right: '64px', popsTop: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 132px)' };
+    return { top: 'max(10px, var(--gh-st, env(safe-area-inset-top, 0px)))', right: '64px', popsTop: 'calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 132px)' };
   }
 
   /** Dock the chat button to a challenge card (pass the card's overlay element), or release it back

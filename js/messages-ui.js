@@ -148,7 +148,7 @@ function ensureCss() {
   const style = document.createElement('style');
   style.id = 'msg-css';
   style.textContent = `
-  .msg-overlay { z-index: 300; padding: max(var(--gh-sp-4), env(safe-area-inset-top)) var(--gh-sp-4)
+  .msg-overlay { z-index: 300; padding: max(var(--gh-sp-4), var(--gh-st, env(safe-area-inset-top))) var(--gh-sp-4)
                  max(var(--gh-sp-4), env(safe-area-inset-bottom)); align-content: center; }
   /* The modal itself does NOT scroll: the list inside it does, so the title and the composer stay
      put and the composer can never be pushed off the bottom edge on a short phone. */
