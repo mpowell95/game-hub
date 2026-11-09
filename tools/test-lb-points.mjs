@@ -29,6 +29,15 @@ ok('Ultimate wins (saved mode) at Ultimate values, uncapped',
 ok('Ultimate wins with no saved mode go to Medium first', gamePoints(rec({ beginner: W(5), intermediate: W(5) }, { tt: { ultimate: W(3), classic: W(7) } }), 'tictactoe').pts === 3 * 3 + 7);
 ok('Flick 3 goals: Hard 9', gamePoints(rec({ hard: W(1) }, { byMode: { 'goals=3|off=x': { hard: W(1) } } }), 'flicksoccer').pts === 9);
 ok('Dots Large x2', gamePoints(rec({ pro: W(1) }, { byMode: { 'size=large': { pro: W(1) } } }), 'dotsboxes').pts === 10);
+// Each board its own points (Matt, 2026-11-09): Small 1/3/5, Medium 1/4/8, Large 2/6/10; no saved board = Small.
+{ const dbm = (size) => ({ [`first=you|size=${size}|undo=0|went=me`]: { beginner: W(1), intermediate: W(1), pro: W(1) } });
+  const r3 = (size) => gamePoints(rec({ beginner: W(1), intermediate: W(1), pro: W(1) }, size ? { byMode: dbm(size) } : {}), 'dotsboxes').pts;
+  ok('Dots Small 1/3/5', r3('small') === 9);
+  ok('Dots Medium 1/4/8', r3('medium') === 13);
+  ok('Dots Large 2/6/10', r3('large') === 18);
+  ok('Dots win with no saved board = Small (never guessed upward)', r3(null) === 9);
+  ok('Dots pointsForWin Medium Hard = 8', pointsForWin('dotsboxes', 'pro', { size: 'medium', first: 'you' }) === 8);
+  ok('Dots online stays 3 on every board', pointsForWin('dotsboxes', 'mp', { size: 'medium' }) === 3); }
 ok('Cup Pong Hard 0 reracks x2', gamePoints(rec({ hard: W(1) }, { byMode: { 'gent=1|rr=0': { hard: W(1) } } }), 'cuppong').pts === 6);
 // Session 6 (docs/HANDOFF-LB-POINTS-INFO.md): no reracks doubles EVERY level, still inside the 20-point limit.
 ok('Cup Pong Easy/Medium 0 reracks x2', gamePoints(rec({ easy: W(1), medium: W(1) }, { byMode: { 'gent=1|rr=0': { easy: W(1), medium: W(1) } } }), 'cuppong').pts === 4);

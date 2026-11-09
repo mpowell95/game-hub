@@ -31,7 +31,7 @@ export const LEVEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 
 // 1 / 1.5 / 2 min (2 = one level down); Chinchón score under 100 or rounds under 10 = one level down; Hoops
 // shots 'until' (default, one level down; mode one=0) / 'one'; Cup Pong reracks 0/1/2/3/inf (default 2, inf = one
 // level down); Darts 301 (default) / 201 / 101 (one level down) / Cricket, Cricket in order; Dominoes 150 (one level
-// down) / 300 (default) / 500; Dots small/medium (default) / large; Flick 1 (one level down) / 2 (default) / 3
+// down) / 300 (default) / 500; Dots small / medium / large (each its own points, 2026-11-09); Flick 1 (one level down) / 2 (default) / 3
 // goals; Pool 1 (default, one level down) / 2 / 3 racks; Tic Tac Toe Classic / Ultimate.
 const O = (k, opt = {}) => ({ k, ...opt });
 const OPTIONS = {
@@ -42,7 +42,7 @@ const OPTIONS = {
   cuppong: [O('cp_inf', { short: true, mode: { rr: 'inf' } }), O('cp_some', { mode: { rr: 2 } }), O('cp_none', { mode: { rr: 0 } })],
   darts: [O('dt_short', { short: true, mode: { kind: '201' } }), O('dt_normal', { mode: { kind: '301' } }), O('dt_order', { mode: { kind: 'cricket-order' } })],
   dominoes: [O('dm_150', { short: true, mode: { to: 150 } }), O('dm_300', { mode: { to: 300 } }), O('dm_500', { mode: { to: 500 } })],
-  dotsboxes: [O('db_normal', { mode: { size: 'medium' } }), O('db_large', { mode: { size: 'large' } })],
+  dotsboxes: [O('db_small', { mode: { size: 'small' } }), O('db_medium', { mode: { size: 'medium' } }), O('db_large', { mode: { size: 'large' } })],
   flicksoccer: [O('fs_1', { short: true, mode: { goals: 1 } }), O('fs_2', { mode: { goals: 2 } }), O('fs_3', { mode: { goals: 3 } })],
   eightball: [O('eb_1', { short: true, mode: { racks: 1 } }), O('eb_2', { mode: { racks: 2 } }), O('eb_3', { mode: { racks: 3 } })],
   tictactoe: [O('tt_classic', { mode: { v: 'classic' } }), O('tt_ultimate', { mode: { v: 'ultimate' } })],
