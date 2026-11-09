@@ -79,5 +79,35 @@ bdb.tree.beeLog[bk].AAAAA.k51 = { t: 51, e: 'guess', w: 'missed', r: 'ok' };   /
 const l4 = await B.logsFor(bdb, bk, await B.readTouched(bdb), Date.now() + 2 * B.LOG_FULL_MS);
 ok('bee: a lost stamp heals at LOG_FULL_MS', !!l4.AAAAA.k51);
 
+// --- ctHistory, re-read at most every 30 minutes -------------------------------------------------
+const cdb = fakeDb({ ctHistory: { TESTA: { dev: { 'en-1': { d: 'won' } } } } });
+const c1 = await C.readNodeCached(cdb, 'ctHistory', 30 * 60e3, now);
+c1.TESTA = null;   // a caller's edit
+cdb.bytes = 0;
+const c2 = await C.readNodeCached(cdb, 'ctHistory', 30 * 60e3, now + 60e3);
+ok('ctHistory: inside 30 min, no download and a clean copy', cdb.bytes === 0 && same(c2, cdb.tree.ctHistory));
+cdb.tree.ctHistory.TESTB = { dev: {} };
+ok('ctHistory: after 30 min, re-read', !!(await C.readNodeCached(cdb, 'ctHistory', 30 * 60e3, now + 31 * 60e3)).TESTB);
+
+// --- THE GUARD (Matt, 2026-11-09: "I don't want any surprise bills like this EVER again") ----------
+// Every server download is billed past ~360 MB a day. No function may read a whole large node
+// directly; it goes through functions/cache.js (or a query that downloads only what changed).
+{
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const BIG = ['players', 'ctHistory', 'beeLog', 'beeDaily', 'playLog', 'messages', 'rooms', 'pushSubs', 'ctHistory', 'skeeballThrows'];
+  const bad = [];
+  for (const f of readdirSync(new URL('../functions/', import.meta.url)).filter((n) => n.endsWith('.js') && n !== 'cache.js')) {
+    const src = readFileSync(new URL(`../functions/${f}`, import.meta.url), 'utf8');
+    src.split('\n').forEach((line, i) => {
+      for (const n of BIG) {
+        if (line.includes(`ref('${n}').get()`) || line.includes(`valOf(db, '${n}')`)) bad.push(`functions/${f}:${i + 1} reads all of ${n}/`);
+      }
+    });
+  }
+  const allowed = ['functions/bee.js reads all of beeDaily/'];   // 32 KB, only on a board rebuild (not a timer loop)
+  const real = bad.filter((b) => !allowed.some((a) => b.startsWith(a.split(' ')[0]) && b.endsWith(a.split(' ').slice(1).join(' '))));
+  ok('guard: no function downloads a whole large node outside functions/cache.js' + (real.length ? ` -> ${real.join('; ')}` : ''), real.length === 0);
+}
+
 console.log(`\nServer cache tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
