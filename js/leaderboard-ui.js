@@ -3875,7 +3875,7 @@ export function lb2Gap(list, key, id) {
 }
 export function lb2Records(list, meKey) {
   const me = list.find((g) => g.key === meKey);
-  const out = { held: [], close: [], fresh: [], withRecord: 0, me: me || null };
+  const out = { held: [], close: [], fresh: [], narrow: [], withRecord: 0, me: me || null };
   if (!me) return out;
   for (const meta of gameMetaSorted()) {
     const id = meta.id;
@@ -3888,7 +3888,16 @@ export function lb2Records(list, meKey) {
       const played = lang ? (beeRowFor(me) || {}).days > 0 : boardPlaysOf(me, id) > 0;
       const rank = st.rankOf[me.key];
       const val = (g) => ({ text: youValText(id, boardMetricOf(g, id)), tier: boardTierOf(g, id) });
-      if (rank === 1) out.held.push({ id, lang, mine: val(me), tie: st.tiedAt(me.key) });
+      if (rank === 1) {
+        out.held.push({ id, lang, mine: val(me), tie: st.tiedAt(me.key) });
+        // Narrowest margin (Matt, 2026-11-09, admin devices only): the person right behind this gold and what THEY need
+        // to take it (needOf from their side, the Closest list's own maths); a tie for gold is the narrowest of all.
+        const runner = st.rows.find((r) => r.key !== me.key);
+        if (runner) {
+          const tied = st.rankOf[runner.key] === 1;
+          out.narrow.push({ id, lang, runner, tied, rank: st.rankOf[runner.key], need: tied ? null : needOf(runner, me, id), c: tied ? 2 : closeness(runner, me, id) });
+        }
+      }
       else if (played && rec) {
         // Session 4 mockup (display only): the viewer's number read at the RECORD'S difficulty (gapText's rule),
         // and why the record ranks above when that is invisible: a harder difficulty or the no-hint rule.
@@ -3903,6 +3912,7 @@ export function lb2Records(list, meKey) {
     });
   }
   out.close.sort((a, b) => b.c - a.c || labelOf(a.id).localeCompare(labelOf(b.id)));
+  out.narrow.sort((a, b) => b.c - a.c || labelOf(a.id).localeCompare(labelOf(b.id)));
   return out;
 }
 /** A person's page: every game on the launcher they played, most played first, with their place in that

@@ -96,8 +96,10 @@ function saveFavFirst(on) { try { localStorage.setItem(PREF_KEY, JSON.stringify(
 // Me's list (2026-11-03, Matt): Golds | Lost | Closest, one at a time; the last one picked is remembered on this
 // phone (`meList` added to gamehub.lb2.v1, a preference, try/catch both ways; kept in memory too if storage fails).
 const ME_LISTS = ['gold', 'lost', 'close'];
+// Narrowest margin (Matt, 2026-11-09): a fourth list, ADMIN DEVICES ONLY until Matt releases it.
+const meLists = () => (isAdminDevice() ? [...ME_LISTS, 'narrow'] : ME_LISTS);
 let _meList = '';
-function loadMeList() { const v = readPref().meList; return ME_LISTS.includes(v) ? v : (ME_LISTS.includes(_meList) ? _meList : ''); }
+function loadMeList() { const L = meLists(), v = readPref().meList; return L.includes(v) ? v : (L.includes(_meList) ? _meList : ''); }
 function saveMeList(v) { _meList = v; try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, meList: v, updatedAt: Date.now() })); } catch { /* a preference */ } }
 function saveSort(v) {
   try { localStorage.setItem(PREF_KEY, JSON.stringify({ ...readPref(), v: 1, sort: v, updatedAt: Date.now() })); } catch { /* a preference: best effort */ }
@@ -778,10 +780,17 @@ function meHTML() {
   const lost = lostRows.length ? `<div class="lb2-card">${lostRows.map((x) => `<button type="button" class="lb2-row sm" data-act="game" data-game="${esc(baseOf(x.game))}"${langAttr(langOf(x.game))}>
       ${art(baseOf(x.game))}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(x.game))}</span><span class="lb2-t2">${medal(1, 'xs')}${esc(x.takenBy.join(', '))} · ${esc(day(x.at))}</span></span>
       <span class="lb2-right">${placeHTML(defPlace(x.game, _meKey))}</span>${CHEV}</button>`).join('')}</div>` : '';
+  // Narrowest margin (admin devices only): each gold held, the person right behind it and what they need to take it,
+  // closest first; a tie for gold first of all.
+  const narrow = R.narrow.length ? `<div class="lb2-card">${R.narrow.map((x) => `<button type="button" class="lb2-row lb2-close" data-act="game" data-game="${esc(x.id)}"${langAttr(x.lang)}>
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(mkOf(x.id, x.lang)))}</span>
+      <span class="lb2-t2 lb2-need num">${x.tied ? esc(t2('lb2_tied_with', { name: nameOf(x.runner) })) : `${medal(Math.min(3, x.rank || 2), 'xs')}${esc(nameOf(x.runner))}${x.need ? ` · ${needLine(x)}` : ''}`}</span></span>
+      <span class="lb2-right">${med(1, x.tied, 'sm')}</span>${CHEV}</button>`).join('')}</div>` : '';
   // Which list: the one picked last; else the first that has rows (Golds, Lost, Closest); else Golds.
-  const lists = { gold: held, lost, close };
-  const which = loadMeList() || ME_LISTS.find((k) => lists[k]) || 'gold';
-  const sw = `<div class="lb2-mesw">${seg(ME_LISTS.map((v) => ({ v, label: t2('lb2_me_' + v) })), which, 'melist')}</div>`;
+  const L = meLists();
+  const lists = { gold: held, lost, close, narrow };
+  const which = loadMeList() || L.find((k) => lists[k]) || 'gold';
+  const sw = `<div class="lb2-mesw">${seg(L.map((v) => ({ v, label: t2('lb2_me_' + v) })), which, 'melist')}</div>`;
   const list = lists[which] || `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   const body = R.me ? tiles + sw + list : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
   return `${headHTML()}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${body}</div></div>`;
@@ -1042,7 +1051,7 @@ function onClick(e) {
     }
     case 'back': goBack(); return;
     case 'melist': {
-      if (!ME_LISTS.includes(v)) return;
+      if (!meLists().includes(v)) return;
       // Scrolled past the medal tiles (the switcher stuck on top): the new list starts right under the switcher.
       const sc = _host.querySelector('.lb2-page [data-role="scroll"]'), tl = _host.querySelector('.lb2-tiles');
       const stuckAt = sc && tl ? Math.round(tl.getBoundingClientRect().bottom - sc.getBoundingClientRect().top + sc.scrollTop + 8) : 0;
