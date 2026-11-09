@@ -37,5 +37,21 @@ export async function readPlayers(db, now = Date.now()) {
   return structuredClone(c.data);
 }
 
+const nodeCaches = new WeakMap();   // db -> Map(path -> { at, val })
+
+/** A small node re-read at most every `maxAgeMs` (ctHistory, 41 KB on 2026-11-09 and growing: it only
+ *  lowers Contexto's fewest guesses before a phone's own sync carries it, so 30 minutes late is harmless). */
+export async function readNodeCached(db, path, maxAgeMs, now = Date.now()) {
+  let m = nodeCaches.get(db);
+  if (!m) { m = new Map(); nodeCaches.set(db, m); }
+  const c = m.get(path);
+  if (!c || now - c.at > maxAgeMs) {
+    const val = (await db.ref(path).get()).val();
+    m.set(path, { at: now, val });
+    return structuredClone(val);
+  }
+  return structuredClone(c.val);
+}
+
 /** Tests only. */
 export function _cacheState(db) { return caches.get(db) || null; }

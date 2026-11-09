@@ -51,7 +51,7 @@ import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { handleClaim } from './claim.js';
-import { readPlayers } from './cache.js';
+import { readPlayers, readNodeCached } from './cache.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -294,10 +294,11 @@ async function rebuildBoards(db) {
   await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
   // players/ from functions/cache.js: only the records changed since this instance's last rebuild are
   // downloaded (2026-11-09, the Google bill; it was all 722 KB every time).
-  const [players, [cfg, sums, cth, pairsAt]] = await Promise.all([
+  const [players, [cfg, sums, pairsAt], cth] = await Promise.all([
     readPlayers(db),
-    Promise.all([db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(), db.ref('ctHistory').get(),
+    Promise.all([db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
       db.ref('boards/v1/meta/pairsAt').get()]).then((s) => s.map((x) => x.val())),
+    readNodeCached(db, 'ctHistory', 30 * 60 * 1000),
   ]);
   // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
   // flagged once and every admin told; a strong one is voided in the package built just below.
