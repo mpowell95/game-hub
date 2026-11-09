@@ -259,6 +259,29 @@ export function fullLevelStats(st, code) {
 // that person's record at read time (a negative number takes away; a result never goes below 0). `total` moves with the
 // level. No phone ever writes adminConfig, so an edit sticks; players/ records are untouched; deleting the entry undoes
 // it. Only played/won/lost: a game's own extra counters (points, bests) are not touched.
+// HAND ADJUSTMENTS: the same slots as the console's adjust node, in CODE, merged into that person's adjust entry at read
+// time (`withHandAdjust`), so a session can make one Matt asks for without writing adminConfig. Summed with his own edits.
+export const HAND_ADJUST = {
+  // Matt, 2026-11-09: "Make them medium. I thought I was playing medium because I had clicked medium." His Connect 4
+  // Hoops one-shot wins of Nov 9 1:16 and 1:17 AM ET were a saved Easy match resumed by Continue while Medium was picked.
+  QZCC4: { hoops4: { 'easy~first=me|one=1': { played: -2, won: -2 }, 'medium~first=me|one=1': { played: 2, won: 2 } } },
+};
+/** One person's adjust entry ({ <game>: { <slot>: {played, won, lost} } }) with their HAND_ADJUST added. */
+export function withHandAdjust(adj, code) {
+  const h = HAND_ADJUST[String(code || '').trim().toUpperCase()];
+  if (!h) return adj;
+  const out = Object.assign({}, adj && typeof adj === 'object' ? adj : {});
+  for (const [g, slots] of Object.entries(h)) {
+    const gg = Object.assign({}, out[g] && typeof out[g] === 'object' ? out[g] : {});
+    for (const [slot, f] of Object.entries(slots)) {
+      const cur = Object.assign({}, gg[slot] && typeof gg[slot] === 'object' ? gg[slot] : {});
+      for (const k of Object.keys(f)) cur[k] = (Math.trunc(Number(cur[k])) || 0) + f[k];
+      gg[slot] = cur;
+    }
+    out[g] = gg;
+  }
+  return out;
+}
 const ADJ_F = ['played', 'won', 'lost'];
 const ADJ_KEY = /^[A-Za-z0-9_-]{1,24}$/;
 const adjNum = (v) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) ? n : 0; };
