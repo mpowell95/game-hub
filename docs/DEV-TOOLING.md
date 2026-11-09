@@ -147,3 +147,4 @@
 - `tools/test-full-level.mjs` (2026-11-07): `FULL_LEVEL` in `js/stats-corrections.js`: the listed code's Flick Soccer Hard, first-to-1 games move from Medium to Hard at read time (clamped, totals and raw records untouched, nobody else changed), also through `aggregatePlayers`; and the console adjustments (`adminConfig/v1/corrections/adjust`, `adjustGame`): added per person, floor 0, `total` in step, nobody else changed. Node only.
 
 - `tools/test-bee-restore.mjs` (2026-11-09): Spelling Bee's restore of lost words from `beeLog` (`spelling-bee/js/restore.js`), against a fake server: order, times, counted-day and Genius marks, additive, no write once the caller moved on.
+- `tools/test-repair-1109.mjs` (2026-11-09): the one-time re-added-phone repair (`js/repair-1109.js`), made-up code and ids: sync first, refuses another code, full rollback on a failure halfway, never twice.

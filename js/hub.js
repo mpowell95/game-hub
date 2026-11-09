@@ -1206,8 +1206,15 @@ class Hub {
       this._quitSettled = true;
       import('./game-stats.js').then((m) => m.settleQuitLosses(30 * 60 * 1000)).catch(() => {});
     }
-    import('./stats-net.js')
-      .then((m) => m.syncMyStats())
+    // ONE-TIME REPAIR (2026-11-09, js/repair-1109.js): one phone only; it syncs first itself, then
+    // reloads onto its old device id. Everyone else: resolves false at once, sync as always.
+    import('./repair-1109.js')
+      .then((r) => r.repairReinstall1109())
+      .catch(() => false)
+      .then((moved) => {
+        if (moved) { location.reload(); return null; }
+        return import('./stats-net.js').then((m) => m.syncMyStats());
+      })
       .catch((err) => console.error('[hub] stats sync could not start', err));
     // THE PLAY LOG (2026-10-28, js/play-log.js): sends what the games queued, then keeps sending.
     if (!this._playLogOn) {
