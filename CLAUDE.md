@@ -89,6 +89,8 @@ re-rank and a popup to every player on 2026-11-02, v1422-v1424; rolled back, v14
 Do it the first time I ask. Always.").** It's his game. If the obvious route is blocked (a session cannot write a
 player's row, Firebase rules), build the route that works (a read-time overlay like `HAND_ADDS` / `VOIDED_MATCHES`)
 and do it; say the limit in one line while doing it, never as a reason to stop or ask again.
+**Never say "I can't undo/fix that on your phone" (Matt, 2026-11-09).** A game state or save on one phone is fixed by shipping a
+one-time repair keyed to his code (stamped, verified by re-read), e.g. Monopoly Deal's `repairForcedDeal1109`.
 
 ## Performance: measure what the phone DOWNLOADS first (Matt, 2026-10-22)
 
