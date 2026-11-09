@@ -768,9 +768,9 @@ export function resolveAdjust(cfg, code, gameId, level) {
  * (Matt, 2026-11-08: the admin page's Adjust, the same numbers he could type in the console). `played` moves with
  * them. Back to all zero = the entry is removed. Read time only: players/ is never touched. Verified by re-read.
  */
-export function setAdjust(code, gameId, level, dWon, dLost) {
+export function setAdjust(code, gameId, level, dWon, dLost, bySlot = false) {
   const c = codeOf(code);
-  if (!/^[A-Z0-9]{3,12}$/.test(c) || !/^[a-z0-9]{2,24}$/.test(String(gameId || '')) || !/^[A-Za-z0-9_-]{1,24}$/.test(String(level || ''))) {
+  if (!/^[A-Z0-9]{3,12}$/.test(c) || !/^[a-z0-9]{2,24}$/.test(String(gameId || '')) || !(bySlot || /^[A-Za-z0-9_-]{1,24}$/.test(String(level || '')))) {
     return Promise.resolve(fail(`not a player, game and level: ${code} ${gameId} ${level}`));
   }
   const cur = resolveAdjust(readCachedConfig(), c, gameId, level);
@@ -784,6 +784,17 @@ export function setAdjust(code, gameId, level, dWon, dLost) {
   });
 }
 
+/**
+ * Adjust BY GAME TYPE (Matt, 2026-11-09): the same as setAdjust, for results of one saved mode (a byMode key, e.g.
+ * `goals=1|aids=0`) picked at `level`, stored in the slot `<level>~<key>` (js/stats-corrections.js adjustModesGame).
+ */
+export function setAdjustMode(code, gameId, level, modeKey, dWon, dLost) {
+  const k = String(modeKey || '');
+  if (!k || k === '?' || k.length > 200 || /[.#$/[\]\u0000-\u001f\u007f]/.test(k)) return Promise.resolve(fail(`not a game type: ${modeKey}`));
+  if (!/^[A-Za-z0-9_-]{1,24}$/.test(String(level || ''))) return Promise.resolve(fail(`not a level: ${level}`));
+  return setAdjust(code, gameId, `${level}~${k}`, dWon, dLost, true);
+}
+
 export function setOnlineAllowed(code, on) {
   const c = codeOf(code);
   if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
@@ -792,7 +803,7 @@ export function setOnlineAllowed(code, on) {
 }
 
 export default {
-  ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed, resolveReviewed, setReviewed,
+  ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed, resolveReviewed, setReviewed, setAdjustMode,
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,
   isGameLive, isBoardReleased, isBoardTesting, boardMode, onAdminConfig, refreshAdminConfig,

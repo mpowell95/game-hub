@@ -47,7 +47,7 @@ import {
   resolveGameAllowed, gameAllowList, setGameAllowed, setBoardMode, resolveBoardCorrections,
   setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
   resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
-  setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust,
+  setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust, setAdjustMode,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './integrity.js';
@@ -219,6 +219,7 @@ const _filters = new Map(); // search box selector -> what is typed, kept across
 const _scroll = new Map();  // view key -> scrollTop
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
 let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
+let _adjType = new Map();  // Adjust: stats game id -> the game type picked ('' = Standard)
 let _peopleAll = false;     // People tab: false = played in the last 30 days (Matt, 2026-11-09), true = everyone
 
 const loading = () => _players === null;
@@ -898,8 +899,10 @@ function gamePlayerPage(cfg, sid, key) {
     row({ title: (tx('adm_played_l', 'Played')), value: fmt(tot.played) }),
     ...(SOLO.has(sid) ? [] : [row({ title: (tx('adm_won_l', 'Won')), value: fmt(tot.won) })]),
     ...(sid === 'skeeball' ? [] : Object.entries(obj(g.byDiff)).filter(([, d]) => (+obj(d).played || 0) > 0)
+      .sort(([a], [b]) => lvRank(a) - lvRank(b))
       .map(([k, d]) => row({ title: diffLabel(k), value: SOLO.has(sid) ? fmt(d.played) : `${fmt(d.won)} / ${fmt(d.played)}` }))),
   ], true);
+  body += adjustHTML(cfg, p, sid);   // Matt, 2026-11-09: numbers, Adjust, then the voids, then the plays
   if (sid === 'skeeball') {
     const ids = idsOf(key);
     const shown = obj(obj(g.sk).boards);
@@ -937,32 +940,54 @@ function gamePlayerPage(cfg, sid, key) {
       title: (voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')),
       acts: [voided ? btn(tx('adm_undo', 'Undo'), gameVoid(key, sid, false)) : btn(tx('adm_void', 'Void'), gameVoid(key, sid, true), 'x')] })]);
   }
-  body += adjustHTML(cfg, p, sid);
   body += playsHTML(p, sid);
   return { title: p.name, body };
 }
 
+/** Levels in play order: Easy, Medium, Hard, Expert, then Online (Matt, 2026-11-09: Medium above Hard). */
+const LV_ORDER = ['easy', 'beginner', 'medium', 'normal', 'intermediate', 'hard', 'pro', 'expert', 'mp'];
+const lvRank = (k) => (LV_ORDER.indexOf(k) + 1) || 99;
+/** Game types Adjust can file a result as (Matt, 2026-11-09: "an option to choose what game you're adjusting"): the
+ *  options that change a game's points or its level, as the byMode key part the game itself saves. Standard = no type. */
+const ADJ_TYPES = {
+  flicksoccer: [['goals=1', 'First to 1'], ['goals=2', 'First to 2'], ['goals=3', 'First to 3']],
+  eightball: [['racks=1', '1 rack'], ['racks=3', '3 racks'], ['game=ct', 'Cutthroat']],
+  cuppong: [['rr=inf', 'Unlimited reracks'], ['rr=0', 'No reracks']],
+  darts: [['kind=201', '201'], ['kind=101', '101'], ['kind=cricket-order', 'Cricket in order']],
+  dominoes: [['to=150', 'To 150'], ['to=500', 'To 500']],
+  boggle: [['min=2', '2 minutes']],
+  hoops4: [['one=0', 'Until you score']],
+  dotsboxes: [['size=large', 'Large']],
+  battleship: [['size=quick', 'Quick']],
+};
 /** ADJUST (Matt, 2026-11-08): add or take away wins and losses per level, read time only
- *  (adminConfig/v1/corrections/adjust, js/stats-corrections.js adjustGame). The numbers above already include it. */
+ *  (adminConfig/v1/corrections/adjust, js/stats-corrections.js adjustGame / adjustModesGame). The numbers above
+ *  already include it. With a game type picked, the result is filed as that type (its points and level follow). */
 function adjustHTML(cfg, p, sid) {
   const code = (p.playerId || '').toUpperCase();
   if (!code || SOLO.has(sid)) return '';
+  const types = ADJ_TYPES[sid] || [];
+  const type = types.some(([k]) => k === _adjType.get(sid)) ? _adjType.get(sid) : '';
   const adj = obj(obj(obj(obj(cfg).corrections).adjust)[code])[sid];
-  const levels = new Set([...Object.keys(obj(obj(obj(p.games)[sid]).byDiff)), ...Object.keys(obj(adj)), ...((FULL_LEVEL_GAMES[sid] || {}).ladder || [])]);
-  const order = ['easy', 'beginner', 'medium', 'normal', 'intermediate', 'hard', 'pro', 'expert', 'mp'];
-  const lv = [...levels].filter((k) => /^[A-Za-z0-9_-]{1,24}$/.test(k)).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+  const levels = new Set([...Object.keys(obj(obj(obj(p.games)[sid]).byDiff)), ...Object.keys(obj(adj)).map((k) => k.split('~')[0]), ...((FULL_LEVEL_GAMES[sid] || {}).ladder || [])]);
+  const lv = [...levels].filter((k) => /^[A-Za-z0-9_-]{1,24}$/.test(k)).sort((a, b) => lvRank(a) - lvRank(b));
   const sign = (n) => (n > 0 ? `+${n}` : String(n));
+  const typeRows = !types.length ? [] : [['', tx('adm_adj_standard', 'Standard')], ...types].map(([k, label]) => row({
+    title: label, check: k === type, tap: () => { _adjType.set(sid, k); render(); } }));
   const rows = lv.map((k) => {
-    const a = resolveAdjust(cfg, code, sid, k);
+    const slot = type ? `${k}~${type}` : k;
+    const a = resolveAdjust(cfg, code, sid, slot);
     const sub = a.won || a.lost ? `${tx('adm_won_l', 'Won')} ${sign(a.won)} · ${tx('adm_lost_l', 'Lost')} ${sign(a.lost)}` : '';
+    const put = (dw, dl) => (type ? () => setAdjustMode(code, sid, k, type, dw, dl) : () => setAdjust(code, sid, k, dw, dl));
     return row({ title: diffLabel(k), sub, acts: [
-      btn(tx('adm_adj_w_minus', 'W −'), () => setAdjust(code, sid, k, -1, 0)),
-      btn(tx('adm_adj_w_plus', 'W +'), () => setAdjust(code, sid, k, 1, 0)),
-      btn(tx('adm_adj_l_minus', 'L −'), () => setAdjust(code, sid, k, 0, -1)),
-      btn(tx('adm_adj_l_plus', 'L +'), () => setAdjust(code, sid, k, 0, 1)),
+      btn(tx('adm_adj_w_minus', 'W −'), put(-1, 0)),
+      btn(tx('adm_adj_w_plus', 'W +'), put(1, 0)),
+      btn(tx('adm_adj_l_minus', 'L −'), put(0, -1)),
+      btn(tx('adm_adj_l_plus', 'L +'), put(0, 1)),
     ] });
   });
-  return rows.length ? gh(tx('adm_adjust', 'Adjust')) + grp(rows) : '';
+  if (!rows.length) return '';
+  return gh(tx('adm_adjust', 'Adjust')) + (typeRows.length ? grp(typeRows) + '<div style="height:14px"></div>' : '') + grp(rows);
 }
 
 /** A difficulty bucket's name: the stored id, readable (ids stay canonical; only the label changes). */

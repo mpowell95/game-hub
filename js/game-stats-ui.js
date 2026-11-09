@@ -15,7 +15,7 @@
 import { loadStoredStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isGameLive, corrections, isAdminDevice } from './admin-config.js';
-import { correctStats, fullLevelStats, adjustStats, handResultsStats, flickTestStats } from './stats-corrections.js';
+import { correctStats, fullLevelStats, adjustStats, adjustModesStats, handResultsStats, flickTestStats } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
@@ -2950,7 +2950,7 @@ export function openStatsOverlay() {
   // The first paint is local, before the network answers - so it applies the corrections too.
   // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
   { const me = (loadProfile() || {}).playerId, c = corrections() || {};
-    _st = adjustStats(fullLevelStats(handResultsStats(flickTestStats(correctStats(loadStoredStats(), statsId(), c)), me), me), me && c.adjust ? c.adjust[me] : null); }
+    _st = adjustStats(fullLevelStats(adjustModesStats(handResultsStats(flickTestStats(correctStats(loadStoredStats(), statsId(), c)), me), me && c.adjust ? c.adjust[me] : null), me), me && c.adjust ? c.adjust[me] : null); }
   _combinedDevices = 1;
   _places = null;
   _s4 = true;   // the v2 look for everyone since 2026-11-04 (Matt: "release it")

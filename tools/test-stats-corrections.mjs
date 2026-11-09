@@ -317,5 +317,23 @@ console.log('\n--- integrity voids: Golf must not rank first, Contexto must not 
   ok('test games: first-to-1 Hard ones show at Hard', shown.byDiff.hard.played === 3 && shown.byDiff.hard.won === 2, JSON.stringify(shown.byDiff));
 }
 
+// Adjust by game type (Matt, 2026-11-09): a `<level>~<mode>` slot is filed as the recorder would, then shown and priced
+// like a real game: Flick Soccer Hard first to 1 = Hard on screen, 3 points (Medium's); first to 3 = 9; plain slots skip it.
+{
+  const { adjustModesGame, adjustGame: adjG, fullLevelGame: flG } = await import('../js/stats-corrections.js');
+  const { gamePoints } = await import('../js/lb-points.js');
+  const base = { total: { played: 4, won: 2, lost: 2 }, byDiff: { hard: { played: 4, won: 2, lost: 2 } }, byMode: { 'goals=2|first=me': { hard: { played: 4, won: 2, lost: 2 } } } };
+  const go = (adj) => adjG(flG(adjustModesGame(base, 'flicksoccer', adj), 'flicksoccer'), adj);
+  const p0 = gamePoints(flG(base, 'flicksoccer'), 'flicksoccer').pts;
+  const one = go({ 'hard~goals=1': { won: 1, played: 1 } });
+  ok('adjust type: Hard first to 1 shows at Hard', one.byDiff.hard.won === 3 && one.total.won === 3 && one.total.played === 5, JSON.stringify(one.byDiff));
+  ok('adjust type: Hard first to 1 = 3 points', gamePoints(one, 'flicksoccer').pts - p0 === 3, gamePoints(one, 'flicksoccer').pts - p0);
+  ok('adjust type: Hard first to 3 = 9 points', gamePoints(go({ 'hard~goals=3': { won: 1, played: 1 } }), 'flicksoccer').pts - p0 === 9);
+  ok('adjust type: old adjustGame ignores a typed slot', adjG(base, { 'hard~goals=1': { won: 1 } }) === base);
+  const neg = adjustModesGame(base, 'flicksoccer', { 'hard~goals=3': { won: -5, played: -5 } });
+  ok('adjust type: never below 0', neg.byDiff.hard.won === 0 && neg.total.won === 0 && neg.byMode['goals=3'].hard.won === 0, JSON.stringify(neg));
+  ok('adjust type: the stored record is untouched', base.byDiff.hard.won === 2 && !base.byMode['goals=1']);
+}
+
 console.log(`\nStats corrections tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }
