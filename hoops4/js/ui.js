@@ -388,8 +388,18 @@ class Hoops4 {
     // device that used the old screen, and it is NOT deleted or rewritten here. The CPU row just
     // shows its nearest meaning (Medium) until the player picks something; `start()` reads the
     // same fallback, so a device that never touches this screen keeps behaving sensibly.
+    let saved = readSave(true);
+    // WHAT IS SELECTED IS WHAT YOU PLAY (Matt, 2026-11-09: two "Medium" wins were recorded Easy: Continue
+    // resumed a saved Easy match while the row showed Medium). On the first paint with a saved match the row
+    // shows THAT match's level and shots; Continue appears only while the row matches the save, so picking
+    // another level leaves just New game.
+    if (saved && !this._syncedSave) {
+      this._syncedSave = true;
+      s.opponent = saved.match.cpuSkill; s.shots = saved.match.oneShot ? 'one' : 'until';
+      writeSettings(s);
+    }
     const cpuPick = s.opponent === 'two' ? 2 : s.opponent;
-    const saved = readSave(true);
+    if (saved && (saved.match.cpuSkill !== cpuPick || saved.match.oneShot !== (s.shots === 'one'))) saved = null;
     // "Let me collapse the computer game section too" (2026-09-24). A one-tap view preference in
     // its own key, never in the settings object (THE LAW rule 2's exemption: nothing earned).
     let cpuOpen = true;
@@ -1135,6 +1145,7 @@ class Hoops4 {
     const save = { v: 1, at: Date.now(), vsCpu: m.vsCpu ? 1 : 0, skill: m.cpuSkill, one: m.oneShot ? 1 : 0, first: m.first, turn: m.turn,
       sit: m.shotsThisTurn, shots: [m.shots[0] | 0, m.shots[1] | 0], moves: m.moves.map((x) => ({ by: x.by, col: x.col, shots: x.shots | 0 })), fly };
     try { localStorage.setItem(saveKeyOf(m.vsCpu), JSON.stringify(save)); } catch (err) { console.error('[hoops4] match not saved', err); }
+    if (m.vsCpu) this._syncedSave = false;   // the setup row shows this match's level next time (renderSetup)
   }
   /** Play again / New game: the same game again (its opponent, level and shot rule). */
   _sameGame() { const m = this.match; return m ? { vsCpu: m.vsCpu, oneShot: m.oneShot, skill: m.cpuSkill } : {}; }

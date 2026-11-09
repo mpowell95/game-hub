@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1510';
+const CACHE = 'game-hub-v1511';
 
 const ASSETS = [
   './',
@@ -1252,7 +1252,7 @@ const REST_MANIFEST = {
   './cup-pong/js/cpu.js': '03725812df',
   './hoops4/index.html': '533fd79845',
   './hoops4/css/hoops4.css': '308feaeac3',
-  './hoops4/js/ui.js': '3c14732dac',
+  './hoops4/js/ui.js': '99d85e6593',
   './hoops4/js/boarddef.js': 'd1214c250c',
   './hoops4/js/machine.js': '657e6330a1',
   './hoops4/js/physics.js': 'a5793407ee',
