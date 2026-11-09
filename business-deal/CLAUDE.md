@@ -212,3 +212,7 @@ removed once the result is recorded. A save taken mid-action is never written (o
 attack replays from that computer's move choice (it may choose again). Test: Q5-style browser run in the session's scratchpad
 (save, reload, Continue, a computer turn resumed, one loss per discard, save gone at game end); `tools/test-quit-loss.mjs` G5.
 `APP_VERSION` and `sw.js` CACHE are v43.
+
+## Extras beyond a full set are stealable (2026-11-09)
+
+Matt couldn't Sly/Forced Deal a 3rd Dark Blue sitting beside a full set (the board draws it as its own pile). `stealableProps` now offers the cards after the first REQ of a complete colour (the set = the first REQ cards, as Deal Breaker and the board use); `ai.js` `oppHasStealable` matches. The card sheet's Bank button is gold, never Play's green. `APP_VERSION`/CACHE v44.

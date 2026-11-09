@@ -714,8 +714,9 @@
     oppHasStealable(opp) {
       if (!opp) return false;
       for (const color of Object.keys(opp.properties)) {
-        if (isComplete(opp.properties, color)) continue;
-        if (opp.properties[color].cards.length > 0) return true;
+        // Cards beyond a full set are stealable too (game.js stealableProps).
+        const n = opp.properties[color].cards.length;
+        if (n > (isComplete(opp.properties, color) ? REQ[color] : 0)) return true;
       }
       return false;
     }
