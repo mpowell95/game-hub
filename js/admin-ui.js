@@ -219,6 +219,7 @@ const _filters = new Map(); // search box selector -> what is typed, kept across
 const _scroll = new Map();  // view key -> scrollTop
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
 let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
+let _peopleAll = false;     // People tab: false = played in the last 30 days (Matt, 2026-11-09), true = everyone
 
 const loading = () => _players === null;
 const act = (fn) => { _acts.push(fn); return `data-a="${_acts.length - 1}"`; };
@@ -998,13 +999,30 @@ function playsHTML(p, sid) {
 
 // --- People -------------------------------------------------------------------------------------------
 
+/** Player code -> the newest play on any of its devices (`players/<id>/activity`, each game's `last`). */
+function lastPlayByCode() {
+  const out = new Map();
+  for (const rec of Object.values(_players || {})) {
+    const code = String(obj(obj(rec).profile).playerId || '').trim().toUpperCase();
+    if (!code) continue;
+    let last = 0;
+    for (const g of Object.values(obj(obj(rec).activity))) last = Math.max(last, +obj(g).last || 0);
+    if (last > (out.get(code) || 0)) out.set(code, last);
+  }
+  return out;
+}
+const ACTIVE_MS = 30 * 24 * 3600 * 1000;
 function peopleTab() {
   const title = tx('adm_tab_people', 'People');
   if (loading()) return { title, body: waitBody() };
-  const people = codedPeople();
+  const all = codedPeople();   // A-Z
+  const lastBy = lastPlayByCode();
+  const since = Date.now() - ACTIVE_MS;
+  const people = _peopleAll ? all : all.filter((p) => (lastBy.get((p.playerId || '').trim().toUpperCase()) || 0) >= since);
+  const flip = `<button type="button" class="adm-ga" ${act(() => { _peopleAll = !_peopleAll; render(); })}>${esc(_peopleAll ? tx('adm_last_30', 'Last 30 days') : tx('adm_all', 'All'))}</button>`;
   return { title, body: `<label class="adm-search" data-filter="#adm-people">${I.search}<input type="search" placeholder="${esc(tx('adm_search_people', 'Name or code'))}" aria-label="${esc(tx('adm_search_people', 'Name or code'))}"></label>`
     + grp([more(tx('adm_online_pairs', 'Online pairs'), () => push({ k: 'pairs' }))])
-    + gh(tx('adm_everyone', 'Everyone'), people.length)
+    + gh(_peopleAll ? tx('adm_everyone', 'Everyone') : tx('adm_last_30', 'Last 30 days'), people.length, flip)
     + `<div class="adm-grp" id="adm-people">${people.map((p) => row({ icon: whoHTML(p.emoji), title: (p.name), acts: [`<span class="adm-code">${esc(p.playerId)}</span>`],
       q: `${p.name} ${p.playerId}`, go: () => push({ k: 'person', key: p.key }) })).join('')}</div>` };
 }
