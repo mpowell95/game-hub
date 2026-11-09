@@ -259,7 +259,10 @@ console.log('\n--- wiring ---');
     /integrityOnUndo = onValueWritten\(\{ ref: '\/adminConfig\/v1\/integrity'/.test(idx)
     && ['darts', 'cuppong', 'battleship', 'hoops'].every((n) => idx.includes(`onMatchOver('${n}')`)));
   ok('server: functions that may push carry the VAPID secret',
-    ['boardsOnSync', 'boardsOnConfig', 'integrityOnUndo', 'boardsCatchUp'].every((f) => (idx.split('\n').find((l) => l.startsWith(`export const ${f} =`)) || '').includes('secrets: [VAPID_PRIVATE_KEY]')));
+    ['boardsOnConfig', 'integrityOnUndo', 'boardsCatchUp'].every((f) => (idx.split('\n').find((l) => l.startsWith(`export const ${f} =`)) || '').includes('secrets: [VAPID_PRIVATE_KEY]')));
+  // 2026-11-09: a sync only marks the board dirty (boardsCatchUp rebuilds), so it never pushes and needs no secret.
+  ok('server: a sync only marks the board dirty; the rebuild (and any push) runs in boardsCatchUp',
+    /boardsOnSync = [^\n]*\n\s*async \(\) => \{ await getDatabase\(\)\.ref\('boards\/v1\/meta\/dirty'\)\.set\(true\); \}\);/.test(idx));
   ok('shared: js/integrity.js is copied to the server', /'js\/integrity\.js'/.test(read('tools/sync-functions-shared.mjs')));
   ok('hub: a tap on the push opens the admin page, on an admin device only', /if \(id === 'admin'\) \{ this\._clearPushOpen\(\); if \(isAdminDevice\(\)\) this\.openAdmin\(\); return; \}/.test(read('js/hub.js')));
   const ui = read('js/admin-ui.js');
