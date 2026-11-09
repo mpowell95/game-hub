@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v44';
+  const APP_VERSION = 'v45';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -115,8 +115,36 @@
       const ok = s && s.v === 1 && s.game && Array.isArray(s.game.players) && Array.isArray(s.names)
         && s.game.players.length === s.names.length && (s.numAI | 0) >= 1 && (s.numAI | 0) <= 4
         && s.game.players.length === (s.numAI | 0) + 1;
-      return ok ? s : null;
+      return ok ? repairForcedDeal1109(s) : null;
     } catch (e) { return null; }
+  }
+  // ONE-TIME repair (Matt, 2026-11-09: "I'm not being penalized for the games error"). A game bug
+  // (cards beyond a full set could not be stolen) left his Forced Deal banked. On his code only,
+  // once: the Forced Deal goes from his bank back to his hand, and the play comes back if it is
+  // still that turn. Stamped so it never runs again; the save is re-read to verify the write.
+  const FIX1109_KEY = 'gamehub.bd.fix1109.v1';
+  function repairForcedDeal1109(s) {
+    try {
+      if (localStorage.getItem(FIX1109_KEY)) return s;
+      const prof = JSON.parse(localStorage.getItem('gamehub.profile') || 'null');
+      if (!prof || String(prof.playerId || '').toUpperCase() !== 'QZCC4') return s;
+      const g = s.game, me = g.players[0];
+      const i = (me.bank || []).findIndex(c => c && c.type === T.ACTION && c.action === A.FORCED_DEAL);
+      const logs = g.logs || [];
+      const at = logs.map(String).lastIndexOf(`${me.name} banks Forced Deal ($3M).`);
+      if (i === -1 || at === -1) return s;
+      const card = me.bank.splice(i, 1)[0];
+      me.hand.push(card);
+      const sameTurn = !logs.slice(at + 1).some(l => /^-- Turn /.test(String(l)));
+      if (sameTurn && g.currentPlayerIndex === 0) g.playsRemaining = Math.min(3, (g.playsRemaining | 0) + 1);
+      localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+      const back = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      if (back && back.game.players[0].hand.some(c => c.id === card.id)) {
+        localStorage.setItem(FIX1109_KEY, String(Date.now()));
+        console.log('[business-deal] Forced Deal returned to hand (2026-11-09 repair)');
+      } else console.error('[business-deal] 2026-11-09 repair: save re-read did not match');
+    } catch (e) { console.error('[business-deal] 2026-11-09 repair failed', e); }
+    return s;
   }
   // Computer speed (2026-09-28, Matt: "Add a setting for fast computer moves. like we
   // just did for texas hold em"). Scales only the pauses that wait on a COMPUTER: its
