@@ -263,3 +263,11 @@ Matt: "they should look centered and balanced". While the setup shows (the one s
 Small 1/3/5, Medium 1/4/8, Large 2/6/10 (Easy/Medium/Hard), online 3 on every board (`js/lb-points.js` `DB_PTS`).
 A win with no saved board (before withMode, 2026-10-30) counts as Small: never guessed upward. The scores sheet
 shows Small | Medium | Large (was "Small or medium" | "Large"). Read time only; nothing stored changes.
+
+### Hard on Medium reads from 22 lines left (2026-11-09, Matt: "the medium board is easier than the small board")
+
+It was: the exact solve began at 14 lines left (14 of Small's 24, only 14 of Medium's 40, after Medium is decided). On 4x4
+only, Pro now solves exactly from `MEDIUM_READ` = 22 lines left with a bitmask table (`bitMove`, one solve per game, kept
+in `_bit`; 2.5 s deadline falls back to the heuristic and resumes). Tests (scratch harness, 2026-11-09): new Hard beat old
+Hard 34-4-2; a player reading from 24 left beat old Hard 97% first / 90% second, new Hard 73% / 68%; the same reader beats
+Hard on Small 96% / 100%. Slowest move 1.3 s on a laptop (once a game). Small and Large unchanged.
