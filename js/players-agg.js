@@ -11,7 +11,7 @@
 
 import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
-import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
+import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, adjustModesGame, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
@@ -1014,9 +1014,11 @@ export function aggregatePlayers(all, corrections) {
     // every merge (the result carries `fl`, which js/lb-points.js reads so the points stay the sheet's).
     // Matt's HAND RESULTS (js/stats-corrections.js, 2026-11-08): added before the full-level move, filed as the recorder would.
     for (const g of Object.keys(HAND_RESULTS)) { if (grp.games[g]) grp.games[g] = handResultsGame(grp.games[g], g, grp.playerId); }
+    // Matt's ADJUST BY GAME TYPE (2026-11-09, adjustModesGame): filed as the recorder would, before the full-level move.
+    const adj = grp.playerId && corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null;
+    if (adj && typeof adj === 'object') for (const g of Object.keys(adj)) { if (grp.games[g]) grp.games[g] = adjustModesGame(grp.games[g], g, adj[g]); }
     for (const g of Object.keys(FULL_LEVEL)) { if (grp.games[g]) grp.games[g] = fullLevelGame(grp.games[g], g, grp.playerId); }
     // Matt's console ADJUSTMENTS (js/stats-corrections.js adjustGame, 2026-11-07): per PERSON, after every merge.
-    const adj = grp.playerId && corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null;
     if (adj && typeof adj === 'object') for (const g of Object.keys(adj)) { if (grp.games[g]) grp.games[g] = adjustGame(grp.games[g], adj[g]); }
     let cp = 0, cw = 0, cl = 0;
     for (const g of COMPETITIVE) { const t = grp.games[g].total; cp += t.played; cw += t.won; cl += t.lost; }

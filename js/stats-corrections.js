@@ -287,6 +287,65 @@ export function adjustGame(gm, adj) {
   }
   return out || gm;
 }
+// ADJUST BY GAME TYPE (Matt, 2026-11-09: "There needs to be an option to choose what game you're adjusting... It doesn't
+// allow me to do a hard game first to 1 for 3 points"). A slot `<level>~<byMode key>` in the same adjust node is a result
+// of THAT type at the level PICKED, filed as the recorder would: byMode[key][level] and byDiff at the level it RECORDS at
+// (one down for a FULL_LEVEL short setting), BEFORE the full-level move, so it shows and prices exactly like a real game.
+// Old builds' adjustGame skips these slots (ADJ_KEY has no '~'). Read time only; a result never goes below 0.
+const ADJ_MODE = /^([A-Za-z0-9_-]{1,24})~(.+)$/;
+/** The byDiff level a result of mode `key` picked at `level` is RECORDED at, in game `id`. */
+export function recordedLevelOf(id, level, key) {
+  const g = FULL_LEVEL_GAMES[id];
+  if (!g || level === 'mp') return level;
+  let short = false;
+  try { short = !!g.short(modeParts(key)); } catch { short = false; }
+  const i = g.ladder.indexOf(level);
+  return short && i > 0 ? g.ladder[i - 1] : level;
+}
+/** `gm` plus `adj`'s by-type slots; `gm` itself when there are none. Never mutates. */
+export function adjustModesGame(gm, id, adj) {
+  if (!adj || typeof adj !== 'object' || Array.isArray(adj)) return gm;
+  let out = null;
+  for (const slot of Object.keys(adj)) {
+    const mm = ADJ_MODE.exec(slot);
+    const a = adj[slot];
+    if (!mm || !a || typeof a !== 'object') continue;
+    const [, level, key] = mm;
+    const d = {};
+    let any = false;
+    for (const f of ADJ_F) { d[f] = adjNum(a[f]); if (d[f]) any = true; }
+    if (!any) continue;
+    if (!out) {
+      const g = gm || {};
+      out = Object.assign({}, g, { total: Object.assign({ played: 0, won: 0, lost: 0 }, g.total), byDiff: Object.assign({}, g.byDiff), byMode: Object.assign({}, g.byMode) });
+    }
+    const rec = recordedLevelOf(id, level, key);
+    const b = Object.assign({ played: 0, won: 0, lost: 0 }, out.byDiff[rec]);
+    const row = Object.assign({}, out.byMode[key]);
+    const m = Object.assign({ played: 0, won: 0, lost: 0 }, row[level]);
+    for (const f of ADJ_F) {
+      const before = b[f] | 0, after = Math.max(0, before + d[f]);
+      b[f] = after;
+      m[f] = Math.max(0, (m[f] | 0) + (after - before));
+      out.total[f] = Math.max(0, (out.total[f] | 0) + (after - before));
+    }
+    out.byDiff[rec] = b;
+    row[level] = m;
+    out.byMode[key] = row;
+  }
+  return out || gm;
+}
+/** A whole stats store with one person's by-type adjust slots applied (My Stats' first paint). */
+export function adjustModesStats(st, adjByGame) {
+  if (!st || !st.games || !adjByGame || typeof adjByGame !== 'object') return st;
+  let games = null;
+  for (const id of Object.keys(adjByGame)) {
+    if (!st.games[id]) continue;
+    const f = adjustModesGame(st.games[id], id, adjByGame[id]);
+    if (f !== st.games[id]) (games || (games = Object.assign({}, st.games)))[id] = f;
+  }
+  return games ? Object.assign({}, st, { games }) : st;
+}
 /** A whole stats store with `adjByGame` ({ <game id>: { <level>: {...} } }, one person's adjust entry) applied. */
 export function adjustStats(st, adjByGame) {
   if (!st || !st.games || !adjByGame || typeof adjByGame !== 'object') return st;
