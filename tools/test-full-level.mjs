@@ -96,7 +96,8 @@ assert.equal(gamePoints(moved, 'flicksoccer', 3, WHO).pts, 4 * 6 - 2 * 3); q++; 
 assert.equal(gamePoints(moved, 'flicksoccer', 2, WHO).pts, 1 * 3); q++;          // Medium tab: what is left there
 console.log(`test-full-level (points): ${q} checks passed`);
 
-// Medium, first to 1 SHOWS at Medium, priced at Easy's 1 and inside Easy's 20-point limit (the sheet's yellow circle).
+// Medium, first to 1 SHOWS at Medium, priced at Easy's 1, with ITS OWN 20-point limit (Matt, 2026-11-08: "I just won medium
+// first to 1 twice but it didn't give me any points. I should be at 20 for medium now"; it used to share Easy's limit).
 {
   const mg = { total: { played: 30, won: 30, lost: 0 }, byDiff: { easy: { played: 30, won: 30, lost: 0 } },
     byMode: { 'goals=1': { easy: { played: 20, won: 20, lost: 0 }, medium: { played: 10, won: 10, lost: 0 } } } };
@@ -104,8 +105,10 @@ console.log(`test-full-level (points): ${q} checks passed`);
   assert.deepEqual(mm.byDiff.easy, { played: 20, won: 20, lost: 0 });
   assert.deepEqual(mm.byDiff.medium, { played: 10, won: 10, lost: 0 });
   assert.equal(gamePoints(mg, 'flicksoccer').pts, 20);                     // raw: 30 Easy wins, capped at 20
-  assert.equal(gamePoints(mm, 'flicksoccer', null, OTHER).pts, 20);        // shown at Medium, still 1 each, still capped
-  console.log('test-full-level (medium, first to 1): 4 checks passed');
+  assert.equal(gamePoints(mm, 'flicksoccer', null, OTHER).pts, 30);        // 20 Easy (its limit) + 10 Medium first to 1 (its own)
+  assert.equal(gamePoints(mm, 'flicksoccer', 1, OTHER).pts, 20);           // Easy tab: Easy's own wins only
+  assert.equal(gamePoints(mm, 'flicksoccer', 2, OTHER).pts, 10);           // Medium tab: the first-to-1 wins, 1 each
+  console.log('test-full-level (medium, first to 1): 6 checks passed');
 }
 // Never moved twice; a record it was not applied to is priced as stored.
 {
