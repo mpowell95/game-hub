@@ -23,6 +23,7 @@ import { bestNow, liveNow, whenLive, onLive, __setServerTimeForTest } from '../.
 import { isLatePost } from '../../js/bee-fairplay.js';
 import { logAction, flushLog, logConfirmed } from './log.js';
 import { myCode } from '../../js/messages.js';
+import { restoreFromServer } from './restore.js';
 import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
@@ -243,7 +244,23 @@ class SpellingBee {
       return;
     }
     if (this.disposed) return;
+    await this._restore();
+    if (this.disposed) return;
     this._startDay();
+  }
+
+  /** Put back words this code found that this phone's save lacks (a re-added app, a second phone):
+   *  spelling-bee/js/restore.js. Waits at most 2.5 s; after that it changes nothing this open. */
+  async _restore() {
+    let live = true;
+    try {
+      const todayN = dayNumber(this.data.epoch, new Date(bestNow()));
+      await Promise.race([
+        restoreFromServer(this.data, loadSave(), todayN, { alive: () => live && !this.disposed, write: writeSave }),
+        new Promise((r) => setTimeout(r, 2500)),
+      ]);
+    } catch (err) { console.warn('[spelling-bee] could not check the server for missing words', err); }
+    live = false;
   }
 
   _renderError() {
