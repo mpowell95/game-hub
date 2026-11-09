@@ -22,12 +22,13 @@
 //   battleArenaTurnPush battlearena/index/<code>/<id> a Battle Arena challenge, your turn, the end (2026-10-24)
 //   battleshipTurnPush battleship/index/<code>/<id>  a Battleship challenge, your turn, the end (2026-10-27)
 //   roomsCleanup      every 30 min: delete live-game rooms nobody has been in for an hour
-//   boardsOnSync      a device synced: rebuild the leaderboard (at most every 2 min)
-//   boardsCatchUp     every 5 min: a rebuild skipped by that limit, or the first one
-//   directoryBuild    hourly + on an Online play change: the small directory/ the pickers read
+//   boardsOnSync      a device synced: mark the leaderboard dirty
+//   boardsCatchUp     every 2 min: rebuild it if dirty (or 30 min old), from a cached players/ (cache.js)
+//   directoryBuild    hourly + on an Online play change: ask boardsCatchUp to rebuild directory/
 //   nudgePush         the Remind bell on the Multiplayer screen (2026-10-22)
 //   turnReminderPush  every hour: "Reminder: your turn vs X" once a turn has waited 24 h (2026-10-20)
 //   beeWatch          every 5 min: Spelling Bee copy detection + missing-log alerts, pushed to admins (2026-10-28)
+//   beeLogTouch       a Spelling Bee log line added: stamp its puzzle so the scan re-reads only that log (2026-11-09)
 //   beeOnDaily        a Spelling Bee board row changed: rebuild boards/v1/bee (at most every 2 min)
 //   beeOnUndo         Matt undid a Spelling Bee void on the admin page: rebuild boards/v1/bee
 //   (rebuildBoards)   every board rebuild also runs the integrity checks on every record (2026-10-28)
@@ -50,6 +51,7 @@ import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { handleClaim } from './claim.js';
+import { readPlayers, readNodeCached } from './cache.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
@@ -271,12 +273,11 @@ export const nudgePush = onValueWritten({ ref: '/nudges/{code}/{key}', ...OPTS }
 // (decide.js buildDirectory) so the "pick a person" lists read a few KB instead of every device's
 // stats. Derived data, written only here (rules: clients read, never write); players/ is untouched.
 // Hourly, and at once when Matt lets a code in or out (so a newly allowed person is pickable now).
+// 2026-11-09 (the Google bill): this read all of players/ hourly. rebuildBoards builds the very same
+// directory from its cached read (written only when it changed), so this now just asks for that rebuild
+// (boardsCatchUp, within 2 minutes).
 async function rebuildDirectory() {
-  const db = getDatabase();
-  const all = (await db.ref('players').get()).val() || {};
-  const dir = buildDirectory(all);
-  await db.ref('directory').set(dir);
-  logger.info('directory rebuilt', { codes: Object.keys(dir).length });
+  await getDatabase().ref('boards/v1/meta/dirty').set(true);
 }
 export const directoryBuild = onSchedule({
   schedule: 'every 60 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1,
@@ -286,17 +287,19 @@ export const directoryOnApprove = onValueWritten({ ref: '/adminConfig/v1/online/
 
 // THE SERVER-BUILT LEADERBOARD (2026-10-22, boards.js has the why). Phones read the ~60 KB
 // boards/v1/lb/z instead of all of players/ (~930 KB). Rebuilt when a device syncs, at most once every
-// BOARD_GAP_MS (a rebuild reads all of players/ once, so a burst of syncs costs one read, not one
-// each); a sync inside that gap marks the board dirty and boardsCatchUp rebuilds it within 5
-// minutes. The package is rewritten only when a number changed (boards/v1/sums/lb). Derived data: rules let clients read it, never
+// 2 minutes: a sync marks the board dirty and boardsCatchUp rebuilds it (2026-11-09: from a cached
+// players/, functions/cache.js). The package is rewritten only when a number changed (boards/v1/sums/lb). Derived data: rules let clients read it, never
 // write it, and players/ is only read.
-const BOARD_GAP_MS = 2 * 60 * 1000;
 async function rebuildBoards(db) {
   await db.ref('boards/v1/meta/dirty').set(false);        // a sync after THIS point marks it again
-  const [players, cfg, sums, cth, pairsAt] = await Promise.all([
-    db.ref('players').get(), db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(), db.ref('ctHistory').get(),
-    db.ref('boards/v1/meta/pairsAt').get(),
-  ]).then((s) => s.map((x) => x.val()));
+  // players/ from functions/cache.js: only the records changed since this instance's last rebuild are
+  // downloaded (2026-11-09, the Google bill; it was all 722 KB every time).
+  const [players, [cfg, sums, pairsAt], cth] = await Promise.all([
+    readPlayers(db),
+    Promise.all([db.ref('adminConfig/v1').get(), db.ref('boards/v1/sums').get(),
+      db.ref('boards/v1/meta/pairsAt').get()]).then((s) => s.map((x) => x.val())),
+    readNodeCached(db, 'ctHistory', 30 * 60 * 1000),
+  ]);
   // INTEGRITY CHECKS (2026-10-28, functions/integrity.js): a rule broken for the first time is
   // flagged once and every admin told; a strong one is voided in the package built just below.
   const { written, flags } = await writeFlags(db, players || {});
@@ -333,24 +336,25 @@ async function rebuildBoards(db) {
   await db.ref('boards/v1').update(patch);
   logger.info('boards rebuilt', { people: patch['meta/people'], changed: !!patch['lb/z'] });
 }
-async function rebuildIfDue(db) {
-  const now = Date.now();
-  const lock = await db.ref('boards/v1/meta/lockUntil').transaction((cur) => (cur && cur > now ? undefined : now + BOARD_GAP_MS));
-  if (!lock.committed) { await db.ref('boards/v1/meta/dirty').set(true); return; }
-  await rebuildBoards(db);
-}
-// `secrets`: a rebuild may push an integrity flag to the admins (sendTo needs the VAPID key).
-export const boardsOnSync = onValueWritten({ ref: '/players/{id}/updatedAt', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5, secrets: [VAPID_PRIVATE_KEY] },
-  async () => { await rebuildIfDue(getDatabase()); });
+// A sync only MARKS the board dirty (2026-11-09): the rebuild runs in boardsCatchUp, one instance that
+// stays warm on its 2-minute timer, so its copy of players/ (functions/cache.js) is reused and only the
+// changed records are downloaded. Before, each sync's own (often cold) instance read all of players/.
+export const boardsOnSync = onValueWritten({ ref: '/players/{id}/updatedAt', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 },
+  async () => { await getDatabase().ref('boards/v1/meta/dirty').set(true); });
 export const boardsOnConfig = onValueWritten({ ref: '/adminConfig/v1/corrections', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] },
   async () => { await rebuildBoards(getDatabase()); });
 export const integrityOnUndo = onValueWritten({ ref: '/adminConfig/v1/integrity', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] },
   async () => { await rebuildBoards(getDatabase()); });
-export const boardsCatchUp = onSchedule({ schedule: 'every 5 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
+let boardsBusy = null;   // one rebuild at a time on this instance
+export const boardsCatchUp = onSchedule({ schedule: 'every 2 minutes', region: OPTS.region, retryCount: 0, maxInstances: 1, secrets: [VAPID_PRIVATE_KEY] }, async () => {
+  if (boardsBusy) return;
   const db = getDatabase();
-  const meta = (await db.ref('boards/v1/meta').get()).val() || {};
-  // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
-  if (meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) await rebuildBoards(db);
+  boardsBusy = (async () => {
+    const meta = (await db.ref('boards/v1/meta').get()).val() || {};
+    // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
+    if (meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) await rebuildBoards(db);
+  })();
+  try { await boardsBusy; } finally { boardsBusy = null; }
 });
 
 // EMPTY ROOMS ARE CLEARED (2026-10-23, Matt: "something should clear them if they've been empty for
@@ -396,6 +400,10 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
     logger.info('bee board rebuilt', r);
   }
 });
+// A Spelling Bee log line was added (2026-11-09): stamp its puzzle, so the scan re-reads only the logs that
+// grew (bee.js logsFor). A tiny write per line instead of re-reading every log every few minutes.
+export const beeLogTouch = onValueCreated({ ref: '/beeLog/{puzzle}/{code}/{k}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 3 },
+  async (event) => { await getDatabase().ref(`boards/v1/beeMeta/touched/${event.params.puzzle}`).set(Date.now()); });
 export const beeOnDaily = onValueWritten({ ref: '/beeDaily/{puzzle}/{code}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 5 },
   async () => { await rebuildBeeIfDue(getDatabase()); });
 export const beeOnUndo = onValueWritten({ ref: '/adminConfig/v1/bee', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 1 },

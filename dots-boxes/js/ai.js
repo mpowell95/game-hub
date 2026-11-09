@@ -233,7 +233,86 @@ function bestExactMove(state, me, ctx) {
   return bestMove;
 }
 
+// --- Pro on the Medium board: read ahead much earlier (2026-11-09) ----------
+//
+// Matt: "I think the medium board is easier than the small board." It was: the exact
+// solve above starts with 14 lines left, which is 14 of Small's 24 lines but only 14 of
+// Medium's 40, and a Medium game is decided earlier, as the safe lines run out (a player
+// reading from 24 lines left beat the old Pro 97 of 100 going first, 90 of 100 going
+// second). So on Medium (4x4) Pro solves exactly from MEDIUM_READ lines left, with a
+// bitmask table instead of cloned states: one solve per game (the table is kept and
+// every later position is a lookup), about 1 s on a laptop at 22 lines left.
+// A deadline guards a slow phone: the table filled so far stays exact, the move falls
+// back to the heuristic, and the next move carries on filling it.
+const MEDIUM_READ = 22;
+const MEDIUM_MS = 2500;
+let _bit = null;   // { rem: [edge], keys: Map(edgeKey -> bit), memo, boxRel, eb, full }
+
+function bitTable(state) {
+  const remaining = legalMoves(state);
+  // Still valid while every undrawn line was in the table (a value depends only on which lines are drawn).
+  if (_bit && remaining.every((e) => _bit.keys.has(edgeKey(e)))) return _bit;
+  const keys = new Map(remaining.map((e, k) => [edgeKey(e), k]));
+  const boxRel = [];
+  for (let r = 0; r < state.rows; r++) for (let c = 0; c < state.cols; c++) {
+    let m = 0;
+    for (const e of boxEdges(r, c)) { const k = keys.get(edgeKey(e)); if (k !== undefined) m |= 1 << k; }
+    if (m) boxRel.push(m);
+  }
+  const eb = remaining.map((e, k) => boxRel.filter((m) => m & (1 << k)));
+  const n = remaining.length;
+  _bit = { rem: remaining, keys, memo: new Int8Array(1 << n).fill(-128), boxRel, eb, full: (1 << n) - 1, n };
+  return _bit;
+}
+
+function bitMove(state) {
+  const T = bitTable(state);
+  let m = 0;
+  for (let k = 0; k < T.n; k++) if (edgeDrawn(state, T.rem[k])) m |= 1 << k;
+  const deadline = Date.now() + MEDIUM_MS;
+  let nodes = 0;
+  const { memo, eb, full, n } = T;
+  const f = (x) => {
+    if (x === full) return 0;
+    const v = memo[x];
+    if (v !== -128) return v;
+    if ((++nodes & 4095) === 0 && Date.now() > deadline) throw ABORT;
+    let best = -100;
+    for (let k = 0; k < n; k++) {
+      const b = 1 << k;
+      if (x & b) continue;
+      const y = x | b;
+      let got = 0;
+      for (const bm of eb[k]) if ((y & bm) === bm) got++;
+      const val = got ? got + f(y) : -f(y);
+      if (val > best) best = val;
+    }
+    memo[x] = best;
+    return best;
+  };
+  try {
+    let bestK = -1, bestV = -1e9;
+    for (let k = 0; k < n; k++) {
+      const b = 1 << k;
+      if (m & b) continue;
+      const y = m | b;
+      let got = 0;
+      for (const bm of eb[k]) if ((y & bm) === bm) got++;
+      const val = got ? got + f(y) : -f(y);
+      if (val > bestV) { bestV = val; bestK = k; }
+    }
+    return bestK >= 0 ? T.rem[bestK] : null;
+  } catch (e) {
+    if (e === ABORT) return null;
+    throw e;
+  }
+}
+
 function proMove(state, moves, rng) {
+  if (state.rows === 4 && state.cols === 4 && moves.length <= MEDIUM_READ) {
+    const exact = bitMove(state);
+    if (exact) return exact;
+  }
   if (moves.length <= ENDGAME_EDGE_THRESHOLD) {
     const exact = bestExactMove(state, state.turn, { deadline: Date.now() + PRO_MS, nodes: 0 });
     if (exact) return exact;

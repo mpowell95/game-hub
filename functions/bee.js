@@ -36,6 +36,31 @@ export function recentPuzzles(now = Date.now()) {
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
 
+// LOG CACHE (2026-11-09, Matt's Google bill: the database's downloads were the whole charge). The scan
+// re-read every recent puzzle's whole log every 5 minutes and every logged puzzle's every hour, some of
+// them twice (2.6 MB and growing). Log lines are write-once (database.rules.json), so a puzzle's log only
+// changes when a line is ADDED, and index.js beeLogTouch stamps boards/v1/beeMeta/touched/<puzzle> with
+// the server time of each new line. A puzzle's log is re-read only when it was touched after this
+// instance last read it; everything is re-read every LOG_FULL_MS anyway (a missed stamp heals). Read only.
+export const LOG_FULL_MS = 6 * 60 * 60 * 1000;
+const LOG_SLACK_MS = 60 * 1000;
+const logCaches = new WeakMap();   // db -> Map(puzzle -> { at, logs }); one per database handle (tests use many)
+
+/** The touched stamps, read once per pass ({ puzzle: ms }). */
+export async function readTouched(db) { return (await valOf(db, 'boards/v1/beeMeta/touched')) || {}; }
+
+/** beeLog/<bk> ({ CODE: log }), from this instance's copy unless a line was added since it was read. */
+export async function logsFor(db, bk, touched, now = Date.now()) {
+  let m = logCaches.get(db);
+  if (!m) { m = new Map(); logCaches.set(db, m); }
+  const c = m.get(bk);
+  const t = Number((touched || {})[bk]) || 0;
+  if (c && now - c.at < LOG_FULL_MS && t < c.at - LOG_SLACK_MS) return c.logs;
+  const logs = (await valOf(db, `beeLog/${bk}`)) || {};
+  m.set(bk, { at: now, logs });
+  return logs;
+}
+
 /** Logging began 2026-10-27; every puzzle from then to tomorrow is checked (2026-10-29, Matt: "you
  *  SHOULD NOT SKIP ANYTHING"; only yesterday, today and tomorrow were, so a log sent late, or a day
  *  checked under an older rule, was never looked at again). */
@@ -67,11 +92,11 @@ export async function checkPlayer(db, bk, code, row, log) {
 }
 
 /** Missing log, alert only. Returns the alert written (once), or null. */
-export async function checkLog(db, bk, code, row, now = Date.now()) {
+export async function checkLog(db, bk, code, row, now = Date.now(), log) {
   if (!PUZZLES[bk] || !row || isHiddenName(row.name) || !(row.words > 0)) return null;
   if (!(Number(row.at) && now - Number(row.at) >= LOG_QUIET_MS)) return null;
   if (await valOf(db, `beeAlerts/${bk}/${code}`)) return null;
-  const log = await valOf(db, `beeLog/${bk}/${code}`);
+  if (log === undefined) log = await valOf(db, `beeLog/${bk}/${code}`);
   if (!log) return null;   // no log at all: an older build, not a gap
   const logged = new Set(Object.values(log).filter((x) => x && x.e === 'guess' && (x.r === 'ok' || x.r === 'bonus')).map((x) => x.w)).size;
   if (logged >= row.words) return null;
@@ -120,9 +145,10 @@ export function beeNote(kind, bk, info) {
  *  board row OR a log; missing-log alerts for board rows. Returns {flags: [[bk, code, flag]], alerts}. */
 export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
   const flags = [], alerts = [];
+  const touched = await readTouched(db);
   for (const bk of all ? loggedPuzzles(now) : recentPuzzles(now)) {
     const rows = (await valOf(db, `beeDaily/${bk}`)) || {};
-    const logs = (await valOf(db, `beeLog/${bk}`)) || {};
+    const logs = await logsFor(db, bk, touched, Date.now());
     for (const code of new Set([...Object.keys(rows), ...Object.keys(logs)])) {
       const row = rows[code];
       const f = await checkPlayer(db, bk, code, row, logs[code] || null);
@@ -130,7 +156,7 @@ export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
       const z = await checkZone(db, bk, code, row, logs[code] || null, now);
       if (z) alerts.push([bk, `${code}~zone`, z]);
       if (!row || typeof row !== 'object') continue;
-      const a = await checkLog(db, bk, code, row, now);
+      const a = await checkLog(db, bk, code, row, now, logs[code] || null);
       if (a) alerts.push([bk, code, a]);
     }
   }
@@ -150,6 +176,7 @@ export function ownDayPuzzles(now = Date.now()) {
  *  { own: the whole map as it should be, patch: paths that changed }. */
 export async function ownDayNumbers(db, daily, current, now = Date.now()) {
   const recent = ownDayPuzzles(now);
+  const touched = await readTouched(db);
   const own = JSON.parse(JSON.stringify(current && typeof current === 'object' ? current : {}));
   const patch = {};
   for (const [bk, rows] of Object.entries(daily && typeof daily === 'object' ? daily : {})) {
@@ -160,7 +187,7 @@ export async function ownDayNumbers(db, daily, current, now = Date.now()) {
       const had = (own[bk] || {})[code] || null;
       const stale = !had || Number(had.at) !== Number(row.at);
       if (!recent.has(bk) && !(isLatePost(pz.day, row.at) && stale)) continue;
-      const e = ownEntry(row, await valOf(db, `beeLog/${bk}/${code}`), pz);
+      const e = ownEntry(row, (await logsFor(db, bk, touched, Date.now()))[code] || null, pz);
       if (JSON.stringify(e) === JSON.stringify(had)) continue;
       if (!own[bk]) own[bk] = {};
       if (e) own[bk][code] = e; else delete own[bk][code];

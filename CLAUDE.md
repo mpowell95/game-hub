@@ -402,6 +402,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
+- **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
@@ -675,7 +676,7 @@ None of this makes the hub cheat-proof; never describe it that way.
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
-  ~930 KB of `players/`). Rebuilt on a sync (at most every 2 min; `boardsCatchUp` every 5 min). The Leaderboard
+  ~930 KB of `players/`). A sync marks it dirty; `boardsCatchUp` (every 2 min) rebuilds it. **Server downloads are billed (2026-11-09, Matt's suspended Google bill: ~360 MB/day free, then $1/GB, all of it database downloads by our own functions)**: `functions/cache.js` keeps `players/` in memory and asks only for records whose `updatedAt` moved (index on `players`); Spelling Bee logs are re-read only when `beeLogTouch` stamped them. A new function must never re-read a whole node on a timer; `tools/test-server-cache.mjs`. **No surprise bills, ever (Matt, 2026-11-09)**: that test's guard blocks the deploy; backup card added; a Google budget email at $0.01 was given to Matt to set up (Billing > Budgets & caps), unconfirmed. The Leaderboard
   reads it (`stats-net.js` `watchBoard`), falling back to `players/` if absent. `tools/test-boards.mjs <snapshot>`
   proves every person is deep-equal to the phone's own grouping. **Other screens**: My Stats, Records, Hold'em's own bank,
   Skeeball's picker use `readPlayersForMe()` (own devices in full + everyone's name from the board); Hold'em's bank list,
