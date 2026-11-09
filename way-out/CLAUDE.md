@@ -533,3 +533,7 @@ someone leaves the app, they lose that round"*; a weekly game with a history tab
 ## Other storages' slips at read time; hints carry over; Rush by the server's clock (2026-10-29, second pass)
 
 Each record stamps its first slip (`wo.sf`) and first clear (`wo.ct`) per level (server time where known); `woCapCl` caps a clear by the slips the person's OTHER records stamped before it (players-agg, so phone and server boards agree; no stamps = never capped). The clear re-reads the carry key and this storage's own `wo.sl` (two tabs). The clearing try's hints go into `p` (Matt: a Replay never wins a hint back). Rush runs and saves use the server's time; a run with a clock known wrong is kept as `late`, never counted. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+## The level never starts below what the stats show cleared (2026-11-09)
+
+Matt re-added the app: `ladder2` (settings, phone-only) was gone and Expert opened on 201, though `wo.cl` showed clears to 344. `loadSettings` now raises each band's level to `clearedFloor(k)` = 1 + the highest level in `wo.cl[k]` (or `wo.leg[k].e`), only ever up. Checked in a browser: Expert cl to 306 opens on 307.
