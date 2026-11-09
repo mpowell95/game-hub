@@ -105,6 +105,13 @@ Español (`beeTabsHTML`), 🥇🥈🥉 · 🧠 · 🐝 · 📅 under each name; 
 
 **Never show Matt answer words** (2026-10-28, Matt: "I don't want to see the words tho!"): reading a log or board for him, run `read-bee-times.mjs` WITHOUT `--words` and report lengths/patterns only, even if he asks to "see the words"; confirm first.
 
+## Lost words come back (2026-11-09, Matt: a re-added app wiped the day's words, "Please add them back")
+
+`js/restore.js`, before each day starts (at most 2.5 s): when `beeDaily/<puzzle>/<CODE>` shows more words than the save,
+the accepted words in `beeLog` are appended (in order, with times); that day is marked counted in `days` and, at Genius,
+`recorded` + `seenGenius`, so nothing counts twice. Today on every open; every day once per phone per language
+(`gamehub.spellingbee.restored.v1`). Additive only. `node tools/test-bee-restore.mjs`.
+
 ## Tests
 
 `node spelling-bee/js/test.js` (engine + every puzzle in the data is fair); `node tools/check-no-scroll.mjs
