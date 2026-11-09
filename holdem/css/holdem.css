@@ -91,7 +91,7 @@
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) max(18px, calc(50% - 220px)) calc(env(safe-area-inset-bottom, 0px) + 12px);
+  padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 48px) + 50px) max(18px, calc(50% - 220px)) calc(env(safe-area-inset-bottom, 0px) + 12px);
   justify-content: center;
 }
 .pk-root .pk-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -192,7 +192,7 @@
 /* The table picker: the reference menu's tournament tiles, two to a row. */
 .pk-root .pk-tiers {
   flex: 1; display: flex; flex-direction: column; gap: 8px;
-  padding: calc(max(env(safe-area-inset-top, 0px), 48px) + 50px) max(12px, calc(50% - 230px)) calc(env(safe-area-inset-bottom, 0px) + 10px);
+  padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 48px) + 50px) max(12px, calc(50% - 230px)) calc(env(safe-area-inset-bottom, 0px) + 10px);
   background: linear-gradient(180deg, #213656 0%, #14223a 45%, #0b1322 100%);
 }
 .pk-root .pk-tierhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -313,7 +313,7 @@
    96px in from the left. */
 .pk-root .pk-top {
   flex: 0 0 auto;
-  margin-top: max(env(safe-area-inset-top, 0px), 48px);
+  margin-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 48px);
   padding: 0 6px 6px 96px;
 }
 .pk-root .pk-ban {

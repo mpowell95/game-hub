@@ -52,7 +52,7 @@
 /* Shares its row with the hub's floating back button (top-left), so it keeps to the right. */
 .dt-root .dt-top {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 50px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px);
   right: 10px;
   display: flex;
   align-items: center;
@@ -287,7 +287,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(env(safe-area-inset-top, 0px), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) 16px calc(16px + env(safe-area-inset-bottom, 0px));
   background: rgba(20, 8, 2, 0.5);
   overscroll-behavior: contain;
 }
@@ -447,7 +447,7 @@
 .dt-root .dt-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
 
 /* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */
-.dt-root .dt-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.dt-root .dt-ov-mp { align-items: flex-start; padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .dt-root .dt-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
 .dt-root .dt-mp-top { display: flex; align-items: center; gap: 6px; }
 .dt-root .dt-mp-back {
@@ -537,7 +537,7 @@
 .dt-root .dt-ov-setup > .dt-card { margin-block: auto; }
 /* The card starts BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
    same clearance as the multiplayer screen (dt-ov-mp). */
-.dt-root .dt-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.dt-root .dt-ov-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .dt-root .dt-tabs { display: flex; width: 100%; padding: 2px; background: #efe3cb; border-color: #e0cfae; }
 .dt-root .dt-tabs .dt-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: #6b5440; font-size: 17px; }
 .dt-root .dt-tabs .dt-tab[aria-pressed="true"] { background: #fff; color: var(--dt-ink); font-weight: 800; box-shadow: 0 0 0 2px #b8282d; }

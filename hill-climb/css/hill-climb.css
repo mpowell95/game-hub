@@ -67,7 +67,7 @@
   background-color: var(--hc-navy);
   background-image:
     repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 12px, transparent 12px 24px);
-  padding: max(env(safe-area-inset-top, 0px), 52px) 10px max(env(safe-area-inset-bottom, 0px), 6px);
+  padding: max(var(--gh-st, env(safe-area-inset-top, 0px)), 52px) 10px max(env(safe-area-inset-bottom, 0px), 6px);
   gap: 8px;
 }
 
@@ -281,7 +281,7 @@
 
 .hc-root .hc-hud-tl {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 8px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 8px);
   left: 10px;
   display: flex;
   flex-direction: column;
@@ -312,7 +312,7 @@
 
 .hc-root .hc-hud-tc {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 8px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 8px);
   left: 50%;
   transform: translateX(-50%);
   width: min(46vw, 240px);
@@ -351,7 +351,7 @@
 
 .hc-root .hc-pausebtn {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 8px);
+  top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 8px);
   right: 12px;
   width: 40px; height: 40px;
   border-radius: 12px;

@@ -94,7 +94,7 @@
      the hub's floating back button, and gives that up before it gives up reaching Play. The
      bottom pad clears the home-indicator bar. overflow-y stays as a net, never as the plan. */
   padding:
-    clamp(56px, env(safe-area-inset-top, 0px) + 64px, 84px)
+    clamp(56px, var(--gh-st, env(safe-area-inset-top, 0px)) + 64px, 84px)
     16px
     calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -564,14 +564,14 @@
 .sk-root .sk-rack {
   flex: 0 0 auto;
   text-align: center;
-  padding: calc(max(10px, env(safe-area-inset-top, 0px)) + 44px) 12px 4px;
+  padding: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 44px) 12px 4px;
   pointer-events: none;
 }
 
 /* Top RIGHT: the hub's own floating Hub button owns the top left, and the two overlapped. */
 .sk-root .sk-menu {
   position: absolute;
-  top: max(10px, env(safe-area-inset-top, 0px));
+  top: max(10px, var(--gh-st, env(safe-area-inset-top, 0px)));
   right: 12px;
   z-index: 4;
   /* 44x44 is the floor for a reliable thumb; do not shrink it back to fit a layout. */
@@ -720,7 +720,7 @@
    rails down, grow the box, or raise .sk-swipe's height, and MEASURE the two rects again. */
 .sk-root .sk-grail {
   position: absolute;
-  top: calc(max(10px, env(safe-area-inset-top, 0px)) + 134px);
+  top: calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 134px);
   z-index: 3;
   /* Narrower on a narrow phone: the gutter is a share of the width, not a constant. */
   width: min(76px, 19vw);

@@ -153,7 +153,7 @@ const CUSTOM_ICON = `<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden
  *  so it overlaps neither the Menu (top right) nor the status line, whose second line runs wide
  *  ("Cups 10-10 vs Ana · Game 2 of 3 · Straight up") and is centred in the bar. It lands on the
  *  table's far wall, which is nothing to touch; the flick pad is the lower 60%. */
-const CHAT_PLACE = { top: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 52px)', right: '12px', popsTop: 'calc(max(10px, env(safe-area-inset-top, 0px)) + 104px)' };
+const CHAT_PLACE = { top: 'calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 52px)', right: '12px', popsTop: 'calc(max(10px, var(--gh-st, env(safe-area-inset-top, 0px))) + 104px)' };
 
 const escapeHTML = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

@@ -42,6 +42,12 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* must win over .hub-grid { display: grid } etc. */
 .hub-card, .hub-back { touch-action: manipulation; }
+/* THE TOP SAFE AREA, one setting (2026-11-09). Every top row in the hub and its games reads
+   var(--gh-st, env(safe-area-inset-top)) instead of env() directly, so it can be moved in one place.
+   Normally identical to env(). iOS 26 blur test, ADMIN DEVICES ONLY (html.gh-edgepad, set in index.html
+   and profile/index.html from the cached admin answer): 48px more, below the blurred band. */
+:root { --gh-st: env(safe-area-inset-top, 0px); }
+html.gh-edgepad { --gh-st: calc(env(safe-area-inset-top, 0px) + 48px); }
 html, body { margin: 0; min-height: 100%; }
 /* While a game is mounted the page itself cannot scroll or rubber-band (Matt, 2026-10-15: "no
  * gameplay screen should scroll"). Set and cleared by js/hub.js (_enterGameChrome / showLauncher).
@@ -66,11 +72,11 @@ body {
   align-items: stretch;
   gap: 10px;
   padding: 14px 16px;
-  /* Clear the iOS status bar/notch in EVERY context. `env(safe-area-inset-top)`
+  /* Clear the iOS status bar/notch in EVERY context. `var(--gh-st, env(safe-area-inset-top))`
      is ~0 in mobile Safari (and when returning here from the Monopoly Deal PWA),
      which let "Game Hub" collide with the clock. Guarantee a 54px minimum (≈ a
      Dynamic Island status bar); the notch/standalone case still wins via env(). */
-  padding-top: max(env(safe-area-inset-top, 0px), 54px);
+  padding-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px);
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: saturate(1.2) blur(6px);
   border-bottom: 1px solid var(--hub-surface-2);
@@ -87,7 +93,7 @@ body {
   background: none;
   backdrop-filter: none;
   border-bottom: 0;
-  padding: max(env(safe-area-inset-top, 0px), 54px) 0 0 10px;
+  padding: max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) 0 0 10px;
   pointer-events: none;
 }
 .hub-top.hub-top-immersive .hub-top-title,
@@ -122,7 +128,7 @@ body {
 .hub-gamebug {
   position: fixed;
   z-index: 10;   /* the floating "‹ Hub" layer (.hub-top), so a game's own popups still cover it */
-  top: calc(max(env(safe-area-inset-top, 0px), 54px) - 4px);
+  top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) - 4px);
   right: calc(10px + env(safe-area-inset-right, 0px));
   width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
@@ -249,7 +255,7 @@ html.gh-gamebug .ww-root.is-immersive .ww-top { padding-right: calc(64px + env(s
 /* The floating immersive back button (above) overlays .hub-main since
    .hub-top is taken out of flow; reserve enough top clearance so it never
    sits on top of the mounted game's own content. */
-.hub-main.hub-main-immersive { padding-top: calc(max(env(safe-area-inset-top, 0px), 54px) + 44px); }
+.hub-main.hub-main-immersive { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 44px); }
 
 /* Launcher grid — 2-up on phones, landscape (16:9) tiles so more rows fit per
    scroll. Each tile is full-bleed art with a title caption. */
@@ -972,7 +978,7 @@ html.gh-touring .hub-tabs { z-index: 26; pointer-events: none; }
 html.gh-touring .hub-tab { opacity: 0.3; transition: opacity 0.2s; }
 html.gh-touring .hub-tab.is-tip { opacity: 1; }
 .hub-tour-skip {
-  position: absolute; top: max(env(safe-area-inset-top, 0px), 54px); right: 16px; width: 44px; height: 44px;
+  position: absolute; top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px); right: 16px; width: 44px; height: 44px;
   border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.92); color: #111; font-size: 24px; line-height: 1;
   cursor: pointer; touch-action: manipulation;
 }

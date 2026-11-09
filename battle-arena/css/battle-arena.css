@@ -101,7 +101,7 @@
 .ba-root .ba-home { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; --ba-hm: min(150px, 18vh, 38vw); }
 .ba-root .ba-home-hero {
   flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-  padding: calc(max(env(safe-area-inset-top, 0px), 54px) + 36px) 16px 0;
+  padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px) 16px 0;
 }
 /* The logo: a small white first line over a huge outlined yellow last word ("BATTLE / ARENA"). */
 .ba-root .ba-title {
@@ -116,7 +116,7 @@
 }
 .ba-root .ba-home-art[hidden] { display: none; }
 /* fitHome's last steps on a short phone (2026-11-08): the logo level with the Hub button, tighter gaps. */
-.ba-root .ba-home.is-tight .ba-home-hero { padding-top: max(env(safe-area-inset-top, 0px), 50px); }
+.ba-root .ba-home.is-tight .ba-home-hero { padding-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px); }
 .ba-root .ba-home.is-tight .ba-home-menu { padding-top: 20px; gap: 8px; }
 .ba-root .ba-home-art { display: flex; align-items: flex-end; justify-content: center; gap: 4px; margin-bottom: calc(var(--ba-hm) * -.1); }
 .ba-root .ba-home-mon svg { width: var(--ba-hm); height: var(--ba-hm); }
@@ -170,7 +170,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: calc(max(env(safe-area-inset-top, 0px), 54px) + 52px) 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 52px) 12px calc(12px + env(safe-area-inset-bottom, 0px));
   max-width: 520px;
   margin: 0 auto;
 }
@@ -393,7 +393,7 @@
  * only) in the middle, MOVES under it, STAGE on the right. The Hub button floats at the far left. */
 .ba-root .ba-hubrow {
   position: relative; z-index: 2; flex: 0 0 auto;
-  height: calc(env(safe-area-inset-top, 0px) + 58px); padding: env(safe-area-inset-top, 0px) 8px 0 0;
+  height: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 58px); padding: var(--gh-st, env(safe-area-inset-top, 0px)) 8px 0 0;
   display: flex; align-items: center; gap: 4px;
 }
 .ba-root .ba-hubspace { flex: 0 0 74px; }
@@ -633,8 +633,8 @@
 
 /* --- the result and the menu --------------------------------------------------------------------- */
 .ba-root .ba-result-ov { position: absolute; inset: 0; z-index: 40; display: flex; align-items: stretch; background: rgba(8, 4, 2, .55); }
-.ba-root .ba-result { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: calc(env(safe-area-inset-top, 0px) + 56px) 0 calc(14px + env(safe-area-inset-bottom, 0px)); }
-.ba-root .ba-result-x { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 10px; color: #fff; background: rgba(0, 0, 0, .45); }
+.ba-root .ba-result { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 56px) 0 calc(14px + env(safe-area-inset-bottom, 0px)); }
+.ba-root .ba-result-x { position: absolute; top: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 8px); right: 10px; color: #fff; background: rgba(0, 0, 0, .45); }
 .ba-root .ba-result-stage { position: relative; display: flex; flex-direction: column; align-items: center; }
 .ba-root .ba-result-art { display: flex; justify-content: center; gap: 4px; }
 .ba-root .ba-result-mon { position: relative; animation: ba-hop 1.2s ease-in-out infinite; }
@@ -809,13 +809,13 @@
  * real players. ui.js TEST_MODE; remove at release. Above every overlay, never takes a tap. */
 .ba-root.is-test::after {
   content: attr(data-test); position: absolute; z-index: 60; pointer-events: none;
-  top: calc(env(safe-area-inset-top, 0px) + 4px); left: 50%; transform: translateX(-50%);
+  top: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 4px); left: 50%; transform: translateX(-50%);
   padding: 4px 12px 3px 15px; border-radius: 7px; border: 2px solid #1f1a14;
   font: 900 16px/1.1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: .16em; color: #1f1a14;
   background: repeating-linear-gradient(-45deg, #f2b705 0 8px, #ffd84a 8px 16px); box-shadow: 0 2px 0 rgba(0, 0, 0, .45);
 }
 /* In a match the top rows are the two teams and MOVES; the tag sits on the stage just under them. */
-.ba-root.is-test:has(.ba-battle)::after { top: calc(env(safe-area-inset-top, 0px) + 106px); }
+.ba-root.is-test:has(.ba-battle)::after { top: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 106px); }
 
 /* HOME TABS (2026-11-07): Online | Computer. The hero keeps its own height and the floor menu fills the rest from the
    top, so the tabs sit in one place whichever panel is open. */

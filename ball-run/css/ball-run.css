@@ -66,7 +66,7 @@
   gap: 14px;
   max-width: 480px;
   margin: 0 auto;
-  padding: max(24px, env(safe-area-inset-top)) 24px 32px;
+  padding: max(24px, var(--gh-st, env(safe-area-inset-top))) 24px 32px;
   text-align: center;
 }
 
@@ -195,7 +195,7 @@
 
 .br-hud {
   position: absolute;
-  top: max(14px, env(safe-area-inset-top));
+  top: max(14px, var(--gh-st, env(safe-area-inset-top)));
   left: 0;
   right: 0;
   display: flex;

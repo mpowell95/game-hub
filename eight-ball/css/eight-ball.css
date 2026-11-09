@@ -32,7 +32,7 @@
   --ep-brand: #0F8A3C;
   --gh-accent: #0F8A3C;
   --ep-pill: rgba(28, 22, 18, 0.62);
-  --ep-top: max(env(safe-area-inset-top, 0px), 50px);
+  --ep-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px);
 }
 .ep-root,
 .ep-root * {
@@ -617,7 +617,7 @@
 .ep-root .ep-ov-setup > .ep-card { margin-block: auto; }
 /* The card starts BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
    same clearance as the multiplayer screen (ep-ov-mp). */
-.ep-root .ep-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.ep-root .ep-ov-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .ep-root .ep-tabs { display: flex; width: 100%; padding: 2px; background: #f1e6d6; border-color: var(--ep-line); }
 .ep-root .ep-tabs .ep-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: var(--ep-muted); font-size: 17px; }
 .ep-root .ep-tabs .ep-tab[aria-pressed="true"] { background: #fff; color: var(--ep-ink); font-weight: 800; box-shadow: 0 0 0 2px var(--ep-brand); }

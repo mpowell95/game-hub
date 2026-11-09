@@ -142,7 +142,7 @@ let instance = null;
  *  the Pause button holds in a vs-computer match (Pause is hidden online and its 44px slot is
  *  empty, `right: 12px` is the row's own padding), so it overlaps neither the score nor the table,
  *  where the mallet is dragged. The bubbles come down under the row. */
-const CHAT_PLACE = { top: 'calc(max(env(safe-area-inset-top, 0px), 46px) + 2px)', right: '12px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 46px) + 56px)' };
+const CHAT_PLACE = { top: 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 46px) + 2px)', right: '12px', popsTop: 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 46px) + 56px)' };
 
 class AirHockeyUI {
   constructor(host) {

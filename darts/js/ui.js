@@ -148,7 +148,7 @@ let ACTIVE_HINT = false;
 /** Where the quick-chat button sits (js/match-chat-ui.js `place`): on the top row, LEFT of the
  *  darts-left icons and the menu button (the row is `right: 10px`, icons 42px + gap 10 + menu 44),
  *  so it overlaps neither; the bubbles come down under that row. */
-const CHAT_PLACE = { top: 'max(env(safe-area-inset-top, 0px), 50px)', right: '118px', popsTop: 'calc(max(env(safe-area-inset-top, 0px), 50px) + 54px)' };
+const CHAT_PLACE = { top: 'max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px)', right: '118px', popsTop: 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 54px)' };
 
 class DartsUI {
   constructor(container) {

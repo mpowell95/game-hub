@@ -23,7 +23,7 @@
   --fs-line: #d5e2d8;
   --fs-green: #1f7a3a;
   --gh-accent: #1f7a3a;
-  --fs-top: max(env(safe-area-inset-top, 0px), 50px);
+  --fs-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px);
 }
 .fs-root,
 .fs-root * {
@@ -399,7 +399,7 @@ html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
 .fs-root .fs-danger { background: #fff; color: #a3161b; border-color: #e3b9b9; }
 
 /* Clear of the hub's floating back button (top-left, ~54-90px down): the card starts below it. */
-.fs-root .fs-ov-mp { align-items: flex-start; padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.fs-root .fs-ov-mp { align-items: flex-start; padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .fs-root .fs-mp { width: min(420px, 100%); max-height: 100%; overflow: hidden; gap: 10px; }
 .fs-root .fs-mp-top { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; }
 .fs-root .fs-mp-back {
@@ -586,7 +586,7 @@ html[lang="es"] .fs-root .fs-logo { font-size: 23px; letter-spacing: 0; }
 .fs-root .fs-ov-setup > .fs-card { margin-block: auto; }
 /* The card starts BELOW the floating "‹ Hub" button (2026-11-08: the card sat under it), the
    same clearance as the multiplayer screen (fs-ov-mp). */
-.fs-root .fs-ov-setup { padding-top: calc(max(env(safe-area-inset-top, 0px), 50px) + 50px); }
+.fs-root .fs-ov-setup { padding-top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 50px) + 50px); }
 .fs-root .fs-tabs { display: flex; width: 100%; padding: 2px; background: #e6efe8; border-color: var(--fs-line); }
 .fs-root .fs-tabs .fs-tab { flex: 1 1 0; min-width: 0; min-height: 40px; gap: 6px; padding: 0 6px; color: var(--fs-muted); font-size: 17px; }
 .fs-root .fs-tabs .fs-tab[aria-pressed="true"] { background: #fff; color: var(--fs-ink); font-weight: 800; box-shadow: 0 0 0 2px var(--fs-green); }

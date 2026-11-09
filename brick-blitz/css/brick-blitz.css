@@ -53,7 +53,7 @@
   justify-content: space-between;
   gap: 6px;
   height: 46px;
-  margin-top: max(env(safe-area-inset-top, 0px), 48px);
+  margin-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 48px);
   padding: 0 12px 0 96px;
   font-family: var(--bx-disp);
   font-style: italic;
@@ -155,7 +155,7 @@
 .bx-root .bx-ov {
   position: absolute; inset: 0; z-index: 2;
   display: flex; align-items: center; justify-content: center;
-  padding: max(env(safe-area-inset-top, 0px), 96px) 16px max(env(safe-area-inset-bottom, 0px), 16px);
+  padding: max(var(--gh-st, env(safe-area-inset-top, 0px)), 96px) 16px max(env(safe-area-inset-bottom, 0px), 16px);
   background: radial-gradient(90% 70% at 50% 45%, rgba(18, 0, 43, 0.4), rgba(18, 0, 43, 0.86));
   text-align: center;
 }
