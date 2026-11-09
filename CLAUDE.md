@@ -238,9 +238,10 @@ It sends `Cache-Control: no-store`.
 
 ### iOS 26 top-edge blur (2026-11-09)
 
-iOS 26 blurs the top of the Home Screen app (Matt's screenshots, v1514). Test fix, ADMIN DEVICES ONLY: `js/hub.js`
-`paintEdgeStrip()` + `#gh-edge-strip` in `css/hub.css` (a fixed, opaque, full-width box as tall as the status bar).
-Unverified on an iPhone. If it fails, next try is dropping `black-translucent` (every phone must re-add the app).
+iOS 26 blurs the top of the Home Screen app (Matt's screenshots, v1514). A solid strip at the top edge (v1515, admin
+only) did NOT help on Matt's iPhone; removed v1516. Untried: dropping `black-translucent` (only phones that re-add the
+app get it). **Never tell a player to delete the app without first warning it wipes unsynced data, saves, settings and
+admin access** (admin is per install: re-adding needs the new auth id in `admins/`).
 
 ### Diagnostic: the version pill stuck at `vN → vN+1`
 

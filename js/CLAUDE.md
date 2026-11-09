@@ -284,7 +284,7 @@ profile pill (a count, never hue alone).
 
 ### The announcement layer
 
-Seen-list `gamehub.announce.v1` (a preference). `until` retires an entry; a malformed date fails SAFE
+Seen-list `gamehub.announce.v1` (a preference). **A re-added app never re-shows a popup (2026-11-09, Matt)**: before the first popup of a load, `_maybeAnnounce` merges the `announce.seen` reports of this person's other devices (`readMySeenAnnouncements`, by device, code, else profile name; `mergeSeen`), and a device with no seen-list yet shows nothing on its first load. `players/<id>/device.layout` reports Comfortable/Compact (2026-11-09). `until` retires an entry; a malformed date fails SAFE
 (shown). **Append a NEW id; never reuse or renumber.** Text `{en, es}` on the entry. `shots` = whole
 screens per theme (`resolvedTheme()`) × language in `img/`, neutral profile with code/device id
 blanked; `tile: {art, name}` for a new game. Never over the name gate or a game; once per load.

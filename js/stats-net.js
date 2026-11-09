@@ -290,7 +290,7 @@ export async function syncMyStats() {
       // shell install FAILED sits on an old build indefinitely and looks completely normal.
       // + the time zone (2026-11-02): one of the "look-alike phones" signs of the online-pairs alerts
       // (js/integrity.js pairAlerts). A report, read by no gameplay or stats path.
-      device: Object.assign(installState(), { build: await appVersion(), tz: tzName() }),
+      device: Object.assign(installState(), { build: await appVersion(), tz: tzName(), layout: layoutName() }),
       // WHICH LAUNCHER ANNOUNCEMENTS THIS DEVICE HAS DISMISSED (2026-09-09). Matt, releasing golf:
       // *"i want a way to see who has seen the popup too."* The seen-list is a local preference and
       // never left the phone, so "did everyone get told about the new game" had no answer anywhere.
@@ -460,6 +460,13 @@ export async function watchBoard(cb) {
 
 /** The board once (not live), reused for READ_REUSE_MS like readPlayersOnce. null = no board. */
 let _boardMemo = null;
+/** Which launcher layout this device uses (2026-11-09, Matt: "is anyone using the old layout?").
+ *  A report only; read straight from the preference so this module needs no new import. */
+function layoutName() {
+  try { const v = localStorage.getItem('gamehub.layout.v1'); return v === 'compact' ? 'compact' : 'comfortable'; }
+  catch { return null; }
+}
+
 export async function readBoardOnce() {
   if (!(await init())) return null;
   if (_boardMemo && Date.now() - _boardMemo.at < READ_REUSE_MS) return _boardMemo.val ? boardList(_boardMemo.val) : null;
@@ -502,6 +509,24 @@ export async function readPlayersForMe() {
   const recs = await Promise.all(ids.map((id) => _api.get(_api.ref(_db, 'players/' + id)).then((s) => s.val()).catch(() => null)));
   ids.forEach((id, i) => { if (recs[i]) out[id] = recs[i]; });
   return out;
+}
+
+/** Popups this PERSON already dismissed on their other devices (2026-11-09): each record's
+ *  `announce.seen` report, read only for this person's own device ids (a few bytes each). The
+ *  person is found by device or code, else (a re-added app that has not linked its code yet) by the
+ *  profile name, which the username registry reserves to one person. null when there is no board. */
+export async function readMySeenAnnouncements() {
+  const board = await readBoardOnce();
+  if (!board) return null;
+  const name = String((loadProfile() || {}).name || '').trim().toLowerCase();
+  const g = myGroupOn(board) || (name ? board.list.find((x) => String(x.name || '').trim().toLowerCase() === name) : null);
+  const ids = new Set(g ? board.idsByKey.get(g.key) || [] : []);
+  ids.delete(statsId());
+  if (!ids.size) return [];
+  const vals = await Promise.all([...ids].map((id) => _api.get(_api.ref(_db, 'players/' + id + '/announce/seen')).then((x) => x.val()).catch(() => null)));
+  const out = new Set();
+  for (const v of vals) for (const x of (v && typeof v === 'object' ? Object.values(v) : [])) if (typeof x === 'string' && x) out.add(x);
+  return [...out];
 }
 
 /** Everyone, already grouped by person and corrected (the board's list), for the screens that rank

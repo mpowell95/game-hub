@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1516';
+const CACHE = 'game-hub-v1517';
 
 const ASSETS = [
   './',
@@ -835,10 +835,10 @@ const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 // __REST_MANIFEST_START__
 const REST_MANIFEST = {
   './manifest.webmanifest': 'cd3b726da1',
-  './css/hub.css': '58df9d9540',
+  './css/hub.css': 'a4592b8827',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '49d3c7a256',
+  './js/hub.js': '5c2678c729',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -868,13 +868,13 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': '059e671605',
-  './js/stats-net.js': 'ea53661d41',
+  './js/stats-net.js': 'afbf010707',
   './js/firebase-boot.js': '8d10f6458c',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'e6de6b7a35',
   './js/bug-report-ui.js': '557cd3d1ed',
-  './js/announce.js': '9386a76d9c',
+  './js/announce.js': '2753851b99',
   './js/announce-ui.js': '4ba8cf86ba',
   './js/messages.js': '0a7c38fb0a',
   './js/device-key.js': '4a749275f3',

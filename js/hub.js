@@ -30,7 +30,7 @@ import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
-import { pendingAnnouncement, loadSeen, markSeen, ANNOUNCEMENTS } from './announce.js';
+import { pendingAnnouncement, loadSeen, hasSeenStore, mergeSeen, markSeen, ANNOUNCEMENTS } from './announce.js';
 import { startPointsToast } from './points-toast.js';
 // "+X pts" over a result screen whenever a win is counted (2026-11-02, js/points-toast.js). Display only.
 try { startPointsToast(); } catch (err) { console.warn('[hub] points toast off', err); }
@@ -991,9 +991,8 @@ class Hub {
     // of the count on the CACHED answer, which is right on every load after the first - but a
     // device that has just been added to the allowlist has no cached yes yet, and without this it
     // would show no inbox badge until the load after next.
-    paintEdgeStrip();
     Promise.resolve(refreshAdminDevice())
-      .then(() => { paintEdgeStrip(); if (!this._destroyed) this._paintReplyBadge(); })
+      .then(() => { if (!this._destroyed) this._paintReplyBadge(); })
       .catch(() => { /* offline: the cached answer already painted whatever it knew */ });
   }
 
@@ -1020,8 +1019,29 @@ class Hub {
     if (this._announced || this.current || !hasName()) return;
     // `adminDevice` entries (the new leaderboard's intro, 2026-11-03) are SKIPPED, not held, on every other phone:
     // they must never stand in front of the next announcement a player is owed.
-    const a = pendingAnnouncement(Date.now(), loadSeen(), ANNOUNCEMENTS.filter((x) => !x.adminDevice || isAdminDevice()));
+    const owed = () => pendingAnnouncement(Date.now(), loadSeen(), ANNOUNCEMENTS.filter((x) => !x.adminDevice || isAdminDevice()));
+    let a = owed();
     if (!a) return;
+    // NO POPUP A PERSON ALREADY SAW (2026-11-09, Matt re-added the app and got three old popups:
+    // "it should NOT show them the popups a second time"). Once per load, before the first popup:
+    // add what this person dismissed on their other devices. A brand-new seen-list (a new or
+    // re-added app) shows nothing on its first load, so a re-added app has time to link its code.
+    if (!this._seenMerged) {
+      this._seenMerged = true;
+      this._announced = true;   // hold other callers while we read
+      const fresh = !hasSeenStore();
+      let ids = null;
+      try {
+        const m = await import('./stats-net.js');
+        ids = await Promise.race([m.readMySeenAnnouncements(), new Promise((r) => setTimeout(() => r(null), 4000))]);
+      } catch (err) { console.warn('[hub] could not read seen popups from other devices', err); }
+      mergeSeen(ids || []);
+      this._announced = false;
+      if (fresh || this._destroyed) { this._announced = true; return; }
+      if (this.current) return;
+      a = owed();
+      if (!a) return;
+    }
     // `adminOnly` entries are Matt-only previews. Returning BEFORE showAnnouncement matters: it is
     // showAnnouncement that marks an entry seen, so a gated announcement leaves every other device
     // untouched and lands fresh for everyone the day the flag comes off.
@@ -3242,19 +3262,3 @@ export function initHub(root) {
 
 export default { initHub };
 
-/* iOS 26 edge blur test (2026-11-09, Matt: "Try #2 first. Admin only"). iOS 26 blurs the top edge
-   of a Home Screen web app. Field reports say it skips the blur when a fixed, full-width, OPAQUE box
-   sits at the very top (found by hit testing, so no pointer-events: none). ADMIN DEVICES ONLY while
-   Matt checks it on his iPhone. Display only. */
-function paintEdgeStrip() {
-  try {
-    const on = isAdminDevice();
-    let el = document.getElementById('gh-edge-strip');
-    if (on && !el) {
-      el = document.createElement('div');
-      el.id = 'gh-edge-strip';
-      el.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(el);
-    } else if (!on && el) el.remove();
-  } catch (err) { console.warn('[hub] edge strip', err); }
-}

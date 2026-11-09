@@ -994,13 +994,3 @@ html.gh-touring .hub-tab.is-tip { opacity: 1; }
 @keyframes hub-tip-in { from { opacity: 0; transform: translateY(8px) scale(0.85); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .hub-tip.is-in { animation: none; } }
 
-/* iOS 26 edge blur test, admin devices only (js/hub.js paintEdgeStrip, 2026-11-09). One solid
-   colour, full width, at the top edge, as tall as the status bar. */
-#gh-edge-strip {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: env(safe-area-inset-top, 0px);
-  background: #f4f6fb;
-  z-index: 2147483000;
-}
-:root.gh-dark #gh-edge-strip { background: #0e1420; }

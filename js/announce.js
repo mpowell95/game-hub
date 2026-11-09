@@ -178,6 +178,24 @@ export function markSeen(id) {
   return next;
 }
 
+/** Has this device EVER had a seen-list? False only on a brand-new (or re-added) Home Screen app. */
+export function hasSeenStore() {
+  try { return localStorage.getItem(KEY) !== null; } catch { return true; }
+}
+
+/** Add ids seen on this person's OTHER devices (2026-11-09, Matt: a re-added app showed every old
+ *  popup again; "it should NOT show them the popups a second time"). Append-only, like markSeen.
+ *  Called with [] it just creates the store, so the next load knows this device is not new. */
+export function mergeSeen(ids) {
+  const seen = loadSeen();
+  const add = (Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x && !seen.includes(x));
+  if (add.length === 0 && hasSeenStore()) return seen;
+  const next = seen.concat([...new Set(add)]);
+  try { localStorage.setItem(KEY, JSON.stringify({ version: 1, seen: next, updatedAt: Date.now() })); }
+  catch (err) { console.warn('[announce] could not save the merged seen-list', err); }
+  return next;
+}
+
 /** Inside its live window right now? A missing/invalid `from` means "live already", a bad `until`
  *  means "no expiry" - both fail safe, because a bad date should produce an announcement that
  *  shows, not one that silently never does. */
