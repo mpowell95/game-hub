@@ -43,6 +43,8 @@ export const STRINGS = {
     lb2_me_gold: 'Golds',
     lb2_me_lost: 'Lost',
     lb2_me_close: 'Closest',
+    lb2_me_narrow: 'Narrowest',
+    lb2_tied_with: 'Tied with {name}',
     lb2_close_h: 'Closest to a record',
     // How far from gold (the Me tab, 2026-11-03): `v` the number, `sh` its level's shape or ''. The difference is
     // bold and gold; as few words as possible (Matt).
@@ -182,6 +184,8 @@ export const STRINGS = {
     lb2_me_gold: 'Oros',
     lb2_me_lost: 'Perdidos',
     lb2_me_close: 'Más cerca',
+    lb2_me_narrow: 'Más justo',
+    lb2_tied_with: 'Empate con {name}',
     lb2_close_h: 'Más cerca de un récord',
     lb2_need: (p) => {
       const s = (a, b) => (Number(p.n) === 1 ? a : b);

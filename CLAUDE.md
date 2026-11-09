@@ -236,6 +236,12 @@ node server.mjs           # http://localhost:8123/  (hub; /profile/, /<game>/ st
 A dev server is required (ES modules, workers and the service worker cannot run from `file://`).
 It sends `Cache-Control: no-store`.
 
+### iOS 26 top-edge blur (2026-11-09)
+
+iOS 26 blurs the top of the Home Screen app (Matt's screenshots, v1514). Test fix, ADMIN DEVICES ONLY: `js/hub.js`
+`paintEdgeStrip()` + `#gh-edge-strip` in `css/hub.css` (a fixed, opaque, full-width box as tall as the status bar).
+Unverified on an iPhone. If it fails, next try is dropping `black-translucent` (every phone must re-add the app).
+
 ### Diagnostic: the version pill stuck at `vN → vN+1`
 
 Two causes that look identical; separate them in this order:
