@@ -121,7 +121,7 @@ const lines = (s) => esc(s).split('\n').join('<br>');
 /** The yellow circle on a cell under the 20-point limit (its words are in the note under the table). */
 const capCell = (v) => `<span class="lbpt-cap" role="img" aria-label="${esc(t('lbpt_cap', { n: CAP }))}">${esc(v)}</span>`;
 /** The note under a table with a limited cell: "(circle) = Only your first 20 points from these count." */
-export const capNoteHTML = (n = CAP) => `<div class="lbpt-capn"><span class="lbpt-dot" aria-hidden="true"></span><b aria-hidden="true">=</b><span>${esc(t('lbpt_cap', { n }))}</span></div>`;
+export const capNoteHTML = (n = CAP, key = 'lbpt_cap') => `<div class="lbpt-capn"><span class="lbpt-dot" aria-hidden="true"></span><b aria-hidden="true">=</b><span>${esc(t(key, { n }))}</span></div>`;
 /** The table: { left: header over the labels, sup: a header over every value column, cols: each value column's
  *  header ('\n' = a line break), rows: [{ ic, label, vals: [{ v, cap, txt }] }], online: { v } | null }.
  *  Two-column tables (one value column) get the wider value column of the mockups' Difficulty | Points per win. */
@@ -166,7 +166,7 @@ export function pointsSheetHTML(id) {
       online: onlineRow,
     });
   }
-  const cap = cards.some((c) => c.kind === 'limit') ? capNoteHTML() : '';
+  const cap = cards.some((c) => c.kind === 'limit') ? capNoteHTML(CAP, pointsTable(id).ownCap ? 'lbpt_cap_lv' : 'lbpt_cap') : '';   // ownCap: each level its own limit (2026-11-08)
   const tb = cards.find((c) => c.kind === 'table');
   const note = tb ? `<div class="lbpt-note"><b>${esc(t('lbpt_tables_b'))}</b> ${esc(t('lbpt_tables'))}<br>${esc(t('lbpt_tables_ex', {
     a: t(LEVEL_KEY[tb.ex.tiers[0]]), b: t(LEVEL_KEY[tb.ex.tiers[1]]), n: tb.ex.pts }))}</div>` : '';

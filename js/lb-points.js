@@ -45,7 +45,10 @@ const P = {
   eightball: { lv: [1, 3, 5], on: 3, opp: (m) => (m.game === 'ct' ? 2 : 1), down: (m) => +m.racks === 1,
     mode: (m, t, v) => { const x = v * (+m.racks >= 3 ? 2 : 1) * (m.game === 'ct' ? 2 : 1); return x === v ? undefined : x; } },
   escoba: { lv: [1, 2, 4], on: 2, opp: (m) => (+m.n || 2) - 1, mode: (m, t, v, lv) => tableSum(m, lv, 0) },
-  flicksoccer: { lv: [1, 3, 6], cap: [1], on: 3, mode: (m, t) => (+m.goals === 3 ? ({ 2: 4, 3: 9 })[t] : undefined) },
+  // ownCap (Matt, 2026-11-08: "I just won medium first to 1 twice but it didn't give me any points"): a first-to-1 win is
+  // RECORDED one level down (Medium as Easy) but its 20-point limit is the level it SHOWS at, its own, never shared with
+  // that lower level's own wins (js/stats-corrections.js FULL_LEVEL groups, priced in gamePoints).
+  flicksoccer: { lv: [1, 3, 6], cap: [1], on: 3, ownCap: true, mode: (m, t) => (+m.goals === 3 ? ({ 2: 4, 3: 9 })[t] : undefined) },
   // Hoops "Until you score" (the shortened option, recorded one level down; mode one=0): Hard = 2, not Medium's 3
   // (Matt, 2026-11-04, mockup sheet-hoops4). Its Easy and Medium are unchanged (recorded Easy: 1).
   hoops4: { lv: [1, 3, 5], on: 3, down: (m) => String(m.one) === '0', mode: (m, t) => (String(m.one) === '0' && t === 2 ? 2 : undefined) },
@@ -142,11 +145,20 @@ export function gamePoints(gm, id, tier = null, code = null) {
   const fl = fullLevelWins(gm);
   if (fl.length) {
     const raw = fullLevelRaw(gm);
-    if (tier == null) return recordedPoints(raw, id, null, code);
+    // ownCap games: a moved group whose RECORDED level is limited gets its own 20-point limit at the level it shows at.
+    const spec = pointsTable(id), capSet = new Set(spec.cap || []);
+    const own = spec.ownCap ? fl.filter((x) => capSet.has(tierOf(x.from))) : [];
+    const ownPts = (x) => Math.min(CAP, Math.max(0, x.won | 0) * lvOf(spec, tierOf(x.from)));
+    if (tier == null) {
+      if (!own.length) return recordedPoints(raw, id, null, code);
+      const base = recordedPoints(fullLevelRaw(gm, own), id, null, code);
+      return { pts: base.pts + own.reduce((a, x) => a + ownPts(x), 0), wins: base.wins + own.reduce((a, x) => a + (x.won | 0), 0) };
+    }
     const rest = recordedPoints(fullLevelRaw(gm, fl), id, tier, code);
     let pts = rest.pts, wins = rest.wins;
     for (const x of fl) {
       if (tierOf(x.level) !== tier) continue;
+      if (own.includes(x)) { pts += ownPts(x); wins += x.won | 0; continue; }
       const f = tierOf(x.from);
       if (!f) continue;
       const a = recordedPoints(raw, id, f, code), b = recordedPoints(fullLevelRaw(gm, [x]), id, f, code);
