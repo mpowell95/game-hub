@@ -600,3 +600,7 @@ it; gone on the gallery, list and ordinary racks. Panel `js/match-chat-ui.js`, d
 ## Challenge racks feed no objective (2026-10-29, second pass)
 
 A challenge rack is recorded and shown like any rack, and beside it `sk.chg` (its share of the global goal counters) and `sk.chk[machine]` (that machine's record before its first challenge rack, plus every other rack since). Objectives read `goals.js goalStore()`, the record without challenge racks, so they cannot pre-earn the next machine. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+## Old results never re-shown (2026-11-09)
+
+The launcher bubble shows a finished challenge only if it finished after this phone's storage began (`alert.js` `storageSince` = `statsOwner().at`): a re-added app showed Matt every old "X beat you". Same rule as every other game's results. `tools/test-skee-challenge.mjs`.

@@ -143,6 +143,8 @@ check('the turn coming BACK to the challenger raises "Your turn vs <them>"', al 
 const over = CH.rowFor(CH.validateChallenge({ ...withScores(doc(), { 0: 300 }, { 0: 350 }), stage: 'over', over: { winner: 'b', at: 7 }, updated: 7 }), 'a');
 al = decideAlert(CH.rowsFromIndex({ cccccc33: over }), {});
 check('a finished match you have not seen raises a result bubble', al && al.kind === 'over' && al.result === 'lost');
+check('a match that finished BEFORE this phone storage began raises nothing (a re-added app, 2026-11-09)', decideAlert(CH.rowsFromIndex({ cccccc33: over }), {}, Date.now(), 100) === null);
+check('...one that finished after it still does', (decideAlert(CH.rowsFromIndex({ cccccc33: over }), {}, Date.now(), 3) || {}).kind === 'over');
 check('an expired challenge raises nothing', decideAlert(CH.rowsFromIndex({ aaaaaa11: { ...rb, updated: 5, expires: 10 } }), {}) === null);
 
 // --- which machines two players share ------------------------------------------------------------
