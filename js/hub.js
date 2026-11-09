@@ -991,8 +991,9 @@ class Hub {
     // of the count on the CACHED answer, which is right on every load after the first - but a
     // device that has just been added to the allowlist has no cached yes yet, and without this it
     // would show no inbox badge until the load after next.
+    paintEdgeStrip();
     Promise.resolve(refreshAdminDevice())
-      .then(() => { if (!this._destroyed) this._paintReplyBadge(); })
+      .then(() => { paintEdgeStrip(); if (!this._destroyed) this._paintReplyBadge(); })
       .catch(() => { /* offline: the cached answer already painted whatever it knew */ });
   }
 
@@ -3240,3 +3241,20 @@ export function initHub(root) {
 }
 
 export default { initHub };
+
+/* iOS 26 edge blur test (2026-11-09, Matt: "Try #2 first. Admin only"). iOS 26 blurs the top edge
+   of a Home Screen web app. Field reports say it skips the blur when a fixed, full-width, OPAQUE box
+   sits at the very top (found by hit testing, so no pointer-events: none). ADMIN DEVICES ONLY while
+   Matt checks it on his iPhone. Display only. */
+function paintEdgeStrip() {
+  try {
+    const on = isAdminDevice();
+    let el = document.getElementById('gh-edge-strip');
+    if (on && !el) {
+      el = document.createElement('div');
+      el.id = 'gh-edge-strip';
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    } else if (!on && el) el.remove();
+  } catch (err) { console.warn('[hub] edge strip', err); }
+}
