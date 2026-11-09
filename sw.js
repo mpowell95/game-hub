@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1519';
+const CACHE = 'game-hub-v1520';
 
 const ASSETS = [
   './',
@@ -1272,7 +1272,7 @@ const REST_MANIFEST = {
   './skeeball/js/goals.js': '02bbd7fe9c',
   './skeeball/js/challenge.js': '63bade3e88',
   './skeeball/js/challenge-ui.js': '03b1ee4f46',
-  './skeeball/js/alert.js': 'c7fc8bef3b',
+  './skeeball/js/alert.js': '740d9f17e3',
   './skeeball/js/boards.js': '00af5279e9',
   './skeeball/js/engines.js': '9d1dd1cf73',
   './skeeball/js/picstore.js': '59ba228dd4',

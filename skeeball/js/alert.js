@@ -10,14 +10,20 @@
 //
 // Nothing here is player history (see challenge.js). It lives in skeeball/, not js/, because it
 // writes a `gamehub.*` key and the cache-first shell may not (root CLAUDE.md, sw.js strategy).
+import { statsOwner } from '../../js/game-stats.js';
 import { readMyChallenges, watchMyChallenges, readSeen, markSeen, myCode, isExpired, flushOutbox } from './challenge.js';
 
 export { readSeen, markSeen };
 
+/** When this phone's storage first held a player code (ms), or 0. */
+function storageSince() {
+  try { const o = statsOwner(); const t = o && Date.parse(o.at); return Number.isFinite(t) ? t : 0; } catch { return 0; }
+}
+
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 
 /** PURE: rows + seen map -> null | { kind, id, name, emoji, result?, names, count }. */
-export function decideAlert(rows, seen, now = Date.now()) {
+export function decideAlert(rows, seen, now = Date.now(), since = 0) {
   if (!Array.isArray(rows)) return null;
   const unseen = (r) => ms(r.updated) > ms(seen && seen[r.id]);
   // Waiting on you and not yet acknowledged: a challenge just delivered, or (v3, turns alternate)
@@ -28,7 +34,10 @@ export function decideAlert(rows, seen, now = Date.now()) {
   // A finished match this device has not acknowledged. Every write this device makes stamps the
   // seen map, so a match you finished yourself never raises this; one the other person finished does.
   // A cancelled or declined challenge (2026-10-13) is not a result: it raises no bubble.
-  const ended = rows.filter((r) => r && r.id && r.over && unseen(r) && r.ended !== 'cancelled' && r.ended !== 'declined')
+  // ...and only one that finished after this phone's storage began (2026-11-09, Matt re-added the app and
+  // got every old "X beat you" again): `since` = when this storage first held a player code (game-stats.js
+  // statsOwner().at), the same rule every other game's results follow (mayCountChallenge).
+  const ended = rows.filter((r) => r && r.id && r.over && unseen(r) && ms(r.updated) > ms(since) && r.ended !== 'cancelled' && r.ended !== 'declined')
     .sort((a, b) => ms(b.updated) - ms(a.updated));
   // A brand-new challenge to you outranks a returned turn; a turn names everyone waiting on you.
   const isNew = (r) => !r.sent && !(seen && seen[r.id]);
@@ -55,7 +64,7 @@ export async function check() {
     if (!myCode()) return null;
     try { await flushOutbox(); } catch { /* retried next time */ }
     lastRows = await readMyChallenges();
-    return decideAlert(lastRows, readSeen());
+    return decideAlert(lastRows, readSeen(), Date.now(), storageSince());
   } catch (err) {
     console.warn('[skeeball] could not check for challenges', err);
     return null;
@@ -68,7 +77,7 @@ export async function watch(cb) {
     if (!myCode()) return () => {};
     return await watchMyChallenges((rows) => {
       lastRows = Array.isArray(rows) ? rows : [];
-      try { cb(decideAlert(lastRows, readSeen())); } catch (err) { console.warn('[skeeball] alert watch', err); }
+      try { cb(decideAlert(lastRows, readSeen(), Date.now(), storageSince())); } catch (err) { console.warn('[skeeball] alert watch', err); }
     });
   } catch { return () => {}; }
 }
