@@ -37,7 +37,7 @@ const MODES = {   // what each option card's wins look like in a real record (wi
   tt_classic: { v: 'classic' }, tt_ultimate: { v: 'ultimate' }, cp_none: { gent: 1, rr: 0 }, cp_some: { gent: 1, rr: 2 },
   dt_order: { kind: 'cricket-order', first: 'me' }, dt_normal: { kind: '301', first: 'me' }, fs_3: { goals: 3, off: 'x' },
   fs_2: { goals: 2, off: 'x' }, eb_3: { racks: 3 }, eb_2: { racks: 2 }, dm_500: { to: 500 }, dm_300: { to: 300 },
-  db_large: { size: 'large' }, db_normal: { size: 'medium' }, bs_quick: { size: 'quick' }, bs_classic: { size: 'classic' },
+  db_large: { size: 'large' }, db_medium: { size: 'medium' }, db_small: { size: 'small' }, bs_quick: { size: 'quick' }, bs_classic: { size: 'classic' },
 };
 MODES.h4_until = { first: 'me', one: 0 }; MODES.h4_one = { first: 'me', one: 1 };
 MODES.cc_short = { vc: 'points', sl: 50 }; MODES.cc_normal = { vc: 'points', sl: 100 };

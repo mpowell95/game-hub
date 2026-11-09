@@ -257,3 +257,9 @@ Solo Restart / Menu after the player's first edge = ONE loss (`_statsCommitted`;
 ## Setup centred (2026-11-08)
 
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
+
+### Points: each board its own (2026-11-09, Matt: "Make each board have their own point system")
+
+Small 1/3/5, Medium 1/4/8, Large 2/6/10 (Easy/Medium/Hard), online 3 on every board (`js/lb-points.js` `DB_PTS`).
+A win with no saved board (before withMode, 2026-10-30) counts as Small: never guessed upward. The scores sheet
+shows Small | Medium | Large (was "Small or medium" | "Large"). Read time only; nothing stored changes.

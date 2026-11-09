@@ -20,7 +20,9 @@ export const CAP = 20;
 const P = {
   tictactoe: { lv: [1, 1, 5], cap: [1, 2], on: 3, ult: [1, 3, 10] },   // Classic; Ultimate in `ult`
   connect4: { lv: [1, 6, 8, 12], on: 5 },
-  dotsboxes: { lv: [1, 3, 5], on: 3, mode: (m, t, v) => (m.size === 'large' ? v * 2 : undefined) },
+  // Each board its own points (Matt, 2026-11-09: "Make each board have their own point system"). `lv` = Small, which is
+  // also what a win with no saved board is worth (before 2026-10-30: the board was not saved, never guessed upward).
+  dotsboxes: { lv: [1, 3, 5], on: 3, mode: (m, t) => (DB_PTS[m.size] ? DB_PTS[m.size][Math.min(t, 3) - 1] : undefined) },
   filler: { lv: [1, 2, 3], on: 2 },
   mancala: { lv: [1, 2, 6], on: 3 },
   battleship: { lv: [1, 1, 3], cap: [1], on: 3, mode: (m, t, v, lv) => (m.size === 'quick' && t > 1 ? lv[t - 2] : undefined) },
@@ -57,6 +59,7 @@ const P = {
   yahtzee: { lv: [1, 1, 1], on: 1 },
   airhockey: { lv: [1, 2, 5], on: 3 },
 };
+const DB_PTS = { medium: [1, 4, 8], large: [2, 6, 10] };   // Dots and Boxes; Small = its `lv`
 /** Chinchón's short match (the game's own isShortMatch, on the saved mode: vc / sl / rl): under 100 points or 10 rounds. */
 function ccShort(m) {
   const pts = (+m.sl || 100) < 100, rnd = (+m.rl || 10) < 10;
