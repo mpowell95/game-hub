@@ -446,3 +446,7 @@ Setup is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`). Online =
 ## Fits on a short phone (2026-11-08)
 
 `mp-ui.js fitOnline`: match rows come off the end until the setup fits (at least one kept), then "+N more" (every match is on the Multiplayer screen); re-run by `showTab`. The setup starts below the Hub button like every other game (`max(safe top, 54px) + 44px`), except on a screen under 720px tall, where the title sits level with the Hub button. `tools/review-setup-cards.cjs hoops4`.
+
+## What is selected is what you play (2026-11-09)
+
+Matt's two "Medium one shot" wins were recorded Easy: Continue resumed a saved Easy match while the row showed Medium. Now the first setup paint with a save shows THAT match's level and shots (`_syncedSave`, reset by `saveMatch`), and Continue shows only while the row matches the save; another pick leaves only New game.
