@@ -605,6 +605,9 @@ never crash.
 
 ## The compact layout (2026-10-17)
 
+**Compact is the ONLY layout since 2026-11-10 (Matt: "should be the default and only available layout now")**: `getLayout()` always
+returns `'compact'` (the stored `gamehub.layout.v1` is left, unread), the profile's Layout row is gone, the bottom-bar tips no longer run,
+and the leaderboard intro, Golf, New layout and tips announcements all end 2026-11-09 (Matt: "Remove").
 A per-device choice (Profile > Settings > Layout; default Comfortable). Compact = one title row, 3-across
 tiles with the name under the art, favorites keep their heart (Matt, 2026-10-26; it was removed 2026-10-17 against his wishes), the edit button moves and removes them, and
 an icons-only bottom tab bar (Games, Multiplayer, Messages, Leaderboards, Profile) carrying the same

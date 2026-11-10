@@ -25,6 +25,8 @@ const KEY = 'gamehub.announce.v1';
  *  handler and run straight from the popup's own button. `tile: { art, name }` draws that game's
  *  real launcher art (js/game-art.js, keyed by HUB id) with its name under it - use it for a new
  *  game, where the thing being announced is a tile the player is about to go looking for. */
+// RETIRED 2026-11-10 (Matt: "Remove A B C D"): the leaderboard intro, Golf, New layout and the
+// bottom-bar tips all end 2026-11-09, so no phone shows them again. Entries kept (ids never reused).
 export const ANNOUNCEMENTS = [
   {
     // The new leaderboard and its points (2026-11-03, Matt's approved mockup: two pages of one height, then "Show me
@@ -35,7 +37,7 @@ export const ANNOUNCEMENTS = [
     // Matt's too (the 11-03 id was dismissed on admin devices; seen-lists are by id).
     id: 'lb2-points-2026-11-04',
     from: '2026-11-03',
-    until: '2027-01-31',
+    until: '2026-11-09',
     pages: 'lb2-intro',
   },
   {
@@ -65,7 +67,7 @@ export const ANNOUNCEMENTS = [
     // a heading that already reads "New game!" is the same word twice.
     id: 'golf-2026-09-09',
     from: '2026-09-09',
-    until: '2026-11-15',
+    until: '2026-11-09',
     requiresGame: 'golf',
     action: 'play-golf',
     title: { en: 'New game!', es: '\u00a1Juego nuevo!' },
@@ -125,7 +127,7 @@ export const ANNOUNCEMENTS = [
     // layout is available and telling people to test it out". Try it switches this device to it.
     id: 'compact-layout-2026-10-17',
     from: '2026-10-17',
-    until: '2026-11-30',
+    until: '2026-11-09',
     // SAME ID after the 2026-10-17 redesign (Matt: "Don't resend it to anyone"): a device that
     // dismissed the first version never sees this one.
     badge: true,
@@ -152,7 +154,7 @@ export const ANNOUNCEMENTS = [
     // (players/<id>/announce) and Matt's Admin > Announcements shows who has seen it.
     id: 'compact-tour-2026-10-17',
     from: '2026-10-17',
-    until: '2026-11-30',
+    until: '2026-11-09',
     tour: true,
     title: { en: 'Bottom bar tips', es: 'Consejos de la barra' },
   },

@@ -1560,7 +1560,7 @@ class Hub {
     // check is separate (_checkGameAlerts) and only runs on the launcher; this is pure DOM.
     this._paintGameAlert();
     this._paintChallengeCount();
-    if (compact) this._maybeTour();
+    // Bottom-bar tips retired 2026-11-10 (Matt: "Remove"); `_maybeTour` kept, no longer called.
   }
 
   // --- a game saying somebody is waiting on you -------------------------------------------------

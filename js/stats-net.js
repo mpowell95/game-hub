@@ -463,8 +463,7 @@ let _boardMemo = null;
 /** Which launcher layout this device uses (2026-11-09, Matt: "is anyone using the old layout?").
  *  A report only; read straight from the preference so this module needs no new import. */
 function layoutName() {
-  try { const v = localStorage.getItem('gamehub.layout.v1'); return v === 'compact' ? 'compact' : 'comfortable'; }
-  catch { return null; }
+  return 'compact';   // the only layout since 2026-11-10 (js/layout.js)
 }
 
 export async function readBoardOnce() {
