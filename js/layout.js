@@ -13,11 +13,9 @@ const KEY = 'gamehub.layout.v1';
 export const LAYOUTS = ['comfortable', 'compact'];
 const EVENT = 'gamehub:layout';
 
-/** The stored choice. Unset or unrecognized reads as 'comfortable'. */
-export function getLayout() {
-  try { const v = localStorage.getItem(KEY); return LAYOUTS.includes(v) ? v : 'comfortable'; }
-  catch { return 'comfortable'; }
-}
+/** COMPACT FOR EVERYONE (2026-11-10, Matt: "should be the default and only available layout now").
+ *  The stored choice is left in place (a preference; rule 5) but no longer read: every device is Compact. */
+export function getLayout() { return 'compact'; }
 
 export const isCompact = () => getLayout() === 'compact';
 
@@ -28,7 +26,7 @@ function applyDom(layout) {
 
 /** Persist the layout, restamp the DOM, and notify listeners. Returns the layout actually set. */
 export function setLayout(layout) {
-  const v = LAYOUTS.includes(layout) ? layout : 'comfortable';
+  const v = 'compact';   // the only layout since 2026-11-10
   try { localStorage.setItem(KEY, v); }
   catch (err) { console.warn('[layout] could not save the layout choice (it applies to this visit only)', err); }
   applyDom(v);
