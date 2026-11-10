@@ -2,7 +2,7 @@ import { NutsBoltsGame, getTopRun } from './game.js';
 import { CAP, PALETTE, isBoltComplete, TIER_ORDER, rampStart } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordNutsBolts, withMode } from '../../js/game-stats.js';
+import { recordNutsBolts, withMode, loadStats } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -230,6 +230,16 @@ class NutsBoltsUI {
     this.rampFrom = saved.data.rampFrom;
     this.currentDifficulty = saved.data.currentDifficulty;
     this.won = readWon(saved.data.won);
+    // NEVER BELOW WHAT THE STATS SAY WAS SOLVED (2026-11-09, Matt re-added the app: the level per tier
+    // lives only in this storage, the stats `nb.bestByTier` (synced, restorable) hold the furthest
+    // level solved). Only ever raises `won`; the loop below then moves the level past it.
+    try {
+      const best = ((loadStats().games.nutsbolts || {}).nb || {}).bestByTier || {};
+      for (const tier of TIER_ORDER) {
+        const b = Math.floor(Number(best[String(tier).toLowerCase()]) || 0);
+        if (b > (this.won[tier] | 0)) this.won[tier] = b;
+      }
+    } catch { /* no stats yet: the stored level stands */ }
     // A tier whose current level is already recorded (closed on the win card) starts on the next
     // level; its kept-aside board, if any, would be that solved level again and is not resumed.
     for (const tier of TIER_ORDER) {

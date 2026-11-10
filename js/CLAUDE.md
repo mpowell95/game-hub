@@ -100,6 +100,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `play-log-queue.js`, `play-log.js` | the queue is PURE (no network: `game-stats.js`, also copied to the server, imports it); **every `export function record*` calls `notePlay`** (`tools/test-integrity.mjs` checks); a new recorder must too |
 | `bee-fairplay.js` | PURE and SHARED with `functions/bee.js` (copied by `tools/sync-functions-shared.mjs`): change it and both the phone and the server change; `tools/test-bee-server.mjs` + `tools/test-bee-fairplay.mjs` |
 | `announce.js` | see "The announcement layer" |
+| `alert-seed.js` | (2026-11-09) `seedSeenOnce(key, rows, markSeen)`: called by every challenge game's `alert.js` (and Hoops') after each read; when that game's seen key never existed on this storage, every visible match is stamped seen (your-turn ones 1 ms under, so they read "your turn", never "X challenged you"). A re-added app showed old matches as new challenges |
 | `career-store.js` | see "Career sync" |
 | `challenge/` | retired but LOAD-BEARING (`hooks.js` imported every load; `isDevProfile` rests on `secrets.js`). Never delete |
 

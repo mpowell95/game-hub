@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWayOut, recordWayOutReplay, recordWayOutRush, noteWayOutSlips, withMode, loadStats, loadStoredStats, statsId } from '../../js/game-stats.js';
-import { woClMap, woSlipsOf, woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
+import { woClMap, woList, woSlipsOf, woMistakeMs, woHintMs, woClock, woLevelPoints, woPoints, woEarnedPoints, woMissed, RUSH_MODES, RUSH_START_MS, RUSH_GAIN_MS, RUSH_RULES, rushMissMs, woRushExtras, woRushTime, woRushBest, woRushBestMap, woWeekKey, woWeekEnd } from '../../js/arrow-maze-time.js';
 import { TIERS, SAVE_V, GEN_LATEST, LADDER_GEN, BAND_START, bandEnd, buildLevel, buildLadder, buildMore, isMore, MORE_GEN, buildB8, hasB8, B8_GEN, buildB9, hasB9, B9_GEN, buildB10, hasB10, B10_GEN, B10_COUNT, buildB11, hasB11, B11_GEN, B11_COUNT, buildB12, hasB12, B12_GEN, B12_COUNT, buildRush, occupancy, blockerOf, dirOf, hintArrow, peel } from './engine.js';
 import STRINGS from './strings.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -1138,6 +1138,14 @@ class WayOut {
    *  replay, all difficulties; with none, the icon alone. */
   _showNews() {
     if (!hasNews() || this.screen !== 'home' || newsSeen()) return;
+    // A player who was already clearing levels before this news (their stats' finish log says so) saw
+    // it then: a re-added app (2026-11-09, Matt: "make sure I won't get anymore past popups") stamps it
+    // seen instead of showing it again.
+    try {
+      const log = ((((loadStats().games || {}).wayout || {}).wo || {}).log) || {};
+      const before = Date.UTC(2026, 9, 28);
+      if (Object.values(log).some((l) => woList(l).some((f) => f && f.d > 0 && f.d < before))) { markNewsSeen(); return; }
+    } catch { /* no stats: show it as before */ }
     const m = this.root.querySelector('.wo-modal');
     if (!m || !m.hidden) return;
     const rec = this._myWayout();

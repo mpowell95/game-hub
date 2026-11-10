@@ -229,10 +229,24 @@ function archive(prev, why) {
  *  witness simply does not apply, leaving the conservation law to stand on its own. Plain `load()`
  *  is left alone so the headless tests, and any future caller that wants the raw save, still get
  *  one. */
-export function loadVerified(lifetimeCoins) {
+export function loadVerified(lifetimeCoins, bestByStage = null) {
   const s = load();
   const earned = effectiveEarned(s, lifetimeCoins);
-  const raised = earned !== (s.earned | 0) ? { ...s, earned } : s;
+  let raised = earned !== (s.earned | 0) ? { ...s, earned } : s;
+  // A GARAGE THAT BOUGHT NOTHING HOLDS EVERY COIN EVER EARNED (2026-11-09, Matt re-added the Home
+  // Screen app: this key was gone, the witness above still said 11,900 coins, and the garage stood
+  // empty with 0 to spend). With nothing bought, the books say coins == earned, so a wallet short of
+  // that by more than the dead band is handed the difference: the same refund rebuildHonest() gives,
+  // nothing more. And the per-stage bests come back from the shared store (Math.max, rule 2).
+  if (spentOf(raised) === 0 && ((raised.coins | 0) + TAMPER_SLACK) < earned) raised = { ...raised, coins: earned };
+  if (bestByStage && typeof bestByStage === 'object') {
+    let best = raised.best || {};
+    for (const id of STAGE_IDS) {
+      const b = Math.floor(Number(bestByStage[id]) || 0);
+      if (b > (best[id] | 0)) best = { ...best, [id]: b };
+    }
+    if (best !== raised.best) raised = { ...raised, best };
+  }
   const a = auditSave(raised);
   if (a.ok) {
     // The repair is worth persisting on its own: it is additive, and leaving it unsaved means
