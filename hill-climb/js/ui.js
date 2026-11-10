@@ -84,9 +84,9 @@ class HillClimb {
     // mirrored to Firebase and is not editable from this page's devtools alone. A failure to read
     // it is not a reason to skip the audit: 0 simply turns the `earned` cross-check off and leaves
     // the conservation law itself doing the work.
-    let lifetimeCoins = 0;
-    try { lifetimeCoins = ((loadStats().games.hillclimb || {}).hc || {}).coins | 0; } catch { lifetimeCoins = 0; }
-    this.save = store.loadVerified(lifetimeCoins);
+    let lifetimeCoins = 0, bestByStage = null;
+    try { const hc = (loadStats().games.hillclimb || {}).hc || {}; lifetimeCoins = hc.coins | 0; bestByStage = hc.bestDistanceByStage || null; } catch { lifetimeCoins = 0; }
+    this.save = store.loadVerified(lifetimeCoins, bestByStage);
     this.tab = 'vehicle';
     this.screen = 'garage';
     this.run = null;

@@ -127,3 +127,7 @@ reopening starts 318.
 ## One win per level per PERSON; two tabs (2026-10-29, second pass)
 
 Each solve names its level (`nb.lv[tier]`, a range string) and the record snapshots how far its untracked wins reach (`nb.leg`); `js/players-agg.js` counts a level once per person per tier (a fresh storage replaying Expert 1, 2, 3 adds nothing). The stored `won` is merged before the record check and every save (`mergeStoredWon`), so two tabs cannot both record a level. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+## The level never starts below what the stats show solved (2026-11-09)
+
+Matt re-added the app: the level per tier lives only in `gamehub.nutsbolts.v1`. On load `won[tier]` is raised to the stats' `nb.bestByTier` (only up), so each tier opens past its furthest solved level and a level already counted is never recorded again.

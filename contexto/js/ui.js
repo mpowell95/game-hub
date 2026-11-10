@@ -177,7 +177,58 @@ class ContextoUI {
       return;
     }
     if (this._dead) return;
+    await this._restoreHistory();
+    if (this._dead) return;
     this._enterPuzzle(puzzleNumber(new Date()));
+  }
+
+  /** Put back puzzles this phone's save lost (2026-11-09, Matt re-added the app: "make sure everything
+   *  is restored"). Every puzzle in every phone's save is copied to ctHistory/<CODE>/<device>/<lang>-<n>
+   *  (js/contexto-history.js), readable by admin devices only, so this works on Matt's phones and is a
+   *  quiet no-op elsewhere. Once per storage per language (`gamehub.contexto.restored.v1`); a puzzle is
+   *  added only where the save has fewer guesses, with its `recorded` flag, so nothing counts twice.
+   *  Waits at most 3 s. Additive only. */
+  async _restoreHistory() {
+    const STAMP = 'gamehub.contexto.restored.v1';
+    let st = {};
+    try { st = JSON.parse(localStorage.getItem(STAMP) || '{}') || {}; } catch { st = {}; }
+    const code = activeCode();
+    if (st[this.lang] || !code) return;
+    const work = (async () => {
+      const { getStatsApp } = await import('../../js/firebase-boot.js');
+      const boot = await getStatsApp();
+      if (!boot) return false;
+      let all = null;
+      try { const snap = await boot.api.get(boot.api.ref(boot.db, `ctHistory/${code}`)); all = snap && snap.exists() ? snap.val() : {}; }
+      catch { return true; }   // not an admin device: nothing readable, nothing to do
+      let added = 0;
+      for (const dev of Object.values(all || {})) {
+        for (const row of Object.values(dev || {})) {
+          if (!row || row.l !== this.lang || !(row.n >= 0) || !Array.isArray(row.g) || !row.g.length) continue;
+          const word = this.model.words[this.model.secretFor(row.n)];
+          if (!word) continue;
+          const k = gameKey(this.lang, word);
+          const cur = this.save.games[k];
+          if (cur && Array.isArray(cur.guesses) && cur.guesses.length >= row.g.length) continue;
+          this.save.games[k] = {
+            ...(cur || {}), n: row.n,
+            guesses: row.g.filter((x) => x && typeof x.w === 'string').map((x) => ({ w: x.w, hint: !!x.h })),
+            done: row.d === 'won' || row.d === 'gave' ? row.d : ((cur && cur.done) || null),
+            recorded: !!row.r || !!(cur && cur.recorded),
+          };
+          added++;
+        }
+      }
+      if (added) { writeSave(this.save); console.info(`[contexto] restored ${added} puzzle(s) from the server`); }
+      return true;
+    })();
+    let done = false;
+    try { done = await Promise.race([work, new Promise((r) => setTimeout(() => r(false), 3000))]); }
+    catch (err) { console.warn('[contexto] history restore', err); }
+    if (done) {
+      st[this.lang] = Date.now();
+      try { localStorage.setItem(STAMP, JSON.stringify(st)); } catch { /* runs again next open */ }
+    }
   }
 
   _switchLang() {

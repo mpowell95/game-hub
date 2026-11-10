@@ -20,6 +20,7 @@
 // NOTHING HERE IS PLAYER HISTORY. The seen map is a one-tap-recreatable preference (THE LAW rule
 // 2's stated exemption, the same class as launcher favourites) - losing it shows a bubble twice,
 // which is the harmless direction. It never writes to `hoops/`, so no match state is at risk.
+import { seedSeenOnce } from '../../js/alert-seed.js';
 import { readMyGames, myCode, watchMyGames, readSeen, markSeen, armTurn, readGame, sideOf, SEEN_KEY,
   recordFinished, readUnseen, markResultSeen, readOwedSeries } from './mp.js';
 
@@ -117,6 +118,7 @@ export async function check() {
     if (!myCode()) return null;
     const rows = await readMyGames();
     lastRows = Array.isArray(rows) ? rows : [];
+    seedSeenOnce(SEEN_KEY, lastRows, markSeen);   // a fresh storage: old matches are not news (js/alert-seed.js)
     await rearmUnshot(lastRows);
     try { recordFinished(lastRows); } catch (err) { console.warn('[hoops4] recordFinished', err); }
     await refreshOwed(lastRows);
@@ -137,6 +139,7 @@ export async function watch(cb) {
     if (!myCode()) return () => {};
     return await watchMyGames(async (rows) => {
       lastRows = Array.isArray(rows) ? rows : [];
+      seedSeenOnce(SEEN_KEY, lastRows, markSeen);
       try { await rearmUnshot(lastRows); } catch { /* the plain decision below still stands */ }
       try { recordFinished(lastRows); } catch { /* counted on the next open instead */ }
       await refreshOwed(lastRows);

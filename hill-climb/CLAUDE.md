@@ -430,3 +430,7 @@ at EVERY size tested, including 393x852; Stage 69px at 393x852; Tune 56px at 390
 
 `tools/check-no-scroll.mjs` now measures all three other tabs (`EXTRA_SCREENS['hill-climb']`) and both
 360-wide sizes, so none of this can come back unnoticed.
+
+## A garage that bought nothing holds every coin earned (2026-11-09)
+
+Matt re-added the app: the garage key was gone, `hc.coins` (11,900) still in the stats. `loadVerified(lifetimeCoins, bestByStage)`: with nothing bought (`spentOf` 0) and the wallet short of `earned` by more than `TAMPER_SLACK`, the wallet is set to `earned` (the same refund as `rebuildHonest`); per-stage bests come back from `hc.bestDistanceByStage` (Math.max). A garage that bought anything is untouched. Purchases themselves are not stored anywhere else and cannot be restored.

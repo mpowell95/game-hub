@@ -4,6 +4,7 @@
 // armOpen(), armChallenge(), rowFor(), markSeen(), markResultSeen() and myTurnCount(); the words are
 // the hub's and the decision is here. darts/js/alert.js is the model. It lives in the game folder,
 // not js/, because it writes `gamehub.*` keys, which no cache-first shell module may do.
+import { seedSeenOnce } from '../../js/alert-seed.js';
 import { readMyGames, myCode, watchMyGames, readSeen, markSeen, SEEN_KEY, recordFinished, readUnseen,
   markResultSeen } from './mp.js';
 
@@ -47,6 +48,7 @@ export async function check() {
   try {
     if (!myCode()) return null;
     lastRows = await readMyGames();
+    seedSeenOnce(SEEN_KEY, lastRows, markSeen);   // a fresh storage: old matches are not news (js/alert-seed.js)
     try { recordFinished(lastRows); } catch (err) { console.warn('[escoba] recordFinished', err); }
     return decideAlert(lastRows, readSeen(), readUnseen());
   } catch (err) { console.warn('[escoba] could not check for challenges', err); return null; }
@@ -58,6 +60,7 @@ export async function watch(cb) {
     if (!myCode()) return () => {};
     return await watchMyGames((rows) => {
       lastRows = Array.isArray(rows) ? rows : [];
+      seedSeenOnce(SEEN_KEY, lastRows, markSeen);
       try { recordFinished(lastRows); } catch { /* counted on the next open instead */ }
       try { cb(decideAlert(lastRows, readSeen(), readUnseen())); } catch (err) { console.warn('[escoba] alert watch', err); }
     });
