@@ -11,7 +11,7 @@
 // rather than scoring a round. See golf/CLAUDE.md.
 
 import { onViewportResize } from '../../js/viewport.js';
-import { makeT } from '../../js/i18n.js';
+import { makeT, myName } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { COURSES, ROUNDS, MODES, courseById, roundById, roundKey, roundHoles, roundPar, roundsOfMode, roundsFor, roundsForCourse, modesForCourse, roundRange, holeKey, stablefordPoints, maxStrokes } from './rounds.js';
@@ -32,6 +32,12 @@ import { isCourseReleased, courseTestingOverride, readCachedConfig, isAdminDevic
 import { isDevProfile } from '../../js/challenge/hooks.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
+/** Whether this player had a challenge going at the last look (this page's life only): the setup
+ *  screen's first paint opens on the tab it will settle on (Darts' ACTIVE_HINT). */
+let ACTIVE_HINT = false;
+/** Where the quick-chat button sits in a challenge (js/match-chat-ui.js `place`): top right, under
+ *  the wind panel, so it covers neither the pause button nor the flag. */
+const CHAT_PLACE = { top: 'calc(var(--gf-top-pad, 0px) + 84px)', right: '10px', popsTop: 'calc(var(--gf-top-pad, 0px) + 140px)' };
 
 function esc(v) {
   return String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -398,6 +404,13 @@ class GolfGame {
     this._renderSetup();
     this._fit();
     requestAnimationFrame(() => this._fit());
+    // ONLINE CHALLENGES (2026-11-10): a tapped launcher bubble, notification or Multiplayer-screen
+    // row names a match ('open'), or a person to challenge ('pick'), golf/js/alert.js.
+    import('./alert.js').then((A) => {
+      const o = A.takeOpen();
+      if (!o || this.destroyed || instance !== this) return;
+      if (o.kind === 'pick') this._mpOpenPick(o.them); else this._mpOpen(o.id);
+    }).catch(() => {});
   }
 
   // ---------------------------------------------------------------- listeners ----
@@ -574,7 +587,9 @@ class GolfGame {
    *
    *  With 18 selected there is exactly one set, so its row is a single wide button rather than a
    *  grid of one - a chooser with one option is not a choice and should not look like one. */
-  _renderSetup() {
+  _renderSetup(tab) {
+    if (tab) this._tab = tab;
+    this._mpLeave();
     this._stopLoop();
     this.hole = null;
     this.rootEl.innerHTML = '';
@@ -669,7 +684,25 @@ class GolfGame {
         ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="board"><span>${esc(t('board'))}</span></button>`}
         <div class="gf-ladder">${esc(t('ladder_progress', ladder))}</div>
       </div>`;
+    // THE TABS (2026-11-10, Darts' and Cup Pong's shape): Online first, then Solo = everything above,
+    // unchanged. Online holds the matches and Challenge (golf/js/mp-ui.js fillOnline).
+    const tabs = document.createElement('div');
+    tabs.className = 'gf-tabs';
+    tabs.setAttribute('role', 'group');
+    tabs.innerHTML = `<button type="button" class="gf-btn gf-tab" data-gtab="online" aria-pressed="false"><span>${esc(t('tab_online'))}</span><b class="gf-tab-n" hidden></b></button>
+      <button type="button" class="gf-btn gf-tab" data-gtab="solo" aria-pressed="true"><span>${esc(t('tab_solo'))}</span></button>`;
+    el.prepend(tabs);
+    const onlineBox = document.createElement('div');
+    onlineBox.className = 'gf-online gf-offtab';
+    onlineBox.dataset.role = 'online';
+    onlineBox.innerHTML = `<p class="gf-mp-note">${esc(t('mp_loading'))}</p>`;
+    el.appendChild(onlineBox);
+    for (const b of tabs.querySelectorAll('[data-gtab]')) {
+      this._on(b, 'click', () => { this._tab = b.dataset.gtab; this._showTab(b.dataset.gtab); });
+    }
     this.rootEl.appendChild(el);
+    this._showTab(this._tab || (ACTIVE_HINT ? 'online' : 'solo'), true);
+    this._countOnline(onlineBox);
     this._paintHoleStrip(el.querySelector('[data-role="strip"]'));
     for (const b of el.querySelectorAll('[data-mode]')) {
       this._on(b, 'click', () => {
@@ -1337,6 +1370,7 @@ class GolfGame {
     this._sizeCanvas();
     this._paintHud();
     this._startLoop();
+    this._mpReattachChat();
   }
 
   _bindPlay() {
@@ -1549,7 +1583,7 @@ class GolfGame {
     // into one you could ignore. The tap is refused and the rings flash instead - a control that
     // quietly does nothing reads as broken, which is the exact complaint the putter's dead zone got.
     if (this.coach && this.coach.blocksSwing()) { this.coach.nudge(); return; }
-    if (this.holed) { this._renderSetup(); return; }
+    if (this.holed) { if (!this.mp) this._renderSetup(); return; }
     // `atMs` is the input event's own timestamp when the caller has one - see the swing button's
     // binding. Everything downstream is a pure function of it, so the shot is resolved against
     // the instant the player's finger landed rather than the instant this handler ran.
@@ -1805,6 +1839,7 @@ class GolfGame {
    *  On the LAST hole of a scored round this is also where the round is written to the player's
    *  stats - once, and only if every hole in it has a score. See `_recordRound`. */
   _showHoleResult() {
+    if (this.mp) { this._mpHoleResult(); return; }
     const hole = this.hole;
     // THE STROKE COUNT IS `shotN`, NOT `shotN - 1`, AND THE OFF-BY-ONE WAS REAL.
     //
@@ -1961,6 +1996,8 @@ class GolfGame {
    *
    *  Practice and the tutorial are skipped by construction - see the header block on `readSave`. */
   _saveRound() {
+    // A CHALLENGE NEVER TOUCHES THE SOLO SAVE (2026-11-10): its state is the match's own log.
+    if (this.mp) return this._mpLogRest();
     if (!this.hole || this.recorded || !this.roundId || this.roundId === 'practice') return false;
     this.saveOk = writeSave({
       v: SAVE_V,
@@ -2115,7 +2152,7 @@ class GolfGame {
     if (!Number.isFinite(strokes) || strokes <= 0) return;
     try {
       // a hole's own record, not a round (no total is counted); its mode says which hole
-      withMode(() => ({ hole: holeKey(this.course, hole.n) }), this.course.id, () => recordGolf(this.course.id, {
+      withMode(() => ({ hole: holeKey(this.course, hole.n), ...(this.mp ? { online: 1 } : {}) }), this.course.id, () => recordGolf(this.course.id, {
         holeOnly: true, holeScores: { [holeKey(this.course, hole.n)]: strokes },
       }));
     } catch (e) {
@@ -2409,6 +2446,9 @@ class GolfGame {
       if (moved) {
         this.ball = [...moved.rest];
         this.shotN += 1;
+        // A challenge's hole ends at its cap even when a drop is what reached it (the match log
+        // refuses a score past double par plus one).
+        if (this.mp && this._capReached()) { close(); this._pickUp(); return; }
         this.aimRad = this._bearingToPin();
         this.club = autoSelectClub(this._distToPin(), this._lie());
         this._syncTempo();
@@ -2431,11 +2471,14 @@ class GolfGame {
     // 'practice'` (one hole, no `bestRoundByCourse` write), which is right for the recorder and
     // wrong for the label: the result card says "Tutorial complete" while the panel three inches
     // above it read "practice" for the whole lesson.
-    this.el.mode.textContent = this.tutorialRun
+    this.el.mode.textContent = this.mp
+      ? t('mp_hud', { name: String((this.mp.them && this.mp.them.name) || '?').split(/\s+/)[0], n: this.pos + 1, all: this.holeIdxs.length })
+      : this.tutorialRun
       ? t('mode_tutorial')
       : this.roundId === 'practice'
         ? t('mode_practice')
         : `${t(roundById(this.roundId).labelKey)} ${this.pos + 1}/${this.holeIdxs.length}`;
+    this.el.mode.style.textTransform = this.mp ? 'none' : '';
     this.el.holeno.textContent = String(this.hole.n);
     // The lie is a PICTURE of the surface now, not the word. The name stays on the aria-label.
     if (this._lieArtFor !== lie) {
@@ -3184,10 +3227,573 @@ class GolfGame {
     }
   }
 
+  // ---------------------------------------------------------------- online challenges ----
+  // (2026-11-10, Matt: "Make golf multiplayer. Allow me to challenge someone to a course and certain
+  // number of holes. Turn based multiplayer".) golf/js/mp.js is the data, golf/js/mp-ui.js the
+  // screens around a hole; the hole itself is played by the SAME code as a solo round. What differs:
+  //   - `this.mp` is set while a challenge is on screen, and `_saveRound` hands every at-rest state
+  //     to `_mpLogRest` instead of the solo save (which a challenge never touches);
+  //   - each shot that comes to rest is appended to the match's log (`_mpRecord` -> `_mpFlush`,
+  //     queued in golf/js/mp.js's outbox until the server has it), so closing the app resumes the
+  //     hole where the ball lies with its strokes, and a shot in the air is replayed (`saveShot`);
+  //   - a finished hole is written as the hole's score (`d: 1`), its hole best is recorded as any
+  //     hole is, and the turn passes: one hole per turn.
+
+  async _loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+  async _loadMPUI() { if (!this.MPUI) this.MPUI = await import('./mp-ui.js'); return this.MPUI; }
+  _myName() { try { return myName() || ''; } catch { return ''; } }
+
+  /** A course everyone can play right now (no dev bypass): the only courses a challenge offers. */
+  _courseOpenToAll(courseId) {
+    if (this._courseTesting(courseId)) return false;
+    return courseOpenByDefault(courseId) || isCourseReleased(courseId);
+  }
+
+  _toast(msg, ms = 2600) {
+    if (!this.rootEl || !msg) return;
+    const el = document.createElement('div');
+    el.className = 'gf-toast';
+    el.setAttribute('role', 'status');
+    el.textContent = msg;
+    this.rootEl.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, ms);
+  }
+
+  /** Show one setup tab (no re-render). */
+  _showTab(k, quiet = false) {
+    const setup = this.rootEl && this.rootEl.querySelector('.gf-setup');
+    if (!setup) return;
+    const on = k === 'online';
+    setup.classList.toggle('is-online', on);
+    for (const kid of setup.children) {
+      if (kid.classList.contains('gf-tabs') || kid.classList.contains('gf-result') || kid.classList.contains('ghc')) continue;
+      kid.classList.toggle('gf-offtab', kid.classList.contains('gf-online') ? !on : on);
+    }
+    for (const b of setup.querySelectorAll('[data-gtab]')) {
+      b.setAttribute('aria-pressed', String(b.dataset.gtab === k));
+      b.classList.toggle('is-on', b.dataset.gtab === k);
+    }
+    if (on) { if (this.MPUI) this.MPUI.fitOnline(this); return; }
+    if (!quiet && this.stripEl) {
+      this._sizeStripRows();
+      this._paintHoleStrip(this.stripEl);
+    }
+  }
+
+  /** Fill the Online tab, then pick the tab: Online when a match is going, else Solo, unless the
+   *  player tapped one. */
+  async _countOnline(box) {
+    try {
+      const [MP, UI] = await Promise.all([this._loadMP(), this._loadMPUI()]);
+      if (this.destroyed || !box.isConnected) return;
+      const res = await UI.fillOnline(this, MP, box);
+      if (!res || this.destroyed || !box.isConnected) return;
+      ACTIVE_HINT = res.active;
+      const n = this.rootEl.querySelector('.gf-tab-n');
+      if (n) { n.hidden = !res.mine; n.textContent = res.mine ? String(res.mine) : ''; }
+      if (!this._tab) this._showTab(res.active ? 'online' : 'solo');
+      else if (this._tab === 'online') UI.fitOnline(this);
+    } catch (err) { console.warn('[golf] the Online tab could not load', err); }
+  }
+
+  /** A page of the online flow in place of the setup screen (golf/js/mp-ui.js `page`). */
+  _mpPage(html) {
+    this._dropStripObs();
+    this._stopLoop();
+    this.hole = null;
+    this.rootEl.innerHTML = '';
+    const el = document.createElement('div');
+    el.className = 'gf-setup gf-mp';
+    this._themeSetup(el);
+    el.innerHTML = html;
+    this.rootEl.appendChild(el);
+    return el;
+  }
+
+  /** The hub's Multiplayer screen handed over a person: open the challenge card for them. */
+  async _mpOpenPick(them) {
+    if (!them || !them.code) { this._renderSetup('online'); return; }
+    const [MP, UI] = await Promise.all([this._loadMP(), this._loadMPUI()]);
+    if (this.destroyed) return;
+    UI.challengeTo(this, MP, them);
+  }
+
+  /** Send a new challenge: the hole list (and each hole's cup) is fixed here, from the course. */
+  async _mpSend(them, courseId, roundId) {
+    const MP = await this._loadMP();
+    const c = courseById(courseId);
+    if (!c || c.id !== courseId || !this._courseOpenToAll(courseId)) return { ok: false, reason: 'bad-round' };
+    const holes = roundHoles(c, roundId).map((i) => {
+      const h = c.holes[i];
+      const np = Array.isArray(h.pins) && h.pins.length > 1 ? h.pins.length : 0;
+      return { i, n: h.n, par: h.par, pin: np ? Math.floor(Math.random() * np) : -1 };
+    });
+    const res = await MP.createGame({ them, course: c.id, round: roundId, holes });
+    if (this.destroyed || !res.ok) return res;
+    this.settings.lastCourse = c.id;
+    this.settings.lastRound = roundId;
+    this.settings.lastMode = roundById(roundId).mode;
+    saveSettings(this.settings);
+    this._mpBegin(res.game);
+    return res;
+  }
+
+  /** Open one stored match. Shots still waiting on this phone go first, so none is lost; if they
+   *  still cannot be sent the match does not open (it would show the ball where it USED to lie). */
+  async _mpOpen(id) {
+    const MP = await this._loadMP();
+    await this._loadMPUI();
+    if (MP.pendingFor(id)) await MP.drainOutbox(id);
+    if (this.destroyed) return;
+    if (MP.pendingFor(id)) { this._renderSetup('online'); this._toast(t('mp_not_sent')); return; }
+    const game = await MP.readGame(id);
+    if (this.destroyed) return;
+    if (!game) { this._renderSetup('online'); this._toast(t('mp_not_found')); return; }
+    this._mpBegin(game);
+  }
+
+  /** What to say about a match that ended with no result ('' for any other). */
+  _mpEndText(game, side) {
+    const MP = this.MP;
+    if (!game || !MP) return '';
+    if (MP.lifeOf(game).expired) return t('mp_expired');
+    if (!MP.isCalledOff(game)) return '';
+    const why = game.over.why === 'declined' ? 'declined' : 'cancelled';
+    const iSent = side !== MP.recipientOf(game);
+    const mine = why === 'cancelled' ? iSent : !iSent;
+    const them = MP.themOf(game, MP.myCode());
+    return t(mine ? `mp_you_${why}` : `mp_they_${why}`, { name: (them && them.name) || '?' });
+  }
+
+  _mpBegin(game) {
+    const MP = this.MP;
+    const side = MP.sideOf(game, MP.myCode());
+    if (!side) { this._renderSetup('online'); return; }
+    const endText = this._mpEndText(game, side);
+    if (endText) { this._renderSetup('online'); this._toast(endText, 3200); return; }
+    this._mpLeave();
+    const mp = { id: game.id, side, game, them: MP.themOf(game, MP.myCode()), base: game.log.length, pending: [], sending: false,
+      stop: null, finished: false, playing: false, logged: 0, loggedDone: false, longest: 0 };
+    this.mp = mp;
+    MP.watchGame(game.id, (g) => this._mpOnGame(g)).then((stop) => {
+      if (this.mp === mp) mp.stop = stop; else { try { stop(); } catch { /* detached */ } }
+    });
+    this._mpMountChat();
+    if (game.over) this._mpFinish();
+    else if (game.turn === side) this._mpPlayHole();
+    else this._mpCard();
+  }
+
+  /** Play this player's hole: the round's hole list from the match, the cup it fixed, and the ball
+   *  where the log says it lies. */
+  _mpPlayHole() {
+    const mp = this.mp;
+    const MP = this.MP;
+    const g = mp.game;
+    const c = courseById(g.course);
+    if (!c || c.id !== g.course) { this._renderSetup('online'); this._toast(t('mp_not_found')); return; }
+    this.course = c;
+    this.roundId = g.round;
+    this.holeIdxs = g.holes.map((h) => h.i);
+    this.pos = g.hole;
+    this.scores = g.scores[mp.side].map((v) => (Number.isFinite(v) ? v : undefined));
+    this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: mp.longest };
+    this.recorded = false;
+    this.newBest = false;
+    this.tutorialRun = false;
+    this._dropCoach();
+    const hm = g.holes[g.hole];
+    this._resumePinIdx = hm.pin >= 0 ? hm.pin : null;
+    mp.playing = true;
+    mp.loggedDone = false;
+    const rest = MP.restOf(g, mp.side);
+    mp.logged = rest ? rest.s : 0;
+    this.screen = 'mpplay';
+    this._enterHole();
+    if (rest) {
+      this.ball = [rest.x, rest.y];
+      this.shotN = rest.s + 1;
+      this.intro = null;
+      this.aimRad = this._bearingToPin();
+      this.club = autoSelectClub(this._distToPin(), this._lie());
+      this._syncTempo();
+      this._aimCamera(true);
+      this._paintHud();
+    }
+    // A SHOT IN THE AIR when the app closed: replayed to its settle, so it cannot be taken back.
+    const shot = MP.shotFor(mp.id);
+    if (shot) {
+      const here = shot.h === g.hole && shot.s === this.shotN - 1 && Array.isArray(shot.ball)
+        && Math.abs(shot.ball[0] - this.ball[0]) < 0.05 && Math.abs(shot.ball[1] - this.ball[1]) < 0.05;
+      if (here && shot.spec) { this.intro = null; this._replayPending(shot.spec); }
+      else MP.saveShot(mp.id, null);
+    }
+    // THEIR SCORE ON THIS HOLE, when they have played it.
+    const otherSide = mp.side === 'a' ? 'b' : 'a';
+    const theirs = g.scores[otherSide][g.hole];
+    if (Number.isFinite(theirs)) this._showBanner(String(mp.them.name || '?').split(/\s+/)[0], t('mp_strokes', { n: theirs }));
+  }
+
+  /** The at-rest hook (`_saveRound` in a challenge): a shot about to fly is kept on this phone, a
+   *  ball at rest or a finished hole is appended to the match's log. Returns true (nothing to warn). */
+  _mpLogRest() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || !mp.playing || !this.hole || mp.finished || !MP) return true;
+    if (this.pendingShot) {
+      MP.saveShot(mp.id, { h: this.pos, s: this.shotN - 1, ball: [this.ball[0], this.ball[1]], spec: this.pendingShot });
+      return true;
+    }
+    if (this.anim) return true;
+    const sc = this.scores[this.pos];
+    let e;
+    if (Number.isFinite(sc)) {
+      if (mp.loggedDone) return true;
+      mp.loggedDone = true;
+      e = { by: mp.side, h: this.pos, s: sc, d: 1, x: this.hole.pin[0], y: this.hole.pin[1] };
+    } else {
+      if (this.pickedUp || this._capReached() || this.holed) return true;
+      const s = this.shotN - 1;
+      if (s <= mp.logged) return true;
+      e = { by: mp.side, h: this.pos, s, x: this.ball[0], y: this.ball[1] };
+    }
+    mp.logged = e.s;
+    MP.saveShot(mp.id, null);
+    this._mpRecord(e);
+    return true;
+  }
+
+  _mpRecord(e) {
+    const mp = this.mp;
+    if (!mp.pending.length && !mp.sending) mp.base = mp.game.log.length;
+    mp.pending.push(e);
+    this.MP.savePending(mp.id, mp.base, mp.pending);
+    this._mpFlush();
+  }
+
+  async _mpFlush() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || mp.sending || !mp.pending.length) return;
+    mp.sending = true;
+    const list = mp.pending.slice();
+    const base = mp.base;
+    MP.savePending(mp.id, base, mp.pending);          // kept on the phone until the server has it
+    const res = await MP.appendLog(mp.id, base, list);
+    if (this.mp !== mp) return;
+    mp.sending = false;
+    if (res.ok) {
+      mp.pending.splice(0, list.length);
+      mp.base = base + list.length;
+      mp.game = res.game;
+      MP.savePending(mp.id, mp.base, mp.pending);
+      if (mp.pending.length) { this._mpFlush(); return; }
+      if (this.screen === 'mpcard') this._mpAfterSend();
+      return;
+    }
+    if (res.retryable) {
+      this._toast(t('mp_not_sent'), 1800);
+      setTimeout(() => { if (this.mp === mp) this._mpFlush(); }, 4000);
+    } else if (res.reason === 'expired') {
+      MP.savePending(mp.id, mp.base, []);
+      mp.finished = true;
+      this._renderSetup('online');
+      this._toast(t('mp_expired'), 3200);
+    } else {
+      console.error('[golf] a shot could not be sent:', res.reason);
+      this._toast(this.MPUI ? this.MPUI.reasonText(res.reason) : t('mp_send_failed'), 2600);
+    }
+  }
+
+  /** The hole is over in a challenge: its score (never past the cap), its hole best, the log, then
+   *  the card. On this player's last hole the round goes into golf's own record too. */
+  _mpHoleResult() {
+    const mp = this.mp;
+    const hole = this.hole;
+    if (!mp || !hole) return;
+    const cap = maxStrokes(hole.par);
+    const strokes = Math.min(cap, this.pickedUp ? cap : this.shotN);
+    this.scores[this.pos] = strokes;
+    mp.longest = Math.max(mp.longest, (this.roundStats && this.roundStats.longestDriveYd) || 0);
+    this._recordHole(hole, strokes);
+    this._mpLogRest();
+    if (this.pos >= this.holeIdxs.length - 1) this._mpRecordRound(this.scores);
+    const otherSide = mp.side === 'a' ? 'b' : 'a';
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel gf-mpres">
+        <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
+        <div class="gf-result__name">${esc(this.pickedUp ? t('picked_up') : this._scoreName(strokes, hole.par))}</div>
+        <div class="gf-mpres__line">${esc(this.pickedUp ? t('picked_up_in', { n: strokes }) : t('holed_in', { n: strokes }))} · ${esc(t('par_n', { n: hole.par }))}</div>
+        ${this.MPUI ? this.MPUI.scorecardHTML(mp.game.holes, [
+    { name: this._myName(), scores: this.scores.map((v) => (Number.isFinite(v) ? v : null)), mine: true },
+    { name: mp.them.name, scores: mp.game.scores[otherSide] },
+  ], this.pos) : ''}
+        <div class="gf-actions"><button type="button" class="gf-btn" data-role="res-ok"><span>${esc(t('mp_ok'))}</span></button></div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    const go = () => { el.remove(); this._mpAfterHole(); };
+    this._on(el.querySelector('[data-role="res-close"]'), 'click', go);
+    this._on(el.querySelector('[data-role="res-ok"]'), 'click', go);
+  }
+
+  _mpAfterHole() {
+    const mp = this.mp;
+    if (!mp) return;
+    mp.playing = false;
+    if (mp.game.over && !mp.pending.length && !mp.sending) { this._mpFinish(); return; }
+    this._mpCard();
+  }
+  /** The last shot of a turn has landed while the scorecard is up: repaint it (or end the match). */
+  _mpAfterSend() {
+    const mp = this.mp;
+    if (!mp || mp.playing) return;
+    if (mp.game.over) this._mpFinish(); else this._mpCard();
+  }
+
+  /** A complete challenge round goes into golf's own round record, once per match on this phone
+   *  (golf/js/mp.js ROUND_LEDGER_KEY, marked BEFORE the write so a crash cannot count it twice). */
+  _mpRecordRound(scores) {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (globalThis.__gfNoRecord || !mp || !MP) return;
+    const holes = mp.game.holes;
+    if (holes.some((_, i) => !Number.isFinite(scores[i]))) return;
+    if (MP.roundRecorded(mp.id)) return;
+    const c = courseById(mp.game.course);
+    if (!c || c.id !== mp.game.course) return;
+    // ONLY A REAL ROUND OF THAT COURSE: the match's holes must be exactly the round's holes with the
+    // course's own pars, or its strokes would stand as a best for a round nobody played (THE LAW
+    // rule 2: a wrong low best could never be corrected).
+    const want = roundHoles(c, mp.game.round);
+    if (roundById(mp.game.round).id !== mp.game.round || want.length !== holes.length
+      || holes.some((h, i) => h.i !== want[i] || !c.holes[h.i] || c.holes[h.i].par !== h.par)) return;
+    if (!MP.markRoundRecorded(mp.id)) return;
+    const key = roundKey(c, mp.game.round);
+    const st = { birdies: 0, eagles: 0, aces: 0, points: 0 };
+    holes.forEach((h, i) => {
+      const s = scores[i], d = s - h.par;
+      if (s === 1) st.aces++; else if (d === -2) st.eagles++; else if (d === -1) st.birdies++;
+      st.points += stablefordPoints(s, h.par);
+    });
+    const strokes = holes.reduce((a, _, i) => a + scores[i], 0);
+    try {
+      withMode(() => ({ round: key, holes: holes.length, online: 1 }), c.id, () => recordGolf(c.id, {
+        courseId: key,
+        holes: holes.length,
+        strokes,
+        points: st.points,
+        birdies: st.birdies,
+        eagles: st.eagles,
+        aces: st.aces,
+        longestDriveYd: Math.round(mp.longest || 0),
+      }), () => ({ lo: strokes, detail: { strokes, birdies: st.birdies, eagles: st.eagles, aces: st.aces } }));
+    } catch (e) { console.error('[golf] recording the challenge round FAILED', e); return; }
+    const after = this._storedBest(key);
+    if (!Number.isFinite(after) || after > strokes) console.error(`[golf] the challenge round did not land: ${key} reads ${after} after writing ${strokes}`);
+  }
+
+  /** The scorecard screen between turns: both players' holes, whose turn, Play when it is yours. */
+  _mpCard() {
+    const mp = this.mp;
+    if (!mp || !this.MPUI) return;
+    this.screen = 'mpcard';
+    const g = mp.game;
+    const otherSide = mp.side === 'a' ? 'b' : 'a';
+    const busy = mp.pending.length > 0 || mp.sending;
+    const mine = !busy && !g.over && g.turn === mp.side;
+    const status = busy ? t('mp_sending') : mine ? t('mp_hole_of', { n: g.hole + 1, all: g.holes.length }) : t('mp_turn_of', { name: String(mp.them.name || '?').split(/\s+/)[0] });
+    const el = this._mpPage(`
+      <div class="gf-mp-top">
+        <button type="button" class="gf-btn gf-mp-back" data-mp="back" aria-label="${esc(t('back'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+        <h2 class="gf-mp-title"><span aria-hidden="true">${esc(mp.them.emoji)}</span> ${esc(mp.them.name)}</h2>
+      </div>
+      <div class="gf-mp-body">
+        <p class="gf-mp-vs">${esc(this.MPUI.roundLine(g.course, g.round))}</p>
+        ${this.MPUI.scorecardHTML(g.holes, [
+    { name: this._myName(), scores: g.scores[mp.side], mine: true },
+    { name: mp.them.name, scores: g.scores[otherSide] },
+  ], g.over ? -1 : g.hole)}
+        <p class="gf-mp-status">${esc(status)}</p>
+        ${mine ? `<button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="play">${esc(t('mp_play'))}</button>` : ''}
+        ${g.over ? '' : `<button type="button" class="gf-btn gf-mp-wide gf-mp-quiet" data-mp="end">${esc(this._mpEndLabel())}</button>`}
+      </div>`);
+    this._on(el.querySelector('[data-mp="back"]'), 'click', () => this._renderSetup('online'));
+    const play = el.querySelector('[data-mp="play"]');
+    if (play) this._on(play, 'click', () => this._mpPlayHole());
+    const end = el.querySelector('[data-mp="end"]');
+    if (end) this._on(end, 'click', () => this._mpAskEnd());
+    this._mpReattachChat();
+  }
+
+  /** The match is over: counted once on this phone, then the result over the scorecard. */
+  _mpFinish() {
+    const mp = this.mp;
+    const MP = this.MP;
+    if (!mp || !this.MPUI) return;
+    const g = mp.game;
+    const side = mp.side;
+    const otherSide = side === 'a' ? 'b' : 'a';
+    const res = MP.resultOf(g, side);
+    if (!mp.finished) {
+      mp.finished = true;
+      if (MP.RESULTS.includes(res)) {
+        MP.countResult(mp.id, res === 'won' ? true : res === 'lost' ? false : null, (g.over && g.over.at) || Date.now(),
+          () => MP.modeOfGame(g, side), () => ({ detail: () => ({ strokes: g.totals[side], them: g.totals[otherSide] }) }));
+      }
+      MP.markResultSeen(mp.id);
+      MP.markSeen(mp.id, g.updated);
+      // A round finished on this phone before the app closed, but not yet recorded, is recorded now.
+      this._mpRecordRound(g.scores[side]);
+    }
+    this._mpCard();
+    const me = this._myName();
+    const title = res === 'draw' ? t('mp_draw') : t('mp_wins', { name: String((res === 'won' ? me : mp.them.name) || '?').split(/\s+/)[0] });
+    const why = g.over.why === 'timeout' ? t('mp_timed_out')
+      : g.over.why === 'resign' ? t('mp_resigned_by', { name: String((res === 'won' ? mp.them.name : me) || '?').split(/\s+/)[0] }) : '';
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel gf-mpres" role="dialog" aria-modal="true" aria-label="${esc(t('mp_game_over'))}">
+        <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
+        <div class="gf-result__name">${esc(title)}</div>
+        ${why ? `<div class="gf-mpres__line">${esc(why)}</div>` : ''}
+        ${this.MPUI.scorecardHTML(g.holes, [
+    { name: me, scores: g.scores[side], mine: true },
+    { name: mp.them.name, scores: g.scores[otherSide] },
+  ])}
+        <div class="gf-actions"><button type="button" class="gf-btn" data-role="res-ok"><span>${esc(t('mp_ok'))}</span></button></div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    this._on(el.querySelector('[data-role="res-close"]'), 'click', () => el.remove());
+    this._on(el.querySelector('[data-role="res-ok"]'), 'click', () => this._renderSetup('online'));
+  }
+
+  /** The watched match changed. Their shots arrive here; our own echoes change nothing. */
+  _mpOnGame(g) {
+    const mp = this.mp;
+    if (!mp || g.id !== mp.id || g.log.length < mp.game.log.length) return;
+    if (mp.sending || mp.pending.length) return;      // our own write is landing: its result decides
+    mp.game = g;
+    if (this.MP.isCalledOff(g) && !mp.finished) {
+      mp.finished = true;
+      this._renderSetup('online');
+      this._toast(this._mpEndText(g, mp.side), 3200);
+      return;
+    }
+    if (mp.playing) {
+      // Resigned or timed out while this phone was mid-hole: the match is over. (A match this phone's
+      // own last hole finished waits for the hole card's OK: `_mpAfterHole`.)
+      if (g.over && (g.over.why === 'resign' || g.over.why === 'timeout')) { mp.playing = false; this._mpFinish(); }
+      return;
+    }
+    if (this.screen !== 'mpcard') return;
+    if (g.over && !mp.finished) this._mpFinish(); else if (!g.over) this._mpCard();
+  }
+
+  /** What the end-the-match control is called right now: resign, or cancel / decline while unanswered. */
+  _mpEndKind() {
+    const mp = this.mp;
+    if (!mp || !this.MP) return 'resign';
+    const life = this.MP.lifeOf(mp.game);
+    return !life.open ? 'resign' : mp.side === this.MP.recipientOf(mp.game) ? 'decline' : 'cancel';
+  }
+  _mpEndLabel() { const k = this._mpEndKind(); return k === 'resign' ? t('mp_resign') : t(`mp_${k}_ch`); }
+
+  /** Asked twice: resign (a loss), or cancel / decline (a loss once the sender has played). */
+  _mpAskEnd() {
+    const mp = this.mp;
+    if (!mp) return;
+    const k = this._mpEndKind();
+    const loss = k === 'resign' || this.MP.cancelCosts(mp.game);
+    const el = document.createElement('div');
+    el.className = 'gf-result';
+    el.innerHTML = `
+      <div class="gf-result__card gf-panel gf-mpres">
+        <button type="button" class="gf-result__x" data-role="e-no" aria-label="${esc(t('mp_keep'))}">&times;</button>
+        <div class="gf-mpres__q">${esc(t(`mp_${k}_q`))}</div>
+        ${loss ? `<div class="gf-mpres__line">${esc(t('mp_loss'))}</div>` : ''}
+        <div class="gf-actions">
+          <button type="button" class="gf-btn" data-role="e-no"><span>${esc(t('mp_keep'))}</span></button>
+          <button type="button" class="gf-btn" data-role="e-yes"><span>${esc(this._mpEndLabel())}</span></button>
+        </div>
+      </div>`;
+    this.rootEl.appendChild(el);
+    for (const b of el.querySelectorAll('[data-role="e-no"]')) this._on(b, 'click', () => el.remove());
+    this._on(el.querySelector('[data-role="e-yes"]'), 'click', async () => {
+      el.remove();
+      const res = await this.MP.resignGame(mp.id);
+      if (this.mp !== mp) return;
+      if (!res.ok) { this._toast(this.MPUI ? this.MPUI.reasonText(res.reason) : t('mp_send_failed')); return; }
+      mp.game = res.game;
+      mp.playing = false;
+      if (res.cancelled) { mp.finished = true; this._renderSetup('online'); this._toast(this._mpEndText(res.game, mp.side), 3200); return; }
+      this._mpFinish();
+    });
+  }
+
+  // --- quick chat in every challenge (js/match-chat-ui.js + js/match-chat.js, `golf/chat/<id>`) ---
+  async _mpMountChat() {
+    this._mpUnmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    let UI, DATA;
+    try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
+    if (this.destroyed || this.mp !== mp || this._chat) return;
+    const node = 'golf';
+    const side = mp.side;
+    const seenAt = DATA.readChatSeen(node, mp.id);
+    const chat = UI.createMatchChat({
+      root: this.rootEl,
+      send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      them: () => ({ name: mp.them.name || '?', emoji: mp.them.emoji || '' }),
+      place: CHAT_PLACE,
+    });
+    this._chat = chat;
+    this._chatLayer = this.rootEl.querySelector(':scope > .ghc');
+    const stop = await DATA.watchChat({ node, id: mp.id }, (list) => {
+      let newest = 0;
+      for (const c of list) {
+        const mine = c.by === side;
+        chat.add({ key: c.key, mine, t: c.t, v: c.v, at: c.at }, { pop: !mine && c.at > seenAt });
+        if (!mine) newest = Math.max(newest, c.at);
+      }
+      DATA.markChatSeen(node, mp.id, newest);
+    });
+    if (this.destroyed || this.mp !== mp || this._chat !== chat) { try { stop(); } catch { /* detached */ } return; }
+    this._chatStop = stop;
+  }
+  /** Every screen change empties `rootEl`: the chat's own layer is put back on top of the new one. */
+  _mpReattachChat() {
+    if (this.mp && this._chatLayer && this.rootEl && this._chatLayer.parentNode !== this.rootEl) this.rootEl.appendChild(this._chatLayer);
+  }
+  _mpUnmountChat() {
+    if (this._chatStop) { try { this._chatStop(); } catch { /* detached */ } this._chatStop = null; }
+    if (this._chat) { try { this._chat.destroy(); } catch { /* gone */ } this._chat = null; }
+    if (this._chatLayer) { try { this._chatLayer.remove(); } catch { /* gone */ } this._chatLayer = null; }
+  }
+
+  /** Stop watching the open challenge (shots not yet sent stay in the outbox) and put the solo
+   *  course back, so the setup screen reads what the player last chose. */
+  _mpLeave() {
+    this._mpUnmountChat();
+    const mp = this.mp;
+    if (!mp) return;
+    this.mp = null;
+    if (mp.stop) { try { mp.stop(); } catch { /* detached */ } }
+    this.anim = null;
+    this.pendingShot = null;
+    this.course = courseById(this.settings.lastCourse || COURSES[0].id);
+    this.roundId = null;
+    this.screen = 'setup';
+  }
+
   _startLoop() { if (!this.raf) this.raf = requestAnimationFrame(this._frame); }
   _stopLoop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   destroy() {
+    try { this._mpLeave(); } catch { /* gone */ }
     if (this._onVis) { document.removeEventListener('visibilitychange', this._onVis); this._onVis = null; }
     this.destroyed = true;
     this._stopLoop();
@@ -3229,6 +3835,8 @@ class GolfGame {
     // cannot write (storage full, private mode) still gets the old warning, which is exactly when
     // it is true again.
     if (this.saveOk && readSave()) return false;
+    // A challenge is written shot by shot into its match: leaving loses nothing.
+    if (this.mp) return false;
     return !!(this.hole && this.roundId && this.roundId !== 'practice' && this.holeIdxs
       && this.scores.filter((v) => Number.isFinite(v)).length < this.holeIdxs.length);
   }
@@ -3268,6 +3876,7 @@ class GolfGame {
         <div class="gf-pause__rows">
           <button type="button" class="gf-pause__row" data-role="p-resume">${esc(t('pause_resume'))}</button>
           <button type="button" class="gf-pause__row is-lit" data-role="p-bug">${esc(t('report_bug'))}</button>
+          ${this.mp ? `<button type="button" class="gf-pause__row" data-role="p-end">${esc(this._mpEndLabel())}</button>` : ''}
           <button type="button" class="gf-pause__row" data-role="p-quit">${esc(t('quit'))}</button>
         </div>
       </div>`;
@@ -3278,6 +3887,8 @@ class GolfGame {
     // nothing; the row that DOES lose something goes through `_quit`'s own prompt.
     this._on(el, 'click', (ev) => { if (ev.target === el) close(); });
     this._on(el.querySelector('[data-role="p-quit"]'), 'click', () => { close(); this._quit(); });
+    const pEnd = el.querySelector('[data-role="p-end"]');
+    if (pEnd) this._on(pEnd, 'click', () => { close(); this._mpAskEnd(); });
     this._on(el.querySelector('[data-role="p-bug"]'), 'click', () => {
       close();
       // Lazily imported: the report form pulls in the whole device-report + Firebase picture, and
@@ -3305,7 +3916,7 @@ class GolfGame {
       // screen reads it - otherwise the course picker opens on a course that is not in `COURSES`
       // and the chips have nothing highlighted.
       if (this.tutorialRun) { this._leaveTutorial(); return; }
-      this._renderSetup();
+      this._renderSetup(this.mp ? 'online' : undefined);
     };
     if (!this._roundAtStake()) { leave(); return; }
     const el = document.createElement('div');

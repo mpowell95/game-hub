@@ -66,13 +66,15 @@ ok('finished newest first', S.finished[0].updated >= S.finished[S.finished.lengt
 ok('summarize does not mutate its input', rows[0].id === 'd1' && rows.length === 7);
 // Chinchón and Escoba joined 2026-10-18 (turn-by-turn challenges beside their live rooms).
 // Battle Arena joined 2026-10-24, Battleship 2026-10-27 (challenges beside their live rooms).
-ok('every registry source is one of the eleven challenge games',
-  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'battleship', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'hoops4', 'skeeball']));
+// Golf joined 2026-11-10.
+ok('every registry source is one of the twelve challenge games',
+  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'battleship', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'golf', 'hoops4', 'skeeball']));
 
 // --- the handoff contract, per game ---------------------------------------------------------------
 const them = { code: 'ANABB', name: 'Ana', emoji: '🦊' };
 for (const [game, path, take] of [
   ['darts', './darts/js/alert.js', 'takeOpen'],
+  ['golf', './golf/js/alert.js', 'takeOpen'],
   ['archery', './archery/js/alert.js', 'takeOpen'],
   ['chinchon', './chinchon/js/alert.js', 'takeOpen'],
   ['escoba', './escoba/js/alert.js', 'takeOpen'],
@@ -105,6 +107,12 @@ for (const [game, path, take] of [
 const src = (p) => readFileSync(new URL(p, __ROOT_URL), 'utf8');
 ok('darts: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./darts/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./darts/js/ui.js')));
 ok('darts: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./darts/js/mp-ui.js')));
+ok('golf: a pick opens the challenge card (course and holes), a match id opens the match',
+  /o\.kind === 'pick'\) this\._mpOpenPick\(o\.them\); else this\._mpOpen\(o\.id\)/.test(src('./golf/js/ui.js')) && /UI\.challengeTo\(this, MP, them\)/.test(src('./golf/js/ui.js')));
+ok('golf: the challenge card chooses the course, the length and the holes',
+  /export function challengeTo\(/.test(src('./golf/js/mp-ui.js')) && /data-chcourse/.test(src('./golf/js/mp-ui.js')) && /data-chmode/.test(src('./golf/js/mp-ui.js')) && /data-chround/.test(src('./golf/js/mp-ui.js')));
+ok('golf: every picker and createGame ask codeMayPlayOnline for golf', (src('./golf/js/mp.js').match(/codeMayPlayOnline\([^)]*'golf'/g) || []).length >= 2);
+ok('golf: the hub entry declares its alerts module', /alerts: \(\) => import\('\.\.\/golf\/js\/alert\.js'\)/.test(src('./js/hub.js')));
 ok('flick soccer: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./flick-soccer/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./flick-soccer/js/ui.js')));
 ok('flick soccer: mp-ui exports challengeTo', /export function challengeTo\(/.test(src('./flick-soccer/js/mp-ui.js')));
 ok('archery: a pick opens the challenge card', /o\.kind === 'pick'\) this\._openOnline\(o\.them\)/.test(src('./archery/js/ui.js')) && /UI\.challengeTo\(this, MP, pickFor\)/.test(src('./archery/js/ui.js')));
@@ -173,11 +181,11 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
   ok('a timed-out row reads as done, with its result, and says so', (() => { const r = n('darts', { id: 'x7', with: 'ANABB', over: true, result: 'won', why: 'timeout' }); return r.state === 'done' && r.result === 'won' && r.timedOut && !r.resigned; })());
   ok('every challenge game spells "Timed out" in both languages', ['./darts/js/strings.js', './cup-pong/js/strings.js', './flick-soccer/js/strings.js', './archery/js/strings.js',
     './battle-arena/js/strings.js', './battleship/js/strings.js', './chinchon/js/strings.js', './escoba/js/strings.js', './eight-ball/js/strings.js', './hoops4/js/strings.js',
-    './skeeball/js/strings.js', './js/challenges-strings.js'].every((f) => { const s = readFileSync(new URL(f, __ROOT_URL), 'utf8'); return /[Tt]imed out/.test(s) && /[Tt]iempo agotado/.test(s); }));
+    './skeeball/js/strings.js', './golf/js/strings.js', './js/challenges-strings.js'].every((f) => { const s = readFileSync(new URL(f, __ROOT_URL), 'utf8'); return /[Tt]imed out/.test(s) && /[Tt]iempo agotado/.test(s); }));
 
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
-  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js']]) {
+  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js'], ['golf', './golf/js/mp.js']]) {
     const M = await import(new URL(path, __ROOT_URL).href);
     ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
       ['cancelGame', 'resignGame', 'lifeOf', 'recipientOf', 'isCalledOff', 'readGame', 'sideOf', 'myCode'].every((k) => typeof M[k] === 'function'));

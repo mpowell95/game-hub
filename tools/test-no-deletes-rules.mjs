@@ -123,7 +123,7 @@ const DB = {
   courseDrafts: { AAAAA: { d1: { holes: 9 } } },
   messages: { threads: { 'AAAAA_BBBBB': { msgs: { m1: { from: 'AAAAA', text: 'hi', atMs: NOW - 1 } } } }, index: { AAAAA: { BBBBB: { at: NOW - 1 } }, BBBBB: { AAAAA: { at: NOW - 1 } } } },
 };
-const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'hoops', 'skeeChallenges'];
+const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'golf', 'hoops', 'skeeChallenges'];
 for (const n of MP) DB[n] = { games: { g1: game('AAAAA', 'BBBBB') }, index: { AAAAA: { g1: { result: '' } }, BBBBB: { g1: { result: '' } } }, chat: { g1: { c1: { by: 'AAAAA', t: 'c', v: 'gg' } } } };
 
 // --- LEGIT: what the app really sends - every one must still work ------------------------------------------------

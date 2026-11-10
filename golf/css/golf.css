@@ -812,3 +812,86 @@
   }
   .gf-root .gf-tut.is-nudge .gf-tut__rail { animation: none; background: rgba(90, 72, 10, .96); }
 }
+
+/* --- ONLINE CHALLENGES (2026-11-10, golf/js/mp-ui.js) ----------------------------------------
+   The setup screen gains two tabs, Online first; Solo is everything above, unchanged. The Online
+   tab, the challenge pages and the scorecard follow the repo's text floor (17px body, 15px
+   secondary). Selected = the flag gold PLUS a border and weight, never colour alone. */
+.gf-root .gf-tabs { display: flex; gap: 8px; width: 100%; max-width: 360px; flex: 0 0 auto; }
+.gf-root .gf-setup .gf-tab { flex: 1; font-size: 17px; position: relative; background: #dfd9c6; color: #33502f; }
+.gf-root .gf-setup .gf-tab.is-on { background: #ffce3a; color: #2a2000; border-color: #8a6a00; font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(255, 206, 58, .45), var(--gf-shadow); }
+.gf-root .gf-tab-n { position: absolute; top: -8px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 11px; background: #1b3a1e; color: #fff; font-size: 15px; line-height: 22px; font-weight: 800; }
+/* The tab not shown: `gf-offtab` is put on each of its parts by ui.js `_showTab` (a hiding class of its
+   own, never a layout class: tools/test-game-conventions.mjs). */
+.gf-root .gf-offtab { display: none !important; }
+.gf-root .gf-online { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+.gf-root .gf-on-sec { display: flex; flex-direction: column; gap: 8px; }
+.gf-root .gf-on-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-on-rows { display: flex; flex-direction: column; gap: 8px; }
+.gf-root .gf-mp-note { margin: 0; font-size: 15px; color: #f4f7ee; text-align: center; text-shadow: var(--gf-shadow); }
+.gf-root .gf-setup .gf-mrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 12px; min-height: 56px; box-sizing: border-box; }
+.gf-root .gf-setup .gf-mrow.is-mine { border: 2px solid #8a6a00; }
+.gf-root .gf-mrow.is-static { background: rgba(255, 255, 255, .13); color: #fff; border: 1px solid rgba(0, 0, 0, .3); box-shadow: var(--gf-shadow); }
+.gf-root .gf-mrow-face { font-size: 26px; flex: 0 0 auto; }
+.gf-root .gf-mrow-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.gf-root .gf-mrow-name { font-size: 17px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-mrow-sub { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-mrow-chev { font-size: 24px; flex: 0 0 auto; }
+.gf-root .gf-play-pill { flex: 0 0 auto; padding: 6px 14px; border-radius: 16px; background: #ffce3a; color: #2a2000; border: 1px solid #8a6a00; font-size: 15px; font-weight: 800; }
+.gf-root .gf-setup .gf-rec-chip { min-height: 36px; padding: 4px 12px; font-size: 15px; }
+.gf-root .gf-setup .gf-more { width: 100%; font-size: 15px; }
+.gf-root .gf-faces { display: flex; gap: 6px; }
+.gf-root .gf-setup .gf-face { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; min-width: 0; max-width: 72px; }
+.gf-root .gf-setup .gf-face.is-any { flex: 0 0 auto; max-width: none; padding: 8px 10px; }
+.gf-root .gf-face-dot { font-size: 26px; line-height: 32px; height: 32px; }
+.gf-root .gf-face.is-any .gf-face-dot { font-weight: 800; }
+.gf-root .gf-face-name { font-size: 15px; font-weight: 700; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-setup .gf-mp-wide { width: 100%; max-width: 360px; font-size: 17px; }
+.gf-root .gf-setup .gf-mp-wide.is-cta { background: #ffce3a; color: #2a2000; border-color: #8a6a00; font-weight: 800; }
+.gf-root .gf-setup .gf-mp-quiet { background: rgba(255, 255, 255, .13); color: #fff; border-color: rgba(0, 0, 0, .3); font-size: 15px; }
+.gf-root .gf-mp-push { width: 100%; }
+.gf-root .gf-mp .gf-roundbtn > span { font-size: 17px; }
+.gf-root .gf-mp .gf-roundbtn small { font-size: 15px; }
+.gf-root .gf-mp .gf-chip { font-size: 17px; }
+
+/* the challenge pages (picker, course + holes, history, the scorecard between turns) */
+.gf-root .gf-mp-top { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 360px; }
+.gf-root .gf-setup .gf-mp-back { display: flex; align-items: center; justify-content: center; padding: 0; width: 44px; }
+.gf-root .gf-mp-back svg { width: 24px; height: 24px; }
+.gf-root .gf-mp-title { margin: 0; font-size: 24px; font-weight: 800; text-shadow: var(--gf-shadow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-mp-body { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 360px; }
+.gf-root .gf-mp-body > * { width: 100%; }
+.gf-root .gf-mp-list { display: flex; flex-direction: column; gap: 8px; }
+.gf-root .gf-mp-h { margin: 4px 0 0; font-size: 17px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-search { box-sizing: border-box; width: 100%; min-height: 48px; padding: 8px 12px; font: inherit; font-size: 17px;
+  border: 1px solid rgba(0, 0, 0, .45); background: #f2eddd; color: #1b3a1e; -webkit-user-select: text; user-select: text; }
+.gf-root .gf-mp-vs { margin: 0; font-size: 17px; font-weight: 800; text-align: center; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-status { margin: 0; font-size: 17px; font-weight: 800; text-align: center; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-err { color: #fff; }
+.gf-root .gf-rec { font-size: 17px; }
+.gf-root .gf-hmark { font-size: 22px; width: 26px; text-align: center; font-weight: 800; }
+
+/* THE SCORECARD both players share: nine holes to a block, a dash for a hole not played. */
+.gf-root .gf-scwrap { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.gf-root .gf-sc { width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(6, 12, 4, .45); }
+.gf-root .gf-sc th, .gf-root .gf-sc td { border: 1px solid rgba(255, 255, 255, .55); text-align: center; padding: 3px 0; color: #fff; }
+.gf-root .gf-sc th { width: 66px; font-size: 15px; font-weight: 700; text-align: left; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-sc td { font-size: 17px; font-weight: 800; }
+.gf-root .gf-sc .gf-sc__h td, .gf-root .gf-sc .gf-sc__p td { font-size: 15px; font-weight: 600; }
+.gf-root .gf-sc td.is-now { background: rgba(255, 206, 58, .28); outline: 2px solid #ffce3a; outline-offset: -2px; }
+.gf-root .gf-sc .gf-sc__r.is-mine th { font-weight: 800; text-decoration: underline; }
+.gf-root .gf-sc__tots { display: flex; justify-content: space-between; gap: 10px; font-size: 17px; text-shadow: var(--gf-shadow); }
+.gf-root .gf-sc__tot.is-mine b { text-decoration: underline; }
+
+/* the hole card, the result and the "are you sure" card in a challenge */
+.gf-root .gf-mpres { max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+.gf-root .gf-mpres__line { font-size: 15px; color: #f4f7ee; }
+.gf-root .gf-mpres__q { font-size: 22px; font-weight: 800; padding: 0 30px; }
+.gf-root .gf-mpres__face { font-size: 40px; }
+.gf-root .gf-mpres .gf-btn { font-size: 17px; }
+.gf-root .gf-toast { position: absolute; left: 50%; bottom: calc(24px + var(--gf-safe-b)); transform: translateX(-50%); z-index: 8;
+  max-width: calc(100% - 32px); padding: 10px 16px; background: rgba(6, 12, 4, .9); color: #fff; font-size: 17px; font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, .7); text-align: center; pointer-events: none; }
+.gf-root .gf-mpres.gf-panel { background: var(--gf-hatch), rgba(16, 20, 12, 0.95); }

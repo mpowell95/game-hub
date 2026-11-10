@@ -246,3 +246,11 @@ Oasis Sands "NOT built" (it is built); "Holes 1-3 NOT re-cut"; the hole-3 swap b
 ## A shot in the air is saved (2026-10-29)
 
 `_fire` saves the shot's inputs (`pending`: club, aim, power, miss; `save.js` validates, a bad one drops only itself) BEFORE the ball leaves; `_resumeSaved` replays it to its settle (`_replayPending`), so a force-quit mid-flight cannot undo a bad shot. `pinIdx` is saved too (a resume plays the same cup). Never save `pending` after `_settleShot` has run.
+
+## Online challenges (2026-11-10)
+
+Matt: *"Make golf multiplayer. Allow me to challenge someone to a course and certain number of holes. Turn based multiplayer"*. Darts' pattern, no code shared: `js/mp.js` (data, node `golf/`), `js/mp-ui.js` (Online tab, picker, course + holes card, History, scorecard, Game Over popup), `js/alert.js` (launcher bubble, Multiplayer screen); push `golfTurnPush` + `decideGolf`.
+- **The match fixes the course, the round and every hole's cup** (`holes: [{i, n, par, pin}]`, pin -1 = one cup); only courses open to everyone are offered (`_courseOpenToAll`); the unlock ladder does not gate a challenge. **One hole per turn**: challenger hole 1, then the other hole 1, and so on; delivered when the challenger's first hole ends.
+- **A log of shots at rest** (`{by, h, x, y, s, d?}`; `d: 1` = the hole's score, never past double par plus one): `_saveRound` hands every at-rest state to `_mpLogRest` in a challenge, so **the solo save is never touched**; a shot in the air is kept in `gamehub.golf.mpShot.v1` and replayed on reopen. Outbox `gamehub.golf.outbox.v1`; a match with shots still unsent does not open.
+- Fewest strokes wins, equal = draw. Counted once per phone (`countResult`, mode = course, round, holes, first, online). Each finished hole sets its hole best (`_recordHole`, mode `online`); a complete round goes into golf's round record once per match (`gamehub.golf.mpRounds.v1`), ONLY when its holes are exactly that round's holes with the course's pars.
+- Setup = tabs **Online | Solo** (Solo unchanged); `gf-offtab` hides the other tab's parts. Quick chat on `golf/chat/<id>` (re-attached after every screen change, `_mpReattachChat`). Tests: `tools/test-golf-mp.mjs`.

@@ -629,6 +629,8 @@ export const GAMES = [
     blurb: { en: 'Three holes. Aim, then time your swing.',
       es: 'Tres hoyos. Apunta y calcula el momento de tu golpe.' },
     module: '../golf/js/ui.js',
+    // Turn-by-turn challenges (2026-11-10, golf/js/mp.js): the launcher's bubble and the Multiplayer screen.
+    alerts: () => import('../golf/js/alert.js'),
     // Its own full-bleed chrome (the course view plus the floating HUD), so the hub's header
     // collapses to the floating back button - same call as Skeeball and Hill Climb.
     immersive: true,

@@ -403,6 +403,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 
 - **Setup cards on real phones (2026-11-08):** `tools/review-setup-cards.cjs` (every multiplayer setup tab on the family's 6 phone sizes, fake database with 3 matches each; shots in `.visual-out/setup-cards/`).
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
+- **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
@@ -509,7 +510,7 @@ Each game's full docs: `<game>/CLAUDE.md`.
 | Escoba | module, immersive, multiplayer 2-4 seats (`escoba-save`) + 2-player turn-by-turn challenges (`escoba/`, 2026-10-18) | `.eb-root` / `.eb-` | `escoba-settings` (frozen) | `recordEscoba` (challenges: `'mp'`, never h2h) |
 | Filler | module, multiplayer (`gamehub.filler.mp.v1`) | `.filler` / `.fl-` (frozen) | `gamehub.filler.v1` | `recordResult('filler', …)` |
 | Flick Soccer | module, immersive, released 2026-10-20; vs computer, 2 players, challenges (`flicksoccer/`); hub id `flick-soccer`, stats id `flicksoccer`; **Expert computer + Test mode (pieces can enter the nets, same size, moved out of any net when the play ends; retuned Easy/Medium/Hard) ADMIN DEVICES ONLY (2026-11-06); Test games COUNT (2026-11-08); Expert results kept in `fx`, counted by nothing** | `.fs-root` / `.fs-` | `gamehub.flicksoccer.v1` (+ `.save.v1`) | `recordResult('flicksoccer', …)` |
-| Golf | module, immersive | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` |
+| Golf | module, immersive; turn-by-turn challenges, a course and its holes, one hole a turn (`golf/`, 2026-11-10) | `.gf-root` / `.gf-` | `gamehub.golf.v1` (+ `.save.v1`) | `recordGolf` (challenges: `recordResult('golf', 'mp')`) |
 | Gridlock | module, immersive, released 2026-11-02; 4,000-level ladder, Wood/Cars/Yard/Logs looks; levels GENERATED (append-only) | `.gl-root` / `.gl-` | `gamehub.gridlock.v1` (+ `.save.v2`; `.save.v1` read once) | `recordGridlock` + `recordGridlockHint` (`gl`) |
 | Hill Climb | module, immersive | `.hc-root` / `.hc-` | `gamehub.hillclimb.v1` | `recordHillClimb` |
 | Mancala | module, immersive, multiplayer (`gamehub.mancala.mp.v1`) | `.mancala` / `.mc-` (frozen) | `gamehub.mancala.v1` | `recordResult('mancala', …)` |
@@ -678,6 +679,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   2026-11-02: online-pairs alerts (no new trigger or node): `rebuildBoards` runs `checkOnlinePairs` at most hourly (`boards/v1/meta/pairsAt`), alerts in `integrityAlerts/pair~<A>~<B>` (`docs/INTEGRITY-CHECKS-SPEC.md`, "Online pairs").
   2026-11-02: `d` (string, <= 400) on `playLog` rows: a result's withMode detail (until the rules deploy, a batch holding one is refused and stays queued, never lost).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
+  2026-11-10 (Golf challenges): `golfTurnPush` and the `golf` rules branch (+ in the nudges key pattern and the 24-hour reminder).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
