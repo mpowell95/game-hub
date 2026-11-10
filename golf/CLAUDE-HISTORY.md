@@ -6206,3 +6206,15 @@ profile. **To release it:** delete its line there and set `coralkeys: true` in
 Wired in everywhere a nine-hole course has to be (the Oasis Sands list): `rounds.js` `COURSES`,
 `strings.js` `course_coralkeys` / `blurb_coralkeys` (en + es), `GOLF_COURSE_PAR` (`coralkeys3/3b/
 3c/9`), `GOLF_COURSES` + `GOLF_COURSE_HOLES`, `sw.js` `ASSETS`, `sheet-course.mjs`.
+
+
+### Red Mesa's 5 failing tests, fixed (2026-11-10)
+
+Matt, after Golf challenges shipped: *"Fix everything then."* The five `golf/js/test.js` failures had stood since the
+2026-09-16 fold-back (reported then as editor work). Hole 7 (par 4): two sentinel clusters of palo verdes (h 47 / 39.5,
+too tall to fly) and the right belt sat between the fairway and the green's right lobe where both pins are; the
+clean-strike bot took 7 and the 24-run bot averaged +7.5. Sentinels 1-2 moved 40 yd further right (still framing the
+lobe), right belt `to: 0.8`: clean strikes 5/6 by pin, 24-run average +0.54, blocks +1.5 +2.1 +1.9 +2.7 +1.0 +3.1 (back
+nine harder than front, closing harder than opening). Hole 3's back fringe 2 -> 3 yd (a 3 yd miss landed in heavy
+rough). Card test: the route ends at the green's centre by design (holegen.js), so a back pin legitimately exceeds the
+card; test 12 allows exactly the cup's distance behind centre. Par unchanged (71); no stored key touched.
