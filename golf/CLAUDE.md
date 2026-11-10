@@ -29,6 +29,7 @@ Matt: *"This is my game. Nothing is locked to me."* The clone instruction govern
 ### Red Mesa's first fold-back (2026-09-16)
 
 Editor export folded in at CACHE v852 with three validator repairs. Guards every course inherits: `dropLoops` (`holes.js`), the editor flooring waypoints at tee + 10 yd.
+**Red Mesa's 5 red tests fixed (2026-11-10, Matt: "Fix everything")**: hole 7's two palo verde sentinel clusters moved 40 yd right (off 73.9/87.8) and its right belt stops at `to: 0.8` (they walled off the green's right lobe: clean strikes took 7); hole 3's back fringe 2 -> 3; test 12 now measures the card to the green's CENTRE (a back pin may exceed it by its distance behind centre). `golf/js/test.js` all green (831).
 
 ### The power putter, and a stated wind (2026-09-16)
 

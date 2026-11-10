@@ -1427,11 +1427,21 @@ ok(`all ${COURSES.reduce((a, c) => a + c.holes.length, 0)} greens on both course
 
 console.log('\n-- 12. the two yardages stay different on purpose --');
 {
+  // The card is walked to the green's CENTRE (holegen.js: "The route still ends at the green's
+  // centre; only the cup moves"), as a real scorecard is. Since 2026-09-16 a hole may carry several
+  // pins, and a cup at the BACK of the green is legitimately further than the card (Red Mesa 3, 4,
+  // 5 and 8 failed the old to-the-cup version from that day). So the straight line is allowed to
+  // exceed the card by exactly how far that cup sits behind the centre, and not a yard more.
   let bad = 0;
   for (const h of COURSES.flatMap((c) => c.holes)) {
-    if (!(h.cardYards >= distYd(h.tee, h.pin) - 1.5)) { bad++; console.log(`  hole ${h.n} card ${h.cardYards} < straight`); }
+    const ctr = h.route[h.route.length - 1];
+    const L = distYd(h.tee, ctr) || 1;
+    for (const pin of (h.pins || [h.pin])) {
+      const behind = Math.max(0, ((pin[0] - ctr[0]) * (ctr[0] - h.tee[0]) + (pin[1] - ctr[1]) * (ctr[1] - h.tee[1])) / L);
+      if (!(h.cardYards >= distYd(h.tee, pin) - behind - 1.5)) { bad++; console.log(`  hole ${h.n} card ${h.cardYards} < straight`); }
+    }
   }
-  ok('no hole\'s card yardage is shorter than its own straight line', bad === 0);
+  ok('no hole\'s card yardage is shorter than its straight line to the green\'s centre', bad === 0);
 }
 ok("hole 3's card is over its straight line, because it is a dogleg",
   PINE_VALLEY.holes[2].cardYards - distYd(PINE_VALLEY.holes[2].tee, PINE_VALLEY.holes[2].pin) > 10);

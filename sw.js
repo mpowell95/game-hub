@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1525';
+const CACHE = 'game-hub-v1526';
 
 const ASSETS = [
   './',
@@ -1320,7 +1320,7 @@ const REST_MANIFEST = {
   './golf/js/mp-ui.js': '9f2157279a',
   './golf/js/alert.js': '266a8282ad',
   './golf/courses/pinevalley.js': 'aabb5248b9',
-  './golf/courses/redmesa.js': 'c5eaf0e55b',
+  './golf/courses/redmesa.js': '633a4b2521',
   './golf/courses/oasissands.js': 'b26e3a67c2',
   './golf/courses/coralkeys.js': 'ef13657708',
   './golf/courses/tutorial.js': '5f72833828',
