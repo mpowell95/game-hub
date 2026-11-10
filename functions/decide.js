@@ -323,6 +323,58 @@ export function decideDarts({ code, id, before, after }) {
   return mk('turn', (s) => s.turn(who, n(after.mine), n(after.theirs)));
 }
 
+// --- GOLF CHALLENGES (2026-11-10) ------------------------------------------------------------------
+// golf/js/mp.js writes golf/index/<code>/<id> from each person's side, `lastBy` saying whose write it
+// was. Darts' rules: a NEW row that is your turn is a challenge (naming the course and the holes), the
+// turn coming back says the hole and the strokes over the holes both have played, and the end by THEIR
+// hand says who won (equal strokes are a draw). Your own writes never notify you.
+const GOLF_COURSES = { pinevalley: 'Pine Valley', redmesa: 'Red Mesa', oasissands: 'Oasis Sands', coralkeys: 'Coral Keys' };
+const GOLF_ROUNDS = { quick3: '1-3', set3b: '4-6', set3c: '7-9', set3d: '10-12', set3e: '13-15', set3f: '16-18', front9: '1-9', back9: '10-18', full18: '1-18' };
+const golfWhere = (r) => [GOLF_COURSES[r.course] || '', GOLF_ROUNDS[r.round] || ''].filter(Boolean).join(' ');
+const GOLF_TEXT = {
+  en: {
+    title: 'Golf',
+    challenge: (w, where) => `${w} challenged you to ${where || 'a round'}. Your turn!`,
+    turn: (w, h, all, a, b, done) => `Your turn vs ${w}. Hole ${h} of ${all}` + (done ? `. You ${a}, ${w} ${b}` : ''),
+    theyWon: (w, a, b) => `${w} won, ${b} to ${a}.`,
+    youWonBy: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
+    draw: (w, a) => `A draw with ${w}, ${a} each.`,
+    youWon: (w) => `You won! ${w} resigned.`,
+  },
+  es: {
+    title: 'Golf',
+    challenge: (w, where) => `${w} te ha retado a ${where || 'una vuelta'}. ¡Te toca!`,
+    turn: (w, h, all, a, b, done) => `Te toca contra ${w}. Hoyo ${h} de ${all}` + (done ? `. Tú ${a}, ${w} ${b}` : ''),
+    theyWon: (w, a, b) => `${w} ganó, ${b} a ${a}.`,
+    youWonBy: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
+    draw: (w, a) => `Empate con ${w}, ${a} cada uno.`,
+    youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+  },
+};
+
+export function decideGolf({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = GOLF_TEXT[lang] || GOLF_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who, n(after.mineTotal), n(after.theirsTotal)));
+    if (after.result === 'won') return mk('over', (s) => s.youWonBy(who, n(after.mineTotal), n(after.theirsTotal)));
+    if (after.result === 'draw') return mk('over', (s) => s.draw(who, n(after.mineTotal)));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who, golfWhere(after)));
+  if (before.yourTurn && !before.over) return null;             // it was already your turn
+  return mk('turn', (s) => s.turn(who, Math.max(1, n(after.hole)), n(after.holes), n(after.mine), n(after.theirs), n(after.done)));
+}
+
 // --- FLICK SOCCER CHALLENGES (2026-10-11) -------------------------------------------------------------
 // flick-soccer/js/mp.js writes flicksoccer/index/<code>/<id> from each person's side, with `lastBy`
 // saying whose write it was ('me' = this row's owner). Darts' rules:
@@ -651,6 +703,7 @@ export const REMINDER_GAMES = [
   { node: 'escoba', game: 'escoba', tag: 'escoba', en: 'Escoba', es: 'Escoba' },
   { node: 'battlearena', game: 'battle-arena', tag: 'battlearena', en: 'Battle Arena', es: 'Arena de Batalla' },
   { node: 'battleship', game: 'battleship', tag: 'battleship', en: 'Battleship', es: 'Hundir la Flota' },
+  { node: 'golf', game: 'golf', tag: 'golf', en: 'Golf', es: 'Golf' },
 ];
 const REMIND_TEXT = {
   en: (w) => `Reminder: your turn vs ${w}`,

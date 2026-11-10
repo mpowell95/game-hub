@@ -9,7 +9,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // function, sw.js always showing what it receives, js/push.js staying network-first, and the
 // database rule that lets a device store its own address.
 import { readFileSync } from 'node:fs';
-import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, isActive, ACTIVE_WINDOW_MS,
+import { decide, decideMessage, decideBugReport, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, isActive, ACTIVE_WINDOW_MS,
   decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, REMIND_AFTER_MS, REMIND_UNTIL_MS } from '../functions/decide.js';
 
 let pass = 0; let fail = 0;
@@ -335,7 +335,26 @@ console.log('\nBattleship challenges (2026-10-27)');
   check('battleship: the trigger watches battleship/index and names the match', /ref: '\/battleship\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'battleship', match: id \}/.test(fnSrc));
   check('battleship: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'battleship' && x.game === 'battleship')
     && decideNudge({ key: 'battleship~m1', from: 'TESTA', row: { name: 'Test', with: 'TESTA', updated: 1, yourTurn: true, over: false } }) !== null
-    && /battleship\)~/.test(read('database.rules.json')) && /battleship: 'battleship'/.test(read('js/messages.js')));
+    && /battleship[|)]/.test(read('database.rules.json')) && /battleship: 'battleship'/.test(read('js/messages.js')));
+}
+
+// --- Golf challenges (2026-11-10) -------------------------------------------------------------------
+{
+  const row = (x) => ({ name: 'Test2', yourTurn: false, over: false, lastBy: 'them', course: 'pinevalley', round: 'front9', holes: 9, hole: 1, done: 0, mine: 0, theirs: 0, ...x });
+  const body = (n) => n && n.text('en').body;
+  check('golf: a new row that is your turn is a challenge naming the course and the holes', body(decideGolf({ code: 'TESTA', id: 'x', before: null, after: row({ yourTurn: true }) })) === 'Test2 challenged you to Pine Valley 1-9. Your turn!');
+  check('golf: the challenger\'s own new row is not news', decideGolf({ code: 'TESTA', id: 'x', before: null, after: row({ lastBy: 'me' }) }) === null);
+  check('golf: the turn coming back says the hole and the strokes', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ yourTurn: true, hole: 3, done: 2, mine: 9, theirs: 8 }) })) === 'Your turn vs Test2. Hole 3 of 9. You 9, Test2 8');
+  check('golf: already your turn is not news again', decideGolf({ code: 'TESTA', id: 'x', before: row({ yourTurn: true }), after: row({ yourTurn: true }) }) === null);
+  check('golf: they won', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'lost', mineTotal: 40, theirsTotal: 38 }) })) === 'Test2 won, 38 to 40.');
+  check('golf: a draw says so', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'draw', mineTotal: 39, theirsTotal: 39 }) })) === 'A draw with Test2, 39 each.');
+  check('golf: they resigned, you won', /resigned/.test(body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
+  check('golf: your own last putt does not notify you', decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('golf: Spanish wording', /te ha retado a Pine Valley 1-9/.test(decideGolf({ code: 'TESTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').body));
+  check('golf: the trigger watches golf/index and names the match', /ref: '\/golf\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'golf', match: id \}/.test(fnSrc) && /export const golfTurnPush/.test(fnSrc));
+  check('golf: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'golf' && x.game === 'golf')
+    && decideNudge({ key: 'golf~m1', from: 'TESTA', row: { name: 'Test', with: 'TESTA', updated: 1, yourTurn: true, over: false } }) !== null
+    && /\|golf\)~/.test(read('database.rules.json')) && /golf: 'golf'/.test(read('js/messages.js')));
 }
 
 console.log('\n24-hour reminder (2026-10-20)');
@@ -358,7 +377,7 @@ console.log('\n24-hour reminder (2026-10-20)');
   check('reminder: a new move since the last reminder sends again', r({ updated: now - 30 * H }, now - 60 * H) !== null);
   check('reminder: no time on the row, nothing', r({ updated: 0 }) === null);
   check('reminder: every challenge game has a turn trigger on the node it reads',
-    REMINDER_GAMES.length === 10 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
+    REMINDER_GAMES.length === 11 && REMINDER_GAMES.every((x) => fnSrc.includes(`ref: '/${x.node}/index/{code}/`)));
   check('reminder: the scheduled function exists and stamps its own node, never the index row',
     /export const turnReminderPush = onSchedule\(/.test(fnSrc) && /pushReminders\/\$\{code\}\/\$\{key\}/.test(fnSrc));
 }

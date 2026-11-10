@@ -95,6 +95,14 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Golf (2026-11-10): golf/js/mp.js, the same log-game shape as Darts (a log of shots at rest).
+  golf: {
+    load: () => import('../golf/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
   'flick-soccer': {
     load: () => import('../flick-soccer/js/mp.js'),
     read: (M) => M.readMyGames(),

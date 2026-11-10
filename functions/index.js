@@ -21,6 +21,7 @@
 //   escobaTurnPush  escoba/index/<code>/<id>         an Escoba challenge, your turn, the end (2026-10-18)
 //   battleArenaTurnPush battlearena/index/<code>/<id> a Battle Arena challenge, your turn, the end (2026-10-24)
 //   battleshipTurnPush battleship/index/<code>/<id>  a Battleship challenge, your turn, the end (2026-10-27)
+//   golfTurnPush    golf/index/<code>/<id>           a Golf challenge (course + holes), your turn, the end (2026-11-10)
 //   roomsCleanup      every 30 min: delete live-game rooms nobody has been in for an hour
 //   boardsOnSync      a device synced: mark the leaderboard dirty
 //   boardsCatchUp     every 2 min: rebuild it if dirty (or 30 min old), from a cached players/ (cache.js)
@@ -52,7 +53,7 @@ import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { handleClaim } from './claim.js';
 import { readPlayers, readNodeCached } from './cache.js';
-import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
+import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
 initializeApp();
 
@@ -220,6 +221,14 @@ export const battleshipTurnPush = onValueWritten({ ref: '/battleship/index/{code
   const after = event.data.after.exists() ? event.data.after.val() : null;
   const note = decideBattleship({ code, id, before, after });
   if (note) await sendTo(getDatabase(), code, note, `battleship-${id}`, { game: 'battleship', match: id });
+});
+
+export const golfTurnPush = onValueWritten({ ref: '/golf/index/{code}/{id}', ...OPTS }, async (event) => {
+  const { code, id } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const note = decideGolf({ code, id, before, after });
+  if (note) await sendTo(getDatabase(), code, note, `golf-${id}`, { game: 'golf', match: id });
 });
 
 // THE 24-HOUR REMINDER (2026-10-20). Hourly, reads every challenge game's index (a few small nodes)

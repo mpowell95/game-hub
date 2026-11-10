@@ -92,6 +92,14 @@
         "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
         "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
       } } },
+    "golf": { ".read": "auth != null",
+      "index": { "$code": { "$id": { ".write": "auth != null && newData.exists()" } } },
+      "chat": { "$id": { "$k": { ".write": "auth != null && newData.exists()" } } },
+      "games": { "$id": { ".write": "auth != null && newData.exists()",
+        "created": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
+        "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
+      } } },
     "flicksoccer": { ".read": "auth != null",
       "index": { "$code": { "$id": { ".write": "auth != null && newData.exists()" } } },
       "chat": { "$id": { "$k": { ".write": "auth != null && newData.exists()" } } },
@@ -167,7 +175,7 @@
         "$key": {
           ".read": "auth != null",
           ".write": "auth != null && newData.exists() && newData.child('from').val() === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || now - data.child('t').val() >= 21600000)",
-          ".validate": "newData.hasChildren(['from', 't']) && newData.child('t').val() === now && $key.matches(/^(hoops|skeeChallenges|cuppong|darts|flicksoccer|archery|chinchon|escoba|battlearena|battleship)~[A-Za-z0-9_-]+$/) && $key.length <= 60"
+          ".validate": "newData.hasChildren(['from', 't']) && newData.child('t').val() === now && $key.matches(/^(hoops|skeeChallenges|cuppong|darts|flicksoccer|archery|chinchon|escoba|battlearena|battleship|golf)~[A-Za-z0-9_-]+$/) && $key.length <= 60"
         }
       }
     },

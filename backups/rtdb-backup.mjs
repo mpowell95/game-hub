@@ -127,6 +127,9 @@ export const BRANCHES = [
   // battleship/ (battleship/js/mp.js, 2026-10-27): Battleship's turn-by-turn challenges, their
   // per-player index and quick chat. Same auth shape as darts/. (Its LIVE rooms stay under rooms/.)
   'battleship',
+  // golf/ (golf/js/mp.js, 2026-11-10): Golf's turn-by-turn challenges, their per-player index and
+  // quick chat. Same auth shape as darts/.
+  'golf',
   // pushSubs/ (2026-09-23, js/push.js): each device's push-notification address, by player code.
   // Readable by any signed-in session; written only by the device that claimed that code.
   'pushSubs',
