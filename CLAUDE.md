@@ -242,8 +242,8 @@ iOS 26 blurs the top of the Home Screen app (Matt's screenshots, v1514). A solid
 only) did NOT help on Matt's iPhone; removed v1516. Untried: dropping `black-translucent` (only phones that re-add the
 app get it). **Never tell a player to delete the app without first warning it wipes unsynced data, saves, settings and
 admin access** (admin is per install: re-adding needs the new auth id in `admins/`).
-**Test 2 (v1521, ADMIN DEVICES ONLY, Matt: "yes build the blur test, admin only")**: every top row 32px lower (48px in v1521-1522; Matt: "It's too far down now"). All top safe-area
-uses read `var(--gh-st, env(safe-area-inset-top))` (39 files); `:root --gh-st` = env() normally, + 32px under `html.gh-edgepad`
+**Test 2 (v1521, ADMIN DEVICES ONLY, Matt: "yes build the blur test, admin only")**: every top row 16px lower (48px v1521-1522, 32px v1523; Matt: "It's too far down now", "Still too high"). All top safe-area
+uses read `var(--gh-st, env(safe-area-inset-top))` (39 files); `:root --gh-st` = env() normally, + 16px under `html.gh-edgepad`
 (set in index.html and profile/index.html from the cached admin answer). A new top row must use `var(--gh-st, ...)` too.
 
 ### Diagnostic: the version pill stuck at `vN → vN+1`
