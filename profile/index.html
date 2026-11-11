@@ -500,9 +500,11 @@
       let P;
       try { P = await import('../js/push.js'); } catch { msg.textContent = t('pf_notify_unsupported'); btn.hidden = true; return; }
       const st = await P.pushState().catch(() => 'unsupported');
-      const text = { on: 'pf_notify_on', off: 'pf_notify_off', denied: 'pf_notify_denied', install: 'pf_notify_install',
-        unsupported: 'pf_notify_unsupported', 'no-code': 'pf_notify_nocode' }[st] || 'pf_notify_unsupported';
-      msg.textContent = t(text) + (extra ? ' ' + extra : '');
+      // On / Off: the button says it all, no line under it (Matt, 2026-11-11: "It's unnecessary").
+      const text = (st === 'on' || st === 'off') ? '' : ({ denied: 'pf_notify_denied', install: 'pf_notify_install',
+        unsupported: 'pf_notify_unsupported', 'no-code': 'pf_notify_nocode' }[st] || 'pf_notify_unsupported');
+      msg.textContent = [text ? t(text) : '', extra || ''].filter(Boolean).join(' ');
+      msg.hidden = !msg.textContent;
       document.getElementById('pf-notify-grp').hidden = !(st === 'on' || st === 'off');
       btn.innerHTML = `<span class="pf-t pf-blue">${escAttr(t(st === 'on' ? 'pf_notify_btn_off' : 'pf_notify_btn_on'))}</span>`;
       const v = document.getElementById('pf-val-notify');
