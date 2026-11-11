@@ -401,7 +401,6 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
-- **Push health (2026-11-11):** `.github/workflows/push-logs.yml` (run by hand; totals of sent / failed / skipped pushes from the server logs, no codes).
 - **Setup cards on real phones (2026-11-08):** `tools/review-setup-cards.cjs` (every multiplayer setup tab on the family's 6 phone sizes, fake database with 3 matches each; shots in `.visual-out/setup-cards/`).
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
