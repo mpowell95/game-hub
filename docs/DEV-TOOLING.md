@@ -149,4 +149,3 @@
 
 - `tools/test-bee-restore.mjs` (2026-11-09): Spelling Bee's restore of lost words from `beeLog` (`spelling-bee/js/restore.js`), against a fake server: order, times, counted-day and Genius marks, additive, no write once the caller moved on.
 - `tools/test-repair-1109.mjs` (2026-11-09): the one-time re-added-phone repair (`js/repair-1109.js`), made-up code and ids: sync first, refuses another code, full rollback on a failure halfway, never twice.
-- `tools/push-log-summary.mjs` + `.github/workflows/push-logs.yml` (2026-11-11, Matt: "I'm not getting notifications anymore"): READ ONLY. Run the workflow by hand (Actions > Push logs); it reads the push functions' Cloud logs with the deploy account and prints totals per Eastern day, per function: sent, failed (with Apple's or Google's reason), skipped because the app was open, expired addresses removed, errors. No codes or addresses (the Actions logs are public).
