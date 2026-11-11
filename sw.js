@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1494;
-const CACHE = 'game-hub-v1529';
+const IMPORTANT_SINCE = 1530;
+const CACHE = 'game-hub-v1530';
 
 const ASSETS = [
   './',
@@ -100,27 +100,9 @@ const ASSETS = [
   // Shared by stats-net.js (mirrors it to players/<id>/device on every sync) and bug-report.js,
   // so it is genuinely app-shell: without it the hub cannot boot offline.
   './js/install-state.js',
-  // The announcement's "here is where the button lives" pictures. Deliberately NOT under ./ico... [docs/SW-NOTES.md #3]
-  './img/where-hub.jpg',
-  './img/where-hub-dark.jpg',
-  './img/where-hub-es.jpg',
-  './img/where-hub-es-dark.jpg',
-  './img/where-profile.jpg',
-  './img/where-profile-dark.jpg',
-  './img/where-profile-es.jpg',
-  './img/where-profile-es-dark.jpg',
-  './img/layout-comfortable.jpg',
-  './img/layout-comfortable-dark.jpg',
-  './img/layout-comfortable-es.jpg',
-  './img/layout-comfortable-es-dark.jpg',
-  './img/layout-compact.jpg',
-  './img/lb2-intro-board-en.png',
-  './img/lb2-intro-board-en-dark.png',
-  './img/lb2-intro-board-es.png',
-  './img/lb2-intro-board-es-dark.png',
-  './img/layout-compact-dark.jpg',
-  './img/layout-compact-es.jpg',
-  './img/layout-compact-es-dark.jpg',
+  // The old announcements' pictures (img/where-*, layout-*, lb2-intro-board-*) left ASSETS 2026-11-11 (Matt:
+  // "Fix 4"): every popup that shows them ended by 2026-11-09, so ~1 MB was warmed onto every new phone for
+  // nothing. The files stay on the site (a phone with a wrong clock fetches one from the network). [docs/SW-NOTES.md #3]
   './js/players-agg.js',
   './js/game-art.js',
   './js/hidden-players.js',
@@ -875,7 +857,7 @@ const REST_MANIFEST = {
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': 'a27a2c3f90',
   './js/stats-net.js': 'bd96956644',
-  './js/firebase-boot.js': '8d10f6458c',
+  './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
   './js/bug-report.js': 'e6de6b7a35',
@@ -950,26 +932,6 @@ const REST_MANIFEST = {
   './icons/medal-iron.png': '4fd0e8427f',
   './js/emoji-search-en.js': 'ee87f858cb',
   './js/emoji-search-es.js': '1594c6f049',
-  './img/where-hub.jpg': 'f163453a0f',
-  './img/where-hub-dark.jpg': 'ec03c35a3c',
-  './img/where-hub-es.jpg': 'ea7411feb8',
-  './img/where-hub-es-dark.jpg': '982a9aa682',
-  './img/where-profile.jpg': '67836eadad',
-  './img/where-profile-dark.jpg': '649eb0d5cb',
-  './img/where-profile-es.jpg': '58ef56a483',
-  './img/where-profile-es-dark.jpg': 'c8a436d45f',
-  './img/layout-comfortable.jpg': '2ad7fa312c',
-  './img/layout-comfortable-dark.jpg': 'baa363bdad',
-  './img/layout-comfortable-es.jpg': 'a65f1f4a83',
-  './img/layout-comfortable-es-dark.jpg': 'cb3a059591',
-  './img/layout-compact.jpg': 'db98bcc07f',
-  './img/lb2-intro-board-en.png': '451d1da566',
-  './img/lb2-intro-board-en-dark.png': '3fbfd2263b',
-  './img/lb2-intro-board-es.png': 'b56d3abeef',
-  './img/lb2-intro-board-es-dark.png': '0890567e31',
-  './img/layout-compact-dark.jpg': '242273151d',
-  './img/layout-compact-es.jpg': '24e941516f',
-  './img/layout-compact-es-dark.jpg': '00c18403ea',
   './connect-four/index.html': '7af02d64d6',
   './connect-four/js/ui.js': 'eb15a7ffe0',
   './connect-four/js/worker.js': '13ca1206b4',

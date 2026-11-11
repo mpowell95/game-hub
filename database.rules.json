@@ -229,6 +229,7 @@
     "ctHistory": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {
+        ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
         "$dev": {
           "$k": {
             ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val()",

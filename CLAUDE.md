@@ -683,6 +683,7 @@ None of this makes the hub cheat-proof; never describe it that way.
   2026-11-02: `d` (string, <= 400) on `playLog` rows: a result's withMode detail (until the rules deploy, a batch holding one is refused and stays queued, never lost).
   2026-10-27 (with Battleship challenges): `battleshipTurnPush` and the `battleship` rules branch (+ in the nudges key pattern).
   2026-11-10 (Golf challenges): `golfTurnPush` and the `golf` rules branch (+ in the nudges key pattern and the 24-hour reminder).
+  2026-11-11: `ctHistory/<CODE>` readable by that code's own claim (Contexto history's re-read verify; it was failing for every non-admin).
 - **Server-built leaderboard (2026-10-22, Matt: "why are we making every individual phone do all that work")**:
   `functions/boards.js` runs the app's own `aggregatePlayers` (copied in by `tools/sync-functions-shared.mjs`,
   generated `functions/shared/`, git-ignored) and publishes `boards/v1/lb/z`, ONE gzipped package (~60 KB vs
