@@ -1674,3 +1674,23 @@ The `pages build and deployment` run for #1532 (v1486) timed out three times in 
 incident posted and the site at 143 MB / 2,173 files. Re-running the same run did not help (the same commit
 failed each time; the same thing happened on 2026-11-04). A new commit to `main` starts a fresh deployment;
 that is what to try after one failed re-run.
+
+## 2026-11-11: performance report, fixes 1, 2 and 4 (Matt: "Fix 1, 2, and 4")
+
+A measure-first performance review (real phones' `players/<id>/perf` logs, a localhost lab run on an emulated slow
+iPhone, the deploy history) found:
+1. **Contexto history re-sent every puzzle on every launcher open.** `js/contexto-history.js` verifies its send by
+   re-reading `ctHistory/<CODE>/<dev>/<key>/g`, but `ctHistory` was admin-read only, so on every non-admin phone the
+   re-read was refused, the seen-list never updated, and the whole history was re-sent (5 of 6 non-admin phones had
+   every row stamped the same day; one phone failed 17 times in 3 hours; 25 of 159 logged slow reads). Data was never
+   lost. Fix: `ctHistory/$code` `.read` for that code's own `msgAuth` claim (the `playLog` pattern). No app change.
+2. **Google's sign-in iframe loaded on every open.** `getAuth()` adds `browserPopupRedirectResolver`, which on
+   mobile/Safari/iOS (`_shouldInitProactively`) loads `firebaseapp.com/__/auth/iframe(.js)` + gapi (~135 KB, cached
+   30 min) and awaits it BEFORE reading the stored user. `js/firebase-boot.js` now calls `initializeAuth` with the
+   same three persistences (read from the 10.12.2 SDK source). Proven: same uid before/after (iPhone and desktop
+   emulation), no iframe requests, sign-in ready 407 ms -> 155 ms (median of 5, fast line). IMPORTANT_SINCE 1530.
+   `js/challenge/challenge-net.js` (retired, DEFAULT app) still uses getAuth; left alone.
+4. **20 old announcement pictures (~1 MB) were in ASSETS**, warmed onto every new phone though every popup that
+   shows them ended by 2026-11-09. Removed from ASSETS (v1530); the files stay on the site.
+Not fixed (Matt chose 1, 2, 4): Chinchon's two decks (3.8 MB warmed to every phone), two copies of three.js.
+

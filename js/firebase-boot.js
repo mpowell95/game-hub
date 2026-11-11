@@ -48,7 +48,20 @@ async function boot() {
   // has websockets, so the slow path is never needed. Must run before getDatabase().
   try { if (typeof dbMod.forceWebSockets === 'function') dbMod.forceWebSockets(); } catch { /* default transport */ }
   const db = dbMod.getDatabase(app);
-  const auth = authMod.getAuth(app);
+  // NO SIGN-IN POPUP CODE (2026-11-11, Matt: "Fix 2"). getAuth() = initializeAuth() with these SAME
+  // three persistences PLUS browserPopupRedirectResolver, which on iPhones/Safari loads Google's
+  // sign-in iframe (~135 KB, cached only 30 min) and WAITS for it before the stored user is read, so
+  // every database read waited too. The hub only ever signs in anonymously. The persistence list
+  // must stay exactly getAuth()'s, in this order, or a phone would lose its stored uid (msgAuth,
+  // admins/, device keys). A second boot attempt finds auth already set up: getAuth() returns it.
+  let auth;
+  try {
+    auth = authMod.initializeAuth(app, { persistence: [authMod.indexedDBLocalPersistence,
+      authMod.browserLocalPersistence, authMod.browserSessionPersistence] });
+  } catch (err) {
+    if (!(err && err.code === 'auth/already-initialized')) console.error('[firebase-boot] initializeAuth', err);
+    auth = authMod.getAuth(app);
+  }
   if (!auth.currentUser) await authMod.signInAnonymously(auth);
   // `uid` is ADDITIVE (2026-08-31) and every existing caller ignores it. It is the anonymous
   // sign-in's own id - stable for this browser until its site data is cleared - and it is the only
