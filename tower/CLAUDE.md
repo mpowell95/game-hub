@@ -13,6 +13,15 @@ Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's ap
 another admin-only game. Not before: an admin-only game must never be carried. Matt is test-playing first; ship only on
 his "release it".
 
+**The release commit, every edit (checked by the 2026-11-12 reviews; real records held 0 Tower plays on 105 records that
+day, so the carry cannot double count):** (1) `js/hub.js`: drop `devOnly`, add `released`; (2) `js/game-stats.js`: remove
+`tower` from `ADMIN_ONLY`, add `tower: true` to `CARRY_TEST`; (3) `js/game-stats-ui.js` TABS: drop `devOnly`; (4) `sw.js`
+ASSETS: add `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
+`tools/validate-sw-assets.mjs`, bump CACHE; (5) `tools/test-admin-only-plays.mjs` and `tools/test-word-weaver.mjs` use Tower
+as their admin-only example: point them at another admin-only game (archery, cup-baseball); (6) docs (here + root table);
+(7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. Ship the commit
+WITH the admin live switch, never the switch first (the game would read the empty real record until the carry).
+
 ## Rules (`js/engine.js`, pure)
 
 - A block slides across (alternating sides). Tap = drop. The overlap with the block below stays; the
@@ -31,7 +40,7 @@ his "release it".
 - **Name: "Tower Stack"** (Matt, 2026-11-12; Spanish stays "Torre"). Ids, keys and folder stay `tower` (rule 5).
 - `isInProgress()`: LITERAL meaning (no resume, like Snake): true only while a run is live (playing or paused).
 - **Leaving keeps the blocks (2026-11-12 review)**: Pause > Quit AND leaving through the hub (Hub button, back gesture:
-  `destroy()`) record a run that stacked any blocks, once. The hub's "Leave?" dialog pauses the run (`onLeaveAsk`).
+  `destroy()`) record a run that stacked any blocks, once. The hub's "Leave?" dialog and in-game bug sheet pause the run (`onCovered`). Keys typed outside the game (the bug report) are ignored. A Perfect needs the blocks to touch. Game over stops drawing once it settles (Ice keeps its snow).
   The draw loop runs only while the canvas is what the player sees (play, game over), never behind setup, the pause
   card or Record towers. A tap drops the block where it is AT THE TAP (stepped to the tap time), not at the last frame.
   Record towers: a tie on the best goes to the better average at that difficulty (byMode `hs`/`hn`), else all-time;

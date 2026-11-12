@@ -50,6 +50,18 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
   ok('12 perfects in a row: the block never grows back', near(r.stack[r.stack.length - 1].w, 200) && near(r.mover.w, 200));
 }
 // Speed rises per block and caps; harder is faster.
+// A Perfect needs the blocks to touch (2026-11-12 review): a 2-wide block, the next dropped 7.5 to the side on Easy
+// (8 units of slack) is a MISS, not a Perfect.
+{
+  const r = E.createRun('easy');
+  r.stack.push({ x: 200, w: 2 }); E.spawn(r);
+  r.mover.x = 207.5;
+  const res = E.drop(r);
+  ok('no overlap is a miss even within the Perfect slack', res.kind === 'miss' && r.over === true);
+  const r2 = E.createRun('easy');
+  r2.mover.x = r2.stack[0].x + 7.5;
+  ok('within the slack AND touching is still a Perfect', E.drop(r2).kind === 'perfect');
+}
 ok('speed rises with height', E.speedFor('medium', 10) > E.speedFor('medium', 1));
 ok('no top speed: it keeps rising', E.speedFor('medium', 200) > E.speedFor('medium', 100) && E.speedFor('medium', 100) > 1000);
 ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0 || (E.TUNE[d].v0 > E.TUNE[E.DIFFS[i - 1]].v0 && E.TUNE[d].perfect < E.TUNE[E.DIFFS[i - 1]].perfect)));

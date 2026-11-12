@@ -279,16 +279,17 @@ export function drawBlock(ctx, look, x, y, w, h, i, k, alpha = 1) {
     ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
   } else if (look === 'space') {
-    const hue = neonHue(i), p = 2 * k;
+    const hue = neonHue(i), p = Math.min(2 * k, w / 4, h / 4);
     rrect(ctx, x + p, y + p, w - 2 * p, h - 2 * p, 4 * k);
     ctx.fillStyle = hsl(hue, 62, 34); ctx.fill();
     ctx.fillStyle = hsl(hue, 85, 62, 0.35);
     rrect(ctx, x + p, y + p, w - 2 * p, (h - 2 * p) * 0.45, 4 * k); ctx.fill();
     ctx.fillStyle = hsl(hue, 70, 20);
     rrect(ctx, x + p, y + h - 9 * k, w - 2 * p, 7 * k, 3 * k); ctx.fill();
-    ctx.shadowColor = hsl(hue, 100, 64); ctx.shadowBlur = 10;
-    ctx.strokeStyle = hsl(hue, 100, 64); ctx.lineWidth = 2.5;
-    rrect(ctx, x + p, y + p, w - 2 * p, h - 2 * p, 4 * k); ctx.stroke();
+    // The glow: a wide faint stroke under the bright one (shadowBlur cost ~30 ms a frame on a tall tower).
+    rrect(ctx, x + p, y + p, w - 2 * p, h - 2 * p, 4 * k);
+    ctx.strokeStyle = hsl(hue, 100, 64, 0.28); ctx.lineWidth = 7; ctx.stroke();
+    ctx.strokeStyle = hsl(hue, 100, 64); ctx.lineWidth = 2.5; ctx.stroke();
   } else if (look === 'toy') {
     const c = TOY[((i % 4) + 4) % 4];
     box3d(ctx, x, y, w, h, dx * 0.85, dy * 0.9, c, shade(c, 1.25), shade(c, 0.7));
