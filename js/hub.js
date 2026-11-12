@@ -793,7 +793,7 @@ export const GAMES = [
     // IMMERSIVE: the tower wants the whole screen. Hub id = stats id = folder = `tower`.
     id: 'tower',
     added: '2026-11-01',            // sort-only (the launcher's Newest order); never the New pill
-    title: { en: 'Tower', es: 'Torre' },
+    title: { en: 'Tower Stack', es: 'Torre' },   // 'Tower Stack': Matt, 2026-11-12
     blurb: { en: 'Stack the blocks as high as you can.',
       es: 'Apila los bloques lo más alto que puedas.' },
     module: '../tower/js/ui.js',

@@ -21,11 +21,19 @@ his "release it".
 - No overlap = game over. Score = blocks stacked (stack length - 1).
 - Speed rises every block with NO top speed (ramp doubled 2026-11-02, Matt: "should increase as the game goes on"; cap removed the same day: "There shouldn't be a max speed"). Blocks 40 units tall (were 26; Matt: "pretty thin"). Four difficulties (speed + perfect slack): easy / medium / hard / expert.
 - World is `WORLD_W` (400) units wide; the UI scales it to the screen.
+- **Speeds (units/s; one crossing is ~450 units)**: start easy 150, medium 180, hard 220, expert 420; each block adds
+  8 / 11 / 14 / 17. Expert's start was 270 until 2026-11-12 (Matt: "Expert starts way too slow still").
 
 ## Hub integration
 
 - Module, `immersive: true`. Hub id = stats id = folder = `tower`. CSS root `.tw-root`, prefix `.tw-`.
-- `isInProgress()`: LITERAL meaning (no resume, like Snake): true only while a run is live.
+- **Name: "Tower Stack"** (Matt, 2026-11-12; Spanish stays "Torre"). Ids, keys and folder stay `tower` (rule 5).
+- `isInProgress()`: LITERAL meaning (no resume, like Snake): true only while a run is live (playing or paused).
+- **Pause (2026-11-12, Matt: "there's no back button or pause or anything")**: a round button bottom right while
+  playing (Esc too; leaving the app pauses). Paused card: Resume / Quit. Quit records the run if it stacked any blocks,
+  then the setup screen.
+- **Record towers has a "‹ Back" button** at the bottom (its old X sat under the hub's bug button); the phone's back
+  swipe closes it too (`js/back-stack.js`).
 - Setup screen (Gridlock / Arrow Maze layout): picture (tap = play) + "?" (How to play), title + best at the
   chosen difficulty, Look (City / Ice / Space, cosmetic), Difficulty (shape + best each), Play, leader footer
   (`readPeople()`, at the chosen difficulty) + Leaderboard ›.

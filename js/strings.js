@@ -1255,7 +1255,7 @@ export const STRINGS = {
     game_title_spellingbee: 'Spelling Bee',
     game_title_battlearena: 'Battle Arena',
     game_title_wordweaver: 'Word Weaver',
-    game_title_tower: 'Tower',
+    game_title_tower: 'Tower Stack',
     lb_tex_bz_bricks: 'Bricks smashed',
     lb_tex_bz_combo: 'Best combo',
     game_title_golf: 'Golf',

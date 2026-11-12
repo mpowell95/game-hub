@@ -5,7 +5,7 @@
 // only while a run is live. Leaving mid-run abandons it and records nothing.
 //
 // Screens: setup (picture + "?", title + best, Look x3, Difficulty x4, Play, the leader footer),
-// play (canvas, score, best, perfect streak), game over (card with an X: score, best, perfects, Again).
+// play (canvas, score, best, perfect streak, pause button -> Paused card: Resume / Quit), game over (card with an X: score, best, perfects, Again).
 // Every finished run is recorded ONCE through recordTower inside withMode({ look }, diff, ..., { hi }).
 
 import * as E from './engine.js';
@@ -16,11 +16,13 @@ import { recordTower, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onThemeChange } from '../../js/theme.js';
+import { backStack } from '../../js/back-stack.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.tower.v1';
 const LOOKS = ['city', 'ice', 'space'];
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const PAUSE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 
 function loadSettings() {
@@ -120,8 +122,12 @@ class Tower {
     this._ensureCss();
     this._build();
     this._onDown = (e) => this._tap(e);
-    this._onKey = (e) => { if (this.screen === 'play' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); this._drop(); } };
-    this._onVis = () => { if (document.hidden) this._stop(); else this._start(); };
+    this._onKey = (e) => {
+      if (e.key === 'Escape') { if (this.screen === 'play') this._pause(); else if (this.screen === 'paused') this._resume(); return; }
+      if (this.screen === 'play' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); this._drop(); }
+    };
+    // Leaving the app mid-run pauses it (2026-11-12), so the block is not already moving on return.
+    this._onVis = () => { if (document.hidden) { this._pause(); this._stop(); } else this._start(); };
     this.canvas.addEventListener('pointerdown', this._onDown);
     this.root.addEventListener('click', this._onClick = (e) => this._click(e));
     document.addEventListener('keydown', this._onKey);
@@ -129,7 +135,7 @@ class Tower {
     this._offResize = onViewportResize(() => this._layout());
     this._ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this._layout()) : null;
     if (this._ro) this._ro.observe(this.root);
-    this._offLang = onLangChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderHelp(); });
+    this._offLang = onLangChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderHelp(); this._renderPause(); this._renderTowers(); });
     this._offTheme = onThemeChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderTowers(); this._draw(); });
     this._layout();
     this._showSetup();
@@ -153,10 +159,12 @@ class Tower {
           <div class="tw-best">&#9733; <b data-role="hudBest">0</b></div>
           <div class="tw-score" data-role="score">0</div>
           <div class="tw-streak" data-role="streak" hidden><span aria-hidden="true">&#9670;</span> <b data-role="streakN">0</b></div>
+          <button type="button" class="tw-pause" data-act="pause" data-role="pauseBtn">${PAUSE_SVG}</button>
         </div>
         <div class="tw-setup" data-role="setup"></div>
         <div class="tw-ov" data-role="over" hidden></div>
         <div class="tw-ov" data-role="help" hidden></div>
+        <div class="tw-ov" data-role="pause" hidden></div>
         <div class="tw-towers" data-role="towers" hidden></div>
       </div>`;
     this.root = this.host.querySelector('.tw-root');
@@ -165,6 +173,7 @@ class Tower {
     this.el = (r) => this.root.querySelector(`[data-role="${r}"]`);
     this.canvas.setAttribute('aria-label', t('aria_board'));
     this._renderHelp();
+    this._renderPause();
   }
 
   _layout() {
@@ -187,8 +196,9 @@ class Tower {
     this.fx = { falling: [], flashes: [] };
     this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1; this.lift = this.liftTarget = 0;
     this.el('hud').hidden = true;
-    this.el('towers').hidden = true;
+    this._closeTowers();
     this.el('over').hidden = true;
+    this.el('pause').hidden = true;
     this.el('setup').hidden = false;
     this._renderSetup();
   }
@@ -279,6 +289,38 @@ class Tower {
       </div>`;
   }
 
+  /** Pause (2026-11-12, Matt: "there's no back button or pause or anything in this game"). */
+  _renderPause() {
+    this.el('pauseBtn').setAttribute('aria-label', t('pause'));
+    this.el('pause').innerHTML = `
+      <div class="tw-card">
+        <h2 class="tw-ph">${esc(t('paused'))}</h2>
+        <div class="tw-btns">
+          <button type="button" class="tw-play" data-act="resume">${esc(t('resume'))}</button>
+          <button type="button" class="tw-play tw-alt" data-act="quit">${esc(t('quit'))}</button>
+        </div>
+      </div>`;
+  }
+  _pause() {
+    if (this.screen !== 'play' || !this.run || this.run.over) return;
+    this.screen = 'paused';
+    this.el('pause').hidden = false;
+  }
+  _resume() {
+    if (this.screen !== 'paused') return;
+    this.el('pause').hidden = true;
+    this.screen = 'play';
+    this.last = performance.now();
+  }
+  /** Quit from the pause card: a run with blocks stacked is recorded like a finished one (its blocks
+   *  were earned); an empty one records nothing. Then the setup screen. */
+  _quit() {
+    if (this.screen !== 'paused') return;
+    const run = this.run;
+    if (run && E.score(run) > 0) this._record(run);
+    this._showSetup();
+  }
+
   _click(e) {
     const b = e.target.closest('[data-act]');
     if (!b || !this.root.contains(b)) return;
@@ -289,7 +331,10 @@ class Tower {
     else if (act === 'help') this.el('help').hidden = false;
     else if (act === 'helpClose') this.el('help').hidden = true;
     else if (act === 'board' || act === 'compare') this._showTowers();
-    else if (act === 'towersClose') this.el('towers').hidden = true;
+    else if (act === 'towersClose') { if (this._twBs) this._twBs.back(); else this._closeTowers(); }
+    else if (act === 'pause') this._pause();
+    else if (act === 'resume') this._resume();
+    else if (act === 'quit') this._quit();
     else if (act === 'twDiff') { this.towersDiff = E.normDiff(b.dataset.v); this._renderTowers(); }
     else if (act === 'fullBoard') this._openLeaderboard();
     else if (act === 'menu') this._showSetup();
@@ -306,7 +351,8 @@ class Tower {
     this.recorded = false;
     this.fx = { falling: [], flashes: [] };
     this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1; this.lift = this.liftTarget = 0;
-    this.el('towers').hidden = true;
+    this._closeTowers();
+    this.el('pause').hidden = true;
     this._hud();
   }
 
@@ -381,7 +427,17 @@ class Tower {
     this.towersDiff = this.screen === 'over' && this.run ? this.run.diff : this.s.diff;
     if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
     this.el('towers').hidden = false;
+    // The phone's back swipe and the Back button both close it (js/back-stack.js).
+    if (!this._twBs) this._twBs = backStack(() => this._closeTowers());
+    this._twBs.sync(1);
     this._renderTowers();
+  }
+  _closeTowers() {
+    const box = this.el('towers');
+    if (box) box.hidden = true;
+    const bs = this._twBs;
+    this._twBs = null;
+    if (bs) bs.close();
   }
   /** One column per person with a best at this difficulty, tallest first, drawn as a stack of slabs in
    *  the chosen look. Names are profile names (never "You"); this phone's own column is ringed + bold. */
@@ -422,13 +478,13 @@ class Tower {
     const tabs = E.DIFFS.map((k) => `
       <button type="button" class="tw-tab${k === d ? ' is-sel' : ''}" data-act="twDiff" data-v="${k}" role="tab" aria-selected="${k === d}">${diffShapeSVG(tierOf(k))}<b>${t('diff_' + k)}</b></button>`).join('');
     box.innerHTML = `
-      <div class="tw-tw-head">
-        <h2>${esc(t('records'))}</h2>
-        <button type="button" class="tw-x" data-act="towersClose" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
-      </div>
+      <div class="tw-tw-head"><h2>${esc(t('records'))}</h2></div>
       <div class="tw-tabs" role="tablist">${tabs}</div>
       <div class="tw-cols">${list.length ? list.map(col).join('') : '<p class="tw-none">-</p>'}</div>
-      <button type="button" class="tw-lead-all tw-full" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>`;
+      <div class="tw-twbar">
+        <button type="button" class="tw-play tw-alt tw-back" data-act="towersClose">&#8249; ${esc(t('back'))}</button>
+        <button type="button" class="tw-lead-all" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>
+      </div>`;
     const me = box.querySelector('.tw-col.is-me');
     if (me && me.scrollIntoView) { try { me.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch { /* old browser */ } }
   }
@@ -617,10 +673,11 @@ class Tower {
     if (this._offLang) this._offLang();
     if (this._offTheme) this._offTheme();
     if (this._ro) this._ro.disconnect();
+    if (this._twBs) { try { this._twBs.close(); } catch { /* gone */ } this._twBs = null; }
     this.host.innerHTML = '';
   }
 
-  inProgress() { return this.screen === 'play' && !!this.run && !this.run.over; }
+  inProgress() { return (this.screen === 'play' || this.screen === 'paused') && !!this.run && !this.run.over; }
 
   /** Test seam (tools/test-tower.mjs drives the real screen through it). */
   _seam() {

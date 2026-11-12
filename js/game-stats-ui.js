@@ -1579,7 +1579,7 @@ function airHockeyScreen(rec) {
 function towerScreen(rec) {
   const tw = (rec && rec.tw) || {};
   const games = tw.games | 0;
-  if (!games) return emptyState(tf('game_title_tower', 'Tower'));
+  if (!games) return emptyState(tf('game_title_tower', 'Tower Stack'));
   const by = tw.bestByDiff || {};
   return `
     <div class="gs-tallies is-4">
