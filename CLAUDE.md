@@ -712,6 +712,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   Deployed 2026-10-21 (workflow run, `turnReminderPush` created).
 - **The VAPID private key is a Firebase secret; never in this repo.** Its public half is in
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
+- **Each send's result is on the address (2026-11-11, Matt: "Notifications are still broken for me")**: `pushSubs/<code>/<key>/last` =
+  `{t, tag, r: sent|skip|fail|error, s, why}`, written by `sendTo`; any signed-in session can read it (the functions' logs cannot be).
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
 - Never notify about your own action (`by` on the match). No push to a device with the hub open
   (`activeAt` heartbeat, decided on the SERVER in `isActive`). Opening the hub clears shown
