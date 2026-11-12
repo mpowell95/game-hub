@@ -28,6 +28,9 @@
   width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;
   background: rgba(255,255,255,.22); color: #fff; border: 2px solid rgba(255,255,255,.55); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
 .tw-root .tw-ov[data-role="pause"] { background: rgba(10, 18, 34, .55); }
+/* Light grounds (Ice's snow, Toy's sand and sky): darker pause button, light best pill. */
+.tw-root[data-look="ice"] .tw-pause, .tw-root[data-look="toy"] .tw-pause { background: rgba(22,36,58,.7); border-color: rgba(255,255,255,.85); }
+.tw-root[data-look="toy"] .tw-best { background: rgba(255,255,255,.8); color: #16243a; }
 .tw-root .tw-ph { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
 
 /* --- Setup --- */
@@ -46,9 +49,9 @@
 .tw-root .tw-hbest { margin: 2px 0 0; font-size: 16px; color: #5b6b82; }
 .tw-root .tw-hbest b { color: #16243a; }
 .tw-root .tw-card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 2px 8px rgba(16,30,54,.10); }
-.tw-root .tw-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tw-root .tw-looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .tw-root .tw-look { position: relative; border: 2px solid rgba(16,36,58,.14); border-radius: 12px; padding: 6px; background: #fff;
-  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 14px; }
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; }
 .tw-root .tw-look svg { display: block; width: 100%; height: 44px; border-radius: 8px; }
 .tw-root .tw-look.is-sel, .tw-root .tw-seg.is-sel { border-color: #ffce3a; box-shadow: 0 0 0 2px #ffce3a; }
 .tw-root .tw-chk { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 999px; background: #ffce3a;

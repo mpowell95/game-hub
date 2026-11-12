@@ -35,12 +35,15 @@ his "release it".
 - **Record towers has a "‹ Back" button** at the bottom (its old X sat under the hub's bug button); the phone's back
   swipe closes it too (`js/back-stack.js`).
 - Setup screen (Gridlock / Arrow Maze layout): picture (tap = play) + "?" (How to play), title + best at the
-  chosen difficulty, Look (City / Ice / Space, cosmetic), Difficulty (shape + best each), Play, leader footer
+  chosen difficulty, Look (City / Ice / Space / Toy, cosmetic), Difficulty (shape + best each), Play, leader footer
   (`readPeople()`, at the chosen difficulty) + Leaderboard ›.
 - Settings: `gamehub.tower.v1` = `{ diff, look }`.
-- **Dark mode (2026-11-02, Matt: "quality dark mode")**: City plays at night (lit windows), Ice under an aurora with
-  dark peaks, Space unchanged; the setup picture and look thumbnails match. `isDark()` reads `.gh-dark` at draw time;
-  `onThemeChange` repaints.
+- **The four looks (2026-11-12, Matt: "those are great implement"; `docs/mockups/tower/art-upgrades.html`)**: all drawing
+  in `js/art.js`. City = skyscraper floors in 3D with soft window lights, city at night, moon, street (Matt: lights not
+  "too vibrant"); Ice = glassy 3D blocks, aurora, snowy peaks, falling snow; Space = solid neon-edged blocks (Matt: not
+  "too transparent"), nebula, ringed planet, landing pad; Toy (new) = 3D toy blocks at sunset, the one light look. Each
+  look has ONE time of day, whatever the hub theme (the old day/night City and Ice are gone). Sky and scenery are cached
+  canvases; scenery scrolls at 0.35 of the tower. Look ids unchanged (rule 5).
 - **Best line + record towers (2026-11-02, Matt)**: a dashed "★ N" line at your best (this difficulty) while playing
   (turns yellow once beaten) and at game over (the PREVIOUS best). Game over zooms to fit the tower and the line, the
   ground lifts above a bottom card (score, best, Again, Compare). Compare and the setup footer's Leaderboard open
