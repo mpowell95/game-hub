@@ -35,7 +35,7 @@ function notePerf(p, ms) {
     localStorage.setItem('gamehub.perf.v1', JSON.stringify(l.slice(-30)));
   } catch { /* a report only */ }
 }
-const medal = (i) => (i < 3 ? ['&#129351;', '&#129352;', '&#129353;'][i] + ' ' : '');
+const medal = (rank) => (rank >= 1 && rank <= 3 ? ['&#129351;', '&#129352;', '&#129353;'][rank - 1] + ' ' : '');   // by RANK: a tie shares it
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 
 function loadSettings() {
@@ -68,11 +68,19 @@ class Tower {
     this._build();
     this._onDown = (e) => this._tap(e);
     this._onKey = (e) => {
-      if (e.key === 'Escape') { if (this.screen === 'play') this._pause(); else if (this.screen === 'paused') this._resume(); return; }
+      if (e.key === 'Escape') {
+        if (this._twBs) this._twBs.back();
+        else if (!this.el('help').hidden) this.el('help').hidden = true;
+        else if (this.screen === 'play') this._pause();
+        else if (this.screen === 'paused') this._resume();
+        return;
+      }
       if (this.screen === 'play' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); this._drop(); }
     };
     // Leaving the app mid-run pauses it (2026-11-12), so the block is not already moving on return.
     this._onVis = () => { if (document.hidden) { this._pause(); this._stop(); } else this._start(); };
+    // The loop runs only while the canvas is what the player sees (play, game over), never behind the setup screen,
+    // the pause card or Record towers (2026-11-12 review: battery and heat on iPhone). _start() checks _wantLoop().
     this.canvas.addEventListener('pointerdown', this._onDown);
     this.root.addEventListener('click', this._onClick = (e) => this._click(e));
     document.addEventListener('keydown', this._onKey);
@@ -124,13 +132,16 @@ class Tower {
   _layout() {
     const r = this.root.getBoundingClientRect();
     const W = Math.round(r.width), H = Math.round(r.height);
-    if (!W || !H) { requestAnimationFrame(() => this._layout()); return; }
-    if (W === this.W && H === this.H) return;
+    if (this._dead) return;
+    if (!W || !H) { if (!this._layoutQ) this._layoutQ = requestAnimationFrame(() => { this._layoutQ = 0; this._layout(); }); return; }
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (W === this.W && H === this.H && dpr === this.dpr) return;
     this.W = W; this.H = H;
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.dpr = dpr;
     this.canvas.width = Math.round(W * this.dpr); this.canvas.height = Math.round(H * this.dpr);
     // World units -> CSS px. Narrow screens fill the width; wide ones cap so the tower is not huge.
     this.k = Math.min(W / E.WORLD_W, (H * 0.62) / E.WORLD_W * 1.3);
+    if (this.screen === 'over') this._fitOver();
     this._draw();
     if (this._twBs) this._renderTowers();   // Record towers re-fits too
   }
@@ -147,6 +158,7 @@ class Tower {
     this.el('pause').hidden = true;
     this.el('setup').hidden = false;
     this._renderSetup();
+    this._stop();
   }
 
   _renderSetup() {
@@ -209,7 +221,7 @@ class Tower {
         rows = people.list.filter((g) => g.key === people.meKey || !hidden.isHiddenName(g.name)).map((g) => {
           const me = g.key === people.meKey;
           const tw = (((g.games || {}).tower) || {}).tw || {};
-          return { me, name: me ? (p.name || g.name || '') : g.name, emoji: me ? (p.emoji || g.emoji || '') : g.emoji, by: tw.bestByDiff || {}, shapes: tw.shapes || {} };
+          return { me, name: me ? (p.name || g.name || '') : g.name, emoji: me ? (p.emoji || g.emoji || '') : g.emoji, by: tw.bestByDiff || {}, shapes: tw.shapes || {}, gm: (g.games || {}).tower || null };
         });
       }
     } catch (err) { console.warn('[tower] leader not read', err); }
@@ -252,12 +264,16 @@ class Tower {
     if (this.screen !== 'play' || !this.run || this.run.over) return;
     this.screen = 'paused';
     this.el('pause').hidden = false;
+    this._stop();
+    this._draw();
   }
+  /** The hub's "Leave?" dialog is up (js/hub.js requestLeave): stop the block under it. */
+  onLeaveAsk() { this._pause(); }
   _resume() {
     if (this.screen !== 'paused') return;
     this.el('pause').hidden = true;
     this.screen = 'play';
-    this.last = performance.now();
+    this._start();
   }
   /** Quit from the pause card: a run with blocks stacked is recorded like a finished one (its blocks
    *  were earned); an empty one records nothing. Then the setup screen. */
@@ -306,11 +322,19 @@ class Tower {
     this._closeTowers();
     this.el('pause').hidden = true;
     this._hud();
+    this._start();
   }
 
   _tap(e) {
     if (this.screen !== 'play') return;
     e.preventDefault();
+    // Drop where the block IS at the tap, not where the last frame drew it (2026-11-12 review: at Expert speed a
+    // frame is ~24 units against 3.5 of Perfect slack, so a 120 Hz phone had an edge). The loop carries on from here.
+    const now = performance.now();
+    if (this.run && !this.run.over && this.last && now > this.last) {
+      E.stepMover(this.run, Math.min(0.05, (now - this.last) / 1000));
+      this.last = now;
+    }
     this._drop();
   }
 
@@ -347,14 +371,11 @@ class Tower {
     this.screen = 'over';
     const sc = E.score(run);
     const before = this.best | 0;          // the PREVIOUS best: its line stays drawn at game over
-    this._record(run);
-    const isNew = sc > before && sc > 0;
+    const saved = this._record(run);
+    const isNew = saved && sc > before && sc > 0;   // never "Best" for a run the store refused
     this.camTarget = 0;
-    // Zoom out to show the whole tower AND the best line, above the card (the ground lifts over it).
-    this.liftTarget = Math.min(this.H * 0.3, 210);
-    const room = this.H - Math.max(90, this.H * 0.13) - this.liftTarget - 110;
-    const tall = (Math.max(run.stack.length, before + 1) + 1) * E.BLOCK_H * this.k;
-    this.zoomTarget = Math.min(1, room / tall);
+    this._overBefore = before;
+    this._fitOver();
     this.el('hud').hidden = true;
     clearTimeout(this._overT);
     this._overT = setTimeout(() => {
@@ -374,6 +395,17 @@ class Tower {
     }, 750);
   }
 
+  /** Game over: zoom out to show the whole tower AND the best line above the card (the ground lifts over it).
+   *  Re-run on resize. Never a zero or negative zoom (a short landscape screen). */
+  _fitOver() {
+    const run = this.run;
+    if (!run) return;
+    this.liftTarget = Math.max(0, Math.min(this.H * 0.3, 210));
+    const room = Math.max(60, this.H - Math.max(90, this.H * 0.13) - this.liftTarget - 110);
+    const tall = (Math.max(run.stack.length, (this._overBefore | 0) + 1) + 1) * E.BLOCK_H * this.k;
+    this.zoomTarget = Math.max(0.02, Math.min(1, room / Math.max(1, tall)));
+  }
+
   // --- Record towers v2 (Matt, 2026-11-12: "I want the actual towers shown. Same as how I see my tower after
   // a round"; docs/mockups/tower/record-towers-v2.html). A: everyone's best tower at this difficulty, its real
   // shape, ONE scale, scrolling sideways. B: one tower tapped, drawn like the game (its own look), with ‹ ›.
@@ -383,6 +415,8 @@ class Tower {
     this.twPick = null;
     if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
     this.el('towers').hidden = false;
+    this._twScroll = null;
+    this._stop();
     // The phone's back swipe and the Back button step back one screen (B -> A -> closed), js/back-stack.js.
     if (!this._twBs) this._twBs = backStack((n) => this._twStepBack(n));
     this._renderTowers();
@@ -398,16 +432,28 @@ class Tower {
     const bs = this._twBs;
     this._twBs = null;
     if (bs) bs.close();
+    this._start();
   }
-  /** Everyone with a best at difficulty d, tallest first: { me, name, emoji, best, stack, look, at }. */
+  /** Everyone with a best at difficulty d, tallest first: { me, name, emoji, best, stack, look, at, rank }. A tie on
+   *  the best goes to the better AVERAGE at that difficulty (byMode hs/hn), else the all-time average (tw.blocks/games);
+   *  equal on both = tied, same rank and medal (root CLAUDE.md, "Every leaderboard tie"). */
   _towerList(d) {
     const decode = (sv, best) => {
       if (!sv || typeof sv !== 'object' || (sv.n | 0) !== best || typeof sv.s !== 'string') return null;
       const st = sv.s.split(';').map((p) => { const [x, w] = p.split(',').map(Number); return { x, w }; });
-      return st.length === best + 1 && st.every((q) => Number.isFinite(q.x) && Number.isFinite(q.w) && q.w > 0) ? st : null;
+      return st.length === best + 1 && st.every((q) => Number.isFinite(q.x) && Number.isFinite(q.w) && q.w >= 0) ? st : null;
+    };
+    const avgOf = (gm) => {
+      if (!gm || typeof gm !== 'object') return null;
+      let s = 0, n = 0;
+      for (const b of Object.values(gm.byMode || {})) { const x = b && b[d]; if (x && x.hn > 0) { s += +x.hs || 0; n += +x.hn || 0; } }
+      if (n > 0) return s / n;
+      const tw = gm.tw || {};
+      return tw.games > 0 ? (tw.blocks | 0) / tw.games : null;
     };
     const rows = ((this.lead && this.lead.rows) || []).map((r) => ({ ...r, best: r.by[d] | 0, sv: (r.shapes || {})[d] }));
-    const own = ((towerRec() || {}).tw) || {};
+    const ownRec = towerRec();
+    const own = ((ownRec || {}).tw) || {};
     const mine = (own.bestByDiff || {})[d] | 0, myShape = (own.shapes || {})[d];
     let meRow = rows.find((r) => r.me);
     if (!meRow && mine > 0) {
@@ -416,10 +462,14 @@ class Tower {
       meRow = { me: true, name: p.name || '', emoji: p.emoji || '', best: 0, sv: null };
       rows.push(meRow);
     }
-    if (meRow && mine >= meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; }
-    return rows.filter((r) => r.best > 0).sort((a, b) => b.best - a.best).map((r) => {
+    if (meRow && mine >= meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; meRow.gm = ownRec; }
+    for (const r of rows) r.avg = avgOf(r.gm);
+    const cmp = (a, b) => (b.best - a.best) || ((b.avg == null ? -1 : b.avg) - (a.avg == null ? -1 : a.avg));
+    const list = rows.filter((r) => r.best > 0).sort(cmp);
+    list.forEach((r, i) => { r.rank = i && cmp(list[i - 1], r) === 0 ? list[i - 1].rank : i + 1; });
+    return list.map((r) => {
       const stack = decode(r.sv, r.best);
-      return { me: r.me, name: r.name, emoji: r.emoji, best: r.best,
+      return { me: r.me, name: r.name, emoji: r.emoji, best: r.best, rank: r.rank,
         stack: stack || Array.from({ length: r.best + 1 }, () => ({ x: (E.WORLD_W - E.START_W) / 2, w: E.START_W })),
         look: stack && LOOKS.indexOf(r.sv.l) >= 0 ? r.sv.l : this.s.look, at: stack ? Number(r.sv.t) || 0 : 0 };
     });
@@ -447,9 +497,9 @@ class Tower {
         <div class="tw-pick">
           <canvas class="tw-pick-c" aria-hidden="true"></canvas>
           <div class="tw-pick-n">${r.best}</div>
-          <div class="tw-pick-who">${medal(this.twPick)}${esc(r.emoji)} ${esc(r.name || t('anon_player'))}<small>${esc(t('diff_' + d))}${when}</small></div>
-          ${list.length > 1 ? `<button type="button" class="tw-arrow is-l" data-act="twPrev" aria-label="&#8249;">&#8249;</button>
-          <button type="button" class="tw-arrow is-r" data-act="twNext" aria-label="&#8250;">&#8250;</button>` : ''}
+          <div class="tw-pick-who">${medal(r.rank)}${esc(r.emoji)} ${esc(r.name || t('anon_player'))}<small>${esc(t('diff_' + d))}${when}</small></div>
+          ${list.length > 1 ? `<button type="button" class="tw-arrow is-l" data-act="twPrev" aria-label="${esc(t('aria_prev'))}">&#8249;</button>
+          <button type="button" class="tw-arrow is-r" data-act="twNext" aria-label="${esc(t('aria_next'))}">&#8250;</button>` : ''}
           ${bar}
         </div>`;
       this._drawPick(r);
@@ -471,7 +521,7 @@ class Tower {
     const W = Math.max(1, sc.clientWidth), H = Math.max(1, sc.clientHeight);
     const gy = H - 74;
     const top = list.reduce((m, r) => Math.max(m, r.best), 0);
-    const k = Math.min(0.42, (gy - 44) / ((top + 1) * E.BLOCK_H));
+    const k = Math.max(0.02, Math.min(0.42, (gy - 44) / ((top + 1) * E.BLOCK_H)));
     const slot = Math.max(84, E.START_W * k + 14);
     const SW = Math.max(W, slot * list.length);
     const bh = E.BLOCK_H * k;
@@ -491,16 +541,21 @@ class Tower {
       });
       const ty = gy - (r.best + 1) * bh - 9;
       out += `<text x="${cx}" y="${ty.toFixed(0)}" text-anchor="middle" font-size="20" font-weight="800" fill="${r.me ? '#ffce3a' : '#f2f6fc'}">${r.best}</text>`;
-      const nm = String(r.name || t('anon_player'));
-      const name = nm.length > maxCh ? nm.slice(0, maxCh - 1) + '…' : nm;
+      const nm = Array.from(String(r.name || t('anon_player')));   // whole characters: never half an emoji
+      const name = nm.length > maxCh ? nm.slice(0, maxCh - 1).join('') + '…' : nm.join('');
       if (r.me) out += `<rect x="${slot * i + 5}" y="${gy + 9}" width="${slot - 10}" height="58" rx="10" fill="none" stroke="#ffce3a" stroke-width="2.5"/>`;
-      out += `<text x="${cx}" y="${gy + 32}" text-anchor="middle" font-size="17">${medal(i)}${esc(r.emoji)}</text>`;
+      out += `<text x="${cx}" y="${gy + 32}" text-anchor="middle" font-size="17">${medal(r.rank)}${esc(r.emoji)}</text>`;
       out += `<text x="${cx}" y="${gy + 56}" text-anchor="middle" font-size="15" font-weight="700" fill="#f2f6fc">${esc(name)}</text>`;
       out += `<rect data-act="twPick" data-i="${i}" x="${slot * i}" y="0" width="${slot}" height="${H}" fill="transparent" style="cursor:pointer"/>`;
     });
     sc.innerHTML = out + '</svg>';
-    const me = list.findIndex((r) => r.me);
-    if (me >= 0 && SW > W) sc.scrollLeft = Math.max(0, slot * me + slot / 2 - W / 2);
+    sc.addEventListener('scroll', () => { this._twScroll = { d: this.towersDiff, x: sc.scrollLeft }; }, { passive: true });
+    // A repaint (the board arriving, a resize) keeps where the player scrolled; a new tab starts on their own tower.
+    if (this._twScroll && this._twScroll.d === this.towersDiff) sc.scrollLeft = this._twScroll.x;
+    else {
+      const me = list.findIndex((r) => r.me);
+      if (me >= 0 && SW > W) sc.scrollLeft = Math.max(0, slot * me + slot / 2 - W / 2);
+    }
   }
   /** B: one tower, drawn exactly like the game draws it (tower/js/art.js), on its own look's scene. */
   _drawPick(r) {
@@ -514,7 +569,7 @@ class Tower {
     const who = box.querySelector('.tw-pick-who');
     const topY = who ? who.getBoundingClientRect().bottom - box.getBoundingClientRect().top + 24 : 220;
     const groundY = H - Math.max(110, H * 0.14);
-    const k = Math.min(W / E.WORLD_W * 0.95, (groundY - topY) / ((r.best + 1) * E.BLOCK_H));
+    const k = Math.max(0.02, Math.min(W / E.WORLD_W * 0.95, (groundY - topY) / ((r.best + 1) * E.BLOCK_H)));
     const ox = (W - E.WORLD_W * k) / 2, bh = E.BLOCK_H * k;
     A.drawBackdrop(ctx, r.look, W, H, dpr, groundY, groundY, 0);
     ctx.save(); ctx.translate(0, groundY);
@@ -526,21 +581,27 @@ class Tower {
   /** Once per run. withMode carries the LOOK and the DIFFICULTY (root CLAUDE.md, "Every result records
    *  its MODE") and the height as that mode's best. */
   _record(run) {
-    if (this.recorded) return;
+    if (this.recorded) return this.saved === true;
     this.recorded = true;
+    this.saved = false;
     const d = run.diff;
     try {
       const st = withMode(() => ({ look: this.s.look }), d,
         () => recordTower(E.score(run), d, { perfects: run.perfects, bestStreak: run.bestStreak }),
         () => ({ hi: E.score(run) }));
       if (!st) console.warn('[tower] result not recorded (rate gate or store refused it)');
-      else keepTowerShape(d, E.score(run), run.stack, this.s.look);   // only a best's shape is kept
+      else { this.saved = true; keepTowerShape(d, E.score(run), run.stack, this.s.look); }   // only a best's shape is kept
     } catch (err) { console.error('[tower] recording the result failed', err); }
+    return this.saved;
   }
 
   // --- loop + drawing ------------------------------------------------------------------------------
+  _wantLoop() {
+    const tw = this.el && this.el('towers');
+    return !this._dead && !document.hidden && (this.screen === 'play' || this.screen === 'over') && !(tw && !tw.hidden);
+  }
   _start() {
-    if (this.raf) return;
+    if (this.raf || !this._wantLoop()) return;
     this.last = performance.now();
     // The next frame is asked for FIRST, and a frame that throws is caught (2026-11-12, Matt's iPhone froze on a
     // half-drawn frame mid-run): one bad frame can never stop the game again. A throw or a stall on a visible
@@ -648,6 +709,11 @@ class Tower {
   }
 
   destroy() {
+    // Leaving through the hub (Hub button, back gesture) keeps the blocks stacked, exactly like Pause > Quit
+    // (2026-11-12 review: the two exits differed). Once only (`recorded`).
+    try { if (this.run && !this.run.over && !this.recorded && E.score(this.run) > 0) this._record(this.run); } catch (err) { console.error('[tower] run on leave not recorded', err); }
+    this._dead = true;
+    if (this._layoutQ) { cancelAnimationFrame(this._layoutQ); this._layoutQ = 0; }
     this._stop();
     clearTimeout(this._overT);
     try { this.canvas.removeEventListener('pointerdown', this._onDown); } catch { /* gone */ }
@@ -687,4 +753,6 @@ export function destroy() {
 }
 // Literal meaning: a run is live (no resume). See the header.
 export function isInProgress() { return !!(instance && instance.inProgress()); }
-export default { init, destroy, isInProgress };
+/** The hub's "Leave?" dialog opened (js/hub.js requestLeave): pause the run under it. */
+export function onLeaveAsk() { if (instance) instance.onLeaveAsk(); }
+export default { init, destroy, isInProgress, onLeaveAsk };

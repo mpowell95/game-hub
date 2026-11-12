@@ -444,7 +444,7 @@ Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 
 In `docs/BUILDING-A-GAME.md`, "Part 1 — Building a game" (exports, leak-free `destroy()`, name
 gate, `isInProgress()`'s two legitimate meanings, `immersive: true`). Read it before touching any
-game's mount/unmount lifecycle.
+game's mount/unmount lifecycle. Optional `onLeaveAsk()` (2026-11-12): the hub calls it as its "Leave?" dialog opens (Tower Stack pauses).
 
 ### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
 

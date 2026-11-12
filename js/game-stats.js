@@ -1805,19 +1805,44 @@ export function combineWwRecords(real, test) {
   for (const k of Object.keys(t)) if (out[k] === undefined) out[k] = clone(t[k]);
   return out;
 }
-const CARRY_COMBINE = { wordweaver: combineWwRecords };
+/** Tower Stack: two records of one person combined (pure). Counters add; bests take the max; each difficulty's best
+ *  SHAPE is the taller one. Ready for the release commit's `CARRY_TEST.tower` (Matt, 2026-11-12: test plays count). */
+export function combineTowerRecords(real, test) {
+  const r = plainObj(real) ? real : {}, t = plainObj(test) ? test : {};
+  const out = { ...clone(r) };
+  for (const k of ['total', 'byDiff', 'byMode', 'dt']) if (r[k] !== undefined || t[k] !== undefined) out[k] = addCounts(r[k] || {}, t[k] || {});
+  const rt = plainObj(r.tw) ? r.tw : {}, tt = plainObj(t.tw) ? t.tw : {};
+  if (Object.keys(rt).length || Object.keys(tt).length) {
+    const w = { ...clone(rt) };
+    const n = (v) => Math.max(0, Math.floor(+v || 0));
+    for (const k of ['games', 'blocks', 'perfects']) w[k] = n(rt[k]) + n(tt[k]);
+    for (const k of ['best', 'bestStreak']) w[k] = Math.max(n(rt[k]), n(tt[k]));
+    w.bestByDiff = mergeMap(rt.bestByDiff, tt.bestByDiff, (a, b) => Math.max(n(a), n(b)));
+    const sh = mergeMap(rt.shapes, tt.shapes, (a, b) => {
+      const ok = (v) => plainObj(v) && typeof v.s === 'string';
+      if (!ok(b)) return ok(a) ? a : null;
+      return ok(a) && n(a.n) >= n(b.n) ? a : clone(b);
+    });
+    if (Object.keys(sh).length) w.shapes = sh;
+    out.tw = w;
+  }
+  for (const k of Object.keys(t)) if (out[k] === undefined) out[k] = clone(t[k]);
+  return out;
+}
+// Every game that may ever be listed in CARRY_TEST needs its combiner here (tools/test-tower.mjs checks Tower's).
+export const CARRY_COMBINE = { wordweaver: combineWwRecords, tower: combineTowerRecords };
 /** The record as it COUNTS: real + test for a carried game whose store has not been stamped yet (read time). */
 export function carriedGame(stats, id) {
   const real = stats && stats.games && stats.games[id];
   const test = stats && stats.testGames && stats.testGames[id];
-  if (!CARRY_TEST[id] || !plainObj(test) || (plainObj(stats.carried) && stats.carried[id]) || isTestGame(id)) return real;
+  if (!CARRY_TEST[id] || !CARRY_COMBINE[id] || !plainObj(test) || (plainObj(stats.carried) && stats.carried[id]) || isTestGame(id)) return real;
   return CARRY_COMBINE[id](real, test);
 }
 /** One write per store and game: the real record becomes real + test, stamped `carried.<id>`. Verified by re-read. */
 function carryTestRecords(st) {
   let changed = false;
   for (const id of Object.keys(CARRY_TEST)) {
-    if (isTestGame(id) || !plainObj(st.testGames) || !plainObj(st.testGames[id])) continue;
+    if (!CARRY_COMBINE[id] || isTestGame(id) || !plainObj(st.testGames) || !plainObj(st.testGames[id])) continue;
     if (plainObj(st.carried) && st.carried[id]) continue;
     st.games[id] = CARRY_COMBINE[id](st.games[id], st.testGames[id]);
     if (!plainObj(st.carried)) st.carried = {};
@@ -3528,9 +3553,11 @@ export function keepTowerShape(difficulty, height, stack, look) {
   if (h < (g.tw.bestByDiff[d] | 0)) return false;
   const old = g.tw.shapes && g.tw.shapes[d];
   if (old && (old.n | 0) >= h) return false;
-  const num = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
+  // One decimal (2026-11-12 review: whole units turned a sliver under 0.5 into width 0); a sliver keeps 0.1.
+  const num = (v) => (Number.isFinite(v) ? Math.round(v * 10) / 10 : 0);
+  const wid = (v) => (Number.isFinite(v) && v > 0 ? Math.max(0.1, num(v)) : 0);
   if (!g.tw.shapes || typeof g.tw.shapes !== 'object') g.tw.shapes = {};
-  g.tw.shapes[d] = { n: h, s: stack.map((b) => num(b && b.x) + ',' + num(b && b.w)).join(';'),
+  g.tw.shapes[d] = { n: h, s: stack.map((b) => num(b && b.x) + ',' + wid(b && b.w)).join(';'),
     l: typeof look === 'string' ? look.slice(0, 12) : '', t: Date.now() };
   st.updatedAt = new Date().toISOString();
   persist(st);

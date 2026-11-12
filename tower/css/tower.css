@@ -34,21 +34,24 @@
 .tw-root .tw-ph { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
 
 /* --- Setup --- */
-.tw-root .tw-setup { position: absolute; inset: 0; overflow: hidden; background: #f4f6fb; }
+/* Fits every family phone (360x640 up). On anything shorter it scrolls rather than hide Play or the leader row. */
+.tw-root .tw-setup { position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: #f4f6fb; }
 .tw-root .tw-setup[hidden] { display: none; }
-.tw-root .tw-home { max-width: 440px; margin: 0 auto; height: 100%; display: flex; flex-direction: column;
-  justify-content: center; padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 4px) 16px max(env(safe-area-inset-bottom, 0px), 16px); }
+.tw-root .tw-home { max-width: 440px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column;
+  justify-content: center; box-sizing: border-box;
+  /* Starts BELOW the hub's floating "‹ Hub" and bug buttons (their row ends ~44px under the safe top). */
+  padding: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 46px) 16px max(env(safe-area-inset-bottom, 0px), 10px); }
 .tw-root .tw-herorow { position: relative; display: flex; justify-content: center; }
-.tw-root .tw-hero { width: min(250px, 30dvh); aspect-ratio: 1; padding: 0; border: 0; border-radius: 24px; overflow: hidden;
+.tw-root .tw-hero { width: min(240px, 22dvh); aspect-ratio: 1; padding: 0; border: 0; border-radius: 24px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(16,30,54,.14); background: none; }
 .tw-root .tw-hero svg { display: block; width: 100%; height: 100%; }
 .tw-root .tw-q { position: absolute; right: 12px; top: 0; width: 44px; height: 44px; border-radius: 999px; border: 0;
   background: #fff; box-shadow: 0 2px 8px rgba(16,30,54,.10); font-weight: 800; font-size: 20px; }
-.tw-root .tw-head { text-align: center; margin: 14px 0 12px; }
-.tw-root .tw-head h1 { margin: 0; font-size: 34px; font-weight: 800; }
+.tw-root .tw-head { text-align: center; margin: 8px 0 8px; }
+.tw-root .tw-head h1 { margin: 0; font-size: 30px; font-weight: 800; }
 .tw-root .tw-hbest { margin: 2px 0 0; font-size: 16px; color: #5b6b82; }
 .tw-root .tw-hbest b { color: #16243a; }
-.tw-root .tw-card { background: #fff; border-radius: 16px; padding: 14px; box-shadow: 0 2px 8px rgba(16,30,54,.10); }
+.tw-root .tw-card { background: #fff; border-radius: 16px; padding: 12px; box-shadow: 0 2px 8px rgba(16,30,54,.10); }
 .tw-root .tw-looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .tw-root .tw-look { position: relative; border: 2px solid rgba(16,36,58,.14); border-radius: 12px; padding: 6px; background: #fff;
   display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 15px; }
@@ -56,16 +59,16 @@
 .tw-root .tw-look.is-sel, .tw-root .tw-seg.is-sel { border-color: #ffce3a; box-shadow: 0 0 0 2px #ffce3a; }
 .tw-root .tw-chk { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 999px; background: #ffce3a;
   font-size: 13px; font-weight: 900; display: grid; place-items: center; }
-.tw-root .tw-segs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.tw-root .tw-segs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
 .tw-root .tw-seg { border: 2px solid rgba(16,36,58,.14); border-radius: 12px; padding: 8px 2px; background: #fff;
   display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.tw-root .tw-seg-t { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.tw-root .tw-seg-t { display: flex; align-items: center; gap: 3px; font-size: 15px; white-space: nowrap; }
 .tw-root .tw-seg-t svg { width: 13px; height: 13px; }
 .tw-root .tw-seg-t svg.lb-dshape-x2 { width: 22px; }
-.tw-root .tw-seg-n { font-size: 13px; color: #5b6b82; }
-.tw-root .tw-play { display: block; width: 100%; margin-top: 14px; height: 56px; border: 0; border-radius: 999px; background: #ffce3a;
+.tw-root .tw-seg-n { font-size: 15px; color: #5b6b82; }
+.tw-root .tw-play { display: block; width: 100%; margin-top: 12px; height: 54px; border: 0; border-radius: 999px; background: #ffce3a;
   color: #16243a; font-size: 20px; font-weight: 800; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-.tw-root .tw-lead { margin-top: 12px; background: #fff; border-radius: 16px; padding: 8px 8px 8px 14px; display: flex; align-items: center;
+.tw-root .tw-lead { margin-top: 10px; background: #fff; border-radius: 16px; padding: 8px 8px 8px 14px; display: flex; align-items: center;
   justify-content: space-between; gap: 8px; box-shadow: 0 2px 8px rgba(16,30,54,.10); font-size: 16px; }
 .tw-root .tw-lead-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tw-root .tw-lead-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,7 +85,7 @@
   display: grid; place-items: center; }
 .tw-root .tw-big { font-size: 72px; font-weight: 800; line-height: 1; }
 .tw-root .tw-new { display: inline-block; margin-top: 10px; background: #ffce3a; border-radius: 999px; padding: 4px 12px;
-  font-weight: 800; font-size: 14px; }
+  font-weight: 800; font-size: 15px; }
 .tw-root .tw-row { display: flex; justify-content: center; gap: 24px; margin: 14px 0 6px; font-size: 16px; color: #5b6b82; }
 .tw-root .tw-row b { display: block; color: #16243a; font-size: 20px; }
 .tw-root .tw-ov .tw-help { text-align: left; }
@@ -110,7 +113,7 @@
 .tw-root .tw-tw-head h2 { margin: 0; font-size: 22px; }
 .tw-root .tw-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 10px; }
 .tw-root .tw-tab { min-height: 44px; border: 2px solid rgba(16,36,58,.14); border-radius: 12px; background: #fff;
-  display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; }
+  display: flex; align-items: center; justify-content: center; gap: 3px; font-size: 15px; white-space: nowrap; }
 .tw-root .tw-tab svg { width: 13px; height: 13px; }
 .tw-root .tw-tab svg.lb-dshape-x2 { width: 22px; }
 .tw-root .tw-tab.is-sel { border-color: #ffce3a; box-shadow: 0 0 0 2px #ffce3a; }
@@ -144,8 +147,9 @@
 .gh-dark .tw-root .tw-look, .gh-dark .tw-root .tw-seg { border-color: rgba(255,255,255,.14); }
 .gh-dark .tw-root .tw-hbest b, .gh-dark .tw-root .tw-row b { color: #e8eef8; }
 .gh-dark .tw-root .tw-hbest, .gh-dark .tw-root .tw-seg-n, .gh-dark .tw-root .tw-row, .gh-dark .tw-root .tw-x,
-.gh-dark .tw-root .tw-lead-who b { color: #a9b6ca; }
+.gh-dark .tw-root .tw-lead-who b { color: #e3e9f3; }
 .gh-dark .tw-root .tw-lead-all { color: #7fb2ff; }
+.gh-dark .tw-root .tw-none { color: #e3e9f3; }
 .gh-dark .tw-root .tw-play, .gh-dark .tw-root .tw-new, .gh-dark .tw-root .tw-chk { color: #16243a; }
 /* Hard / Expert shapes are dark ink; light them in dark mode (the hub does this in hub.css, the standalone page needs it here). */
 .gh-dark .tw-root .lb-dshape-t3, .gh-dark .tw-root .lb-dshape-t4 { fill: #e6e9f0; }

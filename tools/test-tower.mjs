@@ -97,5 +97,24 @@ ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0
   ok('agg: a person keeps the TALLEST shape across devices', !!zed && zed.games.tower.tw.shapes.easy.n === 15 && zed.games.tower.tw.bestByDiff.easy === 15);
 }
 
+// Release readiness (2026-11-12 review): Matt's "test plays count" needs a combiner, or loadStats would throw.
+{
+  const GS = await import('../js/game-stats.js');
+  ok('release: Tower has a carry combiner', typeof GS.CARRY_COMBINE.tower === 'function');
+  const real = { total: { played: 1, won: 1, lost: 0 }, byDiff: { hard: { played: 1, won: 1, lost: 0 } },
+    tw: { games: 1, best: 5, bestByDiff: { hard: 5 }, blocks: 5, perfects: 1, bestStreak: 1, shapes: { hard: { n: 5, s: 'a', l: 'city', t: 1 } } } };
+  const test = { total: { played: 2, won: 2, lost: 0 }, byDiff: { hard: { played: 2, won: 2, lost: 0 } },
+    tw: { games: 2, best: 9, bestByDiff: { hard: 9, easy: 3 }, blocks: 12, perfects: 4, bestStreak: 3, shapes: { hard: { n: 9, s: 'b', l: 'toy', t: 2 } } } };
+  const c = GS.combineTowerRecords(real, test);
+  ok('release: counters add, bests max, taller shape kept', c.total.played === 3 && c.byDiff.hard.won === 3 && c.tw.games === 3 && c.tw.blocks === 17
+    && c.tw.best === 9 && c.tw.bestByDiff.hard === 9 && c.tw.bestByDiff.easy === 3 && c.tw.bestStreak === 3 && c.tw.shapes.hard.s === 'b');
+  ok('release: neither record is changed', real.tw.games === 1 && test.tw.games === 2);
+  // A sliver never rounds to width 0 (it would void the whole shape).
+  GS.withMode({ look: 'ice' }, 'medium', () => GS.recordTower(2, 'medium', {}), { hi: 2 });
+  GS.keepTowerShape('medium', 2, [{ x: 75, w: 250 }, { x: 80.04, w: 3.26 }, { x: 81, w: 0.04 }], 'ice');
+  const sm = GS.loadStats().games.tower.tw.shapes.medium.s;
+  ok('shape: one decimal, a sliver kept above 0', sm === '75,250;80,3.3;81,0.1');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
