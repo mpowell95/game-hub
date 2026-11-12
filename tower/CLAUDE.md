@@ -7,6 +7,11 @@
 Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's approved mockups
 (`docs/mockups/tower/`, branch `mockup/tower`). **Admin only (`devOnly`) until Matt releases it.**
 
+**At release, TEST PLAYS COUNT (Matt, 2026-11-12: "Yes test plays should count")**: the release commit adds
+`tower: true` to `CARRY_TEST` (`js/game-stats.js`) and flips `tools/test-word-weaver.mjs`'s "never carried" check to
+another admin-only game. Not before: an admin-only game must never be carried. Matt is test-playing first; ship only on
+his "release it".
+
 ## Rules (`js/engine.js`, pure)
 
 - A block slides across (alternating sides). Tap = drop. The overlap with the block below stays; the
