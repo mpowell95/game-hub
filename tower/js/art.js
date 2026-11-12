@@ -36,14 +36,20 @@ export function slabOf(look, i) {
 
 // --- canvas: cached sky and scenery ------------------------------------------------------------
 const SCN_H = 320;   // scenery strip height (CSS px), drawn up from the ground line
+// iPhones cap the memory ALL canvases may use; past it a new canvas gives no context (2026-11-12, a frozen frame on
+// Matt's phone). So: few cached canvases, memory handed back (width 0) when dropped or the game closes, and null
+// when the phone refuses one (the caller then paints straight onto the screen).
 const cache = new Map();
+function drop(c) { try { c.width = 0; c.height = 0; } catch { /* gone */ } }
+export function releaseArt() { for (const c of cache.values()) drop(c); cache.clear(); }
 function cached(key, w, h, dpr, paint) {
   let c = cache.get(key);
   if (c) return c;
-  if (cache.size > 16) cache.clear();
+  if (cache.size >= 6) releaseArt();
   c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr));
   const g = c.getContext('2d');
+  if (!g) { drop(c); return null; }
   g.scale(dpr, dpr);
   paint(g, w, h);
   cache.set(key, c);
@@ -162,10 +168,14 @@ const SCENERY = {
  *  `groundY` = the screen y of the real ground line, `t` = seconds (falling snow). */
 export function drawBackdrop(ctx, look, W, H, dpr, gy, groundY, t) {
   if (!SKY[look]) look = 'city';
-  ctx.drawImage(cached(`sky|${look}|${W}|${H}|${dpr}`, W, H, dpr, SKY[look]), 0, 0, W, H);
+  const sky = cached(`sky|${look}|${W}|${H}|${dpr}`, W, H, dpr, SKY[look]);
+  if (sky) ctx.drawImage(sky, 0, 0, W, H);
+  else { ctx.save(); SKY[look](ctx, W, H); ctx.restore(); }
   const sc = SCENERY[look];
   if (sc) {
-    ctx.drawImage(cached(`scn|${look}|${W}|${dpr}`, W, SCN_H, dpr, (g, w) => sc.paint(g, w)), 0, gy - SCN_H, W, SCN_H);
+    const img = cached(`scn|${look}|${W}|${dpr}`, W, SCN_H, dpr, (g, w) => sc.paint(g, w));
+    if (img) ctx.drawImage(img, 0, gy - SCN_H, W, SCN_H);
+    else { ctx.save(); ctx.translate(0, gy - SCN_H); sc.paint(ctx, W); ctx.restore(); }
     if (groundY > gy) { ctx.fillStyle = sc.base; ctx.fillRect(0, gy - 1, W, groundY - gy + 2); }
   }
   if (look === 'ice') {
@@ -381,4 +391,4 @@ export function lookThumb(look) {
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${svgScene(look, W, H, gy)}${b}</svg>`;
 }
 
-export default { LOOKS, slabOf, drawBackdrop, drawShadow, drawBlock, bestLineStyle, heroSVG, lookThumb };
+export default { LOOKS, slabOf, drawBackdrop, drawShadow, drawBlock, bestLineStyle, heroSVG, lookThumb, svgBlock, releaseArt };
