@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Record Towers v2</title>
+<style>
+  :root { --bg: #070b14; --ink: #f2f6fc; --dim: #d3dceb; --accent: #ffce3a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; padding: 24px 16px 40px; }
+  .frame { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .tag { font-size: 24px; font-weight: 800; color: var(--accent); }
+  .phone { position: relative; width: 402px; height: 874px; border-radius: 44px; overflow: hidden;
+    background: linear-gradient(#0b1030, #1a2050 70%, #262a5c); box-shadow: 0 0 0 10px #1c2230, 0 20px 50px rgba(0,0,0,.6); }
+  @media (max-width: 440px) { .phone { width: 100%; max-width: 402px; } }
+  .stars { position: absolute; inset: 0; }
+  .hub { position: absolute; left: 12px; top: 62px; height: 40px; padding: 0 16px; border-radius: 12px; background: #1a2234;
+    border: 1px solid #2b3550; display: flex; align-items: center; font-size: 18px; font-weight: 700; z-index: 3; }
+  .bug { position: absolute; right: 12px; top: 58px; width: 46px; height: 46px; border-radius: 50%; background: #1a2234;
+    border: 1px solid #2b3550; display: grid; place-items: center; font-size: 22px; z-index: 3; }
+  .title { position: absolute; left: 0; right: 0; top: 66px; text-align: center; font-size: 26px; font-weight: 800; z-index: 2; }
+  .tabs { position: absolute; left: 12px; right: 12px; top: 118px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; z-index: 2; }
+  .tab { height: 46px; border-radius: 12px; background: rgba(26,34,52,.92); border: 2px solid rgba(255,255,255,.12);
+    display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 16px; font-weight: 700; }
+  .tab.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .scene { position: absolute; left: 0; right: 0; top: 176px; bottom: 0; }
+  .scene svg { display: block; width: 100%; height: 100%; }
+  .bar { position: absolute; left: 14px; right: 14px; bottom: 26px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+  .back { height: 54px; padding: 0 26px; border-radius: 999px; background: #2a3650; font-size: 19px; font-weight: 800; display: flex; align-items: center; }
+  .lb { font-size: 19px; font-weight: 800; color: #8fc0ff; }
+  .big-n { position: absolute; left: 0; right: 0; top: 112px; text-align: center; font-size: 72px; font-weight: 800; line-height: 1;
+    text-shadow: 0 2px 12px rgba(0,0,0,.5); z-index: 2; }
+  .big-who { position: absolute; left: 0; right: 0; top: 192px; text-align: center; font-size: 20px; font-weight: 700; z-index: 2; }
+  .big-who small { display: block; font-size: 17px; font-weight: 600; color: var(--dim); margin-top: 4px; }
+  .arrows { position: absolute; top: 470px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 10px; z-index: 2; }
+  .arrows span { width: 48px; height: 48px; border-radius: 50%; background: rgba(26,34,52,.85); display: grid; place-items: center;
+    font-size: 26px; font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="frame">
+    <div class="tag">A</div>
+    <div class="phone" id="A">
+      <svg class="stars" data-stars></svg>
+      <div class="hub">&#8249; Hub</div>
+      <div class="bug">&#128030;</div>
+      <div class="title">Record towers</div>
+      <div class="tabs">
+        <div class="tab"><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#2fae4f"/></svg>Easy</div>
+        <div class="tab"><svg width="13" height="13"><rect width="13" height="13" fill="#1F5FA8"/></svg>Medium</div>
+        <div class="tab"><svg width="14" height="14"><path d="M7 0L14 7L7 14L0 7Z" fill="#e6e9f0"/></svg>Hard</div>
+        <div class="tab sel"><svg width="26" height="14"><path d="M6 0L12 7L6 14L0 7Z M20 0L26 7L20 14L14 7Z" fill="#e6e9f0"/></svg>Expert</div>
+      </div>
+      <div class="scene" data-scene="A"></div>
+      <div class="bar"><div class="back">&#8249; Back</div><div class="lb">Leaderboard &#8250;</div></div>
+    </div>
+  </div>
+
+  <div class="frame">
+    <div class="tag">B</div>
+    <div class="phone" id="B">
+      <svg class="stars" data-stars></svg>
+      <div class="hub">&#8249; Hub</div>
+      <div class="bug">&#128030;</div>
+      <div class="big-n">17</div>
+      <div class="big-who">&#129351; &#127918; MattyIce<small>Expert &middot; Nov 11</small></div>
+      <div class="arrows"><span>&#8249;</span><span>&#8250;</span></div>
+      <div class="scene" data-scene="B"></div>
+      <div class="bar"><div class="back">&#8249; Back</div><div class="lb">Leaderboard &#8250;</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Tower shapes are simulated with the game's own rules (tower/js/engine.js): base 250 wide in a 400-wide
+// world, blocks 40 tall, overhang cut, Expert perfect slack 3.5 keeps the width. Colours = slabOf().
+const WORLD = 400, START = 250, BH = 40, PERFECT = 3.5;
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+function build(n, seed) {
+  const r = rng(seed), stack = [{ x: (WORLD - START) / 2, w: START }];
+  const maxErr = Math.max(4, (START - 40) / n * 1.7);
+  for (let i = 0; i < n; i++) {
+    const top = stack[stack.length - 1];
+    let err = (r() < 0.25 ? r() * PERFECT * 0.9 : r() * maxErr) * (r() < 0.5 ? -1 : 1);
+    if (Math.abs(err) <= PERFECT) { stack.push({ x: top.x, w: top.w }); continue; }
+    if (Math.abs(err) > top.w - 18) err = Math.sign(err) * (top.w - 18);
+    const x = err > 0 ? top.x + err : top.x, w = top.w - Math.abs(err);
+    stack.push({ x, w });
+  }
+  return stack;
+}
+function slab(look, i) {
+  let h, s, l;
+  if (look === 'ice') { h = 185 + Math.sin(i / 6) * 25; s = 55; l = 66 + Math.sin(i / 3) * 8; }
+  else if (look === 'space') { h = (250 + i * 7) % 360; s = 60; l = 60; }
+  else { h = (200 + i * 9) % 360; s = 66; l = 56; }
+  return { top: `hsl(${h} ${s + 4}% ${l + 8}%)`, face: `hsl(${h} ${s}% ${l}%)`, edge: `hsl(${h} ${s - 6}% ${l - 14}%)` };
+}
+function towerSVG(stack, look, ox, gy, k) {
+  let out = '';
+  stack.forEach((b, i) => {
+    const c = slab(look, i), x = ox + (b.x - (WORLD - START) / 2) * k, w = b.w * k, h = BH * k, y = gy - (i + 1) * h;
+    out += `<rect x="${x.toFixed(1)}" y="${(y + h * 0.2).toFixed(1)}" width="${w.toFixed(1)}" height="${(h * 0.8).toFixed(1)}" fill="${c.face}"/>`
+      + `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${(h * 0.2).toFixed(1)}" fill="${c.top}"/>`
+      + `<rect x="${x.toFixed(1)}" y="${(y + h - Math.max(1, 3 * k)).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1, 3 * k).toFixed(1)}" fill="${c.edge}"/>`;
+  });
+  return out;
+}
+function skyline(W, gy) {
+  let s = '<g fill="#0b1230">', win = '<g fill="rgba(242,183,5,.75)">';
+  for (let b = 0; b < 12; b++) {
+    const bw = W / 10, bh = 60 + ((b * 37) % 90), x0 = b * bw * 0.95 - 10;
+    s += `<rect x="${x0}" y="${gy - bh}" width="${bw * 0.8}" height="${bh}"/>`;
+    for (let r = 0; r * 14 + 10 < bh; r++) for (let c = 0; c < 3; c++) {
+      if ((b * 7 + r * 3 + c * 5) % 4) continue;
+      win += `<rect x="${x0 + 5 + c * (bw * 0.8 - 10) / 3}" y="${gy - bh + 8 + r * 14}" width="4" height="5"/>`;
+    }
+  }
+  return s + '</g>' + win + '</g>';
+}
+const PEOPLE = [ // sample players
+  { name: 'MattyIce', emoji: '&#127918;', n: 17, look: 'city', seed: 7, me: true },
+  { name: 'Ana', emoji: '&#127800;', n: 13, look: 'ice', seed: 21 },
+  { name: 'Joe', emoji: '&#129412;', n: 10, look: 'space', seed: 5 },
+  { name: 'Lili', emoji: '&#127752;', n: 7, look: 'city', seed: 33 },
+  { name: 'Moonis', emoji: '&#9917;', n: 4, look: 'ice', seed: 12 },
+];
+const MEDAL = ['&#129351;', '&#129352;', '&#129353;'];
+
+function drawA() {
+  const W = 402, H = 874 - 176, gy = H - 150;           // ground line; names + bar below it
+  const top = Math.max(...PEOPLE.map((p) => p.n));
+  // One scale for every tower (true heights and widths). About 4 fit across; the row scrolls sideways.
+  const k = Math.min(0.4, (gy - 40) / ((top + 1) * BH));
+  const slot = START * k + 10;
+  let svg = `<svg viewBox="0 0 ${W} ${H}">${skyline(W, gy)}`;
+  svg += `<rect x="0" y="${gy}" width="${W}" height="${H - gy}" fill="#1a2440"/><rect x="0" y="${gy}" width="${W}" height="5" fill="#3d5070"/>`;
+  PEOPLE.forEach((p, i) => {
+    const st = build(p.n, p.seed), cx = slot * i + slot / 2, ox = cx - START * k / 2;
+    const tTop = gy - (p.n + 1) * BH * k;
+    svg += towerSVG(st, p.look, ox, gy, k);
+    svg += `<text x="${cx}" y="${tTop - 8}" text-anchor="middle" font-size="20" font-weight="800" fill="${p.me ? '#ffce3a' : '#f2f6fc'}">${p.n}</text>`;
+    const ny = gy + 34;
+    if (p.me) svg += `<rect x="${cx - slot / 2 + 6}" y="${ny - 22}" width="${slot - 12}" height="58" rx="10" fill="none" stroke="#ffce3a" stroke-width="2.5"/>`;
+    svg += `<text x="${cx}" y="${ny}" text-anchor="middle" font-size="17">${i < 3 ? MEDAL[i] : ''} ${p.emoji}</text>`;
+    svg += `<text x="${cx}" y="${ny + 24}" text-anchor="middle" font-size="15" font-weight="700" fill="#f2f6fc">${p.name}</text>`;
+  });
+  document.querySelector('[data-scene="A"]').innerHTML = svg + '</svg>';
+}
+function drawB() {
+  const W = 402, H = 874 - 176, gy = H - 130;
+  const p = PEOPLE[0], st = build(p.n, p.seed);
+  const k = Math.min((W - 30) / START, (gy - 150) / ((p.n + 1) * BH));
+  let svg = `<svg viewBox="0 0 ${W} ${H}">${skyline(W, gy)}`;
+  svg += `<rect x="0" y="${gy}" width="${W}" height="${H - gy}" fill="#1a2440"/><rect x="0" y="${gy}" width="${W}" height="5" fill="#3d5070"/>`;
+  svg += towerSVG(st, p.look, W / 2 - START * k / 2, gy, k);
+  document.querySelector('[data-scene="B"]').innerHTML = svg + '</svg>';
+}
+function stars() {
+  document.querySelectorAll('[data-stars]').forEach((s) => {
+    let out = '';
+    for (let i = 0; i < 70; i++) out += `<rect x="${(i * 97.3) % 402}" y="${(i * 53.7) % 600}" width="2" height="2" fill="#fff" opacity=".7"/>`;
+    s.setAttribute('viewBox', '0 0 402 874'); s.innerHTML = out;
+  });
+}
+stars(); drawA(); drawB();
+</script>
+</body>
+</html>
