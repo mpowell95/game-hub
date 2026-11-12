@@ -789,7 +789,7 @@ export const GAMES = [
   },
   {
     // Tower (2026-11-01): stack sliding blocks as high as you can; the overhang is cut off, so the
-    // next block is only as wide as what landed (tower/CLAUDE.md). Four difficulties, three looks.
+    // next block is only as wide as what landed (tower/CLAUDE.md). Four difficulties, four looks.
     // IMMERSIVE: the tower wants the whole screen. Hub id = stats id = folder = `tower`.
     id: 'tower',
     added: '2026-11-01',            // sort-only (the launcher's Newest order); never the New pill
@@ -3071,6 +3071,8 @@ class Hub {
       try { loss = !!(m && typeof m.quitCostsLoss === 'function' && m.quitCostsLoss()); } catch { /* ignore */ }
       const msg = this.el.confirm.querySelector('.hub-confirm-msg');
       if (msg) msg.textContent = loss ? tf('hub_confirm_loss', 'Leave? Counts as a loss.') : t('hub_confirm_msg');
+      // Optional: a game may stop its action under the dialog (Tower Stack pauses, 2026-11-12).
+      try { if (m && typeof m.onLeaveAsk === 'function') m.onLeaveAsk(); } catch { /* the dialog still shows */ }
       this.el.confirm.hidden = false;
       return;
     }

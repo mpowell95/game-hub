@@ -8,7 +8,8 @@ Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's ap
 (`docs/mockups/tower/`, branch `mockup/tower`). **Admin only (`devOnly`) until Matt releases it.**
 
 **At release, TEST PLAYS COUNT (Matt, 2026-11-12: "Yes test plays should count")**: the release commit adds
-`tower: true` to `CARRY_TEST` (`js/game-stats.js`) and flips `tools/test-word-weaver.mjs`'s "never carried" check to
+`tower: true` to `CARRY_TEST` (`js/game-stats.js`; its combiner `combineTowerRecords` is already in `CARRY_COMBINE`,
+2026-11-12 review: without one loadStats would throw) and flips `tools/test-word-weaver.mjs`'s "never carried" check to
 another admin-only game. Not before: an admin-only game must never be carried. Matt is test-playing first; ship only on
 his "release it".
 
@@ -29,6 +30,12 @@ his "release it".
 - Module, `immersive: true`. Hub id = stats id = folder = `tower`. CSS root `.tw-root`, prefix `.tw-`.
 - **Name: "Tower Stack"** (Matt, 2026-11-12; Spanish stays "Torre"). Ids, keys and folder stay `tower` (rule 5).
 - `isInProgress()`: LITERAL meaning (no resume, like Snake): true only while a run is live (playing or paused).
+- **Leaving keeps the blocks (2026-11-12 review)**: Pause > Quit AND leaving through the hub (Hub button, back gesture:
+  `destroy()`) record a run that stacked any blocks, once. The hub's "Leave?" dialog pauses the run (`onLeaveAsk`).
+  The draw loop runs only while the canvas is what the player sees (play, game over), never behind setup, the pause
+  card or Record towers. A tap drops the block where it is AT THE TAP (stepped to the tap time), not at the last frame.
+  Record towers: a tie on the best goes to the better average at that difficulty (byMode `hs`/`hn`), else all-time;
+  equal on both shares the rank and medal. The setup screen fits 360x640 and starts below the hub's button row.
 - **Pause (2026-11-12, Matt: "there's no back button or pause or anything")**: a round button bottom right while
   playing (Esc too; leaving the app pauses). Paused card: Resume / Quit. Quit records the run if it stacked any blocks,
   then the setup screen.
@@ -67,7 +74,7 @@ his "release it".
 - Sub-counter `tw`: `games`, `blocks`, `perfects` (add); `best`, `bestByDiff`, `bestStreak` (Math.max).
   Wired in `players-agg.js`, `game-stats-ui.js` (`towerScreen`), `leaderboard-ui.js` (`twBestAt`, tiered),
   `stats-corrections.js`. While admin-only, plays go to the test record (`ADMIN_ONLY`).
-- **`tw.shapes[diff]` = `{n, s: "x,w;..." (base first, world units), l: look, t: ms}`** (2026-11-12): `keepTowerShape`
+- **`tw.shapes[diff]` = `{n, s: "x,w;..." (base first, world units, one decimal, a sliver >= 0.1), l: look, t: ms}`** (2026-11-12): `keepTowerShape`
   right after `recordTower`, kept only when the run IS the best at that difficulty and taller than the kept shape
   (only improves). Separate from `recordTower` ON PURPOSE: a play-log row's arguments may be at most 1600 chars and a
   tall tower's shape is longer (a refused row would sit in the queue). Merged per person = the tallest

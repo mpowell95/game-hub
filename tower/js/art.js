@@ -263,7 +263,8 @@ function rrect(ctx, x, y, w, h, r) {
 
 /** One block (level i) at screen rect x, y, w, h (y = its top). `k` = px per world unit. */
 export function drawBlock(ctx, look, x, y, w, h, i, k, alpha = 1) {
-  if (w <= 0.5) return;
+  if (!(w > 0) || !(h > 0) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+  if (w < 1) { x -= (1 - w) / 2; w = 1; }   // a sliver stays visible (2026-11-12 review)
   ctx.save();
   ctx.globalAlpha = alpha;
   const dx = 12 * k, dy = -9 * k;
