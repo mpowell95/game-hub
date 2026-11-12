@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tower Stack Art</title>
+<style>
+  :root { --bg: #070b14; --ink: #f2f6fc; --accent: #ffce3a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 30px; justify-content: center; padding: 24px 16px 40px; }
+  .frame { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .tag { font-size: 26px; font-weight: 800; color: var(--accent); }
+  .phone { position: relative; width: 402px; height: 874px; border-radius: 44px; overflow: hidden;
+    box-shadow: 0 0 0 10px #1c2230, 0 20px 50px rgba(0,0,0,.6); }
+  @media (max-width: 440px) { .phone { width: 100%; max-width: 402px; } }
+  .phone > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hub { position: absolute; left: 12px; top: 62px; height: 40px; padding: 0 16px; border-radius: 12px; background: rgba(20,28,44,.85);
+    border: 1px solid rgba(255,255,255,.15); display: flex; align-items: center; font-size: 18px; font-weight: 700; color: #fff; }
+  .bug { position: absolute; right: 12px; top: 58px; width: 46px; height: 46px; border-radius: 50%; background: rgba(20,28,44,.85);
+    border: 1px solid rgba(255,255,255,.15); display: grid; place-items: center; font-size: 22px; }
+  .best { position: absolute; right: 68px; top: 66px; padding: 6px 13px; border-radius: 999px; background: rgba(0,0,0,.3);
+    font-size: 17px; font-weight: 800; color: #fff; }
+  .score { position: absolute; left: 0; right: 0; top: 114px; text-align: center; font-size: 66px; font-weight: 800; line-height: 1;
+    color: #fff; text-shadow: 0 3px 14px rgba(0,0,0,.45); }
+  .streak { position: absolute; left: 50%; top: 190px; transform: translateX(-50%); background: var(--accent); color: #16243a;
+    font-size: 17px; font-weight: 800; padding: 4px 13px; border-radius: 999px; }
+  .pause { position: absolute; right: 16px; bottom: 22px; width: 54px; height: 54px; border-radius: 50%;
+    background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.55); display: grid; place-items: center; }
+  .light .best { background: rgba(255,255,255,.75); color: #16243a; }
+  .light .score { color: #fff; }
+  .snowy .pause, .light .pause { background: rgba(22,36,58,.7); border-color: rgba(255,255,255,.85); }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"></div>
+<script>
+// Each frame = the same moment of play: 8 blocks stacked, the 9th sliding in, one cut piece falling,
+// best line at 10. Tower shape simulated with the game's rules (tower/js/engine.js).
+const W = 402, H = 874, WORLD = 400, START = 250, BH = 40, K = W / WORLD;
+const GY = H - Math.max(90, H * 0.13);
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+const STACK = (() => {
+  const r = rng(11), s = [{ x: 75, w: 250 }];
+  for (let i = 0; i < 8; i++) {
+    const t = s[s.length - 1]; let e = (r() < 0.3 ? 0 : 4 + r() * 16) * (i % 2 ? 1 : -1);
+    s.push({ x: e > 0 ? t.x + e : t.x, w: t.w - Math.abs(e) });
+  }
+  return s;
+})();
+const MOVER = { x: STACK[8].x - 70, w: STACK[8].w };
+const yOf = (i) => GY - (i + 1) * BH * K;
+const px = (x) => x * K;
+const hsl = (h, s, l, a = 1) => `hsla(${h},${s}%,${l}%,${a})`;
+const BEST = 10;
+
+// --- shared bits ---------------------------------------------------------------------------------
+function stars(n, seed, maxY, size = 2, op = 0.8) {
+  const r = rng(seed); let o = '';
+  for (let i = 0; i < n; i++) { const s = r() < 0.15 ? size + 1 : size; o += `<rect x="${(r() * W).toFixed(0)}" y="${(r() * maxY).toFixed(0)}" width="${s}" height="${s}" fill="#fff" opacity="${(op * (0.4 + r() * 0.6)).toFixed(2)}"/>`; }
+  return o;
+}
+function bestLine(color = 'rgba(255,255,255,.9)', ink = '#fff', bg = 'rgba(0,0,0,.45)') {
+  const y = yOf(BEST);
+  return `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="${color}" stroke-width="2" stroke-dasharray="10 7"/>`
+    + `<rect x="${W - 66}" y="${y - 26}" width="58" height="24" rx="4" fill="${bg}"/><text x="${W - 37}" y="${y - 8}" text-anchor="middle" font-size="16" font-weight="800" fill="${ink}">&#9733; ${BEST}</text>`;
+}
+function hud(extra = '') {
+  return `<div class="hub">&#8249; Hub</div><div class="bug">&#128030;</div><div class="best">&#9733; ${BEST}</div>
+    <div class="score">8</div><div class="streak">&#9670; 3</div>
+    <div class="pause"><svg width="24" height="24"><rect x="6" y="5" width="4" height="14" rx="1" fill="#fff"/><rect x="14" y="5" width="4" height="14" rx="1" fill="#fff"/></svg></div>${extra}`;
+}
+// Oblique 3D block: front face + top face + right side face (depth dx, dy).
+function block3d(x, y, w, h, c, dx = 12, dy = -9) {
+  return `<polygon points="${x},${y} ${x + w},${y} ${x + w + dx},${y + dy} ${x + dx},${y + dy}" fill="${c.top}"/>`
+    + `<polygon points="${x + w},${y} ${x + w + dx},${y + dy} ${x + w + dx},${y + h + dy} ${x + w},${y + h}" fill="${c.side}"/>`
+    + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c.face}"/>`;
+}
+
+// --- NOW: the current look (City at night) -------------------------------------------------------
+function now() {
+  const slab = (i) => { const h = (200 + i * 9) % 360; return { top: hsl(h, 70, 64), face: hsl(h, 66, 56), edge: hsl(h, 60, 42) }; };
+  let o = `<defs><linearGradient id="n-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgb(16,23,58)"/><stop offset="1" stop-color="rgb(52,56,110)"/></linearGradient></defs>
+    <rect width="${W}" height="${H}" fill="url(#n-sky)"/>${stars(70, 3, H * 0.75, 2, 0.6)}<g fill="#0b1230">`;
+  let win = '<g fill="rgba(242,183,5,.8)">';
+  for (let b = 0; b < 12; b++) {
+    const bw = W / 10, bh = 60 + ((b * 37) % 90), x0 = b * bw * 0.95 - 10;
+    o += `<rect x="${x0}" y="${GY - bh}" width="${bw * 0.8}" height="${bh}"/>`;
+    for (let r = 0; r * 14 + 10 < bh; r++) for (let c = 0; c < 3; c++) if (!((b * 7 + r * 3 + c * 5) % 4)) win += `<rect x="${x0 + 5 + c * (bw * 0.8 - 10) / 3}" y="${GY - bh + 8 + r * 14}" width="4" height="5"/>`;
+  }
+  o += '</g>' + win + `</g><rect x="0" y="${GY}" width="${W}" height="${H - GY}" fill="#1a2440"/><rect x="0" y="${GY}" width="${W}" height="6" fill="#3d5070"/>`;
+  const flat = (b, i) => { const c = slab(i), x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K;
+    return `<rect x="${x}" y="${y + h * .2}" width="${w}" height="${h * .8}" fill="${c.face}"/><rect x="${x}" y="${y}" width="${w}" height="${h * .2}" fill="${c.top}"/><rect x="${x}" y="${y + h - 3}" width="${w}" height="3" fill="${c.edge}"/>`; };
+  STACK.forEach((b, i) => { o += flat(b, i); });
+  o += bestLine() + flat(MOVER, 9);
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 40},${yOf(7)}) rotate(28)"><rect x="-14" y="-18" width="28" height="40" fill="${slab(8).face}"/></g>`;
+  return o;
+}
+
+// --- A: Skyscraper. Every block is a lit floor of a building, in 3D; layered city, moon, street ----
+function skyscraper() {
+  const tint = (i) => { const h = 215 + (i % 2) * 8; return { face: `url(#a-face)`, top: hsl(h, 30, 62), side: hsl(h, 32, 26) }; };
+  let o = `<defs>
+    <linearGradient id="a-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070d2b"/><stop offset=".62" stop-color="#2a2a6a"/><stop offset=".86" stop-color="#8a4a7a"/><stop offset="1" stop-color="#e08a5c"/></linearGradient>
+    <linearGradient id="a-face" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4b5d86"/><stop offset="1" stop-color="#34436a"/></linearGradient>
+    <radialGradient id="a-moon"><stop offset=".55" stop-color="#fff6d8"/><stop offset=".62" stop-color="rgba(255,246,216,.35)"/><stop offset="1" stop-color="rgba(255,246,216,0)"/></radialGradient>
+  </defs><rect width="${W}" height="${H}" fill="url(#a-sky)"/>${stars(60, 5, H * 0.5, 2, 0.8)}
+  <circle cx="300" cy="300" r="70" fill="url(#a-moon)"/>`;
+  // far skyline (hazy), near skyline (lit windows)
+  const r = rng(9);
+  o += '<g fill="#3a3570" opacity=".75">';
+  for (let x = -10; x < W; x += 34) { const h = 120 + r() * 160; o += `<rect x="${x}" y="${GY - h}" width="30" height="${h}"/>`; if (r() < 0.4) o += `<rect x="${x + 13}" y="${GY - h - 18}" width="3" height="18"/>`; }
+  o += '</g><g fill="#141a3c">'; let win = '<g fill="#ffd36b">';
+  for (let x = -20; x < W; x += 58) { const h = 70 + r() * 110, bw = 50;
+    o += `<rect x="${x}" y="${GY - h}" width="${bw}" height="${h}"/>`;
+    for (let yy = GY - h + 10; yy < GY - 10; yy += 13) for (let c = 0; c < 4; c++) if (r() < 0.35) win += `<rect x="${x + 6 + c * 11}" y="${yy}" width="6" height="7"/>`; }
+  o += '</g>' + win + '</g>';
+  // street
+  o += `<rect x="0" y="${GY}" width="${W}" height="${H - GY}" fill="#1b1f33"/><rect x="0" y="${GY}" width="${W}" height="8" fill="#5a6280"/>
+    <g fill="#e8c35a">${[0, 1, 2, 3, 4, 5, 6].map((k) => `<rect x="${k * 64 + 10}" y="${GY + 52}" width="34" height="5"/>`).join('')}</g>`;
+  [40, 362].forEach((lx) => { o += `<rect x="${lx}" y="${GY - 70}" width="4" height="70" fill="#2b3150"/><circle cx="${lx + 2}" cy="${GY - 72}" r="7" fill="#ffe7a0"/><circle cx="${lx + 2}" cy="${GY - 72}" r="22" fill="rgba(255,231,160,.18)"/>`; });
+  // floors
+  const floor = (b, i, lit = true) => {
+    const x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K, c = tint(i);
+    let s = block3d(x, y, w, h, c);
+    s += `<rect x="${x}" y="${y}" width="${w}" height="3" fill="rgba(255,255,255,.35)"/>`;
+    const rr = rng(100 + i);
+    for (let wx = x + 7; wx + 9 < x + w - 4; wx += 15) {
+      const on = lit && rr() < 0.7;
+      s += `<rect x="${wx.toFixed(1)}" y="${y + 11}" width="9" height="17" rx="1" fill="${on ? '#ffd774' : '#1e2747'}"/>`;
+      if (on) s += `<rect x="${wx.toFixed(1)}" y="${y + 11}" width="9" height="5" fill="rgba(255,255,255,.35)"/>`;
+    }
+    return s;
+  };
+  STACK.forEach((b, i) => { o += floor(b, i); });
+  // shadow of the tower on the street
+  o = o.replace('<rect x="0" y="' + GY + '" width="' + W + '" height="8" fill="#5a6280"/>', `<rect x="0" y="${GY}" width="${W}" height="8" fill="#5a6280"/><ellipse cx="${px(200)}" cy="${GY + 10}" rx="150" ry="10" fill="rgba(0,0,0,.35)"/>`);
+  o += bestLine('rgba(255,215,116,.95)', '#16243a', '#ffd774');
+  o += floor(MOVER, 9);
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 44},${yOf(7)}) rotate(24)">${block3d(-15, -20, 30, 40, tint(8))}<rect x="-8" y="-9" width="9" height="17" fill="#ffd774"/></g>`;
+  return o;
+}
+
+// --- B: Ice crystal. Glassy blocks, aurora, snowy peaks, falling snow -----------------------------
+function ice() {
+  let o = `<defs>
+    <linearGradient id="b-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03121f"/><stop offset=".6" stop-color="#0b2f45"/><stop offset="1" stop-color="#1f5a6e"/></linearGradient>
+    <linearGradient id="b-au1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="rgba(63,214,168,0)"/><stop offset=".4" stop-color="rgba(63,214,168,.55)"/><stop offset="1" stop-color="rgba(120,120,255,.15)"/></linearGradient>
+    <filter id="b-blur" filterUnits="userSpaceOnUse" x="-60" y="0" width="560" height="500"><feGaussianBlur stdDeviation="9"/></filter>
+    <linearGradient id="b-ice" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(200,245,255,.92)"/><stop offset="1" stop-color="rgba(90,185,225,.85)"/></linearGradient>
+    <linearGradient id="b-peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9f7ff"/><stop offset=".35" stop-color="#7fb0c6"/><stop offset="1" stop-color="#2c5368"/></linearGradient>
+  </defs><rect width="${W}" height="${H}" fill="url(#b-sky)"/>${stars(55, 8, H * 0.55, 2, 0.8)}
+  <path d="M-30 210 C 90 120, 200 300, 440 170" stroke="url(#b-au1)" stroke-width="46" fill="none" filter="url(#b-blur)"/>
+  <path d="M-30 290 C 120 220, 260 360, 440 260" stroke="url(#b-au1)" stroke-width="28" fill="none" filter="url(#b-blur)" opacity=".7"/>
+  <path d="M-10 ${GY} L80 ${GY - 210} L130 ${GY - 150} L200 ${GY - 260} L290 ${GY - 120} L340 ${GY - 190} L420 ${GY} Z" fill="url(#b-peak)" opacity=".9"/>
+  <path d="M80 ${GY - 210} L62 ${GY - 175} L88 ${GY - 182} L100 ${GY - 168} L118 ${GY - 166} Z M200 ${GY - 260} L178 ${GY - 220} L204 ${GY - 228} L222 ${GY - 210} Z" fill="#fff"/>
+  <rect x="0" y="${GY}" width="${W}" height="${H - GY}" fill="#d9eef7"/><path d="M0 ${GY} Q 100 ${GY - 10} 200 ${GY} T 402 ${GY}" fill="#f4fbff"/>
+  <ellipse cx="${px(200)}" cy="${GY + 8}" rx="140" ry="8" fill="rgba(40,110,150,.25)"/>`;
+  const cube = (b, i) => {
+    const x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K;
+    let s = block3d(x, y, w, h, { face: 'url(#b-ice)', top: 'rgba(235,252,255,.95)', side: 'rgba(60,140,185,.85)' }, 10, -8);
+    s += `<polygon points="${x + w * .12},${y + h} ${x + w * .22},${y + h} ${x + w * .42},${y} ${x + w * .32},${y}" fill="rgba(255,255,255,.35)"/>`;
+    s += `<polygon points="${x + w * .5},${y + h} ${x + w * .54},${y + h} ${x + w * .74},${y} ${x + w * .70},${y}" fill="rgba(255,255,255,.22)"/>`;
+    s += `<rect x="${x + .5}" y="${y + .5}" width="${w - 1}" height="${h - 1}" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1"/>`;
+    return s;
+  };
+  STACK.forEach((b, i) => { o += cube(b, i); });
+  o += `<rect x="${px(STACK[6].x) - 14}" y="${yOf(6) - 14}" width="${px(STACK[6].w) + 28}" height="${BH * K + 28}" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="3" rx="4"/>`;
+  o += bestLine() + cube(MOVER, 9);
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 42},${yOf(7)}) rotate(30)">${block3d(-14, -20, 28, 40, { face: 'url(#b-ice)', top: '#eafcff', side: 'rgba(60,140,185,.85)' }, 8, -6)}</g>`;
+  const r = rng(77); o += '<g fill="#fff">';
+  for (let i = 0; i < 45; i++) o += `<circle cx="${(r() * W).toFixed(0)}" cy="${(r() * GY).toFixed(0)}" r="${(1 + r() * 2.2).toFixed(1)}" opacity="${(0.4 + r() * 0.5).toFixed(2)}"/>`;
+  return o + '</g>';
+}
+
+// --- C: Neon space. Glowing outlined blocks, nebula, ringed planet, landing pad -------------------
+function neon() {
+  let o = `<defs>
+    <radialGradient id="c-neb1" cx=".25" cy=".3" r=".55"><stop offset="0" stop-color="rgba(220,60,200,.55)"/><stop offset="1" stop-color="rgba(220,60,200,0)"/></radialGradient>
+    <radialGradient id="c-neb2" cx=".8" cy=".55" r=".5"><stop offset="0" stop-color="rgba(60,110,255,.5)"/><stop offset="1" stop-color="rgba(60,110,255,0)"/></radialGradient>
+    <radialGradient id="c-planet" cx=".35" cy=".35" r=".8"><stop offset="0" stop-color="#ffb36b"/><stop offset=".6" stop-color="#c2507a"/><stop offset="1" stop-color="#3a1850"/></radialGradient>
+    <filter id="c-glow" x="-30%" y="-60%" width="160%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="c-pad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2140"/><stop offset="1" stop-color="#0c0818"/></linearGradient>
+  </defs><rect width="${W}" height="${H}" fill="#06030f"/><rect width="${W}" height="${H}" fill="url(#c-neb1)"/><rect width="${W}" height="${H}" fill="url(#c-neb2)"/>
+  ${stars(110, 21, H, 2, 0.9)}
+  <circle cx="320" cy="300" r="48" fill="url(#c-planet)"/>
+  <ellipse cx="320" cy="300" rx="84" ry="16" fill="none" stroke="rgba(255,200,150,.7)" stroke-width="4" transform="rotate(-18 320 300)"/>
+  <circle cx="60" cy="430" r="10" fill="#9fb8ff" opacity=".8"/>
+  <rect x="0" y="${GY}" width="${W}" height="${H - GY}" fill="url(#c-pad)"/>
+  <line x1="0" y1="${GY + 1}" x2="${W}" y2="${GY + 1}" stroke="#36f0ff" stroke-width="3" filter="url(#c-glow)"/>
+  <g stroke="rgba(54,240,255,.25)" stroke-width="1">${[1, 2, 3, 4, 5].map((k) => `<line x1="0" y1="${GY + k * 22}" x2="${W}" y2="${GY + k * 22}"/>`).join('')}${[-3, -2, -1, 0, 1, 2, 3, 4, 5, 6].map((k) => `<line x1="${W / 2}" y1="${GY}" x2="${W / 2 + k * 110}" y2="${H}"/>`).join('')}</g>`;
+  const nb = (b, i) => {
+    const x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K, hue = (300 - i * 16 + 360) % 360;
+    return `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="${hsl(hue, 70, 18, .9)}"/>`
+      + `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${(h - 4) * .45}" rx="4" fill="${hsl(hue, 90, 60, .18)}"/>`
+      + `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="none" stroke="${hsl(hue, 100, 64)}" stroke-width="2.5" filter="url(#c-glow)"/>`;
+  };
+  STACK.forEach((b, i) => { o += nb(b, i); });
+  o += `<rect x="${px(STACK[7].x) - 16}" y="${yOf(7) - 16}" width="${px(STACK[7].w) + 32}" height="${BH * K + 32}" rx="10" fill="none" stroke="rgba(54,240,255,.6)" stroke-width="3" filter="url(#c-glow)"/>`;
+  o += bestLine('rgba(54,240,255,.9)', '#06030f', '#36f0ff') + nb(MOVER, 9);
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 42},${yOf(7)}) rotate(26)"><rect x="-14" y="-20" width="28" height="40" rx="4" fill="${hsl(170, 70, 18)}" stroke="${hsl(170, 100, 64)}" stroke-width="2.5" filter="url(#c-glow)"/></g>`;
+  return o;
+}
+
+// --- D: Toy blocks at sunset (a LIGHT look). Chunky 3D bricks with studs, hills, clouds -----------
+function toy() {
+  const pal = ['#E0532F', '#F2B705', '#1F5FA8', '#178A7A'];
+  const shade = (hex, k) => { const n = parseInt(hex.slice(1), 16); const f = (v) => Math.max(0, Math.min(255, Math.round(v * k))); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; };
+  let o = `<defs>
+    <linearGradient id="d-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5aa9e6"/><stop offset=".55" stop-color="#a9d3f0"/><stop offset=".85" stop-color="#ffd7a8"/><stop offset="1" stop-color="#ffb98a"/></linearGradient>
+  </defs><rect width="${W}" height="${H}" fill="url(#d-sky)"/>
+  <circle cx="90" cy="330" r="44" fill="#ffe9a8"/><circle cx="90" cy="330" r="70" fill="rgba(255,233,168,.3)"/>
+  ${[[60, 250, 1], [280, 200, .8], [330, 420, .7]].map(([cx, cy, s]) => `<g fill="#fff" opacity=".92" transform="translate(${cx},${cy}) scale(${s})"><circle cx="0" cy="0" r="24"/><circle cx="26" cy="-10" r="30"/><circle cx="56" cy="2" r="22"/><rect x="0" y="0" width="56" height="22"/></g>`).join('')}
+  <path d="M0 ${GY - 60} Q 90 ${GY - 140} 190 ${GY - 70} T 402 ${GY - 90} L402 ${GY} L0 ${GY} Z" fill="#8cc47a"/>
+  <path d="M0 ${GY - 20} Q 120 ${GY - 80} 260 ${GY - 25} T 402 ${GY - 30} L402 ${GY} L0 ${GY} Z" fill="#6aae5a"/>
+  <rect x="0" y="${GY}" width="${W}" height="${H - GY}" fill="#c9a26b"/><rect x="0" y="${GY}" width="${W}" height="10" fill="#7fbf63"/>
+  <ellipse cx="${px(200)}" cy="${GY + 12}" rx="150" ry="10" fill="rgba(60,40,10,.25)"/>`;
+  const brick = (b, i) => {
+    const x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K, base = pal[i % 4];
+    let s = block3d(x, y, w, h, { face: base, top: shade(base, 1.25), side: shade(base, 0.7) }, 10, -8);
+    s += `<rect x="${x}" y="${y + h - 4}" width="${w}" height="4" fill="${shade(base, .8)}"/><rect x="${x}" y="${y}" width="${w}" height="3" fill="rgba(255,255,255,.35)"/>`;
+    return s;
+  };
+  const studs = (b, i) => { const x = px(b.x), w = px(b.w), y = yOf(i), base = pal[i % 4]; let s = '';
+    for (let sx = x + 12; sx < x + w - 6; sx += 26) s += `<ellipse cx="${sx + 5}" cy="${y - 4}" rx="8" ry="4" fill="${shade(base, 1.15)}"/><rect x="${sx - 3}" y="${y - 8}" width="16" height="4" fill="${shade(base, 1.3)}"/>`;
+    return s; };
+  STACK.forEach((b, i) => { o += brick(b, i); });
+  o += bestLine('rgba(22,36,58,.75)', '#fff', 'rgba(22,36,58,.75)') + brick(MOVER, 9);
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 42},${yOf(7)}) rotate(26)">${block3d(-14, -20, 28, 40, { face: pal[0], top: shade(pal[0], 1.25), side: shade(pal[0], .7) }, 8, -6)}</g>`;
+  return o;
+}
+
+const FRAMES = [['Now', now], ['A', skyscraper], ['B', ice], ['C', neon], ['D', toy]];
+document.getElementById('wrap').innerHTML = FRAMES.map(([tag, fn]) => `
+  <div class="frame"><div class="tag">${tag}</div>
+    <div class="phone${tag === 'D' ? ' light' : ''}${tag === 'B' ? ' snowy' : ''}"><svg viewBox="0 0 ${W} ${H}">${fn()}</svg>${hud()}</div></div>`).join('');
+</script>
+</body>
+</html>
