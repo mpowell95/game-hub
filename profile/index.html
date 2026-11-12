@@ -245,6 +245,10 @@
   </style>
 </head>
 <body>
+  <!-- Phones are portrait only (2026-11-12, Matt: "no game in the entire game hub needs landscape mode... Let's just
+       turn it off"). The manifest asks for portrait; iPhones ignore that, so a sideways phone gets this cover
+       (css/hub.css .gh-rotate, phones only: a touch screen under 500px tall in landscape). -->
+  <div class="gh-rotate" role="alert"><svg viewBox="0 0 48 48" width="64" height="64" aria-hidden="true"><rect x="14" y="4" width="20" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="38" r="2" fill="currentColor"/></svg><p><span class="gh-rot-en">Turn your phone upright</span><span class="gh-rot-es">Pon el teléfono en vertical</span></p></div>
   <div class="pf-app">
     <!-- MAIN. Matt, 2026-10-29: "I have to click bottom right then admin in a different area to get
          there". Admin is now the first row, on admin devices only (hidden for everyone else, so no

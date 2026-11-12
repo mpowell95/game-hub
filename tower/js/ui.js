@@ -142,6 +142,8 @@ class Tower {
     // World units -> CSS px. Narrow screens fill the width; wide ones cap so the tower is not huge.
     this.k = Math.min(W / E.WORLD_W, (H * 0.62) / E.WORLD_W * 1.3);
     if (this.screen === 'over') this._fitOver();
+    // A phone turned sideways is covered by the hub's "turn your phone upright" screen (css/hub.css .gh-rotate): pause.
+    try { if (window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)').matches) this._pause(); } catch { /* old browser */ }
     this._draw();
     if (this._twBs) this._renderTowers();   // Record towers re-fits too
   }
