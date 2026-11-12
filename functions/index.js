@@ -77,11 +77,27 @@ const OPTS = {
  * whose subscription the phone has dropped (404/410) is removed: a delivery address, not player
  * data, and the player recreates it with one tap.
  */
+// THE LAST RESULT (2026-11-11, Matt: "Notifications are still broken for me"). Each attempt writes what
+// happened onto that subscription's own row, `pushSubs/<code>/<key>/last` = {t, tag, r, s?, why?}
+// (r: sent | skip (app open) | fail | error), so a session can READ why a phone got nothing: the
+// functions' logs are not reachable from a session. A delivery report, not player data; the phone's
+// own set() on re-subscribing replaces the row and its `last`. Never throws.
+async function noteLast(db, code, k, last) {
+  try { await db.ref(`pushSubs/${code}/${k}/last`).set({ t: Date.now(), ...last }); }
+  catch (err) { logger.error('could not note the push result', { code, sub: k, err: String(err) }); }
+}
+
 async function sendTo(db, code, note, tag, open) {
   const subs = (await db.ref(`pushSubs/${code}`).get()).val() || {};
-  const keys = Object.keys(subs);
+  const keys = Object.keys(subs).filter((k) => subs[k] && subs[k].endpoint);
   if (!keys.length) return;
-  webpush.setVapidDetails(SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.value());
+  try {
+    webpush.setVapidDetails(SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.value());
+  } catch (err) {
+    logger.error('push setup failed', { code, tag, err: String(err) });
+    await Promise.all(keys.map((k) => noteLast(db, code, k, { tag, r: 'error', why: String(err).slice(0, 200) })));
+    return;
+  }
   const q = new URLSearchParams({ open: open.game });
   if (open.with) q.set('with', open.with);
   const url = `${HUB_URL}?${q}`;
@@ -89,13 +105,18 @@ async function sendTo(db, code, note, tag, open) {
     const s = subs[k];
     if (!s || !s.endpoint || !s.keys) return;
     // The hub is open on this device right now: it already shows the news, so no notification.
-    if (isActive(s)) { logger.info('skipped, app open', { code, tag, sub: k }); return; }
-    const { title, body } = note.text(s.lang === 'es' ? 'es' : 'en');
-    const payload = JSON.stringify({ title, body, tag, url, game: open.game, with: open.with || '', name: open.name || '', match: open.match || '' });
+    if (isActive(s)) {
+      logger.info('skipped, app open', { code, tag, sub: k });
+      await noteLast(db, code, k, { tag, r: 'skip' });
+      return;
+    }
     try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload,
+      const { title, body } = note.text(s.lang === 'es' ? 'es' : 'en');
+      const payload = JSON.stringify({ title, body, tag, url, game: open.game, with: open.with || '', name: open.name || '', match: open.match || '' });
+      const res = await webpush.sendNotification({ endpoint: s.endpoint, keys: s.keys }, payload,
         { TTL: 60 * 60 * 24 * 3, urgency: 'high' });
       logger.info('sent', { code, kind: note.kind, tag, sub: k });
+      await noteLast(db, code, k, { tag, r: 'sent', s: (res && res.statusCode) || 0 });
     } catch (err) {
       const status = err && err.statusCode;
       if (status === 404 || status === 410) {
@@ -103,6 +124,7 @@ async function sendTo(db, code, note, tag, open) {
         logger.info('removed expired subscription', { code, sub: k, status });
       } else {
         logger.error('push failed', { code, tag, sub: k, status, body: err && err.body });
+        await noteLast(db, code, k, { tag, r: 'fail', s: status || 0, why: String((err && (err.body || err.message)) || err).slice(0, 200) });
       }
     }
   }));
