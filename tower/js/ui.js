@@ -12,18 +12,19 @@ import * as E from './engine.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordTower, loadStats, withMode } from '../../js/game-stats.js';
+import { recordTower, keepTowerShape, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onThemeChange } from '../../js/theme.js';
 import * as A from './art.js';
-import { LOOKS, slabOf, heroSVG, lookThumb } from './art.js';
+import { LOOKS, slabOf, heroSVG, lookThumb, svgBlock } from './art.js';
 import { backStack } from '../../js/back-stack.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.tower.v1';
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+const medal = (i) => (i < 3 ? ['&#129351;', '&#129352;', '&#129353;'][i] + ' ' : '');
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 
 function loadSettings() {
@@ -120,6 +121,7 @@ class Tower {
     // World units -> CSS px. Narrow screens fill the width; wide ones cap so the tower is not huge.
     this.k = Math.min(W / E.WORLD_W, (H * 0.62) / E.WORLD_W * 1.3);
     this._draw();
+    if (this._twBs) this._renderTowers();   // Record towers re-fits too
   }
 
   // --- screens ---------------------------------------------------------------------------------
@@ -196,7 +198,7 @@ class Tower {
         rows = people.list.filter((g) => g.key === people.meKey || !hidden.isHiddenName(g.name)).map((g) => {
           const me = g.key === people.meKey;
           const tw = (((g.games || {}).tower) || {}).tw || {};
-          return { me, name: me ? (p.name || g.name || '') : g.name, emoji: me ? (p.emoji || g.emoji || '') : g.emoji, by: tw.bestByDiff || {} };
+          return { me, name: me ? (p.name || g.name || '') : g.name, emoji: me ? (p.emoji || g.emoji || '') : g.emoji, by: tw.bestByDiff || {}, shapes: tw.shapes || {} };
         });
       }
     } catch (err) { console.warn('[tower] leader not read', err); }
@@ -270,6 +272,11 @@ class Tower {
     else if (act === 'resume') this._resume();
     else if (act === 'quit') this._quit();
     else if (act === 'twDiff') { this.towersDiff = E.normDiff(b.dataset.v); this._renderTowers(); }
+    else if (act === 'twPick') { this.twPick = Number(b.dataset.i) | 0; this._renderTowers(); }
+    else if (act === 'twPrev' || act === 'twNext') {
+      const n = (this._twList || []).length;
+      if (n && this.twPick != null) { this.twPick = (this.twPick + (act === 'twNext' ? 1 : n - 1)) % n; this._renderTowers(); }
+    }
     else if (act === 'fullBoard') this._openLeaderboard();
     else if (act === 'menu') this._showSetup();
   }
@@ -356,71 +363,151 @@ class Tower {
     }, 750);
   }
 
-  // --- Everyone's record tower (Matt, 2026-11-02: "the screen where you can see everyone's record tower") ---
+  // --- Record towers v2 (Matt, 2026-11-12: "I want the actual towers shown. Same as how I see my tower after
+  // a round"; docs/mockups/tower/record-towers-v2.html). A: everyone's best tower at this difficulty, its real
+  // shape, ONE scale, scrolling sideways. B: one tower tapped, drawn like the game (its own look), with ‹ ›.
+  // A best set before shapes were kept (2026-11-12) has none: it is drawn as a straight stack of its height.
   _showTowers() {
     this.towersDiff = this.screen === 'over' && this.run ? this.run.diff : this.s.diff;
+    this.twPick = null;
     if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
     this.el('towers').hidden = false;
-    // The phone's back swipe and the Back button both close it (js/back-stack.js).
-    if (!this._twBs) this._twBs = backStack(() => this._closeTowers());
-    this._twBs.sync(1);
+    // The phone's back swipe and the Back button step back one screen (B -> A -> closed), js/back-stack.js.
+    if (!this._twBs) this._twBs = backStack((n) => this._twStepBack(n));
     this._renderTowers();
+  }
+  _twStepBack(n) {
+    if (this.twPick != null && n > 0) { this.twPick = null; n -= 1; }
+    if (n > 0) this._closeTowers(); else this._renderTowers();
   }
   _closeTowers() {
     const box = this.el('towers');
     if (box) box.hidden = true;
+    this.twPick = null;
     const bs = this._twBs;
     this._twBs = null;
     if (bs) bs.close();
   }
-  /** One column per person with a best at this difficulty, tallest first, drawn as a stack of slabs in
-   *  the chosen look. Names are profile names (never "You"); this phone's own column is ringed + bold. */
+  /** Everyone with a best at difficulty d, tallest first: { me, name, emoji, best, stack, look, at }. */
+  _towerList(d) {
+    const decode = (sv, best) => {
+      if (!sv || typeof sv !== 'object' || (sv.n | 0) !== best || typeof sv.s !== 'string') return null;
+      const st = sv.s.split(';').map((p) => { const [x, w] = p.split(',').map(Number); return { x, w }; });
+      return st.length === best + 1 && st.every((q) => Number.isFinite(q.x) && Number.isFinite(q.w) && q.w > 0) ? st : null;
+    };
+    const rows = ((this.lead && this.lead.rows) || []).map((r) => ({ ...r, best: r.by[d] | 0, sv: (r.shapes || {})[d] }));
+    const own = ((towerRec() || {}).tw) || {};
+    const mine = (own.bestByDiff || {})[d] | 0, myShape = (own.shapes || {})[d];
+    let meRow = rows.find((r) => r.me);
+    if (!meRow && mine > 0) {
+      let p = {};
+      try { p = loadProfile() || {}; } catch { p = {}; }
+      meRow = { me: true, name: p.name || '', emoji: p.emoji || '', best: 0, sv: null };
+      rows.push(meRow);
+    }
+    if (meRow && mine >= meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; }
+    return rows.filter((r) => r.best > 0).sort((a, b) => b.best - a.best).map((r) => {
+      const stack = decode(r.sv, r.best);
+      return { me: r.me, name: r.name, emoji: r.emoji, best: r.best,
+        stack: stack || Array.from({ length: r.best + 1 }, () => ({ x: (E.WORLD_W - E.START_W) / 2, w: E.START_W })),
+        look: stack && LOOKS.indexOf(r.sv.l) >= 0 ? r.sv.l : this.s.look, at: stack ? Number(r.sv.t) || 0 : 0 };
+    });
+  }
   _renderTowers() {
     const box = this.el('towers');
     if (!box || box.hidden) return;
     const d = this.towersDiff;
-    const rows = ((this.lead && this.lead.rows) || []).map((r) => ({ ...r, best: r.by[d] | 0 }));
-    const mine = bestFor(d);
-    let meRow = rows.find((r) => r.me);
-    if (meRow) meRow.best = Math.max(meRow.best, mine);
-    else if (mine > 0) {
-      let p = {};
-      try { p = loadProfile() || {}; } catch { p = {}; }
-      rows.push({ me: true, name: p.name || '', emoji: p.emoji || '', best: mine });
-    }
-    const list = rows.filter((r) => r.best > 0).sort((a, b) => b.best - a.best);
-    const top = list.reduce((m, r) => Math.max(m, r.best), 0);
-    const look = this.s.look;
-    const col = (r, i) => {
-      const n = r.best, H = 100;
-      const sh = H / Math.max(n, 1);   // the column's own height is set to n / top below
-      const draw = Math.min(n, 120), step = n / draw;
-      let rects = '';
-      for (let j = 0; j < draw; j++) {
-        const c = slabOf(look, Math.floor(j * step));
-        const y = H - (j + 1) * sh * step;
-        rects += `<rect x="0" y="${y.toFixed(2)}" width="20" height="${(sh * step + 0.05).toFixed(2)}" fill="${c.face}"/>`;
-        if (sh * step > 2.5) rects += `<rect x="0" y="${y.toFixed(2)}" width="20" height="${(Math.min(1, sh * step * 0.2)).toFixed(2)}" fill="${c.top}"/>`;
-      }
-      return `
-        <div class="tw-col${r.me ? ' is-me' : ''}">
-          <b class="tw-col-n">${n}</b>
-          <svg class="tw-col-t" viewBox="0 0 20 100" preserveAspectRatio="none" style="height:calc((100% - 64px) * ${(n / Math.max(top, 1)).toFixed(4)})" aria-hidden="true">${rects}</svg>
-          <span class="tw-col-who">${i < 3 ? ['&#129351;', '&#129352;', '&#129353;'][i] + ' ' : ''}${esc(r.emoji)} ${esc(r.name || t('anon_player'))}</span>
-        </div>`;
-    };
-    const tabs = E.DIFFS.map((k) => `
-      <button type="button" class="tw-tab${k === d ? ' is-sel' : ''}" data-act="twDiff" data-v="${k}" role="tab" aria-selected="${k === d}">${diffShapeSVG(tierOf(k))}<b>${t('diff_' + k)}</b></button>`).join('');
-    box.innerHTML = `
-      <div class="tw-tw-head"><h2>${esc(t('records'))}</h2></div>
-      <div class="tw-tabs" role="tablist">${tabs}</div>
-      <div class="tw-cols">${list.length ? list.map(col).join('') : '<p class="tw-none">-</p>'}</div>
+    const list = this._towerList(d);
+    this._twList = list;
+    if (this.twPick != null && !list[this.twPick]) this.twPick = null;
+    const bar = `
       <div class="tw-twbar">
         <button type="button" class="tw-play tw-alt tw-back" data-act="towersClose">&#8249; ${esc(t('back'))}</button>
         <button type="button" class="tw-lead-all" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>
       </div>`;
-    const me = box.querySelector('.tw-col.is-me');
-    if (me && me.scrollIntoView) { try { me.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch { /* old browser */ } }
+    if (this.twPick != null) {
+      const r = list[this.twPick];
+      let when = '';
+      if (r.at) { try { when = ' &middot; ' + esc(new Date(r.at).toLocaleDateString(document.documentElement.lang === 'es' ? 'es-ES' : 'en-US', { month: 'short', day: 'numeric' })); } catch { when = ''; } }
+      box.classList.add('is-pick');
+      box.innerHTML = `
+        <div class="tw-pick">
+          <canvas class="tw-pick-c" aria-hidden="true"></canvas>
+          <div class="tw-pick-n">${r.best}</div>
+          <div class="tw-pick-who">${medal(this.twPick)}${esc(r.emoji)} ${esc(r.name || t('anon_player'))}<small>${esc(t('diff_' + d))}${when}</small></div>
+          ${list.length > 1 ? `<button type="button" class="tw-arrow is-l" data-act="twPrev" aria-label="&#8249;">&#8249;</button>
+          <button type="button" class="tw-arrow is-r" data-act="twNext" aria-label="&#8250;">&#8250;</button>` : ''}
+          ${bar}
+        </div>`;
+      this._drawPick(r);
+    } else {
+      box.classList.remove('is-pick');
+      const tabs = E.DIFFS.map((k) => `
+        <button type="button" class="tw-tab${k === d ? ' is-sel' : ''}" data-act="twDiff" data-v="${k}" role="tab" aria-selected="${k === d}">${diffShapeSVG(tierOf(k))}<b>${t('diff_' + k)}</b></button>`).join('');
+      box.innerHTML = `
+        <div class="tw-tw-head"><h2>${esc(t('records'))}</h2></div>
+        <div class="tw-tabs" role="tablist">${tabs}</div>
+        <div class="tw-scene">${list.length ? '' : '<p class="tw-none">-</p>'}</div>
+        ${bar}`;
+      if (list.length) this._drawScene(box.querySelector('.tw-scene'), list);
+    }
+    if (this._twBs) this._twBs.sync(this.twPick != null ? 2 : 1);
+  }
+  /** A: the towers side by side on one ground, one scale (true heights AND widths), as SVG. */
+  _drawScene(sc, list) {
+    const W = Math.max(1, sc.clientWidth), H = Math.max(1, sc.clientHeight);
+    const gy = H - 74;
+    const top = list.reduce((m, r) => Math.max(m, r.best), 0);
+    const k = Math.min(0.42, (gy - 44) / ((top + 1) * E.BLOCK_H));
+    const slot = Math.max(84, E.START_W * k + 14);
+    const SW = Math.max(W, slot * list.length);
+    const bh = E.BLOCK_H * k;
+    let stars = '';
+    for (let i = 0; i < 60; i++) stars += `<rect x="${((i * 97.3) % SW).toFixed(0)}" y="${((i * 53.7) % (gy * 0.8)).toFixed(0)}" width="2" height="2" fill="#fff" opacity=".6"/>`;
+    let out = `<svg width="${SW}" height="${H}" viewBox="0 0 ${SW} ${H}" aria-hidden="true">
+      <defs><linearGradient id="tw-rt-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1030"/><stop offset="1" stop-color="#2a2e62"/></linearGradient></defs>
+      <rect width="${SW}" height="${H}" fill="url(#tw-rt-sky)"/>${stars}
+      <rect y="${gy}" width="${SW}" height="${H - gy}" fill="#1a2440"/><rect y="${gy}" width="${SW}" height="5" fill="#3d5070"/>`;
+    const maxCh = Math.max(5, Math.floor(slot / 9));
+    list.forEach((r, i) => {
+      const cx = slot * i + slot / 2, base = (E.WORLD_W - E.START_W) / 2;
+      r.stack.forEach((b, j) => {
+        const x = cx + (b.x - base - E.START_W / 2) * k, y = gy - (j + 1) * bh, w = b.w * k;
+        if (bh >= 6) out += svgBlock(r.look, x, y, w, bh, j, k * 2);
+        else { const c = slabOf(r.look, j); out += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${(bh + 0.3).toFixed(2)}" fill="${c.face}"/>`; }
+      });
+      const ty = gy - (r.best + 1) * bh - 9;
+      out += `<text x="${cx}" y="${ty.toFixed(0)}" text-anchor="middle" font-size="20" font-weight="800" fill="${r.me ? '#ffce3a' : '#f2f6fc'}">${r.best}</text>`;
+      const nm = String(r.name || t('anon_player'));
+      const name = nm.length > maxCh ? nm.slice(0, maxCh - 1) + '…' : nm;
+      if (r.me) out += `<rect x="${slot * i + 5}" y="${gy + 9}" width="${slot - 10}" height="58" rx="10" fill="none" stroke="#ffce3a" stroke-width="2.5"/>`;
+      out += `<text x="${cx}" y="${gy + 32}" text-anchor="middle" font-size="17">${medal(i)}${esc(r.emoji)}</text>`;
+      out += `<text x="${cx}" y="${gy + 56}" text-anchor="middle" font-size="15" font-weight="700" fill="#f2f6fc">${esc(name)}</text>`;
+      out += `<rect data-act="twPick" data-i="${i}" x="${slot * i}" y="0" width="${slot}" height="${H}" fill="transparent" style="cursor:pointer"/>`;
+    });
+    sc.innerHTML = out + '</svg>';
+    const me = list.findIndex((r) => r.me);
+    if (me >= 0 && SW > W) sc.scrollLeft = Math.max(0, slot * me + slot / 2 - W / 2);
+  }
+  /** B: one tower, drawn exactly like the game draws it (tower/js/art.js), on its own look's scene. */
+  _drawPick(r) {
+    const box = this.el('towers'), cv = box.querySelector('.tw-pick-c');
+    if (!cv) return;
+    const W = Math.max(1, box.clientWidth), H = Math.max(1, box.clientHeight);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const who = box.querySelector('.tw-pick-who');
+    const topY = who ? who.getBoundingClientRect().bottom - box.getBoundingClientRect().top + 24 : 220;
+    const groundY = H - Math.max(110, H * 0.14);
+    const k = Math.min(W / E.WORLD_W * 0.95, (groundY - topY) / ((r.best + 1) * E.BLOCK_H));
+    const ox = (W - E.WORLD_W * k) / 2, bh = E.BLOCK_H * k;
+    A.drawBackdrop(ctx, r.look, W, H, dpr, groundY, groundY, 0);
+    ctx.save(); ctx.translate(0, groundY);
+    A.drawShadow(ctx, r.look, ox + (r.stack[0].x + r.stack[0].w / 2) * k, r.stack[0].w * k);
+    ctx.restore();
+    r.stack.forEach((b, j) => A.drawBlock(ctx, r.look, ox + b.x * k, groundY - (j + 1) * bh, b.w * k, bh, j, k));
   }
 
   /** Once per run. withMode carries the LOOK and the DIFFICULTY (root CLAUDE.md, "Every result records
@@ -434,6 +521,7 @@ class Tower {
         () => recordTower(E.score(run), d, { perfects: run.perfects, bestStreak: run.bestStreak }),
         () => ({ hi: E.score(run) }));
       if (!st) console.warn('[tower] result not recorded (rate gate or store refused it)');
+      else keepTowerShape(d, E.score(run), run.stack, this.s.look);   // only a best's shape is kept
     } catch (err) { console.error('[tower] recording the result failed', err); }
   }
 

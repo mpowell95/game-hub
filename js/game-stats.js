@@ -3513,6 +3513,29 @@ export function recordTower(height, difficulty, extras) {
   persist(st);
   return st;
 }
+/** Tower: keep the SHAPE of a best tower (2026-11-12, Matt: Record towers show "the actual towers"), called
+ *  right after recordTower. NOT a result and not logged: a shape is far longer than a play-log row may be.
+ *  `tw.shapes[diff]` = { n: height, s: "x,w;x,w;..." (base first, world units, rounded), l: look, t: ms }.
+ *  Kept only when this run IS the best at that difficulty (height >= bestByDiff) and taller than the shape
+ *  already kept, so a shape always belongs to a best and only ever improves (rule 2). */
+export function keepTowerShape(difficulty, height, stack, look) {
+  const d = TW_DIFFS.indexOf(normDiff(difficulty)) >= 0 ? normDiff(difficulty) : null;
+  const h = Number.isFinite(height) ? Math.max(0, Math.floor(height)) : 0;
+  if (!d || h < 1 || !Array.isArray(stack) || stack.length !== h + 1 || h > 5000) return false;
+  const st = loadStats();
+  const g = st.games.tower;
+  ensureTw(g);
+  if (h < (g.tw.bestByDiff[d] | 0)) return false;
+  const old = g.tw.shapes && g.tw.shapes[d];
+  if (old && (old.n | 0) >= h) return false;
+  const num = (v) => (Number.isFinite(v) ? Math.round(v) : 0);
+  if (!g.tw.shapes || typeof g.tw.shapes !== 'object') g.tw.shapes = {};
+  g.tw.shapes[d] = { n: h, s: stack.map((b) => num(b && b.x) + ',' + num(b && b.w)).join(';'),
+    l: typeof look === 'string' ? look.slice(0, 12) : '', t: Date.now() };
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return true;
+}
 
 // --- Air Hockey records (2026-09-28) -----------------------------------------------------------
 // Matt: "Shot speed and records" - fastest shot, shutouts, longest win streak. One call per

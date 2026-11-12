@@ -73,5 +73,29 @@ ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0
   ok('recorder: the look and difficulty are recorded (byMode)', g.byMode && g.byMode['look=city'] && g.byMode['look=city'].hard.hi === 17 && g.byMode['look=ice'].hard.played === 1);
 }
 
+// Best tower shapes (2026-11-12): kept only for a best, only improving, never in the play log; merged tallest.
+{
+  const GS = await import('../js/game-stats.js');
+  const tower = (n) => Array.from({ length: n + 1 }, (_, i) => ({ x: 75 + i * 0.4, w: 250 - i * 0.8 }));
+  GS.withMode({ look: 'space' }, 'easy', () => GS.recordTower(12, 'easy', {}), { hi: 12 });
+  ok('shape: kept for a new best', GS.keepTowerShape('easy', 12, tower(12), 'space') === true);
+  const sh = GS.loadStats().games.tower.tw.shapes.easy;
+  ok('shape: height, look, base first, rounded', sh.n === 12 && sh.l === 'space' && sh.s.split(';').length === 13 && sh.s.startsWith('75,250;'));
+  GS.withMode({ look: 'city' }, 'easy', () => GS.recordTower(8, 'easy', {}), { hi: 8 });
+  ok('shape: a shorter run never replaces it', GS.keepTowerShape('easy', 8, tower(8), 'city') === false && GS.loadStats().games.tower.tw.shapes.easy.n === 12);
+  ok('shape: a stack of the wrong length is refused', GS.keepTowerShape('easy', 20, tower(5), 'city') === false);
+  ok('shape: hard best 17 has no shape (set before shapes); a 9 is not a best', GS.keepTowerShape('hard', 9, tower(9), 'ice') === false);
+  const q = JSON.parse(localStorage.getItem('gamehub.playlog.v1') || '[]');
+  ok('shape: never in the play log (rows stay under 1600 chars)', q.every((r) => !r.a || r.a.length <= 1600) && !q.some((r) => r.f === 'keepTowerShape'));
+  const { aggregatePlayers } = await import('../js/players-agg.js');
+  const mk = (id, n) => ({ id, profile: { name: 'Zed', playerId: 'ZZZZ2' }, stats: { games: { tower: { total: { played: 1, won: 1, lost: 0 }, byDiff: {},
+    tw: { games: 1, best: n, bestByDiff: { easy: n }, blocks: n, perfects: 0, bestStreak: 0, shapes: { easy: { n, s: tower(n).map((b) => Math.round(b.x) + ',' + Math.round(b.w)).join(';'), l: 'toy', t: 1 } } } } } } });
+  let people = null;
+  try { people = aggregatePlayers({ a: mk('a', 6), b: mk('b', 15) }); } catch (err) { console.log('aggregate threw', err); }
+  const list = Array.isArray(people) ? people : (people && (people.list || Object.values(people))) || [];
+  const zed = list.find((p) => p && p.games && p.games.tower);
+  ok('agg: a person keeps the TALLEST shape across devices', !!zed && zed.games.tower.tw.shapes.easy.n === 15 && zed.games.tower.tw.bestByDiff.easy === 15);
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);
