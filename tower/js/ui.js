@@ -72,6 +72,7 @@ class Tower {
       // typing a bug report during a run dropped blocks).
       const tg = e.target;
       if (tg && tg.closest && (tg.closest('input, textarea, select, [contenteditable]') || (tg !== document.body && !this.root.contains(tg)))) return;
+      if (document.querySelector('.lb2, .lb-overlay')) return;   // a Leaderboard opened from Record towers owns Esc
       if (e.key === 'Escape') {
         if (this._twBs) this._twBs.back();
         else if (!this.el('help').hidden) this.el('help').hidden = true;
@@ -147,6 +148,7 @@ class Tower {
     this.k = Math.min(W / E.WORLD_W, (H * 0.62) / E.WORLD_W * 1.3);
     if (this.screen === 'over') this._fitOver();
     // A phone turned sideways is covered by the hub's "turn your phone upright" screen (css/hub.css .gh-rotate): pause.
+    // (The hub also calls onCovered(); this covers the standalone page.)
     try { if (window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)').matches) this._pause(); } catch { /* old browser */ }
     this._draw();
     if (this._twBs) this._renderTowers();   // Record towers re-fits too

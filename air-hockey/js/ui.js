@@ -1094,4 +1094,7 @@ export function destroy() {
 export function isInProgress() {
   return !!(instance && instance.online && (instance.screen === 'game' || instance.screen === 'paused' || instance.screen === 'wait'));
 }
-export default { init, destroy, isInProgress, quitCostsLoss };
+/** The hub covers the game (Leave? dialog, a sideways phone): pause a game vs the computer, as when the app is hidden
+ *  (2026-11-12). An online match cannot pause (the other phone keeps playing). */
+export function onCovered() { try { if (instance && instance.screen === 'game' && !instance.online) instance._pause(); } catch (err) { console.warn('[air-hockey] pause', err); } }
+export default { init, destroy, isInProgress, quitCostsLoss, onCovered };

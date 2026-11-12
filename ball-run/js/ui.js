@@ -835,4 +835,11 @@ export function isInProgress() {
   return !!instance && instance.isInProgress();
 }
 
-export default { init, destroy, isInProgress };
+/** The hub covers the game (Leave? dialog, a sideways phone): stop at the "tap to resume" gate, as when the app is
+ *  hidden (2026-11-12). */
+export function onCovered() {
+  try {
+    if (instance && instance.running) { instance.stopLoop(); instance._pausedForVisibility = true; instance.el.resumeGate.hidden = false; }
+  } catch (err) { console.warn('[ball-run] pause', err); }
+}
+export default { init, destroy, isInProgress, onCovered };

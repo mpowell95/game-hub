@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1530;
-const CACHE = 'game-hub-v1535';
+const CACHE = 'game-hub-v1536';
 
 const ASSETS = [
   './',
@@ -826,7 +826,7 @@ const REST_MANIFEST = {
   './css/hub.css': '7598cfa92d',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'ef365b9d9d',
+  './js/hub.js': '4648d447be',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -1138,7 +1138,7 @@ const REST_MANIFEST = {
   './dots-boxes/js/strings.js': 'c2b20ce3e7',
   './ball-run/index.html': 'd92adb2397',
   './ball-run/css/ball-run.css': 'ee3e50486e',
-  './ball-run/js/ui.js': '206e490ab0',
+  './ball-run/js/ui.js': '9a66ac4be4',
   './ball-run/js/config.js': '98ec5079f8',
   './ball-run/js/track.js': '7e7c04a63d',
   './ball-run/js/sim.js': 'c8340ae6c5',
@@ -1161,19 +1161,19 @@ const REST_MANIFEST = {
   './snake/': 'f7b6207c85',
   './snake/index.html': 'f7b6207c85',
   './snake/css/snake.css': 'c109ec9312',
-  './snake/js/ui.js': '0b86514221',
+  './snake/js/ui.js': '02493e58c8',
   './snake/js/game.js': 'f69fbe6fe8',
   './snake/js/strings.js': '7d8a6ccce9',
   './brick-blitz/': '8f1267a3bb',
   './brick-blitz/index.html': '8f1267a3bb',
   './brick-blitz/css/brick-blitz.css': 'bcc9a3d27b',
-  './brick-blitz/js/ui.js': 'a084bcafad',
+  './brick-blitz/js/ui.js': 'd44157623f',
   './brick-blitz/js/game.js': 'ae87ee3447',
   './brick-blitz/js/strings.js': '00a75d8c6d',
   './air-hockey/': 'c4f7eb7ae7',
   './air-hockey/index.html': 'c4f7eb7ae7',
   './air-hockey/css/air-hockey.css': '799f36931b',
-  './air-hockey/js/ui.js': '64a1d6a25d',
+  './air-hockey/js/ui.js': 'c36e1dcd9c',
   './air-hockey/js/physics.js': 'a8e3192cef',
   './air-hockey/js/ai.js': '05aee99aee',
   './air-hockey/js/render.js': 'b056ca690e',
@@ -1193,7 +1193,7 @@ const REST_MANIFEST = {
   './hill-climb/': '692c1740cf',
   './hill-climb/index.html': '692c1740cf',
   './hill-climb/css/hill-climb.css': 'dbc5e1a9a5',
-  './hill-climb/js/ui.js': 'd45e8ad6b6',
+  './hill-climb/js/ui.js': '9ad2ea5068',
   './hill-climb/js/physics.js': 'f9a9689016',
   './hill-climb/js/terrain.js': '5bc901c361',
   './hill-climb/js/render.js': '623cbf7db4',

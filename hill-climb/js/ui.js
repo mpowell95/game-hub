@@ -776,4 +776,6 @@ export function isInProgress() {
   return !!instance && instance.isInProgress();
 }
 
-export default { init, destroy, isInProgress };
+/** The hub covers the game (Leave? dialog, a sideways phone): pause, as when the app is hidden (2026-11-12). */
+export function onCovered() { try { if (instance && instance.screen === 'play') instance.setPaused(true); } catch (err) { console.warn('[hill-climb] pause', err); } }
+export default { init, destroy, isInProgress, onCovered };

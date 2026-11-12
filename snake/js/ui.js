@@ -511,4 +511,6 @@ export function isInProgress() {
   return !!(instance && instance.screen === 'game' && instance.started &&
     instance.game && !instance.game.over);
 }
-export default { init, destroy, isInProgress };
+/** The hub covers the game (Leave? dialog, a sideways phone): pause, as when the app is hidden (2026-11-12). */
+export function onCovered() { try { if (instance) instance._pause(); } catch (err) { console.warn('[snake] pause', err); } }
+export default { init, destroy, isInProgress, onCovered };
