@@ -714,6 +714,8 @@ None of this makes the hub cheat-proof; never describe it that way.
   `js/push.js` and `functions/index.js`; `tools/test-push.mjs` fails if they differ.
 - **Each send's result is on the address (2026-11-11, Matt: "Notifications are still broken for me")**: `pushSubs/<code>/<key>/last` =
   `{t, tag, r: sent|skip|fail|error, s, why}`, written by `sendTo`; any signed-in session can read it (the functions' logs cannot be).
+  **"No notifications" diagnosis order**: read `last` (sent 201 = Apple took it); an app-icon badge = the phone SHOWED it (sw.js `syncBadge`
+  runs only after `showNotification`), so it is the iPhone's settings under the Home Screen NAME (Matt's: "Matt's Game Hub"). Matt's 2026-11-11 cause: Scheduled Summary.
 - iPhone: only the Home Screen app (iOS 16.4+) can receive them; `pushState()` returns `'install'`.
 - Never notify about your own action (`by` on the match). No push to a device with the hub open
   (`activeAt` heartbeat, decided on the SERVER in `isActive`). Opening the hub clears shown
