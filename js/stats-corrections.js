@@ -621,7 +621,7 @@ const ZERO = {
     'd.solved', 'd.guesses', 'd.noHint', 'd.silver', 'd.bronze'] },
   wayout: { wo: ['pts', 'log', 'replay', 'best', 'recent', 'rush', 'cl', 'leg'] },
   brickblitz: { bz: ['bestScore', 'bestScoreByDiff', 'points', 'bestCombo'] },
-  tower: { tw: ['best', 'bestByDiff', 'bestStreak', 'blocks', 'perfects'] },
+  tower: { tw: ['best', 'bestByDiff', 'bestStreak', 'blocks', 'perfects', 'shapes'] },
   ballrun: { br: ['bestObstacles', 'bestObstaclesByDiff'], brOrbital: ['bestObstacles', 'bestObstaclesByDiff'] },
   nutsbolts: { nb: ['bestLevel', 'bestByTier'] },
   holdem: { hb: ['winnings', 'best', 'cashes'], hs: ['won', 'bigPot', 'best', 'bestCat', 'bestCards'] },

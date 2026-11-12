@@ -305,7 +305,7 @@ function svgBox(x, y, w, h, dx, dy, c) {
     + `<polygon points="${x + w},${y} ${x + w + dx},${y + dy} ${x + w + dx},${y + h + dy} ${x + w},${y + h}" fill="${c.side}"/>`
     + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c.face}"/>`;
 }
-function svgBlock(look, x, y, w, h, i, s) {
+export function svgBlock(look, x, y, w, h, i, s) {
   const c = slabOf(look, i);
   if (look === 'space') {
     return `<rect x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${h - 2}" rx="${2 * s}" fill="${c.face}" stroke="${c.top}" stroke-width="${Math.max(1, 1.6 * s)}"/>`;

@@ -47,9 +47,13 @@ his "release it".
 - **Best line + record towers (2026-11-02, Matt)**: a dashed "★ N" line at your best (this difficulty) while playing
   (turns yellow once beaten) and at game over (the PREVIOUS best). Game over zooms to fit the tower and the line, the
   ground lifts above a bottom card (score, best, Again, Compare). Compare and the setup footer's Leaderboard open
-  **Record towers**: everyone's best at a difficulty as side-by-side towers (`readPeople()` rows, tallest first, own
-  column ringed, medals 1-3), tabs per difficulty, Leaderboard › to the hub board. While Tower is admin-only nobody's
-  plays upload, so only this phone's own tower shows there.
+  **Record towers**. While Tower is admin-only nobody's plays upload, so only this phone's own tower shows there.
+- **Record towers v2 (2026-11-12, Matt: "build the record towers mockup"; `docs/mockups/tower/record-towers-v2.html`)**:
+  A = every best at the tab's difficulty as its REAL shape (`tw.shapes`), one scale for all (true heights and widths),
+  side by side on one ground, scrolling sideways, tallest first, medals 1-3, own name ringed; each tower in the look it
+  was built in. Tap one = B: that tower drawn like the game (`art.js` on a canvas, its look's scene), number, medal, name,
+  difficulty and date, ‹ › through the list. Back / back swipe: B -> A -> closed (back-stack levels 2, 1). A best set
+  before 2026-11-12 has no shape: drawn as a straight stack of its height until beaten.
 
 ## Stats
 
@@ -58,8 +62,13 @@ his "release it".
 - Sub-counter `tw`: `games`, `blocks`, `perfects` (add); `best`, `bestByDiff`, `bestStreak` (Math.max).
   Wired in `players-agg.js`, `game-stats-ui.js` (`towerScreen`), `leaderboard-ui.js` (`twBestAt`, tiered),
   `stats-corrections.js`. While admin-only, plays go to the test record (`ADMIN_ONLY`).
+- **`tw.shapes[diff]` = `{n, s: "x,w;..." (base first, world units), l: look, t: ms}`** (2026-11-12): `keepTowerShape`
+  right after `recordTower`, kept only when the run IS the best at that difficulty and taller than the kept shape
+  (only improves). Separate from `recordTower` ON PURPOSE: a play-log row's arguments may be at most 1600 chars and a
+  tall tower's shape is longer (a refused row would sit in the queue). Merged per person = the tallest
+  (`players-agg.js`); voided with the other bests (`stats-corrections.js`).
 
 ## Tests
 
-`node tools/test-tower.mjs` (engine + recorder). Also covered: `tools/players-agg.test.mjs` (tw combine),
+`node tools/test-tower.mjs` (engine, recorder, best shapes kept and merged). Also covered: `tools/players-agg.test.mjs` (tw combine),
 `tools/test-game-conventions.mjs`, `tools/test-i18n-strings.mjs`, `tools/test-game-modes.mjs`.

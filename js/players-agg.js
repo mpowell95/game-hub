@@ -800,6 +800,15 @@ export function aggregatePlayers(all, corrections) {
         dst.tw.bestStreak = Math.max(dst.tw.bestStreak | 0, src.tw.bestStreak | 0);
         const tbd = src.tw.bestByDiff || {};
         for (const k of Object.keys(tbd)) dst.tw.bestByDiff[k] = Math.max(dst.tw.bestByDiff[k] | 0, tbd[k] | 0);
+        // Best tower shapes (2026-11-12): per difficulty, the TALLEST across the person's devices (a copy).
+        const tsh = src.tw.shapes || {};
+        for (const k of Object.keys(tsh)) {
+          const sv = tsh[k];
+          if (!sv || typeof sv !== 'object' || typeof sv.s !== 'string') continue;
+          if (!dst.tw.shapes) dst.tw.shapes = {};
+          const dv = dst.tw.shapes[k];
+          if (!dv || (sv.n | 0) > (dv.n | 0)) dst.tw.shapes[k] = { n: sv.n | 0, s: sv.s, l: String(sv.l || ''), t: Number(sv.t) || 0 };
+        }
       } else if (g === 'airhockey' && src.ah) {
         // Air Hockey records (js/game-stats.js, recordAirHockey). Counters ADD; bestShot and
         // bestStreak take Math.max, never a sum. `streak` is one device's live state and is not
