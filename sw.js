@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1530;
-const CACHE = 'game-hub-v1536';
+const CACHE = 'game-hub-v1537';
 
 const ASSETS = [
   './',
@@ -20,6 +20,7 @@ const ASSETS = [
   './js/name-gate.js',
   './js/name-gate-auto.js',
   './js/no-zoom.js',
+  './js/sideways.js',
   './js/a2hs.js',
   './js/favorites.js',
   './js/launcher-sort.js',
@@ -823,13 +824,14 @@ const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 // __REST_MANIFEST_START__
 const REST_MANIFEST = {
   './manifest.webmanifest': 'cd3b726da1',
-  './css/hub.css': '7598cfa92d',
+  './css/hub.css': '45d6206013',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '4648d447be',
+  './js/hub.js': 'a9fa6975da',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
+  './js/sideways.js': '488a5d3ad5',
   './js/a2hs.js': '0dd98205a9',
   './js/favorites.js': '42997e1b0d',
   './js/launcher-sort.js': '5687e93cca',
@@ -1016,13 +1018,13 @@ const REST_MANIFEST = {
   './murdoku/': '05fbbc038a',
   './murdoku/index.html': '05fbbc038a',
   './murdoku/css/murdoku.css': 'ec84773045',
-  './murdoku/js/ui.js': '3402663763',
+  './murdoku/js/ui.js': '34aa3ec7b9',
   './murdoku/js/engine.js': '46518c0de8',
   './murdoku/js/strings.js': 'e744e28e32',
   './way-out/': '266cc82dc4',
   './way-out/index.html': '266cc82dc4',
   './way-out/css/way-out.css': '48873b9523',
-  './way-out/js/ui.js': '11d62adffc',
+  './way-out/js/ui.js': '256369ce66',
   './way-out/js/engine.js': '289418bac1',
   './way-out/js/strings.js': 'd5dc282381',
   './way-out/js/boards8.js': '56f9933468',
@@ -1043,7 +1045,7 @@ const REST_MANIFEST = {
   './word-weaver/': '6cfc088022',
   './word-weaver/index.html': '6cfc088022',
   './word-weaver/css/word-weaver.css': 'd884de0311',
-  './word-weaver/js/ui.js': '10a8b97461',
+  './word-weaver/js/ui.js': 'a65c360d3e',
   './word-weaver/js/engine.js': 'fd399c2d42',
   './word-weaver/js/daily.js': '4bc8b1e063',
   './word-weaver/js/board.js': 'd23a562192',
@@ -1110,7 +1112,7 @@ const REST_MANIFEST = {
   './sudoku/': '39055429fc',
   './sudoku/index.html': '39055429fc',
   './sudoku/css/sudoku.css': '146887ebaf',
-  './sudoku/js/ui.js': '7c4cc157d4',
+  './sudoku/js/ui.js': '385b49e34b',
   './sudoku/js/game.js': '8a05a5a69c',
   './sudoku/js/generator.js': '2d3d2c92f1',
   './sudoku/js/solver.js': 'c12fe83ae8',

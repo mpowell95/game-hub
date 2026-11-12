@@ -444,7 +444,7 @@ Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 
 In `docs/BUILDING-A-GAME.md`, "Part 1 — Building a game" (exports, leak-free `destroy()`, name
 gate, `isInProgress()`'s two legitimate meanings, `immersive: true`). Read it before touching any
-game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog, the in-game bug sheet or the sideways-phone cover covers the game; Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb and Air Hockey (vs computer) pause, as when the app is hidden. A new real-time game must export it.
+game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog, the in-game bug sheet or the sideways cover covers the game; Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb and Air Hockey (vs computer) pause, as when the app is hidden. Optional `onSideways(on)`: a clock that pauses when the app is hidden pauses sideways and runs on upright (Sudoku, Murdoku, Arrow Maze levels, Word Weaver's daily). Minesweeper/Boggle (time away counts) and Rush (never stops) export neither, on purpose. A new timed game must choose.
 
 ### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
 
@@ -465,8 +465,9 @@ game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub cal
 | Buttons, cards, fields, modals | `css/ui.css` `.gh-*` + `--gh-*` tokens | chrome from scratch |
 
 **Scroll and touch rules:**
-- **Phones are portrait only (2026-11-12, Matt: "Let's just turn it off")**: a sideways phone (touch, under 500px tall) gets
-  `.gh-rotate`, "Turn your phone upright" (`index.html`, `profile/index.html`, `css/hub.css`); desktops and tablets never see it.
+- **Phones are portrait only (2026-11-12, Matt: "Let's just turn it off")**: `js/sideways.js` (classic, after no-zoom.js on the
+  hub and profile page) reads how the PHONE is held (`screen.orientation`), never the page's shape (a keyboard or split screen
+  made an upright phone's page "landscape"), sets `html.gh-sideways` = the "Turn your phone upright" cover; tablets/desktops never.
 - **No page zooms or selects, and no game screen scrolls (Matt, 2026-10-15).** Every page's viewport
   meta has `maximum-scale=1, user-scalable=no` and loads `js/no-zoom.js` right after it (a `*`
   `touch-action: pan-x pan-y` + `user-select: none`, inputs excepted, + Safari's `gesturestart`
