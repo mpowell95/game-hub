@@ -2486,4 +2486,7 @@ export function destroy() {
 /** Always false: every change autosaves (see the header). */
 export function isInProgress() { return false; }
 
-export default { init, destroy, isInProgress };
+/** A phone turned sideways (js/hub.js, js/sideways.js): a LEVEL's clock stops as when the app is hidden and runs on when
+ *  upright (2026-11-12). Rush is left alone: its clock never stops (Matt: "don't stop the clock"). */
+export function onSideways(on) { try { if (instance && !instance.rush) { if (on) instance._clockPause(); else instance._clockRun(); } } catch (err) { console.warn('[arrow-maze] clock', err); } }
+export default { init, destroy, isInProgress, onSideways };

@@ -208,8 +208,8 @@ function drawGround(ctx, look, W, H, y) {
     for (let k = 1; y + k * 22 < H; k++) { ctx.moveTo(0, y + k * 22); ctx.lineTo(W, y + k * 22); }
     for (let k = -4; k <= 4; k++) { ctx.moveTo(W / 2, y); ctx.lineTo(W / 2 + k * 110 * (W / 402), H); }
     ctx.stroke();
-    ctx.save(); ctx.shadowColor = '#36f0ff'; ctx.shadowBlur = 10;
-    ctx.fillStyle = '#36f0ff'; ctx.fillRect(0, y, W, 3); ctx.restore();
+    ctx.fillStyle = 'rgba(54,240,255,.25)'; ctx.fillRect(0, y - 3, W, 9);   // the glow, without shadowBlur
+    ctx.fillStyle = '#36f0ff'; ctx.fillRect(0, y, W, 3);
     return;
   }
   if (look === 'toy') {

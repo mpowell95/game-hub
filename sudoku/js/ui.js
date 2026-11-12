@@ -699,4 +699,7 @@ export function destroy() {
 
 export function isInProgress() { return instance ? instance.isInProgress() : false; }
 
-export default { init, destroy, isInProgress };
+/** A phone turned sideways (js/hub.js, js/sideways.js): the clock stops as when the app is hidden, and runs on when
+ *  the phone is upright again (2026-11-12). */
+export function onSideways(on) { try { if (instance) { if (on) instance._pauseTimer(); else instance._maybeResumeTimer(); } } catch (err) { console.warn('[sudoku] clock', err); } }
+export default { init, destroy, isInProgress, onSideways };

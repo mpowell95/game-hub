@@ -1089,25 +1089,28 @@ class Hub {
       });
     } catch (err) { console.warn('[hub] announcement could not be shown', err); }
   }
-
-  /** The player's bug-report form, preloaded with whichever game they were last in. */
   /** Something now covers the mounted game (the Leave? dialog, the in-game bug sheet, the "Turn your phone upright"
    *  screen of a sideways phone): a game may stop its action under it through an optional `onCovered()` export
    *  (2026-11-12: Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb, Air Hockey vs the computer). Never throws. */
   _watchRotate() {
-    if (this._rotateMq || typeof window === 'undefined' || !window.matchMedia) return;
-    try {
-      // The same query as css/hub.css .gh-rotate.
-      this._rotateMq = window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
-      const on = (e) => { if (e.matches) this._coverGame(); };
-      if (this._rotateMq.addEventListener) this._rotateMq.addEventListener('change', on); else this._rotateMq.addListener(on);
-    } catch { /* an old browser: the cover still shows */ }
+    if (this._rotateOn || typeof window === 'undefined') return;
+    // js/sideways.js fires this from how the PHONE is held. Sideways: the game is covered (onCovered: games with a
+    // pause screen pause) and told (onSideways(true): a clock that pauses when the app is hidden pauses); upright
+    // again: onSideways(false) lets that clock run on. Rush-style "the clock never stops" games export neither.
+    this._rotateOn = (e) => {
+      const on = !!(e && e.detail);
+      if (on) this._coverGame();
+      const m = this.current && this.current.module;
+      try { if (m && typeof m.onSideways === 'function') m.onSideways(on); } catch { /* the cover still shows */ }
+    };
+    window.addEventListener('gamehub:sideways', this._rotateOn);
   }
   _coverGame() {
     const m = this.current && this.current.module;
     try { if (m && typeof m.onCovered === 'function') m.onCovered(); } catch { /* the cover still shows */ }
   }
 
+  /** The player's bug-report form, preloaded with whichever game they were last in. */
   async openBugReport() {
     try {
       const m = await import('./bug-report-ui.js');

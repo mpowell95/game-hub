@@ -1003,16 +1003,15 @@ html.gh-touring .hub-tab.is-tip { opacity: 1; }
 
 /* PHONES ARE PORTRAIT ONLY (2026-11-12, Matt: "no game in the entire game hub needs landscape mode... Let's just turn it
    off"). manifest.webmanifest asks for portrait, but iPhones honour no orientation lock, so a sideways PHONE gets a cover
-   (the element is in index.html and profile/index.html). Gated on a touch screen under 500px tall: a desktop or laptop
-   window (landscape, fine pointer) and a tablet never see it. Skeeball's own .sk-rotate predates this. */
+   (the element is in index.html and profile/index.html). js/sideways.js decides, from how the phone is HELD, never the
+   page's shape (a keyboard or split screen made an upright phone's page "landscape", 2026-11-12 review), and puts
+   `gh-sideways` on <html>. Tablets and desktops never qualify. Skeeball's own .sk-rotate predates this. */
 .gh-rotate { display: none; }
-@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .gh-rotate {
-    position: fixed; inset: 0; z-index: 2147483600;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-    padding: 24px; background: #0f1726; color: #f2f6fc; text-align: center;
-    font: 700 22px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  .gh-rotate p { margin: 0; }
-  html:not([lang="es"]) .gh-rotate .gh-rot-es, html[lang="es"] .gh-rotate .gh-rot-en { display: none; }
+html.gh-sideways .gh-rotate {
+  position: fixed; inset: 0; z-index: 2147483600;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 24px; background: #0f1726; color: #f2f6fc; text-align: center;
+  font: 700 22px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+html.gh-sideways .gh-rotate p { margin: 0; }
+html:not([lang="es"]) .gh-rotate .gh-rot-es, html[lang="es"] .gh-rotate .gh-rot-en { display: none; }

@@ -93,7 +93,7 @@ class Tower {
     this._offResize = onViewportResize(() => this._layout());
     this._ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this._layout()) : null;
     if (this._ro) this._ro.observe(this.root);
-    this._offLang = onLangChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderHelp(); this._renderPause(); this._renderTowers(); });
+    this._offLang = onLangChange(() => { this.canvas.setAttribute('aria-label', t('aria_board')); if (this.screen === 'setup') this._renderSetup(); this._renderHelp(); this._renderPause(); this._renderTowers(); });
     this._offTheme = onThemeChange(() => { if (this.screen === 'setup') this._renderSetup(); this._renderTowers(); this._draw(); });
     this._layout();
     this._showSetup();
@@ -149,7 +149,7 @@ class Tower {
     if (this.screen === 'over') this._fitOver();
     // A phone turned sideways is covered by the hub's "turn your phone upright" screen (css/hub.css .gh-rotate): pause.
     // (The hub also calls onCovered(); this covers the standalone page.)
-    try { if (window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)').matches) this._pause(); } catch { /* old browser */ }
+    if (document.documentElement.classList.contains('gh-sideways')) this._pause();
     this._draw();
     if (this._twBs) this._renderTowers();   // Record towers re-fits too
   }
@@ -462,7 +462,13 @@ class Tower {
       meRow = { me: true, name: p.name || '', emoji: p.emoji || '', best: 0, sv: null };
       rows.push(meRow);
     }
-    if (meRow && mine >= meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; meRow.gm = ownRec; }
+    // This phone's best counts at once; the tie-break averages stay the PERSON's (all their phones, the board's record),
+    // as the Leaderboard's do. This phone's own record only when the board has none for them yet.
+    if (meRow) {
+      if (mine > meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; }
+      else if (mine === meRow.best && !meRow.sv && myShape) meRow.sv = myShape;
+      if (!meRow.gm) meRow.gm = ownRec;
+    }
     for (const r of rows) { r.avgD = avgAt(r.gm); r.avgA = avgAll(r.gm); }
     const cmp = (a, b) => {
       if (b.best !== a.best) return b.best - a.best;

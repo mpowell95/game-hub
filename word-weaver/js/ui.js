@@ -1489,4 +1489,7 @@ export function destroy() {
 /** False on purpose: every accepted word and hint is saved, so leaving is lossless (see the header). */
 export function isInProgress() { return false; }
 
-export default { init, destroy, isInProgress };
+/** A phone turned sideways (js/hub.js, js/sideways.js): the daily puzzle's clock holds as when the app is hidden, and runs
+ *  on when upright (2026-11-12). */
+export function onSideways(on) { try { if (instance) { if (on) instance._dailyHold(); else instance._dailyRun(); } } catch (err) { console.warn('[word-weaver] clock', err); } }
+export default { init, destroy, isInProgress, onSideways };

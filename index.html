@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <script src="js/no-zoom.js"></script>
+  <script src="js/sideways.js"></script>
   <title>Matt's Game Hub</title>
   <meta name="description" content="A small hub of self-contained games. No ads, fully offline.">
   <meta name="theme-color" content="#1769d4">
@@ -45,7 +46,7 @@
 <body>
   <!-- Phones are portrait only (2026-11-12, Matt: "no game in the entire game hub needs landscape mode... Let's just
        turn it off"). The manifest asks for portrait; iPhones ignore that, so a sideways phone gets this cover
-       (css/hub.css .gh-rotate, phones only: a touch screen under 500px tall in landscape). -->
+       (css/hub.css .gh-rotate, shown by js/sideways.js from how the PHONE is held). -->
   <div class="gh-rotate" role="alert"><svg viewBox="0 0 48 48" width="64" height="64" aria-hidden="true"><rect x="14" y="4" width="20" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="38" r="2" fill="currentColor"/></svg><p><span class="gh-rot-en">Turn your phone upright</span><span class="gh-rot-es">Pon el teléfono en vertical</span></p></div>
   <!-- FIRST-PAINT SKELETON (2026-09-01). Matt, on coming BACK from the profile: "It still
        flashes. Black now... i still don't want that."
