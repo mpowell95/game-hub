@@ -465,6 +465,8 @@ game's mount/unmount lifecycle. Optional `onLeaveAsk()` (2026-11-12): the hub ca
 | Buttons, cards, fields, modals | `css/ui.css` `.gh-*` + `--gh-*` tokens | chrome from scratch |
 
 **Scroll and touch rules:**
+- **Phones are portrait only (2026-11-12, Matt: "Let's just turn it off")**: a sideways phone (touch, under 500px tall) gets
+  `.gh-rotate`, "Turn your phone upright" (`index.html`, `profile/index.html`, `css/hub.css`); desktops and tablets never see it.
 - **No page zooms or selects, and no game screen scrolls (Matt, 2026-10-15).** Every page's viewport
   meta has `maximum-scale=1, user-scalable=no` and loads `js/no-zoom.js` right after it (a `*`
   `touch-action: pan-x pan-y` + `user-select: none`, inputs excepted, + Safari's `gesturestart`
