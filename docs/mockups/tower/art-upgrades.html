@@ -110,7 +110,7 @@ function skyscraper() {
   const r = rng(9);
   o += '<g fill="#3a3570" opacity=".75">';
   for (let x = -10; x < W; x += 34) { const h = 120 + r() * 160; o += `<rect x="${x}" y="${GY - h}" width="30" height="${h}"/>`; if (r() < 0.4) o += `<rect x="${x + 13}" y="${GY - h - 18}" width="3" height="18"/>`; }
-  o += '</g><g fill="#141a3c">'; let win = '<g fill="#ffd36b">';
+  o += '</g><g fill="#141a3c">'; let win = '<g fill="rgba(226,190,120,.45)">';
   for (let x = -20; x < W; x += 58) { const h = 70 + r() * 110, bw = 50;
     o += `<rect x="${x}" y="${GY - h}" width="${bw}" height="${h}"/>`;
     for (let yy = GY - h + 10; yy < GY - 10; yy += 13) for (let c = 0; c < 4; c++) if (r() < 0.35) win += `<rect x="${x + 6 + c * 11}" y="${yy}" width="6" height="7"/>`; }
@@ -126,9 +126,8 @@ function skyscraper() {
     s += `<rect x="${x}" y="${y}" width="${w}" height="3" fill="rgba(255,255,255,.35)"/>`;
     const rr = rng(100 + i);
     for (let wx = x + 7; wx + 9 < x + w - 4; wx += 15) {
-      const on = lit && rr() < 0.7;
-      s += `<rect x="${wx.toFixed(1)}" y="${y + 11}" width="9" height="17" rx="1" fill="${on ? '#ffd774' : '#1e2747'}"/>`;
-      if (on) s += `<rect x="${wx.toFixed(1)}" y="${y + 11}" width="9" height="5" fill="rgba(255,255,255,.35)"/>`;
+      const on = lit && rr() < 0.45;
+      s += `<rect x="${wx.toFixed(1)}" y="${y + 11}" width="9" height="17" rx="1" fill="${on ? 'rgba(226,190,120,.62)' : '#26304f'}"/>`;
     }
     return s;
   };
@@ -137,7 +136,7 @@ function skyscraper() {
   o = o.replace('<rect x="0" y="' + GY + '" width="' + W + '" height="8" fill="#5a6280"/>', `<rect x="0" y="${GY}" width="${W}" height="8" fill="#5a6280"/><ellipse cx="${px(200)}" cy="${GY + 10}" rx="150" ry="10" fill="rgba(0,0,0,.35)"/>`);
   o += bestLine('rgba(255,215,116,.95)', '#16243a', '#ffd774');
   o += floor(MOVER, 9);
-  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 44},${yOf(7)}) rotate(24)">${block3d(-15, -20, 30, 40, tint(8))}<rect x="-8" y="-9" width="9" height="17" fill="#ffd774"/></g>`;
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 44},${yOf(7)}) rotate(24)">${block3d(-15, -20, 30, 40, tint(8))}<rect x="-8" y="-9" width="9" height="17" fill="rgba(226,190,120,.62)"/></g>`;
   return o;
 }
 
@@ -191,14 +190,15 @@ function neon() {
   <g stroke="rgba(54,240,255,.25)" stroke-width="1">${[1, 2, 3, 4, 5].map((k) => `<line x1="0" y1="${GY + k * 22}" x2="${W}" y2="${GY + k * 22}"/>`).join('')}${[-3, -2, -1, 0, 1, 2, 3, 4, 5, 6].map((k) => `<line x1="${W / 2}" y1="${GY}" x2="${W / 2 + k * 110}" y2="${H}"/>`).join('')}</g>`;
   const nb = (b, i) => {
     const x = px(b.x), w = px(b.w), y = yOf(i), h = BH * K, hue = (300 - i * 16 + 360) % 360;
-    return `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="${hsl(hue, 70, 18, .9)}"/>`
-      + `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${(h - 4) * .45}" rx="4" fill="${hsl(hue, 90, 60, .18)}"/>`
+    return `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="${hsl(hue, 62, 34)}"/>`
+      + `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${(h - 4) * .45}" rx="4" fill="${hsl(hue, 85, 62, .35)}"/>`
+      + `<rect x="${x + 2}" y="${y + h - 9}" width="${w - 4}" height="7" rx="3" fill="${hsl(hue, 70, 20)}"/>`
       + `<rect x="${x + 2}" y="${y + 2}" width="${w - 4}" height="${h - 4}" rx="4" fill="none" stroke="${hsl(hue, 100, 64)}" stroke-width="2.5" filter="url(#c-glow)"/>`;
   };
   STACK.forEach((b, i) => { o += nb(b, i); });
   o += `<rect x="${px(STACK[7].x) - 16}" y="${yOf(7) - 16}" width="${px(STACK[7].w) + 32}" height="${BH * K + 32}" rx="10" fill="none" stroke="rgba(54,240,255,.6)" stroke-width="3" filter="url(#c-glow)"/>`;
   o += bestLine('rgba(54,240,255,.9)', '#06030f', '#36f0ff') + nb(MOVER, 9);
-  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 42},${yOf(7)}) rotate(26)"><rect x="-14" y="-20" width="28" height="40" rx="4" fill="${hsl(170, 70, 18)}" stroke="${hsl(170, 100, 64)}" stroke-width="2.5" filter="url(#c-glow)"/></g>`;
+  o += `<g transform="translate(${px(STACK[8].x + STACK[8].w) + 42},${yOf(7)}) rotate(26)"><rect x="-14" y="-20" width="28" height="40" rx="4" fill="${hsl(170, 62, 34)}" stroke="${hsl(170, 100, 64)}" stroke-width="2.5" filter="url(#c-glow)"/></g>`;
   return o;
 }
 
