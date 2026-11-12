@@ -1091,8 +1091,18 @@ class Hub {
   }
 
   /** The player's bug-report form, preloaded with whichever game they were last in. */
-  /** Something of the hub's now covers the mounted game (the Leave? dialog, the in-game bug sheet): a game may stop its
-   *  action under it through an optional `onCovered()` export (Tower Stack pauses, 2026-11-12). Never throws. */
+  /** Something now covers the mounted game (the Leave? dialog, the in-game bug sheet, the "Turn your phone upright"
+   *  screen of a sideways phone): a game may stop its action under it through an optional `onCovered()` export
+   *  (2026-11-12: Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb, Air Hockey vs the computer). Never throws. */
+  _watchRotate() {
+    if (this._rotateMq || typeof window === 'undefined' || !window.matchMedia) return;
+    try {
+      // The same query as css/hub.css .gh-rotate.
+      this._rotateMq = window.matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
+      const on = (e) => { if (e.matches) this._coverGame(); };
+      if (this._rotateMq.addEventListener) this._rotateMq.addEventListener('change', on); else this._rotateMq.addListener(on);
+    } catch { /* an old browser: the cover still shows */ }
+  }
   _coverGame() {
     const m = this.current && this.current.module;
     try { if (m && typeof m.onCovered === 'function') m.onCovered(); } catch { /* the cover still shows */ }
@@ -1424,6 +1434,7 @@ class Hub {
 
     this.el.back.addEventListener('click', this._onBack);
     if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => { this._coverGame(); this.openBugReport(); });
+    this._watchRotate();
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
       el.addEventListener('click', () => { this.el.confirm.hidden = true; this._rearmReturn(); }));
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {

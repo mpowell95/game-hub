@@ -444,7 +444,7 @@ Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 
 In `docs/BUILDING-A-GAME.md`, "Part 1 — Building a game" (exports, leak-free `destroy()`, name
 gate, `isInProgress()`'s two legitimate meanings, `immersive: true`). Read it before touching any
-game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog or the in-game bug sheet covers the game (Tower Stack pauses).
+game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog, the in-game bug sheet or the sideways-phone cover covers the game; Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb and Air Hockey (vs computer) pause, as when the app is hidden. A new real-time game must export it.
 
 ### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
 

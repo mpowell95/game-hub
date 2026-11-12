@@ -529,4 +529,6 @@ export function destroy() {
 export function isInProgress() {
   return !!(instance && instance.runActive && (instance.screen === 'game' || instance.screen === 'paused'));
 }
-export default { init, destroy, isInProgress };
+/** The hub covers the game (Leave? dialog, a sideways phone): pause, as when the app is hidden (2026-11-12). */
+export function onCovered() { try { if (instance && instance.screen === 'game') instance._pause(); } catch (err) { console.warn('[brick] pause', err); } }
+export default { init, destroy, isInProgress, onCovered };
