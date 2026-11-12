@@ -44,6 +44,11 @@ his "release it".
   "too transparent"), nebula, ringed planet, landing pad; Toy (new) = 3D toy blocks at sunset, the one light look. Each
   look has ONE time of day, whatever the hub theme (the old day/night City and Ice are gone). Sky and scenery are cached
   canvases; scenery scrolls at 0.35 of the tower. Look ids unchanged (rule 5).
+- **A frame can never freeze the game (2026-11-12, Matt's iPhone stopped on a half-drawn frame mid-run, not reproducible
+  in Chrome)**: the loop asks for the next frame FIRST and catches a throwing frame; iPhones cap total canvas memory,
+  so art.js keeps at most 6 cached canvases, hands memory back (width 0) on drop/close, and paints straight to the
+  screen when a canvas is refused. A draw error or a stall over 1.5 s on a visible screen is written to
+  `gamehub.perf.v1` as `tower:draw:<look>:<msg>` / `tower:stall:<look>` (mirrored `players/<id>/perf`): read it there.
 - **Best line + record towers (2026-11-02, Matt)**: a dashed "★ N" line at your best (this difficulty) while playing
   (turns yellow once beaten) and at game over (the PREVIOUS best). Game over zooms to fit the tower and the line, the
   ground lifts above a bottom card (score, best, Again, Compare). Compare and the setup footer's Leaderboard open

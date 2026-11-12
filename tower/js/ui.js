@@ -17,6 +17,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onThemeChange } from '../../js/theme.js';
 import * as A from './art.js';
+import { noteError } from '../../js/error-log.js';
 import { LOOKS, slabOf, heroSVG, lookThumb, svgBlock } from './art.js';
 import { backStack } from '../../js/back-stack.js';
 
@@ -24,6 +25,16 @@ const t = makeT(STRINGS);
 const KEY = 'gamehub.tower.v1';
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PAUSE_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>';
+/** A line in the phone's slow-step report (`gamehub.perf.v1`, the format js/firebase-boot.js writes; mirrored as
+ *  players/<id>/perf by stats-net.js). A REPORT: nothing reads it back. Never throws. */
+function notePerf(p, ms) {
+  try {
+    const list = JSON.parse(localStorage.getItem('gamehub.perf.v1') || '[]');
+    const l = Array.isArray(list) ? list : [];
+    l.push({ t: Date.now(), ms: Math.round(ms), p: String(p).slice(0, 79), ok: 0, back: -1 });
+    localStorage.setItem('gamehub.perf.v1', JSON.stringify(l.slice(-30)));
+  } catch { /* a report only */ }
+}
 const medal = (i) => (i < 3 ? ['&#129351;', '&#129352;', '&#129353;'][i] + ' ' : '');
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 
@@ -420,6 +431,8 @@ class Tower {
     const list = this._towerList(d);
     this._twList = list;
     if (this.twPick != null && !list[this.twPick]) this.twPick = null;
+    const oldPick = box.querySelector('.tw-pick-c');
+    if (oldPick) { oldPick.width = 0; oldPick.height = 0; }   // iPhone: give its memory back at once
     const bar = `
       <div class="tw-twbar">
         <button type="button" class="tw-play tw-alt tw-back" data-act="towersClose">&#8249; ${esc(t('back'))}</button>
@@ -529,16 +542,29 @@ class Tower {
   _start() {
     if (this.raf) return;
     this.last = performance.now();
+    // The next frame is asked for FIRST, and a frame that throws is caught (2026-11-12, Matt's iPhone froze on a
+    // half-drawn frame mid-run): one bad frame can never stop the game again. A throw or a stall on a visible
+    // screen is written to the phone's slow-step report (`notePerf`), so the cause can be read back.
     const loop = (now) => {
-      const dt = Math.min(0.05, (now - this.last) / 1000);
-      this.last = now;
-      this._step(dt);
-      this._draw();
       this.raf = requestAnimationFrame(loop);
+      const gap = now - this.last;
+      if (gap > 1500 && (this.screen === 'play' || this.screen === 'over') && !document.hidden) notePerf('tower:stall:' + this.s.look, gap);
+      const dt = Math.min(0.05, gap / 1000);
+      this.last = now;
+      try { this._step(dt); this._draw(); } catch (err) { this._drawFailed(err); }
     };
     this.raf = requestAnimationFrame(loop);
   }
   _stop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
+  _drawFailed(err) {
+    try { this.ctx.restore(); this.ctx.restore(); } catch { /* unbalanced save is fine */ }
+    this._drawErrs = (this._drawErrs | 0) + 1;
+    if (this._drawErrs > 3) return;   // note the first few only
+    console.error('[tower] a frame failed to draw', err);
+    const msg = String((err && err.message) || err).slice(0, 50);
+    notePerf('tower:draw:' + this.s.look + ':' + msg, 0);
+    noteError('tower-draw', { msg: String((err && err.message) || err), stack: err && err.stack });
+  }
 
   _step(dt) {
     if (this.screen === 'play' && this.run) E.stepMover(this.run, dt);
@@ -633,6 +659,9 @@ class Tower {
     if (this._offTheme) this._offTheme();
     if (this._ro) this._ro.disconnect();
     if (this._twBs) { try { this._twBs.close(); } catch { /* gone */ } this._twBs = null; }
+    try { const pc = this.root.querySelector('.tw-pick-c'); if (pc) { pc.width = 0; pc.height = 0; } } catch { /* gone */ }
+    try { this.canvas.width = 0; this.canvas.height = 0; } catch { /* gone */ }
+    A.releaseArt();
     this.host.innerHTML = '';
   }
 
