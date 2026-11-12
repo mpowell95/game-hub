@@ -74,7 +74,10 @@ export function drop(run) {
   const diff = m.x - top.x;
   const tol = TUNE[run.diff].perfect;
   run.mover = null;
-  if (Math.abs(diff) <= tol) {
+  // A Perfect needs the blocks to touch (2026-11-12 review: once a block is narrower than the slack, a drop beside it
+  // with no overlap at all used to count as a Perfect).
+  const touch = Math.min(m.x + m.w, top.x + top.w) - Math.max(m.x, top.x);
+  if (Math.abs(diff) <= tol && touch > 0) {
     run.streak += 1; run.perfects += 1;
     run.bestStreak = Math.max(run.bestStreak, run.streak);
     run.stack.push({ x: top.x, w: top.w });

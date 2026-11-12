@@ -1091,6 +1091,13 @@ class Hub {
   }
 
   /** The player's bug-report form, preloaded with whichever game they were last in. */
+  /** Something of the hub's now covers the mounted game (the Leave? dialog, the in-game bug sheet): a game may stop its
+   *  action under it through an optional `onCovered()` export (Tower Stack pauses, 2026-11-12). Never throws. */
+  _coverGame() {
+    const m = this.current && this.current.module;
+    try { if (m && typeof m.onCovered === 'function') m.onCovered(); } catch { /* the cover still shows */ }
+  }
+
   async openBugReport() {
     try {
       const m = await import('./bug-report-ui.js');
@@ -1416,7 +1423,7 @@ class Hub {
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
-    if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => this.openBugReport());
+    if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => { this._coverGame(); this.openBugReport(); });
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
       el.addEventListener('click', () => { this.el.confirm.hidden = true; this._rearmReturn(); }));
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
@@ -3071,8 +3078,7 @@ class Hub {
       try { loss = !!(m && typeof m.quitCostsLoss === 'function' && m.quitCostsLoss()); } catch { /* ignore */ }
       const msg = this.el.confirm.querySelector('.hub-confirm-msg');
       if (msg) msg.textContent = loss ? tf('hub_confirm_loss', 'Leave? Counts as a loss.') : t('hub_confirm_msg');
-      // Optional: a game may stop its action under the dialog (Tower Stack pauses, 2026-11-12).
-      try { if (m && typeof m.onLeaveAsk === 'function') m.onLeaveAsk(); } catch { /* the dialog still shows */ }
+      this._coverGame();
       this.el.confirm.hidden = false;
       return;
     }

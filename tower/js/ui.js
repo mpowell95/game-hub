@@ -68,6 +68,10 @@ class Tower {
     this._build();
     this._onDown = (e) => this._tap(e);
     this._onKey = (e) => {
+      // Keys typed into anything else (the hub's bug report, a search box) are not the game's (2026-11-12 review:
+      // typing a bug report during a run dropped blocks).
+      const tg = e.target;
+      if (tg && tg.closest && (tg.closest('input, textarea, select, [contenteditable]') || (tg !== document.body && !this.root.contains(tg)))) return;
       if (e.key === 'Escape') {
         if (this._twBs) this._twBs.back();
         else if (!this.el('help').hidden) this.el('help').hidden = true;
@@ -195,17 +199,10 @@ class Tower {
    *  server-built board (readPeople), at most once a minute. This phone's own best counts at once. */
   _leadHTML() {
     if (!this.lead || Date.now() - this.lead.at > 60000) this._loadLead();
-    const d = this.s.diff;
-    const rows = (this.lead && this.lead.rows) || [];
-    const mine = bestFor(d);
-    const all = rows.map((r) => (r.me ? { ...r, best: Math.max(r.by[d] | 0, mine) } : { ...r, best: r.by[d] | 0 }));
-    if (!all.some((r) => r.me) && mine > 0) {
-      let p = {};
-      try { p = loadProfile() || {}; } catch { p = {}; }
-      all.push({ me: true, name: p.name || '', emoji: p.emoji || '', best: mine });
-    }
-    const top = all.reduce((m, r) => Math.max(m, r.best || 0), 0);
-    const lead = top > 0 ? all.filter((r) => r.best === top) : [];
+    // The same ranking as Record towers (best, then the better average; only equal on both is a tie).
+    const ranked = this._towerList(this.s.diff);
+    const top = ranked.length ? ranked[0].best : 0;
+    const lead = ranked.filter((r) => r.rank === 1);
     const names = lead.map((r) => `${esc(r.emoji)} ${esc(r.name)}`.trim()).filter(Boolean).join(' &amp; ');
     return `
       <span class="tw-lead-who"><span aria-hidden="true">&#127942;</span> <span class="tw-lead-name">${names || '-'}</span> <b>${lead.length ? top : ''}</b></span>
@@ -269,8 +266,8 @@ class Tower {
     this._stop();
     this._draw();
   }
-  /** The hub's "Leave?" dialog is up (js/hub.js requestLeave): stop the block under it. */
-  onLeaveAsk() { this._pause(); }
+  /** The hub's "Leave?" dialog or bug sheet covers the game (js/hub.js _coverGame): stop the block under it. */
+  onCovered() { this._pause(); }
   _resume() {
     if (this.screen !== 'paused') return;
     this.el('pause').hidden = true;
@@ -445,14 +442,13 @@ class Tower {
       const st = sv.s.split(';').map((p) => { const [x, w] = p.split(',').map(Number); return { x, w }; });
       return st.length === best + 1 && st.every((q) => Number.isFinite(q.x) && Number.isFinite(q.w) && q.w >= 0) ? st : null;
     };
-    const avgOf = (gm) => {
-      if (!gm || typeof gm !== 'object') return null;
+    // The same two averages, in the same order, as the Leaderboard's tie-break (leaderboard-ui.js cmpAvgGame).
+    const avgAt = (gm) => {
       let s = 0, n = 0;
-      for (const b of Object.values(gm.byMode || {})) { const x = b && b[d]; if (x && x.hn > 0) { s += +x.hs || 0; n += +x.hn || 0; } }
-      if (n > 0) return s / n;
-      const tw = gm.tw || {};
-      return tw.games > 0 ? (tw.blocks | 0) / tw.games : null;
+      for (const b of Object.values((gm && gm.byMode) || {})) { const x = b && b[d]; if (x && x.hn > 0) { s += +x.hs || 0; n += +x.hn || 0; } }
+      return n > 0 ? s / n : null;
     };
+    const avgAll = (gm) => { const tw = (gm && gm.tw) || {}; return tw.games > 0 ? (tw.blocks | 0) / tw.games : null; };
     const rows = ((this.lead && this.lead.rows) || []).map((r) => ({ ...r, best: r.by[d] | 0, sv: (r.shapes || {})[d] }));
     const ownRec = towerRec();
     const own = ((ownRec || {}).tw) || {};
@@ -465,8 +461,12 @@ class Tower {
       rows.push(meRow);
     }
     if (meRow && mine >= meRow.best) { meRow.best = mine; if (myShape) meRow.sv = myShape; meRow.gm = ownRec; }
-    for (const r of rows) r.avg = avgOf(r.gm);
-    const cmp = (a, b) => (b.best - a.best) || ((b.avg == null ? -1 : b.avg) - (a.avg == null ? -1 : a.avg));
+    for (const r of rows) { r.avgD = avgAt(r.gm); r.avgA = avgAll(r.gm); }
+    const cmp = (a, b) => {
+      if (b.best !== a.best) return b.best - a.best;
+      if (a.avgD != null && b.avgD != null) return b.avgD - a.avgD;
+      return a.avgA == null || b.avgA == null ? 0 : b.avgA - a.avgA;
+    };
     const list = rows.filter((r) => r.best > 0).sort(cmp);
     list.forEach((r, i) => { r.rank = i && cmp(list[i - 1], r) === 0 ? list[i - 1].rank : i + 1; });
     return list.map((r) => {
@@ -523,7 +523,7 @@ class Tower {
     const W = Math.max(1, sc.clientWidth), H = Math.max(1, sc.clientHeight);
     const gy = H - 74;
     const top = list.reduce((m, r) => Math.max(m, r.best), 0);
-    const k = Math.max(0.02, Math.min(0.42, (gy - 44) / ((top + 1) * E.BLOCK_H)));
+    const k = Math.max(0.0005, Math.min(0.42, (gy - 44) / ((top + 1) * E.BLOCK_H)));
     const slot = Math.max(84, E.START_W * k + 14);
     const SW = Math.max(W, slot * list.length);
     const bh = E.BLOCK_H * k;
@@ -571,7 +571,7 @@ class Tower {
     const who = box.querySelector('.tw-pick-who');
     const topY = who ? who.getBoundingClientRect().bottom - box.getBoundingClientRect().top + 24 : 220;
     const groundY = H - Math.max(110, H * 0.14);
-    const k = Math.max(0.02, Math.min(W / E.WORLD_W * 0.95, (groundY - topY) / ((r.best + 1) * E.BLOCK_H)));
+    const k = Math.max(0.0005, Math.min(W / E.WORLD_W * 0.95, (groundY - topY) / ((r.best + 1) * E.BLOCK_H)));
     const ox = (W - E.WORLD_W * k) / 2, bh = E.BLOCK_H * k;
     A.drawBackdrop(ctx, r.look, W, H, dpr, groundY, groundY, 0);
     ctx.save(); ctx.translate(0, groundY);
@@ -612,9 +612,13 @@ class Tower {
       this.raf = requestAnimationFrame(loop);
       const gap = now - this.last;
       if (gap > 1500 && (this.screen === 'play' || this.screen === 'over') && !document.hidden) notePerf('tower:stall:' + this.s.look, gap);
-      const dt = Math.min(0.05, gap / 1000);
+      const dt = Math.max(0, Math.min(0.05, gap / 1000));   // a tap can step the clock past this frame's stamp
       this.last = now;
       try { this._step(dt); this._draw(); } catch (err) { this._drawFailed(err); }
+      // Game over: once the zoom, the lift and every falling piece have settled the picture no longer changes, so stop
+      // (battery). Ice keeps drawing for its snow. Resize, theme and Record towers' close redraw it.
+      if (this.screen === 'over' && this.s.look !== 'ice' && !this.fx.falling.length && !this.fx.flashes.length
+        && Math.abs(this.zoom - this.zoomTarget) < 1e-3 && Math.abs(this.lift - this.liftTarget) < 0.5 && Math.abs(this.cam - this.camTarget) < 0.5) this._stop();
     };
     this.raf = requestAnimationFrame(loop);
   }
@@ -755,6 +759,6 @@ export function destroy() {
 }
 // Literal meaning: a run is live (no resume). See the header.
 export function isInProgress() { return !!(instance && instance.inProgress()); }
-/** The hub's "Leave?" dialog opened (js/hub.js requestLeave): pause the run under it. */
-export function onLeaveAsk() { if (instance) instance.onLeaveAsk(); }
-export default { init, destroy, isInProgress, onLeaveAsk };
+/** The hub's "Leave?" dialog or bug sheet covers the game (js/hub.js _coverGame): pause the run under it. */
+export function onCovered() { if (instance) instance.onCovered(); }
+export default { init, destroy, isInProgress, onCovered };
