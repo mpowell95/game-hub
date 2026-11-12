@@ -23,6 +23,12 @@
   top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 126px);
   background: #ffce3a; color: #16243a; font-size: 16px; font-weight: 800; padding: 4px 12px; border-radius: 999px; }
 .tw-root .tw-streak[hidden] { display: none; }
+/* Pause: bottom right, on the ground under the tower (the top corners are the hub's Hub and bug buttons). */
+.tw-root .tw-pause { position: absolute; right: 16px; bottom: max(env(safe-area-inset-bottom, 0px), 16px); pointer-events: auto;
+  width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;
+  background: rgba(255,255,255,.22); color: #fff; border: 2px solid rgba(255,255,255,.55); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+.tw-root .tw-ov[data-role="pause"] { background: rgba(10, 18, 34, .55); }
+.tw-root .tw-ph { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
 
 /* --- Setup --- */
 .tw-root .tw-setup { position: absolute; inset: 0; overflow: hidden; background: #f4f6fb; }
@@ -99,7 +105,6 @@
 .tw-root .tw-tw-head { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 88px; }
 .tw-root .tw-tw-head h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tw-root .tw-tw-head h2 { margin: 0; font-size: 22px; }
-.tw-root .tw-tw-head .tw-x { top: 0; right: 0; }
 .tw-root .tw-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 10px; }
 .tw-root .tw-tab { min-height: 44px; border: 2px solid rgba(16,36,58,.14); border-radius: 12px; background: #fff;
   display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 13px; }
@@ -116,7 +121,8 @@
 .tw-root .tw-col.is-me .tw-col-t { outline: 3px solid #ffce3a; outline-offset: 2px; }
 .tw-root .tw-col.is-me .tw-col-who, .tw-root .tw-col.is-me .tw-col-n { font-weight: 800; }
 .tw-root .tw-none { margin: auto; font-size: 22px; color: #5b6b82; }
-.tw-root .tw-full { align-self: center; margin-top: 8px; }
+.tw-root .tw-twbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.tw-root .tw-twbar .tw-back { width: auto; margin: 0; height: 52px; padding: 0 26px; font-size: 18px; }
 
 /* --- Dark theme (js/theme.js puts .gh-dark on <html>) --- */
 .gh-dark .tw-root, .gh-dark .tw-root .tw-setup, .gh-dark .tw-root .tw-towers { background: #0f1726; color: #e8eef8; }

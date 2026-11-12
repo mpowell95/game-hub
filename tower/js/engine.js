@@ -18,7 +18,7 @@ export const TUNE = {
   easy:   { v0: 150, dv: 8,  perfect: 8 },
   medium: { v0: 180, dv: 11, perfect: 6 },
   hard:   { v0: 220, dv: 14, perfect: 4.5 },
-  expert: { v0: 270, dv: 17, perfect: 3.5 },
+  expert: { v0: 420, dv: 17, perfect: 3.5 },   // v0 was 270 (Matt, 2026-11-12: "Expert starts way too slow still")
 };
 
 export function normDiff(d) { return DIFFS.indexOf(d) >= 0 ? d : 'medium'; }
