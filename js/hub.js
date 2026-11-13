@@ -83,7 +83,7 @@ const TOUR_FB = {
 // the same Report a bug form as the launcher, with this game preselected. Opt-in per game: add a hub
 // id here once that game's top-right corner is checked clear on its setup AND play screens; anything of
 // the game's own in that corner is moved by a `html.gh-gamebug` rule in css/hub.css (not the game's files).
-const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder']);
+const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder', 'number-merge']);
 
 const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
@@ -807,6 +807,22 @@ export const GAMES = [
     immersive: true,
     accent: '#24406f',
     art: GAME_ART['word-ladder'],
+    // ADMIN ONLY until Matt says "release it": no `released` date (the New pill and New games bubble read it).
+    devOnly: true,
+  },
+  {
+    // Number Merge (2026-11-13, Matt: "Start another session to build Number Merge"): a 4x4 merge puzzle, Classic
+    // (endless, a best score) and Daily (one seeded tile sequence a day for everyone). number-merge/CLAUDE.md.
+    // Hub id = folder `number-merge`; stats id `numbermerge`.
+    id: 'number-merge',
+    added: '2026-11-13',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Number Merge', es: 'Fusión de números' },
+    blurb: { en: 'Slide the tiles. Equal numbers merge and double.',
+      es: 'Desliza las fichas. Los números iguales se unen y se doblan.' },
+    module: '../number-merge/js/ui.js',
+    immersive: true,
+    accent: '#2c3448',
+    art: GAME_ART['number-merge'],
     // ADMIN ONLY until Matt says "release it": no `released` date (the New pill and New games bubble read it).
     devOnly: true,
   },

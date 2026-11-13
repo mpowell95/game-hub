@@ -1,0 +1,136 @@
+/* number-merge/css/number-merge.css - every rule scoped under .nm-root. One deep slate look in light and dark (dark by
+   design, like Word Ladder): bright text. COLOURBLIND-SAFE: tiles are told apart by their NUMBER and their LIGHTNESS
+   (each step darker than the last, light tiles dark numbers, dark tiles white numbers, 2048+ a gold ring), never hue. */
+.nm-root {
+  --nm-bg: #151b28; --nm-bg2: #24304a; --nm-on: #f5f8ff; --nm-ink: #2a2320; --nm-board: #2c3448; --nm-cellbg: #3a4256;
+  --nm-gold: #f2b705; --nm-sel: #ffce3a;
+  --nm-below: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px);
+  --nm-size: 340px; --nm-gap: 10px; --nm-cell: 72.5px;
+  position: fixed; inset: 0; z-index: 1; overflow: hidden;
+  width: 100%; height: 100dvh;
+  color: var(--nm-on);
+  background: radial-gradient(120% 80% at 50% 0%, var(--nm-bg2), var(--nm-bg) 70%);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+}
+.nm-root button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.nm-root * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; box-sizing: border-box; }
+
+/* --- setup --- */
+.nm-root .nm-setup { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--nm-below) + 16px) 16px max(env(safe-area-inset-bottom, 0px), 16px); }
+.nm-root .nm-home { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.nm-root .nm-hero { width: 180px; height: auto; display: block; }
+.nm-root .nm-title { margin: 0; font-size: clamp(26px, 8vw, 32px); font-weight: 800; text-align: center; line-height: 1.15; white-space: nowrap; }
+.nm-root .nm-bestline { display: inline-flex; align-items: center; gap: 8px; font-size: 20px; }
+.nm-root .nm-bestline svg { color: var(--nm-gold); width: 24px; height: 24px; }
+.nm-root .nm-bestline b { font-size: 24px; }
+.nm-root .nm-btn { width: 100%; min-height: 56px; border-radius: 16px; border: 2px solid rgba(255,255,255,.7);
+  background: rgba(255,255,255,.08); font-size: 20px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; gap: 10px; }
+.nm-root .nm-btn-main { background: var(--nm-gold); color: #10203c; border-color: var(--nm-gold); font-size: 22px; }
+.nm-root .nm-btn-n { font-weight: 800; opacity: .85; }
+.nm-root .nm-ok { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--nm-on); color: #10203c; font-style: normal; }
+.nm-root .nm-help { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
+  background: transparent; font-size: 22px; font-weight: 800; }
+
+/* --- play --- */
+.nm-root .nm-game { position: absolute; inset: 0; display: flex; flex-direction: column;
+  padding: 0 16px max(env(safe-area-inset-bottom, 0px), 16px); }
+/* Row 1 = the hub's button row: only the mode chip, centred (the corners are the Hub and bug buttons). */
+.nm-root .nm-top { flex: none; height: var(--nm-below); display: flex; align-items: flex-end; justify-content: center; }
+.nm-root .nm-chip { height: 36px; padding: 0 16px; border-radius: 999px; background: rgba(255,255,255,.14);
+  display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+.nm-root .nm-chip svg { width: 20px; height: 20px; }
+/* Row 2: the game's own back arrow TOP LEFT under the Hub button (docs/BUILDING-A-GAME.md Part 0). */
+.nm-root .nm-row2 { flex: none; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nm-root .nm-icon { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255,255,255,.12);
+  display: grid; place-items: center; font-size: 20px; font-weight: 800; }
+.nm-root .nm-boxes { display: flex; gap: 10px; }
+.nm-root .nm-box { min-width: 96px; padding: 6px 12px; border-radius: 12px; background: var(--nm-board); text-align: center;
+  display: flex; flex-direction: column; line-height: 1.15; }
+.nm-root .nm-box span { font-size: 15px; font-weight: 700; }
+.nm-root .nm-box b { font-size: 24px; }
+.nm-root .nm-stage { flex: 1 1 auto; min-height: 0; margin-top: 16px; position: relative; display: flex; align-items: center; justify-content: center;
+  touch-action: none; }
+.nm-root .nm-board { position: relative; width: var(--nm-size); height: var(--nm-size); border-radius: 16px; background: var(--nm-board);
+  display: grid; grid-template-columns: repeat(4, var(--nm-cell)); grid-template-rows: repeat(4, var(--nm-cell)); gap: var(--nm-gap); padding: var(--nm-gap);
+  touch-action: none; }
+.nm-root .nm-cell { border-radius: 10px; background: var(--nm-cellbg); }
+.nm-root .nm-layer { position: absolute; inset: 0; pointer-events: none; }
+.nm-root .nm-tile { position: absolute; left: 0; top: 0; width: var(--nm-cell); height: var(--nm-cell);
+  transform: translate(calc(var(--nm-gap) + var(--c) * (var(--nm-cell) + var(--nm-gap))), calc(var(--nm-gap) + var(--r) * (var(--nm-cell) + var(--nm-gap))));
+  transition: transform 120ms ease-out; }
+.nm-root .nm-tile span, .nm-root .nm-mini span { position: absolute; inset: 0; border-radius: 10px; display: grid; place-items: center;
+  font-weight: 800; line-height: 1; background: var(--nm-t); color: var(--nm-tx); box-shadow: inset 0 0 0 var(--nm-ring, 0) var(--nm-gold); }
+.nm-root .nm-tile.nm-d1 span, .nm-root .nm-tile.nm-d2 span { font-size: calc(var(--nm-cell) * .46); }
+.nm-root .nm-tile.nm-d3 span { font-size: calc(var(--nm-cell) * .38); }
+.nm-root .nm-tile.nm-d4 span { font-size: calc(var(--nm-cell) * .3); }
+.nm-root .nm-tile.nm-d5 span { font-size: calc(var(--nm-cell) * .24); }
+.nm-root .nm-tile.is-pop span { animation: nm-pop 160ms ease-out; }
+.nm-root .nm-tile.is-new span { animation: nm-new 160ms ease-out; }
+@keyframes nm-pop { 0% { transform: scale(1); } 50% { transform: scale(1.14); } 100% { transform: scale(1); } }
+@keyframes nm-new { 0% { transform: scale(.3); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.nm-root .nm-board.is-bump-left { animation: nm-bl 140ms ease-out; }
+.nm-root .nm-board.is-bump-right { animation: nm-br 140ms ease-out; }
+.nm-root .nm-board.is-bump-up { animation: nm-bu 140ms ease-out; }
+.nm-root .nm-board.is-bump-down { animation: nm-bd 140ms ease-out; }
+@keyframes nm-bl { 50% { transform: translateX(-5px); } }
+@keyframes nm-br { 50% { transform: translateX(5px); } }
+@keyframes nm-bu { 50% { transform: translateY(-5px); } }
+@keyframes nm-bd { 50% { transform: translateY(5px); } }
+
+/* The tile ladder: lightness falls at every step (L about 97, 88, 81, 66, 53, 43, 38, 33, 30, 27, 22, 12). */
+.nm-root .nm-v1 { --nm-t: #f7f4ec; --nm-tx: #2a2320; }
+.nm-root .nm-v2 { --nm-t: #e8dcbf; --nm-tx: #2a2320; }
+.nm-root .nm-v3 { --nm-t: #f2c45a; --nm-tx: #2a2320; }
+.nm-root .nm-v4 { --nm-t: #df8f2f; --nm-tx: #1d1714; }
+.nm-root .nm-v5 { --nm-t: #c4632c; --nm-tx: #ffffff; }
+.nm-root .nm-v6 { --nm-t: #a2433a; --nm-tx: #ffffff; }
+.nm-root .nm-v7 { --nm-t: #8a3d5f; --nm-tx: #ffffff; }
+.nm-root .nm-v8 { --nm-t: #713a72; --nm-tx: #ffffff; }
+.nm-root .nm-v9 { --nm-t: #573580; --nm-tx: #ffffff; }
+.nm-root .nm-v10 { --nm-t: #3f3486; --nm-tx: #ffffff; }
+.nm-root .nm-v11 { --nm-t: #262b72; --nm-tx: #ffffff; --nm-ring: 4px; }
+.nm-root .nm-v12 { --nm-t: #121640; --nm-tx: #ffffff; --nm-ring: 5px; }
+
+/* --- game over --- */
+.nm-root .nm-over { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center;
+  background: rgba(10,14,24,.55); border-radius: 16px; }
+.nm-root .nm-card { position: relative; width: calc(100% - 16px); max-width: 340px; border-radius: 20px; background: #fff; color: #10203c;
+  padding: 20px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.nm-root .nm-x { position: absolute; top: 8px; right: 8px; background: rgba(16,32,60,.08); color: #10203c; }
+.nm-root .nm-card-h { margin: 0; padding: 0 44px; text-align: center; font-size: 24px; font-weight: 800; white-space: nowrap; }
+.nm-root .nm-big { font-size: 48px; font-weight: 800; line-height: 1; }
+.nm-root .nm-newbest { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px;
+  background: #10203c; color: #fff; font-size: 17px; font-weight: 800; }
+.nm-root .nm-newbest svg { color: var(--nm-gold); }
+.nm-root .nm-facts { display: flex; gap: 18px; align-items: center; font-size: 17px; font-weight: 700; }
+.nm-root .nm-fact { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.nm-root .nm-fact b { font-size: 20px; }
+.nm-root .nm-mini { position: relative; display: inline-block; width: 44px; height: 44px; font-style: normal; }
+.nm-root .nm-mini span { border-radius: 8px; font-size: 17px; }
+.nm-root .nm-mini.nm-d4 span, .nm-root .nm-mini.nm-d5 span { font-size: 13px; }
+.nm-root .nm-card .nm-btn-main { margin-top: 4px; }
+
+/* --- sheets (How to play, New game?) --- */
+.nm-root .nm-ov { position: absolute; inset: 0; z-index: 5; background: rgba(6,12,26,.6); display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--nm-below) + 8px) 12px max(env(safe-area-inset-bottom, 0px), 12px); }
+.nm-root .nm-sheet { position: relative; width: 100%; max-width: 400px; border-radius: 20px; background: #1e2638; color: var(--nm-on);
+  padding: 16px 18px 16px; border: 2px solid rgba(255,255,255,.25); display: flex; flex-direction: column; gap: 8px; }
+.nm-root .nm-sheet .nm-x { background: rgba(255,255,255,.12); color: var(--nm-on); }
+.nm-root .nm-sheet p { margin: 0; font-size: clamp(15px, 4.4vw, 17px); line-height: 1.4; white-space: nowrap; }
+.nm-root .nm-sheet .nm-how-b { font-weight: 800; font-size: clamp(17px, 4.8vw, 18px); }
+.nm-root .nm-sheet .nm-how-cap { text-align: center; font-weight: 700; }
+.nm-root .nm-how-svg { display: block; margin: 4px auto 0; max-width: 100%; height: auto; }
+.nm-root .nm-gotit { margin-top: 8px; min-height: 52px; }
+.nm-root .nm-confirm { gap: 14px; }
+.nm-root .nm-confirm .nm-how-b { white-space: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The slide IS the game, so it stays (shorter); the pop, the new tile's grow and the bump go. */
+  .nm-root .nm-tile { transition-duration: 80ms; }
+  .nm-root .nm-tile.is-pop span, .nm-root .nm-tile.is-new span { animation: none; }
+  .nm-root .nm-board[class*="is-bump"] { animation: none; }
+}

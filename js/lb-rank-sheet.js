@@ -81,6 +81,8 @@ const SHEETS = {
   nutsbolts: () => (isAdminDevice() ? [levelTable('nutsbolts', 'lbpt_per_level')] : [hardest('lbrs_nb_by')]),
   // Word Ladder (2026-11-13, admin only): levels finished, like Nuts & Bolts' player sheet. Revisit at release.
   wordladder: () => [hardest('lbrs_nb_by')],
+  // Number Merge (2026-11-13, admin only): one best Classic score. Revisit at release.
+  numbermerge: () => [{ h: 'lbrs_h_by', text: 'lbrs_nm_1' }],
   murdoku: () => [helpGrid('lbrs_mk_sup')],
   sudoku: () => [helpGrid('lbrs_su_sup')],
   skeeball: () => [{ h: 'lbrs_total', text: 'lbrs_sk_by1' }, { h: 'gs_sk_best_game', text: 'lbrs_sk_by2' }],

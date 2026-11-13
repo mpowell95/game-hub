@@ -190,6 +190,8 @@ const GAME_META = [
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   // Word Ladder (2026-11-13, word-ladder/): admin only at first; the row ships with the game (OFF_THE_BOARD stays empty).
   { id: 'wordladder', labelKey: 'game_title_wordladder' },
+  // Number Merge (2026-11-13, number-merge/): admin only at first; the row ships with the game (OFF_THE_BOARD stays empty).
+  { id: 'numbermerge', labelKey: 'game_title_numbermerge' },
   // Tower (2026-11-01, tower/): admin only at first; the row ships with the game.
   { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'parchis', labelKey: 'game_title_parchis' },
@@ -1055,6 +1057,8 @@ function gameMetricAt(g, id, tier) {
   if (id === 'skeeball') return skPointsAt(g, _machine);
   if (id === 'brickblitz') return bzBestAt(g, tier);
   if (id === 'tower') return twBestAt(g, tier);
+  // Number Merge (admin only): Classic's best score (no difficulty tiers).
+  if (id === 'numbermerge') return ((((g && g.games) || {}).numbermerge || {}).nm || {}).best | 0;
   // Contexto ranks on MEDALS (Matt, 2026-09-29): golds, then silvers, then bronzes, then solves
   // with no medal, packed into one number by ctMedalScore (js/leaderboard-rank.js). Ties go to
   // the lower average guesses in boardMetricCmp below. Every solve is still stored and shown.
@@ -1314,7 +1318,7 @@ function boardMetricCmp(id) {
   return (a, b) => base(a, b) || tieByAverage(a, b, id);
 }
 /** Boards ranked by ONE best game, not a total. */
-const BEST_BOARDS = new Set(['golf', 'snake', 'ballrun', 'hillclimb', 'brickblitz', 'tower']);
+const BEST_BOARDS = new Set(['golf', 'snake', 'ballrun', 'hillclimb', 'brickblitz', 'tower', 'numbermerge']);
 /** A person's average game, HIGHER = better, or null when the store keeps no total to divide (snake, ball run,
  *  hill climb keep only bests). Across every difficulty: no per-difficulty totals are stored. */
 function avgGameOf(g, id) {
@@ -1322,6 +1326,7 @@ function avgGameOf(g, id) {
   if (id === 'golf') { const f = gm.gf || {}; return (f.holes | 0) > 0 ? -((f.strokes | 0) / f.holes) : null; }   // fewer strokes a hole
   if (id === 'brickblitz') { const z = gm.bz || {}; return (z.games | 0) > 0 ? (z.points | 0) / z.games : null; }
   if (id === 'tower') { const w = gm.tw || {}; return (w.games | 0) > 0 ? (w.blocks | 0) / w.games : null; }
+  if (id === 'numbermerge') { const m = gm.nm || {}; return (m.games | 0) > 0 ? (m.score | 0) / m.games : null; }
   return null;
 }
 /** The average game from EVERY score saved per mode (byMode `hs`/`hn` or `ls`/`ln`, saved from 2026-11-06), at the
