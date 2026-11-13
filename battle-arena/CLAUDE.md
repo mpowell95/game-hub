@@ -162,3 +162,18 @@ Home = **Online | Computer** tabs (`renderHome(tab, note)`, `showTab`, `fillOnli
 ## Fits on a short phone (2026-11-08)
 
 `fitHome()` (ui.js): on a short phone the Online tab ran off the bottom (Unai's 360x668 Android) and How to play sat on the iPhone home bar. Step by step until the menu fits: the monster art shrinks to 64px, then goes; then `.ba-home.is-tight` (logo level with the Hub button, smaller gaps); then the logo shrinks to half at most. Buttons never change. Re-run on every tab switch, the Online list filling, and resize. `tools/review-setup-cards.cjs battle-arena`.
+
+## Release review (2026-11-13)
+
+Matt: "do a full exhaustive thorough review of Battle Arena to get it ready to be released". Fixed (story: `CLAUDE-HISTORY.md`):
+- **Every way out records a decided match** (`recordOutcome`, from `finish`, the menu's New match / Home and `destroy`): the winning move animates with the winner already set, and leaving then dropped the result.
+- **Live: a resign or claim ends the room with the loser's forfeit** (`resign` → `LL.leaveWithForfeit`; `onRoom` reads `forfeitsOf` first, `decide`), and an 'r' by this phone's own side (a claim against it) is applied. Before: a move in flight overwrote the claim and both phones could win.
+- **Live recovery works**: the host's state travels as a JSON string (Firebase sorted keys and dropped nulls, so it never hashed the same); the HOST keeps its own result of a guest move it cannot match and pushes it (`publishRecovery(true)`; it used to freeze).
+- **Hub "Leave?" in a live room** = `quitCostsLoss`/`leaveMatch`/`isInProgress` (after your first move: "Counts as a loss", resigns).
+- **A challenge win counts once its last move is on the server** (`owed`); the outbox drain no longer wipes a move queued meanwhile; `mp.js writesAllowed` asks `automationBlocks`.
+- **Mode + detail**: online results carry `first` and `via` (`ch`/`live`, `onlineMode`); index rows carry `tm` (the team) so a launcher count has one; every result has `detail` (`matchDetail`: moves, turns, hp, foeHp, evolved, end).
+- Screens: text floor 15px (`fitText` floor, HUD names grow outward), help lines wrap at 17px (`text-wrap: balance`), the card's X works, end card keeps the profile name's case, Online tab says so when it cannot load.
+- **NOT changed, on purpose**: a rules VERSION. No match stores one, so absent = v1; **any engine.js change after release must stamp `rv: 2` on new matches and keep v1's paths**, or open challenges stop replaying.
+- Left as is: the 25 s live clock runs under the hub's covers (no `onCovered`: the other phone is waiting); `battlearena` rules let an existing log entry be rewritten (same as every challenge game).
+
+**Release checklist (only on Matt's "release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; `CARRY_TEST` + a combiner if Matt wants testers' wins (and so their unlocked monsters) to carry; `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.

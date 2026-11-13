@@ -127,4 +127,27 @@ export function teamMode(state, side) {
   return out;
 }
 
-export default { SIDES, sideOfSeat, seatOfSide, PLACEHOLDER_TEAM, cleanTeam, cleanEntry, moveOf, entryOf, startState, replay, mirror, mirrorEvents, stateHash, freshSeed };
+/** The mode of an ONLINE result (2026-11-13, root CLAUDE.md "Every result records its MODE"): the
+ *  team, who actually moved first, and which kind of match (`via`: 'ch' challenge | 'live' room). */
+export function onlineMode(state, side, via) {
+  const out = teamMode(state, side);
+  if (state && (state.first === 0 || state.first === 1)) out.first = state.first === side ? 'me' : 'them';
+  if (via) out.via = via;
+  return out;
+}
+
+/** A finished match's numbers for withMode's `detail` (2026-11-13), from `side`'s point of view:
+ *  counters ADD up in `games.battlearena.dt` (moves, turns, HP left, monsters evolved), `end` is counted
+ *  per value (ko | resign | timeout | quit). Read from the state only: the engine is unchanged. */
+export function matchDetail(state, side, end) {
+  if (!state || !Array.isArray(state.sides) || !state.sides[side]) return null;
+  const me = state.sides[side], them = state.sides[1 - side] || {};
+  const n = (v) => Math.max(0, Math.floor(+v || 0));
+  return {
+    moves: n(state.moveNo), turns: n(me.turns), hp: n(me.hp), foeHp: n(them.hp),
+    evolved: (Array.isArray(me.mons) ? me.mons : []).filter((m) => m && m.evo).length,
+    end: end || (state.timedOut ? 'timeout' : state.resigned != null ? 'resign' : 'ko'),
+  };
+}
+
+export default { SIDES, sideOfSeat, seatOfSide, PLACEHOLDER_TEAM, cleanTeam, cleanEntry, moveOf, entryOf, startState, replay, mirror, mirrorEvents, stateHash, freshSeed, teamMode, onlineMode, matchDetail };

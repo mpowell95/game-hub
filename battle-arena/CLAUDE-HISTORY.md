@@ -100,3 +100,39 @@ should only be able to see silhouettes of the [locked] monsters and the number o
 - The draft's locked monsters used to be grey but fully drawn, and their card showed everything; now both
   are silhouettes, matching Monsters. A monster seen in a battle (an opponent's) still shows in full.
 - `tools/check-no-scroll.mjs` measures "monsters + card" (evolved form). 56 screens, 0 scroll.
+
+## Release review (2026-11-13)
+
+Matt asked for "a full exhaustive thorough review of Battle Arena to get it ready to be released". Two
+read-only reviews (rules/online, screens) plus a 600-match engine soak: the engine was clean (no stuck
+board, no first-turn KO, one extra move a turn, JSON-safe state, deterministic replay, mirror correct).
+What was wrong and fixed:
+
+- Vs the computer, the menu opened during the WINNING move's animation offered New match / Home with
+  `winner` already set; `quitCostsLoss()` needs `winner == null`, so the save was cleared and nothing
+  recorded (a reviewer reproduced it: played 0 after a win). Same hole let a loss by the computer's last
+  blow vanish. Now `recordOutcome()` runs from `finish()`, the menu's quit and `destroy()`.
+- Live rooms: a claim wrote `{by: <claimed side>, k: 'r'}` at the shared seq; the claimed phone treated
+  any entry by its own side as "my move not echoed yet" and never applied it, and its own late move
+  (`appendMove` is a plain set) overwrote the 'r'. Both phones could then claim and both win. Now the 'r'
+  is applied, and every resign or claim also ends the room with `forfeit/<loser seat>` in the same write
+  (the shared `js/live-leave.js` shape), read first on any ended room and on a rejoin.
+- Live recovery: the host's state was written as an object; Firebase returned it with keys sorted and
+  nulls / empty arrays dropped, so its hash never matched again (every later move re-asked). The host,
+  on a guest move it could not replay, simply stopped applying moves for good. Now the state is a JSON
+  string and the host keeps its own result and pushes it.
+- A live room left through the hub's Back was only detached; the opponent had to wait 90 s and claim
+  (into the race above). Now `quitCostsLoss`/`leaveMatch` resign it after your first move.
+- A challenge knockout made offline and sent after the turn had timed out was counted as a WIN on this
+  phone while the server refused the move. Now it is counted when the move lands (else the launcher
+  counts the stored result).
+- `drainOutbox` wrote back only what it had read, wiping a move saved meanwhile. `mp.js`'s own
+  `writesAllowed` checked only the origin (the automation-guard test passed on the function's name).
+- Mode: a challenge counted from the launcher (the usual path for the player who did not make the last
+  move) had no mode at all (`'?'`); no online result said who went first or live vs challenge; no
+  result carried detail. All added (`onlineMode`, `matchDetail`, index `tm`).
+- Screens: battle HUD text at 11-13px (names, Your Turn, clock label, MOVES, badges, the Stage button,
+  whose `font: 900 13px/1 inherit` shorthand was invalid and fell back to the browser's 13.3px); help
+  lines at 11-14px with the berry line cut off; the monster card's X under the art (`z-index`); "New
+  team" split over two lines; the end card upper-casing the profile name; the Online tab stuck on "…"
+  when `online-ui.js` could not load. `tabCpu` in Spanish was "Máquina" beside the game's own "Ordenador".

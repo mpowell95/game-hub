@@ -28,6 +28,7 @@
 // the other person's row is written only when the turn is theirs. NO MOVE CLOCK here (Matt: the
 // timer is for live matches only), so a challenge log never holds a pass.
 import { getStatsApp } from '../../js/firebase-boot.js';
+import { automationBlocks } from '../../js/automation.js';
 import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
@@ -37,7 +38,7 @@ import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
-import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed } from './online.js';
+import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed, onlineMode, matchDetail } from './online.js';
 
 export const NODE = 'battlearena';
 const STATS_ID = 'battlearena';
@@ -83,6 +84,8 @@ function isDevOrigin() {
   } catch { return false; }
 }
 function writesAllowed(what) {
+  // Test automation never writes (js/automation.js; 2026-11-13: this copy only checked the origin).
+  if (automationBlocks(`battle-arena ${what}`)) return false;
   if (!isDevOrigin()) return true;
   try { if (localStorage.getItem(DEV_SYNC_OK) === '1') return true; } catch { /* fall through */ }
   console.warn(`[battle-arena] ${what} BLOCKED: dev origin. To allow: localStorage.setItem('${DEV_SYNC_OK}', '1')`);
@@ -104,6 +107,22 @@ const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 /** The engine state after the first `upto` moves (stored frame). validateGame proved they replay. */
 export function buildState(game, upto = game.log.length) {
   return replay(game.seed, { a: game.a.team, b: game.b.team }, game.log.slice(0, upto)).state;
+}
+
+/** A finished challenge's mode and numbers for this person (2026-11-13, withMode): from the match
+ *  itself, or from the index row alone (`tm` = the team, `sent` = the challenger, who moves first). */
+function gameMode(g, side) { return onlineMode(buildState(g), seatOfSide(side), 'ch'); }
+function gameDetail(g, side) {
+  const why = g && g.over && g.over.why;
+  return matchDetail(buildState(g), seatOfSide(side), why === 'timeout' || why === 'resign' ? why : 'ko');
+}
+function rowDetail(r) {
+  const why = r && r.why;
+  return { hp: Math.max(0, r.mine | 0), foeHp: Math.max(0, r.theirs | 0), end: why === 'timeout' || why === 'resign' ? why : 'ko' };
+}
+function rowMode(r) {
+  const tm = cleanTeam(r && r.tm);
+  return { ...(tm ? { t1: tm[0], t2: tm[1] } : {}), first: r && r.sent ? 'me' : 'them', via: 'ch' };
 }
 
 /**
@@ -300,7 +319,7 @@ export function markCounted(id) {
  *  'mp' bucket; challenges never write head-to-head (js/mp-records.js reads them from the index). */
 //  `mode` (2026-10-30, js/game-stats.js withMode): this player's team when the page has the match
 //  (online-ui.js finish); an index row carries no team, so a count from the launcher has none.
-export function countResult(id, won, finishedAt = Date.now(), mode = null) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null, detail = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch(STATS_ID, id)) return false;
@@ -308,7 +327,7 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won))); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won), { detail: () => (typeof detail === 'function' ? detail() : detail) })); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   return true;
 }
 export function noteVoided() {
@@ -333,12 +352,13 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at)) return false;
+    const sd = sideOf(g, myCode());
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at, () => gameMode(g, sd), () => gameDetail(g, sd))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, r.result === 'won', r.updated);
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => rowMode(r), () => rowDetail(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -379,7 +399,7 @@ export function rowsFromIndex(val, now = decideNow()) {
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
-      mine: ms(r.mine), theirs: ms(r.theirs),
+      mine: ms(r.mine), theirs: ms(r.theirs), tm: cleanTeam(r.tm),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch(STATS_ID, r.id)));
 }
@@ -485,6 +505,8 @@ function rowFor(game, side, writer) {
     sent: side !== recipientOf(game),
     pl: senderPlayed(game),                     // the sender has played: calling off costs a loss (2026-10-29)
     mine: game.hp[side], theirs: game.hp[other(side)],
+    // This person's team (2026-11-13): a result counted from the launcher carries its mode too.
+    ...(Array.isArray(game[side] && game[side].team) ? { tm: game[side].team.slice(0, 2) } : {}),
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),
@@ -766,7 +788,12 @@ export async function drainOutbox(onlyId = null) {
     else if (res.retryable) left.push(item);
     else console.warn('[battle-arena] dropping queued moves that can no longer be sent:', res.reason, item);
   }
-  writeOutbox(left);
+  // Merge with what was queued WHILE this ran (2026-11-13): a match played meanwhile saved its moves
+  // with savePending, and writing `left` alone wiped them. Anything not exactly as read here is newer.
+  const was = new Set(q.map((x) => JSON.stringify(x)));
+  const fresh = readOutbox().filter((x) => !was.has(JSON.stringify(x)));
+  const freshIds = new Set(fresh.map((x) => x.id));
+  writeOutbox(left.filter((x) => !freshIds.has(x.id)).concat(fresh));
   return sent;
 }
 

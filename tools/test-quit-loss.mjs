@@ -200,7 +200,7 @@ W('flick-soccer/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Fli
 W('eight-ball/js/ui.js', /_newMatch\(\) \{\s*this\._recordQuitLoss\(\);/, 'Pool: a new match over a shot-in one records it');
 W('eight-ball/js/ui.js', /if \(this\.mode === 'cpu' && !opts\.replay\) m\.ps = 1;/, 'Pool (second pass): the first shot of the match arms it, the computer\'s break included');
 W('archery/js/ui.js', /if \(mode === 'cpu'\) this\._recordQuitLoss\(\);/, 'Archery: a new match vs the computer over a saved one records it');
-W('battle-arena/js/ui.js', /close\(\); this\.recordQuitLoss\(\); this\.clearSave\(\);/, 'Battle Arena: New match / Home record the quit');
+W('battle-arena/js/ui.js', /close\(\); this\.recordOutcome\(\); this\.recordQuitLoss\(\); this\.clearSave\(\);/, 'Battle Arena: New match / Home record the quit (and first a match already decided, 2026-11-13)');
 W('minesweeper/js/ui.js', /newGame\(level\) \{[\s\S]{0,200}this\._recordQuitLoss\(lv\);/, 'Minesweeper: a started board thrown away is a loss');
 W('business-deal/js/ui.js', /_takeQuitLoss\(\); this\._restartGame\(\);/, 'Monopoly Deal: New Game records the quit');
 W('business-deal/js/ui.js', /window\.__ghStats\.takeQuit\('business'\)\) this\._bumpBdStats\(false\)/, 'Monopoly Deal: a page that closed mid-game is a loss on the next open');
@@ -295,7 +295,7 @@ for (const [g, id] of []) {   // none left: every game vs the computer saves sin
   ok('Q4 cup-baseball saves: init still takes a marker an older build armed', /export function init\(container\) \{[\s\S]{0,400}takeQuitLoss\('cupbaseball'\);/.test(c));
 }
 W('js/hub.js', /settleQuitLosses\(30 \* 60 \* 1000\)/, 'Hub: settles the markers of games that died with their page');
-W('js/hub.js', /m\.quitCostsLoss\(\)[\s\S]{0,200}hub_confirm_loss/, 'Hub: its leave confirm says "Counts as a loss" when the game says so');
+W('js/hub.js', /m\.quitCostsLoss\(\)[\s\S]{0,700}hub_confirm_loss/, 'Hub: its leave confirm says "Counts as a loss" when the game says so');
 // strings
 const STR = [
   ['js/strings.js', ['hub_confirm_loss']],
