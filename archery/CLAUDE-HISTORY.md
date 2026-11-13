@@ -166,3 +166,12 @@ running off the top of the screen. The built target bow (laid out from the recor
 model) was still in the code and already matched the recording closely; only its built hand was crude. Matt chose
 "New bow, keep arm": the model now draws only its arm and hand (skin and sleeve triangles), on the built grip,
 turned so the arm comes up from the bottom-left corner. The string rods and `MODEL_REST` are gone.
+
+## 2026-11-13 (later): fast incoming arrows, no swing on the draw
+
+Matt's recording (`ScreenRecording_11-13-2026 18-01-40_1.mov`): "the computer's arrows hitting the target. They're
+incredibly slow... Arrows come in fast", and the bow "glitchy/shaky" ("Constant jitter"). The incoming arrow ran 3.5 m
+in 0.5 s (7 m/s); now 9 m in 0.15 s (about 60 m/s), trail kept. Measured frame by frame, the recording's bow and sight
+did not move during a held aim (only the leaves did); the motion was the draw: the bow tilted 7 degrees and swung left
+then back on the way up, and the first draw froze for 70 ms (the sight's magnified view built on first use). The swing
+is gone and the magnified view is built at load (`render.js _warm`).

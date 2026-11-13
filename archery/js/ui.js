@@ -31,6 +31,7 @@ const FIRSTS = ['alt', 'me', 'them'];
 const HIT_POP = 0.3;           // seconds from an arrow hitting to its number popping (Matt, 2026-10-20: was 0.6, read as a freeze)
 const HIT_HOLD = 2.0;          // seconds on the target after a hit
 const DRAW_T = 0.25;           // seconds to bring the bow up (the recording, frame by frame)
+const INCOMING_T = 0.15;       // seconds for the other player's arrow to fly in (render.js INCOMING_RUN)
 const PANIC_T = 0.6;           // seconds of shaking before a panicked arrow goes
 const BOW_IN_T = 0.2;          // seconds for the bow to slide up into view on the line
 const JOLT_T = 0.033;           // seconds of the arrow leaving the bow (the string snaps), before the flight
@@ -765,8 +766,9 @@ class ArcheryUI {
   /** An arrow comes in to the close-up at `p`, then `done()`. */
   _incoming(seat, p, done) {
     const color = this._colorOf(seat);
-    // Matt, 2026-10-20: at 0.28 s it seemed to appear from nowhere; now it flies in with a trail.
-    const T = this.reduce ? 0.01 : 0.5;
+    // Matt, 2026-10-20: at 0.28 s it seemed to appear from nowhere, so it got a trail and 0.5 s; Matt,
+    // 2026-11-13: that was "incredibly slow". Now arrow speed (render.js INCOMING_RUN), trail kept.
+    const T = this.reduce ? 0.01 : INCOMING_T;
     this._inc = { p, color, t: 0, T, done };
   }
   /** An arrow has just hit: it is in the target (quivering) at once; its number comes with _landed. */
@@ -1509,10 +1511,9 @@ class ArcheryUI {
       const drawn = { x: A.x, y: A.y, k: this.k, rot: 0 };
       let x = idle.x + (drawn.x - idle.x) * p, y = idle.y + (drawn.y - idle.y) * p;
       const k = idle.k + (drawn.k - idle.k) * p;
-      // On the way up the bow tilts and swings left, then settles upright on the aim.
-      const bump = Math.sin(Math.PI * p);
-      let rot = idle.rot + (drawn.rot - idle.rot) * p - 7 * bump;
-      x -= this.w * 0.05 * bump;
+      // Straight up onto the aim (Matt, 2026-11-13, "glitchy/shaky": it used to tilt 7 degrees and swing
+      // left on the way up, then swing back; the recording's bow just comes up).
+      const rot = idle.rot + (drawn.rot - idle.rot) * p;
       if (this.phase === 'panic' && !this.reduce) {
         const s = 6 + this.panicT * 18;
         x += (Math.random() - 0.5) * s; y += (Math.random() - 0.5) * s - this.panicT * 40;
