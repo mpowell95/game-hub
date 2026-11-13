@@ -200,3 +200,9 @@ old head-to-head until it next opens (none exists today).
   How to play is an outlined 17px button; help lines share one left edge with an icon or dot gutter; the menu's other actions are
   outlined; one X look on every popup. Kept on purpose: the home is the game's own full-bleed arena (not a centred card), the end
   card's "Better luck next time, <loser>" line, no heading on the Host draft (same draft as vs the computer).
+
+## Launcher tile (2026-11-13, Matt: "C is the best. go with it.")
+
+`GAME_ART['battle-arena']` (`js/game-art.js`) = option C of `docs/mockups/battle-arena-tile/` (built by its `build.mjs` from
+`art.js`'s real monsters and gems): Emberkit and Driplet on their tanks over a gem board, three fire gems lit, energy flying to
+Emberkit. A new tile is drawn from the game's own art, never a hand-made copy of it.
