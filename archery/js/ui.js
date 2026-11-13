@@ -852,9 +852,10 @@ class ArcheryUI {
     const d = this.drag;
     if (!d || e.pointerId !== d.id || this.phase !== 'draw') return;
     const p = this._local(e);
-    // About a ring for every 6 px of finger at phone width: fine enough to place, coarse enough to
-    // reach the edge of the target in one thumb movement.
-    const gain = 1 / (0.155 * this.w);
+    // The sight follows the finger 1:1 on screen (Matt, 2026-11-13: "I can move my finger a lot and the aim
+    // barely moves. it should be the inverse"; it was a ring per 6 px of finger, the sight moving a quarter as far
+    // as the finger). The magnified view inside the sight does the fine work.
+    const gain = 1 / this.r.pxPerR();
     const dx = (p.x - d.x) * gain, dy = (p.y - d.y) * gain;
     d.x = p.x; d.y = p.y;
     // The finger moves where the hand is trying to aim; the sight follows with weight (_tick,
