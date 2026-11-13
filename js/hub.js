@@ -1109,6 +1109,11 @@ class Hub {
     const m = this.current && this.current.module;
     try { if (m && typeof m.onCovered === 'function') m.onCovered(); } catch { /* the cover still shows */ }
   }
+  /** "Keep playing" on the Leave? dialog: a game paused by the cover may carry straight on (optional `onUncovered()`). */
+  _uncoverGame() {
+    const m = this.current && this.current.module;
+    try { if (m && typeof m.onUncovered === 'function') m.onUncovered(); } catch { /* stays paused */ }
+  }
 
   /** The player's bug-report form, preloaded with whichever game they were last in. */
   async openBugReport() {
@@ -1439,7 +1444,11 @@ class Hub {
     if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => { this._coverGame(); this.openBugReport(); });
     this._watchRotate();
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
-      el.addEventListener('click', () => { this.el.confirm.hidden = true; this._rearmReturn(); }));
+      el.addEventListener('click', () => { this.el.confirm.hidden = true; this._rearmReturn(); this._uncoverGame(); }));
+    // The game's back step label (see requestLeave): '‹ Back' while it steps back, '‹ Hub' otherwise.
+    window.addEventListener('gamehub:backlabel', (e) => {
+      if (this.el.back) this.el.back.textContent = e && e.detail ? '‹ ' + tf('hub_back_step', 'Back') : '‹ Hub';
+    });
     this.root.querySelector('[data-role="confirm-leave"]').addEventListener('click', () => {
       this.el.confirm.hidden = true;
       // A LIVE ROOM left on purpose (2026-10-29, js/live-leave.js): the game resigns the match it is
@@ -3084,14 +3093,22 @@ class Hub {
   /** Back-to-hub intent: confirm first if the game reports it's mid-play. */
   requestLeave() {
     const m = this.current && this.current.module;
+    // A game with screens of its own may take the hub's back one step back first (optional `back()` returning true;
+    // Tower Stack's game over and Record towers, 2026-11-12: Matt left to the hub by accident). The button then reads
+    // "‹ Back", set by the game through the `gamehub:backlabel` event.
+    try { if (m && typeof m.back === 'function' && m.back() === true) return; } catch (e) { console.warn('back() failed', e); }
     let inProgress = false;
     try { inProgress = !!(m && typeof m.isInProgress === 'function' && m.isInProgress()); } catch { /* ignore */ }
     if (inProgress) {
       // A game with no resume whose quit now counts as a loss says so (2026-10-29): `quitCostsLoss()`.
       let loss = false;
       try { loss = !!(m && typeof m.quitCostsLoss === 'function' && m.quitCostsLoss()); } catch { /* ignore */ }
+      // A game whose leaving keeps what was played says so in its own words (optional `leaveText()`; Tower Stack
+      // records the blocks, 2026-11-12: "Your current progress will be lost" was untrue there).
+      let own = '';
+      try { own = m && typeof m.leaveText === 'function' ? String(m.leaveText() || '') : ''; } catch { own = ''; }
       const msg = this.el.confirm.querySelector('.hub-confirm-msg');
-      if (msg) msg.textContent = loss ? tf('hub_confirm_loss', 'Leave? Counts as a loss.') : t('hub_confirm_msg');
+      if (msg) msg.textContent = own || (loss ? tf('hub_confirm_loss', 'Leave? Counts as a loss.') : t('hub_confirm_msg'));
       this._coverGame();
       this.el.confirm.hidden = false;
       return;
@@ -3226,6 +3243,7 @@ class Hub {
     if (this.el.extra) this.el.extra.hidden = false;
     if (this.el.chbar) this.el.chbar.hidden = false;
     this.el.back.hidden = true;
+    this.el.back.textContent = '‹ Hub';   // a game's '‹ Back' step label never outlives it
     if (this.el.gamebug) this.el.gamebug.hidden = true;
     document.documentElement.classList.remove('gh-gamebug');
     this.el.title.textContent = "Matt's Game Hub";

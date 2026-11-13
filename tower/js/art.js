@@ -76,11 +76,14 @@ function glow(g, x, y, r, color) {
   g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
 }
 function cloud(g, cx, cy, s) {
+  // ONE path, ONE fill (2026-11-12 play-test: a rect filled over the translucent arcs drew a brighter box).
   g.fillStyle = 'rgba(255,255,255,.92)';
   g.beginPath();
-  g.arc(cx, cy, 24 * s, 0, Math.PI * 2); g.arc(cx + 26 * s, cy - 10 * s, 30 * s, 0, Math.PI * 2);
-  g.arc(cx + 56 * s, cy + 2 * s, 22 * s, 0, Math.PI * 2); g.fill();
-  g.fillRect(cx, cy, 56 * s, 22 * s);
+  g.moveTo(cx + 24 * s, cy); g.arc(cx, cy, 24 * s, 0, Math.PI * 2);
+  g.moveTo(cx + 56 * s, cy - 10 * s); g.arc(cx + 26 * s, cy - 10 * s, 30 * s, 0, Math.PI * 2);
+  g.moveTo(cx + 78 * s, cy + 2 * s); g.arc(cx + 56 * s, cy + 2 * s, 22 * s, 0, Math.PI * 2);
+  g.rect(cx, cy, 56 * s, 22 * s);
+  g.fill('nonzero');
 }
 
 const SKY = {
