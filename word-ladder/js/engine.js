@@ -99,6 +99,11 @@ export function cleanLevel(l) {
 /** A saved attempt, read back safely: { chain: [words...], moves, hints, done, recorded }. The chain always starts at
  *  the level's start; a word that is not a legal step from the one before ends it there. Never throws. */
 export function cleanAttempt(a, level, dict) {
+  // A save made on a DIFFERENT puzzle (its first word is not this level's start: the data was remade under that
+  // number or day) is not this attempt: none of its moves or hints count here (2026-11-13: Matt's daily read 5 moves
+  // for a 4-move ladder, one move carried over from the old LIES puzzle).
+  if (a && Array.isArray(a.chain) && a.chain.length && String(a.chain[0]) !== level.s) a = null;
+  if (a && a.s && String(a.s) !== level.s) a = null;
   const chain = [level.s];
   try {
     const c = Array.isArray(a && a.chain) ? a.chain : [];
