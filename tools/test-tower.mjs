@@ -62,6 +62,12 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
   r2.mover.x = r2.stack[0].x + 7.5;
   ok('within the slack AND touching is still a Perfect', E.drop(r2).kind === 'perfect');
 }
+// A blind tap at the far end of the slide misses, even with the first, full-width block (play-test 2026-11-12).
+{
+  const r = E.createRun('easy');
+  r.mover.x = -r.mover.w * 0.72;
+  ok('a full-width block can miss at the far end', E.drop(r).kind === 'miss');
+}
 ok('speed rises with height', E.speedFor('medium', 10) > E.speedFor('medium', 1));
 ok('no top speed: it keeps rising', E.speedFor('medium', 200) > E.speedFor('medium', 100) && E.speedFor('medium', 100) > 1000);
 ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0 || (E.TUNE[d].v0 > E.TUNE[E.DIFFS[i - 1]].v0 && E.TUNE[d].perfect < E.TUNE[E.DIFFS[i - 1]].perfect)));
@@ -69,7 +75,7 @@ ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0
 {
   const r = E.createRun('expert');
   for (let i = 0; i < 200; i++) E.stepMover(r, 0.05);
-  ok('mover stays inside its range', r.mover.x >= -r.mover.w * 0.6 - 1e-9 && r.mover.x <= E.WORLD_W - r.mover.w * 0.4 + 1e-9);
+  ok('mover stays inside its range', r.mover.x >= -r.mover.w * 0.72 - 1e-9 && r.mover.x <= E.WORLD_W - r.mover.w * 0.28 + 1e-9);
 }
 
 // The recorder: additive counters, Math.max bests, mode recorded. A fake localStorage.

@@ -14,11 +14,15 @@ export const BLOCK_H = 40;   // 2026-11-02, Matt: "each block should be taller" 
 
 // v0: first block's speed (units/s); dv: added per block, FOREVER (no top speed: Matt, 2026-11-02, "There
 // shouldn't be a max speed"); perfect: units of slack.
+// 2026-11-12 (play-test, Matt: "Fix everything"): the slide reaches further past each edge (0.72 / 0.28 of the block,
+// was 0.6 / 0.4) so a blind tap at the far end can miss even at full width; every speed x1.133 keeps the time to
+// cross a full-width block the same (510 units vs 450). Expert's Perfect 3.5 -> 4.5 and Hard 4.5 -> 5 (Expert was
+// about one frame wide). Expert's start was raised earlier the same day (270 -> 420, Matt: "way too slow still").
 export const TUNE = {
-  easy:   { v0: 150, dv: 8,  perfect: 8 },
-  medium: { v0: 180, dv: 11, perfect: 6 },
-  hard:   { v0: 220, dv: 14, perfect: 4.5 },
-  expert: { v0: 420, dv: 17, perfect: 3.5 },   // v0 was 270 (Matt, 2026-11-12: "Expert starts way too slow still")
+  easy:   { v0: 170, dv: 9,    perfect: 8 },
+  medium: { v0: 204, dv: 12.5, perfect: 6 },
+  hard:   { v0: 249, dv: 15.9, perfect: 5 },
+  expert: { v0: 476, dv: 19.3, perfect: 4.5 },
 };
 
 export function normDiff(d) { return DIFFS.indexOf(d) >= 0 ? d : 'medium'; }
@@ -41,8 +45,8 @@ export function speedFor(diff, n) {
   return k.v0 + k.dv * Math.max(0, n - 1);
 }
 
-/** The travel range for a block of width w: it may hang 60% off either edge. */
-function range(w) { return { lo: -w * 0.6, hi: WORLD_W - w * 0.4 }; }
+/** The travel range for a block of width w: it may hang 72% off either edge (so a full-width block can miss). */
+function range(w) { return { lo: -w * 0.72, hi: WORLD_W - w * 0.28 }; }
 
 export function spawn(run) {
   const top = run.stack[run.stack.length - 1];

@@ -31,8 +31,9 @@ WITH the admin live switch, never the switch first (the game would read the empt
 - No overlap = game over. Score = blocks stacked (stack length - 1).
 - Speed rises every block with NO top speed (ramp doubled 2026-11-02, Matt: "should increase as the game goes on"; cap removed the same day: "There shouldn't be a max speed"). Blocks 40 units tall (were 26; Matt: "pretty thin"). Four difficulties (speed + perfect slack): easy / medium / hard / expert.
 - World is `WORLD_W` (400) units wide; the UI scales it to the screen.
-- **Speeds (units/s; one crossing is ~450 units)**: start easy 150, medium 180, hard 220, expert 420; each block adds
-  8 / 11 / 14 / 17. Expert's start was 270 until 2026-11-12 (Matt: "Expert starts way too slow still").
+- **Speeds (units/s; one crossing is ~450 units)**: start easy 170, medium 204, hard 249, expert 476; each block adds
+  9 / 12.5 / 15.9 / 19.3 (play test 2026-11-12: every level ~13% faster; Expert was 270, then 420). Perfect slack
+  8 / 6 / 5 / 4.5 units. A block slides from 72% off one side to 72% off the other, so even a full-width block can miss.
 
 ## Hub integration
 
@@ -63,6 +64,12 @@ WITH the admin live switch, never the switch first (the game would read the empt
 - **Readable against the background (2026-11-12, Matt: "The piece is too close to the background")**: City floors are WARM
   STONE with a light edge against the cool city (blue vs yellow-brown also reads for red/green colour blindness), the city
   behind dimmer; Ice blocks near solid in front of DARKER mountains. Check every look's tower against its scene at full size.
+- **Play test fixes (2026-11-12, a phone play-test agent's 20 findings, Matt: "Fix everything")**: the miss shows for
+  0.55 s (HUD stays, the falling piece outlined) before the zoom; the card ignores taps for its first 0.4 s; its X tucks it
+  away (tap the scene to bring it back); the hub's button reads "‹ Back" whenever the game can step back itself (module
+  `back()` + `gamehub:backlabel`) and the hub's Leave? text is the game's own (`leaveText()`, "Your blocks count"); Keep
+  playing resumes (`onUncovered()`); "Perfect!" pops; the streak chip is 🔥 bottom left; the best line is solid, ✓ once beaten,
+  its label drawn above the pieces; the HUD's best pill hides at a tie; Record towers opens on first place.
 - **Game over**: the card has "‹ Back" (to setup) besides the X (Matt went to the hub by accident). Nothing that must be read
   goes under the hub's top row (`_readTopY`, a CSS probe): the best line's label drops below the line there, and the
   game-over zoom fits the tower between that row and the card (the card is built first, hidden, and measured).

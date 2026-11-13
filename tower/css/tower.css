@@ -16,12 +16,22 @@
 .tw-root .tw-hud { position: absolute; inset: 0; pointer-events: none; color: #fff; }
 .tw-root .tw-hud[hidden] { display: none; }
 .tw-root .tw-best { position: absolute; right: 14px; top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 10px);
-  font-size: 16px; font-weight: 700; background: rgba(0,0,0,.22); padding: 6px 12px; border-radius: 999px; }
+  font-size: 17px; font-weight: 700; background: rgba(0,0,0,.22); padding: 6px 12px; border-radius: 999px; }
+.tw-root .tw-best[hidden] { display: none; }
 .tw-root .tw-score { position: absolute; left: 0; right: 0; top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 50px);
   text-align: center; font-size: 64px; font-weight: 800; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.35); }
-.tw-root .tw-streak { position: absolute; left: 50%; transform: translateX(-50%);
-  top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 126px);
-  background: #ffce3a; color: #16243a; font-size: 16px; font-weight: 800; padding: 4px 12px; border-radius: 999px; }
+.tw-root .tw-streak { position: absolute; left: 16px; bottom: calc(max(env(safe-area-inset-bottom, 0px), 16px) + 4px);
+  height: 44px; display: flex; align-items: center; gap: 4px;
+  background: #ffce3a; color: #16243a; font-size: 18px; font-weight: 800; padding: 0 14px; border-radius: 999px; }
+/* "Perfect!" pops up under the score (play-test 2026-11-12: a Perfect was barely noticeable). */
+.tw-root .tw-pop { position: absolute; left: 0; right: 0; top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 124px);
+  text-align: center; font-size: 28px; font-weight: 900; color: #ffce3a; text-shadow: 0 2px 10px rgba(0,0,0,.55);
+  opacity: 0; pointer-events: none; }
+.tw-root .tw-pop.is-on { animation: tw-pop 0.85s ease-out both; }
+@keyframes tw-pop { 0% { opacity: 0; transform: translateY(10px) scale(.9); } 20% { opacity: 1; transform: translateY(0) scale(1.06); }
+  70% { opacity: 1; transform: translateY(-4px) scale(1); } 100% { opacity: 0; transform: translateY(-10px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tw-root .tw-pop.is-on { animation: tw-pop-still 0.85s linear both; }
+  @keyframes tw-pop-still { 0%, 80% { opacity: 1; } 100% { opacity: 0; } } }
 .tw-root .tw-streak[hidden] { display: none; }
 /* Pause: bottom right, on the ground under the tower (the top corners are the hub's Hub and bug buttons). */
 .tw-root .tw-pause { position: absolute; right: 16px; bottom: max(env(safe-area-inset-bottom, 0px), 16px); pointer-events: auto;
@@ -49,7 +59,7 @@
   background: #fff; box-shadow: 0 2px 8px rgba(16,30,54,.10); font-weight: 800; font-size: 20px; }
 .tw-root .tw-head { text-align: center; margin: 8px 0 8px; }
 .tw-root .tw-head h1 { margin: 0; font-size: 30px; font-weight: 800; }
-.tw-root .tw-hbest { margin: 2px 0 0; font-size: 16px; color: #5b6b82; }
+.tw-root .tw-hbest { margin: 2px 0 0; font-size: 17px; color: #5b6b82; }
 .tw-root .tw-hbest b { color: #16243a; }
 .tw-root .tw-card { background: #fff; border-radius: 16px; padding: 12px; box-shadow: 0 2px 8px rgba(16,30,54,.10); }
 .tw-root .tw-looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -69,7 +79,7 @@
 .tw-root .tw-play { display: block; width: 100%; margin-top: 12px; height: 54px; border: 0; border-radius: 999px; background: #ffce3a;
   color: #16243a; font-size: 20px; font-weight: 800; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
 .tw-root .tw-lead { margin-top: 10px; background: #fff; border-radius: 16px; padding: 8px 8px 8px 14px; display: flex; align-items: center;
-  justify-content: space-between; gap: 8px; box-shadow: 0 2px 8px rgba(16,30,54,.10); font-size: 16px; }
+  justify-content: space-between; gap: 8px; box-shadow: 0 2px 8px rgba(16,30,54,.10); font-size: 17px; }
 .tw-root .tw-lead-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tw-root .tw-lead-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tw-root .tw-lead-who b { color: #5b6b82; }
@@ -86,12 +96,12 @@
 .tw-root .tw-big { font-size: 72px; font-weight: 800; line-height: 1; }
 .tw-root .tw-new { display: inline-block; margin-top: 10px; background: #ffce3a; border-radius: 999px; padding: 4px 12px;
   font-weight: 800; font-size: 15px; }
-.tw-root .tw-row { display: flex; justify-content: center; gap: 24px; margin: 14px 0 6px; font-size: 16px; color: #5b6b82; }
+.tw-root .tw-row { display: flex; justify-content: center; gap: 24px; margin: 14px 0 6px; font-size: 17px; color: #5b6b82; }
 .tw-root .tw-row b { display: block; color: #16243a; font-size: 20px; }
 .tw-root .tw-ov .tw-help { text-align: left; }
 .tw-root .tw-ov[data-role="help"] { background: rgba(10, 18, 34, .5); }
 .tw-root .tw-help h2 { margin: 0 0 8px; font-size: 22px; }
-.tw-root .tw-help ol { margin: 0; padding-left: 20px; font-size: 16px; line-height: 1.45; }
+.tw-root .tw-help ol { margin: 0; padding-left: 20px; font-size: 17px; line-height: 1.45; }
 .tw-root .tw-help li + li { margin-top: 6px; }
 
 /* --- Game over: the card sits at the bottom; the ground lifts above it so the whole tower shows --- */
@@ -132,13 +142,14 @@
   text-align: center; font-size: 72px; font-weight: 800; line-height: 1; text-shadow: 0 2px 12px rgba(0,0,0,.5); }
 .tw-root .tw-pick-who { position: absolute; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px);
   top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 132px); padding: 8px 18px; border-radius: 16px;
-  background: rgba(10, 16, 34, .62); text-align: center; font-size: 20px; font-weight: 700; white-space: nowrap; }
+  background: rgba(10, 16, 34, .82); text-align: center; font-size: 20px; font-weight: 700; white-space: nowrap; }
 .tw-root .tw-pick-who small { display: block; margin-top: 4px; font-size: 17px; font-weight: 600; color: #eef3fb; }
 .tw-root .tw-arrow { position: absolute; top: 52%; width: 52px; height: 52px; border: 0; border-radius: 999px; background: rgba(20,28,44,.8);
   color: #fff; font-size: 30px; font-weight: 800; line-height: 1; display: grid; place-items: center; }
 .tw-root .tw-arrow.is-l { left: 10px; }
 .tw-root .tw-arrow.is-r { right: 10px; }
-.tw-root .tw-pick .tw-twbar { position: absolute; left: 14px; right: 14px; bottom: max(env(safe-area-inset-bottom, 0px), 14px); margin: 0; }
+.tw-root .tw-pick .tw-twbar { position: absolute; left: 0; right: 0; bottom: 0; margin: 0;
+  padding: 12px 14px max(env(safe-area-inset-bottom, 0px), 14px); background: #0a1022; }
 .tw-root .tw-pick .tw-lead-all { color: #8fc0ff; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
 .tw-root .tw-none { margin: auto; font-size: 22px; color: #5b6b82; }
 .tw-root .tw-twbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }

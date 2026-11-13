@@ -444,7 +444,8 @@ Main suites: service worker (`test-sw-strategy`, `test-sw-update`); data safety
 
 In `docs/BUILDING-A-GAME.md`, "Part 1 — Building a game" (exports, leak-free `destroy()`, name
 gate, `isInProgress()`'s two legitimate meanings, `immersive: true`). Read it before touching any
-game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog, the in-game bug sheet or the sideways cover covers the game; Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb and Air Hockey (vs computer) pause, as when the app is hidden. Optional `onSideways(on)`: a clock that pauses when the app is hidden pauses sideways and runs on upright (Sudoku, Murdoku, Arrow Maze levels, Word Weaver's daily). Minesweeper/Boggle (time away counts) and Rush (never stops) export neither, on purpose. A new timed game must choose.
+game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub calls it when its "Leave?" dialog, the in-game bug sheet or the sideways cover covers the game; Tower Stack, Snake, Brick Breaker, Ball Run, Hill Climb and Air Hockey (vs computer) pause, as when the app is hidden. Optional `onSideways(on)`: a clock that pauses when the app is hidden pauses sideways and runs on upright (Sudoku, Murdoku, Arrow Maze levels, Word Weaver's daily). Minesweeper/Boggle (time away counts) and Rush (never stops) export neither, on purpose. A new timed game must choose. Optional `back()` (return true if the game stepped back itself; the hub then stays), `leaveText()` (the Leave? text),
+`onUncovered()` (Keep playing), and the event `gamehub:backlabel` (detail true = the hub button reads "‹ Back"); Tower Stack uses all four (2026-11-12).
 
 ### Before you build: USE WHAT EXISTS (read this before writing a line of a new game)
 

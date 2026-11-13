@@ -12,7 +12,7 @@ import * as E from './engine.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordTower, keepTowerShape, loadStats, withMode } from '../../js/game-stats.js';
+import { recordTower, keepTowerShape, loadStats, withMode, isTestGame } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onThemeChange } from '../../js/theme.js';
@@ -116,7 +116,8 @@ class Tower {
         <div class="tw-hud" data-role="hud" hidden>
           <div class="tw-best">&#9733; <b data-role="hudBest">0</b></div>
           <div class="tw-score" data-role="score">0</div>
-          <div class="tw-streak" data-role="streak" hidden><span aria-hidden="true">&#9670;</span> <b data-role="streakN">0</b></div>
+          <div class="tw-streak" data-role="streak" hidden><span aria-hidden="true">&#128293;</span> <b data-role="streakN">0</b></div>
+          <div class="tw-pop" data-role="pop" aria-hidden="true"></div>
           <button type="button" class="tw-pause" data-act="pause" data-role="pauseBtn">${PAUSE_SVG}</button>
         </div>
         <div class="tw-setup" data-role="setup"></div>
@@ -175,8 +176,10 @@ class Tower {
     this.el('over').style.visibility = '';
     this.el('pause').hidden = true;
     this.el('setup').hidden = false;
+    clearTimeout(this._missT); clearTimeout(this._overT); this._peek = false; this.el('over').style.pointerEvents = '';
     this._renderSetup();
     this._stop();
+    this._syncBack();
   }
 
   _renderSetup() {
@@ -216,9 +219,11 @@ class Tower {
     const top = ranked.length ? ranked[0].best : 0;
     const lead = ranked.filter((r) => r.rank === 1);
     const names = lead.map((r) => `${esc(r.emoji)} ${esc(r.name)}`.trim()).filter(Boolean).join(' &amp; ');
+    // The link says where it goes (play-test 2026-11-12: "Leaderboard ›" opened Record towers); no "🏆 -" when nobody
+    // has a best yet.
     return `
-      <span class="tw-lead-who"><span aria-hidden="true">&#127942;</span> <span class="tw-lead-name">${names || '-'}</span> <b>${lead.length ? top : ''}</b></span>
-      <button type="button" class="tw-lead-all" data-act="board">${esc(t('leaderboard'))} &#8250;</button>`;
+      ${names ? `<span class="tw-lead-who"><span aria-hidden="true">&#127942;</span> <span class="tw-lead-name">${names}</span> <b>${top}</b></span>` : '<span></span>'}
+      <button type="button" class="tw-lead-all" data-act="board">${esc(t('records'))} &#8250;</button>`;
   }
   async _loadLead() {
     if (this.leadBusy) return;
@@ -273,15 +278,34 @@ class Tower {
   }
   _pause() {
     if (this.screen !== 'play' || !this.run || this.run.over) return;
+    this.fx.flashes = [];   // a Perfect's outline must not freeze on the paused screen
     this.screen = 'paused';
     this.el('pause').hidden = false;
     this._stop();
     this._draw();
   }
   /** The hub's "Leave?" dialog or bug sheet covers the game (js/hub.js _coverGame): stop the block under it. */
-  onCovered() { this._pause(); }
+  onCovered() { const was = this.screen === 'play'; this._pause(); if (was) this._coverPaused = true; }
+  /** "Keep playing" (js/hub.js _uncoverGame): a run the dialog paused carries straight on (play-test 2026-11-12). */
+  onUncovered() { if (this._coverPaused && this.screen === 'paused') { this._coverPaused = false; this._resume(); } }
+  /** The hub's back: one step back inside the game where there is one (Record towers, How to play, game over), so
+   *  "‹ Hub" never throws the player out from those (Matt, 2026-11-12: "I went back to the hub on accident"). */
+  back() {
+    if (this._twBs) { this._twBs.back(); return true; }
+    if (!this.el('help').hidden) { this.el('help').hidden = true; this._syncBack(); return true; }
+    if (this.screen === 'over') { this._showSetup(); return true; }
+    return false;
+  }
+  /** Tell the hub whether its top-left button is "‹ Back" (a step inside the game) or "‹ Hub". */
+  _syncBack() {
+    const step = !this._dead && (!!this._twBs || (this.el && !this.el('help').hidden) || this.screen === 'over');
+    if (step === this._backStep) return;
+    this._backStep = step;
+    try { window.dispatchEvent(new CustomEvent('gamehub:backlabel', { detail: step })); } catch { /* old browser */ }
+  }
   _resume() {
     if (this.screen !== 'paused') return;
+    this._coverPaused = false;
     this.el('pause').hidden = true;
     this.screen = 'play';
     this._start();
@@ -302,8 +326,9 @@ class Tower {
     if (act === 'look') { this.s.look = b.dataset.v; saveSettings(this.s); this._renderSetup(); this._draw(); }
     else if (act === 'diff') { this.s.diff = E.normDiff(b.dataset.v); saveSettings(this.s); this._renderSetup(); }
     else if (act === 'play' || act === 'again') this._play();
-    else if (act === 'help') this.el('help').hidden = false;
-    else if (act === 'helpClose') this.el('help').hidden = true;
+    else if (act === 'help') { this.el('help').hidden = false; this._syncBack(); }
+    else if (act === 'helpClose') { this.el('help').hidden = true; this._syncBack(); }
+    else if (act === 'peek') { this.el('over').hidden = true; this._peek = true; }
     else if (act === 'board' || act === 'compare') this._showTowers();
     else if (act === 'towersClose') { if (this._twBs) this._twBs.back(); else this._closeTowers(); }
     else if (act === 'pause') this._pause();
@@ -333,11 +358,15 @@ class Tower {
     this.cam = this.camTarget = 0; this.zoom = this.zoomTarget = 1; this.lift = this.liftTarget = 0;
     this._closeTowers();
     this.el('pause').hidden = true;
+    clearTimeout(this._missT); clearTimeout(this._overT); this._peek = false; this.el('over').style.pointerEvents = '';
     this._hud();
     this._start();
+    this._syncBack();
   }
 
   _tap(e) {
+    // Game over with the card tucked away (its X, to look at the tower): a tap brings it back.
+    if (this.screen === 'over' && this._peek) { this._peek = false; this.el('over').hidden = false; return; }
     if (this.screen !== 'play') return;
     e.preventDefault();
     // Drop where the block IS at the tap, not where the last frame drew it (2026-11-12 review: at Expert speed a
@@ -358,13 +387,24 @@ class Tower {
     if (res.kind === 'perfect') {
       const top = run.stack[run.stack.length - 1];
       this.fx.flashes.push({ i, x: top.x, w: top.w, t: 0 });
+      this._popText(t('perfect'));   // a Perfect you can SEE (play-test 2026-11-12: a thin outline was missed)
     }
     if (res.cut && res.cut.w > 0.5) {
-      this.fx.falling.push({ x: res.cut.x, w: res.cut.w, y: this._yOf(i), vy: 0, rot: 0, vr: res.cut.dir * (res.kind === 'miss' ? 1.2 : 2.2), i });
+      this.fx.falling.push({ x: res.cut.x, w: res.cut.w, y: this._yOf(i), vy: 0, rot: 0, vr: res.cut.dir * (res.kind === 'miss' ? 1.2 : 2.2), i,
+        miss: res.kind === 'miss', t: 0 });
     }
     if (res.kind === 'miss') { this._gameOver(); return; }
     this.camTarget = Math.max(0, (run.stack.length - 7) * E.BLOCK_H);
     this._hud();
+  }
+
+  _popText(text) {
+    const el = this.el('pop');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('is-on');
+    void el.offsetWidth;
+    el.classList.add('is-on');
   }
 
   _hud() {
@@ -385,16 +425,16 @@ class Tower {
     const before = this.best | 0;          // the PREVIOUS best: its line stays drawn at game over
     const saved = this._record(run);
     const isNew = saved && sc > before && sc > 0;   // never "Best" for a run the store refused
-    this.camTarget = 0;
     this._overBefore = before;
-    this.el('hud').hidden = true;
+    this._peek = false;
+    this._syncBack();
     // The card is built now (hidden) so its real height decides how far the ground lifts; it shows 750 ms later.
     // "‹ Back" (to the setup screen) is a real button (2026-11-12, Matt: "It's not clear how to go back. I went back
     // to the hub on accident"); the X stays (every result card has one).
     const ov = this.el('over');
     ov.innerHTML = `
       <div class="tw-card tw-overcard">
-        <button type="button" class="tw-x" data-act="menu" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
+        <button type="button" class="tw-x" data-act="peek" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
         <div class="tw-big">${sc}</div>
         ${isNew ? `<div class="tw-new">&#9733; ${esc(t('new_best'))}</div>` : `<div class="tw-obest">&#9733; ${before}</div>`}
         <div class="tw-btns">
@@ -405,12 +445,23 @@ class Tower {
       </div>`;
     ov.style.visibility = 'hidden';
     ov.hidden = false;
-    this._fitOver();
-    clearTimeout(this._overT);
+    // The miss gets its moment (play-test 2026-11-12): the score stays up and the missed block falls, flashing, where
+    // the player can see it; only then the camera pulls back and the card comes up. The card ignores taps for its
+    // first 0.4 s, so a fast player's last tap never lands on Again or Back.
+    clearTimeout(this._missT); clearTimeout(this._overT);
+    this._missT = setTimeout(() => {
+      if (this.screen !== 'over') return;
+      this.el('hud').hidden = true;
+      this.camTarget = 0;
+      this._fitOver();
+      this._start();
+    }, 550);
     this._overT = setTimeout(() => {
       if (this.screen !== 'over') return;
       ov.style.visibility = '';
-    }, 750);
+      ov.style.pointerEvents = 'none';
+      this._overT = setTimeout(() => { ov.style.pointerEvents = ''; }, 400);
+    }, 1100);
   }
 
   /** Game over: zoom out to show the whole tower AND the best line above the card (the ground lifts over it).
@@ -444,6 +495,7 @@ class Tower {
     // The phone's back swipe and the Back button step back one screen (B -> A -> closed), js/back-stack.js.
     if (!this._twBs) this._twBs = backStack((n) => this._twStepBack(n));
     this._renderTowers();
+    this._syncBack();
   }
   _twStepBack(n) {
     if (this.twPick != null && n > 0) { this.twPick = null; n -= 1; }
@@ -457,6 +509,7 @@ class Tower {
     this._twBs = null;
     if (bs) bs.close();
     this._start();
+    this._syncBack();
   }
   /** Everyone with a best at difficulty d, tallest first: { me, name, emoji, best, stack, look, at, rank }. A tie on
    *  the best goes to the better AVERAGE at that difficulty (byMode hs/hn), else the all-time average (tw.blocks/games);
@@ -507,6 +560,8 @@ class Tower {
         look: stack && LOOKS.indexOf(r.sv.l) >= 0 ? r.sv.l : this.s.look, at: stack ? Number(r.sv.t) || 0 : 0 };
     });
   }
+  /** The hub leaderboard lists Tower only once it is released: until then the link would be a dead end. */
+  _boardOpen() { try { return !isTestGame('tower'); } catch { return false; } }
   _renderTowers() {
     const box = this.el('towers');
     if (!box || box.hidden) return;
@@ -519,7 +574,7 @@ class Tower {
     const bar = `
       <div class="tw-twbar">
         <button type="button" class="tw-play tw-alt tw-back" data-act="towersClose">&#8249; ${esc(t('back'))}</button>
-        <button type="button" class="tw-lead-all" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>
+        ${this._boardOpen() ? `<button type="button" class="tw-lead-all" data-act="fullBoard">${esc(t('leaderboard'))} &#8250;</button>` : '<span></span>'}
       </div>`;
     if (this.twPick != null) {
       const r = list[this.twPick];
@@ -584,11 +639,9 @@ class Tower {
     sc.innerHTML = out + '</svg>';
     sc.addEventListener('scroll', () => { this._twScroll = { d: this.towersDiff, x: sc.scrollLeft }; }, { passive: true });
     // A repaint (the board arriving, a resize) keeps where the player scrolled; a new tab starts on their own tower.
-    if (this._twScroll && this._twScroll.d === this.towersDiff) sc.scrollLeft = this._twScroll.x;
-    else {
-      const me = list.findIndex((r) => r.me);
-      if (me >= 0 && SW > W) sc.scrollLeft = Math.max(0, slot * me + slot / 2 - W / 2);
-    }
+    // Opens on FIRST PLACE (play-test 2026-11-12: centring on your own tower hid the gold one off the left edge); a
+    // repaint keeps where the player scrolled.
+    sc.scrollLeft = this._twScroll && this._twScroll.d === this.towersDiff ? this._twScroll.x : 0;
   }
   /** B: one tower, drawn exactly like the game draws it (tower/js/art.js), on its own look's scene. */
   _drawPick(r) {
@@ -669,7 +722,7 @@ class Tower {
     this.cam += (this.camTarget - this.cam) * Math.min(1, dt * 6);
     this.zoom += (this.zoomTarget - this.zoom) * Math.min(1, dt * 4);
     this.lift += (this.liftTarget - this.lift) * Math.min(1, dt * 4);
-    for (const f of this.fx.falling) { f.vy += 1300 * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
+    for (const f of this.fx.falling) { f.vy += 1300 * dt; f.y += f.vy * dt; f.rot += f.vr * dt; f.t = (f.t || 0) + dt; }
     this.fx.falling = this.fx.falling.filter((f) => f.y < 4000);
     for (const f of this.fx.flashes) f.t += dt;
     this.fx.flashes = this.fx.flashes.filter((f) => f.t < 0.45);
@@ -704,30 +757,23 @@ class Tower {
       const py = this._yOf(i) * k;
       if (py > viewTop && py < viewBot) A.drawBlock(ctx, look, ox + s.x * k, py, s.w * k, ph, i, k);
     });
-    // Your best at this difficulty, as a dashed line across at its height (play and game over;
-    // at game over it is the PREVIOUS best). Matt, 2026-11-02: "so you know when you beat it".
+    // Your best at this difficulty, as a line across at its height (play and game over; at game over it is the
+    // PREVIOUS best). Matt, 2026-11-02: "so you know when you beat it". The LINE is drawn here, behind the blocks;
+    // its LABEL after the sliding block (below), so the block never covers it (play-test 2026-11-12).
+    let bestTag = null;
     if (this.run && (this.best | 0) > 0) {
       const ly = this._yOf(this.best) * k;   // the top edge of block #best (a tower of `best`)
+      // Beaten = a SOLID, thicker line and a ✓ on the label, never colour alone (Matt is red/green colourblind; in
+      // City the old "turns yellow" was yellow on yellow).
       const beat = E.score(this.run) > this.best;
       const [lineC, tagC, inkC] = A.bestLineStyle(look);
       ctx.save();
-      ctx.strokeStyle = beat ? 'rgba(255,206,58,.95)' : lineC;
-      ctx.lineWidth = 2 / this.zoom;
-      ctx.setLineDash([10 / this.zoom, 7 / this.zoom]);
+      ctx.strokeStyle = beat ? (look === 'toy' ? 'rgba(22,36,58,.9)' : '#ffce3a') : lineC;
+      ctx.lineWidth = (beat ? 3.5 : 2) / this.zoom;
+      if (!beat) ctx.setLineDash([10 / this.zoom, 7 / this.zoom]);
       ctx.beginPath(); ctx.moveTo(-W, ly); ctx.lineTo(W * 2, ly); ctx.stroke();
-      ctx.setLineDash([]);
-      const fs = 16 / this.zoom, label = '★ ' + this.best;
-      ctx.font = `800 ${fs}px system-ui, sans-serif`;
-      const tw = ctx.measureText(label).width + 12 / this.zoom;
-      const lx = W / 2 + (W / 2 - 8) / this.zoom - tw;
-      // Above the line, unless that would put it under the hub's top row (the 🐞 sits top right): then below it.
-      const above = groundY + (ly - fs - 8 / this.zoom) * this.zoom >= (this.topY || 110);
-      const ry = above ? ly - fs - 8 / this.zoom : ly + 2 / this.zoom;
-      ctx.fillStyle = beat ? '#ffce3a' : tagC;
-      ctx.fillRect(lx, ry, tw, fs + 8 / this.zoom);
-      ctx.fillStyle = beat ? '#16243a' : inkC;
-      ctx.fillText(label, lx + 6 / this.zoom, ry + fs + 2 / this.zoom);
       ctx.restore();
+      bestTag = { ly, beat, tagC, inkC };
     }
     for (const f of this.fx.flashes) {
       const p = f.t / 0.45, pad = 4 + p * 14;
@@ -743,16 +789,52 @@ class Tower {
       ctx.translate(ox + (f.x + f.w / 2) * k, f.y * k + ph / 2);
       ctx.rotate(f.rot);
       A.drawBlock(ctx, look, (-f.w / 2) * k, -ph / 2, f.w * k, ph, f.i, k);
+      if (f.miss) {   // the block that missed flashes as it falls, so the player sees where it went
+        ctx.strokeStyle = `rgba(255,255,255,${(0.55 + 0.45 * Math.cos((f.t || 0) * 18)).toFixed(2)})`;
+        ctx.lineWidth = 4 / this.zoom;
+        ctx.strokeRect((-f.w / 2) * k - 3, -ph / 2 - 3, f.w * k + 6, ph + 6);
+      }
       ctx.restore();
     }
+    // The best line's label, on top of everything. Above the line, unless that is under the hub's top row (the 🐞)
+    // or the row the block is sliding on (tying your best): then below it.
+    let tagShown = false;
+    if (bestTag) {
+      const { ly, beat, tagC, inkC } = bestTag;
+      const fs = 17 / this.zoom, label = '★ ' + this.best + (beat ? ' ✓' : '');
+      ctx.save();
+      ctx.font = `800 ${fs}px system-ui, sans-serif`;
+      const tw = ctx.measureText(label).width + 12 / this.zoom;
+      const lx = W / 2 + (W / 2 - 8) / this.zoom - tw;
+      const moverRow = this.screen === 'play' && this.run && this.run.mover && this.run.stack.length === this.best + 1;
+      const above = !moverRow && groundY + (ly - fs - 8 / this.zoom) * this.zoom >= (this.topY || 110);
+      const ry = above ? ly - fs - 8 / this.zoom : ly + 3 / this.zoom;
+      ctx.fillStyle = beat ? '#ffce3a' : tagC;
+      ctx.fillRect(lx, ry, tw, fs + 8 / this.zoom);
+      ctx.fillStyle = beat ? '#16243a' : inkC;
+      ctx.fillText(label, lx + 6 / this.zoom, ry + fs + 2 / this.zoom);
+      ctx.restore();
+      const sy = groundY + ry * this.zoom;
+      tagShown = sy > (this.topY || 110) - 4 && sy < this.H;
+    }
     ctx.restore();
+    // The ★ pill at the top only when it adds something: a best above the screen, not yet reached (play-test: it
+    // repeated the score on a first run, and the line's own label when both were on screen).
+    const pillOn = this.screen === 'play' && this.run && (this.best | 0) > E.score(this.run) && !tagShown;
+    if (pillOn !== this._pillOn) {
+      this._pillOn = pillOn;
+      const pill = this.root.querySelector('.tw-best');
+      if (pill) pill.hidden = !pillOn;
+    }
   }
 
   destroy() {
     // Leaving through the hub (Hub button, back gesture) keeps the blocks stacked, exactly like Pause > Quit
     // (2026-11-12 review: the two exits differed). Once only (`recorded`).
     try { if (this.run && !this.run.over && !this.recorded && E.score(this.run) > 0) this._record(this.run); } catch (err) { console.error('[tower] run on leave not recorded', err); }
+    clearTimeout(this._missT);
     this._dead = true;
+    this._syncBack();
     if (this._layoutQ) { cancelAnimationFrame(this._layoutQ); this._layoutQ = 0; }
     this._stop();
     clearTimeout(this._overT);
@@ -795,4 +877,10 @@ export function destroy() {
 export function isInProgress() { return !!(instance && instance.inProgress()); }
 /** The hub's "Leave?" dialog or bug sheet covers the game (js/hub.js _coverGame): pause the run under it. */
 export function onCovered() { if (instance) instance.onCovered(); }
-export default { init, destroy, isInProgress, onCovered };
+/** "Keep playing" on the hub's Leave? dialog: carry on. */
+export function onUncovered() { if (instance) instance.onUncovered(); }
+/** The hub's back: true when the game took one step back itself (js/hub.js requestLeave). */
+export function back() { return !!(instance && instance.back()); }
+/** The hub's Leave? text for a run in progress: its blocks are kept. */
+export function leaveText() { return t('leave_keeps'); }
+export default { init, destroy, isInProgress, onCovered, onUncovered, back, leaveText };
