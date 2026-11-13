@@ -37,7 +37,16 @@
 .tw-root .tw-pause { position: absolute; right: 16px; bottom: max(env(safe-area-inset-bottom, 0px), 16px); pointer-events: auto;
   width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;
   background: rgba(255,255,255,.22); color: #fff; border: 2px solid rgba(255,255,255,.55); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+.tw-root .tw-pause[hidden] { display: none; }
 .tw-root .tw-ov[data-role="pause"] { background: rgba(10, 18, 34, .55); }
+/* Toy's pale sky: the white score and the Perfect pop get a dark outline (review 4). */
+.tw-root[data-look="toy"] .tw-score { text-shadow: 0 0 2px #16243a, 0 2px 0 #16243a, 0 0 14px rgba(22,36,58,.5); }
+.tw-root[data-look="toy"] .tw-pop { text-shadow: 0 0 2px #16243a, 0 2px 0 #16243a, 0 0 12px rgba(22,36,58,.5); }
+/* Game over with the card tucked away: the score as a pill at the bottom; tap it (or the scene) for the card. */
+.tw-root .tw-unpeek { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(max(env(safe-area-inset-bottom, 0px), 16px) + 8px);
+  display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 22px; border-radius: 999px; border: 2px solid rgba(255,255,255,.85);
+  background: rgba(16,24,40,.88); color: #fff; font-size: 24px; font-weight: 800; box-shadow: 0 2px 12px rgba(0,0,0,.35); touch-action: manipulation; }
+.tw-root .tw-unpeek[hidden] { display: none; }
 /* Light grounds (Ice's snow, Toy's sand and sky): darker pause button, light best pill. */
 .tw-root[data-look="ice"] .tw-pause, .tw-root[data-look="toy"] .tw-pause { background: rgba(22,36,58,.7); border-color: rgba(255,255,255,.85); }
 .tw-root[data-look="toy"] .tw-best { background: rgba(255,255,255,.8); color: #16243a; }

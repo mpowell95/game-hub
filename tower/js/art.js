@@ -199,10 +199,11 @@ export function drawBackdrop(ctx, look, W, H, dpr, gy, groundY, t) {
 function drawGround(ctx, look, W, H, y) {
   if (y >= H) return;
   if (look === 'ice') {
-    ctx.fillStyle = '#d9eef7'; ctx.fillRect(0, y, W, H - y);
-    ctx.fillStyle = '#f4fbff';
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(W * 0.25, y - 10, W * 0.5, y); ctx.quadraticCurveTo(W * 0.75, y + 10, W, y);
-    ctx.lineTo(W, y + 6); ctx.lineTo(0, y + 6); ctx.closePath(); ctx.fill();
+    // Deep blue ice under a thin snow edge (review 4: pale blocks on near-white snow merged at the base).
+    ctx.fillStyle = vgrad(ctx, y, H, [[0, '#4f7f98'], [1, '#22465a']]); ctx.fillRect(0, y, W, H - y);
+    ctx.fillStyle = '#e6f5fb';
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(W * 0.25, y - 6, W * 0.5, y); ctx.quadraticCurveTo(W * 0.75, y + 6, W, y);
+    ctx.lineTo(W, y + 4); ctx.lineTo(0, y + 4); ctx.closePath(); ctx.fill();
     return;
   }
   if (look === 'space') {
@@ -235,7 +236,7 @@ function drawGround(ctx, look, W, H, y) {
 
 /** The soft shadow under the tower, in world-drawing coordinates (ground at y = 0). */
 export function drawShadow(ctx, look, cx, w) {
-  const col = { city: 'rgba(0,0,0,.35)', ice: 'rgba(40,110,150,.25)', toy: 'rgba(60,40,10,.25)' }[look];
+  const col = { city: 'rgba(0,0,0,.35)', ice: 'rgba(6,26,40,.45)', toy: 'rgba(60,40,10,.25)' }[look];
   if (!col) return;
   ctx.fillStyle = col;
   ctx.beginPath(); ctx.ellipse(cx, 10, w * 0.6, 10, 0, 0, Math.PI * 2); ctx.fill();
@@ -282,6 +283,7 @@ export function drawBlock(ctx, look, x, y, w, h, i, k, alpha = 1) {
     ctx.beginPath(); ctx.moveTo(x + w * 0.5, y + h); ctx.lineTo(x + w * 0.54, y + h); ctx.lineTo(x + w * 0.74, y); ctx.lineTo(x + w * 0.7, y); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = 'rgba(24,82,120,.6)'; ctx.fillRect(x, y + h - 2, w, 2);   // each block's foot reads on snow
   } else if (look === 'space') {
     const hue = neonHue(i), p = Math.min(2 * k, w / 4, h / 4);
     rrect(ctx, x + p, y + p, w - 2 * p, h - 2 * p, 4 * k);
