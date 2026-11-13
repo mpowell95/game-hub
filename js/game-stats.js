@@ -1764,7 +1764,7 @@ function swapInTestGames(st) {
 // store: games.<id> := combine(real, test), stamped `carried.<id>` (a new field, rule 5). The test record is never
 // touched or deleted. A record not carried yet (a phone on an older build) is combined at READ time by
 // js/players-agg.js, the same function, so the boards count it now. Additive only: every number only grows.
-export const CARRY_TEST = { wordweaver: true, tower: true };
+export const CARRY_TEST = { wordweaver: true, tower: true, battlearena: true };   // battlearena: Matt, 2026-11-13 "have test plays count"; carried at its release (isTestGame skips it until then)
 const plainObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Add counters key by key (nested objects recurse); `hi` keeps the max, `lo` the least non-zero (byMode). */
 function addCounts(a, b) {
@@ -1830,8 +1830,40 @@ export function combineTowerRecords(real, test) {
   for (const k of Object.keys(t)) if (out[k] === undefined) out[k] = clone(t[k]);
   return out;
 }
+/** Battle Arena (Matt, 2026-11-13: "have test plays count. and have plays from non-admins count"): real + test of one
+ *  person (pure). Its test record STARTED AS A COPY of the real one (swapInTestGames, 2026-10-28) and the real one never
+ *  moved after (the game was never switched live: adminConfig/v1/games/battle-arena absent, checked 2026-11-13), so
+ *  ADDING them would count the games before 2026-10-28 twice (Matt's phone: real 6 played, test 7 = 7, not 13). Each
+ *  number takes the LARGER of the two (`lo`, a least-non-zero best, the smaller non-zero); lists join; a key only one
+ *  side has is kept. With the test record a superset that is exactly the test record; if a real record ever did move
+ *  after the copy, neither side drops below its own count. Also used for its head-to-head (testH2h, same copy). */
+function mergeCopied(a, b, key) {
+  if (a === undefined || a === null) return b === undefined || b === null ? undefined : clone(b);
+  if (b === undefined || b === null) return clone(a);
+  if (typeof a === 'number' && typeof b === 'number') {
+    if (key === 'lo') return a > 0 && b > 0 ? Math.min(a, b) : Math.max(a, b);
+    return Math.max(a, b);
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const out = clone(a), seen = new Set(a.map((x) => JSON.stringify(x)));
+    for (const x of b) if (!seen.has(JSON.stringify(x))) out.push(clone(x));
+    return out;
+  }
+  if (plainObj(a) && plainObj(b)) {
+    const out = {};
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const v = mergeCopied(a[k], b[k], k); if (v !== undefined) out[k] = v; }
+    return out;
+  }
+  return clone(b);
+}
+export function combineCopiedRecords(real, test) {
+  const r = plainObj(real) ? real : {}, t = plainObj(test) ? test : {};
+  return mergeCopied(r, t, '') || {};
+}
 // Every game that may ever be listed in CARRY_TEST needs its combiner here (tools/test-tower.mjs checks Tower's).
-export const CARRY_COMBINE = { wordweaver: combineWwRecords, tower: combineTowerRecords };
+export const CARRY_COMBINE = { wordweaver: combineWwRecords, tower: combineTowerRecords, battlearena: combineCopiedRecords };
+// A carried game whose test HEAD-TO-HEAD started as a copy too (live rooms write h2h): combined the same way, once.
+const CARRY_H2H = { battlearena: combineCopiedRecords };
 /** The record as it COUNTS: real + test for a carried game whose store has not been stamped yet (read time). */
 export function carriedGame(stats, id) {
   const real = stats && stats.games && stats.games[id];
@@ -1846,6 +1878,10 @@ function carryTestRecords(st) {
     if (!CARRY_COMBINE[id] || isTestGame(id) || !plainObj(st.testGames) || !plainObj(st.testGames[id])) continue;
     if (plainObj(st.carried) && st.carried[id]) continue;
     st.games[id] = CARRY_COMBINE[id](st.games[id], st.testGames[id]);
+    if (CARRY_H2H[id] && plainObj(st.testH2h) && plainObj(st.testH2h[id])) {
+      if (!plainObj(st.h2h)) st.h2h = {};
+      st.h2h[id] = CARRY_H2H[id](st.h2h[id], st.testH2h[id]);
+    }
     if (!plainObj(st.carried)) st.carried = {};
     st.carried[id] = Date.now();
     changed = true;

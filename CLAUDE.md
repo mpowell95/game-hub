@@ -408,6 +408,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
+- **Battle Arena's test plays carried at release (2026-11-13):** `tools/test-battlearena-carry.mjs` (a test record that started as a copy is never added twice).
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.

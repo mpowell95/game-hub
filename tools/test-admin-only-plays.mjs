@@ -91,6 +91,11 @@ r = raw();
 ok('repeated loads and writes never nest or move records', r.games.cupbaseball.total.played === 22 && r.testGames.cupbaseball.total.played === 23
   && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.cupbaseball) === before);
 
+// Battle Arena is listed in CARRY_TEST (Matt, 2026-11-13) but is still admin-only: nothing is carried yet.
+r = raw();
+ok('Battle Arena listed to carry, but while admin-only nothing is carried or stamped', G.CARRY_TEST.battlearena === true
+  && G.carriedGame(r, 'battlearena') === r.games.battlearena && !(r.carried && r.carried.battlearena) && JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
+
 // --- the readers: everything that shows or uploads stats reads the stored shape ---
 const src = (p) => readFileSync(new URL(p, __ROOT_URL), 'utf8');
 const net = src('./js/stats-net.js');
