@@ -41,8 +41,9 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 
 ## Data (GENERATED: `node tools/build-word-ladder-data.mjs`, never hand-edited)
 
-`data/<en|es>/words.json` (accepted words, 3-5 letters, Word Weaver's cleaned grid + extra words: no names, no bad
-words; grid words first, most common first), `levels.json` (500), `daily.json` (730). A level = `{ s, t, p, h }`.
+`data/<en|es>/words.json` (accepted words, 3-5 letters: Word Weaver's grid + extra words PLUS the whole Boggle
+dictionary, ENABLE / `boggle/data/words-es.txt`, so every real word is a legal step, rude ones included (2026-11-13,
+Matt: ASS was refused, "Yes it is" a word); grid words first, most common first), `levels.json` (500), `daily.json` (730). A level = `{ s, t, p, h }`.
 **Par is the true minimum over EVERY accepted word** (so nobody beats it) and a path of that length exists through
 Word Weaver's GRID words alone (common, hand-checked); start, target and the hint path are grid words.
 `node word-ladder/js/data-test.js` (~1 min) checks every level and day of both languages by breadth-first search.
