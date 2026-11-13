@@ -53,6 +53,7 @@ const G = await import('../js/game-stats.js');
 
 ok('Cup Baseball and Battle Arena are admin-only right now', G.isTestGame('cupbaseball') && G.isTestGame('battlearena'));
 ok('Archery, switched live from the admin page, is not', !G.isTestGame('archery'));
+ok('Word Ladder is admin-only right now (its plays go to the test record)', G.isTestGame('wordladder'));
 ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock') && !G.isTestGame('wordweaver') && !G.isTestGame('tower'));
 
 const before = JSON.stringify(raw().games.cupbaseball);

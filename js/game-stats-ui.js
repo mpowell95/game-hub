@@ -1586,7 +1586,8 @@ function wordLadderScreen(rec) {
   const daily = ents(wl.dl);
   if (!ladder.length && !daily.length && !((rec && rec.total && rec.total.played) | 0)) return emptyState(tf('game_title_wordladder', 'Word Ladder'));
   const stars = ladder.reduce((n, e) => n + (e.s | 0), 0);
-  const three = [...ladder, ...daily].filter((e) => (e.s | 0) >= 3).length;
+  // At par = ladder levels finished in par moves (hints or not); the daily has its own tally.
+  const three = ladder.filter((e) => (e.m | 0) > 0 && (e.p | 0) > 0 && (e.m | 0) <= (e.p | 0)).length;
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${ladder.length}</b><span>${tf('gs_wl_levels', 'Levels')}</span></div>

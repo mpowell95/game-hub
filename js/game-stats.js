@@ -3552,15 +3552,35 @@ function ensureWl(g) {
 }
 /** Two entries of one level (or day) combined: stars only rise, moves and hints only fall, the earliest time. Pure. */
 export function wlBest(a, b) {
+  // The BETTER attempt is kept WHOLE (more stars, then fewer moves, then fewer hints): never its moves with another
+  // attempt's hints, a result nobody played (2026-11-13 review, rule 4). `t` = the earliest completion of either.
   const ok = (e) => e && typeof e === 'object' && !Array.isArray(e);
   if (!ok(a)) return ok(b) ? { ...b } : a;
   if (!ok(b)) return { ...a };
   const n = (v) => Math.max(0, Math.floor(Number(v) || 0));
-  const minPos = (x, y) => (n(x) && n(y) ? Math.min(n(x), n(y)) : n(x) || n(y));
-  const out = { s: Math.max(n(a.s), n(b.s)), m: minPos(a.m, b.m), h: Math.min(n(a.h), n(b.h)), t: minPos(a.t, b.t) };
-  const p = n(a.p) || n(b.p);
+  const key = (e) => [-n(e.s), n(e.m) || Infinity, n(e.h)];
+  const ka = key(a), kb = key(b);
+  let best = a;
+  for (let i = 0; i < 3; i++) { if (kb[i] < ka[i]) { best = b; break; } if (kb[i] > ka[i]) break; }
+  const out = { s: n(best.s), m: n(best.m), h: n(best.h) };
+  const p = n(best.p) || n(a.p) || n(b.p);
   if (p) out.p = p;
+  const t = [n(a.t), n(b.t)].filter(Boolean);
+  if (t.length) out.t = Math.min(...t);
   return out;
+}
+/** Word Ladder's band of a ladder level (= word-ladder/js/engine.js BANDS: Easy 1, Medium 101, Hard 251, Expert 401). */
+export function wlBandOf(n) { return n >= 401 ? 'expert' : n >= 251 ? 'hard' : n >= 101 ? 'medium' : 'easy'; }
+/** Distinct ladder levels completed (English + Spanish), optionally one band: the board number, counted from the merged
+ *  per-level maps, so a level finished on two phones counts once (2026-11-13 review). The daily is not a level. */
+export function wlSolved(gm, band) {
+  const wl = (gm && gm.wl) || {};
+  let c = 0;
+  for (const m of [wl.lv, wl.es]) if (m && typeof m === 'object') for (const k of Object.keys(m)) {
+    const lv = Number(k.slice(1));
+    if (Number.isInteger(lv) && lv >= 1 && (!band || wlBandOf(lv) === band)) c++;
+  }
+  return c;
 }
 /** Word Ladder stars, the same rule as word-ladder/js/engine.js starsFor (moves at par 3, up to 2 over 2, else 1;
  *  1 hint caps at 2, 2+ at 1). */

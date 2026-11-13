@@ -405,7 +405,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Who has seen the New game bubble (2026-11-13):** `tools/read-new-dock.mjs [<game id>]` (read only); `tools/test-new-dock.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
-- **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked).
+- **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
 - **Battle Arena's test plays carried at release (2026-11-13):** `tools/test-battlearena-carry.mjs` (a test record that started as a copy is never added twice).

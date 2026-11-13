@@ -58,6 +58,8 @@ ok(a.chain.join(' ') === 'COLD CORD' && a.moves === 1 && a.hints === 2 && !a.don
 ok(E.cleanAttempt(null, lv, dict).chain.join() === 'COLD', 'no save = the start word');
 const other = E.cleanAttempt({ chain: ['CARD', 'CORD'], moves: 1, hints: 1 }, lv, dict);
 ok(other.chain.join() === 'COLD' && other.moves === 0 && other.hints === 0, 'a save from another puzzle counts no moves or hints here');
+const kept = E.cleanAttempt({ chain: ['COLD', 'CORD', 'GONE', 'WARM'], moves: 3, hints: 1, done: true, recorded: true }, lv, dict);
+ok(kept.done && kept.chain.length === 4 && kept.moves === 3, 'a finished, recorded save is kept even if a word left the list');
 
 console.log(`word-ladder data tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
