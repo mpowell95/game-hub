@@ -48,9 +48,9 @@ const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
 // so Tower Stack's admin test plays marked it seen before its release. v2 keeps only v1 stamps made after Tower Stack's
 // release was merged (NEW_DOCK_V1_TRUST), and a launch now stamps only a released game inside its New window.
 // v1 is left in place, unread after the first copy (rule 5).
-const NEW_DOCK_KEY = 'gamehub.newDock.v2';
-const NEW_DOCK_V1 = 'gamehub.newDock.v1';
-const NEW_DOCK_V1_TRUST = Date.parse('2026-11-13T17:45:36Z');
+// v3 (same day, Matt: "fix this now"): starts EMPTY, carrying nothing from v1/v2, so every phone shows the bubble once
+// whatever it opened before. v1 and v2 are left in place, unread (rule 5).
+const NEW_DOCK_KEY = 'gamehub.newDock.v3';
 
 // The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
 const TAB_ICON = {
@@ -2260,15 +2260,7 @@ class Hub {
   _newDockSeen() {
     try {
       const v = JSON.parse(localStorage.getItem(NEW_DOCK_KEY) || 'null');
-      if (v && v.seen && typeof v.seen === 'object') return v.seen;
-      // First read of v2: carry over only the v1 stamps a released build made.
-      const seen = {};
-      try {
-        const o = JSON.parse(localStorage.getItem(NEW_DOCK_V1) || 'null');
-        for (const [id, at] of Object.entries((o && o.seen) || {})) if (+at >= NEW_DOCK_V1_TRUST) seen[id] = +at;
-      } catch { /* nothing to carry */ }
-      try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 2, seen })); } catch { /* a preference */ }
-      return seen;
+      return v && v.seen && typeof v.seen === 'object' ? v.seen : {};
     } catch { return {}; }
   }
   /** Is this game one the bubble would show (released, inside its New window)? */
@@ -2280,7 +2272,7 @@ class Hub {
     let changed = false;
     for (const id of list) if (!seen[id]) { seen[id] = Date.now(); changed = true; }
     if (!changed) return;
-    try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 2, seen })); } catch { /* a preference */ }
+    try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 3, seen })); } catch { /* a preference */ }
   }
   _newDockGames() {
     const seen = this._newDockSeen();
