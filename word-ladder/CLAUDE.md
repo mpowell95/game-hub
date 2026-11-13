@@ -63,6 +63,11 @@ the Hub and in again fetches them fresh (the hub keeps this module loaded for th
 kept old data until the app was closed, and Matt's refused LIEN). A data change that must reach admin phones at once also
 bumps CACHE (they reload on a new build).
 
+**A save from another puzzle counts nothing (2026-11-13, Matt: "How is this 5 moves? I never used the undo")**: `cleanAttempt`
+drops a save whose first word (or stored `s`) is not this level's start, so a remade level or day starts at 0 moves; attempts
+now store `s`. Matt's daily that day (KICK LICK LICE LIVE LOVE, saved as 5) is set to 4 moves and recorded again by the
+one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`, verified by re-read; the entry only improves).
+
 ## Layout
 
 Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it:

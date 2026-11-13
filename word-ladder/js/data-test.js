@@ -56,6 +56,8 @@ const lv = E.cleanLevel({ s: 'COLD', t: 'WARM', p: 4, h: 'COLD CORD WORD WARD WA
 const a = E.cleanAttempt({ chain: ['COLD', 'CORD', 'XXXX', 'WORD'], moves: 1, hints: 2 }, lv, dict);
 ok(a.chain.join(' ') === 'COLD CORD' && a.moves === 1 && a.hints === 2 && !a.done, 'a bad saved word ends the chain there');
 ok(E.cleanAttempt(null, lv, dict).chain.join() === 'COLD', 'no save = the start word');
+const other = E.cleanAttempt({ chain: ['CARD', 'CORD'], moves: 1, hints: 1 }, lv, dict);
+ok(other.chain.join() === 'COLD' && other.moves === 0 && other.hints === 0, 'a save from another puzzle counts no moves or hints here');
 
 console.log(`word-ladder data tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

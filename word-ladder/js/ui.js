@@ -15,6 +15,7 @@ import { makeT, getLang } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { recordWordLadder, recordWordLadderDaily, withMode, loadStats } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
+import { loadProfile } from '../../js/profile-store.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.wordladder.v1';            // settings: { lang }
@@ -96,6 +97,7 @@ class WordLadder {
     document.addEventListener('keydown', this._onKey);
     this._offResize = onViewportResize(() => this._fit());
     try { startServerTime(); } catch { /* the day falls back to the phone's clock */ }
+    this._repair1113();
     this._flushAll();
     this._setup();
   }
@@ -137,6 +139,29 @@ class WordLadder {
     return !!((a && a.done) || ((wlRec().dl || {})[k]));
   }
 
+  /** ONE-TIME REPAIR (2026-11-13), Matt's code only: his daily KICK LICK LICE LIVE LOVE was saved and recorded as 5 moves
+   *  (one move carried over from the old LIES puzzle; cleanAttempt now drops such saves). The save is set to 4 moves and
+   *  the result recorded again: recordWordLadderDaily only IMPROVES the day's entry (stars 2 -> 3, moves 5 -> 4), no new
+   *  play is counted. Stamped once done, verified by a fresh re-read of the stats entry; nothing else is touched. */
+  _repair1113() {
+    const STAMP = 'gamehub.wordladder.repair1113.v1';
+    try {
+      if (localStorage.getItem(STAMP)) return;
+      const p = loadProfile();
+      if (!p || p.playerId !== 'QZCC4') return;
+      const key = 'en-2026-11-13';
+      const all = readJSON(DAILY_KEY, { d: {} });
+      const a = (all.d || {})[key];
+      if (!a || !a.done || (a.moves | 0) !== 5 || (a.hints | 0) !== 0 || (a.chain || []).join(' ') !== 'KICK LICK LICE LIVE LOVE') return;
+      const fixed = { kind: 'daily', key, lang: 'en', ...a, s: 'KICK', p: 4, moves: 4, recorded: false };
+      this._saveAttempt(fixed);
+      if (!this._record(fixed)) { console.error('[word-ladder] repair1113: not recorded yet, tried again on the next open'); return; }
+      const e = ((wlRec().dl || {})[key]) || {};
+      if ((e.m | 0) !== 4 || (e.s | 0) !== 3) { console.error('[word-ladder] repair1113: entry did not read back', e); return; }
+      localStorage.setItem(STAMP, String(Date.now()));
+    } catch (err) { console.error('[word-ladder] repair1113 failed; nothing stamped, tried again on the next open', err); }
+  }
+
   /** Every finished attempt the recorder has not taken yet, recorded now (both languages, ladder and daily). */
   _flushAll() {
     const saves = this._saves();
@@ -164,7 +189,7 @@ class WordLadder {
     return true;
   }
   _saveAttempt(a) {
-    const rec = { v: 1, n: a.n, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, sel: a.sel | 0, done: !!a.done, recorded: !!a.recorded };
+    const rec = { v: 1, n: a.n, s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, sel: a.sel | 0, done: !!a.done, recorded: !!a.recorded };
     if (a.kind === 'daily') {
       const all = readJSON(DAILY_KEY, { v: 1, d: {} });
       if (!all.d || typeof all.d !== 'object') all.d = {};
