@@ -434,6 +434,7 @@ function tabOn(tab, st) { return Object.keys(tab.st).every((k) => (st[k] ?? null
 function tabText(game, tab) {
   if (tab.st.view === 'mp') return t2('lb2_online');
   if (game === 'skeeball' && 'view' in tab.st && !('machine' in tab.st)) return t2(tab.st.view === 'high' ? 'lb2_sk_best' : 'lb2_sk_total');
+  if (game === 'tower' && 'by' in tab.st) return t2(tab.st.by === 'total' ? 'lb2_sk_total' : 'lb2_sk_best');
   // "Medium" spelled out wherever the old board shortened it to "Med" (round 4: it fits at 360px, EN and ES).
   if (tab.tier === 2) return lb2TierWord(2);
   return tab.label;
