@@ -258,7 +258,7 @@ for (const [g, id] of []) {   // none left: every game vs the computer saves sin
   ok('Q4 cup-pong: the finish clears the save BEFORE recording (a continued match counts once)',
     /this\.recorded = true;[\s\S]{0,250}clearSave\(\);[\s\S]{0,200}recordCupPong\(/.test(c));
 }
-// Yahtzee and Cup Baseball SAVE since 2026-11-06 (Matt: "We should add resume to the other games that
+// Yahtzee (and Cup Baseball, archived 2026-11-13) SAVE since 2026-11-06 (Matt: "We should add resume to the other games that
 // don't save"): leaving keeps the game for Continue; New game over a thrown-in / rolled-in one is the loss.
 {
   const c = src('yahtzee/js/ui.js');
@@ -276,24 +276,6 @@ for (const [g, id] of []) {   // none left: every game vs the computer saves sin
     /applyRollResult\(values\);\s*if\(state\.mp\) mpAfterLocalMove\(\{ t:'roll', dice: values \}\);[\s\S]{0,200}else saveGame\(\);/.test(c));
   ok('Q4 yahtzee saves: init still takes a marker an older build armed', /export function init\(container\)\{[\s\S]{0,400}takeQuitLoss\('yahtzee'\);/.test(c));
 }
-{
-  const c = src('cup-baseball/js/ui.js');
-  ok('Q4 cup-baseball saves: leaving is not quitting (destroy() takes no loss, no quitCostsLoss export, isInProgress false)',
-    !/destroy\(\) \{[\s\S]{0,300}takeQuit\(\)/.test(c) && !/export function quitCostsLoss/.test(c)
-    && /export function isInProgress\(\) \{\s*return false;\s*\}/.test(c));
-  ok('Q4 cup-baseball saves: a new game over a thrown-in one (live or saved) records ONE loss, the save cleared first',
-    /newGame\(\) \{\s*this\.takeQuit\(\);/.test(c) && /takeQuit\(\) \{\s*const q = this\.quitPending\(\);\s*clearSave\(\);[\s\S]{0,300}armQuitLoss\('cupbaseball'[\s\S]{0,200}takeQuitLoss\('cupbaseball'\)/.test(c)
-    && (c.match(/armQuitLoss\(/g) || []).length === 1);
-  ok('Q4 cup-baseball saves: Play / 2 players over a saved thrown-in game ask twice; Change settings keeps the save',
-    /data-role="play"\]'\), 'click', \(e\) => this\.quitGate\(e\.currentTarget, \(\) => this\.start\('cpu'\)\)\)/.test(c)
-    && /data-role="pass"\]'\), 'click', \(e\) => this\.quitGate\(e\.currentTarget, \(\) => this\.start\('pass'\)\)\)/.test(c)
-    && /data-role="setup"\]'\), 'click', \(\) => \{ el\.remove\(\); this\.renderSetup\(\); \}\);/.test(c));
-  ok('Q4 cup-baseball saves: the finish clears the save BEFORE recording (a continued game counts once)',
-    /clearSave\(\);\s*this\.recorded = true;[\s\S]{0,700}recordResult\('cupbaseball'/.test(c));
-  ok('Q4 cup-baseball saves: every throw is saved at launch, the computer\'s included (no take-backs by leaving)',
-    /this\.saveGame\(\{ s: 'b', p: th\.power, a: th\.aim \}\)/.test(c) && /this\.saveGame\(\{ s: 'a', p: power, a: aim \}\)/.test(c));
-  ok('Q4 cup-baseball saves: init still takes a marker an older build armed', /export function init\(container\) \{[\s\S]{0,400}takeQuitLoss\('cupbaseball'\);/.test(c));
-}
 W('js/hub.js', /settleQuitLosses\(30 \* 60 \* 1000\)/, 'Hub: settles the markers of games that died with their page');
 W('js/hub.js', /m\.quitCostsLoss\(\)[\s\S]{0,700}hub_confirm_loss/, 'Hub: its leave confirm says "Counts as a loss" when the game says so');
 // strings
@@ -305,8 +287,8 @@ const STR = [
   ['battleship/js/strings.js', ['quit_loss']], ['boggle/js/strings.js', ['quit_loss']], ['darts/js/strings.js', ['quit_loss']],
   ['flick-soccer/js/strings.js', ['quit_loss']], ['eight-ball/js/strings.js', ['quit_loss']], ['archery/js/strings.js', ['quit_loss']],
   ['air-hockey/js/strings.js', ['quit_loss']], ['battle-arena/js/strings.js', ['quitLoss']], ['cup-pong/js/strings.js', ['quitLoss']],
-  ['cup-baseball/js/strings.js', ['quitLoss']], ['hoops4/js/strings.js', ['quitLoss']], ['minesweeper/js/strings.js', ['quit_loss']],
-  ['yahtzee/js/strings.js', ['quit_loss', 'continue_game', 'new_game']], ['cup-baseball/js/strings.js', ['continueGame']],
+  ['hoops4/js/strings.js', ['quitLoss']], ['minesweeper/js/strings.js', ['quit_loss']],
+  ['yahtzee/js/strings.js', ['quit_loss', 'continue_game', 'new_game']],
 ];
 for (const [file, keys] of STR) {
   const c = src(file);
@@ -362,7 +344,6 @@ W('yahtzee/js/ui.js', /function savedMoved\(s\)\{ return !!s && \(s\.rollsUsed>0
 W('business-deal/js/ui.js', /this\.game = new Game\(\{ verbose: false, players \}\);[\s\S]{0,250}this\._armQuitLoss\(\);/, 'G3 Monopoly Deal: dealt = armed');
 W('parchis/index.html', /function doRoll\(\) \{[\s\S]{0,400}if \(G\.cfg && G\.cfg\.vsMode === "cpu"\) G\.cfg\.hm = true;/, 'G3 Parchis: the first roll of the game, the computer\'s included');
 W('cup-pong/js/ui.js', /const savedMoved = \(s\) => !!s && \(\(s\.match\.throwsTaken \| 0\) > 0 \|\| !!s\.fly\);/, 'G3 Cup Pong (saves since 2026-11-03): any throw in the saved match, the computer\'s or one still in the air included');
-W('cup-baseball/js/ui.js', /const savedMoved = \(s\) => !!s && s\.mode === 'cpu' && \(\(s\.game\.throws \| 0\) > 0 \|\| !!s\.fly\);/, 'G3 Cup Baseball (saves since 2026-11-06): any throw in the saved game, the computer\'s or one still in the air included');
 W('hoops4/js/ui.js', /const savedMoved = \(sv\) => !!sv && \(sv\.match\.moves\.length > 0 \|\| sv\.match\.shots\[0\] \+ sv\.match\.shots\[1\] > 0 \|\| !!sv\.fly\);/, 'G3 Connect 4 Hoops (saves since 2026-11-06): any shot in the saved match, the computer\'s or one still in the air included');
 W('air-hockey/js/ui.js', /this\.screen = 'game';\s*this\._showOnly\(null\);[\s\S]{0,250}this\._saveMatch\(\);\s*this\._start\(\);/, 'G3 Air Hockey (saves since 2026-11-06): the puck live = saved, so New game over it is a loss');
 W('archery/js/ui.js', /m\.shots\.some\(\(s\) => s && s\.length > 0\)/, 'G3 Archery: any arrow, the computer\'s included');
@@ -389,7 +370,7 @@ G.settleQuitLosses(30 * 60 * 1000);   // a page frozen that long: the hub took i
 ok('G5 quitLossLost: true once the hub settled this page\'s marker (the game must record nothing more)', G.quitLossLost('cuppong') === true && stats().games.cuppong.total.lost === 1);
 G.dropQuitLoss('cuppong');
 ok('G5 quitLossLost: false again once the game has dropped it', G.quitLossLost('cuppong') === false);
-for (const [g, id] of [['yahtzee', 'yahtzee'], ['cup-baseball', 'cupbaseball']]) {
+for (const [g, id] of [['yahtzee', 'yahtzee']]) {
   ok(`G5 ${g}: its real result is skipped when the marker was settled elsewhere`, new RegExp(`quitLossLost\\('${id}'\\)`).test(src(`${g}/js/ui.js`)));
 }
 W('js/game-stats.js', /function keepFresh\(gameId\) \{[\s\S]{0,200}setInterval\(quitTick, QUIT_TICK_MS\)/, 'G5 game-stats: an armed marker is refreshed every minute while its page lives');

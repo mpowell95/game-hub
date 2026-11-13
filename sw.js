@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1548;
-const CACHE = 'game-hub-v1553';
+const CACHE = 'game-hub-v1554';
 
 const ASSETS = [
   './',
@@ -835,7 +835,7 @@ const REST_MANIFEST = {
   './css/hub.css': '6498bfd5a0',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '473d6d4cc6',
+  './js/hub.js': '0142b2d955',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
@@ -849,7 +849,7 @@ const REST_MANIFEST = {
   './js/theme.js': 'e8b40b1bc2',
   './js/layout.js': '1d8dc93ca3',
   './js/back-stack.js': '30b257fa2a',
-  './js/lb-rules.js': '8b1c932080',
+  './js/lb-rules.js': '6986191ea1',
   './js/lb-points.js': '5f672fd4d8',
   './js/lb-points-sheet.js': 'aed5a372ef',
   './js/lb-rank-sheet.js': '7a4ab4946e',
@@ -858,15 +858,15 @@ const REST_MANIFEST = {
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'f1e41e53ac',
+  './js/strings.js': 'b712256e98',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '0a19fa08d2',
+  './js/game-stats.js': '5f5e074865',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': 'f686c7d976',
+  './js/game-stats-ui.js': '1b737b2185',
   './js/stats-net.js': 'b46f740ebd',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
@@ -903,10 +903,10 @@ const REST_MANIFEST = {
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': '20721335c7',
-  './js/game-art.js': '7ffabd4b14',
+  './js/game-art.js': 'ddc7fd069d',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
-  './js/leaderboard-ui.js': 'b4beaa6d17',
+  './js/leaderboard-ui.js': 'fc7f807e80',
   './js/leaderboard2-ui.js': '1a8a3ae2ee',
   './js/leaderboard2-boards.js': '97be9b11eb',
   './js/leaderboard2-strings.js': '6fd06667f1',

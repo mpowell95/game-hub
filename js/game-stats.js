@@ -306,7 +306,7 @@ import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-// `pinball`, `pool`, `poolv2` and `pipes` stay in GAMES even though those games are ARCHIVED (Matt,
+// `pinball`, `pool`, `poolv2`, `pipes` and `cupbaseball` (archived 2026-11-13) stay in GAMES even though those games are ARCHIVED (Matt,
 // 2026-09-28: "archive all traces"): GAMES is the STORE's shape, and players' recorded games still
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
@@ -315,7 +315,7 @@ const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'esco
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 // The challenge match being counted right now (withChallengeMatch, 2026-10-29); null otherwise.
 let _mpMatch = null;
-const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes'];
+const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes', 'cupbaseball'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -1721,7 +1721,7 @@ function resetKingOfGamesSkeeball(st) {
 // Stats id -> hub id for every game js/hub.js marks devOnly (tools/test-leaderboard-rank.mjs fails
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
-  archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
+  archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball',
   wordladder: 'word-ladder',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */

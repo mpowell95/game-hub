@@ -19,7 +19,7 @@ day, so the carry cannot double count):** (1) `js/hub.js`: drop `devOnly`, add `
 `tower` from `ADMIN_ONLY`, add `tower: true` to `CARRY_TEST`; (3) `js/game-stats-ui.js` TABS: drop `devOnly`; (4) `sw.js`
 ASSETS: add `./tower/`, `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
 `tools/validate-sw-assets.mjs`, bump CACHE; (5) `tools/test-admin-only-plays.mjs` and `tools/test-word-weaver.mjs` use Tower
-as their admin-only example: point them at another admin-only game (archery, cup-baseball); (6) docs (here + root table);
+as their admin-only example: point them at another admin-only game (archery, baseball; cup-baseball archived 2026-11-13); (6) docs (here + root table);
 (7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. The New games bubble (root CLAUDE.md) then shows it to everyone for 7 days from its `released` date, on its own. **Order (review 4):
 deploy the commit FIRST, check Matt's devices are on the new build, and only then (if at all) flip the admin live switch**:
 the switch alone sends phones still on the old build to the empty real record before they have the carry (bests read 0

@@ -102,9 +102,6 @@ const TABS = [
   // Pool (2026-10-22, eight-ball/): admin only at first, NOT devOnly here (Darts' reasoning above).
   // total/byDiff only, so the generic screen draws it.
   { id: 'eightball', labelKey: 'game_title_eightball' },
-  // Cup Baseball (2026-10-23, cup-baseball/): admin only at first, NOT devOnly here (Darts' reasoning
-  // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
-  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball', devOnly: true },
   // Spelling Bee (2026-10-23, spelling-bee/): admin only at first, NOT devOnly here (Darts' reasoning
   // above). total/byDiff only (a win = a puzzle taken to Genius), so the generic screen draws it.
   { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
@@ -131,7 +128,7 @@ const HUB_ID = {
   dotsboxes: 'dots-boxes', ballrun: 'ball-run', business: 'business-deal',
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
-  cupbaseball: 'cup-baseball', spellingbee: 'spelling-bee', battlearena: 'battle-arena',
+  spellingbee: 'spelling-bee', battlearena: 'battle-arena',
   wordweaver: 'word-weaver', wordladder: 'word-ladder',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
@@ -2520,7 +2517,7 @@ function freshScreenForBase(id, stt) {
       const shot = getLang() === 'es' ? `${Math.round(ms * 3.6)} km/h` : `${Math.round(ms * 2.23694)} mph`;
       return stdScreen(id, rec, { facts: [['gs_ah_shot', ah.bestShot ? shot : null], ['gs_ah_shutouts', nf(ah.shutouts)], ['gs_ah_streak', nf(ah.bestStreak)], ['gs_ah_goals', `${nf(ah.goalsFor)}–${nf(ah.goalsAgainst)}`]] });
     }
-    case 'business': case 'parchis': case 'archery': case 'cupbaseball': case 'battlearena':
+    case 'business': case 'parchis': case 'archery': case 'battlearena':
       return stdScreen(id, rec);
     default: return screenFor(id, stt);
   }

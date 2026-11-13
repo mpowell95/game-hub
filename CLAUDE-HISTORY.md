@@ -1694,3 +1694,7 @@ iPhone, the deploy history) found:
    shows them ended by 2026-11-09. Removed from ASSETS (v1530); the files stay on the site.
 Not fixed (Matt chose 1, 2, 4): Chinchon's two decks (3.8 MB warmed to every phone), two copies of three.js.
 
+
+## 2026-11-13: Cup Baseball archived
+
+Matt: "remove Cup Baseball from the gamehub and archive it. we're not moving forward in building that". Folder moved to `archive/cup-baseball/` (restore steps in its CLAUDE.md); every app trace removed; `cupbaseball` kept in `GAMES` and added to `ARCHIVED_GAMES`, so every stored play (real and test records) stays on the phones and in `players/`.

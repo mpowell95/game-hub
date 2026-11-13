@@ -51,7 +51,6 @@ const DICTS = [
   { name: 'flick-soccer/js/strings.js', path: './flick-soccer/js/strings.js' },
   { name: 'archery/js/strings.js', path: './archery/js/strings.js' },
   { name: 'eight-ball/js/strings.js', path: './eight-ball/js/strings.js' },
-  { name: 'cup-baseball/js/strings.js', path: './cup-baseball/js/strings.js' },
   { name: 'spelling-bee/js/strings.js', path: './spelling-bee/js/strings.js' },
   { name: 'battle-arena/js/strings.js', path: './battle-arena/js/strings.js' },
   { name: 'word-weaver/js/strings.js', path: './word-weaver/js/strings.js' },
