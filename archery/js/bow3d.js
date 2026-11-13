@@ -55,7 +55,11 @@ export class BowView {
     const g = (x) => track.g(x), m = (x) => track.m(x);
     this.scene = new THREE.Scene();
     if (env) this.scene.environment = env;
-    this.cam = new THREE.PerspectiveCamera(FOV, 1, 0.05, 200);
+    // Near plane 2, not 0.05 (Matt's recording 2026-11-13: the column's strips and marks flickered on his
+    // iPhone). Nothing on screen is ever nearer than about 8 bow units (measured at 360 and 402 wide, bow down
+    // and drawn), and a near plane 40x further out gives the depth buffer 40x the precision, so the bow's
+    // close-together faces no longer fight.
+    this.cam = new THREE.PerspectiveCamera(FOV, 1, 2, 80);
     this.scene.add(this.cam);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x5c8a4a, 0.6));
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -146,12 +150,14 @@ export class BowView {
     // The fork: two blue arms down to the column, the sky showing between them.
     // A Y: the left arm slants in from the pocket's left corner, the right one runs straight down.
     ext([[0.8, 2.75], [1.3, 2.75], [2.1, 1.3], [1.78, 1.3]], 0.66, M.blue);
-    ext([[0.8, 2.75], [0.95, 2.75], [1.86, 1.3], [1.78, 1.3]], 0.7, M.blueHi);
+    ext([[0.8, 2.75], [0.95, 2.75], [1.86, 1.3], [1.78, 1.3]], 0.76, M.blueHi);
     ext([[2.0, 2.75], [2.33, 2.75], [2.33, 1.3], [2.0, 1.3]], 0.66, M.blue);
     // The column, blue with a black strip down its far edge, a dark slot and three white marks.
     ext([[1.78, 1.32], [2.33, 1.32], [2.33, -2.35], [1.78, -2.35]], 0.7, M.blue);
-    ext([[1.78, 1.32], [1.88, 1.32], [1.88, -2.35], [1.78, -2.35]], 0.74, M.blueHi);
-    ext([[2.2, 1.32], [2.35, 1.32], [2.35, -2.35], [2.18, -2.35]], 0.74, M.black);
+    // Strips and marks stand clear of the column's front (0.44 with the bevel) by 0.04+, never 0.02 or level with it:
+    // closer, a phone's depth buffer let them flicker through each other (Matt's recording 2026-11-13).
+    ext([[1.78, 1.32], [1.88, 1.32], [1.88, -2.35], [1.78, -2.35]], 0.8, M.blueHi);
+    ext([[2.2, 1.32], [2.35, 1.32], [2.35, -2.35], [2.18, -2.35]], 0.8, M.black);
     const slot = new THREE.Shape();
     slot.absarc(2.0, -0.95, 0.11, 0, Math.PI, false);
     slot.absarc(2.0, -1.75, 0.11, Math.PI, Math.PI * 2, false);
@@ -159,7 +165,7 @@ export class BowView {
     const slotMesh = new THREE.Mesh(g(new THREE.ShapeGeometry(slot, 10)), M.rubber);
     slotMesh.position.z = 0.42;
     rig.add(slotMesh);
-    for (let i = 0; i < 3; i++) box(0.08, 0.13, 0.04, 2.08, 0.75 - i * 0.24, 0.42, M.white);
+    for (let i = 0; i < 3; i++) box(0.08, 0.13, 0.04, 2.08, 0.75 - i * 0.24, 0.47, M.white);
     // The sight: a thick black bar from the riser hooking down to the ring, a small foot under it.
     // The bar runs in from the column below the ring's middle and hooks up into its lower right.
     // (Kept out of the merge below: the sight stays when the bow model replaces the rest.)
@@ -194,15 +200,15 @@ export class BowView {
     rig.add(grip);
     // Below the grip: blue again, wider, a bolt, a black band, down off the screen.
     ext([[0.7, -6.3], [1.85, -6.3], [1.95, -18], [0.7, -18]], 0.7, M.blue);
-    ext([[1.7, -6.3], [1.85, -6.3], [1.95, -18], [1.82, -18]], 0.74, M.black);
+    ext([[1.7, -6.3], [1.85, -6.3], [1.95, -18], [1.82, -18]], 0.8, M.black);
     box(1.2, 0.34, 0.8, 1.3, -8.8, 0, M.black);
     const bolt = new THREE.Mesh(g(new THREE.CylinderGeometry(0.15, 0.15, 0.08, 20)), M.grey);
     bolt.rotation.x = Math.PI / 2;
-    bolt.position.set(1.27, -7.25, 0.42);
+    bolt.position.set(1.27, -7.25, 0.47);
     rig.add(bolt);
     const boltIn = new THREE.Mesh(g(new THREE.CylinderGeometry(0.07, 0.07, 0.1, 12)), M.rubber);
     boltIn.rotation.x = Math.PI / 2;
-    boltIn.position.set(1.27, -7.25, 0.44);
+    boltIn.position.set(1.27, -7.25, 0.5);
     rig.add(boltIn);
 
     // --- the left hand, seen from the back: a closed hand round the grip under the shelf, the

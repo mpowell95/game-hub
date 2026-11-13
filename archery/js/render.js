@@ -92,7 +92,7 @@ export class Renderer {
     this.renderer.setPixelRatio(this.soft ? 1 : Math.min(2, window.devicePixelRatio || 1));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene = new THREE.Scene();
-    this.cam = new THREE.PerspectiveCamera(56, 1, 0.05, 400);
+    this.cam = new THREE.PerspectiveCamera(56, 1, 0.25, 400);   // near 0.25 m (was 0.05): 5x the depth precision; nothing is nearer (the grass at the screen's foot is ~2 m off)
     this.zoomCam = new THREE.PerspectiveCamera(4.2, 1, 1, 400);
     this.rt = new THREE.WebGLRenderTarget(384, 384);
     this.hud = new THREE.Scene();
@@ -368,7 +368,9 @@ export class Renderer {
         c.fillText(String(i), cx + r, cx + 8);
       }
     });
-    const faceMesh = new THREE.Mesh(this._g(new THREE.CircleGeometry(T.face, 96)), this._m(new THREE.MeshBasicMaterial({ map: face })));
+    // Pulled toward the camera in the depth test: it is 1 cm in front of the board, 30 m away, which a phone's
+    // depth buffer cannot always tell apart (the face flickering into the board).
+    const faceMesh = new THREE.Mesh(this._g(new THREE.CircleGeometry(T.face, 96)), this._m(new THREE.MeshBasicMaterial({ map: face, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })));
     faceMesh.position.set(T.x, T.y, FACE_Z);
     g.add(faceMesh);
     // The wooden easel: two front legs, two back legs, a ledge under the board.

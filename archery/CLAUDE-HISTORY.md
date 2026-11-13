@@ -175,3 +175,13 @@ in 0.5 s (7 m/s); now 9 m in 0.15 s (about 60 m/s), trail kept. Measured frame b
 did not move during a held aim (only the leaves did); the motion was the draw: the bow tilted 7 degrees and swung left
 then back on the way up, and the first draw froze for 70 ms (the sight's magnified view built on first use). The swing
 is gone and the magnified view is built at load (`render.js _warm`).
+
+## 2026-11-13 (later still): the flicker
+
+Matt, on a cropped copy of the same recording: "look at every frame between 0s and 3.5s... it's VERY clear that it's
+fucked up". Frame-by-frame differences during a held aim showed the bow's column flickering: its strips, its white
+marks and a block of its face appearing and disappearing frame to frame (depth fighting; SwiftShader, which the
+session's checks use, never shows it). Causes: the bow camera's near plane at 0.05 while nothing on screen is nearer
+than about 8 bow units (the depth buffer's precision spent on empty space), strips only 0.02 clear of the column, and
+the three white marks exactly level with its front. Near plane now 2 (range camera 0.25 m), strips 0.04+ clear, marks
+in front, the target face polygon-offset. The tilt and swing on the draw (also in these frames) had gone earlier today.
