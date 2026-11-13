@@ -143,7 +143,7 @@
 .ba-root .ba-home-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 /* The difficulty: a dark track, the chosen one lit (a lighter fill AND dark text, never hue alone). */
 .ba-root .ba-seg { display: flex; padding: 4px; border: 2px solid #0f0c0a; background: rgba(0, 0, 0, .5); }
-.ba-root .ba-seg .gh-seg__item { flex: 1 1 0; gap: 6px; min-height: 40px; padding: 0 8px; color: #e9dccb; font-size: 15px; font-weight: 800; }
+.ba-root .ba-seg .gh-seg__item { flex: 1 1 0; gap: 6px; min-height: 44px; padding: 0 8px; color: #e9dccb; font-size: 15px; font-weight: 800; }
 .ba-root .ba-seg .gh-seg__item[aria-pressed="true"] { background: #f4efe6; color: #1d2430; }
 .ba-root .lb-dshape { width: 14px; height: 14px; }
 .ba-root .lb-dshape-t3 { fill: #f4efe6; }
@@ -153,11 +153,13 @@
   border: 0;
   background: none;
   min-height: 44px;
-  padding: 0 12px;
-  color: var(--bas-muted);
+  padding: 0 18px;
+  border: 2px solid rgba(244, 239, 230, .45);
+  border-radius: 999px;
+  color: #f4efe6;
   font: inherit;
-  font-size: 15px;
-  text-decoration: underline;
+  font-size: 17px;
+  font-weight: 800;
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -347,9 +349,12 @@
 .ba-root .ba-help-svg { width: 240px; height: 92px; flex: 0 0 auto; }
 .ba-root .ba-help-arrow { fill: none; stroke: var(--bas-ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .ba-root .ba-help-plus { font: 900 20px system-ui, sans-serif; fill: var(--bas-ink); }
-.ba-root .ba-help-line { margin: 0; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ba-root .ba-help-line { margin: 0; width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px; }
+/* Every line on one left edge, an icon (or a dot) in a fixed gutter (2026-11-13 review: centred text beside left icons looked ragged). */
+.ba-root .ba-help-dot { flex: 0 0 22px; height: 22px; display: grid; place-items: center; }
+.ba-root .ba-help-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ba-hl, #ffce3a); }
 .ba-root .ba-help-line svg { width: 22px; height: 22px; flex: 0 0 auto; }
-.ba-root .ba-help-line span { min-width: 0; font-size: 17px; line-height: 1.25; text-align: center; text-wrap: balance; }
+.ba-root .ba-help-line span { min-width: 0; font-size: 17px; line-height: 1.25; text-align: left; text-wrap: pretty; }
 
 /* --- battle ------------------------------------------------------------------------------------- */
 /* Modelled on the reference recordings: the arena fills the top (teams' panels over it, the
@@ -399,7 +404,7 @@
   height: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 58px); padding: var(--gh-st, env(safe-area-inset-top, 0px)) 8px 0 0;
   display: flex; align-items: center; gap: 4px;
 }
-.ba-root .ba-hubspace { flex: 0 0 74px; }
+.ba-root .ba-hubspace { flex: 0 0 84px; }   /* clears the hub's floating "‹ Hub" (8-80px), 2026-11-13 */
 .ba-root .ba-center { flex: 1 1 auto; display: flex; justify-content: center; min-width: 0; }
 .ba-root .ba-menu { flex: 0 0 44px; background: rgba(20, 12, 8, .55); border-color: rgba(255, 255, 255, .25); color: #fff; border-radius: 50%; }
 .ba-root .ba-clock { display: flex; flex-direction: column; align-items: center; line-height: 1; color: #fff; }
@@ -424,7 +429,7 @@
 .ba-root .ba-badges { display: flex; gap: 2px; }
 .ba-root .ba-badge { display: flex; align-items: center; gap: 1px; font-size: 15px; font-weight: 900; text-shadow: 0 1px 0 #000; }
 .ba-root .ba-badge svg { width: 15px; height: 15px; }
-.ba-root .ba-who { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 52px; }
+.ba-root .ba-who { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 46px; }
 .ba-root .ba-avatar {
   width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 23px; line-height: 1;
   background: #f1ece4; border: 3px solid rgba(255, 255, 255, .85); box-shadow: 0 2px 4px rgba(0, 0, 0, .5);
@@ -503,7 +508,7 @@
 .ba-root .ba-mon.is-full .ba-bar-track { border-color: var(--ba-hl); box-shadow: 0 0 10px var(--ba-hl); }
 .ba-root .ba-evo-pill {
   position: absolute; top: -4px; z-index: 2; display: flex; gap: 3px; align-items: center; padding: 3px 10px 3px 6px; border-radius: 999px;
-  background: var(--ba-hl); color: #2a1a00; font-size: 14px; font-weight: 900; white-space: nowrap; animation: ba-throb .6s ease-in-out infinite alternate;
+  background: var(--ba-hl); color: #2a1a00; font-size: 15px; font-weight: 900; white-space: nowrap; animation: ba-throb .6s ease-in-out infinite alternate;
   box-shadow: 0 3px 0 rgba(0, 0, 0, .4);
 }
 .ba-root .ba-evo-pill[hidden] { display: none; }
@@ -676,6 +681,10 @@
 .ba-root .ba-result-actions .gh-btn { min-height: 50px; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
 .ba-root .ba-result .gh-btn--ghost { color: #fff; border-color: rgba(255, 255, 255, .35); background: transparent; }
 .ba-root .ba-pause { width: min(340px, 100%); padding-top: 48px; }
+/* The menu's other actions are outlined buttons, as on the end card (2026-11-13 review). */
+.ba-root .ba-pause .gh-btn--ghost { border: 2px solid rgba(255, 255, 255, .35); }
+/* One X look on every Battle Arena popup (the card's sat bare on its steel). */
+.ba-root .ba-overlay .gh-modal__close { background: rgba(255, 255, 255, .14); color: #f4efe6; }
 
 @media (prefers-reduced-motion: reduce) {
   .ba-root .ba-home-mon:first-child, .ba-root .ba-home-mon:last-child, .ba-root .ba-mon-bob, .ba-root .ba-result-mon,

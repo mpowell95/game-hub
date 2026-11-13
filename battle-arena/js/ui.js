@@ -528,7 +528,7 @@ class BattleArena {
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <p class="ba-help-goal">${t('helpGoal')}</p>
         ${helpSVG()}
-        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : ''}<span>${t(k)}</span></p>`).join('')}
+        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : '<i class="ba-help-dot" aria-hidden="true"></i>'}<span>${t(k)}</span></p>`).join('')}
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
