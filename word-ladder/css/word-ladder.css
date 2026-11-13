@@ -80,7 +80,8 @@
 .wl-root .wl-flag { position: absolute; left: -32px; top: 50%; transform: translateY(-50%); color: var(--wl-gold); display: grid; }
 .wl-root .wl-now.is-shake { animation: wl-shake .4s ease; }
 @keyframes wl-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
-.wl-root .wl-msg { flex: none; height: 26px; text-align: center; font-size: 18px; font-weight: 700; color: var(--wl-sel); }
+.wl-root .wl-msg { flex: none; height: 26px; text-align: center; font-size: 18px; font-weight: 700; color: var(--wl-sel); white-space: nowrap; }
+.wl-root .wl-msg.is-coach { color: var(--wl-on); }
 .wl-root .wl-tools { flex: none; display: flex; justify-content: space-between; padding: 0 4px 8px; }
 .wl-root .wl-tool { width: 56px; height: 48px; }
 /* The keyboard: 10 keys across like a phone keyboard. Keys are 50px tall, narrower than 44px on a 360px phone
@@ -109,11 +110,17 @@
 .wl-root .wl-ov { position: absolute; inset: 0; z-index: 5; background: rgba(6,12,26,.6); display: flex; align-items: center; justify-content: center;
   padding: calc(var(--wl-below) + 8px) 12px max(env(safe-area-inset-bottom, 0px), 12px); }
 .wl-root .wl-sheet { position: relative; width: 100%; max-width: 400px; border-radius: 20px; background: #fff; color: var(--wl-ink);
-  padding: 22px 18px 18px; }
-.wl-root .wl-sheet p { margin: 10px 0 0; font-size: 17px; line-height: 1.4; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  padding: 16px 18px 14px; }
+.wl-root .wl-sheet p { margin: 6px 0 0; font-size: 17px; line-height: 1.4; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wl-root .wl-sheet .wl-how-b { font-weight: 800; font-size: 18px; }
 .wl-root .wl-sheet .wl-how-eg { font-weight: 800; letter-spacing: .02em; }
 .wl-root .wl-t-demo { --wl-small: 34px; flex: none; }
+.wl-root .wl-how-svg { display: block; margin: 12px auto 0; max-width: 100%; height: auto; }
+.wl-root .wl-sheet .wl-how-cap { justify-content: center; text-align: center; font-weight: 700; }
+.wl-root .wl-sheet .wl-how-b, .wl-root .wl-sheet .wl-how-cap { display: block; white-space: nowrap; font-size: clamp(15px, 4.6vw, 18px); }
+.wl-root .wl-flag-in { display: inline-block; vertical-align: -4px; color: var(--wl-gold); }
+.wl-root .wl-flag-in svg { stroke: none; }
+.wl-root .wl-gotit { margin-top: 14px; min-height: 52px; }
 
 @media (prefers-reduced-motion: reduce) {
   .wl-root .wl-now.is-shake { animation: none; }
