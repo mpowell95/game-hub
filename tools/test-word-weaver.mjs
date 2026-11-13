@@ -168,7 +168,7 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   const gs = readFileSync(new URL('js/game-stats-ui.js', ROOT), 'utf8');
   ok('leaderboard: a GAME_META row', /\{ id: 'wordweaver', labelKey: 'game_title_wordweaver' \}/.test(lb));
   ok('leaderboard: the board number is wwPoints, a band filter = that band', /id === 'wordweaver'\) return wwPoints\(g\.games\.wordweaver, tier == null \? null : WW_TIERS\[tier - 1\]\)/.test(lb));
-  ok('leaderboard: All is one number across bands (no tier pill)', /\(id === 'wayout' \|\| id === 'gridlock' \|\| id === 'wordweaver'\) && _tier == null\) return null;/.test(lb));
+  ok('leaderboard: All is one number across bands (no tier pill)', /\(id === 'wayout' \|\| id === 'gridlock' \|\| id === 'wordweaver'[^)]*\) && _tier == null\) return null;/.test(lb));
   ok('leaderboard: band tabs and band plays come from the per-level map (old ladder plays still show)',
     /id === 'wordweaver'\) tiers = \[1, 2, 3, 4\]\.filter/.test(lb) && /id === 'wordweaver' && _tier != null\) return wwCleared/.test(lb));
   ok('leaderboard: standing records (levels completed, three-star levels)', /wordweaver: \[\s*\{ labelKey: 'lb_tex_ww_cleared'[\s\S]*?lb_tex_ww_three/.test(lb));
