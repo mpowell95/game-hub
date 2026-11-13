@@ -16,6 +16,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { recordWordLadder, recordWordLadderDaily, withMode, loadStats } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
+import { backStack } from '../../js/back-stack.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.wordladder.v1';            // settings: { lang }
@@ -95,11 +96,56 @@ class WordLadder {
     this._onKey = (e) => this._key(e);
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
+    // THE PHONE'S BACK SWIPE steps back one screen, as in every leaderboard (js/back-stack.js; Matt, 2026-11-13: "make sure
+    // the swipe back feature we built into all leaderboard screens also works here"). Levels: start screen 0, a level /
+    // the daily / its done card 1, How to play +1. The hub's top-left button takes the same step ("‹ Back") via back().
+    this._bs = backStack((n) => this._stepBack(n));
     this._offResize = onViewportResize(() => (this.screen === 'done' ? this._fitFinal() : this._fit()));
     try { startServerTime(); } catch { /* the day falls back to the phone's clock */ }
     this._repair1113();
     this._flushAll();
     this._setup();
+  }
+
+  // --- the back step (swipe, the hub's button, the game's own back arrow and X, Esc: one path) ---------------
+  _level() {
+    const help = !!this.root.querySelector('.wl-ov');
+    return (this.screen === 'setup' ? 0 : 1) + (help ? 1 : 0) - (this.screen === 'help' && this._helpPrev === 'setup' ? 1 : 0);
+  }
+  _sync() {
+    if (this._dead || !this._bs || this._stepping) return;
+    const lv = Math.max(0, this._level());
+    this._bs.sync(lv);
+    this._label(lv > 0);
+  }
+  /** The hub's top-left button reads "‹ Back" while the game has a step to take, "‹ Hub" on the start screen. */
+  _label(step) {
+    if (step === this._backStep) return;
+    this._backStep = step;
+    try { window.dispatchEvent(new CustomEvent('gamehub:backlabel', { detail: step })); } catch { /* old browser */ }
+  }
+  /** One step back through history (so the swipe and every on-screen back run the same code). */
+  _goBack() {
+    if (this._bs && this._bs.level > 0) this._bs.back(); else this._stepBack(1);
+  }
+  /** Step back n levels: How to play closes first, then a level or the daily returns to the start screen. */
+  _stepBack(n) {
+    // Screens are drawn without syncing history in between: one sync at the end, to where the steps landed
+    // (a sync per step would push an entry from inside the popstate, js/back-stack.js).
+    this._stepping = true;
+    try {
+      for (let i = 0; i < n; i++) {
+        if (this.root.querySelector('.wl-ov')) { this._closeHelp(); continue; }
+        if (this.screen !== 'setup') { this._setup(); continue; }
+        break;
+      }
+    } finally { this._stepping = false; }
+    this._sync();
+  }
+  /** The hub's back (its button, or a gesture it holds): true when the game took the step itself. */
+  back() {
+    if (this._level() > 0) { this._goBack(); return true; }
+    return false;
   }
 
   _ensureCss() {
@@ -222,11 +268,15 @@ class WordLadder {
           <button type="button" class="wl-help" data-act="help" aria-label="${esc(t('help_aria'))}">?</button>
         </div>
       </div>`;
+    this._sync();
   }
 
   async _open(kind) {
     const lang = this.lang;
+    this.screen = 'loading';
+    this.cur = null;
     this.root.innerHTML = '<div class="wl-setup"><div class="wl-home"><div class="wl-wait"></div></div></div>';
+    this._sync();
     let d;
     try { d = await loadData(lang); } catch (err) {
       console.error('[word-ladder] data not loaded', err);
@@ -235,7 +285,7 @@ class WordLadder {
         <button type="button" class="wl-btn" data-act="setup">${esc(t('back'))}</button></div></div>`;
       return;
     }
-    if (!this.root.isConnected || this.lang !== lang) return;
+    if (!this.root.isConnected || this.lang !== lang || this.screen !== 'loading') return;   // left meanwhile
     let a, level, n = 0, key = '';
     if (kind === 'daily') {
       const today = new Date(bestNow());
@@ -263,6 +313,8 @@ class WordLadder {
     this._play();
   }
   _soon() {
+    this.screen = 'soon';
+    this._sync();
     this.root.innerHTML = `<div class="wl-setup"><div class="wl-home"><h1 class="wl-title">${esc(t('done_all'))}</h1>
       <button type="button" class="wl-btn wl-btn-main" data-act="setup">${esc(t('back'))}</button></div></div>`;
   }
@@ -298,6 +350,7 @@ class WordLadder {
       </div>`;
     this._drawLadder();
     this._fit();
+    this._sync();
     // The first time on this device, How to play opens by itself (Matt, 2026-11-13: "not clear how to play AT ALL").
     if (!loadSettings().seen) { saveSettings({ seen: 1 }); this._help(); }
   }
@@ -443,6 +496,7 @@ class WordLadder {
         </div>
       </div>`;
     this._fitFinal();
+    this._sync();
   }
   /** The finished ladder above the card. Tiles 30-44px; a ladder too long for the room shows its first word, a ⋮ and
    *  the last words that fit (2026-11-13 review: an 18-word ladder shrank to 16px tiles with 9px letters and overflowed). */
@@ -483,13 +537,14 @@ class WordLadder {
     this.root.appendChild(ov);
     this.screen = 'help';
     this._helpPrev = prev;
+    this._sync();
   }
 
   // --- input ------------------------------------------------------------------------------------------------
   _click(e) {
     const b = e.target.closest('button');
     if (!b || !this.root.contains(b)) {
-      if (e.target.classList && e.target.classList.contains('wl-ov')) this._closeHelp();
+      if (e.target.classList && e.target.classList.contains('wl-ov')) this._goBack();
       return;
     }
     if (b.dataset.key) { this._letter(b.dataset.key); return; }
@@ -501,10 +556,10 @@ class WordLadder {
     const act = b.dataset.act;
     if (act === 'play') this._open('ladder');
     else if (act === 'daily') this._open('daily');
-    else if (act === 'setup') this._setup();
+    else if (act === 'setup') { if (this.screen === 'done' || this.screen === 'play' || this.screen === 'soon') this._goBack(); else this._setup(); }
     else if (act === 'next') this._open('ladder');
     else if (act === 'help') this._help();
-    else if (act === 'close-help') this._closeHelp();
+    else if (act === 'close-help') this._goBack();
     else if (act === 'undo') this._undo();
     else if (act === 'hint') this._hint();
     else if (act === 'lang') {
@@ -516,13 +571,14 @@ class WordLadder {
   _closeHelp() {
     const ov = this.root.querySelector('.wl-ov');
     if (ov) ov.remove();
-    this.screen = this._helpPrev || 'setup';
+    if (this.screen === 'help') this.screen = this._helpPrev || 'setup';
+    this._sync();
   }
   _key(e) {
     const tg = e.target;
     if (tg && tg.closest && (tg.closest('input, textarea, select, [contenteditable]') || (tg !== document.body && !this.root.contains(tg)))) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (this.screen === 'help' && e.key === 'Escape') { this._closeHelp(); return; }
+    if (e.key === 'Escape' && this._level() > 0) { this._goBack(); e.preventDefault(); return; }
     if (this.screen !== 'play' || !this.cur) return;
     const len = this.cur.level.t.length;
     if (e.key === 'ArrowLeft') { this.cur.sel = (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
@@ -540,6 +596,10 @@ class WordLadder {
     document.removeEventListener('keydown', this._onKey);
     try { if (this._offResize) this._offResize(); } catch { /* gone */ }
     clearTimeout(this._msgT);
+    try { if (this._bs) this._bs.close(); } catch { /* gone */ }
+    this._bs = null;
+    this._dead = true;
+    this._label(false);
     this.root.remove();
   }
 
@@ -596,4 +656,6 @@ export function destroy() {
 }
 // Always false: every move is saved, leaving is lossless (see the header).
 export function isInProgress() { return false; }
-export default { init, destroy, isInProgress };
+/** The hub's back: one screen back inside the game (How to play, then the start screen); false = leave to the hub. */
+export function back() { return !!(instance && instance.back()); }
+export default { init, destroy, isInProgress, back };

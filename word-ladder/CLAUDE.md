@@ -34,6 +34,10 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
   list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
 - Desktop: letters type, ← → move the caret, Backspace = Undo.
+- **The phone's back swipe steps back one screen, as in every leaderboard (2026-11-13, Matt)**: `js/back-stack.js`, levels
+  start screen 0, a level / daily / done card 1, How to play +1. The swipe, the hub's top-left button (`back()`; it reads
+  "‹ Back" via `gamehub:backlabel` while there is a step, "‹ Hub" on the start screen), the game's own back arrow, the X's
+  and Esc all run ONE path (`_goBack` -> history -> `_stepBack`). `destroy()` closes the stack. Checked: history does not grow.
 - **The goal is said on screen (2026-11-13, Matt: "not clear how to play AT ALL")**: How to play opens BY ITSELF the
   first time a device reaches a level (`seen` in `gamehub.wordladder.v1`, a preference), with a drawn example ladder
   (`howSVG`: each step's changed letter outlined gold, arrows, the flag) and a Got it button; until the first move the
