@@ -42,6 +42,10 @@ import { isAutomation } from './automation.js';
 const t = makeT(STRINGS);
 // js/strings.js is cache-first, so a key added with a feature can be missing for one visit.
 const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
+// The new-games bubble (_paintNewDock): its per-device seen-list, and unreleased games admin devices preview it with
+// (remove an id at that game's release; tower/CLAUDE.md's release checklist says so).
+const NEW_DOCK_KEY = 'gamehub.newDock.v1';
+const NEW_DOCK_PREVIEW = ['tower'];
 
 // The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
 const TAB_ICON = {
@@ -1541,6 +1545,7 @@ class Hub {
     if (tabs) {
       tabs.addEventListener('click', (e) => {
         if (e.target.closest('[data-role="alert-dock"]')) { e.preventDefault(); this._onDockTap(e); return; }
+        if (e.target.closest('[data-role="new-dock"]')) { e.preventDefault(); this._onNewDockTap(e); return; }
         const tab = e.target.closest('[data-tab]');
         if (!tab) return;
         const k = tab.dataset.tab;
@@ -2144,7 +2149,14 @@ class Hub {
     return (this._gameAlerts || []).find((x) => x.game === id && x.alert) || null;
   }
 
+  /** The launcher's bubbles: a game waiting on the player (_paintTurnAlert) first; with none, new games
+   *  (_paintNewDock). Same spot on the tab bar, never both. */
   _paintGameAlert() {
+    this._paintTurnAlert();
+    try { this._paintNewDock(); } catch (err) { console.warn('[hub] new-game bubble failed', err); }
+  }
+
+  _paintTurnAlert() {
     if (this.root) {
       for (const prev of this.root.querySelectorAll('.hub-alert, .hub-dock, .hub-turnmark')) prev.remove();
       for (const c of this.root.querySelectorAll('.hub-cell.is-turnring')) c.classList.remove('is-turnring');
@@ -2234,6 +2246,84 @@ class Hub {
   _dockTab() {
     if (!this._compact || !this.root) return null;
     return this.root.querySelector('[data-role="tabs"] [data-tab="challenges"]');
+  }
+
+  // --- NEW GAMES BUBBLE (2026-11-13, Matt: "yes i want that. Make sure it opens the new game and won't break
+  // anything"; docs/mockups/new-games/bubble.html). The your-turn bubble's look on the tab bar, no pointer:
+  // "New game / <name>" (or "N new games / A, B +n"), for games inside their New window (js/new-badge.js, 7 days)
+  // that this device has not opened or put away. Tap = open the newest one (as its tile would); X = put them all
+  // away. A your-turn bubble always wins the spot. Seen-list `gamehub.newDock.v1` (a preference, per device).
+  // Admin devices also preview NEW_DOCK_PREVIEW (unreleased games they can see) so Matt can try it first.
+  _newDockSeen() {
+    try { const v = JSON.parse(localStorage.getItem(NEW_DOCK_KEY) || 'null'); return v && v.seen && typeof v.seen === 'object' ? v.seen : {}; } catch { return {}; }
+  }
+  _markNewSeen(ids) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+    if (!list.length) return;
+    const seen = this._newDockSeen();
+    let changed = false;
+    for (const id of list) if (!seen[id]) { seen[id] = Date.now(); changed = true; }
+    if (!changed) return;
+    try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 1, seen })); } catch { /* a preference */ }
+  }
+  _newDockGames() {
+    const seen = this._newDockSeen();
+    const now = Date.now();
+    let admin = false;
+    try { admin = isAdminDevice(); } catch { admin = false; }
+    return (this.games || [])
+      .filter((g) => g && !g.comingSoon && !seen[g.id]
+        && (isNewGame(g, now, gameLiveAt(g.id)) || (admin && NEW_DOCK_PREVIEW.includes(g.id))))
+      .map((g) => ({ g, ms: sortMsOf(g, gameLiveAt(g.id)) || now }))
+      .sort((a, b) => b.ms - a.ms || titleText(a.g).localeCompare(titleText(b.g)))
+      .map((x) => x.g);
+  }
+  _paintNewDock() {
+    if (!this.root) return;
+    for (const prev of this.root.querySelectorAll('[data-role="new-dock"]')) prev.remove();
+    const tabs = this.root.querySelector('[data-role="tabs"]');
+    if (!this._compact || !tabs || this.current) return;
+    if (this.root.querySelector('.hub-dock, .hub-alert')) return;   // a game waiting on the player comes first
+    const list = this._newDockGames();
+    if (!list.length) return;
+    const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const name = (g) => esc(titleText(g) || '');
+    const many = list.length > 1;
+    const n = list.length;
+    const l1 = many
+      ? (t('hub_newdock_many', { n }) !== 'hub_newdock_many' ? t('hub_newdock_many', { n }) : `${n} new games`)
+      : tf('hub_newdock_one', 'New game');
+    const l2 = many ? `${name(list[0])}, ${name(list[1])}${n > 2 ? ` <b>+${n - 2}</b>` : ''}` : name(list[0]);
+    const thumbs = list.slice(0, 3).map((g) => `<span class="hub-dock-th">${g.art || ''}</span>`).join('');
+    const el = document.createElement('div');
+    el.className = 'hub-dock is-new' + (many ? ' is-many' : '');
+    el.dataset.role = 'new-dock';
+    el.dataset.game = list[0].id;
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<span class="hub-dock-thumbs">${thumbs}</span>
+      <span class="hub-dock-tx"><span class="hub-dock-l1">${l1}</span><span class="hub-dock-l2">${l2}</span></span>
+      <button type="button" class="hub-dock-x" data-role="new-dock-x" aria-label="${t('hub_alert_dismiss')}">&times;</button>`;
+    tabs.appendChild(el);
+  }
+  /** Tap on the new-games bubble: X puts every game in it away; anywhere else opens the newest one exactly as
+   *  its tile does (a launch-out game follows its link), and only that one is marked seen. */
+  _onNewDockTap(e) {
+    const dock = e.target.closest('[data-role="new-dock"]');
+    if (!dock) return;
+    if (e.target.closest('[data-role="new-dock-x"]')) {
+      this._markNewSeen(this._newDockGames().map((g) => g.id));
+      this._paintNewDock();
+      return;
+    }
+    const id = dock.dataset.game;
+    this._markNewSeen(id);
+    dock.remove();
+    const g = (this.games || []).find((x) => x.id === id);
+    if (!g) return;
+    if (g.href) { window.location.href = g.href; return; }   // a launch-out game: what its tile's link does
+    const card = this.root.querySelector(`.hub-card[data-id="${CSS.escape(id)}"]`);
+    if (card) card.click();   // the tile's own path (a waiting alert, edit mode, coming soon all honoured)
+    else this.launch(id);
   }
 
   _paintDock(list) {
@@ -3004,6 +3094,7 @@ class Hub {
     // AFTER the player comes back out of the game they had trouble with. Set before the import so
     // a game that fails to LOAD is still the one preselected.
     this._lastGameId = id;
+    try { this._markNewSeen(id); } catch { /* a preference */ }   // opened = no "New game" bubble for it
     // A return left over from an earlier game is dropped here; this launch brings its own, if any.
     this._dropReturn();
 
