@@ -38,13 +38,12 @@ localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzprobe', playe
 localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { archery: { live: true } } }));
 // Plays recorded BEFORE this existed sit in the real records (Matt: "leave them, count them"),
 // plus an old test record for Archery that must never come back once it is live.
-// (Tower stands in for Gridlock and Word Weaver here since their releases, 2026-11-02.)
-const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { played: 22, won: 22, lost: 0 } },
-  tw: { games: 22, blocks: 100, best: 0, perfects: 0, bestStreak: 0, bestByDiff: { easy: 0, medium: 0, hard: 0, expert: 0 } } };
+// (Cup Baseball stands in for Gridlock, Word Weaver and Tower Stack here since their releases.)
+const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { played: 22, won: 22, lost: 0 } } };
 const legacyBa = { total: { played: 6, won: 3, lost: 3 }, byDiff: { mp: { played: 6, won: 3, lost: 3 } } };
 localStorage.setItem('gamehub.stats', JSON.stringify({
   version: 1,
-  games: { tower: legacyGl, battlearena: legacyBa, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
+  games: { cupbaseball: legacyGl, battlearena: legacyBa, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
   h2h: { battlearena: { devOld: { name: 'Old', w: 1, l: 0 } } },
   testGames: { archery: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } } },
 }));
@@ -52,25 +51,25 @@ const raw = () => JSON.parse(store.get('gamehub.stats'));
 
 const G = await import('../js/game-stats.js');
 
-ok('Tower and Battle Arena are admin-only right now', G.isTestGame('tower') && G.isTestGame('battlearena'));
+ok('Cup Baseball and Battle Arena are admin-only right now', G.isTestGame('cupbaseball') && G.isTestGame('battlearena'));
 ok('Archery, switched live from the admin page, is not', !G.isTestGame('archery'));
-ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock') && !G.isTestGame('wordweaver'));
+ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock') && !G.isTestGame('wordweaver') && !G.isTestGame('tower'));
 
-const before = JSON.stringify(raw().games.tower);
-G.recordTower(10, 'easy');
+const before = JSON.stringify(raw().games.cupbaseball);
+G.recordResult('cupbaseball', 'easy', true);
 G.recordResult('battlearena', 'mp', true);
 let r = raw();
-ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.tower.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
-ok('the real Tower record is byte-for-byte unchanged', JSON.stringify(r.games.tower) === before);
+ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.cupbaseball.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
+ok('the real Cup Baseball record is byte-for-byte unchanged', JSON.stringify(r.games.cupbaseball) === before);
 ok('the real Battle Arena record is unchanged', JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
-ok('the tester\'s progress carries on in the test record (level 1 kept, level 2 added)', r.testGames.tower.tw.games === 23 && r.testGames.tower.tw.blocks === 110);
-ok('...and the real record did not gain the game', r.games.tower.tw.games === 22);
+ok('the tester\'s progress carries on in the test record', r.testGames.cupbaseball.byDiff.easy.played === 23 && r.testGames.cupbaseball.total.won === 23);
+ok('...and the real record did not gain the game', r.games.cupbaseball.byDiff.easy.played === 22);
 
 const view = G.loadStats();
-ok('the GAME sees its test record while testing (its progress reads)', view.games.tower.total.played === 23 && view.games.tower.tw.games === 23);
+ok('the GAME sees its test record while testing (its progress reads)', view.games.cupbaseball.total.played === 23);
 const stored = G.loadStoredStats();
-ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.tower.total.played === 22 && stored.games.tower.tw.games === 22);
-ok('loadStoredStats() carries the test record apart', stored.testGames.tower.total.played === 23);
+ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.cupbaseball.total.played === 22);
+ok('loadStoredStats() carries the test record apart', stored.testGames.cupbaseball.total.played === 23);
 ok('no hidden swap marker leaks into JSON', JSON.stringify(stored) === JSON.stringify(JSON.parse(JSON.stringify(stored))) && !Object.getOwnPropertySymbols(stored).length);
 
 G.recordHeadToHead('battlearena', { deviceId: 'devNew', name: 'New' }, true);
@@ -89,8 +88,8 @@ ok('a released game is untouched by any of this', r.games.uno.total.played === 3
 
 for (let i = 0; i < 3; i++) { G.loadStats(); G.recordResult('uno', 'easy', false); }
 r = raw();
-ok('repeated loads and writes never nest or move records', r.games.tower.total.played === 22 && r.testGames.tower.total.played === 23
-  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.tower) === before);
+ok('repeated loads and writes never nest or move records', r.games.cupbaseball.total.played === 22 && r.testGames.cupbaseball.total.played === 23
+  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.cupbaseball) === before);
 
 // --- the readers: everything that shows or uploads stats reads the stored shape ---
 const src = (p) => readFileSync(new URL(p, __ROOT_URL), 'utf8');

@@ -1721,7 +1721,6 @@ function resetKingOfGamesSkeeball(st) {
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
   archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
-  tower: 'tower',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
 export function isTestGame(id) {
@@ -1763,7 +1762,7 @@ function swapInTestGames(st) {
 // store: games.<id> := combine(real, test), stamped `carried.<id>` (a new field, rule 5). The test record is never
 // touched or deleted. A record not carried yet (a phone on an older build) is combined at READ time by
 // js/players-agg.js, the same function, so the boards count it now. Additive only: every number only grows.
-export const CARRY_TEST = { wordweaver: true };
+export const CARRY_TEST = { wordweaver: true, tower: true };
 const plainObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Add counters key by key (nested objects recurse); `hi` keeps the max, `lo` the least non-zero (byMode). */
 function addCounts(a, b) {
