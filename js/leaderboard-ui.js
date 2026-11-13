@@ -704,6 +704,16 @@ function boardView(list, id) {
     const k = _view;
     v = simple(list.filter((g) => ((ttOf(g)[k] || {}).played | 0) > 0), (g) => ttVariantWins(ttOf(g)[k]), t('lb_unit_wins'),
       (g) => t('lb_played_count', { n: (ttOf(g)[k] || {}).played | 0 }), null, (g) => (ttOf(g)[k] || {}).played | 0);
+  } else if (id === 'tower' && _beeBy === 'total') {
+    // Tower Stack's Total: blocks stacked at this difficulty (All: every run). Ranked, no medals (noPodium), never
+    // the game's standing (gameStanding reads the Best board). Same total: fewer runs ranks higher.
+    const tier = _tier;
+    const rows = list.filter((g) => twTotalAt(g, tier) > 0);
+    const cmp = (a, b) => (twTotalAt(b, tier) - twTotalAt(a, tier)) || (twRunsAt(a, tier) - twRunsAt(b, tier));
+    rows.sort((a, b) => cmp(a, b) || recent(a, b));
+    v = { rows, cmp, unit: t('lb_unit_blocks'), noPodium: true,
+      val: (g) => `<span>${esc(numText(twTotalAt(g, tier)))}</span>`,
+      sub: (g) => t('lb_played_count', { n: twRunsAt(g, tier) }) };
   } else if (_view === 'off' || _view === 'on') {
     const w = _view;
     const rows = list.filter((g) => snWallsCell(g, w));
@@ -886,6 +896,26 @@ function twBestAt(g, tier) {
   if (tier == null) return tw.best | 0;
   const key = TW_TIER_KEYS[tier - 1];
   return key ? (tw.bestByDiff || {})[key] | 0 : 0;
+}
+/** Tower Stack's TOTAL (Matt, 2026-11-13: "a spot so you can see total levels built at each difficulty. Gold is not
+ *  awarded out for this"): blocks stacked over every run. All = the lifetime `tw.blocks`; a difficulty = every saved
+ *  score there (byMode `hs`, saved from 2026-11-06; earlier runs have no difficulty to file under, so they count in
+ *  All only). Runs = the matching count. */
+function twTotalAt(g, tier) {
+  const gm = ((g && g.games) || {}).tower || {};
+  if (tier == null) return (gm.tw && gm.tw.blocks) | 0;
+  const key = TW_TIER_KEYS[tier - 1];
+  let s = 0;
+  for (const m of Object.values(gm.byMode || {})) { const b = m && m[key]; if (b && +b.hs > 0) s += +b.hs; }
+  return Math.round(s);
+}
+function twRunsAt(g, tier) {
+  const gm = ((g && g.games) || {}).tower || {};
+  if (tier == null) return (gm.tw && gm.tw.games) | 0;
+  const key = TW_TIER_KEYS[tier - 1];
+  let n = 0;
+  for (const m of Object.values(gm.byMode || {})) { const b = m && m[key]; if (b) n += b.hn | 0; }
+  return n;
 }
 function hcBestAt(g, tier) {
   const hc = (g.games.hillclimb || {}).hc;
@@ -3801,6 +3831,9 @@ export function lb2Tabs(list, id) {
     if (id === 'snake') row.push(tab({ view: 'off' }, t('lb_sn_walls_off')), tab({ view: 'on' }, t('lb_sn_walls_on')));
     if (id === 'cuppong' && list.some((g) => cpSoloBest(g) !== null)) row.push(tab({ view: 'solo' }, tx('lb_tab_solo', 'Solo')));
     if (anyMpPlays(list, id)) row.push(tab({ view: 'mp' }, t('lb_mp_short')));
+    // Tower Stack: Best game | Total on its own row (2026-11-13), kept across the difficulty tabs ('by', like
+    // Spelling Bee's Points | Words). Medals come from Best only.
+    if (id === 'tower') return { rows: [row, [tab({ by: 'points' }, tx('lb_tw_best', 'Best game')), tab({ by: 'total' }, tx('lb_tw_total', 'Total'))]], def: {} };
     return { rows: [row], def: {} };
   });
 }
@@ -3838,7 +3871,7 @@ export function lb2Board(list, id, st = {}) {
       rows = v.rows; cmp = v.cmp; unit = v.unit || ''; empty = v.empty || t('lb_empty_game', { label: labelOf(id) });
       // `bee` (2026-11-03, additive): Spelling Bee's own counts behind beeChipsHTML, so v2 can draw them in fixed
       // columns (the old board's chips are unchanged). Read here, inside the borrowed tab state.
-      rowOut = (g) => ({ html: v.val(g), sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null, nohint: v.nohint ? v.nohint(g) : false,
+      rowOut = (g) => ({ html: v.val(g), noPodium: !!v.noPodium, sub: v.sub ? v.sub(g) : '', sub2: v.sub2 ? v.sub2(g) : '', subHtml: v.subHtml ? v.subHtml(g) : '', tier: v.tier ? v.tier(g) : null, nohint: v.nohint ? v.nohint(g) : false,
         bee: id === 'spellingbee' && beeBoard() ? { ...beeRowFor(g) } : null });
       if (v.gap) gapFn = (me, rec) => gapParts(me, rec, id);
     }

@@ -113,6 +113,12 @@ rules yet (cheap candidates: perfects <= blocks, bestStreak <= perfects, bestByD
   tall tower's shape is longer (a refused row would sit in the queue). Merged per person = the tallest
   (`players-agg.js`); voided with the other bests (`stats-corrections.js`).
 
+- **Leaderboard: Best game | Total (2026-11-13, Matt: "a spot so you can see total levels built at each difficulty. Gold
+  is not awarded out for this, but it should be similar")**: a second tab row on the v2 board (`lb2Tabs`, state `by`:
+  'points' | 'total', kept across the difficulty tabs, Skeeball's words). Total = blocks stacked (`twTotalAt`: All =
+  `tw.blocks`; a difficulty = byMode `hs` there, saved from 2026-11-06, so runs before that count in All only), runs
+  under it, same total = fewer runs higher, plain "#1" ranks (`noPodium`), never the standing or Medal Count.
+
 ## Tests
 
 `node tools/test-tower.mjs` (engine, recorder, best shapes kept and merged). Also covered: `tools/players-agg.test.mjs` (tw combine),
