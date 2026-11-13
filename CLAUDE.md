@@ -620,7 +620,8 @@ stacks ABOVE it; first version hid it, so Matt, always with a game waiting, neve
 **WHO SAW IT is reported (Matt, same day: "WHY would you make it so we can't determine if someone has seen it? I ask you for this
 level of detail EVERY single time")**: `js/new-dock-log.js` keeps first/last shown (really on screen), how often, tapped, closed and
 opened per game, mirrored as `players/<id>/newDock` (a REPORT, never read back); Admin > Sent > New game bubble lists every person.
-**Any new popup, bubble or notice must report who saw it from day one.** Shows before v1548 were never recorded.
+**Any new popup, bubble or notice must report who saw it from day one.** Shows before v1548 were never recorded. "Seen" = 2 s in a row really on
+screen (not under the name gate, the add-to-home-screen sheet, an overlay or another tab); a phone with no name paints no bubble.
 
 ## The compact layout (2026-10-17)
 

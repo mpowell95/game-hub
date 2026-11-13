@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1548;
-const CACHE = 'game-hub-v1550';
+const CACHE = 'game-hub-v1551';
 
 const ASSETS = [
   './',
@@ -832,10 +832,10 @@ const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 // __REST_MANIFEST_START__
 const REST_MANIFEST = {
   './manifest.webmanifest': 'cd3b726da1',
-  './css/hub.css': '136627aac7',
+  './css/hub.css': '6498bfd5a0',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '89b391e7b3',
+  './js/hub.js': '473d6d4cc6',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',

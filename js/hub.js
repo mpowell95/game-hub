@@ -2306,6 +2306,7 @@ class Hub {
     const tabs = this.root.querySelector('[data-role="tabs"]');
     if (!this._compact || !tabs || this.current) return;
     if (this.root.querySelector('.hub-alert')) return;
+    if (!hasName()) return;   // a new phone: the name gate comes first; render() paints this once it closes
     const list = this._newDockGames();
     if (!list.length) return;
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2330,8 +2331,20 @@ class Hub {
     const turn = tabs.querySelector('[data-role="alert-dock"]');
     if (turn) { el.classList.add('is-stacked'); el.style.setProperty('--below', `${(turn.offsetHeight || 64) + 10}px`); }
     tabs.appendChild(el);
-    // Who has SEEN it (js/new-dock-log.js, mirrored to players/<id>/newDock): only when it is really on screen.
-    try { if (document.visibilityState === 'visible' && getComputedStyle(el).display !== 'none') noteNewDockShown(list.map((g) => g.id)); } catch { /* a report */ }
+    // Who has SEEN it (js/new-dock-log.js, mirrored to players/<id>/newDock): only once it is really on screen, never
+    // while hidden by the name gate, the add-to-home-screen sheet, an overlay, another tab or a hidden app (CSS hides
+    // the bubble then). Checked now and every second while this bubble is on the page (2026-11-13: a new phone's bubble
+    // sat behind "Choose a name" and would have counted as seen).
+    // "On screen" = 2 seconds in a row: the add-to-home-screen sheet opens 1.5 s after the launcher, over the bubble.
+    const ids = list.map((g) => g.id);
+    const onScreen = () => { try { return el.isConnected && document.visibilityState === 'visible' && getComputedStyle(el).display !== 'none'; } catch { return false; } };
+    clearInterval(this._newDockSeenT);
+    let run = 0;
+    this._newDockSeenT = setInterval(() => {
+      if (!el.isConnected) { clearInterval(this._newDockSeenT); return; }
+      run = onScreen() ? run + 1 : 0;
+      if (run >= 4) { clearInterval(this._newDockSeenT); try { noteNewDockShown(ids); } catch { /* a report */ } }
+    }, 500);
   }
   /** Tap on the new-games bubble: X puts every game in it away; anywhere else opens the newest one exactly as
    *  its tile does (a launch-out game follows its link), and only that one is marked seen. */
