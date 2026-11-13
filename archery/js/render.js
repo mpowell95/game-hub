@@ -52,7 +52,7 @@ const FLIGHT_ARC = 0.25;
 // The chase: CHASE_UP m above the arrow's line, from FLIGHT_D0 to CHASE_BACK behind it (the close-up's
 // own distance from the target), settling onto the close-up over the last CHASE_SETTLE of the flight.
 const CHASE_UP = 0.3, CHASE_BACK = 4.8, CHASE_SETTLE = 0.15;
-const INCOMING_RUN = 3.5;                       // m: how far out a replay arrow is first drawn
+const INCOMING_RUN = 9;                         // m: how far out a replay arrow is first drawn (9 m in 0.15 s, ui.js INCOMING_T: about 60 m/s, a real arrow's speed; Matt, 2026-11-13: "incredibly slow... Arrows come in fast")
 const WOBBLE_T = 0.6, WOBBLE_A = 0.07;          // s, rad: an arrow quivering in the target after it hits
 const FLASH_T = 0.9;                            // s: the scored ring lit on the face
 const BOWL_Z = 10;                              // the centre of the stadium's curve
@@ -111,6 +111,22 @@ export class Renderer {
     this.env = this._envMap();
     this.bow = new BowView(THREE, { g: (x) => this._g(x), m: (x) => this._m(x), t: (x) => { this._tex.push(x); return x; } }, { env: this.env, color: ARROW_COLORS.me });
     this._bowPose = null;
+    this._warm();
+  }
+
+  /** Compile the sight's magnified view and draw it once now, so the first draw of the bow does not
+   *  stall while the phone builds it (Matt's recording 2026-11-13: a 70 ms freeze mid-draw, first shot only). */
+  _warm() {
+    try {
+      const r = this.renderer;
+      this.scopeDisc.visible = true;
+      r.compile(this.hud, this.hudCam);
+      r.compile(this.bow.scene, this.bow.cam);
+      r.setRenderTarget(this.rt);
+      r.render(this.scene, this.zoomCam);
+      r.setRenderTarget(null);
+    } catch { /* warming is only a speed-up */ }
+    this.scopeDisc.visible = false;
   }
 
   /** A soft environment for the shiny parts to reflect: sky above, grass below, a sun. */

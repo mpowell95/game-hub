@@ -72,7 +72,7 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 
 ## The turn (timed off the recording at 30 fps)
 
-Touch and hold: the bow comes up in 0.25 s (`DRAW_T`). Drag to aim (about a ring per 6 px). Let go:
+Touch and hold: the bow comes up in 0.25 s (`DRAW_T`), straight onto the aim (no tilt or swing on the way, 2026-11-13). Drag to aim (about a ring per 6 px). Let go:
 the string snaps and the arrow leaves the bow over 0.033 s (`JOLT_T`, two frames; the bow no longer
 kicks: its jump read as a glitch, Matt's recording 2026-10-22), then the flight, 0.8 s (`FLIGHT_T`). **The flight is a
 real straight line in the world** (Matt, 2026-10-22: framed from the moving camera it "curves towards
@@ -87,8 +87,8 @@ Every arrow sticks along that straight line (`inDir`), flown or replayed.
 clears then; its own number pops `HIT_POP` 0.3 s later with stars, and the ring it scored lights up
 yellow ON the face, under the arrows (`render.js flashRing`; it used to be a screen overlay that popped
 out on top of everything). The target stays up 2 s. Back on the line the view cuts and the bow slides
-up into place (`BOW_IN_T` 0.2 s). The other player's arrows fly into the close-up one by one (0.5 s
-with a trail, `INCOMING_RUN`) with red tiles, then the yellow **Your Turn** button. Pass and play
+up into place (`BOW_IN_T` 0.2 s). The other player's arrows fly into the close-up one by one, at arrow speed
+(9 m in 0.15 s, about 60 m/s, with a trail: `INCOMING_RUN`, `INCOMING_T`; Matt, 2026-11-13: 0.5 s was "incredibly slow") with red tiles, then the yellow **Your Turn** button. Pass and play
 hands over with a **Pass to <name>** card.
 
 ## The look (matched to the recording, 2026-10-14)
