@@ -497,6 +497,9 @@ class WordLadder {
   }
 
   destroy() {
+    // Forget the words and levels: the hub keeps this module loaded for the life of the page, so without this a phone
+    // kept a data update out until the app was closed (2026-11-13: Matt's phone refused LIEN from the old list).
+    for (const k of Object.keys(_data)) delete _data[k];
     this.root.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     try { if (this._offResize) this._offResize(); } catch { /* gone */ }
