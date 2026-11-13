@@ -73,14 +73,14 @@ const OPTIONS = {
     </svg>`,
   // C2 (2026-11-13, Matt leaning to C): readable at tile size. 5 gems a row instead of 7 (bigger), the monsters
   // moved in from the corners (the "New" tag top left, the heart top right), bigger energy dots.
-  C2: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 46, glow: true })}
-      ${tank(52, 44, 18)}${tank(110, 44, 18)}
-      ${mon('emberkit', false, 30, 6, 42)}${mon('driplet', false, 89, 6, 42, true)}
-      ${burst(81, 26, 7, '#ffd36a', 8)}
-      <rect x="18" y="52" width="124" height="38" rx="5" fill="#1a120d" opacity=".92"/>
-      ${[['water', 'fire', 'fire', 'fire', 'leaf'], ['shadow', 'spark', 'water', 'leaf', 'spark']].map((row, r) => row.map((k, c) => gem(k, 21 + c * 24.4, 53.5 + r * 17.5, 18)).join('')).join('')}
-      <rect x="43" y="53" width="73" height="19.5" rx="5" fill="none" stroke="#fff3b0" stroke-width="2.2"/>
-      <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.2"><circle cx="79" cy="46" r="4.2"/><circle cx="75" cy="36.5" r="4.6"/></g>
+  C2: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 42, glow: true })}
+      ${tank(32, 40, 22)}${tank(128, 40, 22)}
+      ${mon('emberkit', false, 7, -4, 50)}${mon('driplet', false, 103, -4, 50, true)}
+      ${burst(80, 18, 9, '#ffd36a', 9)}${burst(80, 18, 4.5, '#fff8dc', 9)}
+      <rect x="2" y="45" width="156" height="45" rx="5" fill="#1a120d" opacity=".94"/>
+      ${[['water', 'fire', 'fire', 'fire', 'leaf'], ['shadow', 'spark', 'water', 'leaf', 'spark']].map((row, r) => row.map((k, c) => gem(k, 7 + c * 30, 46.5 + r * 21.5, 22)).join('')).join('')}
+      <rect x="34" y="45.8" width="88" height="23.4" rx="6" fill="none" stroke="#fff3b0" stroke-width="2.4"/>
+      <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.2"><circle cx="60" cy="38" r="4.4"/><circle cx="54" cy="28" r="4.8"/></g>
     </svg>`,
   // D: the hero: Blazelynx in a burst of fire, the five gems around it.
   D: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 70 })}
