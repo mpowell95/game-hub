@@ -9,6 +9,7 @@
 // once, and only then is the save removed. Unlocks are DERIVED from total wins at read time;
 // nothing here stores an unlock.
 import { onViewportResize } from '../../js/viewport.js';
+import { backStack } from '../../js/back-stack.js';
 import { makeT, myName } from '../../js/i18n.js';
 import { recordResult, loadStats, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -255,6 +256,7 @@ class BattleArena {
     if (TEST_MODE) { this.root.classList.add('is-test'); this.root.dataset.test = t('test'); }
     // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
     try { window.__baTest = this; } catch {}
+    this.armBack();
     // ONLINE FIRST: a match handed over by the launcher / Multiplayer screen / a notification
     // (alert.js armOpen, armChallenge), or a live room this phone was in when it left. Both are
     // looked up synchronously so a vs-computer player downloads none of the online code.
@@ -267,6 +269,94 @@ class BattleArena {
     // animation, so leaving during it means finish() never ran; resuming records it now (once).
     if (save) this.resume(save);
     else this.renderHome();
+  }
+
+  // --- the back step (2026-11-13, Matt: "make sure it has the swipe to go back feature we added to all of the
+  // screens in the new leaderboard"). ONE step, four ways in: a left-to-right swipe anywhere on a menu screen (the
+  // leaderboard's recognizer, js/leaderboard2-ui.js onTouch*), the phone's own back gesture (js/back-stack.js, one
+  // history entry per level), the hub's top-left button (`back()`, reading "‹ Back" while there is a step) and the
+  // screen's own back arrow / X (the step CLICKS them, so every way runs the screen's own code). Levels: home and the
+  // battle 0; Monsters, the draft and every online screen 1; each open popup +1 (the topmost closes first). In a
+  // battle with nothing open the step is the hub's (Leave?), and a swipe there is a move on the board, never a back.
+  armBack() {
+    this._bs = backStack((n) => { this._backSeq = (this._backSeq | 0) + 1; for (let i = 0; i < n; i++) if (!this.backStep()) break; this.syncBack(); });
+    this._obs = new MutationObserver(() => {
+      if (this._obsQueued) return;
+      this._obsQueued = true;
+      queueMicrotask(() => { this._obsQueued = false; this.syncBack(); });
+    });
+    this._obs.observe(this.root, { childList: true, subtree: true });
+    const EDGE = 28, LOCK = 8, FAR = 56, FLICK = 30, SPEED = 0.35;   // the leaderboard's numbers
+    this._swStart = (e) => {
+      const tt = e.touches && e.touches[0];
+      this._sw = null;
+      if (!tt || e.touches.length !== 1 || this.backLevel() === 0) return;
+      if (this.screen === 'battle' && !this.topPopup()) return;          // the board's swipes are moves
+      this._sw = { x: tt.clientX, y: tt.clientY, t: e.timeStamp || 0, dir: '', edge: tt.clientX < EDGE, typing: !!(e.target.closest && e.target.closest('input, textarea')), seq: this._backSeq | 0 };
+    };
+    this._swMove = (e) => {
+      const s = this._sw, tt = e.touches && e.touches[0];
+      if (!s || !tt) return;
+      if (e.touches.length > 1) { this._sw = null; return; }
+      if (!s.dir) {
+        const dx = tt.clientX - s.x, dy = tt.clientY - s.y;
+        if (Math.hypot(dx, dy) >= LOCK) s.dir = Math.abs(dx) > Math.abs(dy) * 1.5 ? 'h' : 'v';
+      }
+    };
+    this._swEnd = (e) => {
+      const s = this._sw;
+      this._sw = null;
+      if (!s || s.dir !== 'h' || s.edge || s.typing || this.disposed) return;
+      if (s.seq !== (this._backSeq | 0)) return;                        // the system's own back swipe already stepped
+      const tt = e.changedTouches && e.changedTouches[0];
+      if (!tt) return;
+      const dx = tt.clientX - s.x, dy = tt.clientY - s.y, dt = Math.max(1, (e.timeStamp || 0) - s.t);
+      if (dx < FLICK || Math.abs(dy) > dx * 0.7) return;                // rightward, still mostly sideways
+      if (dx < FAR && dx / dt < SPEED) return;                          // a short drag has to be a flick
+      this.goBack();
+    };
+    this.root.addEventListener('touchstart', this._swStart, { passive: true });
+    this.root.addEventListener('touchmove', this._swMove, { passive: true });
+    this.root.addEventListener('touchend', this._swEnd, { passive: true });
+  }
+  /** The open popup on top (help, a card, the menu, a "Resign?", the result card...), or null. */
+  topPopup() {
+    const list = this.root.querySelectorAll('.gh-overlay, .ba-result-ov');
+    return list.length ? list[list.length - 1] : null;
+  }
+  backLevel() {
+    const base = !this.screen || this.screen === 'home' || this.screen === 'battle' ? 0 : 1;
+    return base + this.root.querySelectorAll('.gh-overlay, .ba-result-ov').length;
+  }
+  /** Keep history and the hub's button in step with what is on screen. */
+  syncBack() {
+    if (this.disposed || !this._bs) return;
+    const lv = this.backLevel();
+    this._bs.sync(lv);
+    const step = lv > 0;
+    if (step !== this._backLabel) {
+      this._backLabel = step;
+      try { window.dispatchEvent(new CustomEvent('gamehub:backlabel', { detail: step })); } catch { /* old browser */ }
+    }
+  }
+  /** Back through history when it can (so the swipe and the phone's gesture run one code), else straight. */
+  goBack() {
+    if (this._bs && this._bs.level > 0) this._bs.back();
+    else if (this.backStep()) this.syncBack();
+  }
+  /** ONE step back, by the screen's own controls. False = nothing to step (the hub's back takes over). */
+  backStep() {
+    const top = this.topPopup();
+    if (top) {
+      const x = top.querySelector('[data-role="close"], [data-role="no"], [data-role="ok"]');
+      if (x) x.click(); else top.remove();
+      return true;
+    }
+    if (!this.screen || this.screen === 'home' || this.screen === 'battle') return false;
+    const b = this.root.querySelector('[data-role="back"]');
+    if (b) { b.click(); return true; }
+    this.renderHome();
+    return true;
   }
 
   /** The online screens (online-ui.js, lazily imported). `armed`: only act on a handed-over match or
@@ -438,7 +528,7 @@ class BattleArena {
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <p class="ba-help-goal">${t('helpGoal')}</p>
         ${helpSVG()}
-        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : ''}<span>${t(k)}</span></p>`).join('')}
+        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : '<i class="ba-help-dot" aria-hidden="true"></i>'}<span>${t(k)}</span></p>`).join('')}
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
@@ -2012,6 +2102,15 @@ class BattleArena {
     // A match decided while its last move still animated is recorded on the way out (2026-11-13).
     if (this.screen === 'battle') { try { this.recordOutcome(); } catch (err) { console.error('[battle-arena] record on leave failed', err); } }
     this.disposed = true;
+    if (this._obs) { try { this._obs.disconnect(); } catch {} this._obs = null; }
+    if (this._swStart) {
+      this.root.removeEventListener('touchstart', this._swStart);
+      this.root.removeEventListener('touchmove', this._swMove);
+      this.root.removeEventListener('touchend', this._swEnd);
+      this._swStart = this._swMove = this._swEnd = null;
+    }
+    if (this._bs) { try { this._bs.close(); } catch {} this._bs = null; }
+    if (this._backLabel) { this._backLabel = false; try { window.dispatchEvent(new CustomEvent('gamehub:backlabel', { detail: false })); } catch {} }
     if (this.link) { try { this.link.destroy(); } catch {} this.link = null; }
     this.gen++;
     try { if (window.__baTest === this) delete window.__baTest; } catch {}
@@ -2056,8 +2155,15 @@ export function leaveMatch() {
 /** THE "AUTOSAVE / RESUME" MEANING of the contract: the match in progress is saved after every
  *  move (`gamehub.battlearena.save.v1`) and picked up on return, so leaving is lossless. */
 //  The one exception: a LIVE ROOM after this player's first move, where leaving resigns (2026-11-13).
+/** The hub's back (its top-left button, or the gesture it holds): true when the game stepped back itself. */
+export function back() {
+  if (!instance || instance.disposed || instance.backLevel() === 0) return false;
+  instance.goBack();
+  return true;
+}
+
 export function isInProgress() {
   return quitCostsLoss();
 }
 
-export default { init, destroy, isInProgress, openArmed, quitCostsLoss, leaveMatch };
+export default { init, destroy, isInProgress, openArmed, quitCostsLoss, leaveMatch, back };

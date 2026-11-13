@@ -187,3 +187,16 @@ real 6 played, test 7), so each number takes the larger of the two (= the test r
 testers alike: every player's test plays count. Nothing happens before the release (`isTestGame`).
 `node tools/test-battlearena-carry.mjs`. Read-time Records (`mp-records.js`) read raw `h2h`: an unopened phone shows its
 old head-to-head until it next opens (none exists today).
+
+## Back step + second UI/UX review (2026-11-13, Matt: "make sure it has the swipe to go back feature we added to all of the screens in the new leaderboard")
+
+- **One back step, four ways in** (`ui.js` `armBack` / `backStep` / `goBack`, export `back()`): a left-to-right swipe on any menu
+  screen (the leaderboard's recognizer and numbers: 28px edge strip left to the phone, 8px lock, 56px or a 30px flick), the
+  phone's back gesture (`js/back-stack.js`), the hub's top-left button ("‹ Back" via `gamehub:backlabel`) and the screen's own
+  back arrow / X (the step CLICKS them). Levels: home and battle 0, Monsters / draft / online screens 1, each popup +1 (topmost
+  first). In a battle with nothing open a swipe is a board move and the step is the hub's. A `MutationObserver` keeps history in
+  step. `node tools/test-battlearena-back.mjs` (real touch swipes, needs a dev server).
+- Review fixes: difficulty buttons 44px; Evolve pill 15px; the HUD clears the hub's "‹ Hub" (`.ba-hubspace` 84px, `.ba-who` 46px);
+  How to play is an outlined 17px button; help lines share one left edge with an icon or dot gutter; the menu's other actions are
+  outlined; one X look on every popup. Kept on purpose: the home is the game's own full-bleed arena (not a centred card), the end
+  card's "Better luck next time, <loser>" line, no heading on the Host draft (same draft as vs the computer).
