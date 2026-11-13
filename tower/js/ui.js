@@ -124,6 +124,7 @@ class Tower {
         <div class="tw-ov" data-role="help" hidden></div>
         <div class="tw-ov" data-role="pause" hidden></div>
         <div class="tw-towers" data-role="towers" hidden></div>
+        <div class="tw-probe" data-role="probe" aria-hidden="true"></div>
       </div>`;
     this.root = this.host.querySelector('.tw-root');
     this.canvas = this.root.querySelector('.tw-canvas');
@@ -146,12 +147,20 @@ class Tower {
     this.canvas.width = Math.round(W * this.dpr); this.canvas.height = Math.round(H * this.dpr);
     // World units -> CSS px. Narrow screens fill the width; wide ones cap so the tower is not huge.
     this.k = Math.min(W / E.WORLD_W, (H * 0.62) / E.WORLD_W * 1.3);
+    this.topY = this._readTopY();
     if (this.screen === 'over') this._fitOver();
     // A phone turned sideways is covered by the hub's "turn your phone upright" screen (css/hub.css .gh-rotate): pause.
     // (The hub also calls onCovered(); this covers the standalone page.)
     if (document.documentElement.classList.contains('gh-sideways')) this._pause();
     this._draw();
     if (this._twBs) this._renderTowers();   // Record towers re-fits too
+  }
+
+  /** The bottom of the hub's top row (safe area + the floating "‹ Hub" and 🐞 buttons), in screen px: nothing the
+   *  game draws that must be read (the best line's label, the game-over tower) goes above it (2026-11-12, Matt's
+   *  screenshot: the "★ 21" label sat under the 🐞). Measured from a probe placed with the same CSS as the buttons. */
+  _readTopY() {
+    try { const p = this.el('probe'); const v = p ? p.offsetTop : 0; return v > 0 ? v : 110; } catch { return 110; }
   }
 
   // --- screens ---------------------------------------------------------------------------------
@@ -163,6 +172,7 @@ class Tower {
     this.el('hud').hidden = true;
     this._closeTowers();
     this.el('over').hidden = true;
+    this.el('over').style.visibility = '';
     this.el('pause').hidden = true;
     this.el('setup').hidden = false;
     this._renderSetup();
@@ -312,6 +322,7 @@ class Tower {
   _play() {
     this.el('setup').hidden = true;
     this.el('over').hidden = true;
+    this.el('over').style.visibility = '';
     this.el('help').hidden = true;
     this.el('hud').hidden = false;
     this.screen = 'play';
@@ -376,23 +387,29 @@ class Tower {
     const isNew = saved && sc > before && sc > 0;   // never "Best" for a run the store refused
     this.camTarget = 0;
     this._overBefore = before;
-    this._fitOver();
     this.el('hud').hidden = true;
+    // The card is built now (hidden) so its real height decides how far the ground lifts; it shows 750 ms later.
+    // "‹ Back" (to the setup screen) is a real button (2026-11-12, Matt: "It's not clear how to go back. I went back
+    // to the hub on accident"); the X stays (every result card has one).
+    const ov = this.el('over');
+    ov.innerHTML = `
+      <div class="tw-card tw-overcard">
+        <button type="button" class="tw-x" data-act="menu" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
+        <div class="tw-big">${sc}</div>
+        ${isNew ? `<div class="tw-new">&#9733; ${esc(t('new_best'))}</div>` : `<div class="tw-obest">&#9733; ${before}</div>`}
+        <div class="tw-btns">
+          <button type="button" class="tw-play" data-act="again">${esc(t('again'))}</button>
+          <button type="button" class="tw-play tw-alt" data-act="compare">${esc(t('compare'))}</button>
+        </div>
+        <button type="button" class="tw-play tw-alt tw-overback" data-act="menu">&#8249; ${esc(t('back'))}</button>
+      </div>`;
+    ov.style.visibility = 'hidden';
+    ov.hidden = false;
+    this._fitOver();
     clearTimeout(this._overT);
     this._overT = setTimeout(() => {
       if (this.screen !== 'over') return;
-      const ov = this.el('over');
-      ov.innerHTML = `
-        <div class="tw-card tw-overcard">
-          <button type="button" class="tw-x" data-act="menu" aria-label="${esc(t('aria_close'))}">${X_SVG}</button>
-          <div class="tw-big">${sc}</div>
-          ${isNew ? `<div class="tw-new">&#9733; ${esc(t('new_best'))}</div>` : `<div class="tw-obest">&#9733; ${before}</div>`}
-          <div class="tw-btns">
-            <button type="button" class="tw-play" data-act="again">${esc(t('again'))}</button>
-            <button type="button" class="tw-play tw-alt" data-act="compare">${esc(t('compare'))}</button>
-          </div>
-        </div>`;
-      ov.hidden = false;
+      ov.style.visibility = '';
     }, 750);
   }
 
@@ -401,8 +418,14 @@ class Tower {
   _fitOver() {
     const run = this.run;
     if (!run) return;
-    this.liftTarget = Math.max(0, Math.min(this.H * 0.3, 210));
-    const room = Math.max(60, this.H - Math.max(90, this.H * 0.13) - this.liftTarget - 110);
+    // The ground lifts to just above the card; the tower (and the best line with its label) fits between the
+    // ground and the bottom of the hub's top row.
+    const card = this.el('over') && this.el('over').querySelector('.tw-overcard');
+    const band = Math.max(90, this.H * 0.13);
+    const cardTop = card ? card.getBoundingClientRect().top - this.root.getBoundingClientRect().top : this.H - 260;
+    this.liftTarget = Math.max(0, Math.min(this.H * 0.5, (this.H - band) - (cardTop - 14)));
+    const groundY = this.H - band - this.liftTarget;
+    const room = Math.max(60, groundY - (this.topY || 110) - 34);
     const tall = (Math.max(run.stack.length, (this._overBefore | 0) + 1) + 1) * E.BLOCK_H * this.k;
     this.zoomTarget = Math.max(0.02, Math.min(1, room / Math.max(1, tall)));
   }
@@ -697,10 +720,13 @@ class Tower {
       ctx.font = `800 ${fs}px system-ui, sans-serif`;
       const tw = ctx.measureText(label).width + 12 / this.zoom;
       const lx = W / 2 + (W / 2 - 8) / this.zoom - tw;
+      // Above the line, unless that would put it under the hub's top row (the 🐞 sits top right): then below it.
+      const above = groundY + (ly - fs - 8 / this.zoom) * this.zoom >= (this.topY || 110);
+      const ry = above ? ly - fs - 8 / this.zoom : ly + 2 / this.zoom;
       ctx.fillStyle = beat ? '#ffce3a' : tagC;
-      ctx.fillRect(lx, ly - fs - 8 / this.zoom, tw, fs + 8 / this.zoom);
+      ctx.fillRect(lx, ry, tw, fs + 8 / this.zoom);
       ctx.fillStyle = beat ? '#16243a' : inkC;
-      ctx.fillText(label, lx + 6 / this.zoom, ly - 6 / this.zoom);
+      ctx.fillText(label, lx + 6 / this.zoom, ry + fs + 2 / this.zoom);
       ctx.restore();
     }
     for (const f of this.fx.flashes) {

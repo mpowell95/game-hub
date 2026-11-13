@@ -101,6 +101,10 @@
 .tw-root .tw-obest { margin-top: 6px; font-size: 18px; font-weight: 700; color: #5b6b82; }
 .tw-root .tw-btns { display: flex; gap: 10px; margin-top: 14px; }
 .tw-root .tw-btns .tw-play { margin-top: 0; flex: 1; font-size: 18px; }
+.tw-root .tw-overcard .tw-overback { margin-top: 10px; height: 50px; font-size: 18px; }
+/* Where the hub's top row ends (safe area + the floating Hub and bug buttons): read by ui.js _readTopY. */
+.tw-root .tw-probe { position: absolute; left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none;
+  top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 50px); }
 .tw-root .tw-play.tw-alt { background: #eef2f8; box-shadow: none; }
 
 /* --- Record towers: everyone's best at one difficulty, side by side --- */
@@ -148,7 +152,7 @@
 .gh-dark .tw-root .tw-look, .gh-dark .tw-root .tw-seg { border-color: rgba(255,255,255,.14); }
 .gh-dark .tw-root .tw-hbest b, .gh-dark .tw-root .tw-row b { color: #e8eef8; }
 .gh-dark .tw-root .tw-hbest, .gh-dark .tw-root .tw-seg-n, .gh-dark .tw-root .tw-row, .gh-dark .tw-root .tw-x,
-.gh-dark .tw-root .tw-lead-who b { color: #e3e9f3; }
+.gh-dark .tw-root .tw-lead-who b, .gh-dark .tw-root .tw-obest { color: #e3e9f3; }
 .gh-dark .tw-root .tw-lead-all { color: #7fb2ff; }
 .gh-dark .tw-root .tw-none { color: #e3e9f3; }
 .gh-dark .tw-root .tw-play, .gh-dark .tw-root .tw-new, .gh-dark .tw-root .tw-chk { color: #16243a; }
