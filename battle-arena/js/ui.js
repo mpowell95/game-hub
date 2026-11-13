@@ -153,16 +153,31 @@ function effectLines(sp) {
   return out;
 }
 
-/** How to play's diagram: a swap lines up three fire gems, and the fire monster charges. */
-function helpSVG() {
-  const g = (k, x, y, s = 30) => `<svg x="${x}" y="${y}" width="${s}" height="${s}" viewBox="0 0 40 40">${gemSVG(k).replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>`;
-  return `<svg viewBox="0 0 240 92" width="240" height="92" aria-hidden="true" class="ba-help-svg">
-    ${g('fire', 6, 10)}${g('fire', 40, 10)}${g('water', 74, 10)}${g('fire', 74, 50)}
-    <path d="M70 56c-10-6-10-22 0-28" class="ba-help-arrow"/><path d="M104 28c10 6 10 22 0 28" class="ba-help-arrow"/>
-    <path d="M118 30h26" class="ba-help-arrow"/><path d="M140 24l8 6-8 6" class="ba-help-arrow"/>
-    <svg x="152" y="0" width="80" height="80" viewBox="0 0 120 120">${monsterSVG('emberkit').replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>
-    <text x="214" y="88" class="ba-help-plus">+3</text></svg>`;
-}
+/** How to play's pictures (2026-11-13, Matt: "try to use images"): one small scene per rule, drawn from the
+ *  game's own gems and monsters, 132x56. The words beside each are a caption, not the explanation. */
+const inner = (svg) => svg.replace(/^<svg[^>]*>|<\/svg>$/g, '');
+const helpGem = (k, x, y, s = 26, n) => `<svg x="${x}" y="${y}" width="${s}" height="${s}" viewBox="0 0 40 40">${inner(gemSVG(k, n))}</svg>`;
+const helpMon = (x, y, s, evo) => `<svg x="${x}" y="${y}" width="${s}" height="${s}" viewBox="0 0 120 120">${inner(monsterSVG('emberkit', evo))}</svg>`;
+const helpArrow = (x, y) => `<path d="M${x} ${y}h16" class="ba-help-arrow"/><path d="M${x + 12} ${y - 5}l6 5-6 5" class="ba-help-arrow"/>`;
+const helpBurst = (cx, cy, r) => {
+  const pts = [];
+  for (let i = 0; i < 16; i++) { const a = (i * Math.PI) / 8, k = i % 2 ? r * 0.5 : r; pts.push(`${(cx + k * Math.cos(a)).toFixed(1)},${(cy + k * Math.sin(a)).toFixed(1)}`); }
+  return `<polygon points="${pts.join(' ')}" fill="#F2B705" stroke="#E0532F" stroke-width="2" stroke-linejoin="round"/>`;
+};
+const HELP_PICS = {
+  // a swap lines up three fire gems, and the fire monster charges
+  helpMatch: () => `${helpGem('fire', 0, 6, 28)}${helpGem('water', 30, 6, 28)}${helpGem('fire', 60, 6, 28)}${helpGem('fire', 30, 34, 28)}
+    <path d="M28 46c-7-6-7-22 0-28" class="ba-help-arrow ba-help-thin"/>${helpArrow(92, 32)}${helpMon(110, 2, 60)}`,
+  // a full bar sets off the special
+  helpFull: () => `<rect x="2" y="24" width="70" height="16" rx="8" fill="#E0532F" stroke="#ffce3a" stroke-width="3"/>
+    ${helpArrow(80, 32)}${helpBurst(132, 32, 30)}${helpMon(102, 2, 60)}`,
+  // four berries, then the evolved monster
+  helpBerry: () => `${helpGem('berry', 4, 4)}${helpGem('berry', 34, 4)}${helpGem('berry', 4, 34)}${helpGem('berry', 34, 34)}
+    ${helpArrow(70, 32)}${helpMon(94, 0, 64, true)}`,
+  // a match next to a bomb sets it off
+  helpBomb: () => `${helpGem('fire', 0, 18, 28)}${helpGem('fire', 30, 18, 28)}${helpGem('fire', 60, 18, 28)}
+    ${helpBurst(110, 32, 30)}${helpGem('bomb', 92, 14, 36, 5)}`,
+};
 
 /** Shrink a single-line label until it fits its box, never under 15px (the text floor, root CLAUDE.md;
  *  2026-11-13: it went down to 11px). A label still too long is cut by its own CSS. */
@@ -551,13 +566,11 @@ class BattleArena {
   showHelp() {
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
-    const lines = ['helpSwap', 'helpCharge', 'helpFull', 'helpBerry', 'helpBomb'];
     el.innerHTML = `
       <div class="gh-modal ba-help" role="dialog" aria-modal="true" aria-label="${t('help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <p class="ba-help-goal">${t('helpGoal')}</p>
-        ${helpSVG()}
-        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' ? gemSVG('bomb', 5) : '<i class="ba-help-dot" aria-hidden="true"></i>'}<span>${t(k)}</span></p>`).join('')}
+        ${Object.keys(HELP_PICS).map((k) => `<div class="ba-help-row"><svg viewBox="0 0 160 64" class="ba-help-pic" aria-hidden="true">${HELP_PICS[k]()}</svg><span>${escapeHTML(t(k))}</span></div>`).join('')}
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
@@ -2032,6 +2045,7 @@ class BattleArena {
         <div class="ba-result-strip"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span class="ba-result-title">${escapeHTML(title)}</span></div>
         ${this.canon && this.canon.resigned != null ? `<p class="ba-result-why">${escapeHTML(this.canon.timedOut ? t('timedOut') : t('resigned', { name: this.names[l] }))}</p>` : ''}
         <div class="ba-result-lose">
+          ${w === ME ? '' : `<span class="ba-result-luck">${escapeHTML(t('betterLuck', { name: this.names[l] }))}</span>`}
           <div class="ba-result-losers"><span class="ba-result-av">${escapeHTML(this.avatars[l])}</span>${s.sides[l].mons.map((m, i) => `<div class="ba-result-hex${l === ME ? ' ba-face-left' : ''}"><span class="ba-result-emo">${i ? '😥' : '😭'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
           <div class="ba-result-actions">
             ${this.link ? `<button type="button" class="gh-btn gh-btn--primary" data-role="done">${t('done')}</button>` : `

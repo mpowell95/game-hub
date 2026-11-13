@@ -354,6 +354,11 @@
 .ba-root .ba-help-dot { flex: 0 0 22px; height: 22px; display: grid; place-items: center; }
 .ba-root .ba-help-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ba-hl, #ffce3a); }
 .ba-root .ba-help-line svg { width: 22px; height: 22px; flex: 0 0 auto; }
+.ba-root .ba-help-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.ba-root .ba-help-row + .ba-help-row { border-top: 1px solid rgba(255, 255, 255, .12); }
+.ba-root .ba-help-pic { width: 160px; height: 64px; flex: 0 0 auto; }
+.ba-root .ba-help-row span { min-width: 0; font-size: 17px; font-weight: 700; line-height: 1.25; text-wrap: balance; }
+.ba-root .ba-help-thin { stroke-width: 2.4; }
 .ba-root .ba-help-line span { min-width: 0; font-size: 17px; line-height: 1.25; text-align: left; text-wrap: pretty; }
 
 /* --- battle ------------------------------------------------------------------------------------- */
@@ -691,6 +696,7 @@
 .ba-root .ba-result-title { min-width: 0; font-size: 22px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ba-root .ba-result-av { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: #f1ece4; border: 2px solid #1f6fc8; }
 .ba-root .ba-result-lose { margin: 14px 12px 0; padding: 12px; border-radius: 16px; background: rgba(10, 6, 4, .78); display: flex; flex-direction: column; align-items: center; gap: 8px; color: #fff; }
+.ba-root .ba-result-luck { max-width: 100%; font-size: 17px; font-weight: 700; text-align: center; }
 .ba-root .ba-result-losers { display: flex; align-items: center; gap: 10px; }
 .ba-root .ba-result-losers .ba-result-av { border-color: #888; }
 .ba-root .ba-result-hex {
