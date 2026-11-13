@@ -28,6 +28,7 @@ import { watchTabBar } from './tabbar-fix.js';
 import { backStack } from './back-stack.js';
 import { GAME_ART } from './game-art.js';
 import { isNewGame, sortMsOf } from './new-badge.js';
+import { noteShown as noteNewDockShown, noteAction as noteNewDockAction } from './new-dock-log.js';
 import { loadSort, saveSort, sortGames } from './launcher-sort.js';
 import { installErrorLog, noteError } from './error-log.js';
 import { pendingAnnouncement, loadSeen, hasSeenStore, mergeSeen, markSeen, ANNOUNCEMENTS } from './announce.js';
@@ -2329,6 +2330,8 @@ class Hub {
     const turn = tabs.querySelector('[data-role="alert-dock"]');
     if (turn) { el.classList.add('is-stacked'); el.style.setProperty('--below', `${(turn.offsetHeight || 64) + 10}px`); }
     tabs.appendChild(el);
+    // Who has SEEN it (js/new-dock-log.js, mirrored to players/<id>/newDock): only when it is really on screen.
+    try { if (document.visibilityState === 'visible' && getComputedStyle(el).display !== 'none') noteNewDockShown(list.map((g) => g.id)); } catch { /* a report */ }
   }
   /** Tap on the new-games bubble: X puts every game in it away; anywhere else opens the newest one exactly as
    *  its tile does (a launch-out game follows its link), and only that one is marked seen. */
@@ -2336,11 +2339,13 @@ class Hub {
     const dock = e.target.closest('[data-role="new-dock"]');
     if (!dock) return;
     if (e.target.closest('[data-role="new-dock-x"]')) {
+      try { noteNewDockAction('closed', this._newDockGames().map((g) => g.id)); } catch { /* a report */ }
       this._markNewSeen(this._newDockGames().map((g) => g.id));
       this._paintNewDock();
       return;
     }
     const id = dock.dataset.game;
+    try { noteNewDockAction('tapped', id); } catch { /* a report */ }
     this._markNewSeen(id);
     dock.remove();
     const g = (this.games || []).find((x) => x.id === id);
@@ -3121,7 +3126,7 @@ class Hub {
     this._lastGameId = id;
     // Opened = no "New game" bubble for it; only a released game in its New window (an admin's test plays of an
     // unreleased game must not use up its bubble, 2026-11-13).
-    try { if (this._isNewDockGame(game)) this._markNewSeen(id); } catch { /* a preference */ }
+    try { if (this._isNewDockGame(game)) { this._markNewSeen(id); noteNewDockAction('opened', id); } } catch { /* a preference */ }
     // A return left over from an earlier game is dropped here; this launch brings its own, if any.
     this._dropReturn();
 

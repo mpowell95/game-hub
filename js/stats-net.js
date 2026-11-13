@@ -17,6 +17,7 @@ import { loadProfile } from './profile-store.js';
 import { getStatsApp, perfReport } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
 import { loadSeen } from './announce.js';
+import { newDockReport } from './new-dock-log.js';
 import { hubReadReport } from './hub-messages.js';
 import { automationBlocks } from './automation.js';
 
@@ -320,6 +321,10 @@ export async function syncMyStats() {
     // read only by the admin page, never by a phone, and omitted while there is nothing to report.
     const hubRead = hubReadReport();
     if (hubRead) rec.hubMsgs = hubRead;
+    // WHO HAS SEEN THE "NEW GAME" BUBBLE (2026-11-13, Matt: "WHY would you make it so we can't determine if someone
+    // has seen it?"): js/new-dock-log.js. Same additive REPORT shape, read by the admin page (Sent) and
+    // tools/read-new-dock.mjs only; omitted while there is nothing to report.
+    try { const nd = newDockReport(); if (nd) rec.newDock = nd; } catch { /* a report */ }
     // SLOW DATABASE READS ON THIS PHONE (2026-10-27, js/firebase-boot.js perfReport). Same additive
     // REPORT shape: read by no phone, omitted while there is nothing slow to report.
     const perf = perfReport();

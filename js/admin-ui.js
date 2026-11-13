@@ -40,6 +40,7 @@ import { hubIdOf } from './game-stats-ui.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
 import { ANNOUNCEMENTS, textFor } from './announce.js';
+import { mergeNewDock } from './new-dock-log.js';
 import { HUB_MESSAGES, hubText, readStatusFor } from './hub-messages.js';
 import { isHiddenName, isHiddenDeviceId } from './hidden-players.js';
 import {
@@ -495,6 +496,8 @@ function closeAdmin() {
 }
 
 /** Open the admin page. js/hub.js gates the button on isAdmin(); this is a screen, not a lock. */
+/** Test seam (tools only): repaint the open page with these `players/` records. Never called by the app. */
+export function __setPlayersForTest(p) { _players = p || {}; if (_host) render(); }
 export async function openAdmin(opts = {}) {
   ensureCss();
   _backRoot = opts && typeof opts.backLabel === 'string' && opts.backLabel ? opts.backLabel : null;
@@ -631,6 +634,7 @@ function renderView(cfg, v) {
     case 'testerfor': return testerForPage(cfg, v.key);
     case 'allgames': return allGamesPage(cfg, v.key);
     case 'ann': return annPage(v.id);
+    case 'nd': return ndPage(v.id);
     case 'hm': return hmPage(v.id);
     case 'pairs': return pairsPage();
     case 'pair': return pairPage(v.key);
@@ -1183,6 +1187,57 @@ function annPeople() {
   }
   return [...people.values()].sort((a, b) => (a.name || '￿').localeCompare(b.name || '￿'));
 }
+/** The "New game" bubble (js/new-dock-log.js, players/<id>/newDock), per PERSON: every device's report for game
+ *  `id` merged (mergeNewDock). Who saw it, when, and what they did (2026-11-13, Matt: "WHY would you make it so we
+ *  can't determine if someone has seen it?"). Bubble shows before the reports existed (before v1548) were never kept. */
+function ndPeople(id) {
+  const all = _players || {};
+  const people = new Map();
+  for (const did of Object.keys(all)) {
+    const rec = all[did] || {};
+    const prof = rec.profile || {};
+    if (isHiddenDeviceId(did) || isHiddenName(prof.name)) continue;
+    const key = _ident.keyFor(prof, did);
+    if (!people.has(key)) people.set(key, { name: '', emoji: '', reps: [] });
+    const p = people.get(key);
+    if ((prof.name || '').trim() && !p.name) { p.name = prof.name.trim(); p.emoji = prof.emoji || ''; }
+    if (rec.newDock) p.reps.push(rec.newDock);
+  }
+  return [...people.values()].map((p) => ({ ...p, m: mergeNewDock(p.reps, id) }))
+    .sort((a, b) => (a.name || '￿').localeCompare(b.name || '￿'));
+}
+/** Game ids any report names (newest first-shown first). */
+function ndGames() {
+  const first = new Map();
+  for (const rec of Object.values(_players || {})) {
+    const nd = (rec && rec.newDock) || {};
+    for (const k of ['shown', 'tapped', 'closed', 'opened', 'done']) for (const [id, at] of Object.entries(nd[k] || {})) {
+      if (!first.has(id) || (+at && +at < first.get(id))) first.set(id, +at || 0);
+    }
+  }
+  return [...first.keys()];
+}
+const ndSeen = (m) => !!(m.shown || m.tapped || m.closed || m.opened || m.done);
+function ndTitle(id) {
+  const g = GAMES.find((x) => x.id === id);
+  const t0 = g && g.title;
+  return (t0 && typeof t0 === 'object' ? (t0[getLang()] || t0.en) : t0) || id;
+}
+function ndPage(id) {
+  const title = tx('adm_nd_title', 'New game bubble: {g}', { g: ndTitle(id) });
+  if (loading()) return { title, body: waitBody() };
+  const people = ndPeople(id);
+  // Line 1: what they did with it; line 2: when it was first on their screen (and how many times).
+  const did = (m) => (m.tapped ? tx('adm_nd_tapped', 'Tapped {when}', { when: when(m.tapped) })
+    : m.closed ? tx('adm_nd_closed', 'Closed {when}', { when: when(m.closed) })
+      : m.opened ? tx('adm_nd_opened', 'Opened the game {when}', { when: when(m.opened) })
+        : m.done ? tx('adm_nd_done', 'Done {when}', { when: when(m.done) }) : '');
+  const saw = (m) => (m.shown ? tx('adm_nd_shown', 'Seen {when}', { when: when(m.shown) }) + (m.n > 1 ? ` (${m.n}x)` : '') : '');
+  const yes = people.filter((p) => ndSeen(p.m)), no = people.filter((p) => !ndSeen(p.m));
+  const list = (l, v) => l.map((p) => row({ icon: whoHTML(p.emoji), title: (p.name || tx('adm_sc_unnamed', 'Unnamed player')), ...v(p) }));
+  return { title, body: gh(tx('adm_ann_seen', 'Seen it'), yes.length) + (yes.length ? grp(list(yes, (p) => (did(p.m) ? { sub: did(p.m), sub2: saw(p.m) } : { sub: saw(p.m) })), true) : `<p class="adm-empty">${esc(tx('adm_ann_nobody', 'Nobody yet.'))}</p>`)
+    + (no.length ? gh(tx('adm_ann_notyet', 'Not yet'), no.length) + grp(list(no, () => ({}))) : '') };
+}
 function sentTab() {
   const title = tx('adm_tab_sent', 'Sent');
   if (loading()) return { title, body: waitBody() };
@@ -1193,7 +1248,12 @@ function sentTab() {
   const msgs = HUB_MESSAGES.slice().sort((a, b) => b.atMs - a.atMs).map((m) => row({ title: (hubText(m, lang)),
     value: tx('adm_n_of', '{n} of {all}', { n: (m.to || []).filter((c) => readStatusFor(_players, m.id, c).read).length, all: (m.to || []).length }),
     go: () => push({ k: 'hm', id: m.id }) }));
-  return { title, body: (anns.length ? gh(tx('adm_popups_seen', 'Popups · seen')) + grp(anns) : '')
+  const nds = ndGames().map((id) => {
+    const ppl = ndPeople(id);
+    return row({ title: ndTitle(id), value: tx('adm_n_of', '{n} of {all}', { n: ppl.filter((p) => ndSeen(p.m)).length, all: ppl.length }), go: () => push({ k: 'nd', id }) });
+  });
+  return { title, body: (nds.length ? gh(tx('adm_nd_head', 'New game bubble · seen')) + grp(nds) : '')
+    + (anns.length ? gh(tx('adm_popups_seen', 'Popups · seen')) + grp(anns) : '')
     + (msgs.length ? gh(tx('adm_hubmsgs_read', 'Game Hub messages · read')) + grp(msgs) : '') };
 }
 function annPage(id) {

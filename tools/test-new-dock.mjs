@@ -1,0 +1,26 @@
+// tools/test-new-dock.mjs - js/new-dock-log.js: the New game bubble's who-saw-it report (2026-11-13).
+const store = new Map();
+globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+let pass = 0, fail = 0;
+const ok = (name, c) => { if (c) pass++; else { fail++; console.log('FAIL ', name); } };
+const L = await import('../js/new-dock-log.js');
+ok('nothing yet = no report (the node stays absent)', L.newDockReport() === null);
+L.noteShown(['tower']);
+let r = L.newDockReport();
+ok('shown: first and last stamped, counted once', r.shown.tower > 0 && r.last.tower === r.shown.tower && r.n.tower === 1);
+L.noteShown(['tower']);
+ok('a repaint within a minute is not a new look', L.newDockReport().n.tower === 1);
+L.noteAction('tapped', 'tower'); const t1 = L.newDockReport().tapped.tower;
+L.noteAction('tapped', 'tower');
+ok('tapped kept at the first time', t1 > 0 && L.newDockReport().tapped.tower === t1);
+L.noteAction('bogus', 'tower');
+ok('unknown actions ignored', !('bogus' in L.newDockReport()));
+store.set('gamehub.newDock.v3', JSON.stringify({ version: 3, seen: { tower: 123 } }));
+ok('the report carries hub.js\'s seen-list as done', L.newDockReport().done.tower === 123);
+const m = L.mergeNewDock([{ shown: { tower: 50 }, last: { tower: 90 }, n: { tower: 2 } }, { shown: { tower: 40 }, last: { tower: 70 }, n: { tower: 1 }, closed: { tower: 80 } }, null], 'tower');
+ok('merge: earliest shown, latest last, counts added, actions kept', m.shown === 40 && m.last === 90 && m.n === 3 && m.closed === 80 && m.tapped === 0);
+ok('merge: another game reads empty', L.mergeNewDock([{ shown: { tower: 5 } }], 'gridlock').shown === 0);
+store.set('gamehub.newDockLog.v1', '{broken');
+ok('a broken store never throws', L.newDockReport() !== undefined);
+console.log(`new-dock tests: ${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
