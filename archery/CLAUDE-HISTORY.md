@@ -155,3 +155,14 @@ arm now runs off the bottom-left corner, as a real bow arm does from the eye. Th
 old turn (a pitched resting bow swung its sleeve across the view); `setPose` blends the two by `p` and
 turns the arrow's rest with the model each frame. Checked headless at 360, 393, 430 wide: drawn,
 mid-draw (p 0.5), aimed at the face's corners, and down.
+
+## 2026-11-13: the target bow back, the Meshy arm kept
+
+Matt: "archery does NOT work. It have HUGE visual problems", then "you never got the 3d bow thing correct".
+Side by side with the recording (frames pulled from the Dropbox video): the recording's bow is an upright target
+bow, only its middle on screen, the sight on a bar off the riser; ours (since 2026-10-21) was the Meshy model's
+plain recurve, its whole length showing, the sight ring floating beside it with nothing holding it, and a string
+running off the top of the screen. The built target bow (laid out from the recording 2026-10-14, hidden since the
+model) was still in the code and already matched the recording closely; only its built hand was crude. Matt chose
+"New bow, keep arm": the model now draws only its arm and hand (skin and sleeve triangles), on the built grip,
+turned so the arm comes up from the bottom-left corner. The string rods and `MODEL_REST` are gone.
