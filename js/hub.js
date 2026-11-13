@@ -44,7 +44,13 @@ const t = makeT(STRINGS);
 const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
 // The new-games bubble (_paintNewDock): its per-device seen-list. Released games only, on every device: an unreleased
 // game never gets the bubble, not even on an admin device (Matt, 2026-11-13: "it shouldnt be live. the game isn't live yet").
-const NEW_DOCK_KEY = 'gamehub.newDock.v1';
+// v2 (2026-11-13, Matt: "i didn't get the popup notification for a new game"): v1 stamped a game seen on ANY launch,
+// so Tower Stack's admin test plays marked it seen before its release. v2 keeps only v1 stamps made after Tower Stack's
+// release was merged (NEW_DOCK_V1_TRUST), and a launch now stamps only a released game inside its New window.
+// v1 is left in place, unread after the first copy (rule 5).
+const NEW_DOCK_KEY = 'gamehub.newDock.v2';
+const NEW_DOCK_V1 = 'gamehub.newDock.v1';
+const NEW_DOCK_V1_TRUST = Date.parse('2026-11-13T17:45:36Z');
 
 // The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
 const TAB_ICON = {
@@ -2252,8 +2258,21 @@ class Hub {
   // that this device has not opened or put away. Tap = open the newest one (as its tile would); X = put them all
   // away. A your-turn bubble always wins the spot. Seen-list `gamehub.newDock.v1` (a preference, per device).
   _newDockSeen() {
-    try { const v = JSON.parse(localStorage.getItem(NEW_DOCK_KEY) || 'null'); return v && v.seen && typeof v.seen === 'object' ? v.seen : {}; } catch { return {}; }
+    try {
+      const v = JSON.parse(localStorage.getItem(NEW_DOCK_KEY) || 'null');
+      if (v && v.seen && typeof v.seen === 'object') return v.seen;
+      // First read of v2: carry over only the v1 stamps a released build made.
+      const seen = {};
+      try {
+        const o = JSON.parse(localStorage.getItem(NEW_DOCK_V1) || 'null');
+        for (const [id, at] of Object.entries((o && o.seen) || {})) if (+at >= NEW_DOCK_V1_TRUST) seen[id] = +at;
+      } catch { /* nothing to carry */ }
+      try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 2, seen })); } catch { /* a preference */ }
+      return seen;
+    } catch { return {}; }
   }
+  /** Is this game one the bubble would show (released, inside its New window)? */
+  _isNewDockGame(g) { return !!g && !g.comingSoon && !g.devOnly && isNewGame(g, Date.now(), gameLiveAt(g.id)); }
   _markNewSeen(ids) {
     const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
     if (!list.length) return;
@@ -2261,13 +2280,13 @@ class Hub {
     let changed = false;
     for (const id of list) if (!seen[id]) { seen[id] = Date.now(); changed = true; }
     if (!changed) return;
-    try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 1, seen })); } catch { /* a preference */ }
+    try { localStorage.setItem(NEW_DOCK_KEY, JSON.stringify({ version: 2, seen })); } catch { /* a preference */ }
   }
   _newDockGames() {
     const seen = this._newDockSeen();
     const now = Date.now();
     return (this.games || [])
-      .filter((g) => g && !g.comingSoon && !g.devOnly && !seen[g.id] && isNewGame(g, now, gameLiveAt(g.id)))
+      .filter((g) => !seen[g.id] && this._isNewDockGame(g))
       .map((g) => ({ g, ms: sortMsOf(g, gameLiveAt(g.id)) || now }))
       .sort((a, b) => b.ms - a.ms || titleText(a.g).localeCompare(titleText(b.g)))
       .map((x) => x.g);
@@ -2277,7 +2296,7 @@ class Hub {
     for (const prev of this.root.querySelectorAll('[data-role="new-dock"]')) prev.remove();
     const tabs = this.root.querySelector('[data-role="tabs"]');
     if (!this._compact || !tabs || this.current) return;
-    if (this.root.querySelector('.hub-dock, .hub-alert')) return;   // a game waiting on the player comes first
+    if (this.root.querySelector('.hub-alert')) return;
     const list = this._newDockGames();
     if (!list.length) return;
     const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -2297,6 +2316,10 @@ class Hub {
     el.innerHTML = `<span class="hub-dock-thumbs">${thumbs}</span>
       <span class="hub-dock-tx"><span class="hub-dock-l1">${l1}</span><span class="hub-dock-l2">${l2}</span></span>
       <button type="button" class="hub-dock-x" data-role="new-dock-x" aria-label="${t('hub_alert_dismiss')}">&times;</button>`;
+    // A your-turn / game-over bubble already there: this one sits ABOVE it, so both are seen (2026-11-13: with a game
+    // always waiting on Matt, "the turn bubble wins the spot" meant he never saw the new game).
+    const turn = tabs.querySelector('[data-role="alert-dock"]');
+    if (turn) { el.classList.add('is-stacked'); el.style.setProperty('--below', `${(turn.offsetHeight || 64) + 10}px`); }
     tabs.appendChild(el);
   }
   /** Tap on the new-games bubble: X puts every game in it away; anywhere else opens the newest one exactly as
@@ -3088,7 +3111,9 @@ class Hub {
     // AFTER the player comes back out of the game they had trouble with. Set before the import so
     // a game that fails to LOAD is still the one preselected.
     this._lastGameId = id;
-    try { this._markNewSeen(id); } catch { /* a preference */ }   // opened = no "New game" bubble for it
+    // Opened = no "New game" bubble for it; only a released game in its New window (an admin's test plays of an
+    // unreleased game must not use up its bubble, 2026-11-13).
+    try { if (this._isNewDockGame(game)) this._markNewSeen(id); } catch { /* a preference */ }
     // A return left over from an earlier game is dropped here; this launch brings its own, if any.
     this._dropReturn();
 
