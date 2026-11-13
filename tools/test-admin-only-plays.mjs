@@ -32,45 +32,45 @@ globalThis.localStorage = {
   get length() { return store.size; },
 };
 
-// A made-up player (never Matt's code or name). Archery is switched LIVE from the admin page;
+// A made-up player (never Matt's code or name). Baseball is switched LIVE from the admin page;
 // every other admin-only game is still admin-only.
 localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzprobe', playerId: 'ZZZQ9' }));
-localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { archery: { live: true } } }));
+localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { baseball: { live: true } } }));
 // Plays recorded BEFORE this existed sit in the real records (Matt: "leave them, count them"),
-// plus an old test record for Archery that must never come back once it is live.
-// (Cup Baseball stands in for Gridlock, Word Weaver and Tower Stack here since their releases.)
+// plus an old test record for Baseball that must never come back once it is live.
+// (Archery stands in for Gridlock, Word Weaver and Tower Stack here since their releases.)
 const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { played: 22, won: 22, lost: 0 } } };
 const legacyBa = { total: { played: 6, won: 3, lost: 3 }, byDiff: { mp: { played: 6, won: 3, lost: 3 } } };
 localStorage.setItem('gamehub.stats', JSON.stringify({
   version: 1,
-  games: { cupbaseball: legacyGl, battlearena: legacyBa, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
+  games: { archery: legacyGl, battlearena: legacyBa, cupbaseball: { total: { played: 4, won: 1, lost: 3 }, byDiff: { easy: { played: 4, won: 1, lost: 3 } } }, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
   h2h: { battlearena: { devOld: { name: 'Old', w: 1, l: 0 } } },
-  testGames: { archery: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } } },
+  testGames: { cupbaseball: { total: { played: 9, won: 2, lost: 7 }, byDiff: { hard: { played: 9, won: 2, lost: 7 } } }, baseball: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } } },
 }));
 const raw = () => JSON.parse(store.get('gamehub.stats'));
 
 const G = await import('../js/game-stats.js');
 
-ok('Cup Baseball and Battle Arena are admin-only right now', G.isTestGame('cupbaseball') && G.isTestGame('battlearena'));
-ok('Archery, switched live from the admin page, is not', !G.isTestGame('archery'));
-ok('Word Ladder is admin-only right now (its plays go to the test record)', G.isTestGame('wordladder'));
+ok('Archery and Battle Arena are admin-only right now', G.isTestGame('archery') && G.isTestGame('battlearena'));
+ok('Baseball, switched live from the admin page, is not', !G.isTestGame('baseball'));
+ok('Cup Baseball, archived 2026-11-13, is no longer a test game (its stored records are left where they are)', !G.isTestGame('cupbaseball'));
 ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock') && !G.isTestGame('wordweaver') && !G.isTestGame('tower'));
 
-const before = JSON.stringify(raw().games.cupbaseball);
-G.recordResult('cupbaseball', 'easy', true);
+const before = JSON.stringify(raw().games.archery);
+G.recordResult('archery', 'easy', true);
 G.recordResult('battlearena', 'mp', true);
 let r = raw();
-ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.cupbaseball.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
-ok('the real Cup Baseball record is byte-for-byte unchanged', JSON.stringify(r.games.cupbaseball) === before);
+ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.archery.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
+ok('the real Archery record is byte-for-byte unchanged', JSON.stringify(r.games.archery) === before);
 ok('the real Battle Arena record is unchanged', JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
-ok('the tester\'s progress carries on in the test record', r.testGames.cupbaseball.byDiff.easy.played === 23 && r.testGames.cupbaseball.total.won === 23);
-ok('...and the real record did not gain the game', r.games.cupbaseball.byDiff.easy.played === 22);
+ok('the tester\'s progress carries on in the test record', r.testGames.archery.byDiff.easy.played === 23 && r.testGames.archery.total.won === 23);
+ok('...and the real record did not gain the game', r.games.archery.byDiff.easy.played === 22);
 
 const view = G.loadStats();
-ok('the GAME sees its test record while testing (its progress reads)', view.games.cupbaseball.total.played === 23);
+ok('the GAME sees its test record while testing (its progress reads)', view.games.archery.total.played === 23);
 const stored = G.loadStoredStats();
-ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.cupbaseball.total.played === 22);
-ok('loadStoredStats() carries the test record apart', stored.testGames.cupbaseball.total.played === 23);
+ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', stored.games.archery.total.played === 22);
+ok('loadStoredStats() carries the test record apart', stored.testGames.archery.total.played === 23);
 ok('no hidden swap marker leaks into JSON', JSON.stringify(stored) === JSON.stringify(JSON.parse(JSON.stringify(stored))) && !Object.getOwnPropertySymbols(stored).length);
 
 G.recordHeadToHead('battlearena', { deviceId: 'devNew', name: 'New' }, true);
@@ -78,10 +78,10 @@ r = raw();
 ok('an admin-only h2h row goes to testH2h (started as a copy)', !!(r.testH2h && r.testH2h.battlearena && r.testH2h.battlearena.devNew && r.testH2h.battlearena.devOld));
 ok('the real h2h is unchanged', JSON.stringify(r.h2h.battlearena) === JSON.stringify({ devOld: { name: 'Old', w: 1, l: 0 } }));
 
-G.recordResult('archery', 'easy', true);
+G.recordResult('baseball', 'easy', true);
 r = raw();
-ok('a game switched live records into its REAL record (starts at 0)', r.games.archery.total.played === 1 && r.games.archery.total.won === 1);
-ok('its old test record is kept, untouched', r.testGames.archery.total.played === 5);
+ok('a game switched live records into its REAL record (starts at 0)', r.games.baseball.total.played === 1 && r.games.baseball.total.won === 1);
+ok('its old test record is kept, untouched', r.testGames.baseball.total.played === 5);
 
 G.recordResult('uno', 'easy', true);
 r = raw();
@@ -89,8 +89,13 @@ ok('a released game is untouched by any of this', r.games.uno.total.played === 3
 
 for (let i = 0; i < 3; i++) { G.loadStats(); G.recordResult('uno', 'easy', false); }
 r = raw();
-ok('repeated loads and writes never nest or move records', r.games.cupbaseball.total.played === 22 && r.testGames.cupbaseball.total.played === 23
-  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.cupbaseball) === before);
+ok('repeated loads and writes never nest or move records', r.games.archery.total.played === 22 && r.testGames.archery.total.played === 23
+  && !r.testGames.testGames && !r.games.testGames && JSON.stringify(r.games.archery) === before);
+// Cup Baseball, archived 2026-11-13 (Matt: "remove Cup Baseball from the gamehub and archive it"): its real AND
+// test records stay exactly where they were, through loads and other games' writes (THE LAW).
+ok('archived Cup Baseball: real record kept as it was', JSON.stringify(r.games.cupbaseball.total) === JSON.stringify({ played: 4, won: 1, lost: 3 }) && r.games.cupbaseball.byDiff.easy.played === 4);
+ok('archived Cup Baseball: test record kept as it was', JSON.stringify(r.testGames.cupbaseball.total) === JSON.stringify({ played: 9, won: 2, lost: 7 }) && r.testGames.cupbaseball.byDiff.hard.played === 9);
+ok('archived Cup Baseball: still in the store\'s GAMES and in ARCHIVED_GAMES (out of every total)', G.GAMES.includes('cupbaseball') && G.ARCHIVED_GAMES.includes('cupbaseball'));
 
 // Battle Arena is listed in CARRY_TEST (Matt, 2026-11-13) but is still admin-only: nothing is carried yet.
 r = raw();

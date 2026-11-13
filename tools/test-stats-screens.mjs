@@ -30,7 +30,7 @@ const { v2ScreenFor, screenFor, SK_MACHINES } = UI;
 const IDS = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'sudoku', 'hoops4', 'minesweeper', 'contexto', 'murdoku', 'wayout',
   'gridlock', 'wordweaver', 'tower', 'wordladder', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'yahtzee',
   'dominoes', 'hillclimb', 'battleship', 'skeeball', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'darts', 'flicksoccer', 'archery',
-  'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'golf'];
+  'eightball', 'spellingbee', 'battlearena', 'golf'];
 const BAD = /NaN|undefined|\[object|>null<|Infinity/;
 const render = (id, st, fresh) => { try { return { html: fresh ? v2ScreenFor(id, st, { fresh: true }) : screenFor(id, st) }; } catch (err) { return { err }; } };
 

@@ -1164,14 +1164,6 @@ export const GAME_ART = {
             <rect class="sbt-bg" width="160" height="90" fill="#fff6c2"/>
             ${[[0,0,'A',1],[0,-1,'B',0],[1,-0.5,'E',0],[1,0.5,'L',0],[0,1,'T',0],[-1,0.5,'R',0],[-1,-0.5,'C',0]].map(([x,y,l,c])=>{const cx=80+x*24.6,cy=45+y*27.6;return `<path d="M${cx-16} ${cy} L${cx-8} ${cy-13.86} L${cx+8} ${cy-13.86} L${cx+16} ${cy} L${cx+8} ${cy+13.86} L${cx-8} ${cy+13.86} Z" ${c?'':' class="sbt-cell"'} fill="${c?'#f7da21':'#e6e6e6'}"/><text${c?'':' class="sbt-l"'} x="${cx}" y="${cy+5.5}" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="15" fill="#000">${l}</text>`}).join('')}
           </svg>`,
-  'cup-baseball': `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#1a2230"/>
-            <path d="M62 6 L98 6 L146 90 L14 90 Z" fill="#00a650"/>
-            <path d="M62 6 L98 6 L146 90 L14 90 Z" fill="none" stroke="#f4efe6" stroke-width="2"/>
-            ${[[12,3.6,'HR'],[24,4.4,'3B'],[38,5.3,'2B'],[54,6.4,'1B']].map(([y,w,l])=>`<path d="M${80-w} ${y-w} L${80-w*0.7} ${y+w} L${80+w*0.7} ${y+w} L${80+w} ${y-w} Z" fill="#1f5fa8"/><ellipse cx="80" cy="${y-w}" rx="${w}" ry="${w*0.3}" fill="#f3f0ea"/><text x="${80+w+5}" y="${y+w*0.5}" font-family="system-ui,sans-serif" font-weight="900" font-size="${w*1.6}" fill="#fff">${l}</text>`).join('')}
-            <circle cx="80" cy="76" r="7" fill="#fbfaf6"/>
-            <ellipse cx="80" cy="85" rx="7" ry="2" fill="#000" opacity=".25"/>
-          </svg>`,
   // Battle Arena (2026-10-24, battle-arena/): the Boiler Room, a fire kitten facing a water drop
   // (the game's own creatures, simplified), a row of gems below, each its own SHAPE.
   'battle-arena': `<svg viewBox="0 0 160 90" aria-hidden="true">

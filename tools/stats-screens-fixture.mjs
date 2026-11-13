@@ -41,7 +41,7 @@ export async function buildFixture() {
     for (const [d, w, f] of [['easy', true, 'me'], ['medium', false, 'them'], ['mp', true, 'them']]) R('filler', { first: f }, d, w, { mine: 30, theirs: 26, moves: 22 });
     for (const [d, w, n] of [['easy', true, 2], ['hard', false, 4]]) R('uno', { n }, d, w);
     for (const [d, w, g, f] of [['easy', true, '8', 'me'], ['hard', false, '9', 'them'], ['mp', true, 'ct', 'me']]) R('eightball', { game: g, racks: 1, call: 0, bank: 0, obst: 0, first: f }, d, w);
-    for (const [id, d, w] of [['business', 'easy', true], ['business', 'hard', false], ['parchis', 'pro', true], ['archery', 'easy', true], ['archery', 'mp', false], ['cupbaseball', 'easy', true], ['battlearena', 'hard', false]]) R(id, { first: w ? 'me' : 'them' }, d, w);
+    for (const [id, d, w] of [['business', 'easy', true], ['business', 'hard', false], ['parchis', 'pro', true], ['archery', 'easy', true], ['archery', 'mp', false], ['battlearena', 'hard', false]]) R(id, { first: w ? 'me' : 'them' }, d, w);
     for (const [d, w, tier] of [['medium', true, 'buddy'], ['hard', false, 'world'], ['easy', true, 'buddy'], ['mp', false, 'free']]) R('holdem', { n: 4, tier, speed: 'normal' }, d, w);
     G.recordHoldemHand({ won: true, amt: 12000, score: 5, cat: 7, cards: [48, 49, 50, 51, 44] });
     // Solo games.

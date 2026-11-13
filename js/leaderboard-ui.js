@@ -229,9 +229,6 @@ const GAME_META = [
   // Pool (2026-10-22, eight-ball/): admin only at first; the row ships with the game (the Yahtzee
   // lesson above). isGameOnLauncher keeps its board hidden until Matt releases it.
   { id: 'eightball', labelKey: 'game_title_eightball' },
-  // Cup Baseball (2026-10-23, cup-baseball/): admin only at first; the row ships with the game (the
-  // Yahtzee lesson above). isGameOnLauncher keeps its board hidden until Matt releases it.
-  { id: 'cupbaseball', labelKey: 'game_title_cupbaseball' },
   // Spelling Bee (2026-10-23, spelling-bee/): admin only at first; the row ships with the game (the
   // Yahtzee lesson above). isGameOnLauncher keeps its board hidden until Matt releases it.
   { id: 'spellingbee', labelKey: 'game_title_spellingbee' },

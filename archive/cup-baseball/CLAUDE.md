@@ -1,5 +1,17 @@
 # Cup Baseball — game documentation
 
+> **ARCHIVED 2026-11-13** (Matt: "remove Cup Baseball from the gamehub and archive it. we're not moving
+> forward in building that"). Moved from `cup-baseball/` to `archive/cup-baseball/`; removed from the app:
+> launcher entry (`js/hub.js`), tile art, `game_title_cupbaseball` strings, My Stats tab + its `stdScreen` case,
+> leaderboard GAME_META row, `lb-rules.js` entry, `ADMIN_ONLY` entry, and its tests. It was admin-only and never
+> in sw.js ASSETS. **Stored player history was NOT touched**: `'cupbaseball'` stays in `js/game-stats.js`'s `GAMES`
+> and is in `ARCHIVED_GAMES`; the real record (`games.cupbaseball`), the test record (`testGames.cupbaseball`) and
+> `gamehub.cupbaseball.v1` / `.save.v1` stay on the phones and in `players/<id>` (pinned by
+> `tools/test-admin-only-plays.mjs`). Its imports (`../../cup-pong/`, `../../js/`) only resolve from the old path.
+>
+> **To restore:** revert the archive commit (or move the folder back, bring back everything above from git at
+> `a0fba94`, and drop it from `ARCHIVED_GAMES`).
+
 > **THE LAW applies here.** Player data is never deleted, never lost, never put at risk. THE LAW
 > and its nine working rules live at the top of the root `CLAUDE.md`, which is always loaded
 > alongside this file. Nothing below overrides them.

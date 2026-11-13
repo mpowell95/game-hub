@@ -386,7 +386,7 @@ ok('wordweaver is a SOLO game', A.SOLO.has('wordweaver'));
   ok('board: an unstamped record counts real + test', g1.total.played === 4 && P.wwCleared(g1) === 3 && g1.ww.x === 34);
   const g2 = A.aggregatePlayers({ d1: rec(raw) })[0].games.wordweaver;
   ok('board: a stamped record counts its real record only (never twice)', g2.total.played === 4 && g2.ww.x === 34);
-  ok('board: a game still admin-only is never carried', !G.CARRY_TEST.cupbaseball);
+  ok('board: a game still admin-only is never carried', !G.CARRY_TEST.archery);
 }
 
 // --- released (2026-11-02) ---
