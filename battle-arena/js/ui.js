@@ -551,13 +551,13 @@ class BattleArena {
   showHelp() {
     const el = document.createElement('div');
     el.className = 'gh-overlay ba-overlay';
-    const lines = ['helpSwap', 'helpCharge', 'helpEx', 'helpFull', 'helpFour', 'helpFive', 'helpBerry', 'helpBomb', 'helpBoom', 'helpSudden', 'helpStart'];
+    const lines = ['helpSwap', 'helpCharge', 'helpFull', 'helpBerry', 'helpBomb'];
     el.innerHTML = `
       <div class="gh-modal ba-help" role="dialog" aria-modal="true" aria-label="${t('help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <p class="ba-help-goal">${t('helpGoal')}</p>
         ${helpSVG()}
-        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : '<i class="ba-help-dot" aria-hidden="true"></i>'}<span>${t(k)}</span></p>`).join('')}
+        ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' ? gemSVG('bomb', 5) : '<i class="ba-help-dot" aria-hidden="true"></i>'}<span>${t(k)}</span></p>`).join('')}
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
@@ -2032,7 +2032,6 @@ class BattleArena {
         <div class="ba-result-strip"><span class="ba-result-av">${escapeHTML(this.avatars[w])}</span><span class="ba-result-title">${escapeHTML(title)}</span></div>
         ${this.canon && this.canon.resigned != null ? `<p class="ba-result-why">${escapeHTML(this.canon.timedOut ? t('timedOut') : t('resigned', { name: this.names[l] }))}</p>` : ''}
         <div class="ba-result-lose">
-          <span class="ba-result-luck">${escapeHTML(t('betterLuck', { name: this.names[l] }))}</span>
           <div class="ba-result-losers"><span class="ba-result-av">${escapeHTML(this.avatars[l])}</span>${s.sides[l].mons.map((m, i) => `<div class="ba-result-hex${l === ME ? ' ba-face-left' : ''}"><span class="ba-result-emo">${i ? '😥' : '😭'}</span>${monsterSVG(m.id, m.evo)}</div>`).join('')}</div>
           <div class="ba-result-actions">
             ${this.link ? `<button type="button" class="gh-btn gh-btn--primary" data-role="done">${t('done')}</button>` : `

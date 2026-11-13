@@ -41,7 +41,7 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
   every time (`FIVE_HEAL`).
 - **A fair start** (Matt, 2026-10-28: a first-turn knockout "should never be possible", nor starting your first turn
   on 1 HP): a side with `turns` 0, or bitten by a curse as its first turn starts, cannot go below `OPENING_FLOOR`
-  (40, half its HP; `damage`, event `floored`). In How to play (`helpStart`). No new state field; no stored online
+  (40, half its HP; `damage`, event `floored`). Not in How to play since 2026-11-13 (cut to 5 lines). No new state field; no stored online
   match or open room existed when both rules went in. Before: ~1 in 90 hard openings was a KO, one turn ran 220 moves.
 - **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
   one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
@@ -198,8 +198,9 @@ old head-to-head until it next opens (none exists today).
   step. `node tools/test-battlearena-back.mjs` (real touch swipes, needs a dev server).
 - Review fixes: difficulty buttons 44px; Evolve pill 15px; the HUD clears the hub's "‹ Hub" (`.ba-hubspace` 84px, `.ba-who` 46px);
   How to play is an outlined 17px button; help lines share one left edge with an icon or dot gutter; the menu's other actions are
-  outlined; one X look on every popup. Kept on purpose: the home is the game's own full-bleed arena (not a centred card), the end
-  card's "Better luck next time, <loser>" line, no heading on the Host draft (same draft as vs the computer).
+  outlined; one X look on every popup. Kept on purpose: the home is the game's own full-bleed arena (not a centred card), no
+  heading on the Host draft (same draft as vs the computer). The end card's "Better luck next time, <loser>" line was removed
+  2026-11-13 (Matt: "build it").
 
 ## Launcher tile (2026-11-13, Matt: "C is the best. go with it.")
 
@@ -219,3 +220,9 @@ Emberkit. A new tile is drawn from the game's own art, never a hand-made copy of
   bursts at 0). The HUD's small shield badge is gone.
 - **A match opens behind SHUT doors**: renderBattle puts them up on the first frame, `stageIntro` shows "Boiler Room" on
   them, then they open (it used to show the board, then the name, then close and open the doors).
+
+## How to play cut to 5 lines (2026-11-13, Matt: "build it")
+
+84 words EN / 88 ES down to 37 / 37: goal, then Swap 2 tiles, Gems charge their monster, Full bar = special, 4 berries,
+bomb (`showHelp` `lines`). Dropped from How to play (rules unchanged): 3 fire example, match 4/5, the 40 HP opening
+floor, a bomb at 0 (still on the stage card), turn 20. Each line measured to fit one row at 402px in both languages.
