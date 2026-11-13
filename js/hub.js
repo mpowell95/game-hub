@@ -82,7 +82,7 @@ const TOUR_FB = {
 // the same Report a bug form as the launcher, with this game preselected. Opt-in per game: add a hub
 // id here once that game's top-right corner is checked clear on its setup AND play screens; anything of
 // the game's own in that corner is moved by a `html.gh-gamebug` rule in css/hub.css (not the game's files).
-const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver']);
+const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder']);
 
 const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
@@ -810,6 +810,22 @@ export const GAMES = [
     accent: '#4a5aa8',
     art: GAME_ART['tower'],
     released: '2026-11-13',         // Matt: "release it"; the New pill and the New games bubble count from here
+  },
+  {
+    // Word Ladder (2026-11-13, Matt: "start a new session to build Word Ladder"): change one letter at a time from a
+    // start word to a target word (word-ladder/CLAUDE.md). A level ladder and a daily ladder, English and Spanish.
+    // Hub id = folder `word-ladder`; stats id `wordladder`.
+    id: 'word-ladder',
+    added: '2026-11-13',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Word Ladder', es: 'Escalera de palabras' },
+    blurb: { en: 'Change one letter at a time to reach the target word.',
+      es: 'Cambia una letra cada vez hasta llegar a la palabra meta.' },
+    module: '../word-ladder/js/ui.js',
+    immersive: true,
+    accent: '#24406f',
+    art: GAME_ART['word-ladder'],
+    // ADMIN ONLY until Matt says "release it": no `released` date (the New pill and New games bubble read it).
+    devOnly: true,
   },
 ];
 

@@ -55,6 +55,7 @@ export const LB_RULES = {
   uno: { by: 'wins' },
   wayout: { by: 'points' },
   wordweaver: { by: 'points' },
+  wordladder: { by: 'solves' },   // admin only: levels finished (no points yet)
   yahtzee: { by: 'wins' },
 };
 

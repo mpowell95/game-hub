@@ -1,0 +1,67 @@
+# Word Ladder — word-ladder/CLAUDE.md
+
+> **THE LAW** (root `CLAUDE.md`): player data is never deleted, never lost, never put at risk.
+> Read it there before touching anything that records or stores. The working rules are in `js/CLAUDE.md`.
+
+Change one letter at a time, every step a real word, from a start word to a target (COLD, CORD, WORD, WARD, WARM).
+Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONLY (`devOnly: true`) until Matt says
+"release it"**: no `released` date, no announcement, no popup, no New bubble, no Game Hub message.
+
+## Hub integration
+
+| | |
+|---|---|
+| Folder / hub id / stats id | `word-ladder/` / `word-ladder` / `wordladder` |
+| Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
+| Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
+| Settings | `gamehub.wordladder.v1` `{ lang }` (puzzle language; nothing saved = the hub's language) |
+| Saves | `gamehub.wordladder.save.v1` `{ en, es: attempt }`; `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, p, chain, moves, hints, sel, done, recorded }` |
+| `isInProgress()` | always `false`: every move is saved, leaving is lossless |
+
+## Rules (`js/engine.js`, pure)
+
+- Tap a letter of the current word (gold outline + caret), then a key. The new word must change exactly that one
+  letter and be on the word list, else "Not a word" and a shake. A letter already right (same as the target's at that
+  place) is TEAL WITH A DOT (never colour alone). The target row has dashed gold tiles and a flag.
+- **Moves count every change, Undo too** (an undo is a move back). Par = the fewest changes possible.
+- **Stars**: moves at par 3, par +1 or +2 = 2, more = 1; 1 hint caps at 2, 2+ hints at 1 (`starsFor`, = `wlStars` in
+  `js/game-stats.js`). **Hint** = plays the next word on a shortest path from where you are (the commonest one) and
+  counts as a move.
+- **One ladder per language, played in order** (no replays, no level picker): bands by level number (`BANDS`):
+  1-100 Easy, 101-250 Medium, 251-400 Hard, 401-500 Expert (the stats `byDiff` bucket). Next level = the attempt in
+  progress, else one past the highest completed in the stats map. Past 500: "More levels soon".
+- **Daily**: one ladder a day per language, the same for everyone: the phone's LOCAL date of `bestNow()`
+  (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
+  list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
+- Desktop: letters type, ← → move the caret, Backspace = Undo.
+
+## Data (GENERATED: `node tools/build-word-ladder-data.mjs`, never hand-edited)
+
+`data/<en|es>/words.json` (accepted words, 3-5 letters, Word Weaver's cleaned grid + extra words: no names, no bad
+words; grid words first, most common first), `levels.json` (500), `daily.json` (730). A level = `{ s, t, p, h }`.
+**Par is the true minimum over EVERY accepted word** (so nobody beats it) and a path of that length exists through
+Word Weaver's GRID words alone (common, hand-checked); start, target and the hint path are grid words.
+`node word-ladder/js/data-test.js` (~1 min) checks every level and day of both languages by breadth-first search.
+**APPEND-ONLY once released**: progress is by level number.
+
+## Stats (`wl` sub-counter)
+
+`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
+stars Math.max, moves and hints Math.min, earliest time). First completion = one play + win in its band (`daily` for the
+daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (levels, stars,
+at par, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`). Leaderboard rule `solves`
+(`js/lb-rules.js`); no points yet. **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
+decide `CARRY_TEST` with Matt, add every file to `sw.js` ASSETS with `data/**` in LAZY, bump CACHE.
+
+## Layout
+
+Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it:
+back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes from the
+room; earlier words folded under a ⋮ when they do not fit). **Keys are 10 across like a phone keyboard, so narrower
+than 44px on a 360px phone** (a documented departure from the 44x44 floor; 50px tall).
+
+## Tests
+
+`node word-ladder/js/data-test.js`, `node tools/test-game-conventions.mjs`, `node tools/test-game-modes.mjs`,
+`node tools/test-i18n-strings.mjs`, `node tools/players-agg.test.mjs`, `node tools/test-lb-rules.mjs`.
+The localhost-only seam `window.__wlTest` (`state()`, `type(word)`, `hint()`).
