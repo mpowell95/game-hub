@@ -29,7 +29,7 @@
   background: rgba(255,255,255,.08); font-size: 20px; font-weight: 800;
   display: flex; align-items: center; justify-content: center; gap: 10px; }
 .nm-root .nm-btn-main { background: var(--nm-gold); color: #10203c; border-color: var(--nm-gold); font-size: 22px; }
-.nm-root .nm-btn-n { font-weight: 800; opacity: .85; }
+.nm-root .nm-btn-n { font-weight: 800; }
 .nm-root .nm-ok { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
   background: var(--nm-on); color: #10203c; font-style: normal; }
 .nm-root .nm-help { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
@@ -52,9 +52,9 @@
   display: flex; flex-direction: column; line-height: 1.15; }
 .nm-root .nm-box span { font-size: 15px; font-weight: 700; }
 .nm-root .nm-box b { font-size: 24px; }
-.nm-root .nm-stage { flex: 1 1 auto; min-height: 0; margin-top: 16px; position: relative; display: flex; align-items: center; justify-content: center;
+.nm-root .nm-stage { flex: 1 1 auto; min-height: 0; margin-top: 16px; position: relative; display: flex; align-items: flex-start; justify-content: center;
   touch-action: none; }
-.nm-root .nm-board { position: relative; width: var(--nm-size); height: var(--nm-size); border-radius: 16px; background: var(--nm-board);
+.nm-root .nm-board { margin-top: var(--nm-top, 0px); position: relative; width: var(--nm-size); height: var(--nm-size); border-radius: 16px; background: var(--nm-board);
   display: grid; grid-template-columns: repeat(4, var(--nm-cell)); grid-template-rows: repeat(4, var(--nm-cell)); gap: var(--nm-gap); padding: var(--nm-gap);
   touch-action: none; }
 .nm-root .nm-cell { border-radius: 10px; background: var(--nm-cellbg); }
@@ -97,7 +97,7 @@
 
 /* --- game over --- */
 .nm-root .nm-over { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center;
-  background: rgba(10,14,24,.55); border-radius: 16px; }
+  background: rgba(10,14,24,.3); border-radius: 16px; }
 .nm-root .nm-card { position: relative; width: calc(100% - 16px); max-width: 340px; border-radius: 20px; background: #fff; color: #10203c;
   padding: 20px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
 .nm-root .nm-x { position: absolute; top: 8px; right: 8px; background: rgba(16,32,60,.08); color: #10203c; }
@@ -120,7 +120,7 @@
 .nm-root .nm-sheet { position: relative; width: 100%; max-width: 400px; border-radius: 20px; background: #1e2638; color: var(--nm-on);
   padding: 16px 18px 16px; border: 2px solid rgba(255,255,255,.25); display: flex; flex-direction: column; gap: 8px; }
 .nm-root .nm-sheet .nm-x { background: rgba(255,255,255,.12); color: var(--nm-on); }
-.nm-root .nm-sheet p { margin: 0; font-size: clamp(15px, 4.4vw, 17px); line-height: 1.4; white-space: nowrap; }
+.nm-root .nm-sheet p { margin: 0; font-size: 17px; line-height: 1.4; white-space: nowrap; }
 .nm-root .nm-sheet .nm-how-b { font-weight: 800; font-size: clamp(17px, 4.8vw, 18px); }
 .nm-root .nm-sheet .nm-how-cap { text-align: center; font-weight: 700; }
 .nm-root .nm-how-svg { display: block; margin: 4px auto 0; max-width: 100%; height: auto; }

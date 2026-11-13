@@ -50,6 +50,12 @@ Score / Best, How to play. The board is the biggest square the room allows (`_fi
 `transform` (120 ms); merged tiles pop, new tiles grow. Reduced motion: the slide stays (80 ms; it IS the game), pop /
 grow / the no-move bump go.
 
+**UI review (2026-11-13, an independent reviewer; Matt: "Have another chat review the UI/UX")**: back navigation and every
+flow passed. Fixed: the board sits a third of the spare height down (it floated centred), How to play text at 17px with
+shorter lines (one row each at 320px, EN and ES), New game? makes Keep playing the gold button, Continue has no number,
+the daily's game-over card says "No moves left" too, a lighter scrim so the final board shows. The game's own back
+arrow stays (Part 0: under the Hub button, never removed).
+
 ## Stats (`nm` sub-counter)
 
 `nm` = `{ games, moves, score }` (add), `best` (Classic), `bestDaily`, `bestTile` (Math.max), `dl: { 'YYYY-MM-DD': { sc, tl,

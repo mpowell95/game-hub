@@ -212,7 +212,7 @@ class NumberMerge {
           <h1 class="nm-title">${esc(t('title'))}</h1>
           ${best ? `<div class="nm-bestline">${SVG.star}<span>${esc(t('best'))}</span><b>${fmt(best, this.lang)}</b></div>` : ''}
           ${going
-            ? `<button type="button" class="nm-btn nm-btn-main" data-act="continue">${esc(t('cont'))} <b class="nm-btn-n">${fmt(c.st.score, this.lang)}</b></button>
+            ? `<button type="button" class="nm-btn nm-btn-main" data-act="continue">${esc(t('cont'))}</button>
                <button type="button" class="nm-btn" data-act="new">${esc(t('new_game'))}</button>`
             : `<button type="button" class="nm-btn nm-btn-main" data-act="classic">${esc(t('play'))}</button>`}
           <button type="button" class="nm-btn nm-btn-daily${dDone ? ' is-done' : ''}" data-act="daily" aria-label="${esc(dDone ? t('daily_done_aria', { n: fmt(dScore, this.lang) }) : t('daily_aria'))}">${SVG.cal}<span>${esc(t('daily'))}</span>${dDone ? `<i class="nm-ok">${SVG.check}</i><b class="nm-btn-n">${fmt(dScore, this.lang)}</b>` : ''}</button>
@@ -285,6 +285,8 @@ class NumberMerge {
     this.root.style.setProperty('--nm-size', size + 'px');
     this.root.style.setProperty('--nm-gap', gap + 'px');
     this.root.style.setProperty('--nm-cell', cell + 'px');
+    // Spare height: a third above the board, two thirds below (centred looked like it floated, 2026-11-13 review).
+    this.root.style.setProperty('--nm-top', Math.max(0, Math.round((H - size) / 3)) + 'px');
   }
 
   /** Draw every tile where it stands now. `fx` = { merged: [index], at } for the pop and the new tile. */
@@ -364,7 +366,7 @@ class NumberMerge {
     card.className = 'nm-over';
     card.innerHTML = `<div class="nm-card" role="dialog" aria-label="${esc(t('over'))}">
       <button type="button" class="nm-icon nm-x" data-act="setup" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
-      <h2 class="nm-card-h">${esc(c.kind === 'daily' ? t('daily') : t('over'))}</h2>
+      <h2 class="nm-card-h">${esc(t('over'))}</h2>
       <div class="nm-big">${fmt(c.st.score, this.lang)}</div>
       ${isBest ? `<div class="nm-newbest">${SVG.star}<span>${esc(t('new_best'))}</span></div>` : ''}
       <div class="nm-facts">
@@ -409,8 +411,8 @@ class NumberMerge {
       <button type="button" class="nm-icon nm-x" data-act="close-sheet" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
       <h2 class="nm-card-h">${esc(t('end_q'))}</h2>
       <p class="nm-how-b">${esc(t('end_t', { n: fmt(c ? c.st.score : 0, this.lang) }))}</p>
-      <button type="button" class="nm-btn nm-btn-main" data-act="end-new">${esc(t('new_game'))}</button>
-      <button type="button" class="nm-btn nm-btn-dark" data-act="close-sheet">${esc(t('keep'))}</button>
+      <button type="button" class="nm-btn nm-btn-main" data-act="close-sheet">${esc(t('keep'))}</button>
+      <button type="button" class="nm-btn" data-act="end-new">${esc(t('new_game'))}</button>
     </div>`;
     this.root.appendChild(ov);
     this._sheetPrev = this.screen;
