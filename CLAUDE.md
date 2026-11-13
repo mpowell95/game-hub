@@ -150,10 +150,6 @@ A code alone must stop being an identity. Step A LIVE (v1465, invisible): each c
 (`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. Step B (PINs for a new phone, rules
 lock on `msgAuth` and `players/`) is planned, NOT built, player-visible: needs Matt's "ship it". `docs/SECURITY-DEVICE-KEYS.md`.
 
-## Open handoff (2026-11-13): Battle Arena
-
-"Pick up where we left off on Battle Arena" = **`docs/HANDOFF-BATTLE-ARENA-2026-11-13.md`**. Delete this section once its open items are closed.
-
 ## Open handoff (2026-10-30)
 
 "Let's pick up where we just left off" = **`docs/HANDOFF-KING-OF-GAMES-2026-10-30.md`** (reader key, King of Games'

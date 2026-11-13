@@ -19,16 +19,13 @@ Start by reading `battle-arena/CLAUDE.md` (every rule and fix below is summarise
   - iPhone notes: home centred on tall phones (`spreadHome`), "Your Turn" in the name slot, bubble shield with its number
     (`paintShield`), doors shut from the first frame with "Boiler Room" on them. PR #1639.
 
-## Open items (nothing below is built)
+## Open items: all closed (2026-11-13, second session)
 
-1. **How to play is 84 words (EN), 88 (ES).** Proposed ~35 words, 5 lines: "Knock the other team to 0 HP." / "Swap 2 tiles
-   to line up 3." / "Gems charge their monster. Full bar = special." / "4 berries: tap a monster to evolve." / "Match next
-   to a bomb: it blows." Offered to Matt; he has not said "build it".
-2. **End card line** "Better luck next time, <loser>" on a win: a reviewer said it can read as a loss message. Kept; Matt
-   has not decided.
-3. **Not tested on two real phones**: live rooms and challenges are proven headlessly (fake Firebase) only.
-4. **Release** only on Matt's "release it": checklist at the end of `battle-arena/CLAUDE.md`, "Release review".
-5. **Rules version**: any `engine.js` change after release must stamp `rv: 2` on new matches and keep v1's paths.
+1. How to play cut to 37 words (Matt: "build it"). Done.
+2. "Better luck next time" line removed from the end card (Matt: "build it"). Done.
+3. Two-phone test: Matt: "you can't test this so remove this as an open item". Removed.
+4. Release: Matt: "not applicable yet". Checklist stays in `battle-arena/CLAUDE.md`, "Release review".
+5. Rules version: a standing rule, in `battle-arena/CLAUDE.md`.
 
 ## Tests
 
