@@ -59,8 +59,6 @@ const TABS = [
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   // Word Ladder (2026-11-13, word-ladder/): admin only, devOnly like the hub's entry. Its `wl` sub-counter: wordLadderScreen.
   { id: 'wordladder', labelKey: 'game_title_wordladder', devOnly: true },
-  // Number Merge (2026-11-13, number-merge/): admin only, devOnly like the hub's entry. Its `nm` sub-counter: numberMergeScreen.
-  { id: 'numbermerge', labelKey: 'game_title_numbermerge', devOnly: true },
   // Tower Stack (2026-11-01, tower/; released 2026-11-13). Its `tw` sub-counter: towerScreen.
   { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
@@ -131,10 +129,10 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
   spellingbee: 'spelling-bee', battlearena: 'battle-arena',
-  wordweaver: 'word-weaver', wordladder: 'word-ladder', numbermerge: 'number-merge',
+  wordweaver: 'word-weaver', wordladder: 'word-ladder',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', numbermerge: 'lb_unit_points', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -1407,7 +1405,6 @@ function hasPlays(id, rec) {
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
   if (id === 'tower') return !!(rec.tw && rec.tw.games);
-  if (id === 'numbermerge') return !!(rec.nm && rec.nm.games);
   if (id === 'wordladder') return ((rec.total || {}).played | 0) > 0 || !!(rec.wl && (Object.keys(rec.wl.lv || {}).length || Object.keys(rec.wl.es || {}).length || Object.keys(rec.wl.dl || {}).length));
   if (id === 'cuppong') return ((rec.total || {}).played | 0) > 0 || !!(rec.cp && rec.cp.soloRacks);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
@@ -1430,7 +1427,6 @@ function headlineOf(id, rec) {
   if (id === 'hillclimb') return { n: (rec.hc && rec.hc.bestDistance) | 0, unitKey: unitKeyOf(id) };
   if (id === 'brickblitz') return { n: (rec.bz && rec.bz.bestScore) | 0, unitKey: unitKeyOf(id) };
   if (id === 'tower') return { n: (rec.tw && rec.tw.best) | 0, unitKey: unitKeyOf(id) };
-  if (id === 'numbermerge') return { n: (rec.nm && rec.nm.best) | 0, unitKey: unitKeyOf(id) };
   if (id === 'contexto') return { n: (rec.ct && rec.ct.solved) | 0, unitKey: unitKeyOf(id) };
   // Lifetime points, not the best single rack - the same fix leaderboard-ui.js's skPointsAt
   // already made for the Skeeball board's own Points sort (2026-09-01, Matt: "Points should
@@ -1595,21 +1591,6 @@ function wordLadderScreen(rec) {
       <div class="gs-tally"><b>${stars}</b><span>${tf('gs_wl_stars', 'Stars')}</span></div>
       <div class="gs-tally"><b>${three}</b><span>${tf('gs_wl_three', 'At par')}</span></div>
       <div class="gs-tally"><b>${daily.length}</b><span>${tf('gs_wl_daily', 'Daily')}</span></div>
-    </div>
-    ${diffTable(rec && rec.byDiff)}`;
-}
-
-/** Number Merge (2026-11-13): the `nm` sub-counter (js/game-stats.js recordNumberMerge). */
-function numberMergeScreen(rec) {
-  const nm = (rec && rec.nm) || {};
-  if (!(nm.games | 0)) return emptyState(tf('game_title_numbermerge', 'Number Merge'));
-  const days = nm.dl && typeof nm.dl === 'object' ? Object.keys(nm.dl).length : 0;
-  return `
-    <div class="gs-tallies is-4">
-      <div class="gs-tally"><b>${(nm.best | 0).toLocaleString()}</b><span>${tf('gs_nm_best', 'Best score')}</span></div>
-      <div class="gs-tally"><b>${(nm.bestTile | 0).toLocaleString()}</b><span>${tf('gs_nm_tile', 'Top tile')}</span></div>
-      <div class="gs-tally"><b>${nm.games | 0}</b><span>${tf('gs_nm_games', 'Games')}</span></div>
-      <div class="gs-tally"><b>${days}</b><span>${tf('gs_nm_daily', 'Daily')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
 }
@@ -1861,7 +1842,6 @@ function screenForBase(id, st) {
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
   if (id === 'tower') return towerScreen(rec);
-  if (id === 'numbermerge') return numberMergeScreen(rec);
   if (id === 'wordladder') return wordLadderScreen(rec);
   if (id === 'airhockey') return airHockeyScreen(rec);
   if (id === 'cuppong') return cupPongScreen(rec);

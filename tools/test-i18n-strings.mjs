@@ -55,7 +55,6 @@ const DICTS = [
   { name: 'battle-arena/js/strings.js', path: './battle-arena/js/strings.js' },
   { name: 'word-weaver/js/strings.js', path: './word-weaver/js/strings.js' },
   { name: 'word-ladder/js/strings.js', path: './word-ladder/js/strings.js' },
-  { name: 'number-merge/js/strings.js', path: './number-merge/js/strings.js' },
   { name: 'tower/js/strings.js', path: './tower/js/strings.js' },
 ];
 

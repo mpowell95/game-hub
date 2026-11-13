@@ -1698,3 +1698,7 @@ Not fixed (Matt chose 1, 2, 4): Chinchon's two decks (3.8 MB warmed to every pho
 ## 2026-11-13: Cup Baseball archived
 
 Matt: "remove Cup Baseball from the gamehub and archive it. we're not moving forward in building that". Folder moved to `archive/cup-baseball/` (restore steps in its CLAUDE.md); every app trace removed; `cupbaseball` kept in `GAMES` and added to `ARCHIVED_GAMES`, so every stored play (real and test records) stays on the phones and in `players/`.
+
+## 2026-11-13: Number Merge archived
+
+Built the same day (admin only). Matt, on learning it is the 2048 genre: "remove this from the gamehub". Folder moved to `archive/number-merge/` (restore steps in its CLAUDE.md); every app trace removed (launcher, tile art, strings, My Stats tab and screen, leaderboard row and metric, lb rules, ADMIN_ONLY, the `nm` recorder and merge branch, its test); `numbermerge` kept in `GAMES` and added to `ARCHIVED_GAMES`, so any stored play (real and test records, the `nm` sub-counter) stays on the phones and in `players/`.

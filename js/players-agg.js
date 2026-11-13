@@ -9,14 +9,14 @@
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame, wlBest, nmDayBest } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame, wlBest } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, adjustModesGame, withHandAdjust, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower', 'wordladder', 'numbermerge']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower', 'wordladder']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -799,16 +799,6 @@ export function aggregatePlayers(all, corrections) {
           if (!sm || typeof sm !== 'object' || Array.isArray(sm)) continue;
           const dm = dst.wl[mk] || (dst.wl[mk] = {});
           for (const k of Object.keys(sm)) dm[k] = wlBest(dm[k], sm[k]);
-        }
-      } else if (g === 'numbermerge' && src.nm) {
-        // Number Merge (2026-11-13). Counters ADD; every best takes Math.max; a daily game per day, the better kept whole.
-        if (!dst.nm) dst.nm = { games: 0, moves: 0, score: 0, best: 0, bestDaily: 0, bestTile: 0, dl: {} };
-        for (const k of ['games', 'moves', 'score']) dst.nm[k] = (dst.nm[k] | 0) + (src.nm[k] | 0);
-        for (const k of ['best', 'bestDaily', 'bestTile']) dst.nm[k] = Math.max(dst.nm[k] | 0, src.nm[k] | 0);
-        const sd = src.nm.dl;
-        if (sd && typeof sd === 'object' && !Array.isArray(sd)) {
-          if (!dst.nm.dl) dst.nm.dl = {};
-          for (const k of Object.keys(sd)) dst.nm.dl[k] = nmDayBest(dst.nm.dl[k], sd[k]);
         }
       } else if (g === 'tower' && src.tw) {
         // Tower (2026-11-01). Counters ADD; every best (overall, per difficulty, streak) takes Math.max.
