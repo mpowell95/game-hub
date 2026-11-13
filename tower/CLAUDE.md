@@ -5,7 +5,8 @@
 > which is always loaded alongside this file (full rule rationale: `js/CLAUDE.md`).
 
 Stack sliding blocks as high as you can (Matt, 2026-11-01). Built from Matt's approved mockups
-(`docs/mockups/tower/`, branch `mockup/tower`). **Admin only (`devOnly`) until Matt releases it.**
+(`docs/mockups/tower/`, branch `mockup/tower`). **Released 2026-11-13 (Matt: "release it"); its test plays were carried into the
+real record once (`CARRY_TEST`, stamp `carried.tower`).** The release steps below are kept as the record of what was done.
 
 **At release, TEST PLAYS COUNT (Matt, 2026-11-12: "Yes test plays should count")**: the release commit adds
 `tower: true` to `CARRY_TEST` (`js/game-stats.js`; its combiner `combineTowerRecords` is already in `CARRY_COMBINE`,
@@ -16,7 +17,7 @@ his "release it".
 **The release commit, every edit (checked by the 2026-11-12 reviews; real records held 0 Tower plays on 105 records that
 day, so the carry cannot double count):** (1) `js/hub.js`: drop `devOnly`, add `released`; (2) `js/game-stats.js`: remove
 `tower` from `ADMIN_ONLY`, add `tower: true` to `CARRY_TEST`; (3) `js/game-stats-ui.js` TABS: drop `devOnly`; (4) `sw.js`
-ASSETS: add `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
+ASSETS: add `./tower/`, `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
 `tools/validate-sw-assets.mjs`, bump CACHE; (5) `tools/test-admin-only-plays.mjs` and `tools/test-word-weaver.mjs` use Tower
 as their admin-only example: point them at another admin-only game (archery, cup-baseball); (6) docs (here + root table);
 (7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. The New games bubble (root CLAUDE.md) then shows it to everyone for 7 days from its `released` date, on its own. **Order (review 4):
@@ -112,6 +113,12 @@ rules yet (cheap candidates: perfects <= blocks, bestStreak <= perfects, bestByD
   (only improves). Separate from `recordTower` ON PURPOSE: a play-log row's arguments may be at most 1600 chars and a
   tall tower's shape is longer (a refused row would sit in the queue). Merged per person = the tallest
   (`players-agg.js`); voided with the other bests (`stats-corrections.js`).
+
+- **Leaderboard: Best game | Total (2026-11-13, Matt: "a spot so you can see total levels built at each difficulty. Gold
+  is not awarded out for this, but it should be similar")**: a second tab row on the v2 board (`lb2Tabs`, state `by`:
+  'points' | 'total', kept across the difficulty tabs, Skeeball's words). Total = blocks stacked (`twTotalAt`: All =
+  `tw.blocks`; a difficulty = byMode `hs` there, saved from 2026-11-06, so runs before that count in All only), runs
+  under it, same total = fewer runs higher, plain "#1" ranks (`noPodium`), never the standing or Medal Count.
 
 ## Tests
 
