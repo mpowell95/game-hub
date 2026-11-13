@@ -43,6 +43,14 @@ const OPTIONS = {
       ${burst(80, 36, 13, '#ffd36a', 9)}${burst(80, 36, 7, '#fff8dc', 9)}
       ${['fire', 'water', 'spark', 'leaf', 'shadow'].map((k, i) => gem(k, 41 + i * 16, 73, 14)).join('')}
     </svg>`,
+  // A2 (2026-11-13, Matt: "2 versions of A and 2 versions of C"): A readable at tile size. The monsters moved in from
+  // the corners (the "New" tag top left, the heart top right), a bigger clash spark, bigger gems.
+  A2: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 62 })}
+      ${tank(47, 59, 22)}${tank(113, 59, 22)}
+      ${mon('emberkit', false, 20, 12, 50)}${mon('driplet', false, 90, 12, 50, true)}
+      ${burst(80, 38, 12, '#ffd36a', 9)}${burst(80, 38, 6, '#fff8dc', 9)}
+      ${['fire', 'water', 'spark', 'leaf', 'shadow'].map((k, i) => gem(k, 33 + i * 19.5, 70, 18)).join('')}
+    </svg>`,
   // B: the special attack: Blazelynx (Emberkit evolved) leaps, a fire blast hits Driplet.
   B: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false })}
       ${tank(126, 64, 22)}
@@ -84,8 +92,8 @@ const OPTIONS = {
 };
 OPTIONS.NOW = GAME_ART['battle-arena'];
 
-const ORDER = ['NOW', 'A', 'B', 'C', 'C2', 'D'];
-const LABEL = { NOW: 'Now', A: 'A', B: 'B', C: 'C', C2: 'C2', D: 'D' };
+const ORDER = ['A', 'A2', 'C', 'C2'];
+const LABEL = { A: 'A', A2: 'A2', C: 'C', C2: 'C2' };
 const tile = (svg, name, tag) => `<div class="cell"><div class="art">${svg}${tag ? `<span class="pill${tag === 'New' ? ' new' : ''}">${tag}</span>` : ''}<span class="fav">♡</span></div><div class="name">${name}</div></div>`;
 const row = (svg) => tile(GAME_ART['ball-run'], 'Ball Run') + tile(GAME_ART.baseball, 'Baseball', 'Test') + tile(svg, 'Battle Arena', 'New');
 const sec = (k) => `<section><h2>${LABEL[k]}</h2>
