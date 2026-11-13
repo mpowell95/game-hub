@@ -607,6 +607,13 @@ never crash.
   first open stamps the time, mirrored as `players/<id>/hubMsgs` (a report); Admin → **Game Hub
   messages** shows Read <time> / Not yet per recipient.
 
+## New games bubble (2026-11-13, Matt: "yes i want that. Make sure it opens the new game"; `docs/mockups/new-games/bubble.html`)
+
+The your-turn bubble's box on the tab bar, NO pointer: "New game / <name>" or "N new games / A, B +n", for launcher games inside
+their New window (7 days, `js/new-badge.js`) this device has not opened or put away (`gamehub.newDock.v1`, a preference). Tap =
+the newest one, as its tile (a launch-out game follows its link); X = all away; a your-turn / game-over bubble always wins the
+spot (`js/hub.js` `_paintNewDock`). Admin devices also preview `NEW_DOCK_PREVIEW` (Tower Stack); drop an id at its release.
+
 ## The compact layout (2026-10-17)
 
 **Compact is the ONLY layout since 2026-11-10 (Matt: "should be the default and only available layout now")**: `getLayout()` always

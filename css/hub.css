@@ -959,6 +959,8 @@ html.gh-compact:not(.gh-ingame) .hub-tabs {
 html.gh-touring .hub-dock,
 body:has(.gs-overlay, .lb2, .cx-overlay, .gh-overlay, .ann-overlay) .hub-dock { display: none; }
 @media (prefers-reduced-motion: reduce) { .hub-dock { animation: none; } }
+/* The new-games bubble (js/hub.js _paintNewDock, 2026-11-13): the same box, no pointer (Matt's mockup). */
+.hub-dock.is-new::after { display: none; }
 /* Each waiting tile: a yellow ring AND crossed swords (shape as well as colour). */
 .hub-cell.is-turnring .hub-card-art { outline: 3px solid #ffce3a; outline-offset: 2px; }
 .hub-turnmark {

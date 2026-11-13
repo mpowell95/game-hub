@@ -19,7 +19,7 @@ day, so the carry cannot double count):** (1) `js/hub.js`: drop `devOnly`, add `
 ASSETS: add `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
 `tools/validate-sw-assets.mjs`, bump CACHE; (5) `tools/test-admin-only-plays.mjs` and `tools/test-word-weaver.mjs` use Tower
 as their admin-only example: point them at another admin-only game (archery, cup-baseball); (6) docs (here + root table);
-(7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. **Order (review 4):
+(7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks; (9) `js/hub.js` `NEW_DOCK_PREVIEW`: remove `'tower'` (the New games bubble then shows it to everyone for its 7 days by its `released` date). **Order (review 4):
 deploy the commit FIRST, check Matt's devices are on the new build, and only then (if at all) flip the admin live switch**:
 the switch alone sends phones still on the old build to the empty real record before they have the carry (bests read 0
 until they update; nothing lost). `js/integrity.js` `GAME_NAMES` already has `tower` (2026-11-13); Tower has no integrity
