@@ -104,6 +104,11 @@ export function cleanAttempt(a, level, dict) {
   // for a 4-move ladder, one move carried over from the old LIES puzzle).
   if (a && Array.isArray(a.chain) && a.chain.length && String(a.chain[0]) !== level.s) a = null;
   if (a && a.s && String(a.s) !== level.s) a = null;
+  // A finished, RECORDED attempt is kept as saved even if a word has since left the list (it was legal when played).
+  if (a && a.done && a.recorded && Array.isArray(a.chain) && a.chain[a.chain.length - 1] === level.t && a.chain.length >= 2) {
+    const n0 = (v) => Math.max(0, Math.floor(Number(v) || 0));
+    return { chain: a.chain.map(String), moves: Math.max(n0(a.moves), a.chain.length - 1), hints: n0(a.hints), done: true, recorded: true };
+  }
   const chain = [level.s];
   try {
     const c = Array.isArray(a && a.chain) ? a.chain : [];

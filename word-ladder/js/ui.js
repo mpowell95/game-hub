@@ -260,7 +260,7 @@ class WordLadder {
           ${heroSVG()}
           <h1 class="wl-title">${esc(t('title'))}</h1>
           <div class="wl-sub">
-            <span class="wl-total" aria-label="${esc(t('total_aria', { n: this._totalStars() }))}">${starSVG(true)}<b>${this._totalStars()}</b></span>
+            ${this._totalStars() ? `<span class="wl-total" aria-label="${esc(t('total_aria', { n: this._totalStars() }))}">${starSVG(true)}<b>${this._totalStars()}</b></span>` : ''}
             <button type="button" class="wl-lang" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
           </div>
           <button type="button" class="wl-btn wl-btn-main" data-act="play">${esc(t('play_n', { n }))}</button>
@@ -343,7 +343,7 @@ class WordLadder {
         <div class="wl-msg" data-role="msg" aria-live="polite"></div>
         <div class="wl-tools">
           <button type="button" class="wl-icon wl-tool" data-act="undo" aria-label="${esc(t('undo_aria'))}">${SVG.undo}</button>
-          <button type="button" class="wl-icon wl-tool" data-act="hint" aria-label="${esc(t('hint_aria'))}">${SVG.hint}</button>
+          <button type="button" class="wl-icon wl-tool wl-hintbtn" data-act="hint" aria-label="${esc(t('hint_aria'))}">${SVG.hint}<i class="wl-badge" data-role="hints"${c.hints ? '' : ' hidden'}>${c.hints}</i></button>
         </div>
         <div class="wl-kb" data-role="kb">${kb.map((row) => `<div class="wl-kr">${[...row].map((ch) =>
           `<button type="button" class="wl-key" data-key="${ch}" aria-label="${esc(t('key_aria', { l: ch }))}">${ch}</button>`).join('')}</div>`).join('')}</div>
@@ -389,6 +389,8 @@ class WordLadder {
       <div class="wl-w wl-goal" aria-label="${esc(t('target_aria', { w: tg }))}"><i class="wl-flag">${SVG.flag}</i>${[...tg].map((ch) => `<span class="wl-t">${ch}</span>`).join('')}</div>`;
     const mv = this.root.querySelector('[data-role="moves"]');
     if (mv) mv.textContent = String(c.moves);
+    const hb = this.root.querySelector('[data-role="hints"]');
+    if (hb) { hb.textContent = String(c.hints); hb.hidden = !c.hints; }
     const undo = this.root.querySelector('[data-act="undo"]');
     if (undo) undo.disabled = c.chain.length < 2;
     this._coach();
@@ -401,7 +403,7 @@ class WordLadder {
     if (!el) return;
     const len = this.cur.level.t.length;
     const H = el.clientHeight, W = el.clientWidth;
-    if (!H || !W) { requestAnimationFrame(() => this._fit()); return; }
+    if (!H || !W) { if (this.root.isConnected && !this._dead) requestAnimationFrame(() => this._fit()); return; }
     // Rows: the word being changed (big), the link (34 with margins), the target (0.8 big), then earlier words
     // (0.62 big + 6 each) and, when some are folded away, the ⋮ row (28).
     const past = this.cur.chain.length - 1;
@@ -489,7 +491,7 @@ class WordLadder {
           <button type="button" class="wl-icon wl-x" data-act="setup" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
           <h2 class="wl-card-h">${head}</h2>
           <div class="wl-stars" aria-label="${esc(t('stars_aria', { n: stars }))}">${[1, 2, 3].map((i) => starSVG(i <= stars)).join('')}</div>
-          <div class="wl-count wl-count-card"><span>${esc(t('moves'))} <b>${c.moves}</b></span><span>${esc(t('par'))} <b>${c.p}</b></span></div>
+          <div class="wl-count wl-count-card"><span>${esc(t('moves'))} <b>${c.moves}</b></span><span>${esc(t('par'))} <b>${c.p}</b></span>${c.hints ? `<span class="wl-hints-n" aria-label="${esc(t('hints_aria', { n: c.hints }))}">${SVG.hint}<b>${c.hints}</b></span>` : ''}</div>
           ${c.kind === 'daily'
             ? `<button type="button" class="wl-btn wl-btn-main" data-act="setup">${esc(t('back'))}</button>`
             : `<button type="button" class="wl-btn wl-btn-main" data-act="next">${esc(t('next'))}</button>`}
@@ -532,6 +534,7 @@ class WordLadder {
       <p><span class="wl-t wl-t-demo is-match">A</span> ${esc(t('how_dot'))}</p>
       <p>${esc(t('how_stars'))}</p>
       <p>${esc(t('how_hint'))}</p>
+      <p>${esc(t('how_undo'))}</p>
       <button type="button" class="wl-btn wl-btn-main wl-gotit" data-act="close-help">${esc(t('got_it'))}</button>
     </div>`;
     this.root.appendChild(ov);
@@ -572,6 +575,7 @@ class WordLadder {
     const ov = this.root.querySelector('.wl-ov');
     if (ov) ov.remove();
     if (this.screen === 'help') this.screen = this._helpPrev || 'setup';
+    if (this.screen === 'play') this._fit();   // a resize while the sheet was up
     this._sync();
   }
   _key(e) {
