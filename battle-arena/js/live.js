@@ -24,7 +24,7 @@
 // (the live rooms' Records, js/mp-records.js), once per match per phone (LIVE_LEDGER).
 import { recordResult, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat, teamMode } from './online.js';
+import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat, onlineMode, matchDetail } from './online.js';
 import * as E from './engine.js';
 import NET from '../../js/net.js';
 import * as LL from '../../js/live-leave.js';
@@ -47,7 +47,7 @@ export function clearRoomSave() { try { localStorage.removeItem(ROOM_KEY); } cat
 /** Record a finished live match on this phone, once (THE LAW rule 2). `llKey` (2026-10-29): the same
  *  match in js/live-leave.js's ledger, so a loss already settled from an armed leave is not counted
  *  again, and a counted match drops its armed leave. */
-export function countLive(key, won, opp, llKey, mode = null) {
+export function countLive(key, won, opp, llKey, mode = null, detail = null) {
   const done = readJSON(localStorage, LIVE_LEDGER);
   const list = Array.isArray(done) ? done.filter((x) => typeof x === 'string') : [];
   if (list.includes(key)) return false;
@@ -56,9 +56,15 @@ export function countLive(key, won, opp, llKey, mode = null) {
   if (llKey && LL.alreadyCounted(llKey)) return false;
   if (llKey) LL.endedNormally(GAME, llKey);
   // `mode` (2026-10-30, js/game-stats.js withMode): this player's drafted team.
-  try { withMode(mode, 'mp', () => recordResult(GAME, 'mp', !!won)); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
+  try { withMode(mode, 'mp', () => recordResult(GAME, 'mp', !!won), { detail: () => (typeof detail === 'function' ? detail() : detail) }); } catch (err) { console.error('[battle-arena] recordResult failed', err); }
   if (opp && opp.deviceId) { try { recordHeadToHead(GAME, { deviceId: opp.deviceId, name: opp.name || '' }, !!won); } catch { /* never block the result */ } }
   return true;
+}
+
+/** A recovered state: a JSON string (2026-11-13), or the object an older host wrote. */
+function parseCanon(c) {
+  if (typeof c === 'string') { try { return JSON.parse(c); } catch { return null; } }
+  return c && typeof c === 'object' ? c : null;
 }
 
 /** The moves stored in a room, in seq order, cleaned. Stops at the first gap. */
@@ -171,8 +177,14 @@ export class LiveRoom {
     if (oppRec) this.opp = oppRec;
     if (oppRec && oppRec.lastSeen && this.cb.onPresence) this.cb.onPresence(Math.max(0, Date.now() - oppRec.lastSeen));
     if (room.status === 'ended' && !this.over) {
-      // A room ended by the other player. Mid-match they always resign first (a 'r' move), so an
-      // end with the match still on is a room that went away: nothing is recorded.
+      // A resign or a claim ends the room with the LOSER's forfeit in the same write (2026-11-13,
+      // js/live-leave.js leaveWithForfeit): that decides it, even when a move this phone had in flight
+      // at the same seq overwrote the 'r' entry (appendMove is a plain set), and on a rejoin.
+      const m0 = this.match || matchOf(room);
+      const f = m0 ? LL.forfeitsOf(room, m0.seed) : [];
+      if (f.length) { this.decide(room, m0, f.some((x) => String(x.seat) === String(this.seat)) ? 1 - this.seat : this.seat); return; }
+      // Ended by an older build: mid-match it always resigned first (a 'r' move), so an end with the
+      // match still on is a room that went away: nothing is recorded.
       const moves = movesOf(room);
       if (!moves.some((m) => m.entry.k === 'r')) { this.end(this.started ? 'left' : 'gone'); return; }
     }
@@ -197,25 +209,29 @@ export class LiveRoom {
       // This phone's armed leave was settled as a loss while it was away (js/live-leave.js, the hub
       // after 30 minutes): the match is lost here, so say so in the room (the other side wins).
       if (!this.over && LL.alreadyCounted(this.llKey())) this.resign();
-      if (this.cb.onStart) this.cb.onStart(this.canon, done);
+      if (this.cb.onStart) { this.shown = true; this.cb.onStart(this.canon, done); }
       return;
     }
     // Recovery (only after a hash mismatch, which a deterministic engine should never produce).
+    // The state travels as a JSON STRING (2026-11-13): stored as an object, Firebase sorted its keys
+    // and dropped its nulls and empty arrays, so the recovered state never hashed the same again.
     const rec = room.recovery;
-    if (this.seat === 0 && rec && rec.requested != null && !rec.state) {
-      this.net.writeRecovery(this.code, this.applied, { canon: this.canon, applied: this.applied }).catch(() => {});
-    }
-    if (this.seat === 1 && this.recovering && rec && rec.state && rec.state.canon) {
+    if (this.seat === 0 && rec && rec.requested != null && !rec.state) this.publishRecovery(false);
+    const recState = this.seat === 1 && rec && rec.state && (this.recovering || rec.state.push) ? parseCanon(rec.state.canon) : null;
+    if (recState && (rec.state.applied | 0) >= this.applied) {
       this.recovering = false;
-      this.canon = rec.state.canon;
+      this.canon = recState;
       this.applied = rec.state.applied | 0;
+      if (recState.winner != null) this.over = true;
       this.net.clearRecovery(this.code).catch(() => {});
       if (this.cb.onResync) this.cb.onResync(this.canon);
       return;
     }
     for (const m of movesOf(room).slice(this.applied)) {
+      // Our own move not echoed back yet in order: wait. A resign by OUR side is the other phone's
+      // claim against this one (2026-11-13): applied, never waited on (it used to sit there forever).
       const mine = m.entry.by === sideOfSeat(this.seat);
-      if (mine) break;                       // our own move not echoed back yet in order: wait
+      if (mine && m.entry.k !== 'r') break;
       if (!this.applyStored(m)) return;
       if (this.cb.onMove) this.cb.onMove(m.entry);
       if (this.over) break;
@@ -235,16 +251,47 @@ export class LiveRoom {
     const res = mv && E.apply(this.canon, mv);
     if (!res || !res.ok || (m.h && stateHash(res.state) !== m.h)) {
       console.error('[battle-arena] live move did not replay to the same match', m, res && res.error);
-      if (this.seat === 1 && !this.recovering) {
-        this.recovering = true;
-        this.net.requestRecovery(this.code, m.seq).catch(() => {});
+      if (this.seat === 1) {
+        if (!this.recovering) { this.recovering = true; this.net.requestRecovery(this.code, m.seq).catch(() => {}); }
+        return false;
       }
-      return false;
+      // The HOST is the truth (js/CLAUDE.md, lockstep): it keeps its own result of the guest's move
+      // (or skips a move its rules refuse) and sends the guest its state (2026-11-13: it used to stop
+      // here for good, and the match froze).
+      if (res && res.ok) this.canon = res.state;
+      this.applied = m.seq + 1;
+      if (this.canon.winner != null) this.over = true;
+      this.publishRecovery(true);
+      return true;
     }
     this.canon = res.state;
     this.applied = m.seq + 1;
     if (res.state.winner != null) this.over = true;
     return true;
+  }
+
+  /** The host's state for the guest: asked for (`push` false) or sent unasked after a guest move the
+   *  host could not replay to the same hash (`push` true). */
+  publishRecovery(push) {
+    const snap = { canon: JSON.stringify(this.canon), applied: this.applied };
+    if (push) snap.push = true;
+    this.net.writeRecovery(this.code, this.applied, snap).catch(() => {});
+  }
+
+  /** The match was decided by a forfeit in the ended room: `winner` = stored-frame side. The screen
+   *  shows (and records, once) the end, as after a resign. */
+  decide(room, match, winner) {
+    if (!this.started) {
+      this.started = true;
+      this.match = match;
+      this.canon = startState(match.seed, { a: match.a, b: match.b }, match.first);
+      for (const m of movesOf(room)) if (!this.applyStored(m)) break;
+    }
+    this.over = true;
+    this.canon = { ...this.canon, winner, resigned: 1 - winner };
+    clearRoomSave();
+    if (this.cb.onStart && !this.shown) { this.shown = true; this.cb.onStart(this.canon, []); return; }
+    if (this.cb.onMove) this.cb.onMove({ by: sideOfSeat(1 - winner), k: 'r' });
   }
 
   /** This player's move (stored-frame entry), already shown on this phone. Written in order; a
@@ -260,7 +307,7 @@ export class LiveRoom {
     const h = entry.k === 'r' ? null : stateHash(this.canon);
     // Your own first move arms the leave (js/live-leave.js): a phone that never comes back loses.
     if (entry.k !== 'r' && !this.over && entry.by === sideOfSeat(this.seat)) {
-      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : [], modeTag(() => (teamMode(this.canon, this.seat)), 'mp'));
+      LL.armLeave(GAME, this.llKey(), 'recordResult', [GAME, 'mp', false], this.opp ? [this.opp] : [], modeTag(() => (onlineMode(this.canon, this.seat, 'live')), 'mp', () => ({ detail: matchDetail(this.canon, this.seat, 'quit') })));
     }
     this.sending = this.sending.then(async () => {
       for (let tries = 0; tries < 8 && !this.dead; tries++) {
@@ -274,9 +321,17 @@ export class LiveRoom {
   /** Resign (this player) or claim the win (`forThem`: the other player has been gone CLAIM_MS). */
   resign(forThem = false) {
     if (this.over || !this.started) return;
-    const by = sideOfSeat(forThem ? 1 - this.seat : this.seat);
-    this.send({ by, k: 'r' });
+    const loser = forThem ? 1 - this.seat : this.seat;
+    this.send({ by: sideOfSeat(loser), k: 'r' });
+    // Then the room ends with the loser's forfeit in the same write (2026-11-13; js/live-leave.js):
+    // the other phone's move in flight at that seq cannot undo it, and two claims cannot both win.
+    const code = this.code, n = this.match ? this.match.seed : 0, role = this.seat === 0 ? 'host' : 'guest';
+    this.sending = this.sending.then(() => LL.leaveWithForfeit(this.net, code, role, loser, n, forThem))
+      .catch((err) => console.error('[battle-arena] the forfeit could not be written', err));
   }
+
+  /** Leaving now costs this phone the match: its leave is armed (its own first move) and not settled. */
+  leaveCosts() { return LL.leaveCosts(GAME, this.llKey()); }
 
   /** The other player's record for head-to-head, and this match's ledger key. */
   resultKey() { return `${this.code}:${this.match ? this.match.seed : 0}`; }

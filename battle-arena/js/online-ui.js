@@ -17,7 +17,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { STRINGS } from './strings.js';
 import * as MP from './mp.js';
 import { LiveRoom, readRoomSave, clearRoomSave, countLive, CLAIM_MS, STALE_MS } from './live.js';
-import { seatOfSide, sideOfSeat, teamMode } from './online.js';
+import { seatOfSide, sideOfSeat, onlineMode, matchDetail } from './online.js';
 import { lobbyBG, monsterSVG } from './art.js';
 
 const t = makeT(STRINGS);
@@ -385,12 +385,15 @@ class ChallengeLink {
       MP.savePending(this.id, this.pendingBase, this.pending);
       if (!this.pending.length) this.pending = null;
       else this.flush();
+      // The winning move is on the server now: count it (2026-11-13, see finish).
+      if (!this.pending && this.owed) { const o = this.owed; this.owed = null; this.finish(o.canon, o.won); }
       return;
     }
     if (res.retryable && !this.dead) { setTimeout(() => this.flush(), 3000); return; }
     // The match moved on without these moves (expired, over, another phone): say so, start again.
     MP.savePending(this.id, this.pendingBase, []);
     this.pending = null;
+    this.owed = null;            // the server never took the last move: its real result counts from the launcher
     if (!this.dead) home(this.ui, reasonText(res.reason));
   }
 
@@ -421,8 +424,12 @@ class ChallengeLink {
   }
 
   finish(canon, won) {
+    // Counted only once the move that ended it is ON THE SERVER (2026-11-13): a knockout refused there
+    // (the turn timed out first, another phone moved) was counted as a win here. A page closed before
+    // then leaves it to the launcher, which counts the stored result (mp.js recordFinished).
+    if (this.pending && this.pending.length) { this.owed = { canon, won }; return; }
     const ov = this.game && this.game.over;
-    MP.countResult(this.id, won, (ov && ov.at) || Date.now(), () => teamMode(canon, this.seat));   // the finish time keeps a fresh storage honest
+    MP.countResult(this.id, won, (ov && ov.at) || Date.now(), () => onlineMode(canon, this.seat, 'ch'), () => matchDetail(canon, this.seat));   // the finish time keeps a fresh storage honest
     MP.markResultSeen(this.id);
   }
 
@@ -545,13 +552,23 @@ class LiveLink {
 
   send(entry) { this.room.send(entry); }
 
+  /** The hub's "Leave?" (js/hub.js quitCostsLoss / leaveMatch, root CLAUDE.md "Live rooms too"):
+   *  after this player's first move, leaving resigns (a loss here, the other's win). */
+  leaveCosts() { return !!(this.room.started && !this.room.over && this.room.leaveCosts()); }
+  leaveForGood() {
+    if (this.leaveCosts()) { this.room.resign(); this.ui.forceEnd(1 - this.seat); }
+    this.left = true;
+    this.dead = true;
+    this.room.leave();
+  }
+
   menuItems() {
     const items = [{ label: t('resign'), act: () => confirmResign(this.ui, () => { this.room.resign(); this.ui.forceEnd(1 - this.seat); }) }];
     if (this.away >= CLAIM_MS) items.push({ label: t('claim'), act: () => { this.room.resign(true); this.ui.forceEnd(this.seat); } });
     return items;
   }
 
-  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp, this.room.llKey(), teamMode(canon, this.seat)); }
+  finish(canon, won) { countLive(this.room.resultKey(), won, this.room.opp, this.room.llKey(), () => onlineMode(canon, this.seat, 'live'), () => matchDetail(canon, this.seat)); }
 
   done() { this.left = true; this.room.leave(); this.dead = true; home(this.ui); }
   resync() { if (this.room.canon) this.ui.startOnline(this, this.room.canon); }

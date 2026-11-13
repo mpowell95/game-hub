@@ -18,7 +18,7 @@ import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
-import { mirror, mirrorEvents, entryOf, moveOf, teamMode } from './online.js';
+import { mirror, mirrorEvents, entryOf, moveOf, teamMode, matchDetail } from './online.js';
 /** A match vs the computer: the player's drafted team (side 0) and who opened. */
 const modeOf = (s) => ({ ...teamMode(s, 0), first: s && s.first === 1 ? 'them' : 'me' });
 import { playAttack, evolveScene } from './attacks.js';
@@ -163,12 +163,13 @@ function helpSVG() {
     <text x="214" y="88" class="ba-help-plus">+3</text></svg>`;
 }
 
-/** Shrink a single-line label until it fits its box (never under 11px). */
+/** Shrink a single-line label until it fits its box, never under 15px (the text floor, root CLAUDE.md;
+ *  2026-11-13: it went down to 11px). A label still too long is cut by its own CSS. */
 function fitText(el, max = 15) {
   if (!el) return;
   let size = max;
   el.style.fontSize = size + 'px';
-  while (size > 11 && el.scrollWidth > el.clientWidth + 0.5) {
+  while (size > 15 && el.scrollWidth > el.clientWidth + 0.5) {
     size -= 0.5;
     el.style.fontSize = size + 'px';
   }
@@ -396,7 +397,15 @@ class BattleArena {
     const box = this.root.querySelector('.ba-onbox');
     if (!box) return;
     let O;
-    try { O = await import('./online-ui.js'); } catch (err) { console.error('[battle-arena] online did not load', err); return; }
+    try { O = await import('./online-ui.js'); } catch (err) {
+      // Not loaded (offline on a first visit): say so, with a retry, instead of a "…" forever (2026-11-13).
+      console.error('[battle-arena] online did not load', err);
+      if (this.disposed || gen !== this.gen) return;
+      box.innerHTML = `<p class="ba-ol-note">${escapeHTML(t('e_offline'))}</p><button type="button" class="ba-steelbtn" data-role="ol-retry"><span>${escapeHTML(t('retry'))}</span></button>`;
+      this.on(box.querySelector('[data-role="ol-retry"]'), 'click', () => this.fillOnline(note));
+      if (!this._tab) this.showTab('cpu'); else this.fitHome();
+      return;
+    }
     if (this.disposed || gen !== this.gen) return;
     let res;
     try { res = await O.fillOnline(this, box, note); } catch (err) { console.warn('[battle-arena] online tab', err); return; }
@@ -432,7 +441,6 @@ class BattleArena {
         ${lines.map((k) => `<p class="ba-help-line">${k === 'helpBerry' ? gemSVG('berry') : k === 'helpBomb' || k === 'helpBoom' ? gemSVG('bomb', k === 'helpBoom' ? 0 : 5) : ''}<span>${t(k)}</span></p>`).join('')}
       </div>`;
     this.root.appendChild(el);
-    for (const p of el.querySelectorAll('.ba-help-line span, .ba-help-goal')) fitText(p, p.classList.contains('ba-help-goal') ? 16 : 14);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
   }
 
@@ -540,7 +548,7 @@ class BattleArena {
         </div>
         <div class="ba-grid">${MONSTERS.map((m) => this.tileHTML(m, true)).join('')}</div>
       </div>`;
-    for (const n of this.root.querySelectorAll('.ba-pick-name:not(.is-lock)')) fitText(n, 13);
+    for (const n of this.root.querySelectorAll('.ba-pick-name:not(.is-lock)')) fitText(n, 15);
     const grid = this.root.querySelector('.ba-grid');
     const open = (e) => {
       const c = e.target.closest('.ba-pick');
@@ -650,7 +658,7 @@ class BattleArena {
     this.clearSave();
     const won = save.state.winner != null ? save.state.winner === ME : false;
     try {
-      const st = withMode(() => (modeOf(save.state)), save.diff, () => recordResult('battlearena', save.diff, won));
+      const st = withMode(() => (modeOf(save.state)), save.diff, () => recordResult('battlearena', save.diff, won), { detail: () => matchDetail(save.state, ME) });
       if (!st) console.warn('[battle-arena] set-aside match not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] set-aside match not recorded', err); }
   }
@@ -1257,7 +1265,6 @@ class BattleArena {
         <p class="ba-help-line">${gemSVG('bomb', 0)}<span>${escapeHTML(t('helpBoom'))}</span></p>
       </div>`;
     this.root.appendChild(el);
-    for (const p of el.querySelectorAll('.ba-help-line span')) fitText(p, 15);
     const close = () => el.remove();
     this.on(el, 'click', (e) => { if (e.target === el) close(); });
     this.on(el.querySelector('[data-role="close"]'), 'click', close);
@@ -1804,9 +1811,24 @@ class BattleArena {
   // --- the end ----------------------------------------------------------------------------------
   finish() {
     const s = this.state;
+    this.recordOutcome();
+    this.syncAll();
+    // The losers faint; then the result.
+    for (const a of this.teamArts(1 - s.winner)) {
+      if (!reducedMotion()) a.animate([{ transform: 'translateY(0) rotate(0)', opacity: 1 }, { transform: 'translateY(20px) rotate(-12deg)', opacity: 0.35 }], { duration: 700, easing: 'ease-in', fill: 'forwards' });
+    }
+    this.later(() => this.showResult(), 1000);
+  }
+
+  /** Record a DECIDED match, once (`recorded`). Called by `finish()` and by every way out of the
+   *  battle screen (the menu's New match / Home, destroy): the winning move's animation runs with
+   *  the winner already decided, and leaving during it used to drop the result (2026-11-13). */
+  recordOutcome() {
+    const s = this.state;
+    if (!s || s.winner == null || this.recorded) return;
     // Unlocks before this result is recorded: a win that crosses a threshold gets a reveal.
-    if (!this.recorded) this.unlockedBefore = unlockedIds(totalWins());
-    if (!this.recorded && this.link) {
+    this.unlockedBefore = unlockedIds(totalWins());
+    if (this.link) {
       // ONLINE: the link records it ('mp' bucket, once per match through its own ledger; a live
       // room also writes head-to-head). Never the computer's save slot or who-opens-next.
       this.recorded = true;
@@ -1816,19 +1838,13 @@ class BattleArena {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       try {
-        const st = withMode(() => (modeOf(s)), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME));
+        const st = withMode(() => (modeOf(s)), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME), { detail: () => matchDetail(s, ME) });
         if (!st) console.warn('[battle-arena] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[battle-arena] record failed', err); }
       this.clearSave();
       this.settings.nextFirst = this.settings.nextFirst === 1 ? 0 : 1;
       writeJSON(SETTINGS_KEY, this.settings);
     }
-    this.syncAll();
-    // The losers faint; then the result.
-    for (const a of this.teamArts(1 - s.winner)) {
-      if (!reducedMotion()) a.animate([{ transform: 'translateY(0) rotate(0)', opacity: 1 }, { transform: 'translateY(20px) rotate(-12deg)', opacity: 0.35 }], { duration: 700, easing: 'ease-in', fill: 'forwards' });
-    }
-    this.later(() => this.showResult(), 1000);
   }
 
   /** The reference's ending, on the stage: the winners in the middle under a big VICTORY (or DEFEAT),
@@ -1861,7 +1877,6 @@ class BattleArena {
       </div>`;
     this.root.querySelector('.ba-battle').appendChild(el);
     fitText(el.querySelector('.ba-result-title'), 22);
-    fitText(el.querySelector('.ba-result-luck'), 14);
     if (!reducedMotion()) {
       el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 350 });
       el.querySelector('.ba-result-big').animate([{ transform: 'scale(2.6)', opacity: 0 }, { transform: 'scale(.9)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 560, easing: 'ease-out' });
@@ -1932,7 +1947,7 @@ class BattleArena {
     // settings"): two taps, the button saying so. Leaving the hub is not quitting: the save resumes it.
     const quit = (btn, go) => {
       if (this.quitCostsLoss() && btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = t('quitLoss'); return; }
-      close(); this.recordQuitLoss(); this.clearSave(); this.state = null; go();
+      close(); this.recordOutcome(); this.recordQuitLoss(); this.clearSave(); this.state = null; go();
     };
     this.on(el.querySelector('[data-role="new"]'), 'click', (e) => quit(e.currentTarget, () => this.renderDraft()));
     this.on(el.querySelector('[data-role="home"]'), 'click', (e) => quit(e.currentTarget, () => this.renderHome()));
@@ -1947,7 +1962,7 @@ class BattleArena {
     if (!this.quitCostsLoss()) return;
     this.recorded = true;
     try {
-      const st = withMode(() => (modeOf(this.state)), this.diff, () => recordResult('battlearena', this.diff, false));
+      const st = withMode(() => (modeOf(this.state)), this.diff, () => recordResult('battlearena', this.diff, false), { detail: () => matchDetail(this.state, ME, 'quit') });
       if (!st) console.warn('[battle-arena] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] quit loss not recorded', err); }
   }
@@ -1994,6 +2009,8 @@ class BattleArena {
   }
 
   destroy() {
+    // A match decided while its last move still animated is recorded on the way out (2026-11-13).
+    if (this.screen === 'battle') { try { this.recordOutcome(); } catch (err) { console.error('[battle-arena] record on leave failed', err); } }
     this.disposed = true;
     if (this.link) { try { this.link.destroy(); } catch {} this.link = null; }
     this.gen++;
@@ -2025,10 +2042,22 @@ export function destroy() {
   try { instance.destroy(); } finally { instance = null; }
 }
 
-/** THE "AUTOSAVE / RESUME" MEANING of the contract: the match in progress is saved after every
- *  move (`gamehub.battlearena.save.v1`) and picked up on return, so leaving is lossless. */
-export function isInProgress() {
-  return false;
+/** A LIVE ROOM left through the hub's "Leave?" (js/hub.js): says it counts as a loss, then resigns.
+ *  Closing the app is not leaving (destroy() only detaches; the next mount rejoins). */
+export function quitCostsLoss() {
+  const l = instance && instance.link;
+  return !!(l && l.kind === 'live' && typeof l.leaveCosts === 'function' && l.leaveCosts());
+}
+export function leaveMatch() {
+  const l = instance && instance.link;
+  if (l && l.kind === 'live' && typeof l.leaveForGood === 'function') l.leaveForGood();
 }
 
-export default { init, destroy, isInProgress, openArmed };
+/** THE "AUTOSAVE / RESUME" MEANING of the contract: the match in progress is saved after every
+ *  move (`gamehub.battlearena.save.v1`) and picked up on return, so leaving is lossless. */
+//  The one exception: a LIVE ROOM after this player's first move, where leaving resigns (2026-11-13).
+export function isInProgress() {
+  return quitCostsLoss();
+}
+
+export default { init, destroy, isInProgress, openArmed, quitCostsLoss, leaveMatch };

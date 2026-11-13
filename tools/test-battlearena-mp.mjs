@@ -354,9 +354,29 @@ let id;
   ok('outbox: a match not found yet keeps its move queued (retried, as Darts does)', MP.outboxCount() === 1);
   MP.savePending('abcdefgh', 0, []);
   ok('outbox: an empty entry is removed', MP.outboxCount() === 0);
+  // 2026-11-13: a move queued WHILE a drain runs (a match played meanwhile) is not wiped by it.
+  MP.savePending('abcdefgh', 3, [{ by: 'a', k: 's', a: 0, b: 1 }]);
+  const draining = MP.drainOutbox();
+  MP.savePending('ijklmnop', 5, [{ by: 'b', k: 's', a: 7, b: 8 }]);
+  await draining;
+  ok('outbox: a move saved during a drain survives it', !!MP.pendingFor('ijklmnop') && MP.pendingFor('ijklmnop').base === 5 && !!MP.pendingFor('abcdefgh'));
+  MP.savePending('abcdefgh', 0, []); MP.savePending('ijklmnop', 0, []);
+  // The mode of a result counted from the launcher (an index row), 2026-11-13.
+  const idxRows = Object.values(getAt('battlearena/index/DREG5') || {});
+  ok('mode: an index row carries this person\'s team (`tm`)', idxRows.length > 0 && idxRows.every((r) => Array.isArray(r.tm) && r.tm.length === 2));
+  console.log('   byMode keys:', Object.keys(loadStats().games.battlearena.byMode || {}).join(' | '), ' dt:', JSON.stringify(loadStats().games.battlearena.dt || {}));
 }
 
 // --- 3. live rooms, against a stand-in for js/net.js ---------------------------------------------
+function asFirebase(v) {
+  if (Array.isArray(v)) { const a = v.map(asFirebase).filter((x) => x !== undefined); return a.length ? a : undefined; }
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v).sort()) { const x = asFirebase(v[k]); if (x !== undefined) o[k] = x; }
+    return Object.keys(o).length ? o : undefined;
+  }
+  return v === null ? undefined : v;
+}
 function makeNet(name) {
   let sub = null;
   const self = {
@@ -376,11 +396,14 @@ function makeNet(name) {
     },
     startRound: async (code, n, deck, dealer) => { setAt(`rooms/${code}/round`, { n, deck, dealer }); setAt(`rooms/${code}/status`, 'active'); later(); },
     appendMove: async (code, by, seq, move, h) => { setAt(`rooms/${code}/moves/${String(seq).padStart(4, '0')}`, { by, seq, move, h }); later(); },
-    writeRecovery: async () => {}, requestRecovery: async () => {}, clearRecovery: async () => {},
+    // As Firebase stores it: keys sorted, nulls and empty arrays/objects dropped (a string is kept as is).
+    writeRecovery: async (code, seq, snap) => { setAt(`rooms/${code}/recovery`, { state: asFirebase(snap), seq, at: Date.now() }); later(); },
+    requestRecovery: async (code, seq) => { setAt(`rooms/${code}/recovery`, { requested: seq, at: Date.now() }); later(); },
+    clearRecovery: async (code) => { setAt(`rooms/${code}/recovery`, null); later(); },
     sendReaction: async () => {},
     heartbeat: () => {}, stopHeartbeat: () => {},
     onRoom: async (code, cb) => { sub = { code, cb }; later(); return () => { sub = null; }; },
-    leaveRoom: async (code) => { setAt(`rooms/${code}/status`, 'ended'); later(); sub = null; },
+    leaveRoom: async (code, role, f) => { setAt(`rooms/${code}/status`, 'ended'); if (f && f.seat != null) setAt(`rooms/${code}/forfeit/${f.seat}`, f); later(); sub = null; },
     disconnect: () => { sub = null; },
     deliver: () => { if (sub) sub.cb(clone(getAt(`rooms/${sub.code}`))); },
     name,
@@ -479,6 +502,90 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
   ok('live: a move whose hash does not match is not applied; the guest asks the host', g3.applied === 0 && asked);
 }
 
+// --- 2026-11-13 review: claims and resigns can no longer be undone or doubled; recovery works --------
+async function pair(tag) {
+  setAt('rooms/QRST', null);
+  const na = makeNet('A' + tag), nb = makeNet('B' + tag);
+  nets.splice(0, nets.length, na, nb);
+  const got = { A: [], B: [] };
+  use('A'); const host = new L.LiveRoom(na, { onMove: (e) => got.A.push(e) }); await host.host(TEAMS.a);
+  use('B'); const guest = new L.LiveRoom(nb, { onMove: (e) => got.B.push(e) }); await guest.join('QRST', TEAMS.b);
+  for (let i = 0; i < 5; i++) await tick();
+  return { na, nb, host, guest, got };
+}
+async function playUntil(rooms, cond, guard = 200) {
+  for (let g = 0; g < guard && !cond() && !rooms[0].over && !rooms[1].over; g++) {
+    const side = rooms[0].canon.turn, me = rooms[side];
+    use(side ? 'B' : 'A');
+    me.send(O.entryOf({ ...chooseMove(me.canon, 'easy'), side }));
+    for (let i = 0; i < 3; i++) await tick();
+  }
+}
+{
+  // A claim against a phone that comes back with a move it made while gone, at the SAME seq.
+  const { nb, host, guest, got } = await pair('c');
+  const rooms = { 0: host, 1: guest };
+  await playUntil(rooms, () => host.canon.turn === 1);
+  ok('claim: set up, the guest\'s turn', host.canon.turn === 1 && same(host.canon, guest.canon));
+  const stash = [];
+  const realAppend = nb.appendMove, realDeliver = nb.deliver;
+  nb.appendMove = (...a) => new Promise((r) => stash.push(() => realAppend(...a).then(r)));
+  nb.deliver = () => {};                       // the guest's phone is offline
+  use('B');
+  guest.send(O.entryOf({ ...chooseMove(guest.canon, 'easy'), side: 1 }));   // made offline, sent later
+  use('A');
+  host.resign(true);                           // 90 s of silence: the host claims the win
+  for (let i = 0; i < 4; i++) await tick();
+  ok('claim: the room ends with the GUEST\'s forfeit, in the same write', getAt('rooms/QRST/status') === 'ended' && getAt('rooms/QRST/forfeit/1') && getAt('rooms/QRST/forfeit/1').claim === true);
+  use('B');
+  for (const f of stash) await f();            // the guest's late move overwrites the claim's 'r' entry
+  nb.deliver = realDeliver;
+  later();
+  for (let i = 0; i < 4; i++) await tick();
+  const stored = getAt(`rooms/QRST/moves/${String(host.applied - 1).padStart(4, '0')}`);
+  ok('claim: (the late move did overwrite the \'r\' entry, as appendMove is a plain set)', stored && stored.move && stored.move.k !== 'r');
+  ok('claim: the claimed phone still ends LOST, and is told (its screen ends the match)', guest.over && guest.canon.winner === 0 && got.B.some((e) => e.k === 'r' && e.by === 'b'));
+  ok('claim: the claimer won', host.over && host.canon.winner === 0);
+  guest.resign(true);
+  ok('claim: the claimed phone cannot claim back (both winning)', guest.canon.winner === 0);
+}
+{
+  // A claim with no race: the claimed phone applies the 'r' entry (it used to wait on it forever).
+  const { host, guest } = await pair('d');
+  await playUntil({ 0: host, 1: guest }, () => host.canon.turn === 1);
+  use('A'); host.resign(true);
+  for (let i = 0; i < 4; i++) await tick();
+  ok('claim: an \'r\' by the claimed side is applied on the claimed phone', guest.over && guest.canon.winner === 0);
+}
+{
+  // Recovery after a guest-side mismatch: the host's state travels as a string and the match goes on.
+  const { na, host, guest } = await pair('r');
+  use('A');
+  const realAppend = na.appendMove;
+  na.appendMove = (code, by, seq, move, h) => { na.appendMove = realAppend; return realAppend(code, by, seq, move, 'tampered'); };
+  host.send(O.entryOf({ ...chooseMove(host.canon, 'hard'), side: 0 }));
+  for (let i = 0; i < 8; i++) await tick();
+  ok('recovery: the guest asked, adopted the host\'s state, and the request was cleared', !guest.recovering && same(guest.canon, host.canon) && !getAt('rooms/QRST/recovery'));
+  const before = host.applied;
+  await playUntil({ 0: host, 1: guest }, () => host.applied >= before + 8);
+  ok('recovery: the next moves replay to the same hash on both phones', host.applied >= before + 8 && guest.applied === host.applied && same(host.canon, guest.canon));
+}
+{
+  // A guest move the HOST cannot replay to the same hash: the host keeps its own result and pushes it.
+  const { host, guest } = await pair('h');
+  await playUntil({ 0: host, 1: guest }, () => host.canon.turn === 1);
+  const seq = host.applied;
+  const mv = { ...chooseMove(guest.canon, 'hard'), side: 1 };
+  use('B');
+  setAt(`rooms/QRST/moves/${String(seq).padStart(4, '0')}`, { by: 1, seq, move: O.entryOf(mv), h: 'tampered' });
+  later();
+  for (let i = 0; i < 8; i++) await tick();
+  ok('host mismatch: the host goes on (it used to freeze) and the guest takes its state', host.applied === seq + 1 && guest.applied === seq + 1 && same(host.canon, guest.canon));
+  const before = host.applied;
+  await playUntil({ 0: host, 1: guest }, () => host.applied >= before + 6);
+  ok('host mismatch: the match carries on in lockstep', host.applied >= before + 6 && same(host.canon, guest.canon));
+}
+
 {
   // The gate on live rooms is js/net.js's own (checked before any network call).
   const NET = (await import('../js/net.js')).default;
@@ -505,6 +612,12 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
   ok('challenges never write head-to-head; live rooms do', !/recordHeadToHead/.test(src('battle-arena/js/mp.js')) && /recordHeadToHead\(GAME/.test(src('battle-arena/js/live.js')));
   ok('the pickers read the small directory, never all of players/', /readOpponentProfiles/.test(src('battle-arena/js/mp.js')) && !/readPlayersOnce|ref\([^)]*'players'/.test(src('battle-arena/js/mp.js')));
   ok('no move clock in challenges, 25 s in live rooms', /this\.timed = false;/.test(src('battle-arena/js/online-ui.js')) && /this\.timed = true;/.test(src('battle-arena/js/online-ui.js')));
+  const ui = src('battle-arena/js/ui.js'), oui = src('battle-arena/js/online-ui.js');
+  ok('hub leave: a live room after your first move asks "Counts as a loss" and resigns (quitCostsLoss / leaveMatch, 2026-11-13)',
+    /export function quitCostsLoss\(\)/.test(ui) && /export function leaveMatch\(\)/.test(ui) && /export function isInProgress\(\) \{\s*return quitCostsLoss\(\);/.test(ui)
+    && /leaveForGood\(\) \{\s*if \(this\.leaveCosts\(\)\) \{ this\.room\.resign\(\); this\.ui\.forceEnd\(1 - this\.seat\); \}/.test(oui));
+  ok('a challenge win is counted only once its last move is on the server (2026-11-13)', /if \(this\.pending && this\.pending\.length\) \{ this\.owed = \{ canon, won \}; return; \}/.test(oui) && /if \(!this\.pending && this\.owed\)/.test(oui));
+  ok('a decided match is recorded on every way out of the battle (menu, destroy; 2026-11-13)', /recordOutcome\(\) \{/.test(ui) && /this\.screen === 'battle'\) \{ try \{ this\.recordOutcome\(\); \}/.test(ui));
   ok('vs the computer: still no clock (ui.js times only a live link)', /this\.timed = !!\(this\.link && this\.link\.timed\)/.test(src('battle-arena/js/ui.js')));
 }
 
