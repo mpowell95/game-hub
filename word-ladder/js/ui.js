@@ -95,7 +95,7 @@ class WordLadder {
     this._onKey = (e) => this._key(e);
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
-    this._offResize = onViewportResize(() => this._fit());
+    this._offResize = onViewportResize(() => (this.screen === 'done' ? this._fitFinal() : this._fit()));
     try { startServerTime(); } catch { /* the day falls back to the phone's clock */ }
     this._repair1113();
     this._flushAll();
@@ -359,7 +359,7 @@ class WordLadder {
       return all >= past ? all : Math.floor((room - 28) / per);
     };
     let big = Math.max(40, Math.min(64, Math.floor((W - 16 - (len - 1) * 8) / len)));
-    while (big > 30 && rowsFor(big) < Math.min(1, past)) big -= 2;
+    while (big > 32 && rowsFor(big) < Math.min(1, past)) big -= 2;
     this.root.style.setProperty('--wl-big', big + 'px');
     this.root.style.setProperty('--wl-small', Math.round(big * 0.62) + 'px');
     const fit = Math.max(1, rowsFor(big));
@@ -431,7 +431,7 @@ class WordLadder {
     const head = c.kind === 'daily' ? esc(t('daily')) : esc(t('level_n', { n: c.n }));
     this.root.innerHTML = `
       <div class="wl-game wl-is-done">
-        <div class="wl-ladder wl-final">${c.chain.map((w, i) => `<div class="wl-w ${i === c.chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}">${[...w].map((ch, j) => `<span class="wl-t${ch === c.level.t[j] ? ' is-match' : ''}">${ch}</span>`).join('')}</div>`).join('')}</div>
+        <div class="wl-ladder wl-final" data-role="final"></div>
         <div class="wl-card" role="dialog" aria-label="${head}">
           <button type="button" class="wl-icon wl-x" data-act="setup" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
           <h2 class="wl-card-h">${head}</h2>
@@ -444,14 +444,25 @@ class WordLadder {
       </div>`;
     this._fitFinal();
   }
+  /** The finished ladder above the card. Tiles 30-44px; a ladder too long for the room shows its first word, a ⋮ and
+   *  the last words that fit (2026-11-13 review: an 18-word ladder shrank to 16px tiles with 9px letters and overflowed). */
   _fitFinal() {
-    const el = this.root.querySelector('.wl-final');
+    const el = this.root.querySelector('[data-role="final"]');
     if (!el || !this.cur) return;
-    const rows = this.cur.chain.length, len = this.cur.level.t.length;
+    const c = this.cur, chain = c.chain, len = c.level.t.length, tg = c.level.t;
     const H = el.clientHeight || 300, W = el.clientWidth || 300;
-    const s = Math.max(16, Math.min(44, Math.floor((H - rows * 5) / rows), Math.floor((W - 40) / len) - 6));
+    const fitRows = (sz) => Math.floor((H + 5) / (sz + 5));
+    let s = Math.max(30, Math.min(44, Math.floor((H + 5) / chain.length) - 5, Math.floor((W - 40 - (len - 1) * 8) / len)));
+    let rows = chain.slice();
+    if (fitRows(s) < chain.length) {
+      const room = Math.max(3, Math.floor((H + 5 - 27) / (s + 5)));   // 27 = the ⋮ row and its gap
+      rows = [chain[0], null, ...chain.slice(chain.length - (room - 1))];
+    }
     this.root.style.setProperty('--wl-small', s + 'px');
+    el.innerHTML = rows.map((w, i) => w == null ? '<div class="wl-more" aria-hidden="true">⋮</div>'
+      : `<div class="wl-w ${i === rows.length - 1 ? 'wl-goal is-won' : 'wl-past'}">${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}">${ch}</span>`).join('')}</div>`).join('');
   }
+
 
   _help() {
     const prev = this.screen;

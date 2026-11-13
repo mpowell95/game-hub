@@ -72,7 +72,9 @@ one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`,
 
 Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it:
 back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes from the
-room; earlier words folded under a ⋮ when they do not fit). **Keys are 10 across like a phone keyboard, so narrower
+room; earlier words folded under a ⋮ when they do not fit; tiles never under 32px, so earlier words' letters stay over 11px). The
+done screen's ladder (`_fitFinal`, refit on resize) keeps 30-44px tiles and shows the first word, a ⋮ and the last words when it
+is too long (2026-11-13 review: an 18-word ladder had shrunk to 16px tiles, 9px letters, and overflowed). **Keys are 10 across like a phone keyboard, so narrower
 than 44px on a 360px phone** (a documented departure from the 44x44 floor; 50px tall).
 
 ## Tests
