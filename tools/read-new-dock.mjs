@@ -4,12 +4,16 @@
 //
 //   node tools/read-new-dock.mjs            every game in any report
 //   node tools/read-new-dock.mjs tower      one game
+//   --days N                                people seen in the last N days (default 14)
 import { firebaseConfig } from '../js/firebase-config.js';
 import { signInAnonymously } from '../backups/rtdb-backup.mjs';
 import { isHiddenName } from '../js/hidden-players.js';
 import { mergeNewDock } from '../js/new-dock-log.js';
 
-const only = process.argv[2] || null;
+const only = process.argv.slice(2).find((a) => !a.startsWith('--')) || null;
+const days = Number(process.argv.find((a, i) => process.argv[i - 1] === '--days') || 14);
+const since = Date.now() - days * 86400000;
+const num = (b) => Number((/v(\d+)/.exec(b || '') || [])[1] || 0);
 const tok = await signInAnonymously(firebaseConfig.apiKey);
 const id = typeof tok === 'string' ? tok : tok.idToken;
 const players = await fetch(`${firebaseConfig.databaseURL}/players.json?auth=${id}`).then((r) => r.json());
@@ -21,15 +25,16 @@ for (const [dev, rec] of Object.entries(players || {})) {
   const name = String(p.name || '').trim();
   if (!name || isHiddenName(name)) continue;
   const k = p.playerId || name;
-  if (!people.has(k)) people.set(k, { name, reps: [], build: '' });
+  if (!people.has(k)) people.set(k, { name, reps: [], build: '', at: 0 });
   const x = people.get(k);
   if (rec.newDock) { x.reps.push(rec.newDock); for (const kind of Object.values(rec.newDock)) for (const g of Object.keys(kind || {})) games.add(g); }
   const b = String((rec.device || {}).build || '');
-  if (b > x.build) x.build = b;
+  if (num(b) > num(x.build)) x.build = b;
+  x.at = Math.max(x.at, +rec.updatedAt || 0);
 }
 for (const g of only ? [only] : [...games]) {
   console.log(`\n== ${g}`);
-  for (const x of [...people.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const x of [...people.values()].filter((p) => p.at >= since).sort((a, b) => a.name.localeCompare(b.name))) {
     const m = mergeNewDock(x.reps, g);
     const acts = ['tapped', 'closed', 'opened', 'done'].filter((k) => m[k]).map((k) => `${k} ${et(m[k])}`);
     const seen = m.shown ? `seen ${et(m.shown)}${m.n > 1 ? ` (${m.n}x, last ${et(m.last)})` : ''}` : '';
