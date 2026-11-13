@@ -679,6 +679,27 @@ eq('identity: device fallback', identityKey({}, 'dev1').key, 'device:dev1');
   ok('tower counts as a SOLO game', SOLO.has('tower'));
 }
 
+// ---- Word Ladder's wl sub-counter: per level, one entry per person, the better attempt WHOLE (2026-11-13) ----
+{
+  const all = {
+    d1: rec({ playerId: 'WL111', name: 'Laddie' }, {
+      wordladder: { total: { played: 2, won: 2, lost: 0 }, byDiff: { easy: { played: 2, won: 2, lost: 0 } },
+        wl: { lv: { L1: { s: 1, m: 4, p: 3, h: 2, t: 200 }, L2: { s: 3, m: 3, p: 3, h: 0, t: 300 } } } },
+    }, 100),
+    d2: rec({ playerId: 'wl111', name: 'Laddie' }, {
+      wordladder: { total: { played: 2, won: 2, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 }, daily: { played: 1, won: 1, lost: 0 } },
+        wl: { lv: { L1: { s: 2, m: 5, p: 3, h: 0, t: 100 } }, es: { L1: { s: 3, m: 3, p: 3, h: 0, t: 50 } }, dl: { 'en-2026-11-13': { s: 3, m: 4, p: 4, h: 0, t: 60 } } } },
+    }, 200),
+  };
+  const g = aggregatePlayers(all)[0].games.wordladder;
+  eq('wordladder: L1 keeps the better attempt WHOLE (never its moves with the other\'s hints)', g.wl.lv.L1, { s: 2, m: 5, h: 0, p: 3, t: 100 });
+  eq('wordladder: levels from both phones kept', Object.keys(g.wl.lv).sort(), ['L1', 'L2']);
+  eq('wordladder: the Spanish ladder and the daily kept apart', [Object.keys(g.wl.es), Object.keys(g.wl.dl)], [['L1'], ['en-2026-11-13']]);
+  const { wlSolved } = await import('../js/game-stats.js');
+  eq('wordladder: board = DISTINCT levels (L1 twice counts once; es counts)', wlSolved(g), 3);
+  ok('wordladder counts as a SOLO game', SOLO.has('wordladder'));
+}
+
 // ---- Arrow Maze's wo (timer) survives the cross-device combine (THE LAW rule 1) ----
 // 2026-10-13. Counters add. A finish log cannot be summed across phones, so per difficulty the
 // person keeps the log of the device with the most timed finishes there; d2's arrives as a Firebase

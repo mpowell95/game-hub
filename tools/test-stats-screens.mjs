@@ -28,7 +28,7 @@ const fixture = await buildFixture();
 const UI = await import('../js/game-stats-ui.js');
 const { v2ScreenFor, screenFor, SK_MACHINES } = UI;
 const IDS = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'sudoku', 'hoops4', 'minesweeper', 'contexto', 'murdoku', 'wayout',
-  'gridlock', 'wordweaver', 'tower', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'yahtzee',
+  'gridlock', 'wordweaver', 'tower', 'wordladder', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'yahtzee',
   'dominoes', 'hillclimb', 'battleship', 'skeeball', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'darts', 'flicksoccer', 'archery',
   'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'golf'];
 const BAD = /NaN|undefined|\[object|>null<|Infinity/;

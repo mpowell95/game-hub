@@ -86,9 +86,9 @@
 .wl-root .wl-tool { width: 56px; height: 48px; }
 /* The keyboard: 10 keys across like a phone keyboard. Keys are 50px tall, narrower than 44px on a 360px phone
    (a documented departure from the 44x44 floor: ten keys must fit one row, as on every phone keyboard). */
-.wl-root .wl-kb { flex: none; display: flex; flex-direction: column; gap: 8px; }
-.wl-root .wl-kr { display: flex; justify-content: center; gap: 5px; }
-.wl-root .wl-key { flex: 0 1 40px; min-width: 0; height: 50px; border-radius: 8px; border: 0; background: rgba(255,255,255,.9); color: var(--wl-ink);
+.wl-root .wl-kb { flex: none; display: flex; flex-direction: column; gap: 8px; margin: 0 -6px; }
+.wl-root .wl-kr { display: flex; justify-content: center; gap: 3px; }
+.wl-root .wl-key { flex: 1 1 0; max-width: 46px; min-width: 0; height: 50px; border-radius: 8px; border: 0; background: rgba(255,255,255,.9); color: var(--wl-ink);
   font-size: 20px; font-weight: 800; padding: 0; box-shadow: 0 2px 0 rgba(0,0,0,.3); }
 .wl-root .wl-key:active { background: var(--wl-sel); }
 
@@ -117,7 +117,13 @@
 .wl-root .wl-t-demo { --wl-small: 34px; flex: none; }
 .wl-root .wl-how-svg { display: block; margin: 12px auto 0; max-width: 100%; height: auto; }
 .wl-root .wl-sheet .wl-how-cap { justify-content: center; text-align: center; font-weight: 700; }
-.wl-root .wl-sheet .wl-how-b, .wl-root .wl-sheet .wl-how-cap { display: block; white-space: nowrap; font-size: clamp(15px, 4.6vw, 18px); }
+.wl-root .wl-sheet .wl-how-b, .wl-root .wl-sheet .wl-how-cap { display: block; white-space: nowrap; font-size: clamp(17px, 4.8vw, 18px); }
+.wl-root .wl-hintbtn { position: relative; }
+.wl-root .wl-badge { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px;
+  background: var(--wl-sel); color: var(--wl-ink); font-style: normal; font-size: 15px; font-weight: 800; line-height: 22px; text-align: center; }
+.wl-root .wl-badge[hidden] { display: none; }
+.wl-root .wl-hints-n { display: inline-flex; align-items: center; gap: 4px; }
+.wl-root .wl-hints-n svg { width: 22px; height: 22px; }
 .wl-root .wl-flag-in { display: inline-block; vertical-align: -4px; color: var(--wl-gold); }
 .wl-root .wl-flag-in svg { stroke: none; }
 .wl-root .wl-gotit { margin-top: 14px; min-height: 52px; }

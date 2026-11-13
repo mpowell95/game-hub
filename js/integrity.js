@@ -588,7 +588,7 @@ export const GAME_NAMES = {
   chinchon: 'Chinchón', escoba: 'Escoba', mancala: 'Mancala', filler: 'Filler', uno: 'Uno', murdoku: 'Murdoku',
   flicksoccer: 'Flick Soccer', eightball: 'Pool', archery: 'Archery', business: 'Monopoly Deal', parchis: 'Parchís',
   spellingbee: 'Spelling Bee', gridlock: 'Gridlock', wordweaver: 'Word Weaver', baseball: 'Baseball',
-  battlearena: 'Battle Arena', cupbaseball: 'Cup Baseball', tower: 'Tower Stack', pair: 'Online play',
+  battlearena: 'Battle Arena', cupbaseball: 'Cup Baseball', tower: 'Tower Stack', wordladder: 'Word Ladder', pair: 'Online play',
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 

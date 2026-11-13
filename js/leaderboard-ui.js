@@ -55,7 +55,7 @@ import { corrections, isAdminDevice } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { loadProfile } from './profile-store.js';
-import { statsId, holdemBalance, holdemSuspect, isTestGame } from './game-stats.js';
+import { statsId, holdemBalance, holdemSuspect, isTestGame, wlSolved } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, formatTimeMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
@@ -1077,6 +1077,8 @@ function gameMetricAt(g, id, tier) {
   // Word Weaver ranks on POINTS: stars x the band's multiplier (1/2/3/4), over distinct levels
   // completed (js/word-weaver-points.js, Matt 2026-10-29); at a tier, that band's own points.
   if (id === 'wordweaver') return wwPoints(g.games.wordweaver, tier == null ? null : WW_TIERS[tier - 1]);
+  // Word Ladder (admin only): DISTINCT levels completed, from the merged per-level maps (a level done on two phones once).
+  if (id === 'wordladder') return wlSolved(g.games.wordladder, tier == null ? null : ['easy', 'medium', 'hard', 'expert'][tier - 1]);
   // Sudoku / Murdoku: a row with a no-hint solve is ranked and shown by its no-hint solves (2026-10-29).
   if (NOHINT_GAMES.has(id) && noHintTierOf(g, id)) return noHintAt(g, id, tier);
   // Every wins board ranks on POINTS (Matt, 2026-11-02, js/lb-points.js): every win adds, harder levels

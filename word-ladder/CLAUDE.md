@@ -34,6 +34,10 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
   list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
 - Desktop: letters type, ← → move the caret, Backspace = Undo.
+- **The phone's back swipe steps back one screen, as in every leaderboard (2026-11-13, Matt)**: `js/back-stack.js`, levels
+  start screen 0, a level / daily / done card 1, How to play +1. The swipe, the hub's top-left button (`back()`; it reads
+  "‹ Back" via `gamehub:backlabel` while there is a step, "‹ Hub" on the start screen), the game's own back arrow, the X's
+  and Esc all run ONE path (`_goBack` -> history -> `_stepBack`). `destroy()` closes the stack. Checked: history does not grow.
 - **The goal is said on screen (2026-11-13, Matt: "not clear how to play AT ALL")**: How to play opens BY ITSELF the
   first time a device reaches a level (`seen` in `gamehub.wordladder.v1`, a preference), with a drawn example ladder
   (`howSVG`: each step's changed letter outlined gold, arrows, the flag) and a Got it button; until the first move the
@@ -52,10 +56,13 @@ Word Weaver's GRID words alone (common, hand-checked); start, target and the hin
 ## Stats (`wl` sub-counter)
 
 `wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
-stars Math.max, moves and hints Math.min, earliest time). First completion = one play + win in its band (`daily` for the
+the BETTER attempt kept WHOLE: more stars, then fewer moves, then fewer hints; never one attempt's moves with another's hints,
+rule 4; earliest time). First completion = one play + win in its band (`daily` for the
 daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (levels, stars,
-at par, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`). Leaderboard rule `solves`
-(`js/lb-rules.js`); no points yet. **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
+at par = ladder levels in par moves, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`). Leaderboard rule
+`solves` (`js/lb-rules.js`); the board number is `wlSolved` (DISTINCT levels from the merged maps, both languages, by band via
+`wlBandOf`), never `byDiff` wins: a second phone starts at level 1 and would count a level twice. No points yet. No integrity
+rule yet (`GAME_NAMES` has it; candidate STRONG rule `m >= p`, replay over real data first). **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
 decide `CARRY_TEST` with Matt, add every file to `sw.js` ASSETS with `data/**` in LAZY, bump CACHE.
 
 **Data reaches the phone on the next open (2026-11-13)**: `destroy()` forgets the loaded words and levels, so going back to
@@ -75,10 +82,14 @@ back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by mea
 room; earlier words folded under a ⋮ when they do not fit; tiles never under 32px, so earlier words' letters stay over 11px). The
 done screen's ladder (`_fitFinal`, refit on resize) keeps 30-44px tiles and shows the first word, a ⋮ and the last words when it
 is too long (2026-11-13 review: an 18-word ladder had shrunk to 16px tiles, 9px letters, and overflowed). **Keys are 10 across like a phone keyboard, so narrower
-than 44px on a 360px phone** (a documented departure from the 44x44 floor; 50px tall).
+than 44px** (33px at 360, 37px at 402, edge to edge with 3px gaps; a documented departure from the 44x44 floor; 50px tall).
+Hints show as a badge on the bulb and beside Moves/Par on the done card (2026-11-13 UI review: a 1-star finish at par read
+as a bug). How to play says Undo counts as a move. The star total on the start screen hides at 0. A finished, RECORDED save
+is kept as saved even if a word later leaves the list. **The daily is the day it is OPENED on**: a ladder half done at
+midnight stays saved under its day but the Daily button then opens the new day (not finishable after; kept simple).
 
 ## Tests
 
-`node word-ladder/js/data-test.js`, `node tools/test-game-conventions.mjs`, `node tools/test-game-modes.mjs`,
+`node word-ladder/js/data-test.js`, `node tools/test-word-ladder.mjs` (recorders, merge, board count, stars = engine), `node tools/test-game-conventions.mjs`, `node tools/test-game-modes.mjs`,
 `node tools/test-i18n-strings.mjs`, `node tools/players-agg.test.mjs`, `node tools/test-lb-rules.mjs`.
 The localhost-only seam `window.__wlTest` (`state()`, `type(word)`, `hint()`).
