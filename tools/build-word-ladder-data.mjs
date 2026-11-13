@@ -5,7 +5,8 @@
 //
 // SOURCES (all in this repo, nothing downloaded)
 //   * The WORDS: every grid word and extra word of Word Weaver's shipped levels (word-weaver/data/, word-weaver/data/es/),
-//     3 to 5 letters. Those lists were already cleaned by Word Weaver's generators: SCOWL / ENABLE (English) and Spelling
+//     3 to 5 letters, PLUS every 3-5 letter word of the Boggle dictionaries (boggle/data/words.txt = ENABLE,
+//     words-es.txt), so any real word is a legal step (2026-11-13). Word Weaver's lists were already cleaned by Word Weaver's generators: SCOWL / ENABLE (English) and Spelling
 //     Bee's Spanish lists, no first names, no bad words or their plurals (word-weaver/data/CREDITS.md). A word is
 //     ACCEPTED as a step only if it is on this list, and every par below is the shortest path over exactly this list,
 //     so no player can ever beat par.
@@ -53,6 +54,11 @@ function loadWords(lang) {
     const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
     for (const l of j.levels) { for (const w of l.w) { set.add(w[0]); grid.add(w[0]); } for (const x of l.x) set.add(x); }
   }
+  // Every real word counts as a STEP (2026-11-13, Matt: "ASS ... Yes it is" a word): the whole Boggle dictionary
+  // too (ENABLE for English, boggle/data/words-es.txt for Spanish), bad words included. Start, target and the
+  // hint path stay Word Weaver GRID words (common, clean).
+  const broad = fs.readFileSync(path.join(ROOT, 'boggle/data', lang === 'es' ? 'words-es.txt' : 'words.txt'), 'utf8').split(/\r?\n/);
+  for (const w of broad) set.add(w.trim().toUpperCase());
   const ok = lang === 'es' ? /^[A-ZÑ]{3,5}$/ : /^[A-Z]{3,5}$/;
   return { all: [...set].filter((w) => ok.test(w)), grid };
 }
