@@ -58,6 +58,11 @@ at par, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`).
 (`js/lb-rules.js`); no points yet. **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
 decide `CARRY_TEST` with Matt, add every file to `sw.js` ASSETS with `data/**` in LAZY, bump CACHE.
 
+**Data reaches the phone on the next open (2026-11-13)**: `destroy()` forgets the loaded words and levels, so going back to
+the Hub and in again fetches them fresh (the hub keeps this module loaded for the life of the page; before this a phone
+kept old data until the app was closed, and Matt's refused LIEN). A data change that must reach admin phones at once also
+bumps CACHE (they reload on a new build).
+
 ## Layout
 
 Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it:
