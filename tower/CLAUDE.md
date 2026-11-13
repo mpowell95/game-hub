@@ -60,6 +60,12 @@ WITH the admin live switch, never the switch first (the game would read the empt
   "too transparent"), nebula, ringed planet, landing pad; Toy (new) = 3D toy blocks at sunset, the one light look. Each
   look has ONE time of day, whatever the hub theme (the old day/night City and Ice are gone). Sky and scenery are cached
   canvases; scenery scrolls at 0.35 of the tower. Look ids unchanged (rule 5).
+- **Readable against the background (2026-11-12, Matt: "The piece is too close to the background")**: City floors are WARM
+  STONE with a light edge against the cool city (blue vs yellow-brown also reads for red/green colour blindness), the city
+  behind dimmer; Ice blocks near solid in front of DARKER mountains. Check every look's tower against its scene at full size.
+- **Game over**: the card has "‹ Back" (to setup) besides the X (Matt went to the hub by accident). Nothing that must be read
+  goes under the hub's top row (`_readTopY`, a CSS probe): the best line's label drops below the line there, and the
+  game-over zoom fits the tower between that row and the card (the card is built first, hidden, and measured).
 - **A frame can never freeze the game (2026-11-12, Matt's iPhone stopped on a half-drawn frame mid-run, not reproducible
   in Chrome)**: the loop asks for the next frame FIRST and catches a throwing frame; iPhones cap total canvas memory,
   so art.js keeps at most 6 cached canvases, hands memory back (width 0) on drop/close, and paints straight to the

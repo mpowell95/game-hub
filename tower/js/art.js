@@ -31,7 +31,7 @@ export function slabOf(look, i) {
   if (look === 'space') { const h = neonHue(i); return { face: hsl(h, 62, 34), top: hsl(h, 100, 64), side: hsl(h, 70, 20) }; }
   if (look === 'toy') { const c = TOY[i % 4]; return { face: c, top: shade(c, 1.25), side: shade(c, 0.7) }; }
   const h = 215 + (i % 2) * 8;
-  return { face: hsl(h, 28, 40), top: hsl(h, 30, 62), side: hsl(h, 32, 26) };
+  return { face: '#c9a77a', top: '#ead2a8', side: '#7d5f3e' };   // warm stone against the cool city (2026-11-12)
 }
 
 // --- canvas: cached sky and scenery ------------------------------------------------------------
@@ -134,7 +134,7 @@ const SKY = {
 const SCENERY = {
   city: { base: '#141a3c', paint(g, W) {
     const r = rng(9), B = SCN_H;
-    g.globalAlpha = 0.75; g.fillStyle = '#3a3570';
+    g.globalAlpha = 0.55; g.fillStyle = '#332f66';
     for (let x = -10; x < W; x += 34) { const h = 120 + r() * 160; g.fillRect(x, B - h, 30, h); if (r() < 0.4) g.fillRect(x + 13, B - h - 18, 3, 18); }
     g.globalAlpha = 1;
     for (let x = -20; x < W; x += 58) {
@@ -146,7 +146,8 @@ const SCENERY = {
   } },
   ice: { base: '#2c5368', paint(g, W) {
     const B = SCN_H;
-    g.fillStyle = vgrad(g, B - 260, B, [[0, '#e9f7ff'], [0.35, '#7fb0c6'], [1, '#2c5368']]);
+    // Darker than the ice blocks in front of them (2026-11-12: pale peaks behind pale glass were hard to tell apart).
+    g.fillStyle = vgrad(g, B - 260, B, [[0, '#9cbfd1'], [0.35, '#4d7a90'], [1, '#22465a']]);
     g.globalAlpha = 0.9;
     g.beginPath(); g.moveTo(-10, B); g.lineTo(W * 0.2, B - 210); g.lineTo(W * 0.32, B - 150); g.lineTo(W * 0.5, B - 260);
     g.lineTo(W * 0.72, B - 120); g.lineTo(W * 0.85, B - 190); g.lineTo(W + 20, B); g.closePath(); g.fill();
@@ -270,7 +271,7 @@ export function drawBlock(ctx, look, x, y, w, h, i, k, alpha = 1) {
   const dx = 12 * k, dy = -9 * k;
   if (look === 'ice') {
     const face = ctx.createLinearGradient(0, y, 0, y + h);
-    face.addColorStop(0, 'rgba(200,245,255,.92)'); face.addColorStop(1, 'rgba(90,185,225,.85)');
+    face.addColorStop(0, 'rgba(206,246,255,.98)'); face.addColorStop(1, 'rgba(104,192,230,.97)');   // near solid (2026-11-12)
     box3d(ctx, x, y, w, h, dx * 0.85, dy * 0.9, face, 'rgba(235,252,255,.95)', 'rgba(60,140,185,.85)');
     ctx.fillStyle = 'rgba(255,255,255,.35)';
     ctx.beginPath(); ctx.moveTo(x + w * 0.12, y + h); ctx.lineTo(x + w * 0.22, y + h); ctx.lineTo(x + w * 0.42, y); ctx.lineTo(x + w * 0.32, y); ctx.closePath(); ctx.fill();
@@ -296,15 +297,19 @@ export function drawBlock(ctx, look, x, y, w, h, i, k, alpha = 1) {
     ctx.fillStyle = shade(c, 0.8); ctx.fillRect(x, y + h - 4 * k, w, 4 * k);
     ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x, y, w, 3 * k);
   } else {
-    const hh = 215 + (i % 2) * 8;
     const face = ctx.createLinearGradient(x, 0, x + w, 0);
-    face.addColorStop(0, '#4b5d86'); face.addColorStop(1, '#34436a');
-    box3d(ctx, x, y, w, h, dx, dy, face, hsl(hh, 30, 62), hsl(hh, 32, 26));
+    // WARM STONE against the cool blue-purple city (2026-11-12, Matt: "The piece is too close to the background. It's
+    // tough to tell them apart"; the blue-grey floors matched the buildings). Blue vs yellow-brown also reads for
+    // red/green colour blindness. A light edge outlines every floor.
+    face.addColorStop(0, '#d2b083'); face.addColorStop(1, '#b8925f');
+    box3d(ctx, x, y, w, h, dx, dy, face, '#efd9b0', '#7d5f3e');
+    ctx.strokeStyle = 'rgba(255,240,210,.55)'; ctx.lineWidth = Math.max(1, 1.2 * k);
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x, y, w, 3 * k);
     // Windows: fixed per floor and column (no flicker); about half lit, a soft warm glow.
     let n = 0;
     for (let wx = x + 7 * k; wx + 9 * k < x + w - 4 * k; wx += 15 * k, n++) {
-      ctx.fillStyle = hash(i + 1, n + 1) < 0.45 ? 'rgba(226,190,120,.62)' : '#26304f';
+      ctx.fillStyle = hash(i + 1, n + 1) < 0.45 ? '#ffe3a3' : '#3b3148';
       ctx.fillRect(wx, y + 11 * k, 9 * k, 17 * k);
     }
   }
@@ -330,7 +335,7 @@ export function svgBlock(look, x, y, w, h, i, s) {
   if (look === 'city') {
     let n = 0;
     for (let wx = x + 4 * s; wx + 5 * s < x + w - 2 * s; wx += 8 * s, n++) {
-      out += `<rect x="${wx.toFixed(1)}" y="${(y + h * 0.28).toFixed(1)}" width="${(5 * s).toFixed(1)}" height="${(h * 0.44).toFixed(1)}" fill="${hash(i + 1, n + 1) < 0.45 ? 'rgba(226,190,120,.7)' : '#26304f'}"/>`;
+      out += `<rect x="${wx.toFixed(1)}" y="${(y + h * 0.28).toFixed(1)}" width="${(5 * s).toFixed(1)}" height="${(h * 0.44).toFixed(1)}" fill="${hash(i + 1, n + 1) < 0.45 ? '#ffe3a3' : '#3b3148'}"/>`;
     }
   }
   return out;
@@ -340,7 +345,7 @@ function svgScene(look, W, H, gy) {
     return `<defs><linearGradient id="tws-ice" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03121f"/><stop offset="1" stop-color="#1f5a6e"/></linearGradient></defs>
       <rect width="${W}" height="${H}" fill="url(#tws-ice)"/>
       <path d="M-10 ${H * 0.3} C ${W * 0.3} ${H * 0.12}, ${W * 0.55} ${H * 0.45}, ${W + 10} ${H * 0.22}" stroke="rgba(63,214,168,.35)" stroke-width="${H * 0.09}" fill="none" stroke-linecap="round"/>
-      <path d="M-10 ${gy} L${W * 0.2} ${gy - H * 0.4} L${W * 0.36} ${gy - H * 0.25} L${W * 0.55} ${gy - H * 0.48} L${W * 0.78} ${gy - H * 0.22} L${W + 10} ${gy}Z" fill="#7fb0c6"/>
+      <path d="M-10 ${gy} L${W * 0.2} ${gy - H * 0.4} L${W * 0.36} ${gy - H * 0.25} L${W * 0.55} ${gy - H * 0.48} L${W * 0.78} ${gy - H * 0.22} L${W + 10} ${gy}Z" fill="#4d7a90"/>
       <path d="M${W * 0.55} ${gy - H * 0.48} L${W * 0.5} ${gy - H * 0.38} L${W * 0.58} ${gy - H * 0.4}Z" fill="#fff"/>
       <rect y="${gy}" width="${W}" height="${H - gy}" fill="#d9eef7"/>`;
   }
