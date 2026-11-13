@@ -63,6 +63,17 @@ const OPTIONS = {
       <path d="M80 52 C 76 40, 62 34, 48 30" fill="none" stroke="#ffb35a" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/>
       <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1"><circle cx="72" cy="42" r="3.2"/><circle cx="60" cy="35" r="3.6"/></g>
     </svg>`,
+  // C2 (2026-11-13, Matt leaning to C): readable at tile size. 5 gems a row instead of 7 (bigger), the monsters
+  // moved in from the corners (the "New" tag top left, the heart top right), bigger energy dots.
+  C2: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 46, glow: true })}
+      ${tank(52, 44, 18)}${tank(110, 44, 18)}
+      ${mon('emberkit', false, 30, 6, 42)}${mon('driplet', false, 89, 6, 42, true)}
+      ${burst(81, 26, 7, '#ffd36a', 8)}
+      <rect x="18" y="52" width="124" height="38" rx="5" fill="#1a120d" opacity=".92"/>
+      ${[['water', 'fire', 'fire', 'fire', 'leaf'], ['shadow', 'spark', 'water', 'leaf', 'spark']].map((row, r) => row.map((k, c) => gem(k, 21 + c * 24.4, 53.5 + r * 17.5, 18)).join('')).join('')}
+      <rect x="43" y="53" width="73" height="19.5" rx="5" fill="none" stroke="#fff3b0" stroke-width="2.2"/>
+      <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.2"><circle cx="79" cy="46" r="4.2"/><circle cx="75" cy="36.5" r="4.6"/></g>
+    </svg>`,
   // D: the hero: Blazelynx in a burst of fire, the five gems around it.
   D: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 70 })}
       <g opacity=".85">${burst(80, 40, 46, '#c4421c', 14)}${burst(80, 40, 34, '#ff8a2a', 14)}${burst(80, 40, 20, '#ffd36a', 14)}</g>
@@ -73,10 +84,10 @@ const OPTIONS = {
 };
 OPTIONS.NOW = GAME_ART['battle-arena'];
 
-const ORDER = ['NOW', 'A', 'B', 'C', 'D'];
-const LABEL = { NOW: 'Now', A: 'A', B: 'B', C: 'C', D: 'D' };
-const tile = (svg, name, test) => `<div class="cell"><div class="art">${svg}${test ? '<span class="pill">Test</span>' : ''}<span class="fav">♡</span></div><div class="name">${name}</div></div>`;
-const row = (svg) => tile(GAME_ART['ball-run'], 'Ball Run') + tile(GAME_ART.baseball, 'Baseball', true) + tile(svg, 'Battle Arena');
+const ORDER = ['NOW', 'A', 'B', 'C', 'C2', 'D'];
+const LABEL = { NOW: 'Now', A: 'A', B: 'B', C: 'C', C2: 'C2', D: 'D' };
+const tile = (svg, name, tag) => `<div class="cell"><div class="art">${svg}${tag ? `<span class="pill${tag === 'New' ? ' new' : ''}">${tag}</span>` : ''}<span class="fav">♡</span></div><div class="name">${name}</div></div>`;
+const row = (svg) => tile(GAME_ART['ball-run'], 'Ball Run') + tile(GAME_ART.baseball, 'Baseball', 'Test') + tile(svg, 'Battle Arena', 'New');
 const sec = (k) => `<section><h2>${LABEL[k]}</h2>
   <div class="big">${OPTIONS[k]}</div>
   <div class="pair"><div class="hub dark"><div class="grid">${row(OPTIONS[k])}</div></div><div class="hub light"><div class="grid">${row(OPTIONS[k])}</div></div></div>
@@ -101,6 +112,7 @@ const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta n
   .name { margin-top: 5px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dark .name { color: #f4f6fb; } .light .name { color: #1b2333; }
   .pill { position: absolute; top: 5px; left: 5px; font-size: 11px; font-weight: 700; background: #33405a; color: #fff; padding: 2px 6px; border-radius: 999px; }
+  .pill.new { background: #E0532F; }
   .fav { position: absolute; top: 0; right: 4px; color: #fff; font-size: 18px; text-shadow: 0 1px 2px #000; }
 </style></head><body><main>
 ${ORDER.map(sec).join('\n')}
