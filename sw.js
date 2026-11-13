@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1530;
-const CACHE = 'game-hub-v1542';
+const CACHE = 'game-hub-v1543';
 
 const ASSETS = [
   './',
@@ -375,6 +375,13 @@ const ASSETS = [
   './tic-tac-toe/js/ai.js',
   './tic-tac-toe/js/hash.js',
   './tic-tac-toe/js/strings.js',
+  './tower/',
+  './tower/index.html',
+  './tower/css/tower.css',
+  './tower/js/ui.js',
+  './tower/js/engine.js',
+  './tower/js/art.js',
+  './tower/js/strings.js',
   // Dots and Boxes module
   './dots-boxes/',
   './dots-boxes/index.html',
@@ -827,7 +834,7 @@ const REST_MANIFEST = {
   './css/hub.css': '5f853d38b4',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'aa397f58f9',
+  './js/hub.js': '6809dbb010',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -854,10 +861,10 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '3fc5f54751',
+  './js/game-stats.js': '9920b15627',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
-  './js/game-stats-ui.js': '1b5094fecb',
+  './js/game-stats-ui.js': 'b113bf0a7c',
   './js/stats-net.js': 'bd96956644',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
@@ -1130,6 +1137,13 @@ const REST_MANIFEST = {
   './tic-tac-toe/js/ai.js': '32360ab831',
   './tic-tac-toe/js/hash.js': 'fc3c1f6bac',
   './tic-tac-toe/js/strings.js': 'ffc38f2811',
+  './tower/': '8863f00bd1',
+  './tower/index.html': '8863f00bd1',
+  './tower/css/tower.css': '8c53ce1d5d',
+  './tower/js/ui.js': '9181dae3e6',
+  './tower/js/engine.js': '6bffabdd81',
+  './tower/js/art.js': '90a72590fc',
+  './tower/js/strings.js': 'a8615ba14c',
   './dots-boxes/': 'db0a41b47e',
   './dots-boxes/index.html': 'db0a41b47e',
   './dots-boxes/css/dots-boxes.css': '796c62de32',

@@ -803,8 +803,7 @@ export const GAMES = [
     immersive: true,
     accent: '#4a5aa8',
     art: GAME_ART['tower'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose.
-    devOnly: true,
+    released: '2026-11-13',         // Matt: "release it"; the New pill and the New games bubble count from here
   },
 ];
 
