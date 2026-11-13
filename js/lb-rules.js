@@ -54,6 +54,7 @@ export const LB_RULES = {
   uno: { by: 'wins' },
   wayout: { by: 'points' },
   wordweaver: { by: 'points' },
+  numbermerge: { by: 'best' },   // admin only: Classic's best score
   wordladder: { by: 'solves' },   // admin only: levels finished (no points yet)
   yahtzee: { by: 'wins' },
 };
