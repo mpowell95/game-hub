@@ -1247,21 +1247,6 @@ export const GAME_ART = {
               <rect x="46" y="76" width="70" height="12" rx="3" fill="none" stroke="#f2b705" stroke-width="2" stroke-dasharray="4 3"/>
             </g>
           </svg>`,
-  // Number Merge (2026-11-13, number-merge/): a 4x4 board of numbered tiles on deep slate, each step DARKER than the one
-  // before (lightness and the number tell them apart, never hue), two 8s about to meet.
-  'number-merge': `<svg viewBox="0 0 160 90" aria-hidden="true">
-            <rect width="160" height="90" fill="#1b2232"/>
-            <rect x="42" y="5" width="80" height="80" rx="8" fill="#2c3448"/>
-            <g font-family="system-ui,sans-serif" font-weight="800" text-anchor="middle">
-              ${[[0, 0, 2], [1, 0, 4], [2, 0, 8], [3, 0, 8], [0, 1, 16], [1, 1, 32], [3, 1, 2], [0, 2, 64], [1, 2, 128], [2, 2, 4], [0, 3, 256], [1, 3, 512], [3, 3, 2048]].map(([c, r, v]) => {
-                const fill = { 2: '#f7f4ec', 4: '#e8dcbf', 8: '#f2c45a', 16: '#df8f2f', 32: '#c4632c', 64: '#a2433a', 128: '#8a3d5f', 256: '#713a72', 512: '#573580', 2048: '#262b72' }[v];
-                const x = 46 + c * 19, y = 9 + r * 19, ink = v >= 32 ? '#ffffff' : '#2a2320';
-                return `<rect x="${x}" y="${y}" width="16" height="16" rx="3" fill="${fill}"${v === 2048 ? ' stroke="#f2b705" stroke-width="1.6"' : ''}/><text x="${x + 8}" y="${y + 11.5}" font-size="${v > 999 ? 5.5 : v > 99 ? 7 : 9}" fill="${ink}">${v}</text>`;
-              }).join('')}
-            </g>
-            <path d="M24 45h12M30 39l6 6-6 6" stroke="#f5f8ff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M136 45h-12M130 39l-6 6 6 6" stroke="#f5f8ff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>`,
   // Tower (2026-11-01, tower/): a stack of slabs at dusk, the next block sliding in off-centre.
   'tower': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <defs><linearGradient id="twTileSky" x1="0" y1="0" x2="0" y2="1">

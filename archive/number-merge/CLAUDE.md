@@ -1,4 +1,15 @@
-# Number Merge — number-merge/CLAUDE.md
+# Number Merge — archive/number-merge/CLAUDE.md
+
+> **ARCHIVED 2026-11-13** (Matt: "remove this from the gamehub"). Moved from `number-merge/` to `archive/number-merge/`;
+> removed from the app: launcher entry and `BUG_BTN_GAMES` (`js/hub.js`), tile art, strings, My Stats tab and
+> `numberMergeScreen`, leaderboard GAME_META row, metric and `BEST_BOARDS`, `lb-rules.js`, `lb-rank-sheet.js`,
+> `ADMIN_ONLY`, `recordNumberMerge` / `ensureNm` / `nmDayBest` (`js/game-stats.js`), its `players-agg.js` branch and
+> SOLO entry, and `tools/test-number-merge.mjs`. It was admin-only and never in sw.js ASSETS. **Stored history NOT
+> touched**: `'numbermerge'` stays in `GAMES` and is in `ARCHIVED_GAMES`; the real and test records (with `nm`) and
+> `gamehub.numbermerge.v1` / `.save.v1` / `.daily.v1` stay on the phones and in `players/<id>` (pinned by
+> `tools/test-admin-only-plays.mjs`). Its imports (`../../js/`) only resolve from the old path.
+>
+> **To restore:** revert the archive commit (everything above comes back from git).
 
 > **THE LAW** (root `CLAUDE.md`): player data is never deleted, never lost, never put at risk.
 > Read it there before touching anything that records or stores. The working rules are in `js/CLAUDE.md`.

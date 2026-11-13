@@ -43,9 +43,11 @@ const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { pl
 const legacyBa = { total: { played: 6, won: 3, lost: 3 }, byDiff: { mp: { played: 6, won: 3, lost: 3 } } };
 localStorage.setItem('gamehub.stats', JSON.stringify({
   version: 1,
-  games: { archery: legacyGl, battlearena: legacyBa, cupbaseball: { total: { played: 4, won: 1, lost: 3 }, byDiff: { easy: { played: 4, won: 1, lost: 3 } } }, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} } },
+  games: { archery: legacyGl, battlearena: legacyBa, cupbaseball: { total: { played: 4, won: 1, lost: 3 }, byDiff: { easy: { played: 4, won: 1, lost: 3 } } }, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} },
+    numbermerge: { total: { played: 3, won: 3, lost: 0 }, byDiff: { classic: { played: 3, won: 3, lost: 0 } }, nm: { games: 3, best: 556, bestTile: 2048, dl: {} } } },
   h2h: { battlearena: { devOld: { name: 'Old', w: 1, l: 0 } } },
-  testGames: { cupbaseball: { total: { played: 9, won: 2, lost: 7 }, byDiff: { hard: { played: 9, won: 2, lost: 7 } } }, baseball: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } } },
+  testGames: { cupbaseball: { total: { played: 9, won: 2, lost: 7 }, byDiff: { hard: { played: 9, won: 2, lost: 7 } } }, baseball: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } },
+    numbermerge: { total: { played: 7, won: 7, lost: 0 }, byDiff: { daily: { played: 7, won: 7, lost: 0 } }, nm: { games: 7, best: 900, bestTile: 512, dl: { '2026-11-13': { sc: 64, tl: 64, mv: 9, t: 5 } } } } },
 }));
 const raw = () => JSON.parse(store.get('gamehub.stats'));
 
@@ -95,6 +97,9 @@ ok('repeated loads and writes never nest or move records', r.games.archery.total
 // test records stay exactly where they were, through loads and other games' writes (THE LAW).
 ok('archived Cup Baseball: real record kept as it was', JSON.stringify(r.games.cupbaseball.total) === JSON.stringify({ played: 4, won: 1, lost: 3 }) && r.games.cupbaseball.byDiff.easy.played === 4);
 ok('archived Cup Baseball: test record kept as it was', JSON.stringify(r.testGames.cupbaseball.total) === JSON.stringify({ played: 9, won: 2, lost: 7 }) && r.testGames.cupbaseball.byDiff.hard.played === 9);
+ok('archived Number Merge (2026-11-13, Matt: "remove this from the gamehub"): real record and its nm kept', r.games.numbermerge.total.played === 3 && r.games.numbermerge.nm.best === 556 && r.games.numbermerge.nm.bestTile === 2048);
+ok('archived Number Merge: test record and its daily kept', r.testGames.numbermerge.total.played === 7 && r.testGames.numbermerge.nm.dl['2026-11-13'].sc === 64);
+ok('archived Number Merge: in GAMES and ARCHIVED_GAMES, not a test game', G.GAMES.includes('numbermerge') && G.ARCHIVED_GAMES.includes('numbermerge') && !G.isTestGame('numbermerge'));
 ok('archived Cup Baseball: still in the store\'s GAMES and in ARCHIVED_GAMES (out of every total)', G.GAMES.includes('cupbaseball') && G.ARCHIVED_GAMES.includes('cupbaseball'));
 
 // Battle Arena is listed in CARRY_TEST (Matt, 2026-11-13) but is still admin-only: nothing is carried yet.

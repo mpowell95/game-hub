@@ -306,7 +306,7 @@ import { appendPlayLog, argsJSON } from './play-log-queue.js';
 
 const DEVICE_KEY = 'gamehub.deviceId';
 const STATS_KEY = 'gamehub.stats';
-// `pinball`, `pool`, `poolv2`, `pipes` and `cupbaseball` (archived 2026-11-13) stay in GAMES even though those games are ARCHIVED (Matt,
+// `pinball`, `pool`, `poolv2`, `pipes`, `cupbaseball` and `numbermerge` (both archived 2026-11-13) stay in GAMES even though those games are ARCHIVED (Matt,
 // 2026-09-28: "archive all traces"): GAMES is the STORE's shape, and players' recorded games still
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
@@ -315,7 +315,7 @@ const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'esco
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 // The challenge match being counted right now (withChallengeMatch, 2026-10-29); null otherwise.
 let _mpMatch = null;
-const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes', 'cupbaseball'];
+const ARCHIVED_GAMES = ['pinball', 'pool', 'poolv2', 'pipes', 'cupbaseball', 'numbermerge'];
 
 // --- WHOSE stats these are (2026-07-23) -------------------------------------------------------------
 //
@@ -1084,7 +1084,6 @@ function normalize(raw) {
   ensureBz(st.games.brickblitz);
   ensureTw(st.games.tower);
   ensureWl(st.games.wordladder);
-  ensureNm(st.games.numbermerge);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
   ensureCp(st.games.cuppong);
@@ -1723,7 +1722,7 @@ function resetKingOfGamesSkeeball(st) {
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
   archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball',
-  wordladder: 'word-ladder', numbermerge: 'number-merge',
+  wordladder: 'word-ladder',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
 export function isTestGame(id) {
@@ -3628,59 +3627,6 @@ export function recordWordLadderDaily(key, { moves, par, hints } = {}) {
   else if (_mode) _mode.noted = true;
   const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };
   map[k] = wlBest(map[k], e);
-  st.updatedAt = new Date().toISOString();
-  persist(st);
-  return st;
-}
-
-/** Number Merge (2026-11-13, number-merge/): a 4x4 merge puzzle, solo, score-based. Every ended game is one play and
- *  one win (no loss axis, like Tower) under byDiff.classic or byDiff.daily.
- *  `nm` = { games, moves, score (sums: add), best (Classic's best score), bestDaily, bestTile (both modes): Math.max ONLY,
- *           dl: { 'YYYY-MM-DD': { sc: score, tl: top tile, mv: moves, t: ms } } }  the daily games, one per day.
- *  A day recorded twice on one store (it cannot happen through the game: one try) keeps the BETTER score's entry WHOLE
- *  and counts no second play (rule 2, rule 4). */
-export const NM_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-function ensureNm(g) {
-  if (!g.nm || typeof g.nm !== 'object' || Array.isArray(g.nm)) g.nm = { games: 0, moves: 0, score: 0, best: 0, bestDaily: 0, bestTile: 0, dl: {} };
-  for (const k of ['games', 'moves', 'score', 'best', 'bestDaily', 'bestTile']) if (!Number.isFinite(g.nm[k])) g.nm[k] = 0;
-  if (!g.nm.dl || typeof g.nm.dl !== 'object' || Array.isArray(g.nm.dl)) g.nm.dl = {};
-}
-/** Two entries of one daily game: the higher score kept whole, the earliest time. Pure. */
-export function nmDayBest(a, b) {
-  const ok = (e) => e && typeof e === 'object' && !Array.isArray(e);
-  if (!ok(a)) return ok(b) ? { ...b } : a;
-  if (!ok(b)) return { ...a };
-  const keep = (b.sc | 0) > (a.sc | 0) ? b : a;
-  const ta = Number(a.t) || 0, tb = Number(b.t) || 0;
-  return { ...keep, t: ta && tb ? Math.min(ta, tb) : ta || tb };
-}
-/** Number Merge: one game ended (no move left, or ended by New game, or a past day's daily). `mode` 'classic' | 'daily';
- *  `day` = 'YYYY-MM-DD' for the daily. The caller wraps it in withMode({ mode }, mode, ..., { hi: score, detail }).
- *  Returns the store, or null when rate-gated or the daily's day is malformed (nothing written). */
-export function recordNumberMerge(score, { mode, tile, moves, day } = {}) {
-  if (tooFast('numbermerge')) return null;
-  notePlay('numbermerge', 'recordNumberMerge', arguments);
-  const n = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Math.floor(Number(v))) : 0);
-  const daily = mode === 'daily';
-  if (daily && !NM_DAY_RE.test(String(day || ''))) { console.error('[game-stats] Number Merge daily: bad day, nothing recorded', day); return null; }
-  const st = loadStats();
-  const g = st.games.numbermerge;
-  ensureNm(g);
-  const sc = n(score), tl = n(tile), mv = n(moves);
-  const e = { sc, tl, mv, t: Date.now() };
-  if (daily && g.nm.dl[day]) {
-    g.nm.dl[day] = nmDayBest(g.nm.dl[day], e);
-    if (_mode) _mode.noted = true;
-  } else {
-    bumpTotals(g, daily ? 'daily' : 'classic', true);
-    g.nm.games += 1;
-    g.nm.moves += mv;
-    g.nm.score += sc;
-    if (daily) g.nm.dl[day] = e;
-  }
-  if (daily) g.nm.bestDaily = Math.max(g.nm.bestDaily | 0, sc);
-  else g.nm.best = Math.max(g.nm.best | 0, sc);
-  g.nm.bestTile = Math.max(g.nm.bestTile | 0, tl);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;
