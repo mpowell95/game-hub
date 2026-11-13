@@ -206,3 +206,16 @@ old head-to-head until it next opens (none exists today).
 `GAME_ART['battle-arena']` (`js/game-art.js`) = option C of `docs/mockups/battle-arena-tile/` (built by its `build.mjs` from
 `art.js`'s real monsters and gems): Emberkit and Driplet on their tanks over a gem board, three fire gems lit, energy flying to
 Emberkit. A new tile is drawn from the game's own art, never a hand-made copy of it.
+
+## Matt's iPhone notes (2026-11-13)
+
+- **Home centred on a tall phone** (`spreadHome`, after `fitHome`): the spare room under the menu (measured with the TALLER
+  tab, so the tabs never move) grows the monsters up to 150px, then half the rest goes above the hero (`--ba-lift`). The
+  hero's 2px art margin is not "overflow" (`+ 6` in `over()`; it made every phone take the short-phone path).
+- **"Your Turn" takes the name's place** (same slot and size, no floating pill); the numbers column sits level with the
+  avatar (`.ba-team` `align-items: flex-start`) so that line never touches the HP.
+- **The shield is a bubble** over each monster of the shielded team, with a shield chip and the number on the side facing
+  the other team (`paintShield`; follows the shield / damage events mid-move, `_inPlay`; pops in, wobbles on a soaked hit,
+  bursts at 0). The HUD's small shield badge is gone.
+- **A match opens behind SHUT doors**: renderBattle puts them up on the first frame, `stageIntro` shows "Boiler Room" on
+  them, then they open (it used to show the board, then the name, then close and open the doors).

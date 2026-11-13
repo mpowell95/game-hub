@@ -451,6 +451,7 @@ class BattleArena {
     const art = home.querySelector('.ba-home-art');
     const mon = home.querySelector('.ba-home-mon svg');
     home.style.removeProperty('--ba-hm');
+    home.style.removeProperty('--ba-lift');
     home.classList.remove('is-tight');
     if (art) art.hidden = false;
     fitText(home.querySelector('.ba-title-a'), 30);
@@ -461,8 +462,8 @@ class BattleArena {
     const over = () => (menu && menu.getBoundingClientRect().bottom > Math.min(window.innerHeight, this.root.getBoundingClientRect().bottom) + 1)
       || (menu && menu.lastElementChild && menu.lastElementChild.getBoundingClientRect().bottom
         > menu.getBoundingClientRect().bottom - parseFloat(getComputedStyle(menu).paddingBottom) + 1)
-      || (hero && hero.scrollHeight > hero.clientHeight + 1);
-    if (!over() || !mon) return;
+      || (hero && hero.scrollHeight > hero.clientHeight + 6);   // 2px is the art's own negative margin, not overflow (2026-11-13)
+    if (!over() || !mon) { this.spreadHome(home, menu, mon); return; }
     let hm = Math.round(mon.getBoundingClientRect().width);
     while (over() && hm > 64) { hm -= 8; home.style.setProperty('--ba-hm', hm + 'px'); }
     if (over() && art) art.hidden = true;
@@ -472,6 +473,34 @@ class BattleArena {
     const lines = [...home.querySelectorAll('.ba-title-a, .ba-title-b')];
     const base = lines.map((el) => parseFloat(el.style.fontSize) || parseFloat(getComputedStyle(el).fontSize));
     for (let f = 0.9; over() && f >= 0.5; f -= 0.1) lines.forEach((el, i) => { el.style.fontSize = (base[i] * f).toFixed(1) + 'px'; });
+  }
+
+  /** A TALL phone (2026-11-13, Matt on his iPhone: "everything high up... the content isn't centered"): the room left
+   *  under the menu is shared out. The monsters grow first (up to 150px), then everything moves down by half of what is
+   *  left, so the space sits evenly above and below. Measured with the TALLER of the two tabs, so the tabs never move. */
+  spreadHome(home, menu, mon) {
+    if (!menu || !menu.lastElementChild) return;
+    const panels = [...menu.querySelectorAll('[data-panel]')];
+    const spare = () => {
+      const shown = panels.map((p) => p.hidden);
+      let least = Infinity;
+      for (const p of panels.length ? panels : [null]) {
+        if (p) panels.forEach((q) => { q.hidden = q !== p; });
+        const end = menu.getBoundingClientRect().bottom - parseFloat(getComputedStyle(menu).paddingBottom);
+        least = Math.min(least, end - menu.lastElementChild.getBoundingClientRect().bottom);
+      }
+      panels.forEach((q, i) => { q.hidden = shown[i]; });
+      return least;
+    };
+    let room = spare();
+    if (room < 24) return;
+    const art = home.querySelector('.ba-home-art');
+    if (mon && art && !art.hidden) {
+      const hm = Math.round(mon.getBoundingClientRect().width);
+      const grow = Math.min(150 - hm, Math.floor(room * 0.4));
+      if (grow > 0) { home.style.setProperty('--ba-hm', (hm + grow) + 'px'); room = spare(); }
+    }
+    if (room > 16) home.style.setProperty('--ba-lift', Math.floor(room / 2) + 'px');
   }
 
   /** Show one home tab's panel (no re-render: the Online list and the chosen level stay as they are). */
@@ -831,7 +860,7 @@ class BattleArena {
     const mon = (sd, mi) => `
       <div class="ba-mon ${mi === 0 ? 'is-back' : 'is-front'}" data-side="${sd}" data-mon="${mi}" role="button" tabindex="0">
         <div class="ba-plat"></div>
-        <div class="ba-mon-art"><div class="ba-mon-bob"></div></div>
+        <div class="ba-mon-art"><div class="ba-mon-bob"></div><span class="ba-shield" hidden aria-hidden="true"><b class="ba-shield-n">${ICONS.shield}<i></i></b></span></div>
         <div class="ba-bar"><span class="ba-bar-gem"></span><span class="ba-bar-track"><i class="ba-bar-fill"></i><span class="ba-bar-txt"></span></span></div>
         <span class="ba-evo-pill" hidden>${ICONS.berry}<b>${t('evolve')}</b></span>
       </div>`;
@@ -886,6 +915,13 @@ class BattleArena {
     this.startClock(gen);
     requestAnimationFrame(() => { if (gen === this.gen) { this.fit(); this.placeAll(); } });
     const fresh = this.state.moveNo === 0 && this.state.turnNo === 1 && !this.inbox.length;
+    // A new match opens behind SHUT doors (stageIntro names the stage on them, then opens them).
+    if (fresh && !reducedMotion()) {
+      const doors = document.createElement('div');
+      doors.className = 'ba-doors';
+      doors.innerHTML = '<div class="ba-door"></div><div class="ba-door"></div>';
+      this.root.querySelector('.ba-battle').appendChild(doors);
+    }
     if (this.link) { try { this.link.mountChat(this); } catch (err) { console.warn('[battle-arena] chat', err); } }
     this.busy = true;
     (async () => {
@@ -1272,6 +1308,7 @@ class BattleArena {
       this.hpShown[sd] = s.sides[sd].hp;
       this.paintSide(sd);
       s.sides[sd].mons.forEach((_, mi) => this.paintMon(sd, mi));
+      if (!this._inPlay) this.paintShield(sd);   // mid-move the story paints it (shield / damage events)
     }
     this.ui = { turn: s.turn, left: s.movesLeft };
     this.paintTurn();
@@ -1299,10 +1336,40 @@ class BattleArena {
     b.querySelector('.ba-berry-n').textContent = `${side.berries}/${BERRIES_TO_EVOLVE}`;
     b.setAttribute('aria-label', t('berries', { n: side.berries }));
     let badges = '';
-    if (side.shield) badges += `<span class="ba-badge">${ICONS.shield}<b>${side.shield}</b></span>`;
     if (side.frozen) badges += `<span class="ba-badge">${ICONS.snow}</span>`;
     if (side.curse && side.curse.left > 0) badges += `<span class="ba-badge">${ICONS.hex}<b>${side.curse.left}</b></span>`;
     el.querySelector('.ba-badges').innerHTML = badges;
+  }
+
+  /** The team's SHIELD as a bubble over each of its monsters, the number on it (2026-11-13, Matt: "It should have a
+   *  little shield thing in front of both of my guys... the outside of a bubble with the # on it"). `n` follows the
+   *  STORY (the shield / damage events) while a move plays out; syncAll paints the state's. Shapes, not hue alone:
+   *  a ring and a shield icon with the number. Pops in, wobbles when it soaks a hit, bursts when it is gone. */
+  paintShield(sd, n) {
+    const side = this.state && this.state.sides[sd];
+    const v = Math.max(0, n != null ? n : (side ? side.shield | 0 : 0));
+    if (!this.shieldShown) this.shieldShown = [0, 0];
+    const was = this.shieldShown[sd] | 0;
+    this.shieldShown[sd] = v;
+    const rm = reducedMotion();
+    for (const mi of [0, 1]) {
+      const el = this.monEl(sd, mi);
+      const b = el && el.querySelector('.ba-shield');
+      if (!b) continue;
+      if (v > 0) {
+        b.querySelector('i').textContent = String(v);
+        if (b.hidden) {
+          b.hidden = false;
+          if (!rm) b.animate([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1.08)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 420, easing: 'ease-out' });
+        } else if (v < was && !rm) {
+          b.animate([{ transform: 'scale(1)' }, { transform: 'scale(.9, 1.06)' }, { transform: 'scale(1.04, .95)' }, { transform: 'scale(1)' }], { duration: 380, easing: 'ease-out' });
+        }
+      } else if (!b.hidden) {
+        if (rm || was === 0) { b.hidden = true; continue; }
+        b.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.35)', opacity: 0 }], { duration: 320, easing: 'ease-out' })
+          .finished.catch(() => {}).then(() => { if ((this.shieldShown || [])[sd] === 0) b.hidden = true; });
+      }
+    }
   }
 
   paintMon(sd, mi, energyOverride) {
@@ -1463,26 +1530,30 @@ class BattleArena {
   }
 
   /** "Boiler Room": the arena's name in a hexagon, as the reference's stage reveal. */
+  /** The match's opening (2026-11-13, Matt: "it shows me everything, then says boiler room, then doors close then
+   *  open. It's a weird order"): the steel doors are SHUT from the first frame (renderBattle puts them up), the stage's
+   *  name is shown ON them, then they open on the arena. Reduced motion: the name alone, no doors. */
   async stageIntro() {
-    const d = this.fx('ba-stage', `<div class="ba-stage-hex">${gemSVG('bomb', 5)}</div><b class="ba-stage-name">${escapeHTML(t('stage_boiler'))}</b>`);
-    if (!d) return;
-    const a = d.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1.06)', offset: 0.18 }, { opacity: 1, transform: 'scale(1)', offset: 0.3 },
-      { opacity: 1, transform: 'scale(1)', offset: 0.82 }, { opacity: 0, transform: 'scale(1.1)' }], { duration: 1600, easing: 'ease-out' });
+    const doors = this.root.querySelector('.ba-doors');
+    const stageHTML = `<div class="ba-stage-hex">${gemSVG('bomb', 5)}</div><b class="ba-stage-name">${escapeHTML(t('stage_boiler'))}</b>`;
+    if (!doors) {
+      const d = this.fx('ba-stage', stageHTML);
+      if (!d) return;
+      await d.animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.8 }, { opacity: 0 }], { duration: 1400 }).finished.catch(() => {});
+      d.remove();
+      return;
+    }
+    const d = document.createElement('div');
+    d.className = 'ba-stage is-on-doors';
+    d.innerHTML = stageHTML;
+    doors.appendChild(d);
+    const a = d.animate([{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1.06)', offset: 0.2 }, { opacity: 1, transform: 'scale(1)', offset: 0.34 },
+      { opacity: 1, transform: 'scale(1)', offset: 0.84 }, { opacity: 0, transform: 'scale(1.1)' }], { duration: 1500, easing: 'ease-out' });
     await a.finished.catch(() => {});
     d.remove();
-    if (reducedMotion()) return;
-    // The doors: shut over the screen, then open on the arena.
-    const doors = document.createElement('div');
-    doors.className = 'ba-doors';
-    doors.innerHTML = '<div class="ba-door"></div><div class="ba-door"></div>';
-    this.root.querySelector('.ba-battle').appendChild(doors);
-    const [l, r] = doors.children;
-    await Promise.all([
-      l.animate([{ transform: 'translateX(-100%)' }, { transform: 'translateX(0)' }], { duration: 280, easing: 'ease-in', fill: 'forwards' }).finished,
-      r.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: 280, easing: 'ease-in', fill: 'forwards' }).finished,
-    ]).catch(() => {});
+    const [l, r] = doors.querySelectorAll('.ba-door');
     this.shake(doors, 4, 200);
-    await this.sleep(320);
+    await this.sleep(220);
     await Promise.all([
       l.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-100%)' }], { duration: 420, easing: 'ease-out', fill: 'forwards' }).finished,
       r.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { duration: 420, easing: 'ease-out', fill: 'forwards' }).finished,
@@ -1567,6 +1638,10 @@ class BattleArena {
 
   // --- the story of a move ----------------------------------------------------------------------
   async play(events, gen) {
+    this._inPlay = true;
+    try { return await this.playEvents(events, gen); } finally { this._inPlay = false; }
+  }
+  async playEvents(events, gen) {
     const rm = reducedMotion();
     let extra = false;
     let landed = Promise.resolve();      // the orbs of the last clear; a special waits for them
@@ -1748,6 +1823,7 @@ class BattleArena {
           for (const a of this.teamArts(sd)) { this.flash(a, '#fff'); this.shake(a, 8, 380); }
           this.shake(this.root.querySelector('.ba-scene'), 4, 300);
           if (e.absorbed) this.pop({ x: this.hpAt(sd).x, y: this.hpAt(sd).y + 34 }, `${ICONS.shield}<b>-${e.absorbed}</b>`, 'is-shield', 1100);
+          if (e.absorbed || e.shield != null) this.paintShield(sd, e.shield);
           if (e.n) this.pop({ x: this.hpAt(sd).x, y: this.hpAt(sd).y + (e.absorbed ? 62 : 38) }, `<b>-${e.n}</b><small>${escapeHTML(t('dmg'))}</small>`, 'is-dmg', 1300);
           this.tweenHP(sd, e.hp);
           this.paintSide(sd, e.hp);
@@ -1774,7 +1850,7 @@ class BattleArena {
               { duration: 800, easing: 'ease-out' }).finished.catch(() => {}).then(() => b.remove());
           }
           this.pop({ x: this.hpAt(e.side).x, y: this.hpAt(e.side).y + 38 }, `${ICONS.shield}<b>+${e.n}</b>`, 'is-shield', 1200);
-          this.paintSide(e.side);
+          this.paintShield(e.side, e.shield);
           await this.sleep(rm ? 200 : 520);
           break;
         }
