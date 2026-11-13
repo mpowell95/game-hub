@@ -34,6 +34,10 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
   list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
 - Desktop: letters type, ← → move the caret, Backspace = Undo.
+- **The goal is said on screen (2026-11-13, Matt: "not clear how to play AT ALL")**: How to play opens BY ITSELF the
+  first time a device reaches a level (`seen` in `gamehub.wordladder.v1`, a preference), with a drawn example ladder
+  (`howSVG`: each step's changed letter outlined gold, arrows, the flag) and a Got it button; until the first move the
+  line above Undo/Hint reads "Change one letter. Get to <target>." (`_coach`). Each help line fits one row at 360px.
 
 ## Data (GENERATED: `node tools/build-word-ladder-data.mjs`, never hand-edited)
 

@@ -48,6 +48,9 @@ function writeJSON(key, val) {
     return true;
   } catch (err) { console.error('[word-ladder] progress NOT saved', key, err); return false; }
 }
+function loadSettings() { return readJSON(KEY, {}); }
+/** Settings are { lang, seen } (seen = How to play shown once on this device, a preference). */
+function saveSettings(patch) { return writeJSON(KEY, { ...loadSettings(), ...patch }); }
 function loadLang() {
   const s = readJSON(KEY, {});
   return s.lang === 'es' || s.lang === 'en' ? s.lang : (getLang() === 'es' ? 'es' : 'en');
@@ -270,6 +273,19 @@ class WordLadder {
       </div>`;
     this._drawLadder();
     this._fit();
+    // The first time on this device, How to play opens by itself (Matt, 2026-11-13: "not clear how to play AT ALL").
+    if (!loadSettings().seen) { saveSettings({ seen: 1 }); this._help(); }
+  }
+
+  /** The goal, said on the screen until the first move: "Change one letter. Get to AYE." */
+  _coach() {
+    const m = this.root.querySelector('[data-role="msg"]');
+    if (!m || !this.cur) return;
+    const on = this.cur.chain.length === 1;
+    m.classList.toggle('is-coach', on);
+    if (on) m.textContent = t('coach', { w: this.cur.level.t });
+    else if (m.classList.contains('was-coach')) m.textContent = '';
+    m.classList.toggle('was-coach', on);
   }
 
   /** The ladder: earlier words (small), the word being changed (big, tappable), the target (flag). */
@@ -297,6 +313,7 @@ class WordLadder {
     if (mv) mv.textContent = String(c.moves);
     const undo = this.root.querySelector('[data-act="undo"]');
     if (undo) undo.disabled = c.chain.length < 2;
+    this._coach();
   }
 
   /** Tile size from the room the ladder has (never scrolls): the width for 5 letters and the height for its rows. */
@@ -329,7 +346,8 @@ class WordLadder {
     if (!m) return;
     m.textContent = text;
     clearTimeout(this._msgT);
-    this._msgT = setTimeout(() => { if (m.isConnected) m.textContent = ''; }, 1600);
+    m.classList.remove('is-coach', 'was-coach');
+    this._msgT = setTimeout(() => { if (m.isConnected) { m.textContent = ''; this._coach(); } }, 1600);
     const now = this.root.querySelector('[data-role="now"]');
     if (now) { now.classList.remove('is-shake'); void now.offsetWidth; now.classList.add('is-shake'); }
   }
@@ -417,13 +435,14 @@ class WordLadder {
     ov.innerHTML = `<div class="wl-sheet" role="dialog" aria-label="${esc(t('how_title'))}">
       <button type="button" class="wl-icon wl-x" data-act="close-help" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
       <h2 class="wl-card-h">${esc(t('how_title'))}</h2>
-      <p class="wl-how-b">${esc(t('how_goal'))}</p>
-      <p class="wl-how-eg">${esc(t('how_eg'))}</p>
+      <p class="wl-how-b">${String(t('how_goal', { flag: '\u0000' })).split('\u0000').map(esc).join(`<i class="wl-flag-in">${SVG.flag}</i>`)}</p>
+      ${howSVG(String(t('how_eg')).split(' '))}
+      <p class="wl-how-cap">${esc(t('how_step'))}</p>
       <p>${esc(t('how_tap'))}</p>
       <p><span class="wl-t wl-t-demo is-match">A</span> ${esc(t('how_dot'))}</p>
       <p>${esc(t('how_stars'))}</p>
       <p>${esc(t('how_hint'))}</p>
-      <p>${esc(t('how_daily'))}</p>
+      <button type="button" class="wl-btn wl-btn-main wl-gotit" data-act="close-help">${esc(t('got_it'))}</button>
     </div>`;
     this.root.appendChild(ov);
     this.screen = 'help';
@@ -454,7 +473,7 @@ class WordLadder {
     else if (act === 'hint') this._hint();
     else if (act === 'lang') {
       this.lang = this.lang === 'es' ? 'en' : 'es';
-      writeJSON(KEY, { lang: this.lang });
+      saveSettings({ lang: this.lang });
       this._setup();
     }
   }
@@ -493,6 +512,28 @@ class WordLadder {
       hint: () => this._hint(),
     };
   }
+}
+
+/** How to play's diagram: the example ladder top to bottom, the letter each step changes outlined in gold with
+ *  an arrow between rungs, the last word marked with the flag (shape and outline, never colour alone). */
+function howSVG(words) {
+  const n = words.length, len = (words[0] || '').length, cell = 30, gap = 6, rowH = 42;
+  const w = len * cell + (len - 1) * gap, x0 = 40, W = x0 + w + 40, H = n * rowH - (rowH - cell) + 4;
+  let out = '';
+  words.forEach((wd, r) => {
+    const y = 2 + r * rowH;
+    const prev = r ? words[r - 1] : null;
+    [...wd].forEach((ch, i) => {
+      const x = x0 + i * (cell + gap);
+      const changed = prev && prev[i] !== ch;
+      const last = r === n - 1;
+      out += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="6" fill="${last ? 'none' : '#ffffff'}" stroke="${changed ? '#f2b705' : last ? '#f2b705' : '#9aa6bb'}" stroke-width="${changed ? 4 : 2}"${last && !changed ? ' stroke-dasharray="5 4"' : ''}/>`;
+      out += `<text x="${x + cell / 2}" y="${y + 22}" text-anchor="middle" font-size="19" font-weight="800" font-family="system-ui,sans-serif" fill="#10203c">${esc(ch)}</text>`;
+    });
+    if (r < n - 1) out += `<path d="M${x0 - 18} ${y + cell - 4}v${rowH - cell + 8}" stroke="#10203c" stroke-width="2.4" fill="none"/><path d="M${x0 - 23} ${y + rowH - 2}l5 6 5-6" stroke="#10203c" stroke-width="2.4" fill="none" stroke-linejoin="round"/>`;
+    else out += `<path d="M${x0 + w + 14} ${y + 30}V${y + 4}" stroke="#10203c" stroke-width="2.4"/><path d="M${x0 + w + 14} ${y + 4}h14l-4 5 4 5h-14z" fill="#f2b705" stroke="#10203c" stroke-width="1.2"/>`;
+  });
+  return `<svg class="wl-how-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${out}</svg>`;
 }
 
 function heroSVG() {
