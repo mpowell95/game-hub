@@ -1266,6 +1266,18 @@ export const GAME_ART = {
               <g fill="#1d2230"><text x="44" y="29">W</text><text x="60.2" y="40.7">O</text><text x="54" y="59.8">R</text><text x="34" y="59.8">D</text><text x="27.8" y="40.7">E</text></g>
             </g>
           </svg>`,
+  // Word Ladder (2026-11-13, word-ladder/): COLD to WARM up a gold ladder, one letter changed a rung (the changed
+  // letter teal with a dot, the game's own "right letter, right place" mark).
+  'word-ladder': `<svg viewBox="0 0 160 90" aria-hidden="true">
+            <rect width="160" height="90" fill="#1d3360"/>
+            <path d="M30 4v82M130 4v82" stroke="#f2b705" stroke-width="5" stroke-linecap="round"/>
+            <path d="M30 22h100M30 46h100M30 70h100" stroke="#f2b705" stroke-width="4" opacity=".55"/>
+            <g font-family="system-ui,sans-serif" font-weight="800" font-size="15" text-anchor="middle">
+              ${[['COLD', 10, -1], ['CORD', 34, 2], ['WORD', 58, 0]].map(([w, y, hi]) => [...w].map((ch, i) =>
+                `<rect x="${46 + i * 18}" y="${y}" width="16" height="16" rx="3" fill="${i === hi ? '#178a7a' : '#ffffff'}"/><text x="${54 + i * 18}" y="${y + 13}" fill="${i === hi ? '#ffffff' : '#10203c'}">${ch}</text>`).join('')).join('')}
+              <rect x="46" y="76" width="70" height="12" rx="3" fill="none" stroke="#f2b705" stroke-width="2" stroke-dasharray="4 3"/>
+            </g>
+          </svg>`,
   // Tower (2026-11-01, tower/): a stack of slabs at dusk, the next block sliding in off-centre.
   'tower': `<svg viewBox="0 0 160 90" aria-hidden="true">
             <defs><linearGradient id="twTileSky" x1="0" y1="0" x2="0" y2="1">

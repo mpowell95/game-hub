@@ -57,6 +57,8 @@ const TABS = [
   // Word Weaver (2026-10-28, word-weaver/): admin only, so devOnly as in js/hub.js. Its `ww`
   // sub-counter has its own screen (wordWeaverScreen).
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
+  // Word Ladder (2026-11-13, word-ladder/): admin only, devOnly like the hub's entry. Its `wl` sub-counter: wordLadderScreen.
+  { id: 'wordladder', labelKey: 'game_title_wordladder', devOnly: true },
   // Tower Stack (2026-11-01, tower/; released 2026-11-13). Its `tw` sub-counter: towerScreen.
   { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
@@ -130,7 +132,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
   cupbaseball: 'cup-baseball', spellingbee: 'spelling-bee', battlearena: 'battle-arena',
-  wordweaver: 'word-weaver',
+  wordweaver: 'word-weaver', wordladder: 'word-ladder',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
 const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
@@ -1406,6 +1408,7 @@ function hasPlays(id, rec) {
   if (id === 'hillclimb') return !!(rec.hc && rec.hc.runs);
   if (id === 'brickblitz') return !!(rec.bz && rec.bz.games);
   if (id === 'tower') return !!(rec.tw && rec.tw.games);
+  if (id === 'wordladder') return ((rec.total || {}).played | 0) > 0 || !!(rec.wl && (Object.keys(rec.wl.lv || {}).length || Object.keys(rec.wl.es || {}).length || Object.keys(rec.wl.dl || {}).length));
   if (id === 'cuppong') return ((rec.total || {}).played | 0) > 0 || !!(rec.cp && rec.cp.soloRacks);
   if (id === 'nutsbolts') return !!(rec.nb && rec.nb.solved);
   if (id === 'sudoku') return !!(rec.sd && rec.sd.solved);
@@ -1571,6 +1574,25 @@ function airHockeyScreen(rec) {
       <div class="gs-tally"><b>${ah.shutouts | 0}</b><span>${t('gs_ah_shutouts')}</span></div>
       <div class="gs-tally"><b>${ah.bestStreak | 0}</b><span>${t('gs_ah_streak')}</span></div>
       <div class="gs-tally"><b>${ah.goalsFor | 0}-${ah.goalsAgainst | 0}</b><span>${t('gs_ah_goals')}</span></div>
+    </div>
+    ${diffTable(rec && rec.byDiff)}`;
+}
+
+/** Word Ladder (2026-11-13): the `wl` sub-counter (js/game-stats.js recordWordLadder / recordWordLadderDaily). */
+function wordLadderScreen(rec) {
+  const wl = (rec && rec.wl) || {};
+  const ents = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.values(m).filter((e) => e && typeof e === 'object') : []);
+  const ladder = [...ents(wl.lv), ...ents(wl.es)];
+  const daily = ents(wl.dl);
+  if (!ladder.length && !daily.length && !((rec && rec.total && rec.total.played) | 0)) return emptyState(tf('game_title_wordladder', 'Word Ladder'));
+  const stars = ladder.reduce((n, e) => n + (e.s | 0), 0);
+  const three = [...ladder, ...daily].filter((e) => (e.s | 0) >= 3).length;
+  return `
+    <div class="gs-tallies is-4">
+      <div class="gs-tally"><b>${ladder.length}</b><span>${tf('gs_wl_levels', 'Levels')}</span></div>
+      <div class="gs-tally"><b>${stars}</b><span>${tf('gs_wl_stars', 'Stars')}</span></div>
+      <div class="gs-tally"><b>${three}</b><span>${tf('gs_wl_three', 'At par')}</span></div>
+      <div class="gs-tally"><b>${daily.length}</b><span>${tf('gs_wl_daily', 'Daily')}</span></div>
     </div>
     ${diffTable(rec && rec.byDiff)}`;
 }
@@ -1822,6 +1844,7 @@ function screenForBase(id, st) {
   if (id === 'skeeball') return skeeballScreen(rec);
   if (id === 'brickblitz') return brickBlitzScreen(rec);
   if (id === 'tower') return towerScreen(rec);
+  if (id === 'wordladder') return wordLadderScreen(rec);
   if (id === 'airhockey') return airHockeyScreen(rec);
   if (id === 'cuppong') return cupPongScreen(rec);
   if (id === 'holdem') return holdemScreen(rec);

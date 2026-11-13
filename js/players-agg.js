@@ -9,14 +9,14 @@
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame, wlBest } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, adjustModesGame, withHandAdjust, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
 import { glBest } from './gridlock-points.js';
 import { wwMerge, wwHintBest, wwDailyMerge, WW_DAY_RE } from './word-weaver-points.js';
 
-export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower']);  // solo: win-only (no loss axis) or score-based
+export const SOLO = new Set(['nutsbolts', 'ballrun', 'snake', 'hillclimb', 'skeeball', 'golf', 'sudoku', 'minesweeper', 'contexto', 'brickblitz', 'murdoku', 'wayout', 'gridlock', 'spellingbee', 'wordweaver', 'tower', 'wordladder']);  // solo: win-only (no loss axis) or score-based
 
 /** 'You' is profile-store's default when a name is left blank, so it is a placeholder, not a name. */
 export const isPlaceholderName = (n) => { const s = (typeof n === 'string' ? n : '').trim().toLowerCase(); return !s || s === 'you'; };
@@ -790,6 +790,16 @@ export function aggregatePlayers(all, corrections) {
         dst.bz.bestCombo = Math.max(dst.bz.bestCombo | 0, src.bz.bestCombo | 0);
         const sbd = src.bz.bestScoreByDiff || {};
         for (const k of Object.keys(sbd)) dst.bz.bestScoreByDiff[k] = Math.max(dst.bz.bestScoreByDiff[k] | 0, sbd[k] | 0);
+      } else if (g === 'wordladder' && src.wl) {
+        // Word Ladder (2026-11-13). Per level / per day, one entry per person: stars Math.max, moves and hints
+        // Math.min, the earliest time (wlBest). Maps of their own (lv English, es Spanish, dl daily), never mixed.
+        if (!dst.wl) dst.wl = { lv: {} };
+        for (const mk of ['lv', 'es', 'dl']) {
+          const sm = src.wl[mk];
+          if (!sm || typeof sm !== 'object' || Array.isArray(sm)) continue;
+          const dm = dst.wl[mk] || (dst.wl[mk] = {});
+          for (const k of Object.keys(sm)) dm[k] = wlBest(dm[k], sm[k]);
+        }
       } else if (g === 'tower' && src.tw) {
         // Tower (2026-11-01). Counters ADD; every best (overall, per difficulty, streak) takes Math.max.
         if (!dst.tw) dst.tw = { games: 0, best: 0, bestByDiff: {}, blocks: 0, perfects: 0, bestStreak: 0 };

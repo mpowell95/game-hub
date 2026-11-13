@@ -188,6 +188,8 @@ const GAME_META = [
   { id: 'gridlock', labelKey: 'game_title_gridlock' },
   // Word Weaver (2026-10-28, stats id 'wordweaver'): admin only at first; the row ships with the game.
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
+  // Word Ladder (2026-11-13, word-ladder/): admin only at first; the row ships with the game (OFF_THE_BOARD stays empty).
+  { id: 'wordladder', labelKey: 'game_title_wordladder' },
   // Tower (2026-11-01, tower/): admin only at first; the row ships with the game.
   { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'parchis', labelKey: 'game_title_parchis' },

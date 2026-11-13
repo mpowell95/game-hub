@@ -311,7 +311,7 @@ const STATS_KEY = 'gamehub.stats';
 // live under those keys, in this store and in players/<id>. Nothing displays them (ARCHIVED_GAMES
 // keeps them out of every total); nothing deletes them (THE LAW). To restore one, see
 // archive/<game>/CLAUDE.md.
-const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver', 'tower'];
+const GAMES = ['connect4', 'chinchon', 'business', 'parchis', 'nutsbolts', 'escoba', 'filler', 'mancala', 'ballrun', 'tictactoe', 'dotsboxes', 'boggle', 'snake', 'uno', 'pool', 'poolv2', 'yahtzee', 'dominoes', 'hillclimb', 'battleship', 'skeeball', 'pinball', 'pipes', 'golf', 'baseball', 'sudoku', 'minesweeper', 'hoops4', 'brickblitz', 'holdem', 'airhockey', 'cuppong', 'contexto', 'murdoku', 'darts', 'wayout', 'flicksoccer', 'gridlock', 'archery', 'eightball', 'cupbaseball', 'spellingbee', 'battlearena', 'wordweaver', 'tower', 'wordladder'];
 /** Stored and synced, never displayed or counted: players-agg.js keeps these out of COMPETITIVE. */
 // The challenge match being counted right now (withChallengeMatch, 2026-10-29); null otherwise.
 let _mpMatch = null;
@@ -1083,6 +1083,7 @@ function normalize(raw) {
   ensureWw(st.games.wordweaver);
   ensureBz(st.games.brickblitz);
   ensureTw(st.games.tower);
+  ensureWl(st.games.wordladder);
   ensureHb(st.games.holdem);
   ensureAh(st.games.airhockey);
   ensureCp(st.games.cuppong);
@@ -1721,6 +1722,7 @@ function resetKingOfGamesSkeeball(st) {
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
   archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball', cupbaseball: 'cup-baseball',
+  wordladder: 'word-ladder',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */
 export function isTestGame(id) {
@@ -3497,6 +3499,78 @@ export function recordBrickBlitz(score, difficulty, extras) {
   g.bz.stages += n(x.stages);
   if (x.circuit === true) g.bz.circuits += 1;
   g.bz.bestCombo = Math.max(g.bz.bestCombo | 0, n(x.bestCombo));
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** Word Ladder (2026-11-13, word-ladder/): change one letter at a time from a start word to a target word.
+ *  `wl` = { lv: { 'L<n>': entry }, es?: { 'L<n>': entry } (the Spanish ladder, its own numbers), dl?: { '<en|es>-<YYYY-MM-DD>': entry } }
+ *  entry = { s: stars (Math.max), m: fewest moves (Math.min), p: par, h: fewest hints (Math.min), t: first completion (earliest) }.
+ *  A malformed map is replaced by an empty one; every well formed entry is kept as stored. */
+export const WL_DAY_RE = /^(en|es)-\d{4}-\d{2}-\d{2}$/;
+function ensureWl(g) {
+  if (!g.wl || typeof g.wl !== 'object' || Array.isArray(g.wl)) g.wl = { lv: {} };
+  if (!g.wl.lv || typeof g.wl.lv !== 'object' || Array.isArray(g.wl.lv)) g.wl.lv = {};
+  for (const k of ['es', 'dl']) if (g.wl[k] !== undefined && (!g.wl[k] || typeof g.wl[k] !== 'object' || Array.isArray(g.wl[k]))) g.wl[k] = {};
+}
+/** Two entries of one level (or day) combined: stars only rise, moves and hints only fall, the earliest time. Pure. */
+export function wlBest(a, b) {
+  const ok = (e) => e && typeof e === 'object' && !Array.isArray(e);
+  if (!ok(a)) return ok(b) ? { ...b } : a;
+  if (!ok(b)) return { ...a };
+  const n = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  const minPos = (x, y) => (n(x) && n(y) ? Math.min(n(x), n(y)) : n(x) || n(y));
+  const out = { s: Math.max(n(a.s), n(b.s)), m: minPos(a.m, b.m), h: Math.min(n(a.h), n(b.h)), t: minPos(a.t, b.t) };
+  const p = n(a.p) || n(b.p);
+  if (p) out.p = p;
+  return out;
+}
+/** Word Ladder stars, the same rule as word-ladder/js/engine.js starsFor (moves at par 3, up to 2 over 2, else 1;
+ *  1 hint caps at 2, 2+ at 1). */
+function wlStars(moves, par, hints) {
+  const m = Math.max(0, moves | 0), p = Math.max(1, par | 0), h = Math.max(0, hints | 0);
+  return Math.min(m <= p ? 3 : m <= p + 2 ? 2 : 1, h === 0 ? 3 : h === 1 ? 2 : 1);
+}
+const WL_TIERS = ['easy', 'medium', 'hard', 'expert'];
+/** Word Ladder: a ladder level finished. The FIRST completion of a level on this store is one play and one win in its
+ *  band (`band`, one of easy/medium/hard/expert, from word-ladder/js/engine.js bandOf); a later one only improves its
+ *  entry. `lang: 'es'` = the Spanish ladder (`wl.es`). The caller wraps it in withMode({ mode: 'ladder', lang }, band, ...).
+ *  Returns the store, or null when rate-gated or `level` is not a positive integer (nothing written: rule 4). */
+export function recordWordLadder(level, { moves, par, hints, lang, band } = {}) {
+  if (tooFast('wordladder')) return null;
+  notePlay('wordladder', 'recordWordLadder', arguments);
+  const n = Number(level);
+  if (!(Number.isInteger(n) && n >= 1)) { console.error('[game-stats] Word Ladder: bad level, nothing recorded', level); return null; }
+  const st = loadStats();
+  const g = st.games.wordladder;
+  ensureWl(g);
+  const map = lang === 'es' ? (g.wl.es || (g.wl.es = {})) : g.wl.lv;
+  const k = 'L' + n;
+  if (!map[k]) bumpTotals(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder', true);
+  else if (_mode) _mode.noted = true;
+  const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };
+  map[k] = wlBest(map[k], e);
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+/** Word Ladder's DAILY ladder: that day's puzzle finished. `key` = '<en|es>-<YYYY-MM-DD>'. The first completion is one
+ *  play and one win under `byDiff.daily`; a later one only improves `wl.dl[key]`. Caller: withMode({ mode: 'daily', lang },
+ *  'daily', ...). Returns the store, or null when rate-gated or the key is malformed (nothing written). */
+export function recordWordLadderDaily(key, { moves, par, hints } = {}) {
+  if (tooFast('wordladder')) return null;
+  notePlay('wordladder', 'recordWordLadderDaily', arguments);
+  const k = String(key || '');
+  if (!WL_DAY_RE.test(k)) { console.error('[game-stats] Word Ladder daily: bad key, nothing recorded', key); return null; }
+  const st = loadStats();
+  const g = st.games.wordladder;
+  ensureWl(g);
+  const map = g.wl.dl || (g.wl.dl = {});
+  if (!map[k]) bumpTotals(g, 'daily', true);
+  else if (_mode) _mode.noted = true;
+  const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };
+  map[k] = wlBest(map[k], e);
   st.updatedAt = new Date().toISOString();
   persist(st);
   return st;

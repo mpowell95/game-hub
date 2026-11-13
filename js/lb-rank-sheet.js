@@ -79,6 +79,8 @@ const SHEETS = {
   minesweeper: () => [levelTable('minesweeper', 'lbpt_per_board')],
   // Points held for players (2026-11-04): the points table only where the board is on points (admin devices).
   nutsbolts: () => (isAdminDevice() ? [levelTable('nutsbolts', 'lbpt_per_level')] : [hardest('lbrs_nb_by')]),
+  // Word Ladder (2026-11-13, admin only): levels finished, like Nuts & Bolts' player sheet. Revisit at release.
+  wordladder: () => [hardest('lbrs_nb_by')],
   murdoku: () => [helpGrid('lbrs_mk_sup')],
   sudoku: () => [helpGrid('lbrs_su_sup')],
   skeeball: () => [{ h: 'lbrs_total', text: 'lbrs_sk_by1' }, { h: 'gs_sk_best_game', text: 'lbrs_sk_by2' }],

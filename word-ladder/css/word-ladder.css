@@ -1,0 +1,121 @@
+/* word-ladder/css/word-ladder.css - every rule scoped under .wl-root. One night-blue look in light and dark
+   (like Nuts & Bolts, dark by design): bright text, white tiles. Colourblind-safe: a matching letter is teal AND
+   carries a dot; the selected letter is #ffce3a AND has a thick outline and a caret; the target has a flag. */
+.wl-root {
+  --wl-bg: #17284a; --wl-bg2: #24406f; --wl-ink: #10203c; --wl-on: #f5f8ff; --wl-tile: #ffffff;
+  --wl-match: #178a7a; --wl-sel: #ffce3a; --wl-gold: #f2b705;
+  --wl-top: var(--gh-st, env(safe-area-inset-top, 0px));
+  /* The bottom of the hub's floating Hub button (it sits at max(safe top, 54px), 36px tall). */
+  --wl-below: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px);
+  --wl-big: 56px; --wl-small: 35px;
+  position: fixed; inset: 0; z-index: 1; overflow: hidden;
+  width: 100%; height: 100dvh;
+  color: var(--wl-on);
+  background: radial-gradient(120% 80% at 50% 0%, var(--wl-bg2), var(--wl-bg) 70%);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+}
+.wl-root button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.wl-root * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; box-sizing: border-box; }
+
+/* --- setup --- */
+.wl-root .wl-setup { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--wl-below) + 16px) 16px max(env(safe-area-inset-bottom, 0px), 16px); }
+.wl-root .wl-home { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 16px; position: relative; }
+.wl-root .wl-hero { width: 220px; height: auto; display: block; }
+.wl-root .wl-title { margin: 0; font-size: clamp(26px, 8vw, 32px); font-weight: 800; text-align: center; line-height: 1.15; }
+.wl-root .wl-sub { display: flex; align-items: center; gap: 16px; }
+.wl-root .wl-total { display: inline-flex; align-items: center; gap: 6px; font-size: 24px; }
+.wl-root .wl-total svg { width: 30px; height: 30px; }
+.wl-root .wl-lang { min-width: 56px; height: 44px; border-radius: 12px; border: 2px solid rgba(255,255,255,.7);
+  background: rgba(255,255,255,.08); font-size: 18px; font-weight: 800; letter-spacing: .04em; }
+.wl-root .wl-btn { width: 100%; min-height: 56px; border-radius: 16px; border: 2px solid rgba(255,255,255,.7);
+  background: rgba(255,255,255,.08); font-size: 20px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; gap: 10px; }
+.wl-root .wl-btn-main { background: var(--wl-gold); color: var(--wl-ink); border-color: var(--wl-gold); font-size: 22px; }
+.wl-root .wl-btn-daily.is-done { border-style: solid; }
+.wl-root .wl-ok { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--wl-on); color: var(--wl-ink); font-style: normal; }
+.wl-root .wl-help { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
+  background: transparent; font-size: 22px; font-weight: 800; }
+.wl-root .wl-err { font-size: 20px; margin: 0; }
+.wl-root .wl-wait { width: 44px; height: 44px; border-radius: 50%; border: 4px solid rgba(255,255,255,.25); border-top-color: var(--wl-on);
+  animation: wl-spin 0.9s linear infinite; }
+@keyframes wl-spin { to { transform: rotate(360deg); } }
+
+/* --- play --- */
+.wl-root .wl-game { position: absolute; inset: 0; display: flex; flex-direction: column;
+  padding: 0 8px max(env(safe-area-inset-bottom, 0px), 8px); }
+/* Row 1 = the hub's button row: only the level chip, centred (the corners are the Hub and bug buttons). */
+.wl-root .wl-top { flex: none; height: var(--wl-below); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0; }
+.wl-root .wl-chip { height: 36px; padding: 0 16px; border-radius: 999px; background: rgba(255,255,255,.14);
+  display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+.wl-root .wl-chip svg { width: 20px; height: 20px; }
+/* Row 2: the game's own back arrow TOP LEFT under the Hub button (docs/BUILDING-A-GAME.md Part 0). */
+.wl-root .wl-row2 { flex: none; margin-top: 16px; height: 44px; display: flex; align-items: center; justify-content: space-between; }
+.wl-root .wl-icon { width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255,255,255,.12);
+  display: grid; place-items: center; font-size: 20px; font-weight: 800; }
+.wl-root .wl-icon:disabled { opacity: .35; cursor: default; }
+.wl-root .wl-count { display: flex; gap: 18px; font-size: 18px; }
+.wl-root .wl-count b { font-size: 22px; }
+.wl-root .wl-ladder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
+.wl-root .wl-w { display: flex; gap: 8px; align-items: center; }
+.wl-root .wl-t { width: var(--wl-small); height: var(--wl-small); border-radius: 8px; display: grid; place-items: center; position: relative;
+  background: rgba(255,255,255,.88); color: var(--wl-ink); font-weight: 800; font-size: calc(var(--wl-small) * .58); line-height: 1; border: 0; padding: 0; }
+.wl-root .wl-t.is-match { background: var(--wl-match); color: #fff; padding-bottom: 8%; }
+.wl-root .wl-t.is-match::after { content: ''; position: absolute; bottom: 5%; left: 50%; width: 14%; height: 14%; min-width: 5px; min-height: 5px;
+  border-radius: 50%; background: #fff; transform: translateX(-50%); }
+.wl-root .wl-more { height: 22px; font-size: 22px; line-height: 22px; opacity: .8; }
+.wl-root .wl-now { margin-top: 4px; }
+.wl-root .wl-now .wl-t { width: var(--wl-big); height: var(--wl-big); font-size: calc(var(--wl-big) * .6); border-radius: 12px; background: var(--wl-tile);
+  box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+.wl-root .wl-now .wl-t.is-match { background: var(--wl-match); }
+.wl-root .wl-now .wl-t.is-sel { outline: 5px solid var(--wl-sel); outline-offset: 2px; }
+.wl-root .wl-now .wl-t.is-sel::before { content: ''; position: absolute; left: 50%; bottom: -17px; transform: translateX(-50%);
+  border: 8px solid transparent; border-bottom: 0; border-top-color: var(--wl-sel); }
+.wl-root .wl-link { width: 4px; height: 14px; border-radius: 2px; background: repeating-linear-gradient(var(--wl-on) 0 4px, transparent 4px 8px); opacity: .6; margin-top: 8px; }
+.wl-root .wl-goal { position: relative; }
+.wl-root .wl-goal .wl-t { width: calc(var(--wl-big) * .8); height: calc(var(--wl-big) * .8); font-size: calc(var(--wl-big) * .48);
+  background: transparent; color: var(--wl-on); border: 3px dashed var(--wl-gold); }
+.wl-root .wl-flag { position: absolute; left: -32px; top: 50%; transform: translateY(-50%); color: var(--wl-gold); display: grid; }
+.wl-root .wl-now.is-shake { animation: wl-shake .4s ease; }
+@keyframes wl-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+.wl-root .wl-msg { flex: none; height: 26px; text-align: center; font-size: 18px; font-weight: 700; color: var(--wl-sel); }
+.wl-root .wl-tools { flex: none; display: flex; justify-content: space-between; padding: 0 4px 8px; }
+.wl-root .wl-tool { width: 56px; height: 48px; }
+/* The keyboard: 10 keys across like a phone keyboard. Keys are 50px tall, narrower than 44px on a 360px phone
+   (a documented departure from the 44x44 floor: ten keys must fit one row, as on every phone keyboard). */
+.wl-root .wl-kb { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.wl-root .wl-kr { display: flex; justify-content: center; gap: 5px; }
+.wl-root .wl-key { flex: 0 1 40px; min-width: 0; height: 50px; border-radius: 8px; border: 0; background: rgba(255,255,255,.9); color: var(--wl-ink);
+  font-size: 20px; font-weight: 800; padding: 0; box-shadow: 0 2px 0 rgba(0,0,0,.3); }
+.wl-root .wl-key:active { background: var(--wl-sel); }
+
+/* --- done --- */
+.wl-root .wl-is-done { padding-top: calc(var(--wl-below) + 12px); }
+.wl-root .wl-final { gap: 5px; justify-content: center; }
+.wl-root .wl-final .wl-goal.is-won .wl-t { width: var(--wl-small); height: var(--wl-small); font-size: calc(var(--wl-small) * .58);
+  border: 0; background: var(--wl-gold); color: var(--wl-ink); }
+.wl-root .wl-card { flex: none; position: relative; margin: 8px auto 0; width: 100%; max-width: 400px; border-radius: 20px;
+  background: #fff; color: var(--wl-ink); padding: 20px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.wl-root .wl-card .wl-x, .wl-root .wl-sheet .wl-x { position: absolute; top: 8px; right: 8px; background: rgba(16,32,60,.08); color: var(--wl-ink); }
+.wl-root .wl-card-h { margin: 0; font-size: 26px; font-weight: 800; }
+.wl-root .wl-stars { display: flex; gap: 8px; color: var(--wl-ink); }
+.wl-root .wl-count-card { color: var(--wl-ink); }
+.wl-root .wl-card .wl-btn { border-color: var(--wl-gold); }
+
+/* --- How to play --- */
+.wl-root .wl-ov { position: absolute; inset: 0; z-index: 5; background: rgba(6,12,26,.6); display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--wl-below) + 8px) 12px max(env(safe-area-inset-bottom, 0px), 12px); }
+.wl-root .wl-sheet { position: relative; width: 100%; max-width: 400px; border-radius: 20px; background: #fff; color: var(--wl-ink);
+  padding: 22px 18px 18px; }
+.wl-root .wl-sheet p { margin: 10px 0 0; font-size: 17px; line-height: 1.4; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wl-root .wl-sheet .wl-how-b { font-weight: 800; font-size: 18px; }
+.wl-root .wl-sheet .wl-how-eg { font-weight: 800; letter-spacing: .02em; }
+.wl-root .wl-t-demo { --wl-small: 34px; flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wl-root .wl-now.is-shake { animation: none; }
+  .wl-root .wl-wait { animation: none; }
+}
