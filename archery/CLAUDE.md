@@ -72,7 +72,7 @@ game is "Archery" (Matt: *"Yup"*). Avatars are profile emoji. No sound (root `CL
 
 ## The turn (timed off the recording at 30 fps)
 
-Touch and hold: the bow comes up in 0.25 s (`DRAW_T`), straight onto the aim (no tilt or swing on the way, 2026-11-13). Drag to aim (about a ring per 6 px). Let go:
+Touch and hold: the bow comes up in 0.25 s (`DRAW_T`), straight onto the aim (no tilt or swing on the way, 2026-11-13). Drag to aim: **the sight follows the finger 1:1 on screen** (`gain = 1 / r.pxPerR()`; Matt, 2026-11-13: "I can move my finger a lot and the aim barely moves"; it was a ring per 6 px, the sight a quarter as fast as the finger; `GAUGE.moving`, `AIM.slow`/`fast`/`lim` scaled x4 with it so the same finger feels the same). Let go:
 the string snaps and the arrow leaves the bow over 0.033 s (`JOLT_T`, two frames; the bow no longer
 kicks: its jump read as a glitch, Matt's recording 2026-10-22), then the flight, 0.8 s (`FLIGHT_T`). **The flight is a
 real straight line in the world** (Matt, 2026-10-22: framed from the moving camera it "curves towards

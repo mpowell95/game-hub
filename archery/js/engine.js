@@ -171,7 +171,9 @@ export function shotOrder(m) {
 // drains about 0.3 a second while the aim is moving and about 0.1 a second while it is still; it
 // is yellow below 1/3. Empty = PANIC (Matt: "Make it so the animated person panics and shoots it
 // over the target").
-export const GAUGE = { grace: 0.4, still: 0.1, move: 0.3, yellow: 1 / 3, red: 0.12, moving: 0.25 };
+// `moving` (face radii a second) was 0.25 while a finger moved the sight a quarter as far as itself; x4 with the
+// 1:1 finger (2026-11-13), so the same finger speed still counts as moving.
+export const GAUGE = { grace: 0.4, still: 0.1, move: 0.3, yellow: 1 / 3, red: 0.12, moving: 1.0 };
 
 /** The ring after `dt` seconds held (`held` = seconds since the draw), moving at `speed` face radii
  *  a second. */
@@ -199,7 +201,8 @@ export function swayAt(t, g, ph = [0, 1.7, 3.1, 4.4]) {
 //   - A move faster than `slow` (face radii a second) also pushes a DRIFT that carries the target on
 //     in that direction and dies away over `tau` seconds, full strength from `fast`. A finger move
 //     back against the drift cancels it (moving back by the distance it has left stops it dead).
-export const AIM = { k: 55, zeta: 0.5, slow: 1.5, fast: 8, push: 0.55, tau: 0.8, lim: 3 };
+// slow/fast were 1.5/8 and lim 3 with the old quarter-speed finger; x4 (lim 8) with the 1:1 finger (2026-11-13), same finger.
+export const AIM = { k: 55, zeta: 0.5, slow: 6, fast: 32, push: 0.55, tau: 0.8, lim: 8 };
 
 /** A new hand with the sight resting at `p`. */
 export function newHand(p = { x: 0, y: 0 }) {

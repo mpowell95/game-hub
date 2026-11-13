@@ -80,7 +80,7 @@ g = drainGauge(g, 0.3, 0.3, 0);
 ok('full for the first 0.4 s', g === 1);
 g = 1; for (let t = 0.4; t < 3.4; t += 0.01) g = drainGauge(g, 0.01, t + 0.01, 0);
 ok('held still for 3 s it loses about 0.3', Math.abs(g - 0.7) < 0.02, g);
-g = 1; for (let t = 0.4; t < 3.4; t += 0.01) g = drainGauge(g, 0.01, t + 0.01, 1);
+g = 1; for (let t = 0.4; t < 3.4; t += 0.01) g = drainGauge(g, 0.01, t + 0.01, 4);   // 4 face radii a second: a slow 1:1 finger
 ok('moving for 3 s it loses about 0.9', Math.abs(g - 0.1) < 0.02, g);
 g = 0.05; g = drainGauge(g, 1, 5, 1);
 ok('it never goes below empty', g === 0);
@@ -107,16 +107,17 @@ const handMove = (dist, dur, hold = 2, h = newHand()) => {
   for (let i = 0; i < hold * 60; i++) { stepHand(h, 0, 0, dt); peak = Math.max(peak, h.x); }
   return { h, peak, endX, rest: h.x };
 };
-const slow = handMove(0.3, 1);
-ok('a slow, small move lands where the finger put it', Math.abs(slow.rest - 0.3) < 0.01 && slow.peak < 0.33, slow);
-ok('the sight lags the finger a little', handMove(0.5, 0.5).endX < 0.45);
-const jerk = handMove(1, 0.1);
-ok('a jerk overshoots and keeps floating that way', jerk.rest > 1.3 && jerk.rest < 1.8, jerk.rest);
-const fixH = handMove(1, 0.1, 0.2).h, driftBefore = Math.hypot(fixH.dx, fixH.dy);
-handMove(-0.4, 0.8, 0, fixH);
-ok('a slow move back stops the floating', driftBefore > 0.1 && Math.hypot(fixH.dx, fixH.dy) < 0.01, [driftBefore, fixH.dx]);
+// Distances are 4x the first version's: the finger moves the sight 1:1 on screen since 2026-11-13 (same finger moves).
+const slow = handMove(1.2, 1);
+ok('a slow, small move lands where the finger put it', Math.abs(slow.rest - 1.2) < 0.04 && slow.peak < 1.32, slow);
+ok('the sight lags the finger a little', handMove(2, 0.5).endX < 1.8);
+const jerk = handMove(4, 0.1);
+ok('a jerk overshoots and keeps floating that way', jerk.rest > 5.2 && jerk.rest < 7.2, jerk.rest);
+const fixH = handMove(4, 0.1, 0.2).h, driftBefore = Math.hypot(fixH.dx, fixH.dy);
+handMove(-1.6, 0.8, 0, fixH);
+ok('a slow move back stops the floating', driftBefore > 0.4 && Math.hypot(fixH.dx, fixH.dy) < 0.04, [driftBefore, fixH.dx]);
 const big = handMove(30, 0.05);
-ok('it never leaves the range', big.rest <= 3 && big.peak <= 3);
+ok('it never leaves the range', big.rest <= 8 && big.peak <= 8);
 const lazy = newHand({ x: 0.2, y: -0.1 }); stepHand(lazy, 0, 0, 0.05);
 ok('a long frame does not blow it up', Math.abs(lazy.x - 0.2) < 1e-9 && Math.abs(lazy.y + 0.1) < 1e-9);
 
