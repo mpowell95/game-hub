@@ -118,6 +118,10 @@ a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
   the inside of the hand toward you, as in the recording. No string is drawn (the recording shows none). The arrow
   lies on the built shelf (`REST`). Checked headless at 360, 402, 430 wide: bow down, mid-draw, drawn, aimed at a
   corner. Until the model loads (or if it fails) the built hand and sleeve stand in.
+- **No flicker (2026-11-13, Matt's recording: the column's strips and marks flickered on his iPhone)**: the bow
+  camera's near plane is 2 (nothing on screen is nearer than ~8 bow units), the range camera's 0.25 m, the target
+  face has a polygon offset, and every strip or mark on the bow stands 0.04+ clear of the face under it (the white
+  marks were level with the column's front). Keep new overlays clear the same way.
 - **Draw calls**: the bow's static parts are merged into one mesh per material (`mergeByMaterial`):
   about 97 a frame while aiming, the bow 23 of them.
 - **The close-up**: the board half-width is 1.14 face radii as DRAWN (`BOARD_HALF`; the rules'
