@@ -152,6 +152,10 @@
 - `tools/test-bee-restore.mjs` (2026-11-09): Spelling Bee's restore of lost words from `beeLog` (`spelling-bee/js/restore.js`), against a fake server: order, times, counted-day and Genius marks, additive, no write once the caller moved on.
 - `tools/test-repair-1109.mjs` (2026-11-09): the one-time re-added-phone repair (`js/repair-1109.js`), made-up code and ids: sync first, refuses another code, full rollback on a failure halfway, never twice.
 
+## tools/test-battlearena-carry.mjs (2026-11-13)
+
+Battle Arena's test plays counted at its release (`CARRY_TEST.battlearena`, `combineCopiedRecords`): runs the release on a made-up player (switch on, one load), checks the test record that began as a COPY of the real one is never added twice (6 real + 7 test = 7), modes, detail, challenge ids and head-to-head carried once, the stamp, the read-time combine. Node only.
+
 ## tools/read-new-dock.mjs (2026-11-13)
 
 Read-only. Who has seen the launcher's New game bubble: each person's devices' `players/<id>/newDock` reports merged

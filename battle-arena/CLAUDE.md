@@ -176,4 +176,14 @@ Matt: "do a full exhaustive thorough review of Battle Arena to get it ready to b
 - **NOT changed, on purpose**: a rules VERSION. No match stores one, so absent = v1; **any engine.js change after release must stamp `rv: 2` on new matches and keep v1's paths**, or open challenges stop replaying.
 - Left as is: the 25 s live clock runs under the hub's covers (no `onCovered`: the other phone is waiting); `battlearena` rules let an existing log entry be rewritten (same as every challenge game).
 
-**Release checklist (only on Matt's "release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; `CARRY_TEST` + a combiner if Matt wants testers' wins (and so their unlocked monsters) to carry; `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.
+**Release checklist (only on Matt's "release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; (`CARRY_TEST.battlearena` is ALREADY set, below); `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.
+
+## Test plays count (2026-11-13, Matt: "have test plays count. and have plays from non-admins count")
+
+`CARRY_TEST.battlearena` with its own combiner `combineCopiedRecords` (`js/game-stats.js`), carried at the release
+(every phone's store once, stamp `carried.battlearena`; `players-agg` combines an unstamped record at read time;
+`testH2h` too, `CARRY_H2H`). NOT added: the test record started as a COPY of the real one (only real data: Matt's phone,
+real 6 played, test 7), so each number takes the larger of the two (= the test record; `lo` the smaller). Admins and
+testers alike: every player's test plays count. Nothing happens before the release (`isTestGame`).
+`node tools/test-battlearena-carry.mjs`. Read-time Records (`mp-records.js`) read raw `h2h`: an unopened phone shows its
+old head-to-head until it next opens (none exists today).
