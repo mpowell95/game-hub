@@ -610,7 +610,7 @@ never crash.
 ## New games bubble (2026-11-13, Matt: "yes i want that. Make sure it opens the new game"; `docs/mockups/new-games/bubble.html`)
 
 The your-turn bubble's box on the tab bar, NO pointer: "New game / <name>" or "N new games / A, B +n", for launcher games inside
-their New window (7 days, `js/new-badge.js`) this device has not opened or put away (`gamehub.newDock.v2`, a preference; a launch stamps only a released game in its New window; v1 stamped admin TEST plays, so v2 kept only v1 stamps after Tower Stack's release merge). Tap =
+their New window (7 days, `js/new-badge.js`) this device has not opened or put away (`gamehub.newDock.v3`, a preference; a launch stamps only a released game in its New window; v1 stamped admin TEST plays and hid Tower Stack's bubble from Matt, so v3 started EMPTY on every phone). Tap =
 the newest one, as its tile (a launch-out game follows its link); X = all away; a your-turn / game-over bubble sits under it (the new one
 stacks ABOVE it; first version hid it, so Matt, always with a game waiting, never saw Tower Stack's) (`js/hub.js` `_paintNewDock`). RELEASED games only: never an admin-only game, not even on an admin device (Matt, same day:
 "it shouldnt be live. the game isn't live yet"; an admin-device Tower Stack preview was removed).
