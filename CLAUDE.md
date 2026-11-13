@@ -402,6 +402,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools there AND here).
 
 - **Setup cards on real phones (2026-11-08):** `tools/review-setup-cards.cjs` (every multiplayer setup tab on the family's 6 phone sizes, fake database with 3 matches each; shots in `.visual-out/setup-cards/`).
+- **Who has seen the New game bubble (2026-11-13):** `tools/read-new-dock.mjs [<game id>]` (read only); `tools/test-new-dock.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked).
@@ -616,6 +617,10 @@ their New window (7 days, `js/new-badge.js`) this device has not opened or put a
 the newest one, as its tile (a launch-out game follows its link); X = all away; a your-turn / game-over bubble sits under it (the new one
 stacks ABOVE it; first version hid it, so Matt, always with a game waiting, never saw Tower Stack's) (`js/hub.js` `_paintNewDock`). RELEASED games only: never an admin-only game, not even on an admin device (Matt, same day:
 "it shouldnt be live. the game isn't live yet"; an admin-device Tower Stack preview was removed).
+**WHO SAW IT is reported (Matt, same day: "WHY would you make it so we can't determine if someone has seen it? I ask you for this
+level of detail EVERY single time")**: `js/new-dock-log.js` keeps first/last shown (really on screen), how often, tapped, closed and
+opened per game, mirrored as `players/<id>/newDock` (a REPORT, never read back); Admin > Sent > New game bubble lists every person.
+**Any new popup, bubble or notice must report who saw it from day one.** Shows before v1548 were never recorded.
 
 ## The compact layout (2026-10-17)
 

@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1546;
-const CACHE = 'game-hub-v1547';
+const IMPORTANT_SINCE = 1548;
+const CACHE = 'game-hub-v1548';
 
 const ASSETS = [
   './',
@@ -17,6 +17,7 @@ const ASSETS = [
   // index.html, so it needs listing here in its own right to survive offline.
   './css/ui.css',
   './js/hub.js',
+  './js/new-dock-log.js',
   './js/name-gate.js',
   './js/name-gate-auto.js',
   './js/no-zoom.js',
@@ -834,7 +835,8 @@ const REST_MANIFEST = {
   './css/hub.css': '136627aac7',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'b5415dafe1',
+  './js/hub.js': '89b391e7b3',
+  './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -865,7 +867,7 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': '7b7ed3ec0a',
-  './js/stats-net.js': 'bd96956644',
+  './js/stats-net.js': 'b46f740ebd',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',
@@ -888,7 +890,7 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'b70c68e50c',
-  './js/admin-ui.js': 'af7f776932',
+  './js/admin-ui.js': '2c478c9474',
   './js/integrity.js': 'c19ae6ac55',
   './js/play-log-queue.js': '5a64cdfdac',
   './js/play-log.js': '250ce128a0',

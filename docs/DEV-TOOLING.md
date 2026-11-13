@@ -150,3 +150,9 @@
 
 - `tools/test-bee-restore.mjs` (2026-11-09): Spelling Bee's restore of lost words from `beeLog` (`spelling-bee/js/restore.js`), against a fake server: order, times, counted-day and Genius marks, additive, no write once the caller moved on.
 - `tools/test-repair-1109.mjs` (2026-11-09): the one-time re-added-phone repair (`js/repair-1109.js`), made-up code and ids: sync first, refuses another code, full rollback on a failure halfway, never twice.
+
+## tools/read-new-dock.mjs (2026-11-13)
+
+Read-only. Who has seen the launcher's New game bubble: each person's devices' `players/<id>/newDock` reports merged
+(`js/new-dock-log.js` `mergeNewDock`), per game, times in Eastern. `node tools/read-new-dock.mjs [<game id>]`.
+`tools/test-new-dock.mjs` tests the log and the merge.
