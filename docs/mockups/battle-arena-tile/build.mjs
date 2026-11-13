@@ -82,6 +82,25 @@ const OPTIONS = {
       <rect x="34" y="45.8" width="88" height="23.4" rx="6" fill="none" stroke="#fff3b0" stroke-width="2.4"/>
       <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.2"><circle cx="60" cy="38" r="4.4"/><circle cx="54" cy="28" r="4.8"/></g>
     </svg>`,
+  // C3 (2026-11-13, a rethink: zoom in). The camera close on the battle: the board runs off both sides and the bottom,
+  // the gems as big as the monsters' heads, the kitten and the drop cropped by the frame. Judged at real tile size.
+  C3: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 40, glow: true })}
+      ${mon('emberkit', false, -8, -10, 66)}${mon('driplet', false, 102, -8, 64, true)}
+      ${burst(82, 20, 11, '#ffd36a', 9)}${burst(82, 20, 5.5, '#fff8dc', 9)}
+      <rect x="-2" y="44" width="164" height="50" fill="#1a120d"/>
+      ${[['leaf', 'fire', 'fire', 'fire', 'water', 'spark'], ['spark', 'shadow', 'water', 'leaf', 'shadow', 'fire']].map((row, r) => row.map((k, c) => gem(k, -12 + c * 32, 46 + r * 31, 29)).join('')).join('')}
+      <rect x="17" y="45" width="96" height="31" rx="7" fill="none" stroke="#fff3b0" stroke-width="3"/>
+      <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.4"><circle cx="54" cy="38" r="5"/><circle cx="44" cy="30" r="5.5"/></g>
+    </svg>`,
+  // C4 (same rethink, one subject): the kitten alone, big, glowing as the matched fire gems charge it. No second monster.
+  C4: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 46, glow: true })}
+      <g opacity=".9">${burst(84, 28, 44, '#c4421c', 14)}${burst(84, 28, 31, '#ff8a2a', 14)}</g>
+      ${mon('emberkit', false, 44, -12, 78)}
+      <rect x="-2" y="56" width="164" height="40" fill="#1a120d"/>
+      ${[['water', 'leaf', 'fire', 'fire', 'fire', 'spark'], ['shadow', 'spark', 'water', 'leaf', 'shadow', 'water']].map((row, r) => row.map((k, c) => gem(k, -12 + c * 32, 58 + r * 31, 29)).join('')).join('')}
+      <rect x="49" y="57" width="96" height="31" rx="7" fill="none" stroke="#fff3b0" stroke-width="3"/>
+      <g fill="#ff9a3a" stroke="#fff3b0" stroke-width="1.4"><circle cx="122" cy="50" r="5"/><circle cx="130" cy="40" r="4.4"/><circle cx="62" cy="52" r="4.4"/></g>
+    </svg>`,
   // D: the hero: Blazelynx in a burst of fire, the five gems around it.
   D: `<svg viewBox="0 0 160 90" aria-hidden="true">${room({ furnace: false, floorY: 70 })}
       <g opacity=".85">${burst(80, 40, 46, '#c4421c', 14)}${burst(80, 40, 34, '#ff8a2a', 14)}${burst(80, 40, 20, '#ffd36a', 14)}</g>
@@ -92,8 +111,8 @@ const OPTIONS = {
 };
 OPTIONS.NOW = GAME_ART['battle-arena'];
 
-const ORDER = ['A', 'A2', 'C', 'C2'];
-const LABEL = { A: 'A', A2: 'A2', C: 'C', C2: 'C2' };
+const ORDER = ['C', 'C3', 'C4'];
+const LABEL = { C: 'C', C3: 'C3', C4: 'C4' };
 const tile = (svg, name, tag) => `<div class="cell"><div class="art">${svg}${tag ? `<span class="pill${tag === 'New' ? ' new' : ''}">${tag}</span>` : ''}<span class="fav">♡</span></div><div class="name">${name}</div></div>`;
 const row = (svg) => tile(GAME_ART['ball-run'], 'Ball Run') + tile(GAME_ART.baseball, 'Baseball', 'Test') + tile(svg, 'Battle Arena', 'New');
 const sec = (k) => `<section><h2>${LABEL[k]}</h2>
