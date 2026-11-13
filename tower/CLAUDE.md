@@ -19,8 +19,11 @@ day, so the carry cannot double count):** (1) `js/hub.js`: drop `devOnly`, add `
 ASSETS: add `./tower/index.html`, `./tower/css/tower.css`, `./tower/js/{ui,engine,art,strings}.js`, run
 `tools/validate-sw-assets.mjs`, bump CACHE; (5) `tools/test-admin-only-plays.mjs` and `tools/test-word-weaver.mjs` use Tower
 as their admin-only example: point them at another admin-only game (archery, cup-baseball); (6) docs (here + root table);
-(7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. Ship the commit
-WITH the admin live switch, never the switch first (the game would read the empty real record until the carry).
+(7) check `openLeaderboard({game:'tower'})` lands on Tower's board; (8) no announcement unless Matt asks. **Order (review 4):
+deploy the commit FIRST, check Matt's devices are on the new build, and only then (if at all) flip the admin live switch**:
+the switch alone sends phones still on the old build to the empty real record before they have the carry (bests read 0
+until they update; nothing lost). `js/integrity.js` `GAME_NAMES` already has `tower` (2026-11-13); Tower has no integrity
+rules yet (cheap candidates: perfects <= blocks, bestStreak <= perfects, bestByDiff <= best; replay over a snapshot first).
 
 ## Rules (`js/engine.js`, pure)
 
@@ -70,6 +73,14 @@ WITH the admin live switch, never the switch first (the game would read the empt
   `back()` + `gamehub:backlabel`) and the hub's Leave? text is the game's own (`leaveText()`, "Your blocks count"); Keep
   playing resumes (`onUncovered()`); "Perfect!" pops; the streak chip is 🔥 bottom left; the best line is solid, ✓ once beaten,
   its label drawn above the pieces; the HUD's best pill hides at a tie; Record towers opens on first place.
+- **Review 4 fixes (2026-11-13, an independent code review and a phone play test; Matt: "Do the next independent review")**:
+  taps wait 0.35 s after Play, Again, Resume and Keep playing (a double tap ended runs at 0); the card's X tucks it away and
+  leaves a bottom pill with the score (tap it or the scene; the card then ignores taps for 0.4 s again); pausing drops the
+  falling offcuts and hides the pause button; keys are ignored while the hub's dialog covers the game; an app closed
+  mid-run keeps its blocks (`pagehide`, not persisted); Record towers follows the PERSON picked, draws one or two towers
+  bigger and centred, stars scattered; Ice ground is deep blue (pale blocks merged with the snow); Toy's score has a dark
+  outline; "★ New best"; the title's best hides at 0. The hub puts the leaderboard return back after a back gesture the
+  game took itself (`requestLeave`).
 - **Game over**: the card has "‹ Back" (to setup) besides the X (Matt went to the hub by accident). Nothing that must be read
   goes under the hub's top row (`_readTopY`, a CSS probe): the best line's label drops below the line there, and the
   game-over zoom fits the tower between that row and the card (the card is built first, hidden, and measured).

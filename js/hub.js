@@ -3096,7 +3096,14 @@ class Hub {
     // A game with screens of its own may take the hub's back one step back first (optional `back()` returning true;
     // Tower Stack's game over and Record towers, 2026-11-12: Matt left to the hub by accident). The button then reads
     // "‹ Back", set by the game through the `gamehub:backlabel` event.
-    try { if (m && typeof m.back === 'function' && m.back() === true) return; } catch (e) { console.warn('back() failed', e); }
+    // A back GESTURE the game took itself spent the leaderboard-return history entry: put it back from outside the
+    // popstate (js/back-stack.js), or the next swipe would leave the app (review 4).
+    try {
+      if (m && typeof m.back === 'function' && m.back() === true) {
+        if (this._retGesture) { this._retGesture = false; setTimeout(() => this._rearmReturn(), 0); }
+        return;
+      }
+    } catch (e) { console.warn('back() failed', e); }
     let inProgress = false;
     try { inProgress = !!(m && typeof m.isInProgress === 'function' && m.isInProgress()); } catch { /* ignore */ }
     if (inProgress) {

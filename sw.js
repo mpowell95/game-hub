@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1530;
-const CACHE = 'game-hub-v1538';
+const CACHE = 'game-hub-v1539';
 
 const ASSETS = [
   './',
@@ -827,7 +827,7 @@ const REST_MANIFEST = {
   './css/hub.css': '45d6206013',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'd5b8f13ec5',
+  './js/hub.js': '6e864973e0',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
@@ -882,7 +882,7 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'b70c68e50c',
   './js/admin-ui.js': 'af7f776932',
-  './js/integrity.js': 'b508c1d3a0',
+  './js/integrity.js': 'c19ae6ac55',
   './js/play-log-queue.js': '5a64cdfdac',
   './js/play-log.js': '250ce128a0',
   './js/contexto-history.js': '343da78a44',
