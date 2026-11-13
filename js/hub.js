@@ -42,10 +42,9 @@ import { isAutomation } from './automation.js';
 const t = makeT(STRINGS);
 // js/strings.js is cache-first, so a key added with a feature can be missing for one visit.
 const tf = (k, fb, p) => { const v = t(k, p); return v === k ? fb : v; };
-// The new-games bubble (_paintNewDock): its per-device seen-list, and unreleased games admin devices preview it with
-// (remove an id at that game's release; tower/CLAUDE.md's release checklist says so).
+// The new-games bubble (_paintNewDock): its per-device seen-list. Released games only, on every device: an unreleased
+// game never gets the bubble, not even on an admin device (Matt, 2026-11-13: "it shouldnt be live. the game isn't live yet").
 const NEW_DOCK_KEY = 'gamehub.newDock.v1';
-const NEW_DOCK_PREVIEW = ['tower'];
 
 // The compact layout's tab bar icons (js/layout.js). Outline, 24-unit grid, drawn by currentColor.
 const TAB_ICON = {
@@ -2253,7 +2252,6 @@ class Hub {
   // "New game / <name>" (or "N new games / A, B +n"), for games inside their New window (js/new-badge.js, 7 days)
   // that this device has not opened or put away. Tap = open the newest one (as its tile would); X = put them all
   // away. A your-turn bubble always wins the spot. Seen-list `gamehub.newDock.v1` (a preference, per device).
-  // Admin devices also preview NEW_DOCK_PREVIEW (unreleased games they can see) so Matt can try it first.
   _newDockSeen() {
     try { const v = JSON.parse(localStorage.getItem(NEW_DOCK_KEY) || 'null'); return v && v.seen && typeof v.seen === 'object' ? v.seen : {}; } catch { return {}; }
   }
@@ -2269,11 +2267,8 @@ class Hub {
   _newDockGames() {
     const seen = this._newDockSeen();
     const now = Date.now();
-    let admin = false;
-    try { admin = isAdminDevice(); } catch { admin = false; }
     return (this.games || [])
-      .filter((g) => g && !g.comingSoon && !seen[g.id]
-        && (isNewGame(g, now, gameLiveAt(g.id)) || (admin && NEW_DOCK_PREVIEW.includes(g.id))))
+      .filter((g) => g && !g.comingSoon && !g.devOnly && !seen[g.id] && isNewGame(g, now, gameLiveAt(g.id)))
       .map((g) => ({ g, ms: sortMsOf(g, gameLiveAt(g.id)) || now }))
       .sort((a, b) => b.ms - a.ms || titleText(a.g).localeCompare(titleText(b.g)))
       .map((x) => x.g);

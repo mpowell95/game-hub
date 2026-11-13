@@ -612,7 +612,8 @@ never crash.
 The your-turn bubble's box on the tab bar, NO pointer: "New game / <name>" or "N new games / A, B +n", for launcher games inside
 their New window (7 days, `js/new-badge.js`) this device has not opened or put away (`gamehub.newDock.v1`, a preference). Tap =
 the newest one, as its tile (a launch-out game follows its link); X = all away; a your-turn / game-over bubble always wins the
-spot (`js/hub.js` `_paintNewDock`). Admin devices also preview `NEW_DOCK_PREVIEW` (Tower Stack); drop an id at its release.
+spot (`js/hub.js` `_paintNewDock`). RELEASED games only: never an admin-only game, not even on an admin device (Matt, same day:
+"it shouldnt be live. the game isn't live yet"; an admin-device Tower Stack preview was removed).
 
 ## The compact layout (2026-10-17)
 
