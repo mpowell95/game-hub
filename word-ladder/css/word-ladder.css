@@ -3,7 +3,7 @@
    carries a dot; the selected letter is #ffce3a AND has a thick outline and a caret; the target has a flag. */
 .wl-root {
   --wl-bg: #17284a; --wl-bg2: #24406f; --wl-ink: #10203c; --wl-on: #f5f8ff; --wl-tile: #ffffff;
-  --wl-match: #1f9a52; --wl-sel: #ffce3a; --wl-gold: #f2b705;
+  --wl-match: #22b84f; --wl-sel: #ffce3a; --wl-gold: #f2b705;
   --wl-top: var(--gh-st, env(safe-area-inset-top, 0px));
   /* The bottom of the hub's floating Hub button (it sits at max(safe top, 54px), 36px tall). */
   --wl-below: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px);
