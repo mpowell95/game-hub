@@ -299,3 +299,6 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
 - **Every attack visibly hits BOTH of the other team's monsters** (Matt: "Make sure when a monster attacks, it attacks both of the
   opposing monsters"; damage was always team HP). Driplet's jet now splits onto both; Pebbleop drops a boulder on each (evolved: a
   third between them); the rest already did. The boulder and its chips are Pebbleop's red-hot rock now. A new attack must hit both.
+- **Starters cover all five gem colours** (Matt: "NONE of the monsters use that other piece? They only use the leaf, fire, water, and
+  electricity???"): weakest-first left both shadow monsters locked. Hexowl is now a starter and Frostling opens at 10 wins (they
+  were within a point of each other). Starters: Thornpaw, Sproutle, Driplet, Cinderwing, Hexowl, Stormhorn. A test keeps it so.

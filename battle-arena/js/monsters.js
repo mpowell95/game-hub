@@ -22,6 +22,9 @@ export const ELEMENT_COLOR = {
  *  ones get unlocked"). Tuned on every 2-monster team against every other (8,910 medium + 5,940 hard computer matches):
  *  each monster now wins 45-55% of its matches (v1: 27-68%). Listed and unlocked weakest first; the order of the middle is
  *  within a point or two. Version 1's numbers are frozen below (V1) for every match started before. */
+/** Starters cover ALL FIVE gem colours (2026-11-14, Matt: "NONE of the monsters use that other piece?"): weakest-first had left
+ *  both shadow monsters locked, so a purple gem charged no starter. Hexowl (shadow) and Frostling (water) swapped places: Hexowl is
+ *  a starter, Frostling opens at 10 wins. The two are within a point of each other under v3. Unlocks are not rules: no `rv`. */
 export const MONSTERS = [
   { id: 'thornpaw', name: 'Thornpaw', evoName: 'Briarlord', el: 'leaf', cost: 5,
     sp: { convert: 4, heal: 8 }, evo: { convert: 5, heal: 11 } },
@@ -31,8 +34,8 @@ export const MONSTERS = [
     sp: { dmg: 12 }, evo: { dmg: 18 } },
   { id: 'cinderwing', name: 'Cinderwing', evoName: 'Pyrovern', el: 'fire', cost: 8,
     sp: { dmg: 12, rows: 1 }, evo: { dmg: 17, rows: 2 } },
-  { id: 'frostling', name: 'Frostling', evoName: 'Glacielle', el: 'water', cost: 5,
-    sp: { dmg: 7, freeze: true }, evo: { dmg: 11, freeze: true } },
+  { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5,
+    sp: { dmg: 8, curse: { tick: 5, turns: 2 } }, evo: { dmg: 13, curse: { tick: 5, turns: 3 } } },
   { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thundrake', el: 'spark', cost: 5,
     sp: { dmg: 12, chain: 1 }, evo: { dmg: 17, chain: 2 } },
 
@@ -40,8 +43,8 @@ export const MONSTERS = [
     sp: { dmg: 12, col: 1 }, evo: { dmg: 18, col: 2 } },
   { id: 'pebbleop', name: 'Pebbleop', evoName: 'Cragoon', el: 'fire', cost: 7, unlock: 6,
     sp: { dmg: 13, shield: 9 }, evo: { dmg: 18, shield: 13 } },
-  { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5, unlock: 10,
-    sp: { dmg: 8, curse: { tick: 5, turns: 2 } }, evo: { dmg: 13, curse: { tick: 5, turns: 3 } } },
+  { id: 'frostling', name: 'Frostling', evoName: 'Glacielle', el: 'water', cost: 5, unlock: 10,
+    sp: { dmg: 7, freeze: true }, evo: { dmg: 11, freeze: true } },
   { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6, unlock: 15,
     sp: { dmg: 12, drain: 2 }, evo: { dmg: 17, drain: 3 } },
   { id: 'zapup', name: 'Zapup', evoName: 'Voltail', el: 'spark', cost: 4, unlock: 20,
