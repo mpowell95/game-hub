@@ -274,10 +274,32 @@ function charge(s, ev, side, counts) {
       const gain = Math.floor(m.part / 2);
       m.part %= 2;
       if (gain) addEnergy(s, ev, side, mi, gain, 'all');
-    } else if (counts[el]) {
+    } else if (counts[el] && !((s.rv || 1) >= 3 && sameEl(s, side, el))) {
       addEnergy(s, ev, side, mi, counts[el], el);
     }
   });
+  // Rules version 3 (2026-11-14, Matt: "it's insane that you're letting that count as 6! It can't be +3 for both of them"):
+  // two monsters of ONE element SHARE the gems. They fill the one closer to its special first (ties: seat order), and what
+  // its full bar cannot hold spills to the other. Before v3 each got every gem.
+  if ((s.rv || 1) >= 3) {
+    for (const el of Object.keys(counts)) {
+      if (!sameEl(s, side, el)) continue;
+      const mons = s.sides[side].mons.map((m, mi) => ({ m, mi })).filter((x) => BY_ID[x.m.id].el === el);
+      const fill = (x) => x.m.energy / costOf(x.m.id, s.rv);
+      mons.sort((a, b) => fill(b) - fill(a) || a.mi - b.mi);
+      let left = counts[el];
+      for (const x of mons) {
+        if (left <= 0) break;
+        const room = Math.max(0, costOf(x.m.id, s.rv) - x.m.energy);
+        const give = Math.min(left, room);
+        if (give > 0) { addEnergy(s, ev, side, x.mi, give, el); left -= give; }
+      }
+    }
+  }
+}
+/** Does `side` have two or more monsters of element `el`? */
+function sameEl(s, side, el) {
+  return s.sides[side].mons.filter((m) => BY_ID[m.id].el === el).length > 1;
 }
 
 /** Remove a set of cells. `side` null = nobody is charged (a bomb going off on its own). */
