@@ -342,20 +342,23 @@ const ATTACKS = {
         wave.remove();
       }
     } else {
+      // The jet splits and hits BOTH of them (2026-11-14, Matt: "when a monster attacks, it attacks both of the opposing monsters").
       const from = { x: me.x + s.dir * s.size * 0.3, y: me.y - s.size * 0.05 };
-      const b = s.beam(from, front, 'is-water', s.size * 0.5, 900);
-      if (b) b.animate([{ height: s.size * 0.42 + 'px' }, { height: s.size * 0.6 + 'px' }, { height: s.size * 0.42 + 'px' }], { duration: 160, iterations: 5 });
-      const drip = setInterval(() => { if (s.alive) { const u = Math.random(); s.emit(2, { x: from.x + (front.x - from.x) * u, y: from.y + (front.y - from.y) * u }, { sp: [0.5, 2], life: [400, 600], r: [3, 5], c: WATER, g: 0.2 }); } }, 30);
+      for (const t of [front, back]) {
+        const b = s.beam(from, t, 'is-water', s.size * 0.42, 900);
+        if (b) b.animate([{ height: s.size * 0.34 + 'px' }, { height: s.size * 0.5 + 'px' }, { height: s.size * 0.34 + 'px' }], { duration: 160, iterations: 5 });
+      }
+      const drip = setInterval(() => { if (s.alive) { const t = Math.random() < 0.5 ? front : back, u = Math.random(); s.emit(2, { x: from.x + (t.x - from.x) * u, y: from.y + (t.y - from.y) * u }, { sp: [0.5, 2], life: [400, 600], r: [3, 5], c: WATER, g: 0.2 }); } }, 30);
       await s.sleep(220);
       for (let n = 0; n < 3; n++) {
-        s.emit(18, front, { ang: s.dir < 0 ? Math.PI * 1.25 : -Math.PI * 0.25, spread: 0.9, sp: [3, 8], life: [400, 800], r: [3, 7], c: WATER, g: 0.22 });
+        for (const t of [front, back]) s.emit(14, t, { ang: s.dir < 0 ? Math.PI * 1.25 : -Math.PI * 0.25, spread: 0.9, sp: [3, 8], life: [400, 800], r: [3, 7], c: WATER, g: 0.22 });
         s.jolt('#5fb6ff'); s.shake(5, 160);
         await s.sleep(170);
       }
       clearInterval(drip);
       s.ring(front, '#9fd8ff', s.size * 0.6, 480, 2.6);
-      s.ring(back, '#9fd8ff', s.size * 0.5, 480, 2.2);
-      s.emit(26, back, { sp: [2, 6], life: [400, 800], r: [3, 6], c: WATER, g: 0.2 });
+      s.ring(back, '#9fd8ff', s.size * 0.6, 480, 2.6);
+      for (const t of [front, back]) s.emit(20, t, { sp: [2, 6], life: [400, 800], r: [3, 6], c: WATER, g: 0.2 });
       s.shake(9, 360);
     }
     s.home();
@@ -448,9 +451,10 @@ const ATTACKS = {
     s.emit(16, { x: me.x, y: s.feet(me) }, { ang: -Math.PI / 2, spread: 1.2, sp: [1, 3], life: [400, 700], r: [8, 14], c: ['#8a6a50', '#a68a6a'], shape: 'smoke' });
     await s.move([[0, s.size * 0.12, 0, 0.88], [0, -(me.y + s.size * 1.5)]], 300, 'ease-in');
     if (!s.alive) return;
-    const rocks = evo ? [front, back, { x: (front.x + back.x) / 2, y: (front.y + back.y) / 2 }] : [front];
+    // A boulder on EACH of them (2026-11-14, Matt: every attack hits both); evolved, a third between them.
+    const rocks = evo ? [front, back, { x: (front.x + back.x) / 2, y: (front.y + back.y) / 2 }] : [front, back];
     for (let n = 0; n < rocks.length; n++) {
-      const t = rocks[n], sz = s.size * (evo ? 1.0 : 1.15) * (n === 2 ? 0.8 : 1);
+      const t = rocks[n], sz = s.size * 1.0 * (n === 2 ? 0.8 : 1);
       const r = s.el('ba-boulder', BOULDER, { x: t.x, y: -sz });
       if (!r) continue;
       r.style.width = r.style.height = sz + 'px';
@@ -458,11 +462,11 @@ const ATTACKS = {
       await done(r.animate([{ transform: `translate(-50%, -50%) rotate(0)` }, { transform: `translate(-50%, calc(-50% + ${land + sz}px)) rotate(${s.dir * 200}deg)` }], { duration: 360, easing: 'cubic-bezier(.5,0,1,.6)', fill: 'forwards' }));
       s.shake(16 * k, 520); s.flash('#d8c2a0', 200, 0.3); s.jolt('#d8c2a0');
       const hit = { x: t.x, y: land };
-      s.emit(Math.round(22 * k), hit, { ang: -Math.PI / 2, spread: 1.3, sp: [3, 9], life: [500, 900], r: [3, 7], c: ROCK, shape: 'rock', g: 0.3, drag: 0.98 });
+      s.emit(Math.round(22 * k), hit, { ang: -Math.PI / 2, spread: 1.3, sp: [3, 9], life: [500, 900], r: [3, 7], c: ['#B8472A', '#8A3420', '#F2B705', '#E2774A'], shape: 'rock', g: 0.3, drag: 0.98 });
       s.emit(18, { x: t.x, y: s.feet(t) }, { sp: [1, 3], life: [600, 1000], r: [14, 22], c: ['#7a5e48', '#9c8064'], shape: 'smoke', jx: s.size * 0.4 });
       done(r.animate([{ transform: `translate(-50%, calc(-50% + ${land + sz}px)) rotate(${s.dir * 200}deg)`, opacity: 1 },
         { transform: `translate(calc(-50% + ${s.dir * 30}px), calc(-50% + ${land + sz - 30}px)) rotate(${s.dir * 260}deg) scale(.6)`, opacity: 0 }], { duration: 420, easing: 'ease-out', fill: 'forwards' })).then(() => r.remove());
-      if (evo) await s.sleep(120);
+      await s.sleep(120);
     }
     // home: drop back in from the top
     await s.move([[0, -(me.y + s.size * 1.5)], [0, 0, 0, 1]], 320, 'cubic-bezier(.5,0,1,.6)');
@@ -670,8 +674,9 @@ const MAW = (evo) => `<svg viewBox="0 0 200 200" preserveAspectRatio="none" aria
     <path d="M20 104 l12 -22 l12 22 l12 -26 l12 26 l12 -28 l12 28 l12 -28 l12 28 l12 -26 l12 26 l12 -22 l12 22 l12 -20 l12 20 Z" fill="#efe6ff" stroke="#4a2a8a" stroke-width="2.5" stroke-linejoin="round"/></g>
 </svg>`;
 
-const BOULDER = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 40 L34 12 L70 10 L92 38 L86 76 L54 92 L18 80 Z" fill="#8a6a50" stroke="#3a2a1c" stroke-width="5" stroke-linejoin="round"/>
-  <path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#5a4434" stroke-width="3" fill="none"/><path d="M38 20 L58 18" stroke="#c4a888" stroke-width="5" stroke-linecap="round"/></svg>`;
+// Pebbleop's red-hot rock (2026-11-14: it was grey stone, Pebbleop is fire): glowing yellow cracks.
+const BOULDER = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 40 L34 12 L70 10 L92 38 L86 76 L54 92 L18 80 Z" fill="#B8472A" stroke="#4a1a0e" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#F2B705" stroke-width="4" fill="none"/><path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#FFF1B0" stroke-width="1.5" fill="none"/><path d="M38 20 L58 18" stroke="#E2774A" stroke-width="5" stroke-linecap="round"/></svg>`;
 
 /** A hex seal: two rings, a six-point star, runes round the rim. */
 function SIGIL(cx, cy, R) {

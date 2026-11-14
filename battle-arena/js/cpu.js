@@ -10,6 +10,11 @@ import { apply, legalMoves, previewSwap, evolveOptions } from './engine.js';
 import { BY_ID, specialOf, costOf, BERRIES_TO_EVOLVE } from './monsters.js';
 
 export const LEVELS = ['easy', 'medium', 'hard'];
+/** Hard plays each swap out this many times on guessed falls (never the match's own seed) and averages. */
+const HARD_GUESSES = 2;
+/** Hard's turn plan: its best few first moves (Medium's eye), each with its best few second moves. Measured 2026-11-14 (300
+ *  matches each): 4/4 beat Medium 56%, 8/6 55%, 12/8 50%; 4/4 is also the cheapest on a phone. */
+const HARD_FIRST = 4, HARD_SECOND = 4;
 
 /** What a special is worth, roughly in HP. */
 function specialValue(id, evo, rv) {
@@ -125,25 +130,58 @@ export function chooseMove(state, level, rand = Math.random) {
   const swap = (m) => ({ type: 'swap', a: m.a, b: m.b });
   if (level === 'easy') return swap(moves[Math.floor(rand() * moves.length)]);
 
+  if (level === 'hard') return swap(hardMove(state, side, moves, rand) || moves[0]);
   let best = null, bestV = -Infinity;
   for (const m of moves) {
     let v;
-    if (level === 'hard') {
-      const res = apply(state, swap(m));
-      if (!res.ok) continue;
-      v = scoreOutcome(state, side, res);
-      const st = res.state;
-      if (st.winner == null) {
-        if (st.turn === side) v += 0.8 * Math.max(0, bestPreview(st, side));
-        else if (st.turn !== side) v -= 0.6 * threat(st, st.turn);
-      }
-    } else {
+    {
       v = scorePreview(state, side, previewSwap(state, m.a, m.b));
     }
     v += rand() * 0.5;          // break ties without always picking the top-left swap
     if (v > bestV) { bestV = v; best = m; }
   }
   return swap(best || moves[0]);
+}
+
+/** HARD, with NO PEEKING (2026-11-14, Matt: "are you just calculating it so the robot gets luckier than me?"). It used to
+ *  play each swap out on the REAL state, whose random seed decides the tiles that fall in, so it knew every cascade before
+ *  choosing (and beat Medium 84%). Now every look ahead runs on GUESSED falls (a seed of its own, never the match's), averaged
+ *  over HARD_GUESSES, so it sees the board exactly as the player does. To play better FAIRLY it plans its whole turn: the best
+ *  first moves (Medium's eye) each with the best second move after them, and how much the player could fire back. */
+function hardMove(state, side, moves, rand) {
+  const swap = (m) => ({ type: 'swap', a: m.a, b: m.b });
+  const guess = (st) => ({ ...st, rng: (Math.floor(rand() * 4294967296) >>> 0) || 1 });
+  const ranked = moves.map((m) => ({ m, p: scorePreview(state, side, previewSwap(state, m.a, m.b)) + rand() * 0.5 }))
+    .sort((a, b) => b.p - a.p).slice(0, HARD_FIRST);
+  let best = null, bestV = -Infinity;
+  for (const { m, p } of ranked) {
+    let v = 0, n = 0;
+    for (let k = 0; k < HARD_GUESSES; k++) {
+      const res = apply(guess(state), swap(m));
+      if (!res.ok) break;
+      let g = scoreOutcome(state, side, res);
+      const st = res.state;
+      if (st.winner == null && st.turn === side) {
+        // The second move of the turn, on the same guessed board: the best of Medium's top picks, played out.
+        const seconds = legalMoves(st).map((m2) => ({ m2, p2: scorePreview(st, side, previewSwap(st, m2.a, m2.b)) }))
+          .sort((a, b) => b.p2 - a.p2).slice(0, HARD_SECOND);
+        let b2 = 0;
+        for (const { m2 } of seconds) {
+          const r2 = apply(guess(st), swap(m2));
+          if (!r2.ok) continue;
+          let g2 = scoreOutcome(st, side, r2);
+          if (r2.state.winner == null && r2.state.turn !== side) g2 -= 0.6 * threat(r2.state, r2.state.turn);
+          b2 = Math.max(b2, g2);
+        }
+        g += 0.9 * b2;
+      } else if (st.winner == null) g -= 0.6 * threat(st, st.turn);
+      v += g; n++;
+    }
+    if (!n) continue;
+    v = v / n + 0.3 * p;
+    if (v > bestV) { bestV = v; best = m; }
+  }
+  return best;
 }
 
 /** The computer's draft: two different monsters, not the ones the player took. Easy and Medium

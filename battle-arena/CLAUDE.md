@@ -289,3 +289,13 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   a picked monster's element-mates (`.is-taken`) and picking one SWAPS it in; Random, a saved team (`oneOfEach`) and the computer
   (`chooseTeam`) obey it. Not enforced on stored matches (`cleanTeam`), so no old match or challenge breaks. The v3 sharing rule
   stays for old matches. Balance without same-element teams: every monster 46-53% (medium 4,752 + hard 2,376), no retune.
+- **Hard no longer peeks** (Matt: "are you just calculating it so the robot gets luckier than me?"). I built it wrong: Hard played
+  each swap out on the REAL state, and the match's seed decides what falls in, so it knew every cascade before choosing (old code
+  changed its pick on 25 of 40 boards when only the hidden seed changed; it beat Medium 84%). Now `hardMove` (cpu.js) looks ahead
+  only on GUESSED falls (its own seed, 2 guesses averaged) and plans its whole turn (best 4 first moves x best 4 second moves).
+  Test: "no peeking", the same move on 40/40 boards whatever is about to fall. Fair Hard beats Medium ~55% (300 matches; every
+  look-ahead size tried was 50-56%): match-3 is mostly luck once nobody sees the future. Nothing is ever rigged: the falls are
+  the match's seeded RNG, the same for both sides.
+- **Every attack visibly hits BOTH of the other team's monsters** (Matt: "Make sure when a monster attacks, it attacks both of the
+  opposing monsters"; damage was always team HP). Driplet's jet now splits onto both; Pebbleop drops a boulder on each (evolved: a
+  third between them); the rest already did. The boulder and its chips are Pebbleop's red-hot rock now. A new attack must hit both.
