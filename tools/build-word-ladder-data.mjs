@@ -23,8 +23,9 @@
 //     s = start, t = target, p = par (the shortest number of changes), h = a shortest path "S W1 W2 ... T"
 //   word-ladder/data/<lang>/daily.json  { v: 1, epoch, count, levels: [ same shape ] } (day d = levels[d])
 //
-// THE RAMP (plan): 1-100 Easy (3 letters, par 3-4; 4 letters once the 3-letter pairs run out), 101-250 Medium (4 letters, par 4-5), 251-400 Hard (4 letters par
-// 5-7 or 5 letters par 4-5), 401-500 Expert (5 letters par 5-7 or 4 letters par 7-9). Bands: word-ladder/js/engine.js.
+// THE RAMP (plan): 1-100 Easy (3 letters, par 3-4; 4 letters once the 3-letter pairs run out), 101-250 Medium (4 letters, par 4-5),
+// 251-400 Hard (5 letters, par 4-6), 401-500 Expert (6 letters, par 4-6) (2026-11-14; until then Hard/Expert were 4-5 letters).
+// `--keep-through 250` (used 2026-11-14) keeps levels 1-250 and every daily as shipped and remakes only 251-500. Bands: word-ladder/js/engine.js.
 // Daily: 4 letters par 4-6 or 5 letters par 4-5, common words. No start/target PAIR repeats anywhere; a word is a start
 // or target at most MAX_USES times in each language. Seeded: the same sources always give the same data.
 //
@@ -38,7 +39,8 @@ const RARE = 200000;
 const LEVELS = 500;
 const DAILY = 730;
 const EPOCH = '2026-11-13';
-const MAX_USES = 3;   // a word is a start or target at most this often per language
+const MAX_USES = 3;
+const KEEP = (() => { const i = process.argv.indexOf('--keep-through'); return i > 0 ? Number(process.argv[i + 1]) | 0 : 0; })();   // a word is a start or target at most this often per language
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -59,7 +61,7 @@ function loadWords(lang) {
   // hint path stay Word Weaver GRID words (common, clean).
   const broad = fs.readFileSync(path.join(ROOT, 'boggle/data', lang === 'es' ? 'words-es.txt' : 'words.txt'), 'utf8').split(/\r?\n/);
   for (const w of broad) set.add(w.trim().toUpperCase());
-  const ok = lang === 'es' ? /^[A-ZÑ]{3,5}$/ : /^[A-Z]{3,5}$/;
+  const ok = lang === 'es' ? /^[A-ZÑ]{3,6}$/ : /^[A-Z]{3,6}$/;
   return { all: [...set].filter((w) => ok.test(w)), grid };
 }
 function loadRanks(lang) {
@@ -114,8 +116,11 @@ function plan(n) {
   if (n <= 20) return [{ len: 3, p: [3, 3], cap: 3000 }, { len: 3, p: [3, 3], cap: 8000 }, { len: 4, p: [3, 3], cap: 3000 }];
   if (n <= 100) return [{ len: 3, p: [3, 4], cap: 5000 }, { len: 4, p: [3, 4], cap: 4000 }];
   if (n <= 250) return [{ len: 4, p: n <= 175 ? [4, 4] : [4, 5], cap: 5000 }];
-  if (n <= 400) return n % 2 ? [{ len: 4, p: [5, 7], cap: 7000 }, { len: 5, p: [4, 5], cap: 7000 }] : [{ len: 5, p: [4, 5], cap: 7000 }, { len: 4, p: [5, 7], cap: 7000 }];
-  return n % 2 ? [{ len: 5, p: [5, 7], cap: 9000 }, { len: 4, p: [7, 9], cap: 9000 }] : [{ len: 4, p: [7, 9], cap: 9000 }, { len: 5, p: [5, 7], cap: 9000 }];
+  // 2026-11-14 (Matt: "How do I get longer words?"): Hard = 5-letter words, Expert = 6-letter words, each its own difficulty.
+  if (n <= 400) return [{ len: 5, p: [4, 6], cap: 7000 }, { len: 5, p: [4, 6], cap: 15000 }, { len: 4, p: [6, 8], cap: 9000 }];
+  // 6-letter grid words rarely chain into each other, so an Expert ladder's MIDDLE steps may be any accepted word
+  // (anyPath); its start and target stay common grid words, and par is still the true minimum.
+  return [{ len: 6, p: [4, 6], cap: 9000 }, { len: 6, p: [4, 6], cap: 20000, anyPath: true }, { len: 6, p: [3, 6], cap: 60000, anyPath: true }, { len: 5, p: [6, 8], cap: 12000 }];
 }
 const dailyPlan = (d) => [...(d % 3 === 2 ? [{ len: 5, p: [4, 5], cap: 6000 }, { len: 4, p: [4, 6], cap: 6000 }] : [{ len: 4, p: [4, 6], cap: 6000 }, { len: 5, p: [4, 5], cap: 6000 }]),
   // Spanish runs out of common pairs: then less common words (still on the cleaned list).
@@ -134,7 +139,7 @@ function build(lang) {
   for (const k of Object.keys(byLen)) { graphs[k] = graph(byLen[k]); gridGraphs[k] = graph(byLen[k].filter((w) => grid.has(w))); }
   const used = new Set();
   const uses = new Map();
-  const R = rng(lang === 'es' ? 9173 : 4421);
+  let R = rng(lang === 'es' ? 9173 : 4421);
   const pick = (specs) => {
     for (const spec of specs) {
       const nb = graphs[spec.len];
@@ -147,7 +152,7 @@ function build(lang) {
         const want = spec.p[0] + Math.floor(R() * (spec.p[1] - spec.p[0] + 1));
         for (const p of [want, ...[spec.p[0], spec.p[1]].filter((x) => x !== want)]) {
           const ts = [];
-          for (const [t, dd] of d) if (dd === p && dg.get(t) === p && commonSet.has(t) && !used.has([s, t].sort().join('-'))) ts.push(t);
+          for (const [t, dd] of d) if (dd === p && (spec.anyPath || dg.get(t) === p) && commonSet.has(t) && !used.has([s, t].sort().join('-'))) ts.push(t);
           if (!ts.length) continue;
           const t = ts[Math.floor(R() * ts.length)];
           used.add([s, t].sort().join('-'));
@@ -159,13 +164,26 @@ function build(lang) {
     throw new Error(`${lang}: no level for ${JSON.stringify(specs)}`);
   };
   const levels = [];
-  for (let n = 1; n <= LEVELS; n++) { levels.push(pick(plan(n))); if (n % 100 === 0) console.log(lang, 'level', n); }
-  const daily = [];
-  for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
+  let daily = [];
+  const dirIn = path.join(ROOT, 'word-ladder/data', lang);
+  if (KEEP) {
+    // --keep-through N: levels 1..N and EVERY daily stay exactly as shipped; only N+1.. are made again (their own seed).
+    const oldL = JSON.parse(fs.readFileSync(path.join(dirIn, 'levels.json'), 'utf8')).levels;
+    daily = JSON.parse(fs.readFileSync(path.join(dirIn, 'daily.json'), 'utf8')).levels;
+    for (const l of [...oldL.slice(0, KEEP), ...daily]) {
+      used.add([l.s, l.t].sort().join('-'));
+      uses.set(l.s, (uses.get(l.s) || 0) + 1); uses.set(l.t, (uses.get(l.t) || 0) + 1);
+    }
+    levels.push(...oldL.slice(0, KEEP));
+    const R2 = rng((lang === 'es' ? 9173 : 4421) + 7 * KEEP);
+    R = R2;
+  }
+  for (let n = levels.length + 1; n <= LEVELS; n++) { levels.push(pick(plan(n))); if (n % 50 === 0) console.log(lang, 'level', n); }
+  if (!KEEP) for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
   const dir = path.join(ROOT, 'word-ladder/data', lang);
   fs.mkdirSync(dir, { recursive: true });
   const w = {};
-  for (const k of ['3', '4', '5']) w[k] = (byLen[k] || []).join(' ');
+  for (const k of ['3', '4', '5', '6']) w[k] = (byLen[k] || []).join(' ');
   fs.writeFileSync(path.join(dir, 'words.json'), JSON.stringify({ v: 1, w }) + '\n');
   const lines = (arr) => '[\n' + arr.map((l) => JSON.stringify(l)).join(',\n') + '\n]';
   fs.writeFileSync(path.join(dir, 'levels.json'), `{"v":1,"count":${levels.length},"levels":${lines(levels)}}\n`);
