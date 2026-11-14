@@ -384,6 +384,12 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 // --- unlocks --------------------------------------------------------------------------------------------
 ok('6 starters open at 0 wins', unlockedIds(0).length === 6 && STARTERS.length === 6);
 ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
+{
+  // Never two of one element (2026-11-14, Matt: "You shouldn't be able to choose 2 of the same"): the computer's team.
+  const all = MONSTERS.map((m) => m.id); let bad = 0; const r = seeded(77);
+  for (let i = 0; i < 500; i++) for (const lv of ['easy', 'medium', 'hard']) { const t = chooseTeam(lv, all, [], r); if (t.length !== 2 || BY_ID[t[0]].el === BY_ID[t[1]].el) bad++; }
+  ok('the computer never picks two of one element (1,500 teams)', bad === 0, String(bad));
+}
 ok('the six starters are the weakest six', ['thornpaw', 'sproutle', 'driplet', 'cinderwing', 'frostling', 'stormhorn'].every((id) => STARTERS.includes(id)));
 {
   // Rules version 2: a new match carries rv 2 and plays the new numbers; a match with no rv keeps version 1's.

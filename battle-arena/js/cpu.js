@@ -156,7 +156,10 @@ export function chooseTeam(level, unlocked, taken, rand = Math.random) {
   const out = [];
   while (out.length < 2 && pool.length) {
     const i = Math.floor(rand() * pool.length);
-    out.push(pool.splice(i, 1)[0]);
+    const id = pool.splice(i, 1)[0];
+    // Never two of one element (2026-11-14), unless nothing else is left.
+    if (out.length && BY_ID[out[0]].el === BY_ID[id].el && pool.some((x) => BY_ID[x].el !== BY_ID[out[0]].el)) continue;
+    out.push(id);
   }
   return out;
 }

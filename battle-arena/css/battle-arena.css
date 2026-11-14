@@ -248,6 +248,8 @@
 .ba-root .ba-pick-name svg { width: 13px; height: 13px; }
 /* Picked: a thick accent ring AND a check badge (never colour alone). */
 .ba-root .ba-pick.is-on { border-color: var(--ba-hl); }
+/* An element already on the team: dimmed (tap swaps it in for the picked one of that element). */
+.ba-root .ba-pick.is-taken { opacity: .4; }
 .ba-root .ba-pick.is-on::after {
   content: "\2713";
   position: absolute;
