@@ -302,3 +302,8 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
 - **Starters cover all five gem colours** (Matt: "NONE of the monsters use that other piece? They only use the leaf, fire, water, and
   electricity???"): weakest-first left both shadow monsters locked. Hexowl is now a starter and Frostling opens at 10 wins (they
   were within a point of each other). Starters: Thornpaw, Sproutle, Driplet, Cinderwing, Hexowl, Stormhorn. A test keeps it so.
+- **How to play has two tabs: Basics | Powers** (Matt: "What is curse? These things need to be defined somewhere"). Powers = every
+  word a monster's power uses (the tile's words), one line each: Damage, Heal, Shield, Drain, Freeze (1 move on their next turn),
+  Curse 5x2 (5 damage as each of their next 2 turns starts), +1 to partner, Burns a row, Column clear, 2x2 blast, 4 to Leaf, Rainbow
+  (`POWER_KEYS`, strings `pw_*` + `pw_*_d`). Fits Matt's 402x874 without scrolling; on a 360x668 phone in Spanish the card scrolls
+  inside itself (contained). A new power needs a `pw_` entry.

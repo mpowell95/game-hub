@@ -172,6 +172,9 @@ function tileLines(sp) {
   return out;
 }
 
+/** How to play > Powers: every word a monster's power uses, defined (strings `pw_*` = the word, `pw_*_d` = what it does). */
+const POWER_KEYS = ['pw_dmg', 'pw_heal', 'pw_shield', 'pw_drain', 'pw_freeze', 'pw_curse', 'pw_chain', 'pw_rows', 'pw_col', 'pw_block', 'pw_convert', 'pw_all'];
+
 /** How to play's pictures (2026-11-13, Matt: "try to use images"): one small scene per rule, drawn from the
  *  game's own gems and monsters, 132x56. The words beside each are a caption, not the explanation. */
 const inner = (svg) => svg.replace(/^<svg[^>]*>|<\/svg>$/g, '');
@@ -592,11 +595,28 @@ class BattleArena {
     el.innerHTML = `
       <div class="gh-modal ba-help" role="dialog" aria-modal="true" aria-label="${t('help')}">
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
-        <p class="ba-help-goal">${t('helpGoal')}</p>
-        ${Object.keys(HELP_PICS).map((k) => `<div class="ba-help-row"><svg viewBox="0 0 160 64" class="ba-help-pic" aria-hidden="true">${HELP_PICS[k]()}</svg><span>${escapeHTML(t(k))}</span></div>`).join('')}
+        <div class="gh-seg ba-seg ba-help-tabs" role="group">
+          <button type="button" class="gh-seg__item" data-tab="basics" aria-pressed="true">${escapeHTML(t('helpTabBasics'))}</button>
+          <button type="button" class="gh-seg__item" data-tab="powers" aria-pressed="false">${escapeHTML(t('helpTabPowers'))}</button>
+        </div>
+        <div class="ba-help-pane" data-pane="basics">
+          <p class="ba-help-goal">${t('helpGoal')}</p>
+          ${Object.keys(HELP_PICS).map((k) => `<div class="ba-help-row"><svg viewBox="0 0 160 64" class="ba-help-pic" aria-hidden="true">${HELP_PICS[k]()}</svg><span>${escapeHTML(t(k))}</span></div>`).join('')}
+        </div>
+        <div class="ba-help-pane" data-pane="powers" hidden>
+          ${POWER_KEYS.map((k) => `<div class="ba-pw-row"><b>${escapeHTML(t(k))}</b><span>${escapeHTML(t(k + '_d'))}</span></div>`).join('')}
+        </div>
       </div>`;
     this.root.appendChild(el);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
+    const tabs = el.querySelector('.ba-help-tabs');
+    this.on(tabs, 'click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
+      for (const x of tabs.querySelectorAll('[data-tab]')) x.setAttribute('aria-pressed', String(x === b));
+      for (const p of el.querySelectorAll('.ba-help-pane')) p.hidden = p.dataset.pane !== b.dataset.tab;
+      el.querySelector('.ba-help').scrollTop = 0;
+    });
   }
 
   // --- draft ------------------------------------------------------------------------------------
