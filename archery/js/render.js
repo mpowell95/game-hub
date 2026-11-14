@@ -718,8 +718,9 @@ export class Renderer {
       this.zoomCam.position.copy(this.cam.position);
       const P = this.facePoint(s.ax, s.ay);
       const dist = this.cam.position.distanceTo(P);
-      // The face fills about two fifths of the sight, the board round it showing (the recording).
-      this.zoomCam.fov = (2 * Math.atan((TARGET.face / 0.5) / dist) * 180) / Math.PI;
+      // The face fills the whole sight, edge to edge (Matt, 2026-11-13: "make the scope zoom in more"; it was
+      // twice as far out, the face half the sight's width with the board round it, read off the recording).
+      this.zoomCam.fov = (2 * Math.atan(TARGET.face / dist) * 180) / Math.PI;
       this.zoomCam.aspect = 1;
       this.zoomCam.updateProjectionMatrix();
       this.zoomCam.lookAt(P);

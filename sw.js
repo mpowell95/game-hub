@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1548;
-const CACHE = 'game-hub-v1557';
+const CACHE = 'game-hub-v1558';
 
 const ASSETS = [
   './',
@@ -1090,7 +1090,7 @@ const REST_MANIFEST = {
   './flick-soccer/js/mp.js': 'b539f61e22',
   './flick-soccer/js/mp-ui.js': '1209afff96',
   './flick-soccer/js/alert.js': 'cb4f982e77',
-  './archery/js/engine.js': 'a7a170fc9d',
+  './archery/js/engine.js': '5e79749d6d',
   './archery/js/mp.js': 'f660bf1441',
   './eight-ball/': '91e30df217',
   './eight-ball/index.html': '91e30df217',

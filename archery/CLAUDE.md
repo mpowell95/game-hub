@@ -98,8 +98,8 @@ until you are satisfied"*. Every position below was measured on a grid over the 
 compared at the recording's own game-area shape (402 x 718 CSS px; the recording's card is wider than
 a phone screen). Full story: `archery/CLAUDE-HISTORY.md`.
 
-- **The sight's outer ring is a tenth of the screen width** (`this.k`); the zoom shows the face at
-  about two fifths of the sight (`/0.5`). The ring is SVG (`ringSVG`: grey housing, green gauge
+- **The sight's outer ring is a tenth of the screen width** (`this.k`); the zoom shows the face filling
+  the whole sight (2x the first version's zoom; Matt, 2026-11-13: "make the scope zoom in more"). The ring is SVG (`ringSVG`: grey housing, green gauge
   inside it, red crosshair).
 - **The bow, hand, sleeve and nocked arrow are 3D** (`bow3d.js`, a lit view model drawn over the
   range; `render.js setBow`). `setPose` puts the bow at the depth that makes its sight match the
