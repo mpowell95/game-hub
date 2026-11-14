@@ -134,5 +134,31 @@ ok('harder difficulties are faster and tighter', E.DIFFS.every((d, i) => i === 0
   ok('shape: one decimal, a sliver kept above 0', sm === '75,250;80,3.3;81,0.1');
 }
 
+// The LOWEST run per difficulty (Matt, 2026-11-14: high, low and average for every difficulty).
+{
+  const GS = await import('../js/game-stats.js');
+  // Runs so far in this file: hard 17, 9; easy 12, 8; medium 2.
+  let lo = GS.loadStats().games.tower.tw.lowByDiff;
+  ok('low: the least run per difficulty', lo.hard === 9 && lo.easy === 8 && lo.medium === 2 && !('expert' in lo));
+  GS.withMode({ look: 'toy' }, 'hard', () => GS.recordTower(30, 'hard', {}), { hi: 30 });
+  lo = GS.loadStats().games.tower.tw.lowByDiff;
+  ok('low: a higher run never raises it', lo.hard === 9 && GS.loadStats().games.tower.tw.bestByDiff.hard === 30);
+  GS.withMode({ look: 'toy' }, 'expert', () => GS.recordTower(0, 'expert', {}), { hi: 0 });
+  ok('low: a 0-block run is a real low', GS.loadStats().games.tower.tw.lowByDiff.expert === 0);
+  const c = GS.combineTowerRecords({ tw: { games: 1, lowByDiff: { hard: 4, easy: 0 } } }, { tw: { games: 1, lowByDiff: { hard: 2, medium: 7 } } });
+  ok('low: release combine keeps the least, 0 included', c.tw.lowByDiff.hard === 2 && c.tw.lowByDiff.easy === 0 && c.tw.lowByDiff.medium === 7);
+  ok('low: combine without lows adds none', !('lowByDiff' in GS.combineTowerRecords({ tw: { games: 1 } }, { tw: { games: 1 } }).tw));
+  const { aggregatePlayers } = await import('../js/players-agg.js');
+  const mk = (id, lows) => ({ id, profile: { name: 'Yan', playerId: 'YYYY2' }, stats: { games: { tower: { total: { played: 1, won: 1, lost: 0 }, byDiff: {},
+    tw: { games: 1, best: 9, bestByDiff: { easy: 9 }, blocks: 9, perfects: 0, bestStreak: 0, ...(lows ? { lowByDiff: lows } : {}) } } } } });
+  const people = aggregatePlayers({ a: mk('a', { easy: 5, hard: 0 }), b: mk('b', { easy: 3 }), c: mk('c', null) });
+  const list = Array.isArray(people) ? people : (people && (people.list || Object.values(people))) || [];
+  const yan = list.find((p) => p && p.games && p.games.tower && p.games.tower.tw.games === 3);
+  ok('agg: a person keeps the LEAST low across devices, 0 included', !!yan && yan.games.tower.tw.lowByDiff.easy === 3 && yan.games.tower.tw.lowByDiff.hard === 0);
+  const SC = await import('../js/stats-corrections.js');
+  ok('TOWER_BEFORE: every low is a whole number, every pre run has a count and blocks', Object.values(SC.TOWER_BEFORE).every((e) =>
+    Object.values(e.lo || {}).every((v) => Number.isInteger(v) && v >= 0) && Object.values(e.pre || {}).every((p) => p.n > 0 && p.s >= 0)));
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

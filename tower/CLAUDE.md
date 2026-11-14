@@ -120,6 +120,13 @@ rules yet (cheap candidates: perfects <= blocks, bestStreak <= perfects, bestByD
   `tw.blocks`; a difficulty = byMode `hs` there, saved from 2026-11-06, so runs before that count in All only), runs
   under it, same total = fewer runs higher, plain "#1" ranks (`noPodium`), never the standing or Medal Count.
 
+- **High, low and average per difficulty (2026-11-14, Matt: "When I click into a player on the tower stack leaderboard, I
+  should be able to see their high, low, and average for every difficulty")**: a person's Tower page, ADMIN DEVICES ONLY (the
+  rows look, `game-stats-ui.js` `rowsTower`) until Matt says "release it". High = `tw.bestByDiff`; low = `tw.lowByDiff`
+  (Math.min, saved from v1562; merged least in players-agg and the carry; emptied by a void) + `TOWER_BEFORE`
+  (`js/stats-corrections.js`, every earlier run's low from the play log, per code); average = byMode `hs`/`hn` over every
+  look + `TOWER_BEFORE.pre` (Matt's 3 runs from before running totals). Checked equal to the play log for all 4 people.
+
 ## Tests
 
 `node tools/test-tower.mjs` (engine, recorder, best shapes kept and merged). Also covered: `tools/players-agg.test.mjs` (tw combine),

@@ -261,6 +261,19 @@ export function fullLevelStats(st, code) {
 // it. Only played/won/lost: a game's own extra counters (points, bests) are not touched.
 // HAND ADJUSTMENTS: the same slots as the console's adjust node, in CODE, merged into that person's adjust entry at read
 // time (`withHandAdjust`), so a session can make one Matt asks for without writing adminConfig. Summed with his own edits.
+// TOWER STACK RUNS BEFORE LOWS WERE SAVED (Matt, 2026-11-14: "I should be able to see their high, low, and average for
+// every difficulty"). js/game-stats.js recordTower saves each difficulty's lowest run (`tw.lowByDiff`) only from
+// 2026-11-14; byMode's running totals (`hs`/`hn`, the average) only from 2026-11-06. Every earlier run is in the play
+// log (playLog/<CODE>, read 2026-11-14 with tools/read-play-log.mjs: 89 runs, the same counts as the stored records).
+// Read time, display only (game-stats-ui.js rowsTower), per CODE: `lo` = the lowest run at each difficulty in the play
+// log (a least, so overlapping the saved low is harmless); `pre` = the runs that carry no running total ({n, s}: count
+// and blocks), added to byMode's `hs`/`hn` for the average. The stored records are untouched.
+export const TOWER_BEFORE = {
+  QZCC4: { lo: { easy: 33, medium: 24, hard: 5, expert: 10 }, pre: { medium: { n: 2, s: 51 }, expert: { n: 1, s: 15 } } },
+  '3VN33': { lo: { easy: 37, medium: 30, hard: 18, expert: 1 } },
+  K99MB: { lo: { medium: 17, hard: 11, expert: 2 } },
+  '3G2EC': { lo: { medium: 2 } },
+};
 export const HAND_ADJUST = {
   // Matt, 2026-11-09: "Make them medium. I thought I was playing medium because I had clicked medium." His Connect 4
   // Hoops one-shot wins of Nov 9 1:16 and 1:17 AM ET were a saved Easy match resumed by Continue while Medium was picked.
@@ -635,6 +648,7 @@ const ZERO = {
 // still one). The raw record keeps every round; this is the overlay only.
 const EMPTY = {
   golf: { gf: ['bestRoundByCourse', 'bestHole'] },
+  tower: { tw: ['lowByDiff'] },   // a low of 0 is a real run, so a voided record keeps none
 };
 /** A copy of `v` with every number in it 0, every string '', every list emptied. */
 function zeroed(v) {
