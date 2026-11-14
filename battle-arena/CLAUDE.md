@@ -296,3 +296,6 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   Test: "no peeking", the same move on 40/40 boards whatever is about to fall. Fair Hard beats Medium ~55% (300 matches; every
   look-ahead size tried was 50-56%): match-3 is mostly luck once nobody sees the future. Nothing is ever rigged: the falls are
   the match's seeded RNG, the same for both sides.
+- **Every attack visibly hits BOTH of the other team's monsters** (Matt: "Make sure when a monster attacks, it attacks both of the
+  opposing monsters"; damage was always team HP). Driplet's jet now splits onto both; Pebbleop drops a boulder on each (evolved: a
+  third between them); the rest already did. The boulder and its chips are Pebbleop's red-hot rock now. A new attack must hit both.
