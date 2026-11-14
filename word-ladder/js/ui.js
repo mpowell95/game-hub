@@ -235,7 +235,7 @@ class WordLadder {
     return true;
   }
   _saveAttempt(a) {
-    const rec = { v: 1, n: a.n, s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, sel: a.sel | 0, done: !!a.done, recorded: !!a.recorded };
+    const rec = { v: 1, n: a.n, s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, done: !!a.done, recorded: !!a.recorded };
     if (a.kind === 'daily') {
       const all = readJSON(DAILY_KEY, { v: 1, d: {} });
       if (!all.d || typeof all.d !== 'object') all.d = {};
@@ -305,8 +305,7 @@ class WordLadder {
     if (!level) { console.error('[word-ladder] level does not add up, not drawn', kind, n); this._soon(); return; }
     const c = E.cleanAttempt(a, level, d.dict);
     this.data = d;
-    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: 0 };
-    this.cur.sel = this._firstDiff();
+    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
@@ -320,11 +319,7 @@ class WordLadder {
   }
 
   _word() { return this.cur.chain[this.cur.chain.length - 1]; }
-  _firstDiff() {
-    const w = this._word(), tg = this.cur.level.t;
-    for (let i = 0; i < w.length; i++) if (w[i] !== tg[i]) return i;
-    return 0;
-  }
+
 
   _play() {
     this.screen = 'play';
@@ -437,6 +432,7 @@ class WordLadder {
     const c = this.cur;
     if (!c || this.screen !== 'play') return;
     const w = this._word();
+    if (c.sel == null) { this._msg(t('pick_first')); return; }   // a key before a letter: say so
     const next = w.slice(0, c.sel) + ch + w.slice(c.sel + 1);
     if (next === w) return;
     const why = E.checkMove(this.data.dict, w, next);
@@ -456,7 +452,7 @@ class WordLadder {
       this._done();
       return;
     }
-    c.sel = this._firstDiff();
+    c.sel = null;
     this._saveAttempt(c);
     this._drawLadder();
     this._fit();
@@ -466,7 +462,7 @@ class WordLadder {
     if (!c || c.chain.length < 2) return;
     c.chain = E.undoChain(c.chain);
     c.moves += 1;               // an undo is a move (par counts every change)
-    c.sel = this._firstDiff();
+    c.sel = null;
     this._saveAttempt(c);
     this._drawLadder();
     this._fit();
@@ -585,8 +581,8 @@ class WordLadder {
     if (e.key === 'Escape' && this._level() > 0) { this._goBack(); e.preventDefault(); return; }
     if (this.screen !== 'play' || !this.cur) return;
     const len = this.cur.level.t.length;
-    if (e.key === 'ArrowLeft') { this.cur.sel = (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
-    if (e.key === 'ArrowRight') { this.cur.sel = (this.cur.sel + 1) % len; this._drawLadder(); e.preventDefault(); return; }
+    if (e.key === 'ArrowLeft') { this.cur.sel = this.cur.sel == null ? len - 1 : (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
+    if (e.key === 'ArrowRight') { this.cur.sel = this.cur.sel == null ? 0 : (this.cur.sel + 1) % len; this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'Backspace') { this._undo(); e.preventDefault(); return; }
     const ch = String(e.key || '').toUpperCase();
     if (ch.length === 1 && (this.data.alpha || '').includes(ch)) { this._letter(ch); e.preventDefault(); }

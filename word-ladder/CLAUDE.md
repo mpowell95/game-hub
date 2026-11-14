@@ -15,12 +15,14 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
 | Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
 | Settings | `gamehub.wordladder.v1` `{ lang }` (puzzle language; nothing saved = the hub's language) |
-| Saves | `gamehub.wordladder.save.v1` `{ en, es: attempt }`; `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, p, chain, moves, hints, sel, done, recorded }` |
+| Saves | `gamehub.wordladder.save.v1` `{ en, es: attempt }`; `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, s, p, chain, moves, hints, done, recorded }` (older saves also carry an unread `sel`) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
 
 ## Rules (`js/engine.js`, pure)
 
-- Tap a letter of the current word (gold outline + caret), then a key. The new word must change exactly that one
+- Tap a letter of the current word (gold outline + caret), then a key. **Nothing is picked until the player taps a letter**,
+  at the start and after every move or undo (Matt, 2026-11-14: "Don't default to have the first letter selected"); a key before
+  that shakes the word and says "Tap a letter first". The new word must change exactly that one
   letter and be on the word list, else "Not a word" and a shake. A letter already right (same as the target's at that
   place) is a SOLID BRIGHT GREEN tile (`--wl-match` #22b84f; "make it a better green", 2026-11-14), nothing else (Matt, 2026-11-14: "Just make it green"; a dot under the letter and
   then a folded corner were both rejected; his call over the shape-plus-colour rule). The target row has dashed gold tiles and a flag.
