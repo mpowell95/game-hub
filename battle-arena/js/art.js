@@ -225,27 +225,27 @@ const DRAW = {
       + `<circle cx="22" cy="46" r="3" fill="#C9A2F0"/><circle cx="104" cy="40" r="2.5" fill="#C9A2F0"/>`;
   },
 
-  // Fire pebble: a rock with lava cracks. Evolved: a crag golem with a magma heart.
+  // Fire pebble: a red-hot rock with glowing cracks (fire-coloured, like every monster's element; Matt, 2026-11-14). Evolved: a crag golem with a magma heart.
   pebbleop: (evo) => {
-    const o = '#3d2f25';
+    const o = '#4a1a0e';
     if (!evo) {
       return shadowUnder(60, 34)
-        + `<g ${OL(o)}><ellipse cx="42" cy="104" rx="9" ry="5" fill="#7a6b5d"/><ellipse cx="78" cy="104" rx="9" ry="5" fill="#7a6b5d"/>
-          <path d="M24 82 28 50 50 32 82 34 98 56 96 88 72 102 40 100z" fill="#9A8B7A"/></g>`
-        + `<path d="M36 46l8 10-4 12M88 50l-8 6 2 10M40 90l10-6 6 8" stroke="#E0532F" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
-        + `<path d="M36 46l8 10-4 12M88 50l-8 6 2 10M40 90l10-6 6 8" stroke="#F2B705" stroke-width="1.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
-        + `<path d="M50 38 66 36 60 44z" fill="#b8ab9c"/>`
+        + `<g ${OL(o)}><ellipse cx="42" cy="104" rx="9" ry="5" fill="#8A3420"/><ellipse cx="78" cy="104" rx="9" ry="5" fill="#8A3420"/>
+          <path d="M24 82 28 50 50 32 82 34 98 56 96 88 72 102 40 100z" fill="#B8472A"/></g>`
+        + `<path d="M36 46l8 10-4 12M88 50l-8 6 2 10M40 90l10-6 6 8" stroke="#F2B705" stroke-width="3.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
+        + `<path d="M36 46l8 10-4 12M88 50l-8 6 2 10M40 90l10-6 6 8" stroke="#FFF1B0" stroke-width="1.4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
+        + `<path d="M50 38 66 36 60 44z" fill="#E2774A"/>`
         + eyes(62, 80, 66, 6) + blush(54, 88, 78) + smile(73, 81, 4, o)
-        + flameTuft(66, 34, 0.55, '#E0532F', '#F2B705');
+        + flameTuft(66, 34, 0.55, '#F2B705', '#FFF1B0');
     }
     return shadowUnder(60, 44)
-      + `<g ${OL(o)}><path d="M20 70 8 58 24 50zM100 64 114 50 104 76z" fill="#6f6152"/>
-        <path d="M30 42 36 18 48 36zM54 32 62 6 72 30zM78 36 92 14 94 44z" fill="#8a7a69"/>
-        <path d="M30 108 36 92H52L54 108zM70 108 72 92H88L92 108z" fill="#6f6152"/>
-        <path d="M16 84 22 44 48 28 86 30 106 52 104 92 76 104 34 102z" fill="#857563"/></g>`
-      + `<circle cx="60" cy="78" r="13" fill="#E0532F" stroke="${o}" stroke-width="3"/><circle cx="60" cy="78" r="7" fill="#F2B705"/>`
-      + `<path d="M28 52l10 8-2 12M96 56l-10 6 2 12M48 98l12-8 12 8" stroke="#E0532F" stroke-width="4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
-      + `<path d="M28 52l10 8-2 12M96 56l-10 6 2 12M48 98l12-8 12 8" stroke="#F2B705" stroke-width="1.6" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
+      + `<g ${OL(o)}><path d="M20 70 8 58 24 50zM100 64 114 50 104 76z" fill="#8A3420"/>
+        <path d="M30 42 36 18 48 36zM54 32 62 6 72 30zM78 36 92 14 94 44z" fill="#C9562E"/>
+        <path d="M30 108 36 92H52L54 108zM70 108 72 92H88L92 108z" fill="#8A3420"/>
+        <path d="M16 84 22 44 48 28 86 30 106 52 104 92 76 104 34 102z" fill="#A93F24"/></g>`
+      + `<circle cx="60" cy="78" r="13" fill="#F2B705" stroke="${o}" stroke-width="3"/><circle cx="60" cy="78" r="7" fill="#FFF1B0"/>`
+      + `<path d="M28 52l10 8-2 12M96 56l-10 6 2 12M48 98l12-8 12 8" stroke="#F2B705" stroke-width="4" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
+      + `<path d="M28 52l10 8-2 12M96 56l-10 6 2 12M48 98l12-8 12 8" stroke="#FFF1B0" stroke-width="1.6" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`
       + eyes(62, 84, 52, 5.5, { glow: '#F2B705', mood: 'fierce', brow: o });
   },
 
