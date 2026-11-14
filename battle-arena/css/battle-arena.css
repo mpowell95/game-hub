@@ -273,11 +273,16 @@
 /* Monsters (2026-10-29): the draft's grid with names; the count of unlocked ones top right. */
 .ba-root .ba-dex-n { display: grid; place-items: center; font-size: 16px; font-weight: 900; color: var(--ba-hl); white-space: nowrap; }
 .ba-root .ba-dex .ba-pick-name { padding: 0 4px 2px; font-size: 15px; }
-/* The element a monster eats, big (Matt, 2026-11-14: "Make the things they eat bigger"); its power as icons + numbers. */
-.ba-root .ba-dex .ba-pick-gem, .ba-root .ba-dex .ba-pick-gem svg { width: 32px; height: 32px; }
-.ba-root .ba-pick-pow { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 3px; min-height: 45px; padding: 2px 2px 6px; max-width: 100%; }
-.ba-root .ba-pow { display: inline-flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 900; color: #fff; line-height: 1; white-space: nowrap; }
-.ba-root .ba-pow svg { width: 20px; height: 20px; flex: 0 0 auto; }
+/* Monsters (2026-11-14, Matt: "Make it 3x4 instead of 4x3"): three across so names and powers fit; the element a monster
+   eats big (Matt: "Make the things they eat bigger"); its power in WORDS, one effect a line (the icon chips were "not clear
+   at all"). The art takes whatever height is left. */
+.ba-root .ba-dex .ba-grid { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); }
+.ba-root .ba-dex .ba-pick { justify-content: flex-start; padding-top: 4px; }
+.ba-root .ba-dex .ba-pick-gem, .ba-root .ba-dex .ba-pick-gem svg { width: 30px; height: 30px; }
+.ba-root .ba-dex .ba-pick-name { font-size: 17px; padding: 0 4px; }
+.ba-root .ba-pick-pow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 40px; padding: 1px 1px 6px; max-width: 100%; }
+.ba-root .ba-pick-pow span { font-size: 15px; font-weight: 700; line-height: 1.2; color: #fff; text-align: center; white-space: nowrap; }
+@media (max-width: 380px) { .ba-root .ba-dex { padding-left: 6px; padding-right: 6px; } .ba-root .ba-dex .ba-grid { gap: 6px; } }
 
 /* Reference look: no names in the grid (tap = the card), each monster on a hexagon; the two
  * picks in big teal-ringed hexagons. */
