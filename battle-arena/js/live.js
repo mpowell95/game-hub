@@ -24,7 +24,8 @@
 // (the live rooms' Records, js/mp-records.js), once per match per phone (LIVE_LEDGER).
 import { recordResult, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat, onlineMode, matchDetail } from './online.js';
+import { cleanTeam, cleanEntry, moveOf, startState, stateHash, freshSeed, sideOfSeat, onlineMode, matchDetail, cleanRv } from './online.js';
+import { RULES_VERSION } from './monsters.js';
 import * as E from './engine.js';
 import NET from '../../js/net.js';
 import * as LL from '../../js/live-leave.js';
@@ -88,7 +89,7 @@ export function matchOf(room) {
   const a = cleanTeam(d.a), b = cleanTeam(d.b);
   const seed = Number(d.seed);
   if (!a || !b || !Number.isInteger(seed) || seed < 1) return null;
-  return { seed, a, b, first: room.round.dealer === 1 ? 1 : 0 };
+  return { seed, a, b, first: room.round.dealer === 1 ? 1 : 0, rv: cleanRv(d.rv) };
 }
 
 /**
@@ -191,7 +192,7 @@ export class LiveRoom {
     // The host publishes the match once the guest is seated with a team.
     if (!room.round && this.seat === 0 && room.guest && cleanTeam(room.guest.team) && this.team && !this.publishing) {
       this.publishing = true;
-      const deck = { seed: freshSeed(), a: this.team, b: cleanTeam(room.guest.team) };
+      const deck = { seed: freshSeed(), rv: RULES_VERSION, a: this.team, b: cleanTeam(room.guest.team) };
       this.net.startRound(this.code, 1, deck, 0).catch((err) => { this.publishing = false; console.error('[battle-arena] could not start the match', err); });
     }
     const match = matchOf(room);
@@ -199,7 +200,7 @@ export class LiveRoom {
     if (!this.started) {
       this.started = true;
       this.match = match;
-      this.canon = startState(match.seed, { a: match.a, b: match.b }, match.first);
+      this.canon = startState(match.seed, { a: match.a, b: match.b }, match.first, match.rv);
       // A rejoin: everything already stored is replayed silently (the screen starts on it).
       const done = [];
       for (const m of movesOf(room)) {
@@ -284,7 +285,7 @@ export class LiveRoom {
     if (!this.started) {
       this.started = true;
       this.match = match;
-      this.canon = startState(match.seed, { a: match.a, b: match.b }, match.first);
+      this.canon = startState(match.seed, { a: match.a, b: match.b }, match.first, match.rv);
       for (const m of movesOf(room)) if (!this.applyStored(m)) break;
     }
     this.over = true;

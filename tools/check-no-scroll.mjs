@@ -82,7 +82,7 @@ const EXTRA_SCREENS = {
       name: 'monsters + card',
       async open(page) {
         await page.evaluate(() => { document.querySelectorAll('.ba-root .gh-overlay').forEach((o) => o.remove()); window.__baTest.renderMonsters(); });
-        await page.click('.ba-pick[data-id="emberkit"]');
+        await page.click('.ba-dex .ba-pick:not(.is-locked)');   // the first unlocked one (the starters changed 2026-11-14)
         await page.click('.ba-form[data-evo="1"]');
         await page.waitForTimeout(400);
       },

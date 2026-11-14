@@ -5,7 +5,9 @@ import {
   apply, newMatch, findRuns, legalMoves, adjacent, idx, COLS, ROWS, evolveOptions,
 } from './engine.js';
 import { chooseMove, chooseTeam, LEVELS } from './cpu.js';
-import { MONSTERS, BY_ID, unlockedIds, STARTERS } from './monsters.js';
+import { MONSTERS, BY_ID, unlockedIds, STARTERS, specialOf, costOf, RULES_VERSION } from './monsters.js';
+// These rules tests play version-1 matches (newMatch with no rv), so they read version 1's numbers.
+const V1 = (id) => specialOf(id, false, 1);
 
 let pass = 0, fail = 0;
 const ok = (label, cond) => { if (cond) pass++; else { fail++; console.log('FAIL ' + label); } };
@@ -104,7 +106,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const hp = s.sides[1].hp;
   const r = apply(s, swap(4, 3, 4, 4));
   ok('a full bar fires on its own', has(r.events, 'special', (e) => e.side === 0 && e.mon === 0));
-  ok('the special hits the other team (12)', r.state.sides[1].hp === hp - BY_ID.emberkit.sp.dmg);
+  ok('the special hits the other team (12)', r.state.sides[1].hp === hp - V1('emberkit').dmg);
   ok('the bar resets, excess lost', r.state.sides[0].mons[0].energy < 7);
 }
 {
@@ -120,7 +122,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 }
 {
   // Shield: Pebbleop's Rock Toss shields; then the other side's Zapup hits through what is left.
-  const SH = BY_ID.pebbleop.sp.shield, ZD = BY_ID.zapup.sp.dmg;
+  const SH = V1('pebbleop').shield, ZD = V1('zapup').dmg;
   const s = setup([['pebbleop', 'driplet'], ['zapup', 'sproutle']], THREE);
   s.sides[0].mons[0].energy = 7;
   const r = apply(s, swap(4, 3, 4, 4));
@@ -187,7 +189,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   const t = setup([['thornpaw', 'driplet'], ['zapup', 'sproutle']], LEAF);
   t.sides[0].mons[0].energy = 5;
   const r2 = apply(t, swap(4, 3, 4, 4));
-  ok('Overgrowth turns gems into Leaf', has(r2.events, 'convert', (e) => e.cells.length === BY_ID.thornpaw.sp.convert));
+  ok('Overgrowth turns gems into Leaf', has(r2.events, 'convert', (e) => e.cells.length === V1('thornpaw').convert));
   ok('the board is still settled after a convert', noRuns(r2.state));
 }
 
@@ -381,7 +383,20 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- unlocks --------------------------------------------------------------------------------------------
 ok('6 starters open at 0 wins', unlockedIds(0).length === 6 && STARTERS.length === 6);
-ok('3 wins opens Cinderwing', unlockedIds(3).includes('cinderwing') && !unlockedIds(5).includes('thornpaw'));
+ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
+ok('the six starters are the weakest six', ['thornpaw', 'sproutle', 'driplet', 'cinderwing', 'frostling', 'stormhorn'].every((id) => STARTERS.includes(id)));
+{
+  // Rules version 2: a new match carries rv 2 and plays the new numbers; a match with no rv keeps version 1's.
+  const s2 = newMatch({ seed: 7, teams: [['emberkit', 'zapup'], ['driplet', 'sproutle']], rv: RULES_VERSION });
+  const s1 = newMatch({ seed: 7, teams: [['emberkit', 'zapup'], ['driplet', 'sproutle']] });
+  ok('rules v2: stamped on the match', s2.rv === 2 && !('rv' in s1));
+  ok('rules v2: Emberkit costs 7 (v1: 6), Prismote 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
+  // The same board and swap (+3 fire to Emberkit at 3): fires under v1 (cost 6), not under v2 (cost 7).
+  const a = setup(TEAM, THREE); a.sides[0].mons[0].energy = 3;
+  const b = setup(TEAM, THREE); b.sides[0].mons[0].energy = 3; b.rv = 2;
+  const fired = (st) => apply(st, swap(4, 3, 4, 4)).events.some((e) => e.t === 'special' && e.side === 0 && e.mon === 0);
+  ok('rules v2: Emberkit at 3 + 3 fire fires in a v1 match, not in a v2 match', fired(a) && !fired(b));
+}
 ok('30 wins opens all 12', unlockedIds(30).length === 12 && MONSTERS.length === 12);
 
 // --- determinism ----------------------------------------------------------------------------------------
@@ -428,7 +443,7 @@ function playOut(seed, teams, levels, rnd, log) {
     const t0team = chooseTeam('hard', all, [], rnd);
     const t1team = chooseTeam('hard', all, t0team, rnd);
     try {
-      let s = newMatch({ seed: 1000 + g, teams: [t0team, t1team], first: g % 2 });
+      let s = newMatch({ seed: 1000 + g, teams: [t0team, t1team], first: g % 2, rv: RULES_VERSION });   // the soak plays today's rules
       let guard = 0;
       while (s.winner == null && guard++ < 3000) {
         const r = apply(s, chooseMove(s, levels[s.turn], rnd));

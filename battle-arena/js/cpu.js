@@ -7,13 +7,13 @@
 // `rand` is the caller's (the UI's Math.random, the soak's seeded one); the match's own RNG is
 // never touched, so the computer cannot change the board it is thinking about.
 import { apply, legalMoves, previewSwap, evolveOptions } from './engine.js';
-import { BY_ID, specialOf, BERRIES_TO_EVOLVE } from './monsters.js';
+import { BY_ID, specialOf, costOf, BERRIES_TO_EVOLVE } from './monsters.js';
 
 export const LEVELS = ['easy', 'medium', 'hard'];
 
 /** What a special is worth, roughly in HP. */
-function specialValue(id, evo) {
-  const sp = specialOf(id, evo);
+function specialValue(id, evo, rv) {
+  const sp = specialOf(id, evo, rv || 1);
   return (sp.dmg || 0) + (sp.heal || 0) * 0.7 + (sp.shield || 0) * 0.7 + (sp.drain || 0) * 2
     + (sp.freeze ? 6 : 0) + (sp.chain || 0) * 2 + (sp.curse ? sp.curse.tick * sp.curse.turns : 0)
     + (sp.rows ? 4 * sp.rows : 0) + (sp.convert ? sp.convert : 0);
@@ -29,8 +29,9 @@ export function scorePreview(state, side, p) {
     const def = BY_ID[m.id];
     const gain = def.el === 'all' ? Math.floor((m.part + total) / 2) : (p.counts[def.el] || 0);
     if (!gain) continue;
-    score += gain * (1 + 2 * (m.energy / def.cost));
-    if (m.energy + gain >= def.cost) score += 8 + specialValue(m.id, m.evo);
+    const cost = costOf(m.id, state.rv || 1);
+    score += gain * (1 + 2 * (m.energy / cost));
+    if (m.energy + gain >= cost) score += 8 + specialValue(m.id, m.evo, state.rv);
   }
   if (p.berries && sd.mons.some((m) => !m.evo)) {
     score += p.berries * (sd.berries + p.berries >= BERRIES_TO_EVOLVE ? 7 : 2.5);
@@ -60,7 +61,7 @@ function threat(state, side) {
     for (const m of sd.mons) {
       const def = BY_ID[m.id];
       const gain = def.el === 'all' ? Math.floor((m.part + total) / 2) : (p.counts[def.el] || 0);
-      if (gain && m.energy + gain >= def.cost) worst = Math.max(worst, specialValue(m.id, m.evo));
+      if (gain && m.energy + gain >= costOf(m.id, state.rv || 1)) worst = Math.max(worst, specialValue(m.id, m.evo, state.rv));
     }
   }
   return worst;
@@ -73,8 +74,8 @@ function scoreOutcome(before, side, res) {
     if (e.t === 'damage') score += e.side === side ? -1.3 * e.n : 1.2 * (e.n + e.absorbed * 0.5);
     else if (e.t === 'heal' && e.side === side) score += 0.8 * e.n;
     else if (e.t === 'energy' && e.side === side) {
-      const def = BY_ID[before.sides[side].mons[e.mon].id];
-      score += e.gained * (1 + 1.5 * (e.energy / def.cost));
+      const cost = costOf(before.sides[side].mons[e.mon].id, before.rv || 1);
+      score += e.gained * (1 + 1.5 * (e.energy / cost));
     } else if (e.t === 'berry' && e.side === side) score += 2.5 * e.n;
     else if (e.t === 'evolve' && e.side === side) score += 12;
     else if (e.t === 'evolveReady' && e.side === side) score += 12;
@@ -91,7 +92,7 @@ export function chooseEvolve(state, side) {
   let best = -1, bestFill = -1;
   mons.forEach((m, i) => {
     if (m.evo) return;
-    const f = m.energy / BY_ID[m.id].cost;
+    const f = m.energy / costOf(m.id, state.rv || 1);
     if (f > bestFill) { bestFill = f; best = i; }
   });
   return best;

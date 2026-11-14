@@ -38,7 +38,8 @@ import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
-import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed, onlineMode, matchDetail } from './online.js';
+import { cleanTeam, cleanEntry as cleanMove, replay, sideOfSeat, seatOfSide, freshSeed, onlineMode, matchDetail, cleanRv } from './online.js';
+import { RULES_VERSION } from './monsters.js';
 
 export const NODE = 'battlearena';
 const STATS_ID = 'battlearena';
@@ -106,7 +107,7 @@ const fail = (reason, retryable = false) => ({ ok: false, reason, retryable });
 // --- the match ------------------------------------------------------------------------------------
 /** The engine state after the first `upto` moves (stored frame). validateGame proved they replay. */
 export function buildState(game, upto = game.log.length) {
-  return replay(game.seed, { a: game.a.team, b: game.b.team }, game.log.slice(0, upto)).state;
+  return replay(game.seed, { a: game.a.team, b: game.b.team }, game.log.slice(0, upto), 0, game.rv).state;
 }
 
 /** A finished challenge's mode and numbers for this person (2026-11-13, withMode): from the match
@@ -154,7 +155,8 @@ export function validateGame(raw) {
     log.push(e);
     ats.push(ms(src[k].at));
   }
-  const rep = replay(seed, { a: teamA, b: teamB }, log);
+  const rv = cleanRv(raw.rv);                         // the rules version it was made under (absent = 1)
+  const rep = replay(seed, { a: teamA, b: teamB }, log, 0, rv);
   if (!rep.ok) return null;
   const st = rep.state;
   let over = null;
@@ -178,6 +180,7 @@ export function validateGame(raw) {
   const who = (x, team) => ({ code: asCode(x.code), name: String(x.name || ''), emoji: String(x.emoji || '🙂'), team });
   return {
     v: 1, id, seed,
+    ...(rv > 1 ? { rv } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -551,7 +554,7 @@ export async function createGame({ them, team, seed = freshSeed() }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, id, seed: (Number(seed) >>> 0) || 1, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, id, seed: (Number(seed) >>> 0) || 1, rv: RULES_VERSION, lapse: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji, team: mineTeam },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -651,7 +654,7 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');   // includes 7 days on a turn (timeout)
     // Nobody answered it for 3 days, so it lapsed (js/challenge-life.js): no move can revive it.
     if (lifeOf(fresh).expired) return fail('expired');
-    const rep = replay(fresh.seed, { a: fresh.a.team, b: fresh.b.team }, fresh.log.concat(todo));
+    const rep = replay(fresh.seed, { a: fresh.a.team, b: fresh.b.team }, fresh.log.concat(todo), 0, fresh.rv);
     if (!rep.ok) return fail('rules-refused');
     const now = stampFor(api);      // the SERVER stamps every move (rules refuse any other time)
     const patch = { updated: now };

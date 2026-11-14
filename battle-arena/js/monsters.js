@@ -18,36 +18,64 @@ export const ELEMENT_COLOR = {
   berry: '#A3203A', bomb: '#3A3F47', all: '#C9A2F0',
 };
 
+/** Rules version 2 (2026-11-14, Matt: "Yes rebalance them. At least reorder them weakest in the first batch, then better
+ *  ones get unlocked"). Tuned on every 2-monster team against every other (8,910 medium + 5,940 hard computer matches):
+ *  each monster now wins 45-55% of its matches (v1: 27-68%). Listed and unlocked weakest first; the order of the middle is
+ *  within a point or two. Version 1's numbers are frozen below (V1) for every match started before. */
 export const MONSTERS = [
-  { id: 'emberkit', name: 'Emberkit', evoName: 'Blazelynx', el: 'fire', cost: 6,
-    sp: { dmg: 12, col: 1 }, evo: { dmg: 18, col: 2 } },
+  { id: 'thornpaw', name: 'Thornpaw', evoName: 'Briarlord', el: 'leaf', cost: 5,
+    sp: { convert: 4, heal: 7 }, evo: { convert: 5, heal: 10 } },
   { id: 'sproutle', name: 'Sproutle', evoName: 'Mossback', el: 'leaf', cost: 6,
-    sp: { dmg: 10, heal: 10 }, evo: { dmg: 15, heal: 15 } },
+    sp: { dmg: 9, heal: 6 }, evo: { dmg: 14, heal: 10 } },
   { id: 'driplet', name: 'Driplet', evoName: 'Tidefang', el: 'water', cost: 4,
-    sp: { dmg: 8 }, evo: { dmg: 14 } },
-  { id: 'zapup', name: 'Zapup', evoName: 'Voltail', el: 'spark', cost: 4,
-    sp: { dmg: 5, block: 2 }, evo: { dmg: 10, block: 3 } },
-  { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6,
-    sp: { dmg: 10, drain: 2 }, evo: { dmg: 15, drain: 3 } },
-  { id: 'pebbleop', name: 'Pebbleop', evoName: 'Cragoon', el: 'fire', cost: 8,
-    sp: { dmg: 10, shield: 8 }, evo: { dmg: 15, shield: 12 } },
+    sp: { dmg: 12 }, evo: { dmg: 18 } },
+  { id: 'cinderwing', name: 'Cinderwing', evoName: 'Pyrovern', el: 'fire', cost: 8,
+    sp: { dmg: 11, rows: 1 }, evo: { dmg: 16, rows: 2 } },
+  { id: 'frostling', name: 'Frostling', evoName: 'Glacielle', el: 'water', cost: 5,
+    sp: { dmg: 7, freeze: true }, evo: { dmg: 11, freeze: true } },
+  { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thundrake', el: 'spark', cost: 5,
+    sp: { dmg: 12, chain: 1 }, evo: { dmg: 17, chain: 2 } },
 
-  { id: 'cinderwing', name: 'Cinderwing', evoName: 'Pyrovern', el: 'fire', cost: 8, unlock: 3,
-    sp: { dmg: 10, rows: 1 }, evo: { dmg: 15, rows: 2 } },
-  { id: 'thornpaw', name: 'Thornpaw', evoName: 'Briarlord', el: 'leaf', cost: 6, unlock: 6,
-    sp: { convert: 3, heal: 5 }, evo: { convert: 5, heal: 10 } },
-  { id: 'frostling', name: 'Frostling', evoName: 'Glacielle', el: 'water', cost: 5, unlock: 10,
-    sp: { dmg: 8, freeze: true }, evo: { dmg: 12, freeze: true } },
-  { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thundrake', el: 'spark', cost: 5, unlock: 15,
-    sp: { dmg: 10, chain: 1 }, evo: { dmg: 15, chain: 2 } },
-  { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5, unlock: 20,
-    sp: { dmg: 5, curse: { tick: 5, turns: 2 } }, evo: { dmg: 10, curse: { tick: 5, turns: 3 } } },
+  { id: 'emberkit', name: 'Emberkit', evoName: 'Blazelynx', el: 'fire', cost: 7, unlock: 3,
+    sp: { dmg: 11, col: 1 }, evo: { dmg: 17, col: 2 } },
+  { id: 'pebbleop', name: 'Pebbleop', evoName: 'Cragoon', el: 'fire', cost: 7, unlock: 6,
+    sp: { dmg: 12, shield: 9 }, evo: { dmg: 17, shield: 13 } },
+  { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5, unlock: 10,
+    sp: { dmg: 8, curse: { tick: 5, turns: 2 } }, evo: { dmg: 13, curse: { tick: 5, turns: 3 } } },
+  { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6, unlock: 15,
+    sp: { dmg: 12, drain: 2 }, evo: { dmg: 17, drain: 3 } },
+  { id: 'zapup', name: 'Zapup', evoName: 'Voltail', el: 'spark', cost: 4, unlock: 20,
+    sp: { dmg: 4, block: 2 }, evo: { dmg: 8, block: 3 } },
   // ALL: every gem of any element charges it, at half rate (1 per 2 gems).
-  { id: 'prismote', name: 'Prismote', evoName: 'Prismaraja', el: 'all', cost: 14, unlock: 30,
-    sp: { dmg: 20 }, evo: { dmg: 30 } },
+  { id: 'prismote', name: 'Prismote', evoName: 'Prismaraja', el: 'all', cost: 16, unlock: 30,
+    sp: { dmg: 18 }, evo: { dmg: 27 } },
 ];
 
 export const BY_ID = Object.fromEntries(MONSTERS.map((m) => [m.id, m]));
+
+/** RULES VERSIONS (2026-11-14, the rebalance; Matt: "Yes rebalance them"). A match carries `rv`; no `rv` = 1. Every
+ *  match started before the rebalance (a vs-computer save, an open challenge, a live room) replays on its OWN numbers,
+ *  so no stored match changes its result. A new match is stamped RULES_VERSION. V1 = the numbers as of 2026-11-13,
+ *  frozen: never edit them. A future rebalance adds V2 here and bumps RULES_VERSION to 3. */
+export const RULES_VERSION = 2;
+const V1 = {
+  emberkit: { cost: 6, sp: { dmg: 12, col: 1 }, evo: { dmg: 18, col: 2 } },
+  sproutle: { cost: 6, sp: { dmg: 10, heal: 10 }, evo: { dmg: 15, heal: 15 } },
+  driplet: { cost: 4, sp: { dmg: 8 }, evo: { dmg: 14 } },
+  zapup: { cost: 4, sp: { dmg: 5, block: 2 }, evo: { dmg: 10, block: 3 } },
+  gloomite: { cost: 6, sp: { dmg: 10, drain: 2 }, evo: { dmg: 15, drain: 3 } },
+  pebbleop: { cost: 8, sp: { dmg: 10, shield: 8 }, evo: { dmg: 15, shield: 12 } },
+  cinderwing: { cost: 8, sp: { dmg: 10, rows: 1 }, evo: { dmg: 15, rows: 2 } },
+  thornpaw: { cost: 6, sp: { convert: 3, heal: 5 }, evo: { convert: 5, heal: 10 } },
+  frostling: { cost: 5, sp: { dmg: 8, freeze: true }, evo: { dmg: 12, freeze: true } },
+  stormhorn: { cost: 5, sp: { dmg: 10, chain: 1 }, evo: { dmg: 15, chain: 2 } },
+  hexowl: { cost: 5, sp: { dmg: 5, curse: { tick: 5, turns: 2 } }, evo: { dmg: 10, curse: { tick: 5, turns: 3 } } },
+  prismote: { cost: 14, sp: { dmg: 20 }, evo: { dmg: 30 } },
+};
+const OLD = { 1: V1 };
+/** The numbers a match of rules version `rv` uses (absent = 1). The current version reads MONSTERS. */
+const defOf = (id, rv) => { const v = OLD[rv || 1]; return (v && v[id]) || BY_ID[id]; };
+export const costOf = (id, rv = RULES_VERSION) => { const d = defOf(id, rv); return d ? d.cost : 1; };
 export const STARTERS = MONSTERS.filter((m) => !m.unlock).map((m) => m.id);
 
 /** Unlocked monster ids for a total-wins count. DERIVED at read time, never stored (THE LAW: there
@@ -61,8 +89,10 @@ export const monName = (id, evolved) => {
   const m = BY_ID[id];
   return m ? (evolved ? m.evoName : m.name) : '';
 };
-export const specialOf = (id, evolved) => {
-  const m = BY_ID[id];
+/** A special's numbers. `rv` = the match's rules version (engine and computer pass it); screens outside a match
+ *  show the current numbers. */
+export const specialOf = (id, evolved, rv = RULES_VERSION) => {
+  const m = defOf(id, rv);
   return m ? (evolved ? m.evo : m.sp) : {};
 };
 

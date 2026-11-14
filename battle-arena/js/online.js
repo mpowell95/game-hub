@@ -67,13 +67,15 @@ export function entryOf(move) {
 }
 
 /** The first state of a match (stored frame). `teams` = { a, b }; a missing `b` is the placeholder. */
-export function startState(seed, teams, first = 0) {
-  return E.newMatch({ seed: (Number(seed) >>> 0) || 1, teams: [teams.a, teams.b || PLACEHOLDER_TEAM], first: first === 1 ? 1 : 0 });
+export function startState(seed, teams, first = 0, rv = 1) {
+  return E.newMatch({ seed: (Number(seed) >>> 0) || 1, teams: [teams.a, teams.b || PLACEHOLDER_TEAM], first: first === 1 ? 1 : 0, rv: cleanRv(rv) });
 }
+/** A stored match's rules version (monsters.js): 2+ only when stored as such; anything else (absent, old) = 1. */
+export const cleanRv = (rv) => (Number.isInteger(rv) && rv >= 2 && rv <= 99 ? rv : 1);
 
 /** Replay `entries` from the start. { ok, state, n, error }: `n` = how many applied before any refusal. */
-export function replay(seed, teams, entries, first = 0) {
-  let s = startState(seed, teams, first);
+export function replay(seed, teams, entries, first = 0, rv = 1) {
+  let s = startState(seed, teams, first, rv);
   let n = 0;
   for (const e of entries) {
     if (s.winner != null) return { ok: false, state: s, n, error: 'over' };
