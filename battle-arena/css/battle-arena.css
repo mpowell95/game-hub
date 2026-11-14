@@ -205,8 +205,8 @@
 }
 .ba-root .ba-slot.is-empty { border: 3px dashed var(--bas-line); background: transparent; }
 .ba-root .ba-slot-art svg { width: 78px; height: 78px; }
-.ba-root .ba-slot-gem, .ba-root .ba-pick-gem { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; }
-.ba-root .ba-slot-gem svg, .ba-root .ba-pick-gem svg { width: 20px; height: 20px; }
+.ba-root .ba-slot-gem, .ba-root .ba-pick-gem { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; z-index: 1; }
+.ba-root .ba-slot-gem svg, .ba-root .ba-pick-gem svg { width: 28px; height: 28px; }
 
 .ba-root .ba-grid {
   flex: 1 1 auto;
@@ -272,7 +272,12 @@
 .ba-root .ba-online-title { font-style: italic; text-transform: uppercase; letter-spacing: .03em; text-shadow: 0 3px 0 #000; }
 /* Monsters (2026-10-29): the draft's grid with names; the count of unlocked ones top right. */
 .ba-root .ba-dex-n { display: grid; place-items: center; font-size: 16px; font-weight: 900; color: var(--ba-hl); white-space: nowrap; }
-.ba-root .ba-dex .ba-pick-name { padding: 0 4px 6px; font-size: 15px; }
+.ba-root .ba-dex .ba-pick-name { padding: 0 4px 2px; font-size: 15px; }
+/* The element a monster eats, big (Matt, 2026-11-14: "Make the things they eat bigger"); its power as icons + numbers. */
+.ba-root .ba-dex .ba-pick-gem, .ba-root .ba-dex .ba-pick-gem svg { width: 32px; height: 32px; }
+.ba-root .ba-pick-pow { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; gap: 3px; min-height: 45px; padding: 2px 2px 6px; max-width: 100%; }
+.ba-root .ba-pow { display: inline-flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 900; color: #fff; line-height: 1; white-space: nowrap; }
+.ba-root .ba-pow svg { width: 20px; height: 20px; flex: 0 0 auto; }
 
 /* Reference look: no names in the grid (tap = the card), each monster on a hexagon; the two
  * picks in big teal-ringed hexagons. */
