@@ -389,7 +389,22 @@ ok('the six starters are the weakest six', ['thornpaw', 'sproutle', 'driplet', '
   // Rules version 2: a new match carries rv 2 and plays the new numbers; a match with no rv keeps version 1's.
   const s2 = newMatch({ seed: 7, teams: [['emberkit', 'zapup'], ['driplet', 'sproutle']], rv: RULES_VERSION });
   const s1 = newMatch({ seed: 7, teams: [['emberkit', 'zapup'], ['driplet', 'sproutle']] });
-  ok('rules v2: stamped on the match', s2.rv === 2 && !('rv' in s1));
+  ok('rules: the current version is stamped on a new match', s2.rv === RULES_VERSION && RULES_VERSION >= 3 && !('rv' in s1));
+  // Rules v3: two monsters of one element SHARE the gems (3 fire = +3 in all, never +3 each).
+  const FF = [['emberkit', 'cinderwing'], ['zapup', 'sproutle']];
+  const share = (rv, e0, e1) => { const st = setup(FF, THREE); if (rv > 1) st.rv = rv; st.sides[0].mons[0].energy = e0; st.sides[0].mons[1].energy = e1; const r = apply(st, swap(4, 3, 4, 4)); return r.state.sides[0].mons.map((m) => m.energy); };
+  const v2 = share(2, 0, 0), v3 = share(3, 0, 0);
+  ok('rules v2 (old matches): 3 fire charged BOTH fire monsters +3', v2[0] === 3 && v2[1] === 3, JSON.stringify(v2));
+  ok('rules v3: 3 fire = +3 in all, to one monster', v3[0] + v3[1] === 3 && (v3[0] === 0 || v3[1] === 0), JSON.stringify(v3));
+  const fuller = share(3, 1, 4);   // Cinderwing 4/8 is closer to its special than Emberkit 1/7
+  ok('rules v3: the gems go to the one closer to its special first', fuller[1] === 7 && fuller[0] === 1, JSON.stringify(fuller));
+  {
+    // Cinderwing 6/8 takes 2, the third spills to Emberkit (read from the first match's energy events: the special then fires).
+    const st = setup(FF, THREE); st.rv = 3; st.sides[0].mons[1].energy = 6;
+    const ev = apply(st, swap(4, 3, 4, 4)).events;
+    const first = ev.slice(0, ev.findIndex((e) => e.t === 'special') >>> 0).filter((e) => e.t === 'energy' && e.side === 0);
+    ok('rules v3: what a full bar cannot hold spills to the partner', first.some((e) => e.mon === 1 && e.gained === 2) && first.some((e) => e.mon === 0 && e.gained === 1), JSON.stringify(first));
+  }
   ok('rules v2: Emberkit costs 7 (v1: 6), Prismote 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
   // The same board and swap (+3 fire to Emberkit at 3): fires under v1 (cost 6), not under v2 (cost 7).
   const a = setup(TEAM, THREE); a.sides[0].mons[0].energy = 3;

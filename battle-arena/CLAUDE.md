@@ -53,7 +53,10 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
 - Specials fire after the board settles, seat order; a special that changes the board settles again.
 - **Sudden death**: after each side's 20th turn heals do nothing (the soak found two healing teams
   out-healing each other past 3000 moves).
-- Both monsters of one element both charge. The computer never drafts the player's monsters.
+- **Two monsters of one element SHARE the gems (rules v3, 2026-11-14; Matt: "it's insane that you're letting that count as 6! It
+  can't be +3 for both of them")**: the fuller one (energy / cost) first, ties by seat, what its full bar cannot hold spills to the
+  other (`engine.js charge`, `cpu.js gainsFor`). v1/v2 matches keep the old rule (each got every gem). The computer never drafts
+  the player's monsters.
 - **Team HP is a flat 80 for every team, max 80 (Matt, 2026-10-24: "everyone starts at 80").
   Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side (8.4 with one extra move a turn, 2026-10-28).
 - **RULES VERSION 2 (2026-11-14, the rebalance): see "Rebalance" at the end; the numbers below are version 1's history.** Balance (soak-tuned 2026-10-24, from the spec's first guess): Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
@@ -278,3 +281,7 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   made sense. Fix this one."): 3 x 4, name + power words on each (`tileHTML(m, true)`, `.ba-draft` rules shared by both screens);
   the picked tile's teal hexagon stays inside the art box (it covered the name). Short phones (height <= 740px) drop the two big
   pick hexes (a picked tile keeps its ring and tick) so the pictures keep ~33px; Matt's 402x874 keeps both (art 64-68px).
+- **Rules version 3 (same day)**: the sharing rule above + a retune for it (same-element pairs lost their double charge, so the fire
+  trio dipped and Prismote rose): Thornpaw heal 8 (evo 11), Cinderwing dmg 12 (17), Emberkit dmg 12 (18), Pebbleop dmg 13 (18),
+  Prismote cost 17 dmg 17 (26). Every monster 47-54% (medium 5,940 + hard 2,970 matches). `V2` frozen beside `V1`. Unlock order
+  kept: under v3 the six starters and the rest are within a point or two, so reshuffling testers' unlocks would be noise.

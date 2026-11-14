@@ -19,15 +19,32 @@ function specialValue(id, evo, rv) {
     + (sp.rows ? 4 * sp.rows : 0) + (sp.convert ? sp.convert : 0);
 }
 
+/** What each of `side`'s monsters would gain from cleared `counts` (the engine's charge rule, per rules version: from v3 two
+ *  monsters of one element SHARE the gems, the fuller one first). Prismote gains 1 per 2 gems of any element. */
+function gainsFor(state, side, counts, total) {
+  const mons = state.sides[side].mons, rv = state.rv || 1;
+  const gains = mons.map((m) => { const el = BY_ID[m.id].el; return el === 'all' ? Math.floor((m.part + total) / 2) : (counts[el] || 0); });
+  if (rv >= 3) {
+    for (const el of Object.keys(counts)) {
+      const same = mons.map((m, mi) => ({ m, mi })).filter((x) => BY_ID[x.m.id].el === el);
+      if (same.length < 2) continue;
+      same.sort((a, b) => b.m.energy / costOf(b.m.id, rv) - a.m.energy / costOf(a.m.id, rv) || a.mi - b.mi);
+      let left = counts[el];
+      for (const x of same) { const g = Math.min(left, Math.max(0, costOf(x.m.id, rv) - x.m.energy)); gains[x.mi] = g; left -= g; }
+    }
+  }
+  return gains;
+}
+
 /** Medium's eye: the first step of a swap, scored for `side`. */
 export function scorePreview(state, side, p) {
   if (!p) return -Infinity;
   const sd = state.sides[side];
   let score = 0;
   const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
-  for (const m of sd.mons) {
-    const def = BY_ID[m.id];
-    const gain = def.el === 'all' ? Math.floor((m.part + total) / 2) : (p.counts[def.el] || 0);
+  const gains = gainsFor(state, side, p.counts, total);
+  for (const [mi, m] of sd.mons.entries()) {
+    const gain = gains[mi];
     if (!gain) continue;
     const cost = costOf(m.id, state.rv || 1);
     score += gain * (1 + 2 * (m.energy / cost));
@@ -58,9 +75,9 @@ function threat(state, side) {
   for (const mv of legalMoves(state)) {
     const p = previewSwap(state, mv.a, mv.b);
     const total = Object.values(p.counts).reduce((a, b) => a + b, 0);
-    for (const m of sd.mons) {
-      const def = BY_ID[m.id];
-      const gain = def.el === 'all' ? Math.floor((m.part + total) / 2) : (p.counts[def.el] || 0);
+    const gains = gainsFor(state, side, p.counts, total);
+    for (const [mi, m] of sd.mons.entries()) {
+      const gain = gains[mi];
       if (gain && m.energy + gain >= costOf(m.id, state.rv || 1)) worst = Math.max(worst, specialValue(m.id, m.evo, state.rv));
     }
   }
