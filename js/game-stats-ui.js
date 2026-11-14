@@ -15,7 +15,7 @@
 import { loadStoredStats, statsId, holdemBalance } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isGameLive, corrections, isAdminDevice } from './admin-config.js';
-import { correctStats, fullLevelStats, adjustStats, adjustModesStats, withHandAdjust, handResultsStats, flickTestStats } from './stats-corrections.js';
+import { correctStats, fullLevelStats, adjustStats, adjustModesStats, withHandAdjust, handResultsStats, flickTestStats, TOWER_BEFORE } from './stats-corrections.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
@@ -2202,7 +2202,7 @@ function freshBrickBlitz(rec) {
 // DISPLAY ONLY: every number is the one the tables showed.
 const LV_CLS = { 1: 'gs-t1', 2: 'gs-t2', 3: 'gs-t3', 4: 'gs-t4', mp: 'gs-tmp' };
 /** cells: [{ tier: 1-4 | 'mp' | 0, word (HTML), big (HTML), sm: [HTML...], bar: % | null, panel: HTML | '' }] */
-function levelStripHTML(cells) {
+function levelStripHTML(cells, opts) {
   if (!cells.length) return '';
   const cols = cells.length === 5 ? 3 : Math.min(cells.length, 4);
   const iconOf = (c) => (c.tier === 'mp' ? GLOBE : (c.tier >= 1 && c.tier <= 4 ? v2shape(c.tier) : ''));
@@ -2212,7 +2212,7 @@ function levelStripHTML(cells) {
     ? `<button type="button" class="gs-lc ${clsOf(c)}" data-lv="${i}" aria-expanded="false">${body(c)}</button>`
     : `<div class="gs-lc ${clsOf(c)}">${body(c)}</div>`);
   const panels = cells.map((c, i) => (c.panel ? `<div class="gs-lp ${clsOf(c)}" data-lv="${i}" hidden><div class="gs-lp-h">${iconOf(c)}<span>${c.word}</span></div>${c.panel}</div>` : '')).join('');
-  return `<div class="gs-ls"><div class="gs-lsg" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${cells.map(cellHTML).join('')}</div>${panels}</div>`;
+  return `<div class="gs-ls"><div class="gs-lsg${opts && opts.wrap2 ? ' gs-lsg-2n' : ''}" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${cells.map(cellHTML).join('')}</div>${panels}</div>`;
 }
 /** One tap listener for every level strip (the leaderboard's and My Stats' overlays alike), wired once. */
 let _lvWired = false;
@@ -2397,8 +2397,41 @@ function rowsGolf(rec) {
     + (rounds ? rh(t('gs_golf_courses_h')) + `<div class="gs-rl">${rounds}</div>` : '')
     + golfHolesHTML(gf) + golfPracticeHTML(gf);
 }
+/** Tower Stack (Matt, 2026-11-14: "I should be able to see their high, low, and average for every difficulty"): one
+ *  column per difficulty played: the high (`tw.bestByDiff`), the low (`tw.lowByDiff`, saved from 2026-11-14, with the
+ *  play log's earlier runs, TOWER_BEFORE) and the average (byMode `hs`/`hn`, every look, + TOWER_BEFORE's runs with no
+ *  running total). DISPLAY ONLY. A low above the high (a voided record) is not shown. */
+function rowsTower(rec, code) {
+  const tw = (rec && rec.tw) || {};
+  const games = n0(tw.games);
+  if (!games) return towerScreen(rec);
+  const before = (code && Object.prototype.hasOwnProperty.call(TOWER_BEFORE, code) && TOWER_BEFORE[code]) || {};
+  const bd = (rec && rec.byDiff) || {}, best = tw.bestByDiff || {}, low = tw.lowByDiff || {};
+  const sum = {};
+  const bm = rec && rec.byMode && typeof rec.byMode === 'object' ? rec.byMode : {};
+  for (const mk of Object.keys(bm)) {
+    const per = bm[mk];
+    if (!per || typeof per !== 'object') continue;
+    for (const d of Object.keys(per)) {
+      const b = per[d] || {};
+      if (!(n0(b.hn) > 0)) continue;
+      const x = sum[d] || (sum[d] = { n: 0, s: 0 });
+      x.n += n0(b.hn); x.s += Math.max(0, +b.hs || 0);
+    }
+  }
+  const cells = C4_DIFFS.filter(([k]) => n0((bd[k] || {}).played) > 0 || n0(best[k]) > 0).map(([k]) => {
+    const hi = n0(best[k]);
+    const lows = [low[k], ((before.lo || {})[k])].map((v) => +v).filter((v) => Number.isFinite(v) && v >= 0 && v <= hi);
+    const pre = (before.pre || {})[k] || {};
+    const n = ((sum[k] || {}).n || 0) + n0(pre.n), s = ((sum[k] || {}).s || 0) + Math.max(0, +pre.s || 0);
+    return { tier: LV_TIER[k], word: lvWord(k), big: nf(hi),
+      sm: [lows.length ? t('st_low_n', { n: nf(Math.min(...lows)) }) : '', n > 0 ? t('st_avg_n', { n: r1(s / n) }) : '', runsN((bd[k] || {}).played).replace(/ /g, '\u00a0')] };
+  });
+  return tilesHTML([[nf(games), t('gs_runs')], [nf(tw.best), t('gs_tw_best')], [nf(tw.perfects), t('gs_tw_perfects')], [nf(tw.bestStreak), t('gs_tw_streak')]])
+    + (cells.length ? rh(t('st_high')) + levelStripHTML(cells, { wrap2: true }) : '');
+}
 /** The rows look's own screen for a game, or null (the game keeps its fresh screen). */
-function rowsScreenFor(id, rec) {
+function rowsScreenFor(id, rec, code) {
   switch (id) {
     case 'gridlock': return rowsGridlock(rec);
     case 'wordweaver': return rowsWordWeaver(rec);
@@ -2411,6 +2444,7 @@ function rowsScreenFor(id, rec) {
     case 'hillclimb': return rowsHillClimb(rec);
     case 'brickblitz': return rowsBrickBlitz(rec);
     case 'golf': return rowsGolf(rec);
+    case 'tower': return rowsTower(rec, code);
     default: return null;
   }
 }
@@ -2420,7 +2454,7 @@ function freshScreenFor(id, stt) { return freshScreenForBase(id, stt) + ptsSecti
 function freshScreenForBase(id, stt) {
   const rec = (stt.games && stt.games[id]) || {};
   const dt = rec.dt || {};
-  if (_rows) { const r = rowsScreenFor(id, rec); if (r != null) return r; }
+  if (_rows) { const r = rowsScreenFor(id, rec, (stt && 'code' in stt) ? stt.code : (loadProfile() || {}).playerId); if (r != null) return r; }
   switch (id) {
     case 'connect4': return freshConnect4(rec);
     case 'tictactoe': return freshTicTacToe(rec);
@@ -2703,6 +2737,7 @@ const V2_CSS = `.gs-v2{--l2-bg:#F4F5F7;--l2-surf:#FFFFFF;--l2-text:#14161A;--l2-
 :root.gh-dark .gs-v2 .gs-t0{--tf:#9AA1AD}
 .gs-v2 .gs-ls{display:flex;flex-direction:column;gap:10px}
 .gs-v2 .gs-lsg{display:grid;gap:8px}
+@media (max-width:389px){html[lang="es"] .gs-v2 .gs-lsg-2n{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 .gs-v2 .gs-lc{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0;padding:14px 4px 14px;border-radius:16px;text-align:center;overflow:hidden;color:var(--l2-text);font-family:inherit;background:linear-gradient(180deg,rgba(var(--t),.20),rgba(var(--t),.07)),var(--l2-surf);border:1px solid rgba(var(--t),.38)}
 .gs-v2 button.gs-lc{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .gs-v2 .gs-lc:has(.gs-lc-bar){padding-bottom:0}

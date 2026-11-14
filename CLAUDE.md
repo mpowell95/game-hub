@@ -135,8 +135,8 @@ and gap (`lb2Gap`), then Record / Opponent (difficulties + Online) / modes / Tur
 set in `v2ScreenFor` from `isAdminDevice()`; My Stats' game pages on admin devices too). Display only.
 **Level columns (2026-11-08, Matt: "nice, build it"; `docs/mockups/lb2-player-game-v2.html`)**: every level is a tinted column in its
 own muted colour (`levelStripHTML`, `gs-t1..4`/`gs-tmp`); Flick Soccer's columns open first to 1/2/3 on tap (byMode `goals`, the rest =
-"Earlier games"); Gridlock, Word Weaver, Arrow Maze, Sudoku, Murdoku, Nuts & Bolts, Snake, Ball Run, Hill Climb, Brick Breaker, Golf
-have their own rows screens (`rowsScreenFor`); Skeeball machine cards tinted. Still admin devices only until "release it".
+"Earlier games"); Gridlock, Word Weaver, Arrow Maze, Sudoku, Murdoku, Nuts & Bolts, Snake, Ball Run, Hill Climb, Brick Breaker, Golf,
+Tower Stack (high / low / average per difficulty, 2026-11-14) have their own rows screens (`rowsScreenFor`); Skeeball machine cards tinted. Still admin devices only until "release it".
 
 **Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: the BETTER
 AVERAGE game ranks higher. Totals (points, wins, medals): fewer plays/wins = higher average. A best-game board (golf,

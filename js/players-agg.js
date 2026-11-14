@@ -810,6 +810,15 @@ export function aggregatePlayers(all, corrections) {
         dst.tw.bestStreak = Math.max(dst.tw.bestStreak | 0, src.tw.bestStreak | 0);
         const tbd = src.tw.bestByDiff || {};
         for (const k of Object.keys(tbd)) dst.tw.bestByDiff[k] = Math.max(dst.tw.bestByDiff[k] | 0, tbd[k] | 0);
+        // The lowest run per difficulty (2026-11-14): the LEAST across the person's devices; a missing key is no low.
+        const tlo = src.tw.lowByDiff && typeof src.tw.lowByDiff === 'object' ? src.tw.lowByDiff : {};
+        for (const k of Object.keys(tlo)) {
+          const v = +tlo[k];
+          if (!Number.isFinite(v) || v < 0) continue;
+          if (!dst.tw.lowByDiff) dst.tw.lowByDiff = {};
+          const cur = dst.tw.lowByDiff[k];
+          dst.tw.lowByDiff[k] = Number.isFinite(cur) ? Math.min(cur, Math.floor(v)) : Math.floor(v);
+        }
         // Best tower shapes (2026-11-12): per difficulty, the TALLEST across the person's devices (a copy).
         const tsh = src.tw.shapes || {};
         for (const k of Object.keys(tsh)) {

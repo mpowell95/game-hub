@@ -537,6 +537,7 @@ export const STRINGS = {
     // Level columns (2026-11-08, docs/mockups/lb2-player-game-v2.html).
     st_levels: 'Levels', st_levels_n: (p) => `${p.n} ${Number(p.nn) === 1 ? 'level' : 'levels'}`,
     st_daily: 'Daily', st_bonus: 'Bonus stars', st_spent_n: '{n} spent', st_rush_week: 'Rush this week',
+    st_high: 'High', st_low_n: 'Low\u00a0{n}', st_avg_n: 'Avg\u00a0{n}',
     st_best_n: 'Best {n}', st_runs_n: (p) => `${p.n} ${Number(p.nn) === 1 ? 'run' : 'runs'}`, st_solved_n: '{n} solved',
     st_earlier: 'Earlier', st_longest: 'Longest', st_br_classic: 'Classic', st_br_orbital: 'Orbital',
     st_first_to_n: 'First to {n}', st_yd_n: '{n} yd',
@@ -1823,6 +1824,7 @@ export const STRINGS = {
     st_ties_n: (p) => `${p.t} ${Number(p.tn) === 1 ? 'empate' : 'empates'}`,
     st_levels: 'Niveles', st_levels_n: (p) => `${p.n} ${Number(p.nn) === 1 ? 'nivel' : 'niveles'}`,
     st_daily: 'Diarios', st_bonus: 'Estrellas extra', st_spent_n: '{n} gastadas', st_rush_week: 'Contrarreloj esta semana',
+    st_high: 'Máximo', st_low_n: 'Mín.\u00a0{n}', st_avg_n: 'Media\u00a0{n}',
     st_best_n: 'Mejor {n}', st_runs_n: (p) => `${p.n} ${Number(p.nn) === 1 ? 'partida' : 'partidas'}`, st_solved_n: '{n} resueltos',
     st_earlier: 'Antes', st_longest: 'Más larga', st_br_classic: 'Clásico', st_br_orbital: 'Orbital',
     st_first_to_n: 'A {n}', st_yd_n: '{n} yd',

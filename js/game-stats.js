@@ -1819,6 +1819,13 @@ export function combineTowerRecords(real, test) {
     for (const k of ['games', 'blocks', 'perfects']) w[k] = n(rt[k]) + n(tt[k]);
     for (const k of ['best', 'bestStreak']) w[k] = Math.max(n(rt[k]), n(tt[k]));
     w.bestByDiff = mergeMap(rt.bestByDiff, tt.bestByDiff, (a, b) => Math.max(n(a), n(b)));
+    // Lowest run per difficulty: the least of the two (by hand: mergeMap drops a 0, and 0 is a real low).
+    const lo = {};
+    for (const m of [rt.lowByDiff, tt.lowByDiff]) if (plainObj(m)) for (const k of Object.keys(m)) {
+      const v = +m[k];
+      if (Number.isFinite(v) && v >= 0) lo[k] = k in lo ? Math.min(lo[k], Math.floor(v)) : Math.floor(v);
+    }
+    if (Object.keys(lo).length) w.lowByDiff = lo; else delete w.lowByDiff;
     const sh = mergeMap(rt.shapes, tt.shapes, (a, b) => {
       const ok = (v) => plainObj(v) && typeof v.s === 'string';
       if (!ok(b)) return ok(a) ? a : null;
@@ -3662,6 +3669,14 @@ export function recordTower(height, difficulty, extras) {
   g.tw.perfects += n(x.perfects);
   g.tw.best = Math.max(g.tw.best | 0, h);
   if (d) g.tw.bestByDiff[d] = Math.max(g.tw.bestByDiff[d] | 0, h);
+  // The LOWEST run at each difficulty (Matt, 2026-11-14: "high, low, and average for every difficulty"): only ever
+  // goes down (Math.min); a difficulty with no key has no low yet. Runs from before this field: stats-corrections.js
+  // TOWER_BEFORE (read from the play log), added at read time.
+  if (d) {
+    if (!g.tw.lowByDiff || typeof g.tw.lowByDiff !== 'object' || Array.isArray(g.tw.lowByDiff)) g.tw.lowByDiff = {};
+    const lo = g.tw.lowByDiff[d];
+    g.tw.lowByDiff[d] = Number.isFinite(lo) && lo >= 0 ? Math.min(lo, h) : h;
+  }
   g.tw.bestStreak = Math.max(g.tw.bestStreak | 0, n(x.bestStreak));
   st.updatedAt = new Date().toISOString();
   persist(st);
