@@ -22,8 +22,8 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 
 - Tap a letter of the current word (gold outline + caret), then a key. The new word must change exactly that one
   letter and be on the word list, else "Not a word" and a shake. A letter already right (same as the target's at that
-  place) is TEAL WITH A FOLDED CORNER top right (never colour alone; a dot under the letter until 2026-11-14 pushed the letter up
-  out of line, Matt: "It's terrible"). The target row has dashed gold tiles and a flag.
+  place) is a SOLID GREEN tile (`--wl-match`), nothing else (Matt, 2026-11-14: "Just make it green"; a dot under the letter and
+  then a folded corner were both rejected; his call over the shape-plus-colour rule). The target row has dashed gold tiles and a flag.
 - **Moves count every change, Undo too** (an undo is a move back). Par = the fewest changes possible.
 - **Stars**: moves at par 3, par +1 or +2 = 2, more = 1; 1 hint caps at 2, 2+ hints at 1 (`starsFor`, = `wlStars` in
   `js/game-stats.js`). **Hint** = plays the next word on a shortest path from where you are (the commonest one) and

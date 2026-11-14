@@ -3,7 +3,7 @@
    carries a dot; the selected letter is #ffce3a AND has a thick outline and a caret; the target has a flag. */
 .wl-root {
   --wl-bg: #17284a; --wl-bg2: #24406f; --wl-ink: #10203c; --wl-on: #f5f8ff; --wl-tile: #ffffff;
-  --wl-match: #178a7a; --wl-sel: #ffce3a; --wl-gold: #f2b705;
+  --wl-match: #1f9a52; --wl-sel: #ffce3a; --wl-gold: #f2b705;
   --wl-top: var(--gh-st, env(safe-area-inset-top, 0px));
   /* The bottom of the hub's floating Hub button (it sits at max(safe top, 54px), 36px tall). */
   --wl-below: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px);
@@ -63,10 +63,8 @@
 .wl-root .wl-t { width: var(--wl-small); height: var(--wl-small); border-radius: 8px; display: grid; place-items: center; position: relative;
   background: rgba(255,255,255,.88); color: var(--wl-ink); font-weight: 800; font-size: calc(var(--wl-small) * .58); line-height: 1; border: 0; padding: 0; }
 .wl-root .wl-t.is-match { background: var(--wl-match); color: #fff; }
-/* A right letter in the right place: teal AND a folded corner top right (shape, not colour alone). The corner sits outside
-   the letter's box, so every letter stays centred on its row (Matt, 2026-11-14: the old dot under the letter pushed it up). */
-.wl-root .wl-t.is-match::after { content: ''; position: absolute; top: 0; right: 0; width: 30%; height: 30%;
-  background: rgba(255,255,255,.92); clip-path: polygon(0 0, 100% 0, 100% 100%); border-top-right-radius: inherit; pointer-events: none; }
+/* A right letter in the right place: a solid green tile, nothing else (Matt, 2026-11-14: "Just make it green"; a dot under
+   the letter and then a folded corner were both rejected). Green on the white/grey tiles reads by lightness too. */
 .wl-root .wl-more { height: 22px; font-size: 22px; line-height: 22px; opacity: .8; }
 .wl-root .wl-now { margin-top: 4px; }
 .wl-root .wl-now .wl-t { width: var(--wl-big); height: var(--wl-big); font-size: calc(var(--wl-big) * .6); border-radius: 12px; background: var(--wl-tile);
