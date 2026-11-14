@@ -42,12 +42,30 @@ const MP = await import('../battle-arena/js/mp.js');
 const L = await import('../battle-arena/js/live.js');
 const { chooseMove } = await import('../battle-arena/js/cpu.js');
 const { loadStats } = await import('../js/game-stats.js');
+const { RULES_VERSION: RV, costOf, specialOf } = await import('../battle-arena/js/monsters.js');
 
 let pass = 0, fail = 0;
 const ok = (label, cond, extra = '') => { if (cond) { pass++; console.log('ok  ', label); } else { fail++; console.log('FAIL', label, extra); } };
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
 
 // --- 1. the pure half ---------------------------------------------------------------------------
+// --- 0. rules versions (2026-11-14 rebalance): a match keeps the numbers it was started with ---------------------
+{
+  ok('rules: a match with no rv is version 1', !('rv' in O.startState(5, { a: ['thornpaw', 'driplet'], b: ['emberkit', 'zapup'] })));
+  ok('rules: rv 2 is stamped when asked', O.startState(5, { a: ['thornpaw', 'driplet'], b: ['emberkit', 'zapup'] }, 0, 2).rv === 2);
+  ok('rules: an rv that is not 2..99 is version 1', O.cleanRv('2') === 1 && O.cleanRv(1) === 1 && O.cleanRv(2) === 2 && O.cleanRv(null) === 1);
+  const v1 = ['emberkit', 'sproutle', 'driplet', 'zapup', 'gloomite', 'pebbleop', 'cinderwing', 'thornpaw', 'frostling', 'stormhorn', 'hexowl', 'prismote'];
+  const frozen = { emberkit: 6, sproutle: 6, driplet: 4, zapup: 4, gloomite: 6, pebbleop: 8, cinderwing: 8, thornpaw: 6, frostling: 5, stormhorn: 5, hexowl: 5, prismote: 14 };
+  ok('rules: version 1 numbers are frozen (costs)', v1.every((id) => costOf(id, 1) === frozen[id]));
+  ok('rules: version 1 numbers are frozen (Sproutle heal 10, Prismote 20)', specialOf('sproutle', false, 1).heal === 10 && specialOf('prismote', false, 1).dmg === 20);
+  // An OLD stored challenge (no rv) replays exactly as before: the same log gives the same state under v1 and differs under v2.
+  const T = { a: ['sproutle', 'prismote'], b: ['thornpaw', 'driplet'] };
+  let s1 = O.startState(4242, T), log = [];
+  for (let i = 0; i < 40 && s1.winner == null; i++) { const mv = chooseMove(s1, 'medium', () => 0.3); log.push(O.entryOf({ ...mv, side: s1.turn })); s1 = E.apply(s1, mv).state; }
+  const again = O.replay(4242, T, log);
+  ok('rules: an old log (no rv) replays to the same state as before', again.ok && same(again.state, s1));
+}
+
 const TEAMS = { a: ['emberkit', 'zapup'], b: ['sproutle', 'gloomite'] };
 /** Play a whole match with the computer on both sides; returns the entries. */
 function selfPlay(seed, teams, { evolveFirst = true, passEvery = 0 } = {}) {
@@ -254,7 +272,8 @@ let id;
   const gB = await MP.readGame(id);
   ok('two phones: the same validated match, the same final state', same(gB, g) && same(MP.buildState(gB), MP.buildState(g)));
   // The phone's step-by-step state equals the replay (what each phone has on screen at the end).
-  let st = O.startState(g.seed, { a: g.a.team, b: g.b.team });
+  let st = O.startState(g.seed, { a: g.a.team, b: g.b.team }, 0, g.rv);
+  ok('a new challenge is stamped with the current rules version', g.rv === RV);
   for (const e of g.log) st = E.apply(st, O.moveOf(e)).state;
   ok('two phones: applying the moves one by one = replaying the stored log', same(st, MP.buildState(g)));
   ok('evolve as a move was played online (k:"e" in the log) and replays', g.log.some((e) => e.k === 'e'));
@@ -448,7 +467,7 @@ const tick = () => new Promise((r) => setTimeout(r, 5));
   }
   ok(`live: ${moves} moves (${passes} passes) in lockstep, every hash checked`, same(host.canon, guest.canon) && host.canon.winner != null, `${host.applied} ${guest.applied}`);
   ok('live: each phone was shown exactly the OTHER player\'s moves, in order', seen.A.every((e) => e.by === 'b') && seen.B.every((e) => e.by === 'a') && seen.A.length + seen.B.length === moves);
-  const replayed = (() => { let s = O.startState(host.match.seed, { a: host.match.a, b: host.match.b }); for (const m of L.movesOf(getAt('rooms/QRST'))) s = E.apply(s, O.moveOf(m.entry)).state; return s; })();
+  const replayed = (() => { let s = O.startState(host.match.seed, { a: host.match.a, b: host.match.b }, host.match.first, host.match.rv); for (const m of L.movesOf(getAt('rooms/QRST'))) s = E.apply(s, O.moveOf(m.entry)).state; return s; })();
   ok('live: a rejoining phone replays the stored moves to the same match', same(replayed, host.canon));
   // Count once each, with head-to-head.
   use('A');

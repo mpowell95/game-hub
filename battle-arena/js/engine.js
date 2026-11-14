@@ -12,7 +12,7 @@
 // `events` is the ordered story of what happened, for the UI to animate (see the EVENTS list at
 // the bottom of this file). Rules: docs/BATTLE-ARENA-SPEC.md; deviations in battle-arena/CLAUDE.md.
 import {
-  ELEMENTS, BY_ID, specialOf, BERRIES_TO_EVOLVE, TEAM_HP, BOMB_DAMAGE, MAX_BOMBS,
+  ELEMENTS, BY_ID, specialOf, costOf, BERRIES_TO_EVOLVE, TEAM_HP, BOMB_DAMAGE, MAX_BOMBS,
 } from './monsters.js';
 
 export const COLS = 7;
@@ -188,12 +188,13 @@ export function previewSwap(state, a, b) {
 // --- a new match ---------------------------------------------------------------------------------
 /** teams: [[idA, idB], [idC, idD]] (side 0 = the player, side 1 = the computer / opponent).
  *  first: which side moves first. seed: any 32-bit integer. */
-export function newMatch({ seed = 1, teams, first = 0, arena = 'boiler' }) {
+export function newMatch({ seed = 1, teams, first = 0, arena = 'boiler', rv = 1 }) {
   const s = {
     v: 1, arena, rng: (seed >>> 0) || 1, nextId: 1,
     board: [], turn: first === 1 ? 1 : 0, first: first === 1 ? 1 : 0,
     movesLeft: MOVES_PER_TURN, extraUsed: false, turnNo: 1, moveNo: 0,
     pendingEvolve: null, winner: null,   // pendingEvolve: no longer used (kept for old saves)
+    ...(rv > 1 ? { rv } : {}),            // the rules version (monsters.js); absent = 1, as every match before 2026-11-14
     sides: teams.map((ids) => {
       const mons = ids.map((id) => ({ id, evo: false, energy: 0, part: 0 }));
       return { mons, hp: TEAM_HP, maxHp: TEAM_HP, shield: 0, berries: 0, curse: { tick: 0, left: 0 }, frozen: false, turns: 0 };
@@ -255,7 +256,7 @@ function heal(s, ev, target, n, cause = 'special') {
 
 function addEnergy(s, ev, side, mi, n, k) {
   const m = s.sides[side].mons[mi];
-  const cost = BY_ID[m.id].cost;
+  const cost = costOf(m.id, s.rv || 1);
   const before = m.energy;
   m.energy = Math.min(cost, m.energy + n);
   if (n > 0) ev.push({ t: 'energy', side, mon: mi, n, k, energy: m.energy, gained: m.energy - before });
@@ -375,7 +376,7 @@ function scorchRows(s, n) {
 
 function fireSpecial(s, ev, side, mi) {
   const m = s.sides[side].mons[mi];
-  const sp = specialOf(m.id, m.evo);
+  const sp = specialOf(m.id, m.evo, s.rv || 1);
   const foe = 1 - side;
   m.energy = 0;
   ev.push({ t: 'special', side, mon: mi, id: m.id, evo: m.evo });
@@ -468,7 +469,7 @@ function firePending(s, ev, side) {
     let fired = false;
     s.sides[side].mons.forEach((m, mi) => {
       if (s.winner != null) return;
-      if (m.energy >= BY_ID[m.id].cost) {
+      if (m.energy >= costOf(m.id, s.rv || 1)) {
         fireSpecial(s, ev, side, mi);
         fired = true;
         if (s.winner == null) settle(s, ev, side);

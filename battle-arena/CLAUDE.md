@@ -56,7 +56,7 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
 - Both monsters of one element both charge. The computer never drafts the player's monsters.
 - **Team HP is a flat 80 for every team, max 80 (Matt, 2026-10-24: "everyone starts at 80").
   Monsters have NO HP of their own.** Evolve heals 5, capped at 80. Soak: ~7.7 turns per side (8.4 with one extra move a turn, 2026-10-28).
-- **Balance (soak-tuned 2026-10-24, from the spec's first guess)**: Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
+- **RULES VERSION 2 (2026-11-14, the rebalance): see "Rebalance" at the end; the numbers below are version 1's history.** Balance (soak-tuned 2026-10-24, from the spec's first guess): Emberkit cost 7→6; Driplet 5/10→8/14 dmg; Pebbleop shield 5/10→8/12; Thornpaw convert
   4/6→3/5; Frostling 10/15→8/12 dmg; Prismote cost 12→14.
 
 ## The battle screen (rebuilt 2026-10-24 after Matt: "in no way, shape, or form a clone")
@@ -173,7 +173,7 @@ Matt: "do a full exhaustive thorough review of Battle Arena to get it ready to b
 - **A challenge win counts once its last move is on the server** (`owed`); the outbox drain no longer wipes a move queued meanwhile; `mp.js writesAllowed` asks `automationBlocks`.
 - **Mode + detail**: online results carry `first` and `via` (`ch`/`live`, `onlineMode`); index rows carry `tm` (the team) so a launcher count has one; every result has `detail` (`matchDetail`: moves, turns, hp, foeHp, evolved, end).
 - Screens: text floor 15px (`fitText` floor, HUD names grow outward), help lines wrap at 17px (`text-wrap: balance`), the card's X works, end card keeps the profile name's case, Online tab says so when it cannot load.
-- **NOT changed, on purpose**: a rules VERSION. No match stores one, so absent = v1; **any engine.js change after release must stamp `rv: 2` on new matches and keep v1's paths**, or open challenges stop replaying.
+- **Rules versions now exist (2026-11-14, `rv`)**: absent = v1; **any later change to a number or rule must add a version (monsters.js `OLD`, bump `RULES_VERSION`) and keep every older one**, or open challenges stop replaying.
 - Left as is: the 25 s live clock runs under the hub's covers (no `onCovered`: the other phone is waiting); `battlearena` rules let an existing log entry be rewritten (same as every challenge game).
 
 **Release checklist (only on Matt's "release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; (`CARRY_TEST.battlearena` is ALREADY set, below); `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.
@@ -253,3 +253,23 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
 - **Admin phones keep old Battle Arena code until the page reloads** (the open page holds the imported modules; held-back files
   give no update). Matt saw the grey Pebbleop 13 minutes after it shipped. A CACHE bump (v1559) reloads admin devices; players get
   a near-empty update.
+- **HP never moves** (Matt: "once I recover both my monster guys and didn't need any more berries, my health moved up"): HP and
+  berries share one line, HP nearest the avatar, so a hidden berries count moves nothing (measured: same x/y before and after).
+
+## Rebalance: rules version 2, weakest first (2026-11-14, Matt: "Yes rebalance them. At least reorder them weakest in the first batch, then better ones get unlocked")
+
+- **A match carries `rv`** (`engine.newMatch({ rv })`; absent = 1). `monsters.js`: `MONSTERS` = the current numbers,
+  `V1` = 2026-11-13's numbers, FROZEN; `costOf(id, rv)` / `specialOf(id, evo, rv)`; the engine and the computer pass the
+  match's `rv`. New vs-computer matches, challenges (`doc.rv`, kept by `validateGame`) and live rooms (`round.deck.rv`,
+  `matchOf`) are stamped `RULES_VERSION` (2); saves, open challenges and rooms from before replay on v1, unchanged
+  (`tools/test-battlearena-mp.mjs` "rules:", `battle-arena/js/test.js` "rules v2"). Screens outside a match show v2; a
+  match's own card and energy bars show its version.
+- **Win rates, every 2-monster team vs every other team** (`/tmp` tuner, same AI both sides): v1 27-68%; v2 45-55% on
+  medium (8,910 matches) and hard (5,940). v2 numbers: Thornpaw cost 5, convert 4 heal 7 (evo 5/10); Sproutle dmg 9 heal 6
+  (14/10); Driplet dmg 12 (18); Cinderwing dmg 11 (16); Frostling dmg 7 (11); Stormhorn dmg 12 (17); Emberkit cost 7 dmg 11
+  (17); Pebbleop cost 7 dmg 12 shield 9 (17/13); Hexowl dmg 8 (13); Gloomite dmg 12 (17); Zapup dmg 4 (8); Prismote cost
+  16 dmg 18 (27). Thornpaw's convert is touchy: convert 5 at cost 5-6 won 61-77% on hard.
+- **Unlock order = weakest first**: starters Thornpaw, Sproutle, Driplet, Cinderwing, Frostling, Stormhorn; then Emberkit 3
+  wins, Pebbleop 6, Hexowl 10, Gloomite 15, Zapup 20, Prismote 30 (`MONSTERS` order = the Monsters screen's order).
+  Unlocks stay DERIVED from wins (nothing stored, nothing lost); testers who had Emberkit, Zapup, Gloomite or Pebbleop as
+  starters now unlock them by wins. A saved team or Play again with a now-locked monster goes to the team pick.

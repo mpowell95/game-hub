@@ -17,7 +17,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { STRINGS } from './strings.js';
 import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
-import { MONSTERS, BY_ID, unlockedIds, specialOf, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
+import { MONSTERS, BY_ID, unlockedIds, specialOf, costOf, RULES_VERSION, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
 import { mirror, mirrorEvents, entryOf, moveOf, teamMode, matchDetail } from './online.js';
 /** A match vs the computer: the player's drafted team (side 0) and who opened. */
@@ -728,7 +728,7 @@ class BattleArena {
   /** A monster's card: the big art, element + charge, its special, and both forms side by side (tap
    *  one to see it). In the draft it carries Pick / Remove. A LOCKED monster (draft, Monsters) is
    *  only its silhouette and the wins still to go. */
-  showCard(id, { draft = false, evolved = false, locked = false } = {}) {
+  showCard(id, { draft = false, evolved = false, locked = false, rv = RULES_VERSION } = {}) {
     const m = BY_ID[id];
     if (!m) return;
     if (draft) locked = !this.unlocked.includes(id);
@@ -736,14 +736,14 @@ class BattleArena {
     el.className = 'gh-overlay ba-overlay';
     let evo = !!evolved;
     const body = () => {
-      const sp = specialOf(id, evo);
+      const sp = specialOf(id, evo, rv);
       const fx = effectLines(sp);
       if (m.el === 'all') fx.push(t('fx_half'));
       return `
         <div class="ba-card-art${evo ? ' is-evo' : ''}">${monsterSVG(id, evo)}</div>
         <h2 class="ba-card-name">${escapeHTML(monName(id, evo))}</h2>
         <div class="ba-card-stats">
-          <span class="ba-card-stat" aria-label="${t('el_' + m.el)} ${m.cost}">${elementBadge(m.el)}<b>${m.cost}</b></span>
+          <span class="ba-card-stat" aria-label="${t('el_' + m.el)} ${costOf(id, rv)}">${elementBadge(m.el)}<b>${costOf(id, rv)}</b></span>
         </div>
         <div class="ba-card-sp">
           <b class="ba-card-spname">${t('sp_' + id + (evo ? '_evo' : ''))}</b>
@@ -797,7 +797,7 @@ class BattleArena {
     const foe = chooseTeam(this.settings.diff, unlocked, team);
     let seed = 1;
     try { seed = (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch { seed = Math.floor(Math.random() * 4294967296) >>> 0; }
-    const state = E.newMatch({ seed, teams: [team, foe], first: this.settings.nextFirst });
+    const state = E.newMatch({ seed, teams: [team, foe], first: this.settings.nextFirst, rv: RULES_VERSION });
     this.diff = this.settings.diff;
     this.link = null;
     this.state = this.canon = state;
@@ -1308,7 +1308,7 @@ class BattleArena {
       return;
     }
     if (this.busy) return;
-    this.showCard(m.id, { evolved: m.evo });
+    this.showCard(m.id, { evolved: m.evo, rv: s.rv || 1 });   // a match shows ITS numbers (rules version)
   }
 
   hideEvolve() { for (const p of this.root.querySelectorAll('.ba-evo-pill')) p.hidden = true; for (const m of this.root.querySelectorAll('.ba-mon')) m.classList.remove('is-evo-pick'); }
@@ -1430,7 +1430,7 @@ class BattleArena {
     if (!el || !m) return;
     const bob = el.querySelector('.ba-mon-bob');
     if (bob.dataset.evo !== (m.evo ? '1' : '0')) { bob.innerHTML = monsterSVG(m.id, m.evo); bob.dataset.evo = m.evo ? '1' : '0'; }
-    const cost = BY_ID[m.id].cost;
+    const cost = costOf(m.id, this.state.rv || 1);
     const e = energyOverride != null ? energyOverride : m.energy;
     el.querySelector('.ba-bar-fill').style.transform = `scaleX(${Math.min(1, e / cost)})`;
     el.querySelector('.ba-bar-txt').textContent = `${e}/${cost}`;
@@ -2103,7 +2103,12 @@ class BattleArena {
     }
     const team = s.sides[ME].mons.map((m) => m.id);
     this.on(el.querySelector('[data-role="close"]'), 'click', () => el.remove());
-    this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.startMatch(team); });
+    // A team with a monster that is no longer unlocked (the 2026-11-14 reorder) goes to the team pick instead.
+    this.on(el.querySelector('[data-role="again"]'), 'click', () => {
+      el.remove();
+      const open = unlockedIds(totalWins());
+      if (team.every((id) => open.includes(id))) this.startMatch(team); else this.renderDraft();
+    });
     this.on(el.querySelector('[data-role="done"]'), 'click', () => { el.remove(); if (this.link) this.link.done(); });
     this.on(el.querySelector('[data-role="team"]'), 'click', () => { el.remove(); this.renderDraft(); });
     // Back to the setup screen (difficulty + Play), Matt 2026-11-14: "Play again" started a match at once and the
