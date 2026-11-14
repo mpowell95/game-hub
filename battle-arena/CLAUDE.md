@@ -285,3 +285,7 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   trio dipped and Prismote rose): Thornpaw heal 8 (evo 11), Cinderwing dmg 12 (17), Emberkit dmg 12 (18), Pebbleop dmg 13 (18),
   Prismote cost 17 dmg 17 (26). Every monster 47-54% (medium 5,940 + hard 2,970 matches). `V2` frozen beside `V1`. Unlock order
   kept: under v3 the six starters and the rest are within a point or two, so reshuffling testers' unlocks would be noise.
+- **A team never has two monsters of one element** (Matt, same day: "You shouldn't be able to choose 2 of the same"): the draft dims
+  a picked monster's element-mates (`.is-taken`) and picking one SWAPS it in; Random, a saved team (`oneOfEach`) and the computer
+  (`chooseTeam`) obey it. Not enforced on stored matches (`cleanTeam`), so no old match or challenge breaks. The v3 sharing rule
+  stays for old matches. Balance without same-element teams: every monster 46-53% (medium 4,752 + hard 2,376), no retune.

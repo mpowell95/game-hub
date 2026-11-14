@@ -29,7 +29,9 @@ const CSS_MARK = 'data-battlearena-css';
 const SETTINGS_KEY = 'gamehub.battlearena.v1';
 const SAVE_KEY = 'gamehub.battlearena.save.v1';
 const DIFFS = ['easy', 'medium', 'hard'];
-const ME = 0, CPU = 1;            // SCREEN sides: this phone's player right, the other team left
+const ME = 0, CPU = 1;
+/** A team never has two monsters of one element (2026-11-14): the first of each element, in order. */
+const oneOfEach = (ids) => ids.filter((id, i) => BY_ID[id] && !ids.slice(0, i).some((x) => BY_ID[x] && BY_ID[x].el === BY_ID[id].el));            // SCREEN sides: this phone's player right, the other team left
 
 
 // Timings, from the reference recordings (slower and weightier than a puzzle game).
@@ -607,7 +609,7 @@ class BattleArena {
     const unlocked = unlockedIds(wins);
     this.unlocked = unlocked;
     this.wins = wins;
-    this.picks = this.settings.team.filter((id) => unlocked.includes(id));
+    this.picks = oneOfEach(this.settings.team.filter((id) => unlocked.includes(id)));
     // The same tiles as Monsters: name and power on each (Matt, 2026-11-14: "Why does this screen suck? We just redid the other one").
     const cells = MONSTERS.map((m) => this.tileHTML(m, true)).join('');
     this.root.innerHTML = `
@@ -644,7 +646,10 @@ class BattleArena {
     this.on(this.root.querySelector('[data-role="random"]'), 'click', () => {
       const pool = this.unlocked.slice();
       this.picks = [];
-      while (this.picks.length < 2 && pool.length) this.picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      while (this.picks.length < 2 && pool.length) {
+        const id = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+        if (!this.picks.some((x) => BY_ID[x].el === BY_ID[id].el)) this.picks.push(id);   // never two of one element
+      }
       this.paintDraft();
     });
     this.on(this.root.querySelector('[data-role="fight"]'), 'click', (e) => {
@@ -667,7 +672,12 @@ class BattleArena {
       el.innerHTML = id ? `<div class="ba-slot-art">${monsterSVG(id)}</div><span class="ba-slot-gem">${elementBadge(BY_ID[id].el)}</span>` : '';
       el.setAttribute('aria-label', id ? BY_ID[id].name : String(i + 1));
     });
-    for (const c of this.root.querySelectorAll('.ba-pick')) c.classList.toggle('is-on', this.picks.includes(c.dataset.id));
+    for (const c of this.root.querySelectorAll('.ba-pick')) {
+      const id = c.dataset.id;
+      c.classList.toggle('is-on', this.picks.includes(id));
+      // Dimmed: the element of a picked monster is taken (a tap swaps it in instead).
+      c.classList.toggle('is-taken', !this.picks.includes(id) && this.picks.some((x) => BY_ID[x] && BY_ID[id] && BY_ID[x].el === BY_ID[id].el));
+    }
     const fight = this.root.querySelector('[data-role="fight"]');
     if (fight) fight.disabled = this.picks.length !== 2;
   }
@@ -771,7 +781,11 @@ class BattleArena {
     });
     const pick = el.querySelector('[data-role="pick"]');
     this.on(pick, 'click', () => {
+      // Never two of one element (Matt, 2026-11-14: "You shouldn't be able to choose 2 of the same"): picking a monster of a
+      // picked one's element SWAPS them.
+      const same = this.picks.find((x) => x !== id && BY_ID[x].el === BY_ID[id].el);
       if (this.picks.includes(id)) this.picks = this.picks.filter((x) => x !== id);
+      else if (same) this.picks = this.picks.map((x) => (x === same ? id : x));
       else if (this.picks.length < 2) this.picks.push(id);
       else this.picks = [this.picks[1], id];
       this.paintDraft();
