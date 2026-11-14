@@ -235,3 +235,9 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   a started match is a loss.
 - **Every monster is its element's colour** (Matt: "make the colors of the monsters match the thing they eat"). Only Pebbleop was off
   (grey stone, a FIRE monster): now a red-hot rock with yellow cracks, both forms (`art.js`). Art only; the engine is untouched.
+- **Element gems bigger** (Matt: "Make the things they eat bigger"): 28px on every tile (was 20), 32px on Monsters.
+- **Monsters shows each base monster's power** (Matt: "on this screen you should show the powers of the base monster") as
+  icons + numbers under the name (`powerChips`, one per line, room for two on every tile so names line up): burst = damage,
+  green heart + = heal, shield, bolt −n = drain, bolt +n = to partner, snowflake = freeze, hex = curse n×k, a 3x3 grid with the
+  row / column / 2x2 lit = the board clear, leaf gem n = convert. Words did not fit a quarter-width tile at 15px; the card
+  (tap) says it in words, and the chips' `aria-label` does too.
