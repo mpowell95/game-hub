@@ -241,3 +241,15 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   green heart + = heal, shield, bolt −n = drain, bolt +n = to partner, snowflake = freeze, hex = curse n×k, a 3x3 grid with the
   row / column / 2x2 lit = the board clear, leaf gem n = convert. Words did not fit a quarter-width tile at 15px; the card
   (tap) says it in words, and the chips' `aria-label` does too.
+- **Battle top bar in two rows** (Matt circled the old one: numbers against the Hub and menu buttons, his side's numbers missing
+  once both monsters evolved, TEST on top of MOVES). Row 1 (`.ba-hubrow`, level with the hub's button): hub space, chat (online),
+  TEST, the stage button (now the bomb icon, no word), menu. Row 2 (`.ba-teamrow`): each team = avatar OUTSIDE, name over
+  "HP ♥ berries 🍒" (HP nearest the avatar, so a hidden berries count leaves no gap); the move hexes between them, no "MOVES"
+  word; a live room's clock = clock icon + seconds under the hexes. Narrow phones (≤380px) a little smaller.
+- **End card**: the overlay is near-opaque (the HUD and board no longer show through), the losers' panel solid, the X sits exactly
+  on the menu button's spot, and a lone Done (online) spans the full width.
+- **Stage card**: two picture rows like How to play (`stageBomb`, `stageZero`); it had borrowed How to play's "Match next to it:
+  boom." where "it" meant nothing.
+- **Admin phones keep old Battle Arena code until the page reloads** (the open page holds the imported modules; held-back files
+  give no update). Matt saw the grey Pebbleop 13 minutes after it shipped. A CACHE bump (v1559) reloads admin devices; players get
+  a near-empty update.

@@ -208,6 +208,10 @@ const HELP_PICS = {
     ${helpBurst(110, 32, 30)}${helpGem('bomb', 92, 14, 36, 5)}`,
 };
 
+/** The stage card's second picture: a bomb at 0 hits the mover for 10 (2026-11-14). */
+const STAGE_ZERO = () => `${helpGem('bomb', 6, 12, 40, 0)}${helpArrow(56, 32)}${helpBurst(112, 32, 28)}
+  <text x="112" y="38" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="17" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">\u221210</text>`;
+
 /** Shrink a single-line label until it fits its box, never under 15px (the text floor, root CLAUDE.md;
  *  2026-11-13: it went down to 11px). A label still too long is cut by its own CSS. */
 function fitText(el, max = 15) {
@@ -889,15 +893,15 @@ class BattleArena {
     // the name under it; the other team LEFT, the player RIGHT; MOVES in the middle under the clock.
     const team = (sd) => `
       <div class="ba-team" data-side="${sd}">
-        <div class="ba-counts">
-          <span class="ba-stat ba-stat-berry"><b class="ba-berry-n"></b>${ICONS.berry}</span>
-          <span class="ba-stat ba-stat-hp"><b class="ba-hp-n"></b>${ICONS.heart}</span>
-          <span class="ba-badges"></span>
-        </div>
-        <div class="ba-who">
-          <div class="ba-avatar"><span>${escapeHTML(this.avatars[sd])}</span></div>
+        <div class="ba-avatar"><span>${escapeHTML(this.avatars[sd])}</span></div>
+        <div class="ba-info">
           <span class="ba-name">${escapeHTML(this.names[sd])}</span>
           ${sd === ME ? `<span class="ba-yourturn" hidden>${escapeHTML(t('yourTurn'))}</span>` : ''}
+          <div class="ba-counts">
+            <span class="ba-stat ba-stat-hp"><b class="ba-hp-n"></b>${ICONS.heart}</span>
+            <span class="ba-stat ba-stat-berry"><b class="ba-berry-n"></b>${ICONS.berry}</span>
+            <span class="ba-badges"></span>
+          </div>
         </div>
       </div>`;
     const mon = (sd, mi) => `
@@ -912,19 +916,24 @@ class BattleArena {
         <div class="ba-arena-bg" aria-hidden="true">${arenaSVG()}</div>
         <div class="ba-floor" aria-hidden="true"></div>
         <div class="ba-scene">
+          <!-- Two rows (2026-11-14, Matt circled the old one-row bar: the numbers sat against the Hub and menu buttons).
+               Row 1: the hub's button, chat (online), TEST, stage, menu. Row 2: the two teams, MOVES between them. -->
           <div class="ba-hubrow">
             <span class="ba-hubspace"></span>
-            ${team(CPU)}
-            <div class="ba-center">
-              <div class="ba-clock" hidden><small>${escapeHTML(t('timer'))}</small><b class="ba-clock-n"></b></div>
-            </div>
-            ${team(ME)}
+            <span class="ba-chatslot"><span class="ba-presence" hidden></span></span>
+            <span class="ba-rowgap"></span>
+            <button type="button" class="ba-iconbtn ba-stagebtn" aria-label="${escapeHTML(t('stage'))}">${gemSVG('bomb', 5)}</button>
             <button type="button" class="ba-iconbtn ba-menu" aria-label="${t('menu')}">${ICONS.menu}</button>
           </div>
-          <div class="ba-subrow">
-            <span class="ba-chatslot"><span class="ba-presence" hidden></span></span>
-            <div class="ba-movesbox"><div class="ba-moves" aria-live="polite"></div><span class="ba-moves-label">${escapeHTML(t('moves'))}</span></div>
-            <button type="button" class="ba-stagebtn">${escapeHTML(t('stage'))}</button>
+          <div class="ba-teamrow">
+            ${team(CPU)}
+            <div class="ba-center">
+              <!-- The hexes ARE the moves left (aria-label says so): no "MOVES" word, and the live clock is an icon + seconds
+                   (2026-11-14; "MOVIMIENTOS" alone was wider than a phone could give the middle). -->
+              <div class="ba-movesbox"><div class="ba-moves" aria-live="polite"></div>
+                <div class="ba-clock" hidden aria-label="${escapeHTML(t('timer'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 13V8.5M9.5 2.5h5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><b class="ba-clock-n"></b></div></div>
+            </div>
+            ${team(ME)}
           </div>
           <div class="ba-field">${mon(CPU, 0)}${mon(CPU, 1)}${mon(ME, 0)}${mon(ME, 1)}</div>
         </div>
@@ -1461,8 +1470,8 @@ class BattleArena {
         <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
         <div class="ba-stage-hex">${gemSVG('bomb', 5)}</div>
         <b class="ba-stage-name">${escapeHTML(t('stage_boiler'))}</b>
-        <p class="ba-help-line">${gemSVG('bomb', 5)}<span>${escapeHTML(t('helpBomb'))}</span></p>
-        <p class="ba-help-line">${gemSVG('bomb', 0)}<span>${escapeHTML(t('helpBoom'))}</span></p>
+        <div class="ba-help-row"><svg viewBox="0 0 160 64" class="ba-help-pic" aria-hidden="true">${HELP_PICS.helpBomb()}</svg><span>${escapeHTML(t('stageBomb'))}</span></div>
+        <div class="ba-help-row"><svg viewBox="0 0 160 64" class="ba-help-pic" aria-hidden="true">${STAGE_ZERO()}</svg><span>${escapeHTML(t('stageZero'))}</span></div>
       </div>`;
     this.root.appendChild(el);
     const close = () => el.remove();
