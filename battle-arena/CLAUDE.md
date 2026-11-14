@@ -274,3 +274,7 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   wins, Pebbleop 6, Hexowl 10, Gloomite 15, Zapup 20, Prismote 30 (`MONSTERS` order = the Monsters screen's order).
   Unlocks stay DERIVED from wins (nothing stored, nothing lost); testers who had Emberkit, Zapup, Gloomite or Pebbleop as
   starters now unlock them by wins. A saved team or Play again with a now-locked monster goes to the team pick.
+- **The team pick (draft) = the Monsters screen's tiles** (Matt: "Why does this screen suck? We just redid the other one so it
+  made sense. Fix this one."): 3 x 4, name + power words on each (`tileHTML(m, true)`, `.ba-draft` rules shared by both screens);
+  the picked tile's teal hexagon stays inside the art box (it covered the name). Short phones (height <= 740px) drop the two big
+  pick hexes (a picked tile keeps its ring and tick) so the pictures keep ~33px; Matt's 402x874 keeps both (art 64-68px).
