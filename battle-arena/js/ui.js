@@ -2050,7 +2050,8 @@ class BattleArena {
           <div class="ba-result-actions">
             ${this.link ? `<button type="button" class="gh-btn gh-btn--primary" data-role="done">${t('done')}</button>` : `
             <button type="button" class="gh-btn gh-btn--primary" data-role="again">${t('playAgain')}</button>
-            <button type="button" class="gh-btn gh-btn--ghost" data-role="team">${t('newTeam')}</button>`}
+            <button type="button" class="gh-btn gh-btn--ghost" data-role="team">${t('newTeam')}</button>
+            <button type="button" class="gh-btn gh-btn--ghost ba-result-home" data-role="home">${t('home')}</button>`}
           </div>
         </div>
       </div>`;
@@ -2066,6 +2067,9 @@ class BattleArena {
     this.on(el.querySelector('[data-role="again"]'), 'click', () => { el.remove(); this.startMatch(team); });
     this.on(el.querySelector('[data-role="done"]'), 'click', () => { el.remove(); if (this.link) this.link.done(); });
     this.on(el.querySelector('[data-role="team"]'), 'click', () => { el.remove(); this.renderDraft(); });
+    // Back to the setup screen (difficulty + Play), Matt 2026-11-14: "Play again" started a match at once and the
+    // only way out was the hub. The match is over and recorded, so this costs nothing.
+    this.on(el.querySelector('[data-role="home"]'), 'click', () => { el.remove(); this.recordOutcome(); this.clearSave(); this.state = null; this.renderHome('cpu'); });
     if (w === ME && this.unlockedBefore) {
       const fresh = unlockedIds(totalWins()).filter((id) => !this.unlockedBefore.includes(id));
       this.unlockedBefore = null;

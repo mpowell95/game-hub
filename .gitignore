@@ -30,3 +30,6 @@ backups/*.json
 functions/shared/
 .boards10-parts/
 .boards11-parts/
+
+# tools/lb2-shots.cjs output: real player names, never committed
+review-shots/

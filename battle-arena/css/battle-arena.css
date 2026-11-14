@@ -707,6 +707,7 @@
 .ba-root .ba-result-hex .ba-result-emo { top: 2px; left: auto; right: 0; transform: none; font-size: 16px; padding: 0; background: none; box-shadow: none; }
 .ba-root .ba-result-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
 .ba-root .ba-result-actions .gh-btn { min-height: 50px; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+.ba-root .ba-result-actions .ba-result-home { grid-column: 1 / -1; }
 .ba-root .ba-result .gh-btn--ghost { color: #fff; border-color: rgba(255, 255, 255, .35); background: transparent; }
 .ba-root .ba-pause { width: min(340px, 100%); padding-top: 48px; }
 /* The menu's other actions are outlined buttons, as on the end card (2026-11-13 review). */

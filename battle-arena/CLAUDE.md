@@ -227,3 +227,11 @@ The goal line, then 4 rows, each a small scene drawn from the game's own gems an
 (`HELP_PICS` in `ui.js`): swap to match 3 → monster charges; full bar → special; 4 berries → evolved; 3 gems by a bomb →
 boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): match 4/5, the 40 HP opening floor, a bomb at 0
 (on the stage card), turn 20. **Bombs are still in the game** (`BOMB_RATE` 2.5%, `MAX_BOMBS` 2); none was ever removed.
+
+## Matt's notes, 2026-11-14
+
+- **End card: Play again / New team / Home** (full width under the two). Home = the setup screen (Computer tab); the match is
+  already recorded, so it costs nothing. Matt: Play again "started a new game immediately... It was only back to hub", and leaving
+  a started match is a loss.
+- **Every monster is its element's colour** (Matt: "make the colors of the monsters match the thing they eat"). Only Pebbleop was off
+  (grey stone, a FIRE monster): now a red-hot rock with yellow cracks, both forms (`art.js`). Art only; the engine is untouched.
