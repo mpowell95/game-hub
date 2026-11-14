@@ -390,6 +390,16 @@ ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(
   for (let i = 0; i < 500; i++) for (const lv of ['easy', 'medium', 'hard']) { const t = chooseTeam(lv, all, [], r); if (t.length !== 2 || BY_ID[t[0]].el === BY_ID[t[1]].el) bad++; }
   ok('the computer never picks two of one element (1,500 teams)', bad === 0, String(bad));
 }
+{
+  // NO PEEKING (2026-11-14): Hard's choice never depends on the match's own random seed (which decides what falls in).
+  let same = 0;
+  for (let g = 0; g < 40; g++) {
+    const st = newMatch({ seed: 300 + g, teams: [['emberkit', 'driplet'], ['zapup', 'sproutle']], first: 1, rv: RULES_VERSION });
+    const a = chooseMove(st, 'hard', seeded(g)), b = chooseMove({ ...st, rng: (st.rng ^ 0x5bd1e995) >>> 0 || 7 }, 'hard', seeded(g));
+    if (JSON.stringify(a) === JSON.stringify(b)) same++;
+  }
+  ok('Hard picks the same move whatever tiles are about to fall (no peeking, 40 boards)', same === 40, String(same));
+}
 ok('the six starters are the weakest six', ['thornpaw', 'sproutle', 'driplet', 'cinderwing', 'frostling', 'stormhorn'].every((id) => STARTERS.includes(id)));
 {
   // Rules version 2: a new match carries rv 2 and plays the new numbers; a match with no rv keeps version 1's.
