@@ -9,6 +9,14 @@ export const BANDS = [
   // [tier, first level]; a level's band = the last whose first level is <= it (stats byDiff bucket).
   ['easy', 1], ['medium', 101], ['hard', 251], ['expert', 401],
 ];
+export const LAST_LEVEL = 500;
+/** [first, last] level of a band (each difficulty is its own run of levels, played in order). */
+export function bandRange(band) {
+  const i = BANDS.findIndex(([t]) => t === band);
+  if (i < 0) return [1, LAST_LEVEL];
+  return [BANDS[i][1], i + 1 < BANDS.length ? BANDS[i + 1][1] - 1 : LAST_LEVEL];
+}
+export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 export function bandOf(n) {
   let b = 'easy';
   for (const [tier, first] of BANDS) if (n >= first) b = tier;

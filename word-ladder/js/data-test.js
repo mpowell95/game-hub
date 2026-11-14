@@ -37,7 +37,7 @@ for (const lang of ['en', 'es']) {
     pairs.add(key);
     if (n) {
       const band = E.bandOf(n);
-      const [lo, hi] = { easy: [3, 4], medium: [4, 5], hard: [4, 7], expert: [5, 9] }[band];
+      const [lo, hi] = { easy: [3, 4], medium: [4, 5], hard: [4, 8], expert: [3, 8] }[band];
       ok(l.p >= lo && l.p <= hi, `${where}: par ${l.p} outside ${band} ${lo}-${hi}`);
     }
   };
@@ -48,7 +48,7 @@ for (const lang of ['en', 'es']) {
 // The engine's rules.
 ok(E.starsFor(4, 4, 0) === 3 && E.starsFor(6, 4, 0) === 2 && E.starsFor(7, 4, 0) === 1, 'stars by moves');
 ok(E.starsFor(4, 4, 1) === 2 && E.starsFor(4, 4, 2) === 1, 'stars capped by hints');
-ok(E.bandOf(1) === 'easy' && E.bandOf(101) === 'medium' && E.bandOf(251) === 'hard' && E.bandOf(401) === 'expert', 'bands');
+ok(E.bandRange('easy').join() === '1,100' && E.bandRange('expert').join() === '401,500' && E.bandOf(1) === 'easy' && E.bandOf(101) === 'medium' && E.bandOf(251) === 'hard' && E.bandOf(401) === 'expert', 'bands');
 const dict = E.makeDict({ w: { 4: 'COLD CORD WORD WARD WARM CARD' } });
 ok(E.checkMove(dict, 'COLD', 'CORD') === 'ok' && E.checkMove(dict, 'COLD', 'WORD') === 'two' && E.checkMove(dict, 'COLD', 'COLX') === 'word', 'checkMove');
 ok(E.hintFrom(dict, 'COLD', 'WARM', E.ALPHABET.en) === 'CORD', 'hint is the next word on a shortest path');

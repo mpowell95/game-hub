@@ -29,6 +29,14 @@
 .wl-root .wl-total svg { width: 30px; height: 30px; }
 .wl-root .wl-lang { min-width: 56px; height: 44px; border-radius: 12px; border: 2px solid rgba(255,255,255,.7);
   background: rgba(255,255,255,.08); font-size: 18px; font-weight: 800; letter-spacing: .04em; }
+.wl-root .wl-segs { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wl-root .wl-seg { min-height: 52px; padding: 0 10px; border-radius: 14px; border: 2px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08);
+  display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+.wl-root .wl-seg svg { width: 18px; height: 18px; flex: none; }
+.wl-root .wl-seg svg.lb-dshape-x2 { width: 30px; }
+.wl-root .wl-seg svg.lb-dshape-t3, .wl-root .wl-seg svg.lb-dshape-t4 { fill: var(--wl-on); }   /* black diamonds on night blue */
+.wl-root .wl-seg.is-selected { border-color: #ffce3a; outline: 3px solid #ffce3a; outline-offset: 1px; }
+.wl-root .wl-btn[disabled] { opacity: .6; }
 .wl-root .wl-btn { width: 100%; min-height: 56px; border-radius: 16px; border: 2px solid rgba(255,255,255,.7);
   background: rgba(255,255,255,.08); font-size: 20px; font-weight: 800;
   display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -131,4 +139,10 @@
 @media (prefers-reduced-motion: reduce) {
   .wl-root .wl-now.is-shake { animation: none; }
   .wl-root .wl-wait { animation: none; }
+}
+/* Short phones (360x640): the picture shrinks so the four difficulties, Play, Daily and ? fit without scrolling. */
+@media (max-height: 720px) {
+  .wl-root .wl-hero { width: 140px; }
+  .wl-root .wl-home { gap: 12px; }
+  .wl-root .wl-title { font-size: clamp(24px, 7vw, 28px); }
 }

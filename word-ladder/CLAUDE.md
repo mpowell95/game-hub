@@ -14,8 +14,8 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 | Folder / hub id / stats id | `word-ladder/` / `word-ladder` / `wordladder` |
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
 | Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
-| Settings | `gamehub.wordladder.v1` `{ lang }` (puzzle language; nothing saved = the hub's language) |
-| Saves | `gamehub.wordladder.save.v1` `{ en, es: attempt }`; `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, s, p, chain, moves, hints, done, recorded }` (older saves also carry an unread `sel`) |
+| Settings | `gamehub.wordladder.v1` `{ lang, seen, band }` (puzzle language; nothing saved = the hub's language) |
+| Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, s, p, chain, moves, hints, done, recorded }` (older saves also carry an unread `sel`) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
 
 ## Rules (`js/engine.js`, pure)
@@ -30,9 +30,12 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 - **Stars**: moves at par 3, par +1 or +2 = 2, more = 1; 1 hint caps at 2, 2+ hints at 1 (`starsFor`, = `wlStars` in
   `js/game-stats.js`). **Hint** = plays the next word on a shortest path from where you are (the commonest one) and
   counts as a move.
-- **One ladder per language, played in order** (no replays, no level picker): bands by level number (`BANDS`):
-  1-100 Easy, 101-250 Medium, 251-400 Hard, 401-500 Expert (the stats `byDiff` bucket). Next level = the attempt in
-  progress, else one past the highest completed in the stats map. Past 500: "More levels soon".
+- **Four difficulties, each its own run of levels played in order (2026-11-14, Matt: "How do I get longer words? It should be
+  like Arrows or word weaver where there's difficulty levels")**: the start screen's Easy / Medium / Hard / Expert (shape + name,
+  `gamehub.wordladder.v1` `band`) = bands of one numbered ladder (`BANDS`, `bandRange`): 1-100 Easy (3-letter words), 101-250
+  Medium (4), 251-400 Hard (5), 401-500 Expert (6). Play <n> = that band's attempt in progress, else its lowest level not
+  completed; all done = "<Band> done". One attempt per band in the save (`<lang>:<band>`); the old one-per-language attempt
+  (`<lang>`) is kept as stored and still read for its own band (rule 5). No replays.
 - **Daily**: one ladder a day per language, the same for everyone: the phone's LOCAL date of `bestNow()`
   (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
   list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
@@ -48,13 +51,15 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 
 ## Data (GENERATED: `node tools/build-word-ladder-data.mjs`, never hand-edited)
 
-`data/<en|es>/words.json` (accepted words, 3-5 letters: Word Weaver's grid + extra words PLUS the whole Boggle
+`data/<en|es>/words.json` (accepted words, 3-6 letters: Word Weaver's grid + extra words PLUS the whole Boggle
 dictionary, ENABLE / `boggle/data/words-es.txt`, so every real word is a legal step, rude ones included (2026-11-13,
 Matt: ASS was refused, "Yes it is" a word); grid words first, most common first), `levels.json` (500), `daily.json` (730). A level = `{ s, t, p, h }`.
 **Par is the true minimum over EVERY accepted word** (so nobody beats it) and a path of that length exists through
 Word Weaver's GRID words alone (common, hand-checked); start, target and the hint path are grid words.
 `node word-ladder/js/data-test.js` (~1 min) checks every level and day of both languages by breadth-first search.
-**APPEND-ONLY once released**: progress is by level number.
+**APPEND-ONLY once released**: progress is by level number. Levels 251-500 were remade ONCE, 2026-11-14 (`--keep-through 250`:
+1-250 and every daily untouched), for the 5- and 6-letter difficulties; Expert's middle steps may be any accepted word (`anyPath`;
+6-letter grid words rarely chain), its start and target stay common.
 
 ## Stats (`wl` sub-counter)
 

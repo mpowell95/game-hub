@@ -17,6 +17,7 @@ import { recordWordLadder, recordWordLadderDaily, withMode, loadStats } from '..
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
+import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 
 const t = makeT(STRINGS);
 const KEY = 'gamehub.wordladder.v1';            // settings: { lang }
@@ -53,6 +54,8 @@ function writeJSON(key, val) {
 function loadSettings() { return readJSON(KEY, {}); }
 /** Settings are { lang, seen } (seen = How to play shown once on this device, a preference). */
 function saveSettings(patch) { return writeJSON(KEY, { ...loadSettings(), ...patch }); }
+/** The difficulty picked on the start screen (a preference), Easy when none. */
+function loadBand() { const b = loadSettings().band; return E.TIERS.includes(b) ? b : 'easy'; }
 function loadLang() {
   const s = readJSON(KEY, {});
   return s.lang === 'es' || s.lang === 'en' ? s.lang : (getLang() === 'es' ? 'es' : 'en');
@@ -86,6 +89,7 @@ class WordLadder {
   constructor(host) {
     this.host = host;
     this.lang = loadLang();
+    this.band = loadBand();
     this.cur = null;     // { kind: 'ladder'|'daily', n, key, level, chain, moves, hints, sel, recorded }
     this.dist = null;
     this._ensureCss();
@@ -160,17 +164,24 @@ class WordLadder {
   // --- progress ---------------------------------------------------------------------------------------------
   _saves() { return readJSON(SAVE_KEY, {}); }
   _map(lang) { const wl = wlRec(); return (lang === 'es' ? wl.es : wl.lv) || {}; }
-  /** The level to play: the attempt in progress, else one past the highest completed. */
-  _nextN(lang) {
-    const a = this._saves()[lang];
+  /** A band's attempt in the save: `<lang>:<band>` (2026-11-14, one per difficulty); before that ONE attempt per language
+   *  under `<lang>`, still read (never deleted, rule 5) when its level falls in this band and the band has none of its own. */
+  _bandAttempt(lang, band) {
+    const s = this._saves();
+    const own = s[`${lang}:${band}`];
+    if (own && typeof own === 'object') return own;
+    const old = s[lang];
+    const [lo, hi] = E.bandRange(band);
+    return old && typeof old === 'object' && Number.isInteger(old.n) && old.n >= lo && old.n <= hi ? old : null;
+  }
+  /** The level to play in a band: its attempt in progress, else its lowest level not completed; null = band done. */
+  _nextN(lang, band = this.band) {
     const map = this._map(lang);
-    let top = 0;
-    for (const k of Object.keys(map)) { const n = Number(k.slice(1)); if (Number.isInteger(n) && n > top) top = n; }
-    if (a && Number.isInteger(a.n) && a.n >= 1) {
-      if (!(a.done && a.recorded) && !map['L' + a.n]) return Math.max(a.n, 1);
-      top = Math.max(top, a.n);
-    }
-    return top + 1;
+    const a = this._bandAttempt(lang, band);
+    if (a && Number.isInteger(a.n) && a.n >= 1 && !(a.done && a.recorded) && !map['L' + a.n]) return a.n;
+    const [lo, hi] = E.bandRange(band);
+    for (let n = lo; n <= hi; n++) if (!map['L' + n] && !(a && a.n === n && a.done && a.recorded)) return n;
+    return null;
   }
   _totalStars() {
     const wl = wlRec();
@@ -211,9 +222,9 @@ class WordLadder {
   /** Every finished attempt the recorder has not taken yet, recorded now (both languages, ladder and daily). */
   _flushAll() {
     const saves = this._saves();
-    for (const lang of ['en', 'es']) {
-      const a = saves[lang];
-      if (a && a.done && !a.recorded && Number.isInteger(a.n)) this._record({ kind: 'ladder', lang, ...a }, true);
+    for (const [k, a] of Object.entries(saves)) {
+      const m = /^(en|es)(?::(easy|medium|hard|expert))?$/.exec(k);
+      if (m && a && a.done && !a.recorded && Number.isInteger(a.n)) this._record({ kind: 'ladder', lang: m[1], band: m[2] || E.bandOf(a.n), ...a }, true);
     }
     const all = readJSON(DAILY_KEY, { v: 1, d: {} });
     for (const [k, a] of Object.entries(all.d || {})) if (a && a.done && !a.recorded) this._record({ kind: 'daily', key: k, lang: k.slice(0, 2), ...a }, true);
@@ -244,7 +255,7 @@ class WordLadder {
       return writeJSON(DAILY_KEY, all);
     }
     const s = this._saves();
-    s[a.lang] = rec;
+    s[`${a.lang}:${a.band || E.bandOf(a.n)}`] = rec;   // one attempt per difficulty (the old `<lang>` attempt stays as stored)
     return writeJSON(SAVE_KEY, s);
   }
 
@@ -252,8 +263,12 @@ class WordLadder {
   _setup() {
     this.screen = 'setup';
     this.cur = null;
-    const n = this._nextN(this.lang);
+    const n = this._nextN(this.lang, this.band);
     const done = this._dailyDone(this.lang);
+    const segs = E.TIERS.map((k, i) => `<button type="button" class="wl-seg${k === this.band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === this.band}">${diffShapeSVG(i + 1)}<b>${esc(t('tier_' + k))}</b></button>`).join('');
+    const play = n == null
+      ? `<button type="button" class="wl-btn wl-btn-main" disabled>${esc(t('band_done', { name: t('tier_' + this.band) }))}</button>`
+      : `<button type="button" class="wl-btn wl-btn-main" data-act="play">${esc(t('play_n', { n }))}</button>`;
     this.root.innerHTML = `
       <div class="wl-setup">
         <div class="wl-home">
@@ -263,7 +278,8 @@ class WordLadder {
             ${this._totalStars() ? `<span class="wl-total" aria-label="${esc(t('total_aria', { n: this._totalStars() }))}">${starSVG(true)}<b>${this._totalStars()}</b></span>` : ''}
             <button type="button" class="wl-lang" data-act="lang" aria-label="${esc(t('lang_aria'))}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
           </div>
-          <button type="button" class="wl-btn wl-btn-main" data-act="play">${esc(t('play_n', { n }))}</button>
+          <div class="wl-segs" role="radiogroup" aria-label="${esc(t('diff_aria'))}">${segs}</div>
+          ${play}
           <button type="button" class="wl-btn wl-btn-daily${done ? ' is-done' : ''}" data-act="daily" aria-label="${esc(t(done ? 'daily_done_aria' : 'daily_aria'))}">${SVG.cal}<span>${esc(t('daily'))}</span>${done ? `<i class="wl-ok">${SVG.check}</i>` : ''}</button>
           <button type="button" class="wl-help" data-act="help" aria-label="${esc(t('help_aria'))}">?</button>
         </div>
@@ -296,27 +312,28 @@ class WordLadder {
       a = (readJSON(DAILY_KEY, { d: {} }).d || {})[key] || null;
       n = Math.max(0, dn);
     } else {
-      n = this._nextN(lang);
-      if (n > d.levels.length) { this._soon(); return; }
+      n = this._nextN(lang, this.band);
+      if (n == null || n > d.levels.length) { this._soon(n == null ? t('band_done', { name: t('tier_' + this.band) }) : null); return; }
       level = E.cleanLevel(d.levels[n - 1]);
-      const s = this._saves()[lang];
+      const s = this._bandAttempt(lang, this.band);
       a = s && s.n === n ? s : null;
     }
     if (!level) { console.error('[word-ladder] level does not add up, not drawn', kind, n); this._soon(); return; }
     const c = E.cleanAttempt(a, level, d.dict);
     this.data = d;
-    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null };   // no letter picked: the player chooses (Matt, 2026-11-14)
+    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
     this._play();
   }
-  _soon() {
+  _soon(text) {
     this.screen = 'soon';
     this._sync();
-    this.root.innerHTML = `<div class="wl-setup"><div class="wl-home"><h1 class="wl-title">${esc(t('done_all'))}</h1>
+    this.root.innerHTML = `<div class="wl-setup"><div class="wl-home"><h1 class="wl-title">${esc(text || t('done_all'))}</h1>
       <button type="button" class="wl-btn wl-btn-main" data-act="setup">${esc(t('back'))}</button></div></div>`;
   }
+
 
   _word() { return this.cur.chain[this.cur.chain.length - 1]; }
 
@@ -561,6 +578,9 @@ class WordLadder {
     else if (act === 'close-help') this._goBack();
     else if (act === 'undo') this._undo();
     else if (act === 'hint') this._hint();
+    else if (act === 'band') {
+      if (E.TIERS.includes(b.dataset.band) && b.dataset.band !== this.band) { this.band = b.dataset.band; saveSettings({ band: this.band }); this._setup(); }
+    }
     else if (act === 'lang') {
       this.lang = this.lang === 'es' ? 'en' : 'es';
       saveSettings({ lang: this.lang });
