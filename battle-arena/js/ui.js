@@ -153,33 +153,21 @@ function effectLines(sp) {
   return out;
 }
 
-/** A special as icons + numbers, for the Monsters screen's tiles (2026-11-14, Matt: "show the powers of the base
- *  monster"). Words do not fit a quarter-width tile at 15px; the card (tap) says it in words. Every icon is a SHAPE,
- *  never a colour alone; drain and chain share the bolt and differ by their sign. */
-const grid3 = (lit) => `<svg viewBox="0 0 24 24" aria-hidden="true">${[0, 1, 2].map((r) => [0, 1, 2].map((c) => `<rect x="${2 + c * 7}" y="${2 + r * 7}" width="6" height="6" rx="1.4" fill="${lit(r, c) ? '#F2B705' : 'rgba(255,255,255,.45)'}"/>`).join('')).join('')}</svg>`;
-const POW_ICON = {
-  dmg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l2.6 6.3 6.6-2.1-3.4 6 5.2 3.9-6.6.9.4 6.8L12 18l-4.8 4.8.4-6.8-6.6-.9 5.2-3.9-3.4-6 6.6 2.1z" fill="#E0532F" stroke="#5a1a0a" stroke-width="1.2" stroke-linejoin="round"/></svg>',
-  heal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z" fill="#2EA048" stroke="#103d1a" stroke-width="1.2"/><path d="M12 8.5v7M8.5 12h7" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
-  bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 1 4 14h7l-2 9 11-14h-7z" fill="#F2B705" stroke="#4a3300" stroke-width="1.2" stroke-linejoin="round"/></svg>',
-  rows: grid3((r) => r === 1),
-  col: grid3((r, c) => c === 1),
-  block: grid3((r, c) => r < 2 && c < 2),
-};
-function powerChips(sp) {
-  const chip = (icon, n = '') => `<span class="ba-pow">${icon}${n === '' ? '' : `<b>${n}</b>`}</span>`;
+/** One SHORT line per effect, for the Monsters screen's third-width tiles (the card says it in full). */
+function tileLines(sp) {
   const out = [];
-  if (sp.dmg) out.push(chip(POW_ICON.dmg, sp.dmg));
-  if (sp.heal) out.push(chip(POW_ICON.heal, sp.heal));
-  if (sp.shield) out.push(chip(ICONS.shield, sp.shield));
-  if (sp.drain) out.push(chip(POW_ICON.bolt, '\u2212' + sp.drain));
-  if (sp.freeze) out.push(chip(ICONS.snow));
-  if (sp.curse) out.push(chip(ICONS.hex, `${sp.curse.tick}\u00d7${sp.curse.turns}`));
-  if (sp.chain) out.push(chip(POW_ICON.bolt, '+' + sp.chain));
-  if (sp.rows) out.push(chip(POW_ICON.rows, sp.rows > 1 ? sp.rows : ''));
-  if (sp.convert) out.push(chip(gemSVG('leaf'), sp.convert));
-  if (sp.col) out.push(chip(POW_ICON.col, sp.col > 1 ? sp.col : ''));
-  if (sp.block) out.push(chip(POW_ICON.block));
-  return out.join('');
+  if (sp.dmg) out.push(t('tx_dmg', { n: sp.dmg }));
+  if (sp.heal) out.push(t('tx_heal', { n: sp.heal }));
+  if (sp.shield) out.push(t('tx_shield', { n: sp.shield }));
+  if (sp.drain) out.push(t('tx_drain', { n: sp.drain }));
+  if (sp.freeze) out.push(t('tx_freeze'));
+  if (sp.curse) out.push(t('tx_curse', { n: sp.curse.tick, k: sp.curse.turns }));
+  if (sp.chain) out.push(t('tx_chain', { n: sp.chain }));
+  if (sp.rows) out.push(sp.rows === 1 ? t('tx_rows') : t('tx_rowsN', { n: sp.rows }));
+  if (sp.convert) out.push(t('tx_convert', { n: sp.convert }));
+  if (sp.col) out.push(sp.col === 1 ? t('tx_col') : t('tx_colN', { n: sp.col }));
+  if (sp.block) out.push(t('tx_block', { n: sp.block }));
+  return out;
 }
 
 /** How to play's pictures (2026-11-13, Matt: "try to use images"): one small scene per rule, drawn from the
@@ -693,7 +681,7 @@ class BattleArena {
         <div class="ba-pick-art">${monsterSVG(m.id)}</div>
         ${locked ? '' : `<span class="ba-pick-gem">${elementBadge(m.el)}</span>`}
         ${locked ? `<span class="ba-pick-name is-lock">${ICONS.lock}${more}</span>` : named ? `<span class="ba-pick-name">${escapeHTML(m.name)}</span>
-        <span class="ba-pick-pow" aria-label="${escapeHTML(t('sp_' + m.id) + ': ' + effectLines(specialOf(m.id, false)).join(', '))}">${powerChips(specialOf(m.id, false))}</span>` : ''}
+        <span class="ba-pick-pow">${tileLines(specialOf(m.id, false)).map((l) => `<span>${escapeHTML(l)}</span>`).join('')}</span>` : ''}
       </div>`;
   }
 
