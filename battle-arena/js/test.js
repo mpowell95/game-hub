@@ -400,7 +400,7 @@ ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(
   }
   ok('Hard picks the same move whatever tiles are about to fall (no peeking, 40 boards)', same === 40, String(same));
 }
-ok('the six starters are the weakest six', ['thornpaw', 'sproutle', 'driplet', 'cinderwing', 'frostling', 'stormhorn'].every((id) => STARTERS.includes(id)));
+ok('the starters cover all five gem colours (Hexowl is the shadow one)', ['fire', 'water', 'spark', 'leaf', 'shadow'].every((el) => STARTERS.some((id) => BY_ID[id].el === el)) && STARTERS.includes('hexowl'));
 {
   // Rules version 2: a new match carries rv 2 and plays the new numbers; a match with no rv keeps version 1's.
   const s2 = newMatch({ seed: 7, teams: [['emberkit', 'zapup'], ['driplet', 'sproutle']], rv: RULES_VERSION });
