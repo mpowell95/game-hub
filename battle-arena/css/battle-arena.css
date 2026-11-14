@@ -276,19 +276,25 @@
 /* Monsters (2026-11-14, Matt: "Make it 3x4 instead of 4x3"): three across so names and powers fit; the element a monster
    eats big (Matt: "Make the things they eat bigger"); its power in WORDS, one effect a line (the icon chips were "not clear
    at all"). The art takes whatever height is left. */
-.ba-root .ba-dex .ba-grid { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); }
-.ba-root .ba-dex .ba-pick { justify-content: flex-start; padding-top: 4px; }
-.ba-root .ba-dex .ba-pick-gem, .ba-root .ba-dex .ba-pick-gem svg { width: 30px; height: 30px; }
-.ba-root .ba-dex .ba-pick-name { font-size: 17px; padding: 0 4px; }
+.ba-root .ba-draft .ba-grid { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, 1fr); }
+.ba-root .ba-draft .ba-pick { justify-content: flex-start; padding-top: 4px; }
+.ba-root .ba-draft .ba-pick-gem, .ba-root .ba-draft .ba-pick-gem svg { width: 30px; height: 30px; }
+.ba-root .ba-draft .ba-pick-name { font-size: 17px; padding: 0 4px; }
 .ba-root .ba-pick-pow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 40px; padding: 1px 1px 6px; max-width: 100%; }
 .ba-root .ba-pick-pow span { font-size: 15px; font-weight: 700; line-height: 1.2; color: #fff; text-align: center; white-space: nowrap; }
-@media (max-width: 380px) { .ba-root .ba-dex { padding-left: 6px; padding-right: 6px; } .ba-root .ba-dex .ba-grid { gap: 6px; } }
+@media (max-width: 380px) { .ba-root .ba-draft { padding-left: 6px; padding-right: 6px; } .ba-root .ba-draft .ba-grid { gap: 6px; } }
+/* Short phones: the two big pick hexes go (each picked tile keeps its ring and tick) so the 3x4 tiles keep their pictures. */
+@media (max-height: 740px) {
+  .ba-root .ba-draft .ba-slots { display: none; }
+  .ba-root .ba-draft { gap: 6px; }
+  .ba-root .ba-draft-actions .ba-bigbtn, .ba-root .ba-draft-actions .ba-steelbtn { min-height: 48px; }
+}
 
 /* Reference look: no names in the grid (tap = the card), each monster on a hexagon; the two
  * picks in big teal-ringed hexagons. */
 .ba-root .ba-pick-art { position: relative; }
 .ba-root .ba-pick-art::before {
-  content: ''; position: absolute; left: 50%; top: 50%; width: min(86%, 92px); aspect-ratio: .9; transform: translate(-50%, -50%);
+  content: ''; position: absolute; left: 50%; top: 50%; height: min(100%, 102px); max-width: 86%; aspect-ratio: .9; transform: translate(-50%, -50%);   /* inside the art box, never over the name (2026-11-14) */
   clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: rgba(255, 255, 255, .08);
 }
 .ba-root .ba-pick.is-on .ba-pick-art::before { background: #3fc8d8; }

@@ -608,7 +608,8 @@ class BattleArena {
     this.unlocked = unlocked;
     this.wins = wins;
     this.picks = this.settings.team.filter((id) => unlocked.includes(id));
-    const cells = MONSTERS.map((m) => this.tileHTML(m)).join('');
+    // The same tiles as Monsters: name and power on each (Matt, 2026-11-14: "Why does this screen suck? We just redid the other one").
+    const cells = MONSTERS.map((m) => this.tileHTML(m, true)).join('');
     this.root.innerHTML = `
       ${lobbyBG(true)}
       <div class="ba-draft">
