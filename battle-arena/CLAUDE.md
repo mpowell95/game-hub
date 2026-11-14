@@ -235,7 +235,9 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   a started match is a loss.
 - **Every monster is its element's colour** (Matt: "make the colors of the monsters match the thing they eat"). Only Pebbleop was off
   (grey stone, a FIRE monster): now a red-hot rock with yellow cracks, both forms (`art.js`). Art only; the engine is untouched.
-- **Element gems bigger** (Matt: "Make the things they eat bigger"): 28px on every tile (was 20), 32px on Monsters.
+- **Element gems bigger EVERYWHERE** (Matt: "Make the things they eat bigger"; then "Why are these so small? I've already told you
+  these need to be bigger" about the battle's energy bars, which the first pass missed): 28px on every draft tile, 30px on Monsters,
+  **48px on each battle energy bar** (was 32px, the gem inside ~22px). A size request applies to EVERY screen showing that thing.
 - **Monsters = 3 across x 4 down, powers in WORDS** (Matt: "Some names are cut off. The hints for their powers are not clear at
   all. Make it 3x4 instead of 4x3"; the icon chips are gone). Each base monster's effects, one short line each (`tileLines`,
   strings `tx_*`: "11 damage", "Column clear", "+1 to partner"; the card keeps the full `fx_*` wording), measured to fit a
