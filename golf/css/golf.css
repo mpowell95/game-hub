@@ -595,7 +595,8 @@
 .gf-root .gf-setup__foot {
   width: 100%; max-width: 360px; display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch;
 }
-.gf-root .gf-setup__foot .gf-btn { flex: 1 1 0; min-width: 0; }
+.gf-root .gf-setup__foot .gf-btn { flex: 1 1 0; min-width: 0; white-space: nowrap; padding-left: 4px; padding-right: 4px; }
+.gf-root .gf-setup__foot .gf-tutbtn:not(.is-cta) { flex-grow: .7; }   /* "tutorial" is the short word; the others need the room at 360px */
 .gf-root .gf-setup__foot .gf-ladder { flex: 1 0 100%; }
 .gf-root .gf-ladder { text-align: center; font-size: 11px; color: var(--gf-dim); }
 /* The tutorial is the ONLY thing a new player can do, so until it is done it is the accent

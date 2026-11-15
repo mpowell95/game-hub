@@ -55,7 +55,8 @@ export const TUTORIAL_HOLE_KEY = `${TUTORIAL_COURSE_ID}:1`;
  *  since 2026-09-03, waiting for exactly this caller. So releasing Red Mesa is a tap on the admin
  *  page rather than a deploy - the same rule the game's own `devOnly` follows, and the same reason:
  *  two switches for one decision is how a game ends up shipped hidden by accident. */
-export const COURSE_OPEN_BY_DEFAULT = { pinevalley: true, redmesa: false, oasissands: false, coralkeys: false };
+// EVERY COURSE OPEN (Matt, 2026-11-15: "open all courses for solo play too").
+export const COURSE_OPEN_BY_DEFAULT = { pinevalley: true, redmesa: true, oasissands: true, coralkeys: true };
 
 export function courseOpenByDefault(courseId) { return COURSE_OPEN_BY_DEFAULT[courseId] === true; }
 
@@ -65,7 +66,7 @@ export function courseOpenByDefault(courseId) { return COURSE_OPEN_BY_DEFAULT[co
  *  would hide it. It is a DEFAULT under that override, never a second switch: an explicit
  *  `golf.courses.<id>.testing` written by the admin page wins either way (ui.js `_courseTesting`).
  *  Opening the course to everyone is deleting its line here (and adding it to the map above). */
-export const COURSE_ADMIN_ONLY_BY_DEFAULT = { coralkeys: true };
+export const COURSE_ADMIN_ONLY_BY_DEFAULT = {};   // Coral Keys released 2026-11-15 with the rest
 
 export function courseAdminOnlyByDefault(courseId) { return COURSE_ADMIN_ONLY_BY_DEFAULT[courseId] === true; }
 
@@ -117,7 +118,13 @@ export function setsOfCourse(course) {
 const OPEN = { unlocked: true, need: null };
 const open = () => OPEN;
 
-export function roundState(course, roundId, gf) {
+/** THE LADDER IS OFF (Matt, 2026-11-15: "have all golf unlocked"): every round, length and hole is open
+ *  to everyone, tutorial or not. The ladder's rules below are KEPT (and still tested, with `ladder`
+ *  true): flip this back to bring them back. Nothing was stored for it, so nothing changes in anyone's data. */
+export const ALL_UNLOCKED = true;
+
+export function roundState(course, roundId, gf, ladder = !ALL_UNLOCKED) {
+  if (!ladder) return open();
   const r = roundById(roundId);
   const sets = setsOfCourse(course);
 
@@ -142,7 +149,7 @@ export function roundState(course, roundId, gf) {
     if (r.set === 1) {
       const last = sets[sets.length - 1];
       if (!last) return open();
-      return roundState(course, last.id, gf).unlocked ? open()
+      return roundState(course, last.id, gf, ladder).unlocked ? open()
         : { unlocked: false, need: { kind: 'unlock', roundId: last.id } };
     }
     const front = roundsFor(course).find((x) => x.mode === 9 && x.set === 1);
@@ -158,13 +165,13 @@ export function roundState(course, roundId, gf) {
     : { unlocked: false, need: { kind: 'par', roundId: back.id, par: roundPar(course, back.id) } };
 }
 
-export function roundUnlocked(course, roundId, gf) { return roundState(course, roundId, gf).unlocked; }
+export function roundUnlocked(course, roundId, gf, ladder = !ALL_UNLOCKED) { return roundState(course, roundId, gf, ladder).unlocked; }
 
 /** A LENGTH is offered when any round of that length is open. The setup screen still SHOWS a
  *  locked length rather than hiding it - a ladder you cannot see is not a ladder, it is a
  *  disappointment waiting to happen - but it says what it is waiting on. */
-export function modeUnlocked(course, mode, gf) {
-  return roundsFor(course).some((r) => r.mode === mode && roundUnlocked(course, r.id, gf));
+export function modeUnlocked(course, mode, gf, ladder = !ALL_UNLOCKED) {
+  return roundsFor(course).some((r) => r.mode === mode && roundUnlocked(course, r.id, gf, ladder));
 }
 
 /** WHICH HOLES MAY BE PRACTISED. A hole is open to practice once the round that introduces it is
@@ -173,11 +180,11 @@ export function modeUnlocked(course, mode, gf) {
  *  this course.
  *
  *  Returned as a Set of hole INDICES, which is what the hole-select screen iterates. */
-export function practisableHoles(course, gf) {
+export function practisableHoles(course, gf, ladder = !ALL_UNLOCKED) {
   const out = new Set();
   for (const r of roundsFor(course)) {
     if (r.mode !== 3) continue;                      // the sets are the fine-grained ladder
-    if (!roundUnlocked(course, r.id, gf)) continue;
+    if (!roundUnlocked(course, r.id, gf, ladder)) continue;
     for (let i = r.from; i < Math.min(r.to, course.holes.length); i++) out.add(i);
   }
   return out;
@@ -186,9 +193,9 @@ export function practisableHoles(course, gf) {
 /** How far up the ladder this player is, as `{ done, total }` over every round the course has.
  *  Display only - nothing gates on it - but it is what lets the screen say "4 of 9" rather than
  *  leaving the player to count locks. */
-export function ladderProgress(course, gf) {
+export function ladderProgress(course, gf, ladder = !ALL_UNLOCKED) {
   const rs = roundsFor(course);
-  return { done: rs.filter((r) => roundUnlocked(course, r.id, gf)).length, total: rs.length };
+  return { done: rs.filter((r) => roundUnlocked(course, r.id, gf, ladder)).length, total: rs.length };
 }
 
 export { ROUNDS };

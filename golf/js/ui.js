@@ -26,7 +26,7 @@ import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
 import TUTORIAL_COURSE from '../courses/tutorial.js';
 import { Coach } from './tutorial.js';
-import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderProgress,
+import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderProgress, ALL_UNLOCKED,
   courseOpenByDefault, courseAdminOnlyByDefault } from './progress.js';
 import { isCourseReleased, courseTestingOverride, readCachedConfig, isAdminDevice } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
@@ -603,7 +603,9 @@ class GolfGame {
     // THE LADDER. Everything below is derived from the player's own record - see progress.js for
     // why none of it is stored separately.
     const gf = this._gf();
-    const needTutorial = !tutorialDone(gf);
+    // With the ladder off (progress.js ALL_UNLOCKED) the lesson is offered, never required.
+    const tutDone = tutorialDone(gf);
+    const needTutorial = !ALL_UNLOCKED && !tutDone;
     const ladder = ladderProgress(c, gf);
     // A course still in TESTING is hidden outright; one that is merely not open yet is SHOWN and
     // locked, because a ladder you cannot see is not a ladder. Matt's own rule for Skeeball's
@@ -638,7 +640,7 @@ class GolfGame {
           aria-label="${esc(open ? t('mode_holes', { n: m }) : `${t('mode_holes', { n: m })}, ${t('locked')}`)}"><span>${esc(t('mode_holes', { n: m }))}</span>${open ? '' : `<small>${esc(t('locked'))}</small>`}</button>`;
   }).join('')}
       </div>
-      <div class="gf-coursepick">
+      <div class="gf-coursepick${courses.length > 2 ? ' gf-coursegrid' : ''}">
         ${courses.map((k) => {
     const open = this._courseOpen(k.id);
     return `<button type="button" class="gf-btn gf-chip${k.id === c.id ? ' is-on' : ''}${open ? '' : ' is-locked'}"
@@ -682,7 +684,7 @@ class GolfGame {
           <span>${esc(needTutorial ? t('tutorial_cta') : t('tutorial_again'))}</span></button>
         ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="practice"><span>${esc(t('practice'))}</span></button>`}
         ${needTutorial ? '' : `<button type="button" class="gf-btn" data-role="board"><span>${esc(t('board'))}</span></button>`}
-        <div class="gf-ladder">${esc(t('ladder_progress', ladder))}</div>
+        ${ALL_UNLOCKED ? '' : `<div class="gf-ladder">${esc(t('ladder_progress', ladder))}</div>`}
       </div>`;
     // THE TABS (2026-11-10, Darts' and Cup Pong's shape): Online first, then Solo = everything above,
     // unchanged. Online holds the matches and Challenge (golf/js/mp-ui.js fillOnline).

@@ -6,11 +6,12 @@
 
 **Keep this file short.** A new rule goes here in one or two lines; the story behind it goes in `CLAUDE-HISTORY.md` (append a dated section). Full original text: `CLAUDE-HISTORY.md` (not auto-loaded; headings unchanged, so "golf/CLAUDE.md, \"X\"" references are found there).
 
-## Status: LIVE FOR EVERYONE, Pine Valley the only open solo course
+## Status: LIVE FOR EVERYONE, every course open, everything unlocked (2026-11-15)
 
 - **Complete**: setup, tutorial hole, unlock ladder, three-tap swing, flight and putting, scorecard, mid-round save, per-hole/per-round records, own leaderboard, pause menu with Report a bug.
 - **LIVE FOR EVERYONE**: `adminConfig/v1/games/golf` reads `live: true` (switched 2026-09-10 21:49 ET; verified by a fresh read 2026-11-15, after this file wrongly said admin-only and a session repeated it to Matt). Read the config before saying who can see golf. A config flip, not a code flag: **do not "fix" it by editing `devOnly`** (two switches for one decision ships a game hidden by accident). `js/admin-config.js`'s per-COURSE resolvers exist and are tested; `js/admin-ui.js` has no per-course section.
-- **Only Pine Valley is open** (`COURSE_OPEN_BY_DEFAULT` `{ pinevalley: true }`). Matt: *"Pine Valley ONLY."* Red Mesa and Oasis Sands are finished and unreleased: a test or difficulty failure on ONLY those is no reason to hold a deploy. **Coral Keys (2026-09-29)**: 4th course, 9 holes, ADMIN ONLY (end of file).
+- **Every course is open to everyone** (Matt, 2026-11-15: *"open all courses for solo play too. have all golf unlocked"*): `COURSE_OPEN_BY_DEFAULT` all four true, `COURSE_ADMIN_ONLY_BY_DEFAULT` empty (Coral Keys released with them); the admin config still overrides. (Before: Pine Valley only, Matt 2026-09-11.)
+- **The unlock ladder is OFF** (`progress.js` `ALL_UNLOCKED = true`): every round, length and practice hole open from the first visit; the tutorial is offered, never required; Practice and Leaderboard always shown; no ladder line. The ladder's rules are kept and still tested (`ladder` argument true in `test.js`); flip `ALL_UNLOCKED` to bring it back. Nothing stored changed.
 - **Swing physics were rebuilt 2026-09-10.** Before changing a number in `swing.js`/`clubs.js`, read "Swing and meter" below and the four 2026-09-10 history sections: each reversed something a session did without asking.
 
 Open items: see the root TODO.md, "Golf".
@@ -72,7 +73,7 @@ Matt, 2026-09-03: the board number is the player's **best round on a named cours
 
 ## Who can play it right now
 
-The GAME is live for everyone (see Status). Below is who sees which COURSE solo. **A dev profile counts only on an admin device** (`_isDev`, `isAdminDevice()`, 2026-10-29: the name alone opened every course to anyone who typed it). Courses: use **`courseTestingOverride`, NOT `isCourseTesting`** (TRUE when nothing is written; hid all courses). `COURSE_ADMIN_ONLY_BY_DEFAULT` `{coralkeys: true}` HIDES a course from all but dev (an unopened course shows locked); it sits under the config override. To release Coral Keys: delete its line there, set `coralkeys: true` in `COURSE_OPEN_BY_DEFAULT`.
+The GAME is live for everyone (see Status). Below is who sees which COURSE solo. **A dev profile counts only on an admin device** (`_isDev`, `isAdminDevice()`, 2026-10-29: the name alone opened every course to anyone who typed it). Courses: use **`courseTestingOverride`, NOT `isCourseTesting`** (TRUE when nothing is written; hid all courses). `COURSE_ADMIN_ONLY_BY_DEFAULT` (empty since 2026-11-15) HIDES a listed course from all but dev (an unopened course shows locked); it sits under the config override.
 
 ## The hole-data format
 
@@ -227,12 +228,12 @@ Pinned by `test.js` 12e: seam stroked OUTSIDE the clip (`SEAM_ALPHA`); tree shad
 
 `golf/js/save.js` (`validateSave`, `resumePos`, `isComplete`); `ui.js` reads/writes the `save` field. `recorded`/`newBest` are NOT stored; tutorial and practice holes are not saved. Saved on: entering a hole, the ball at REST (never mid-flight), a hole being scored (before the result card), a penalty drop. **The clear is on the WRITE**: `_recordRound` clears after the best landed by fresh re-read. `_resumeSaved()` branches on `scores[pos]` and **re-saves at the end** (probe, sec. 22). Resume names the hole it will ACTUALLY land on; starting a round/practice/tutorial goes through `_askDiscard`. **`isInProgress()` is `false`**; `_roundAtStake()` (the quit prompt) checks `saveOk` (the VERIFIED write).
 
-## The unlock ladder, and the tutorial hole (2026-09-08)
+## The unlock ladder, and the tutorial hole (2026-09-08; ladder OFF since 2026-11-15, see Status)
 - **Derived, nothing new stored** (`progress.js`): tutorial -> holes 1-3; par or better on each set unlocks the next; all six sets UNLOCKED (not beaten) -> front nine; par on front -> back; par on back -> 18. Read from `gf.bestRoundByCourse` and `gf.bestHole['tutorial:1']` (both `Math.min`), so **no gate can close once open**. `roundState`'s `mode === 9` branch is the line to change if "unlocked" should mean "beaten". **`tutorial:1` is FROZEN once anyone finishes the lesson.** `tools/test-visual.mjs`'s PLAY probe SEEDS it.
 - **Tutorial hole** (`courses/tutorial.js`): an ORDINARY validated hole, NOT in `COURSES`: par 4, 372 yd, straight, no hazards, calm. Changed from par 3 on 2026-09-09 after checking no `tutorial:*` record existed - **re-run that RTDB check before touching its par again** (rule 4).
 - **The lesson** (`tutorial.js`; `Coach` WATCHES, never drives): 10 cards, <= 10 words per rail card and 16 per popup (build fails past it, EN+ES); **no skip button** (probe; only holing out writes the unlock); **NO CARD IS ON SCREEN WHILE THE NEEDLE MOVES** (a `key: null` step is silent; probe: no card waits on `tap-power`/`fire`); `SKIPPABLE` = `fire settled on-green holed`; `on-green` = `mustPutt(this._lie())`; `Coach.blocksSwing()` holds the swing until the gated aim/club control is used (`nudge()`); club lesson on the SECOND shot after a silent `after-drive` step (order pinned); `SETTLE_CARD_MS` 700; the rail is CSS-welded (`.gf-tut__rail` `bottom: 0`; the bottom clusters ride 30 px up under `[data-tut="1"]`); popups paint the REAL meter (`_drawMeter({ still: true, marks })`). The bad-swing card's 25/45 yd are **Matt's and illustrative - do not re-derive**. It teaches aim + club by USING them, that the red dots ARE the meter's 25/50/75/100, and that greens are sloped.
 
-## Coral Keys: the fourth course, nine holes of ISLAND HOPPING, ADMIN ONLY (2026-09-29)
+## Coral Keys: the fourth course, nine holes of ISLAND HOPPING (2026-09-29; open to everyone 2026-11-15)
 
 Matt: *"a fun new golf course... 9 holes and admin only to start."* `courses/coralkeys.js`, Tropical, par 35. The ocean is the ground (`base: 'water'`); `beach` rings land in sand playing as a fairway bunker and each WATER `cross` band becomes a GAP (`spans`/`capped`); `islands` for shortcuts; a stated sea breeze on every hole (1.2-2.0, never calm). No other course's holes changed (hashed). `test.js` 26. Release: "Who can play it right now".
 

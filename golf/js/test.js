@@ -2706,22 +2706,22 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   const os = COURSES.find((c) => c.id === 'oasissands');
   const ids = ['quick3', 'set3b', 'set3c', 'set3d', 'set3e', 'set3f', 'front9', 'back9', 'full18'];
   const openOf = (gf, c = pv) => ids.filter((id) => roundsFor(c).some((r) => r.id === id))
-    .filter((id) => P.roundUnlocked(c, id, gf));
+    .filter((id) => P.roundUnlocked(c, id, gf, true));
 
   // NOTHING IS OPEN BEFORE THE TUTORIAL, and that is the floor: a brand new player has exactly one
   // thing they can do, which is the lesson.
   ok('[KNOWN-BUG PROBE] a brand new player has NO round unlocked', openOf({}).length === 0,
     `opened ${openOf({}).join(', ')}`);
   ok('...and every mode is locked too',
-    !P.modeUnlocked(pv, 3, {}) && !P.modeUnlocked(pv, 9, {}) && !P.modeUnlocked(pv, 18, {}));
-  ok('...and no hole may be practised yet', P.practisableHoles(pv, {}).size === 0);
+    !P.modeUnlocked(pv, 3, {}, true) && !P.modeUnlocked(pv, 9, {}, true) && !P.modeUnlocked(pv, 18, {}, true));
+  ok('...and no hole may be practised yet', P.practisableHoles(pv, {}, true).size === 0);
 
   // THE TUTORIAL IS THE KEY, and its SCORE is irrelevant - Matt: "score doesn't matter".
   const tut = (n) => ({ bestHole: { [P.TUTORIAL_HOLE_KEY]: n } });
   ok('the tutorial opens holes 1-3, whatever it was scored',
     [1, 3, 9, 14].every((n) => openOf(tut(n)).join() === 'quick3'));
   ok('...and it opens the first three holes to practice',
-    [...P.practisableHoles(pv, tut(4))].sort((a, b) => a - b).join() === '0,1,2');
+    [...P.practisableHoles(pv, tut(4), true)].sort((a, b) => a - b).join() === '0,1,2');
 
   // EACH SET IS THE PREVIOUS ONE'S REWARD, and par is a PASS (`<=`, not `<`).
   const with3 = (over) => ({ ...tut(3), bestRoundByCourse: { pinevalley3: roundPar(pv, 'quick3') + over } });
@@ -2752,7 +2752,7 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   let missing = 0;
   for (const id of ids) {
     for (const gf of [{}, tut(3), with3(0), thru5, thruFront]) {
-      const st = P.roundState(pv, id, gf);
+      const st = P.roundState(pv, id, gf, true);
       if (!st.unlocked && (!st.need || !st.need.kind)) missing++;
     }
   }
@@ -2765,13 +2765,18 @@ console.log('\n-- 20. THE UNLOCK LADDER, and the tutorial hole (2026-09-08) --')
   const osThru = { ...tut(3), bestRoundByCourse: { oasissands3: roundPar(os, 'quick3'),
     oasissands3b: roundPar(os, 'set3b') } };
   ok('...and its front nine opens off its LAST set, not Pine Valley\'s sixth',
-    P.roundUnlocked(os, 'front9', osThru));
+    P.roundUnlocked(os, 'front9', osThru, true));
 
-  // ONLY PINE VALLEY IS OPEN IN CODE. Matt: "we're going to release Pine Valley as the only course
-  // to start with." The admin override sits ON TOP of this (js/admin-config.js), so a course is
-  // released with a tap rather than a deploy - this is only the default.
-  ok('[KNOWN-BUG PROBE] Pine Valley is the only course open by default',
-    COURSES.filter((c) => P.courseOpenByDefault(c.id)).map((c) => c.id).join() === 'pinevalley');
+  // EVERY COURSE OPEN, EVERYTHING UNLOCKED (Matt, 2026-11-15: "open all courses for solo play too.
+  // have all golf unlocked"). The ladder rules above are still tested with `ladder` true; the game
+  // runs with them OFF. The admin override still sits on top of the course defaults.
+  ok('every course is open by default', COURSES.every((c) => P.courseOpenByDefault(c.id)) && COURSES.length === 4);
+  ok('...and none is admin only', COURSES.every((c) => !P.courseAdminOnlyByDefault(c.id)));
+  ok('the ladder is off: a brand new player has every round of every course',
+    P.ALL_UNLOCKED === true && COURSES.every((c) => roundsFor(c).every((r) => P.roundUnlocked(c, r.id, {}))));
+  ok('...every length and every hole to practise',
+    COURSES.every((c) => [3, 9, 18].every((m) => !roundsFor(c).some((r) => r.mode === m) || P.modeUnlocked(c, m, {}))
+      && P.practisableHoles(c, {}).size === c.holes.length));
 
   // --- the tutorial hole itself -------------------------------------------------------------
   ok('the tutorial hole is a VALID hole', validateHole(TUT).length === 0, validateHole(TUT).join('; '));
