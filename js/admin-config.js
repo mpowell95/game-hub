@@ -115,7 +115,9 @@ export function normalizeConfig(raw) {
   const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
   const integVoid = (integ.void && typeof integ.void === 'object') ? integ.void : {};
   const reviewed = (src.reviewed && typeof src.reviewed === 'object') ? src.reviewed : {};
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed };
+  const si = (src.signin && typeof src.signin === 'object') ? src.signin : {};
+  const signin = { ask: (si.ask && typeof si.ask === 'object') ? si.ask : {}, everyone: si.everyone === true };
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed, signin };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -157,6 +159,30 @@ export function resolveOnlineAllowed(cfg, code) {
   if (!c) return false;
   const o = onlineOverride(cfg, c);
   return o === null ? ONLINE_BEFORE.has(c) : o;
+}
+
+// --- ALLOW / DENY SIGN IN: who is asked (2026-11-15, js/signin-rules.js) -------------------------------
+//
+// A phone joining an EXISTING code waits for that code's other phone to tap Allow, but ONLY for codes in this
+// ask set (NOT cleared for players: Matt's "ship it" is the release). Every other code links as it always has.
+// The set: SIGNIN_ASK_DEFAULT (test1's code), plus `signin/ask/<CODE>: true` (Admin > People > a person >
+// Ask to sign in), plus `signin/everyone: true`, the release switch (absent = off). `signin/ask/<CODE>: false`
+// takes a code out (even a default one). Synchronous cache read, offline-safe like every resolver here.
+export const SIGNIN_ASK_DEFAULT = new Set(['DREG5']);
+
+/** Matt's choice for this code (true/false), or null when he made none. */
+export function signinAskOverride(cfg, code) {
+  const v = normalizeConfig(cfg).signin.ask[codeOf(code)];
+  return typeof v === 'boolean' ? v : null;
+}
+/** Does a new phone joining this code need an Allow? */
+export function resolveSigninAsk(cfg, code) {
+  const c = codeOf(code);
+  if (!c) return false;
+  const n = normalizeConfig(cfg);
+  const o = signinAskOverride(n, c);
+  if (o !== null) return o;
+  return n.signin.everyone || SIGNIN_ASK_DEFAULT.has(c);
 }
 
 /**
@@ -410,6 +436,8 @@ export function myBoardCorrections(statsIdOf) { return resolveBoardCorrections(r
 export function isBeeUndone(boardKey, code) { return resolveBeeUndone(readCachedConfig(), boardKey, code); }
 
 export function isOnlineAllowed(code) { return resolveOnlineAllowed(readCachedConfig(), code); }
+/** Does a new phone joining this code need an Allow (js/signin-rules.js)? Synchronous cache read. */
+export function isSigninAsk(code) { return resolveSigninAsk(readCachedConfig(), code); }
 
 /** Subscribe to config changes (a refresh that actually changed something). Returns an unsubscribe. */
 export function onAdminConfig(cb) {
@@ -802,7 +830,16 @@ export function setOnlineAllowed(code, on) {
   return writeNode('online', { [c]: want }, (cfg) => onlineOverride(cfg, c) === want, { stamp: false });
 }
 
+/** Put a code in the sign-in ask set (true), take it out (false), or back to the code default (null). Verified by re-read. */
+export function setSigninAsk(code, on) {
+  const c = codeOf(code);
+  if (!/^[A-Z0-9]{3,12}$/.test(c)) return Promise.resolve(fail(`not a player code: ${code}`));
+  const want = on === null ? null : !!on;
+  return writeNode('signin/ask', { [c]: want }, (cfg) => signinAskOverride(cfg, c) === want, { stamp: false });
+}
+
 export default {
+  SIGNIN_ASK_DEFAULT, signinAskOverride, resolveSigninAsk, isSigninAsk, setSigninAsk,
   ONLINE_BEFORE, onlineOverride, resolveOnlineAllowed, isOnlineAllowed, setOnlineAllowed, resolveReviewed, setReviewed, setAdjustMode,
   CACHE_KEY, CONFIG_PATH, EVENT, normalizeConfig, resolveGameLive, gameOverride, resolveBoardReleased,
   boardOverride, resolveBoardTesting, boardTestingOverride, resolveBoardMode, readCachedConfig,

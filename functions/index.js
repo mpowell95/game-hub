@@ -36,6 +36,8 @@
 //                     and, at most hourly, the online-pairs alerts (2026-11-02, functions/integrity.js)
 //   integrityOnUndo   Matt undid or redid an integrity void on the admin page: rebuild the board
 //   <game>MatchCheck  an online challenge ended (darts, cuppong, battleship, hoops): integrity alerts
+//   signInOnWrite     signIns/<code>/<reqId>: a new phone asks to sign in (push to the code's phones), or one of
+//                     them tapped Allow (the server alone grants msgAuth; functions/signin.js) (2026-11-15)
 // Each index row already says, from the recipient's side, what changed, so no client code sends.
 //
 // DEPLOY (from the repo root, on Matt's PC): see functions/README.md.
@@ -52,6 +54,7 @@ import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { handleClaim } from './claim.js';
+import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
 import { decide, decideMessage, decideBugReport, decideSkee, decideCupPong, decideDarts, decideFlickSoccer, decideArchery, decideChinchon, decideEscoba, decideBattleArena, decideBattleship, decideGolf, decideReminder, decideNudge, buildDirectory, REMINDER_GAMES, isActive } from './decide.js';
 
@@ -486,4 +489,19 @@ export const claimOnRequest = onValueWritten({ ref: '/claimReq/{uid}', instance:
   if (!v) return;
   const res = await handleClaim(getDatabase(), event.params.uid, v);
   logger.info('claim', { uid: event.params.uid, t: res.t, code: res.code, ok: res.ok, why: res.why });
+});
+
+// ALLOW / DENY SIGN IN (2026-11-15, functions/signin.js): a new phone asking to join a code is announced to that
+// code's phones ("New sign in for <name>"; a tap opens the hub, which shows the popup), and an Allow is checked
+// and granted here only. The asking phone holds no address under that code, so it is never notified itself.
+export const signInOnWrite = onValueWritten({ ref: '/signIns/{code}/{reqId}', ...OPTS }, async (event) => {
+  const { code, reqId } = event.params;
+  const before = event.data.before.exists() ? event.data.before.val() : null;
+  const after = event.data.after.exists() ? event.data.after.val() : null;
+  const db = getDatabase();
+  const did = await handleSignIn(db, {
+    code, reqId, before, after, now: Date.now(),
+    send: (c, note, tag) => sendTo(db, c, note, tag, { game: 'signin' }),
+  });
+  if (did !== 'none') logger.info('sign in', { code, reqId, did });
 });
