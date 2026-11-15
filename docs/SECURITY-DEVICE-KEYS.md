@@ -34,6 +34,13 @@ specified amount of time"; people named themselves, saved the app to the Home Sc
 It stays exactly as is (a name claimed in the last 24 h links to its code); it counts as a sign in like Link, so the other
 devices get the New sign in notice. Step B's "Remove 'That's me'" item below is CANCELLED.
 
+## Design change 3 (2026-11-15, Matt: "i like the allow/deny popup on the original phone")
+Replaces Design change 2. A phone linking to an existing code waits ("Check your other phone", Cancel) and plays nothing as
+that code until the code's other phone taps Allow (popup if open, notification if closed), or Matt taps Allow on Admin > Now.
+Deny = "Not allowed", back to Choose a name. A phone that has played before keeps its sign in and needs nothing; only a wiped
+phone asks again. Mockup v4: `docs/mockups/new-phone-approval.html` (not yet "build it"). Open: does "That's me" ask too; how
+long a request waits. Every popup and notification reports who saw it and what they tapped.
+
 ## Step B (NOT built; player-visible, needs Matt's "ship it")
 1. Server: t `pin` (6 digits, 10 min, 5 tries), t `fresh` (a brand-new unused code: no `codeKeys`, no
    `directory/`, no `players` record with it), `pinMake` (claimed phone or admin makes a PIN), admin any.
