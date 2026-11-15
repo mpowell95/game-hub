@@ -101,6 +101,7 @@ Roles are in root `CLAUDE.md`'s table; this lists what must not be broken. Keep 
 | `bee-fairplay.js` | PURE and SHARED with `functions/bee.js` (copied by `tools/sync-functions-shared.mjs`): change it and both the phone and the server change; `tools/test-bee-server.mjs` + `tools/test-bee-fairplay.mjs` |
 | `announce.js` | see "The announcement layer" |
 | `alert-seed.js` | (2026-11-09) `seedSeenOnce(key, rows, markSeen)`: called by every challenge game's `alert.js` (and Hoops') after each read; when that game's seen key never existed on this storage, every visible match is stamped seen (your-turn ones 1 ms under, so they read "your turn", never "X challenged you"). A re-added app showed old matches as new challenges |
+| `tips-log.js` | (2026-11-15) in-game tips report: `{game:{tip:{s,n,d}}}` in `gamehub.tipsLog.v1`, mirrored by stats-net as `players/<id>/tips` (omitted when empty), NEVER read back (each game keeps its own seen list); dependency-free. `tools/read-tips.mjs` |
 | `career-store.js` | see "Career sync" |
 | `challenge/` | retired but LOAD-BEARING (`hooks.js` imported every load; `isDevProfile` rests on `secrets.js`). Never delete |
 

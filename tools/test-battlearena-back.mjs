@@ -19,6 +19,8 @@ async function open(url) {
   await ctx.addInitScript(() => {
     localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'test1', emoji: '🦊', playerId: 'DREG5', opponents: [] }));
     localStorage.setItem('gamehub.devAllowSync.v1', '0');
+    // The first-match tutorial blocks the board until Got it (tools/test-battlearena-tips.mjs tests it): seen here.
+    try { const k = 'gamehub.battlearena.v1', v = JSON.parse(localStorage.getItem(k) || '{}'); v.tips = { hp: 1, moves: 1, swap: 1, charge: 1, berry: 1, evolve: 1, extra: 1, bomb: 1 }; localStorage.setItem(k, JSON.stringify(v)); } catch {}
     window.__labels = [];
     window.addEventListener('gamehub:backlabel', (e) => window.__labels.push(!!e.detail));
   });

@@ -23,10 +23,13 @@ import { mirror, mirrorEvents, entryOf, moveOf, teamMode, matchDetail } from './
 /** A match vs the computer: the player's drafted team (side 0) and who opened. */
 const modeOf = (s) => ({ ...teamMode(s, 0), first: s && s.first === 1 ? 'them' : 'me' });
 import { playAttack, evolveScene } from './attacks.js';
+import { noteTipShown, noteTipDone } from '../../js/tips-log.js';
 
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-battlearena-css';
 const SETTINGS_KEY = 'gamehub.battlearena.v1';
+/** The first-match tutorial's tips, in the order they may show (each once per phone, `settings.tips`). */
+const TIP_ORDER = ['hp', 'moves', 'swap', 'charge', 'berry', 'evolve', 'extra', 'bomb'];
 const SAVE_KEY = 'gamehub.battlearena.save.v1';
 const DIFFS = ['easy', 'medium', 'hard'];
 const ME = 0, CPU = 1;
@@ -293,6 +296,8 @@ class BattleArena {
     this.busy = false;
     this.sel = null;
     this.tiles = new Map();
+    this._tip = null;          // its layer went with the old screen
+    this._sawExtra = false;
     return this.gen;
   }
 
@@ -1026,6 +1031,7 @@ class BattleArena {
   /** Board cell size and monster size, measured from the space really there. */
   fit() {
     this.fitHome();
+    if (this._tip) requestAnimationFrame(() => this.placeTip());
     const battle = this.root.querySelector('.ba-battle');
     const field = this.root.querySelector('.ba-field');
     if (!battle || !field) return;
@@ -1121,7 +1127,7 @@ class BattleArena {
 
   canInput() {
     const s = this.state;
-    return !!s && this.screen === 'battle' && !this.busy && s.winner == null && s.turn === ME;
+    return !!s && this.screen === 'battle' && !this.busy && s.winner == null && s.turn === ME && !(this._tip && this._tip.block);
   }
 
   /** Swipe a tile into its neighbour, or tap one then the other. Bound to the board only. */
@@ -1216,6 +1222,7 @@ class BattleArena {
   /** A legal move: keep the new state (saved at once), then tell its story. */
   async commit(res, mine = false) {
     const gen = this.gen;
+    if (mine) this.hideTip(true);
     this.state = res.state;
     this.canon = res.canon || res.state;
     this.save();
@@ -1243,9 +1250,97 @@ class BattleArena {
   next() {
     const s = this.state;
     if (!s || this.screen !== 'battle' || this.busy) return;
-    if (s.winner != null) { this.finish(); return; }
+    if (s.winner != null) { this.hideTip(false); this.finish(); return; }
+    if (s.turn !== ME) this.hideTip(false);
     if (s.turn === CPU) { if (this.link) this.pumpRemote(); else this.cpuTurn(); return; }
     this.syncAll();
+    this.checkTips();
+  }
+
+  // --- the first-match tutorial (2026-11-15, Matt: Ana "didn't really know what was going on ... 4+ things give you an
+  // extra turn ... what the berries did ... how many turns she had left ... health") --------------------------------
+  // One tip at a time, on the player's own turn, the first time each thing matters; each shows ONCE per phone
+  // (`settings.tips`, a preference) and is reported (js/tips-log.js -> players/<id>/tips; root CLAUDE.md: every notice
+  // reports who saw it). A ring on the thing + a bubble + Got it. It blocks the board until Got it, EXCEPT in a live
+  // room (a 25 s clock): there it never blocks and goes away with the player's move.
+  tipTarget(id) {
+    const s = this.state, me = s.sides[ME];
+    const root = this.root;
+    switch (id) {
+      case 'hp': return root.querySelector('.ba-teamrow');
+      case 'moves': return root.querySelector('.ba-moves');
+      case 'swap': return root.querySelector('.ba-board');
+      case 'charge': { const mi = me.mons.findIndex((m) => m.energy > 0); return mi < 0 ? null : this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar'); }
+      case 'berry': return me.berries > 0 && !me.mons.every((m) => m.evo) ? this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry') : null;
+      case 'evolve': { const mi = E.evolveOptions(s)[0]; return mi == null ? null : this.monEl(ME, mi); }
+      case 'extra': return this._sawExtra ? root.querySelector('.ba-moves') : null;
+      case 'bomb': { const t = s.board.find((x) => x && x.k === 'bomb'); return t ? this.tiles.get(t.id) || null : null; }
+      default: return null;
+    }
+  }
+
+  checkTips() {
+    if (this._tip || !this.canInput()) return;
+    const seen = this.settings.tips || (this.settings.tips = {});
+    for (const id of TIP_ORDER) {
+      if (seen[id]) continue;
+      const el = this.tipTarget(id);
+      if (!el || !el.isConnected) continue;
+      this.showTip(id, el);
+      return;
+    }
+  }
+
+  showTip(id, el) {
+    const battle = this.root.querySelector('.ba-battle');
+    if (!battle) return;
+    const block = !this.timed;
+    const ov = document.createElement('div');
+    ov.className = 'ba-coach' + (block ? '' : ' is-free');
+    ov.innerHTML = `<div class="ba-coach-ring"></div>
+      <div class="ba-coach-bubble" role="dialog" aria-live="polite"><p>${escapeHTML(t('tip_' + id))}</p>
+        <button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button></div>`;
+    battle.appendChild(ov);
+    this._tip = { id, el, ov, block };
+    this.placeTip();
+    noteTipShown('battlearena', id);
+    this.on(ov.querySelector('[data-role="tip-ok"]'), 'click', (e) => { e.stopPropagation(); this.hideTip(true); this.checkTips(); });
+  }
+
+  /** Ring the thing, and put the bubble below it (or above, when it sits low), pointing at it. */
+  placeTip() {
+    const tp = this._tip;
+    if (!tp) return;
+    const battle = this.root.querySelector('.ba-battle');
+    if (!battle || !tp.el.isConnected) { this.hideTip(false); return; }
+    const b = battle.getBoundingClientRect(), r = tp.el.getBoundingClientRect();
+    const pad = 6;
+    const ring = tp.ov.querySelector('.ba-coach-ring'), bub = tp.ov.querySelector('.ba-coach-bubble');
+    Object.assign(ring.style, { left: (r.left - b.left - pad) + 'px', top: (r.top - b.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
+    const cx = r.left - b.left + r.width / 2;
+    const w = Math.min(320, b.width - 24);
+    const left = Math.max(12, Math.min(b.width - w - 12, cx - w / 2));
+    bub.style.width = w + 'px';
+    bub.style.left = left + 'px';
+    bub.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
+    const below = r.top - b.top + r.height / 2 < b.height * 0.55;
+    bub.classList.toggle('is-below', below);
+    bub.classList.toggle('is-above', !below);
+    if (below) { bub.style.top = (r.bottom - b.top + pad + 14) + 'px'; bub.style.bottom = ''; }
+    else { bub.style.bottom = (b.bottom - r.top + pad + 14) + 'px'; bub.style.top = ''; }
+  }
+
+  /** `done` = the player saw it through (Got it, or their move in a live room): never shown again on this phone. */
+  hideTip(done) {
+    const tp = this._tip;
+    if (!tp) return;
+    this._tip = null;
+    tp.ov.remove();
+    if (done) {
+      (this.settings.tips || (this.settings.tips = {}))[tp.id] = 1;
+      writeJSON(SETTINGS_KEY, this.settings);
+      noteTipDone('battlearena', tp.id);
+    }
   }
 
   // --- the other person's moves (online) ----------------------------------------------------------
@@ -1779,6 +1874,7 @@ class BattleArena {
         }
         case 'extra':
           extra = true;
+          if (e.side === ME) this._sawExtra = true;   // the first-match tutorial's "extra" tip
           if (this.ui) this.ui.left += 1;
           break;
         case 'bomb':

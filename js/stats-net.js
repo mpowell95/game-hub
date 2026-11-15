@@ -18,6 +18,7 @@ import { getStatsApp, perfReport } from './firebase-boot.js';
 import { installState, appVersion } from './install-state.js';
 import { loadSeen } from './announce.js';
 import { newDockReport } from './new-dock-log.js';
+import { tipsReport } from './tips-log.js';
 import { hubReadReport } from './hub-messages.js';
 import { automationBlocks } from './automation.js';
 
@@ -325,6 +326,9 @@ export async function syncMyStats() {
     // has seen it?"): js/new-dock-log.js. Same additive REPORT shape, read by the admin page (Sent) and
     // tools/read-new-dock.mjs only; omitted while there is nothing to report.
     try { const nd = newDockReport(); if (nd) rec.newDock = nd; } catch { /* a report */ }
+    // WHO HAS SEEN EACH IN-GAME TIP (2026-11-15, js/tips-log.js; Battle Arena's first-match tutorial). Same additive REPORT
+    // shape, read by tools/read-tips.mjs only; omitted while there is nothing to report.
+    try { const tp = tipsReport(); if (tp) rec.tips = tp; } catch { /* a report */ }
     // SLOW DATABASE READS ON THIS PHONE (2026-10-27, js/firebase-boot.js perfReport). Same additive
     // REPORT shape: read by no phone, omitted while there is nothing slow to report.
     const perf = perfReport();

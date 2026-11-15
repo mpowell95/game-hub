@@ -955,3 +955,21 @@
 .ba-root .ba-home { --ba-hm: min(104px, 13vh, 30vw); }
 /* A tall phone's spare room, half above (spreadHome, 2026-11-13): the hero moves down, the menu with it. */
 .ba-root .ba-home-hero { margin-top: var(--ba-lift, 0px); }
+
+/* The first-match tutorial (2026-11-15): a ring on the thing + a bubble pointing at it. Under the result card (40). */
+.ba-root .ba-coach { position: absolute; inset: 0; z-index: 36; background: rgba(0, 0, 0, .28); touch-action: none; }
+.ba-root .ba-coach.is-free { background: none; pointer-events: none; }
+.ba-root .ba-coach-ring { position: absolute; border: 3px solid #ffce3a; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 18px rgba(255, 206, 58, .8); animation: ba-coach-pulse 1.2s ease-in-out infinite; }
+@keyframes ba-coach-pulse { 50% { box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 30px rgba(255, 206, 58, 1); } }
+@media (prefers-reduced-motion: reduce) { .ba-root .ba-coach-ring { animation: none; } }
+.ba-root .ba-coach-bubble { position: absolute; box-sizing: border-box; padding: 14px 16px 12px; border-radius: 16px;
+  background: #fff; color: #15202e; border: 3px solid #ffce3a; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); pointer-events: auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.ba-root .ba-coach-bubble p { margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; }
+.ba-root .ba-coach-ok { align-self: flex-end; min-height: 44px; min-width: 112px; padding: 0 18px; border: 0; border-radius: 12px;
+  background: #ffce3a; color: #15202e; font: inherit; font-size: 18px; font-weight: 900; touch-action: manipulation; cursor: pointer; }
+.ba-root .ba-coach-bubble::after { content: ''; position: absolute; left: var(--ax, 50%); width: 18px; height: 18px; margin-left: -9px;
+  background: #fff; border: 3px solid #ffce3a; transform: rotate(45deg); }
+.ba-root .ba-coach-bubble.is-below::after { top: -12px; border-right: 0; border-bottom: 0; }
+.ba-root .ba-coach-bubble.is-above::after { bottom: -12px; border-left: 0; border-top: 0; }

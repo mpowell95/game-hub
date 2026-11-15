@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1585;
-const CACHE = 'game-hub-v1586';
+const CACHE = 'game-hub-v1587';
 
 const ASSETS = [
   './',
@@ -54,6 +54,7 @@ const ASSETS = [
   './js/game-stats-global.js',
   './js/game-stats-ui.js',
   './js/stats-net.js',
+  './js/tips-log.js',
   './js/firebase-boot.js',
   './js/device-report.js',
   // Report a bug (2026-08-11) + the launcher announcement that introduces it. All five are she... [docs/SW-NOTES.md #2]
@@ -867,7 +868,8 @@ const REST_MANIFEST = {
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'c4edb52832',
   './js/game-stats-ui.js': 'b01e8284ed',
-  './js/stats-net.js': 'b46f740ebd',
+  './js/stats-net.js': '83be7bad7a',
+  './js/tips-log.js': '7bc02856dd',
   './js/firebase-boot.js': 'e7380681ea',
   './js/device-report.js': '501f9753be',
   './js/error-log.js': '2ce0a7eaf3',

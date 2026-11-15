@@ -165,3 +165,14 @@ Battle Arena's test plays counted at its release (`CARRY_TEST.battlearena`, `com
 Read-only. Who has seen the launcher's New game bubble: each person's devices' `players/<id>/newDock` reports merged
 (`js/new-dock-log.js` `mergeNewDock`), per game, times in Eastern. `node tools/read-new-dock.mjs [<game id>]`.
 `tools/test-new-dock.mjs` tests the log and the merge.
+
+## tools/read-tips.mjs (2026-11-15)
+
+Read-only. Who has seen each in-game tip: each person's devices' `players/<id>/tips` reports merged (`js/tips-log.js`
+`mergeTips`: first shown, times shown, first Got it), times in Eastern. `node tools/read-tips.mjs [battlearena] [--days N]`.
+
+## tools/test-battlearena-tips.mjs (2026-11-15)
+
+Battle Arena's first-match tutorial on a dev server: the three first-turn tips in order, each blocking the board until
+Got it, the five later ones when each first matters, saved once and reported, none on a second match or a phone that
+saw them, never blocking in a timed match. `NODE_PATH=$(npm root -g) BASE=http://localhost:8123 node tools/test-battlearena-tips.mjs`.

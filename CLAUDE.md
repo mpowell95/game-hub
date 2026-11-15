@@ -384,6 +384,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `announce.js` / `announce-ui.js` | one-time launcher announcements (`gamehub.announce.v1`), each with an `until` date |
 | `challenge/` | retired challenge system, still load-bearing (`hub.js` imports `hooks.js`); do not delete |
 | `push.js` | push notifications, app half (see "Push notifications") |
+| `tips-log.js` | who saw each in-game tip (`gamehub.tipsLog.v1`, mirrored `players/<id>/tips`, a report): `noteTipShown`/`noteTipDone` (2026-11-15) |
 | `career-store.js` | Baseball's career sync (`careers/<CODE>/baseball/…`) |
 
 **When a screen is removed, grep this table and `js/CLAUDE.md` for what fed it.**
@@ -407,6 +408,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 
 - **Setup cards on real phones (2026-11-08):** `tools/review-setup-cards.cjs` (every multiplayer setup tab on the family's 6 phone sizes, fake database with 3 matches each; shots in `.visual-out/setup-cards/`).
 - **Who has seen the New game bubble (2026-11-13):** `tools/read-new-dock.mjs [<game id>]` (read only); `tools/test-new-dock.mjs`.
+- **Who has seen each in-game tip (2026-11-15):** `tools/read-tips.mjs [<game>] [--days N]` (read only; `js/tips-log.js`, `players/<id>/tips`); Battle Arena's tutorial: `tools/test-battlearena-tips.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
