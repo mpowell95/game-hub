@@ -3003,14 +3003,25 @@ class GolfGame {
 
     // The hatch, over everything. MEASURED contrast is tiny - #616736 band against #656938 hatch,
     // four values apart - so this is a whisper, not the stripes the previous build drew.
-    if (!this._hatchPat) {
+    // ONE PATTERN PER CANVAS (2026-11-15, Matt's iPhone: the dial's band was solid WHITE in a challenge).
+    // Every hole builds a NEW meter canvas (`_renderPlay`), and the pattern used to be made once and
+    // reused on all of them; a pattern made by one canvas's context and stroked on another can draw as
+    // opaque white on iPhone, covering the band, its blocks and the green line. So it is made by the
+    // context that strokes it, from a hatch tile this object keeps alive, and skipped if it fails.
+    if (!this._hatchCv) {
       const hc = document.createElement('canvas'); hc.width = 8; hc.height = 8;
       const hx = hc.getContext('2d');
       hx.strokeStyle = 'rgba(255,255,255,0.075)'; hx.lineWidth = 2;
       hx.beginPath(); hx.moveTo(-3, 11); hx.lineTo(11, -3); hx.stroke();
-      this._hatchPat = c.createPattern(hc, 'repeat');
+      this._hatchCv = hc;
     }
-    arc(BAR_HALF, SWING_MAX, this._hatchPat, BAND);
+    if (this._hatchFor !== c) {
+      let pat = null;
+      try { pat = c.createPattern(this._hatchCv, 'repeat'); } catch { pat = null; }
+      this._hatchPat = pat;
+      this._hatchFor = c;
+    }
+    if (this._hatchPat) arc(BAR_HALF, SWING_MAX, this._hatchPat, BAND);
 
     // The arc's far end cap, black then white, so the block finishes as squarely as it starts.
     for (const [w, col] of [[BAND + 8, '#0b0f07'], [BAND + 4, '#fffdfc']]) {
