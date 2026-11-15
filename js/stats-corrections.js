@@ -42,6 +42,12 @@ export const VOIDED_MATCHES = {
   darts: {
     muzgz01qh0z10nqo: { winner: '3VN33', loser: 'QZCC4' },
   },
+  // Golf: Matt's first challenge to Joe (2026-11-15 5:22 PM ET), started while the swing dial drew
+  // blank on his iPhone (fixed v1585). Matt: "Delete this. The meter didn't work. It can't count
+  // against me." Counts for NOBODY: no winner or loser, hidden from both lists, never counted.
+  golf: {
+    mwiehil8gqhs4xc2: { none: true },
+  },
   // A Spelling Bee DAY (Matt, 2026-10-27: "Do not add today to the leaderboard for Moonis... I meant that
   // it should not be transferred to the long term leaderboard"). `puzzle` = the save/board key. The day's
   // own board still shows him; his Genius win comes out of 'daily', and any long-term Spelling Bee
