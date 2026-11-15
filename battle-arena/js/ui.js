@@ -1279,7 +1279,7 @@ class BattleArena {
         const into = g.cells.has(mv.a) ? mv.a : g.cells.has(mv.b) ? mv.b : -1;
         if (into < 0) continue;
         const line = g.runs.find((r) => r.cells.includes(into)) || g.runs[0];
-        if (!best || (longest ? line.cells.length > best.line.length : line.cells.length < best.line.length)) best = { line: line.cells.slice(), from: into === mv.a ? mv.b : mv.a };
+        if (!best || (longest ? line.cells.length > best.line.length : line.cells.length < best.line.length)) best = { line: line.cells.slice(), from: into === mv.a ? mv.b : mv.a, into };
       }
     }
     return best;
@@ -1300,7 +1300,7 @@ class BattleArena {
       case 'swap': {
         const ln = this.tipLine(3);
         if (!ln) return one(root.querySelector('.ba-board'));
-        return { here: true, parts: [{ cells: ln.line, point: true }, { cells: [ln.from], round: true }] };
+        return { here: true, demo: ln, parts: [{ cells: ln.line, point: true, demo: true }] };
       }
       case 'charge': { const mi = me.mons.findIndex((m) => m.energy > 0); return mi < 0 ? null : one(this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar')); }
       case 'berry': return me.berries > 0 && !me.mons.every((m) => m.evo) ? one(this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry')) : null;
@@ -1310,7 +1310,7 @@ class BattleArena {
         // extra is still to be had). After it happened without that: the move pips.
         if (this._myMoves >= 1 && !s.extraUsed) {
           const ln = this.tipLine(4, true);
-          if (ln) return { here: true, parts: [{ cells: ln.line, point: true }, { cells: [ln.from], round: true }] };
+          if (ln) return { here: true, demo: ln, parts: [{ cells: ln.line, point: true, demo: true }] };
         }
         return this._sawExtra ? one(root.querySelector('.ba-moves')) : null;
       }
@@ -1345,8 +1345,9 @@ class BattleArena {
     const block = !this.timed;
     const ov = document.createElement('div');
     ov.className = 'ba-coach' + (block ? '' : ' is-free');
-    const text = t('tip_' + id) + (tg.here ? ' ' + t('tip_here') : '');
-    ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}"></div>`).join('')
+    const text = t('tip_' + id + (tg.here ? '_demo' : ''));
+    ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}${p.demo ? ' is-demo' : ''}"></div>`).join('')
+      + (tg.demo ? `<svg class="ba-coach-swaparrow" aria-hidden="true"><defs><marker id="ba-cs-head" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto-start-reverse"><path d="M0,0 L14,7 L0,14 z" fill="#fff" stroke="#15202e" stroke-width="1.5"/></marker></defs><line stroke="#15202e" stroke-width="10" stroke-linecap="round"/><line class="is-top" stroke="#fff" stroke-width="6" stroke-linecap="round" marker-start="url(#ba-cs-head)" marker-end="url(#ba-cs-head)"/></svg>` : '')
       + `<div class="ba-coach-bubble" role="dialog" aria-live="polite">${tg.parts.filter((p) => p.point).map(() => '<i class="ba-coach-arrow"></i>').join('')}<p>${escapeHTML(text)}</p>
         <button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button></div>`;
     battle.appendChild(ov);
@@ -1386,6 +1387,12 @@ class BattleArena {
       Object.assign(rings[k].style, { left: (r.left - b.left - pad) + 'px', top: (r.top - b.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
       top = Math.min(top, r.top - pad); bottom = Math.max(bottom, r.bottom + pad);
     });
+    if (tp.tg.demo) {                 // keep the bubble off the two tiles that trade places
+      for (const i of [tp.tg.demo.from, tp.tg.demo.into]) {
+        const el = this.state.board[i] && this.tiles.get(this.state.board[i].id);
+        if (el) { const q = el.getBoundingClientRect(); top = Math.min(top, q.top - 4); bottom = Math.max(bottom, q.bottom + 4); }
+      }
+    }
     const pointed = rects.filter((r, k) => tp.tg.parts[k].point);
     for (const r of pointed) cxSum += r.left - b.left + r.width / 2;
     const cx = cxSum / pointed.length;
@@ -1399,10 +1406,43 @@ class BattleArena {
     bub.classList.toggle('is-above', !below);
     if (below) { bub.style.top = (bottom - b.top + 14) + 'px'; bub.style.bottom = ''; }
     else { bub.style.bottom = (b.bottom - top + 14) + 'px'; bub.style.top = ''; }
+    if (tp.tg.demo) this.placeDemo(tp, b);
     tp.ov.querySelectorAll('.ba-coach-arrow').forEach((a, k) => {
       const r = pointed[k];
       a.style.left = Math.max(18, Math.min(w - 18, r.left - b.left + r.width / 2 - left)) + 'px';
     });
+  }
+
+  /** The swap, shown: copies of the two tiles trade places over and over (the box lights when the line forms), a
+   *  two-way arrow between them; the real two tiles hide under the copies while the tip is up. */
+  placeDemo(tp, b) {
+    const { from, into } = tp.tg.demo;
+    const tA = this.state.board[from], tB = this.state.board[into];
+    const elA = tA && this.tiles.get(tA.id), elB = tB && this.tiles.get(tB.id);
+    if (!elA || !elB) return;
+    const rA = elA.getBoundingClientRect(), rB = elB.getBoundingClientRect();
+    const dx = rB.left - rA.left, dy = rB.top - rA.top;
+    for (const c of tp.ov.querySelectorAll('.ba-coach-ghost')) c.remove();
+    const ghost = (el, r, x, y) => {
+      const g = el.cloneNode(true);
+      g.className = 'ba-tile ba-coach-ghost';
+      Object.assign(g.style, { left: (r.left - b.left) + 'px', top: (r.top - b.top) + 'px', width: r.width + 'px', height: r.height + 'px', transform: '' });
+      g.style.setProperty('--dx', x + 'px'); g.style.setProperty('--dy', y + 'px');
+      tp.ov.insertBefore(g, tp.ov.querySelector('.ba-coach-swaparrow'));
+    };
+    ghost(elB, rB, -dx, -dy);
+    ghost(elA, rA, dx, dy);              // the moving tile on top
+    tp.hidden = [elA, elB];
+    for (const el of tp.hidden) el.style.visibility = 'hidden';
+    const svg = tp.ov.querySelector('.ba-coach-swaparrow');
+    if (svg) {
+      const ax = rA.left - b.left + rA.width / 2, ay = rA.top - b.top + rA.height / 2;
+      const bx = ax + dx, by = ay + dy, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, cut = len * 0.2;
+      for (const ln of svg.querySelectorAll('line')) {
+        ln.setAttribute('x1', ax + ux * cut); ln.setAttribute('y1', ay + uy * cut);
+        ln.setAttribute('x2', bx - ux * cut); ln.setAttribute('y2', by - uy * cut);
+      }
+    }
   }
 
   /** `done` = the player saw it through (Got it, or their move in a live room): never shown again on this phone. */
@@ -1410,6 +1450,7 @@ class BattleArena {
     const tp = this._tip;
     if (!tp) return;
     this._tip = null;
+    for (const el of tp.hidden || []) el.style.visibility = '';
     tp.ov.remove();
     if (done) {
       (this.settings.tips || (this.settings.tips = {}))[tp.id] = 1;
