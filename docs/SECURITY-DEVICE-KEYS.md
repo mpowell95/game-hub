@@ -38,8 +38,9 @@ devices get the New sign in notice. Step B's "Remove 'That's me'" item below is 
 Replaces Design change 2. A phone linking to an existing code waits ("Check your other phone", Cancel) and plays nothing as
 that code until the code's other phone taps Allow (popup if open, notification if closed), or Matt taps Allow on Admin > Now.
 Deny = "Not allowed", back to Choose a name. A phone that has played before keeps its sign in and needs nothing; only a wiped
-phone asks again. Mockup v4: `docs/mockups/new-phone-approval.html` (not yet "build it"). Open: does "That's me" ask too; how
-long a request waits. Every popup and notification reports who saw it and what they tapped.
+phone asks again. A name in use says "<name> is taken" with Pick another / That's me; That's me asks for Allow the same way
+(Matt, 2026-11-15). "No other phone? Report to Matt" files a bug report to Matt ("Sent to Matt"). Mockup v5:
+`docs/mockups/new-phone-approval.html` (not yet "build it"). Open: how long a request waits. Every popup and notification reports who saw it and what they tapped.
 
 ## Step B (NOT built; player-visible, needs Matt's "ship it")
 1. Server: t `pin` (6 digits, 10 min, 5 tries), t `fresh` (a brand-new unused code: no `codeKeys`, no
