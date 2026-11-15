@@ -3640,12 +3640,16 @@ class GolfGame {
     { name: mp.them.name, scores: seq.scores(otherSide) },
   ], g.over ? -1 : g.hole)}
         <p class="gf-mp-status">${esc(status)}</p>
-        ${mine ? `<button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="play">${esc(t('mp_play'))}</button>` : ''}
+        ${mine ? `<button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="play">${esc(g.tp >= 1 ? t('mp_next_hole') : t('mp_play'))}</button>` : ''}
+        ${mine && g.pass ? `<button type="button" class="gf-btn gf-mp-wide" data-mp="send">${esc(t('mp_send', { name: String(mp.them.name || '?').split(/\s+/)[0] }))}</button>` : ''}
         ${g.over ? '' : `<button type="button" class="gf-btn gf-mp-wide gf-mp-quiet" data-mp="end">${esc(this._mpEndLabel())}</button>`}
       </div>`);
     this._on(el.querySelector('[data-mp="back"]'), 'click', () => this._renderSetup('online'));
     const play = el.querySelector('[data-mp="play"]');
     if (play) this._on(play, 'click', () => this._mpPlayHole());
+    // SEND (play ahead, 2026-11-15): hand the turn over after one or more holes.
+    const send = el.querySelector('[data-mp="send"]');
+    if (send) this._on(send, 'click', () => { send.disabled = true; this._mpRecord({ by: mp.side, pass: 1 }); this._mpCard(); });
     const end = el.querySelector('[data-mp="end"]');
     if (end) this._on(end, 'click', () => this._mpAskEnd());
     this._mpReattachChat();

@@ -49,7 +49,9 @@ MP.__setBootForTest(async () => ({ db: {}, api }), { allowDev: true });
 
 const THEM = { code: 'TESTB', name: 'Tester Two', emoji: '🦊' };
 const HOLES = [{ i: 0, n: 1, par: 4, pin: 1 }, { i: 1, n: 2, par: 3, pin: -1 }, { i: 2, n: 3, par: 5, pin: 0 }];
-const NEW = { them: THEM, course: 'pinevalley', round: 'quick3', holes: HOLES };
+// The sections below play the ONE-HOLE-A-TURN rule every match before 2026-11-15 replays with
+// (`ahead: false` = no `ah` on the match); the play-ahead rule has its own section at the end.
+const NEW = { them: THEM, course: 'pinevalley', round: 'quick3', holes: HOLES, ahead: false };
 const rest = (by, h, s, x = 1, y = 100) => ({ by, h, s, x, y });
 const done = (by, h, s) => ({ by, h, s, d: 1, x: 0, y: 300 });
 const stats = (p) => JSON.parse(stores[p].get('gamehub.stats') || '{}');
@@ -271,6 +273,51 @@ ok('`golf` is in the backup branch list', /\n\s*'golf',/.test(readFileSync('./ba
 const ui = readFileSync('./golf/js/ui.js', 'utf8');
 ok('ui.js: a challenge never touches the solo save', /if \(this\.mp\) return this\._mpLogRest\(\);/.test(ui));
 ok('ui.js: quick chat in every challenge (golf/chat)', /createMatchChat\(/.test(ui) && /const node = 'golf'/.test(ui));
+
+// --- PLAY AHEAD (Matt, 2026-11-15: "give the person an option to send 1 hole or play all 3") ---------
+{
+  const pass = (by) => ({ by, pass: 1 });
+  use('A');
+  let r = await MP.createGame({ ...NEW, ahead: true });
+  const id2 = r.id;
+  ok('a new challenge carries ah: true', getAt(`golf/games/${id2}`).ah === true);
+  ok('Send before playing a hole is refused', (await MP.appendLog(id2, 0, [pass('a')])).reason === 'rules-refused');
+  r = await MP.appendLog(id2, 0, [done('a', 0, 4)]);
+  ok('a finished hole KEEPS the turn, on to hole 2, Send offered', r.ok && r.game.turn === 'a' && r.game.hole === 1 && r.game.pass === true && r.game.tp === 1);
+  ok('...and nothing is delivered yet', !getAt(`golf/index/TESTB/${id2}`));
+  r = await MP.appendLog(id2, 1, [rest('a', 1, 1)]);
+  ok('Send mid-hole is refused', (await MP.appendLog(id2, 2, [pass('a')])).reason === 'rules-refused' && r.game.pass === false);
+  r = await MP.appendLog(id2, 2, [done('a', 1, 3)]);
+  ok('two holes played, still the challenger\'s turn', r.ok && r.game.turn === 'a' && r.game.hole === 2 && r.game.tp === 2);
+  r = await MP.appendLog(id2, 3, [pass('a')]);
+  ok('Send: the turn passes, the other starts at THEIR hole 1, and the challenge is delivered',
+    r.ok && r.game.turn === 'b' && r.game.hole === 0 && getAt(`golf/index/TESTB/${id2}`).yourTurn === true && getAt(`golf/index/TESTB/${id2}`).hole === 1);
+  ok('a Send already there is not written twice', (await MP.appendLog(id2, 3, [pass('a')])).ok && Object.keys(getAt(`golf/games/${id2}/log`)).length === 4);
+  use('B');
+  r = await MP.appendLog(id2, 4, [done('b', 0, 5), pass('b')]);
+  ok('they play one hole and Send it back: the challenger is on hole 3', r.ok && r.game.turn === 'a' && r.game.hole === 2 && getAt(`golf/index/TESTA/${id2}`).yourTurn === true);
+  use('A');
+  r = await MP.appendLog(id2, 6, [done('a', 2, 5)]);
+  ok('the challenger\'s last hole passes on its own (nothing left to play)', r.ok && r.game.turn === 'b' && r.game.hole === 1 && r.game.tp === 0);
+  use('B');
+  r = await MP.appendLog(id2, 7, [done('b', 1, 3)]);
+  ok('the other plays on: a hole ahead keeps the turn while the challenger has none left, no Send', r.ok && r.game.turn === 'b' && r.game.pass === false);
+  ok('...Send is refused when the other has nothing to play', (await MP.appendLog(id2, 8, [pass('b')])).reason === 'rules-refused');
+  r = await MP.appendLog(id2, 8, [done('b', 2, 4)]);
+  ok('both done, level at 12: a playoff, challenger first', r.ok && !r.game.over && r.game.turn === 'a' && r.game.hole === 3 && r.game.totals.a === 12 && r.game.totals.b === 12);
+  use('A');
+  r = await MP.appendLog(id2, 9, [done('a', 3, 4)]);
+  ok('the playoff stays one hole a turn (no Send needed)', r.ok && r.game.turn === 'b' && r.game.pass === false);
+  use('B');
+  r = await MP.appendLog(id2, 10, [done('b', 3, 3)]);
+  ok('...and the lower playoff score wins', r.ok && r.game.over && r.game.over.winner === 'b' && r.game.over.why === 'playoff');
+  const doc2 = clone(getAt(`golf/games/${id2}`));
+  ok('the whole play-ahead match replays', !!MP.validateGame(doc2));
+  const bad5 = clone(doc2); bad5.log['0001'] = { by: 'b', h: 0, s: 3, d: 1, x: 0, y: 1, at: 1 };
+  ok('a hole played out of turn makes it invalid', MP.validateGame(bad5) === null);
+  const old = clone(doc2); delete old.ah;
+  ok('without `ah` the same log is refused (the old rule passes on every hole)', MP.validateGame(old) === null);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
