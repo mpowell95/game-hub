@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1575;
-const CACHE = 'game-hub-v1581';
+const CACHE = 'game-hub-v1582';
 
 const ASSETS = [
   './',
@@ -1282,8 +1282,8 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': 'd1dfd2526f',
   './golf/': 'cc7a73041c',
   './golf/index.html': 'cc7a73041c',
-  './golf/css/golf.css': 'ca6b4a6e39',
-  './golf/js/ui.js': '3fdf66bbdd',
+  './golf/css/golf.css': 'b8024fc1e7',
+  './golf/js/ui.js': '5208635c23',
   './golf/js/strings.js': 'fcbd5be063',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
@@ -1296,7 +1296,7 @@ const REST_MANIFEST = {
   './golf/js/rounds.js': 'b6455879b1',
   './golf/js/board.js': '4bdebaa52e',
   './golf/js/save.js': 'ff5f0f70ab',
-  './golf/js/progress.js': '47d04c9fd5',
+  './golf/js/progress.js': 'f68fd5dc8d',
   './golf/js/tutorial.js': '750f5299f7',
   './golf/js/mp.js': '9cd62b30bf',
   './golf/js/mp-ui.js': '170794e6f2',
