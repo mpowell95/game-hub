@@ -30,7 +30,9 @@ import { loadProfile, saveProfile, newPlayerCode, canonicalizeCode,
 import { statsOwner } from './game-stats.js';
 import { usernameStatus, usernameOwner, claimUsername, lookupCodeOwner, syncMyStats } from './stats-net.js';
 import { getLang, setLang, makeT } from './i18n.js';
-import { liveNow, whenLive } from './server-time.js';
+import { liveNow, whenLive, serverNow } from './server-time.js';
+import { refreshAdminConfig } from './admin-config.js';
+import { thatsMeRoute, waitView } from './signin-rules.js';
 import STRINGS from './strings.js';
 
 const t = makeT(STRINGS);
@@ -54,8 +56,16 @@ function ensureCss() {
 }
 
 // How recent a claim of the typed name must be for "That's me" (one day: covers adding to the Home
-// Screen right after the Safari tab's first run; older names still need their code).
-const ME_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Screen right after the Safari tab's first run; older names still need their code). ME_WINDOW_MS now lives in
+// js/signin-rules.js (same 24 hours), with thatsMeRoute, which keeps that rule for every code.
+//
+// ALLOW / DENY SIGN IN (2026-11-15, js/signin-ask.js; NOT cleared for players): for a code in the ask set only
+// (js/admin-config.js resolveSigninAsk, test1's DREG5 by default), Link and "That's me" on a name older than
+// 24 hours do NOT link here. They send a request and wait on "Check your other phone" until the code's other
+// phone (or Matt) taps Allow; only then does the SAME linkTo below run. A name claimed in the last 24 hours
+// still links at once, as before (Matt, 2026-11-15: an iPhone's Home Screen app is a new phone to the Safari tab
+// that made the name, and that tab cannot get notifications). Every other code: byte-for-byte today's gate.
+// Nothing here is written to the profile until the link is allowed, so a refused request changes nothing.
 
 let _pending = null;   // the in-flight gate, so concurrent callers share ONE overlay
 
@@ -96,6 +106,8 @@ function mountGate(done) {
   box.innerHTML = `
     <div class="ng-scrim"></div>
     <div class="ng-card" role="dialog" aria-modal="true" aria-label="${esc(t('hub_fr_dialog_aria'))}">
+      <div class="ng-step" data-role="ng-step" hidden></div>
+      <div data-role="ng-main">
       <h2 class="ng-h">${esc(t('hub_fr_title'))}</h2>
       <p class="ng-lead">${esc(t('hub_fr_lead'))}</p>
       <div class="ng-row ng-langrow" role="group" aria-label="${esc(t('hub_fr_langrow_aria'))}">
@@ -116,7 +128,9 @@ function mountGate(done) {
       <div class="ng-row ng-me" data-role="ng-me-row" hidden>
         <button type="button" class="ng-btn ng-btn-primary" data-role="ng-me">${esc(t('hub_fr_me'))}</button>
       </div>
-    </div>`;
+      </div>
+    </div>
+    <div class="ng-toast" data-role="ng-toast" role="status" aria-live="polite" hidden></div>`;
   document.body.appendChild(box);
 
   const q = (sel) => box.querySelector(sel);
@@ -128,12 +142,19 @@ function mountGate(done) {
   const meRow = q('[data-role="ng-me-row"]');
   const meBtn = q('[data-role="ng-me"]');
   let meCode = '';   // the code "That's me" links to; set only by a recent claim of the typed name
+  const stepEl = q('[data-role="ng-step"]');
+  const mainEl = q('[data-role="ng-main"]');
+  const toastEl = q('[data-role="ng-toast"]');
+  // The config's ask set may have changed since this phone last read it: one read now, waited on (briefly)
+  // only when a gated decision needs it (js/signin-ask.js needsAllow).
+  try { refreshAdminConfig().catch(() => {}); } catch { /* cached */ }
   const say = (s) => { msgEl.textContent = s || ''; meRow.hidden = true; meCode = ''; };
   const busy = (on) => { saveBtn.disabled = on; linkBtn.disabled = on; meBtn.disabled = on; };
 
   setTimeout(() => { try { nameIn.focus(); } catch { /* ignore */ } }, 60);
 
   const finish = () => {
+    stopWait();
     box.remove();
     // Mirror the new identity promptly so the leaderboard picks it up without waiting for the next
     // hub open. Best-effort by design: syncMyStats never throws and logs its own failures loudly.
@@ -198,13 +219,18 @@ function mountGate(done) {
       // claim look fresh, so "That's me" handed over any name's code. No server time = no offer.
       let now = liveNow();
       if (now == null) { try { now = await whenLive(2500); } catch { now = null; } }
-      busy(false);
       const age = claim && Number(claim.at) > 0 && now != null ? now - Number(claim.at) : -1;
-      if (age >= 0 && age < ME_WINDOW_MS) {
+      // thatsMeRoute (js/signin-rules.js): under 24 h = 'link', exactly today's rule for every code. Only an
+      // older name of a code in the sign-in ask set asks for Allow (NOT cleared for players).
+      let route = thatsMeRoute({ gated: false, ageMs: age });
+      if (route === 'none' && claim && claim.code && await gatedFor(claim.code)) route = thatsMeRoute({ gated: true, ageMs: age });
+      busy(false);
+      if (route === 'link') {
         say(t('hub_fr_msg_is_you'));
         meCode = claim.code;
         meRow.hidden = false;
-      } else say(t('hub_fr_msg_taken'));
+      } else if (route === 'ask') showTaken(name, claim.code);
+      else say(t('hub_fr_msg_taken'));
       return;
     }
     saveProfile(Object.assign({}, cur, { name, playerId: code }));
@@ -219,10 +245,14 @@ function mountGate(done) {
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveBtn.click(); });
   codeIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') linkBtn.click(); });
 
-  linkBtn.addEventListener('click', () => {
+  linkBtn.addEventListener('click', async () => {
     const code = canonicalizeCode(codeIn.value);
     if (!code) { say(t('hub_fr_msg_invalid_code')); return; }
-    linkTo(code, '');
+    busy(true);
+    const gated = await gatedFor(code);
+    busy(false);
+    if (gated) askLink(code);
+    else linkTo(code, '');
   });
 
   // "That's me": link to the code that claimed the typed name in the last day. The typed name IS
@@ -254,6 +284,148 @@ function mountGate(done) {
     saveProfile(next);
     finish();
   }
+
+  // --- ALLOW / DENY SIGN IN (gated codes only; see the note at ME_WINDOW_MS above) ----------------------------
+  let _si = null;                       // js/signin-ask.js, loaded only when a gated code needs it
+  const si = async () => (_si = _si || await import('./signin-ask.js'));
+  async function gatedFor(code) {
+    try { return await (await si()).needsAllow(code); } catch { return false; }
+  }
+  const tl = (k, en, p) => { const v = t(k, p); return v && v !== k ? v : String(en).replace(/\{(\w+)\}/g, (m, x) => (p && p[x] != null ? p[x] : m)); };
+  function showStep(html) {
+    stepEl.innerHTML = html;
+    stepEl.hidden = false;
+    mainEl.hidden = true;
+  }
+  function backToMain() {
+    stopWait();
+    stepEl.hidden = true;
+    stepEl.innerHTML = '';
+    mainEl.hidden = false;
+    busy(false);
+    say('');
+  }
+  function toast(text) {
+    toastEl.textContent = text;
+    toastEl.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toastEl.hidden = true; }, 2600);
+  }
+  const onStep = (role, fn) => { const b = stepEl.querySelector(`[data-role="${role}"]`); if (b) b.addEventListener('click', fn); };
+
+  // Screen 2: "<name> is taken" / Pick another, That's me.
+  function showTaken(name, code) {
+    showStep(`<h2 class="ng-sh">${esc(tl('si_taken', '{name} is taken', { name }))}</h2>
+      <div class="ng-row ng-wide"><button type="button" class="ng-btn ng-btn-ghost" data-role="ng-other">${esc(tl('si_pick_another', 'Pick another'))}</button>
+      <button type="button" class="ng-btn ng-btn-primary" data-role="ng-ask-me">${esc(t('hub_fr_me'))}</button></div>`);
+    onStep('ng-other', () => { backToMain(); nameIn.value = ''; try { nameIn.focus(); } catch { /* ignore */ } });
+    onStep('ng-ask-me', () => ask(code, name, '', 'thatsme'));
+  }
+
+  // Link with a gated code: whose code it is (the same lookup linkTo makes), then ask.
+  async function askLink(code) {
+    busy(true);
+    say(t('hub_fr_msg_linking'));
+    let owner = null;
+    try { owner = await lookupCodeOwner(code); } catch { owner = null; }
+    if (!owner || !owner.name) { busy(false); say(t('hub_fr_msg_code_unknown')); return; }
+    ask(code, owner.name, owner.emoji || '', 'link');
+  }
+
+  async function ask(code, name, emoji, via) {
+    busy(true);
+    const m = await si();
+    const r = await m.createRequest(code, { name, via });
+    if (!r.ok) { backToMain(); say(t('hub_fr_msg_need_net')); return; }
+    const w = { code, id: r.id, name, emoji, via, t: Date.now() };
+    m.saveWait(w);
+    showWait(w);
+  }
+
+  // Screen 3 (+4): "Check your other phone", spinner, "No other phone? Report to Matt", Cancel.
+  let _unwatch = null, _tick = null, _done = false;
+  function stopWait() {
+    if (_unwatch) { try { _unwatch(); } catch { /* fine */ } _unwatch = null; }
+    clearInterval(_tick); _tick = null;
+  }
+  async function showWait(w) {
+    const m = await si();
+    _done = false;
+    showStep(`<h2 class="ng-sh">${esc(tl('si_check_other', 'Check your other phone'))}</h2>
+      <div class="ng-wait"><div class="ng-spin" aria-hidden="true"></div></div>
+      <p class="ng-sl"><span class="ng-q">${esc(tl('si_no_other', 'No other phone?'))}</span> <button type="button" class="ng-lnk" data-role="ng-report">${esc(tl('si_report', 'Report to Matt'))}</button></p>
+      <div class="ng-row ng-wide"><button type="button" class="ng-btn ng-btn-ghost" data-role="ng-cancel">${esc(tl('si_cancel', 'Cancel'))}</button></div>`);
+    onStep('ng-cancel', async (e) => {
+      e.currentTarget.disabled = true;
+      _done = true;
+      await m.cancelRequest(w.code, w.id);
+      m.clearWait();
+      backToMain();
+    });
+    onStep('ng-report', async (e) => {
+      const b = e.currentTarget;
+      if (b.disabled) return;
+      b.disabled = true;
+      const ok = await m.reportToMatt(w.name, w.code);
+      b.disabled = false;
+      toast(ok ? tl('si_sent', 'Sent to Matt') : tl('si_not_sent', "Didn't send. Try again."));
+    });
+    let last = null;
+    const judge = async () => {
+      if (_done || !last) return;
+      const now = liveNow() != null ? liveNow() : serverNow();
+      const v = waitView(last, now);
+      if (v === 'wait') return;
+      _done = true;
+      if (v === 'in') {
+        // THE LAW rule 6: the server's grant is proven by a fresh read of this phone's own claim first
+        // (not there yet: keep watching; the 15 s tick asks again).
+        if (!(await m.confirmClaim(w.code))) { _done = false; return; }
+        stopWait();
+        m.clearWait();
+        backToMain();
+        await linkTo(w.code, w.name);
+        if (!box.isConnected) signedInToast(tl('si_signed_in', 'Signed in as {name}', { name: (loadProfile() || {}).name || w.name }));
+        return;
+      }
+      stopWait();
+      m.clearWait();
+      if (v === 'cancelled') { backToMain(); return; }
+      showEnd(v === 'denied' ? tl('si_not_allowed', 'Not allowed') : tl('si_no_answer', 'No answer'));
+    };
+    _unwatch = await m.watchMine(w.code, w.id, (req) => { last = req; judge(); });
+    _tick = setInterval(judge, 15000);
+  }
+
+  // Screens 8: "Not allowed" (or "No answer" after 10 minutes) / OK, back to Choose a name.
+  function showEnd(title) {
+    showStep(`<h2 class="ng-sh">${esc(title)}</h2>
+      <div class="ng-row ng-wide"><button type="button" class="ng-btn ng-btn-primary" data-role="ng-ok">OK</button></div>`);
+    onStep('ng-ok', () => backToMain());
+  }
+
+  // A wait the app was closed in the middle of carries on where it was.
+  si().then((m) => { const w = m.readWait(); if (w && box.isConnected) showWait(w); }).catch(() => {});
+  _testHooks = { showTaken, showWait, showEnd, toast };
+}
+
+// TEST SEAM (tools only, the screens check): the open gate's screens, drawn without a network.
+let _testHooks = null;
+export function __gateScreensForTest() { return _testHooks; }
+
+/** "Signed in as <name>" over the page the gate just left. */
+function signedInToast(text) {
+  try {
+    const el = document.createElement('div');
+    el.className = 'ng-root-toast';
+    el.setAttribute('role', 'status');
+    el.textContent = text;
+    el.style.cssText = 'position:fixed;left:50%;bottom:calc(60px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147483000;'
+      + 'padding:14px 22px;border-radius:999px;background:#f2f6fb;color:#14202f;font:800 18px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;'
+      + 'white-space:nowrap;box-shadow:0 8px 30px rgba(0,0,0,.35);pointer-events:none';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  } catch { /* a nicety */ }
 }
 
 function esc(s) {

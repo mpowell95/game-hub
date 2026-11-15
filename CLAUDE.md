@@ -147,12 +147,14 @@ Only equal on both is tied. `boardMetricCmp` / `tieByAverage`.
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
 A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key
-(`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. Step B (PINs for a new phone, rules
-lock on `msgAuth` and `players/`) is planned, NOT built, player-visible: needs Matt's "ship it". `docs/SECURITY-DEVICE-KEYS.md`.
+(`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. `docs/SECURITY-DEVICE-KEYS.md`.
 **Private reads LIVE (2026-11-15, Matt: "Yeah we should def do this")**: `bugReports`, `bugReportShots`, `deviceReports`, `selfies` = admins +
 reader key only (a report carries `uid` so its sender can re-read it; `tools/read-*-reports.mjs` and the backup sign in with `GAMEHUB_READER`);
-`pushSubs/<code>` = that code + admins + reader. Checks: `tools/test-no-deletes-rules.mjs` (reads too). Step B now = **Allow / Deny on the player's
-other phone** (Matt, 2026-11-15), replacing Design change 2 in that doc. Every page carries `noindex, nofollow` (2026-11-15); a new page must too.
+`pushSubs/<code>` = that code + admins + reader. Checks: `tools/test-no-deletes-rules.mjs` (reads too). **Step B BUILT, GATED (2026-11-15, Matt: "cool yeah build"; NOT
+cleared for players)**: Link with a code, or That's me on a name over 24 h old, waits for Allow on the code's other phone (popup /
+push) or Admin > Now (`js/signin-ask.js`, `js/signin-rules.js`, `functions/signin.js` grants `msgAuth`, `signIns/`), only for codes in the
+ask set (`resolveSigninAsk`: DREG5 + Admin > People > Ask to sign in; `signin/everyone` = release switch). A name under 24 h links at once
+for every code (the iPhone Home Screen app). `msgAuth` lock + release steps: that doc, "The release". Every page carries `noindex, nofollow` (2026-11-15); a new page must too.
 
 ## Open handoff (2026-10-30)
 
@@ -413,7 +415,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
-- **Device keys (2026-11-04):** `tools/test-device-key.mjs`.
+- **Device keys (2026-11-04):** `tools/test-device-key.mjs`. **Allow / Deny sign in (2026-11-15):** `tools/test-signin-ask.mjs`, `tools/test-signin-rules-emu.mjs` (rules on the real emulator).
 - **Battle Arena's back swipe (2026-11-13):** `tools/test-battlearena-back.mjs` (dev server; real touch swipes, the phone's gesture, the hub button).
 - **Battle Arena's test plays carried at release (2026-11-13):** `tools/test-battlearena-carry.mjs` (a test record that started as a copy is never added twice).
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).

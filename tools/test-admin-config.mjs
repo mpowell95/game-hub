@@ -57,13 +57,13 @@ const A = await import('../js/admin-config.js');
 
 // --- normalizeConfig: anything in, the documented shape out ------------------------------------
 console.log('\n--- the shape normalizer ---');
-eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
-eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
+eq('null normalizes to an empty config', A.normalizeConfig(null), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {}, signin: { ask: {}, everyone: false } });
+eq('a string normalizes to an empty config', A.normalizeConfig('nonsense'), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {}, signin: { ask: {}, everyone: false } });
 eq('junk in the branches is replaced, not trusted',
-  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
+  A.normalizeConfig({ games: 7, skeeball: { boards: 'x' } }), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {}, signin: { ask: {}, everyone: false } });
 eq('a real config survives intact',
   A.normalizeConfig({ games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } } }),
-  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
+  { games: { cuppong: { live: true } }, skeeball: { boards: { popongo: { open: true } } }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {}, signin: { ask: {}, everyone: false } });
 
 // --- resolveGameLive: the override sits ON TOP of the code default -----------------------------
 console.log('\n--- is this game live ---');
@@ -144,7 +144,7 @@ console.log('\n--- the local cache ---');
 // boot with, not something it acquires halfway through a session.
 store.set(A.CACHE_KEY, '{ not json');
 eq('a corrupt cache reads as an empty config instead of throwing',
-  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {} });
+  A.readCachedConfig(), { games: {}, skeeball: { boards: {} }, corrections: { skeeball: {}, holdem: {}, adjust: {} }, golf: { courses: {} }, deviceResets: {}, online: {}, bee: { undo: {} }, integrity: { undo: {}, void: {} }, reviewed: {}, signin: { ask: {}, everyone: false } });
 ok('and the code default still decides every game', A.isGameLive('uno', true) === true);
 ok('a devOnly game stays hidden through a corrupt cache', A.isGameLive('cuppong', false) === false);
 ok('no machine is released by a corrupt cache', A.isBoardReleased('popongo') === false);
@@ -278,6 +278,31 @@ console.log('\n-- stats adjustments (corrections/adjust, 2026-11-08) --');
   eq('a bad game id is refused', !!(bad2 && bad2.ok === false), true);
   const src = (await import('node:fs')).readFileSync(new URL('../js/admin-ui.js', import.meta.url), 'utf8');
   eq('wired: the admin page writes it through setAdjust', /setAdjust\(code, sid, k, /.test(src) && /adjustHTML\(cfg, p, sid\)/.test(src), true);
+}
+
+console.log('\n-- Allow / Deny sign in: who is asked (signin/, 2026-11-15) --');
+{
+  eq('test1\'s code is asked by default', A.resolveSigninAsk(null, 'DREG5'), true);
+  eq('...matched case-blind', A.resolveSigninAsk(null, ' dreg5 '), true);
+  eq('every other code is NOT asked (today\'s link, unchanged)', A.resolveSigninAsk(null, 'ABCDE'), false);
+  eq('Matt adds a code', A.resolveSigninAsk({ signin: { ask: { ABCDE: true } } }, 'ABCDE'), true);
+  eq('...and takes test1 out', A.resolveSigninAsk({ signin: { ask: { DREG5: false } } }, 'DREG5'), false);
+  eq('only a real boolean is a choice', A.resolveSigninAsk({ signin: { ask: { ABCDE: 'yes' } } }, 'ABCDE'), false);
+  eq('the release switch asks every code', A.resolveSigninAsk({ signin: { everyone: true } }, 'ABCDE'), true);
+  eq('...but a code Matt took out stays out', A.resolveSigninAsk({ signin: { everyone: true, ask: { ABCDE: false } } }, 'ABCDE'), false);
+  eq('only a literal true releases it', A.resolveSigninAsk({ signin: { everyone: 'yes' } }, 'ABCDE'), false);
+  eq('junk config: only the default', A.resolveSigninAsk({ signin: 7 }, 'DREG5') && !A.resolveSigninAsk({ signin: 7 }, 'ABCDE'), true);
+  eq('no code, never asked', A.resolveSigninAsk({ signin: { everyone: true } }, ''), false);
+  eq('normalizing twice keeps it', A.resolveSigninAsk(A.normalizeConfig(A.normalizeConfig({ signin: { everyone: true } })), 'ABCDE'), true);
+  const bad = await A.setSigninAsk('no!', true);
+  eq('a bad code is refused before any write', !!(bad && bad.ok === false), true);
+  const fs = await import('node:fs');
+  const ui = fs.readFileSync(new URL('../js/admin-ui.js', import.meta.url), 'utf8');
+  eq('wired: the admin page toggles it (setSigninAsk) and lists waiting sign ins', /setSigninAsk\(code, !on\)/.test(ui) && /readAllWaiting\(\)/.test(ui), true);
+  const gate = fs.readFileSync(new URL('../js/name-gate.js', import.meta.url), 'utf8');
+  eq('wired: the name gate asks only through needsAllow', /needsAllow\(code\)/.test(gate) && /if \(gated\) askLink\(code\)/.test(gate), true);
+  const hub = fs.readFileSync(new URL('../js/hub.js', import.meta.url), 'utf8');
+  eq('wired: the hub loads the watch only for a code in the ask set', /if \(!code \|\| !isSigninAsk\(code\)\)/.test(hub), true);
 }
 console.log(`\nAdmin config tests: ${passed} passed, ${failures.length} failed.`);
 if (failures.length) { failures.forEach((f) => console.log(`  - ${f}`)); process.exit(1); }
