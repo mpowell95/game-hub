@@ -332,6 +332,7 @@ Rainbit / Rainbeast, `zapup` = Sparkpup / Sparktail; evolved: Thornpaw → Thorn
 Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and the history use the old names.
 - **How to play, 2026-11-15 (Matt: "Improve/fix these screens")**: the card sits BELOW the hub's Back button and the TEST tag
   (`.ba-overlay:has(.ba-help)`; on his iPhone the Powers list ran up under both and hid the tabs) and Powers is 15px with a 126px
-  word column, so it fits his 402x874 unscrolled (a 360x668 phone scrolls inside the card). Basics: the swap is the ORIGINAL picture with an
-  arrowhead at each end of its white line (Matt: "like your original one, but to just have arrows on that white line"), and "Full bar" is the battle's own bar (gem, full
+  word column, so it fits his 402x874 unscrolled (a 360x668 phone scrolls inside the card). Basics: the swap is the ORIGINAL picture with a proper
+  two-headed curved arrow (SVG markers, solid heads that follow the curve, in a 6px gap left of the water/fire column; Matt: "like
+  your original one, but to just have arrows on that white line", then "these arrows are terrible" about hand-drawn ticks), and "Full bar" is the battle's own bar (gem, full
   track, "7/7"), not a plain red pill.

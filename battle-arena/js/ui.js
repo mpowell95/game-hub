@@ -187,12 +187,14 @@ const helpBurst = (cx, cy, r) => {
   return `<polygon points="${pts.join(' ')}" fill="#F2B705" stroke="#E0532F" stroke-width="2" stroke-linejoin="round"/>`;
 };
 const HELP_PICS = {
-  // a swap lines up three fire gems, and the fire monster charges: the original picture, its white line given an arrowhead at
-  // each end so it reads as two gems trading places (2026-11-15, Matt: "like your original one, but ... arrows on that white line")
-  helpMatch: () => `${helpGem('fire', 0, 6, 28)}${helpGem('water', 30, 6, 28)}${helpGem('fire', 60, 6, 28)}${helpGem('fire', 30, 34, 28)}
-    <path d="M28 46c-7-6-7-22 0-28" class="ba-help-arrow ba-help-thin"/>
-    <path d="M23.5 14.5 L28.5 18 L23 21" class="ba-help-arrow ba-help-thin"/><path d="M23 43 L28.5 46 L23.5 49.5" class="ba-help-arrow ba-help-thin"/>
-    ${helpArrow(92, 32)}${helpMon(110, 2, 60)}`,
+  // a swap lines up three fire gems, and the fire monster charges: the original picture, its white line a proper two-headed
+  // curved arrow (solid heads that follow the curve, SVG markers) in a small gap left of the water gem and the fire under it,
+  // clear of the first gem (2026-11-15, Matt: "these arrows are terrible").
+  helpMatch: () => `<defs><marker id="ba-swap-head" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#f4efe6"/></marker></defs>
+    ${helpGem('fire', 0, 6, 26)}${helpGem('water', 32, 6, 26)}${helpGem('fire', 64, 6, 26)}${helpGem('fire', 32, 36, 26)}
+    <path d="M31 23 C 20 27, 20 47, 31 51" fill="none" stroke="#f4efe6" stroke-width="2.4" stroke-linecap="round" marker-start="url(#ba-swap-head)" marker-end="url(#ba-swap-head)"/>
+    ${helpArrow(96, 32)}${helpMon(112, 3, 56)}`,
   // a full bar sets off the special: the battle's own energy bar (its gem, a full track, "7/7"), lit as a full bar is
   helpFull: () => `<rect x="14" y="22" width="64" height="20" rx="10" fill="#E0532F" stroke="#ffce3a" stroke-width="3"/>
     <text x="50" y="37" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="14" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">7/7</text>
