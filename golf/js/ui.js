@@ -3003,25 +3003,24 @@ class GolfGame {
 
     // The hatch, over everything. MEASURED contrast is tiny - #616736 band against #656938 hatch,
     // four values apart - so this is a whisper, not the stripes the previous build drew.
-    // ONE PATTERN PER CANVAS (2026-11-15, Matt's iPhone: the dial's band was solid WHITE in a challenge).
-    // Every hole builds a NEW meter canvas (`_renderPlay`), and the pattern used to be made once and
-    // reused on all of them; a pattern made by one canvas's context and stroked on another can draw as
-    // opaque white on iPhone, covering the band, its blocks and the green line. So it is made by the
-    // context that strokes it, from a hatch tile this object keeps alive, and skipped if it fails.
-    if (!this._hatchCv) {
-      const hc = document.createElement('canvas'); hc.width = 8; hc.height = 8;
-      const hx = hc.getContext('2d');
-      hx.strokeStyle = 'rgba(255,255,255,0.075)'; hx.lineWidth = 2;
-      hx.beginPath(); hx.moveTo(-3, 11); hx.lineTo(11, -3); hx.stroke();
-      this._hatchCv = hc;
-    }
-    if (this._hatchFor !== c) {
-      let pat = null;
-      try { pat = c.createPattern(this._hatchCv, 'repeat'); } catch { pat = null; }
-      this._hatchPat = pat;
-      this._hatchFor = c;
-    }
-    if (this._hatchPat) arc(BAR_HALF, SWING_MAX, this._hatchPat, BAND);
+    // NO CANVAS PATTERN (2026-11-15, Matt's iPhone, iOS 18.7: the band was solid WHITE, before and
+    // after the swing). The hatch used to be a `createPattern` strokeStyle; on his phone it stroked as
+    // OPAQUE white, covering the band, its blocks and the green line, with only their anti-aliased
+    // edges and everything drawn after it (needle, labels) showing. Per-canvas patterns (v1585) did not
+    // fix it. So the same faint diagonals are plain strokes, CLIPPED TO THE BAND ITSELF: a ring
+    // segment (outer arc out, inner arc back), never a bare arc, whose clip would be a pie and lighten
+    // a wedge of course (CLAUDE-HISTORY "THE HATCH WAS PAINTED OVER A PIE").
+    c.save();
+    c.beginPath();
+    c.arc(cx, cy, OUT_R, ang(BAR_HALF), ang(SWING_MAX));
+    c.arc(cx, cy, IN_R, ang(SWING_MAX), ang(BAR_HALF), true);
+    c.closePath();
+    c.clip();
+    c.strokeStyle = 'rgba(255,255,255,0.075)'; c.lineWidth = 2;
+    c.beginPath();
+    for (let k = -METER_H; k < METER_W + METER_H; k += 8) { c.moveTo(k, METER_H); c.lineTo(k + METER_H, 0); }
+    c.stroke();
+    c.restore();
 
     // The arc's far end cap, black then white, so the block finishes as squarely as it starts.
     for (const [w, col] of [[BAND + 8, '#0b0f07'], [BAND + 4, '#fffdfc']]) {

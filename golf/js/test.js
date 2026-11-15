@@ -634,11 +634,10 @@ console.log('\n-- 8b2. THE OVER-SWING SHRINKS THE TARGET --');
   ok('ui.js paints the bands with overZone() from the marker it is drawing',
     /bandsFor\([\s\S]{0,220}?overZone\(/.test(uiSrc) && /overZone/.test(uiSrc.slice(0, 4000)),
     'the meter and mishit must be handed the same shrink or the drawn target is a lie');
-  // [KNOWN-BUG PROBE] 2026-11-15: the band's hatch pattern was made once and stroked on every later
-  // hole's NEW meter canvas; on Matt's iPhone that drew the band solid white. It must be made by the
-  // context that strokes it.
-  ok('[KNOWN-BUG PROBE] the hatch pattern is made per meter canvas, never reused across canvases',
-    /this\._hatchFor !== c/.test(uiSrc) && /if \(this\._hatchPat\) arc\(/.test(uiSrc) && !/if \(!this\._hatchPat\)/.test(uiSrc));
+  // [KNOWN-BUG PROBE] 2026-11-15: the band's hatch was a canvas pattern; on Matt's iPhone (iOS 18.7)
+  // it stroked as opaque white over the whole band, even after v1585 made it per canvas.
+  ok('[KNOWN-BUG PROBE] the band hatch is plain strokes clipped to the band, never a canvas pattern (white on iPhone)',
+    !/\.createPattern\(/.test(uiSrc) && /c\.arc\(cx, cy, IN_R, ang\(SWING_MAX\), ang\(BAR_HALF\), true\)/.test(uiSrc));
 }
 
 console.log('\n-- 8c. THE OVER-SWING IS A GAMBLE, NOT FREE MONEY --');
