@@ -59,26 +59,36 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
 .sm{padding:10px 14px;font-size:17px}
 .wait{display:flex;justify-content:center;margin:8px 0 18px}
 .spin{width:46px;height:46px;border-radius:50%;border:5px solid #33445c;border-top-color:#ffce3a}
+.lnk{color:#ffce3a;font-weight:800;text-decoration:underline;text-underline-offset:3px}
 .toast{position:absolute;left:50%;bottom:60px;transform:translateX(-50%);padding:14px 22px;border-radius:999px;background:#f2f6fb;color:#14202f;font-weight:800;font-size:18px;white-space:nowrap}
 </style>
 </head>
 <body>
 <div class="wrap">
-
   <div class="col">
     <div class="phone"><div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div><div class="scrim"></div>
       <div class="card">
         <h2 class="h">Choose a name</h2>
         <p class="lead">This is your name on the Leaderboard.</p>
-        <div class="row"><input class="in" placeholder="Your name" aria-label="Your name"><button class="btn pri">Save</button></div>
+        <div class="row"><input class="in" value="Alex" aria-label="Your name"><button class="btn pri">Save</button></div>
         <div class="or">or</div>
-        <div class="row"><input class="in" value="K7MPQ" aria-label="Code" style="letter-spacing:.16em"><button class="btn pri">Link</button></div>
+        <div class="row"><input class="in" placeholder="Code" aria-label="Code" style="letter-spacing:.16em"><button class="btn pri">Link</button></div>
         <div class="rule"></div>
         <div class="row wide"><button class="btn gh">English</button><button class="btn gh">Español</button></div>
         <p class="note2">Name and language can be changed later.</p>
       </div>
     </div>
-    <div class="cap">1. New phone<small>types code, taps Link</small></div>
+    <div class="cap">1. New phone<small>types a name in use, taps Save</small></div>
+  </div>
+
+  <div class="col">
+    <div class="phone"><div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div><div class="scrim"></div>
+      <div class="card" style="text-align:center">
+        <h2 class="h">Alex is taken</h2>
+        <div class="row wide" style="margin-top:16px"><button class="btn gh">Pick another</button><button class="btn pri">That's me</button></div>
+      </div>
+    </div>
+    <div class="cap">2. New phone<small>name in use</small></div>
   </div>
 
   <div class="col">
@@ -86,11 +96,24 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
       <div class="card" style="text-align:center">
         <h2 class="h">Check your other phone</h2>
         <div class="wait"><div class="spin"></div></div>
-        <p class="lead" style="margin:0 0 18px">No other phone? Ask Matt.</p>
+        <p class="lead" style="margin:0 0 18px">No other phone? <span class="lnk">Report to Matt</span></p>
         <div class="row wide"><button class="btn gh">Cancel</button></div>
       </div>
     </div>
-    <div class="cap">2. New phone<small>waits</small></div>
+    <div class="cap">3. New phone<small>taps That's me (or Link with a code)</small></div>
+  </div>
+
+  <div class="col">
+    <div class="phone"><div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div><div class="scrim"></div>
+      <div class="card" style="text-align:center">
+        <h2 class="h">Check your other phone</h2>
+        <div class="wait"><div class="spin"></div></div>
+        <p class="lead" style="margin:0 0 18px">No other phone? <span class="lnk">Report to Matt</span></p>
+        <div class="row wide"><button class="btn gh">Cancel</button></div>
+      </div>
+      <div class="toast">Sent to Matt</div>
+    </div>
+    <div class="cap">4. New phone<small>after Report to Matt</small></div>
   </div>
 
   <div class="col">
@@ -103,7 +126,7 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         </div>
       </div>
     </div>
-    <div class="cap">3. Alex's other phone<small>app closed: notification</small></div>
+    <div class="cap">5. Alex's other phone<small>app closed: notification</small></div>
   </div>
 
   <div class="col">
@@ -114,13 +137,13 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="row wide"><button class="btn gh">Deny</button><button class="btn pri">Allow</button></div>
       </div>
     </div>
-    <div class="cap">4. Alex's other phone<small>app open, or after the notification</small></div>
+    <div class="cap">6. Alex's other phone<small>app open, or after the notification</small></div>
   </div>
 
   <div class="col">
     <div class="phone"><div class="launch"><p class="lt">Game Hub</p><div class="grid"><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div><div class="toast">Signed in as Alex</div>
     </div>
-    <div class="cap">5. New phone, if allowed<small>plays as Alex</small></div>
+    <div class="cap">7. New phone, if allowed<small>plays as Alex</small></div>
   </div>
 
   <div class="col">
@@ -130,7 +153,7 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         <div class="row wide" style="margin-top:16px"><button class="btn pri">OK</button></div>
       </div>
     </div>
-    <div class="cap">6. New phone, if denied<small>back to Choose a name</small></div>
+    <div class="cap">8. New phone, if denied<small>back to Choose a name</small></div>
   </div>
 
   <div class="col">
@@ -143,7 +166,7 @@ body{margin:0;background:#0a0f18;font-family:system-ui,-apple-system,"Segoe UI",
         </div>
       </div>
     </div>
-    <div class="cap">7. Matt's Admin page<small>any waiting sign in</small></div>
+    <div class="cap">9. Matt's Admin page<small>any waiting sign in</small></div>
   </div>
 
 </div>
