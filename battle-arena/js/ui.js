@@ -187,13 +187,12 @@ const helpBurst = (cx, cy, r) => {
   return `<polygon points="${pts.join(' ')}" fill="#F2B705" stroke="#E0532F" stroke-width="2" stroke-linejoin="round"/>`;
 };
 const HELP_PICS = {
-  // a swap lines up three fire gems, and the fire monster charges: the swap is a BOLD yellow two-way arrow between the water
-  // gem and the fire under it (2026-11-15, Matt drew it in: the thin grey bracket did not read as a swap)
-  helpMatch: () => `${helpGem('fire', 0, 8, 25)}${helpGem('water', 26, 8, 25)}${helpGem('fire', 62, 8, 25)}${helpGem('fire', 26, 36, 25)}
-    <path d="M51 18 C62 22, 62 42, 51 47" fill="none" stroke="#ffce3a" stroke-width="3.5" stroke-linecap="round"/>
-    <path d="M50 12 L52 19 L58 15" fill="none" stroke="#ffce3a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M50 53 L52 46 L58 50" fill="none" stroke="#ffce3a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-    ${helpArrow(90, 32)}${helpMon(108, 4, 54)}`,
+  // a swap lines up three fire gems, and the fire monster charges: the original picture, its white line given an arrowhead at
+  // each end so it reads as two gems trading places (2026-11-15, Matt: "like your original one, but ... arrows on that white line")
+  helpMatch: () => `${helpGem('fire', 0, 6, 28)}${helpGem('water', 30, 6, 28)}${helpGem('fire', 60, 6, 28)}${helpGem('fire', 30, 34, 28)}
+    <path d="M28 46c-7-6-7-22 0-28" class="ba-help-arrow ba-help-thin"/>
+    <path d="M23.5 14.5 L28.5 18 L23 21" class="ba-help-arrow ba-help-thin"/><path d="M23 43 L28.5 46 L23.5 49.5" class="ba-help-arrow ba-help-thin"/>
+    ${helpArrow(92, 32)}${helpMon(110, 2, 60)}`,
   // a full bar sets off the special: the battle's own energy bar (its gem, a full track, "7/7"), lit as a full bar is
   helpFull: () => `<rect x="14" y="22" width="64" height="20" rx="10" fill="#E0532F" stroke="#ffce3a" stroke-width="3"/>
     <text x="50" y="37" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="14" fill="#fff" stroke="#000" stroke-width="3" paint-order="stroke">7/7</text>
