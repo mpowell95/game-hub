@@ -43,6 +43,8 @@ const waitTip = (page, id) => page.waitForFunction((id) => window.__baTest._tip 
     ok(`"${id}" rings its target`, ring);
     const inside = await page.evaluate(() => { const r = document.querySelector('.ba-coach-bubble').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; });
     ok(`"${id}" bubble on screen`, inside);
+    if (id === 'hp') ok('"hp" rings BOTH health numbers, an arrow at each', await page.evaluate(() => document.querySelectorAll('.ba-coach-ring').length === 2 && document.querySelectorAll('.ba-coach-arrow').length === 2));
+    if (id === 'swap') ok('"swap" boxes a real 3-in-a-row and circles the tile to move', await page.evaluate(() => { const u = window.__baTest, ln = u.tipLine(3); return !!ln && ln.line.length === 3 && !!document.querySelector('.ba-coach-ring.is-box') && !!document.querySelector('.ba-coach-ring.is-round'); }));
     await page.click('[data-role="tip-ok"]');
   }
   ok('after the first-turn tips the board takes input', await page.evaluate(() => window.__baTest.canInput() && !window.__baTest._tip));
@@ -56,6 +58,7 @@ const waitTip = (page, id) => page.waitForFunction((id) => window.__baTest._tip 
   for (const [id, fn] of steps) {
     await page.evaluate(fn);
     ok(`"${id}" shows when it first matters`, await waitTip(page, id), String(await tipNow(page)));
+    if (id === 'bomb') ok('"bomb" boxes its row and column', await page.evaluate(() => document.querySelectorAll('.ba-coach-ring.is-box').length === 2));
     await page.click('[data-role="tip-ok"]');
   }
   const st = await page.evaluate(() => ({ tips: JSON.parse(localStorage.getItem('gamehub.battlearena.v1')).tips, log: JSON.parse(localStorage.getItem('gamehub.tipsLog.v1') || '{}').battlearena || {} }));

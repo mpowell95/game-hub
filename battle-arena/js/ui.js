@@ -298,6 +298,7 @@ class BattleArena {
     this.tiles = new Map();
     this._tip = null;          // its layer went with the old screen
     this._sawExtra = false;
+    this._myMoves = 0;
     return this.gen;
   }
 
@@ -1222,7 +1223,7 @@ class BattleArena {
   /** A legal move: keep the new state (saved at once), then tell its story. */
   async commit(res, mine = false) {
     const gen = this.gen;
-    if (mine) this.hideTip(true);
+    if (mine) { this.hideTip(true); this._myMoves = (this._myMoves | 0) + 1; }
     this.state = res.state;
     this.canon = res.canon || res.state;
     this.save();
@@ -1263,18 +1264,65 @@ class BattleArena {
   // (`settings.tips`, a preference) and is reported (js/tips-log.js -> players/<id>/tips; root CLAUDE.md: every notice
   // reports who saw it). A ring on the thing + a bubble + Got it. It blocks the board until Got it, EXCEPT in a live
   // room (a 25 s clock): there it never blocks and goes away with the player's move.
+  /** A move on the board that lines up `min`+ alike tiles: { line: cells after the swap, from: the cell whose tile moves
+   *  into the line }, else null. Picks the shortest (the swap tip: a plain 3), or the longest (`longest`, the extra tip); the tutorial shows it boxed ("Here: move the circled tile into the box"). */
+  tipLine(min, longest = false) {
+    const s = this.state;
+    let best = null;
+    for (const mv of E.legalMoves(s)) {
+      const b = s.board.slice();
+      const t = b[mv.a]; b[mv.a] = b[mv.b]; b[mv.b] = t;
+      for (const g of E.matchGroups(E.findRuns(b))) {
+        const cells = [...g.cells];
+        if (cells.length < min || cells.some((c) => b[c] && b[c].k === 'bomb')) continue;
+        // the moved tile now sits in the line at a or b; the circled one starts at the other end of the swap
+        const into = g.cells.has(mv.a) ? mv.a : g.cells.has(mv.b) ? mv.b : -1;
+        if (into < 0) continue;
+        const line = g.runs.find((r) => r.cells.includes(into)) || g.runs[0];
+        if (!best || (longest ? line.cells.length > best.line.length : line.cells.length < best.line.length)) best = { line: line.cells.slice(), from: into === mv.a ? mv.b : mv.a };
+      }
+    }
+    return best;
+  }
+
+  /** What a tip rings: parts [{ el } | { cells }] (round = a circle on one tile, point = an arrow from the bubble),
+   *  and `here` when it boxes a real move. null = not now. */
   tipTarget(id) {
     const s = this.state, me = s.sides[ME];
     const root = this.root;
+    const one = (el, extra) => (el && el.isConnected ? { parts: [{ el, point: true, ...extra }] } : null);
     switch (id) {
-      case 'hp': return root.querySelector('.ba-teamrow');
-      case 'moves': return root.querySelector('.ba-moves');
-      case 'swap': return root.querySelector('.ba-board');
-      case 'charge': { const mi = me.mons.findIndex((m) => m.energy > 0); return mi < 0 ? null : this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar'); }
-      case 'berry': return me.berries > 0 && !me.mons.every((m) => m.evo) ? this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry') : null;
-      case 'evolve': { const mi = E.evolveOptions(s)[0]; return mi == null ? null : this.monEl(ME, mi); }
-      case 'extra': return this._sawExtra ? root.querySelector('.ba-moves') : null;
-      case 'bomb': { const t = s.board.find((x) => x && x.k === 'bomb'); return t ? this.tiles.get(t.id) || null : null; }
+      case 'hp': {
+        const els = [0, 1].map((sd) => this.sideEl(sd) && this.sideEl(sd).querySelector('.ba-stat-hp')).filter(Boolean);
+        return els.length === 2 ? { parts: els.map((el) => ({ el, point: true })) } : null;
+      }
+      case 'moves': return one(root.querySelector('.ba-moves'));
+      case 'swap': {
+        const ln = this.tipLine(3);
+        if (!ln) return one(root.querySelector('.ba-board'));
+        return { here: true, parts: [{ cells: ln.line, point: true }, { cells: [ln.from], round: true }] };
+      }
+      case 'charge': { const mi = me.mons.findIndex((m) => m.energy > 0); return mi < 0 ? null : one(this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar')); }
+      case 'berry': return me.berries > 0 && !me.mons.every((m) => m.evo) ? one(this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry')) : null;
+      case 'evolve': { const mi = E.evolveOptions(s)[0]; return mi == null ? null : one(this.monEl(ME, mi)); }
+      case 'extra': {
+        // Before it happens: a real 4-in-a-row move, boxed (after the player's first move, and while this turn's
+        // extra is still to be had). After it happened without that: the move pips.
+        if (this._myMoves >= 1 && !s.extraUsed) {
+          const ln = this.tipLine(4, true);
+          if (ln) return { here: true, parts: [{ cells: ln.line, point: true }, { cells: [ln.from], round: true }] };
+        }
+        return this._sawExtra ? one(root.querySelector('.ba-moves')) : null;
+      }
+      case 'bomb': {
+        const at = s.board.findIndex((x) => x && x.k === 'bomb');
+        if (at < 0) return null;
+        const r = Math.floor(at / E.COLS), c = at % E.COLS;
+        const row = [], col = [];
+        for (let k = 0; k < E.COLS; k++) row.push(r * E.COLS + k);
+        for (let k = 0; k < E.ROWS; k++) col.push(k * E.COLS + c);
+        return { parts: [{ cells: row }, { cells: col }, { cells: [at], round: true, point: true }] };
+      }
       default: return null;
     }
   }
@@ -1284,50 +1332,77 @@ class BattleArena {
     const seen = this.settings.tips || (this.settings.tips = {});
     for (const id of TIP_ORDER) {
       if (seen[id]) continue;
-      const el = this.tipTarget(id);
-      if (!el || !el.isConnected) continue;
-      this.showTip(id, el);
+      const tg = this.tipTarget(id);
+      if (!tg) continue;
+      this.showTip(id, tg);
       return;
     }
   }
 
-  showTip(id, el) {
+  showTip(id, tg) {
     const battle = this.root.querySelector('.ba-battle');
     if (!battle) return;
     const block = !this.timed;
     const ov = document.createElement('div');
     ov.className = 'ba-coach' + (block ? '' : ' is-free');
-    ov.innerHTML = `<div class="ba-coach-ring"></div>
-      <div class="ba-coach-bubble" role="dialog" aria-live="polite"><p>${escapeHTML(t('tip_' + id))}</p>
+    const text = t('tip_' + id) + (tg.here ? ' ' + t('tip_here') : '');
+    ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}"></div>`).join('')
+      + `<div class="ba-coach-bubble" role="dialog" aria-live="polite">${tg.parts.filter((p) => p.point).map(() => '<i class="ba-coach-arrow"></i>').join('')}<p>${escapeHTML(text)}</p>
         <button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button></div>`;
     battle.appendChild(ov);
-    this._tip = { id, el, ov, block };
+    this._tip = { id, tg, ov, block };
     this.placeTip();
     noteTipShown('battlearena', id);
     this.on(ov.querySelector('[data-role="tip-ok"]'), 'click', (e) => { e.stopPropagation(); this.hideTip(true); this.checkTips(); });
   }
 
-  /** Ring the thing, and put the bubble below it (or above, when it sits low), pointing at it. */
+  /** One part's screen box: its element, or the union of its cells' tiles. */
+  partRect(p) {
+    if (p.el) return p.el.isConnected ? p.el.getBoundingClientRect() : null;
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    for (const i of p.cells) {
+      const tile = this.state.board[i];
+      const el = tile && this.tiles.get(tile.id);
+      if (!el) return null;
+      const q = el.getBoundingClientRect();
+      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    }
+    return { left: l, top: t, right: r, bottom: b, width: r - l, height: b - t };
+  }
+
+  /** Ring each part, and put the bubble below them (or above, when they sit low), an arrow at each pointed part. */
   placeTip() {
     const tp = this._tip;
     if (!tp) return;
     const battle = this.root.querySelector('.ba-battle');
-    if (!battle || !tp.el.isConnected) { this.hideTip(false); return; }
-    const b = battle.getBoundingClientRect(), r = tp.el.getBoundingClientRect();
-    const pad = 6;
-    const ring = tp.ov.querySelector('.ba-coach-ring'), bub = tp.ov.querySelector('.ba-coach-bubble');
-    Object.assign(ring.style, { left: (r.left - b.left - pad) + 'px', top: (r.top - b.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
-    const cx = r.left - b.left + r.width / 2;
+    const rects = battle ? tp.tg.parts.map((p) => this.partRect(p)) : [];
+    if (!battle || !rects.length || rects.some((q) => !q)) { this.hideTip(false); return; }
+    const b = battle.getBoundingClientRect();
+    const rings = tp.ov.querySelectorAll('.ba-coach-ring'), bub = tp.ov.querySelector('.ba-coach-bubble');
+    let top = Infinity, bottom = -Infinity, cxSum = 0;
+    rects.forEach((r, k) => {
+      const p = tp.tg.parts[k];
+      const pad = p.cells ? 2 : 6;
+      Object.assign(rings[k].style, { left: (r.left - b.left - pad) + 'px', top: (r.top - b.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
+      top = Math.min(top, r.top - pad); bottom = Math.max(bottom, r.bottom + pad);
+    });
+    const pointed = rects.filter((r, k) => tp.tg.parts[k].point);
+    for (const r of pointed) cxSum += r.left - b.left + r.width / 2;
+    const cx = cxSum / pointed.length;
     const w = Math.min(320, b.width - 24);
     const left = Math.max(12, Math.min(b.width - w - 12, cx - w / 2));
     bub.style.width = w + 'px';
     bub.style.left = left + 'px';
-    bub.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
-    const below = r.top - b.top + r.height / 2 < b.height * 0.55;
+    // Below when the rings' middle is in the upper part of the screen; above otherwise.
+    const below = (top + bottom) / 2 - b.top < b.height * 0.55;
     bub.classList.toggle('is-below', below);
     bub.classList.toggle('is-above', !below);
-    if (below) { bub.style.top = (r.bottom - b.top + pad + 14) + 'px'; bub.style.bottom = ''; }
-    else { bub.style.bottom = (b.bottom - r.top + pad + 14) + 'px'; bub.style.top = ''; }
+    if (below) { bub.style.top = (bottom - b.top + 14) + 'px'; bub.style.bottom = ''; }
+    else { bub.style.bottom = (b.bottom - top + 14) + 'px'; bub.style.top = ''; }
+    tp.ov.querySelectorAll('.ba-coach-arrow').forEach((a, k) => {
+      const r = pointed[k];
+      a.style.left = Math.max(18, Math.min(w - 18, r.left - b.left + r.width / 2 - left)) + 'px';
+    });
   }
 
   /** `done` = the player saw it through (Got it, or their move in a live room): never shown again on this phone. */
