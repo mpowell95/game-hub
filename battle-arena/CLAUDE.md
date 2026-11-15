@@ -306,7 +306,27 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   were within a point of each other). Starters: Thornpaw, Sproutle, Driplet, Cinderwing, Hexowl, Stormhorn. A test keeps it so.
 - **How to play has two tabs: Basics | Powers** (Matt: "What is curse? These things need to be defined somewhere"). Powers = every
   word a monster's power uses (the tile's words), one line each: Damage, Heal, Shield, Drain, Freeze (1 move on their next turn),
-  Curse 5x2 (5 damage as each of their next 2 turns starts), +1 to partner, Burns a row, Column clear, 2x2 blast, 4 to Leaf, Rainbow
+  Curse 5x2 (5 damage as each of their next 2 turns starts), +1 to partner, Burns a row, Column clear, 2x2 blast, To Leaf, Rainbow
   (`POWER_KEYS`, strings `pw_*` + `pw_*_d`). Fits Matt's 402x874 without scrolling; on a 360x668 phone in Spanish the card scrolls
   inside itself (contained). A new power needs a `pw_` entry.
 - **Freeze is shown as "−1 enemy move"** (Matt) on tiles, the card ("−1 enemy move next turn") and Powers; ES "−1 jugada rival".
+
+## Rules version 4: once a turn, calmer bombs (2026-11-15)
+
+Matt: Thornpaw/Briarlord "went 4 times in a single turn ... way too much"; "bombs go off too easily?". `RULES_VERSION` 4 (`V3` frozen):
+- **A monster's special fires at most once per turn** (`m.went`, cleared by `endTurn`): a bar that fills again stays full and fires
+  on the owner's next move. Before: Thornpaw's leaf gems refilled its own bar, 2+ fires in ~1 of 6 of its turns, record 15 in one turn.
+- **Bombs**: `BOMB_RATE_V4` 1.25% (was 2.5%), at most 1 on the board (was 2), and only the swap's OWN match sets one off (a cascade
+  or a special clearing over it leaves it). Soak: 8.7 → 3.7 set off a match.
+- **Retuned for it** (every team vs every team, medium 24 games a pairing + hard 6): every monster 47-54% (hard 46-56%) at every
+  unlock stage. Thornpaw cost 6, dmg 5 heal 7 convert 3 (evo 8/10/4; its attack now throws thorns at both foes); Sproutle dmg 10
+  heal 5 (15/9); Hexowl dmg 6 (11); Pebbleop shield 7 (11); Gloomite dmg 10 (15); Frostling dmg 9 (13); Cinderwing dmg 13 (18);
+  Emberkit dmg 13 (19); Zapup dmg 7 (11); Prismote cost 16. **Thornpaw is touchy**: dmg 6 at cost 5 won 81% (its leaf gems feed it).
+- Strongest pair left: Driplet + Stormhorn (medium 61%, hard 65-70%). Rankings per unlock stage: `CLAUDE-HISTORY.md`, same heading.
+- Tests: `battle-arena/js/test.js` "rules v4" (+ a 150-match soak: never twice a turn, no cascade/special bomb, never 2 bombs).
+
+## Names (2026-11-15, Matt: "do the name change")
+
+Shown names only; **ids never change** (stored matches, saves and stats use them). id `pebbleop` = Lavapup / Lavatusk, `prismote` =
+Rainbit / Rainbeast, `zapup` = Sparkpup / Sparktail; evolved: Thornpaw → Thornbear, Cinderwing → Firedrake, Frostling → Frostclaw,
+Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and the history use the old names.

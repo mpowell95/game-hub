@@ -28,6 +28,14 @@ export const BERRY_RATE = 0.10;
  *  piled up (Matt saw 11 of 35, 2026-10-24); the reference shows 3-6. */
 export const MAX_BERRIES = 4;
 export const BOMB_RATE = 0.025;
+/** RULES VERSION 4 (2026-11-15, Matt: "bombs go off too easily?", "thornpaw/briarlord just went 4 times in a single turn ... way
+ *  too much"). From v4: each monster's special fires AT MOST ONCE PER TURN (a bar that fills again stays full and fires on the
+ *  owner's next move); bombs are rarer (BOMB_RATE_V4, at most MAX_BOMBS_V4 on the board) and only a match made BY THE SWAP ITSELF
+ *  sets one off: a cascade or a special clearing past one leaves it where it is. Before v4 (1,500 soak matches): ~9 bombs went off
+ *  a match and one Thornpaw fired 15 times in a turn. Older matches keep their own rules (`rv`). */
+export const BOMB_RATE_V4 = 0.0125;
+export const MAX_BOMBS_V4 = 1;
+const v4 = (s) => (s.rv || 1) >= 4;
 const MAX_LOOPS = 40;            // cascade / special safety valve (never reached in the soak)
 /** After each side's 20th turn, heals stop ("Sudden death"): two healing teams could otherwise
  *  out-heal each other for ever (the soak found one still going at 3000 moves). Our rule. */
@@ -71,7 +79,8 @@ const bombCount = (board) => countKind(board, 'bomb');
 function spawnTile(s, bombsNow, berriesNow) {
   const r = rand(s);
   if (r < BERRY_RATE) return berriesNow < MAX_BERRIES ? newTile(s, 'berry') : newTile(s, pick(s, ELEMENTS));
-  if (r < BERRY_RATE + BOMB_RATE && bombsNow < MAX_BOMBS) return newTile(s, 'bomb');
+  const rate = v4(s) ? BOMB_RATE_V4 : BOMB_RATE, max = v4(s) ? MAX_BOMBS_V4 : MAX_BOMBS;
+  if (r < BERRY_RATE + rate && bombsNow < max) return newTile(s, 'bomb');
   return newTile(s, pick(s, ELEMENTS));
 }
 
@@ -160,6 +169,13 @@ function expand(board, seed, runs) {
     }
   }
   return { set, blasts };
+}
+
+/** The cells a special's board clear takes. Before v4 a bomb inside it went off (its row and column too); from v4 the
+ *  bomb is left where it is (Matt, 2026-11-15: bombs went off too easily). */
+function specialArea(s, cells) {
+  if (!v4(s)) return expand(s.board, cells, null);
+  return { set: new Set(cells.filter((i) => !(s.board[i] && s.board[i].k === 'bomb'))), blasts: [] };
 }
 
 /** What a swap would clear on its FIRST step (no refill, no cascade): for the computer's eye.
@@ -262,7 +278,7 @@ function addEnergy(s, ev, side, mi, n, k) {
   if (n > 0) ev.push({ t: 'energy', side, mon: mi, n, k, energy: m.energy, gained: m.energy - before });
 }
 
-/** Cleared element gems charge the mover's monsters of that element; Prismote (ALL) charges 1
+/** Cleared element gems charge the mover's monsters of that element; Rainbit (ALL) charges 1
  *  per 2 gems of any element, carrying the odd one. */
 function charge(s, ev, side, counts) {
   s.sides[side].mons.forEach((m, mi) => {
@@ -355,7 +371,7 @@ function gravity(s, ev) {
 }
 
 /** Clear lines until the board is still. `side` is charged (null: nobody). */
-function settle(s, ev, side) {
+function settle(s, ev, side, direct = false) {
   for (let loop = 0; loop < MAX_LOOPS; loop++) {
     const runs = findRuns(s.board);
     if (!runs.length) return;
@@ -376,7 +392,8 @@ function settle(s, ev, side) {
         ev.push({ t: 'extra', side, moves: s.movesLeft, five: g.cells.size >= 5 });
       }
     }
-    const { set, blasts } = expand(s.board, seed, runs);
+    // v4: only the swap's own match (the first clear of a move) sets off a bomb next to it; a cascade never does.
+    const { set, blasts } = expand(s.board, seed, !v4(s) || (direct && loop === 0) ? runs : null);
     for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
     collect(s, ev, side, set, 'match');
     for (let n = 0; n < fives && s.winner == null; n++) heal(s, ev, side, FIVE_HEAL, 'five');
@@ -401,6 +418,7 @@ function fireSpecial(s, ev, side, mi) {
   const sp = specialOf(m.id, m.evo, s.rv || 1);
   const foe = 1 - side;
   m.energy = 0;
+  if (v4(s)) m.went = true;            // v4: once per turn (cleared by endTurn)
   ev.push({ t: 'special', side, mon: mi, id: m.id, evo: m.evo });
   if (sp.dmg) damage(s, ev, foe, sp.dmg, 'special');
   if (s.winner != null) return;
@@ -434,7 +452,7 @@ function fireSpecial(s, ev, side, mi) {
     const rows = scorchRows(s, sp.rows);
     const cells = [];
     for (const r of rows) for (let c = 0; c < COLS; c++) cells.push(idx(r, c));
-    const { set, blasts } = expand(s.board, cells, null);
+    const { set, blasts } = specialArea(s, cells);
     ev.push({ t: 'rows', side, rows });
     for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
     collect(s, ev, side, set, 'special');
@@ -449,7 +467,7 @@ function fireSpecial(s, ev, side, mi) {
     const cols = score.slice(0, sp.col).map((x) => x.c);
     const cells = [];
     for (const c of cols) for (let r = 0; r < ROWS; r++) cells.push(idx(r, c));
-    const { set, blasts } = expand(s.board, cells, null);
+    const { set, blasts } = specialArea(s, cells);
     ev.push({ t: 'cols', side, cols });
     for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
     collect(s, ev, side, set, 'special');
@@ -466,7 +484,7 @@ function fireSpecial(s, ev, side, mi) {
     }
     const cells = [];
     for (let dr = 0; dr < n; dr++) for (let dc = 0; dc < n; dc++) cells.push(idx(best.r + dr, best.c + dc));
-    const { set, blasts } = expand(s.board, cells, null);
+    const { set, blasts } = specialArea(s, cells);
     ev.push({ t: 'block', side, cells });
     for (const b of blasts) ev.push({ t: 'bomb', at: b.at, cells: b.cells });
     collect(s, ev, side, set, 'special');
@@ -491,7 +509,7 @@ function firePending(s, ev, side) {
     let fired = false;
     s.sides[side].mons.forEach((m, mi) => {
       if (s.winner != null) return;
-      if (m.energy >= costOf(m.id, s.rv || 1)) {
+      if (m.energy >= costOf(m.id, s.rv || 1) && !(v4(s) && m.went)) {
         fireSpecial(s, ev, side, mi);
         fired = true;
         if (s.winner == null) settle(s, ev, side);
@@ -565,6 +583,7 @@ function endTurn(s, ev) {
     settle(s, ev, null);
     if (s.winner != null) return;
   }
+  for (const m of s.sides[ended].mons) delete m.went;
   const next = 1 - ended;
   const sd = s.sides[next];
   s.turn = next;
@@ -633,7 +652,7 @@ export function apply(state, move) {
   s.movesLeft -= 1;
   s.moveNo += 1;
   ev.push({ t: 'swap', side, a, b, ids: [s.board[b].id, s.board[a].id] });
-  settle(s, ev, side);
+  settle(s, ev, side, true);
   firePending(s, ev, side);
   afterMove(s, ev, side);
   return { ok: true, state: s, events: ev };
@@ -647,3 +666,4 @@ export function apply(state, move) {
 //   convert {side,cells,k,board}  cols {side,cols}  block {side,cells}  evolveReady {side}  evolve {side,mon,id,hp,maxHp}
 //   tick {bombs:[{id,at,n}]}  turn {side,moves,frozen}  curseTick {side,left}  shuffle {board}
 //   pass {side}  win {side}
+// v4 state: a monster that fired this turn carries `went: true` until its side's turn ends.

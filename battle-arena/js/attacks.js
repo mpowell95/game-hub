@@ -1,6 +1,6 @@
 // battle-arena/js/attacks.js - every monster's OWN special attack, and the evolution scene
 // (2026-10-28, Matt: "every attack looks the same: an energy ball... This is where the game must stand
-// out"; the mockup he signed off: Emberkit's fire pillar, Zapup's lightning, Gloomite's shadow maw).
+// out"; the mockup he signed off: Emberkit's fire pillar, Sparkpup's lightning, Gloomite's shadow maw).
 //
 // Pure presentation: nothing here reads or writes game state or storage. `ui.js` calls `playAttack`
 // right after a special's banner and `evolveScene` for an evolve event; both resolve when the picture
@@ -520,6 +520,13 @@ const ATTACKS = {
     }
     s.shake(7 * k, 300);
     await s.sleep(300);
+    // the thorns fly out and strike BOTH of the other team's monsters (rules v4 gave Thornpaw damage, 2026-11-15)
+    for (const t of s.foes) s.emit(Math.round(12 * k), me, { sp: [2, 4], life: [380, 520], r: [5, 8], c: LEAF, shape: 'leaf', to: { x: t.x, y: t.y } });
+    await s.sleep(380);
+    if (!s.alive) return;
+    s.jolt('#7ed957');
+    s.shake(6 * k, 200);
+    for (const t of s.foes) s.emit(Math.round(10 * k), t, { sp: [2, 6], life: [400, 700], r: [4, 7], c: LEAF, shape: 'leaf', g: 0.12 });
     // the leaf storm: from Thornpaw down over the board (the gems it turns into leaves follow)
     const board = s.host.root.querySelector('.ba-board');
     const bc = board ? s.host.centre(board) : { x: s.W / 2, y: s.H * 0.7 };
@@ -531,7 +538,7 @@ const ATTACKS = {
     await s.sleep(250);
   },
 
-  /** Ice Shard / Glacielle's: a volley of ice, a frost cloud, then they freeze (evolved: icicles from above). */
+  /** Ice Shard / Frostclaw's: a volley of ice, a frost cloud, then they freeze (evolved: icicles from above). */
   async frostling(s, k, evo) {
     const me = s.me, [front, back] = s.foes;
     s.tint('rgba(150, 210, 255, .25)', 300);
@@ -579,7 +586,7 @@ const ATTACKS = {
     await s.sleep(250);
   },
 
-  /** Chain Bolt / Thundrake's: the horn charges, lightning jumps from them to each other, then home to the partner. */
+  /** Chain Bolt / Thunderhorn's: the horn charges, lightning jumps from them to each other, then home to the partner. */
   async stormhorn(s, k, evo) {
     const me = s.me, [front, back] = s.foes, partner = s.at(s.sd, 1 - s.mi);
     s.tint('rgba(6, 14, 48, .6)');
@@ -637,7 +644,7 @@ const ATTACKS = {
     s.untint(500);
   },
 
-  /** Prism Ray / Prismaraja's: the light splits into every colour and lands as one beam (evolved: three). */
+  /** Prism Ray / Rainbeast's: the light splits into every colour and lands as one beam (evolved: three). */
   async prismote(s, k, evo) {
     const me = s.me, [front, back] = s.foes;
     s.tint('rgba(0, 0, 0, .55)', 300);
@@ -674,7 +681,7 @@ const MAW = (evo) => `<svg viewBox="0 0 200 200" preserveAspectRatio="none" aria
     <path d="M20 104 l12 -22 l12 22 l12 -26 l12 26 l12 -28 l12 28 l12 -28 l12 28 l12 -26 l12 26 l12 -22 l12 22 l12 -20 l12 20 Z" fill="#efe6ff" stroke="#4a2a8a" stroke-width="2.5" stroke-linejoin="round"/></g>
 </svg>`;
 
-// Pebbleop's red-hot rock (2026-11-14: it was grey stone, Pebbleop is fire): glowing yellow cracks.
+// Lavapup's red-hot rock (2026-11-14: it was grey stone, Lavapup is fire): glowing yellow cracks.
 const BOULDER = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 40 L34 12 L70 10 L92 38 L86 76 L54 92 L18 80 Z" fill="#B8472A" stroke="#4a1a0e" stroke-width="5" stroke-linejoin="round"/>
   <path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#F2B705" stroke-width="4" fill="none"/><path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#FFF1B0" stroke-width="1.5" fill="none"/><path d="M38 20 L58 18" stroke="#E2774A" stroke-width="5" stroke-linecap="round"/></svg>`;
 

@@ -121,7 +121,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('every team starts at 80, max 80', s.sides[0].maxHp === 80 && s.sides[1].hp === 80 && s.sides[1].maxHp === 80);
 }
 {
-  // Shield: Pebbleop's Rock Toss shields; then the other side's Zapup hits through what is left.
+  // Shield: Lavapup's Rock Toss shields; then the other side's Sparkpup hits through what is left.
   const SH = V1('pebbleop').shield, ZD = V1('zapup').dmg;
   const s = setup([['pebbleop', 'driplet'], ['zapup', 'sproutle']], THREE);
   s.sides[0].mons[0].energy = 7;
@@ -131,7 +131,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   t.turn = 1; t.movesLeft = 2; t.extraUsed = false;
   t.board = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LSSFSLD']).board.map((x) => ({ ...x, id: x.id + 1000 }));
   // row 4: L S S F S -> swap (4,3)F<->(4,4)S: L S S S F
-  t.sides[1].mons[0].energy = 3;                              // Zapup costs 4
+  t.sides[1].mons[0].energy = 3;                              // Sparkpup costs 4
   const hp = t.sides[0].hp;
   const r2 = apply(t, swap(4, 3, 4, 4));
   ok('the shield soaks first', r2.state.sides[0].hp === hp - Math.max(0, ZD - SH) && r2.state.sides[0].shield === Math.max(0, SH - ZD));
@@ -175,10 +175,10 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('Chain Bolt charges the other monster 1', r.state.sides[0].mons[1].energy >= 1 && has(r.events, 'energy', (e) => e.mon === 1 && e.n === 1));
 }
 {
-  // Prismote: 1 energy per 2 gems of ANY element.
+  // Rainbit: 1 energy per 2 gems of ANY element.
   const s = setup([['prismote', 'emberkit'], ['zapup', 'sproutle']], THREE);
   const r = apply(s, swap(4, 3, 4, 4));
-  ok('Prismote charges at half rate (3 gems = 1, 1 carried)', r.state.sides[0].mons[0].energy === 1 && r.state.sides[0].mons[0].part === 1);
+  ok('Rainbit charges at half rate (3 gems = 1, 1 carried)', r.state.sides[0].mons[0].energy === 1 && r.state.sides[0].mons[0].part === 1);
 }
 {
   // Scorch Row clears a row; Overgrowth turns gems into Leaf.
@@ -237,7 +237,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   t.sides[0].mons.forEach((m) => { m.evo = true; });
   const r2 = apply(t, swap(4, 3, 4, 4));
   ok('both evolved: berries do nothing', r2.state.sides[0].berries === 0 && !has(r2.events, 'berry'));
-  // Evolved special is stronger: Blazelynx 18.
+  // Evolved special is stronger: Blazecat 18.
   const u = setup(TEAM, THREE);
   u.sides[0].mons[0].evo = true; u.sides[0].mons[0].energy = 6;
   const hp = u.sides[1].hp;
@@ -383,7 +383,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- unlocks --------------------------------------------------------------------------------------------
 ok('6 starters open at 0 wins', unlockedIds(0).length === 6 && STARTERS.length === 6);
-ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
+ok('3 wins opens Emberkit, 6 Lavapup (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
 {
   // Never two of one element (2026-11-14, Matt: "You shouldn't be able to choose 2 of the same"): the computer's team.
   const all = MONSTERS.map((m) => m.id); let bad = 0; const r = seeded(77);
@@ -421,12 +421,51 @@ ok('the starters cover all five gem colours (Hexowl is the shadow one)', ['fire'
     const first = ev.slice(0, ev.findIndex((e) => e.t === 'special') >>> 0).filter((e) => e.t === 'energy' && e.side === 0);
     ok('rules v3: what a full bar cannot hold spills to the partner', first.some((e) => e.mon === 1 && e.gained === 2) && first.some((e) => e.mon === 0 && e.gained === 1), JSON.stringify(first));
   }
-  ok('rules v2: Emberkit costs 7 (v1: 6), Prismote 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
+  ok('rules v2: Emberkit costs 7 (v1: 6), Rainbit 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
   // The same board and swap (+3 fire to Emberkit at 3): fires under v1 (cost 6), not under v2 (cost 7).
   const a = setup(TEAM, THREE); a.sides[0].mons[0].energy = 3;
   const b = setup(TEAM, THREE); b.sides[0].mons[0].energy = 3; b.rv = 2;
   const fired = (st) => apply(st, swap(4, 3, 4, 4)).events.some((e) => e.t === 'special' && e.side === 0 && e.mon === 0);
   ok('rules v2: Emberkit at 3 + 3 fire fires in a v1 match, not in a v2 match', fired(a) && !fired(b));
+}
+{
+  // RULES VERSION 4 (2026-11-15, Matt: Thornpaw "went 4 times in a single turn ... way too much"; "bombs go off too easily?").
+  const fires = (rv, went) => { const st = setup(TEAM, THREE); st.rv = rv; st.sides[0].mons[0].energy = 4; if (went) st.sides[0].mons[0].went = true;
+    const r = apply(st, swap(4, 3, 4, 4)); return { fired: r.events.some((e) => e.t === 'special' && e.side === 0 && e.mon === 0), st: r.state }; };
+  ok('rules v4: a full bar fires', fires(4, false).fired);
+  const held = fires(4, true);
+  ok('rules v4: a monster that already went this turn waits (its bar stays full)', !held.fired && held.st.sides[0].mons[0].energy === costOf('emberkit', 4));
+  ok('rules v3 (old matches): no once-a-turn limit', fires(3, true).fired);
+  // A bomb next to the swap's own match goes off (v3 and v4).
+  const BOMBED = ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSX5DLWS', 'LFFSFLD'];
+  const boomed = (rv) => { const st = setup(TEAM, BOMBED); st.rv = rv; return apply(st, swap(4, 3, 4, 4)).events.some((e) => e.t === 'bomb'); };
+  ok('rules v4: a match made by the swap still sets off a bomb next to it', boomed(4) && boomed(3));
+  // Soak, v4: never twice in a turn; a bomb goes off only on the swap's own match (before anything has fallen) or at 0;
+  // never more than one bomb on the board.
+  const rnd = seeded(404), all = MONSTERS.map((m) => m.id);
+  let twice = 0, late = 0, crowded = 0, set = 0, games = 0;
+  for (let g = 0; g < 150; g++) {
+    const t = chooseTeam('hard', all, [], rnd), u = chooseTeam('hard', all, t, rnd);
+    let st = newMatch({ seed: 7700 + g, teams: [t, u], first: g % 2, rv: 4 }); games++;
+    let turn = {}, guard = 0;
+    while (st.winner == null && guard++ < 3000) {
+      const r = apply(st, chooseMove(st, 'medium', rnd));
+      let fell = false, ticked = false;
+      for (const e of r.events) {
+        if (e.t === 'special') { const k = e.side + ':' + e.mon; turn[k] = (turn[k] || 0) + 1; if (turn[k] > 1) twice++; }
+        if (e.t === 'fall') fell = true;
+        if (e.t === 'tick') ticked = true;
+        if (e.t === 'bomb' && !e.boom) { set++; if (fell && !ticked) late++; }
+        if (e.t === 'turn') turn = {};
+      }
+      st = r.state;
+      if (st.board.filter((x) => x && x.k === 'bomb').length > 1) crowded++;
+    }
+  }
+  ok('rules v4 soak: no monster fires twice in one turn (150 matches)', twice === 0, String(twice));
+  ok('rules v4 soak: a cascade or a special never sets off a bomb', late === 0, String(late));
+  ok('rules v4 soak: never two bombs on the board', crowded === 0, String(crowded));
+  ok(`rules v4 soak: bombs set off by a match, ${(set / games).toFixed(1)} a match (v3: ~8.7)`, set / games < 5);
 }
 ok('30 wins opens all 12', unlockedIds(30).length === 12 && MONSTERS.length === 12);
 

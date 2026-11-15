@@ -26,7 +26,12 @@
 // Closing the app mid-hole resumes at the last rest with its stroke count: a bad shot cannot be
 // taken back. `validateGame` replays the log and refuses a malformed document WHOLE.
 //
-// RESULT: fewest total strokes wins; equal totals are a draw (`over.winner: 'draw', why: 'tie'`).
+// RESULT: fewest total strokes wins. EQUAL TOTALS GO TO A PLAYOFF (Matt, 2026-11-15: "playoff hole")
+// on every match made from that day (`po: true`; absent = the old rule, a draw, so older matches
+// replay unchanged): sudden death over the round's own holes again from its first (same cups), one
+// hole a turn in the same order; the first playoff hole with different scores wins it (`why:
+// 'playoff'`). Log entries for playoff holes carry `h` = holes.length + k. After PO_MAX level playoff
+// holes it is a draw (`why: 'tie'`), a ceiling no real match reaches.
 import { getStatsApp } from '../../js/firebase-boot.js';
 import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -45,6 +50,8 @@ const ID_RE = /^[a-z0-9]{6,24}$/;
 const COURSE_RE = /^[a-z0-9]{2,24}$/;
 const ROUND_RE = /^[a-z0-9]{2,12}$/;
 const MAX_LOG = 2000;                            // a ceiling against a runaway writer, not a rule
+/** Sudden-death playoff holes before a still-level match is called a draw. */
+export const PO_MAX = 18;
 const MAX_XY = 5000;                             // yards; a hole's bounds are a few hundred
 const ms = (v) => (Number.isFinite(+v) ? +v : 0);
 const other = (s) => (s === 'a' ? 'b' : 'a');
@@ -129,7 +136,7 @@ export function cleanEntry(e) {
   if (!e || typeof e !== 'object') return null;
   if (e.by !== 'a' && e.by !== 'b') return null;
   const h = +e.h, s = +e.s, x = +e.x, y = +e.y;
-  if (!Number.isInteger(h) || h < 0 || h > 17) return null;
+  if (!Number.isInteger(h) || h < 0 || h > 17 + PO_MAX) return null;
   if (!Number.isInteger(s) || s < 1 || s > 11) return null;
   if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > MAX_XY || Math.abs(y) > MAX_XY) return null;
   const out = { by: e.by, h, x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, s, at: ms(e.at) };
@@ -137,24 +144,37 @@ export function cleanEntry(e) {
   return out;
 }
 
-/** A fresh replay state: whose turn, which hole, every finished hole's score per side, and where
- *  each side's ball lies on a hole it has not finished. */
-export function newPlay() {
-  return { side: 'a', h: 0, lastS: 0, sc: { a: [], b: [] }, rest: { a: {}, b: {} } };
+/** A fresh replay state: whose turn, which hole (an index past the round = a playoff hole), every
+ *  finished hole's score per side, where each side's ball lies on a hole it has not finished, and
+ *  once it is decided `fin` with `win` ('a' | 'b' | 'draw') and `why`. `po`: ties go to a playoff. */
+export function newPlay(po = false) {
+  return { side: 'a', h: 0, lastS: 0, sc: { a: [], b: [] }, rest: { a: {}, b: {} }, po: !!po, fin: false, win: null, why: '' };
 }
+/** The round's hole a log index plays: itself, or for a playoff hole the round again from its start. */
+export const holeAt = (holes, h) => holes[h % holes.length];
+const regTotal = (sc, n) => { let t = 0; for (let i = 0; i < n; i++) t += Number.isFinite(sc[i]) ? sc[i] : 0; return t; };
 /** Apply one entry. True, or false when the rules refuse it (out of turn, wrong hole, strokes that
  *  do not go up, a score past the cap): one such entry makes the whole log invalid. */
 export function applyEntry(st, holes, e) {
-  if (st.h >= holes.length) return false;
+  if (st.fin || (!st.po && st.h >= holes.length)) return false;
   if (e.by !== st.side || e.h !== st.h) return false;
-  const cap = capOf(holes[st.h].par);
+  const cap = capOf(holeAt(holes, st.h).par);
   if (e.s <= st.lastS) return false;
   if (e.d) {
     if (e.s > cap) return false;
     st.sc[st.side][st.h] = e.s;
     delete st.rest[st.side][st.h];
-    if (st.side === 'a') st.side = 'b'; else { st.side = 'a'; st.h += 1; }
     st.lastS = 0;
+    if (st.side === 'a') { st.side = 'b'; return true; }
+    st.side = 'a';
+    const L = holes.length, h = st.h;
+    const decide = (x, y, why) => { st.fin = true; st.win = x < y ? 'a' : y < x ? 'b' : 'draw'; st.why = st.win === 'draw' ? 'tie' : why; };
+    if (h < L - 1) st.h += 1;
+    else if (h === L - 1) {
+      const ta = regTotal(st.sc.a, L), tb = regTotal(st.sc.b, L);
+      if (ta !== tb || !st.po) decide(ta, tb, 'strokes'); else st.h = L;
+    } else if (st.sc.a[h] !== st.sc.b[h] || h + 1 >= L + PO_MAX) decide(st.sc.a[h], st.sc.b[h], 'playoff');
+    else st.h += 1;
   } else {
     // A ball at rest has strokes left to play: at the cap the hole ends instead (a done entry).
     if (e.s >= cap) return false;
@@ -182,16 +202,17 @@ export function validateGame(raw) {
   const keys = Object.keys(src).sort();
   if (keys.length > MAX_LOG) return null;
   const log = [];
-  const st = newPlay();
+  const po = raw.po === true;
+  const st = newPlay(po);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
     if (!applyEntry(st, holes, e)) return null;
     log.push(e);
   }
-  const finished = st.h >= holes.length;
-  const totals = { a: sum(st.sc.a), b: sum(st.sc.b) };
-  const played = finished ? (totals.a < totals.b ? 'a' : totals.b < totals.a ? 'b' : 'draw') : null;
+  const L = holes.length;
+  const totals = { a: regTotal(st.sc.a, L), b: regTotal(st.sc.b, L) };
+  const played = st.fin ? st.win : null;
   let over = null;
   const to = recipientOfRaw(a, b, asCode(raw.by));
   // CALLED OFF before its receiver answered (js/challenge-life.js): counts for nobody, and only
@@ -207,23 +228,31 @@ export function validateGame(raw) {
     // A result the log did not produce is only allowed for a resignation (and nobody resigns a draw).
     if (over.why === 'resign' ? w === 'draw' : played !== w) return null;
   } else if (played) {
-    over = { winner: played, why: played === 'draw' ? 'tie' : 'strokes', at: ms(raw.updated) };
+    over = { winner: played, why: st.why, at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
   // Strokes and par over the holes BOTH players have finished: the fair comparison mid-match.
   const both = holes.map((_, i) => Number.isFinite(st.sc.a[i]) && Number.isFinite(st.sc.b[i]));
   const done = both.filter(Boolean).length;
+  // The playoff so far: one entry per playoff hole begun, { n, par, a, b } (a score or null).
+  const playoff = [];
+  for (let h = L; h <= st.h && st.h >= L; h++) {
+    const hm = holeAt(holes, h);
+    playoff.push({ n: hm.n, par: hm.par, a: Number.isFinite(st.sc.a[h]) ? st.sc.a[h] : null, b: Number.isFinite(st.sc.b[h]) ? st.sc.b[h] : null });
+  }
   return {
     v: 1, id,
     course: String(raw.course), round: String(raw.round), holes,
     ...(raw.lapse === true ? { lapse: true } : {}),
+    ...(po ? { po: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
     a: { code: a, name: String((raw.a && raw.a.name) || ''), emoji: String((raw.a && raw.a.emoji) || '🙂') },
     b: { code: b, name: String((raw.b && raw.b.name) || ''), emoji: String((raw.b && raw.b.emoji) || '🙂') },
     turn: over ? null : st.side,
-    hole: Math.min(st.h, holes.length - 1),     // the hole being played (or the last one, once over)
+    hole: over ? Math.min(st.h, L - 1) : st.h,   // the log index being played (>= L: a playoff hole)
+    playoff,
     log,
     over,
     scores: { a: holes.map((_, i) => (Number.isFinite(st.sc.a[i]) ? st.sc.a[i] : null)), b: holes.map((_, i) => (Number.isFinite(st.sc.b[i]) ? st.sc.b[i] : null)) },
@@ -431,7 +460,7 @@ function rowsFromIndex(val, now = decideNow()) {
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
       course: COURSE_RE.test(String(r.course || '')) ? String(r.course) : '', round: ROUND_RE.test(String(r.round || '')) ? String(r.round) : '',
-      holes: ms(r.holes), hole: ms(r.hole), done: ms(r.done),
+      holes: ms(r.holes), hole: ms(r.hole), done: ms(r.done), pof: r.pof === 1,
       mine: ms(r.mine), theirs: ms(r.theirs), par: ms(r.par), mineTotal: ms(r.mineTotal), theirsTotal: ms(r.theirsTotal),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch('golf', r.id)));
@@ -534,7 +563,7 @@ function rowFor(game, side, writer) {
     sent: side !== recipientOf(game),
     pl: senderPlayed(game),
     course: game.course, round: game.round, holes: game.holes.length,
-    hole: game.hole + 1, done: game.common.done,
+    hole: game.hole + 1, done: game.common.done, pof: game.hole >= game.holes.length ? 1 : 0,
     mine: game.common[side], theirs: game.common[other(side)], par: game.common.par,
     mineTotal: game.totals[side], theirsTotal: game.totals[other(side)],
     lastBy: writer === side ? 'me' : 'them',
@@ -577,7 +606,7 @@ export async function createGame({ them, course, round, holes }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, id, course, round, holes: hs, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, id, course, round, holes: hs, lapse: true, po: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -634,16 +663,12 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');
     if (lifeOf(fresh).expired) return fail('expired');
     // The rules accept them before anything is written.
-    const st = newPlay();
+    const st = newPlay(fresh.po === true);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(st, fresh.holes, e)) return fail('rules-refused');
     const now = stampFor(api);
     const patch = { updated: now };
     todo.forEach((e, i) => { patch[`log/${String(have + i).padStart(4, '0')}`] = { ...e, at: now }; });
-    if (st.h >= fresh.holes.length) {
-      const ta = sum(st.sc.a), tb = sum(st.sc.b);
-      const w = ta < tb ? 'a' : tb < ta ? 'b' : 'draw';
-      patch.over = { winner: w, why: w === 'draw' ? 'tie' : 'strokes', at: now };
-    }
+    if (st.fin) patch.over = { winner: st.win, why: st.why, at: now };
     await api.update(api.ref(db, `${NODE}/games/${id}`), patch);
     const back = await readGame(id);
     if (!back || back.log.length !== have + todo.length) {

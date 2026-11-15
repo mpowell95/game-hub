@@ -25,7 +25,7 @@ function specialValue(id, evo, rv) {
 }
 
 /** What each of `side`'s monsters would gain from cleared `counts` (the engine's charge rule, per rules version: from v3 two
- *  monsters of one element SHARE the gems, the fuller one first). Prismote gains 1 per 2 gems of any element. */
+ *  monsters of one element SHARE the gems, the fuller one first). Rainbit gains 1 per 2 gems of any element. */
 function gainsFor(state, side, counts, total) {
   const mons = state.sides[side].mons, rv = state.rv || 1;
   const gains = mons.map((m) => { const el = BY_ID[m.id].el; return el === 'all' ? Math.floor((m.part + total) / 2) : (counts[el] || 0); });
@@ -53,7 +53,7 @@ export function scorePreview(state, side, p) {
     if (!gain) continue;
     const cost = costOf(m.id, state.rv || 1);
     score += gain * (1 + 2 * (m.energy / cost));
-    if (m.energy + gain >= cost) score += 8 + specialValue(m.id, m.evo, state.rv);
+    if (m.energy + gain >= cost && !m.went) score += 8 + specialValue(m.id, m.evo, state.rv);   // v4: once a turn
   }
   if (p.berries && sd.mons.some((m) => !m.evo)) {
     score += p.berries * (sd.berries + p.berries >= BERRIES_TO_EVOLVE ? 7 : 2.5);
@@ -83,7 +83,7 @@ function threat(state, side) {
     const gains = gainsFor(state, side, p.counts, total);
     for (const [mi, m] of sd.mons.entries()) {
       const gain = gains[mi];
-      if (gain && m.energy + gain >= costOf(m.id, state.rv || 1)) worst = Math.max(worst, specialValue(m.id, m.evo, state.rv));
+      if (gain && !m.went && m.energy + gain >= costOf(m.id, state.rv || 1)) worst = Math.max(worst, specialValue(m.id, m.evo, state.rv));
     }
   }
   return worst;

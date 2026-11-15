@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1562;
-const CACHE = 'game-hub-v1574';
+const IMPORTANT_SINCE = 1575;
+const CACHE = 'game-hub-v1579';
 
 const ASSETS = [
   './',
@@ -835,7 +835,7 @@ const REST_MANIFEST = {
   './css/hub.css': '6498bfd5a0',
   './css/name-gate.css': '91402215cc',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '0142b2d955',
+  './js/hub.js': 'c914a928cd',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'b32cd6fa57',
   './js/name-gate-auto.js': '2c296ba493',
@@ -899,7 +899,7 @@ const REST_MANIFEST = {
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
   './js/stats-corrections.js': '93ccba7a8c',
-  './js/bee-fairplay.js': '0bed676c4b',
+  './js/bee-fairplay.js': '7a17ef9239',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
   './js/players-agg.js': 'a23aebb534',
@@ -1103,8 +1103,8 @@ const REST_MANIFEST = {
   './eight-ball/js/mp.js': '44704a5842',
   './eight-ball/js/mp-ui.js': '980bac34a6',
   './eight-ball/js/alert.js': 'c69860d012',
-  './battle-arena/js/engine.js': '241d47d3ce',
-  './battle-arena/js/monsters.js': '5b92466209',
+  './battle-arena/js/engine.js': 'e960e9703f',
+  './battle-arena/js/monsters.js': 'abaddd0b0b',
   './battle-arena/js/online.js': '19934f1bd1',
   './battle-arena/js/mp.js': '2e6c2009b8',
   './darts/': '9565b5b35f',
@@ -1282,9 +1282,9 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': 'd1dfd2526f',
   './golf/': '457d076497',
   './golf/index.html': '457d076497',
-  './golf/css/golf.css': '50204421bc',
-  './golf/js/ui.js': '90621eff09',
-  './golf/js/strings.js': '29a5123f78',
+  './golf/css/golf.css': 'ca6b4a6e39',
+  './golf/js/ui.js': '3fdf66bbdd',
+  './golf/js/strings.js': 'fcbd5be063',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
   './golf/js/club-art.js': 'b501cf9342',
@@ -1298,8 +1298,8 @@ const REST_MANIFEST = {
   './golf/js/save.js': 'ff5f0f70ab',
   './golf/js/progress.js': '47d04c9fd5',
   './golf/js/tutorial.js': '750f5299f7',
-  './golf/js/mp.js': '32fb69626d',
-  './golf/js/mp-ui.js': '9f2157279a',
+  './golf/js/mp.js': '9cd62b30bf',
+  './golf/js/mp-ui.js': '170794e6f2',
   './golf/js/alert.js': '266a8282ad',
   './golf/courses/pinevalley.js': 'aabb5248b9',
   './golf/courses/redmesa.js': '633a4b2521',

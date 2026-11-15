@@ -53,3 +53,20 @@ look-only (`_renderReview`), and that screen's top bar had only EN/ES, the calen
 no way to open that day's board (only a never-played day, opened for fun, still had it). The trophy is back on the
 look-only screen. `_boardSection` now treats a for-fun day by `this.fun`, not the mode, so a for-fun day whose
 answers were seen still shows its own row unplaced and dashed rather than as a real placed row.
+
+
+## 2026-11-15: the Nov 14 voids (Ana's bug report, "The leaderboard doesn't get updated (only my score)")
+
+Ana's Today board (v1574, Nov 14 1:43 PM ET) showed Lili 0 (Español), MattyIce 0 and King of Games 0 (English):
+the "played, 0" look of a voided row, read as "not updating". Three server flags that day (`beeFlags`):
+- `g-bhimnu` MattyIce "Best 5 first", King of Games "Best 6 first". The puzzle has 26 answers, 14 of them worth
+  exactly 7 points (-ING words), so the bar (6th best still unfound, min 7) was met by over half the answers: any
+  five long words in a row tripped a STRONG rule. Fix: `detectCopying` skips a window when the answers at or above
+  the bar are over a third of those unfound (`RULES.bestShare`, `puzzle.n` from `bee-puzzles.json`).
+- `es-a-dilnoz` Lili "Burst 13 at 5.1 s, Genius in 5.1 min, Re-typed 2": written at 3:00 AM from her first ~40
+  words. Her whole day: 118 right, 151 re-typed, so the third supporting rule never held. Flags were written once and
+  never re-checked against the log. Fix: `checkPlayer` re-judges every flag on the whole log each pass (the hourly
+  pass covers every logged day), storing the result in `beeFlags/<puzzle>/<CODE>/re` only when it changes;
+  `flagStands` reads `re` when present. The flag's own numbers stay (rule 5).
+Replay over every logged puzzle 2026-10-27..2026-11-15 (real `beeLog`): old rules void 3 player-days (KoG Oct 28,
+KoG Nov 14, MattyIce Nov 14); new rules void only KoG Oct 28 (sorted run 7 + best 6 + all supporting).
