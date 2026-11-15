@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1585;
-const CACHE = 'game-hub-v1587';
+const IMPORTANT_SINCE = 1588;
+const CACHE = 'game-hub-v1590';
 
 const ASSETS = [
   './',
@@ -19,6 +19,8 @@ const ASSETS = [
   './js/hub.js',
   './js/new-dock-log.js',
   './js/name-gate.js',
+  './js/signin-ask.js',
+  './js/signin-rules.js',
   './js/name-gate-auto.js',
   './js/no-zoom.js',
   './js/sideways.js',
@@ -834,11 +836,13 @@ const SHELL_CACHE_FIRST = SHELL.filter((p) => !NETWORK_FIRST.includes(p));
 const REST_MANIFEST = {
   './manifest.webmanifest': 'cd3b726da1',
   './css/hub.css': '6498bfd5a0',
-  './css/name-gate.css': '91402215cc',
+  './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'c914a928cd',
+  './js/hub.js': '881ee530a2',
   './js/new-dock-log.js': '4d32e770a7',
-  './js/name-gate.js': 'b32cd6fa57',
+  './js/name-gate.js': 'e8758cc628',
+  './js/signin-ask.js': '9f55d083d6',
+  './js/signin-rules.js': 'fe9166aa6a',
   './js/name-gate-auto.js': '2c296ba493',
   './js/no-zoom.js': 'adf92fcd05',
   './js/sideways.js': '488a5d3ad5',
@@ -859,7 +863,7 @@ const REST_MANIFEST = {
   './js/lb2-lost.js': '1c5e1679ff',
   './js/tabbar-fix.js': '8851c67152',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': 'f6f9f9787d',
+  './js/strings.js': 'be0a267c5f',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -891,8 +895,8 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': 'b70c68e50c',
-  './js/admin-ui.js': '2c478c9474',
+  './js/admin-config.js': 'a1d0989fa0',
+  './js/admin-ui.js': '5d0d6de15d',
   './js/integrity.js': '03072e0106',
   './js/play-log-queue.js': '5a64cdfdac',
   './js/play-log.js': '250ce128a0',
@@ -1285,8 +1289,8 @@ const REST_MANIFEST = {
   './golf/': 'cc7a73041c',
   './golf/index.html': 'cc7a73041c',
   './golf/css/golf.css': 'b8024fc1e7',
-  './golf/js/ui.js': '809a57b3d5',
-  './golf/js/strings.js': 'fcbd5be063',
+  './golf/js/ui.js': 'a692efe869',
+  './golf/js/strings.js': '5eda6b5647',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
   './golf/js/club-art.js': 'b501cf9342',
@@ -1300,7 +1304,7 @@ const REST_MANIFEST = {
   './golf/js/save.js': 'ff5f0f70ab',
   './golf/js/progress.js': 'f68fd5dc8d',
   './golf/js/tutorial.js': '750f5299f7',
-  './golf/js/mp.js': '9cd62b30bf',
+  './golf/js/mp.js': '0c191009bc',
   './golf/js/mp-ui.js': '170794e6f2',
   './golf/js/alert.js': '266a8282ad',
   './golf/courses/pinevalley.js': 'aabb5248b9',

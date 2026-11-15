@@ -61,6 +61,8 @@ export const BRANCHES = [
   'skeeballThrows', 'challenge', 'flight', 'selfies',
   // claimReq/, claimRes/, codeKeys/ (2026-11-04): device keys (functions/claim.js). Not anonymously readable.
   'claimReq', 'claimRes', 'codeKeys',
+  // signIns/ (2026-11-15): Allow / Deny sign in requests, <CODE>/<reqId> (functions/signin.js). Admin + reader read only.
+  'signIns',
   // hoops/ (2026-09-22): Connect 4 Hoops' turn-by-turn matches and their per-player index. Same
   // auth shape as players/ - readable by any signed-in anonymous session.
   'hoops',

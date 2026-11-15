@@ -49,6 +49,7 @@ import {
   setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
   resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
   setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust, setAdjustMode,
+  resolveSigninAsk, setSigninAsk,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './integrity.js';
@@ -204,6 +205,8 @@ let _players = null;
 let _offline = false;
 let _bee = {};
 let _integ = {};
+let _signins = [];          // Allow / Deny sign in (2026-11-15, js/signin-ask.js): every waiting request, any code
+const _signinSeen = new Set(); // requests this page has stamped as seen on this open
 let _agg = null;            // per render: aggregatePlayers with every display correction applied
 let _aggRaw = null;         // per render: the same without them (what is on the phones)
 let _ident = null;
@@ -374,9 +377,29 @@ const andReview = (write, kind, a, b) => async () => {
   return setReviewed(kind, a, b, true);
 };
 
+/** ALLOW / DENY SIGN IN (2026-11-15): answer a waiting request, then read the list again. */
+async function answerSignin(r, allow) {
+  const m = await import('./signin-ask.js');
+  m.noteSeen(r.code, r.id, allow ? 'allow' : 'deny');
+  const res = await m.answerRequest(r.code, r.id, allow);
+  _signins = await m.readAllWaiting();
+  return res;
+}
+/** Who saw it: "Seen 3x · Notified" (seen/<uid> stamps from every phone and this page; pushedAt from the server). */
+function signinSeenText(r) {
+  const n = Object.values(obj(r.seen)).reduce((a, x) => a + ((obj(x).n | 0) || 0), 0);
+  return [n ? tx('adm_signin_seen', 'Seen {n}x', { n }) : '', r.pushedAt ? tx('adm_signin_pushed', 'Notified') : ''].filter(Boolean).join(' · ');
+}
+
 /** Everything on the Now tab: [{group, rowHTML}] built from the flags Matt has not checked yet. */
 function nowRows(cfg) {
-  const rows = { flags: [], online: [] };
+  const rows = { flags: [], online: [], signin: [] };
+  for (const r of _signins) {
+    rows.signin.push(row({
+      title: r.name || '', sub: [r.device || '', when(+r.at || 0)].filter(Boolean).join(' · '), sub2: signinSeenText(r),
+      acts: [btn(tx('si_deny', 'Deny'), () => answerSignin(r, false), 'x'), btn(tx('si_allow', 'Allow'), () => answerSignin(r, true))],
+    }));
+  }
   const codes = codesSeen();
   for (const b of beeFlags(cfg)) {
     if (!b.stands || resolveReviewed(cfg, 'bee', b.bk, b.code)) continue;
@@ -433,7 +456,7 @@ function nowRows(cfg) {
   }
   return rows;
 }
-const nowCount = (cfg) => { if (loading()) return 0; const r = nowRows(cfg); return r.flags.length + r.online.length; };
+const nowCount = (cfg) => { if (loading()) return 0; const r = nowRows(cfg); return r.flags.length + r.online.length + r.signin.length; };
 
 // --- row builders -----------------------------------------------------------------------------------
 
@@ -520,7 +543,9 @@ export async function openAdmin(opts = {}) {
   // Paint at once from the cached config; the people-shaped parts fill in when the reads land.
   _players = null; _offline = false;
   render();
-  const [fresh, players, bee, integ] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee(), readIntegrity()]);
+  const [fresh, players, bee, integ, signins] = await Promise.all([refreshAdminConfig(), readPlayers(), readBee(), readIntegrity(),
+    import('./signin-ask.js').then((m) => m.readAllWaiting()).catch(() => [])]);
+  _signins = Array.isArray(signins) ? signins : [];
   _players = players || {};
   _bee = bee || {};
   _integ = integ || {};
@@ -649,8 +674,16 @@ function nowTab(cfg) {
   const title = tx('adm_tab_now', 'Now');
   if (loading()) return { title, body: waitBody() };
   const r = nowRows(cfg);
-  if (!r.flags.length && !r.online.length) return { title, body: `<p class="adm-empty">${esc(tx('adm_now_empty', 'Nothing needs you.'))}</p>` };
-  return { title, body: (r.flags.length ? gh(tx('adm_flags', 'Flags'), r.flags.length) + grp(r.flags) : '')
+  if (!r.flags.length && !r.online.length && !r.signin.length) return { title, body: `<p class="adm-empty">${esc(tx('adm_now_empty', 'Nothing needs you.'))}</p>` };
+  // Who saw it: each waiting row shown here is stamped once per open of this page.
+  for (const s0 of _signins) {
+    const k = `${s0.code}/${s0.id}`;
+    if (_signinSeen.has(k)) continue;
+    _signinSeen.add(k);
+    import('./signin-ask.js').then((m) => m.noteSeen(s0.code, s0.id)).catch(() => {});
+  }
+  return { title, body: (r.signin.length ? gh(tx('adm_signin_wait', 'Waiting to sign in'), r.signin.length) + grp(r.signin) : '')
+    + (r.flags.length ? gh(tx('adm_flags', 'Flags'), r.flags.length) + grp(r.flags) : '')
     + (r.online.length ? gh(tx('adm_play_online_q', 'Play online?'), r.online.length) + grp(r.online) : '') };
 }
 
@@ -1136,6 +1169,9 @@ function personPage(cfg, key) {
   let body = grp([
     ...(code ? [row({ title: (tx('adm_plays_online', 'Plays online')),
       acts: [`<button type="button" class="adm-sw" aria-pressed="${online}" aria-label="${esc(tx('adm_plays_online', 'Plays online'))}" ${act(() => save(() => setOnlineAllowed(code, !online)))}></button>`] })] : []),
+    // Allow / Deny sign in (2026-11-15): a new phone joining this code waits for Allow. NOT cleared for players.
+    ...(code ? [(() => { const on = resolveSigninAsk(cfg, code); return row({ title: tx('adm_signin_ask', 'Ask to sign in'),
+      acts: [`<button type="button" class="adm-sw" aria-pressed="${on}" aria-label="${esc(tx('adm_signin_ask', 'Ask to sign in'))}" ${act(() => save(() => setSigninAsk(code, !on)))}></button>`] }); })()] : []),
     ...(code && hidden.length ? [row({ title: (tx('adm_tester_for', 'Tester for')), value: tests.length ? tests.join(', ') : tx('adm_none', 'None'), go: () => push({ k: 'testerfor', key }) })] : []),
   ], true);
   const voids = voidsOf(cfg, key);

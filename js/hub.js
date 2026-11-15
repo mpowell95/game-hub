@@ -35,7 +35,7 @@ import { pendingAnnouncement, loadSeen, hasSeenStore, mergeSeen, markSeen, ANNOU
 import { startPointsToast } from './points-toast.js';
 // "+X pts" over a result screen whenever a win is counted (2026-11-02, js/points-toast.js). Display only.
 try { startPointsToast(); } catch (err) { console.warn('[hub] points toast off', err); }
-import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice } from './admin-config.js';
+import { isGameLive, isGameAllowed, gameLiveAt, refreshAdminConfig, onAdminConfig, refreshAdminDevice, isAdminDevice, isSigninAsk } from './admin-config.js';
 import { setGameShownCheck } from './online-gate.js';
 import STRINGS from './strings.js';
 import { isAutomation } from './automation.js';
@@ -943,6 +943,10 @@ class Hub {
     // PUSH NOTIFICATIONS (2026-09-23, js/push.js): keep this device's stored address current, and
     // take a tapped notification to its game. Both lazy; neither can break the launcher.
     this._afterPaint(() => { import('./push.js').then((m) => m.refreshPush()).catch(() => {}); });
+    // ALLOW / DENY SIGN IN (2026-11-15, js/signin-ask.js; NOT cleared for players): a phone whose code is in the
+    // sign-in ask set watches that code's waiting requests and shows "New sign in" (Deny / Allow), over a game too
+    // (which is told it is covered). Every other phone loads nothing past the check.
+    this._afterPaint(() => this._startSigninWatch());
     // ...and clear the notifications already showing, on open and every time the app comes back to
     // the front (Matt, 2026-09-24: "Can the notifications auto dismiss if i go to the game hub?").
     // ...and while the hub is on screen, tell the server so it does not notify THIS device at all
@@ -1110,6 +1114,20 @@ class Hub {
       try { if (m && typeof m.onSideways === 'function') m.onSideways(on); } catch { /* the cover still shows */ }
     };
     window.addEventListener('gamehub:sideways', this._rotateOn);
+  }
+  _startSigninWatch() {
+    if (this._signinStop) return;
+    const p = loadProfile();
+    const code = p && typeof p.playerId === 'string' ? p.playerId.trim().toUpperCase() : '';
+    if (!code || !isSigninAsk(code)) {
+      // Not in the ask set (every player today): nothing loads. Matt adding this code later starts it.
+      if (!this._signinCfg) this._signinCfg = onAdminConfig(() => { if (isSigninAsk(code)) { this._signinCfg(); this._signinCfg = null; this._startSigninWatch(); } });
+      return;
+    }
+    this._signinStop = () => {};
+    import('./signin-ask.js').then((m) => {
+      this._signinStop = m.startSigninWatch({ cover: (on) => { if (on) this._coverGame(); else this._uncoverGame(); } });
+    }).catch((err) => { this._signinStop = null; console.warn('[hub] sign-in watch failed to load', err); });
   }
   _coverGame() {
     const m = this.current && this.current.module;
@@ -2037,6 +2055,8 @@ class Hub {
   }
 
   async _openPushedGameNow(id, extra = {}) {
+    // "New sign in for <name>" (2026-11-15): the watch shows the popup; a tap only has to make sure it runs.
+    if (id === 'signin') { this._clearPushOpen(); this._startSigninWatch(); return; }
     if (this.current) {
       this._clearPushOpen();
       // THE SAME GAME IS ALREADY OPEN (2026-10-14): hand it the match instead of doing nothing,

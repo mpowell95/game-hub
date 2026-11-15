@@ -135,6 +135,8 @@ export function cleanHoles(raw) {
 export function cleanEntry(e) {
   if (!e || typeof e !== 'object') return null;
   if (e.by !== 'a' && e.by !== 'b') return null;
+  // SEND (2026-11-15, matches with `ah`): the turn passes to the other player.
+  if (e.pass === 1 || e.pass === true) return { by: e.by, pass: 1, at: ms(e.at) };
   const h = +e.h, s = +e.s, x = +e.x, y = +e.y;
   if (!Number.isInteger(h) || h < 0 || h > 17 + PO_MAX) return null;
   if (!Number.isInteger(s) || s < 1 || s > 11) return null;
@@ -147,8 +149,20 @@ export function cleanEntry(e) {
 /** A fresh replay state: whose turn, which hole (an index past the round = a playoff hole), every
  *  finished hole's score per side, where each side's ball lies on a hole it has not finished, and
  *  once it is decided `fin` with `win` ('a' | 'b' | 'draw') and `why`. `po`: ties go to a playoff. */
-export function newPlay(po = false) {
-  return { side: 'a', h: 0, lastS: 0, sc: { a: [], b: [] }, rest: { a: {}, b: {} }, po: !!po, fin: false, win: null, why: '' };
+export function newPlay(po = false, ah = false) {
+  return { side: 'a', h: 0, lastS: 0, sc: { a: [], b: [] }, rest: { a: {}, b: {} }, po: !!po, fin: false, win: null, why: '',
+    ah: !!ah, pos: { a: 0, b: 0 }, tp: 0 };
+}
+/** PLAY AHEAD (Matt, 2026-11-15: "after you play 1 hole, give the person an option to send 1 hole or
+ *  play all 3 and send them"), on matches with `ah: true` (every one from that day; absent = the old
+ *  one-hole-a-turn rule, replayed unchanged). Each player plays THEIR holes in order (`pos`); a finished
+ *  hole keeps the turn, and a `{ pass: 1 }` entry (Send) hands it over once at least one hole has been
+ *  played this turn (`tp`) and the other player still has a hole to play. A player whose last hole is
+ *  done passes on their own. When both have played every hole: the result, or the playoff, which stays
+ *  strictly one hole a turn, challenger first. */
+export function canPass(st, holes) {
+  const L = holes.length, o = st.side === 'a' ? 'b' : 'a';
+  return !!st.ah && !st.fin && st.h < L && st.lastS === 0 && st.tp >= 1 && st.pos[o] < L;
 }
 /** The round's hole a log index plays: itself, or for a playoff hole the round again from its start. */
 export const holeAt = (holes, h) => holes[h % holes.length];
@@ -157,6 +171,14 @@ const regTotal = (sc, n) => { let t = 0; for (let i = 0; i < n; i++) t += Number
  *  do not go up, a score past the cap): one such entry makes the whole log invalid. */
 export function applyEntry(st, holes, e) {
   if (st.fin || (!st.po && st.h >= holes.length)) return false;
+  if (e.pass) {
+    if (e.by !== st.side || !canPass(st, holes)) return false;
+    st.side = st.side === 'a' ? 'b' : 'a';
+    st.tp = 0;
+    st.h = st.pos[st.side];
+    return true;
+  }
+  if (st.ah && st.h < holes.length) return applyAhead(st, holes, e);
   if (e.by !== st.side || e.h !== st.h) return false;
   const cap = capOf(holeAt(holes, st.h).par);
   if (e.s <= st.lastS) return false;
@@ -183,6 +205,33 @@ export function applyEntry(st, holes, e) {
   }
   return true;
 }
+/** A shot or a finished hole in the regulation part of a play-ahead match (see canPass). */
+function applyAhead(st, holes, e) {
+  const L = holes.length, side = st.side;
+  if (e.by !== side || e.h !== st.pos[side]) return false;
+  const cap = capOf(holes[e.h].par);
+  if (e.s <= st.lastS) return false;
+  if (!e.d) {
+    if (e.s >= cap) return false;
+    st.rest[side][e.h] = { x: e.x, y: e.y, s: e.s };
+    st.lastS = e.s;
+    return true;
+  }
+  if (e.s > cap) return false;
+  st.sc[side][e.h] = e.s;
+  delete st.rest[side][e.h];
+  st.lastS = 0;
+  st.pos[side] += 1;
+  st.tp += 1;
+  const o = side === 'a' ? 'b' : 'a';
+  if (st.pos.a >= L && st.pos.b >= L) {
+    const ta = regTotal(st.sc.a, L), tb = regTotal(st.sc.b, L);
+    if (ta !== tb || !st.po) { st.fin = true; st.win = ta < tb ? 'a' : tb < ta ? 'b' : 'draw'; st.why = st.win === 'draw' ? 'tie' : 'strokes'; st.h = L - 1; }
+    else { st.h = L; st.side = 'a'; st.tp = 0; }
+  } else if (st.pos[side] >= L) { st.side = o; st.tp = 0; st.h = st.pos[o]; }
+  else st.h = st.pos[side];
+  return true;
+}
 const sum = (list) => list.reduce((a, v) => a + (Number.isFinite(v) ? v : 0), 0);
 
 /**
@@ -203,7 +252,8 @@ export function validateGame(raw) {
   if (keys.length > MAX_LOG) return null;
   const log = [];
   const po = raw.po === true;
-  const st = newPlay(po);
+  const ah = raw.ah === true;
+  const st = newPlay(po, ah);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -245,6 +295,9 @@ export function validateGame(raw) {
     course: String(raw.course), round: String(raw.round), holes,
     ...(raw.lapse === true ? { lapse: true } : {}),
     ...(po ? { po: true } : {}),
+    ...(ah ? { ah: true } : {}),
+    pass: !over && canPass(st, holes),           // may the player on turn Send now
+    tp: st.tp,                                   // holes they have finished this turn
     by: asCode(raw.by),
     created: ms(raw.created),
     updated: ms(raw.updated),
@@ -592,7 +645,7 @@ async function repairRows(api, db, game, writer) {
  * ([{i, n, par, pin}], built by ui.js from the course). The challenger is side 'a' and plays first;
  * only their own row is written here. Returns { ok, id, game } or a failure.
  */
-export async function createGame({ them, course, round, holes }) {
+export async function createGame({ them, course, round, holes, ahead = true }) {
   const me = myCode();
   const to = asCode(them && them.code);
   if (!me) return fail('no-player-code');
@@ -606,7 +659,7 @@ export async function createGame({ them, course, round, holes }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, id, course, round, holes: hs, lapse: true, po: true, by: me, created: 0, updated: 0,
+    v: 1, id, course, round, holes: hs, lapse: true, po: true, ...(ahead ? { ah: true } : {}), by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
@@ -653,7 +706,7 @@ export async function appendLog(id, base, entries) {
     if (!side) return fail('not-your-game');
     if (list.some((e) => e.by !== side)) return fail('bad-entry');
     const have = fresh.log.length;
-    const same = (x, y) => x && y && x.by === y.by && x.h === y.h && x.s === y.s && !!x.d === !!y.d && x.x === y.x && x.y === y.y;
+    const same = (x, y) => x && y && x.by === y.by && x.h === y.h && x.s === y.s && !!x.d === !!y.d && !!x.pass === !!y.pass && x.x === y.x && x.y === y.y;
     let skip = 0;
     while (skip < list.length && base + skip < have && same(fresh.log[base + skip], list[skip])) skip++;
     if (base + skip !== have) return fail('moved-on');
@@ -663,7 +716,7 @@ export async function appendLog(id, base, entries) {
     if (fresh.over) return fail('already-over');
     if (lifeOf(fresh).expired) return fail('expired');
     // The rules accept them before anything is written.
-    const st = newPlay(fresh.po === true);
+    const st = newPlay(fresh.po === true, fresh.ah === true);
     for (const e of fresh.log.concat(todo)) if (!applyEntry(st, fresh.holes, e)) return fail('rules-refused');
     const now = stampFor(api);
     const patch = { updated: now };
