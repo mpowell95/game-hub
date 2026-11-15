@@ -44,9 +44,11 @@ const waitTip = (page, id) => page.waitForFunction((id) => window.__baTest._tip 
     const inside = await page.evaluate(() => { const r = document.querySelector('.ba-coach-bubble').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; });
     ok(`"${id}" bubble on screen`, inside);
     if (id === 'hp') ok('"hp" rings BOTH health numbers, an arrow at each', await page.evaluate(() => document.querySelectorAll('.ba-coach-ring').length === 2 && document.querySelectorAll('.ba-coach-arrow').length === 2));
-    if (id === 'swap') ok('"swap" boxes a real 3-in-a-row and circles the tile to move', await page.evaluate(() => { const u = window.__baTest, ln = u.tipLine(3); return !!ln && ln.line.length === 3 && !!document.querySelector('.ba-coach-ring.is-box') && !!document.querySelector('.ba-coach-ring.is-round'); }));
+    if (id === 'swap') ok('"swap" boxes a real 3-in-a-row and shows the two tiles trading places (copies, arrow; real ones hidden)', await page.evaluate(() => { const u = window.__baTest, ln = u.tipLine(3); return !!ln && ln.line.length === 3 && !!document.querySelector('.ba-coach-ring.is-box') && document.querySelectorAll('.ba-coach-ghost').length === 2 && !!document.querySelector('.ba-coach-swaparrow line') && [...document.querySelectorAll('.ba-board .ba-tile')].filter((e) => e.style.visibility === 'hidden').length === 2; }));
+    if (id === 'swap') ok('the bubble stays clear of the two tiles', await page.evaluate(() => { const u = window.__baTest, d = u._tip.tg.demo, q = document.querySelector('.ba-coach-bubble').getBoundingClientRect(); return [d.from, d.into].every((i) => { const r = u.tiles.get(u.state.board[i].id).getBoundingClientRect(); return r.bottom <= q.top || r.top >= q.bottom; }); }));
     await page.click('[data-role="tip-ok"]');
   }
+  ok('Got it shows the real tiles again', await page.evaluate(() => [...document.querySelectorAll('.ba-board .ba-tile')].every((e) => e.style.visibility !== 'hidden')));
   ok('after the first-turn tips the board takes input', await page.evaluate(() => window.__baTest.canInput() && !window.__baTest._tip));
   const steps = [
     ['charge', () => { const u = window.__baTest; u.state.sides[0].mons[0].energy = 2; u.syncAll(); u.checkTips(); }],
