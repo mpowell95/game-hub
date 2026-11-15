@@ -40,6 +40,7 @@ export const QUEEN = 9;
 export const RULES = {
   sortedRun: 6, burstWords: 10, burstAvgMs: 6000, bestWords: 5, bestOf: 6, bestMinPoints: 7, bestMs: 120000,
   leaveWords: 5, leaveMs: 60000, geniusMs: 10 * 60 * 1000, rightPerWrong: 2, retypeShare: 0.1, judgeRight: 20,
+  bestShare: 1 / 3,   // best words first is judged only while the words at the bar are at most this share of the answers left
 };
 const isOk = (x) => x.r === 'ok' || x.r === 'bonus';
 
@@ -120,6 +121,13 @@ export function detectCopying(entries, { words = 0, puzzle = null } = {}) {
       }
       if (left.length < RULES.bestOf) continue;
       const bar = Math.max(left[RULES.bestOf - 1], RULES.bestMinPoints);
+      // Only when "the best" is RARE (2026-11-15): Nov 14's English puzzle had 14 answers worth exactly 7, so
+      // any five long words in a row read as "best first" and voided MattyIce. When the answers at or above
+      // the bar are over a third of the answers still unfound, finding them first proves nothing: not judged.
+      // (`top` holds only the 15 highest, so the pool is a floor; `n` = answers in the puzzle.)
+      const pool = left.filter((v) => v >= bar).length;
+      const unfound = Number(puzzle.n) > 0 ? Number(puzzle.n) - seen.size : 0;
+      if (unfound > 0 && pool > RULES.bestShare * unfound) continue;
       let n = 0;
       for (const x of ev) {
         if (x.t <= s.t) continue;
@@ -324,6 +332,10 @@ export function countedRow(row, own, day) {
  *  stands. */
 export function flagStands(f) {
   if (!f || typeof f !== 'object') return false;
+  // The server's re-judgement on the player's WHOLE log (functions/bee.js checkPlayer, `re`, 2026-11-15): a flag
+  // is written once, often mid-game (Lili, Nov 14 ES: written at 40 words with 2 re-typed; her full day re-typed
+  // 151), so the latest whole-log numbers decide. The flag's own numbers stay stored, untouched.
+  if (f.re && typeof f.re === 'object') return flagStands({ ...f.re, re: null });
   const num = (x) => (Number.isFinite(Number(x)) && x !== null && x !== '' ? Number(x) : null);
   if (num(f.sorted) == null && num(f.burst) == null && num(f.best) == null) return true;
   const neg = (x) => { const n = num(x); return n == null || n < 0 ? null : n; };

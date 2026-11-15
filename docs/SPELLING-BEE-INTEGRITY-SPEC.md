@@ -104,6 +104,14 @@ phone's clock at the guess); the server time `s` only stamps when a batch was up
    to the app, within 2 minutes and before leaving again, the first 5 answers are all among the 6
    highest-scoring answers not yet found (ties count), each worth 7+ points. King of Games, Oct 28: 6.
    The server knows each puzzle's 15 highest answer scores (`bee-puzzles.json` `top`).
+   **Only when the best is rare (2026-11-15)**: not judged when the answers at or above the bar are over a
+   third of the answers still unfound (`RULES.bestShare`). Nov 14 EN (`g:bhimnu`) had 14 of 26 answers worth
+   exactly 7, so five long words in a row voided MattyIce and King of Games.
+
+**Every flag is re-judged on the whole log (2026-11-15)**: `functions/bee.js` `checkPlayer` re-runs a flagged
+player's whole log each pass and keeps the result in `beeFlags/<puzzle>/<CODE>/re` (only on change; the flag's
+own numbers are kept); `flagStands` judges from `re`. Lili Nov 14 ES was flagged at 40 words with 2 re-typed;
+her full day re-typed 151, so "all three supporting" never held.
 
 **Supporting: any two together void the day.**
 3. **Leave and burst:** back from leaving the app OR reopening it, then 5+ accepted words within 60 s (misses allowed;

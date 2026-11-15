@@ -412,7 +412,8 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
   // Every logged day once an hour, the recent ones every 5 minutes (2026-10-29: only 3 days were checked).
   const meta0 = (await db.ref('boards/v1/beeMeta').get()).val() || {};
   const all = !meta0.fullScanAt || Date.now() - meta0.fullScanAt > 60 * 60 * 1000;
-  const { flags, alerts } = await scanRecent(db, Date.now(), { all });
+  const { flags, alerts, rejudged } = await scanRecent(db, Date.now(), { all });
+  for (const [bk, code, re] of rejudged) logger.info('bee flag re-judged', { bk, code, void: re.void, summary: re.summary });
   if (all) await db.ref('boards/v1/beeMeta/fullScanAt').set(Date.now());
   const codes = (flags.length || alerts.length) ? await adminCodes(db) : new Set();
   for (const [bk, code, f] of flags) {
@@ -426,7 +427,7 @@ export const beeWatch = onSchedule({ schedule: 'every 5 minutes', region: OPTS.r
     for (const c of codes) await sendTo(db, c, beeNote(kind, bk, a), `bee-${kind}-${bk}-${code}`, { game: 'spelling-bee' });
   }
   const meta = (await db.ref('boards/v1/beeMeta').get()).val() || {};
-  if (flags.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000 || handAddDueSince('spellingbee', meta.builtAt)) {
+  if (flags.length || rejudged.length || meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000 || handAddDueSince('spellingbee', meta.builtAt)) {
     const r = await rebuildBee(db);
     logger.info('bee board rebuilt', r);
   }
