@@ -1,7 +1,8 @@
 // tools/reader-auth.mjs - how a session signs in to READ the admin-only logs (2026-10-30, Matt: "set up
 // the read-only list"). With the environment variable GAMEHUB_READER (the key Matt creates on the admin
 // page, Admin > gear > Reader key) the session signs in as that one reader: database.rules.json lets a uid
-// in readers/ READ playLog, beeAlerts, integrityFlags and integrityAlerts, and change nothing. Without it,
+// in readers/ READ playLog, beeAlerts, integrityFlags and integrityAlerts (and, from 2026-11-15, bug/device reports, selfies and
+// pushSubs), and change nothing. Without it,
 // an ordinary anonymous sign-in (the admin-only branches then say "Permission denied").
 //
 //   import { signInForReading } from './reader-auth.mjs';

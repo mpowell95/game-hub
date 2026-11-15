@@ -149,6 +149,10 @@ Only equal on both is tied. `boardMetricCmp` / `tieByAverage`.
 A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key
 (`js/device-key.js`, `functions/claim.js`, `codeKeys/`), `players/<id>.own` = uid. Step B (PINs for a new phone, rules
 lock on `msgAuth` and `players/`) is planned, NOT built, player-visible: needs Matt's "ship it". `docs/SECURITY-DEVICE-KEYS.md`.
+**Private reads LIVE (2026-11-15, Matt: "Yeah we should def do this")**: `bugReports`, `bugReportShots`, `deviceReports`, `selfies` = admins +
+reader key only (a report carries `uid` so its sender can re-read it; `tools/read-*-reports.mjs` and the backup sign in with `GAMEHUB_READER`);
+`pushSubs/<code>` = that code + admins + reader. Checks: `tools/test-no-deletes-rules.mjs` (reads too). Step B now = **Allow / Deny on the player's
+other phone** (Matt, 2026-11-15), replacing Design change 2 in that doc. Every page carries `noindex, nofollow` (2026-11-15); a new page must too.
 
 ## Open handoff (2026-10-30)
 
@@ -430,7 +434,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Reading the admin-only logs (play log, flags, alerts): `node tools/read-play-log.mjs <CODE>`, signed in with the env
   var `GAMEHUB_READER`** (2026-10-30, Matt: test1 is admin in the APP, but database admin is per device id, so a session's
   sign-in is never admin). The key comes from Admin > gear > Reader key for Claude; `readers/<uid>` may READ playLog,
-  beeAlerts, integrityFlags, integrityAlerts and nothing else (`tools/reader-auth.mjs`). Use it before saying "I can't see that".
+  beeAlerts, integrityFlags, integrityAlerts, bug/device reports, selfies, pushSubs (2026-11-15) and change nothing (`tools/reader-auth.mjs`). Use it before saying "I can't see that".
 - **Arrow Maze points per minute: `node tools/read-arrow-pace.mjs`** (Expert 8 since 2026-11-02; Matt wants it revisited with more data).
 - **Firebase-writing scripts are Matt-only, dry-run by default** (`tools/clear-skeeball-stats.mjs`,
   `tools/delete-test-players.mjs`, `tools/delete-device-record.mjs`, `tools/fix-natalia-record.mjs`). Never `--write`

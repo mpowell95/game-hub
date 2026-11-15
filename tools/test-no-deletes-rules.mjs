@@ -111,7 +111,7 @@ const DB = {
   players: { 'dev-me': rec('Me', 'AAAAA'), 'dev-other': rec('Other', 'BBBBB') },
   usernames: { me: { code: 'AAAAA', at: NOW - 1 }, other: { code: 'BBBBB', at: NOW - 1 }, legacy: { at: NOW - 1 } },
   rooms: { ROOM1: { host: { id: 'dev-me' }, seats: { 0: { id: 'dev-me' }, 1: { id: 'dev-other' } }, recovery: { seq: 3 }, pk: { pub: { p: 1 }, clock: 5 }, updated: NOW - 1 } },
-  bugReports: { r1: { text: 'x', createdAtMs: NOW - 1, deleted: true, deletedAtMs: NOW - 1 } },
+  bugReports: { r1: { text: 'x', createdAtMs: NOW - 1, deleted: true, deletedAtMs: NOW - 1, uid: 'u-me' } },
   bugReportShots: { r1: { 0: 'data:' } },
   deviceReports: { 'dev-me': { a: 1 } },
   archive: { players: { 'dev-old': rec('Old', '') } },
@@ -135,9 +135,11 @@ const LEGIT = [
   ['rooms: clear recovery (null)', 'rooms/ROOM1', { recovery: null, updated: NOW }],
   ['rooms: Hold\'em clears pub + clock', 'rooms/ROOM1/pk', { pub: null, clock: null }],
   ['rooms: a reaction', 'rooms/ROOM1/reactions/0', { t: 'e', v: 'x', at: NOW }, { set: true }],
-  ['bug report: send (push + set)', 'bugReports/r2', { text: 'y', createdAtMs: NOW }, { set: true }],
-  ['bug report: undo soft delete (deleted null)', 'bugReports/r1', { deleted: null, deletedAtMs: null }],
-  ['bug report: screenshots', 'bugReportShots/r2', { 0: 'data:' }, { set: true }],
+  ['bug report: send (push + set)', 'bugReports/r2', { text: 'y', createdAtMs: NOW, uid: 'u-me' }, { set: true }],
+  ['bug report: screenshot error noted on my own report', 'bugReports/r1', { shotError: 'x', shotCount: 0 }],
+  ['bug report: admin marks status', 'bugReports/r1', { status: 'done', statusAt: NOW }, { uid: 'u-admin' }],
+  ['bug report: undo soft delete (deleted null)', 'bugReports/r1', { deleted: null, deletedAtMs: null }, { uid: 'u-admin' }],
+  ['bug report: screenshots on my own report', 'bugReportShots/r1', { 0: 'data:' }, { set: true }],
   ['device report', 'deviceReports/dev-me', { a: 2 }, { set: true }],
   ['username: claim', 'usernames/newname', { code: 'AAAAA', at: NOW }],
   ['username: release my own old name on rename', 'usernames/me', null, { set: true }],
@@ -205,6 +207,41 @@ for (const n of MP) {
 for (const [name, p, v, o] of ATTACK) ok('ATTACK refused: ' + name, !allowed(DB, p, v, o));
 ok('ATTACK: even admin cannot delete a player record from a device', !allowed(DB, 'players/dev-other', null, { set: true, uid: 'u-admin' }));
 ok('ATTACK: signed-out cannot write at all', !allowed(DB, 'players/dev-x', rec('X', 'XXXXX'), { set: true, uid: null }));
+
+// --- PRIVATE READS (2026-11-15, Matt: "Yeah we should def do this"): bug reports, device reports, selfies and push
+// addresses were readable by every visitor (every phone signs in anonymously). Now Matt's admin devices and the reader
+// key only, plus the sender's own report (its write is verified by a re-read) and each code's own push addresses.
+function canRead(state, path, uid) {
+  const segs = path.split('/').filter(Boolean), auth = uid ? { uid } : null, root = new Snap(state);
+  let node = RULES, vars = {};
+  for (let d = 0; d <= segs.length; d++) {
+    if (d > 0) { const [n, w] = ruleChild(node, segs[d - 1]); node = n; if (w) vars = { ...vars, [w]: segs[d - 1] }; }
+    if (!node) return false;
+    if (node['.read'] !== undefined && evalRule(node['.read'], { auth, root, data: new Snap(get(state, segs.slice(0, d))) }, vars)) return true;
+  }
+  return false;
+}
+const RDB = { ...DB, readers: { 'u-reader': { on: true } }, selfies: { s1: { status: 'pending', by: 'u-me' } } };
+const READ_OK = [
+  ['admin reads every bug report', 'bugReports', 'u-admin'], ['reader key reads every bug report', 'bugReports', 'u-reader'],
+  ['sender re-reads their own report', 'bugReports/r1/createdAtMs', 'u-me'], ['admin reads screenshots', 'bugReportShots/r1', 'u-admin'],
+  ['admin reads device reports', 'deviceReports', 'u-admin'], ['admin reviews selfies', 'selfies', 'u-admin'],
+  ['the sender watches their own selfie', 'selfies/s1', 'u-me'], ['a phone re-reads its own push address', 'pushSubs/AAAAA/s1', 'u-me'],
+  ['reader reads push results', 'pushSubs/AAAAA', 'u-reader'],
+];
+const READ_NO = [
+  ['any visitor lists bug reports', 'bugReports', 'u-other'], ['another player reads my report', 'bugReports/r1', 'u-other'],
+  ['a visitor reads screenshots', 'bugReportShots/r1', 'u-me'], ['a visitor reads device reports', 'deviceReports', 'u-me'],
+  ['a visitor reads one device report', 'deviceReports/dev-me', 'u-me'], ['a visitor lists selfies', 'selfies', 'u-me'],
+  ['another player watches my selfie', 'selfies/s1', 'u-other'], ['a visitor reads someone else\'s push addresses', 'pushSubs/AAAAA', 'u-other'],
+  ['signed out reads a report', 'bugReports/r1', null],
+];
+for (const [n, p, u] of READ_OK) ok('READ allowed: ' + n, canRead(RDB, p, u));
+for (const [n, p, u] of READ_NO) ok('READ refused: ' + n, !canRead(RDB, p, u));
+ok('ATTACK refused: overwrite someone else\'s bug report', !allowed(DB, 'bugReports/r1', { text: 'z', uid: 'u-other' }, { set: true, uid: 'u-other' }));
+ok('ATTACK refused: a report filed in someone else\'s name', !allowed(DB, 'bugReports/r9', { text: 'z', createdAtMs: NOW, uid: 'u-me' }, { set: true, uid: 'u-other' }));
+ok('ATTACK refused: an old build\'s report with no uid (refused, so it stays queued; no duplicate)', !allowed(DB, 'bugReports/r9', { text: 'z', createdAtMs: NOW }, { set: true }));
+ok('ATTACK refused: screenshots on someone else\'s report', !allowed(DB, 'bugReportShots/r1', { 0: 'x' }, { set: true, uid: 'u-other' }));
 
 // --- no node is left wide open --------------------------------------------------------------------------------------
 const open = [];

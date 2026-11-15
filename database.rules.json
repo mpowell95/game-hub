@@ -71,10 +71,10 @@
     "archive":        { ".read": "auth != null", "$k": { "$id": { ".write": "auth != null && newData.exists()" } } },
     "bugReplies":     { ".read": "auth != null", ".write": "auth != null && root.child('admins').child(auth.uid).val() === true" },
     "bugReplyShots":  { ".read": "auth != null", ".write": "auth != null && root.child('admins').child(auth.uid).val() === true" },
-    "bugReportShots": { ".read": "auth != null", "$id": { ".write": "auth != null && newData.exists()" } },
-    "bugReports":     { ".read": "auth != null", ".indexOn": ["createdAtMs"], "$id": { ".write": "auth != null && newData.exists()" } },
+    "bugReportShots": { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", "$id": { ".write": "auth != null && newData.exists() && (root.child('admins').child(auth.uid).val() === true || root.child('bugReports').child($id).child('uid').val() === auth.uid)" } },
+    "bugReports":     { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", ".indexOn": ["createdAtMs"], "$id": { ".read": "auth != null && data.child('uid').val() === auth.uid", ".write": "auth != null && newData.exists() && (root.child('admins').child(auth.uid).val() === true || (newData.child('uid').val() === auth.uid && (!data.exists() || data.child('uid').val() === auth.uid)))" } },
     "challenge":      { ".read": "auth != null", "$k": { ".write": "auth != null && (newData.exists() || root.child('admins').child(auth.uid).val() === true)" } },
-    "deviceReports":  { ".read": "auth != null", "$id": { ".write": "auth != null && newData.exists()" } },
+    "deviceReports":  { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", "$id": { ".write": "auth != null && newData.exists()" } },
     "flight":         { ".read": "auth != null", ".write": "auth != null && newData.exists()" },
     "cuppong": { ".read": "auth != null",
       "index": { "$code": { "$id": { ".write": "auth != null && newData.exists()" } } },
@@ -291,12 +291,12 @@
 
     "pushSubs": {
       "$code": {
-        ".read": "auth != null",
+        ".read": "auth != null && ($code === root.child('msgAuth').child(auth.uid).val() || root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
         ".write": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()"
       }
     },
     "rooms":          { ".read": "auth != null", ".indexOn": ["updated"], "$code": { ".write": "auth != null && newData.exists()" } },
-    "selfies":        { ".read": "auth != null", "$id": { ".write": "auth != null && newData.exists()" } },
+    "selfies":        { ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)", "$id": { ".read": "auth != null && data.child('by').val() === auth.uid", ".write": "auth != null && newData.exists()" } },
     "skeeballThrows": { ".read": "auth != null", ".write": false },
     "skeeChallenges": { ".read": "auth != null",
       "index": { "$code": { "$id": { ".write": "auth != null && newData.exists()" } } },
