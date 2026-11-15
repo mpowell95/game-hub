@@ -330,3 +330,8 @@ Matt: Thornpaw/Briarlord "went 4 times in a single turn ... way too much"; "bomb
 Shown names only; **ids never change** (stored matches, saves and stats use them). id `pebbleop` = Lavapup / Lavatusk, `prismote` =
 Rainbit / Rainbeast, `zapup` = Sparkpup / Sparktail; evolved: Thornpaw → Thornbear, Cinderwing → Firedrake, Frostling → Frostclaw,
 Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and the history use the old names.
+- **How to play, 2026-11-15 (Matt: "Improve/fix these screens")**: the card sits BELOW the hub's Back button and the TEST tag
+  (`.ba-overlay:has(.ba-help)`; on his iPhone the Powers list ran up under both and hid the tabs) and Powers is 15px with a 126px
+  word column, so it fits his 402x874 unscrolled (a 360x668 phone scrolls inside the card). Basics: the swap is a bold yellow
+  two-way arrow between the water gem and the fire under it (he drew it in), and "Full bar" is the battle's own bar (gem, full
+  track, "7/7"), not a plain red pill.
