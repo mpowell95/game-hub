@@ -90,6 +90,14 @@ const late = [ev(0, 'open'), ...[PAN9, PAN9B, PAN7, 'eeeeeeeeee', 'eeeeeeeeb', '
 ok('late in a game, 5 words of 7 points at the top of what is left still count', detectCopying(late, { puzzle: PZ }).best === 5);
 const lateSmall = { key: PZ.key, top: [16, 16, 14, 10, 9, 8, 8, 8, 8, 7, 7, 6, 6, 6, 6] };
 ok('...but never words under 7 points', detectCopying([...late.slice(0, 12), ev(2000, 'visible'), ...['eeeeee', 'eeeeeb', 'eeeeec', 'eeeeeh', 'eeeeeu'].map((w, i) => g(2010 + i * 5, w))], { puzzle: lateSmall }).best === 1);
+// Only when the best is RARE (2026-11-15): Nov 14's English puzzle (26 answers, 14 of them worth exactly 7) voided
+// MattyIce for five long words in a row. Over a third of the unfound answers at the bar = not judged.
+const ING = { key: 'g:bhimnu', top: [17, 9, 8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7], n: 26 };
+const ingRun = [ev(0, 'open'), ...['gbhimnu', 'gbbhimn', 'gbhhimn', 'gbhiimn', 'gbhimmn'].map((w, i) => g(5 + i * 8, w))];
+ok('best words first: not judged when the bar holds over a third of what is left (Nov 14 EN, MattyIce)', detectCopying(ingRun, { puzzle: ING }).best === 0);
+ok('...the same five in a 60-answer puzzle still count', detectCopying(ingRun, { puzzle: { ...ING, n: 60 } }).best === 5);
+ok('the 2026-10-28 shape (50 answers) still counts 6', detectCopying(best, { puzzle: { ...PZ, n: 50 } }).best === 6);
+ok('late in a game: the unfound count shrinks with what was found', detectCopying(late, { puzzle: { ...PZ, n: 50 } }).best === 5 && detectCopying(late, { puzzle: { ...PZ, n: 24 } }).best === 0);
 
 const game = (rightN, wrongN, retypeN) => {
   const out = [ev(0, 'open')];
@@ -173,6 +181,18 @@ ok('missing log: the player with a short log is alerted', r1.alerts.length === 1
 ok('missing log: no log at all (older build) is not an alert', !db.tree.beeAlerts['e-abcdhu'].OOOOO);
 const r2 = await B.scanRecent(db, NOW);
 ok('a second pass sends nothing again (once per player per puzzle)', r2.flags.length === 0 && r2.alerts.length === 0);
+// Re-judged on the whole log (2026-11-15, Lili Nov 14 ES: flagged at 40 words, 151 re-typed by the end of the day).
+const fc = db.tree.beeFlags['e-abcdhu'].CCCCC;
+ok('re-judge: a standing flag gets its whole-log numbers in `re`, its own numbers untouched', r2.rejudged.length === 1 && fc.re && fc.re.void === true && fc.re.sorted === fc.sorted && fc.rules.includes('sorted'));
+const r2b = await B.scanRecent(db, NOW);
+ok('re-judge: unchanged numbers are not rewritten', r2b.rejudged.length === 0);
+db.tree.beeFlags['e-abcdhu'].HHHHH = { rules: ['burst', 'speed', 'retype'], summary: 'mid-game', sorted: 0, burst: 12, burstAvgMs: 3000, best: 0, geniusMs: 300000, right: 30, wrong: 0, retyped: 1, at: NOW };
+ok('re-judge: the mid-game flag stands before the pass', flagStands(db.tree.beeFlags['e-abcdhu'].HHHHH));
+const r2c = await B.scanRecent(db, NOW);
+const fh = db.tree.beeFlags['e-abcdhu'].HHHHH;
+ok('re-judge: the whole log no longer supports it, so it stops counting; nothing removed', r2c.rejudged.length === 1 && fh.re.void === false && !flagStands(fh) && fh.summary === 'mid-game' && fh.retyped === 1);
+ok('re-judge: a fallen flag leaves the long-term board\'s voids', !voidedAt('e:abcdhu', 'e-abcdhu', { HHHHH: fh }, {}).has('HHHHH') && voidedAt('e:abcdhu', 'e-abcdhu', { CCCCC: fc }, {}).has('CCCCC'));
+delete db.tree.beeFlags['e-abcdhu'].HHHHH;
 ok('the logs and board rows are untouched', Object.keys(db.tree.beeLog['e-abcdhu'].CCCCC).length === copier.length && db.tree.beeDaily['e-abcdhu'].CCCCC.words === 13);
 const rb = await B.rebuildBee(db, NOW);
 const pkg = JSON.parse(db.tree.boards.v1.bee);

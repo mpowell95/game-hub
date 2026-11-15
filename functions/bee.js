@@ -15,7 +15,8 @@
 // ownDayNumbers), not the phone's own-day fields, whenever the log holds every word or the post is late.
 //
 // THE LAW: nothing here changes a save, a beeDaily row or a beeLog entry. Flags and alerts are new
-// nodes; the board is derived. A flag is never removed by this code (Matt's undo sits beside it).
+// nodes; the board is derived. A flag is never removed by this code (Matt's undo sits beside it). Since
+// 2026-11-15 every flag is re-judged on the player's whole log each pass, the result kept in its `re` child.
 import './shared-env.js';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -73,20 +74,38 @@ export function loggedPuzzles(now = Date.now()) {
 /** Detection for one player on one puzzle. `row` may be missing (a log with no board row is checked
  *  too); test accounts are checked like anyone (the push skips them). `log` = that player's log when
  *  the caller already has it. Returns the flag written (once), or null. */
-export async function checkPlayer(db, bk, code, row, log) {
+const numbersOf = (d) => ({
+  rules: [...d.strong, ...d.supporting], summary: flagSummary(d),
+  sorted: d.sorted, burst: d.burst.n, burstAvgMs: Math.round(d.burst.avg), best: d.best, leave: d.leave,
+  geniusMs: d.geniusMs == null ? -1 : Math.round(d.geniusMs), right: d.right == null ? -1 : d.right,
+  wrong: d.wrong == null ? -1 : d.wrong, retyped: d.retyped == null ? -1 : d.retyped,
+});
+const sameNumbers = (a, b) => !!a && !!b && ['sorted', 'burst', 'burstAvgMs', 'best', 'leave', 'geniusMs', 'right', 'wrong', 'retyped', 'void']
+  .every((k) => a[k] === b[k]);
+
+export async function checkPlayer(db, bk, code, row, log, out) {
   if (!PUZZLES[bk]) return null;
-  if (await valOf(db, `beeFlags/${bk}/${code}`)) return null;   // already flagged
+  const had = await valOf(db, `beeFlags/${bk}/${code}`);
   if (log === undefined) log = await valOf(db, `beeLog/${bk}/${code}`);
+  if (had) {
+    // RE-JUDGED on the WHOLE log (2026-11-15). A flag is written once, often mid-game: Lili's Nov 14 ES flag
+    // rested on 2 re-typed of her first 40 words; her full day re-typed 151, so by Matt's "all three together"
+    // she was never copying, yet every phone showed her 0 all day. The latest whole-log numbers go in `re`
+    // beside the flag (the flag's own numbers are never changed or removed); js/bee-fairplay.js flagStands
+    // judges from `re` when present. Written only when the numbers changed. `out` collects re-judged days.
+    if (!log) return null;
+    const d = detectCopying(log, { words: ((row && typeof row === 'object' ? row : {}).words) | 0, puzzle: PUZZLES[bk] });
+    const re = { ...numbersOf(d), void: !!d.void };
+    if (sameNumbers(had.re, re)) return null;
+    await db.ref(`beeFlags/${bk}/${code}/re`).set({ ...re, at: Date.now() });
+    if (Array.isArray(out)) out.push([bk, code, re]);
+    return null;
+  }
   if (!log) return null;
   row = row && typeof row === 'object' ? row : {};
   const d = detectCopying(log, { words: row.words | 0, puzzle: PUZZLES[bk] });
   if (!d.void) return null;
-  const flag = {
-    rules: [...d.strong, ...d.supporting], summary: flagSummary(d), name: String(row.name || code).slice(0, 40),
-    sorted: d.sorted, burst: d.burst.n, burstAvgMs: Math.round(d.burst.avg), best: d.best, leave: d.leave,
-    geniusMs: d.geniusMs == null ? -1 : Math.round(d.geniusMs), right: d.right == null ? -1 : d.right,
-    wrong: d.wrong == null ? -1 : d.wrong, retyped: d.retyped == null ? -1 : d.retyped, at: Date.now(),
-  };
+  const flag = { ...numbersOf(d), name: String(row.name || code).slice(0, 40), at: Date.now() };
   const res = await db.ref(`beeFlags/${bk}/${code}`).transaction((cur) => (cur ? undefined : flag));
   return res && res.committed ? flag : null;
 }
@@ -142,16 +161,17 @@ export function beeNote(kind, bk, info) {
 }
 
 /** One pass: detection over every logged puzzle (`all`) or the recent ones, for every code with a
- *  board row OR a log; missing-log alerts for board rows. Returns {flags: [[bk, code, flag]], alerts}. */
+ *  board row OR a log; missing-log alerts for board rows. Returns {flags: [[bk, code, flag]], alerts,
+ *  rejudged: [[bk, code, re]] (standing flags whose whole-log numbers changed)}. */
 export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
-  const flags = [], alerts = [];
+  const flags = [], alerts = [], rejudged = [];
   const touched = await readTouched(db);
   for (const bk of all ? loggedPuzzles(now) : recentPuzzles(now)) {
     const rows = (await valOf(db, `beeDaily/${bk}`)) || {};
     const logs = await logsFor(db, bk, touched, Date.now());
     for (const code of new Set([...Object.keys(rows), ...Object.keys(logs)])) {
       const row = rows[code];
-      const f = await checkPlayer(db, bk, code, row, logs[code] || null);
+      const f = await checkPlayer(db, bk, code, row, logs[code] || null, rejudged);
       if (f) flags.push([bk, code, f]);
       const z = await checkZone(db, bk, code, row, logs[code] || null, now);
       if (z) alerts.push([bk, `${code}~zone`, z]);
@@ -160,7 +180,7 @@ export async function scanRecent(db, now = Date.now(), { all = false } = {}) {
       if (a) alerts.push([bk, code, a]);
     }
   }
-  return { flags, alerts };
+  return { flags, alerts, rejudged };
 }
 
 /** Puzzles whose words can still arrive on time (the day before yesterday to tomorrow, UTC): their
