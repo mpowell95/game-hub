@@ -59,6 +59,7 @@ const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
   ok('rules: version 1 numbers are frozen (costs)', v1.every((id) => costOf(id, 1) === frozen[id]));
   ok('rules: version 1 numbers are frozen (Sproutle heal 10, Prismote 20)', specialOf('sproutle', false, 1).heal === 10 && specialOf('prismote', false, 1).dmg === 20);
   ok('rules: version 2 numbers are frozen (Prismote cost 16 dmg 18, Thornpaw heal 7)', costOf('prismote', 2) === 16 && specialOf('prismote', false, 2).dmg === 18 && specialOf('thornpaw', false, 2).heal === 7);
+  ok('rules: version 3 numbers are frozen (Thornpaw cost 5 heal 8, Hexowl dmg 8, Prismote cost 17)', costOf('thornpaw', 3) === 5 && specialOf('thornpaw', false, 3).heal === 8 && !specialOf('thornpaw', false, 3).dmg && specialOf('hexowl', false, 3).dmg === 8 && costOf('prismote', 3) === 17);
   // An OLD stored challenge (no rv) replays exactly as before: the same log gives the same state under v1 and differs under v2.
   const T = { a: ['sproutle', 'prismote'], b: ['thornpaw', 'driplet'] };
   let s1 = O.startState(4242, T), log = [];
