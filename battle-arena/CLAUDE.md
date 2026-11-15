@@ -336,3 +336,14 @@ Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and t
   two-headed curved arrow (SVG markers, solid heads that follow the curve, in a 6px gap left of the water/fire column; Matt: "like
   your original one, but to just have arrows on that white line", then "these arrows are terrible" about hand-drawn ticks), and "Full bar" is the battle's own bar (gem, full
   track, "7/7"), not a plain red pill.
+
+## First-match tutorial (2026-11-15, Matt: Ana "didn't really know what was going on ... 4+ things give you an extra turn ... what the berries did ... how many turns she had left ... health")
+
+Eight tips, one at a time, on the player's own turn, each the FIRST time it matters (`TIP_ORDER`, `tipTarget` in `ui.js`):
+hp (team row), moves (the move pips), swap (the board) on the first turn; then charge (a bar with energy), berry (berries
+> 0), evolve (an evolve option), extra (`_sawExtra`, set by the player's own `extra` event), bomb (a bomb tile). A yellow
+ring on the thing + a bubble + Got it (`.ba-coach`, z 36, under the result card). Blocks the board until Got it
+(`canInput`); in a timed live room it never blocks and goes with the player's move. Seen = `settings.tips[id]` (a
+preference, per phone); shown/done reported via `js/tips-log.js` (`players/<id>/tips`, `tools/read-tips.mjs`).
+Words: `tip_*` in `strings.js`. Test: `tools/test-battlearena-tips.mjs`; `test-battlearena-back.mjs` seeds every tip seen.
+
