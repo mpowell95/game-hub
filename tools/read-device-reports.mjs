@@ -49,7 +49,8 @@ async function main() {
     process.exit(1);
   }
 
-  const idToken = await signInAnonymously(firebaseConfig.apiKey);
+  // Bug and device reports are admin-read since 2026-11-15: sign in with the reader key (GAMEHUB_READER).
+  const { idToken } = await (await import('./reader-auth.mjs')).signInForReading();
   const path = deviceId ? `deviceReports/${deviceId}` : 'deviceReports';
   const data = await fetchRTDB(firebaseConfig.databaseURL, path, idToken);
 

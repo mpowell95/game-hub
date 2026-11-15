@@ -177,7 +177,8 @@ async function main() {
     process.exit(1);
   }
 
-  const idToken = await signInAnonymously(firebaseConfig.apiKey);
+  // With GAMEHUB_READER set, read as the reader key: bug/device reports are admin-read since 2026-11-15.
+  const { idToken } = await (await import('../tools/reader-auth.mjs')).signInForReading();
   let data, denied = [];
   if (path) {
     data = await readPath(firebaseConfig.databaseURL, path, idToken);

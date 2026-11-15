@@ -407,10 +407,13 @@ export async function submitBugReport(report) {
   try {
     const boot = await getStatsApp();
     if (!boot) return { ok: false, reason: 'offline or Firebase unavailable', retryable: true };
-    const { db, api } = boot;
+    const { db, api, uid } = boot;
+    if (!uid) return { ok: false, reason: 'not signed in yet', retryable: true };
     const ref = api.push(api.ref(db, 'bugReports'));
     const id = ref.key;
     record.id = id;
+    // The rules (2026-11-15) let only the sender read back their own report, so the uid travels on it.
+    record.uid = uid;
     await api.set(ref, record);
     const snap = await api.get(api.ref(db, 'bugReports/' + id + '/createdAtMs'));
     if (!snap || !snap.exists()) {
