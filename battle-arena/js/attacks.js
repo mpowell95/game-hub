@@ -520,6 +520,13 @@ const ATTACKS = {
     }
     s.shake(7 * k, 300);
     await s.sleep(300);
+    // the thorns fly out and strike BOTH of the other team's monsters (rules v4 gave Thornpaw damage, 2026-11-15)
+    for (const t of s.foes) s.emit(Math.round(12 * k), me, { sp: [2, 4], life: [380, 520], r: [5, 8], c: LEAF, shape: 'leaf', to: { x: t.x, y: t.y } });
+    await s.sleep(380);
+    if (!s.alive) return;
+    s.jolt('#7ed957');
+    s.shake(6 * k, 200);
+    for (const t of s.foes) s.emit(Math.round(10 * k), t, { sp: [2, 6], life: [400, 700], r: [4, 7], c: LEAF, shape: 'leaf', g: 0.12 });
     // the leaf storm: from Thornpaw down over the board (the gems it turns into leaves follow)
     const board = s.host.root.querySelector('.ba-board');
     const bc = board ? s.host.centre(board) : { x: s.W / 2, y: s.H * 0.7 };

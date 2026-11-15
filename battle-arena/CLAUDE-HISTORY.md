@@ -136,3 +136,23 @@ What was wrong and fixed:
   lines at 11-14px with the berry line cut off; the monster card's X under the art (`z-index`); "New
   team" split over two lines; the end card upper-casing the profile name; the Online tab stuck on "…"
   when `online-ui.js` could not load. `tabCpu` in Spanish was "Máquina" beside the game's own "Ordenador".
+
+## Rules version 4: once a turn, calmer bombs (2026-11-15)
+
+Matt asked for simulated games to rank the monsters and pairs at each unlock stage ("I feel like you can win almost always with
+sproutle and pebbleop"), then: "thornpaw/briarlord just went 4 times in a single turn for my opponent. That's way too much. The game
+needs to be tweaked so things like this don't happen. I feel like bombs go off too easily?"
+
+The rankings under v3 (every legal team vs every team it shares no monster with, 1,188 pairings; medium x40 games, hard x8):
+Thornpaw was far the weakest (36-44%; its leaf gems only help a leaf partner and "no two of one element" removed that), Hexowl the
+strongest (54-56%), teams 21-65%. Sproutle + Pebbleop was 55-58% (10th-17th of 59) against everything, but 91% / 69% / 54% for a
+strong player (the hard computer) against the Easy / Medium / Hard computer's real draft: Easy and Medium draft only starters,
+and with Sproutle taken about 45% of their teams hold Thornpaw. A v3 soak (1,500 medium matches): one monster fired 2+ times in
+2,611 turns (Thornpaw), the most 15 in one turn; 8.75 bombs went off a match (9,051 by the swap, 3,590 by a cascade, 414 by a special).
+
+v4 (engine.js `v4`, `went`, `BOMB_RATE_V4`, `MAX_BOMBS_V4`, `specialArea`, `settle(direct)`; cpu.js ignores a bar that already went):
+with v3's numbers Thornpaw fell to 26% and Hexowl rose to 63%. Six tuning passes (scratch tuner, numbers overridden in memory):
+Thornpaw +dmg 6 at cost 5 won 81%, +dmg 3 won 60-68%; cost 6 convert 3 dmg 5 landed. Final (medium, 24 games a pairing), win %
+by unlock stage, all within 47-54%: 0 wins Stormhorn 52, Cinderwing 51, Hexowl 50, Sproutle 50, Thornpaw 48, Driplet 48; 30 wins
+Frostling 52 ... Cinderwing 48. Teams 40-66% (best Driplet + Stormhorn, worst Driplet + Pebbleop 40% at 6 wins). Sproutle +
+Pebbleop 46%. Hard x6 agreed: 46-56%, Driplet + Stormhorn 65-70% the one stand-out.
