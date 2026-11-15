@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1575;
-const CACHE = 'game-hub-v1584';
+const IMPORTANT_SINCE = 1585;
+const CACHE = 'game-hub-v1586';
 
 const ASSETS = [
   './',
@@ -898,7 +898,7 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': '93ccba7a8c',
+  './js/stats-corrections.js': '58ccebe35b',
   './js/bee-fairplay.js': '7a17ef9239',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
@@ -1283,7 +1283,7 @@ const REST_MANIFEST = {
   './golf/': 'cc7a73041c',
   './golf/index.html': 'cc7a73041c',
   './golf/css/golf.css': 'b8024fc1e7',
-  './golf/js/ui.js': '5208635c23',
+  './golf/js/ui.js': '809a57b3d5',
   './golf/js/strings.js': 'fcbd5be063',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
