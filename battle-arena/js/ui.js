@@ -1326,12 +1326,46 @@ class BattleArena {
     const s = this.state;
     const m = s.sides[sd].mons[mi];
     if (sd === ME && s.turn === ME && !this.busy && E.evolveOptions(s).includes(mi)) {
-      const res = this.step({ type: 'evolve', mon: mi, side: ME });
-      if (res.ok) { if (!this.link) this.pm = true; this.poke(); this.select(null); this.hideEvolve(); this.commit(res, true); }
+      // A preview first (2026-11-14, Matt: "we need a way to see the options before someone can decide"): now vs evolved.
+      this.showEvolve(mi);
       return;
     }
     if (this.busy) return;
     this.showCard(m.id, { evolved: m.evo, rv: s.rv || 1 });   // a match shows ITS numbers (rules version)
+  }
+
+  /** Evolve? The monster now and evolved, side by side, each with its power in the tile's words (what grows is lit), and
+   *  Evolve (it costs a move). Shows THIS match's numbers (its rules version). X / outside = not now. */
+  showEvolve(mi) {
+    const s = this.state, rv = s.rv || 1, m = s.sides[ME].mons[mi], id = m.id;
+    const now = tileLines(specialOf(id, false, rv)), next = tileLines(specialOf(id, true, rv));
+    const col = (evo, lines, other) => `
+      <div class="ba-evc${evo ? ' is-evo' : ''}">
+        <div class="ba-evc-art">${monsterSVG(id, evo)}</div>
+        <b class="ba-evc-name">${escapeHTML(monName(id, evo))}</b>
+        <span class="ba-evc-sp">${escapeHTML(t('sp_' + id + (evo ? '_evo' : '')))}</span>
+        ${lines.map((l) => `<span class="ba-evc-fx${evo && !other.includes(l) ? ' is-up' : ''}">${escapeHTML(l)}</span>`).join('')}
+      </div>`;
+    const el = document.createElement('div');
+    el.className = 'gh-overlay ba-overlay';
+    el.innerHTML = `
+      <div class="gh-modal ba-evocard" role="dialog" aria-modal="true" aria-label="${escapeHTML(t('evolve'))}" style="--ba-el:${ELEMENT_COLOR[BY_ID[id].el]}">
+        <button type="button" class="gh-modal__close" data-role="close" aria-label="${t('close')}">&times;</button>
+        <div class="ba-evc-row">${col(false, now, next)}<span class="ba-card-arrow" aria-hidden="true">${ICONS.arrow}</span>${col(true, next, now)}</div>
+        <button type="button" class="ba-bigbtn" data-role="evolve">${ICONS.berry}<span>${escapeHTML(t('evolve'))}</span></button>
+      </div>`;
+    this.root.appendChild(el);
+    for (const n of el.querySelectorAll('.ba-evc-name')) fitText(n, 19);
+    const close = () => el.remove();
+    this.on(el, 'click', (e) => { if (e.target === el) close(); });
+    this.on(el.querySelector('[data-role="close"]'), 'click', close);
+    this.on(el.querySelector('[data-role="evolve"]'), 'click', () => {
+      close();
+      const st = this.state;
+      if (!st || st.turn !== ME || this.busy || !E.evolveOptions(st).includes(mi)) return;   // the moment passed (clock, a reload)
+      const res = this.step({ type: 'evolve', mon: mi, side: ME });
+      if (res.ok) { if (!this.link) this.pm = true; this.poke(); this.select(null); this.hideEvolve(); this.commit(res, true); }
+    });
   }
 
   hideEvolve() { for (const p of this.root.querySelectorAll('.ba-evo-pill')) p.hidden = true; for (const m of this.root.querySelectorAll('.ba-mon')) m.classList.remove('is-evo-pick'); }

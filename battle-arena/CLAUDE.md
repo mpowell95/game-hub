@@ -44,7 +44,9 @@ online: `js/online.js` (pure: entries, replay, mirror, hash) · `js/mp.js` (chal
   (40, half its HP; `damage`, event `floored`). Not in How to play since 2026-11-13. No new state field; no stored online
   match or open room existed when both rules went in. Before: ~1 in 90 hard openings was a KO, one turn ran 220 moves.
 - **Evolving is a MOVE** (rec3 2:49): with 4 berries the mover may tap a monster ("Evolve!"); it costs
-  one move, heals nothing, berries back to 0. Never automatic; with no move left it waits.
+  one move, heals nothing, berries back to 0. Never automatic; with no move left it waits. **The tap opens a preview first**
+  (`showEvolve`, 2026-11-14, Matt: "we need a way to see the options before someone can decide"): now -> evolved side by side,
+  each power in the tile's words, what grows lit (yellow + underline), the match's own numbers; the Evolve button does it.
 - Specials pair damage with a board clear that charges the caster, as the reference's do (Flare: a
   column, Electroclaw: a 2x2): Emberkit clears a column (`col`), Zapup a 2x2 (`block`), Sproutle
   hits AND heals (like Heal Leaf).
@@ -307,6 +309,7 @@ boom. 25 words EN, 24 ES (was 84/88). Not in How to play (rules unchanged): matc
   Curse 5x2 (5 damage as each of their next 2 turns starts), +1 to partner, Burns a row, Column clear, 2x2 blast, To Leaf, Rainbow
   (`POWER_KEYS`, strings `pw_*` + `pw_*_d`). Fits Matt's 402x874 without scrolling; on a 360x668 phone in Spanish the card scrolls
   inside itself (contained). A new power needs a `pw_` entry.
+- **Freeze is shown as "−1 enemy move"** (Matt) on tiles, the card ("−1 enemy move next turn") and Powers; ES "−1 jugada rival".
 
 ## Rules version 4: once a turn, calmer bombs (2026-11-15)
 
