@@ -278,7 +278,7 @@ function addEnergy(s, ev, side, mi, n, k) {
   if (n > 0) ev.push({ t: 'energy', side, mon: mi, n, k, energy: m.energy, gained: m.energy - before });
 }
 
-/** Cleared element gems charge the mover's monsters of that element; Prismote (ALL) charges 1
+/** Cleared element gems charge the mover's monsters of that element; Rainbit (ALL) charges 1
  *  per 2 gems of any element, carrying the odd one. */
 function charge(s, ev, side, counts) {
   s.sides[side].mons.forEach((m, mi) => {
