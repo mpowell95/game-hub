@@ -123,6 +123,9 @@ const DB = {
   courseDrafts: { AAAAA: { d1: { holes: 9 } } },
   messages: { threads: { 'AAAAA_BBBBB': { msgs: { m1: { from: 'AAAAA', text: 'hi', atMs: NOW - 1 } } } }, index: { AAAAA: { BBBBB: { at: NOW - 1 } }, BBBBB: { AAAAA: { at: NOW - 1 } } } },
 };
+// Allow / Deny sign in (2026-11-15): a waiting request from a new phone ('u-new') to join AAAAA.
+DB.signIns = { AAAAA: { req0000001: { uid: 'u-new', name: 'Me', device: 'Android · Chrome', at: NOW - 1000, via: 'link', state: 'waiting', pushedAt: NOW - 900, seen: { 'u-me': { first: 1, last: 1, n: 1 } } } } };
+const SI = 'signIns/AAAAA/req0000001';
 const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'golf', 'hoops', 'skeeChallenges'];
 for (const n of MP) DB[n] = { games: { g1: game('AAAAA', 'BBBBB') }, index: { AAAAA: { g1: { result: '' } }, BBBBB: { g1: { result: '' } } }, chat: { g1: { c1: { by: 'AAAAA', t: 'c', v: 'gg' } } } };
 
@@ -156,6 +159,12 @@ const LEGIT = [
   ['messages: mark seen', 'messages/index/AAAAA/BBBBB', { seenAt: NOW }],
   ['messages: hide', 'messages/index/AAAAA/BBBBB', { hiddenAt: NOW }],
   ['msgAuth: claim my code', 'msgAuth/u-me', 'AAAAA', { set: true }],
+  ['sign in: a new phone asks to join (its own uid, waiting, server time)', 'signIns/AAAAA/req0000002', { uid: 'u-new', name: 'Me', device: 'iPhone · Safari', at: NOW, via: 'thatsme', state: 'waiting' }, { set: true, uid: 'u-new' }],
+  ['sign in: the new phone cancels its own request', SI, { state: 'cancelled' }, { uid: 'u-new' }],
+  ['sign in: the code\'s phone taps Allow', SI, { state: 'allowed', by: 'u-me', answeredAt: NOW }],
+  ['sign in: the code\'s phone taps Deny', SI, { state: 'denied', by: 'u-me', answeredAt: NOW }],
+  ['sign in: Matt answers from Admin > Now', SI, { state: 'allowed', by: 'u-admin', answeredAt: NOW }, { uid: 'u-admin' }],
+  ['sign in: the code\'s phone stamps that it saw it', `${SI}/seen/u-me`, { first: 1, last: 2, n: 2, tap: 'allow' }, { set: true }],
 ];
 for (const n of MP) {
   LEGIT.push([`${n}: new match`, `${n}/games/g2`, game('AAAAA', 'BBBBB'), { set: true }]);
@@ -195,6 +204,21 @@ const ATTACK = [
   ['delete a whole conversation', ...del('messages/threads/AAAAA_BBBBB')],
   ['delete an inbox row', ...del('messages/index/AAAAA/BBBBB')],
   ['delete my msgAuth claim', ...del('msgAuth/u-me')],
+  ['delete all sign-in requests', ...del('signIns', 'u-admin')],
+  ['delete a sign-in request', ...del(SI, 'u-new')],
+  ['delete a seen stamp', ...del(`${SI}/seen/u-me`)],
+  ['a sign-in request in someone else\'s uid', 'signIns/AAAAA/req0000003', { uid: 'u-me', name: 'x', at: NOW, state: 'waiting' }, { set: true, uid: 'u-new' }],
+  ['a sign-in request born allowed', 'signIns/AAAAA/req0000003', { uid: 'u-new', name: 'x', at: NOW, state: 'allowed' }, { set: true, uid: 'u-new' }],
+  ['a sign-in request on the phone\'s own clock', 'signIns/AAAAA/req0000003', { uid: 'u-new', name: 'x', at: NOW - 60000, state: 'waiting' }, { set: true, uid: 'u-new' }],
+  ['the new phone allows itself', SI, { state: 'allowed', by: 'u-new', answeredAt: NOW }, { uid: 'u-new' }],
+  ['the new phone writes itself granted', SI, { granted: true }, { uid: 'u-new' }],
+  ['another code\'s phone answers', SI, { state: 'allowed', by: 'u-other', answeredAt: NOW }, { uid: 'u-other' }],
+  ['the code\'s phone answers as someone else', SI, { state: 'allowed', by: 'u-admin', answeredAt: NOW }],
+  ['the code\'s phone changes who asked', SI, { state: 'allowed', by: 'u-me', answeredAt: NOW, uid: 'u-other' }],
+  ['the code\'s phone grants directly', SI, { state: 'allowed', by: 'u-me', answeredAt: NOW, granted: true }],
+  ['an answer wipes who saw it', SI, { state: 'denied', by: 'u-me', answeredAt: NOW, seen: null }],
+  ['another code\'s phone stamps seen', `${SI}/seen/u-other`, { first: 1, last: 1, n: 1 }, { set: true, uid: 'u-other' }],
+  ['a seen stamp in someone else\'s name', `${SI}/seen/u-admin`, { first: 1, last: 1, n: 1 }, { set: true }],
 ];
 for (const n of MP) {
   ATTACK.push([`delete all of ${n}`, ...del(n)]);
@@ -228,6 +252,8 @@ const READ_OK = [
   ['admin reads device reports', 'deviceReports', 'u-admin'], ['admin reviews selfies', 'selfies', 'u-admin'],
   ['the sender watches their own selfie', 'selfies/s1', 'u-me'], ['a phone re-reads its own push address', 'pushSubs/AAAAA/s1', 'u-me'],
   ['reader reads push results', 'pushSubs/AAAAA', 'u-reader'],
+  ['the code\'s phone reads its waiting sign ins', 'signIns/AAAAA', 'u-me'], ['the new phone reads its own request', SI, 'u-new'],
+  ['admin reads every sign in', 'signIns', 'u-admin'], ['reader reads every sign in', 'signIns', 'u-reader'],
 ];
 const READ_NO = [
   ['any visitor lists bug reports', 'bugReports', 'u-other'], ['another player reads my report', 'bugReports/r1', 'u-other'],
@@ -235,6 +261,8 @@ const READ_NO = [
   ['a visitor reads one device report', 'deviceReports/dev-me', 'u-me'], ['a visitor lists selfies', 'selfies', 'u-me'],
   ['another player watches my selfie', 'selfies/s1', 'u-other'], ['a visitor reads someone else\'s push addresses', 'pushSubs/AAAAA', 'u-other'],
   ['signed out reads a report', 'bugReports/r1', null],
+  ['the new phone lists the code\'s sign ins', 'signIns/AAAAA', 'u-new'], ['another code reads them', 'signIns/AAAAA', 'u-other'],
+  ['another code reads one request', SI, 'u-other'], ['a visitor lists every sign in', 'signIns', 'u-me'],
 ];
 for (const [n, p, u] of READ_OK) ok('READ allowed: ' + n, canRead(RDB, p, u));
 for (const [n, p, u] of READ_NO) ok('READ refused: ' + n, !canRead(RDB, p, u));

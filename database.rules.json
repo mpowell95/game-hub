@@ -57,6 +57,26 @@
       "$uid": { ".read": "auth != null && auth.uid === $uid", ".write": false }
     },
     "codeKeys": { ".read": "auth != null && root.child('admins').child(auth.uid).val() === true", ".write": false },
+    "signIns": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
+      "$code": {
+        ".read": "auth != null && (root.child('msgAuth').child(auth.uid).val() === $code || root.child('admins').child(auth.uid).val() === true)",
+        ".indexOn": [
+          "state"
+        ],
+        "$req": {
+          ".read": "auth != null && data.child('uid').val() === auth.uid",
+          ".write": "auth != null && newData.exists() && !newData.child('granted').exists() && !newData.child('bad').exists() && !newData.child('grantedAt').exists() && ((!data.exists() && !newData.child('pushedAt').exists() && newData.child('uid').val() === auth.uid && newData.child('state').val() === 'waiting' && newData.child('at').val() === now && !newData.child('by').exists() && !newData.child('answeredAt').exists() && !newData.child('seen').exists()) || (data.exists() && data.child('uid').val() === auth.uid && data.child('state').val() === 'waiting' && newData.child('state').val() === 'cancelled' && newData.child('uid').val() === data.child('uid').val() && newData.child('name').val() === data.child('name').val() && newData.child('device').val() === data.child('device').val() && newData.child('at').val() === data.child('at').val() && newData.child('via').val() === data.child('via').val() && newData.child('by').val() === data.child('by').val() && newData.child('pushedAt').val() === data.child('pushedAt').val() && (!data.child('seen').exists() || newData.child('seen').exists())) || (data.exists() && data.child('state').val() === 'waiting' && data.child('uid').val() !== auth.uid && (root.child('msgAuth').child(auth.uid).val() === $code || root.child('admins').child(auth.uid).val() === true) && (newData.child('state').val() === 'allowed' || newData.child('state').val() === 'denied') && newData.child('by').val() === auth.uid && newData.child('answeredAt').val() === now && newData.child('uid').val() === data.child('uid').val() && newData.child('name').val() === data.child('name').val() && newData.child('device').val() === data.child('device').val() && newData.child('at').val() === data.child('at').val() && newData.child('via').val() === data.child('via').val() && newData.child('pushedAt').val() === data.child('pushedAt').val() && (!data.child('seen').exists() || newData.child('seen').exists())))",
+          ".validate": "newData.hasChildren(['uid', 'state', 'at']) && $code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{5}$/) && $req.matches(/^[A-Za-z0-9_-]{6,40}$/) && newData.child('uid').isString() && newData.child('at').isNumber() && (newData.child('state').val() === 'waiting' || newData.child('state').val() === 'allowed' || newData.child('state').val() === 'denied' || newData.child('state').val() === 'cancelled' || newData.child('state').val() === 'lapsed') && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 40)) && (!newData.child('device').exists() || (newData.child('device').isString() && newData.child('device').val().length <= 80)) && (!newData.child('via').exists() || newData.child('via').val() === 'link' || newData.child('via').val() === 'thatsme')",
+          "seen": {
+            "$uid": {
+              ".write": "auth != null && newData.exists() && $uid === auth.uid && (root.child('msgAuth').child(auth.uid).val() === $code || root.child('admins').child(auth.uid).val() === true)",
+              ".validate": "newData.hasChildren(['first', 'last', 'n']) && newData.child('first').isNumber() && newData.child('last').isNumber() && newData.child('n').isNumber() && (!newData.child('tap').exists() || newData.child('tap').val() === 'allow' || newData.child('tap').val() === 'deny')"
+            }
+          }
+        }
+      }
+    },
     "admins": { ".read": "auth != null", ".write": false },
     "readers": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",

@@ -94,3 +94,31 @@
 .ng-root[data-ng-theme="dark"] .ng-input { background: #101828; border-color: #2b3a4f; }
 .ng-root[data-ng-theme="dark"] .ng-input:focus { background: #16202f; }
 .ng-root[data-ng-theme="dark"] .ng-btn-ghost { background: #1e2b3d; color: #cfdcec; border-color: #2b3a4f; }
+
+/* ALLOW / DENY SIGN IN (2026-11-15, js/name-gate.js + js/signin-ask.js; gated codes only): "<name> is taken",
+ * "Check your other phone", "Not allowed". Matt's text rules: title 26px, body 17px+, light text near white. */
+.ng-root .ng-step { text-align: center; }
+.ng-root .ng-step[hidden], .ng-root [data-role="ng-main"][hidden] { display: none; }
+.ng-root .ng-sh { margin: 0 0 16px; font-size: 26px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; text-wrap: balance; }
+.ng-root .ng-wide { gap: 10px; }
+.ng-root .ng-wide .ng-btn { flex: 1 1 0; padding: 14px 10px; font-size: 18px; font-weight: 800; white-space: nowrap; touch-action: manipulation; }
+.ng-root .ng-wait { display: flex; justify-content: center; margin: 8px 0 18px; }
+.ng-root .ng-spin { width: 46px; height: 46px; box-sizing: border-box; border-radius: 50%; border: 5px solid #d5deec; border-top-color: #1769d4; animation: ng-spin 0.9s linear infinite; }
+@keyframes ng-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ng-root .ng-spin { animation-duration: 2.4s; } }
+.ng-root .ng-q { white-space: nowrap; }
+.ng-root .ng-sl { margin: 0 0 18px; font-size: 17px; font-weight: 600; line-height: 1.4; color: #3b4d66; }
+.ng-root .ng-lnk { padding: 4px 2px; font: inherit; font-weight: 800; color: #1769d4; background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; touch-action: manipulation; white-space: nowrap; }
+.ng-root .ng-lnk:disabled { opacity: .55; }
+.ng-root .ng-toast { position: absolute; left: 50%; bottom: calc(60px + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 14px 22px; border-radius: 999px; background: #14202f; color: #f2f6fb; font-weight: 800; font-size: 18px; white-space: nowrap; box-shadow: 0 8px 30px rgba(0, 0, 0, .35); }
+.ng-root .ng-toast[hidden] { display: none; }
+@media (prefers-color-scheme: dark) {
+  .ng-root:not([data-ng-theme="light"]) .ng-sl { color: #d6e0ee; }
+  .ng-root:not([data-ng-theme="light"]) .ng-lnk { color: #ffce3a; }
+  .ng-root:not([data-ng-theme="light"]) .ng-spin { border-color: #33445c; border-top-color: #ffce3a; }
+  .ng-root:not([data-ng-theme="light"]) .ng-toast { background: #f2f6fb; color: #14202f; }
+}
+.ng-root[data-ng-theme="dark"] .ng-sl { color: #d6e0ee; }
+.ng-root[data-ng-theme="dark"] .ng-lnk { color: #ffce3a; }
+.ng-root[data-ng-theme="dark"] .ng-spin { border-color: #33445c; border-top-color: #ffce3a; }
+.ng-root[data-ng-theme="dark"] .ng-toast { background: #f2f6fb; color: #14202f; }
