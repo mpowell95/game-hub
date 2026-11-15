@@ -2472,7 +2472,9 @@ class GolfGame {
     // wrong for the label: the result card says "Tutorial complete" while the panel three inches
     // above it read "practice" for the whole lesson.
     this.el.mode.textContent = this.mp
-      ? t('mp_hud', { name: String((this.mp.them && this.mp.them.name) || '?').split(/\s+/)[0], n: this.pos + 1, all: this.holeIdxs.length })
+      ? (this.mp.game && this.pos >= this.mp.game.holes.length
+        ? t('mp_hud_po', { name: String((this.mp.them && this.mp.them.name) || '?').split(/\s+/)[0], n: this.pos - this.mp.game.holes.length + 1 })
+        : t('mp_hud', { name: String((this.mp.them && this.mp.them.name) || '?').split(/\s+/)[0], n: this.pos + 1, all: this.mp.game ? this.mp.game.holes.length : this.holeIdxs.length }))
       : this.tutorialRun
       ? t('mode_tutorial')
       : this.roundId === 'practice'
@@ -3243,12 +3245,6 @@ class GolfGame {
   async _loadMPUI() { if (!this.MPUI) this.MPUI = await import('./mp-ui.js'); return this.MPUI; }
   _myName() { try { return myName() || ''; } catch { return ''; } }
 
-  /** A course everyone can play right now (no dev bypass): the only courses a challenge offers. */
-  _courseOpenToAll(courseId) {
-    if (this._courseTesting(courseId)) return false;
-    return courseOpenByDefault(courseId) || isCourseReleased(courseId);
-  }
-
   _toast(msg, ms = 2600) {
     if (!this.rootEl || !msg) return;
     const el = document.createElement('div');
@@ -3322,7 +3318,7 @@ class GolfGame {
   async _mpSend(them, courseId, roundId) {
     const MP = await this._loadMP();
     const c = courseById(courseId);
-    if (!c || c.id !== courseId || !this._courseOpenToAll(courseId)) return { ok: false, reason: 'bad-round' };
+    if (!c || c.id !== courseId) return { ok: false, reason: 'bad-round' };
     const holes = roundHoles(c, roundId).map((i) => {
       const h = c.holes[i];
       const np = Array.isArray(h.pins) && h.pins.length > 1 ? h.pins.length : 0;
@@ -3394,15 +3390,18 @@ class GolfGame {
     if (!c || c.id !== g.course) { this._renderSetup('online'); this._toast(t('mp_not_found')); return; }
     this.course = c;
     this.roundId = g.round;
-    this.holeIdxs = g.holes.map((h) => h.i);
+    // A PLAYOFF hole (index past the round) plays the round's holes again from the first.
+    const seq = this._mpSeq(g);
+    this.holeIdxs = seq.holes.map((h) => h.i);
+    while (this.holeIdxs.length <= g.hole) this.holeIdxs.push(MP.holeAt(g.holes, this.holeIdxs.length).i);
     this.pos = g.hole;
-    this.scores = g.scores[mp.side].map((v) => (Number.isFinite(v) ? v : undefined));
+    this.scores = seq.scores(mp.side).map((v) => (Number.isFinite(v) ? v : undefined));
     this.roundStats = { birdies: 0, eagles: 0, aces: 0, points: 0, longestDriveYd: mp.longest };
     this.recorded = false;
     this.newBest = false;
     this.tutorialRun = false;
     this._dropCoach();
-    const hm = g.holes[g.hole];
+    const hm = MP.holeAt(g.holes, g.hole);
     this._resumePinIdx = hm.pin >= 0 ? hm.pin : null;
     mp.playing = true;
     mp.loggedDone = false;
@@ -3430,7 +3429,7 @@ class GolfGame {
     }
     // THEIR SCORE ON THIS HOLE, when they have played it.
     const otherSide = mp.side === 'a' ? 'b' : 'a';
-    const theirs = g.scores[otherSide][g.hole];
+    const theirs = seq.scores(otherSide)[g.hole];
     if (Number.isFinite(theirs)) this._showBanner(String(mp.them.name || '?').split(/\s+/)[0], t('mp_strokes', { n: theirs }));
   }
 
@@ -3526,9 +3525,9 @@ class GolfGame {
         <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
         <div class="gf-result__name">${esc(this.pickedUp ? t('picked_up') : this._scoreName(strokes, hole.par))}</div>
         <div class="gf-mpres__line">${esc(this.pickedUp ? t('picked_up_in', { n: strokes }) : t('holed_in', { n: strokes }))} · ${esc(t('par_n', { n: hole.par }))}</div>
-        ${this.MPUI ? this.MPUI.scorecardHTML(mp.game.holes, [
+        ${this.MPUI ? this.MPUI.scorecardHTML(this._mpSeq(mp.game, this.pos).holes, [
     { name: this._myName(), scores: this.scores.map((v) => (Number.isFinite(v) ? v : null)), mine: true },
-    { name: mp.them.name, scores: mp.game.scores[otherSide] },
+    { name: mp.them.name, scores: this._mpSeq(mp.game, this.pos).scores(otherSide) },
   ], this.pos) : ''}
         <div class="gf-actions"><button type="button" class="gf-btn" data-role="res-ok"><span>${esc(t('mp_ok'))}</span></button></div>
       </div>`;
@@ -3594,6 +3593,16 @@ class GolfGame {
     if (!Number.isFinite(after) || after > strokes) console.error(`[golf] the challenge round did not land: ${key} reads ${after} after writing ${strokes}`);
   }
 
+  /** The match's columns: the round's holes, then each playoff hole begun (`po`: 1, 2...), and
+   *  `scores(side)` lined up with them. `upto` adds the playoff hole being played on this phone. */
+  _mpSeq(g, upto = -1) {
+    const L = g.holes.length;
+    const po = (g.playoff || []).slice();
+    while (upto >= L && po.length < upto - L + 1) { const hm = this.MP.holeAt(g.holes, L + po.length); po.push({ n: hm.n, par: hm.par, a: null, b: null }); }
+    const holes = g.holes.concat(po.map((p, k) => ({ ...this.MP.holeAt(g.holes, L + k), po: k + 1 })));
+    return { holes, scores: (side) => g.scores[side].concat(po.map((p) => (Number.isFinite(p[side]) ? p[side] : null))) };
+  }
+
   /** The scorecard screen between turns: both players' holes, whose turn, Play when it is yours. */
   _mpCard() {
     const mp = this.mp;
@@ -3603,7 +3612,10 @@ class GolfGame {
     const otherSide = mp.side === 'a' ? 'b' : 'a';
     const busy = mp.pending.length > 0 || mp.sending;
     const mine = !busy && !g.over && g.turn === mp.side;
-    const status = busy ? t('mp_sending') : mine ? t('mp_hole_of', { n: g.hole + 1, all: g.holes.length }) : t('mp_turn_of', { name: String(mp.them.name || '?').split(/\s+/)[0] });
+    const inPo = g.hole >= g.holes.length;
+    const status = busy ? t('mp_sending') : mine ? (inPo ? t('mp_playoff_hole', { n: this.MP.holeAt(g.holes, g.hole).n }) : t('mp_hole_of', { n: g.hole + 1, all: g.holes.length }))
+      : t('mp_turn_of', { name: String(mp.them.name || '?').split(/\s+/)[0] });
+    const seq = this._mpSeq(g);
     const el = this._mpPage(`
       <div class="gf-mp-top">
         <button type="button" class="gf-btn gf-mp-back" data-mp="back" aria-label="${esc(t('back'))}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
@@ -3611,9 +3623,9 @@ class GolfGame {
       </div>
       <div class="gf-mp-body">
         <p class="gf-mp-vs">${esc(this.MPUI.roundLine(g.course, g.round))}</p>
-        ${this.MPUI.scorecardHTML(g.holes, [
-    { name: this._myName(), scores: g.scores[mp.side], mine: true },
-    { name: mp.them.name, scores: g.scores[otherSide] },
+        ${this.MPUI.scorecardHTML(seq.holes, [
+    { name: this._myName(), scores: seq.scores(mp.side), mine: true },
+    { name: mp.them.name, scores: seq.scores(otherSide) },
   ], g.over ? -1 : g.hole)}
         <p class="gf-mp-status">${esc(status)}</p>
         ${mine ? `<button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="play">${esc(t('mp_play'))}</button>` : ''}
@@ -3650,7 +3662,8 @@ class GolfGame {
     this._mpCard();
     const me = this._myName();
     const title = res === 'draw' ? t('mp_draw') : t('mp_wins', { name: String((res === 'won' ? me : mp.them.name) || '?').split(/\s+/)[0] });
-    const why = g.over.why === 'timeout' ? t('mp_timed_out')
+    const seq = this._mpSeq(g);
+    const why = g.over.why === 'playoff' ? t('mp_won_playoff') : g.over.why === 'timeout' ? t('mp_timed_out')
       : g.over.why === 'resign' ? t('mp_resigned_by', { name: String((res === 'won' ? mp.them.name : me) || '?').split(/\s+/)[0] }) : '';
     const el = document.createElement('div');
     el.className = 'gf-result';
@@ -3659,9 +3672,9 @@ class GolfGame {
         <button type="button" class="gf-result__x" data-role="res-close" aria-label="${esc(t('back'))}">&times;</button>
         <div class="gf-result__name">${esc(title)}</div>
         ${why ? `<div class="gf-mpres__line">${esc(why)}</div>` : ''}
-        ${this.MPUI.scorecardHTML(g.holes, [
-    { name: me, scores: g.scores[side], mine: true },
-    { name: mp.them.name, scores: g.scores[otherSide] },
+        ${this.MPUI.scorecardHTML(seq.holes, [
+    { name: me, scores: seq.scores(side), mine: true },
+    { name: mp.them.name, scores: seq.scores(otherSide) },
   ])}
         <div class="gf-actions"><button type="button" class="gf-btn" data-role="res-ok"><span>${esc(t('mp_ok'))}</span></button></div>
       </div>`;

@@ -46,14 +46,14 @@ export function scorecardHTML(holes, rows, now = -1) {
   const body = blocks.map(([a, b]) => {
     const hs = holes.slice(a, b);
     return `<table class="gf-sc">
-      <tr class="gf-sc__h"><th></th>${hs.map((h, j) => `<td class="${a + j === now ? 'is-now' : ''}">${h.n}</td>`).join('')}</tr>
+      <tr class="gf-sc__h"><th></th>${hs.map((h, j) => `<td class="${a + j === now ? 'is-now' : ''}">${h.po ? `P${h.po}` : h.n}</td>`).join('')}</tr>
       <tr class="gf-sc__p"><th>${esc(t('mp_par'))}</th>${hs.map((h) => `<td>${h.par}</td>`).join('')}</tr>
       ${rows.map((r) => `<tr class="gf-sc__r${r.mine ? ' is-mine' : ''}"><th>${esc(first(r.name))}</th>${hs.map((h, j) => cell(r.scores[a + j], a + j)).join('')}</tr>`).join('')}
     </table>`;
   }).join('');
   const totals = rows.map((r) => {
     let s = 0, p = 0, n = 0;
-    holes.forEach((h, i) => { if (Number.isFinite(r.scores[i])) { s += r.scores[i]; p += h.par; n++; } });
+    holes.forEach((h, i) => { if (!h.po && Number.isFinite(r.scores[i])) { s += r.scores[i]; p += h.par; n++; } });
     return `<span class="gf-sc__tot${r.mine ? ' is-mine' : ''}"><b>${esc(first(r.name))}</b> ${n ? `${s} (${toPar(s - p)})` : '-'}</span>`;
   }).join('');
   return `<div class="gf-scwrap">${body}<div class="gf-sc__tots">${totals}</div></div>`;
@@ -88,7 +88,7 @@ function fitList(screen, list, extra) {
 }
 
 const courseName = (id) => (COURSES.some((k) => k.id === id) ? t(`course_${id}`) : '');
-const rowSub = (r) => `${r.yourTurn ? courseName(r.course) : roundLine(r.course, r.round)} · ${r.yourTurn ? t('mp_hole_short', { n: Math.max(1, r.hole), all: r.holes || '?' }) : t('mp_turn_of', { name: first(r.name) })}`;
+const rowSub = (r) => `${r.yourTurn ? courseName(r.course) : roundLine(r.course, r.round)} · ${r.yourTurn ? (r.pof ? t('mp_playoff') : t('mp_hole_short', { n: Math.max(1, r.hole), all: r.holes || '?' })) : t('mp_turn_of', { name: first(r.name) })}`;
 
 /**
  * THE SETUP SCREEN'S ONLINE TAB (Darts' and Cup Pong's tabs): the matches going (your turn first,
@@ -229,11 +229,11 @@ async function picker(ui, MP) {
 export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
 
 /**
- * THE CHALLENGE CARD: a course (only courses open to everyone), a length, and which holes, with
+ * THE CHALLENGE CARD: a course (EVERY course, Matt 2026-11-15), a length, and which holes, with
  * golf's own chips and tiles. The unlock ladder does NOT gate a challenge. Then Send.
  */
 function confirm(ui, MP, them, sel = null) {
-  const open = COURSES.filter((c) => ui._courseOpenToAll(c.id));
+  const open = COURSES.slice();   // every course (Matt, 2026-11-15: challenges offer them all)
   if (!open.length) return;
   const s = sel || {};
   const course = open.find((c) => c.id === (s.course || ui.settings.lastCourse)) || open[0];
@@ -243,8 +243,8 @@ function confirm(ui, MP, them, sel = null) {
   const round = rounds.find((r) => r.id === s.round) || rounds[0];
   const body = page(ui, t('mp_challenge'), `
     <p class="gf-mp-vs"><span aria-hidden="true">${esc(them.emoji)}</span> ${esc(them.name)}</p>
-    <div class="gf-coursepick gf-modepick">${modes.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}" data-chmode="${m}" aria-pressed="${m === mode}"><span>${esc(t('mode_holes', { n: m }))}</span></button>`).join('')}</div>
-    ${open.length > 1 ? `<div class="gf-coursepick">${open.map((c) => `<button type="button" class="gf-btn gf-chip${c.id === course.id ? ' is-on' : ''}" data-chcourse="${esc(c.id)}" aria-pressed="${c.id === course.id}"><span>${esc(t(`course_${c.id}`))}</span></button>`).join('')}</div>` : ''}
+    <div class="gf-coursepick gf-modepick gf-coursegrid3">${modes.map((m) => `<button type="button" class="gf-btn gf-chip${m === mode ? ' is-on' : ''}" data-chmode="${m}" aria-pressed="${m === mode}"><span>${esc(t('mode_holes', { n: m }))}</span></button>`).join('')}</div>
+    ${open.length > 1 ? `<div class="gf-coursepick gf-coursegrid">${open.map((c) => `<button type="button" class="gf-btn gf-chip${c.id === course.id ? ' is-on' : ''}" data-chcourse="${esc(c.id)}" aria-pressed="${c.id === course.id}"><span>${esc(t(`course_${c.id}`))}</span></button>`).join('')}</div>` : ''}
     <div class="gf-card"><div class="gf-rounds${rounds.length === 1 ? ' is-one' : ''}">${rounds.map((r) => `
       <button type="button" class="gf-btn gf-roundbtn${r.id === round.id ? ' is-on' : ''}" data-chround="${esc(r.id)}" aria-pressed="${r.id === round.id}"
         aria-label="${esc(t('holes_range', { range: roundRange(r) }))}"><span>${esc(roundRange(r))}</span><small>${esc(t('round_meta', { par: roundPar(course, r.id) }))}</small></button>`).join('')}
@@ -308,7 +308,7 @@ export function showUnseen(ui, MP, rows) {
   const r = ended[0];
   const me = (ui._myName && ui._myName()) || '';
   const title = r.result === 'draw' ? t('mp_draw') : t('mp_wins', { name: first(r.result === 'won' ? me : r.name) });
-  const why = r.why === 'timeout' ? t('mp_timed_out') : r.why === 'resign' ? t('mp_resigned_by', { name: first(r.result === 'won' ? r.name : me) }) : '';
+  const why = r.why === 'playoff' ? t('mp_won_playoff') : r.why === 'timeout' ? t('mp_timed_out') : r.why === 'resign' ? t('mp_resigned_by', { name: first(r.result === 'won' ? r.name : me) }) : '';
   const line = r.mineTotal || r.theirsTotal ? `${first(me)} ${r.mineTotal}, ${first(r.name)} ${r.theirsTotal}` : '';
   const el = document.createElement('div');
   el.className = 'gf-result gf-unseen';

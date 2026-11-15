@@ -340,6 +340,9 @@ const GOLF_TEXT = {
     youWonBy: (w, a, b) => `You beat ${w}, ${a} to ${b}!`,
     draw: (w, a) => `A draw with ${w}, ${a} each.`,
     youWon: (w) => `You won! ${w} resigned.`,
+    playoff: (w) => `Your turn vs ${w}. Playoff hole!`,
+    theyWonPo: (w) => `${w} won in a playoff.`,
+    youWonPo: (w) => `You beat ${w} in a playoff!`,
   },
   es: {
     title: 'Golf',
@@ -349,6 +352,9 @@ const GOLF_TEXT = {
     youWonBy: (w, a, b) => `¡Has ganado a ${w}, ${a} a ${b}!`,
     draw: (w, a) => `Empate con ${w}, ${a} cada uno.`,
     youWon: (w) => `¡Ganaste! ${w} se rindió.`,
+    playoff: (w) => `Te toca contra ${w}. ¡Hoyo de desempate!`,
+    theyWonPo: (w) => `${w} ganó en el desempate.`,
+    youWonPo: (w) => `¡Has ganado a ${w} en el desempate!`,
   },
 };
 
@@ -364,6 +370,7 @@ export function decideGolf({ code, id, before, after }) {
   if (after.over) {
     if (before && before.over) return null;
     if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWon(who));
+    if (after.why === 'playoff') return mk('over', (s) => (after.result === 'won' ? s.youWonPo(who) : s.theyWonPo(who)));
     if (after.result === 'lost') return mk('over', (s) => s.theyWon(who, n(after.mineTotal), n(after.theirsTotal)));
     if (after.result === 'won') return mk('over', (s) => s.youWonBy(who, n(after.mineTotal), n(after.theirsTotal)));
     if (after.result === 'draw') return mk('over', (s) => s.draw(who, n(after.mineTotal)));
@@ -372,6 +379,7 @@ export function decideGolf({ code, id, before, after }) {
   if (!after.yourTurn) return null;
   if (!before) return mk('challenge', (s) => s.challenge(who, golfWhere(after)));
   if (before.yourTurn && !before.over) return null;             // it was already your turn
+  if (after.pof === 1) return mk('turn', (s) => s.playoff(who));
   return mk('turn', (s) => s.turn(who, Math.max(1, n(after.hole)), n(after.holes), n(after.mine), n(after.theirs), n(after.done)));
 }
 

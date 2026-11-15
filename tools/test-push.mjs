@@ -350,6 +350,9 @@ console.log('\nBattleship challenges (2026-10-27)');
   check('golf: a draw says so', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'draw', mineTotal: 39, theirsTotal: 39 }) })) === 'A draw with Test2, 39 each.');
   check('golf: they resigned, you won', /resigned/.test(body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'resign' }) }))));
   check('golf: your own last putt does not notify you', decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'won', lastBy: 'me' }) }) === null);
+  check('golf: a playoff turn says playoff (2026-11-15)', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ yourTurn: true, hole: 10, pof: 1 }) })) === 'Your turn vs Test2. Playoff hole!');
+  check('golf: won in a playoff', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'won', why: 'playoff' }) })) === 'You beat Test2 in a playoff!');
+  check('golf: lost in a playoff', body(decideGolf({ code: 'TESTA', id: 'x', before: row(), after: row({ over: true, result: 'lost', why: 'playoff' }) })) === 'Test2 won in a playoff.');
   check('golf: Spanish wording', /te ha retado a Pine Valley 1-9/.test(decideGolf({ code: 'TESTA', id: 'x', before: null, after: row({ yourTurn: true }) }).text('es').body));
   check('golf: the trigger watches golf/index and names the match', /ref: '\/golf\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'golf', match: id \}/.test(fnSrc) && /export const golfTurnPush/.test(fnSrc));
   check('golf: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'golf' && x.game === 'golf')
