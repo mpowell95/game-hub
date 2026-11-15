@@ -611,9 +611,8 @@ export const GAMES = [
     // top-down game replaces it. `module:` still points at golf/js/ui.js, which is a placeholder
     // screen for the duration, so the hub's mount path never carries a broken import.
     //
-    // NOT devOnly, and it does not need to be: the adminConfig override `games.golf.live = false`
-    // (set 2026-09-03) already hides the tile from everyone but a dev profile, which is exactly
-    // what a code flag would do and is undone with a tap rather than a deploy. Do not add
+    // NOT devOnly. Shown by the adminConfig switch `games.golf.live`, which reads TRUE (live for
+    // everyone since 2026-09-10; checked 2026-11-15). A config flip, undone with a tap. Do not add
     // devOnly on top - two switches for one decision is how a game ships hidden by accident.
     // `released` stays unset: the rebuilt game owns that date.
     id: 'golf',

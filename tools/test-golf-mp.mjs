@@ -139,18 +139,45 @@ ok('...and queued for the Game Over popup', MP.readUnseen().includes(id));
 use('A');
 ok('the challenger\'s phone counts it once too, as a win', MP.countResult(id, true, Date.now(), () => MP.modeOfGame(g, 'a')) === true && MP.countResult(id, true) === false && stats('A').games.golf.byDiff.mp.won === 1);
 
-// A draw.
+// A tie goes to a PLAYOFF (Matt, 2026-11-15: "playoff hole"): sudden death over the round again.
+use('A');
+res = await MP.createGame({ ...NEW, holes: HOLES.slice(0, 1) });
+const pId = res.id;
+ok('a new challenge carries po: true', getAt(`golf/games/${pId}`).po === true);
+await MP.appendLog(pId, 0, [done('a', 0, 4)]);
+use('B');
+res = await MP.appendLog(pId, 1, [done('b', 0, 4)]);
+ok('equal strokes: not over, a playoff hole, the challenger first', res.ok && !res.game.over && res.game.turn === 'a' && res.game.hole === 1 && res.game.playoff.length === 1, JSON.stringify(res.game && { over: res.game.over, turn: res.game.turn, hole: res.game.hole }));
+ok('...the row says playoff', getAt(`golf/index/TESTA/${pId}`).pof === 1 && getAt(`golf/index/TESTA/${pId}`).yourTurn === true);
+use('A');
+res = await MP.appendLog(pId, 2, [rest('a', 1, 1), done('a', 1, 4)]);
+use('B');
+res = await MP.appendLog(pId, 4, [done('b', 1, 4)]);
+ok('a level playoff hole: another one', res.ok && !res.game.over && res.game.hole === 2 && res.game.playoff.length === 2);
+use('A');
+res = await MP.appendLog(pId, 5, [done('a', 2, 5)]);
+use('B');
+ok('...a playoff entry for the wrong hole is refused', (await MP.appendLog(pId, 6, [done('b', 1, 3)])).ok === false);
+res = await MP.appendLog(pId, 6, [done('b', 2, 3)]);
+ok('the first playoff hole with different scores wins it', res.ok && res.game.over && res.game.over.winner === 'b' && res.game.over.why === 'playoff' && res.game.totals.a === 4 && res.game.totals.b === 4, JSON.stringify(res.game && res.game.over));
+ok('...both rows say it', getAt(`golf/index/TESTB/${pId}`).result === 'won' && getAt(`golf/index/TESTA/${pId}`).result === 'lost' && getAt(`golf/index/TESTA/${pId}`).why === 'playoff');
+const poB = (await MP.readMyGames()).filter((r) => r.id === pId);
+MP.recordFinished(poB);
+ok('...counted as a win on the winner\'s phone', stats('B').games.golf.byDiff.mp.won === 1);
+
+// A match made BEFORE playoffs (no `po`) that ties stays the draw it was.
 use('A');
 res = await MP.createGame({ ...NEW, holes: HOLES.slice(0, 1) });
 const dId = res.id;
+setAt(`golf/games/${dId}/po`, null);
 await MP.appendLog(dId, 0, [done('a', 0, 4)]);
 use('B');
 res = await MP.appendLog(dId, 1, [done('b', 0, 4)]);
-ok('equal strokes: a draw', res.ok && res.game.over && res.game.over.winner === 'draw' && res.game.over.why === 'tie');
+ok('an older match with equal strokes: a draw', res.ok && res.game.over && res.game.over.winner === 'draw' && res.game.over.why === 'tie');
 ok('...both rows say draw', getAt(`golf/index/TESTA/${dId}`).result === 'draw' && getAt(`golf/index/TESTB/${dId}`).result === 'draw');
 const drawB = (await MP.readMyGames()).filter((r) => r.id === dId);
 MP.recordFinished(drawB);
-ok('...counted as played, neither won nor lost', stats('B').games.golf.byDiff.mp.played === 2 && stats('B').games.golf.byDiff.mp.lost === 1 && stats('B').games.golf.byDiff.mp.won === 0);
+ok('...counted as played, neither won nor lost', stats('B').games.golf.byDiff.mp.played === 3 && stats('B').games.golf.byDiff.mp.lost === 1 && stats('B').games.golf.byDiff.mp.won === 1);
 
 // Resign.
 use('A');
