@@ -321,3 +321,9 @@ Matt: Thornpaw/Briarlord "went 4 times in a single turn ... way too much"; "bomb
   Emberkit dmg 13 (19); Zapup dmg 7 (11); Prismote cost 16. **Thornpaw is touchy**: dmg 6 at cost 5 won 81% (its leaf gems feed it).
 - Strongest pair left: Driplet + Stormhorn (medium 61%, hard 65-70%). Rankings per unlock stage: `CLAUDE-HISTORY.md`, same heading.
 - Tests: `battle-arena/js/test.js` "rules v4" (+ a 150-match soak: never twice a turn, no cascade/special bomb, never 2 bombs).
+
+## Names (2026-11-15, Matt: "do the name change")
+
+Shown names only; **ids never change** (stored matches, saves and stats use them). id `pebbleop` = Lavapup / Lavatusk, `prismote` =
+Rainbit / Rainbeast, `zapup` = Sparkpup / Sparktail; evolved: Thornpaw → Thornbear, Cinderwing → Firedrake, Frostling → Frostclaw,
+Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and the history use the old names.

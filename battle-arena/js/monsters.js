@@ -27,32 +27,36 @@ export const ELEMENT_COLOR = {
 /** Starters cover ALL FIVE gem colours (2026-11-14, Matt: "NONE of the monsters use that other piece?"): weakest-first had left
  *  both shadow monsters locked, so a purple gem charged no starter. Hexowl (shadow) and Frostling (water) swapped places: Hexowl is
  *  a starter, Frostling opens at 10 wins. The two are within a point of each other under v3. Unlocks are not rules: no `rv`. */
+/** NAMES (2026-11-15, Matt: "we might need to rename characters. Sproutle and mossback are good because they're easy to read and
+ *  remember"; "do the name change"): only the shown names changed. The ids (and every stored match, save and stat) keep the first
+ *  names: pebbleop = Lavapup/Lavatusk, prismote = Rainbit/Rainbeast, zapup = Sparkpup/Sparktail; Briarlord, Pyrovern, Glacielle,
+ *  Thundrake, Blazelynx became Thornbear, Firedrake, Frostclaw, Thunderhorn, Blazecat. Never rename an id. */
 export const MONSTERS = [
-  { id: 'thornpaw', name: 'Thornpaw', evoName: 'Briarlord', el: 'leaf', cost: 6,
+  { id: 'thornpaw', name: 'Thornpaw', evoName: 'Thornbear', el: 'leaf', cost: 6,
     sp: { dmg: 5, heal: 7, convert: 3 }, evo: { dmg: 8, heal: 10, convert: 4 } },
   { id: 'sproutle', name: 'Sproutle', evoName: 'Mossback', el: 'leaf', cost: 6,
     sp: { dmg: 10, heal: 5 }, evo: { dmg: 15, heal: 9 } },
   { id: 'driplet', name: 'Driplet', evoName: 'Tidefang', el: 'water', cost: 4,
     sp: { dmg: 12 }, evo: { dmg: 18 } },
-  { id: 'cinderwing', name: 'Cinderwing', evoName: 'Pyrovern', el: 'fire', cost: 8,
+  { id: 'cinderwing', name: 'Cinderwing', evoName: 'Firedrake', el: 'fire', cost: 8,
     sp: { dmg: 13, rows: 1 }, evo: { dmg: 18, rows: 2 } },
   { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5,
     sp: { dmg: 6, curse: { tick: 5, turns: 2 } }, evo: { dmg: 11, curse: { tick: 5, turns: 3 } } },
-  { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thundrake', el: 'spark', cost: 5,
+  { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thunderhorn', el: 'spark', cost: 5,
     sp: { dmg: 12, chain: 1 }, evo: { dmg: 17, chain: 2 } },
 
-  { id: 'emberkit', name: 'Emberkit', evoName: 'Blazelynx', el: 'fire', cost: 7, unlock: 3,
+  { id: 'emberkit', name: 'Emberkit', evoName: 'Blazecat', el: 'fire', cost: 7, unlock: 3,
     sp: { dmg: 13, col: 1 }, evo: { dmg: 19, col: 2 } },
-  { id: 'pebbleop', name: 'Pebbleop', evoName: 'Cragoon', el: 'fire', cost: 7, unlock: 6,
+  { id: 'pebbleop', name: 'Lavapup', evoName: 'Lavatusk', el: 'fire', cost: 7, unlock: 6,
     sp: { dmg: 13, shield: 7 }, evo: { dmg: 18, shield: 11 } },
-  { id: 'frostling', name: 'Frostling', evoName: 'Glacielle', el: 'water', cost: 5, unlock: 10,
+  { id: 'frostling', name: 'Frostling', evoName: 'Frostclaw', el: 'water', cost: 5, unlock: 10,
     sp: { dmg: 9, freeze: true }, evo: { dmg: 13, freeze: true } },
   { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6, unlock: 15,
     sp: { dmg: 10, drain: 2 }, evo: { dmg: 15, drain: 3 } },
-  { id: 'zapup', name: 'Zapup', evoName: 'Voltail', el: 'spark', cost: 4, unlock: 20,
+  { id: 'zapup', name: 'Sparkpup', evoName: 'Sparktail', el: 'spark', cost: 4, unlock: 20,
     sp: { dmg: 7, block: 2 }, evo: { dmg: 11, block: 3 } },
   // ALL: every gem of any element charges it, at half rate (1 per 2 gems).
-  { id: 'prismote', name: 'Prismote', evoName: 'Prismaraja', el: 'all', cost: 16, unlock: 30,
+  { id: 'prismote', name: 'Rainbit', evoName: 'Rainbeast', el: 'all', cost: 16, unlock: 30,
     sp: { dmg: 17 }, evo: { dmg: 26 } },
 ];
 

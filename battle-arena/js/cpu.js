@@ -25,7 +25,7 @@ function specialValue(id, evo, rv) {
 }
 
 /** What each of `side`'s monsters would gain from cleared `counts` (the engine's charge rule, per rules version: from v3 two
- *  monsters of one element SHARE the gems, the fuller one first). Prismote gains 1 per 2 gems of any element. */
+ *  monsters of one element SHARE the gems, the fuller one first). Rainbit gains 1 per 2 gems of any element. */
 function gainsFor(state, side, counts, total) {
   const mons = state.sides[side].mons, rv = state.rv || 1;
   const gains = mons.map((m) => { const el = BY_ID[m.id].el; return el === 'all' ? Math.floor((m.part + total) / 2) : (counts[el] || 0); });

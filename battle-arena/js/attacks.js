@@ -1,6 +1,6 @@
 // battle-arena/js/attacks.js - every monster's OWN special attack, and the evolution scene
 // (2026-10-28, Matt: "every attack looks the same: an energy ball... This is where the game must stand
-// out"; the mockup he signed off: Emberkit's fire pillar, Zapup's lightning, Gloomite's shadow maw).
+// out"; the mockup he signed off: Emberkit's fire pillar, Sparkpup's lightning, Gloomite's shadow maw).
 //
 // Pure presentation: nothing here reads or writes game state or storage. `ui.js` calls `playAttack`
 // right after a special's banner and `evolveScene` for an evolve event; both resolve when the picture
@@ -538,7 +538,7 @@ const ATTACKS = {
     await s.sleep(250);
   },
 
-  /** Ice Shard / Glacielle's: a volley of ice, a frost cloud, then they freeze (evolved: icicles from above). */
+  /** Ice Shard / Frostclaw's: a volley of ice, a frost cloud, then they freeze (evolved: icicles from above). */
   async frostling(s, k, evo) {
     const me = s.me, [front, back] = s.foes;
     s.tint('rgba(150, 210, 255, .25)', 300);
@@ -586,7 +586,7 @@ const ATTACKS = {
     await s.sleep(250);
   },
 
-  /** Chain Bolt / Thundrake's: the horn charges, lightning jumps from them to each other, then home to the partner. */
+  /** Chain Bolt / Thunderhorn's: the horn charges, lightning jumps from them to each other, then home to the partner. */
   async stormhorn(s, k, evo) {
     const me = s.me, [front, back] = s.foes, partner = s.at(s.sd, 1 - s.mi);
     s.tint('rgba(6, 14, 48, .6)');
@@ -644,7 +644,7 @@ const ATTACKS = {
     s.untint(500);
   },
 
-  /** Prism Ray / Prismaraja's: the light splits into every colour and lands as one beam (evolved: three). */
+  /** Prism Ray / Rainbeast's: the light splits into every colour and lands as one beam (evolved: three). */
   async prismote(s, k, evo) {
     const me = s.me, [front, back] = s.foes;
     s.tint('rgba(0, 0, 0, .55)', 300);
@@ -681,7 +681,7 @@ const MAW = (evo) => `<svg viewBox="0 0 200 200" preserveAspectRatio="none" aria
     <path d="M20 104 l12 -22 l12 22 l12 -26 l12 26 l12 -28 l12 28 l12 -28 l12 28 l12 -26 l12 26 l12 -22 l12 22 l12 -20 l12 20 Z" fill="#efe6ff" stroke="#4a2a8a" stroke-width="2.5" stroke-linejoin="round"/></g>
 </svg>`;
 
-// Pebbleop's red-hot rock (2026-11-14: it was grey stone, Pebbleop is fire): glowing yellow cracks.
+// Lavapup's red-hot rock (2026-11-14: it was grey stone, Lavapup is fire): glowing yellow cracks.
 const BOULDER = `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M14 40 L34 12 L70 10 L92 38 L86 76 L54 92 L18 80 Z" fill="#B8472A" stroke="#4a1a0e" stroke-width="5" stroke-linejoin="round"/>
   <path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#F2B705" stroke-width="4" fill="none"/><path d="M34 12 L44 40 L18 80 M44 40 L70 10 M44 40 L86 76 M44 40 L54 92" stroke="#FFF1B0" stroke-width="1.5" fill="none"/><path d="M38 20 L58 18" stroke="#E2774A" stroke-width="5" stroke-linecap="round"/></svg>`;
 

@@ -121,7 +121,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('every team starts at 80, max 80', s.sides[0].maxHp === 80 && s.sides[1].hp === 80 && s.sides[1].maxHp === 80);
 }
 {
-  // Shield: Pebbleop's Rock Toss shields; then the other side's Zapup hits through what is left.
+  // Shield: Lavapup's Rock Toss shields; then the other side's Sparkpup hits through what is left.
   const SH = V1('pebbleop').shield, ZD = V1('zapup').dmg;
   const s = setup([['pebbleop', 'driplet'], ['zapup', 'sproutle']], THREE);
   s.sides[0].mons[0].energy = 7;
@@ -131,7 +131,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   t.turn = 1; t.movesLeft = 2; t.extraUsed = false;
   t.board = setup(TEAM, ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSLDFWS', 'LSSFSLD']).board.map((x) => ({ ...x, id: x.id + 1000 }));
   // row 4: L S S F S -> swap (4,3)F<->(4,4)S: L S S S F
-  t.sides[1].mons[0].energy = 3;                              // Zapup costs 4
+  t.sides[1].mons[0].energy = 3;                              // Sparkpup costs 4
   const hp = t.sides[0].hp;
   const r2 = apply(t, swap(4, 3, 4, 4));
   ok('the shield soaks first', r2.state.sides[0].hp === hp - Math.max(0, ZD - SH) && r2.state.sides[0].shield === Math.max(0, SH - ZD));
@@ -175,10 +175,10 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   ok('Chain Bolt charges the other monster 1', r.state.sides[0].mons[1].energy >= 1 && has(r.events, 'energy', (e) => e.mon === 1 && e.n === 1));
 }
 {
-  // Prismote: 1 energy per 2 gems of ANY element.
+  // Rainbit: 1 energy per 2 gems of ANY element.
   const s = setup([['prismote', 'emberkit'], ['zapup', 'sproutle']], THREE);
   const r = apply(s, swap(4, 3, 4, 4));
-  ok('Prismote charges at half rate (3 gems = 1, 1 carried)', r.state.sides[0].mons[0].energy === 1 && r.state.sides[0].mons[0].part === 1);
+  ok('Rainbit charges at half rate (3 gems = 1, 1 carried)', r.state.sides[0].mons[0].energy === 1 && r.state.sides[0].mons[0].part === 1);
 }
 {
   // Scorch Row clears a row; Overgrowth turns gems into Leaf.
@@ -237,7 +237,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
   t.sides[0].mons.forEach((m) => { m.evo = true; });
   const r2 = apply(t, swap(4, 3, 4, 4));
   ok('both evolved: berries do nothing', r2.state.sides[0].berries === 0 && !has(r2.events, 'berry'));
-  // Evolved special is stronger: Blazelynx 18.
+  // Evolved special is stronger: Blazecat 18.
   const u = setup(TEAM, THREE);
   u.sides[0].mons[0].evo = true; u.sides[0].mons[0].energy = 6;
   const hp = u.sides[1].hp;
@@ -383,7 +383,7 @@ const TEAM = [['emberkit', 'driplet'], ['zapup', 'sproutle']];
 
 // --- unlocks --------------------------------------------------------------------------------------------
 ok('6 starters open at 0 wins', unlockedIds(0).length === 6 && STARTERS.length === 6);
-ok('3 wins opens Emberkit, 6 Pebbleop (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
+ok('3 wins opens Emberkit, 6 Lavapup (weakest first, 2026-11-14)', unlockedIds(3).includes('emberkit') && !unlockedIds(5).includes('pebbleop') && unlockedIds(6).includes('pebbleop'));
 {
   // Never two of one element (2026-11-14, Matt: "You shouldn't be able to choose 2 of the same"): the computer's team.
   const all = MONSTERS.map((m) => m.id); let bad = 0; const r = seeded(77);
@@ -421,7 +421,7 @@ ok('the starters cover all five gem colours (Hexowl is the shadow one)', ['fire'
     const first = ev.slice(0, ev.findIndex((e) => e.t === 'special') >>> 0).filter((e) => e.t === 'energy' && e.side === 0);
     ok('rules v3: what a full bar cannot hold spills to the partner', first.some((e) => e.mon === 1 && e.gained === 2) && first.some((e) => e.mon === 0 && e.gained === 1), JSON.stringify(first));
   }
-  ok('rules v2: Emberkit costs 7 (v1: 6), Prismote 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
+  ok('rules v2: Emberkit costs 7 (v1: 6), Rainbit 16 (v1: 14)', costOf('emberkit', 2) === 7 && costOf('emberkit', 1) === 6 && costOf('prismote', 2) === 16 && costOf('prismote', 1) === 14);
   // The same board and swap (+3 fire to Emberkit at 3): fires under v1 (cost 6), not under v2 (cost 7).
   const a = setup(TEAM, THREE); a.sides[0].mons[0].energy = 3;
   const b = setup(TEAM, THREE); b.sides[0].mons[0].energy = 3; b.rv = 2;
