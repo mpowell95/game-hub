@@ -969,7 +969,9 @@
 .ba-root .ba-coach-bubble p { margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; }
 .ba-root .ba-coach-ok { align-self: flex-end; min-height: 44px; min-width: 112px; padding: 0 18px; border: 0; border-radius: 12px;
   background: #ffce3a; color: #15202e; font: inherit; font-size: 18px; font-weight: 900; touch-action: manipulation; cursor: pointer; }
-.ba-root .ba-coach-bubble::after { content: ''; position: absolute; left: var(--ax, 50%); width: 18px; height: 18px; margin-left: -9px;
-  background: #fff; border: 3px solid #ffce3a; transform: rotate(45deg); }
-.ba-root .ba-coach-bubble.is-below::after { top: -12px; border-right: 0; border-bottom: 0; }
-.ba-root .ba-coach-bubble.is-above::after { bottom: -12px; border-left: 0; border-top: 0; }
+.ba-root .ba-coach-ring.is-box { border-radius: 8px; border-width: 3px; }
+.ba-root .ba-coach-ring.is-round { border-radius: 50%; border-color: #fff; box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 14px rgba(255, 255, 255, .8); }
+.ba-root .ba-coach-arrow { position: absolute; width: 18px; height: 18px; margin-left: -9px; background: #fff;
+  border: 3px solid #ffce3a; transform: rotate(45deg); }
+.ba-root .ba-coach-bubble.is-below .ba-coach-arrow { top: -12px; border-right: 0; border-bottom: 0; }
+.ba-root .ba-coach-bubble.is-above .ba-coach-arrow { bottom: -12px; border-left: 0; border-top: 0; }

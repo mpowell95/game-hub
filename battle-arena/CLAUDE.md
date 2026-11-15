@@ -340,8 +340,8 @@ Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and t
 ## First-match tutorial (2026-11-15, Matt: Ana "didn't really know what was going on ... 4+ things give you an extra turn ... what the berries did ... how many turns she had left ... health")
 
 Eight tips, one at a time, on the player's own turn, each the FIRST time it matters (`TIP_ORDER`, `tipTarget` in `ui.js`):
-hp (team row), moves (the move pips), swap (the board) on the first turn; then charge (a bar with energy), berry (berries
-> 0), evolve (an evolve option), extra (`_sawExtra`, set by the player's own `extra` event), bomb (a bomb tile). A yellow
+hp (both health numbers, two rings), moves (the move pips), swap (a real 3-in-a-row boxed + the tile to move circled, `tipLine`) on the first turn; then charge (a bar with energy), berry (berries
+> 0), evolve (an evolve option), extra (after the player's first move: a real 4+ move boxed while this turn's extra is open; else after one happened, `_sawExtra`), bomb (its row and column boxed, the bomb circled; Matt 2026-11-15). A yellow
 ring on the thing + a bubble + Got it (`.ba-coach`, z 36, under the result card). Blocks the board until Got it
 (`canInput`); in a timed live room it never blocks and goes with the player's move. Seen = `settings.tips[id]` (a
 preference, per phone); shown/done reported via `js/tips-log.js` (`players/<id>/tips`, `tools/read-tips.mjs`).
