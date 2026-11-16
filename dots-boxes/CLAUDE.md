@@ -244,6 +244,13 @@ Both fields ride the solo save additively (`moves`, `undone`); an older save wit
 not rebuild the saved board, simply has no Undo for that game. Probe: a Playwright run (undo, re-undo, reload, play out,
 stats unchanged, next game recorded); `test-dotsboxes-stats.mjs` needs jsdom, absent in the cloud container.
 
+**Redo (2026-11-16, Matt: "we should add a 'redo' button for this exact scenario")**: Undo pushes the removed moves
+(the player's edge + the computer's replies) onto `_redo`; **Redo**, or tapping the SAME edge again, puts them back
+exactly, and the game still counts. Only a DIFFERENT edge after an Undo sets `_undone` (not counted as a win or tie;
+mode `undo=1`). Undo and Redo sit on their own row above How to play / Restart / Menu (five did not fit one row). `redo`
+rides the solo save additively, kept only if it still replays. Matt's 12:22 PM win that day (Undo, then the same edge)
+is counted by hand: `HAND_RESULTS.dotsboxes` in `js/stats-corrections.js`.
+
 ## Quitting and easier settings (2026-10-29)
 
 Solo Restart / Menu after the player's first edge = ONE loss (`_statsCommitted`; both ask twice, "Counts as a loss"). An Undo game no longer counts as a win or tie, but a LOSS still counts. Leaving the hub is not quitting. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29: quitting and easier settings"; `node tools/test-quit-loss.mjs`.

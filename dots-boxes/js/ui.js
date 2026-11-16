@@ -163,7 +163,8 @@ function saveGame(ui) {
       humanChainRun: ui._humanChainRun,
       humanBestChainThisGame: ui._humanBestChainThisGame,
       moves: ui._moves,     // additive (Undo, 2026-10-27): [seat, type, r, c] per drawn edge, in order
-      undone: ui._undone,   // additive (Undo): an undo was used, so this game records nothing
+      undone: ui._undone,   // additive (Undo): the game left an undone line, so a win or tie records nothing
+      redo: ui._redo,       // additive (Redo, 2026-11-16): the undone moves, newest undo last
     }));
   } catch { /* a full quota must never break the game */ }
 }
@@ -201,6 +202,13 @@ function loadGame() {
         moves = raw.moves.map((m) => m.slice());
       }
     }
+    // Redo's stack (additive, 2026-11-16). Kept only if every undone segment still replays on top
+    // of the move list; anything else just means nothing to redo.
+    let redo = [];
+    if (moves && Array.isArray(raw.redo) && raw.redo.every((g) => Array.isArray(g) && g.length > 0)) {
+      const all = moves.concat(...raw.redo.slice().reverse());
+      if (replayMoves(rows, cols, all)) redo = raw.redo.map((g) => g.map((m) => m.slice()));
+    }
 
     return {
       size: raw.size,
@@ -220,6 +228,7 @@ function loadGame() {
       humanBestChainThisGame: Math.max(0, Math.round(Number(raw.humanBestChainThisGame)) || 0),
       moves,
       undone: raw.undone === true,
+      redo,
     };
   } catch { return null; }
 }
@@ -269,7 +278,8 @@ class DotsBoxesUI {
     this._humanChainRun = 0;
     this._humanBestChainThisGame = 0;
     this._moves = null;     // solo only: every drawn edge as [seat, type, r, c] (Undo); null = no Undo
-    this._undone = false;   // solo only: an undo was used this game, so it records nothing
+    this._undone = false;   // solo only: the game left an undone line, so a win or tie records nothing
+    this._redo = [];        // solo only: undone segments (each [seat, type, r, c] moves), newest last
     this._confirmTimer = null;
     this._setup = this._loadSetup();
     this._statsCommitted = false;
@@ -687,6 +697,7 @@ class DotsBoxesUI {
     this._humanBestChainThisGame = 0;
     this._moves = [];
     this._undone = false;
+    this._redo = [];
     // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
     // (_commitStats()'s `if (this._statsCommitted) return` would otherwise silently skip every
     // game after the first one played in a session -- Play again/Restart/change-settings all
@@ -722,6 +733,7 @@ class DotsBoxesUI {
     this._humanBestChainThisGame = saved.humanBestChainThisGame;
     this._moves = saved.moves;
     this._undone = saved.undone;
+    this._redo = saved.redo;
     this.view = 'game';
     this._afterStateChange(false);
   }
@@ -794,6 +806,15 @@ class DotsBoxesUI {
     if (this.busy || !this.state || isOver(this.state) || this.state.turn !== this.humanSeat) return;
     if (this.mp && this.mp.awaitingRecovery) return;
     if (!this._isLegal(edge)) return;
+    if (!this.mp && this._redo.length) {
+      // After an Undo, playing the SAME edge again is a Redo: the game goes back exactly as it was,
+      // computer's replies included, and still counts (Matt, 2026-11-16). Any other edge leaves the
+      // undone line for good, and only then does the game stop counting as a win or tie.
+      const top = this._redo[this._redo.length - 1][0];
+      if (top && top[0] === this.state.turn && top[1] === edge.type && top[2] === edge.r && top[3] === edge.c) { this.redo(); return; }
+      this._redo = [];
+      this._undone = true;
+    }
     this._logMove(edge);
     const res = applyMove(this.state, edge);
     this._lastEdge = { type: edge.type, r: edge.r, c: edge.c };
@@ -927,7 +948,10 @@ class DotsBoxesUI {
         <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="help">${t('howto')}</button>
         ${this.mp
           ? `<button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="mp-leave">${t('mp_leave_btn')}</button>`
-          : `<button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="undo" ${this.canUndo() ? '' : 'disabled'}>${t('undo')}</button>
+          : `<div class="db-undo-row">
+               <button type="button" class="db-btn db-btn-ghost" data-action="undo" ${this.canUndo() ? '' : 'disabled'}>${t('undo')}</button>
+               <button type="button" class="db-btn db-btn-ghost" data-action="redo" ${this.canRedo() ? '' : 'disabled'}>${t('redo')}</button>
+             </div>
              <button type="button" class="db-btn db-btn-ghost db-btn-small" data-role="restart" data-action="restart">${t('restart_game')}</button>
              <button type="button" class="db-btn db-btn-ghost db-btn-small" data-action="change-settings">${t('new_game')}</button>`}
       </div>`;
@@ -1130,7 +1154,8 @@ class DotsBoxesUI {
   }
 
   /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the board
-   *  size; vs the computer also the First move setting and whether Undo was used. A live room's size
+   *  size; vs the computer also the First move setting and whether the game left an undone line (an Undo
+   *  followed by the same edge is a Redo and does not count, 2026-11-16). A live room's size
    *  is the host's (`mp.size`). */
   _modeOf() {
     // Engine seat 0 always opens (game.js newGame), so humanSeat says who went first (2026-11-02).
@@ -1166,7 +1191,7 @@ class DotsBoxesUI {
     const rep = replayMoves(this.state.rows, this.state.cols, kept, this.humanSeat);
     if (!rep) return;   // cannot happen with a list we built ourselves; never break the board
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
-    this._undone = true;
+    this._redo.push(this._moves.slice(i));   // Redo puts these back exactly (2026-11-16)
     this._moves = kept;
     this.state = rep.s;
     this._lastEdge = rep.lastEdge;
@@ -1174,6 +1199,31 @@ class DotsBoxesUI {
     this._humanChainRun = rep.again ? rep.run : 0;
     this._humanBestChainThisGame = rep.best;
     this._afterStateChange(rep.again);   // the human's turn again; re-renders and re-saves
+  }
+
+  canRedo() {
+    return !this.mp && this.view === 'game' && !!this.state && !isOver(this.state)
+      && Array.isArray(this._moves) && this._moves.length === this.state.drawnEdges
+      && this._redo.length > 0 && this.state.turn === this.humanSeat;
+  }
+
+  /** Put back the last undone segment exactly (the player's edge and the computer's replies after
+   *  it). The game is then the one it was before the Undo, so it still counts. */
+  redo() {
+    if (!this.canRedo()) return;
+    const seg = this._redo[this._redo.length - 1];
+    const all = this._moves.concat(seg);
+    const rep = replayMoves(this.state.rows, this.state.cols, all, this.humanSeat);
+    if (!rep) { this._redo = []; this.renderGame(); return; }   // never break the board
+    if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    this._redo.pop();
+    this._moves = all;
+    this.state = rep.s;
+    this._lastEdge = rep.lastEdge;
+    this._lastCaptured = [];
+    this._humanChainRun = rep.again ? rep.run : 0;
+    this._humanBestChainThisGame = rep.best;
+    this._afterStateChange(rep.again);
   }
 
   // --- events -------------------------------------------------------------
@@ -1220,6 +1270,8 @@ class DotsBoxesUI {
       this.confirmDestructive(btn, () => { this._recordQuitLoss(); this.startGame(); });
     } else if (action === 'undo') {
       this.undo();
+    } else if (action === 'redo') {
+      this.redo();
     } else if (action === 'change-settings') {
       const go = () => { this._recordQuitLoss(); this.closeOverlays(); this.renderSetup(); };
       if (this._quitCostsLoss()) this.confirmDestructive(btn, go); else go();
@@ -1518,6 +1570,7 @@ class DotsBoxesUI {
     this._humanBestChainThisGame = 0;
     this._moves = null;     // no Undo in multiplayer
     this._undone = false;
+    this._redo = [];
     this.view = 'game';
     this.busy = false;
     this._mpStatusMsg = '';

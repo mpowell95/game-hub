@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1599';
+const CACHE = 'game-hub-v1600';
 
 const ASSETS = [
   './',
@@ -904,7 +904,7 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': '58ccebe35b',
+  './js/stats-corrections.js': '147d638bc5',
   './js/bee-fairplay.js': '7a17ef9239',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
@@ -1154,12 +1154,12 @@ const REST_MANIFEST = {
   './tower/js/strings.js': 'a8615ba14c',
   './dots-boxes/': 'abcc52ead9',
   './dots-boxes/index.html': 'abcc52ead9',
-  './dots-boxes/css/dots-boxes.css': '796c62de32',
-  './dots-boxes/js/ui.js': '23d3d65589',
+  './dots-boxes/css/dots-boxes.css': 'ced585b172',
+  './dots-boxes/js/ui.js': '9c4d8ee976',
   './dots-boxes/js/game.js': 'cd0edd18d7',
   './dots-boxes/js/ai.js': '38876d9ca5',
   './dots-boxes/js/hash.js': '4efa5d47bf',
-  './dots-boxes/js/strings.js': 'c2b20ce3e7',
+  './dots-boxes/js/strings.js': '3dbd1717e2',
   './ball-run/index.html': '5907192c6a',
   './ball-run/css/ball-run.css': 'ee3e50486e',
   './ball-run/js/ui.js': '9a66ac4be4',
