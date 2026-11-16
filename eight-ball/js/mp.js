@@ -442,7 +442,7 @@ export function modeOfMatch(raw) {
   return { game: x.mode, racks: x.racks, call: x.opts.call ? 1 : 0, bank: x.opts.bank ? 1 : 0, obst: x.opts.obst ? 1 : 0, aids: x.aids };
 }
 const modeOfRow = (r) => ({ game: MODES.includes(r && r.mode) ? r.mode : '8', racks: RACK_OPTIONS.includes(+(r && r.racks)) ? +r.racks : 1 });
-export function countResult(id, won, finishedAt = Date.now(), mode = null) {
+export function countResult(id, won, finishedAt = Date.now(), mode = null, score = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
@@ -450,7 +450,7 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won))); } catch (err) { console.error('[eight-ball] recordResult failed', err); }
+  try { withChallengeMatch(STATS_ID, id, () => withMode(mode, 'mp', () => recordResult(STATS_ID, 'mp', !!won), score)); } catch (err) { console.error('[eight-ball] recordResult failed', err); }
   return true;
 }
 export function noteVoided() {

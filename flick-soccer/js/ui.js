@@ -841,7 +841,8 @@ class FlickSoccerUI {
     m.recorded = true;
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
-      const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
+      // + who-kicks-off as SET (alt / me / them; the mode's `first` is who actually did), 2026-11-16
+      const detail = () => ({ ...(Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : {}), ...this._firstSetDetail() });
       const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert: its own test bucket, counted by nothing (2026-11-06); Test mode counts like any game, its mode says test=1 (Matt, 2026-11-08: "count all test games")
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
@@ -1027,6 +1028,13 @@ class FlickSoccerUI {
       ? { diff: savedDiff(sv.diff), m: sv.match } : null;
   }
 
+  /** Who kicks off as SET on the setup screen (alt / me / them) as the result's DETAIL (2026-11-16,
+   *  never the mode: it would split byMode). Read inside withMode. */
+  _firstSetDetail() {
+    const f = this.settings && this.settings.first;
+    return FIRSTS.includes(f) ? { firstSet: f } : {};
+  }
+
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
   _recordQuitLoss() {
     const q = this._quitPending();
@@ -1034,7 +1042,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)), { detail: () => this._firstSetDetail() });
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1382,7 +1390,7 @@ class FlickSoccerUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
     const me = mp.mySeat === 1 ? 1 : 0;
     this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && (m.starter === 0 || m.starter === 1) ? { first: m.starter === me ? 'me' : 'them' } : {}) }),
-      { detail: () => (m && Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[me] | 0), ga: Math.max(0, m.scores[me ^ 1] | 0) } : null) });   // once per phone; the finish time keeps a fresh storage honest
+      { detail: () => ({ ...(m && Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[me] | 0), ga: Math.max(0, m.scores[me ^ 1] | 0) } : {}), ...(typeof this.MP.lineupDetail === 'function' ? this.MP.lineupDetail(mp.game, me) : {}) }) });   // + this player's own line-ups (2026-11-16)   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';

@@ -83,6 +83,8 @@ ported; `js/net.js` and the engine needed **zero** changes (`game.js` loops `thi
 
 ## Multiplayer results are recorded, and cannot be lost (2026-08-11)
 
+**Settings as detail (2026-11-16)**: every result carries `vals` (card value badges `on`/`off`) in withMode's detail (solo, quit loss, live-room modeTags); challenges (`countResult`'s new 6th arg `score`) also `assist` (`on`/`off`). Never the mode.
+
 Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."*
 
 1. **Bucket**: MP records under `MP_DIFFICULTY` (`'mp'`), not `opp0.difficulty || 'normal'` (a remote

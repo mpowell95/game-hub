@@ -261,6 +261,8 @@ are readable with developer tools). What exists:
 
 ## Stats
 
+**Settings as detail (2026-11-16)**: every result (solo, forfeit, online) carries `pace` and `cf` (`split`/`one`); online also `bots` (computers at the table) and `botSk` (their skill, `none`/`easy`/`easy-hard`...). Detail only, never the mode (`setDetail` in `ui.js`).
+
 One result per game per device, recorded **the moment the engine decides it** (never behind a modal).
 Walking away records a loss for the one who left. Solo records under the computers' skill
 (`easy`/`medium`/`hard`), online under `'mp'`. Dedupe: solo `state.rec` in the save; online `code:gid`
