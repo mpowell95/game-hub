@@ -14,6 +14,7 @@ import { assumedRecord, fullLevelWins, fullLevelRaw } from './stats-corrections.
 
 export const CAP = 20;
 // lv: points per win at tiers 1-4 (Easy, Medium, Hard, Expert); cap: the tiers in the 20-point group;
+// capMode(m, tier): true = wins with that saved mode count in the 20-point group (at mode()'s price).
 // on: an online win; opp(m): opponents at an online table (each one past the first adds `on` again); other: a win in a bucket with no level (legacy history, Yahtzee's single level).
 // mode(m, tier, v, lv): points for a win RECORDED at `tier` whose saved mode is `m`, or undefined = the level's own
 // value. down(m): true when that mode is recorded one level below the level chosen (byMode keeps the chosen one).
@@ -22,7 +23,11 @@ const P = {
   connect4: { lv: [1, 6, 8, 12], on: 5 },
   // Each board its own points (Matt, 2026-11-09: "Make each board have their own point system"). `lv` = Small, which is
   // also what a win with no saved board is worth (before 2026-10-30: the board was not saved, never guessed upward).
-  dotsboxes: { lv: [1, 3, 5], on: 3, mode: (m, t) => (DB_PTS[m.size] ? DB_PTS[m.size][Math.min(t, 3) - 1] : undefined) },
+  // capMode (Matt, 2026-11-16: "ship it now"): Medium on the SMALL board with the computer going first was won 21 of 23
+  // in 7 minutes (the Medium computer takes every box it can, so it always loses the long chains). Those wins pay 1 and
+  // sit under the 20-point limit, until the computer is fixed. Read time: the wins stay as recorded.
+  dotsboxes: { lv: [1, 3, 5], on: 3, capMode: (m, t) => dbFarm(m, t),
+    mode: (m, t) => (dbFarm(m, t) ? 1 : DB_PTS[m.size] ? DB_PTS[m.size][Math.min(t, 3) - 1] : undefined) },
   filler: { lv: [1, 2, 3], on: 2 },
   mancala: { lv: [1, 2, 6], on: 3 },
   battleship: { lv: [1, 1, 3], cap: [1], on: 3, mode: (m, t, v, lv) => (m.size === 'quick' && t > 1 ? lv[t - 2] : undefined) },
@@ -60,6 +65,8 @@ const P = {
   airhockey: { lv: [1, 2, 5], on: 3 },
 };
 const DB_PTS = { medium: [1, 4, 8], large: [2, 6, 10] };   // Dots and Boxes; Small = its `lv`
+/** Dots and Boxes: Medium, small board, the computer went first (saved mode `went`, else the `first` setting). */
+function dbFarm(m, t) { return t === 2 && m.size === 'small' && (m.went ? m.went === 'them' : m.first === 'opponent'); }
 /** Chinchón's short match (the game's own isShortMatch, on the saved mode: vc / sl / rl): under 100 points or 10 rounds. */
 function ccShort(m) {
   const pts = (+m.sl || 100) < 100, rnd = (+m.rl || 10) < 10;
@@ -207,6 +214,8 @@ function recordedPoints(gm, id, tier, code) {
         const n = Math.min(won(b), s.byT[t] - used[t]);
         if (n <= 0) continue;
         used[t] += n;
+        // capMode: this option's wins move into the 20-point group at their own price, whatever the level's group.
+        if (spec.capMode && spec.capMode(m, t) && !capSet.has(t)) { free -= n * v0; capped += n * v1; continue; }
         if (capSet.has(t)) capped += n * (v1 - v0); else free += n * (v1 - v0);
       }
     }
