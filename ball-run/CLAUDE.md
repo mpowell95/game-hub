@@ -49,6 +49,11 @@ never into the stats store, `players/` or the board. Counters live in `sim.stats
 Older runs: each phone copies its run log once (`e: 'oldrun'`, distance + score; stamp `ballrun.runLogSent.v1`).
 Runs before this kept only score + distance, on the phone that played them.
 
+## UX review and Orbital readability MOCKUP (2026-11-16, Matt: "jumps are really impossible to detect. and drops look exactly like holes")
+
+`docs/BALL-RUN-UX-REVIEW.md` (findings by severity, file:line, effort); before/after mockup `docs/mockups/ball-run-ux/index.html`;
+the prototype renderer code as `docs/mockups/ball-run-ux/prototype.patch` (cues behind `?uxproto=1`). NOT built: mockup only until Matt says "build it".
+
 ## The camera follows by TIME (2026-11-16, Matt: "the ball moves slowly to the right" as the camera catches up)
 
 `CAMERA_LAG` (0.12) is applied per 1/120 s (`CAMERA_LAG_HZ`), not per screen frame (`render.js _layoutCamera`): at 60 or
