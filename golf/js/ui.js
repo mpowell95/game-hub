@@ -374,6 +374,10 @@ class GolfGame {
     this.rootEl = document.createElement('div');
     this.rootEl.className = 'gf-root';
     this.inHub = !!container.closest('.hub-game');
+    // FULL BLEED IN THE HUB (2026-11-16, Matt: "why isn't it full screen? ... No other game does"): fixed to
+    // the viewport like Darts, under the hub's floating back pill; `_fitInsets` keeps the HUD and setup
+    // clear of the pill and the home indicator by MEASUREMENT.
+    if (this.inHub) this.rootEl.classList.add('gf-full');
     // THE TOP PAD AND THE BOTTOM SAFE AREA ARE BOTH MEASURED IN `_fit()`, not assumed here.
     // This used to be a flat `--gf-top-pad: 46px` in the hub, on the grounds that "the hub's
     // floating back button lives in the top-left, so the HUD's own top row moves down out from
@@ -457,6 +461,17 @@ class GolfGame {
     // with dead space under it), and too large is corrected on the very next line, where the page's
     // own overflow is measured and given straight back.
     const vh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0) || 720;
+
+    if (el.classList.contains('gf-full')) {
+      // Fixed to the viewport: the whole screen is ours, no probe needed.
+      const hf = Math.max(320, Math.round(vh));
+      el.style.height = `${hf}px`;
+      this._fitInsets();
+      if (`${hf}px` === prev) return;
+      if (this.canvas) this._sizeCanvas();
+      if (this.stripEl) this._sizeStripRows();
+      return;
+    }
 
     // Pass 1: collapse ourselves and read where our top actually sits. With the game at zero the
     // page cannot be scrolled by our own overflow, which is what makes this viewport-relative
