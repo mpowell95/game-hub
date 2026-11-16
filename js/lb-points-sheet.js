@@ -14,7 +14,7 @@
 // worked out at the level it is RECORDED at; the option's saved mode (withMode) is passed for the multipliers.
 // tools/test-lb-points-sheet.mjs pins the model against gamePoints for every cell of every game.
 // The table renderer and its CSS are shared with js/lb-rank-sheet.js (Nuts & Bolts, Minesweeper, Hill Climb).
-import { pointsForWin, pointsTable, gamePoints, CAP, POINT_GAMES } from './lb-points.js';
+import { pointsForWin, pointsTable, gamePoints, CAP, POINT_GAMES, newPricesOn } from './lb-points.js';
 import { diffShapeSVG } from './difficulty-tiers.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
@@ -22,7 +22,7 @@ import STRINGS from './strings.js';
 const t = makeT(STRINGS);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const L3 = ['easy', 'medium', 'hard'];
-const down = (d) => L3[Math.max(0, L3.indexOf(d) - 1)];
+const down = (d) => (d === 'expert' ? 'hard' : L3[Math.max(0, L3.indexOf(d) - 1)]);
 export const LEVEL_KEY = { 1: 'gs_diff_beginner', 2: 'gs_diff_intermediate', 3: 'gs_diff_pro', 4: 'gs_diff_expert' };
 
 // Per game: its options, easiest to hardest (column word `lbpt_k_<k>`, the header over them `lbpt_h_<game>`;
@@ -82,7 +82,9 @@ const levelCells = (id, o = {}) => {
   const out = [];
   for (let tier = 1; tier <= pointsTable(id).lv.length; tier++) {
     const raw = tier === 4 ? 'expert' : L3[tier - 1];
-    out.push({ tier, ...cellFacts(id, o.short ? down(raw) : raw, raw, o.mode) });
+    // New prices (admin devices until released, js/lb-points.js NEW): the sheet shows what a win vs the NEW computer pays.
+    const mode = newPricesOn() ? { ...(o.mode || {}), cv: 2 } : o.mode;
+    out.push({ tier, ...cellFacts(id, o.short ? down(raw) : raw, raw, mode) });
   }
   return out;
 };

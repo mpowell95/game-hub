@@ -86,9 +86,43 @@ function tableSum(m, lv, drop) {
   return sum;
 }
 const ONE = { lv: [1, 1, 1, 1], on: 1 };   // a wins game with no table yet (admin-only games): 1 a win
+
+// NEW PRICES (docs/HANDOFF-WINS-GAMES-FIXES.md, 2026-11-16). NOT cleared for players: shown only where newPricesOn()
+// (an admin device) until Matt says "release it"; then add the game's id to NEW_RELEASED. `cv` = the saved mode's
+// marker that a win was played against the new computer (game files: `cv: 2`); wins without it are "old".
+// freeMode(m, tier): wins with that saved mode leave the 20-point group (at mode()'s price).
+const isNew = (m) => (+m.cv || 0) >= 2;
+const BD_X = { 1: [1, 1, 2, 2], 2: [2, 3, 3, 4], 3: [3, 4, 5, 6] };   // Monopoly Deal, 1-4 computers: x1 / x1.3 / x1.6 / x1.9
+const NEW = {
+  // Medium won 97%: old Medium wins pay 1 under the 20-point limit (Easy joins it); new Medium wins pay 2, no limit.
+  airhockey: { lv: [1, 1, 5], cap: [1, 2], on: 3, freeMode: (m, t) => t === 2 && isNew(m), mode: (m, t) => (t === 2 && isNew(m) ? 2 : undefined) },
+  // Medium made easier: new Medium wins pay 3, old ones keep 6. Easy (won 85%) under the limit.
+  connect4: { lv: [1, 6, 8, 12], cap: [1], on: 5, mode: (m, t) => (t === 2 && isNew(m) ? 3 : undefined) },
+  // Hard won 60%: old Hard wins pay 2, new Hard wins 3. Cricket in order still doubles.
+  darts: { lv: [1, 2, 2], on: 3, mode: (m, t, v) => {
+    const b = t === 3 && isNew(m) ? 3 : v;
+    const x = String(m.kind || '').startsWith('cricket-order') ? b * 2 : b;
+    return x === v ? undefined : x; } },
+  // Expert (tier 4) pays 6; no reracks pays +1, not x2.
+  cuppong: { lv: [1, 1, 3, 6], cap: [1, 2], on: 3, mode: (m, t, v) => (String(m.rr) === '0' ? v + 1 : undefined) },
+  // More computers: x1 / x1.3 / x1.6 / x1.9 in whole points (old and new wins).
+  business: { lv: [1, 2, 3], on: 3, mode: (m, t, v) => (+m.ai >= 2 && BD_X[t] ? BD_X[t][Math.min(4, +m.ai) - 1] : undefined) },
+  // The farm price stays on old wins; wins against the new Medium pay the table's own price.
+  dotsboxes: { lv: [1, 3, 5], on: 3, capMode: (m, t) => dbFarm(m, t) && !isNew(m),
+    mode: (m, t) => (dbFarm(m, t) && !isNew(m) ? 1 : DB_PTS[m.size] ? DB_PTS[m.size][Math.min(t, 3) - 1] : undefined) },
+};
+const NEW_RELEASED = new Set([]);   // ids Matt has released ("release it"): their NEW price for everyone
+let _newPrices = null, _auto = null;   // _auto: read once a page load (js/admin-config.js isAdminDevice's own key)
+/** Test/preview switch: true/false forces, null = automatic (an admin device). */
+export function setNewPrices(on) { _newPrices = on == null ? null : !!on; }
+export function newPricesOn() {
+  if (_newPrices != null) return _newPrices;
+  if (_auto == null) { try { _auto = !!globalThis.localStorage && globalThis.localStorage.getItem('gamehub.adminDevice.v1') === '1'; } catch { _auto = false; } }
+  return _auto;
+}
 /** Points-ranked board ids (every wins board; js/lb-rules.js `by: 'wins'` or 'cuppong'). */
 export const POINT_GAMES = Object.keys(P);
-export function pointsTable(id) { return P[id] || ONE; }
+export function pointsTable(id) { return (NEW[id] && (NEW_RELEASED.has(id) || newPricesOn()) ? NEW[id] : P[id]) || ONE; }
 
 const won = (b) => Math.max(0, (b && b.won) | 0);
 const lvOf = (spec, t) => (t >= 1 && t <= spec.lv.length ? spec.lv[t - 1] : spec.lv[spec.lv.length - 1]);
@@ -216,6 +250,7 @@ function recordedPoints(gm, id, tier, code) {
         used[t] += n;
         // capMode: this option's wins move into the 20-point group at their own price, whatever the level's group.
         if (spec.capMode && spec.capMode(m, t) && !capSet.has(t)) { free -= n * v0; capped += n * v1; continue; }
+        if (spec.freeMode && spec.freeMode(m, t) && capSet.has(t)) { capped -= n * v0; free += n * v1; continue; }
         if (capSet.has(t)) capped += n * (v1 - v0); else free += n * (v1 - v0);
       }
     }
@@ -268,4 +303,4 @@ export function pointsKey(id) {
   const ult = spec.ult ? spec.ult.map((pts, i) => ({ tier: i + 1, pts })) : null;
   return { levels, ult, on: spec.on, extra: !!spec.mode, cap: capSet.size ? CAP : 0 };
 }
-export default { CAP, pointsKey, POINT_GAMES, pointsTable, gamePoints, pointsForWin, parseModeKey };
+export default { CAP, pointsKey, POINT_GAMES, pointsTable, gamePoints, pointsForWin, parseModeKey, setNewPrices, newPricesOn };

@@ -4,7 +4,7 @@
 //   node tools/test-lb-points.mjs
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { gamePoints, pointsForWin, pointsKey, POINT_GAMES, CAP } from '../js/lb-points.js';
+import { gamePoints, pointsForWin, pointsKey, POINT_GAMES, CAP, setNewPrices, newPricesOn } from '../js/lb-points.js';
 import { LB_RULES } from '../js/lb-rules.js';
 
 let pass = 0, fail = 0;
@@ -127,6 +127,35 @@ try {
   ok('Snake (no points board): nothing', winPoints({ id: 'snake', d: 'easy', g: {}, after: {} }) === null);
 } catch (err) { ok('points-toast.js loads in node', false, String(err)); }
 
+
+// NEW PRICES (docs/HANDOFF-WINS-GAMES-FIXES.md): admin devices only until released; `cv=2` = a win vs the new computer.
+ok('new prices are off in node (no admin device)', newPricesOn() === false);
+ok('...and off means today\'s Air Hockey (Medium 2, no limit)', gamePoints(rec({ medium: W(30) }), 'airhockey').pts === 60);
+setNewPrices(true);
+{ const AH = (old, nu, easy = 0) => rec({ easy: W(easy), medium: W(old + nu) }, nu ? { byMode: { 'cv=2': { medium: W(nu) } } } : {});
+  ok('Air Hockey: old Medium 1 a win, limit 20', gamePoints(AH(60, 0), 'airhockey').pts === 20);
+  ok('...Easy shares the limit', gamePoints(AH(15, 0, 10), 'airhockey').pts === 20);
+  ok('...new Medium (cv=2) 2 a win, no limit', gamePoints(AH(60, 15), 'airhockey').pts === 20 + 30);
+  ok('...Hard unchanged 5', gamePoints(rec({ hard: W(2) }), 'airhockey').pts === 10);
+  ok('...+X: old Medium 1, new 2', pointsForWin('airhockey', 'medium', {}) === 1 && pointsForWin('airhockey', 'medium', { cv: 2 }) === 2);
+  ok('...Medium tab', gamePoints(AH(60, 15), 'airhockey', 2).pts === 50); }
+ok('Connect Four: old Medium 6, new 3; Easy limit 20', gamePoints(rec({ easy: W(85), medium: W(3) }, { byMode: { 'cv=2|first=me': { medium: W(2) } } }), 'connect4').pts === 20 + 6 + 6);
+ok('Darts: old Hard 2, new Hard 3', gamePoints(rec({ hard: W(5) }, { byMode: { 'cv=2|kind=301': { hard: W(2) } } }), 'darts').pts === 3 * 2 + 2 * 3);
+ok('...Cricket in order doubles both', pointsForWin('darts', 'hard', { kind: 'cricket-order' }) === 4 && pointsForWin('darts', 'hard', { kind: 'cricket-order', cv: 2 }) === 6);
+ok('...Easy/Medium unchanged', pointsForWin('darts', 'easy', {}) === 1 && pointsForWin('darts', 'medium', { kind: '301' }) === 2);
+ok('Cup Pong: no reracks +1 (Hard 4)', pointsForWin('cuppong', 'hard', { rr: 0 }) === 4 && pointsForWin('cuppong', 'hard', { rr: 2 }) === 3);
+ok('...Expert 6, 7 with no reracks', pointsForWin('cuppong', 'expert', { rr: 2 }) === 6 && pointsForWin('cuppong', 'expert', { rr: 0 }) === 7);
+for (const [t, d, want] of [[1, 'easy', [1, 1, 2, 2]], [2, 'medium', [2, 3, 3, 4]], [3, 'hard', [3, 4, 5, 6]]]) {
+  ok(`Monopoly Deal ${d} vs 1-4 computers = ${want}`, [1, 2, 3, 4].map((n) => pointsForWin('business', d, { ai: n })).join() === want.join());
+}
+ok('...old wins re-priced too (byMode ai=4, Hard)', gamePoints(rec({ hard: W(2) }, { byMode: { 'ai=4': { hard: W(2) } } }), 'business').pts === 12);
+{ const k = 'first=opponent|size=small|undo=0|went=them';
+  ok('Dots: the farm price stays on old wins', gamePoints(rec({ intermediate: W(21) }, { byMode: { [k]: { intermediate: W(21) } } }), 'dotsboxes').pts === 20);
+  ok('...a win vs the new Medium pays 3', gamePoints(rec({ intermediate: W(22) }, { byMode: { [k]: { intermediate: W(21) }, [k + '|cv=2']: { intermediate: W(1) } } }), 'dotsboxes').pts === 23); }
+ok('games with no new price unchanged (Mancala)', gamePoints(rec({ hard: W(1) }), 'mancala').pts === 6);
+setNewPrices(false);
+ok('switched off again: Monopoly Deal x computers as before', pointsForWin('business', 'hard', { ai: 4 }) === 12);
+setNewPrices(null);
 
 console.log(`\nlb-points tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
