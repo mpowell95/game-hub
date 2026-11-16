@@ -432,6 +432,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.
 - **Private play data (2026-11-16):** `tools/test-private-log.mjs`.
+- **Ball Run Orbital Hard = Classic points, admin only (2026-11-16):** `tools/test-ballrun-classic-equiv.mjs`.
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
