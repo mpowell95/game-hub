@@ -46,26 +46,7 @@ ok('bandOf at every edge', P.wwBandOf(1) === 'easy' && P.wwBandOf(500) === 'easy
   && P.wwBandOf(1001) === 'hard' && P.wwBandOf(1500) === 'hard' && P.wwBandOf(1501) === 'expert' && P.wwBandOf(9999) === 'expert');
 ok('band ends; Expert ends at the last level', P.wwBandEnd('easy') === 500 && P.wwBandEnd('medium') === 1000 && P.wwBandEnd('hard') === 1500 && P.wwBandEnd('expert', 2000) === 2000 && P.wwBandEnd('expert') === Infinity);
 ok('multipliers 1/2/3/4', JSON.stringify(P.WW_MULT) === JSON.stringify({ easy: 1, medium: 2, hard: 3, expert: 4 }));
-ok('admin-only multipliers 1/3/6/12 (Matt, 2026-11-16)', JSON.stringify(P.WW_MULT_ADMIN) === JSON.stringify({ easy: 1, medium: 3, hard: 6, expert: 12 }));
-ok('a player device shows 1/2/3/4', P.wwMult() === P.WW_MULT);
-// An ADMIN device (its cached answer, js/admin-config.js) shows 1/3/6/12: points, and the scores sheet. Own process,
-// because the admin answer is memoized at its first read.
-{
-  const { execFileSync } = await import('node:child_process');
-  const src = `
-    const m = new Map([['gamehub.adminDevice.v1', '1']]);
-    globalThis.localStorage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => void m.set(k, String(v)), removeItem: (k) => void m.delete(k) };
-    const P = await import(${JSON.stringify(new URL('../js/word-weaver-points.js', import.meta.url).href)});
-    const S = await import(${JSON.stringify(new URL('../js/lb-rank-sheet.js', import.meta.url).href)});
-    const rec = { ww: { lv: { L1: { s: 3 }, L500: { s: 1 }, L501: { s: 2 }, L1001: { s: 3 }, L1501: { s: 3 }, L2000: { s: 1 } } } };
-    const [c] = S.rankSheetModel('wordweaver');
-    console.log(JSON.stringify({ mult: P.wwMult(), pts: P.wwPoints(rec), hard: P.wwPoints(rec, 'hard'), rows: c.grid.rows.map((r) => r.vals) }));`;
-  let r = null;
-  try { r = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', src], { encoding: 'utf8' }).trim().split('\n').pop()); } catch (e) { console.log(String(e && e.stdout || e)); }
-  ok('admin device: wwMult is 1/3/6/12', r && JSON.stringify(r.mult) === JSON.stringify(P.WW_MULT_ADMIN));
-  ok('admin device: points (3+1)x1 + 2x3 + 3x6 + (3+1)x12 = 76', r && r.pts === 76 && r.hard === 18);
-  ok('admin device: scores sheet rows 3,2,1 / 9,6,3 / 18,12,6 / 36,24,12', r && JSON.stringify(r.rows) === '[[3,2,1],[9,6,3],[18,12,6],[36,24,12]]');
-}
+ok('every device shows 1/2/3/4 (admin x1/3/6/12 removed 2026-11-16)', P.wwMult() === P.WW_MULT && !('WW_MULT_ADMIN' in P));
 {
   const rec = { ww: { lv: { L1: { s: 3 }, L500: { s: 1 }, L501: { s: 2 }, L1001: { s: 3 }, L1501: { s: 3 }, L2000: { s: 1 } } } };
   ok('points: stars x band (3+1)x1 + 2x2 + 3x3 + (3+1)x4 = 33', P.wwPoints(rec) === 33);

@@ -73,7 +73,7 @@ for (const id of Object.keys(LB_RULES)) {
     const v = c.grid.rows[i].vals;
     ok(`word weaver ${b}: ${v.join(', ')}`, [0, 1, 2, 5].every((h) => wwStarsFor(h) * wwMult()[b] === v[Math.min(h, 2)]));
   });
-  ok('word weaver (admin device, Matt 2026-11-16): Expert 36, 24, 12', c.grid.rows[3].vals.join() === '36,24,12');
+  ok('word weaver: Expert 12, 8, 4', c.grid.rows[3].vals.join() === '12,8,4');
 }
 
 // Sudoku / Murdoku: the points table IS puzzle-points' HINT_STEPS; real records score what the cells say.
