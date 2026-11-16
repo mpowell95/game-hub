@@ -537,7 +537,7 @@ class CupPong {
     } else R.setBallHeat(m.heat('b', m.ball), 0);
     this.busy = true;
     this.paintOptions();
-    this.throwState = this.engine.phys.startThrow({ power, aim, cups: cupsXZ(m.target()) });
+    this.throwState = this.engine.phys.startThrow({ power, aim, cups: cupsXZ(m.target()) });   // vs the computer: the new table
     this.saveMatch({ s: f.s, p: power, a: aim });
   }
 
@@ -632,7 +632,7 @@ class CupPong {
     const th = C.cpuThrow(this.cfg.diff, cups, Math.random, m.called);
     this.shooter = 'b';
     this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
-    this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups, model: this.test ? 'test' : null });
+    this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups });
     this.saveMatch({ s: 'b', p: th.power, a: th.aim });
   }
 
@@ -752,6 +752,9 @@ class CupPong {
   //     closed app loses nothing and cannot take a throw back;
   //   - while it is their turn the match is WATCHED, so their throws arrive while you look at it.
   async loadMP() { if (!this.MP) this.MP = await import('./mp.js'); return this.MP; }
+  /** The table this throw flies on (2026-11-16): the real-life bounce for everything, except a challenge made
+   *  before then, which keeps the old table so its throws replay as played (mp.js tableModel). */
+  tableModel() { return this.mp && this.MP ? this.MP.tableModel(this.mp.game && this.mp.game.rules) : null; }
 
   async mpBegin(game) {
     const MP = await this.loadMP();
@@ -914,8 +917,9 @@ class CupPong {
       this.pendingReplay = e;
       this.shooter = 'b';
       R.setBallHeat(m.heat('b', m.ball), 0);
-      const v = this.engine.phys.replayVector({ power: e.p, aim: e.a, cups }, e.m);
-      this.throwState = this.engine.phys.startThrow({ power: v.power, aim: v.aim, cups });
+      const model = this.tableModel();
+      const v = this.engine.phys.replayVector({ power: e.p, aim: e.a, cups, model }, e.m);
+      this.throwState = this.engine.phys.startThrow({ power: v.power, aim: v.aim, cups, model });
       return;
     }
     const ev = this.MP.applyEntry(m, e) || [];
@@ -1684,7 +1688,7 @@ class CupPong {
       });
     }
     // The greyed spare stays where it is while this ball flies (it is the NEXT throw).
-    this.throwState = this.engine.phys.startThrow({ power, aim, cups, model: this.test ? 'test' : null });
+    this.throwState = this.engine.phys.startThrow({ power, aim, cups, model: this.tableModel() });
     this.saveMatch({ s: 'a', p: power, a: aim });   // vs the computer only (it says no to the rest)
     this.paintHud();
   }
