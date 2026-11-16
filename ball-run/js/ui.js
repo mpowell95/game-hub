@@ -9,7 +9,8 @@ import { InputController } from './input.js';
 import { SIM_DT, MAX_STEPS_PER_FRAME, DEFAULT_DIFFICULTY, DEFAULT_MAP, MAPS } from './config.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordBallRun, loadStats, withMode } from '../../js/game-stats.js';
+import { recordBallRun, loadStats, withMode, activeCode } from '../../js/game-stats.js';
+import { appendPlayLog } from '../../js/play-log-queue.js';
 import { syncMyStats } from '../../js/stats-net.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -110,6 +111,68 @@ function reconcileRunLog() {
   for (const entry of log) {
     if (entry.synced) continue;
     if (trySyncRunEntry(entry)) markRunLogSynced(entry.ts);
+  }
+}
+
+/** Every number a finished run has (2026-11-16, Matt: "save all data from every play/game/turn/round/
+ *  level for all games" ... "somewhere that only I can see and that is never pushed to the player's
+ *  phone"). Saved on this phone's run log entry and sent ONLY to the admin play log (`e: 'run'`,
+ *  logRunDetail), never into the stats store, players/ or the board every phone downloads.
+ *  m = meters, ms = time played, topSpd = top speed x10. Never throws: a bad read drops that number. */
+export function runDetail(sim) {
+  const d = {};
+  const put = (k, f) => { try { const v = f(); if (v != null && Number.isFinite(+v)) d[k] = Math.max(0, Math.floor(+v)); } catch (err) { console.error('[ball-run] run detail', k, err); } };
+  put('m', () => sim.z);
+  put('ms', () => sim.elapsed * 1000);
+  put('obst', () => sim.stats.obst);
+  put('tiers', () => sim.tiersPassed);
+  put('topSpd', () => sim.stats.topSpeed * 10);
+  if (sim.track && sim.track.map && (sim.track.map.split || sim.track.map.jump || sim.track.map.pickups)) {
+    put('orbs', () => sim.orbsCollected);
+    put('splits', () => sim.stats.splits);
+    put('jumps', () => sim.stats.jumps);
+    put('jumpMiss', () => sim.stats.jumpMiss);
+    put('lifeGot', () => sim.stats.lifeGot);
+    put('lifeUsed', () => sim.stats.lifeUsed);
+    for (const k of ['obstacle', 'edge', 'void', 'landing']) put('save_' + k, () => (sim.stats.saves || {})[k] | 0);
+  }
+  try { const c = sim.crashCause || sim.crashReason; if (c) d.end = String(c); } catch { /* the end is optional */ }
+  return d;
+}
+
+function logRunDetail(entry) {
+  try {
+    const d = JSON.stringify({ ...(entry.detail || {}), score: entry.score | 0, seed: entry.seed >>> 0 });
+    const id = appendPlayLog(activeCode(), { g: 'ballrun', e: 'run', k: String(entry.ts), m: `map=${entry.map}@${entry.difficulty}`, d });
+    if (!id) console.error('[ball-run] run detail not queued for the play log (no player code?)', entry);
+  } catch (err) { console.error('[ball-run] run detail not logged', err); }
+}
+
+/** ONE-TIME: runs this phone logged before 2026-11-16 kept their distance only on the phone (the run
+ *  log, newest 200). Each is copied once into the play log (`e: 'oldrun'`, its own time in `k`, the
+ *  whole entry in `a`) so it reaches playLog/<CODE>. The run log itself is never changed (THE LAW).
+ *  `ballrun.runLogSent.v1` = the newest entry time copied; it moves only past entries that queued. */
+const RUN_LOG_SENT_KEY = 'ballrun.runLogSent.v1';
+function sendOldRunsOnce() {
+  const code = activeCode();
+  if (!code) return;
+  let sent = 0;
+  try { sent = +localStorage.getItem(RUN_LOG_SENT_KEY) || 0; } catch { sent = 0; }
+  let top = sent;
+  for (const e of readRunLog()) {
+    if (!e || !(+e.ts > sent) || e.detail) continue; // newer runs went up with their own 'run' entry (logRunDetail)
+    const id = appendPlayLog(code, {
+      g: 'ballrun', e: 'oldrun', k: String(e.ts), m: `map=${e.map || 'classic'}@${e.difficulty || '-'}`,
+      a: JSON.stringify({ ts: e.ts, score: e.score, distance: e.distance, map: e.map || 'classic', difficulty: e.difficulty }),
+    });
+    if (!id) { console.error('[ball-run] an old run was not queued; it will be tried again next open', e); break; }
+    top = Math.max(top, +e.ts);
+  }
+  if (top > sent) {
+    try {
+      localStorage.setItem(RUN_LOG_SENT_KEY, String(top));
+      if (+localStorage.getItem(RUN_LOG_SENT_KEY) !== top) console.error('[ball-run] old-run stamp did not stick; they may queue again (duplicates, never losses)');
+    } catch (err) { console.error('[ball-run] old-run stamp not saved; they may queue again', err); }
   }
 }
 
@@ -281,6 +344,7 @@ class BallRunUI {
     // Retry any run recorded locally last session that never confirmed reaching the shared
     // stats/leaderboard store (see RUN_LOG_KEY above). Cheap no-op when there's nothing to retry.
     try { reconcileRunLog(); } catch (err) { console.error('[ball-run] reconcile on open failed', err); }
+    try { sendOldRunsOnce(); } catch (err) { console.error('[ball-run] old runs not sent', err); }
     // One-time, guarded local best-score migration onto the per-map shape (see its own doc
     // comment). Cheap no-op once migrated.
     migrateBestScoresToMaps();
@@ -546,6 +610,7 @@ class BallRunUI {
     this.el.resumeGate.hidden = true;
 
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+    this._seed = seed;
     this.sim = new Sim(this.map, this.difficulty, seed);
     this.renderer = new Renderer(this.el.canvas, this.map);
     this.input = new InputController(this.el.canvas);
@@ -747,8 +812,11 @@ class BallRunUI {
       this._resultRecorded = true;
       // Sixth-playthrough fix: write the raw result to the flight-recorder log FIRST, before
       // touching the shared store at all, so the run is never lost even if the write below fails.
-      const logEntry = { ts: Date.now(), difficulty: this.difficulty, map: this.map, score, distance, synced: false };
+      let detail = null;
+      try { detail = runDetail(this.sim); } catch (err) { console.error('[ball-run] run detail failed; the run is saved without it', err); }
+      const logEntry = { ts: Date.now(), difficulty: this.difficulty, map: this.map, score, distance, seed: this._seed, detail, synced: false };
       appendRunLog(logEntry);
+      logRunDetail(logEntry);
       if (trySyncRunEntry(logEntry)) markRunLogSynced(logEntry.ts);
       // Fifth-playthrough fix: previously the only thing that pushed a finished run up to Firebase
       // was hub.js's own lifecycle sync (tab-hide / returning to the launcher grid). This screen's

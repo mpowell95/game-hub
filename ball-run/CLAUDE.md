@@ -40,6 +40,15 @@ open.
   **previous** (`help-prev`, disabled on slide 1), right is **next** (disabled on the last), **OK**
   always closes. `SEEN_HELP_KEY` first-open auto-open unchanged.
 
+## Every run's numbers, admin-only (2026-11-16, Matt: "save all data from every play" ... "somewhere that only I can see")
+
+`runDetail(sim)` (`ui.js`): meters, time (ms), obstacles, speed tiers, top speed x10, and on Orbital orbs, splits,
+jumps, missed landings, lives got/used, saves by hazard, plus how it ended (`sim.crashCause`: obstacle/edge/void/
+landing) and the seed. Kept on the run log entry and sent ONLY to `playLog/<CODE>` (`e: 'run'`, `logRunDetail`),
+never into the stats store, `players/` or the board. Counters live in `sim.stats` (read by nothing in the sim).
+Older runs: each phone copies its run log once (`e: 'oldrun'`, distance + score; stamp `ballrun.runLogSent.v1`).
+Runs before this kept only score + distance, on the phone that played them.
+
 ## Second map: Orbital (BALLRUNMAP2ORBITALSPEC.md, all four phases shipped 2026-07-29)
 
 Spec source: `HANDOFF-BALLRUN-NEWMAP.md` (four correctness landmines live there). Phase 1 was a pure
