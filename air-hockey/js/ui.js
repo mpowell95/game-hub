@@ -88,7 +88,7 @@ function readSave() {
     const [a, b] = s.score;
     const okGoal = (n) => Number.isInteger(n) && n >= 0 && n < PHYS.WIN;
     if (!okGoal(a) || !okGoal(b)) return null;
-    return { diff: s.diff, score: [a, b], serve: s.serve, best: Number.isFinite(+s.best) && +s.best > 0 ? +s.best : 0 };
+    return { diff: s.diff, score: [a, b], serve: s.serve, best: Number.isFinite(+s.best) && +s.best > 0 ? +s.best : 0, table: TABLES.includes(s.table) ? s.table : null };
   } catch { return null; }
 }
 const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.error('[airhockey] saved match not cleared', err); } };
@@ -542,7 +542,7 @@ class AirHockeyUI {
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
       const st = counted ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
-        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }));
+        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }), { detail: () => this._ahDetail() });
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
     this._fillOver();
@@ -580,8 +580,15 @@ class AirHockeyUI {
     if (this.online || !this.difficulty || this.match.phase === 'over') return;
     const [a, b] = this.match.score;
     const serve = a + b === 0 ? 0 : 1 - this.match.lastGoal;   // the player who was scored on serves
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), diff: this.difficulty, score: [a, b], serve, best: this.matchBest || 0 })); }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), diff: this.difficulty, score: [a, b], serve, best: this.matchBest || 0, table: this.settings && this.settings.table })); }
     catch (err) { console.error('[airhockey] match not saved', err); }
+  }
+  /** The match's DETAIL (2026-11-16, Matt: "check every game for settings that aren't recorded"): the
+   *  table look this phone played on. A look, never part of the mode (it would split byMode buckets).
+   *  `saved` = the table a saved match carries (saves from before 2026-11-16 have none). */
+  _ahDetail(saved) {
+    const tb = saved || (this.settings && this.settings.table);
+    return { table: typeof tb === 'string' && tb ? tb : 'default' };
   }
   /** Online only: leaving a live round after your first touch is a loss (js/live-leave.js). */
   quitCostsLoss() { return this.online ? this._liveCosts() : false; }
@@ -592,7 +599,7 @@ class AirHockeyUI {
     if (!sv) return;
     clearSave();
     const [gf, ga] = sv.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff));
+    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => ({ detail: this._ahDetail(sv.table) })));
     if (!takeQuitLoss('airhockey')) console.error('[airhockey] the thrown-away match was not recorded as a loss');
   }
 
@@ -996,7 +1003,7 @@ class AirHockeyUI {
       let forfeit = null;
       try { if (app) forfeit = (await app.api.get(app.api.ref(app.db, `rooms/${on.code}/forfeit`))).val(); } catch { /* offline */ }
       const res = LL.onRoomEnded({ forfeit }, { statsId: 'airhockey', key, n: on.rd, mySeat: on.role,
-        fn: 'recordAirHockey', winArgs: args, opps: [], tag: modeTag(AH_MODE, 'mp') });
+        fn: 'recordAirHockey', winArgs: args, opps: [], tag: modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })) });
       const title = res === 'won' ? LL.lt('ll_left_win', { name: on.oppName }) : res === 'lost' ? LL.lt('ll_lost', { name: on.oppName }) : null;
       if (title && instance === this && this.screen === 'left') this.root.querySelector('[data-role="leftTitle"]').textContent = title;
     }).catch(() => {});
@@ -1012,7 +1019,7 @@ class AirHockeyUI {
   _liveArgs(won) { const [gf, ga] = this.match.score; return ['mp', won, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]; }
   _liveArm() {
     if (!this._liveInPlay()) return;
-    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), [], modeTag(AH_MODE, 'mp'));
+    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })));
     this.online.armed = this.online.rd;
   }
   _liveQuietMs() { const on = this.online; return on && on.quietSince ? performance.now() - on.quietSince : 0; }
@@ -1021,7 +1028,7 @@ class AirHockeyUI {
   _liveClaim() {
     if (!this._liveCanClaim()) return;
     const on = this.online;
-    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), [], modeTag(AH_MODE, 'mp'));
+    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })));
     on.leaving = true;
     LL.leaveWithForfeit(on.net, on.code, on.role, on.role === 'host' ? 'guest' : 'host', on.rd, true).catch(() => {});
     this._teardownOnline(false);

@@ -469,7 +469,7 @@ export function markCounted(id) {
  *  '1' / '11' / '21') and the card numbering. An index row carries the length only. */
 export const chModeOf = (raw) => ({ n: 2, len: lenOf(raw) || '21', deck: deckOf(raw) });
 const chModeOfRow = (r) => ({ n: 2, len: LENS.includes(String(r && r.len)) ? String(r.len) : '21' });
-export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode = null) {
+export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode = null, score = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch('escoba', id)) return false;
@@ -477,7 +477,7 @@ export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode 
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('escoba', id, () => withMode(mode, 'mp', () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) }))); }
+  try { withChallengeMatch('escoba', id, () => withMode(mode, 'mp', () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) }), score)); }
   catch (err) { console.error('[escoba] recordEscoba failed', err); }
   return true;
 }

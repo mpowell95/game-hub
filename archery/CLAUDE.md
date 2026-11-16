@@ -211,3 +211,7 @@ Play over a saved match vs the computer the player has shot in = ONE loss, asked
 ## Setup tabs (2026-11-07, the Cup Pong way)
 
 Setup = **Online | Computer | 2 players** tabs. Online = Matches (Play pill on your turn, then their turn; record chip opens History) + Challenge (Anyone = the picker, then the 4 most recent people, one tap = the send screen); `fillOnline` in `js/mp-ui.js`, `_fillOnline` in `ui.js`. The Multiplayer home is gone: every "back" lands on `_showSetup('online')`. Opens on Online when a match is going, else Computer; a tapped tab wins (`this._tab`). 2 players = pass and play. Badge = matches on your turn. `armOpen`/`armChallenge` hand-offs unchanged. Layout only.
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Vs the computer (finish and quit loss): detail `firstSet` (the First setting; the match keeps it as `fs`, older matches: the current setting). Never in the mode.

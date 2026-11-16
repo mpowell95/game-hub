@@ -55,6 +55,19 @@ const MOVE_MS = 1800;            // an opponent's move is highlighted this long 
 const AWAY_MS = 35000;           // no heartbeat change for this long = away (heartbeat is every 10s)
 const MP_SAVE_TTL = 12 * 3600 * 1000;
 const SKILL_ID = { 1: 'easy', 2: 'medium', 3: 'hard' };
+/** This phone's computer speed and Check / Fold button as the result's DETAIL (2026-11-16, never the
+ *  mode: it would split byMode); online also the computers at the table and their skill ('none' with
+ *  no computers, 'easy-hard' when mixed). Read inside withMode. */
+function setDetail(settings, g, online) {
+  const st = settings || {};
+  const d = { pace: st.pace || 'normal', cf: st.cfMode === 'one' ? 'one' : 'split' };
+  if (online) {
+    const bots = (g && Array.isArray(g.players) ? g.players : []).filter((p) => p && (p.bot | 0) > 0);
+    d.bots = bots.length;
+    d.botSk = bots.length ? [...new Set(bots.map((p) => SKILL_ID[p.bot | 0] || String(p.bot | 0)))].sort().join('-') : 'none';
+  }
+  return d;
+}
 
 // The tables you can buy into with your bankroll (2026-09-27), cheapest first - the tournament
 // tiles on the reference app's menu. A table is locked until the bankroll covers its buy-in. The
@@ -1641,7 +1654,7 @@ class Game {
     if (!st.rec) {
       st.rec = true;
       writeJSON(SAVE_KEY, { state: st, at: Date.now() });
-      try { withMode(() => (modeOf(st)), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(st)), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false), { detail: () => setDetail(this.settings, st, false) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
     }
     drop(SAVE_KEY);
   }
@@ -1874,7 +1887,7 @@ class Game {
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
-      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won), { detail: () => setDetail(this.settings, s, false) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
       // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
       if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
@@ -1887,7 +1900,7 @@ class Game {
     if (prize) rec.push(key + ':prize:' + prize);
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
-    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won), { detail: () => setDetail(this.settings, pub, true) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
     if (prize) recordHoldemBank({ prize });
   }
 

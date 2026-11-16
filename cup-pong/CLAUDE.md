@@ -359,3 +359,7 @@ Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss ax
 - Leaving (hub back, Change settings, closed app, a challenge) costs nothing. **New game over a thrown-in match (any throw, the computer's included) = ONE loss**, asked twice (`quitPending`/`takeQuit`, marker armed and taken at once so the play log says `quitLoss`).
 - A throw in the AIR is saved (`fly`, either side) and flown again on Continue (`reFly`; fixed-step physics lands it the same), so leaving never takes a throw back.
 - The finish clears the save BEFORE recording (counted once). `init()` still takes an older build's marker. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Cup Pong saves"; `node tools/test-quit-loss.mjs`.
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Vs the computer: detail `rm` (Make your own Grid/Free). The thrown-away match's quit loss now carries its numbers so far (`detailOf` of the saved tally), `rm` and `quit: 1`. Never in the mode.

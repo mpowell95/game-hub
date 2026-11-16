@@ -534,7 +534,18 @@ class DartsUI {
     else if (s.first === 'them') starter = 1;
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
-    this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(starter, kindFrom(s), true, true) }, true);
+    const match = newMatch(starter, kindFrom(s), true, true);
+    if (s.mode === 'cpu') match.fs = s.first;   // the First throw setting it began under, for the result's detail (2026-11-16)
+    this._begin({ mode: s.mode, diff: s.difficulty, match }, true);
+  }
+
+  /** A result vs the computer's DETAIL additions (2026-11-16, Matt: "check every game for settings that
+   *  aren't recorded"): Computer speed and the First throw setting (who actually threw first is the
+   *  mode). Matches begun before 2026-11-16 carry no `fs`: the current setting stands in. */
+  _dtSetDetail(m) {
+    const st = this.settings || {};
+    const f = (m && m.fs) || st.first;
+    return { pace: typeof st.pace === 'string' && st.pace ? st.pace : 'default', firstSet: typeof f === 'string' && f ? f : 'default' };
   }
 
   /** Practice (2026-10-08, Matt: "play against yourself or just keep throwing as many darts in a row
@@ -572,7 +583,7 @@ class DartsUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false), { detail: () => this._dtSetDetail(q.m) });
       if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[darts] recording the quit loss failed', err); }
   }
@@ -936,7 +947,7 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: () => (dartsDetail(m)) });
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: () => ({ ...(dartsDetail(m) || {}), ...this._dtSetDetail(m) }) });
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }

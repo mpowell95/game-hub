@@ -216,6 +216,8 @@ black pockets, coral and cyan groups).
 
 ## Stats
 
+**Settings as detail (2026-11-16)**: every result (vs computer, quit loss, challenge via `countResult`'s new 5th arg `score`) carries `look` (`classic`/`simple`; 9-ball always `classic`) in withMode's detail, never the mode.
+
 `recordResult('eightball', difficulty, won)`, vs the computer only, once per match (`match.recorded`),
 every game and option into the same buckets (Cutthroat: won = seat 0 was the last one in).
 `total`/`byDiff` only, so My Stats' generic screen draws it and `players-agg.js` needs no branch.

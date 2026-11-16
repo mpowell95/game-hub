@@ -1548,7 +1548,7 @@ class CupPong {
       clearSave();
       const cfg = this.cfg;
       const tl = this._tally;
-      try { withMode(() => (modeOf(cfg)), cfg.diff, () => recordCupPong(statsDiff(cfg.diff, cfg.reracks), won, m.reracksUsed.a), { detail: () => detailOf(tl, m.reracksUsed.a) }); } catch (err) { console.error('[cup-pong] record failed', err); }
+      try { withMode(() => (modeOf(cfg)), cfg.diff, () => recordCupPong(statsDiff(cfg.diff, cfg.reracks), won, m.reracksUsed.a), { detail: () => ({ ...detailOf(tl, m.reracksUsed.a), rm: this._rackModeDetail() }) }); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = cfg.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
@@ -1855,10 +1855,21 @@ class CupPong {
     if (this.match) {
       const m = this.match;
       return this.mode === 'cpu' && !m.over && !this.recorded && (m.throwsTaken > 0 || !!this._fly)
-        ? { cfg: this.cfg, reracks: m.reracksUsed.a } : null;
+        ? { cfg: this.cfg, reracks: m.reracksUsed.a, tally: this._tally } : null;
     }
     const sv = readSave();
-    return savedMoved(sv) ? { cfg: sv.cfg, reracks: ((sv.match.reracksUsed || {}).a) | 0 } : null;
+    return savedMoved(sv) ? { cfg: sv.cfg, reracks: ((sv.match.reracksUsed || {}).a) | 0, tally: sv.tally } : null;
+  }
+  /** The Make your own switch (Grid | Free) this phone uses, in a result's DETAIL as `rm` (2026-11-16,
+   *  Matt: "check every game for settings that aren't recorded"). Never part of the mode. */
+  _rackModeDetail() {
+    const r = this.settings && this.settings.rackMode;
+    return r === 'grid' || r === 'free' ? r : 'default';
+  }
+  /** A thrown-away match's DETAIL: its numbers so far (when its tally is known), the rack switch, `quit`. */
+  _quitDetail(q) {
+    const base = q && q.tally && typeof q.tally === 'object' ? detailOf(q.tally, q.reracks) : { reracks: (q && q.reracks) | 0 };
+    return { ...base, rm: this._rackModeDetail(), quit: 1 };
   }
   quitCostsLoss() { return !!this.quitPending(); }
 
@@ -1870,7 +1881,7 @@ class CupPong {
     if (this.match) this.recorded = true;
     clearSave();
     const cfg = q.cfg;
-    armQuitLoss('cuppong', 'recordCupPong', [statsDiff(cfg.diff, cfg.reracks), false, q.reracks], modeTag(() => (modeOf(cfg)), cfg.diff));
+    armQuitLoss('cuppong', 'recordCupPong', [statsDiff(cfg.diff, cfg.reracks), false, q.reracks], modeTag(() => (modeOf(cfg)), cfg.diff, () => ({ detail: this._quitDetail(q) })));
     if (!takeQuitLoss('cuppong')) console.error('[cup-pong] the thrown-away match was not recorded as a loss');
   }
 
