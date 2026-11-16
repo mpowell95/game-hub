@@ -19,6 +19,10 @@ export const SKILL = {
   easy:   { sPower: 0.30, sAim: 0.080 },
   medium: { sPower: 0.15, sAim: 0.040 },
   hard:   { sPower: 0.06, sAim: 0.025 },
+  // EXPERT (2026-11-16, admin devices only until Matt says "release it"; ui.js newAI()): tuned by SIMULATION on
+  // today's table to clear 10 cups in a median 20 throws (Hard: 25), so a person who plays Hard as the real players
+  // do (median 25 throws in a win, 52% real wins) wins about 1 in 5. Targets its cup the way Hard does.
+  expert: { sPower: 0.045, sAim: 0.019 },
 };
 
 /** Horizontal distance travelled when the ball comes back down through rim height. */
@@ -82,7 +86,7 @@ export function cpuThrow(skill, cups, rnd = Math.random, targetId = null) {
   let target = targetId ? cups.find((k) => k.id === targetId) : null;
   if (target) {
     // a called island: aim at it
-  } else if (skill === 'hard') {
+  } else if (skill === 'hard' || skill === 'expert') {
     // The cup with the most neighbours: a near miss there still lands in a cup.
     const score = (k) => cups.filter((o) => o !== k && Math.hypot(o.x - k.x, o.z - k.z) < 0.11).length;
     const best = Math.max(...cups.map(score));

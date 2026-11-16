@@ -29,6 +29,14 @@ const SETTLE_MS = 450;          // after a throw resolves, before anything else 
 const CPU_PAUSE_MS = 900;       // before each computer throw, so it reads as a person lining up
 const TURN_PAUSE_MS = 700;      // between one side's last throw and the camera moving
 const DIFFS = ['easy', 'medium', 'hard'];
+// EXPERT (2026-11-16, docs/HANDOFF-WINS-GAMES-FIXES.md "Cup Pong", Matt: "I think adding an expert is smart"): a fourth
+// computer, aimed at about 1 win in 5 for a strong player (js/cpu.js SKILL.expert). NOT cleared for players: shown only
+// where newAI() is true (admin devices) until Matt says "release it". Easy, Medium and Hard are unchanged.
+const NEW_AI_RELEASED = false;   // flip when Matt says release it
+const newAI = () => NEW_AI_RELEASED || isAdminDevice();
+/** Every level a saved match or setting may hold (the setup screen shows Expert only where newAI()). */
+const ALL_DIFFS = ['easy', 'medium', 'hard', 'expert'];
+const shownDiffs = () => (newAI() ? ALL_DIFFS : DIFFS);
 const RERACKS = [0, 1, 2, 3, 'inf'];
 let instance = null;
 
@@ -45,7 +53,7 @@ const readSettings = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     return {
-      diff: DIFFS.includes(raw.diff) ? raw.diff : 'medium',
+      diff: ALL_DIFFS.includes(raw.diff) ? raw.diff : 'medium',
       gentlemans: raw.gentlemans !== false,          // default On (brief 4a)
       reracks: RERACKS.includes(raw.reracks) ? raw.reracks : 2,   // per player per game, default 2
       // Turn-based games alternate who opens (docs/BUILDING-A-GAME.md, setup defaults).
@@ -67,12 +75,12 @@ const writeSettings = (s) => { try { localStorage.setItem(SETTINGS_KEY, JSON.str
 // asked twice. A throw still in the air is saved with its launch (`fly`) and flown again on Continue
 // (the physics is a fixed step, so it lands where it was going): leaving cannot take a throw back.
 export function statsDiff(diff, reracks) {
-  return reracks === 'inf' ? oneTierDown(diff, DIFFS) : diff;
+  return reracks === 'inf' ? oneTierDown(diff, ALL_DIFFS) : diff;   // Expert with unlimited reracks = Hard
 }
 /** WHICH game was played vs the computer, recorded with its result (js/game-stats.js withMode,
  *  2026-10-30): Gentleman's on/off, reracks per game, and who shot first (settings.nextFirst is this
  *  match's until finish() turns it over). */
-const modeOf = (s) => ({ gent: s.gentlemans ? 1 : 0, rr: s.reracks, first: s.nextFirst === 'b' ? 'them' : 'me' });
+const modeOf = (s) => ({ gent: s.gentlemans ? 1 : 0, rr: s.reracks, first: s.nextFirst === 'b' ? 'them' : 'me', ...(s.diff === 'expert' ? { cv: 2 } : {}) });   // cv 2 = the new (Expert) computer
 
 /** The saved match vs the computer, or null: `{ v: 1, at, cfg, match, tally, fly }`. `cfg` is that
  *  match's own settings (the setup screen may have changed since); `fly` a throw left in the air. */
@@ -81,7 +89,7 @@ function readSave() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (!s || s.v !== 1 || !s.match || typeof s.match !== 'object' || s.match.over || !s.cfg) return null;
     const c = s.cfg;
-    if (!DIFFS.includes(c.diff) || !RERACKS.includes(c.reracks)) return null;
+    if (!ALL_DIFFS.includes(c.diff) || !RERACKS.includes(c.reracks)) return null;
     return s;
   } catch { return null; }
 }
@@ -230,6 +238,7 @@ class CupPong {
     this.unbindAll();
     this.mode = null;
     this.match = null;
+    if (!shownDiffs().includes(this.settings.diff)) this.settings.diff = 'hard';   // Expert stored on a phone that no longer shows it
     const s = this.settings;
     const seg = (role, items, cur) => `<div class="gh-seg" role="group" data-role="${role}">${items.map(([v, label, icon]) =>
       `<button type="button" class="gh-seg__item" data-v="${v}" aria-pressed="${v === cur}">${icon || ''}<span>${label}</span></button>`).join('')}</div>`;
@@ -250,7 +259,7 @@ class CupPong {
         <div class="cp-panel" data-panel="cpu"${cur === 'cpu' ? '' : ' hidden'}>
         <div class="gh-card cp-setup-card">
           <p class="cp-card-head">${t('vsCpu')}</p>
-          ${seg('diff', DIFFS.map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
+          ${seg('diff', shownDiffs().map((d) => [d, t(d), diffShapeSVG(tierOf(d))]), s.diff)}
           <p class="cp-setup-label">${t('gentlemans')} <span class="cp-setup-hint">${t('gentlemansHint')}</span></p>
           ${seg('gent', [['on', t('on')], ['off', t('off')]], s.gentlemans ? 'on' : 'off')}
           <p class="cp-setup-label">${t('reracks')}</p>

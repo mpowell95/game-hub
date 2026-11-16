@@ -106,6 +106,9 @@ half round. Physics never knows whose throw it is. A greyed spare ball sits at t
 `physics.js`, then adds Gaussian error (`SKILL`): Easy sPower 0.30/sAim 0.080 (~13% make), Medium
 0.15/0.040 (~20%), Hard 0.06/0.025 (~37%); Easy/Medium pick a cup at random, Hard the cup with most
 neighbours. The sigmas are the only knob; whether Easy loses to a new player is Matt's to say.
+**Expert (2026-11-16, ADMIN DEVICES ONLY, `ui.js` `NEW_AI_RELEASED`/`newAI()`; flip at "release it")**: sPower 0.045 / sAim 0.019,
+Hard's targeting. Simulated on today's table: clears 10 cups in a median 20 throws (Hard 25); a person playing as real Hard
+players did wins ~23% (Hard ~47%). Records as `expert` (tier 4), mode `cv: 2`; unlimited reracks = Hard (`statsDiff`, `ALL_DIFFS`).
 
 ## Bounce shots (2026-09-28, brief 5d): OFF
 

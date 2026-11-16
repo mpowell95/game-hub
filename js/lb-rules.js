@@ -27,7 +27,7 @@ export const LB_RULES = {
   chinchon: { by: 'wins', short: { when: 'chinchon', ladder: ['easy', 'normal', 'hard'] }, shown: 'picked', table: true },
   connect4: { by: 'wins' },
   contexto: { by: 'contexto' },
-  cuppong: { by: 'cuppong', short: { when: 'cuppong', ladder: L3 }, shown: 'picked' },
+  cuppong: { by: 'cuppong', short: { when: 'cuppong', ladder: [...L3, 'expert'] }, shown: 'picked' },   // Expert (admin devices, 2026-11-16): unlimited reracks = Hard
   darts: { by: 'wins', short: { when: 'darts', ladder: L3 }, shown: 'picked' },
   dominoes: { by: 'wins', short: { when: 'dominoes', ladder: L3 }, shown: 'picked' },
   dotsboxes: { by: 'wins' },

@@ -27,7 +27,7 @@ export const STRINGS = {
     retry: 'Try again',
     // --- stage 2: the match ---
     vsCpu: 'Play the computer',
-    easy: 'Easy', medium: 'Medium', hard: 'Hard',
+    easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert',
     gentlemans: "Gentleman's",
     gentlemansHint: 'Last 2 cups stand in a line',
     on: 'On', off: 'Off',
@@ -178,7 +178,7 @@ export const STRINGS = {
     loadError: 'La mesa no cargó. Revisa tu conexión e inténtalo de nuevo.',
     retry: 'Reintentar',
     vsCpu: 'Jugar contra la computadora',
-    easy: 'Fácil', medium: 'Normal', hard: 'Difícil',
+    easy: 'Fácil', medium: 'Normal', hard: 'Difícil', expert: 'Experto',
     gentlemans: 'Caballero',
     gentlemansHint: 'Los 2 últimos vasos en fila',
     on: 'Sí', off: 'No',

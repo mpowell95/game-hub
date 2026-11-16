@@ -9,7 +9,7 @@ import { makeRack, cupsXZ, validRack, isCell, inArea, cellXZ, PRESETS, AREA } fr
 import { CUP, CUP_D, ROW_H, RACK_Z0, TABLE } from './geom.js';
 import { powerOf, SWIPE_SLOW, SWIPE_FAST } from '../../skeeball/js/swipe.js';
 import { Match, swapSides } from './match.js';
-import { aimAt, cpuThrow, seeded } from './cpu.js';
+import { aimAt, cpuThrow, seeded, SKILL } from './cpu.js';
 
 let fail = 0;
 const ok = (label, cond, extra = '') => {
@@ -575,8 +575,8 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
     if (r.outcome.kind === 'made' && r.outcome.id === k.id) own++;
   }
   ok('the computer\'s perfect aim lands in the cup it aimed at, every cup', own === 10, own + '/10');
-  const rate = (skill) => {
-    const rnd = seeded(5); let m = 0; const n = 150;
+  const rate = (skill, n = 150) => {
+    const rnd = seeded(5); let m = 0;
     for (let i = 0; i < n; i++) {
       const th = cpuThrow(skill, cups, rnd);
       if (simulateThrow({ power: th.power, aim: th.aim, cups }).outcome.kind === 'made') m++;
@@ -586,6 +586,18 @@ ok('balls really come off the rims (plenty touch a cup and stay out)', rimOut > 
   const e = rate('easy'), me = rate('medium'), h = rate('hard');
   ok('Easy < Medium < Hard at a full rack', e < me && me < h,
     `easy ${(e * 100).toFixed(0)}%, medium ${(me * 100).toFixed(0)}%, hard ${(h * 100).toFixed(0)}%`);
+  // Expert vs Hard: close at a full rack (both make most), so a bigger sample.
+  const h6 = rate('hard', 600), x6 = rate('expert', 600);
+  ok('Hard < Expert at a full rack (600 throws each)', h6 < x6, `hard ${(h6 * 100).toFixed(1)}%, expert ${(x6 * 100).toFixed(1)}%`);
+  // Expert (2026-11-16, admin devices only) must leave the three released computers exactly as they were.
+  ok('Easy / Medium / Hard aim unchanged by Expert', JSON.stringify([SKILL.easy, SKILL.medium, SKILL.hard])
+    === JSON.stringify([{ sPower: 0.30, sAim: 0.080 }, { sPower: 0.15, sAim: 0.040 }, { sPower: 0.06, sAim: 0.025 }]));
+  // Expert picks its cup the way Hard does (the one with most neighbours) and only its error is smaller.
+  {
+    const ra = seeded(77), rb = seeded(77);
+    const a = cpuThrow('hard', cups, ra), b = cpuThrow('expert', cups, rb);
+    ok('Expert targets the same cup as Hard for the same draw', a.target === b.target, `${a.target} / ${b.target}`);
+  }
 }
 
 // --- bounce shots: they must stay POSSIBLE (stage 4, 2026-09-28) ---------------------------------

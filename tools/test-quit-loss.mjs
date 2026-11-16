@@ -169,8 +169,9 @@ ok('Q3 Flick Soccer: first to 1 is one step down; 2 and 3 are not', fs.statsDiff
 ok('Q3 Flick Soccer (second pass): the computer\'s opening flick counts too', !fs.playerShot({ shots: 0, starter: 1 }) && fs.playerShot({ shots: 1, starter: 1 }) && fs.playerShot({ shots: 1, starter: 0 }));
 const ep = load('eight-ball/js/ui.js', ['statsDiff']);
 ok('Q3 Pool: one rack is one step down (Matt\'s call); 2 and 3 racks are not', ep.statsDiff('hard', 1) === 'medium' && ep.statsDiff('hard', 2) === 'hard' && ep.statsDiff('easy', 1) === 'easy');
-const cp = load('cup-pong/js/ui.js', ['statsDiff'], { DIFFS: L3 });
+const cp = load('cup-pong/js/ui.js', ['statsDiff'], { ALL_DIFFS: [...L3, 'expert'] });
 ok('Q3 Cup Pong: unlimited reracks are one step down; 0-3 are not', cp.statsDiff('hard', 'inf') === 'medium' && cp.statsDiff('hard', 2) === 'hard' && cp.statsDiff('hard', 0) === 'hard');
+ok('Q3 Cup Pong: Expert (admin devices) with unlimited reracks counts as Hard', cp.statsDiff('expert', 'inf') === 'hard' && cp.statsDiff('expert', 0) === 'expert');
 
 // --- Q4: wiring --------------------------------------------------------------------------------------
 const W = (file, re, name) => ok(`Q4 ${name}`, re.test(src(file)));
