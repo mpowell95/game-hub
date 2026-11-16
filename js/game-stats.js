@@ -2543,10 +2543,13 @@ export function recordWayOut(tier, f = {}) {
   let earned = woEarnedPoints(d, 0, f.gen | 0);   // an untimed level keeps its full points (nothing invented)
   if (f.timed && WO_TIERS.includes(d) && t > 0 && a > 0 && r > 0) {
     const m = Math.max(0, f.mistakes | 0), h = Math.max(0, f.hints | 0);
+    // Hearts lost in the CLEARING try (`f.tm`, 2026-11-16): a failed try's hearts no longer cost points
+    // (Matt). `m` stays every heart lost on the level, as the clock's penalties count them.
+    const tm = Number.isFinite(Number(f.tm)) && f.tm !== null ? Math.min(m, Math.max(0, Math.floor(Number(f.tm)))) : m;
     // Slips carried from earlier attempts of this level (New game, another storage: 2026-10-29) are
-    // scored too; `s` keeps the number scored when it is more than this attempt's own m + h, and `p`
-    // the slips from before this attempt, which a replay of it can never win back.
-    const slips = Math.max(m + h, Math.max(0, Math.floor(Number(f.slips) || 0)));
+    // scored too; `s` keeps the number scored when it is more than tm + h, and `p` the slips from
+    // before this attempt, which a replay of it can never win back.
+    const slips = Math.max(tm + h, Math.max(0, Math.floor(Number(f.slips) || 0)));
     // HINTS CARRY OVER (Matt, 2026-10-29): the clearing try's own hints count as slips a replay can
     // never win back (only its lost hearts can be), so a level first cleared with hints keeps those
     // points even after a clean Replay.
@@ -2555,7 +2558,8 @@ export function recordWayOut(tier, f = {}) {
     g.wo.mistakes += m;
     g.wo.hints += h;
     const e = { t, a, r, m, h };
-    if (slips > m + h) e.s = slips;
+    if (tm < m) e.tm = tm;
+    if (slips > tm + h) e.s = slips;
     if (prior > 0) e.p = prior;
     // Since the ladder (2026-10-14): which ladder level it was, on which board generator, and when.
     // Additive fields; kept so time can come back into the score once there is enough of it (Matt).
@@ -2616,6 +2620,45 @@ export function recordWayOutReplay(tier, f = {}) {
   st.updatedAt = new Date().toISOString();
   persist(st);
   return up;
+}
+
+/** ONE-TIME REPAIR (2026-11-16), one phone: Matt ran out of lives on Arrow Maze Hard 247 (3 hearts),
+ *  cleared it with no mistakes on Try again (Mon Nov 16, 12:30 PM ET) and got 1 point instead of 4
+ *  ("That's not right"). From today a failed try's hearts do not cost points (log `tm`); this applies
+ *  that rule to that one clear: its log entry gets `tm: 0` and the level's points go up to 4 (best
+ *  only, as a Replay would). Acts only on code QZCC4 and only where that exact log entry is (3 hearts
+ *  lost, no hints, nothing carried). Stamped once verified by re-read. Returns the points added. */
+export function repairWayOutTry1116(t = {}) {
+  const STAMP = 'gamehub.repair.wo1116.v1';
+  try {
+    if (localStorage.getItem(STAMP)) return 0;
+    if (activeCode() !== (t.code || 'QZCC4')) return 0;
+    const st = loadStats();
+    const g = st.games.wayout;
+    if (!g || !isObj(g.wo) || !isObj(g.wo.log) || !Array.isArray(g.wo.log.hard)) return 0;
+    const from = Date.UTC(2026, 10, 16, 17, 0), to = Date.UTC(2026, 10, 16, 18, 0);
+    const i = g.wo.log.hard.findIndex((e) => e && e.l === 247 && e.g === 11 && e.m === 3 && (e.h | 0) === 0
+      && e.tm == null && e.s == null && e.p == null && e.d >= from && e.d < to);
+    if (i < 0) return 0;
+    const was = woEarnedPoints('hard', 3, 11), now = woEarnedPoints('hard', 0, 11);
+    const up = Math.max(0, now - was);
+    g.wo.log.hard[i] = { ...g.wo.log.hard[i], tm: 0 };
+    if (isObj(g.wo.pts)) g.wo.pts.hard = (Math.max(0, Math.floor(Number(g.wo.pts.hard) || 0))) + up;
+    if (!isObj(g.wo.cl)) g.wo.cl = {};
+    g.wo.cl.hard = woClSet(g.wo.cl.hard, 247, now);
+    st.updatedAt = new Date().toISOString();
+    if (!persist(st)) { console.error('[game-stats] Arrow Maze repair 11-16 NOT saved'); return 0; }
+    const back = loadStats().games.wayout.wo;
+    if (!(back.log.hard[i] && back.log.hard[i].tm === 0 && woClMap(back.cl.hard).get(247) === now)) {
+      console.error('[game-stats] Arrow Maze repair 11-16: re-read does not match');
+      return 0;
+    }
+    localStorage.setItem(STAMP, String(Date.now()));
+    return up;
+  } catch (err) {
+    console.error('[game-stats] Arrow Maze repair 11-16 threw', err);
+    return 0;
+  }
 }
 
 /** Arrow Maze: the slips (hints and hearts lost) stored for level `n` of `band` reached `slips`

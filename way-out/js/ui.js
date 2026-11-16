@@ -1274,7 +1274,9 @@ class WayOut {
     const src = s ? s.src : defaultSrc(tier, level);
     // Only the clock starts over (2026-10-29): this try's slips are carried to the next one.
     const c = loadClock(tier);
-    if (c && c.n === level && c.key === srcKey(src)) addCarry(tier, level, src, (c.mistakes | 0) + (c.hints | 0));
+    // Only HINTS are carried (2026-11-16, Matt: a failed try, then a clean one, scored 1 point: "That's
+    // not right"). Hearts lost count only in the try that clears the level.
+    if (c && c.n === level && c.key === srcKey(src)) addCarry(tier, level, src, c.hints | 0);
     resetSave(tier, level, src);
     writeClock(tier, { n: level, key: srcKey(src), ms: 0, pen: 0, mistakes: 0, hints: 0, partial: false });
     this._startLevel(tier, level);
@@ -1548,17 +1550,26 @@ class WayOut {
     this._kick();
   }
 
-  /** Slips on this level so far: this try's own, plus those carried from earlier tries. */
-  _slipsNow() {
-    const c = this.clock, own = c ? (c.mistakes | 0) + (c.hints | 0) : 0;
-    if (this.replay) return this.replay.test ? own : (this._replayCarry | 0) + own;
-    return (this._carry | 0) + own;
+  // A FAILED TRY'S HEARTS DO NOT COUNT (2026-11-16, Matt: he ran out of lives on Hard 247, cleared it
+  // with no mistakes on Try again and got 1 point: "That's not right"). Hearts lost cost points only in
+  // the try that CLEARS the level; hints cost points across every try (Restart, Try again, New game,
+  // another storage), as before (2026-10-29: hints can learn a board, a lost heart cannot).
+  /** Hearts lost in this try only (a resumed try keeps its hearts from the save). */
+  _tryHearts() { return Math.max(0, LIVES - (this.lives | 0)); }
+  /** Hints on this level so far: this try's and every earlier try's. */
+  _hintSlips() {
+    const h = this.clock ? (this.clock.hints | 0) : 0;
+    if (this.replay) return this.replay.test ? h : (this._replayCarry | 0) + h;
+    return (this._carry | 0) + h;
   }
-  /** A slip happened: keep the level's running count where New game, Restart and leaving cannot
-   *  reach it (2026-10-29). Rush and the test boards keep nothing. */
+  /** Slips the level is scored with if cleared now: every hint, plus this try's lost hearts. */
+  _slipsNow() { return this._hintSlips() + this._tryHearts(); }
+  /** A hint was used: keep the level's running hint count where New game, Restart and leaving cannot
+   *  reach it (2026-10-29; hints only since 2026-11-16). Rush and the test boards keep nothing. */
   _noteSlip() {
     if (this.rush || !this.tier || (this.replay && this.replay.test)) return;
-    const s = this._slipsNow();
+    const s = this._hintSlips();
+    if (!(s > 0)) return;
     if (this.replay) { writeReplaySlips(this.tier, this.level, s); return; }
     try {
       if (!noteWayOutSlips(this.tier, this.level, s, bestNow())) console.error('[way-out] slips NOT stored', { tier: this.tier, level: this.level, s });
@@ -1605,7 +1616,6 @@ class WayOut {
     this.red[id] = true;
     this.lives = Math.max(0, this.lives - 1);
     if (this.clock) this.clock.mistakes += 1;
-    this._noteSlip();
     // The first heart lost costs the tier's base time, the second double (Matt, 2026-10-13). The
     // third ends the attempt; the clock keeps running into the retry, which is its own cost.
     if (this.lives > 0) this._penalty(woMistakeMs(this.tier, LIVES - this.lives));
@@ -1647,7 +1657,8 @@ class WayOut {
     // stored slips past what this tab knows of came from elsewhere and count as before this try.
     const other = this._otherSlips(this.tier, this.level);
     this._carry = Math.max(this._carry | 0, readCarry(this.tier, this.level, this.src));
-    const mine = (this._carry | 0) + (c.mistakes | 0) + (c.hints | 0);
+    const tryHearts = this._tryHearts();
+    const mine = (this._carry | 0) + (c.hints | 0) + tryHearts;
     let stored = 0;
     try { stored = woSlipsOf(loadStats().games.wayout, this.tier, this.level); } catch { stored = 0; }
     const elsewhere = stored > mine ? stored : 0;
@@ -1655,7 +1666,7 @@ class WayOut {
     // `prior` (what a replay can never win back): earlier tries, other storages and tabs, and this
     // try's own HINTS (Matt, 2026-10-29: a level cleared with hints keeps their cost).
     const fin = { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds, mistakes: c.mistakes, hints: c.hints, timed: !c.partial,
-      n: this.level, slips, prior: Math.max((this._carry | 0) + (c.hints | 0), other, elsewhere), at: bestNow(),
+      n: this.level, slips, tm: tryHearts, prior: Math.max((this._carry | 0) + (c.hints | 0), other, elsewhere), at: bestNow(),
       // The log's `l` names the BOARD with `g`: for a ladder board it is that generator's own number
       // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
       level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
@@ -1699,7 +1710,7 @@ class WayOut {
     let up = null;
     try {
       up = withMode({ mode: 'replay', g }, this.tier, () => recordWayOutReplay(this.tier, { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds,
-        mistakes: c.mistakes, hints: c.hints, level: l, gen: g, slips: this._slipsNow() }));
+        mistakes: c.mistakes, hints: c.hints, tm: this._tryHearts(), level: l, gen: g, slips: this._slipsNow() }));
     } catch (err) { console.error('[way-out] recordWayOutReplay threw - the replay was NOT recorded', err); }
     if (up == null) console.error('[way-out] the replay was NOT recorded', { tier: this.tier, l, g });
     else clearReplaySlips(this.tier, this.level);   // that replay's slips are in its record now

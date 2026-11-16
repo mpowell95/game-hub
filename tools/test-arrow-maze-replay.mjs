@@ -115,16 +115,18 @@ ok('replay: the level title wears the replay mark', (await page.locator('.wo-lev
 await shot('3-replay-board');
 
 const tapId = async (id) => { const p = await page.evaluate((i) => window.__woTest.pointOf(i), id); await page.mouse.click(p.x, p.y); };
-// A mistake first: it costs a heart and still keeps nothing.
+// A hint and a mistake first: they cost and still keep nothing.
 const bid = await page.evaluate(() => window.__woTest.blockedId());
 if (bid >= 0) {
+  await page.locator('[data-act="hint"]').click();
+  await page.waitForTimeout(100);
   await tapId(bid);
   await page.waitForTimeout(700);
   st = await page.evaluate(() => window.__woTest.state());
   ok('replay: a mistake costs a heart', st.lives === 2);
   ok('replay: a mistake writes nothing (save, clock, next level unchanged)', JSON.stringify(await snap()) === JSON.stringify(before));
-  // Restart: three hearts again, but the slip stays with the replay (2026-10-29: a replay's slips
-  // ride its Restart and Try again, so learning the board and restarting clean pays nothing).
+  // Restart: three hearts again; the HINT stays with the replay (2026-10-29: hints ride its Restart and
+  // Try again), the lost heart does not (2026-11-16, Matt: only the clearing try's hearts count).
   await page.locator('[data-act="restart"]').click();
   await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3);
   ok('replay: Restart gives three hearts again', (await page.evaluate(() => window.__woTest.state())).lives === 3);
@@ -140,21 +142,29 @@ const clearAll = async () => {
   }
 };
 if (bid >= 0) {
-  // Cleared with no further slip: scored with the one carried across Restart, so +0.
+  // Cleared with no further slip: scored with the hint carried across Restart (not the heart), so +0.
   await clearAll();
   await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
   const sub0 = await page.locator('.wo-banner b').innerText();
-  ok('replay: a slip carried across Restart is scored (+0 pts)', /\+0/.test(sub0), sub0);
+  ok('replay: a hint carried across Restart is scored (+0 pts)', /\+0/.test(sub0), sub0);
   await page.waitForSelector('.wo-rp-row', { timeout: 8000 });
   ok('replay: +0, and the level is still listed', (await pts()) === p0 && (await page.locator('.wo-rp-row').count()) === 1);
   const g0 = await page.evaluate(async () => (await import('/js/game-stats.js')).loadStats().games.wayout);
-  ok('replay: that replay is stored raw, scored with the carried slip', g0.wo.replay.medium.length === 1 && g0.wo.replay.medium[0].u === 0 && g0.wo.replay.medium[0].s === 1);
+  ok('replay: that replay is stored raw, scored with the carried hint only', g0.wo.replay.medium.length === 1 && g0.wo.replay.medium[0].u === 0 && g0.wo.replay.medium[0].s === 1 && g0.wo.replay.medium[0].m === 0 && g0.wo.replay.medium[0].h === 0);
   ok('replay: its carried slips are cleared once it is recorded', (await page.evaluate(() => localStorage.getItem('gamehub.wayout.slips.v1') || '{}')) === '{}');
   // A new replay of it starts from no slips.
   await page.locator('.wo-rp-row').click();
   await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3);
+  // A heart lost, then Restart: the clean try that follows still earns full points (2026-11-16).
+  const b2 = await page.evaluate(() => window.__woTest.blockedId());
+  if (b2 >= 0) {
+    await tapId(b2);
+    await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 2);
+    await page.locator('[data-act="restart"]').click();
+    await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3);
+  }
 }
-// Clear it with no slips.
+// Clear it with no slips (a heart lost on an earlier try does not count).
 await clearAll();
 await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
 const sub = await page.locator('.wo-banner b').innerText();
@@ -265,6 +275,39 @@ await page.waitForFunction(() => window.__woTest);
 st = await page.evaluate(() => window.__woTest.state());
 ok('hard: the next level is an 18x25 generator-11 board', st.level === 151 && st.cols === 18, JSON.stringify(st));
 await shot('13-hard-151');
+
+// OUT OF LIVES, THEN A CLEAN TRY AGAIN (2026-11-16, Matt on Hard 247: "I failed a level and replayed it
+// without any errors. But I got 1 point instead of full points. That's not right"): full points. A hint
+// still rides Try again.
+const failOut = async () => {
+  for (let k = 0; k < 3; k++) {
+    const b = await page.evaluate(() => window.__woTest.blockedId());
+    await tapId(b);
+    await page.waitForFunction((n) => window.__woTest.state().lives === n, 2 - k);
+    await page.waitForTimeout(600);   // the bump finishes before the next tap
+  }
+  await page.waitForSelector('[data-act="retry"]', { timeout: 5000 });
+  await page.locator('[data-act="retry"]').click();
+  await page.waitForFunction(() => window.__woTest && window.__woTest.state().lives === 3 && window.__woTest.state().left === window.__woTest.state().total);
+};
+const lastHard = () => page.evaluate(async () => { const l = (await import('/js/game-stats.js')).loadStats().games.wayout.wo.log.hard; return l[l.length - 1]; });
+await failOut();
+await clearAll();
+await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
+let subF = await page.locator('.wo-banner b').innerText();
+let eF = await lastHard();
+ok('out of lives, then a clean Try again: full points (+4)', /\+4/.test(subF) && eF.l === 151 && eF.m === 3 && eF.tm === 0, subF + ' ' + JSON.stringify(eF));
+await page.waitForFunction(() => window.__woTest && window.__woTest.state().level === 152 && window.__woTest.state().lives === 3, null, { timeout: 8000 });
+await page.locator('[data-act="hint"]').click();
+await page.waitForTimeout(100);
+await failOut();
+await clearAll();
+await page.waitForSelector('.wo-banner.is-on', { timeout: 8000 });
+subF = await page.locator('.wo-banner b').innerText();
+eF = await lastHard();
+ok('a hint, out of lives, then a clean Try again: the hint still costs (+3)', /\+3/.test(subF) && eF.l === 152 && eF.h === 1 && eF.tm === 0, subF + ' ' + JSON.stringify(eF));
+const rpHard = await page.evaluate(async () => (await import('/js/arrow-maze-time.js')).woMissed((await import('/js/game-stats.js')).loadStats().games.wayout, 'hard').map((x) => x.l));
+ok('neither is listed in Replay (151 earned full, 152\'s hint is never won back)', !rpHard.includes(151) && !rpHard.includes(152), JSON.stringify(rpHard));
 
 await browser.close();
 console.log(`\nArrow Maze replay / more-levels probe: ${pass} passed, ${fail} failed.`);
