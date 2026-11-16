@@ -3926,10 +3926,14 @@ export function lb2Records(list, meKey) {
         out.held.push({ id, lang, mine: val(me), tie: st.tiedAt(me.key) });
         // Narrowest margin (Matt, 2026-11-09, admin devices only): the person right behind this gold and what THEY need
         // to take it (needOf from their side, the Closest list's own maths); a tie for gold is the narrowest of all.
-        const runner = st.rows.find((r) => r.key !== me.key);
+        // Hold'em (2026-11-16): a bankroll never used (the starting stack, no medal, not on the board) is nobody's
+        // runner-up; the runner is the next person the board shows, at the place the board gives them.
+        const real = st.rows.filter((r) => !(id === 'holdem' && !hbTouched(r)));
+        const runner = real.find((r) => r.key !== me.key);
         if (runner) {
           const tied = st.rankOf[runner.key] === 1;
-          out.narrow.push({ id, lang, runner, tied, rank: st.rankOf[runner.key], need: tied ? null : needOf(runner, me, id), c: tied ? 2 : closeness(runner, me, id) });
+          const rrank = 1 + real.filter((r) => st.rankOf[r.key] < st.rankOf[runner.key]).length;
+          out.narrow.push({ id, lang, runner, tied, rank: rrank, need: tied ? null : needOf(runner, me, id), c: tied ? 2 : closeness(runner, me, id) });
         }
       }
       else if (played && rec) {
