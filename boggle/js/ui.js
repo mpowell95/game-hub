@@ -33,6 +33,11 @@ import {
 import { loadDictionary, isValidWord, dictLang, DICT_LANGS } from './dict.js';
 import { shakePlayableBoard, solveBoard, qualityFor } from './solver.js';
 import { selectAiWords, totalScore } from './ai.js';
+import { isAdminDevice } from '../../js/admin-config.js';
+
+// The new, easier computers (2026-11-16, Matt: Boggle computers easier). Admin devices only; flip when Matt says "release it".
+const NEW_AI_RELEASED = false;
+function newAI() { try { return NEW_AI_RELEASED || isAdminDevice(); } catch { return false; } }
 import { loadProfile } from '../../js/profile-store.js';
 import { recordBoggle, recordHeadToHead, loadStats, deviceId, oneTierDown, withMode, modeTag } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the timer
@@ -186,6 +191,7 @@ function saveGame(ui) {
       // resuming has to rebuild the same board against the same dictionary it
       // was scored against, or every word already found reads as invalid.
       wordLang: ui._setup.wordLang,
+      cv: ui.cv2 ? 2 : undefined,   // played against the new computers (2026-11-16); absent = the old ones
       moved: !!ui._moved,   // 2026-10-29: the player has entered a word (quitting now is a loss)
       // The moment the app went to the background with this round on screen (2026-10-29): a round
       // resumed from it is charged the time away (resumeGame).
@@ -224,6 +230,7 @@ function loadGame() {
       // rather than failing validation (THE LAW rule 3: carry forward
       // everything that CAN be carried).
       wordLang: WORD_LANGS.includes(raw.wordLang) ? raw.wordLang : 'en',
+      cv2: raw.cv === 2,
       moved: raw.moved === true || found.length > 0,
       away: raw.away && typeof raw.away === 'object' && Number.isFinite(raw.away.w) && Number.isFinite(raw.away.rem) ? raw.away : null,
     };
@@ -1343,6 +1350,7 @@ class BoggleUI {
     // The board is SHOWN: giving up from now on is a loss (2026-10-29, second pass, Matt). It used to
     // need the first word, so a bad board could be re-shaken for free.
     this._moved = true;
+    this.cv2 = newAI();   // this round's computer: new or old, fixed for the round
     this._statsCommitted = false;
     this._feedback = null;
     this._roundOver = false;
@@ -1414,6 +1422,7 @@ class BoggleUI {
     this._solved = solveBoard(this._board.grid, this._trieRoot);
     this._found = new Map(save.found);
     this._moved = true;   // a saved round's board was shown (2026-10-29, second pass)
+    this.cv2 = save.cv2;
     this._statsCommitted = false;
     this._path = [];
     this._feedback = null;
@@ -1937,6 +1946,13 @@ class BoggleUI {
   }
 
   /** Record the give-up as a loss, once (`_statsCommitted`), with the words found so far. */
+  /** Solo's saved mode: timer + word list, plus `cv: 2` when the round was against the new computers. */
+  _soloMode() {
+    const m = modeOf(this._setup);
+    if (this.cv2) m.cv = 2;
+    return m;
+  }
+
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
     this._statsCommitted = true;
@@ -1944,7 +1960,7 @@ class BoggleUI {
     const words = [...this._found.entries()];
     const score = words.reduce((s, [, v]) => s + v, 0);
     const longestWord = words.reduce((best, [w]) => (w.length > best.len ? { word: w, len: w.length } : best), { word: '', len: 0 });
-    try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), false, { words: words.length, score, longestWord }), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
+    try { withMode(() => this._soloMode(), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), false, { words: words.length, score, longestWord }), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1969,13 +1985,13 @@ class BoggleUI {
     // scoring is superlinear in length, so English's percentages make the same
     // difficulty label a much harder opponent (see ai.js's TIER_PCT_BY_LANG).
     const aiWords = selectAiWords(this._solved, this._setup.difficulty, Math.random,
-      this._roundWordLang());
+      this._roundWordLang(), !!this.cv2);
     const aiScore = totalScore(aiWords);
     const won = humanScore === aiScore ? null : humanScore > aiScore;
     const extras = { words: humanWords.length, score: humanScore, longestWord };
     if (!this._statsCommitted) {
       this._statsCommitted = true;
-      try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), won, extras), () => ({ log: () => this._playLog('over', { ai: aiWords.map((e) => [e.word, e.score]), aiScore, score: humanScore }) })); } catch { /* never block the result */ }
+      try { withMode(() => this._soloMode(), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), won, extras), () => ({ log: () => this._playLog('over', { ai: aiWords.map((e) => [e.word, e.score]), aiScore, score: humanScore }) })); } catch { /* never block the result */ }
     }
     this._result = { humanWords, humanScore, aiWords, aiScore, won };
     this._path = [];

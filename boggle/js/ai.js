@@ -57,8 +57,17 @@ const TIER_PCT_BY_LANG = {
 // exactly as this module did before languages existed.
 export const TIER_PCT = TIER_PCT_BY_LANG.en;
 
+// The new computers (2026-11-16, behind the gate in ui.js; results carry `cv: 2`). Real people won 26% at Easy,
+// 0 of 118 at Medium and 0 of 1 at Hard. Same sampler, smaller share of the board. Tuned by simulation
+// (tools/sim-boggle-ai.mjs), aiming for about 50%, 25% and 10%.
+const TIER_PCT_V2_BY_LANG = {
+  en: { beginner: 0.16, intermediate: 0.20, pro: 0.23 },
+  es: { beginner: 0.14, intermediate: 0.16, pro: 0.17 },
+};
+
 /** The tier percentages for a gameplay language, English for anything
  *  unrecognised (matching game.js's diceFor and dict.js's dictLang). */
+export { TIER_PCT_V2_BY_LANG };
 export function tierPctFor(lang) {
   return TIER_PCT_BY_LANG[lang] || TIER_PCT_BY_LANG.en;
 }
@@ -86,10 +95,11 @@ function weightedSample(entries, count, weight, rng) {
  *  never invent a word that is not a genuine solver hit. `lang` selects the
  *  tier percentages (see TIER_PCT_BY_LANG); it defaults to English so every
  *  pre-existing caller and test keeps its exact previous behaviour. */
-export function selectAiWords(solved, tier, rng = Math.random, lang = 'en') {
+export function selectAiWords(solved, tier, rng = Math.random, lang = 'en', v2 = false) {
   if (!solved.length) return [];
-  const table = tierPctFor(lang);
-  const pct = table[tier] ?? table.intermediate;
+  const table = v2 ? (TIER_PCT_V2_BY_LANG[lang] || TIER_PCT_V2_BY_LANG.en) : tierPctFor(lang);
+  // `v2` may be a number: a share of the board, for the tuning script only.
+  const pct = typeof v2 === 'number' ? v2 : (table[tier] ?? table.intermediate);
   const weight = TIER_WEIGHT[tier] || TIER_WEIGHT.intermediate;
   const count = Math.min(solved.length, Math.round(pct * solved.length));
   if (count <= 0) return [];
@@ -101,4 +111,4 @@ export function totalScore(entries) {
   return entries.reduce((sum, e) => sum + scoreForWord(e.word), 0);
 }
 
-export default { TIER_PCT, TIER_PCT_BY_LANG, tierPctFor, selectAiWords, totalScore };
+export default { TIER_PCT, TIER_PCT_BY_LANG, TIER_PCT_V2_BY_LANG, tierPctFor, selectAiWords, totalScore };
