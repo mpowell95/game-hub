@@ -235,3 +235,5 @@ Matt: "Keep the alternative first move for all player besides admin. Let me star
 ## Setup centred (2026-11-08)
 
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
+
+Private play data (2026-11-16): logs the STARTING board (63 colours), every colour picked with who and the squares won, the final counts, via withMode `log`.

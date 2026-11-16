@@ -275,3 +275,5 @@ Solo: the menu's New game / Quit to setup, and New game over a resumable match, 
 ## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
 
 Challenges: `chModeOf(raw, side)` adds `first` (the challenger leads); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: the length). `tools/test-escoba-mp.mjs`.
+
+Private play data (2026-11-16): logs per round the deck order, dealer, every play (card, cards taken, escoba), each player's round score and total, and a finished challenge's whole match, via withMode `log` / logPlayData.

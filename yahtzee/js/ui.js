@@ -213,8 +213,27 @@ function myIdentity(){
   return { name: readProfileName() || t('you'), avatar: readProfileEmoji() || '\u{1F642}', deviceId: deviceId() };
 }
 
+/* ---------- PRIVATE PLAY DATA (2026-11-16) ----------
+ * Every roll (dice and which were held) and every category commit, in order, for the admin play log only
+ * (withMode `log`). Never saved, never sent, never shown. A game continued from a save logs from the resume. */
+let pl = null;
+function plNote(ev){
+  try{
+    if(!pl) pl = { ev: [], t0: Date.now(), res: 0 };
+    if(pl.ev.length < 200) pl.ev.push(ev.concat(Date.now() - pl.t0));
+  }catch(e){ /* logging never blocks play */ }
+}
+function plData(end){
+  const sc = (p) => { const o = {}; for(const k of Object.keys(p.scores || {})) o[k] = p.scores[k]; return o; };
+  return { end, first: state.opener, me: localSeat(), ev: (pl && pl.ev) || [], res: pl ? pl.res : 0,
+    cards: state.players.map(sc), bonus: state.players.map((p) => p.bonusTotal | 0), yb: state.yahtzeeBonusCount.slice(),
+    totals: state.players.map(totalScore), names: state.players.map((p) => p.name),
+    opp: state.mp && state.mp.opp ? String((state.mp.opp && state.mp.opp.name) || '') : undefined };
+}
+
 /* ---------- STATE ---------- */
 function newGame(mpInfo){
+  pl = { ev: [], t0: Date.now(), res: 0 };
   state = {
     players: [
       { name: mpInfo ? mpInfo.hostName : t('you'), scores:{}, bonusTotal:0 },
@@ -336,6 +355,7 @@ function reducedMotion(){
 // and the MP remote-apply path (transmitted values) -- see the module header.
 function applyRollResult(values){
   const heldMaskBefore = state.dice.map(d=>d.held);
+  plNote(['r', state.current, values.slice(), heldMaskBefore.map(h=>h?1:0).join('')]);
   values.forEach((v,i)=>{ if(!state.dice[i].held) state.dice[i].value = v; });
   state.rollsUsed++;
   state.selected = null;
@@ -435,6 +455,7 @@ function applyCommit(cat){
   const p = state.players[committedPlayer];
   const dice = state.dice;
   const value = previewScore(p.scores, cat, dice);
+  plNote(['c', committedPlayer, cat, value]);
   const isYz = isYahtzeeRoll(dice);
   const wasBonus = isYz && p.scores.yahtzee === 50;
   const bonusBefore = upperBonus(p.scores);
@@ -484,7 +505,7 @@ function commitStatsOnce(){
   const difficulty = state.mp ? 'mp' : MODE;
   // the game's own numbers (2026-11-02): final scores, Yahtzees, the upper bonus earned or not
   const detail = { score: myTotal, theirs: oppTotal, yahtzees, upper: upperBonus(me.scores) > 0 };
-  try{ withMode(() => (ytzMode()), difficulty, () => recordYahtzee(difficulty, won, { yahtzees, score: myTotal }), { detail }); }
+  try{ withMode(() => (ytzMode()), difficulty, () => recordYahtzee(difficulty, won, { yahtzees, score: myTotal }), () => ({ detail, log: () => plData('over') })); }
   catch(e){ /* never block the result */ }
 }
 
@@ -534,6 +555,7 @@ function saveGame(){
 function resumeGame(sv){
   newGame();
   sv.players.forEach((p, i) => { state.players[i].scores = { ...p.scores }; state.players[i].bonusTotal = p.bonusTotal|0; });
+  if(pl) pl.res = 1;   // private play data: the rolls before this resume are not known
   state.current = sv.current;
   state.opener = sv.opener===1 ? 1 : 0;
   state.dice = sv.dice.map(d => ({ value: d.value|0, held: !!d.held }));
@@ -555,7 +577,8 @@ function takeSavedLoss(){
   const me = sv.players[0];
   const yahtzees = (me.scores.yahtzee===50 ? 1 : 0) + ((sv.yahtzeeBonusCount && sv.yahtzeeBonusCount[0])|0);
   const opener = sv.opener===1 ? 1 : 0;
-  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(() => ({ first: opener===0 ? 'me' : 'them' }), MODE));
+  const lg = () => ({ log: () => ({ end: 'quit', first: opener, cards: sv.players.map((p) => p.scores), totals: sv.players.map(totalScore), yb: sv.yahtzeeBonusCount }) });   // private play data (2026-11-16)
+  armQuitLoss('yahtzee', 'recordYahtzee', [MODE, false, { yahtzees, score: totalScore(me) }], modeTag(() => ({ first: opener===0 ? 'me' : 'them' }), MODE, lg));
   if(!takeQuitLoss('yahtzee')) console.error('[yahtzee] the thrown-away game was not recorded as a loss');
 }
 
@@ -843,7 +866,7 @@ function mpMine(){
   const me = state.players[localSeat()];
   return { yahtzees: (me.scores.yahtzee===50 ? 1 : 0) + (state.yahtzeeBonusCount[localSeat()]||0), score: totalScore(me) };
 }
-function mpArmLeave(){ LL.armLeave('yahtzee', mpKey(), 'recordYahtzee', ['mp', false, mpMine()], [], modeTag(() => (ytzMode()), 'mp')); }
+function mpArmLeave(){ LL.armLeave('yahtzee', mpKey(), 'recordYahtzee', ['mp', false, mpMine()], [], modeTag(() => (ytzMode()), 'mp', () => ({ log: () => plData('leave') }))); }
 function mpInGame(){ return !!(state && state.mp && !state.mp.ended && !state.statsCommitted && state.phase!=='gameOver'); }
 function mpOppRole(){ return state.mp.role==='host' ? 'guest' : 'host'; }
 function mpOppAwayMs(){ const r = state && state.mp && state.mp.lastRoom; return r ? LL.awayMs(r[mpOppRole()]) : 0; }
@@ -872,7 +895,7 @@ function mpClaim(){
   const mp = state.mp;
   state.statsCommitted = true;
   mp.ended = true;
-  LL.recordLeaveWin('yahtzee', mpKey(), 'recordYahtzee', ['mp', true, mpMine()], [], modeTag(() => (ytzMode()), 'mp'));
+  LL.recordLeaveWin('yahtzee', mpKey(), 'recordYahtzee', ['mp', true, mpMine()], [], modeTag(() => (ytzMode()), 'mp', () => ({ log: () => plData('leave') })));
   LL.leaveWithForfeit(net, mp.code, mp.role, mpOppRole(), 1, true).catch(()=>{});
   if(root) LL.hideClaim(root);
   renderMpEndOverlay('', LL.lt('ll_claimed'));
@@ -1014,7 +1037,7 @@ function mpOnRoomUpdate(room){
     let res = 'none';
     if(mpInGame()){
       res = LL.onRoomEnded(room, { statsId: 'yahtzee', key: mpKey(), n: 1, mySeat: mp.role,
-        fn: 'recordYahtzee', winArgs: ['mp', true, mpMine()], opps: [], tag: modeTag(() => (ytzMode()), 'mp') });
+        fn: 'recordYahtzee', winArgs: ['mp', true, mpMine()], opps: [], tag: modeTag(() => (ytzMode()), 'mp', () => ({ log: () => plData('leave') })) });
       if(res!=='none') state.statsCommitted = true;
     }
     mpEndDueToOpponentLeft(res);

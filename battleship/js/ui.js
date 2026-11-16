@@ -29,7 +29,7 @@ import {
 import { chooseShot } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordBattleship, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
+import { recordBattleship, recordHeadToHead, deviceId, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played vs the bot, recorded with its result (js/game-stats.js withMode, 2026-10-30):
  *  the board, shots a volley (1 = no salvo), the salvo rule, the bonus shot, and the First shot setting. */
 const soloMode = (s, firstMode) => ({ size: s && s.sizeKey, shots: (s && s.salvo) || 1, rule: (s && s.salvoRule) || 0,
@@ -1213,6 +1213,14 @@ class BattleshipUI {
   // FLY_MS later (`_lateMs`); every impact, the banner and the settle are timed off that.
 
   _setVolley(shots) {
+    // PRIVATE PLAY DATA (2026-11-16): every shot in order [board shot at, r, c, h/m, sunk, ms] for the admin
+    // play log only. A new battle (no shots yet) starts a fresh list; a resumed one logs from the resume.
+    try {
+      const st = this.state;
+      const total = st && st.shotCount ? (st.shotCount[0] | 0) + (st.shotCount[1] | 0) : 0;
+      if (!this._sj || (!(shots && shots.length) && total === 0)) this._sj = { mv: [], t0: Date.now(), res: total > 0 ? 1 : 0 };
+      for (const q of (shots || [])) if (q && this._sj.mv.length < 400) this._sj.mv.push([q.seat, q.r, q.c, q.result === 'hit' ? 'h' : 'm', q.sunk ? 1 : 0, Date.now() - this._sj.t0]);
+    } catch { /* logging never blocks play */ }
     this._volley = (shots || []).filter(Boolean);
     this._lastShot = this._volley.length ? this._volley[this._volley.length - 1] : null;
     this._volleyKey = (this._volleyKey | 0) + 1;
@@ -2290,6 +2298,21 @@ class BattleshipUI {
     return !this.mp && !this.ch && !(this.view === 'battle' && this.state) && !!loadGame();
   }
 
+  /** What the battle knows at its end, for the admin play log only: every shot in order, both public grids at
+   *  the end (0 unknown, 1 miss, 2 hit, 3 sunk), the fleet(s) this phone knows, who shot first, salvo rules. */
+  _playLog(end) {
+    const s = this.state || {};
+    const j = this._sj || { mv: [], res: 0 };
+    const fl = (f) => (f && f.ships ? f.ships.map((x) => [x.id, x.r != null ? x.r : (x.cells && x.cells[0] ? x.cells[0][0] : null), x.c != null ? x.c : (x.cells && x.cells[0] ? x.cells[0][1] : null), x.dir || null, x.cells ? x.cells.length : null]) : null);
+    const fleets = this.mp ? [this._localSeat() === 0 ? fl(this.mp.myFleet) : null, this._localSeat() === 1 ? fl(this.mp.myFleet) : null] : (s.fleets || []).map(fl);
+    return {
+      end, size: s.sizeKey, bonus: s.bonusShotOnHit ? 1 : 0, shots: s.salvo || 1, rule: s.salvoRule || 0, me: this._localSeat(),
+      first: j.mv.length ? 1 - j.mv[0][0] : null, mv: j.mv, n: s.shotCount ? s.shotCount.slice() : null, win: s.winner == null ? null : s.winner,
+      grids: s.shots ? s.shots.map((g) => Array.from(g.cells).join('')) : null, sunk: s.shots ? s.shots.map((g) => (g.sunkIds || []).slice()) : null,
+      fleets, res: j.res, diff: this.mp || this.ch ? undefined : this._setup.difficulty, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined,
+    };
+  }
+
   /** Record that set-aside battle's loss once (the save cleared first), with its shots so far. */
   _recordSavedQuitLoss() {
     if (!this._savedQuitPending()) return;
@@ -2301,7 +2324,7 @@ class BattleshipUI {
     let hits = 0;
     for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
     const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
-    try { withMode(() => (soloMode(s, this._setup.firstMode)), saved.difficulty, () => recordBattleship(saved.difficulty, false, extras)); } catch { /* never block the new game */ }
+    try { withMode(() => (soloMode(s, this._setup.firstMode)), saved.difficulty, () => recordBattleship(saved.difficulty, false, extras), () => ({ log: () => ({ end: 'quit', saved: 1, n: s.shotCount, grids: s.shots.map((g) => Array.from(g.cells).join('')), size: s.sizeKey }) })); } catch { /* never block the new game */ }
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), with the shots fired so far. */
@@ -2314,7 +2337,7 @@ class BattleshipUI {
     let hits = 0;
     for (const v of oppGrid.cells) if (v === CELL_HIT || v === CELL_SUNK) hits++;
     const extras = { shots: myShots, hits, sunk: oppGrid.sunkIds.length, accuracy: myShots > 0 ? Math.round((hits / myShots) * 100) : 0 };
-    try { withMode(() => (soloMode(s, this._setup.firstMode)), this._setup.difficulty, () => recordBattleship(this._setup.difficulty, false, extras)); } catch { /* never block leaving */ }
+    try { withMode(() => (soloMode(s, this._setup.firstMode)), this._setup.difficulty, () => recordBattleship(this._setup.difficulty, false, extras), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -2338,13 +2361,20 @@ class BattleshipUI {
       // have counted it already, without these extras). Challenges write no head-to-head.
       const ov = this.ch.game && this.ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
       const chMode = () => (typeof CH.modeOfMatch === 'function' ? CH.modeOfMatch(this.ch.game, this.ch.side) : null);   // a thunk: read inside withMode (2026-11-02)
+      try {   // PRIVATE PLAY DATA (2026-11-16): the whole challenge match, logged once when this phone sees it finished
+        const g = this.ch.game || {};
+        logPlayData('battleship', 'match', { end: (g.over && g.over.why) || 'sunk', size: g.size, bonus: g.bonus ? 1 : 0, shots: g.shots, salvo: g.salvo || 0, a: g.a && g.a.name, b: g.b && g.b.name, side: this.ch.side,
+          fa: g.a && g.a.fleet && g.a.fleet.ships ? g.a.fleet.ships.map((x) => [x.id, x.r, x.c, x.dir]) : null, fb: g.b && g.b.fleet && g.b.fleet.ships ? g.b.fleet.ships.map((x) => [x.id, x.r, x.c, x.dir]) : null,
+          log: (g.log || []).map((e, i) => [e.by, e.r, e.c, (g.ats || [])[i] || 0]), over: g.over ? { winner: g.over.winner, why: g.over.why, at: g.over.at } : null, ...this._playLog('over') },
+          { mode: chMode, diff: 'mp', key: this.ch.id });
+      } catch { /* never block the result */ }
       try { CH.countResult(this.ch.id, won, extras, (ov && ov.at) || Date.now(), chMode); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
       return;
     }
     // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
     if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
-    try { withMode(() => (this.mp ? liveMode(this.mp) : soloMode(s, this._setup.firstMode)), difficulty, () => recordBattleship(difficulty, won, extras)); } catch { /* never block the result */ }
+    try { withMode(() => (this.mp ? liveMode(this.mp) : soloMode(s, this._setup.firstMode)), difficulty, () => recordBattleship(difficulty, won, extras), () => ({ log: () => this._playLog('over') })); } catch { /* never block the result */ }
     const opp = this.mp && this.mp.opp;
     if (opp) { try { recordHeadToHead('battleship', opp, won); } catch { /* never block the result */ } }
   }
@@ -2585,7 +2615,7 @@ class BattleshipUI {
     net.appendMove(mp.code, mp.role, seq, { t: 's', k: 's', g: mp.gameNum, seat: this._localSeat(), r, c }, stateHash(this.state))
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     // The first shot arms the leave (js/live-leave.js): leaving from now on is this player's loss.
-    if (!this._statsCommitted) LL.armLeave(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY));
+    if (!this._statsCommitted) LL.armLeave(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     this.renderBattle();
   }
 
@@ -2862,7 +2892,7 @@ class BattleshipUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (liveMode(mp)), MP_DIFFICULTY) });
+          fn: 'recordBattleship', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (liveMode(mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -3052,7 +3082,7 @@ class BattleshipUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBattleship', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (liveMode(mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;

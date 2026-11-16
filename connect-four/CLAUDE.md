@@ -153,3 +153,5 @@ Restart / Quit to setup after the player's first disc = ONE loss (`_quitCostsLos
 
 - Vs the computer: quitting is a loss once any disc is dropped, the computer's opening included (it was the player's own first move).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+Private play data (2026-11-16): logs every column played, every undo (move count, columns taken back), who went first, the seed, the final board (row 0 = bottom); a game won or drawn after Undo or Show best moves is NOT counted but logged via logPlayData 'notcounted' (never start counting it).

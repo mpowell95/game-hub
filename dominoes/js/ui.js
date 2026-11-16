@@ -264,6 +264,7 @@ class DominoesUI {
     clearSave();
     this._moved = true;   // dealt: quitting from now on is a loss (2026-10-29, second pass)
     this.game = new DominoesGame({ target: this.target });
+    this._plogResumed = 0;
     this.game.startMatch();
     this._bestRound = 0;
     this._statsCommitted = false;
@@ -279,6 +280,7 @@ class DominoesUI {
     this.difficulty = save.difficulty || this.difficulty;
     this.target = save.target || this.target;
     this.game = DominoesGame.fromSnapshot(save.snap);
+    this._plogResumed = 1;
     this._bestRound = save.bestRound | 0;
     this._statsCommitted = !!save.statsCommitted;
     this._moved = movedIn(save);
@@ -677,6 +679,12 @@ class DominoesUI {
     this.showRoundCard();
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): the match's every round (deal, every move in order, round score,
+   *  hands left) and totals, for the admin play log only. A resumed match logs from the resume. */
+  _playLog(g, end) {
+    return { end, target: g.target, rounds: g.round, scores: g.scores.slice(), winner: g.matchWinner, best: this._bestRound, res: this._plogResumed || 0, rd: g.plog || [] };
+  }
+
   _recordMatch() {
     if (this._statsCommitted) return;
     this._statsCommitted = true;
@@ -689,7 +697,7 @@ class DominoesUI {
         rounds: g.round,
         bestRound: this._bestRound,
         points: g.scores[HUMAN],
-      }), { detail: () => ({ rounds: Math.max(0, g.round | 0), pts: Math.max(0, g.scores[HUMAN] | 0), theirs: Math.max(0, ...g.scores.filter((_, i) => i !== HUMAN).map((x) => x | 0)) }) });
+      }), () => ({ detail: () => ({ rounds: Math.max(0, g.round | 0), pts: Math.max(0, g.scores[HUMAN] | 0), theirs: Math.max(0, ...g.scores.filter((_, i) => i !== HUMAN).map((x) => x | 0)) }), log: () => this._playLog(g, 'over') }));
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }
@@ -820,7 +828,7 @@ class DominoesUI {
     this._statsCommitted = true;
     clearSave();
     try {
-      withMode(() => ({ to: q.target }), q.difficulty, () => recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points }));
+      withMode(() => ({ to: q.target }), q.difficulty, () => recordDominoes(statsDiff(q.difficulty, q.target), false, { rounds: q.rounds, bestRound: q.bestRound, points: q.points }), () => ({ log: () => ({ ...this._playLog(this.game, 'quit'), rounds: q.rounds, pts: q.points }) }));
     } catch (e) {
       console.error('[dominoes] stats write failed', e);
     }

@@ -293,3 +293,5 @@ Matt: "they should look centered and balanced". While the setup shows (the one s
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Detail `deck`, `dealt` (`me`/`them`/`?`: who dealt round 1; vs the computer the human is seat 0, online seat 0 always deals), and vs the computer `pace`. Live-room deferred tags carry `deck` + `dealt`. `snapshot()` now adds `startDealer` (additive, not hashed; older saves = `?`). Never in the mode.
+
+Private play data (2026-11-16): logs per round the deal order, dealer, every draw/discard/close, each player's round score, total and hand left, and a finished challenge's whole match, via withMode `log` / logPlayData.
