@@ -936,7 +936,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstacle' : 'obstacles'}`,
         longest: `${p.v} long`, solved: `${p.v} solved`, wins: `${p.v} ${one ? 'win' : 'wins'}`,
-        stars: `${p.v} ${one ? 'star' : 'stars'}`, words: `${p.v} ${one ? 'word' : 'words'}`,
+        stars: `${p.v} ${one ? 'star' : 'stars'}`, words: `${p.v} ${one ? 'word' : 'words'}`, blocks: `${p.v} ${one ? 'block' : 'blocks'}`,
       })[p.k] || String(p.v);
     },
     // What it takes to be first. `tier`: the record is at a harder difficulty than your best.
@@ -954,6 +954,7 @@ export const STRINGS = {
         wins: `${p.v} more ${one ? 'win' : 'wins'} to take the record`,
         stars: `${p.v} more ${one ? 'star' : 'stars'} to take the record`,
         words: `${p.v} more ${one ? 'word' : 'words'} to take the record`,
+        blocks: `${p.v} more ${one ? 'block' : 'blocks'} to take the record`,
         tier: `Beat ${p.v} on ${p.tier} to take the record`,
       })[p.k] || '';
     },
@@ -2225,7 +2226,7 @@ export const STRINGS = {
       return ({
         points: `${p.v} pts`, meters: `${p.v} m`, obstacles: `${p.v} ${one ? 'obstáculo' : 'obstáculos'}`,
         longest: `${p.v} de largo`, solved: `${p.v} ${one ? 'resuelto' : 'resueltos'}`, wins: `${p.v} ${one ? 'victoria' : 'victorias'}`,
-        stars: `${p.v} ${one ? 'estrella' : 'estrellas'}`, words: `${p.v} ${one ? 'palabra' : 'palabras'}`,
+        stars: `${p.v} ${one ? 'estrella' : 'estrellas'}`, words: `${p.v} ${one ? 'palabra' : 'palabras'}`, blocks: `${p.v} ${one ? 'bloque' : 'bloques'}`,
       })[p.k] || String(p.v);
     },
     lb_gap: (p) => {
@@ -2242,6 +2243,7 @@ export const STRINGS = {
         wins: `${p.v} ${one ? 'victoria' : 'victorias'} más para batir el récord`,
         stars: `${p.v} ${one ? 'estrella' : 'estrellas'} más para batir el récord`,
         words: `${p.v} ${one ? 'palabra' : 'palabras'} más para batir el récord`,
+        blocks: `${p.v} ${one ? 'bloque' : 'bloques'} más para batir el récord`,
         tier: `Supera ${p.v} en ${p.tier} para batir el récord`,
       })[p.k] || '';
     },
