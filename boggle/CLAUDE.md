@@ -195,4 +195,4 @@ Private play data (2026-11-16): logs the board faces, every word submitted (vali
 
 ## Easier computers (2026-11-16, ADMIN DEVICES ONLY, NOT cleared for players)
 
-`docs/HANDOFF-WINS-GAMES-FIXES.md`. `ai.js` `TIER_PCT_V2_BY_LANG` (smaller share of the board's words per tier); `ui.js` `NEW_AI_RELEASED = false`, `newAI()`; solo results vs them record `cv: 2`. Simulated on 122 real solo scores: about 45-48
+`docs/HANDOFF-WINS-GAMES-FIXES.md`. `ai.js` `TIER_PCT_V2_BY_LANG` (smaller share of the board's words per tier); `ui.js` `NEW_AI_RELEASED = false`, `newAI()`; solo results vs them record `cv: 2`. Simulated on 122 real solo scores: about 45-48% / 20-24% / 9-11% (old: 33% / 0-1% / 0%). Levels already show Easy / Medium / Hard. `tools/sim-boggle-ai.mjs`.

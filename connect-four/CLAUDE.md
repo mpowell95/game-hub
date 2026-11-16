@@ -158,4 +158,4 @@ Private play data (2026-11-16): logs every column played, every undo (move count
 
 ## New Medium computer (2026-11-16, ADMIN DEVICES ONLY, NOT cleared for players)
 
-`docs/HANDOFF-WINS-GAMES-FIXES.md`. `ai.js` `MEDIUM_V2_DEPTH` 3 + `MEDIUM_V2_SLIP` 0.15 (option `v2`, passed to the worker); `ui.js` `NEW_AI_RELEASED = false`, `newAI()` = that or `isAdminDevice()`; a Medium game vs it saves and records `cv: 2`. Simulated: 41-45 0.000000or a person who wins 6
+`docs/HANDOFF-WINS-GAMES-FIXES.md`. `ai.js` `MEDIUM_V2_DEPTH` 3 + `MEDIUM_V2_SLIP` 0.15 (option `v2`, passed to the worker); `ui.js` `NEW_AI_RELEASED = false`, `newAI()` = that or `isAdminDevice()`; a Medium game vs it saves and records `cv: 2`. Simulated: 41-45% for a person who wins 6% vs the old Medium (real 5%). `tools/sim-c4-medium.mjs`.
