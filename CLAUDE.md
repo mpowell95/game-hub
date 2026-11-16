@@ -66,6 +66,14 @@ and logs `m: '?'` (read with `tools/read-play-log.mjs`). **Mode and detail are T
 () => record…, { detail: () => det(m) })`, `modeTag(() => …)`): read inside withMode's own try, so a throw records the
 result anyway (mode `'?'` / no detail, play log `d._err`); the scan fails anything computed at the call site.
 
+**EVERYTHING, PRIVATELY (Matt, 2026-11-16: "ALL data from ALL games played should be recorded. E V E R Y T H I N G" ... "somewhere
+that only I can see and that is never pushed to the player's phone")**: every play's full data (every shot, move, round, word,
+time, seed, end reason; pass and play and practice too) goes to the admin-only play log as `x` (<= 20,000 chars, lists fine) via
+withMode's `log` thunk (`withMode(m, d, rec, { hi, log: () => ({...}) })`) or `logPlayData(game, what, data, {mode, diff, key})`
+for a play that counts for nothing. `detail` is NOT private (summed into stats, `players/`, the board): no new data there.
+`playLog` is admins + reader only; a phone reads back only an entry's `t`; Contexto's cross-phone check reads `ctSync/<CODE>`
+(server copy, `ctSyncCopy`); `beeLog` = admins + that code. Limit: data exists on the phone until sent. `tools/test-private-log.mjs`.
+
 ## Asking for a change means LIVE on the deployed Game Hub — not just committed to a branch
 
 Any request to change, fix, add or remove something means make it live. Pre-authorized, no
@@ -423,6 +431,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.
+- **Private play data (2026-11-16):** `tools/test-private-log.mjs`.
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and

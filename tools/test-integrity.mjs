@@ -300,8 +300,14 @@ console.log('\n--- the play log: every finished game, every Contexto guess ---')
   const rulesJ = JSON.parse(read('database.rules.json')).rules;
   ok('rules: playLog is admin-read, written only under your own claimed code, server time stamped',
     /admins/.test(rulesJ.playLog['.read']) && /msgAuth/.test(rulesJ.playLog.$code.$k['.write']) && rulesJ.playLog.$code.$k.s['.validate'] === 'newData.val() === now');
-  ok('rules: a phone can read back ITS OWN code\'s log (the sender verifies by re-read), nobody else\'s',
-    /\$code === root\.child\('msgAuth'\)\.child\(auth\.uid\)\.val\(\)/.test(rulesJ.playLog.$code['.read'] || ''));
+  // 2026-11-16 (Matt: "somewhere that only I can see"): a phone reads back ONLY an entry's `t` (the
+  // sender's verify), never the log; Contexto's own rows come from ctSync/<CODE> (the server's copy).
+  ok('rules: a phone can read back only its own entries\' `t`, never the log itself',
+    !rulesJ.playLog.$code['.read'] && /\$code === root\.child\('msgAuth'\)\.child\(auth\.uid\)\.val\(\)/.test(rulesJ.playLog.$code.$k.t['.read'] || '')
+    && Object.keys(rulesJ.playLog.$code.$k).filter((k) => k !== 't').every((k) => !(rulesJ.playLog.$code.$k[k] || {})['.read']));
+  ok('rules: ctSync is that code\'s own read, server-written only; Contexto reads it, not playLog',
+    /msgAuth/.test(rulesJ.ctSync.$code['.read']) && !rulesJ.ctSync['.write'] && !JSON.stringify(rulesJ.ctSync).includes('.write')
+    && ui.includes('`ctSync/${code}`') && !ui.includes('api.ref(db, `playLog/'));
   ok('backup and hub: playLog in BRANCHES; the hub starts the sender', /'playLog',/.test(read('backups/rtdb-backup.mjs')) && /m\.startPlayLog\(\)/.test(read('js/hub.js')));
   for (let i = 0; i < 3200; i++) Q.appendPlayLog('DREG5', { g: 'snake' });
   ok('the queue keeps the newest 3,000 at most', Q.readQueue().length === 3000);

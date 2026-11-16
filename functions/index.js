@@ -385,6 +385,7 @@ export const boardsCatchUp = onSchedule({ schedule: 'every 2 minutes', region: O
   const db = getDatabase();
   boardsBusy = (async () => {
     const meta = (await db.ref('boards/v1/meta').get()).val() || {};
+    if (!meta.ctSyncAt) { try { await backfillCtSync(db); } catch (err) { logger.error('ctSync backfill failed (tried again in 2 min)', err); } }
     // Also every 30 minutes regardless, in case a sync's trigger was ever dropped.
     if (meta.dirty || !meta.builtAt || Date.now() - meta.builtAt > 30 * 60 * 1000) await rebuildBoards(db);
   })();
@@ -481,6 +482,35 @@ export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ..
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-contexto-${a.code}-${a.k}`, { game: 'admin' });
   }
 });
+
+// CONTEXTO'S CROSS-PHONE CHECK, WITHOUT THE PLAY LOG (2026-11-16, Matt: the play log is "somewhere that
+// only I can see"). Players can no longer read playLog/, so each Contexto hint / giveup / win entry is
+// copied here as { t, s, k, e } (no word, no rank) to ctSync/<CODE>/<id>, which that code's own phones
+// read (contexto/js/ui.js _remote). Event data only: no read.
+const CT_SYNC_E = new Set(['hint', 'giveup', 'win']);
+export function ctSyncRow(v) {
+  if (!v || v.g !== 'contexto' || !CT_SYNC_E.has(v.e) || typeof v.k !== 'string') return null;
+  return { t: Number(v.t) || 0, s: Number(v.s) || 0, k: v.k, e: v.e };
+}
+export const ctSyncCopy = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
+  const row = ctSyncRow(event.data.val());
+  if (!row) return;
+  await getDatabase().ref(`ctSync/${event.params.code}/${event.params.id}`).set(row);
+});
+/** ONE TIME: the Contexto entries logged before ctSyncCopy existed. Per code, a query on the indexed `k`
+ *  (Contexto keys 'en-<n>' / 'es-<n>'), so only those rows download. Marker boards/v1/meta/ctSyncAt. */
+async function backfillCtSync(db) {
+  const codes = Object.keys((await db.ref('directory').get()).val() || {});
+  const patch = {};
+  for (const code of codes) {
+    if (!/^[A-Z0-9]{3,12}$/.test(code)) continue;
+    const rows = (await db.ref(`playLog/${code}`).orderByChild('k').startAt('en-').endAt('es-\uf8ff').get()).val() || {};
+    for (const [id, v] of Object.entries(rows)) { const r = ctSyncRow(v); if (r) patch[`ctSync/${code}/${id}`] = r; }
+  }
+  if (Object.keys(patch).length) await db.ref().update(patch);
+  await db.ref('boards/v1/meta/ctSyncAt').set(Date.now());
+  logger.info('ctSync backfill', { codes: codes.length, rows: Object.keys(patch).length });
+}
 
 // DEVICE KEYS (2026-11-04, functions/claim.js): a phone's claim request is answered here. STEP A only
 // registers keys for phones that already hold a claim; nothing about who may play changes yet.
