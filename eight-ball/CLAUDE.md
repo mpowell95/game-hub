@@ -72,6 +72,7 @@ black pockets, coral and cyan groups).
   how pool works")**: once groups are set, any ball of the other group dropping ends the turn (no foul,
   it stays down). WPA lets the shooter go on. Old online matches keep their `rv`; saved local games
   take today's rules on Continue (`_savedMatch`).
+  **Matt plays BAR RULES (2026-11-16: "We're playing bar rules")**: any rules question defaults to bar rules, not WPA.
 - **9-ball**: 1-9 in a diamond (1 front, 9 middle). First contact must be the lowest ball (the
   break too). Pot anything and go again; the 9 wins whenever it counts (combos, the break). A 9
   that drops on a foul or without counting is spotted.
