@@ -57,7 +57,8 @@ ok('the challenger can create a match', res.ok, JSON.stringify(res));
 const id = res.id;
 ok('a new challenge is made under "only the called island counts" (io)', res.game.rules.io === true && MP.freshMatch(res.game.rules).islandOnly === true);
 ok('a new challenge is made under "island only with 3+ cups" (i3)', res.game.rules.i3 === true && MP.freshMatch(res.game.rules).islandThree === true);
-ok('a new challenge flies the new table bounce (tb, 2026-11-16)', res.game.rules.tb === true && MP.tableModel(res.game.rules) === null);
+ok('a new challenge flies the newest table (tb + tk, 2026-11-16)', res.game.rules.tb === true && res.game.rules.tk === true && MP.tableModel(res.game.rules) === null);
+ok('a challenge made on the first real-life table (tb, no tk) keeps it', MP.tableModel({ gent: true, rr: 2, tb: true }) === 'v2');
 ok('a challenge without tb keeps the old table', MP.tableModel({ gent: true, rr: 2 }) === 'v1' && MP.cleanRules({ tb: 'yes' }).tb === false);
 ok('a challenge begun before i3 gets the 3-cup rule too (Matt: Moonis called island on the last cup)', MP.freshMatch({ gent: true, rr: 2 }).islandThree === true);
 {

@@ -103,7 +103,20 @@ export function innerR(y) {
 //    already rolling, keeps more (up to all of it). Lying on the table, it slides until it rolls the same way.
 //  - THE BALL IS HOLLOW in test games (inertia 2/3 m r^2, a thin shell), so its spin is right off cups too.
 // No first-bounce / later-bounce split: a real table bounces the same every time.
-export const TEST = { rest: 0.90, mu: 0.25 };
+// 2026-11-16, later (Matt: "Intentional bounce shots go in almost always"... "fix the table"): on the real-life table a
+// DELIBERATE bounce (a soft throw landing 10-25 cm in front of the front cup) went in far more often than a direct
+// throw: King of Games' real throws at 7-10 cups, bounce 62% (223/357) against direct 43%; the best aim point with a
+// person's wobble, bounce 82 / 65 / 52 / 40% against direct 56 / 48 / 42 / 29% at 10 / 6 / 3 / 1 cups. Earlier
+// sessions measured RANDOM throws, which mostly miss, and so saw no gap. No bounce height alone fixes it (0.60-0.68
+// kills the bounce on a full rack before it evens out 6 and 3 cups), so the table now also KICKS (tableKick below):
+// rest 0.70 + a kick of up to 0.25 rad and 18% gives bounce 48 / 48 / 42 / 19% against direct 56 / 48 / 42 / 29%.
+// A bounce-in stays possible; it is never the better shot. Pinned by tools/test-cuppong-bounce.mjs: RE-RUN IT after
+// any change here, and measure the BEST AIM POINT, never random throws.
+// `TABLE_V2` = the table of 2026-11-16's first release (rest 0.90, no kick): only for a challenge made on it
+// (rules `tb` without `tk`, mp.js tableModel), so its throws replay as they were played.
+export const TEST = { rest: 0.70, mu: 0.25, wobA: 0.25, wobV: 0.18 };
+export const TABLE_V2 = 'v2';
+const V2 = { rest: 0.90, wobA: 0, wobV: 0 };
 // A smaller bounce than this is the ball settling: it rolls. 0.15 m/s is a hop under 2 mm, too small to see; at
 // 0.08 a ball resting against a cup's side never stopped (the cup's slanted wall kept pressing it into the table,
 // and each press came back as a 0.1 m/s hop, to the 6 s cap).
@@ -124,6 +137,25 @@ function tableGrip(ball, jn) {
   w.x += -fz / (SHELL * r); w.z += fx / (SHELL * r);
 }
 
+/** THE TABLE KICK: each bounce off the table turns the ball a little left or right (up to TEST.wobA radians) and
+ *  changes how high and how far it comes off (up to TEST.wobV, a share). The amounts come from the throw's own power
+ *  and aim (st.wob, a seeded stream), so the same throw always bounces the same way on every phone, but no finger can
+ *  choose them. */
+function tableKick(st) {
+  const v = st.ball.velocity;
+  const T = st.tbl;
+  const a = (st.wob() * 2 - 1) * T.wobA, k = 1 + (st.wob() * 2 - 1) * T.wobV, ky = 1 + (st.wob() * 2 - 1) * T.wobV;
+  const cs = Math.cos(a), sn = Math.sin(a), x = v.x, z = v.z;
+  v.x = (x * cs - z * sn) * k; v.z = (x * sn + z * cs) * k; v.y *= ky;
+}
+/** A seeded stream of numbers in [0, 1) from a throw's power and aim (mulberry32 over a string hash). */
+function kickStream(power, aim) {
+  let h = 2166136261;
+  const str = `${power},${aim}`;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let t = h >>> 0;
+  return () => { t = (t + 0x6D2B79F5) >>> 0; let r = Math.imul(t ^ (t >>> 15), 1 | t); r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r; return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+}
 /** The table (every model but 'v1'), after each step: the ball meeting the table top is reflected here. */
 function testTable(st) {
   const { ball } = st;
@@ -135,8 +167,9 @@ function testTable(st) {
   const down = -v.y;
   if (down < TEST_STOP_V) { p.y = r; v.y = 0; tableGrip(ball, down); return; }   // lying on it: slides, then rolls
   const tc = (r - p.y) / down;                              // how long ago, this step, it touched
-  v.y = down * TEST.rest;
-  tableGrip(ball, down * (1 + TEST.rest));
+  v.y = down * st.tbl.rest;
+  tableGrip(ball, down * (1 + st.tbl.rest));
+  if (st.wob && !st.touchedCup) tableKick(st);
   p.y = r + v.y * Math.min(tc, H);
   st.tableHits++;
   st.events.push({ type: 'table', v: down, x: p.x, z: p.z });
@@ -224,7 +257,10 @@ export function startThrow({ power = 0.5, aim = 0, cups = [], model = null } = {
     tableHits: 0,        // table contacts BEFORE a cup is made - stage 4 reads this for bounce shots
     touchedCup: false,
     power, aim: a, speed: v, test,
+    tbl: null, wob: null,
   };
+  st.tbl = model === TABLE_V2 ? V2 : TEST;
+  if (test && (st.tbl.wobA || st.tbl.wobV)) st.wob = kickStream(power, aim);
   ball.addEventListener('collide', (e) => {
     const u = e.body && e.body.userData;
     if (!u || st.done) return;

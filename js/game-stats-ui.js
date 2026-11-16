@@ -2514,7 +2514,8 @@ function freshScreenForBase(id, stt) {
       ...['yellow', 'blue', 'vermilion', 'teal', 'purple', 'pink'].map((c) => ['st_sq_' + c, sumOf(dt, 'sq_' + c)])] });
     case 'dotsboxes': {
       const db = rec.db || {};
-      return stdScreen(id, rec, { total: subTotal(rec, db), ties: n0(((rec.total || {}).played)) ? undefined : db.tied,
+      // No Went first / Went second table (Matt, 2026-11-16: "remove the 'going first vs going second' counts"; as Filler).
+      return stdScreen(id, rec, { first: false, total: subTotal(rec, db), ties: n0(((rec.total || {}).played)) ? undefined : db.tied,
         facts: [['st_boxes', nf(db.boxes)], ['st_avg_boxes', avgOf(dt, 'mine')], ['st_avg_their_boxes', avgOf(dt, 'theirs')], ['st_best_chain', nf(db.bestChain)]] });
     }
     case 'yahtzee': {

@@ -168,6 +168,17 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
 
 ## The real-life table bounce: LIVE FOR EVERYONE (2026-11-16, Matt: "Make the new bounce live for everyone")
 
+**The table KICKS, and bounces lower (2026-11-16, later; Matt: "Intentional bounce shots go in almost always"... "fix the table").**
+A DELIBERATE bounce (a soft throw landing 10-25 cm in front of the front cup) was the better shot: King of Games' real
+throws at 7-10 cups, bounce 62% (223/357) against direct 43%; four earlier sessions measured RANDOM throws and saw no gap.
+Now `physics.js` `TEST` = rest 0.70 + `tableKick` (each table bounce before a cup turns the ball up to 0.25 rad and
+changes its speed and height up to 18%, from a stream seeded by the throw's own power and aim: the same on every phone,
+never choosable). Best aim point, bounce against direct: 48/56, 48/48, 47/50, 42/42, 19/29% (10, 6, 6 triangle, 3, 1 cups).
+No bounce height alone passes (the sweep is in physics.js). **`node tools/test-cuppong-bounce.mjs` after ANY table change;
+measure the best aim point, never random throws.** A challenge made on the day's first table carries `tb` without `tk`
+and keeps it (`TABLE_V2` 'v2', rest 0.90, no kick); `createGame` writes `tb` + `tk`; `tableModel`: none 'v1', `tb` 'v2',
+`tb`+`tk` the live table. This is NOT a real ball's 0.90 any more (Matt's 2026-11-08 "mimic reality" gave way to this).
+
 - Every throw (solo, vs computer, every challenge made from 2026-11-16) flies the table below, `physics.js`'s default.
 - **A challenge made before then keeps the OLD table** (`OLD_TABLE` = `model: 'v1'`, the solver table, bit for bit): its rules
   have no `tb`; `createGame` writes `tb: true`; `mp.js` `tableModel(rules)` picks it for every throw and every replay

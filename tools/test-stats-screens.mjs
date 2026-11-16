@@ -57,11 +57,13 @@ for (const id of ['chinchon', 'escoba', 'filler', 'mancala', 'dotsboxes', 'boggl
 }
 ok('cuppong: online right after the record (second card)', H('cuppong').indexOf('>Online<') > H('cuppong').indexOf('class="gs-rec') && H('cuppong').indexOf('class="gs-rec') >= 0);
 for (const [id, w] of [['darts', 'Went first'], ['flicksoccer', 'Went second'], ['hoops4', 'Went first'], ['mancala', 'Went first'],
-  ['dotsboxes', 'Went first'], ['yahtzee', 'Went first'], ['tictactoe', 'Went first'], ['connect4', 'Went second'], ['battleship', 'Went first'], ['cuppong', 'Went first']]) {
+  ['yahtzee', 'Went first'], ['tictactoe', 'Went first'], ['connect4', 'Went second'], ['battleship', 'Went first'], ['cuppong', 'Went first']]) {
   ok(`${id}: first vs second`, words(H(id)).includes(w));
 }
 // Filler has no Went first / Went second table (Matt, 2026-11-06: the opener alternates).
 ok('filler: no first vs second table', !/Went first|Went second/.test(words(H('filler'))));
+// Dots and Boxes too (Matt, 2026-11-16: "remove the 'going first vs going second' counts").
+ok('dotsboxes: no first vs second table', !/Went first|Went second/.test(words(H('dotsboxes'))));
 ok('darts: by game type', /By game.*101.*301.*Cricket/.test(words(H('darts'))));
 ok('flicksoccer: by formation + most played + goals', /By formation.*Balanced \/ Defend/.test(words(H('flicksoccer'))) && words(H('flicksoccer')).includes('Most played formation') && words(H('flicksoccer')).includes('Goals for'));
 ok('holdem: by table, most played table, no Easy/Medium/Hard rows', /By table.*Buddy's House/.test(words(H('holdem')).replace(/&#39;|&apos;/g, "'")) && words(H('holdem')).includes('Most played table') && !/By difficulty/.test(words(H('holdem'))));
