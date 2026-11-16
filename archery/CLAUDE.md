@@ -222,3 +222,5 @@ Vs the computer (finish and quit loss): detail `firstSet` (the First setting; th
 ## Pass and play is kept (2026-11-16, Matt: "yes build 1")
 
 Supersedes "pass and play ... record nothing" under Hub integration. A finished pass-and-play match records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('archery', 'p1'|'p2', names), { detail: pts, pts2, arrows, arrows2, shootoff })` (`_recordPassPlay`, `match.recorded`). Pass and play is not saved, so leaving it after an arrow (Menu > Quit, a new match, the hub) records it as `quit`. `games.archery.pp` (the test record while admin-only), counted by nothing.
+
+Private play data (2026-11-16): logs every arrow (x, y, score, stage), each stage's wind, seed, totals and where each local arrow was AIMED (`m.xa`) via withMode `log` (vs computer, quit loss) / logPlayData (`pnp` finished or left, `practice` every 10 rounds and on leaving, a challenge as `match` once per phone: `mp.js logMatchOnce`).

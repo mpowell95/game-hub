@@ -197,6 +197,16 @@ function throwCricket(m, x, y) {
   return { m, event: 'score', hit };
 }
 
+/** PRIVATE play data (2026-11-16): one dart as a compact row for the admin play log only (js/game-stats.js
+ *  logPlayData / withMode's `log`; never a stat): [seat, x, y, num, mult, pts, marks, event]. `res` is
+ *  throwDart's result. `XL_COLS` names the columns in the log. */
+export const XL_COLS = 'seat,x,y,num,mult,pts,mk,ev';
+export function dartRow(seat, x, y, res) {
+  const h = (res && res.hit) || {};
+  const r3 = (v) => Math.round((+v || 0) * 1000) / 1000;
+  return [seat | 0, r3(x), r3(y), h.num | 0, h.mult | 0, h.pts | 0, h.marks | 0, String((res && res.event) || '')];
+}
+
 /** Hand the board to the other seat. */
 export function nextTurn(m) {
   m.turn = m.turn ^ 1;

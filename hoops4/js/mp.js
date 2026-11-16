@@ -29,7 +29,7 @@ import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
 import { COLS, ROWS } from './game.js';
 import { replayResult, sameResult } from './replay.js';
-import { recordResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
+import { recordResult, withChallengeMatch, mayCountChallenge, countingSince, withMode, logPlayData } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowCallOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
@@ -607,7 +607,55 @@ export function recordFinished(rows) {
   const todo = all.filter((r) => r.why !== TIMEOUT);
   for (const r of todo) countFinished(r.id, r.result === 'won', r.updated, () => modeOfMatch(r));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every move (column or miss, shots it took, the throws kept for the replay: power, aim, seed), the series, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.hoops4.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData('hoops4', 'match', () => privateMatch(game, why), { mode: () => modeOfMatch(game), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[hoops4] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[hoops4] finished matches not logged privately', err); }
+}
+/** The match as private data. */
+export function privateMatch(game, why = null) {
+  const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '' });
+  return {
+    v: 1, id: game.id, me: sideOf(game, myCode()), a: who(game.a), b: who(game.b), first: 'a',
+    sentBy: game.by && game.a && game.by === game.a.code ? 'a' : game.by ? 'b' : null,
+    oneShot: !!game.oneShot, series: game.series, seriesNo: game.seriesNo, seriesWins: game.seriesWins, seriesOf: game.seriesOf, caption: game.caption || '',
+    created: game.created || null, updated: game.updated || null, over: game.over || (why ? { why } : null),
+    chatLines: Array.isArray(game.chat) ? game.chat.length : 0,
+    cols: 'side,col(-1 miss),shots,sec,throws[power,aim,seed]',
+    moves: (game.moves || []).slice(0, 200).map((m) => [m.by, m.miss ? -1 : m.col, m.shots, m.at && game.created ? Math.round((m.at - game.created) / 1000) : null, Array.isArray(m.t) ? m.t.map((x) => [x.p, x.a, x.s]) : null]),
+  };
 }
 /** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
 export const timeoutsSettled = () => confirmsSettled('hoops');
@@ -658,7 +706,7 @@ export async function watchGame(id, cb) {
     const stop = api.onValue(api.ref(db, `hoops/games/${id}`), (snap) => {
       try {
         const g = validateGame(snap && snap.exists() ? snap.val() : null);
-        if (g) { g.id = id; cb(withTimeout(g)); }
+        if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); }
       } catch (err) { console.warn('[hoops4] match watch callback', err); }
     }, () => { /* denied or dropped: the board keeps what it has */ });
     return () => { try { stop(); } catch { /* already detached */ } };
@@ -788,7 +836,9 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[hoops4] hoops/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) {
     console.warn('[hoops4] could not read that game', err);
     return null;

@@ -263,3 +263,5 @@ Matt: *"Make golf multiplayer. Allow me to challenge someone to a course and cer
 ## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
 
 `rowFor` writes `md` = `modeOfGame(game, side)` and `dt` = `detailOfGame(game, side)`, so a count from the list carries the playoff (`po`) and play-ahead (`ah`) options and the detail (`poh`, `end`) like one from the match (older rows: what they hold). `tools/test-golf-mp.mjs`.
+
+Private play data (2026-11-16): logs every shot of a hole (`_xlH`: club, lie, aim, power, needle, miss, from, rest, yards, water/OOB/blocked/holed, penalty, tree drops) with the hole's own record, pin, wind, putts via withMode `log` in `_recordHole` (round, practice, tutorial, online); the round's record carries each hole's summary; logPlayData `left` for an unfinished hole, a challenge as `match` once per phone (`mp.js logMatchOnce`).

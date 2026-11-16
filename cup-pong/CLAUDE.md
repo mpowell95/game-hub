@@ -367,3 +367,5 @@ Vs the computer: detail `rm` (Make your own Grid/Free). The thrown-away match's 
 ## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
 
 `modeOfMatch(g, side)` adds `first` (ui.js's rule, side a); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (rows had only Straight Up and series, still the fallback for older rows). `tools/test-cuppong-mp.mjs`.
+
+Private play data (2026-11-16): vs the computer logs EVERY throw, the computer's too (`_xl`, in the save: side, power, aim, cup, bounced, cups left both sides, rule events), final racks, reracks, islands via withMode / modeTag `log` (finish, quit loss); solo racks with the clear (`log`) or as `solo` abandon; Test games as `test`; a challenge as `match` once per phone (`mp.js logMatchOnce`). The per-throw `throw` entries are unchanged.
