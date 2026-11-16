@@ -172,7 +172,7 @@ const ccShortMode = (m) => {   // Chinchón's isShortMatch, on its saved mode (v
 export const FULL_LEVEL_GAMES = {
   flicksoccer: { ladder: L3, short: (m) => m.goals === '1' },                       // first to 1
   eightball: { ladder: L3, short: (m) => m.racks === '1' },                         // 1 rack
-  cuppong: { ladder: L3, short: (m) => m.rr === 'inf' },                            // unlimited reracks
+  cuppong: { ladder: [...L3, 'expert'], short: (m) => m.rr === 'inf' },            // unlimited reracks (Expert: admin devices, 2026-11-16)
   darts: { ladder: L3, short: (m) => m.kind === '201' || m.kind === '101' },        // 201 / 101
   dominoes: { ladder: L3, short: (m) => +m.to > 0 && +m.to < 300 },                 // to 150
   boggle: { ladder: ['beginner', 'intermediate', 'pro'], short: (m) => m.min === '2' },   // the 2-minute timer
