@@ -9,7 +9,7 @@
 import { makeT } from '../../js/i18n.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { STRINGS } from './strings.js';
-import { COURSES, courseById, modesForCourse, roundsForCourse, roundRange, roundPar, roundById } from './rounds.js';
+import { COURSES, courseById, modesForCourse, roundsForCourse, roundRange, roundPar, roundById, roundHoles } from './rounds.js';
 
 const t = makeT(STRINGS);
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -67,7 +67,9 @@ function page(ui, title, body, back) {
       <h2 class="gf-mp-title">${esc(title)}</h2>
     </div>
     <div class="gf-mp-body">${body}</div>`);
-  el.querySelector('[data-mp="back"]').addEventListener('click', () => (back ? back() : ui._renderSetup('online')));
+  const goBack = () => (back ? back() : ui._renderSetup('online'));
+  el.querySelector('[data-mp="back"]').addEventListener('click', goBack);
+  ui._setMpBack(goBack, back ? 2 : 1);   // the phone's back swipe and the hub's button do the same
   return el.querySelector('.gf-mp-body');
 }
 
@@ -221,7 +223,7 @@ async function picker(ui, MP) {
   list.addEventListener('click', (e) => {
     const b = e.target.closest('.gf-mrow');
     const o = b && opps[Number(b.dataset.oi)];
-    if (o) confirm(ui, MP, o);
+    if (o) confirm(ui, MP, o, null, () => picker(ui, MP));   // back = this list
   });
 }
 
@@ -232,7 +234,7 @@ export function challengeTo(ui, MP, them) { confirm(ui, MP, them); }
  * THE CHALLENGE CARD: a course (EVERY course, Matt 2026-11-15), a length, and which holes, with
  * golf's own chips and tiles. The unlock ladder does NOT gate a challenge. Then Send.
  */
-function confirm(ui, MP, them, sel = null) {
+function confirm(ui, MP, them, sel = null, back = null) {
   const open = COURSES.slice();   // every course (Matt, 2026-11-15: challenges offer them all)
   if (!open.length) return;
   const s = sel || {};
@@ -249,8 +251,11 @@ function confirm(ui, MP, them, sel = null) {
       <button type="button" class="gf-btn gf-roundbtn${r.id === round.id ? ' is-on' : ''}" data-chround="${esc(r.id)}" aria-pressed="${r.id === round.id}"
         aria-label="${esc(t('holes_range', { range: roundRange(r) }))}"><span>${esc(roundRange(r))}</span><small>${esc(t('round_meta', { par: roundPar(course, r.id) }))}</small></button>`).join('')}
     </div></div>
+    ${ui._holeStripHTML(course, roundHoles(course, round.id), 'gf-chstrip')}
     <button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="send">${esc(t('mp_send', { name: first(them.name) }))}</button>
-    <p class="gf-mp-note gf-mp-err" aria-live="polite" hidden></p>`);
+    <p class="gf-mp-note gf-mp-err" aria-live="polite" hidden></p>`, back);
+  // THE HOLES BEING CHOSEN, AS PICTURES (2026-11-16, Matt: "I want to be able to see the 3 holes I'm selecting").
+  ui._paintHoleStrip(body.querySelector('.gf-chstrip'), { course, maxH: 150 });
   const pick = { course: course.id, mode, round: round.id };
   body.addEventListener('click', (e) => {
     const b = e.target.closest('[data-chmode], [data-chcourse], [data-chround]');
@@ -258,7 +263,7 @@ function confirm(ui, MP, them, sel = null) {
     if (b.dataset.chmode) { pick.mode = +b.dataset.chmode; pick.round = null; }
     else if (b.dataset.chcourse) { pick.course = b.dataset.chcourse; pick.round = null; }
     else pick.round = b.dataset.chround;
-    confirm(ui, MP, them, pick);
+    confirm(ui, MP, them, pick, back);
   });
   const send = body.querySelector('[data-mp="send"]');
   send.addEventListener('click', async () => {
