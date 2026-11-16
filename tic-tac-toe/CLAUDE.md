@@ -257,3 +257,7 @@ Solo Restart / New game after the player's first mark = ONE loss (`_statsCommitt
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
 
 Private play data (2026-11-16): logs every move in order with time, the final board (Ultimate sub-boards too), who went first, via withMode `log`.
+
+## New Classic Hard computer (2026-11-16, ADMIN DEVICES ONLY, NOT cleared for players)
+
+`docs/HANDOFF-WINS-GAMES-FIXES.md`. `ai.js` `PRO_V2_SLIP` 0.05 (a worse move now and then); `ui.js` `NEW_AI_RELEASED = false`, `newAI()`; Classic Hard vs it saves and records `cv: 2`. Simulated: about 1 win in 10 (old Hard: never). `tools/sim-ttt-hard.mjs`.
