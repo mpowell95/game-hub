@@ -631,7 +631,8 @@
 .ba-root .ba-pop.is-berry svg { color: #e03a5a; }
 .ba-root .ba-pop.is-drain { color: #d6b8ff; }
 .ba-root .ba-pop.is-note { font-size: 18px; }
-.ba-root .ba-pop.is-extra { font-size: 36px; letter-spacing: .01em; color: #fff; }
+.ba-root .ba-pop.is-extra { font-size: min(36px, 8vw); letter-spacing: .01em; color: #fff; white-space: nowrap; }
+html[lang="es"] .ba-root .ba-pop.is-extra { font-size: min(36px, 6.4vw); }   /* ¡MOVIMIENTO EXTRA! fits at 360 */
 .ba-root .ba-spark { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 6px rgba(255, 255, 255, .8); }
 .ba-root .ba-orb {
   position: absolute; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%);
@@ -975,11 +976,4 @@
   border: 3px solid #ffce3a; transform: rotate(45deg); }
 .ba-root .ba-coach-bubble.is-below .ba-coach-arrow { top: -12px; border-right: 0; border-bottom: 0; }
 .ba-root .ba-coach-bubble.is-above .ba-coach-arrow { bottom: -12px; border-left: 0; border-top: 0; }
-/* The swap demo: copies of the two tiles trade places on a loop; the box lights while the line is made. */
-.ba-root .ba-coach-ghost { position: absolute; z-index: 1; pointer-events: none; animation: ba-coach-swap 2.6s ease-in-out infinite; }
-@keyframes ba-coach-swap { 0%, 20% { transform: translate(0, 0); } 40%, 72% { transform: translate(var(--dx), var(--dy)); } 92%, 100% { transform: translate(0, 0); } }
-.ba-root .ba-coach-ring.is-demo { animation: ba-coach-line 2.6s ease-in-out infinite; }
-@keyframes ba-coach-line { 0%, 36%, 80%, 100% { border-color: rgba(255, 206, 58, .45); box-shadow: 0 0 0 3px rgba(0, 0, 0, .4); }
-  44%, 70% { border-color: #ffce3a; box-shadow: 0 0 0 3px rgba(0, 0, 0, .55), 0 0 26px rgba(255, 206, 58, 1); } }
 .ba-root .ba-coach-swaparrow { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; overflow: visible; }
-@media (prefers-reduced-motion: reduce) { .ba-root .ba-coach-ghost, .ba-root .ba-coach-ring.is-demo { animation: none; } }

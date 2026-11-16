@@ -17,7 +17,7 @@ import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { STRINGS } from './strings.js';
 import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
-import { MONSTERS, BY_ID, unlockedIds, specialOf, costOf, RULES_VERSION, ELEMENT_COLOR, monName, BERRIES_TO_EVOLVE } from './monsters.js';
+import { MONSTERS, BY_ID, unlockedIds, specialOf, costOf, RULES_VERSION, ELEMENT_COLOR, ELEMENTS, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
 import { mirror, mirrorEvents, entryOf, moveOf, teamMode, matchDetail } from './online.js';
 /** A match vs the computer: the player's drafted team (side 0) and who opened. */
@@ -28,8 +28,6 @@ import { noteTipShown, noteTipDone } from '../../js/tips-log.js';
 const t = makeT(STRINGS);
 const CSS_MARK = 'data-battlearena-css';
 const SETTINGS_KEY = 'gamehub.battlearena.v1';
-/** The first-match tutorial's tips, in the order they may show (each once per phone, `settings.tips`). */
-const TIP_ORDER = ['hp', 'moves', 'swap', 'charge', 'berry', 'evolve', 'extra', 'bomb'];
 const SAVE_KEY = 'gamehub.battlearena.save.v1';
 const DIFFS = ['easy', 'medium', 'hard'];
 const ME = 0, CPU = 1;
@@ -299,6 +297,12 @@ class BattleArena {
     this._tip = null;          // its layer went with the old screen
     this._sawExtra = false;
     this._myMoves = 0;
+    this._myTurns = 0;         // the player's turns this screen (the tutorial's later steps wait for the 2nd)
+    this._prevTurn = null;
+    this._guidedOn = null;     // the turn a guided step last showed (one a turn)
+    this._sawPower = null;     // the player's monster whose power went off first
+    this._sawBoom = false;     // the player's own match set a bomb off
+    this._playingMine = false;
     return this.gen;
   }
 
@@ -1199,6 +1203,7 @@ class BattleArena {
   async trySwap(a, b) {
     if (!this.canInput()) return;
     this.poke();
+    if (!this.guideAllows(a, b)) { await this.badSwap(a, b); return; }   // the tutorial asked for a particular swap
     const res = this.step({ type: 'swap', a, b, side: ME });
     if (!res.ok) {
       if (res.error === 'no-match') await this.badSwap(a, b);
@@ -1224,6 +1229,7 @@ class BattleArena {
   async commit(res, mine = false) {
     const gen = this.gen;
     if (mine) { this.hideTip(true); this._myMoves = (this._myMoves | 0) + 1; }
+    this._playingMine = mine;
     this.state = res.state;
     this.canon = res.canon || res.state;
     this.save();
@@ -1252,126 +1258,207 @@ class BattleArena {
     const s = this.state;
     if (!s || this.screen !== 'battle' || this.busy) return;
     if (s.winner != null) { this.hideTip(false); this.finish(); return; }
-    if (s.turn !== ME) this.hideTip(false);
-    if (s.turn === CPU) { if (this.link) this.pumpRemote(); else this.cpuTurn(); return; }
+    const fresh = this._prevTurn !== s.turn;
+    this._prevTurn = s.turn;
+    if (s.turn !== ME && !(this._tip && this._tip.tg.note)) this.hideTip(false);
+    if (s.turn === CPU) {
+      if (fresh) this.theirTurnNote();
+      if (this.link) this.pumpRemote(); else this.cpuTurn();
+      return;
+    }
+    if (fresh) this._myTurns = (this._myTurns | 0) + 1;
+    if (this._tip && this._tip.tg.note) this.hideTip(true);
     this.syncAll();
     this.checkTips();
   }
 
-  // --- the first-match tutorial (2026-11-15, Matt: Ana "didn't really know what was going on ... 4+ things give you an
-  // extra turn ... what the berries did ... how many turns she had left ... health") --------------------------------
-  // One tip at a time, on the player's own turn, the first time each thing matters; each shows ONCE per phone
-  // (`settings.tips`, a preference) and is reported (js/tips-log.js -> players/<id>/tips; root CLAUDE.md: every notice
-  // reports who saw it). A ring on the thing + a bubble + Got it. It blocks the board until Got it, EXCEPT in a live
-  // room (a 25 s clock): there it never blocks and goes away with the player's move.
-  /** A move on the board that lines up `min`+ alike tiles: { line: cells after the swap, from: the cell whose tile moves
-   *  into the line }, else null. Picks the shortest (the swap tip: a plain 3), or the longest (`longest`, the extra tip); the tutorial shows it boxed ("Here: move the circled tile into the box"). */
-  tipLine(min, longest = false) {
+  // --- the first-match tutorial (2026-11-15/16) ----------------------------------------------------------------------------
+  // Matt: Ana "didn't really know what was going on ... 4+ things give you an extra turn ... what the berries did ... how many
+  // turns she had left ... health"; then (2026-11-16): "tell them to do it ... have them collect them ... we should do that
+  // everywhere". So each thing the player can DO is a guided step: "Swap these two ..." (the two tiles ringed, an arrow, the
+  // line boxed; no Got it, only that swap works), the real match plays out, then a tip explains what just happened with the
+  // real numbers. What cannot be done (whose monsters, the arena, the other side's turn, powers) is a short tip with Got it.
+  // Each shows ONCE per phone (`settings.tips`, a preference) and is reported (js/tips-log.js -> players/<id>/tips).
+  // Guided steps only against the computer (never forced online); a timed live room never blocks.
+  // Mockups: docs/mockups/battle-arena-tutorial/.
+
+  /** My two monsters' gem kinds. */
+  myKinds() {
+    const els = this.state.sides[ME].mons.map((m) => (BY_ID[m.id] || {}).el).filter(Boolean);
+    return els.includes('all') ? ELEMENTS.slice() : els;
+  }
+
+  /** A swap that makes a line: { from, into, line } (the tile at `from` moves to `into`, completing `line`), else null.
+   *  kinds: allowed kinds of the line; min: shortest line; longest: prefer the longest (else the shortest);
+   *  nearBomb: the line must touch a bomb (and so set it off). Moves that pick up a bomb are left out. */
+  tipMove({ min = 3, kinds = null, longest = false, nearBomb = false } = {}) {
     const s = this.state;
     let best = null;
     for (const mv of E.legalMoves(s)) {
+      if (s.board[mv.a].k === 'bomb' || s.board[mv.b].k === 'bomb') continue;
       const b = s.board.slice();
       const t = b[mv.a]; b[mv.a] = b[mv.b]; b[mv.b] = t;
       for (const g of E.matchGroups(E.findRuns(b))) {
-        const cells = [...g.cells];
-        if (cells.length < min || cells.some((c) => b[c] && b[c].k === 'bomb')) continue;
-        // the moved tile now sits in the line at a or b; the circled one starts at the other end of the swap
+        if (kinds && !kinds.includes(g.k)) continue;
         const into = g.cells.has(mv.a) ? mv.a : g.cells.has(mv.b) ? mv.b : -1;
         if (into < 0) continue;
-        const line = g.runs.find((r) => r.cells.includes(into)) || g.runs[0];
-        if (!best || (longest ? line.cells.length > best.line.length : line.cells.length < best.line.length)) best = { line: line.cells.slice(), from: into === mv.a ? mv.b : mv.a, into };
+        const run = g.runs.find((r) => r.cells.includes(into)) || g.runs[0];
+        if (run.cells.length < min) continue;
+        if (nearBomb && !run.cells.some((c) => [c - E.COLS, c + E.COLS, E.colOf(c) > 0 ? c - 1 : -1, E.colOf(c) < E.COLS - 1 ? c + 1 : -1]
+          .some((j) => j >= 0 && j < E.N && b[j] && b[j].k === 'bomb'))) continue;
+        const len = run.cells.length;
+        if (!best || (longest ? len > best.line.length : len < best.line.length)) best = { line: run.cells.slice(), from: into === mv.a ? mv.b : mv.a, into };
       }
     }
     return best;
   }
 
-  /** What a tip rings: parts [{ el } | { cells }] (round = a circle on one tile, point = an arrow from the bubble),
-   *  and `here` when it boxes a real move. null = not now. */
-  tipTarget(id) {
+  /** A guided step's target. */
+  guideOf(mv) {
+    return { guide: mv, parts: [{ cells: mv.line, line: true }, { cells: [mv.from], round: true, point: true }, { cells: [mv.into], round: true }] };
+  }
+
+  /** The tip that should show now, or null: { id, tg, text }. In order; the guided ones at most one a turn, from the 2nd turn. */
+  nextTip() {
     const s = this.state, me = s.sides[ME];
+    const seen = this.settings.tips || (this.settings.tips = {});
     const root = this.root;
-    const one = (el, extra) => (el && el.isConnected ? { parts: [{ el, point: true, ...extra }] } : null);
-    switch (id) {
-      case 'hp': {
-        const els = [0, 1].map((sd) => this.sideEl(sd) && this.sideEl(sd).querySelector('.ba-stat-hp')).filter(Boolean);
-        return els.length === 2 ? { parts: els.map((el) => ({ el, point: true })) } : null;
-      }
-      case 'moves': return one(root.querySelector('.ba-moves'));
-      case 'swap': {
-        const ln = this.tipLine(3);
-        if (!ln) return one(root.querySelector('.ba-board'));
-        return { here: true, demo: ln, parts: [{ cells: ln.line, point: true, demo: true }] };
-      }
-      case 'charge': { const mi = me.mons.findIndex((m) => m.energy > 0); return mi < 0 ? null : one(this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar')); }
-      case 'berry': return me.berries > 0 && !me.mons.every((m) => m.evo) ? one(this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry')) : null;
-      case 'evolve': { const mi = E.evolveOptions(s)[0]; return mi == null ? null : one(this.monEl(ME, mi)); }
-      case 'extra': {
-        // Before it happens: a real 4-in-a-row move, boxed (after the player's first move, and while this turn's
-        // extra is still to be had). After it happened without that: the move pips.
-        if (this._myMoves >= 1 && !s.extraUsed) {
-          const ln = this.tipLine(4, true);
-          if (ln) return { here: true, demo: ln, parts: [{ cells: ln.line, point: true, demo: true }] };
-        }
-        return this._sawExtra ? one(root.querySelector('.ba-moves')) : null;
-      }
-      case 'bomb': {
-        const at = s.board.findIndex((x) => x && x.k === 'bomb');
-        if (at < 0) return null;
-        const r = Math.floor(at / E.COLS), c = at % E.COLS;
-        const row = [], col = [];
-        for (let k = 0; k < E.COLS; k++) row.push(r * E.COLS + k);
-        for (let k = 0; k < E.ROWS; k++) col.push(k * E.COLS + c);
-        return { parts: [{ cells: row }, { cells: col }, { cells: [at], round: true, point: true }] };
-      }
-      default: return null;
+    const offline = !this.link;
+    const may = (id) => !seen[id];
+    const el1 = (el, extra) => (el && el.isConnected ? { parts: [{ el, point: true, ...extra }] } : null);
+    const guidedTurn = offline && this._myTurns >= 2 && this._guidedOn !== this._myTurns && s.movesLeft >= 1;
+    const monName0 = (mi) => monName(me.mons[mi].id, me.mons[mi].evo);
+    // 1. Whose monsters, and health.
+    if (may('yours')) {
+      const els = [this.monEl(ME, 0), this.monEl(ME, 1)];
+      const hp = [0, 1].map((sd) => this.sideEl(sd) && this.sideEl(sd).querySelector('.ba-stat-hp'));
+      if (els.every(Boolean) && hp.every(Boolean)) return { id: 'yours', text: offline ? t('tip_yours') : t('tip_yoursVs', { name: this.names[CPU] }), tg: { parts: [...els.map((el) => ({ el, point: true })), ...hp.map((el) => ({ el }))] } };
     }
+    // 2. The first swap, done by the player (before any other move).
+    if (may('doSwap') && offline && !this._myMoves) {
+      const mv = this.tipMove({ kinds: this.myKinds() }) || this.tipMove({ kinds: ELEMENTS });
+      if (mv) return { id: 'doSwap', text: t('tip_doSwap'), tg: this.guideOf(mv) };
+    }
+    // 3. What the gems did.
+    if (may('charged')) {
+      const mi = me.mons.findIndex((m) => m.energy > 0 && m.energy < costOf(m.id, s.rv || 1));
+      const bar = mi >= 0 && this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar');
+      if (bar) return { id: 'charged', text: t('tip_charged', { name: monName0(mi), n: me.mons[mi].energy, max: costOf(me.mons[mi].id, s.rv || 1) }), tg: { parts: [{ el: bar, point: true }] } };
+    }
+    // 4. Moves left, once a move has been used.
+    if (may('movesLeft') && this._myMoves >= 1 && s.movesLeft >= 1) {
+      const r = el1(root.querySelector('.ba-moves'));
+      if (r) return { id: 'movesLeft', text: s.movesLeft === 1 ? t('tip_movesLeft1') : t('tip_movesLeft', { n: s.movesLeft }), tg: r };
+    }
+    // 5. A power, after the player's first one.
+    if (may('power') && this._sawPower != null) {
+      const r = el1(this.monEl(ME, this._sawPower));
+      if (r) return { id: 'power', text: t('tip_power', { name: monName0(this._sawPower) }), tg: r };
+    }
+    // 6. Extra move: explained once it happened; else done by the player.
+    if (may('extraMove') && this._sawExtra) {
+      const r = el1(root.querySelector('.ba-moves'));
+      if (r) return { id: 'extraMove', text: t('tip_extraMove'), tg: r };
+    }
+    // 7. Berries: explained once collected; else done by the player.
+    const berriesMatter = !me.mons.every((m) => m.evo);
+    if (may('berries') && berriesMatter && me.berries > 0) {
+      const r = el1(this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry'));
+      if (r) return { id: 'berries', text: t('tip_berries', { n: me.berries, max: BERRIES_TO_EVOLVE }), tg: r };
+    }
+    // 8. Evolve: tap the monster (the preview opens).
+    if (may('doEvolve')) {
+      const mi = E.evolveOptions(s)[0];
+      const el = mi != null && this.monEl(ME, mi);
+      if (el) return { id: 'doEvolve', text: t('tip_doEvolve', { name: monName0(mi) }), tg: { tap: mi, parts: [{ el, point: true }] } };
+    }
+    // 9. A bomb: explained after the player set one off; else done by the player; else explained with its row and column.
+    if (may('boom') && this._sawBoom) return { id: 'boom', text: t('tip_boom'), tg: { parts: [{ el: root.querySelector('.ba-board') }] } };
+    // The guided steps for later turns (one a turn).
+    if (guidedTurn && may('doExtra') && !this._sawExtra && !s.extraUsed) {
+      const mv = this.tipMove({ min: 4, longest: true });
+      if (mv) return { id: 'doExtra', text: t('tip_doExtra'), tg: this.guideOf(mv) };
+    }
+    if (guidedTurn && may('doBerry') && berriesMatter && !me.berries) {
+      const mv = this.tipMove({ kinds: ['berry'] });
+      if (mv) return { id: 'doBerry', text: t('tip_doBerry'), tg: this.guideOf(mv) };
+    }
+    if (may('doBomb') && may('boom')) {
+      const at = s.board.findIndex((x) => x && x.k === 'bomb');
+      if (at >= 0) {
+        const mv = guidedTurn ? this.tipMove({ nearBomb: true }) : null;
+        if (mv) return { id: 'doBomb', text: t('tip_doBomb'), tg: this.guideOf(mv) };
+        if (this._myTurns >= 2) {
+          const r = Math.floor(at / E.COLS), c = at % E.COLS, row = [], col = [];
+          for (let k = 0; k < E.COLS; k++) row.push(r * E.COLS + k);
+          for (let k = 0; k < E.ROWS; k++) col.push(k * E.COLS + c);
+          return { id: 'doBomb', text: t('tip_bomb'), tg: { parts: [{ cells: row, line: true }, { cells: col, line: true }, { cells: [at], round: true, point: true }] } };
+        }
+      }
+    }
+    // 10. The arena button, from the 2nd turn.
+    if (may('arena') && this._myTurns >= 2) {
+      const r = el1(root.querySelector('.ba-stagebtn'));
+      if (r) return { id: 'arena', text: t('tip_arena'), tg: r };
+    }
+    return null;
   }
 
   checkTips() {
     if (this._tip || !this.canInput()) return;
-    const seen = this.settings.tips || (this.settings.tips = {});
-    for (const id of TIP_ORDER) {
-      if (seen[id]) continue;
-      const tg = this.tipTarget(id);
-      if (!tg) continue;
-      this.showTip(id, tg);
-      return;
-    }
+    const tip = this.nextTip();
+    if (!tip) return;
+    if (tip.tg.guide) this._guidedOn = this._myTurns;
+    this.showTip(tip.id, tip.tg, tip.text);
   }
 
-  showTip(id, tg) {
+  /** The other side's first turn: a note at their name, no button; it goes when the turn comes back. */
+  theirTurnNote() {
+    const seen = this.settings.tips || (this.settings.tips = {});
+    if (seen.theirTurn || this._tip) return;
+    const side = this.sideEl(CPU);
+    const el = side && (side.querySelector('.ba-name') || side);
+    if (!el) return;
+    this.showTip('theirTurn', { note: true, parts: [{ el, point: true }] }, (this.link ? t('tip_theirTurn', { name: this.names[CPU] }) : t('tip_theirTurnCpu')));
+  }
+
+  /** Put a tip up. A guided step (`tg.guide` / `tg.tap`) and a note (`tg.note`) have no Got it and never block the screen;
+   *  the guided swap is enforced in trySwap, the guided tap in onMonTap. */
+  showTip(id, tg, text) {
     const battle = this.root.querySelector('.ba-battle');
     if (!battle) return;
-    const block = !this.timed;
+    const act = !!(tg.guide || tg.tap != null || tg.note);
+    const block = !this.timed && !act;
     const ov = document.createElement('div');
     ov.className = 'ba-coach' + (block ? '' : ' is-free');
-    const text = t('tip_' + id + (tg.here ? '_demo' : ''));
-    ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}${p.demo ? ' is-demo' : ''}"></div>`).join('')
-      + (tg.demo ? `<svg class="ba-coach-swaparrow" aria-hidden="true"><defs><marker id="ba-cs-head" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto-start-reverse"><path d="M0,0 L14,7 L0,14 z" fill="#fff" stroke="#15202e" stroke-width="1.5"/></marker></defs><line stroke="#15202e" stroke-width="10" stroke-linecap="round"/><line class="is-top" stroke="#fff" stroke-width="6" stroke-linecap="round" marker-start="url(#ba-cs-head)" marker-end="url(#ba-cs-head)"/></svg>` : '')
+    ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}${p.line ? ' is-line' : ''}"></div>`).join('')
+      + (tg.guide ? `<svg class="ba-coach-swaparrow" aria-hidden="true"><defs><marker id="ba-cs-head" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto-start-reverse"><path d="M0,0 L14,7 L0,14 z" fill="#fff" stroke="#15202e" stroke-width="1.5"/></marker></defs><line stroke="#15202e" stroke-width="10" stroke-linecap="round"/><line class="is-top" stroke="#fff" stroke-width="6" stroke-linecap="round" marker-start="url(#ba-cs-head)" marker-end="url(#ba-cs-head)"/></svg>` : '')
       + `<div class="ba-coach-bubble" role="dialog" aria-live="polite">${tg.parts.filter((p) => p.point).map(() => '<i class="ba-coach-arrow"></i>').join('')}<p>${escapeHTML(text)}</p>
-        <button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button></div>`;
+        ${act ? '' : `<button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button>`}</div>`;
     battle.appendChild(ov);
     this._tip = { id, tg, ov, block };
     this.placeTip();
     noteTipShown('battlearena', id);
-    this.on(ov.querySelector('[data-role="tip-ok"]'), 'click', (e) => { e.stopPropagation(); this.hideTip(true); this.checkTips(); });
+    const ok = ov.querySelector('[data-role="tip-ok"]');
+    if (ok) this.on(ok, 'click', (e) => { e.stopPropagation(); this.hideTip(true); this.checkTips(); });
   }
 
   /** One part's screen box: its element, or the union of its cells' tiles. */
   partRect(p) {
     if (p.el) return p.el.isConnected ? p.el.getBoundingClientRect() : null;
-    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    let l = Infinity, tp = Infinity, r = -Infinity, b = -Infinity;
     for (const i of p.cells) {
       const tile = this.state.board[i];
       const el = tile && this.tiles.get(tile.id);
       if (!el) return null;
       const q = el.getBoundingClientRect();
-      l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+      l = Math.min(l, q.left); tp = Math.min(tp, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
     }
-    return { left: l, top: t, right: r, bottom: b, width: r - l, height: b - t };
+    return { left: l, top: tp, right: r, bottom: b, width: r - l, height: b - tp };
   }
 
-  /** Ring each part, and put the bubble below them (or above, when they sit low), an arrow at each pointed part. */
+  /** Ring each part and place the bubble: tips on the board (tiles, the board) sit just ABOVE the board so it all stays
+   *  visible (the outside review, 2026-11-16); others below their rings, or above when the rings sit low. */
   placeTip() {
     const tp = this._tip;
     if (!tp) return;
@@ -1380,65 +1467,39 @@ class BattleArena {
     if (!battle || !rects.length || rects.some((q) => !q)) { this.hideTip(false); return; }
     const b = battle.getBoundingClientRect();
     const rings = tp.ov.querySelectorAll('.ba-coach-ring'), bub = tp.ov.querySelector('.ba-coach-bubble');
-    let top = Infinity, bottom = -Infinity, cxSum = 0;
+    let top = Infinity, bottom = -Infinity;
     rects.forEach((r, k) => {
-      const p = tp.tg.parts[k];
-      const pad = p.cells ? 2 : 6;
+      const pad = tp.tg.parts[k].cells ? 2 : 6;
       Object.assign(rings[k].style, { left: (r.left - b.left - pad) + 'px', top: (r.top - b.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px' });
       top = Math.min(top, r.top - pad); bottom = Math.max(bottom, r.bottom + pad);
     });
-    if (tp.tg.demo) {                 // keep the bubble off the two tiles that trade places
-      for (const i of [tp.tg.demo.from, tp.tg.demo.into]) {
-        const el = this.state.board[i] && this.tiles.get(this.state.board[i].id);
-        if (el) { const q = el.getBoundingClientRect(); top = Math.min(top, q.top - 4); bottom = Math.max(bottom, q.bottom + 4); }
-      }
-    }
+    const boardEl = this.root.querySelector('.ba-board');
+    const onBoard = tp.tg.parts.some((p) => p.cells || p.el === boardEl);
     const pointed = rects.filter((r, k) => tp.tg.parts[k].point);
-    for (const r of pointed) cxSum += r.left - b.left + r.width / 2;
-    const cx = cxSum / pointed.length;
+    const aim = pointed.length ? pointed : rects;
+    const cx = aim.reduce((a, r) => a + r.left - b.left + r.width / 2, 0) / aim.length;
     const w = Math.min(320, b.width - 24);
     const left = Math.max(12, Math.min(b.width - w - 12, cx - w / 2));
     bub.style.width = w + 'px';
     bub.style.left = left + 'px';
-    // Below when the rings' middle is in the upper part of the screen; above otherwise.
-    const below = (top + bottom) / 2 - b.top < b.height * 0.55;
+    let below;
+    if (onBoard && boardEl) { below = false; top = boardEl.getBoundingClientRect().top; }
+    else below = (top + bottom) / 2 - b.top < b.height * 0.55;
     bub.classList.toggle('is-below', below);
     bub.classList.toggle('is-above', !below);
     if (below) { bub.style.top = (bottom - b.top + 14) + 'px'; bub.style.bottom = ''; }
     else { bub.style.bottom = (b.bottom - top + 14) + 'px'; bub.style.top = ''; }
-    if (tp.tg.demo) this.placeDemo(tp, b);
     tp.ov.querySelectorAll('.ba-coach-arrow').forEach((a, k) => {
       const r = pointed[k];
       a.style.left = Math.max(18, Math.min(w - 18, r.left - b.left + r.width / 2 - left)) + 'px';
     });
-  }
-
-  /** The swap, shown: copies of the two tiles trade places over and over (the box lights when the line forms), a
-   *  two-way arrow between them; the real two tiles hide under the copies while the tip is up. */
-  placeDemo(tp, b) {
-    const { from, into } = tp.tg.demo;
-    const tA = this.state.board[from], tB = this.state.board[into];
-    const elA = tA && this.tiles.get(tA.id), elB = tB && this.tiles.get(tB.id);
-    if (!elA || !elB) return;
-    const rA = elA.getBoundingClientRect(), rB = elB.getBoundingClientRect();
-    const dx = rB.left - rA.left, dy = rB.top - rA.top;
-    for (const c of tp.ov.querySelectorAll('.ba-coach-ghost')) c.remove();
-    const ghost = (el, r, x, y) => {
-      const g = el.cloneNode(true);
-      g.className = 'ba-tile ba-coach-ghost';
-      // visibility '' : on a re-place the real tile is already hidden, and a copy of it would be too
-      Object.assign(g.style, { left: (r.left - b.left) + 'px', top: (r.top - b.top) + 'px', width: r.width + 'px', height: r.height + 'px', transform: '', visibility: '' });
-      g.style.setProperty('--dx', x + 'px'); g.style.setProperty('--dy', y + 'px');
-      tp.ov.insertBefore(g, tp.ov.querySelector('.ba-coach-swaparrow'));
-    };
-    ghost(elB, rB, -dx, -dy);
-    ghost(elA, rA, dx, dy);              // the moving tile on top
-    tp.hidden = [elA, elB];
-    for (const el of tp.hidden) el.style.visibility = 'hidden';
+    // The guided swap's two-way arrow, between the two tiles.
     const svg = tp.ov.querySelector('.ba-coach-swaparrow');
-    if (svg) {
+    if (svg && tp.tg.guide) {
+      const rA = this.partRect({ cells: [tp.tg.guide.from] }), rB = this.partRect({ cells: [tp.tg.guide.into] });
       const ax = rA.left - b.left + rA.width / 2, ay = rA.top - b.top + rA.height / 2;
-      const bx = ax + dx, by = ay + dy, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, cut = len * 0.2;
+      const bx = rB.left - b.left + rB.width / 2, by = rB.top - b.top + rB.height / 2;
+      const len = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / len, uy = (by - ay) / len, cut = len * 0.2;
       for (const ln of svg.querySelectorAll('line')) {
         ln.setAttribute('x1', ax + ux * cut); ln.setAttribute('y1', ay + uy * cut);
         ln.setAttribute('x2', bx - ux * cut); ln.setAttribute('y2', by - uy * cut);
@@ -1446,12 +1507,18 @@ class BattleArena {
     }
   }
 
-  /** `done` = the player saw it through (Got it, or their move in a live room): never shown again on this phone. */
+  /** Is this swap the one a guided step asks for? (No step up = any swap.) */
+  guideAllows(a, b) {
+    const g = this._tip && this._tip.tg.guide;
+    if (this._tip && this._tip.tg.tap != null) return false;        // "Tap X to evolve it" first
+    return !g || (a === g.from && b === g.into) || (a === g.into && b === g.from);
+  }
+
+  /** `done` = the player saw it through (Got it, did the step, or their move in a live room): never shown again here. */
   hideTip(done) {
     const tp = this._tip;
     if (!tp) return;
     this._tip = null;
-    for (const el of tp.hidden || []) el.style.visibility = '';
     tp.ov.remove();
     if (done) {
       (this.settings.tips || (this.settings.tips = {}))[tp.id] = 1;
@@ -1459,6 +1526,7 @@ class BattleArena {
       noteTipDone('battlearena', tp.id);
     }
   }
+
 
   // --- the other person's moves (online) ----------------------------------------------------------
   /** One stored entry from the other phone: queued, then played exactly as the computer's moves
@@ -1543,6 +1611,7 @@ class BattleArena {
     const sd = Number(mon.dataset.side), mi = Number(mon.dataset.mon);
     const s = this.state;
     const m = s.sides[sd].mons[mi];
+    if (this._tip && this._tip.tg.tap === mi && sd === ME) this.hideTip(true);   // the tutorial's "Tap X to evolve it", done
     if (sd === ME && s.turn === ME && !this.busy && E.evolveOptions(s).includes(mi)) {
       // A preview first (2026-11-14, Matt: "we need a way to see the options before someone can decide"): now vs evolved.
       this.showEvolve(mi);
@@ -1995,6 +2064,7 @@ class BattleArena {
           if (this.ui) this.ui.left += 1;
           break;
         case 'bomb':
+          if (this._playingMine && !e.boom) this._sawBoom = true;   // the tutorial: the player's own match set it off
           this.blast(e.at, e.boom);
           await this.sleep(rm ? 120 : 300);
           break;
@@ -2130,6 +2200,7 @@ class BattleArena {
           break;
         }
         case 'special': {
+          if (e.side === ME && this._sawPower == null) this._sawPower = e.mon;   // the tutorial's "power" tip
           await landed;
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon);
