@@ -180,6 +180,9 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
   vs live 34.3%, full 41.3% both; random 1-10 cup racks (mulberry32 5151, 20k), bounce 15.7% vs live 24.8%, full
   28.8% both, but 2x the bounced balls reach a cup (they keep bouncing), so more bounce makes overall (1,031 vs 819).
   The 0.88/0.65/0.76 tuning before it: CLAUDE-HISTORY.md. Check every bounce change on the FULL rack too.
+  **Matt's real throws** (2026-11-16, `tools/replay-cuppong-throws.mjs <CODE>`; 2,069 throws Sep 28-Nov 15, 2,026 land
+  as recorded on the live physics): made 31.9% live vs 31.2% test; table first 24.1% vs 20.8%; cup first 37.3% vs 37.1%.
+  Run it, and the full-rack grid, on every bounce change.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
 - `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
