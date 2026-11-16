@@ -8,7 +8,7 @@ import { POINT_GAMES } from '../js/lb-points.js';
 import { WO_BAND_POINTS, WO_TIERS, woEarnedPoints } from '../js/arrow-maze-time.js';
 import { glLevelPoints, glHintedPoints, glBandOf } from '../js/gridlock-points.js';
 import { puzzlePoints, LEVEL_POINTS, LEVEL_CAP } from '../js/puzzle-points.js';
-import { wwStarsFor, WW_MULT } from '../js/word-weaver-points.js';
+import { wwStarsFor, wwMult } from '../js/word-weaver-points.js';
 const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 import { setLang } from '../js/i18n.js';
 import STRINGS from '../js/strings.js';
@@ -71,9 +71,9 @@ for (const id of Object.keys(LB_RULES)) {
   ok('word weaver: one table + "bought hints" line', c.grid && c.foot === 'lbrs_ww_foot' && c.grid.cols.join() === '0,1,2+');
   ['easy', 'medium', 'hard', 'expert'].forEach((b, i) => {
     const v = c.grid.rows[i].vals;
-    ok(`word weaver ${b}: ${v.join(', ')}`, [0, 1, 2, 5].every((h) => wwStarsFor(h) * WW_MULT[b] === v[Math.min(h, 2)]));
+    ok(`word weaver ${b}: ${v.join(', ')}`, [0, 1, 2, 5].every((h) => wwStarsFor(h) * wwMult()[b] === v[Math.min(h, 2)]));
   });
-  ok('word weaver: Expert 12, 8, 4', c.grid.rows[3].vals.join() === '12,8,4');
+  ok('word weaver (admin device, Matt 2026-11-16): Expert 36, 24, 12', c.grid.rows[3].vals.join() === '36,24,12');
 }
 
 // Sudoku / Murdoku: the points table IS puzzle-points' HINT_STEPS; real records score what the cells say.
