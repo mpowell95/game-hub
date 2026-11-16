@@ -166,7 +166,8 @@ export const LATERAL_DAMPING = 14; // how fast lateral velocity approaches its t
 // second-playthrough item-1 fix): the camera rides the centerline's moving frame (position along
 // it, yaw aligned to the local tangent) so a curve turns the world around a visually planted ball,
 // with only this small lag/easing producing on-screen lateral motion, never the curve itself.
-export const CAMERA_LAG = 0.12; // lerp factor per frame toward the ball's lateral position
+export const CAMERA_LAG = 0.12; // lerp factor per 1/CAMERA_LAG_HZ seconds toward the ball's lateral position (per frame until 2026-11-16)
+export const CAMERA_LAG_HZ = 120; // the frame rate CAMERA_LAG was felt at (Matt's 120 Hz iPhone): the follow is the same at any frame rate
 export const CAMERA_HEIGHT = 3.6;
 export const CAMERA_BACK = 7.5;
 export const CAMERA_LOOK_AHEAD = 10;
