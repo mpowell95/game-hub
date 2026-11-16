@@ -99,14 +99,33 @@ function proClassic(s, moves) {
   return best;
 }
 
+// Classic Hard v2 (2026-11-16, behind the gate in ui.js; results carry `cv: 2`). Perfect play meant
+// 0 wins in 52 for real people. Now, with this chance a move, it plays a move that is NOT the best
+// (when one exists), so a player who spots the slip can win. Tuned by simulation (tools/sim-ttt-hard.mjs).
+export const PRO_V2_SLIP = 0.25;
+function proClassicV2(s, moves, rng, slip) {
+  const me = s.turn;
+  const vals = moves.map((m) => {
+    const child = cloneClassic(s);
+    applyMoveClassic(child, m);
+    return minimaxClassic(child, me, -Infinity, Infinity);
+  });
+  const bestV = Math.max(...vals);
+  const best = moves.filter((m, i) => vals[i] === bestV);
+  const worse = moves.filter((m, i) => vals[i] < bestV);
+  if (worse.length && rng() < slip) return pick(worse, rng);
+  return pick(best, rng);
+}
+
 /** Pick a cell for the side to move in a Classic state. `tier` is
- *  'beginner' | 'intermediate' | 'pro'. */
-export function chooseClassicMove(s, tier, rng = Math.random) {
+ *  'beginner' | 'intermediate' | 'pro'. `opts.v2` = the new Hard (a slip now and then). */
+export function chooseClassicMove(s, tier, rng = Math.random, opts = null) {
   const moves = legalMovesClassic(s);
   if (!moves.length) return null;
   if (moves.length === 1) return moves[0];
   if (tier === 'beginner') return beginnerClassic(s, moves, rng);
   if (tier === 'intermediate') return intermediateClassic(s, moves, rng);
+  if (opts && opts.v2) return proClassicV2(s, moves, rng, opts.slip ?? PRO_V2_SLIP);
   return proClassic(s, moves);
 }
 
@@ -310,10 +329,10 @@ export function chooseUltimateMove(state, tier, rng = Math.random) {
 
 // === Unified dispatch ========================================================
 
-export function chooseMove(state, tier, rng = Math.random) {
+export function chooseMove(state, tier, rng = Math.random, opts = null) {
   return state.variant === 'ultimate'
     ? chooseUltimateMove(state, tier, rng)
-    : chooseClassicMove(state, tier, rng);
+    : chooseClassicMove(state, tier, rng, opts);
 }
 
 export default { chooseMove, chooseClassicMove, chooseUltimateMove };

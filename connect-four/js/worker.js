@@ -26,7 +26,7 @@ import { Game } from './game.js';
 import { AI, evaluateColumns, clearTranspositionTable } from './ai.js';
 
 self.onmessage = (e) => {
-  const { id, kind, history, firstPlayer, difficulty, budgetMs, seed } = e.data;
+  const { id, kind, history, firstPlayer, difficulty, budgetMs, seed, v2 } = e.data;
   try {
     if (kind === 'newgame') {
       clearTranspositionTable();
@@ -42,7 +42,7 @@ self.onmessage = (e) => {
         exact: evals.exact, reachedDepth: evals.reachedDepth,
       });
     } else {
-      const ai = new AI(difficulty, { expertBudgetMs: budgetMs, seed });
+      const ai = new AI(difficulty, { expertBudgetMs: budgetMs, seed, v2: !!v2 });
       self.postMessage({ id, col: ai.chooseMove(game) });
     }
   } catch (err) {

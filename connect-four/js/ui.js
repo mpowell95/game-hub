@@ -16,6 +16,11 @@ import { cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/chal
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
 import { recordConnect4, withMode, logPlayData } from '../../js/game-stats.js';
+import { isAdminDevice } from '../../js/admin-config.js';
+
+// The new Medium computer (2026-11-16, Matt: Connect 4 medium easier). Admin devices only; flip when Matt says "release it".
+const NEW_AI_RELEASED = false;
+function newAI() { try { return NEW_AI_RELEASED || isAdminDevice(); } catch { return false; } }
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -61,6 +66,7 @@ function saveC4Game(ui) {
       // The game's AI seed (2026-10-29): the computer's choice among equally good moves comes from
       // it, so a resume plays on exactly as the game would have, and a NEW game plays differently.
       aiSeed: ui.aiSeed,
+      cv: ui.cv2 ? 2 : undefined,   // played against the new Medium (2026-11-16); absent = the old computer
       recorded: !!ui.game._statsRecorded,   // 2026-10-29: undone after its result was recorded
       moved: ui._moved,   // 2026-10-29: the human has moved this game (an undo cannot clear it): quitting now is a loss
     }));
@@ -92,6 +98,7 @@ function loadC4Game() {
       // A save from before the seed existed gets a fresh one (nothing was promised about its replies).
       aiSeed: Number.isInteger(raw.aiSeed) && raw.aiSeed >= 0 && raw.aiSeed <= 0xFFFFFFFF ? raw.aiSeed : newAiSeed(),
       moved: !!raw.moved || !!raw.humanHasMoved,
+      cv2: raw.cv === 2,
       recorded: !!raw.recorded,
     };
   } catch { return null; }
@@ -259,6 +266,7 @@ class ConnectFourUI {
       difficulty: this.effectiveDifficulty(),
       budgetMs: EXPERT_BUDGET_MS,
       seed: this.aiSeed,
+      v2: !!this.cv2,
     };
     if (this.worker) {
       try { return (await this.postToWorker(params)).col; }
@@ -300,7 +308,7 @@ class ConnectFourUI {
     const { AI } = await import('./ai.js');
     const game = new Game(params.firstPlayer);
     for (const c of params.history) game.play(c);
-    const ai = new AI(params.difficulty, { expertBudgetMs: params.budgetMs, seed: params.seed });
+    const ai = new AI(params.difficulty, { expertBudgetMs: params.budgetMs, seed: params.seed, v2: params.v2 });
     await new Promise((r) => setTimeout(r, 16)); // let "thinking…" paint first
     return ai.chooseMove(game);
   }
@@ -521,6 +529,7 @@ class ConnectFourUI {
     this.humanHasMoved = saved.humanHasMoved;
     this.aiSeed = saved.aiSeed;
     this._ulog = []; this._t0 = Date.now(); this._res = 1;   // private play data: undos before the resume are not known
+    this.cv2 = saved.cv2;
     this._moved = saved.moved;
     this.game = saved.game;
     if (saved.recorded) this.game._statsRecorded = true;
@@ -634,6 +643,7 @@ class ConnectFourUI {
     }
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
+    this.cv2 = newAI();   // this game's computer: new Medium or the old one (never changes mid-game)
     this.aiSeed = newAiSeed();   // each game gets its own variation of the computer's equal choices
     this._ulog = []; this._t0 = Date.now(); this._res = 0;   // private play data (2026-11-16): undos, start time, resumed
     this.busy = false;
@@ -840,6 +850,7 @@ class ConnectFourUI {
         firstPlayer: this.game.firstPlayer,
         difficulty: this.effectiveDifficulty(),
         budgetMs: EXPERT_BUDGET_MS,
+        v2: !!this.cv2,
       });
     }
     // Guard against a teardown / new game during the async wait.
@@ -1038,7 +1049,9 @@ class ConnectFourUI {
    *  First move setting (you / ai / alternate; who actually moved first is already in `firstMove`), and
    *  whether Undo or Show best moves was used this game (`aid`). */
   _modeOf() {
-    return { first: this.firstMode, aid: this._statsDisqualified ? 1 : 0 };
+    const m = { first: this.firstMode, aid: this._statsDisqualified ? 1 : 0 };
+    if (this.cv2 && this.difficulty === 'medium') m.cv = 2;   // vs the new Medium (2026-11-16)
+    return m;
   }
 
   /** Count the completed game for the hazing and, once past it, award the Connect Four

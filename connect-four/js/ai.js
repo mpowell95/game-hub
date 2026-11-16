@@ -29,6 +29,12 @@ export const Difficulty = {
 const MEDIUM_DEPTH = 5;
 const HARD_DEPTH = 9;
 
+// Medium v2 (2026-11-16, behind the gate in ui.js; results carry `cv: 2`). Real people won 8 of 161
+// against the old Medium (5%), so it played like Expert. The new Medium looks fewer moves ahead and
+// sometimes just plays a random column (a human's slip). Numbers tuned by simulation (tools/sim-c4-medium.mjs).
+export const MEDIUM_V2_DEPTH = 3;
+export const MEDIUM_V2_SLIP = 0.15;
+
 // Center-out column order — better alpha-beta pruning and stronger play, since
 // central columns participate in more winning lines.
 const COLUMN_ORDER = [3, 2, 4, 1, 5, 0, 6];
@@ -781,6 +787,15 @@ function chooseSearchTimed(board, player, deadline, rng = null) {
   return bestCol;
 }
 
+/** Medium v2: a shallower search, and now and then a random column. */
+function chooseMediumV2(board, player, rng, depth, slip) {
+  if (rng() < slip) {
+    const moves = board.legalMoves();
+    return moves[Math.floor(rng() * moves.length)];
+  }
+  return chooseSearch(board, player, depth, rng);
+}
+
 // ---------------------------------------------------------------------------
 // Easy.
 // ---------------------------------------------------------------------------
@@ -834,6 +849,10 @@ export class AI {
     this.nearEqualMargin = Number.isFinite(options.nearEqualMargin) ? options.nearEqualMargin
       : (difficulty === Difficulty.HARD || difficulty === Difficulty.EXPERT) ? HARD_NEAR_EQUAL_MARGIN : NEAR_EQUAL_MARGIN;
     this.expertBudgetMs = options.expertBudgetMs ?? DEFAULT_EXPERT_BUDGET_MS;
+    // The new Medium (see MEDIUM_V2_*); false = exactly the old Medium.
+    this.v2 = !!options.v2;
+    this.v2Depth = options.v2Depth ?? MEDIUM_V2_DEPTH;
+    this.v2Slip = options.v2Slip ?? MEDIUM_V2_SLIP;
   }
 
   /** Choose a column to play for the side to move in `game`. */
@@ -844,7 +863,9 @@ export class AI {
     const rng = (this.seed !== null && !this._explicitRng) ? moveRng(this.seed, board.moveCount) : this.rng;
     switch (this.difficulty) {
       case Difficulty.EASY:   return chooseEasy(board, currentPlayer, rng);
-      case Difficulty.MEDIUM: return chooseSearch(board, currentPlayer, MEDIUM_DEPTH, rng);
+      case Difficulty.MEDIUM: return this.v2
+        ? chooseMediumV2(board, currentPlayer, rng, this.v2Depth, this.v2Slip)
+        : chooseSearch(board, currentPlayer, MEDIUM_DEPTH, rng);
       case Difficulty.HARD:   return chooseSearch(board, currentPlayer, HARD_DEPTH, rng);
       // Expert varies only when it has a seed (or an explicit rng): the exact solver's own
       // ties stay deterministic for the tests that call it bare.
