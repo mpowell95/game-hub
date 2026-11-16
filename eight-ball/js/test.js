@@ -328,7 +328,15 @@ for (const [mode, diffs, opts] of [['8', ['hard', 'easy'], {}], ['9', ['hard', '
       return m.last && m.last.foul;
     };
     ok('rules 2: a soft touch with no cushion is not a foul; rules 1 still calls it', soft(2) == null && soft(1) === 'norail', soft(2) + '/' + soft(1));
-    ok('a new match is on today\'s rules; one with none is rules 1', E.newMatch('8').rv === E.RULES_NOW && E.RULES_NOW === 3 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 5, 1), rv: undefined }));
+    {
+      // Rules 4 (2026-11-16, Matt): one of theirs down with one of yours ends the turn; rules 3 went on.
+      const go = (rv, pots) => { const m = E.newMatch('8', 1, 0, 5, {}, undefined, rv); m.broke = true; m.groups = ['a', 'b']; m.turn = 0;
+        for (const i of pots) m.b[i].on = false;
+        return E.settle(m, { pots, first: 3, rail: true, kiss: {}, pocketAt: [], targets: [1, 2, 3, 4, 5, 6, 7] }).kind; };
+      ok('rules 4: yours + theirs ends the turn, yours alone goes again; rules 3 unchanged',
+        go(4, [3, 10]) === 'turn' && go(4, [3]) === 'again' && go(4, [10]) === 'turn' && go(3, [3, 10]) === 'again');
+    }
+    ok('a new match is on today\'s rules; one with none is rules 1', E.newMatch('8').rv === E.RULES_NOW && E.RULES_NOW === 4 && E.validMatch({ ...E.newMatch('8', 1, 0, 3, {}, 5, 1), rv: undefined }));
   }
   {
     // Rules 3 (2026-10-24): a clean break that pots the 11 gives the breaker stripes; rules 2 kept it open.

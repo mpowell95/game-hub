@@ -68,6 +68,10 @@ black pockets, coral and cyan groups).
   `fixAfter`) decides the groups after that many shots, nothing else; backup taken first. The 8 must be called (always); it wins only as your target,
   clean and in the called pocket; otherwise you lose the rack. 8 on the break wins (loses with a
   scratch).
+  **Rules 4 (2026-11-16, Matt: the computer sank one of its own and one of his, went again: "That's not
+  how pool works")**: once groups are set, any ball of the other group dropping ends the turn (no foul,
+  it stays down). WPA lets the shooter go on. Old online matches keep their `rv`; saved local games
+  take today's rules on Continue (`_savedMatch`).
 - **9-ball**: 1-9 in a diamond (1 front, 9 middle). First contact must be the lowest ball (the
   break too). Pot anything and go again; the 9 wins whenever it counts (combos, the break). A 9
   that drops on a foul or without counting is spotted.
