@@ -784,7 +784,7 @@ class Game {
     const alive = pub.players.filter((p) => !p.out);
     if (meP && !meP.out) {
       q('.pk-ban-rank').textContent = placeText(1 + alive.filter((p) => p.chips > meP.chips).length);
-      q('.pk-ban-of').textContent = t('ban_of', { n: alive.length });
+      q('.pk-ban-of').textContent = '';   // just "1st" (2026-11-16, Matt: no "of 7" anywhere)
     } else {
       q('.pk-ban-rank').textContent = meP ? placeText(meP.place) : '-';
       q('.pk-ban-of').textContent = '';

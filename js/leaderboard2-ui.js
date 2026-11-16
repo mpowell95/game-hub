@@ -870,7 +870,7 @@ function personGameHTML(top) {
   const head = `<div class="lb2-card lb2-kcard"><div class="lb2-khead">${art(top.game)}<span class="lb2-grow"><span class="lb2-t1">${esc(title(top.game))}</span></span>${playable(top.game) ? `<button type="button" class="lb2-play sm" data-act="play" data-game="${esc(top.game)}">${esc(t2('lb2_play'))}</button>` : ''}</div>
     <div class="lb2-kcells" style="grid-template-columns:repeat(${cells.split('class="lb2-kc"').length - 1},minmax(0,1fr))">${cells}</div></div>`;
   // The rows look (2026-11-07, Matt: "Build it. thats WAY better"; docs/mockups/lb2-player-game.html), ADMIN DEVICES
-  // ONLY until Matt says "release it": Play in the top bar, one standing card (medal, "2nd of 6", the board number),
+  // ONLY until Matt says "release it": Play in the top bar, one standing card (medal, "2nd", the board number),
   // the gold holder and the gap under it; the details below draw themselves as rows (game-stats-ui.js `_rows`).
   const rowsLook = (() => { try { return isAdminDevice(); } catch { return false; } })();
   let topBar = bar, topCard = head;
@@ -880,8 +880,8 @@ function personGameHTML(top) {
     let gp = null;
     try { gp = lb2Gap(_people, top.key, top.game); } catch (err) { console.error('[leaderboard2] gap failed', err); }
     const rk = place && place.rank ? place.rank : 0;
-    const of = gp && gp.of ? gp.of : ((_model.byGame[top.game] || {}).rows || []).length;
-    const left = rk ? `<div class="lb2-sl">${rk <= 3 && !place.noMedal ? medal(rk, 'big') : ''}<span><b>${esc(t2('lb2_ord', { n: rk }))}</b>${of ? `<small>${esc(t2('lb2_of_n', { n: fmt(of) }))}</small>` : ''}</span></div>` : '';
+    // No "of 7" under the place (2026-11-16, Matt: "it should just say '1st'").
+    const left = rk ? `<div class="lb2-sl">${rk <= 3 && !place.noMedal ? medal(rk, 'big') : ''}<span><b>${esc(t2('lb2_ord', { n: rk }))}</b></span></div>` : '';
     const right = bnum ? `<div class="lb2-sr"><b class="num">${bnum}</b><small>${esc(unit || t2('lb2_record'))}</small></div>`
       : nPlayed > 0 ? `<div class="lb2-sr"><b class="num">${fmt(nPlayed)}</b><small>${esc(t2('lb2_played_col'))}</small></div>` : '';
     const tierCls = rk >= 1 && rk <= 3 && !place.noMedal ? ` pod${rk}` : '';
@@ -959,8 +959,18 @@ function render({ keepScroll = false, restore = false } = {}) {
   // tall enough to hold it, then released.
   if (_pend && _connected && (!sc || top <= 0 || sc.scrollTop >= top - 1 || Date.now() > _pend)) _pend = 0;
   watchPin(page, sc);
+  fitNames(page);
   if (focused) { const q = page.querySelector('[data-role="q"]'); if (q) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch { /* type=search */ } } }
   if (_bs) _bs.sync(levelNow());
+}
+/** A name in a top bar stays on ONE line (2026-11-16, Matt: "I don't like how his name is on two lines"): the font
+ *  steps down until it fits, never under 16px; past that the end is cut with "…". */
+function fitNames(page) {
+  for (const h of page.querySelectorAll('.lb2-bar h1')) {
+    h.style.fontSize = '';
+    let px = parseFloat(getComputedStyle(h).fontSize) || 20;
+    while (h.scrollWidth > h.clientWidth + 1 && px > 16) { px -= 1; h.style.fontSize = px + 'px'; }
+  }
 }
 /** Screens deep (1 = the first screen): the game it was opened on is level 1, the help sheet one more. */
 function levelNow() {
@@ -1227,7 +1237,7 @@ export async function openLeaderboard2(opts = {}) {
   _host = host;
   document.documentElement.classList.add('gh-lb2-open');
   fitHeight();
-  _offVp = onViewportResize(fitHeight);
+  _offVp = onViewportResize(() => { fitHeight(); const pg = _host && _host.querySelector('.lb2-page'); if (pg) fitNames(pg); });
   // On the profile page the tab bar is that page's: it stays on Profile and its own taps do the leaving.
   if (!_pageTabs) { lightTab(true); document.addEventListener('click', onTabTap, true); }
   document.addEventListener('keydown', onKey);
@@ -1564,7 +1574,7 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 .lb2-beei .lb-ctm,.lb2-beei img{height:18px;width:auto}
 .lb2-bees b{font-size:13px;font-weight:700;color:var(--l2-text)}
 :root.gh-dark .lb2 .lb-ctm img,:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
-.lb2-bar h1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.1}
+.lb2-bar h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
 html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-rview{flex:0 0 auto;width:46%;min-height:48px}
 .lb2-ctrlrow>.lb2-seg.stk{flex:1}

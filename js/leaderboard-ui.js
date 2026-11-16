@@ -2067,7 +2067,7 @@ function gapKind(id) {
   if (id === 'contexto') return null;
   return ({
     lb_unit_ms_best: 'time', lb_unit_golf_best: 'golf', lb_unit_meters: 'meters', lb_unit_points: 'points', lb_unit_stars: 'stars',
-    lb_unit_obstacles: 'obstacles', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank', lb_unit_words: 'words',
+    lb_unit_obstacles: 'obstacles', lb_unit_blocks: 'blocks', lb_unit_longest: 'longest', lb_unit_solved: 'solved', lb_unit_bank: 'bank', lb_unit_words: 'words',
   })[lbUnitKeyOf(id)] || 'wins';
 }
 function numText(n) {
