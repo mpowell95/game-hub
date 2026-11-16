@@ -307,7 +307,8 @@ class ContextoUI {
   /** THIS PUZZLE ON THE PLAYER'S OTHER PHONES AND BROWSERS (2026-10-28, integrity; Matt: "All holes
    *  like this MUST be fixed"). The save is per phone storage, so a hint or a give-up in Safari, or a
    *  solve on a second phone, used to be invisible here: hint in one place, then solve hint-free in
-   *  another for a gold, or solve twice. The play log is per PLAYER CODE, so it is read back:
+   *  another for a gold, or solve twice. The play log is per PLAYER CODE; its hint/giveup/win rows are
+   *  read back from ctSync/<CODE> (the server's copy; the play log is admin-only since 2026-11-16):
    *  { hints, gave, won } (engine.js logSummary: `opts.exclude` = this phone's own finishing entry,
    *  which is sent first so the server's time orders it), or null offline / no code (4 s at most). */
   async _remote(k, opts = {}) {
@@ -320,9 +321,17 @@ class ContextoUI {
         if (!boot || !(await ensureAuthClaim(boot))) return null;
         const { api, db } = boot;
         if (opts.exclude) { try { await (await import('../../js/play-log.js')).flushPlayLog(); } catch { /* sent later */ } }
-        const snap = await api.get(api.query(api.ref(db, `playLog/${code}`), api.orderByChild('k'), api.equalTo(k)));
-        const val = (snap && snap.val()) || {};
-        return logSummary(Object.keys(val).map((id) => ({ ...val[id], id })), k, opts);
+        // ctSync/<CODE> (2026-11-16): the server's copy of this player's hint/giveup/win entries (the play
+        // log itself is admin-only now). The copy lands a moment after the send, so when this phone's own
+        // finishing entry is not there yet, it is read once more 1.5 s later (inside the 4 s limit).
+        const read = async () => {
+          const snap = await api.get(api.query(api.ref(db, `ctSync/${code}`), api.orderByChild('k'), api.equalTo(k)));
+          const val = (snap && snap.val()) || {};
+          return Object.keys(val).map((id) => ({ ...val[id], id }));
+        };
+        let rows = await read();
+        if (opts.exclude && !rows.some((x) => x.id === opts.exclude)) { await new Promise((r) => setTimeout(r, 1500)); rows = await read(); }
+        return logSummary(rows, k, opts);
       })();
       return await Promise.race([work, new Promise((r) => setTimeout(() => r(null), 4000))]);
     } catch (err) { console.warn('[contexto] could not read this puzzle on other phones', err); return null; }

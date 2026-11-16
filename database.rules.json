@@ -269,12 +269,11 @@
     "playLog": {
       ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$code": {
-        ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
         ".indexOn": ["k"],
         "$k": {
           ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || data.child('t').val() === newData.child('t').val())",
           ".validate": "$k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'g', 's'])",
-          "t": { ".validate": "newData.isNumber()" },
+          "t": { ".validate": "newData.isNumber()", ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()" },
           "s": { ".validate": "newData.val() === now" },
           "g": { ".validate": "newData.isString() && newData.val().length <= 24" },
           "f": { ".validate": "newData.isString() && newData.val().length <= 40" },
@@ -285,14 +284,23 @@
           "r": { ".validate": "newData.isString() && newData.val().length <= 20" },
           "m": { ".validate": "newData.isString() && newData.val().length <= 150" },
           "d": { ".validate": "newData.isString() && newData.val().length <= 400" },
+          "x": { ".validate": "newData.isString() && newData.val().length <= 20000" },
           "$other": { ".validate": false }
         }
       }
     },
+    "ctSync": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
+      "$code": {
+        ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
+        ".indexOn": ["k"]
+      }
+    },
     "beeLog": {
+      ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('readers').child(auth.uid).child('on').val() === true)",
       "$puzzle": {
-        ".read": "auth != null",
         "$code": {
+          ".read": "auth != null && $code === root.child('msgAuth').child(auth.uid).val()",
           "$k": {
             ".write": "auth != null && newData.exists() && $code === root.child('msgAuth').child(auth.uid).val() && (!data.exists() || (data.child('t').val() === newData.child('t').val() && data.child('e').val() === newData.child('e').val()))",
             ".validate": "$puzzle.matches(/^(es-)?[a-z0]-[a-z0]{6}$/) && $k.matches(/^[0-9]{13}-[0-9]{1,4}$/) && newData.hasChildren(['t', 'e', 's'])",

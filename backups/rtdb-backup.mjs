@@ -69,8 +69,11 @@ export const BRANCHES = [
   // beeDaily/ (2026-10-26): Spelling Bee's daily board, <puzzle>/<CODE> = words found. Readable by
   // any signed-in session.
   'beeDaily',
-  // beeLog/ (2026-10-27): Spelling Bee's every guess and action, per puzzle and code.
+  // beeLog/ (2026-10-27): Spelling Bee's every guess and action, per puzzle and code. Admin + reader +
+  // that code's own phones only since 2026-11-16.
   'beeLog',
+  // ctSync/ (2026-11-16): Contexto's hint/giveup/win events copied by the server from playLog/, <CODE>/<id>.
+  'ctSync',
   // beeFlags/ (2026-10-28): Spelling Bee days the server flagged as copied, <puzzle>/<CODE>. Server writes only.
   'beeFlags',
   // wwDaily/ (2026-11-02): Word Weaver's daily puzzle board, <lang>-<YYYY-MM-DD>/<CODE> = stars, hints, time.

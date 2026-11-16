@@ -6,8 +6,11 @@
 //     e  an event (Contexto: open, guess, hint, giveup, win, hidden, visible)
 //     m  the game's mode ('<key>@<diff>', '?' = recorded outside withMode)   d  the match's detail (JSON)
 //     k  the puzzle (Contexto 'en-31')          w  the word guessed      r  its rank, or 'unknown'
+//     x  the play's PRIVATE data, JSON (withMode's `log`, logPlayData; 2026-11-16, at most 20,000 chars)
 //
-// Admins read it (database.rules.json), nobody else: Contexto's guesses include the answers. Entries
+// Admins (and the reader key) read it, nobody else (2026-11-16, Matt: "somewhere that only I can see"):
+// a phone may read back only an entry's `t`, to confirm its send arrived. Contexto's cross-phone check
+// reads ctSync/<CODE> instead (hint/giveup/win only, copied by the server, functions ctSyncCopy). Entries
 // go up in batches of 200 under the player's own claimed code; a failed send stays queued and is
 // retried (rule 6), a re-sent entry lands on the same key (never doubled), and an entry for another
 // player code on this phone waits until that player is active again. Dev origins never send.
@@ -34,7 +37,7 @@ export async function flushPlayLog() {
     const patch = {};
     for (const x of batch) {
       const v = { t: x.t, g: x.g, s: api.serverTimestamp() };
-      for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm', 'd']) if (x[k] != null) v[k] = x[k];
+      for (const k of ['f', 'a', 'e', 'k', 'w', 'r', 'm', 'd', 'x']) if (x[k] != null) v[k] = x[k];
       patch[`playLog/${code}/${x.id}`] = v;
     }
     await api.update(api.ref(db), patch);
