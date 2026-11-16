@@ -641,7 +641,7 @@ function boardView(list, id) {
         // Sudoku / Murdoku: the number above is no-hint solves (2026-10-29).
         if (noHintTierOf(g, id)) return tx('lb_nohint', 'no hints');
         const cr = id === 'cuppong' ? cpReracksOf(g) : null;
-        return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks`, { n: cr.r }) : '';
+        return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks in ${cr.w} wins`, { n: cr.r, w: cr.w }) : '';
       },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : id === 'contexto' ? (g) => ctSubHTML(ctOf(g)) : null,
       // Leaderboard v2 only (2026-11-01): the row's number is a no-hint count (its "no hints" pill). Unread here.

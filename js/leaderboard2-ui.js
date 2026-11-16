@@ -521,9 +521,10 @@ function beeSlotsHTML(b) {
 const nohintPill = () => `<span class="lb2-pill lb2-nh">${esc(t2('lb2_nohint'))}</span>`;
 /** Under the name: lifetime only ("24 played"); the difficulty went to the number and the group divider. */
 function rowSub(r) {
-  const parts = [r.sub, r.nohint ? '' : r.sub2].filter(Boolean).map((x) => esc(sepText(x)));
-  const inner = sepHTML(r.subHtml || '') + parts.join(' · ');
-  return inner ? `<span class="lb2-sub">${inner}</span>` : '';
+  // Cup Pong's "10 reracks in 40 wins" gets its own line (2026-11-16, Matt: "unclear" squeezed after "played").
+  const inner = sepHTML(r.subHtml || '') + (r.sub ? esc(sepText(r.sub)) : '');
+  const two = !r.nohint && r.sub2 ? `<span class="lb2-sub">${esc(sepText(r.sub2))}</span>` : '';
+  return (inner ? `<span class="lb2-sub">${inner}</span>` : '') + two;
 }
 /** A thin divider over each difficulty group on an All tab: the shape and its word, nothing else. */
 function dividerHTML(r) {
