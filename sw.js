@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1597';
+const CACHE = 'game-hub-v1598';
 
 const ASSETS = [
   './',
@@ -1005,10 +1005,10 @@ const REST_MANIFEST = {
   './nuts-bolts/index.html': 'dce1845995',
   './minesweeper/': 'd412515e77',
   './minesweeper/index.html': 'd412515e77',
-  './minesweeper/css/minesweeper.css': '2e3b6c93d5',
-  './minesweeper/js/ui.js': 'b801ecbc4c',
+  './minesweeper/css/minesweeper.css': 'e5477d45eb',
+  './minesweeper/js/ui.js': '3117da50f9',
   './minesweeper/js/engine.js': '764025ec21',
-  './minesweeper/js/strings.js': 'e199dd1464',
+  './minesweeper/js/strings.js': '0bf022e3d8',
   './contexto/': 'f21845855b',
   './contexto/index.html': 'f21845855b',
   './contexto/css/contexto.css': 'abcf107a31',

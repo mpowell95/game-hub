@@ -98,6 +98,42 @@
   --gh-border-strong: rgba(190, 214, 244, .34);
 }
 
+/* HIGH CONTRAST (2026-11-16, Matt: dark mode with the phone's brightness all the way down hid the
+ * boxes and numbers). An option on the setup screen, dark mode only: still a dark screen, but
+ * opened squares are black, closed boxes are clearly lighter with a bright edge, and every number
+ * is near full brightness. The flag colours are literals in ui.js's SVGs, so they are lifted here. */
+.gh-dark .ms-root.is-hc {
+  --ms-bg: #000000;
+  --ms-surface: #10151f;
+  --ms-surface-2: #1c2433;
+  --ms-ink: #ffffff;
+  --ms-muted: #dbe4f1;
+  --ms-border: rgba(214, 228, 248, .5);
+  --ms-accent: #4f9bff;
+  --ms-cell: #4a5a78;
+  --ms-cell-top: #5c6d8e;
+  --ms-open: #000000;
+  --ms-grid: rgba(214, 228, 248, .3);
+  --ms-n1: #8cc4ff; --ms-n2: #5ff0d6; --ms-n3: #ffa585; --ms-n4: #cdb6ff;
+  --ms-n5: #ffd257; --ms-n6: #74e2f8; --ms-n7: #ffffff; --ms-n8: #dbe4f1;
+  --gh-bg: #000000;
+  --gh-surface: #10151f;
+  --gh-surface-2: #1c2433;
+  --gh-ink: #ffffff;
+  --gh-muted: #dbe4f1;
+  --gh-border: rgba(214, 228, 248, .5);
+}
+.gh-dark .ms-root.is-hc .ms-c,
+.gh-dark .ms-root.is-hc .ms-zc { border-color: #b9c8e0; box-shadow: none; }
+.gh-dark .ms-root.is-hc .ms-c.is-open,
+.gh-dark .ms-root.is-hc .ms-zc.is-open { border-color: var(--ms-grid); }
+.gh-dark .ms-root.is-hc .ms-c.is-boom { border-color: var(--ms-boom); }
+.gh-dark .ms-root.is-hc .ms-c.is-wrong { border-color: var(--ms-wrong); }
+.gh-dark .ms-root.is-hc [stroke="#e0532f"]:not(.ms-wx) { stroke: #ffb9a1; }
+.gh-dark .ms-root.is-hc [fill="#e0532f"] { fill: #ffb9a1; }
+.gh-dark .ms-root.is-hc [stroke="#178a7a"] { stroke: #7ff0dc; }
+.gh-dark .ms-root.is-hc [fill="#178a7a"] { fill: #7ff0dc; }
+
 /* The ski-slope tier shapes are near-black at tiers 3 and 4 (js/difficulty-tiers.js's TIER_COLOR),
  * which is invisible on a dark card. css/hub.css carries this same override for the leaderboard;
  * a standalone page never loads it, so the rule is scoped here too, exactly as ball-run/ and
