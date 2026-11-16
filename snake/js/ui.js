@@ -241,7 +241,7 @@ class SnakeUI {
     this.started = false;
     this.paused = false;
     this.recorded = false;
-    this.padUses = 0; this.swipeUses = 0; this.keyUses = 0;
+    this.padUses = 0; this.swipeUses = 0; this.keyUses = 0; this._pauseN = 0; this._runT0 = 0;
     this.best = bestFor(this.settings.difficulty);
     this.root.innerHTML = `
       <div class="sn-root">
@@ -427,7 +427,7 @@ class SnakeUI {
     if (this.paused) { this._resume(); return; }
     this.game.setDirection(dir);
     if (!this.started) {
-      this.started = true;
+      this.started = true; this._runT0 = Date.now();
       this.overlay.hidden = true;
       this._startLoop();
     }
@@ -456,7 +456,7 @@ class SnakeUI {
 
   _pause() {
     if (this.screen !== 'game' || !this.started || this.paused || (this.game && this.game.over)) return;
-    this.paused = true;
+    this.paused = true; this._pauseN = (this._pauseN | 0) + 1;
     this._stopLoop();
     if (this.overlay) {
       this.overlay.innerHTML = `<span>${t('paused')}</span><span class="sn-sub">${t('tap_to_resume')}</span>`;
@@ -485,7 +485,7 @@ class SnakeUI {
     // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0, detail: () => ({ pad: this.settings.dpadStyle, padTaps: this.padUses | 0, swipes: this.swipeUses | 0, keys: this.keyUses | 0 }) })); }
+      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0, log: () => ({ ...this.game.privateLog(), pauses: this._pauseN | 0, ms: this._runT0 ? Date.now() - this._runT0 : null }), detail: () => ({ pad: this.settings.dpadStyle, padTaps: this.padUses | 0, swipes: this.swipeUses | 0, keys: this.keyUses | 0 }) })); }
       catch (err) { console.error('[snake] stats record failed — this run is not counted', err); }
     }
     const newBest = this.game.length > this.best;

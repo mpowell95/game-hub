@@ -48,10 +48,13 @@ export class Game {
     this.score = 0;             // food eaten
     this.over = false;
     this.won = false;           // filled the whole grid (theoretical, but handle it)
+    this.ticks = 0; this.turns = []; this.foods = []; this.cause = '';   // private play log only (2026-11-16)
     this._spawnFood();
   }
 
   get length() { return this.body.length; }
+  /** PRIVATE play data (admin play log only): turns as `<tick><u|d|l|r>`, food cells in order, cause of death. */
+  privateLog() { return { ticks: this.ticks, turns: this.turns, foods: this.foods, cause: this.won ? 'won' : this.cause, wrap: this.wrap ? 1 : 0, len: this.body.length, head: this.body[0] ? this.body[0].x + ',' + this.body[0].y : null }; }
 
   /** Queue a turn. Ignored when it would reverse the LAST EFFECTIVE heading (current direction,
    *  or the newest queued turn if there is one) or repeat it. Queue caps at 2. */
@@ -67,7 +70,8 @@ export class Game {
   /** Advance one tick. Returns { moved, ate, over, won } for the UI's per-tick effects. */
   step() {
     if (this.over) return { moved: false, ate: false, over: true, won: this.won };
-    if (this.queue.length) this.dir = this.queue.shift();
+    this.ticks++;
+    if (this.queue.length) { this.dir = this.queue.shift(); if (this.turns.length < 600) this.turns.push(this.ticks + this.dir[0]); }
     const d = DIRS[this.dir];
     let head = { x: this.body[0].x + d.x, y: this.body[0].y + d.y };
 
@@ -77,7 +81,7 @@ export class Game {
         head = { x: (head.x + COLS) % COLS, y: (head.y + ROWS) % ROWS };
       } else {
         // Walls kill (classic phone rules).
-        this.over = true;
+        this.over = true; this.cause = 'wall';
         return { moved: false, ate: false, over: true, won: false };
       }
     }
@@ -87,7 +91,7 @@ export class Game {
     // current tail square is legal when not eating — the classic "chase your tail" move.
     const solid = ate ? this.body : this.body.slice(0, -1);
     if (solid.some((c) => c.x === head.x && c.y === head.y)) {
-      this.over = true;
+      this.over = true; this.cause = 'self';
       return { moved: false, ate: false, over: true, won: false };
     }
 
@@ -111,6 +115,7 @@ export class Game {
       if (!taken.has(x + ',' + y)) free.push({ x, y });
     }
     this.food = free.length ? free[Math.floor(this.rng() * free.length) % free.length] : null;
+    if (this.food && this.foods.length < 400) this.foods.push(this.food.x + ',' + this.food.y);
   }
 }
 

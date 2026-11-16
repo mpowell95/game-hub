@@ -403,3 +403,5 @@ Hidden with a started board on screen: the clock is banked and the moment stampe
 Setup option, shown in dark mode only: `settings.contrast` → `.ms-root.is-hc` (`.gh-dark .ms-root.is-hc`
 in the CSS). Black opened squares, lighter closed boxes with a bright edge, near-full-brightness numbers,
 lifted flag colours. A look only: not a game option, not recorded in the mode.
+
+Private play data (2026-11-16): logs mine layout, boom cell, every tap (dig, chord, flag) with time, resumed flag via withMode `log` / logPlayData.

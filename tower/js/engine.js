@@ -33,6 +33,7 @@ export function createRun(diff) {
     diff: normDiff(diff),
     stack: [{ x: (WORLD_W - START_W) / 2, w: START_W }],
     mover: null, streak: 0, bestStreak: 0, perfects: 0, over: false,
+    log: [],   // private play log only (2026-11-16): every drop [offset, p|c|m, kept width, ms into the run]
   };
   spawn(run);
   return run;
@@ -78,6 +79,7 @@ export function drop(run) {
   const diff = m.x - top.x;
   const tol = TUNE[run.diff].perfect;
   run.mover = null;
+  const lg = (k, kept) => { try { if (run.log && run.log.length < 1500) run.log.push([Math.round(diff * 10) / 10, k, Math.round(kept * 10) / 10, run.t0 ? Math.round(Date.now() - run.t0) : 0]); } catch { /* private log only */ } };
   // A Perfect needs the blocks to touch (2026-11-12 review: once a block is narrower than the slack, a drop beside it
   // with no overlap at all used to count as a Perfect).
   const touch = Math.min(m.x + m.w, top.x + top.w) - Math.max(m.x, top.x);
@@ -85,6 +87,7 @@ export function drop(run) {
     run.streak += 1; run.perfects += 1;
     run.bestStreak = Math.max(run.bestStreak, run.streak);
     run.stack.push({ x: top.x, w: top.w });
+    lg('p', top.w);
     spawn(run);
     return { kind: 'perfect', cut: null, grew: false };
   }
@@ -92,10 +95,10 @@ export function drop(run) {
   const left = Math.max(m.x, top.x), right = Math.min(m.x + m.w, top.x + top.w);
   const keep = right - left;
   if (keep <= 0) {
-    run.over = true;
+    run.over = true; lg('m', 0);
     return { kind: 'miss', cut: { x: m.x, w: m.w, dir: diff > 0 ? 1 : -1 }, grew: false };
   }
-  run.stack.push({ x: left, w: keep });
+  run.stack.push({ x: left, w: keep }); lg('c', keep);
   const cut = diff > 0 ? { x: right, w: m.w - keep, dir: 1 } : { x: m.x, w: m.w - keep, dir: -1 };
   spawn(run);
   return { kind: 'cut', cut, grew: false };

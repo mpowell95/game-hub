@@ -106,3 +106,5 @@ the same way. The rules live at the end of `css/brick-blitz.css`.
 
 `node tools/test-game-conventions.mjs`, `node tools/players-agg.test.mjs` (the `bz` cross-device case),
 `node tools/test-recorder-contract.mjs`, `node tools/check-no-scroll.mjs` (needs `node server.mjs`).
+
+Private play data (2026-11-16): logs power-ups in order, UFO hits, life losses and stage clears with time, end reason via withMode `log` / logPlayData.

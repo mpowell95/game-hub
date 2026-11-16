@@ -131,3 +131,5 @@ rules yet (cheap candidates: perfects <= blocks, bestStreak <= perfects, bestByD
 
 `node tools/test-tower.mjs` (engine, recorder, best shapes kept and merged). Also covered: `tools/players-agg.test.mjs` (tw combine),
 `tools/test-game-conventions.mjs`, `tools/test-i18n-strings.mjs`, `tools/test-game-modes.mjs`.
+
+Private play data (2026-11-16): logs every drop (offset, perfect/cut/miss, width, ms), end reason via withMode `log` / logPlayData.

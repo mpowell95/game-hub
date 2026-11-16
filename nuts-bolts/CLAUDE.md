@@ -131,3 +131,5 @@ Each solve names its level (`nb.lv[tier]`, a range string) and the record snapsh
 ## The level never starts below what the stats show solved (2026-11-09)
 
 Matt re-added the app: the level per tier lives only in `gamehub.nutsbolts.v1`. On load `won[tier]` is raised to the stats' `nb.bestByTier` (only up), so each tier opens past its furthest solved level and a level already counted is never recorded again.
+
+Private play data (2026-11-16): logs starting colours, every move, undo and restart with time (replays via logPlayData) via withMode `log` / logPlayData.

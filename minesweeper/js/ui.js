@@ -492,7 +492,7 @@ class MinesweeperUI {
     const saved = loadSave(this.settings.level);
     if (saved) {
       this.game = saved.state; this.mode = saved.mode; this.elapsedMs = saved.state.elapsedMs | 0;
-      this.game._saved = true;
+      this.game._saved = true; this.game._res = 1;
       if (saved.away) this._chargeAway(saved.away);
     }
     else { this.game = E.createGame(this.settings.level, { noGuess: this._noGuessOn(this.settings.level) }); this.mode = 'dig'; this.elapsedMs = 0; }
@@ -979,6 +979,7 @@ class MinesweeperUI {
 
   _doFlag(i) {
     if (!this._ownsBoard()) return;
+    this._act('f', i);
     const res = E.cycleMark(this.game, i % this.game.w, (i / this.game.w) | 0, this.settings.marks);
     for (const k of res.changed) this._paintCell(k);
     this._syncHud();
@@ -992,6 +993,7 @@ class MinesweeperUI {
     const wasGenerated = g.generated;
     // A tap on an already-open number is a CHORD, the shortcut this game is actually played with.
     const isChord = g.cell[i] === OPEN && g.num[i] > 0;
+    this._act(isChord ? 'c' : 'd', i);
     const res = isChord ? E.chord(g, x, y) : E.openCell(g, x, y);
     if (!wasGenerated && g.generated) this._startTimer();   // the clock starts on the first dig
     if (res.changed.length) for (const k of res.changed) this._paintCell(k);
@@ -1063,7 +1065,7 @@ class MinesweeperUI {
       if (!won) { try { cause = E.lossCause(g, how); } catch (err) { cause = 'unknown'; console.error('[minesweeper] lossCause', err); } }
       withMode(() => ({ ng: g.noGuess ? 1 : 0, marks: this.settings && this.settings.marks === false ? 0 : 1 }), level,
         () => recordMinesweeper(level, won, { timeMs, cleared, flagsRight, mines: g.mines, cause, noGuess: !!g.noGuess }),
-        () => ({ ...(won && timeMs > 0 ? { lo: timeMs } : {}), detail: { cleared: Math.max(0, Math.round(+cleared || 0)), flagsRight, flagsWrong: Math.max(0, flagsWrong | 0), ...(cause ? { cause: String(cause) } : {}), ...this._setDetail() } }));
+        () => ({ ...(won && timeMs > 0 ? { lo: timeMs } : {}), log: () => this._msLog(g, { won, how: how || null, cause: cause || null, pct: Math.round(+cleared || 0) }), detail: { cleared: Math.max(0, Math.round(+cleared || 0)), flagsRight, flagsWrong: Math.max(0, flagsWrong | 0), ...(cause ? { cause: String(cause) } : {}), ...this._setDetail() } }));
     } catch (err) { console.error('[minesweeper] record', err); }
     const isBest = won && timeMs > 0 && (prevBest <= 0 || timeMs < prevBest);
     this._result = { won, timeMs, cleared, flagsRight, flagsWrong, level, prevBest, isBest, wins: winsSoFar() };
@@ -1140,8 +1142,26 @@ class MinesweeperUI {
     q.g._quit = true;   // once: this board can never record again
     clearSave(level);
     try {
-      withMode(() => ({ ng: q.g.noGuess ? 1 : 0, marks: this.settings && this.settings.marks === false ? 0 : 1 }), level, () => recordMinesweeper(level, false, { timeMs: q.timeMs, cleared: E.clearedPct(q.g), flagsRight: E.correctFlags(q.g), mines: q.g.mines, noGuess: !!q.g.noGuess }), () => ({ detail: { quit: 1, ...this._setDetail() } }));
+      withMode(() => ({ ng: q.g.noGuess ? 1 : 0, marks: this.settings && this.settings.marks === false ? 0 : 1 }), level, () => recordMinesweeper(level, false, { timeMs: q.timeMs, cleared: E.clearedPct(q.g), flagsRight: E.correctFlags(q.g), mines: q.g.mines, noGuess: !!q.g.noGuess }), () => ({ log: () => ({ ...this._msLog(q.g), quit: 1, ms: q.timeMs }), detail: { quit: 1, ...this._setDetail() } }));
     } catch (err) { console.error('[minesweeper] quit loss', err); }
+  }
+
+  /** PRIVATE play data (2026-11-16, admin play log only): one entry per tap, 'd' dig / 'c' chord / 'f' flag or
+   *  mark, cell index, tenths of a second on the clock. Kept on the game object, never serialized. */
+  _act(kind, i) {
+    try {
+      const g = this.game;
+      if (!g) return;
+      if (!g._act) g._act = [];
+      if (g._act.length < 1200) g._act.push(kind + i + ':' + Math.round((this.elapsedMs || 0) / 100));
+    } catch { /* private log only */ }
+  }
+  /** The board and every tap, for the play log's `x`. */
+  _msLog(g, extra) {
+    const mines = [];
+    if (g.generated) for (let k = 0; k < g.mine.length; k++) if (g.mine[k]) mines.push(k);
+    return { w: g.w, h: g.h, mines, boom: g.boom, first: g._act && g._act[0] ? g._act[0] : null, acts: g._act || [], opened: g.opened, flags: g.flags,
+      resumed: g._res ? 1 : 0, ms: this.elapsedMs | 0, ...(extra || {}) };
   }
 
   /** Every setting the player chose, saved with each result (2026-11-16, Matt: "save all data"). */

@@ -332,3 +332,5 @@ end-to-end sync test.
 ## Solved stays solved; mistakes count like hints; two tabs (2026-10-29, second pass)
 
 Undo refuses a solved puzzle; a recorded puzzle's id (hash of givens + answer) goes in `gamehub.sudoku.done.v1` (newest 300, a guard) and never records again. A solve with any mistake is a win but not a no-hint solve (Matt). Every write re-reads the save slot: the same puzzle takes the larger hint and mistake counts; a slot another tab finished or replaced is never overwritten (the stale board returns to the menu). Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+Private play data (2026-11-16): logs puzzle id, givens, final board, every digit, note, erase, undo and hint with time via withMode `log` / logPlayData.

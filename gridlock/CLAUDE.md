@@ -259,3 +259,5 @@ middle of a drag now drops the drag, so a lost pointerup can never leave every b
 ## Crown and hint times from the server (2026-10-29, second pass)
 
 `recordGridlock(..., { at })` and `recordGridlockHint(n, at)` get `bestNow()` from the game, so a phone clock cannot put a crown before a hint on another phone. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+Private play data (2026-11-16): logs final moves, every move, undo, restart and hint with time via withMode `log` / logPlayData.

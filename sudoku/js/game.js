@@ -45,6 +45,17 @@ export class SudokuGame {
     this.updatedAt = this.startedAt;
     this._undo = [];                                   // bounded stack of inverse ops
     this._solved = false;
+    this._pl = []; this._plRes = 0; this._undoN = 0;   // private play log only (2026-11-16): never saved
+  }
+
+  /** One private log entry: kind (d digit, x wrong digit, c cleared, e erase, n note, u undo, h hint), cell, digit, clock seconds. */
+  _lg(k, i, d) {
+    try { if (this._pl.length < 1500) this._pl.push([k, i, d, Math.round((this.elapsedMs || 0) / 1000)]); } catch { /* private log only */ }
+  }
+  /** The play's private data for the admin play log (`x`). */
+  privateLog() {
+    return { id: this.puzzleId(), givens: Array.from(this.givens).join(''), final: Array.from(this.cells).join(''), ms: Math.round(this.elapsedMs) || 0,
+      mistakes: this.mistakes | 0, hints: this.hints | 0, undos: this._undoN | 0, res: this._plRes | 0, ev: this._pl };
   }
 
   isGiven(i) { return this.givens[i] !== 0; }
@@ -71,6 +82,7 @@ export class SudokuGame {
     if (this.cells[i] === d) {
       this._pushUndo(this._snapshot(i));
       this.cells[i] = 0;
+      this._lg('c', i, d);
       this.updatedAt = Date.now();
       return { changed: true, cleared: true };
     }
@@ -79,6 +91,7 @@ export class SudokuGame {
     this.cells[i] = d;
     this.notes[i] = 0;
     if (mistake) this.mistakes++;
+    this._lg(mistake ? 'x' : 'd', i, d);
     // Standard convenience: placing a digit removes it from the notes of every peer (row/col/box).
     for (const j of PEERS[i]) this.notes[j] &= ~(1 << (d - 1));
     this.updatedAt = Date.now();
@@ -91,6 +104,7 @@ export class SudokuGame {
     if (this._solved || this.isGiven(i) || this.cells[i] === 0) return false;
     this._pushUndo(this._snapshot(i));
     this.cells[i] = 0;
+    this._lg('e', i, 0);
     this.updatedAt = Date.now();
     return true;
   }
@@ -101,6 +115,7 @@ export class SudokuGame {
     if (d < 1 || d > 9) return false;
     this._pushUndo(this._snapshot(i));
     this.notes[i] ^= (1 << (d - 1));
+    this._lg('n', i, d);
     this.updatedAt = Date.now();
     return true;
   }
@@ -118,6 +133,7 @@ export class SudokuGame {
     if (!snap) return false;
     this.cells[snap.i] = snap.cell;
     this.notes[snap.i] = snap.notes;
+    this._undoN++; this._lg('u', snap.i, snap.cell);
     this.updatedAt = Date.now();
     return true;
   }
@@ -148,6 +164,7 @@ export class SudokuGame {
     this.cells[i] = d;
     this.notes[i] = 0;
     this.hints++;
+    this._lg('h', i, d);
     for (const j of PEERS[i]) this.notes[j] &= ~(1 << (d - 1));
     this.updatedAt = Date.now();
     if (this._checkSolved()) this._solved = true;
@@ -218,6 +235,7 @@ export class SudokuGame {
       g.elapsedMs = Number.isFinite(raw.elapsedMs) ? raw.elapsedMs : 0;
       g.mistakes = Number.isFinite(raw.mistakes) ? raw.mistakes : 0;
       g.hints = Number.isFinite(raw.hints) ? raw.hints : 0;
+      g._plRes = (g.elapsedMs > 0) ? 1 : 0;
       g._undo = Array.isArray(raw.undo) ? raw.undo.slice(-200) : [];
       g.updatedAt = Number.isFinite(raw.updatedAt) ? raw.updatedAt : g.startedAt;
       if (g._checkSolved()) g._solved = true;
