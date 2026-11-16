@@ -21,7 +21,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, recordFlickSoccerTest, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordFlickSoccerTest, recordPassPlay, oneTierDown, withMode, logPlayData } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -576,6 +576,8 @@ class FlickSoccerUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first flick
+    this._xlAbandonPass();    // a pass-and-play match thrown away unfinished: private log only
+    this._recordPassQuit();   // a pass-and-play match thrown away after its first flick: kept, counts for nothing
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -592,6 +594,51 @@ class FlickSoccerUI {
     this._begin({ mode: s.mode, diff: s.difficulty, match: m });
   }
 
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Every flick of a match on this phone (vs the computer, pass and play) is kept on the match as `m.xl`
+  // and sent ONLY to the admin play log (withMode's `log`; logPlayData for pass and play). Never a stat,
+  // never shown. Row: [seat, disc, dx, dy, power, goal (-1 none, else the seat it counted for), own goal,
+  // score after, seconds since the first logged flick]. Online: mp.js logMatchOnce.
+  _xlEnd(m, scorer, mode = this.mode) {
+    try {
+      const xs = this._xlShot;
+      this._xlShot = null;
+      if (!xs || mode === 'mp' || !m) return;
+      if (!Array.isArray(m.xl)) { m.xl = []; m.xt0 = Date.now(); m.xlS0 = m.shots | 0; }
+      if (m.xl.length >= 300) return;   // under 20,000 characters
+      const r4 = (v) => Math.round((+v || 0) * 1e4) / 1e4;
+      const g = Number.isInteger(scorer) && scorer >= 0 ? scorer : -1;
+      const sc = Array.isArray(m.scores) ? m.scores.slice() : [];
+      if (g >= 0 && sc.length === 2) sc[g]++;
+      m.xl.push([xs.seat | 0, xs.i | 0, r4(xs.dx), r4(xs.dy), r4(xs.power), g, g >= 0 && g !== xs.seat ? 1 : 0, sc, Math.round((Date.now() - (+m.xt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[flick-soccer] flick not kept for the private log', err); }
+  }
+  _xlData(m, end, mode = this.mode, diff = this.diff) {
+    const r1 = (v) => Math.round(v * 10) / 10;
+    return {
+      v: 1, end, mode, diff, goals: m.goals, starter: m.starter, winner: m.winner, scores: m.scores, shots: m.shots, test: m.test ? 1 : 0,
+      forms: m.forms || null, pairs: m.pairs || null, seats: (this.seats || []).map((x) => (x && x.name) || ''), aiSeed: this.aiSeed == null ? null : this.aiSeed,
+      firstSet: (this.settings || {}).first || null, fin: Array.isArray(m.b) ? m.b.map((o) => [r1(o.x), r1(o.y)]) : null,
+      cols: 'seat,disc,dx,dy,power,goal,own,score,sec', fromShot: m.xlS0 | 0, flicks: Array.isArray(m.xl) ? m.xl : [],
+    };
+  }
+  /** Pass and play counts for nothing: logged privately, once. */
+  _xlLog(m, end) {
+    try {
+      if (!m || m.xlDone || !Array.isArray(m.xl) || !m.xl.length) return;
+      m.xlDone = true;
+      const diff = this.diff;
+      logPlayData(STATS_ID, 'pnp', () => this._xlData(m, end, 'pass', diff), { mode: () => modeOf(m), diff: 'pnp' });
+    } catch (err) { console.error('[flick-soccer] private play data not logged', err); }
+  }
+  _xlAbandonPass() {
+    try {
+      let m = this.match && this.mode === 'pass' ? this.match : null;
+      if (!m && (!this.match || this.screen === 'setup')) { const sv = this._savedMatch(); m = sv && sv.mode === 'pass' ? sv.match : null; }
+      if (m && m.winner == null) this._xlLog(m, 'abandon');
+    } catch { /* private log only */ }
+  }
+
   /** Admin Test mode for THIS match (never online: both phones must play the same physics). */
   _open() { return this.mode !== 'mp' && !!(this.match && this.match.test); }
 
@@ -604,7 +651,10 @@ class FlickSoccerUI {
     let replayed = false;
     if (sh && Number.isInteger(sh.i) && teamOf(sh.i) === m.turn && [sh.dx, sh.dy, sh.power].every(Number.isFinite)) {
       flick(m.b, sh.i, sh.dx, sh.dy, sh.power);
-      settle(m, runToRest(m.b, undefined, sv.mode !== 'mp' && !!m.test).scorer);
+      const xs = { seat: m.turn, i: sh.i, dx: sh.dx, dy: sh.dy, power: sh.power };
+      const sc = runToRest(m.b, undefined, sv.mode !== 'mp' && !!m.test).scorer;
+      this._xlShot = xs; this._xlEnd(m, sc, sv.mode);
+      settle(m, sc);
       replayed = true;
     }
     this._begin({ mode: sv.mode, diff: savedDiff(sv.diff), match: m, aiSeed: sv.aiSeed });
@@ -760,6 +810,7 @@ class FlickSoccerUI {
       mp.applied++;
     }
     this._save({ i, dx, dy, power });   // the position the shot was taken from, and the shot
+    this._xlShot = this.mode === 'mp' ? null : { seat: m.turn, i, dx, dy, power };
     flick(m.b, i, dx, dy, power);
     this.phase = 'moving';
     this.acc = 0;
@@ -791,6 +842,7 @@ class FlickSoccerUI {
   _rest() {
     const m = this.match;
     freeze(m.b);
+    this._xlEnd(m, -1);
     settle(m, -1);
     this._save();
     this._startTurn(true);
@@ -798,6 +850,7 @@ class FlickSoccerUI {
 
   _goal(scorer) {
     const m = this.match;
+    this._xlEnd(m, scorer);
     this.phase = 'goal';
     // The shooter put it in their own net: say so.
     const own = m.turn !== scorer;
@@ -824,6 +877,7 @@ class FlickSoccerUI {
     if (this.phase === 'moving') {
       const r = runToRest(m.b, undefined, this._open());
       this.phase = 'idle';
+      this._xlEnd(m, r.scorer);
       const res = settle(m, r.scorer);
       if (res === 'win') this._record();
     } else if (this.phase === 'goal') {
@@ -837,12 +891,15 @@ class FlickSoccerUI {
 
   _record() {
     const m = this.match;
-    if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
+    if (!m || m.winner == null || m.recorded) return;
+    if (this.mode === 'pass') { this._recordPassPlay(m, m.winner === 0 ? 'p1' : 'p2', this.seats); return; }
+    if (this.mode !== 'cpu') return;
     m.recorded = true;
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
-      const detail = Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : null;
-      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail });   // Expert: its own test bucket, counted by nothing (2026-11-06); Test mode counts like any game, its mode says test=1 (Matt, 2026-11-08: "count all test games")
+      // + who-kicks-off as SET (alt / me / them; the mode's `first` is who actually did), 2026-11-16
+      const detail = () => ({ ...(Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : {}), ...this._firstSetDetail() });
+      const st = withMode(() => (modeOf(m)), this.diff, () => (this.diff === EXPERT ? recordFlickSoccerTest(this.diff, m.winner === 0) : recordResult(STATS_ID, statsDiff(this.diff, m.goals), m.winner === 0)), { detail, log: () => this._xlData(m, 'end', 'cpu', this.diff) });   // Expert: its own test bucket, counted by nothing (2026-11-06); Test mode counts like any game, its mode says test=1 (Matt, 2026-11-08: "count all test games")
       if (!st) console.warn('[flick-soccer] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the result failed', err); }
   }
@@ -852,6 +909,7 @@ class FlickSoccerUI {
     if (!m || m.winner == null) return;
     if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.mySeat, false); return; }
     this._record();
+    if (this.mode === 'pass') this._xlLog(m, 'end');   // pass and play counts for nothing: private log only
     this._save();
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';
@@ -1027,6 +1085,36 @@ class FlickSoccerUI {
       ? { diff: savedDiff(sv.diff), m: sv.match } : null;
   }
 
+  /** Who kicks off as SET on the setup screen (alt / me / them) as the result's DETAIL (2026-11-16,
+   *  never the mode: it would split byMode). Read inside withMode. */
+  _firstSetDetail() {
+    const f = this.settings && this.settings.first;
+    return FIRSTS.includes(f) ? { firstSet: f } : {};
+  }
+
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.flicksoccer.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' (Blue)
+   *  | 'p2' (Red), or 'quit' for a started match thrown away by a new one. */
+  _recordPassPlay(m, winner, seats) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (seats || []).map((x) => (x && x.name) || '');
+    try {
+      const detail = () => ({ ...(Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : {}), ...this._firstSetDetail() });
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay(STATS_ID, winner, names), { detail });
+      if (!st) console.warn('[flick-soccer] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[flick-soccer] recording pass and play failed', err); }
+  }
+  /** The pass-and-play match a new match would throw away (live, or saved from setup), once a flick was made. */
+  _recordPassQuit() {
+    let m = null, seats = null;
+    if (this.match && this.screen !== 'setup') { if (this.mode === 'pass') { m = this.match; seats = this.seats; } }
+    else { const sv = this._savedMatch(); if (sv && sv.mode === 'pass') { m = sv.match; seats = this._seatsFor('pass'); } }
+    if (!m || m.winner != null || m.recorded || !playerShot(m)) return;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    this._recordPassPlay(m, 'quit', seats);
+  }
+
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
   _recordQuitLoss() {
     const q = this._quitPending();
@@ -1034,7 +1122,7 @@ class FlickSoccerUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => (q.diff === EXPERT ? recordFlickSoccerTest(q.diff, false) : recordResult(STATS_ID, statsDiff(q.diff, q.m.goals), false)), { detail: () => this._firstSetDetail(), log: () => this._xlData(q.m, 'quit', 'cpu', q.diff) });
       if (!st) console.warn('[flick-soccer] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[flick-soccer] recording the quit loss failed', err); }
   }
@@ -1382,8 +1470,9 @@ class FlickSoccerUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
     const me = mp.mySeat === 1 ? 1 : 0;
     this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && (m.starter === 0 || m.starter === 1) ? { first: m.starter === me ? 'me' : 'them' } : {}) }),
-      { detail: () => (m && Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[me] | 0), ga: Math.max(0, m.scores[me ^ 1] | 0) } : null) });   // once per phone; the finish time keeps a fresh storage honest
+      { detail: () => ({ ...(m && Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[me] | 0), ga: Math.max(0, m.scores[me ^ 1] | 0) } : {}), ...(typeof this.MP.lineupDetail === 'function' ? this.MP.lineupDetail(mp.game, me) : {}) }) });   // + this player's own line-ups (2026-11-16)   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
+    try { this.MP.logMatchOnce(mp.game); } catch { /* private log only */ }
     this._say(t('say_win', { name: this.seats[m.winner].name, sa: m.scores[m.winner], sb: m.scores[m.winner ^ 1] }));
     this.screen = 'result';
     this.phase = 'idle';
@@ -1412,6 +1501,7 @@ class FlickSoccerUI {
   _mpCalledOff(text = t('mp_cancelled')) {
     const mp = this.mp;
     if (mp) { mp.finished = true; mp.replaying = false; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (mp) { try { this.MP.logMatchOnce(mp.game, 'called-off'); } catch { /* private log only */ } }
     this._toast(text || t('mp_cancelled'), 3200);
     this._openOnline();
   }

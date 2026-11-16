@@ -47,6 +47,13 @@ export class NutsBoltsGame {
       this.revealedIds = new Set();
     }
     this.selected = null; // bolt index or null
+    this.pl = []; this.t0 = Date.now(); this.res = savedBoard ? 1 : 0; this.undoN = 0; this.restartN = 0;   // private play log only (2026-11-16); never saved
+  }
+
+  _lg(e) { try { if (this.pl.length < 1500) this.pl.push(e + '@' + Math.round((Date.now() - this.t0) / 1000)); } catch { /* private log only */ } }
+  /** The play's private data for the admin play log (`x`): the level's starting colours per bolt and every move, undo and restart. */
+  privateLog() {
+    return { tier: this.tier, level: this.level, start: this.initial.map((st) => st.map((n) => n.color).join('.')), seq: this.pl, moves: this.moves | 0, undos: this.undoN, restarts: this.restartN, secs: Math.round((Date.now() - this.t0) / 1000), res: this.res };
   }
 
   // A hidden nut, once revealed, stays revealed forever (including through
@@ -124,6 +131,7 @@ export class NutsBoltsGame {
     const moved = source.splice(source.length - count, count);
     dest.push(...moved);
     this.moves++;
+    this._lg(from + '>' + to);
     this.selected = null;
 
     this.revealTop(source);
@@ -144,12 +152,14 @@ export class NutsBoltsGame {
     const prev = this.history.pop();
     this.stacks = prev.stacks;
     this.moves = prev.moves;
+    this.undoN++; this._lg('u');
     this.selected = null;
     this.applyRevealed();
     return true;
   }
 
   restart() {
+    this.restartN++; this._lg('r');
     this.stacks = cloneStacks(this.initial);
     this.moves = 0;
     this.history = [];

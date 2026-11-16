@@ -274,6 +274,11 @@ class MurdokuUI {
   _pauseTimer() {
     if (this._runStart !== null) { this.elapsedMs += Date.now() - this._runStart; this._runStart = null; }
   }
+  /** PRIVATE play data (admin play log only): every placement `p`(person, square), lift `l`, mark `m`,
+   *  with the seconds on the clock. Not saved; a resumed case starts a new list (`res`). */
+  _evn(k, a, b) {
+    try { if (!this._ev) this._ev = []; if (this._ev.length < 800) this._ev.push(b === undefined ? [k, a, Math.round(this._elapsed() / 1000)] : [k, a, b, Math.round(this._elapsed() / 1000)]); } catch { /* private log only */ }
+  }
   _elapsed() { return this.elapsedMs + (this._runStart !== null ? Date.now() - this._runStart : 0); }
   _tickTimer() { if (this.el.timer) this.el.timer.textContent = fmtTime(this._elapsed()); }
   _stopLoop() { clearInterval(this._timerInterval); this._timerInterval = null; }
@@ -359,6 +364,7 @@ class MurdokuUI {
 
   _enter(s) {
     this.puz = s.puzzle; this.pos = s.pos.slice(); this.marks = new Set(s.marks);
+    this._ev = []; this._res = s.elapsedMs > 0 ? 1 : 0; this._wrongFull = 0;   // private play log (2026-11-16)
     this.elapsedMs = s.elapsedMs; this.solved = s.solved; this.recorded = s.recorded;
     this.sel = -1; this.mode = 'place';
     this.guided = !!s.guided; this.hint = null;
@@ -865,6 +871,7 @@ class MurdokuUI {
 
   _liftPerson(p) {
     if (this.solved || this.mode !== 'place') return;
+    this._evn('l', p);
     this.pos[p] = -1;
     this.sel = p;                 // lifted to be moved: the next tap on a square puts them back
     this._afterChange();
@@ -875,6 +882,7 @@ class MurdokuUI {
     const who = this._personAt(cell);
     if (this.mode === 'mark') {
       if (who >= 0) return;
+      this._evn('m', cell);
       if (this.marks.has(cell)) this.marks.delete(cell); else this.marks.add(cell);
       this._afterChange();
       return;
@@ -906,6 +914,7 @@ class MurdokuUI {
   _place(p, cell) {
     if (this.solved || !this.puz) return;
     if (p < 0 || p >= this.puz.n || cell < 0 || cell >= this.puz.n * this.puz.n) return;
+    this._evn('p', p, cell);
     const occ = this._personAt(cell);
     if (occ >= 0 && occ !== p) this.pos[occ] = -1;
     this.pos[p] = cell;
@@ -920,7 +929,7 @@ class MurdokuUI {
     if (chk.solved) { this.hint = null; this._win(); return; }
     // A full board that is wrong marks every broken clue: that check is help, so it counts like a
     // hint (Matt, 2026-10-29), once per full wrong board. Cases solved before then are untouched.
-    if (chk.full && !this.guided && this.hints !== null) this.hints += 1;
+    if (chk.full && !this.guided && this.hints !== null) { this.hints += 1; this._wrongFull = (this._wrongFull | 0) + 1; }
     if (this.guided) this._autoHint(); else this.hint = null;
     if (!this._save()) { this._leaveStale(); return; }
     this._paint();
@@ -954,7 +963,7 @@ class MurdokuUI {
     // move: it is a lesson, never a win (2026-10-29). It records nothing at all.
     if (s.guided) return;
     try {
-      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}) }));
+      withMode(() => ({ size: s.puzzle.n | 0 }), s.puzzle.tier, () => recordMurdoku(s.puzzle.tier, { hints: Number.isInteger(s.hints) ? s.hints : null }), () => ({ ...(s.elapsedMs > 0 ? { lo: Math.round(s.elapsedMs) } : {}), log: () => ({ seed: s.puzzle.seed, n: s.puzzle.n, tier: s.puzzle.tier, ms: Math.round(s.elapsedMs) || 0, hints: s.hints, wrongFull: ui ? ui._wrongFull | 0 : 0, res: ui ? ui._res | 0 : 0, ev: ui && ui._ev ? ui._ev : [], pos: s.pos, marks: s.marks }) }));
       s.recorded = true;
       if (ui) ui.recorded = true;
       writeSaveObj(s);

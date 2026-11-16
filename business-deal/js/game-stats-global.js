@@ -18,6 +18,8 @@
 // interoperates cleanly with the ES-module game-stats.js used by the hub, Connect Four, and
 // Chinchon (whoever runs first folds a legacy store; the flag makes the other skip). Exposes
 // window.__ghStats.record(gameId, difficulty, won). Fully guarded: never throws, never blocks a game.
+// record(gameId, difficulty, won, drained, mode, detail, log): `log` and __ghStats.logPlayData(gameId,
+// what, data, {mode, diff, key}) are PRIVATE (2026-11-16): the play log's `x` only, never the stats store.
 
 (function () {
   'use strict';
@@ -117,7 +119,7 @@
   var PLAYLOG_KEY = 'gamehub.playlog.v1';
   var PLAYLOG_MAX = 3000;
   var playSeq = 0;
-  function notePlay(gameId, fn, args, m) {
+  function notePlay(gameId, fn, args, m, d, x) {
     try {
       var code = activeCode();
       if (!code) return;
@@ -128,8 +130,50 @@
       for (var i = 0; i < args.length; i++) a.push(args[i] === undefined ? null : args[i]);
       q.push({ c: code, id: t + '-' + (playSeq++ % 10000), t: t, g: String(gameId).slice(0, 24), f: String(fn).slice(0, 40), a: JSON.stringify(a).slice(0, 1600) });
       if (m) q[q.length - 1].m = String(m).slice(0, 150);
+      if (d) q[q.length - 1].d = String(d).slice(0, 400);
+      if (x) q[q.length - 1].x = String(x).slice(0, X_MAX);
       localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
     } catch (e) { console.error('[game-stats-global] play not logged', e); }
+  }
+
+  // PRIVATE PLAY DATA (2026-11-16, Matt: "ALL data from ALL games played should be recorded ... somewhere
+  // that only I can see"): the same play log `x` as js/game-stats.js privateLog/logPlayData (keep in step).
+  // ANY data (lists, boards, every move) as JSON, at most X_MAX characters (a longer one keeps its first
+  // part and says `_cut`). It goes ONLY to the admin play log, never into the stats store.
+  var X_MAX = 20000;
+  function privateLog(log) {
+    var v = log;
+    if (typeof v === 'function') v = v();
+    if (v == null) return null;
+    var o = {};
+    if (typeof v === 'object' && !Array.isArray(v)) { for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k)) o[k] = v[k]; }
+    else o.data = v;
+    if (!Object.keys(o).length) return null;
+    var j = JSON.stringify(o);
+    return j.length <= X_MAX ? j : JSON.stringify({ _cut: j.length, part: j.slice(0, X_MAX - 60) });
+  }
+  /** A play that counts for nothing (a game with no computer, abandoned) or a play's own extra lines:
+   *  `{ g, e: what (<= 12 chars), k: key (<= 40), m: mode, x: JSON }` in the play log only. Never a
+   *  stat, never read back, never throws. Returns the entry's id or null. */
+  function logPlayData(gameId, what, data, opts) {
+    try {
+      opts = opts || {};
+      var code = activeCode();
+      if (!code || !gameId) return null;
+      var x = privateLog(data);
+      var mk = '';
+      try { mk = modeKey(opts.mode); } catch (e) { mk = ''; }
+      var t = Date.now();
+      var en = { c: code, id: t + '-' + (playSeq++ % 10000), t: t, g: String(gameId).slice(0, 24), e: String(what || 'data').slice(0, 12) };
+      if (opts.key != null) en.k = String(opts.key).slice(0, 40);
+      if (mk) en.m = (mk + '@' + (String(opts.diff == null ? '' : opts.diff).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || '-')).slice(0, 150);
+      if (x) en.x = String(x).slice(0, X_MAX);
+      var q = readJSON(PLAYLOG_KEY);
+      if (!Array.isArray(q)) q = [];
+      q.push(en);
+      localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
+      return en.id;
+    } catch (e) { console.error('[game-stats-global] private play data not logged', gameId, what, e); return null; }
   }
 
   // WHICH MODE the game was (2026-10-30): the same `byMode` and key as js/game-stats.js withMode/modeKey
@@ -159,7 +203,39 @@
     } catch (e) { console.error('[game-stats-global] mode not noted', e); }
   }
 
-  function record(gameId, difficulty, won, drained, mode) {
+  // PER-MATCH DETAIL (2026-11-16, Matt: "save all data"): the same `g.dt` as js/game-stats.js
+  // cleanDetail/noteDetail (keep in step): numbers/booleans ADD into dt.<key>, strings count
+  // dt.<key>.<value>, dt._n = results with detail. `detail` is a flat object or a function returning one.
+  var DT_RE = /[^A-Za-z0-9_-]/g;
+  function cleanDetail(detail) {
+    try { if (typeof detail === 'function') detail = detail(); } catch (e) { console.error('[game-stats-global] the DETAIL threw; recorded without it', e); return null; }
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+    var c = {}, f = {}, n = 0, ks = Object.keys(detail);
+    for (var i = 0; i < ks.length && n < 24; i++) {
+      var k = String(ks[i]).replace(DT_RE, '').slice(0, 16);
+      if (!k || k === '_n') continue;
+      var v = detail[ks[i]];
+      if (typeof v === 'boolean') { c[k] = v ? 1 : 0; n++; }
+      else if (typeof v === 'number') { if (isFinite(v) && v >= 0 && v <= 1e9) { c[k] = Math.floor(v); n++; } }
+      else if (typeof v === 'string') { var sv = v.replace(DT_RE, '').slice(0, 24); if (sv) { f[k] = sv; n++; } }
+    }
+    return n ? { c: c, f: f } : null;
+  }
+  function noteDetail(g, dt) {
+    try {
+      if (!g.dt || typeof g.dt !== 'object' || Array.isArray(g.dt)) g.dt = {};
+      var t = g.dt, k;
+      t._n = Math.max(0, +t._n || 0) + 1;
+      for (k in dt.c) { if (t[k] != null && typeof t[k] !== 'number') continue; t[k] = Math.max(0, +t[k] || 0) + dt.c[k]; }
+      for (k in dt.f) {
+        if (t[k] != null && (typeof t[k] !== 'object' || Array.isArray(t[k]))) continue;
+        var m = t[k] || (t[k] = {});
+        m[dt.f[k]] = Math.max(0, +m[dt.f[k]] || 0) + 1;
+      }
+    } catch (e) { console.error('[game-stats-global] detail not noted', e); }
+  }
+
+  function record(gameId, difficulty, won, drained, mode, detail, log) {
     try {
       if (GAMES.indexOf(gameId) < 0) return;
       // A queued backlog (drainPending) is not a burst of play: it skips the gate, like
@@ -167,7 +243,14 @@
       if (!drained && tooFast(gameId, Date.now())) return;
       var mk = '';
       try { mk = modeKey(mode); } catch (e) { mk = ''; }
-      notePlay(gameId, drained ? 'record(queued)' : 'record', [gameId, difficulty, won], mk ? mk + '@' + String(difficulty) : '');
+      var dt = null;
+      try { dt = cleanDetail(detail); } catch (e) { dt = null; }
+      var dLog = null;
+      try { if (dt) { var o = {}, kk; for (kk in dt.c) o[kk] = dt.c[kk]; for (kk in dt.f) o[kk] = dt.f[kk]; dLog = JSON.stringify(o).slice(0, 400); } } catch (e) { dLog = null; }
+      // `log` (2026-11-16): the play's private data, ONLY to the play log's `x` (privateLog above).
+      var xLog = null;
+      try { xLog = privateLog(log); } catch (e) { console.error('[game-stats-global] the LOG could not be read; recorded without it', e); xLog = null; }
+      notePlay(gameId, drained ? 'record(queued)' : 'record', [gameId, difficulty, won], mk ? mk + '@' + String(difficulty) : '', dLog, xLog);
       var key = activeStatsKey();
       var st = normalize(readJSON(key));
       if (key !== STATS_KEY) latchLegacyGuards(st);
@@ -182,6 +265,7 @@
       if (won === true) { g.total.won += 1; b.won += 1; }
       else if (won === false) { g.total.lost += 1; b.lost += 1; }
       if (mk) noteMode(g, mk, difficulty, won);
+      if (dt) noteDetail(g, dt);
       st.updatedAt = new Date().toISOString();
       localStorage.setItem(key, JSON.stringify(st));
       noteActivity(key, gameId, Date.now());
@@ -221,7 +305,7 @@
       if (!Array.isArray(q) || !q.length) return;
       for (var i = 0; i < q.length; i++) {
         var e = q[i];
-        if (e) record(e.game, e.diff, e.won, true, e.mode);
+        if (e) record(e.game, e.diff, e.won, true, e.mode, e.dt || null, e.x || null);
       }
       localStorage.removeItem(PENDING_STATS_KEY);
       console.warn('[game-stats-global] drained ' + q.length + ' pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable');
@@ -299,6 +383,6 @@
     return true;
   }
 
-  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record, armQuit: armQuit, dropQuit: dropQuit, quitArmed: quitArmed, takeQuit: takeQuit, touchQuit: touchQuit, quitLost: quitLost };
+  (typeof self !== 'undefined' ? self : this).__ghStats = { record: record, armQuit: armQuit, dropQuit: dropQuit, quitArmed: quitArmed, takeQuit: takeQuit, touchQuit: touchQuit, quitLost: quitLost, logPlayData: logPlayData };
   drainPending();
 })();

@@ -354,3 +354,5 @@ explanations `extraMove`, `berries`, `boom` are PROMPTS ending "Make your next m
 Test: `tools/test-battlearena-tips.mjs` (plays it for real); `test-battlearena-back.mjs` seeds every tip seen.
 The Spanish "¡MOVIMIENTO EXTRA!" banner fits at 360 (`html[lang=es] .ba-pop.is-extra`, 2026-11-16).
 - **No forward page after a popup closes (2026-11-16, Matt: a right-to-left swipe "shows me this sproutle page for a second then goes back")**: the iPhone's forward swipe slid back the snapshot of a closed card; fixed for every screen in `js/back-stack.js` (filler entry). `test-battlearena-back.mjs` "forward".
+
+Private play data (2026-11-16): logs the seed, both teams, who opened, every move in order, each side's HP/turns/berries/evolutions, and a finished online match's whole record, via withMode `log` / logPlayData.

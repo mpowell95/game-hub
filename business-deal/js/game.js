@@ -85,7 +85,7 @@
       return JSON.parse(JSON.stringify({
         turn: this.turn, currentPlayerIndex: this.currentPlayerIndex,
         playsRemaining: this.playsRemaining, phase: this.phase,
-        deck: this.deck, discard: this.discard, logs: this.logs.slice(-60),
+        deck: this.deck, discard: this.discard, logs: this.logs.slice(-400),   // 400 (was 60, 2026-11-16): the private play log sends the whole game
         players: this.players.map(p => ({ name: p.name, hand: p.hand, bank: p.bank, properties: p.properties })),
       }));
     }

@@ -368,7 +368,7 @@ class Tower {
     this.el('help').hidden = true;
     this.el('hud').hidden = false;
     this.screen = 'play';
-    this.run = E.createRun(this.s.diff);
+    this.run = E.createRun(this.s.diff); this.run.t0 = Date.now();
     this.best = bestFor(this.s.diff);
     this.recorded = false;
     this.fx = { falling: [], flashes: [] };
@@ -746,7 +746,7 @@ class Tower {
     try {
       const st = withMode(() => ({ look: this.s.look }), d,
         () => recordTower(E.score(run), d, { perfects: run.perfects, bestStreak: run.bestStreak }),
-        () => ({ hi: E.score(run) }));
+        () => ({ hi: E.score(run), log: () => ({ look: this.s.look, drops: run.log || [], perfects: run.perfects, bestStreak: run.bestStreak, width: run.stack.length ? Math.round(run.stack[run.stack.length - 1].w * 10) / 10 : 0, end: run.over ? 'miss' : 'left', ms: run.t0 ? Date.now() - run.t0 : null }) }));
       if (!st) console.warn('[tower] result not recorded (rate gate or store refused it)');
       else { this.saved = true; keepTowerShape(d, E.score(run), run.stack, this.s.look); }   // only a best's shape is kept
     } catch (err) { console.error('[tower] recording the result failed', err); }

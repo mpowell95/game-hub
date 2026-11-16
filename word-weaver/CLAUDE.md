@@ -197,3 +197,5 @@ generator's header. Finished levels keep their stars by NUMBER (the levels under
 A person's level reads the MOST hints any of their records used, stars capped by them (`wwMerge`, both ladders, `js/players-agg.js`);
 `wwBest` still guards each record's own entry. Written 2026-10-29, LOST in a merge the same day (its tests stayed and failed),
 restored 2026-11-01. It also covers entries from before hints were recorded at tap time (`ww.hint`).
+
+Private play data (2026-11-16): logs every word tried with its result and time, found, extra and bonus words, shuffles via withMode `log` / logPlayData.

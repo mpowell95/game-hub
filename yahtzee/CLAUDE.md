@@ -438,3 +438,5 @@ Matt: "We should add resume to the other games that don't save". Vs the computer
 Setup is **Online | Vs Computer** tabs (`setupHeadHTML`; `mpMode` is `'solo'` or `'host'` = the Online tab). Online holds Create Room and the
 room-code Join, moved from the old Host/Join segments, handlers unchanged. Live rooms only (no challenges), so it opens on Vs Computer.
 Screen centred (2026-11-08, Matt; it was pinned to the top). Layout only: no recorder or save touched.
+
+Private play data (2026-11-16): logs every roll (dice and which were held) and every category commit in order, both full scorecards, who rolled first, via withMode `log`.

@@ -30,7 +30,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
+import { recordResult, withChallengeMatch, mayCountChallenge, countingSince, withMode, logPlayData } from '../../js/game-stats.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { Match } from './match.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale, CALL_OFF_LOSS } from '../../js/challenge-life.js';
@@ -416,11 +416,15 @@ export function markCounted(id) {
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
  *  the match its player-chosen rules (Gentleman's, reracks, Straight Up) and series length; from an
  *  index row what the row carries (Straight Up, series). The other rule flags are versions, not choices. */
-export function modeOfMatch(g) {
+export function modeOfMatch(g, side = mySideOf(g)) {
   const r = cleanRules(g && g.rules);
-  return { gent: r.gent ? 1 : 0, rr: r.rr, su: r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(g && g.series)) ? +g.series : 1 };
+  return { gent: r.gent ? 1 : 0, rr: r.rr, su: r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(g && g.series)) ? +g.series : 1,
+    ...(side === 'a' || side === 'b' ? { first: side === 'a' ? 'me' : 'them' } : {}) };   // who went first (ui.js's own rule), 2026-11-16
 }
-const modeOfRow = (r) => ({ su: r && r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(r && r.series)) ? +r.series : 1 });
+function mySideOf(g) { try { return sideOf(g, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16: the match's whole mode), else what an older
+ *  row carries (Straight Up, series). */
+export const modeOfRow = (r) => (r && r.md) || { su: r && r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(r && r.series)) ? +r.series : 1 };
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). */
 export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
@@ -450,7 +454,56 @@ export function recordFinished(rows) {
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every entry of both sides (each throw's power, aim, cup made, bounced; reracks, island calls, owed cups), the rules, the series, the cups left, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.cuppong.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData('cuppong', 'match', () => privateMatch(game, why), { mode: () => modeOfMatch(game), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[cup-pong] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[cup-pong] finished matches not logged privately', err); }
+}
+/** The match as private data. */
+export function privateMatch(game, why = null) {
+  const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '' });
+  const r6 = (x) => (Number.isFinite(+x) ? Math.round(+x * 1e6) / 1e6 : null);
+  return {
+    v: 1, id: game.id, me: sideOf(game, myCode()), a: who(game.a), b: who(game.b), first: 'a',
+    sentBy: game.by && game.a && game.by === game.a.code ? 'a' : game.by ? 'b' : null,
+    rules: game.rules, series: game.series, seriesNo: game.seriesNo, seriesWins: game.seriesWins, seriesOf: game.seriesOf,
+    created: game.created || null, updated: game.updated || null, over: game.over || (why ? { why } : null), cups: game.cups,
+    cols: 'side,kind(t throw,g gentlemans,r rerack,i island,o owed,c center,x bonus),power,aim,cupMade,bounced,key,sec',
+    log: (game.log || []).slice(0, 400).map((e) => [e.by, e.k, e.k === 't' ? r6(e.p) : null, e.k === 't' ? r6(e.a) : null, e.k === 't' ? (e.m || '') : null, e.b ? 1 : 0,
+      e.k === 'r' ? (e.key || '') : e.k === 'i' || e.k === 'o' ? (e.id || '') : null, e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]),
+  };
 }
 /** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
 export const timeoutsSettled = () => confirmsSettled(NODE);
@@ -476,6 +529,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -489,7 +551,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late, rebuttal: !ended && !!r.rebuttal,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs),
       series: SERIES_LENGTHS.includes(+r.series) ? +r.series : 1, seriesNo: Math.max(1, ms(r.seriesNo) || 1),
       seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id, su: r.su === true,
@@ -565,7 +627,9 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[cup-pong] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) { console.warn('[cup-pong] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -575,7 +639,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); } }
       catch (err) { console.warn('[cup-pong] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -641,6 +705,7 @@ function rowFor(game, side, writer) {
     lastBy: writer === side ? 'me' : 'them',
     series: game.series || 1, seriesNo: game.seriesNo || 1, seriesOf: game.seriesOf || game.id,
     ...(game.rules && game.rules.su ? { su: true } : {}),
+    md: rowMd(modeOfMatch(game, side)),         // the match's mode from this side (2026-11-16)
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(game.over && game.over.via ? { via: game.over.via } : {}),   // a costly cancel/decline: the series ends (2026-10-29)
     ...(ended ? { why: ended } : {}),

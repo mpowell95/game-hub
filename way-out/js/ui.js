@@ -1503,11 +1503,23 @@ class WayOut {
     this._send(best);
   }
 
+  /** PRIVATE play log only (admin play log `x`, never saved): every arrow tapped, `<id>g` out or `<id>b` bumped,
+   *  with the ms since the first tap. Kept on the Rush run or the level's board object. */
+  _tn(id, ok) {
+    try {
+      const o = this.rush || this.lvl; if (!o) return;
+      if (!o._tp) { o._tp = []; o._tt0 = performance.now(); }
+      if (o._tp.length < 1500) o._tp.push(id + (ok ? 'g' : 'b') + '@' + Math.round(performance.now() - o._tt0) + (this.rush ? ':' + (this.rush.boards | 0) : ''));
+    } catch { /* private log only */ }
+  }
+  _hn(id) { try { const o = this.rush || this.lvl; if (o) { if (!o._tp) { o._tp = []; o._tt0 = performance.now(); } o._tp.push('h' + id + '@' + Math.round(performance.now() - o._tt0)); } } catch { /* private log only */ } }
+
   _send(id) {
     const { cols: W, rows: H } = this.lvl;
     const cells = this.lvl.arrows[id];
     if (this.hintId === id) this.hintId = -1;
     const block = blockerOf(cells, this.occ, W, H, id);
+    this._tn(id, !block);
     const p = this.pts[id];
     const len = pathLen(p);
     const [dx, dy] = dirOf(cells, W);
@@ -1543,7 +1555,7 @@ class WayOut {
     const id = hintArrow(this.lvl, this.gone, this.red, this.busy);
     if (id < 0) return;
     this.hintId = id;
-    this.hintT0 = performance.now();
+    this.hintT0 = performance.now(); this._hn(id);
     if (this.clock) this.clock.hints += 1;
     this._noteSlip();
     this._penalty(woHintMs(this.tier));
@@ -1671,7 +1683,7 @@ class WayOut {
       // (a first-ladder board carried across keeps its first-ladder number), so (l, g) rebuilds it.
       level: this.src.k === 'L' ? this.src.n : this.level, gen: this.gen };
     try {
-      withMode(() => ({ mode: 'levels', g: fin.gen }), this.tier, () => recordWayOut(this.tier, fin), { detail: () => ({ mistakes: c.mistakes | 0, hints: c.hints | 0, arrows: this.lvl.arrows.length | 0 }) });
+      withMode(() => ({ mode: 'levels', g: fin.gen }), this.tier, () => recordWayOut(this.tier, fin), { detail: () => ({ mistakes: c.mistakes | 0, hints: c.hints | 0, arrows: this.lvl.arrows.length | 0, ...this._thickDetail() }), log: () => ({ level: fin.level, gen: fin.gen, tier: this.tier, ms: Math.round(c.ms), pen: Math.round(c.pen), mistakes: c.mistakes | 0, hints: c.hints | 0, slips, tryHearts, rounds: this.rounds, arrows: this.lvl.arrows.length, taps: (this.lvl && this.lvl._tp) || [] }) });
     } catch (err) {
       console.error('[way-out] recordWayOut failed - the level was NOT recorded', err);
     }
@@ -1710,7 +1722,7 @@ class WayOut {
     let up = null;
     try {
       up = withMode({ mode: 'replay', g }, this.tier, () => recordWayOutReplay(this.tier, { timeMs: c.ms, penaltyMs: c.pen, arrows: this.lvl.arrows.length, rounds: this.rounds,
-        mistakes: c.mistakes, hints: c.hints, tm: this._tryHearts(), level: l, gen: g, slips: this._slipsNow() }));
+        mistakes: c.mistakes, hints: c.hints, tm: this._tryHearts(), level: l, gen: g, slips: this._slipsNow() }), { detail: () => this._thickDetail(), log: () => ({ replay: l, gen: g, tier: this.tier, ms: Math.round(c.ms), pen: Math.round(c.pen), mistakes: c.mistakes | 0, hints: c.hints | 0, rounds: this.rounds, arrows: this.lvl.arrows.length, taps: (this.lvl && this.lvl._tp) || [] }) });
     } catch (err) { console.error('[way-out] recordWayOutReplay threw - the replay was NOT recorded', err); }
     if (up == null) console.error('[way-out] the replay was NOT recorded', { tier: this.tier, l, g });
     else clearReplaySlips(this.tier, this.level);   // that replay's slips are in its record now
@@ -1970,7 +1982,7 @@ class WayOut {
     const late = s.sv === 0 && woWeekEnd(s.d) <= now;
     let st = null;
     try {
-      st = withMode({ mode: 'rush', rush: mode, saved: 1 }, mode, () => recordWayOutRush(mode, { rv: 2, ...s.x, arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d, ...(late ? { late: 1 } : {}) }), { detail: () => ({ arrows: s.arrows | 0, boards: s.boards | 0 }) });
+      st = withMode({ mode: 'rush', rush: mode, saved: 1 }, mode, () => recordWayOutRush(mode, { rv: 2, ...s.x, arrows: s.arrows, boards: s.boards, ms: s.playMs, mistakes: s.mistakes, seed: s.seed, left, at: s.d, ...(late ? { late: 1 } : {}) }), { detail: () => ({ arrows: s.arrows | 0, boards: s.boards | 0, ...this._thickDetail() }), log: () => ({ saved: 1, mode, arrows: s.arrows | 0, boards: s.boards | 0, ms: s.playMs, mistakes: s.mistakes | 0, seed: s.seed, left, end: s.end || null, late: late ? 1 : 0 }) });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the saved run was NOT recorded', err); }
     if (st) writeRushSave(mode, null);
     else console.error('[way-out] the saved Rush run was NOT recorded; kept', mode, s);
@@ -2222,7 +2234,7 @@ class WayOut {
       // file a run in a past, finished week. With the phone's clock known to be wrong and no server time
       // to stand in, the run is kept and not counted (`late`).
       const late = serverNow() == null && clockSuspect();
-      st = withMode(() => ({ mode: 'rush', rush: r.mode }), r.mode, () => recordWayOutRush(r.mode, { ...this._rushExtras(r), arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left', at: bestNow(), ...(late ? { late: 1 } : {}) }), { detail: () => ({ arrows: r.arrows | 0, boards: r.boards | 0, ...(why === 'left' ? { left: 1 } : {}) }) });
+      st = withMode(() => ({ mode: 'rush', rush: r.mode }), r.mode, () => recordWayOutRush(r.mode, { ...this._rushExtras(r), arrows: r.arrows, boards: r.boards, ms, mistakes: r.mistakes, seed: r.seed, left: why === 'left', at: bestNow(), ...(late ? { late: 1 } : {}) }), { detail: () => ({ arrows: r.arrows | 0, boards: r.boards | 0, ...(why === 'left' ? { left: 1 } : {}), ...this._thickDetail() }), log: () => ({ mode: r.mode, why, arrows: r.arrows | 0, boards: r.boards | 0, ms, mistakes: r.mistakes | 0, seed: r.seed, late: late ? 1 : 0, bt: r.bt, ba: r.ba, mx: r.mx, taps: r._tp || [] }) });
     } catch (err) { console.error('[way-out] recordWayOutRush threw - the run was NOT recorded', err); }
     if (!st) console.error('[way-out] the Rush run was NOT recorded', { mode: r.mode, arrows: r.arrows });
     // Recorded: its save slot (if any) is done with. Not recorded: kept, to be recorded next time.
@@ -2323,6 +2335,13 @@ class WayOut {
   _thick() {
     const v = this.settings && this.settings.thick;
     return typeof v === 'boolean' ? v : isAdminDevice();
+  }
+  /** The thick-arrows switch, in every result's DETAIL (2026-11-16, Matt: "check every game for settings
+   *  that aren't recorded"). A look, never part of the mode. */
+  _thickDetail() {
+    let on = null;
+    try { on = this._thick(); } catch { on = null; }
+    return { thick: on === true ? 'on' : on === false ? 'off' : 'default' };
   }
   async _openLeaderboard(woMode, woRush) {
     try {

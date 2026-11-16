@@ -141,6 +141,9 @@ export class SkeeballGame {
     return g;
   }
 
+  /** PRIVATE play data (admin play log `x`, never saved): every swipe [power, aim, machine clock s] and every settled ball [value, hole]. */
+  privateLog() { return { swipes: this.swipes || [], throws: this.throws.map((t) => [t.value, t.hole]), score: this.score, balls: this.ballsUsed, thrown: this.thrown, machineT: Math.round(this.machineT * 10) / 10 }; }
+
   snapshot() {
     return {
       v: 1,
@@ -193,6 +196,7 @@ export class SkeeballGame {
       { ...params, t0: this.machineT, closed: new Set(this.closed), sweeps: this.sweeps },
     ));
     this.thrown += 1;
+    try { if (!this.swipes) this.swipes = []; if (this.swipes.length < 60) this.swipes.push([Math.round((+params.power || 0) * 100) / 100, Math.round((+params.aim || 0) * 100) / 100, Math.round(this.machineT * 10) / 10]); } catch { /* private log only */ }
     this.events.push({ type: 'throw' });
     return true;
   }

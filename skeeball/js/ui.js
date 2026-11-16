@@ -765,6 +765,13 @@ export class SkeeballUI {
 
   /** A challenge game ended (finished OR walked out of): its score is FINAL in the outbox NOW,
    *  before any network call, then sent. One attempt; leaving counts. See challenge.js. */
+  /** A challenge's length and which rack this was (2026-11-16, Matt: "save all data"); 0s outside a challenge. */
+  _chDetail() {
+    const c = this.challenge;
+    const legs = c && c.game && Array.isArray(c.game.legs) ? c.game.legs.length : 0;
+    return { legs, leg: c ? (c.leg | 0) + 1 : 0 };
+  }
+
   _finishChallengeLeg(score) {
     const ch = this.challenge;
     if (!ch) return;
@@ -2437,7 +2444,7 @@ export class SkeeballUI {
     const board = this.game.board;
     try {
       const practice = isBoardTesting(board.id, !!board.adminOnly);
-      withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0, left: 1 }), board.id, () => recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: this.game.score | 0 }));
+      withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0, left: 1 }), board.id, () => recordSkeeball(board.id, { ...this.game.result(), at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: this.game.score | 0 , log: () => ({ ...this.game.privateLog(), board: board.id, challenge: this.challenge ? 1 : 0, practice, left: 1 }), detail: () => this._chDetail() }));
     } catch (err) {
       console.error('[skeeball] could not record the abandoned rack', err);
     }
@@ -2466,7 +2473,7 @@ export class SkeeballUI {
         // 2026-08-24, after two boards handed out scores while they were being tuned). The flag is
         // resolved at RECORD time, so the rack is judged by the machine's state when it was thrown.
         const practice = isBoardTesting(board.id, !!board.adminOnly);
-        withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0 }), board.id, () => recordSkeeball(board.id, { ...result, at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: (result && result.score) | 0 }));
+        withMode(() => ({ board: board.id, ch: this.challenge ? 1 : 0 }), board.id, () => recordSkeeball(board.id, { ...result, at: Date.now(), practice, challenge: !!this.challenge }), () => ({ hi: (result && result.score) | 0 , log: () => ({ ...this.game.privateLog(), board: board.id, challenge: this.challenge ? 1 : 0, practice }), detail: () => this._chDetail() }));
       } catch (err) {
         console.error('[skeeball] could not record the rack', err);
       }

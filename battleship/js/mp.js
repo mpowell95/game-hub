@@ -499,12 +499,16 @@ export function markCounted(id) {
  *  (js/mp-records.js reads them from the index). `extras` are this player's shots / hits / sunk /
  *  accuracy when the match screen saw the end; a result counted from the list alone has none. */
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
- *  board, shots a turn, the salvo rule (0 none, 1/2/3) and the bonus shot. An index row carries none
- *  of them, so a count made from the launcher's list has no mode. */
-export function modeOfMatch(g) {
+ *  board, shots a turn, the salvo rule (0 none, 1/2/3), the bonus shot, and (2026-11-16) who shot first
+ *  from `side` (default: this phone's): the receiver, side 'b', always does. Index rows written from
+ *  2026-11-16 carry this same mode (`md`); an older row proves only who shot first (`sent`). */
+export function modeOfMatch(g, side = mySideOf(g)) {
   if (!g || typeof g !== 'object') return null;
-  return { size: g.size === 'quick' ? 'quick' : 'classic', shots: [1, 3, 5].includes(+g.shots) ? +g.shots : 1, rule: salvoRule(g.salvo), bonus: g.bonus === false ? 0 : 1 };
+  return { size: g.size === 'quick' ? 'quick' : 'classic', shots: [1, 3, 5].includes(+g.shots) ? +g.shots : 1, rule: salvoRule(g.salvo), bonus: g.bonus === false ? 0 : 1,
+    ...(side === 'a' || side === 'b' ? { first: side === 'b' ? 'me' : 'them' } : {}) };
 }
+function mySideOf(g) { try { return sideOf(g, myCode()); } catch { return null; } }
+export const modeOfRow = (r) => (r && r.md) || { first: r && r.sent ? 'them' : 'me' };
 export function countResult(id, won, extras = null, finishedAt = Date.now(), mode = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
@@ -543,7 +547,7 @@ export function recordFinished(rows) {
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, r.result === 'won', null, r.updated);
+  for (const r of todo) countResult(r.id, r.result === 'won', null, r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -571,6 +575,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 export function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -583,7 +596,7 @@ export function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch(STATS_ID, r.id)));
@@ -690,6 +703,7 @@ function rowFor(game, side, writer) {
     sent: side !== recipientOf(game),
     pl: senderPlayed(game),                     // the sender has shot: calling off costs a loss (2026-10-29)
     mine: game.sunk[side], theirs: game.sunk[other(side)],
+    md: rowMd(modeOfMatch(game, side)),       // the match's mode from this side (2026-11-16)
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),

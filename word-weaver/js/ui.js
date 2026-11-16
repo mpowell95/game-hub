@@ -191,7 +191,7 @@ function recordDailyAttempt(key, a) {
   const len = (x) => (Array.isArray(x) ? x.length : 0);
   let res = null;
   try {
-    res = withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints: Math.max(0, Math.floor(a.hints) || 0), extra: len(a.extra), sym: len(a.sym), ms: Math.max(0, Math.floor(a.sec) || 0) * 1000 }));
+    res = withMode({ mode: 'daily', lang }, 'daily', () => recordWordWeaverDaily(key, { hints: Math.max(0, Math.floor(a.hints) || 0), extra: len(a.extra), sym: len(a.sym), ms: Math.max(0, Math.floor(a.sec) || 0) * 1000 }), () => ({ log: () => ({ daily: key, found: a.found || [], extra: a.extra || [], sym: a.sym || [], revealed: a.revealed || [], hints: a.hints | 0, free: a.free | 0, secs: a.sec | 0 }) }));
   } catch (err) { console.error('[word-weaver] daily puzzle NOT recorded yet; retried on the next open', err); }
   if (!res) { console.error('[word-weaver] daily puzzle not recorded (refused); retried on the next open', key); return false; }
   return writeDailyAttempt(key, { recorded: true });
@@ -465,7 +465,7 @@ class WordWeaver {
     }
     const info = { n: this.n, hints: this.st.hints, extra: this.st.extra.length, sym: this.st.sym.length, ...(this.lang === 'es' ? { lang: 'es' } : {}) };
     let res = null;
-    try { res = withMode(() => ({ mode: 'ladder', lang: info.lang || 'en' }), wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
+    try { res = withMode(() => ({ mode: 'ladder', lang: info.lang || 'en' }), wwBandOf(info.n), () => recordWordWeaver(info.n, { hints: info.hints, extra: info.extra, sym: info.sym, ...(info.lang ? { lang: info.lang } : {}) }), () => ({ log: () => this._wwLog() })); } catch (err) { console.error('[word-weaver] recordWordWeaver failed - level NOT recorded yet, queued', err); }
     if (!res) {
       console.error('[word-weaver] level not recorded (refused); queued to retry');
       const list = readPending();
@@ -982,7 +982,22 @@ class WordWeaver {
     this.pillTimer = this._later(() => { this.pillTimer = 0; this.pillHold = null; if (!this.sel.length) this._paintPill(); }, ms);
   }
 
+  /** PRIVATE play log only (admin play log `x`, never saved): every word tried with what it did, in order. */
+  _wwNote(W, kind) {
+    try {
+      const st = this.st; if (!st) return;
+      if (!st._t0) st._t0 = Date.now();
+      if (!st._wl) st._wl = [];
+      if (st._wl.length < 600) st._wl.push(W + ':' + String(kind).charAt(0) + (kind === 'extraFound' ? 'f' : '') + ':' + Math.round((Date.now() - st._t0) / 1000));
+    } catch { /* private log only */ }
+  }
+  _wwLog() {
+    const st = this.st;
+    return { n: this.n, lang: this.lang, level: this.level && this.level.id != null ? this.level.id : this.n, found: st.found, extra: st.extra, sym: st.sym, revealed: st.revealed, hints: st.hints | 0, free: st.free | 0,
+      tried: st._wl || [], shuffles: st._sh | 0, secs: st._t0 ? Math.round((Date.now() - st._t0) / 1000) : null };
+  }
   _shuffle() {
+    try { if (this.st) this.st._sh = (this.st._sh | 0) + 1; } catch { /* private log only */ }
     if (this.view !== 'play' || this.drag || this.finishing) return;
     this.sel = [];
     this.tail = null;
@@ -1074,6 +1089,7 @@ class WordWeaver {
     const W = String(word).toUpperCase();
     const before = foundCells(this.level, this.st);
     const res = applyWord(this.level, this.st, W);
+    this._wwNote(W, res.kind);
     switch (res.kind) {
       case 'grid': {
         this._save();

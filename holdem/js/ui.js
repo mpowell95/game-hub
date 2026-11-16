@@ -14,7 +14,7 @@
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStoredStats, statsId, withMode } from '../../js/game-stats.js';
+import { deviceId, recordResult, recordHoldemBank, recordHoldemHand, holdemLedger, holdemBalance, holdemSuspect, HOLDEM_ALLEY_PRIZE, loadStoredStats, statsId, withMode, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): players at
  *  the table, the table (tier id, 'free' for no buy-in) and the blind speed. `g` is the engine state
  *  or its public view (both carry `cfg` and `players`). Computer speed (pace) is a look, not a rule. */
@@ -32,7 +32,7 @@ import { createReactions } from '../../js/mp-reactions-ui.js';
 import STRINGS from './strings.js';
 import {
   newGame, publicView, legal, blindsOf, SPEEDS, START_CHIPS, MAX_PLAYERS,
-  evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal, payout,
+  evaluate, bestFive, categoryOf, scoreRanks, RANKS, SUIT_GLYPH, potTotal, payout, cardText,
 } from './engine.js';
 import { Table, PACES, RESULT_MS } from './table.js';
 import NT from './net-table.js';
@@ -55,6 +55,32 @@ const MOVE_MS = 1800;            // an opponent's move is highlighted this long 
 const AWAY_MS = 35000;           // no heartbeat change for this long = away (heartbeat is every 10s)
 const MP_SAVE_TTL = 12 * 3600 * 1000;
 const SKILL_ID = { 1: 'easy', 2: 'medium', 3: 'hard' };
+/** This phone's computer speed and Check / Fold button as the result's DETAIL (2026-11-16, never the
+ *  mode: it would split byMode); online also the computers at the table and their skill ('none' with
+ *  no computers, 'easy-hard' when mixed). Read inside withMode. */
+function setDetail(settings, g, online) {
+  const st = settings || {};
+  const d = { pace: st.pace || 'normal', cf: st.cfMode === 'one' ? 'one' : 'split' };
+  if (online) {
+    const bots = (g && Array.isArray(g.players) ? g.players : []).filter((p) => p && (p.bot | 0) > 0);
+    d.bots = bots.length;
+    d.botSk = bots.length ? [...new Set(bots.map((p) => SKILL_ID[p.bot | 0] || String(p.bot | 0)))].sort().join('-') : 'none';
+  }
+  return d;
+}
+
+/** PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded ... somewhere
+ *  that only I can see"): the admin play log's `x` only, never the stats. Cards as text ("A♠"). */
+const cardsText = (cs) => (Array.isArray(cs) ? cs.map((c) => { try { return cardText(c); } catch { return '?'; } }).join(' ') : null);
+/** The whole table at a game's end: each seat's name, computer skill, chips, place, out/left. */
+function tableLog(g) {
+  const ps = (g && Array.isArray(g.players)) ? g.players : [];
+  return ps.map((p) => ({ n: p.name, b: p.bot | 0, c: p.chips, pl: p.place | 0, o: p.out ? 1 : 0, l: p.left ? 1 : 0 }));
+}
+function matchLog(why, g, my, extra) {
+  const cfg = (g && g.cfg) || {};
+  return { why, my, hands: g ? g.handNo : null, level: g ? g.level : null, winner: g ? g.winner : null, cfg, seats: tableLog(g), ...(extra || {}) };
+}
 
 // The tables you can buy into with your bankroll (2026-09-27), cheapest first - the tournament
 // tiles on the reference app's menu. A table is locked until the bankroll covers its buy-in. The
@@ -1641,7 +1667,7 @@ class Game {
     if (!st.rec) {
       st.rec = true;
       writeJSON(SAVE_KEY, { state: st, at: Date.now() });
-      try { withMode(() => (modeOf(st)), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(st)), SKILL_ID[st.skill] || 'medium', () => recordResult('holdem', SKILL_ID[st.skill] || 'medium', false), { detail: () => setDetail(this.settings, st, false), log: () => matchLog('giveup', st, st.players ? st.players.findIndex((p) => !p.bot) : -1, { solo: 1 }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
     }
     drop(SAVE_KEY);
   }
@@ -1776,6 +1802,7 @@ class Game {
       my, hole,
     };
     if (this.overlay === 'last') this._renderOverlay();
+    this._logHand(pub, h, res, key, hole);
     // Counted only for a hand this player was actually dealt into (their two cards are known).
     if (!hole) return;
     const done = readJSON(HANDS_KEY);
@@ -1795,6 +1822,31 @@ class Game {
       cards = bf.cards;
     }
     try { recordHoldemHand({ won: amt > 0, amt, score, cat, cards }); } catch (e) { console.warn('[holdem] hand stats write failed', e); }
+  }
+
+  /** PRIVATE play data (2026-11-16): every finished hand this phone saw, once per page, to the admin
+   *  play log only (`logPlayData`; a hand is not a result): the board, every action in order, the pots
+   *  and who won them, each shown hand and score, each seat's chips after the hand and what it put in,
+   *  and hole cards: ALL of them on the phone that deals (solo, the host), else this seat's own. */
+  _logHand(pub, h, res, key, hole) {
+    try {
+      const st = this.kind !== 'guest' && this.table && this.table.state;
+      const holes = st && st.hand && st.handNo === pub.handNo && st.hand.holes ? st.hand.holes : null;
+      const all = {};
+      if (holes) for (const j of Object.keys(holes)) all[j] = cardsText(holes[j]);
+      const shown = {};
+      for (const j of Object.keys(res.reveal || {})) shown[j] = cardsText(res.reveal[j]);
+      logPlayData('holdem', 'hand', {
+        no: pub.handNo, kind: this.kind, my: this.myIdx, gid: pub.gid || null, room: this.kind === 'solo' ? null : (this.mp && this.mp.code) || null,
+        btn: pub.button, sb: h.sb, bb: h.bb, lvl: pub.level, board: cardsText(h.board || []),
+        hole: hole ? cardsText(hole) : null, holes: holes ? all : undefined,
+        log: (h.log || []).map((e) => [e.i, e.a, e.amt == null ? null : e.amt, e.st]),
+        pots: (res.pots || []).map((p) => ({ a: p.amount, w: p.winners, s: p.score, b: p.back ? 1 : 0 })),
+        shown, scores: res.scores || {}, noShow: res.noShow ? 1 : 0, folded: (h.folded || []).map((f) => (f ? 1 : 0)),
+        put: (h.total || []).slice(), runout: h.runout ? 1 : 0,
+        seats: (pub.players || []).map((p) => ({ n: p.name, b: p.bot | 0, c: p.chips, o: p.out ? 1 : 0 })),
+      }, { mode: modeOf(pub), diff: this.kind === 'solo' ? (SKILL_ID[(st && st.skill)] || 'medium') : 'mp', key });
+    } catch (e) { console.error('[holdem] hand not logged', e); }
   }
 
   /** The "Last hand" sheet: the board, who won what with which hand, everybody's shown cards (and
@@ -1874,7 +1926,7 @@ class Game {
       const prize = alley ? (won ? HOLDEM_ALLEY_PRIZE : 0) : this._prizeFor(won);
       if (prize) s.prize = prize;
       writeJSON(SAVE_KEY, { state: s, at: Date.now() });
-      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+      try { withMode(() => (modeOf(s)), SKILL_ID[s.skill] || 'medium', () => recordResult('holdem', SKILL_ID[s.skill] || 'medium', won), { detail: () => setDetail(this.settings, s, false), log: () => matchLog(won ? 'won' : 'out', s, this.myIdx, { solo: 1, prize: prize || 0, alley: alley ? 1 : 0 }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
       // Behind the Dumpster pays the winner a grant, not a prize: nobody bought in, so there is no pot.
       if (prize) recordHoldemBank(alley ? { grant: prize, alley: true } : { prize });
       return;
@@ -1887,7 +1939,7 @@ class Game {
     if (prize) rec.push(key + ':prize:' + prize);
     if (rec.length > 60) rec.splice(0, rec.length - 60);
     this._saveMp();
-    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won)); } catch (e) { console.warn('[holdem] stats write failed', e); }
+    try { withMode(() => (modeOf(pub)), 'mp', () => recordResult('holdem', 'mp', won), { detail: () => setDetail(this.settings, pub, true), log: () => matchLog(won ? 'won' : 'out', pub, this.myIdx, { room: this.mp && this.mp.code, gid: pub.gid, host: this.kind === 'host' ? 1 : 0, prize: prize || 0 }) }); } catch (e) { console.warn('[holdem] stats write failed', e); }
     if (prize) recordHoldemBank({ prize });
   }
 

@@ -293,6 +293,8 @@ export class UnoGame {
       direction: this.direction, pendingDraw: this.pendingDraw, phase: this.phase,
       winner: this.winner, currentPlayer: this.currentPlayer, activeColor: this.activeColor,
       pendingWild: this.pendingWild, mustPlayDrawn: this.mustPlayDrawn,
+      // who opened (2026-11-16): saved so a resumed game still records it; older saves lack it
+      _startPlayer: this._startPlayer,
     }));
   }
 

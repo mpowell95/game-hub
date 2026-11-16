@@ -276,6 +276,7 @@ export class Run {
     this.nitro = NITRO_START;
     this.state = RunState.READY;
     this.endReason = null;
+    this.t = 0; this.airT = 0; this.cans = 0; this.boosts = 0; this.coinN = 0;   // private play log counters (2026-11-16); nothing reads them in play
     this.events = [];       // transient {kind, x, y, text} popups drained by the renderer
   }
 
@@ -288,7 +289,7 @@ export class Run {
    *  is already burning (so a panicked double tap costs one charge, not two). */
   useNitro() {
     if (!this.live || this.nitro <= 0 || this.car.boostT > 0) return false;
-    this.nitro--;
+    this.nitro--; this.boosts++;
     this.car.boostT = BOOST_TIME;
     return true;
   }
@@ -311,6 +312,7 @@ export class Run {
 
     this.fuel = Math.max(0, this.fuel - (FUEL_IDLE + FUEL_THROTTLE * Math.abs(th)) * d);
     this.distance = Math.max(this.distance, this.car.x);
+    this.t += d; if (this.car.airborne) this.airT += d;
 
     if (landedFlips > 0) {
       this.flips += landedFlips;
@@ -326,9 +328,10 @@ export class Run {
       if (dx * dx + dy * dy > 2.4 * 2.4) continue;
       it.taken = true;
       if (it.kind === 'coin') {
-        this.coins += it.value;
+        this.coins += it.value; this.coinN++;
         this.events.push({ kind: 'coin', x: it.x, y: it.y, value: it.value });
       } else {
+        this.cans++;
         this.fuel = Math.min(this.maxFuel, this.fuel + it.amount);
         this.nitro = Math.min(NITRO_MAX, this.nitro + 1);
         this.events.push({ kind: 'fuel', x: it.x, y: it.y, value: it.amount });
@@ -337,6 +340,12 @@ export class Run {
 
     if (this.car.crashed) this.end(EndReason.CRASH);
     else if (this.fuel <= 0) this.end(EndReason.FUEL);
+  }
+
+  /** PRIVATE play data (admin play log only). */
+  privateLog() {
+    const r = (v) => Math.round(v * 10) / 10;
+    return { reason: this.endReason, secs: r(this.t), air: r(this.airT), fuelLeft: r(this.fuel), maxFuel: r(this.maxFuel), nitroLeft: this.nitro, boosts: this.boosts, cans: this.cans, coinPicks: this.coinN, coins: this.coins | 0, flips: this.flips | 0, dist: Math.floor(this.distance) };
   }
 
   end(reason) {

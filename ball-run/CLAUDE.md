@@ -49,6 +49,13 @@ never into the stats store, `players/` or the board. Counters live in `sim.stats
 Older runs: each phone copies its run log once (`e: 'oldrun'`, distance + score; stamp `ballrun.runLogSent.v1`).
 Runs before this kept only score + distance, on the phone that played them.
 
+## Orbital Hard scored like Classic, ADMIN ONLY (2026-11-16, Matt: "for admin, on ball run orbital on hard, make it so it awards the same points as classic ... Again, admin only")
+
+On an admin device with the admin's name (`classicScoringOn`, Darts' aim-help gate), a Hard Orbital run scores what a Hard
+CLASSIC track with the same seed gives for the same distance (`ClassicEquiv`: Classic obstacle rows passed; frozen at the
+crash). HUD, best and the recorded result use it (`scoreNow`); the Orbital score is `raw` in the private log (`eq: 1`).
+Everyone else and every other map/level unchanged. Runs before it are not converted (rule 4). `tools/test-ballrun-classic-equiv.mjs`.
+
 ## Second map: Orbital (BALLRUNMAP2ORBITALSPEC.md, all four phases shipped 2026-07-29)
 
 Spec source: `HANDOFF-BALLRUN-NEWMAP.md` (four correctness landmines live there). Phase 1 was a pure

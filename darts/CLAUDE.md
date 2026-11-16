@@ -243,3 +243,13 @@ Play (or Pass & play) over a saved match vs the computer the player has thrown i
 ## Setup tabs (2026-11-07)
 
 The setup card is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill; record chip opens History), Challenge (Anyone + the 4 most recent people), Pass & play (`mp-ui.js fillOnline`); Computer = the old Game / Difficulty / Speed / First / Practice / Play. Opens on Online when a match is going, else Computer; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is centred (2026-11-08, Matt).
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Vs the computer (finish and quit loss): detail `pace` (Computer speed) and `firstSet` (the match keeps it as `fs`, older matches: the current setting). Never in the mode.
+
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+A finished pass-and-play match (and one thrown away by a new match after a dart, winner `quit`) records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('darts', 'p1'|'p2'|'draw'|'quit', names), { detail: turns/scores, `firstSet` })` (`_recordPassPlay`, the match's `recorded` flag): `games.darts.pp`, counted by nothing. Supersedes "not recorded" under Screens.
+
+Private play data (2026-11-16): logs every dart (`m.xl`: seat, x, y, number, ring, points, marks, event, seconds), scores, marks, overtime, seats via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, `practice`, `free` every 10 rounds, a challenge as `match` once per phone: `mp.js logMatchOnce`, finished-while-away rows read once).

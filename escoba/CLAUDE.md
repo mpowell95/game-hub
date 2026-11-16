@@ -83,6 +83,8 @@ ported; `js/net.js` and the engine needed **zero** changes (`game.js` loops `thi
 
 ## Multiplayer results are recorded, and cannot be lost (2026-08-11)
 
+**Settings as detail (2026-11-16)**: every result carries `vals` (card value badges `on`/`off`) in withMode's detail (solo, quit loss, live-room modeTags); challenges (`countResult`'s new 6th arg `score`) also `assist` (`on`/`off`). Never the mode.
+
 Matt: *"Make it so that is impossible. Nothing should ever be able to be lost. That's the rule."*
 
 1. **Bucket**: MP records under `MP_DIFFICULTY` (`'mp'`), not `opp0.difficulty || 'normal'` (a remote
@@ -269,3 +271,9 @@ Solo: the menu's New game / Quit to setup, and New game over a resumable match, 
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first card = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per match (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - 3-4 seats: only the leaver records; the table ends as before. Solo: quitting is a loss once DEALT (every save counts); a live room taking the one save slot records the solo match it replaces.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+Challenges: `chModeOf(raw, side)` adds `first` (the challenger leads); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: the length). `tools/test-escoba-mp.mjs`.
+
+Private play data (2026-11-16): logs per round the deck order, dealer, every play (card, cards taken, escoba), each player's round score and total, and a finished challenge's whole match, via withMode `log` / logPlayData.

@@ -15,6 +15,36 @@ import { syncMyStats } from '../../js/stats-net.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
+import { Track } from './track.js';
+import { isAdminDevice } from '../../js/admin-config.js';
+import { isAdmin } from '../../js/challenge/hooks.js';
+
+/** ORBITAL HARD SCORED LIKE CLASSIC, ADMIN ONLY (2026-11-16, Matt: "for admin, on ball run orbital on hard,
+ *  make it so it awards the same points as classic ... Again, admin only"). Hard Orbital gives fewer points
+ *  a meter than Hard Classic (about 53 vs 64 a km: fewer obstacle rows, the rest is orbs, splits, jumps).
+ *  On Matt's admin device (the device AND his name, Darts' aim-help gate) a Hard Orbital run scores what a
+ *  Hard CLASSIC track with the SAME seed would give for the same distance: every Classic obstacle row whose
+ *  far edge the ball passed. Frozen at the crash, like Classic. The run's own Orbital score is kept as
+ *  `raw` in the private play log. Everyone else, and every other map/level: unchanged. */
+export function classicScoringOn(map, difficulty) {
+  if (map !== 'orbital' || difficulty !== 'hard') return false;
+  try { const p = loadProfile(); return isAdminDevice() && !!(p && p.name && isAdmin(p.name)); } catch { return false; }
+}
+export class ClassicEquiv {
+  constructor(seed) { this.tr = new Track('classic', 'hard', seed); this.n = 0; this.last = -1; }
+  at(z) {
+    const tr = this.tr;
+    tr.ensureAhead(z + 60);
+    for (const seg of tr.segments) {
+      if (seg.index <= this.last) continue;
+      if (seg.z1 > z) break;
+      if (seg.type === 'obstacle') this.n += 1;
+      this.last = seg.index;
+    }
+    tr.trimBehind(z - 60);
+    return this.n;
+  }
+}
 
 const t = makeT(STRINGS);
 // config.js's own DIFFICULTIES[].label stays English (a tuning/config module, same discipline as
@@ -612,6 +642,8 @@ class BallRunUI {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
     this._seed = seed;
     this.sim = new Sim(this.map, this.difficulty, seed);
+    this._eq = null; this._eqVal = 0;
+    try { if (classicScoringOn(this.map, this.difficulty)) this._eq = new ClassicEquiv(seed); } catch (err) { console.error('[ball-run] classic scoring not set up; the Orbital score counts', err); this._eq = null; }
     this.renderer = new Renderer(this.el.canvas, this.map);
     this.input = new InputController(this.el.canvas);
     this._resultRecorded = false;
@@ -688,11 +720,20 @@ class BallRunUI {
     if (this.sim.isOver()) this.onGameOver();
   }
 
+  /** The run's score: Orbital Hard on Matt's admin device = the Classic Hard equivalent (classicScoringOn). */
+  scoreNow() {
+    const sim = this.sim;
+    if (!sim) return 0;
+    if (!this._eq) return sim.score;
+    try { if (!sim.crashReason) this._eqVal = this._eq.at(sim.z); } catch (err) { console.error('[ball-run] classic scoring failed; the Orbital score counts', err); this._eq = null; return sim.score; }
+    return this._eqVal;
+  }
+
   updateHud(force) {
     if (!this.sim) return;
     // Obstacle count is the primary HUD number (fourth-playthrough item 2); distance stays as a
     // secondary flavor line, never compared against a best.
-    const score = this.sim.score;
+    const score = this.scoreNow();
     if (force || this._lastShownScore !== score) {
       this._lastShownScore = score;
       this.el.scoreValue.textContent = String(score);
@@ -801,7 +842,7 @@ class BallRunUI {
     this.stopLoop();
     // Fourth-playthrough item 2: obstacle count is now the headline score and what's compared
     // against the personal best. Distance is shown once as secondary flavor info only.
-    const score = this.sim.score;
+    const score = this.scoreNow();
     const distance = Math.floor(this.sim.z);
     const prevBest = loadBest(this.map, this.difficulty);
     const isNewBest = score > prevBest;
@@ -814,6 +855,7 @@ class BallRunUI {
       // touching the shared store at all, so the run is never lost even if the write below fails.
       let detail = null;
       try { detail = runDetail(this.sim); } catch (err) { console.error('[ball-run] run detail failed; the run is saved without it', err); }
+      try { if (this._eq && detail) { detail.eq = 1; detail.raw = this.sim.score | 0; } } catch { /* private log only */ }
       const logEntry = { ts: Date.now(), difficulty: this.difficulty, map: this.map, score, distance, seed: this._seed, detail, synced: false };
       appendRunLog(logEntry);
       logRunDetail(logEntry);

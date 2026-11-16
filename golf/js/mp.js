@@ -37,7 +37,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode, logPlayData } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { automationBlocks } from '../../js/automation.js';
@@ -448,8 +448,9 @@ export function noteVoided() {
   return n;
 }
 /** A row's mode, when the match itself is not to hand. */
-const rowMode = (r) => ({ course: String(r.course || ''), round: String(r.round || ''), holes: ms(r.holes), first: r.sent ? 'me' : 'them', online: 1 });
-const rowDetail = (r) => ({ strokes: ms(r.mineTotal), them: ms(r.theirsTotal) });
+/** Rows written from 2026-11-16 carry the match's own mode and detail (`md`, `dt`); older ones what they hold. */
+export const rowMode = (r) => r.md || ({ course: String(r.course || ''), round: String(r.round || ''), holes: ms(r.holes), first: r.sent ? 'me' : 'them', online: 1 });
+export const rowDetail = (r) => r.dt || ({ strokes: ms(r.mineTotal), them: ms(r.theirsTotal) });
 /** Count every finished row not yet counted here, and queue it for the Game Over popup. */
 export function recordFinished(rows) {
   countingSince(LEDGER_KEY);
@@ -466,7 +467,56 @@ export function recordFinished(rows) {
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, wonOf(r.result), r.updated, () => rowMode(r), () => ({ detail: () => rowDetail(r) }));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every shot at rest (hole, where it stopped, stroke), each hole score both sides, the cups, playoff holes, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.golf.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData('golf', 'match', () => privateMatch(game, why), { mode: () => modeOfGame(game, sideOf(game, myCode())), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[golf] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[golf] finished matches not logged privately', err); }
+}
+/** The match as private data. */
+export function privateMatch(game, why = null) {
+  const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '' });
+  const r1 = (v) => (Number.isFinite(+v) ? Math.round(+v * 10) / 10 : null);
+  return {
+    v: 1, id: game.id, me: sideOf(game, myCode()), a: who(game.a), b: who(game.b), first: 'a',
+    sentBy: game.by && game.a && game.by === game.a.code ? 'a' : game.by ? 'b' : null,
+    course: game.course, round: game.round, holes: game.holes, po: !!game.po, ah: !!game.ah,
+    created: game.created || null, updated: game.updated || null, over: game.over || (why ? { why } : null),
+    scores: game.scores, totals: game.totals, playoff: game.playoff || null,
+    cols: 'side,hole,x,y,stroke,score(d),pass,sec',
+    log: (game.log || []).slice(0, 500).map((e) => [e.by, e.h == null ? null : e.h, r1(e.x), r1(e.y), e.s == null ? null : e.s, e.d ? 1 : 0, e.pass ? 1 : 0, e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]),
+  };
 }
 export const timeoutsSettled = () => confirmsSettled(NODE);
 export const UNSEEN_KEY = 'gamehub.golf.unseenResults.v1';
@@ -507,6 +557,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -518,7 +577,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md), dt: rowMd(r.dt),
       course: COURSE_RE.test(String(r.course || '')) ? String(r.course) : '', round: ROUND_RE.test(String(r.round || '')) ? String(r.round) : '',
       holes: ms(r.holes), hole: ms(r.hole), done: ms(r.done), pof: r.pof === 1,
       mine: ms(r.mine), theirs: ms(r.theirs), par: ms(r.par), mineTotal: ms(r.mineTotal), theirsTotal: ms(r.theirsTotal),
@@ -557,7 +616,9 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[golf] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) { console.warn('[golf] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -567,7 +628,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); } }
       catch (err) { console.warn('[golf] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -626,6 +687,7 @@ function rowFor(game, side, writer) {
     hole: game.hole + 1, done: game.common.done, pof: game.hole >= game.holes.length ? 1 : 0,
     mine: game.common[side], theirs: game.common[other(side)], par: game.common.par,
     mineTotal: game.totals[side], theirsTotal: game.totals[other(side)],
+    md: rowMd(modeOfGame(game, side)), dt: rowMd(detailOfGame(game, side)),   // the match's mode and detail from this side (2026-11-16)
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),

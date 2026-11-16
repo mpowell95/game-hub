@@ -7,7 +7,7 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult, armQuitLoss, takeQuitLoss, withMode, modeTag, oneTierDown } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, armQuitLoss, takeQuitLoss, withMode, modeTag, oneTierDown, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the shot
  *  rule (one shot, or until you sink one). A live room's rule is the host's (room config), on the
  *  Match either way. The player always shoots first vs the computer; the caption is words, not a rule. */
@@ -62,10 +62,23 @@ function readSave(vsCpu) {
     m.shots = [Math.max(0, s.shots[0] | 0), Math.max(0, s.shots[1] | 0)];
     const f = s.fly;
     const fly = f && Number.isFinite(+f.p) && Number.isFinite(+f.a) && Number.isInteger(f.s) ? { p: +f.p, a: +f.a, s: f.s } : null;
+    if (Array.isArray(s.xl)) { m.xl = s.xl.slice(0, 300); m.xt0 = +s.xt0 || Date.now(); }   // the private shot log (2026-11-16)
     return { match: m, fly };
   } catch { return null; }
 }
 const clearSave = (vsCpu) => { try { localStorage.removeItem(saveKeyOf(vsCpu)); } catch (err) { console.error('[hoops4] saved match not cleared', err); } };
+/** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+ *  `games.hoops4.pp`, counted by nothing. Winner 'p1' (Red) | 'p2' (Yellow) | 'draw', or 'quit' for a
+ *  started match thrown away by a new one. Detail = both sides' shots and makes. */
+function recordHoopsPass(m, winner) {
+  try {
+    const st = withMode(() => (modeFor(m, RED)), 'pnp', () => recordPassPlay('hoops4', winner, [t('red'), t('yellow')]), { detail: () => {
+      const a = hoopsDetail(m, RED) || {}, b = hoopsDetail(m, YELLOW) || {};
+      return { ...a, shots2: b.shots | 0, made2: b.made | 0, missed2: b.missed | 0 };
+    } });
+    if (!st) console.warn('[hoops4] pass and play not recorded (rate gate or store refused it)');
+  } catch (err) { console.error('[hoops4] recording pass and play failed', err); }
+}
 /** Any shot taken in it, the computer's included (or one in the air): throwing it away is a loss. */
 const savedMoved = (sv) => !!sv && (sv.match.moves.length > 0 || sv.match.shots[0] + sv.match.shots[1] > 0 || !!sv.fly);
 
@@ -826,7 +839,7 @@ class Hoops4 {
       let res = 'none';
       if (this._liveInPlay()) {
         res = LL.onRoomEnded(room, { statsId: 'hoops4', key: this._liveKey(), n: 1, mySeat: this.mp.role,
-          fn: 'recordResult', winArgs: ['hoops4', 'mp', true], opps: [], tag: modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp') });
+          fn: 'recordResult', winArgs: ['hoops4', 'mp', true], opps: [], tag: modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp', () => ({ log: () => this._xlData(this.match, 'left', 'live') })) });
       }
       this.mp.decided = true;
       if (res !== 'none') this.recorded = true;
@@ -858,7 +871,7 @@ class Hoops4 {
     const mp = this.mp;
     mp.decided = true;
     this.recorded = true;
-    LL.recordLeaveWin('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', true], [], modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp'));
+    LL.recordLeaveWin('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', true], [], modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp', () => ({ log: () => this._xlData(this.match, 'claim', 'live') })));
     LL.hideClaim(this.root);
     if (this._roomStop) { try { this._roomStop(); } catch {} this._roomStop = null; }
     LL.leaveWithForfeit(this.net, mp.code, mp.role, this._liveOppRole(), 1, true).catch(() => {});
@@ -869,7 +882,9 @@ class Hoops4 {
   _applyRemote(move) {
     const m = this.match;
     if (!m || m.over) return;
+    const by = m.turn;
     const res = (move && Number.isInteger(move.col)) ? m.land(move.col) : m.miss();
+    this._xlPush(m, [by, null, null, null, move && Number.isInteger(move.col) ? move.col : -1, res.type || '']);
     this._paintShot(res);
     if (m.over) this.finish();
   }
@@ -1110,7 +1125,7 @@ class Hoops4 {
   // A MATCH VS THE COMPUTER IS SAVED (2026-11-06; docs/INTEGRITY-CHECKS-SPEC.md "Games that SAVE and
   // resume"). Leaving it (Back to setup, the hub's back, a closed app, a challenge opened) costs
   // nothing: it is there to Continue. Only THROWING IT AWAY once any shot was taken (New game, from
-  // the Menu or the setup screen) is a loss, asked twice. Pass and play saves too and records nothing.
+  // the Menu or the setup screen) is a loss, asked twice. Pass and play saves too; its end (or a started one thrown away) is kept by recordPassPlay, counted by nothing.
   /** The level of the computer in `m` (its own, so a continued match keeps it), else the setting's. */
   cpuDiff(m = this.match) {
     const skill = m && m.vsCpu ? m.cpuSkill : this.settings.opponent;
@@ -1134,16 +1149,59 @@ class Hoops4 {
     clearSave(true);
     if (!savedMoved(sv)) return;
     const m = sv.match;
-    armQuitLoss('hoops4', 'recordResult', ['hoops4', this.statsDiff(m), false], modeTag(() => (modeFor(m, RED)), this.cpuDiff(m)));
+    armQuitLoss('hoops4', 'recordResult', ['hoops4', this.statsDiff(m), false], modeTag(() => (modeFor(m, RED)), this.cpuDiff(m), () => ({ log: () => this._xlData(m, 'quit', 'cpu') })));
     if (!takeQuitLoss('hoops4')) console.error('[hoops4] the thrown-away match was not recorded as a loss');
   }
+  /** Throw the saved pass-and-play match away: the save first, then, if anyone shot in it, kept once as 'quit'. */
+  takePassDiscard() {
+    const sv = readSave(false);
+    clearSave(false);
+    if (savedMoved(sv)) recordHoopsPass(sv.match, 'quit');
+  }
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Every shot of a match on this phone is kept on the match as `m.xl` (and in its save) and sent ONLY to
+  // the admin play log (withMode's / modeTag's `log`; logPlayData for pass and play). Never a stat, never
+  // shown. Row: [player, power, aim, seed, column (-1 a miss), what happened, seconds]; a live room's
+  // other player's shots have no power/aim/seed here. Turn-by-turn challenges: mp.js logMatchOnce.
+  _xlPush(m, row) {
+    try {
+      if (!m || (this.mp && this.mp.kind === 'async')) return;
+      if (!Array.isArray(m.xl)) { m.xl = []; m.xt0 = Date.now(); }
+      if (m.xl.length >= 300) return;   // under 20,000 characters
+      const r4 = (v) => (v == null || !Number.isFinite(+v) ? null : Math.round(+v * 1e4) / 1e4);
+      m.xl.push([row[0], r4(row[1]), r4(row[2]), row[3] == null ? null : row[3], row[4], row[5], Math.round((Date.now() - (+m.xt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[hoops4] shot not kept for the private log', err); }
+  }
+  _xlData(m, end, kind) {
+    if (!m) return null;
+    return {
+      v: 1, end, kind, one: m.oneShot ? 1 : 0, first: m.first, skill: m.vsCpu ? m.cpuSkill : null, me: this.myPlayer,
+      vs: this.mp && this.mp.them ? (this.mp.them.name || null) : null, winner: m.winner, over: !!m.over, shots: m.shots,
+      moves: (m.moves || []).map((x) => [x.by, x.col, x.shots | 0]), cols: 'player,power,aim,seed,col,type,sec',
+      shotLog: Array.isArray(m.xl) ? m.xl : [],
+    };
+  }
+  /** Pass and play counts for nothing: logged privately, once. */
+  _xlLog(m, end) {
+    try {
+      if (!m || m.xlDone || !(m.moves.length || m.shots[0] + m.shots[1])) return;
+      m.xlDone = true;
+      logPlayData('hoops4', 'pnp', () => this._xlData(m, end, 'pnp'), { mode: () => modeFor(m, RED), diff: 'pnp' });
+    } catch (err) { console.error('[hoops4] private play data not logged', err); }
+  }
+  /** A pass-and-play save thrown away for a new match. */
+  _xlAbandonPass() {
+    try { const sv = readSave(false); if (sv) this._xlLog(sv.match, 'abandon'); } catch { /* private log only */ }
+  }
+
   /** The match as it stands, saved (vs the computer or pass and play; `fly`: a shot in the air). A
    *  finished match keeps the save it had until finish() clears it, then records. */
   saveMatch(fly = null) {
     const m = this.match;
     if (this.mp || !m || this.recorded || m.over) return;
     const save = { v: 1, at: Date.now(), vsCpu: m.vsCpu ? 1 : 0, skill: m.cpuSkill, one: m.oneShot ? 1 : 0, first: m.first, turn: m.turn,
-      sit: m.shotsThisTurn, shots: [m.shots[0] | 0, m.shots[1] | 0], moves: m.moves.map((x) => ({ by: x.by, col: x.col, shots: x.shots | 0 })), fly };
+      sit: m.shotsThisTurn, shots: [m.shots[0] | 0, m.shots[1] | 0], moves: m.moves.map((x) => ({ by: x.by, col: x.col, shots: x.shots | 0 })), fly,
+      ...(Array.isArray(m.xl) ? { xl: m.xl, xt0: m.xt0 } : {}) };
     try { localStorage.setItem(saveKeyOf(m.vsCpu), JSON.stringify(save)); } catch (err) { console.error('[hoops4] match not saved', err); }
     if (m.vsCpu) this._syncedSave = false;   // the setup row shows this match's level next time (renderSetup)
   }
@@ -1160,8 +1218,10 @@ class Hoops4 {
     // (vs the computer a loss once anyone has shot; pass and play records nothing). A multiplayer
     // match leaves both saves alone.
     let resumed = null;
+    if (!opts.keepMp && !vsCpu && !opts.resume) this._xlAbandonPass();   // a pass-and-play save thrown away: private log only
     if (!opts.keepMp) {
       if (opts.resume) resumed = readSave(vsCpu);
+      if (!resumed && !vsCpu) this.takePassDiscard();   // a started pass-and-play match thrown away: kept as 'quit' (2026-11-16)
       if (!resumed) { if (vsCpu) this.takeDiscard(); else clearSave(false); }
     }
     const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
@@ -1605,6 +1665,7 @@ class Hoops4 {
     // A FULL COLUMN'S HOOP IS CAPPED (physics.js buildWorld `closed`): the ball bounces or rolls
     // off it and cannot score there. The same list paints the lids (paintHud -> setClosed).
     this.throwState = this.engine.phys.startThrow(BOARD, { power, aim, seed, closed: this.closedHoles() });
+    this._xlShot = { by: this.match.turn, p: power, a: aim, s: seed };   // the private shot log (resolve)
     this.captured = null;
     // Saved WITH the shot in the air, either side's (vs the computer, pass and play): leaving now
     // flies it again on Continue, so a shot can never be taken back by leaving.
@@ -1688,16 +1749,19 @@ class Hoops4 {
     const hole = st.outcome && st.outcome.hole;
     const H = BOARD.geom.holes[hole];
     let res;
+    const xs = this._xlShot;
+    this._xlShot = null;
     if (H) {
       res = m.land(H.value - 1);            // hole value IS the column, 1-based
     } else {
       res = m.miss();
     }
+    if (xs) this._xlPush(m, [xs.by, xs.p, xs.a, xs.s, H ? H.value - 1 : -1, res.type || '']);
     this.busy = false;
     if (!this.mp && !m.over) this.saveMatch();   // the shot has settled (a finished match: finish() clears it)
     this._paintShot(res);
     if (this.mp) this._sendShot(res);
-    if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], [], modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp'));
+    if (this._liveInPlay()) LL.armLeave('hoops4', this._liveKey(), 'recordResult', ['hoops4', 'mp', false], [], modeTag(() => (modeFor(this.match, this.myPlayer)), 'mp', () => ({ log: () => this._xlData(this.match, 'left', 'live') })));
 
     if (m.over) { this._whenLanded(() => { if (!this.disposed) this.finish(); }); return; }
     this._whenLanded(() => { if (!this.disposed) this.maybeCpu(); });
@@ -1797,7 +1861,7 @@ class Hoops4 {
       try {
         // 'mp' is the repo's own difficulty for a multiplayer match (js/game-stats.js) - it is
         // unmapped in js/difficulty-tiers.js, so it never lands in a difficulty tier. A
-        // two-players-on-one-phone match records nothing, because there is no "you" in it.
+        // two-players-on-one-phone match is kept by recordPassPlay (2026-11-16), counted by nothing.
         // A TURN-BY-TURN match: counted once per device through the ledger (mp.js), and scored
         // from the STORED winner when there is one - a resignation replays into an unfinished
         // board, whose m.winner would have scored the winner a loss.
@@ -1814,10 +1878,10 @@ class Hoops4 {
           try { this.mp.MP.markResultSeen(this.mp.id); } catch { /* display flag only */ }
         } else if (this.mp && LL.alreadyCounted(this._liveKey())) {
           // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
-        } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); withMode(() => (modeFor(m, this.myPlayer)), 'mp', () => recordResult('hoops4', 'mp', m.winner === this.myPlayer), { detail: () => (hoopsDetail(m, this.myPlayer)) }); }
+        } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); withMode(() => (modeFor(m, this.myPlayer)), 'mp', () => recordResult('hoops4', 'mp', m.winner === this.myPlayer), { detail: () => (hoopsDetail(m, this.myPlayer)), log: () => this._xlData(m, 'end', 'live') }); }
         else if (m.vsCpu) {
-          withMode(() => (modeFor(m, RED)), this.cpuDiff(m), () => recordResult('hoops4', this.statsDiff(m), r.won), { detail: () => (hoopsDetail(m, RED)) });
-        }
+          withMode(() => (modeFor(m, RED)), this.cpuDiff(m), () => recordResult('hoops4', this.statsDiff(m), r.won), { detail: () => (hoopsDetail(m, RED)), log: () => this._xlData(m, 'end', 'cpu') });
+        } else { recordHoopsPass(m, m.winner === RED ? 'p1' : m.winner === YELLOW ? 'p2' : 'draw'); this._xlLog(m, 'end'); }   // pass and play: kept (counts for nothing) + private log
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
     const r = m.result();

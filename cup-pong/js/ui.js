@@ -8,7 +8,7 @@
 // see isInProgress() for which meaning of the contract each is.
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
-import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag, activeCode } from '../../js/game-stats.js';
+import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag, activeCode, logPlayData } from '../../js/game-stats.js';
 import { appendPlayLog } from '../../js/play-log-queue.js';
 import { isAdminDevice } from '../../js/admin-config.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
@@ -441,6 +441,7 @@ class CupPong {
   // Stage 1's practice, now recorded (Matt, 2026-09-28). One ball a throw, no balls back, no
   // reracks, no opponent. Only a CLEARED rack is recorded; giving up part way records nothing.
   newRack() {
+    this._xlSoloLeave();
     this.rack = makeRack('tri10');
     this.throws = 0;
     this.recorded = false;
@@ -469,6 +470,7 @@ class CupPong {
     // THIS player's own numbers in the match (2026-11-02, recorded with the result as withMode's detail;
     // saved with the match, so a continued match counts from its first throw)
     this._tally = { throws: 0, made: 0, ballsBack: 0, onFire: 0, rack: '' };
+    this._xl = []; this._xt0 = Date.now(); this._xlDone = false;   // every throw, both sides: the private log (2026-11-16)
     this.recorded = false;
     this.throwState = null;
     this.pickMode = null;
@@ -504,6 +506,7 @@ class CupPong {
     this.match = m;
     const tl = sv.tally && typeof sv.tally === 'object' ? sv.tally : {};
     this._tally = { throws: tl.throws | 0, made: tl.made | 0, ballsBack: tl.ballsBack | 0, onFire: tl.onFire | 0, rack: tl.rack ? String(tl.rack) : '' };
+    this._xl = Array.isArray(sv.xl) ? sv.xl.slice(0, 300) : []; this._xt0 = +sv.xt0 || Date.now(); this._xlDone = false;
     this.recorded = false;
     this.throwState = null;
     this.pickMode = null;
@@ -534,7 +537,7 @@ class CupPong {
       R.showRestBall(m.spare !== null);
       R.setBallHeat(m.heat('a', m.ball), m.spare !== null ? m.heat('a', m.spare) : 0);
       this.lastShot = { power, aim, cups: cupsXZ(m.target()), refly: 1 };
-    } else R.setBallHeat(m.heat('b', m.ball), 0);
+    } else { R.setBallHeat(m.heat('b', m.ball), 0); this._cpuShot = { power, aim, refly: 1 }; }
     this.busy = true;
     this.paintOptions();
     this.throwState = this.engine.phys.startThrow({ power, aim, cups: cupsXZ(m.target()) });   // vs the computer: the new table
@@ -549,7 +552,7 @@ class CupPong {
     this._fly = fly;
     if (m.over) { clearSave(); return; }
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), cfg: this.cfg, match: m.toJSON(), tally: this._tally || null, fly }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), cfg: this.cfg, match: m.toJSON(), tally: this._tally || null, fly, ...(Array.isArray(this._xl) ? { xl: this._xl, xt0: this._xt0 } : {}) }));
     } catch (err) { console.error('[cup-pong] match not saved', err); }
   }
 
@@ -633,6 +636,7 @@ class CupPong {
     this.shooter = 'b';
     this.engine.rend.setBallHeat(m.heat('b', m.ball), 0);
     this.throwState = this.engine.phys.startThrow({ power: th.power, aim: th.aim, cups });
+    this._cpuShot = { power: th.power, aim: th.aim };
     this.saveMatch({ s: 'b', p: th.power, a: th.aim });
   }
 
@@ -642,6 +646,7 @@ class CupPong {
     const made = outcome && outcome.kind === 'made' ? outcome.id : null;
     const shooter = m.shooter;
     const ev = m.throwResult({ made, bounced: !!(outcome && outcome.bounced) });
+    this._xlThrow(shooter, made, outcome, ev);
     if (ev.length && shooter === 'a' && this.lastShot) {
       this.mpRecord({ k: 't', p: this.lastShot.power, a: this.lastShot.aim, m: made || '', b: outcome && outcome.bounced ? 1 : 0 });
     }
@@ -1054,6 +1059,7 @@ class CupPong {
     // the stored side 'a' shoots first in every challenge game (mp.js), so mp.side says who did (2026-11-02)
     MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(MP.modeOfMatch(mp.game) || {}), first: mp.side === 'a' ? 'me' : 'them' }));   // once per phone, whoever ended it
     MP.markResultSeen(mp.id);
+    try { MP.logMatchOnce(mp.game); } catch { /* private log only */ }
     this.paintHud();
     this.paintOptions();
     this.later(() => this.showMpOver(won, resigned), 700);
@@ -1540,6 +1546,7 @@ class CupPong {
     const m = this.match;
     const won = m.winner === 'a';
     if (this.mp) { this.mpFinish(won); return; }
+    if (this.test && !this._xlDone) { this._xlDone = true; try { logPlayData('cuppong', 'test', () => this._xlData('end', m, this._xl), { mode: () => modeOf(this.cfg), diff: 'test' }); } catch { /* private log only */ } }
     if (this.test) this.recorded = true;                 // test mode: nothing recorded, the real save untouched
     if (!this.recorded) {
       this.recorded = true;
@@ -1548,7 +1555,7 @@ class CupPong {
       clearSave();
       const cfg = this.cfg;
       const tl = this._tally;
-      try { withMode(() => (modeOf(cfg)), cfg.diff, () => recordCupPong(statsDiff(cfg.diff, cfg.reracks), won, m.reracksUsed.a), { detail: () => detailOf(tl, m.reracksUsed.a) }); } catch (err) { console.error('[cup-pong] record failed', err); }
+      try { withMode(() => (modeOf(cfg)), cfg.diff, () => recordCupPong(statsDiff(cfg.diff, cfg.reracks), won, m.reracksUsed.a), { detail: () => ({ ...detailOf(tl, m.reracksUsed.a), rm: this._rackModeDetail() }), log: () => this._xlData('end', m, this._xl) }); } catch (err) { console.error('[cup-pong] record failed', err); }
       this.settings.nextFirst = cfg.nextFirst === 'a' ? 'b' : 'a';
       writeSettings(this.settings);
     }
@@ -1738,9 +1745,65 @@ class CupPong {
       const wait = o.kind === 'made' ? SETTLE_MS + 200 : SETTLE_MS;
       if (this.replaying) { this.throwState = null; this.later(() => this.replayThrowDone(), wait); return; }
       if (this.shooter === 'a') this.logThrow(o);
+      if (this.mode === 'solo') this._xlSolo(o);
       if (this.mode === 'solo') this.later(() => this.serve(), wait);
       else { this.throwState = { done: true, ball: this.throwState && this.throwState.ball, outcome: o }; this.applyThrow(o, wait); }
     }
+  }
+
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Vs the computer: EVERY throw of the match, the computer's too (`_xl`, saved with the match), with the
+  // cup made, bounced, what the rules made of it and the cups left on both sides, sent ONLY to the admin
+  // play log with the result (withMode's / modeTag's `log`). Solo: every throw of the rack with the
+  // clear, or as 'abandon' when a rack is left. Never a stat, never shown. Challenges: mp.js logMatchOnce.
+  _xlThrow(shooter, made, outcome, ev) {
+    try {
+      if (this.mp || this.mode !== 'cpu' || !this.match) return;
+      if (!Array.isArray(this._xl)) { this._xl = []; this._xt0 = Date.now(); }
+      if (this._xl.length >= 300) return;
+      const s = shooter === 'a' ? (this.lastShot || {}) : (this._cpuShot || {});
+      if (shooter === 'b') this._cpuShot = null;
+      const r6 = (x) => (Number.isFinite(+x) ? Math.round(+x * 1e6) / 1e6 : null);
+      const m = this.match;
+      this._xl.push([shooter, r6(s.power), r6(s.aim), made || '', outcome && outcome.bounced ? 1 : 0, (outcome && outcome.kind) || '',
+        m.racks.a.length, m.racks.b.length, (ev || []).map((x) => x.type).filter((x) => x !== 'made' && x !== 'miss').join(' '),
+        s.refly ? 1 : 0, Math.round((Date.now() - (this._xt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[cup-pong] throw not kept for the private log', err); }
+  }
+  _xlData(end, m, xl, sm = null) {
+    const r2 = (x) => Math.round(x * 100) / 100;
+    const rack = (list) => (Array.isArray(list) ? list.map((k) => (k.u != null ? [k.id, r2(k.u), r2(k.v)] : [k.id, k.c, k.r])) : null);
+    const st = m || (sm && typeof sm === 'object' ? sm : null) || {};
+    return {
+      v: 1, end, cfg: this.cfg || null, test: this.test ? 1 : 0, winner: st.winner == null ? null : st.winner, how: st.how || null,
+      racks: st.racks ? { a: rack(st.racks.a), b: rack(st.racks.b) } : null, reracksUsed: st.reracksUsed || null, islandUsed: st.islandUsed || null,
+      tally: this._tally || null, cols: 'side(a = this player, b = computer),power,aim,cupMade,bounced,outcome,cupsA,cupsB,events,reflown,sec',
+      throws: Array.isArray(xl) ? xl : [],
+    };
+  }
+  _xlSolo(o) {
+    try {
+      if (this.mode !== 'solo') return;
+      const s = this.lastShot || {};
+      const r6 = (x) => (Number.isFinite(+x) ? Math.round(+x * 1e6) / 1e6 : null);
+      if (!Array.isArray(this._xlSoloRows)) { this._xlSoloRows = []; this._xlSoloT0 = Date.now(); }
+      if (this._xlSoloRows.length >= 300) return;
+      this._xlSoloRows.push([this.throws | 0, r6(s.power), r6(s.aim), (o && o.kind) || '', o && o.kind === 'made' ? o.id : '', o && o.bounced ? 1 : 0,
+        Array.isArray(s.cups) ? s.cups.length : null, Math.round((Date.now() - this._xlSoloT0) / 100) / 10]);
+    } catch (err) { console.warn('[cup-pong] solo throw not kept for the private log', err); }
+  }
+  _xlSoloData(end) {
+    return { v: 1, end, test: this.test ? 1 : 0, throws: this.throws | 0, cupsLeft: Array.isArray(this.rack) ? this.rack.length : null,
+      cols: 'n,power,aim,outcome,cupMade,bounced,cupsBefore,sec', rows: Array.isArray(this._xlSoloRows) ? this._xlSoloRows : [] };
+  }
+  /** A solo rack left (or a test clear, which records nothing): logged privately. */
+  _xlSoloLeave() {
+    try {
+      if (this.mode !== 'solo' || !Array.isArray(this._xlSoloRows) || !this._xlSoloRows.length) { this._xlSoloRows = null; return; }
+      const data = this._xlSoloData(this.rack && this.rack.length ? 'abandon' : 'cleared');
+      this._xlSoloRows = null;
+      logPlayData('cuppong', this.test ? 'test' : 'solo', data, { mode: { solo: 1 }, diff: 'solo' });
+    } catch (err) { console.error('[cup-pong] solo rack not logged privately', err); }
   }
 
   /**
@@ -1781,7 +1844,8 @@ class CupPong {
     if (this.test) this.recorded = true;                 // test mode: a clear counts for nothing
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { soloThrows: this.throws | 0 } })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
+      try { withMode({ solo: 1 }, 'solo', () => recordCupPongSolo(this.throws), () => ({ lo: this.throws | 0, detail: { soloThrows: this.throws | 0 }, log: () => this._xlSoloData('cleared') })); } catch (err) { console.error('[cup-pong] solo result not recorded', err); }
+      this._xlSoloRows = null;
     }
     const best = soloBest();
     // "New best" only when this rack actually set it (a first clear counts); otherwise the best.
@@ -1855,11 +1919,24 @@ class CupPong {
     if (this.match) {
       const m = this.match;
       return this.mode === 'cpu' && !m.over && !this.recorded && (m.throwsTaken > 0 || !!this._fly)
-        ? { cfg: this.cfg, reracks: m.reracksUsed.a } : null;
+        ? { cfg: this.cfg, reracks: m.reracksUsed.a, tally: this._tally, m, xl: this._xl } : null;
     }
     const sv = readSave();
-    return savedMoved(sv) ? { cfg: sv.cfg, reracks: ((sv.match.reracksUsed || {}).a) | 0 } : null;
+    return savedMoved(sv) ? { cfg: sv.cfg, reracks: ((sv.match.reracksUsed || {}).a) | 0, tally: sv.tally, sm: sv.match, xl: sv.xl } : null;
   }
+  /** The Make your own switch (Grid | Free) this phone uses, in a result's DETAIL as `rm` (2026-11-16,
+   *  Matt: "check every game for settings that aren't recorded"). Never part of the mode. */
+  _rackModeDetail() {
+    const r = this.settings && this.settings.rackMode;
+    return r === 'grid' || r === 'free' ? r : 'default';
+  }
+  /** A thrown-away match's DETAIL: its numbers so far (when its tally is known), the rack switch, `quit`. */
+  _quitDetail(q) {
+    const base = q && q.tally && typeof q.tally === 'object' ? detailOf(q.tally, q.reracks) : { reracks: (q && q.reracks) | 0 };
+    return { ...base, rm: this._rackModeDetail(), quit: 1 };
+  }
+  /** The thrown-away match's score: its detail, and its throws for the private log only. */
+  _quitScore(q) { return { detail: this._quitDetail(q), log: () => this._xlData('quit', q.m || null, q.xl, q.sm) }; }
   quitCostsLoss() { return !!this.quitPending(); }
 
   /** Record that loss, once: the save goes first, then the loss through the quit-loss marker (armed and
@@ -1870,7 +1947,7 @@ class CupPong {
     if (this.match) this.recorded = true;
     clearSave();
     const cfg = q.cfg;
-    armQuitLoss('cuppong', 'recordCupPong', [statsDiff(cfg.diff, cfg.reracks), false, q.reracks], modeTag(() => (modeOf(cfg)), cfg.diff));
+    armQuitLoss('cuppong', 'recordCupPong', [statsDiff(cfg.diff, cfg.reracks), false, q.reracks], modeTag(() => (modeOf(cfg)), cfg.diff, () => this._quitScore(q)));
     if (!takeQuitLoss('cuppong')) console.error('[cup-pong] the thrown-away match was not recorded as a loss');
   }
 
@@ -1882,6 +1959,7 @@ class CupPong {
   }
 
   teardownEngine() {
+    this._xlSoloLeave();
     this.stopLoop();
     this.clearTimers();
     if (this.mp && this.mp.stop) { try { this.mp.stop(); } catch {} }

@@ -238,3 +238,5 @@ an expert speed budget.
 ## Board checks count like hints; two tabs (2026-10-29, second pass)
 
 Each full wrong board (every broken clue marked) adds one to the case's hint count (Matt). Every write and the win re-read the save slot (`_save`, `caseId`): the larger hint count wins; a case another tab solved or replaced is left (`_leaveStale`), never recorded twice. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+Private play data (2026-11-16): logs seed, every placement, lift and mark with time, wrong full boards, final positions via withMode `log` / logPlayData.

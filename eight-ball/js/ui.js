@@ -22,7 +22,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, oneTierDown, withMode, logPlayData } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -46,6 +46,9 @@ const modeOf = (m, me = 0) => {
   return { game: m && m.mode, racks: m && m.racks, call: o.call ? 1 : 0, bank: o.bank ? 1 : 0, obst: o.obst ? 1 : 0,
     ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === me ? 'me' : 'them' } : {}) };
 };
+/** The look the balls were drawn in, as the match's DETAIL (2026-11-16, never the mode: it would split
+ *  byMode). 9-ball always paints classic (render.js ballPaint), so it records 'classic' there. */
+const lookOf = (m, look) => (m && m.mode === '9' ? 'classic' : (LOOKS.includes(look) ? look : 'classic'));
 const OPPS = ['cpu', 'pass'];
 const OPTS = ['call', 'bank', 'obst'];
 /** GamePigeon's controls (Matt, 2026-10-22, replacing the slingshot, which ran out of screen with
@@ -551,6 +554,8 @@ class PoolUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first shot
+    this._xlAbandonPass();    // a pass-and-play match thrown away unfinished: private log only
+    this._recordPassQuit();   // a pass-and-play match thrown away after its first shot: kept, counts for nothing
     const s = this.settings;
     const n = seatsOf(s.game);
     const breaker = s.nextBreaker % n;
@@ -558,6 +563,59 @@ class PoolUI {
     writeJSON(SETTINGS_KEY, s);
     const seed = (Math.floor(Math.random() * 0x7fffffff) + 1) >>> 0;
     this._begin({ mode: s.mode, diff: s.difficulty, match: newMatch(s.game, s.racks, breaker, seed, s.opts) });
+  }
+
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Every shot of a match on this phone (vs the computer, pass and play) is kept on the match as `m.xl`
+  // and sent ONLY to the admin play log (withMode's `log`; logPlayData for pass and play). Never a stat,
+  // never shown. Row: [rack, seat, dx, dy, power, spin, cueX, cueY, called pocket, pots, their pockets,
+  // counted, foul, what happened, seconds since the first logged shot]. Online: mp.js logMatchOnce.
+  _xlAfter(m, xs, r, ev) {
+    try {
+      this._xlShot = null;
+      if (this.mode === 'mp' || !xs || !r) return;
+      this._xlPush(m, xs.seat, xs.rack, xs.shot, r, this.mode, ev);
+    } catch { /* private log only */ }
+  }
+  _xlPush(m, seat, rack, shot, r, mode, ev = null) {
+    try {
+      if (mode === 'mp' || !m || !shot || !r) return;
+      if (!Array.isArray(m.xl)) { m.xl = []; m.xt0 = Date.now(); m.xlS0 = Math.max(0, (m.shots | 0) - 1); }
+      if (m.xl.length >= 240) { m.xlMore = (m.xlMore | 0) + 1; return; }   // under 20,000 characters
+      const r3 = (v) => (Number.isFinite(+v) && v !== null && v !== undefined ? Math.round(+v * 1000) / 1000 : null);
+      const last = m.last || {};
+      const pots = Array.isArray(last.pots) ? last.pots : [];
+      const pk = ev && Array.isArray(ev.pots) && Array.isArray(ev.pocketAt) ? pots.map((i) => ev.pocketAt[ev.pots.indexOf(i)]) : [];
+      m.xl.push([rack | 0, seat | 0, r3(shot.dx), r3(shot.dy), r3(shot.p), r3(shot.s), r3(shot.x), r3(shot.y), Number.isInteger(shot.c) ? shot.c : -1,
+        pots, pk, Array.isArray(last.counted) ? last.counted : [], r.foul || 0, r.kind || '', Math.round((Date.now() - (+m.xt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[eight-ball] shot not kept for the private log', err); }
+  }
+  _xlData(m, end, mode = this.mode, diff = this.diff) {
+    const r1 = (v) => Math.round(v * 10) / 10;
+    return {
+      v: 1, end, mode, diff, game: m.mode, racks: m.racks, opts: m.opts, rv: m.rv || 1, tb: m.tb || 1, seed: m.seed, breaker: m.breaker, n: m.n,
+      seats: (this.seats || []).map((x) => (x && x.name) || ''), look: lookOf(m, (this.settings || {}).look),
+      winner: m.winner, scores: m.scores, rack: m.rack, shots: m.shots, groups: m.groups, out: m.out,
+      fin: Array.isArray(m.b) ? m.b.map((o) => (o && o.on ? [r1(o.x), r1(o.y)] : 0)) : null,
+      cols: 'rack,seat,dx,dy,p,spin,x,y,call,pots,pockets,counted,foul,kind,sec', fromShot: m.xlS0 | 0, more: m.xlMore | 0,
+      shotLog: Array.isArray(m.xl) ? m.xl : [],
+    };
+  }
+  /** Pass and play counts for nothing: logged privately, once. */
+  _xlLog(m, end) {
+    try {
+      if (!m || m.xlDone || !Array.isArray(m.xl) || !m.xl.length) return;
+      m.xlDone = true;
+      const diff = this.diff;
+      logPlayData(STATS_ID, 'pnp', () => this._xlData(m, end, 'pass', diff), { mode: () => modeOf(m), diff: 'pnp' });
+    } catch (err) { console.error('[eight-ball] private play data not logged', err); }
+  }
+  _xlAbandonPass() {
+    try {
+      let m = this.match && this.mode === 'pass' ? this.match : null;
+      if (!m && !this.match) { const sv = this._savedMatch(); m = sv && sv.mode === 'pass' ? sv.match : null; }
+      if (m && m.winner == null) this._xlLog(m, 'abandon');
+    } catch { /* private log only */ }
   }
 
   /** The match against the computer a new match would throw away (the live one, or the saved one
@@ -580,9 +638,31 @@ class PoolUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false), { detail: () => ({ look: lookOf(q.m, this.settings.look) }), log: () => this._xlData(q.m, 'quit', 'cpu', q.diff) });
       if (!st) console.warn('[eight-ball] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the quit loss failed', err); }
+  }
+
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.eightball.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' | 'p2' |
+   *  'p3' (Cutthroat), or 'quit' for a started match thrown away by a new one. */
+  _recordPassPlay(m, winner, seats) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (seats || []).map((x) => (x && x.name) || '');
+    try {
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay(STATS_ID, winner, names), { detail: () => ({ look: lookOf(m, this.settings.look), seats: (m && m.n) | 0, broke: m && Number.isInteger(m.breaker) ? 'p' + (m.breaker + 1) : 'none' }) });
+      if (!st) console.warn('[eight-ball] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[eight-ball] recording pass and play failed', err); }
+  }
+  /** The pass-and-play match a new match would throw away (live, or saved from setup), once a shot was taken. */
+  _recordPassQuit() {
+    let m = null, seats = null;
+    if (this.match) { if (this.mode === 'pass') { m = this.match; seats = this.seats; } }
+    else { const sv = this._savedMatch(); if (sv && sv.mode === 'pass') { m = sv.match; seats = this._seatsFor('pass', sv.diff, sv.match.n); } }
+    if (!m || m.winner != null || m.recorded || !m.ps) return;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    this._recordPassPlay(m, 'quit', seats);
   }
 
   /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
@@ -602,7 +682,9 @@ class PoolUI {
     // A shot that was still rolling when the app went away: play it out now, exactly as it would have.
     let ended = false;
     if (sv.shot) {
+      const seat0 = m.turn, rack0 = m.rack;
       const r = play(m, sv.shot);
+      this._xlPush(m, seat0, rack0, sv.shot, r, sv.mode);
       if (r && r.kind === 'rack') nextRack(m);
       ended = !!r && r.kind === 'win';
     }
@@ -846,7 +928,9 @@ class PoolUI {
     // The first shot of the match, whoever takes it, makes quitting a loss (2026-10-29, second pass,
     // Matt: quitting after the computer's break was free; `ps` was the player's own first shot).
     if (this.mode === 'cpu' && !opts.replay) m.ps = 1;
+    if (this.mode === 'pass' && !opts.replay) m.ps = 1;   // pass and play: a started match, kept as 'quit' if thrown away (2026-11-16)
     this._save(shot);   // the position the shot was taken from, and the shot
+    this._xlShot = { shot, seat: m.turn, rack: m.rack };
     const ev = begin(m, shot);
     if (!ev) { this._startTurn(false); return; }
     if (this.mode === 'mp') {
@@ -899,7 +983,9 @@ class PoolUI {
     const ev = this.ev;
     this.ev = null;
     freeze(m.b);
+    const xs = this._xlShot;
     const r = settle(m, ev);
+    this._xlAfter(m, xs, r, ev);
     if (this.mode === 'mp' && this.mp && this.MP) this.MP.fixAfter(m, this.mp.game, this.mp.applied);
     this.phase = 'idle';
     this.call = -1;
@@ -939,7 +1025,9 @@ class PoolUI {
     if (!m || m.winner != null) return;
     if (this.phase === 'moving' && this.ev) {
       runToRest(m.b, this.ev, undefined, m.obs);
+      const xs = this._xlShot, ev0 = this.ev;
       const r = settle(m, this.ev);
+      this._xlAfter(m, xs, r, ev0);
       if (this.mode === 'mp' && this.mp && this.MP) this.MP.fixAfter(m, this.mp.game, this.mp.applied);
       this.ev = null;
       this.phase = 'idle';
@@ -955,10 +1043,12 @@ class PoolUI {
 
   _record() {
     const m = this.match;
-    if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
+    if (!m || m.winner == null || m.recorded) return;
+    if (this.mode === 'pass') { this._recordPassPlay(m, 'p' + ((m.winner | 0) + 1), this.seats); return; }
+    if (this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0));
+      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0), { detail: () => ({ look: lookOf(m, this.settings.look) }), log: () => this._xlData(m, 'end', 'cpu', this.diff) });
       if (!st) console.warn('[eight-ball] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the result failed', err); }
   }
@@ -968,6 +1058,7 @@ class PoolUI {
     if (!m || m.winner == null) return;
     if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.seat, false); return; }
     this._record();
+    if (this.mode === 'pass') this._xlLog(m, 'end');   // pass and play counts for nothing: private log only
     this._save();
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';
@@ -1458,8 +1549,9 @@ class PoolUI {
     const m = this.match;
     if (resigned) m.winner = mp.game.over.winner;
     const ov = mp.game && mp.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }));   // once per phone, whoever ended it
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => { const md = this.MP.modeOfMatch(mp.game, mp.seat) || {}; return md.first ? md : { ...md, ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }; }, { detail: () => ({ look: lookOf(m, this.settings.look) }) });   // once per phone, whoever ended it
     this.MP.markResultSeen(mp.id);
+    try { this.MP.logMatchOnce(mp.game); } catch { /* private log only */ }
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';
     this.phase = 'idle';
@@ -1485,6 +1577,7 @@ class PoolUI {
   _mpCalledOff(text = t('mp_cancelled')) {
     const mp = this.mp;
     if (mp) { mp.finished = true; mp.replaying = false; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (mp) { try { this.MP.logMatchOnce(mp.game, 'called-off'); } catch { /* private log only */ } }
     this._toast(text || t('mp_cancelled'), 3200);
     this._openOnline();
   }

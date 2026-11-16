@@ -118,6 +118,33 @@ const wCode = done1.p[W].code, lCode = done1.p[L].code;
 ok('both rows say it is over, with the right result', getAt(`eightball/index/${wCode}/${id1}`).result === 'won' && getAt(`eightball/index/${lCode}/${id1}`).result === 'lost');
 use(phoneOf[wCode]);
 ok('the winner\'s phone counts it once', MP.recordFinished(await MP.readMyGames()) === 1 && MP.recordFinished(await MP.readMyGames()) === 0);
+
+// --- a NEW match's index rows carry its mode (`md`, 2026-11-16): counted from the row or from the match,
+// the result files under the SAME byMode key; an older row (no md) still counts with what it proves.
+{
+  const GS = await import('../js/game-stats.js');
+  const ID = id1, NODE_ = 'eightball', CODES = { A: 'MATTA', B: 'ANABB' };
+  const docMode = (g) => MP.modeOfMatch(g);
+  const rowMode = (r) => MP.modeOfRow(r);
+  const oldKey = (r, p) => GS.modeKey({ game: r.mode, racks: r.racks });
+  for (const p of Object.keys(CODES)) {
+    use(p);
+    const g = await MP.readGame(ID);
+    const row = (await MP.readMyGames()).find((r) => r.id === ID);
+    const dk = GS.modeKey(docMode(g)), rk = GS.modeKey(rowMode(row));
+    ok(`row mode (phone ${p}): the row and the match give the same mode key`, !!row && !!row.md && dk === rk && /first=/.test(dk), `${dk} vs ${rk}`);
+    const path = `${NODE_}/index/${CODES[p]}/${ID}`;
+    const keep = getAt(path).md;
+    setAt(`${path}/md`, null);
+    const old = (await MP.readMyGames()).find((r) => r.id === ID);
+    ok(`row mode (phone ${p}): an older row (no md) keeps today's fallback`, !!old && old.md === null && GS.modeKey(rowMode(old)) === oldKey(old, p), old && GS.modeKey(rowMode(old)));
+    setAt(`${path}/md`, keep);
+  }
+  use('' + phoneOf[wCode] + '');
+  const gs = GS.loadStats().games.eightball || {};
+  const want = GS.modeKey(docMode(await MP.readGame(ID)));
+  ok('row mode: the result counted from the list is filed under the match\'s own mode key', !!(gs.byMode && gs.byMode[want]), `${want} in ${Object.keys(gs.byMode || {}).join(' | ')}`);
+}
 const st = JSON.parse(localStorage.getItem('gamehub.stats') || '{}');
 ok('...as an mp win', st.games && st.games.eightball && st.games.eightball.byDiff.mp.won === 1, JSON.stringify(st.games && st.games.eightball));
 

@@ -638,6 +638,7 @@ class Gridlock {
     this.pos = saved ? saved.pos : this.start.slice();
     this.hist = saved ? saved.hist : [];
     this.hints = saved ? saved.hints : 0;
+    this._seq = []; this._t0 = Date.now(); this._res = saved ? 1 : 0; this._undoN = 0; this._rsN = 0;   // private play log only (2026-11-16)
     this.hintMove = null;
     this.hintKey = '';
     this.kbLast = -1;
@@ -655,6 +656,11 @@ class Gridlock {
     if (isSolved(this.pos)) this._win();
   }
 
+  /** PRIVATE play log (admin only): every move `piece:from>to`, `u` undo, `r` restart, `h<piece>` hint, with the clock. */
+  _lgSeq(e) {
+    try { if (this._seq && this._seq.length < 900) this._seq.push(e + '@' + Math.round((Date.now() - this._t0) / 1000)); } catch { /* private log only */ }
+  }
+
   _save() {
     if (this.won) return;
     writeSave(this.band, { v: SAVE_V, n: this.n, hist: this.hist, hints: this.hints });
@@ -662,6 +668,7 @@ class Gridlock {
 
   _restart() {
     if (!this.pz || this.won || !this.hist.length) return;
+    this._rsN++; this._lgSeq('r');
     this.pos = this.start.slice();
     this.hist = [];
     this.kbLast = -1;
@@ -674,6 +681,7 @@ class Gridlock {
   _undo() {
     if (!this.pz || this.won || !this.hist.length) return;
     const [i, from] = this.hist.pop();
+    this._undoN++; this._lgSeq('u');
     this.pos[i] = from;
     this.kbLast = -1;
     this._clearHint();
@@ -690,7 +698,7 @@ class Gridlock {
     if (!path || !path.length) return;
     this.hintMove = path[0];
     this.hintKey = key;
-    this.hints += 1;
+    this.hints += 1; this._lgSeq('h' + path[0][0] + '>' + path[0][1]);
     // Remembered per LEVEL in the stats store (and synced), not just in this attempt: leaving the
     // level and coming back must not forget it (Matt, 2026-10-14). From now on this level earns half
     // its points and no crown, unless it was already solved with no hint.
@@ -709,6 +717,7 @@ class Gridlock {
   _commit(i, q) {
     if (q === this.pos[i]) return;
     this.hist.push([i, this.pos[i], q]);
+    this._lgSeq(i + ':' + this.pos[i] + '>' + q);
     this.pos[i] = q;
     this._afterMove(i);
   }
@@ -729,7 +738,7 @@ class Gridlock {
     // Record first, then everything else: the solve must be counted even if the app closes now.
     const prevPts = this.prevBest ? glPointsFor(this.n, this.prevBest, this.prevHint) : 0;
     const res = withMode(() => ({ look: this.settings.look }), this.band, () => recordGridlock(this.band, { level: this.n, moves, stars, hints: this.hints, at: bestNow() }),
-      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }) });
+      { detail: () => ({ moves, fewest: this.fewest | 0, stars, hints: this.hints | 0 }), log: () => ({ level: this.n, band: this.band, look: this.settings.look, final: this.hist, seq: this._seq, undos: this._undoN | 0, restarts: this._rsN | 0, hints: this.hints | 0, secs: Math.round((Date.now() - this._t0) / 1000), res: this._res | 0 }) });
     if (!res) console.warn('[gridlock] the solve was not recorded (rate gate)');
     writeSave(this.band, null);
     this.settings = loadSettings();

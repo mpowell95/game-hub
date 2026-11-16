@@ -216,6 +216,8 @@ black pockets, coral and cyan groups).
 
 ## Stats
 
+**Settings as detail (2026-11-16)**: every result (vs computer, quit loss, challenge via `countResult`'s new 5th arg `score`) carries `look` (`classic`/`simple`; 9-ball always `classic`) in withMode's detail, never the mode.
+
 `recordResult('eightball', difficulty, won)`, vs the computer only, once per match (`match.recorded`),
 every game and option into the same buckets (Cutthroat: won = seat 0 was the last one in).
 `total`/`byDiff` only, so My Stats' generic screen draws it and `players-agg.js` needs no branch.
@@ -320,3 +322,12 @@ Play over a saved match vs the computer the player has shot in (`m.ps`) = ONE lo
 ## Setup tabs (2026-11-07)
 
 The setup card is tabs **Online | Play** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill, paged "+N more"; record chip opens History; a 3-player row names both others) and Challenge (Anyone + the 4 most recent two-person opponents; a face opens the challenge card, Cutthroat adds the second player there) (`mp-ui.js fillOnline`); Play = the old Game / Computer-or-2-players / Difficulty / options / Racks / Continue / Play. Opens on Online when a match is going, else Play; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is centred (2026-11-08, Matt).
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+`modeOfMatch(raw, seat)` adds `first` = who broke the FIRST rack (always `BREAKER`; ui.js read the engine's `breaker`, which moves each rack); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: game and racks). `tools/test-eightball-mp.mjs`.
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+A finished pass-and-play match (Cutthroat: `p3` too), or one thrown away by a new match after a shot (`m.ps`, winner `quit`), records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('eightball', winner, names), { detail: look, seats, broke })` (`_recordPassPlay`, `match.recorded`): `games.eightball.pp`, counted by nothing.
+
+Private play data (2026-11-16): logs every shot (`m.xl`: rack, seat, aim, power, spin, cue spot, call, pots, pockets, counted, foul, outcome), seed, terms, scores, final table via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, a challenge as `match` once per phone, outcomes kept beside the validated game in `mp.js` OUTCOMES).

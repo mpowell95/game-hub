@@ -101,3 +101,5 @@ midnight stays saved under its day but the Daily button then opens the new day (
 `node word-ladder/js/data-test.js`, `node tools/test-word-ladder.mjs` (recorders, merge, board count, stars = engine), `node tools/test-game-conventions.mjs`, `node tools/test-game-modes.mjs`,
 `node tools/test-i18n-strings.mjs`, `node tools/players-agg.test.mjs`, `node tools/test-lb-rules.mjs`.
 The localhost-only seam `window.__wlTest` (`state()`, `type(word)`, `hint()`).
+
+Private play data (2026-11-16): logs start, target, chain, every try (valid, invalid, hint, undo) with time via withMode `log` / logPlayData.

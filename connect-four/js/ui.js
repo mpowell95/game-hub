@@ -15,7 +15,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { cfForcedDifficulty, cfInEasyPhase, codeFor, taunt } from '../../js/challenge/hooks.js';
 import { loadChallenge, updateChallenge, recordWin } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal, showTaunt } from '../../js/challenge/reveal.js';
-import { recordConnect4, withMode } from '../../js/game-stats.js';
+import { recordConnect4, withMode, logPlayData } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -520,6 +520,7 @@ class ConnectFourUI {
     this._statsDisqualified = saved.statsDisqualified;
     this.humanHasMoved = saved.humanHasMoved;
     this.aiSeed = saved.aiSeed;
+    this._ulog = []; this._t0 = Date.now(); this._res = 1;   // private play data: undos before the resume are not known
     this._moved = saved.moved;
     this.game = saved.game;
     if (saved.recorded) this.game._statsRecorded = true;
@@ -634,6 +635,7 @@ class ConnectFourUI {
     const firstPlayer = this.humanFirst ? this.humanPlayer : this.aiPlayer;
     this.game = new Game(firstPlayer);
     this.aiSeed = newAiSeed();   // each game gets its own variation of the computer's equal choices
+    this._ulog = []; this._t0 = Date.now(); this._res = 0;   // private play data (2026-11-16): undos, start time, resumed
     this.busy = false;
     this.hoverCol = -1;
     this.humanHasMoved = false;
@@ -995,7 +997,10 @@ class ConnectFourUI {
       const won = this.game.status === WIN ? (this.game.winner === this.humanPlayer) : null;
       if (!this._statsDisqualified || won === false) {
         const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-        withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, won));
+        withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, won), () => ({ log: () => this._playLog(won === true ? 'win' : won === false ? 'loss' : 'draw') }));
+      } else {
+        // Won or drawn after an Undo or Show best moves: NOT counted (unchanged); kept privately (2026-11-16).
+        try { logPlayData('connect4', 'notcounted', this._playLog(won === true ? 'win' : 'draw'), { mode: () => this._modeOf(), diff: this.difficulty, key: String(this.aiSeed) }); } catch { /* never block */ }
       }
     }
 
@@ -1016,7 +1021,17 @@ class ConnectFourUI {
     if (!this._quitCostsLoss()) return;
     this.game._statsRecorded = true;
     const firstMove = this.game.firstPlayer === this.humanPlayer ? 'player' : 'computer';
-    withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, false));
+    withMode(() => (this._modeOf()), this.difficulty, () => recordConnect4(this.difficulty, firstMove, false), () => ({ log: () => this._playLog('quit') }));
+  }
+
+  /** PRIVATE PLAY DATA (2026-11-16): every column played in order (as the game ends), who went first, the
+   *  computer's seed, every undo (move count then the columns taken back), whether Show best moves or
+   *  Undo tainted it, the final board and the time. Admin play log only. */
+  _playLog(end) {
+    const g = this.game, b = g.board;
+    const rows = [];
+    for (let r = 0; r < ROWS; r++) { let line = ''; for (let c = 0; c < COLS; c++) line += r < b.heights[c] ? (b.cellAt(c, r) === this.humanPlayer ? 'h' : 'c') : '.'; rows.push(line); }
+    return { end, mv: g.history.slice(), first: g.firstPlayer === this.humanPlayer ? 'me' : 'them', seed: this.aiSeed, undo: this._ulog || [], aid: this._statsDisqualified ? 1 : 0, hints: this.showBestMoves ? 1 : 0, ms: Date.now() - (this._t0 || Date.now()), res: this._res || 0, board: rows };
   }
 
   /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the
@@ -1092,6 +1107,7 @@ class ConnectFourUI {
     let len = hist.length;
     do { len--; } while (len > 0 && ((fp ^ (len % 2)) !== this.humanPlayer));
     const kept = hist.slice(0, len);
+    try { (this._ulog || (this._ulog = [])).push([hist.length, hist.slice(len)]); } catch { /* logging never blocks play */ }
 
     const recorded = !!this.game._statsRecorded;   // an undo after the end never records the game twice
     this.game = new Game(fp);

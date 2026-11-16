@@ -61,6 +61,7 @@ import {
   loadCareer, startCareer, saveCheckpoint, saveAtBat, saveGameEnd, saveCareerState,
   recordGameResult, retire as retireCareerIO, installLifecycle, uninstallLifecycle,
   careerSyncHealth, HEALTH_PULLING, HEALTH_OFFLINE_LOCAL, HEALTH_FORK,
+  compactEvents, logBaseballPlay,
 } from './career-io.js';
 
 const t = makeT(STRINGS);
@@ -729,6 +730,8 @@ class BaseballPlayScreen {
     // R2: the wind-up's own sample timer (`decidePitch`) - a screen torn down mid-delivery must
     // not fire a pitch into a dead DOM.
     if (this._pitchDragTimer) { clearTimeout(this._pitchDragTimer); this._pitchDragTimer = null; }
+    // a Quick Play game left unfinished (the hub, a closed screen): its play so far, private log only
+    if (this._qp && this._qp.game && this._qp.game.winner == null) this._logQuickPlay('left');
     this.destroyed = true;
     // R2: release a batting turn that is still waiting for its READY tap (see decideSwing).
     if (this._pendingReady) this._pendingReady();
@@ -975,7 +978,7 @@ class BaseballPlayScreen {
       const you = won ? 5 : 2, cpu = won ? 2 : 5;
       const out = finishGame(state, { won, you, cpu, forfeit: false, meta });
       state = out.state;
-      recordGameResult(out.record);
+      recordGameResult(out.record, () => ({ why: 'devScript', meta, you, them: cpu, won }));
       if (out.resolved) { resolved = true; trophy = out.trophy; }
       i += 1;
     }
@@ -1543,7 +1546,7 @@ class BaseballPlayScreen {
     const beforeUnspent = state.unspent, beforePointsLost = state.pointsLost;
     const out = finishGame(state, { won: false, you: 0, cpu: 0, forfeit: true, meta });
     this.career.state = out.state;
-    recordGameResult(out.record);
+    recordGameResult(out.record, () => ({ why: 'forfeitSaved', meta, league: state.season && state.season.league }));
     const res = await saveGameEnd(out.state);
     if (res && res.saved) this.career.doc = res.saved;
     this.career.health = careerSyncHealth();
@@ -1649,6 +1652,7 @@ class BaseballPlayScreen {
   }
 
   _startGame() {
+    this._logQuickPlay('abandon');   // a Quick Play game still open is left for this one (private log only)
     const league = this.league;
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
     // Playtest 1 batch 4b: Quick Play plays the model a new career season would (LIVE_PLAY.on),
@@ -1681,6 +1685,11 @@ class BaseballPlayScreen {
       fieldControl: !!(SETTINGS.LIVE_PLAY.on && SETTINGS.LIVE_PLAY.fieldControl), runSpeedV: SETTINGS.LIVE_PLAY.runSpeedV });
     this.cpuTeam = cpuTeam;
     this.playerTeam = playerTeam;
+    // PRIVATE play data (2026-11-16): Quick Play records no result, so its whole game goes to the admin
+    // play log only (`_logQuickPlay`), never the stats. Every engine event is kept for it.
+    this._qpEvents = [];
+    this._qp = { game: this.game, logged: false, t0: Date.now(), seed, league, parkId, hand,
+      preset: this.quickPlay.presetId || null, skills, cpu: cpuTeam.styleId || cpuTeam.name || null };
     this.state = this._freshPlayState(league, 0, 'batting');
     // THE 2-D CURSOR, in zone units, shared by both states (R2) - the pitcher's aim while
     // pitching, the batter's circle while batting. It deliberately PERSISTS across pitches and
@@ -1707,10 +1716,43 @@ class BaseballPlayScreen {
     this._fit();
 
     this.game.onEvent = (type, payload) => this._onEngineEvent(type, payload);
+    const qpGame = this.game;
     this.game.playGame().then(() => {
+      this._logQuickPlay(qpGame.aborted ? 'abandon' : 'end', qpGame);
       if (this.destroyed) return;
       this._showEndModal();
     });
+  }
+
+  /** Quick Play's whole game, ONCE, to the admin play log's `x` only (`logPlayData`; it counts for
+   *  nothing, so no stat changes). `g` = the game it is about (default the current Quick Play game). */
+  _logQuickPlay(why, g) {
+    try {
+      const qp = this._qp;
+      if (!qp || qp.logged || (g && qp.game !== g)) return;
+      const game = qp.game;
+      if (!game || !this._qpEvents || !this._qpEvents.length) return;
+      qp.logged = true;
+      const sc = game.score || {};
+      logBaseballPlay(why === 'end' ? 'quick' : 'quickLeft', () => ({
+        why, league: qp.league, seed: qp.seed, park: qp.parkId, hand: qp.hand, preset: qp.preset, skills: qp.skills,
+        cpu: qp.cpu, side: 'away', you: sc.away, them: sc.home, winner: game.winner == null ? null : game.winner,
+        inning: game.inning, ms: Date.now() - qp.t0, ...compactEvents(this._qpEvents),
+      }), { mode: { kind: 'quick' }, diff: qp.league, key: String(qp.seed) });
+    } catch (e) { console.error('[baseball] Quick Play not logged', e); }
+  }
+
+  /** A career game's private play data (the play log's `x` only), built when its result is recorded. */
+  _careerLog(why, extra) {
+    const g = this.game;
+    const meta = this.careerMeta || null;
+    return {
+      why, meta, league: this.league, side: this.playerSide, cpu: this.cpuTeam ? (this.cpuTeam.styleId || this.cpuTeam.name) : null,
+      skills: this.career && this.career.state && this.career.state.player ? this.career.state.player.skills : null,
+      resumed: !!this._careerResumed, ms: this._careerT0 ? Date.now() - this._careerT0 : null,
+      score: g && g.score ? { ...g.score } : null, inning: g ? g.inning : null,
+      ...(extra || {}), ...compactEvents(this._careerEvents),
+    };
   }
 
   // ------------------------------------------------------------------------- R15-B: career game
@@ -1759,6 +1801,7 @@ class BaseballPlayScreen {
     // the per-game counters `recordBaseball` takes (career.js's own header names which event
     // carries what).
     this._careerEvents = [];
+    this._careerResumed = !!resumeSnap; this._careerT0 = Date.now();   // private play log only
     // Guards `_onCareerGameEnd`/`_forfeitLiveCareerGame` against BOTH running for the same game -
     // `game.abort()` still resolves `playGame()`'s promise, so a manual forfeit that aborts the
     // engine would otherwise also trigger the ordinary end-of-game fold right behind it.
@@ -1791,7 +1834,7 @@ class BaseballPlayScreen {
     const beforeUnspent = before.unspent, beforePointsLost = before.pointsLost;
     const out = finishGame(before, { won, you, cpu, forfeit: false, gameStats, meta: this.careerMeta });
     this.career.state = out.state;
-    recordGameResult(out.record);
+    recordGameResult(out.record, () => this._careerLog('end', { you, them: cpu, won, gameStats }));
     const res = await saveGameEnd(out.state);
     if (res && res.saved) this.career.doc = res.saved;
     this.career.health = careerSyncHealth();
@@ -3076,6 +3119,7 @@ class BaseballPlayScreen {
     // (career.js) once the game ends, and checkpoints locally at every pitch boundary - see the
     // 'count'/'atBatEnd' branches below for where the boundary actually is.
     if (this.careerGame && this._careerEvents) this._careerEvents.push({ type, payload });
+    else if (!this.careerGame && this._qpEvents && this._qpEvents.length < 8000) this._qpEvents.push({ type, payload });
     if (type === 'gameStart') {
       // Playtest 1 batch 3, item 3: the pre-game intro. `game.js`'s own `playGame()` awaits this
       // event before it ever emits 'halfInningStart', so the whole rest of the game loop is
@@ -5248,7 +5292,7 @@ class BaseballPlayScreen {
     const beforeUnspent = before.unspent, beforePointsLost = before.pointsLost;
     const out = finishGame(before, { won: false, you, cpu, forfeit: true, meta: this.careerMeta });
     this.career.state = out.state;
-    recordGameResult(out.record);
+    recordGameResult(out.record, () => this._careerLog('forfeit', { you, them: cpu, won: false }));
     await saveGameEnd(out.state);
     this.career.health = careerSyncHealth();
     if (this.destroyed) return;

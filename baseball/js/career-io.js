@@ -25,7 +25,7 @@ import {
   pullCareer, pushCareer, retireCareer, careerSyncHealth, validateCareer,
 } from '../../js/career-store.js';
 import {
-  recordBaseball, recordBaseballCareerStarted, setBaseballHand, withMode,
+  recordBaseball, recordBaseballCareerStarted, setBaseballHand, withMode, logPlayData,
 } from '../../js/game-stats.js';
 import { myCode } from '../../js/messages.js';
 import { RULES_V } from './engine/settings.js';
@@ -189,19 +189,68 @@ async function push(who) {
  * `finishGame`), so a season is never a second, separate recorder call that could be lost between
  * the two.
  */
-export function recordGameResult(record) {
+export function recordGameResult(record, log) {
   if (!record || !record.league) {
     console.error('[career-io] recordGameResult called with no record; nothing written');
     return null;
   }
   // its mode (2026-11-02, js/game-stats.js withMode): a Career game (the only caller), its league
   const st = withMode(() => ({ kind: 'career', forfeit: record.extras && record.extras.forfeits ? 1 : 0 }), record.league,
-    () => recordBaseball(record.league, record.won, record.extras || {}));
+    () => recordBaseball(record.league, record.won, record.extras || {}),
+    // PRIVATE play data (2026-11-16): `log` (a thunk) reaches only the admin play log's `x`, never the stats
+    () => ({ log: () => (typeof log === 'function' ? log() : (log || null)) }));
   if (!st) {
     // recordBaseball returns null ONLY when the rate gate refused it ("No human plays this fast").
     console.error('[career-io] recordBaseball refused this result; it was NOT counted', record);
   }
   return st;
+}
+
+/**
+ * PRIVATE PLAY DATA (2026-11-16, Matt: "ALL data from ALL games played should be recorded ... somewhere
+ * that only I can see"). Every engine event of a game as one short string each, in order, for the admin
+ * play log's `x` (never the stats store):
+ *   H1t / H1b       half-inning start (inning, top/bottom)      X<away>-<home>  half-inning end, score
+ *   B<batterId>     at-bat start                                P<pitch, 3 letters><s|b>  pitch (strike/ball)
+ *   S<action><mode>[b]  swing decision (first letters; b = bunt)  C<balls><strikes>:<verdict>[:timing]  count
+ *   T<from><to><s|o>    steal (safe/out)                        K<o|s>  pickoff (out/safe)
+ *   E<outcome>:<bases>:<runs>[:<ft>:<mph>:<launch deg>:<spray deg>]  at-bat end
+ *   G<away>-<home>:<winner>:<reason>  game end
+ * Trimmed from the front past ~15,000 characters (`evCut` = how many were dropped). Never throws.
+ */
+export function compactEvents(events) {
+  const out = [];
+  const r = (v) => (Number.isFinite(v) ? Math.round(v) : '');
+  const c1 = (v) => String(v == null ? '' : v).charAt(0);
+  for (const ev of (events || [])) {
+    try {
+      const p = (ev && ev.payload) || {};
+      switch (ev && ev.type) {
+        case 'halfInningStart': out.push('H' + p.inning + c1(p.half)); break;
+        case 'halfInningEnd': out.push('X' + (p.score ? p.score.away + '-' + p.score.home : '')); break;
+        case 'atBatStart': out.push('B' + (p.batterId == null ? '' : p.batterId)); break;
+        case 'pitch': out.push('P' + String(p.type || '').slice(0, 3) + (p.isStrike ? 's' : 'b')); break;
+        case 'swing': out.push('S' + c1(p.action) + c1(p.mode) + (p.bunt ? 'b' : '')); break;
+        case 'count': out.push('C' + p.balls + p.strikes + ':' + (p.verdict || '') + (p.timingWord ? ':' + p.timingWord : '')); break;
+        case 'steal': out.push('T' + p.from + p.to + (p.safe ? 's' : 'o')); break;
+        case 'pickoff': out.push('K' + (p.out ? 'o' : 's')); break;
+        case 'atBatEnd': out.push('E' + p.outcome + ':' + (p.bases | 0) + ':' + (p.runsScored | 0)
+          + (Number.isFinite(p.distanceFt) ? ':' + r(p.distanceFt) + ':' + r(p.exitVeloMph) + ':' + r(p.launchAngleDeg) + ':' + r(p.sprayAngleDeg) : '')); break;
+        case 'gameEnd': out.push('G' + (p.score ? p.score.away + '-' + p.score.home : '') + ':' + (p.winner || '') + ':' + (p.reason || '')); break;
+        default: break;
+      }
+    } catch (e) { /* one odd event never costs the rest */ }
+  }
+  let cut = 0;
+  let len = out.reduce((n, s) => n + s.length + 3, 0);
+  while (out.length && len > 15000) { len -= out[0].length + 3; out.shift(); cut++; }
+  return { ev: out, evCut: cut || undefined };
+}
+
+/** A play that records no result (Quick Play, a game left before its end): the play log's `x` only.
+ *  `what` <= 12 chars, `opts` = { mode, diff, key } as js/game-stats.js logPlayData. Never throws. */
+export function logBaseballPlay(what, data, opts) {
+  try { return logPlayData('baseball', what, data, opts || {}); } catch (e) { console.error('[career-io] play data not logged', e); return null; }
 }
 
 /**
@@ -261,4 +310,5 @@ export default {
   CAREER_SCHEMA_V,
   loadCareer, startCareer, saveCheckpoint, saveCareerState, saveAtBat, saveGameEnd,
   recordGameResult, retire, installLifecycle, uninstallLifecycle, careerSyncHealth,
+  compactEvents, logBaseballPlay,
 };

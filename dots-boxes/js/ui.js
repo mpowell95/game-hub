@@ -32,7 +32,7 @@ import { newGame, legalMoves, applyMove, edgeKey, edgeCount, isOver, score } fro
 import { chooseMove } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordDotsBoxes, recordHeadToHead, loadStats, deviceId, withMode, modeTag } from '../../js/game-stats.js';
+import { recordDotsBoxes, recordHeadToHead, loadStats, deviceId, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -976,13 +976,15 @@ class DotsBoxesUI {
     const extras = { boxes: humanScore, bestChain: this._humanBestChainThisGame };
     // A solo game where Undo was used cannot count as a win or a tie (Matt, 2026-10-27; the end card
     // says so). A LOSS still counts (2026-10-29): before, one Undo made a lost game vanish.
+    // Not counted (unchanged); kept privately (2026-11-16, Matt: ALL data).
+    if (!this.mp && this._undone && won !== false) { try { logPlayData('dotsboxes', 'notcounted', this._playLog(won === null ? 'tie' : 'win'), { mode: () => this._modeOf(), diff: difficulty, key: String(this._t0 || '') }); } catch { /* never block */ } }
     if (!this.mp && this._undone && won !== false) return;
     // A live game already decided by a leave on this phone (js/live-leave.js) counts once, as that.
     if (this.mp && LL.alreadyCounted(this._mpKey())) return;
     if (this.mp) LL.endedNormally(STATS_ID, this._mpKey());
     // the game's own numbers (2026-11-02): boxes each side took, the longest chain this game
     const detail = { mine: humanScore, theirs: aiScore, chain: this._humanBestChainThisGame | 0 };
-    try { withMode(() => (this._modeOf()), difficulty, () => recordDotsBoxes(difficulty, won, extras), { detail }); } catch { /* never block the result */ }
+    try { withMode(() => (this._modeOf()), difficulty, () => recordDotsBoxes(difficulty, won, extras), () => ({ detail, log: () => this._playLog('over') })); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // has no `this.mp` and is untouched. Never allowed to block the ordinary result from being
     // recorded.
@@ -1149,7 +1151,7 @@ class DotsBoxesUI {
     this._statsCommitted = true;
     const sc = score(this.state);
     const boxes = this.humanSeat === 0 ? sc.p0 : sc.p1;
-    try { withMode(() => (this._modeOf()), this._setup.difficulty, () => recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame })); } catch { /* never block leaving */ }
+    try { withMode(() => (this._modeOf()), this._setup.difficulty, () => recordDotsBoxes(this._setup.difficulty, false, { boxes, bestChain: this._humanBestChainThisGame }), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1174,7 +1176,24 @@ class DotsBoxesUI {
   // nothing. Never in multiplayer: the lockstep log cannot take a move back.
 
   _logMove(edge) {
+    this._xnote(['m', this.state.turn, edge.type, edge.r, edge.c]);
     if (this._moves && !this.mp) this._moves.push([this.state.turn, edge.type, edge.r, edge.c]);
+  }
+
+  /** PRIVATE PLAY DATA (2026-11-16): one line of the game's full story (every edge drawn in order, every Undo
+   *  and Redo), for the admin play log only. Unlike `_moves` it keeps what an Undo took back. */
+  _xnote(ev) {
+    try {
+      if (!this._xlog || (this.state && this.state.drawnEdges === 0 && ev[0] === 'm' && (this._xlog[this._xlog.length - 1] || [])[0] !== 'u')) { this._xlog = []; this._t0 = Date.now(); }
+      if (this._xlog.length < 400) this._xlog.push(ev.concat(Date.now() - (this._t0 || Date.now())));
+    } catch { /* logging never blocks play */ }
+  }
+
+  /** What the game knows at its end, for the private play log: the story above, the score, the board size. */
+  _playLog(end) {
+    const s = this.state || {};
+    const sc = s.boxes ? score(s) : { p0: 0, p1: 0 };
+    return { end, rows: s.rows, cols: s.cols, ev: this._xlog || [], me: this.humanSeat, p0: sc.p0, p1: sc.p1, first: this.mp ? undefined : this._setup.firstMode, undone: this._undone ? 1 : 0, chain: this._humanBestChainThisGame | 0, res: this._moves && this._moves.length < (s.drawnEdges | 0) ? 1 : 0, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
   }
 
   canUndo() {
@@ -1191,6 +1210,7 @@ class DotsBoxesUI {
     const rep = replayMoves(this.state.rows, this.state.cols, kept, this.humanSeat);
     if (!rep) return;   // cannot happen with a list we built ourselves; never break the board
     if (this.aiTimer) { clearTimeout(this.aiTimer); this.aiTimer = null; }
+    this._xnote(['u', this._moves.length - i]);
     this._redo.push(this._moves.slice(i));   // Redo puts these back exactly (2026-11-16)
     this._moves = kept;
     this.state = rep.s;
@@ -1212,6 +1232,7 @@ class DotsBoxesUI {
   redo() {
     if (!this.canRedo()) return;
     const seg = this._redo[this._redo.length - 1];
+    this._xnote(['r', seg.length]);
     const all = this._moves.concat(seg);
     const rep = replayMoves(this.state.rows, this.state.cols, all, this.humanSeat);
     if (!rep) { this._redo = []; this.renderGame(); return; }   // never break the board
@@ -1382,7 +1403,7 @@ class DotsBoxesUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(edge), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!isOver(this.state) && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, false, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     }
   }
 
@@ -1436,7 +1457,7 @@ class DotsBoxesUI {
     // desync invisibly. Then the post-apply hash is compared with the sender's.
     let agreed = this._isLegal(edge);
     let res = null;
-    if (agreed) { res = applyMove(this.state, edge); agreed = stateHash(this.state) === entry.h; }
+    if (agreed) { this._xnote(['m', this.state.turn, edge.type, edge.r, edge.c]); res = applyMove(this.state, edge); agreed = stateHash(this.state) === entry.h; }
     if (!agreed) return this._mpOnDivergence(seq);
     mp.appliedSeq = seq;
     mp.recoveryAttempts = 0;
@@ -1647,7 +1668,7 @@ class DotsBoxesUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (this._modeOf()), MP_DIFFICULTY) });
+          fn: 'recordDotsBoxes', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: [mp.opp], tag: modeTag(() => (this._modeOf()), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1824,7 +1845,7 @@ class DotsBoxesUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordDotsBoxes', [MP_DIFFICULTY, true, this._mpExtras()], [mp.opp], modeTag(() => (this._modeOf()), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;

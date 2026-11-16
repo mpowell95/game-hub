@@ -413,6 +413,7 @@ class UnoUI {
     this._turnUpIds.clear();
     this.seats = this._buildSeats(this.players);
     this._aiSeed = newAiSeed();
+    this._plog = []; this._plogAt = Date.now(); this._plogResumed = 0;
     this.game = new UnoGame({ playerCount: this.players, startPlayer, rng: seededRng(this._aiSeed, 'deal'), onEvent: (type, p) => this._onEngineEvent(type, p) });
     this._seenCounts = {};
     this.game.players.forEach((p, i) => { this._seenCounts[i] = p.hand.length; }); // the deal flies them itself
@@ -449,6 +450,7 @@ class UnoUI {
     this._aiSeed = Number.isInteger(saved.aiSeed) && saved.aiSeed >= 0 && saved.aiSeed <= 0xFFFFFFFF ? saved.aiSeed : newAiSeed();
     // The engine's own shuffle (a reshuffled discard) is keyed to the pile sizes at the restore, so the
     // same save always reshuffles the same way.
+    this._plog = []; this._plogAt = Date.now(); this._plogResumed = 1;
     const snapRng = seededRng(this._aiSeed, `resume|${saved.snap.deck ? saved.snap.deck.length : 0}|${saved.snap.discard ? saved.snap.discard.length : 0}`);
     this.game = UnoGame.fromSnapshot(saved.snap, { rng: snapRng, onEvent: (type, p) => this._onEngineEvent(type, p) });
     this.view = 'game';
@@ -459,6 +461,13 @@ class UnoUI {
   /** Engine event hook: names the moment a penalty draw (a +2 stack, a Wild +4 victim, a
    *  first-card +2) lands, as a short toast on the table. */
   _onEngineEvent(type, payload) {
+    // PRIVATE PLAY DATA (2026-11-16): every engine event, in order, for the admin play log only.
+    try {
+      if (!this._plog) { this._plog = []; this._plogAt = Date.now(); }
+      const cc = (c) => (c ? String(c.color || '?')[0] + (c.value != null ? c.value : c.kind) : null);
+      const p = payload || {};
+      if (this._plog.length < 600) this._plog.push([type, p.playerIndex != null ? p.playerIndex : p.currentPlayer != null ? p.currentPlayer : null, cc(p.card || p.topCard) || p.color || p.amount || p.count || null, Date.now() - (this._plogAt || Date.now())]);
+    } catch { /* logging never blocks play */ }
     if (type !== 'penaltyDraw') return;
     const pi = payload.playerIndex;
     const name = (this.seats && this.seats[pi]) ? this.seats[pi].name : '';
@@ -957,7 +966,7 @@ class UnoUI {
     if (!this._statsCommitted) {
       this._statsCommitted = true;
       // WHICH game (js/game-stats.js withMode, 2026-10-30): players at the table.
-      try { withMode(() => ({ n: g.n }), this.difficulty, () => recordResult('uno', this.difficulty, won)); } catch { /* never block the result */ }
+      try { withMode(() => ({ n: g.n }), this.difficulty, () => recordResult('uno', this.difficulty, won), () => ({ detail: () => this._setDetail(g), log: () => this._playLog(g, 'over') })); } catch { /* never block the result */ }
     }
     clearGame();
     const winnerSeat = this.seats[g.winner];
@@ -1062,11 +1071,30 @@ class UnoUI {
     return !!(this.game && this.view === 'game' && this.game.phase !== 'over' && this._moved && !this._statsCommitted);
   }
 
+  /** Every setting chosen, and who opened (2026-11-16, Matt: "save all data"). `first` is '?' for a
+   *  game resumed from a save made before the opener was saved. */
+  _setDetail(g) {
+    const sp = g && g._startPlayer;
+    return { pace: String(this.pace), sort: String(this.handSort), first: Number.isInteger(sp) ? (sp === HUMAN ? 'me' : 'them') : '?' };
+  }
+
+  /** PRIVATE PLAY DATA (2026-11-16): everything the game knows at its end, for the admin play log only
+   *  (withMode `log`): the computer seed, who opened, every engine event in order, cards left in every
+   *  hand, the winner and the time. A resumed game's list starts at the resume (`res`). */
+  _playLog(g, end) {
+    const cc = (c) => String(c.color || '?')[0] + (c.value != null ? c.value : c.kind);
+    return {
+      end, seed: this._aiSeed, n: g.n, first: g._startPlayer, winner: g.winner, pace: this.pace, res: this._plogResumed || 0,
+      names: (this.seats || []).map((x) => x && x.name), ms: Date.now() - (this._plogAt || Date.now()),
+      left: g.players.map((p) => p.hand.map(cc)), ev: this._plog || [],
+    };
+  }
+
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(() => ({ n: this.game.n }), this.difficulty, () => recordResult('uno', this.difficulty, false)); } catch { /* never block leaving */ }
+    try { withMode(() => ({ n: this.game.n }), this.difficulty, () => recordResult('uno', this.difficulty, false), () => ({ detail: () => this._setDetail(this.game), log: () => this._playLog(this.game, 'quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 

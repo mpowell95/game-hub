@@ -235,10 +235,10 @@ class WordLadder {
     try {
       if (a.kind === 'daily') {
         res = withMode(() => ({ mode: 'daily', lang: a.lang }), 'daily', () => recordWordLadderDaily(a.key, { moves: a.moves, par: a.p, hints: a.hints }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }) });
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
       } else {
         res = withMode(() => ({ mode: 'ladder', lang: a.lang }), () => E.bandOf(a.n), () => recordWordLadder(a.n, { moves: a.moves, par: a.p, hints: a.hints, lang: a.lang, band: E.bandOf(a.n) }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }) });
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
       }
     } catch (err) { console.error('[word-ladder] result NOT recorded yet, retried on the next open', err); res = null; }
     if (!res) { if (!quiet) console.error('[word-ladder] the recorder refused the result; kept as not recorded, retried on the next open'); return false; }
@@ -321,7 +321,7 @@ class WordLadder {
     if (!level) { console.error('[word-ladder] level does not add up, not drawn', kind, n); this._soon(); return; }
     const c = E.cleanAttempt(a, level, d.dict);
     this.data = d;
-    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band };   // no letter picked: the player chooses (Matt, 2026-11-14)
+    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, seq: [], t0: Date.now(), res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
@@ -453,11 +453,16 @@ class WordLadder {
     const next = w.slice(0, c.sel) + ch + w.slice(c.sel + 1);
     if (next === w) return;
     const why = E.checkMove(this.data.dict, w, next);
-    if (why !== 'ok') { this._msg(t(why === 'word' ? 'not_word' : 'one_letter')); return; }
+    if (why !== 'ok') { this._wlNote((why === 'word' ? 'x:' : 'o:') + next); this._msg(t(why === 'word' ? 'not_word' : 'one_letter')); return; }
     this._step(next, false);
+  }
+  /** PRIVATE play log only (admin play log `x`, never saved): every try in order, with the clock. */
+  _wlNote(e) {
+    try { const c = this.cur; if (c && c.seq && c.seq.length < 600) c.seq.push(e + '@' + Math.round((Date.now() - (c.t0 || Date.now())) / 1000)); } catch { /* private log only */ }
   }
   _step(next, hint) {
     const c = this.cur;
+    this._wlNote((hint ? 'h:' : 'w:') + next);
     c.chain = [...c.chain, next];
     c.moves += 1;
     if (hint) c.hints += 1;
@@ -477,6 +482,7 @@ class WordLadder {
   _undo() {
     const c = this.cur;
     if (!c || c.chain.length < 2) return;
+    this._wlNote('u');
     c.chain = E.undoChain(c.chain);
     c.moves += 1;               // an undo is a move (par counts every change)
     c.sel = null;

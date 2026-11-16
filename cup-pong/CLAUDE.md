@@ -359,3 +359,13 @@ Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss ax
 - Leaving (hub back, Change settings, closed app, a challenge) costs nothing. **New game over a thrown-in match (any throw, the computer's included) = ONE loss**, asked twice (`quitPending`/`takeQuit`, marker armed and taken at once so the play log says `quitLoss`).
 - A throw in the AIR is saved (`fly`, either side) and flown again on Continue (`reFly`; fixed-step physics lands it the same), so leaving never takes a throw back.
 - The finish clears the save BEFORE recording (counted once). `init()` still takes an older build's marker. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Cup Pong saves"; `node tools/test-quit-loss.mjs`.
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Vs the computer: detail `rm` (Make your own Grid/Free). The thrown-away match's quit loss now carries its numbers so far (`detailOf` of the saved tally), `rm` and `quit: 1`. Never in the mode.
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+`modeOfMatch(g, side)` adds `first` (ui.js's rule, side a); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (rows had only Straight Up and series, still the fallback for older rows). `tools/test-cuppong-mp.mjs`.
+
+Private play data (2026-11-16): vs the computer logs EVERY throw, the computer's too (`_xl`, in the save: side, power, aim, cup, bounced, cups left both sides, rule events), final racks, reracks, islands via withMode / modeTag `log` (finish, quit loss); solo racks with the clear (`log`) or as `solo` abandon; Test games as `test`; a challenge as `match` once per phone (`mp.js logMatchOnce`). The per-throw `throw` entries are unchanged.

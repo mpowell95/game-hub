@@ -127,6 +127,9 @@ export class Game {
     g.discard = snap.discard;
     g.currentPlayerIndex = snap.currentPlayerIndex;
     g.dealerIndex = snap.dealerIndex;
+    // Who dealt the match's FIRST round (2026-11-16, for the result's detail). Snapshots from before that
+    // day carry none: left unknown, never guessed.
+    if (Number.isInteger(snap.startDealer)) g._startDealerIndex = snap.startDealer;
     g.round = snap.round;
     g.phase = snap.phase;
     g.resetsUsed = snap.resetsUsed;
@@ -189,6 +192,8 @@ export class Game {
       discard: this.discard,
       currentPlayerIndex: this.currentPlayerIndex,
       dealerIndex: this.dealerIndex,
+      // Additive (2026-11-16): who dealt round 1, so a resumed match still records it. Not hashed.
+      ...(Number.isInteger(this._startDealerIndex) ? { startDealer: this._startDealerIndex } : {}),
       round: this.round,
       phase: this.phase,
       resetsUsed: this.resetsUsed,

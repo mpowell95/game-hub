@@ -430,6 +430,7 @@ export function notePlay(gameId, fn, args) {
       g: gameId, f: fn, a: argsJSON(args),
       m: _mode ? _mode.key + '@' + _mode.diff : (_bare ? NO_MODE : null),
       d: _mode && _mode.dtLog ? _mode.dtLog : null,
+      x: _mode && _mode.xLog ? _mode.xLog : null,
     });
   } catch (err) { console.error('[game-stats] play not logged', err); }
 }
@@ -1221,7 +1222,37 @@ function resolveScore(score) {
   try { if (typeof detail === 'function') detail = detail(); } catch (e) { console.error('[game-stats] the DETAIL threw; the result is recorded without it', e); detail = null; err = 'detail'; }
   let dt = null;
   try { dt = cleanDetail(detail); } catch (e) { console.error('[game-stats] the DETAIL could not be read; the result is recorded without it', e); dt = null; err = 'detail'; }
-  return { s: { hi: s.hi, lo: s.lo }, dt, err };
+  // `log` (2026-11-16, Matt: "ALL data from ALL games played should be recorded ... somewhere that only I
+  // can see"): ANY data (lists, boards, every shot), sent ONLY to the admin play log as `x` (privateLog),
+  // never into the stats store, players/ or the board. `hi`/`lo` ride along so the log has the score too.
+  let xLog = null;
+  try { xLog = privateLog(s.log, { hi: s.hi, lo: s.lo }); } catch (e) { console.error('[game-stats] the LOG could not be read; recorded without it', e); err = err || 'log'; }
+  return { s: { hi: s.hi, lo: s.lo }, dt, xLog, err };
+}
+/** A play's private data as JSON for the play log's `x` (at most X_MAX characters; a longer one keeps its
+ *  first X_MAX and says `_cut`). `extra` = score numbers added in front. null when there is nothing. */
+export const X_MAX = 20000;
+export function privateLog(log, extra) {
+  let v = log;
+  if (typeof v === 'function') v = v();
+  const o = {};
+  if (extra && typeof extra === 'object') for (const k of Object.keys(extra)) if (extra[k] != null) o[k] = extra[k];
+  if (v != null) { if (typeof v === 'object' && !Array.isArray(v)) Object.assign(o, v); else o.data = v; }
+  if (!Object.keys(o).length) return null;
+  const j = JSON.stringify(o);
+  return j.length <= X_MAX ? j : JSON.stringify({ _cut: j.length, part: j.slice(0, X_MAX - 60) });
+}
+/** PRIVATE DATA WITH NO RESULT (2026-11-16): a play that counts for nothing (pass and play, practice,
+ *  a game abandoned) or a play's own extra lines (every throw, every move), sent ONLY to the admin play
+ *  log: `{ g: gameId, e: what (<= 12 chars), m: mode, k: key (<= 40), x: JSON }`. Never a stat, never
+ *  read back, never throws. Returns the entry's id or null. */
+export function logPlayData(gameId, what, data, opts = {}) {
+  try {
+    let m = null;
+    try { const md = opts.mode == null ? null : resolveMode(opts.mode); m = md ? md.key + '@' + (String(opts.diff == null ? '' : opts.diff).replace(MODE_PART_RE, '').slice(0, 24) || '-') : null; } catch { m = null; }
+    const x = privateLog(data, null);
+    return appendPlayLog(activeCode(), { g: gameId, e: String(what || 'data').slice(0, 12), k: opts.key == null ? null : String(opts.key).slice(0, 40), m, x });
+  } catch (err) { console.error('[game-stats] private play data not logged', gameId, what, err); return null; }
 }
 export function withMode(mode, diff, record, score) {
   let md = { key: NO_MODE, err: 'mode' }, sc = { s: null, dt: null, err: null }, df = '';
@@ -1236,7 +1267,7 @@ export function withMode(mode, diff, record, score) {
     if (Object.keys(o).length) dtLog = JSON.stringify(o).slice(0, 400);
   } catch { dtLog = null; }
   const prev = _mode;
-  _mode = { key: md.key, diff: String(df == null ? '' : df).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: sc.s, dt: sc.dt, dtLog };
+  _mode = { key: md.key, diff: String(df == null ? '' : df).replace(MODE_PART_RE, '').slice(0, 24) || '-', noted: false, score: sc.s, dt: sc.dt, dtLog, xLog: sc.xLog || null };
   try { return record(); } finally { _mode = prev; }
 }
 /** The mode a deferred result (a quit loss, a live-room leave) carries until it is recorded. Takes the
@@ -1254,7 +1285,9 @@ export function modeTag(mode, diff, score) {
     if (r && typeof r === 'object') {
       let det = r.detail;
       try { if (typeof det === 'function') det = det(); } catch (err) { console.error('[game-stats] the DETAIL threw at arm time; recorded without it', err); det = null; }
-      s = { hi: r.hi, lo: r.lo, ...(det && typeof det === 'object' ? { detail: det } : {}) };
+      let lg = r.log;
+      try { if (typeof lg === 'function') lg = lg(); } catch (err) { console.error('[game-stats] the LOG threw at arm time; recorded without it', err); lg = null; }
+      s = { hi: r.hi, lo: r.lo, ...(det && typeof det === 'object' ? { detail: det } : {}), ...(lg != null ? { log: lg } : {}) };
     }
   } catch (err) { console.error('[game-stats] the score/detail threw at arm time; recorded without it', err); s = null; }
   if (m !== NO_MODE && (!m || typeof m !== 'object')) return null;
@@ -1448,6 +1481,8 @@ function drainPendingBusinessDeal(st) {
   for (const e of q) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+    // its PRIVATE play data (2026-11-16): the play log's `x` only (logPlayData never throws)
+    if (e.x != null) logPlayData(e.game, 'queued', e.x, { mode: e.mode || null, diff: e.diff });
   }
   try { localStorage.removeItem(PENDING_BD_KEY); } catch { /* ignore */ }
   console.warn(`[game-stats] drained ${q.length} pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable`);
@@ -2183,6 +2218,38 @@ export function recordFlickSoccerTest(difficulty, won) {
   if (!fx.byMode || typeof fx.byMode !== 'object') fx.byMode = {};
   const m = fx.byMode[key] && typeof fx.byMode[key] === 'object' ? fx.byMode[key] : (fx.byMode[key] = {});
   bump(m[d] && typeof m[d] === 'object' ? m[d] : (m[d] = bucket()));
+  if (_mode) _mode.noted = true;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
+/** PASS AND PLAY (2026-11-16, Matt: "yes build 1"): two or more people on ONE phone. Kept, with its mode,
+ *  its detail and who won, in `games.<id>.pp` = { played, byMode: {<mode key>: {<diff>: {played}}},
+ *  won: {<seat>: n}, dt: {...} } (a new field, rule 5), and counted by NOTHING else: no total, no byDiff, no
+ *  byMode, no points, no leaderboard (the phone's owner played both sides). `winner` = the winning seat's
+ *  label ('p1', 'p2', 'p3', or 'draw'); `names` = the names typed for each seat, in seat order (play log only).
+ *  Called inside withMode like every result; the play log carries the mode, the detail and the names. */
+export function recordPassPlay(gameId, winner, names) {
+  if (tooFast(gameId)) return null;
+  notePlay(gameId, 'recordPassPlay', arguments);
+  if (GAMES.indexOf(gameId) < 0) return null;
+  const st = loadStats();
+  const g = st.games[gameId];
+  if (!g.pp || typeof g.pp !== 'object' || Array.isArray(g.pp)) g.pp = {};
+  const pp = g.pp;
+  pp.played = Math.max(0, +pp.played || 0) + 1;
+  const w = String(winner == null ? 'none' : winner).replace(MODE_PART_RE, '').slice(0, 12) || 'none';
+  if (!pp.won || typeof pp.won !== 'object' || Array.isArray(pp.won)) pp.won = {};
+  pp.won[w] = Math.max(0, +pp.won[w] || 0) + 1;
+  const key = _mode ? _mode.key : NO_MODE;
+  const diff = _mode ? _mode.diff : '-';
+  if (!_mode) console.error('[game-stats] recordPassPlay ran OUTSIDE withMode: filed under mode \'?\'');
+  if (!pp.byMode || typeof pp.byMode !== 'object' || Array.isArray(pp.byMode)) pp.byMode = {};
+  const m = pp.byMode[key] && typeof pp.byMode[key] === 'object' ? pp.byMode[key] : (pp.byMode[key] = {});
+  const b = m[diff] && typeof m[diff] === 'object' ? m[diff] : (m[diff] = {});
+  b.played = Math.max(0, +b.played || 0) + 1;
+  if (_mode && _mode.dt) noteDetail(pp, _mode.dt);
   if (_mode) _mode.noted = true;
   st.updatedAt = new Date().toISOString();
   persist(st);

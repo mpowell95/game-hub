@@ -222,3 +222,5 @@ the swatch would have been worse - it would crop the shape the picker exists to 
 - **Every run records its pad** (Matt: "I don't want to remove any if anybody uses it"): withMode detail
   `{ pad, padTaps, swipes, keys }` → `games.snake.dt.pad.<style>` per person. Runs before 2026-11-16 never stored it
   (the choice lived only in `gamehub.snake.v1` on each phone). Do NOT remove a style while any person's `dt.pad` has it.
+
+Private play data (2026-11-16): logs turns by tick, food cells in order, death cause, pauses via withMode `log` / logPlayData.

@@ -620,7 +620,7 @@ class HillClimb {
       const veh = this.save.vehicle;
       const ups = (this.save.upgrades && this.save.upgrades[veh]) || {};
       withMode(() => ({ veh, up: PARTS.map((p) => ups[p] | 0).join('-') }), stage.id,
-        () => recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips }), () => ({ hi: res.distance }));
+        () => recordHillClimb(res.distance, stage.id, { coins: res.coins, flips: res.flips }), () => ({ hi: res.distance, log: () => ({ ...run.privateLog(), veh, up: ups }) }));
     } catch (err) {
       console.error('[hill-climb] recordHillClimb failed', err);
     }

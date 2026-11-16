@@ -467,9 +467,12 @@ export function markCounted(id) {
  */
 /** WHICH game a challenge was (js/game-stats.js withMode, 2026-10-30): two players, its length (`len`
  *  '1' / '11' / '21') and the card numbering. An index row carries the length only. */
-export const chModeOf = (raw) => ({ n: 2, len: lenOf(raw) || '21', deck: deckOf(raw) });
-const chModeOfRow = (r) => ({ n: 2, len: LENS.includes(String(r && r.len)) ? String(r.len) : '21' });
-export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode = null) {
+export const chModeOf = (raw, side = mySideOf(raw)) => ({ n: 2, len: lenOf(raw) || '21', deck: deckOf(raw),
+  ...(side === 'a' || side === 'b' ? { first: side === 'a' ? 'me' : 'them' } : {}) });   // the challenger leads (2026-11-16)
+function mySideOf(raw) { try { return sideOf(raw, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16: the match's whole mode), else the length. */
+export const chModeOfRow = (r) => (r && r.md) || { n: 2, len: LENS.includes(String(r && r.len)) ? String(r.len) : '21' };
+export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode = null, score = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
   if (timeoutUnsure(NODE, id)) return false;
   if (isVoidedMatch('escoba', id)) return false;
@@ -477,7 +480,7 @@ export function countResult(id, won, escobas = 0, finishedAt = Date.now(), mode 
   // (2026-10-29, js/game-stats.js mayCountChallenge): a fresh install never re-counts history.
   if (!mayCountChallenge(LEDGER_KEY, finishedAt)) return false;
   if (!markCounted(id)) return false;
-  try { withChallengeMatch('escoba', id, () => withMode(mode, 'mp', () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) }))); }
+  try { withChallengeMatch('escoba', id, () => withMode(mode, 'mp', () => recordEscoba('mp', won == null ? null : !!won, { escobas: Math.max(0, escobas | 0) }), score)); }
   catch (err) { console.error('[escoba] recordEscoba failed', err); }
   return true;
 }
@@ -538,6 +541,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -551,7 +563,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs), mineEsc: ms(r.mineEsc), theirsEsc: ms(r.theirsEsc),
       len: LENS.includes(String(r.len)) ? String(r.len) : '21', round: ms(r.round),
     };
@@ -663,6 +675,7 @@ function rowFor(game, side, writer) {
     mineEsc: game.escobas[side], theirsEsc: game.escobas[other(side)],
     round: game.round,
     len: game.len,
+    md: rowMd(chModeOf(game, side)),          // the match's mode from this side (2026-11-16)
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),

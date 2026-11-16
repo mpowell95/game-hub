@@ -26,10 +26,10 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, withMode, mayCountChallenge, countingSince } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, withMode, mayCountChallenge, countingSince, logPlayData } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
-import { newMatch, shoot, totals, hashStr, isShootOff } from './engine.js';
+import { newMatch, shoot, totals, hashStr, isShootOff, windFor } from './engine.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, turnStartOf, timeoutOver, rowTimeout, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
@@ -310,6 +310,15 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   return true;
 }
 const wonOf = (result) => result === 'won';
+/** WHICH game a challenge was (root CLAUDE.md, "Every result records its MODE"): who shot first. The
+ *  challenger (side 'a') shoots first in every round. `side` defaults to this phone's side. */
+export function modeOfMatch(g, side = mySideOf(g)) {
+  return side === 'a' || side === 'b' ? { first: side === 'a' ? 'me' : 'them' } : null;
+}
+function mySideOf(g) { try { return sideOf(g, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16), else what an older row proves: who sent it
+ *  (the sender is side 'a', who shoots first; every archery row carries `sent`). */
+export const modeOfRow = (r) => (r && r.md) || { first: r && r.sent ? 'me' : 'them' };
 export function noteVoided() {
   const me = myCode();
   if (!me) return 0;
@@ -332,14 +341,70 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), g.over.at, () => modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated);
+  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every arrow in order with its score and stage, each stage wind, both totals, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.archery.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData('archery', 'match', () => privateMatch(game, why), { mode: () => ({ first: 'a' }), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[archery] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[archery] finished matches not logged privately', err); }
+}
+/** The match as private data: every arrow replayed with its score. */
+export function privateMatch(game, why = null) {
+  const m = newMatch(seedOf(game.id), 0);
+  const arrows = [];
+  for (const e of game.log || []) {
+    if (m.winner != null || arrows.length >= 300) break;
+    const st = m.stage;
+    const res = shoot(m, e.x, e.y);
+    if (!res) break;
+    arrows.push([seatOf(e.by), e.x, e.y, res.s, st, e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]);
+  }
+  const wind = [];
+  for (let st = 0; st <= Math.min(m.stage | 0, 20); st++) { const w = windFor(m.seed, st); wind.push([w.mph, w.dir]); }
+  const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '' });
+  return {
+    v: 1, id: game.id, me: sideOf(game, myCode()), first: 'a', a: who(game.a), b: who(game.b),
+    sentBy: game.by && game.a && game.by === game.a.code ? 'a' : game.by ? 'b' : null,
+    created: game.created || null, updated: game.updated || null, over: game.over || (why ? { why } : null),
+    totals: totals(m), stage: m.stage, winner: m.winner, wind, cols: 'seat,x,y,s,stage,sec', arrows,
+  };
 }
 /** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
 export const timeoutsSettled = () => confirmsSettled(NODE);
@@ -365,6 +430,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -377,7 +451,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs), round: Math.max(1, ms(r.round) || 1),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch('archery', r.id)));
@@ -413,7 +487,9 @@ export async function readGame(id) {
     const game = validateGame({ ...snap.val(), id });
     if (!game) { console.error(`[archery] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) { console.warn('[archery] could not read that match', err); return null; }
 }
 export async function watchGame(id, cb) {
@@ -422,7 +498,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? { ...snap.val(), id } : null); if (g) { g.id = id; cb(withTimeout(g)); } }
+      try { const g = validateGame(snap && snap.exists() ? { ...snap.val(), id } : null); if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); } }
       catch (err) { console.warn('[archery] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };
@@ -480,6 +556,7 @@ function rowFor(game, side, writer) {
     round: Math.min(game.stage + 1, 4),
     lastBy: writer === side ? 'me' : 'them',
     kind: 'archery',
+    md: rowMd(modeOfMatch(game, side)),       // the match's mode from this side (2026-11-16)
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),
   };
