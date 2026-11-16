@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ball Run Orbital Fixes</title>
+<style>
+:root { --bg:#0b0d14; --panel:#151a26; --ink:#f3f5ff; --dim:#dfe4f5; --now:#ffce3a; --fix:#5fe3ff; }
+* { box-sizing:border-box; }
+html,body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:28px; margin:0 0 20px; }
+h2 { font-size:24px; margin:40px 0 14px; display:flex; gap:12px; align-items:center; }
+.n { display:inline-grid; place-items:center; min-width:36px; height:36px; border-radius:18px; background:var(--panel); font-size:18px; }
+.pair { margin:0 0 22px; }
+figcaption { font-size:19px; font-weight:700; margin:0 0 8px; color:var(--ink); }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.four { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.two > div { position:relative; }
+img { width:100%; height:auto; display:block; border-radius:10px; background:#000; }
+.tag { display:inline-block; margin:0 0 6px; font-size:15px; font-weight:800; padding:1px 10px; border-radius:8px; color:var(--now); border:2px solid var(--now); }
+.tag.fix { color:var(--fix); border-color:var(--fix); border-style:dashed; }
+.card { background:#1f1b2b; border-radius:14px; padding:10px; }
+.card svg { width:100%; height:auto; display:block; border-radius:8px; }
+.card p { margin:10px 4px 2px; font-weight:800; font-size:17px; color:var(--ink); text-align:center; }
+@media (min-width:900px) { .two { max-width:760px; } }
+</style></head>
+<body><main>
+<h1>Ball Run: Orbital fixes</h1>
+<section><h2><span class="n">1</span>Drop: the slope back up shows as black bars</h2><figure class="pair"><figcaption>Drop, 22 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/drop-mid-before.jpg" alt="Drop, 22 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/drop-mid-after.jpg" alt="Drop, 22 m out, fix"></div></div></figure><figure class="pair"><figcaption>On the lowered pad</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/drop-after-before.jpg" alt="On the lowered pad, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/drop-after-after.jpg" alt="On the lowered pad, fix"></div></div></figure></section><section><h2><span class="n">2</span>Hole or jump</h2><figure class="pair"><figcaption>Hole (split void): amber stripes</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/split-close-before.jpg" alt="Hole (split void): amber stripes, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/split-close-after.jpg" alt="Hole (split void): amber stripes, fix"></div></div></figure><figure class="pair"><figcaption>Jump: chevrons, lip, arc, pad</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/jump-flat-close-before.jpg" alt="Jump: chevrons, lip, arc, pad, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/jump-flat-close-after.jpg" alt="Jump: chevrons, lip, arc, pad, fix"></div></div></figure></section><section><h2><span class="n">3</span>Jump from farther out</h2><figure class="pair"><figcaption>Jump, 45 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/jump-flat-far-before.jpg" alt="Jump, 45 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/jump-flat-far-after.jpg" alt="Jump, 45 m out, fix"></div></div></figure><figure class="pair"><figcaption>Jump, 22 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/jump-flat-mid-before.jpg" alt="Jump, 22 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/jump-flat-mid-after.jpg" alt="Jump, 22 m out, fix"></div></div></figure></section><section><h2><span class="n">4</span>Drop and rise</h2><figure class="pair"><figcaption>Drop, 8 m out: down triangles</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/drop-close-before.jpg" alt="Drop, 8 m out: down triangles, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/drop-close-after.jpg" alt="Drop, 8 m out: down triangles, fix"></div></div></figure><figure class="pair"><figcaption>Rise, 22 m out: up triangles, pillars</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/rise-mid-before.jpg" alt="Rise, 22 m out: up triangles, pillars, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/rise-mid-after.jpg" alt="Rise, 22 m out: up triangles, pillars, fix"></div></div></figure><figure class="pair"><figcaption>Rise, 8 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/rise-close-before.jpg" alt="Rise, 8 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/rise-close-after.jpg" alt="Rise, 8 m out, fix"></div></div></figure></section><section><h2><span class="n">5</span>Landing pads</h2><figure class="pair"><figcaption>Narrow, offset pad</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/offset-close-before.jpg" alt="Narrow, offset pad, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/offset-close-after.jpg" alt="Narrow, offset pad, fix"></div></div></figure><figure class="pair"><figcaption>Split pad: one arc per lane</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/splitpad-close-before.jpg" alt="Split pad: one arc per lane, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/splitpad-close-after.jpg" alt="Split pad: one arc per lane, fix"></div></div></figure><figure class="pair"><figcaption>In the air</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/splitpad-air-before.jpg" alt="In the air, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/splitpad-air-after.jpg" alt="In the air, fix"></div></div></figure></section><section><h2><span class="n">6</span>Split from far away</h2><figure class="pair"><figcaption>Split, 45 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/split-far-before.jpg" alt="Split, 45 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/split-far-after.jpg" alt="Split, 45 m out, fix"></div></div></figure><figure class="pair"><figcaption>Split, 22 m out: no stair-step edges</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/split-mid-before.jpg" alt="Split, 22 m out: no stair-step edges, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/split-mid-after.jpg" alt="Split, 22 m out: no stair-step edges, fix"></div></div></figure><figure class="pair"><figcaption>Inside the split</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/split-in-before.jpg" alt="Inside the split, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/split-in-after.jpg" alt="Inside the split, fix"></div></div></figure><figure class="pair"><figcaption>Split with blocks</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/split-obstacles-before.jpg" alt="Split with blocks, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/split-obstacles-after.jpg" alt="Split with blocks, fix"></div></div></figure></section><section><h2><span class="n">7</span>Everything else on the track</h2><figure class="pair"><figcaption>Blocks; far end fades out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/obstacles-before.jpg" alt="Blocks; far end fades out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/obstacles-after.jpg" alt="Blocks; far end fades out, fix"></div></div></figure><figure class="pair"><figcaption>Orb; deck lighter, edges lit</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/orb-before.jpg" alt="Orb; deck lighter, edges lit, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/orb-after.jpg" alt="Orb; deck lighter, edges lit, fix"></div></div></figure><figure class="pair"><figcaption>Heart: wobble, not a full spin</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/heart-before.jpg" alt="Heart: wobble, not a full spin, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/heart-after.jpg" alt="Heart: wobble, not a full spin, fix"></div></div></figure><figure class="pair"><figcaption>Tunnel: no SPEED UP on the floor</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/tunnel-before.jpg" alt="Tunnel: no SPEED UP on the floor, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/tunnel-after.jpg" alt="Tunnel: no SPEED UP on the floor, fix"></div></div></figure></section><section><h2><span class="n">8</span>Higher camera (option)</h2><figure class="pair"><figcaption>Drop, 8 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/cam-drop-close-before.jpg" alt="Drop, 8 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/cam-drop-close-after.jpg" alt="Drop, 8 m out, fix"></div></div></figure><figure class="pair"><figcaption>Split, 45 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/cam-split-far-before.jpg" alt="Split, 45 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/cam-split-far-after.jpg" alt="Split, 45 m out, fix"></div></div></figure><figure class="pair"><figcaption>Rise, 45 m out</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/cam-rise-far-before.jpg" alt="Rise, 45 m out, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/cam-rise-far-after.jpg" alt="Rise, 45 m out, fix"></div></div></figure></section><section><h2><span class="n">9</span>Screens</h2><figure class="pair"><figcaption>HUD: 17px, near white</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/ui-hud-before.jpg" alt="HUD: 17px, near white, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/ui-hud-after.jpg" alt="HUD: 17px, near white, fix"></div></div></figure><figure class="pair"><figcaption>Setup: centred, below Hub</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/ui-setup-before.jpg" alt="Setup: centred, below Hub, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/ui-setup-after.jpg" alt="Setup: centred, below Hub, fix"></div></div></figure><figure class="pair"><figcaption>Game over: 17px distance</figcaption>
+<div class="two"><div><span class="tag">Now</span><img loading="lazy" src="img/ui-gameover-before.jpg" alt="Game over: 17px distance, now"></div>
+<div><span class="tag fix">Fix</span><img loading="lazy" src="img/ui-gameover-after.jpg" alt="Game over: 17px distance, fix"></div></div></figure></section><section><h2><span class="n">10</span>How to play</h2>
+<figure class="pair"><figcaption>Now: 4 pages, Classic colours only</figcaption><div class="four"><img loading="lazy" src="img/ui-help-1.jpg" alt="Help page 1, now"><img loading="lazy" src="img/ui-help-2.jpg" alt="Help page 2, now"><img loading="lazy" src="img/ui-help-3.jpg" alt="Help page 3, now"><img loading="lazy" src="img/ui-help-4.jpg" alt="Help page 4, now"></div></figure>
+<figure class="pair"><figcaption>Fix: 2 more pages, Orbital only</figcaption>
+<div class="two"><div class="card"><svg viewBox="0 0 200 200" role="img" aria-label="Hole">
+  <defs><pattern id="hz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="14" height="14" fill="#16120a"/><rect width="7" height="14" fill="#ffce3a"/></pattern></defs>
+  <rect width="200" height="200" fill="#03060f"/>
+  <path d="M10 196 L80 40 L120 40 L190 196 Z" fill="#242e45"/>
+  <path d="M74 196 L96 70 L104 70 L126 196 Z" fill="#03060f"/>
+  <path d="M62 196 L92 70 L96 70 L74 196 Z" fill="url(#hz)"/>
+  <path d="M126 196 L104 70 L108 70 L138 196 Z" fill="url(#hz)"/>
+  <circle cx="100" cy="168" r="17" fill="#8fe9ff" opacity="0.35"/>
+  <path d="M86 154 L114 182 M114 154 L86 182" stroke="#eef0ff" stroke-width="6" stroke-linecap="round"/>
+</svg><p>Stripes: hole</p></div>
+<div class="card"><svg viewBox="0 0 200 200" role="img" aria-label="Jump">
+  <rect width="200" height="200" fill="#03060f"/>
+  <path d="M10 196 L58 110 L142 110 L190 196 Z" fill="#242e45"/>
+  <path d="M70 66 L130 66 L134 82 L66 82 Z" fill="#242e45"/>
+  <rect x="66" y="82" width="68" height="8" fill="#46577a"/>
+  <rect x="66" y="80" width="68" height="4" fill="#5fe3ff"/>
+  <rect x="72" y="90" width="4" height="60" fill="#6f8fb3"/><rect x="124" y="90" width="4" height="60" fill="#6f8fb3"/>
+  <g fill="none" stroke="#5fe3ff" stroke-width="7"><path d="M60 176 L100 156 L140 176"/><path d="M68 148 L100 132 L132 148"/></g>
+  <rect x="58" y="108" width="84" height="4" fill="#5fe3ff"/>
+  <g fill="#5fe3ff"><circle cx="100" cy="100" r="3.5"/><circle cx="100" cy="90" r="3.5"/><circle cx="100" cy="82" r="3.5"/><circle cx="100" cy="76" r="3.5"/></g>
+  <circle cx="100" cy="176" r="15" fill="#8fe9ff"/>
+</svg><p>Arrows: jump</p></div></div></figure></section>
+</main></body></html>
