@@ -1,5 +1,7 @@
 # Handoff: Word Weaver's level multipliers (2026-11-16)
 
+**REJECTED 2026-11-16.** Built on admin devices, then removed within the hour. Matt: "24 points for a single game? get the fuck out of here that's insanity". Kept as a record only; do not build.
+
 **Written by a session, not by Matt.** Matt's words (2026-11-16): *"give handoff doc for the changes you'd make"*.
 
 **Cleared: this document only.** NOT cleared: building it, merging it, or anything players can see. Do not start
