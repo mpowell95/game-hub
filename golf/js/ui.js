@@ -30,6 +30,7 @@ import { gfOf, roundState, modeUnlocked, tutorialDone, practisableHoles, ladderP
   courseOpenByDefault, courseAdminOnlyByDefault } from './progress.js';
 import { isCourseReleased, courseTestingOverride, readCachedConfig, isAdminDevice } from '../../js/admin-config.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
+import { backStack } from '../../js/back-stack.js';
 
 const SETTINGS_KEY = 'gamehub.golf.v1';
 /** Whether this player had a challenge going at the last look (this page's life only): the setup
@@ -604,6 +605,7 @@ class GolfGame {
    *  grid of one - a chooser with one option is not a choice and should not look like one. */
   _renderSetup(tab) {
     if (tab) this._tab = tab;
+    this._setMpBack(null);
     this._mpLeave();
     this._stopLoop();
     this.hole = null;
@@ -835,32 +837,35 @@ class GolfGame {
    *  Skeeball shipped. The observer is the path back to the truth where there is one; where there
    *  is no `IntersectionObserver` at all, every hole is painted up front instead, because a picture
    *  that costs a moment beats a row of blank rectangles that never fill. */
-  _paintHoleStrip(strip) {
+  _paintHoleStrip(strip, opts = {}) {
     if (!strip) return;
     if (this.stripObs) { this.stripObs.disconnect(); this.stripObs = null; }
     if (!this._stripCache) this._stripCache = new Map();
-    const courseId = this.course.id;
+    // `opts.course` + `opts.maxH`: the challenge card's strip (2026-11-16) - the chosen round's holes on
+    // the chosen course, sized by `_sizeChStrip`, never by the setup screen's own measurement.
+    const course = opts.course || this.course;
+    const courseId = course.id;
 
     const paint = (cv) => {
       if (this.destroyed || !cv.isConnected || cv.dataset.painted) return;
       const r = cv.getBoundingClientRect();
       if (r.width < 8 || r.height < 8) return;
       const i = +cv.dataset.holeArt;
-      const hole = this.course.holes[i];
+      const hole = course.holes[i];
       if (!hole) return;
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       cv.width = Math.round(r.width * dpr);
       cv.height = Math.round(r.height * dpr);
       const ctx = cv.getContext('2d');
       ctx.imageSmoothingEnabled = false;
-      const pal = paletteFor(this.course.theme);
+      const pal = paletteFor(course.theme);
       ctx.fillStyle = pal.heavyRough;
       ctx.fillRect(0, 0, cv.width, cv.height);
 
       const key = `${courseId}:${i}:${cv.width}x${cv.height}`;
       let thumb = this._stripCache.get(key);
       if (!thumb) {
-        const map = buildMap(hole, this.course.theme);
+        const map = buildMap(hole, course.theme);
         // Fit the whole hole in, letterboxed on whichever axis has room to spare - the same rule
         // the single picture used, so a hole is never cropped and the shapes stay comparable.
         const sc = Math.min(cv.width / map.w, cv.height / map.h);
@@ -879,10 +884,10 @@ class GolfGame {
     };
 
     const arts = [...strip.querySelectorAll('[data-hole-art]')];
-    this.stripEl = strip;
+    if (!opts.maxH) this.stripEl = strip;
     requestAnimationFrame(() => {
       if (this.destroyed || !strip.isConnected) return;
-      this._sizeStripRows();
+      if (opts.maxH) this._sizeChStrip(strip, opts.maxH); else this._sizeStripRows();
       // PAINTED A FEW PER FRAME, NEVER ALL AT ONCE. `buildMap` rasterises a whole hole (roughly
       // 264 x 1176 px on Pine Valley 1), and eighteen of those in one frame is a visible stall on
       // the frame the setup screen appears. Four a frame puts the first row up immediately and the
@@ -929,6 +934,39 @@ class GolfGame {
    *  `scrollHeight` is read. That counts the padding, the gaps and every sibling with no list of
    *  them to keep in step - the same reason `_fit()` collapses the root before measuring its top.
    *  It costs one forced reflow, once per render of a menu. */
+  /** The challenge card's hole strip (2026-11-16, Matt: "I want to be able to see the 3 holes I'm
+   *  selecting"): each row as tall as fills its width, at most `maxH`, then shrunk together by any
+   *  overflow so the card never scrolls (58px floor). */
+  _sizeChStrip(strip, maxH) {
+    const rows = [...strip.querySelectorAll('.gf-strip__row')];
+    const GAP = 4;
+    const want = rows.map((row) => {
+      const arts = [...row.querySelectorAll('[data-hole-art]')];
+      let sum = 0;
+      for (const cv of arts) sum += parseFloat(cv.style.getPropertyValue('--gf-ar')) || 0.33;
+      return Math.min(maxH, (row.clientWidth - GAP * (arts.length - 1)) / Math.max(0.1, sum));
+    });
+    const apply = (k) => rows.forEach((row, j) => row.style.setProperty('--gf-strip-h', `${Math.max(58, Math.floor(want[j] * k))}px`));
+    apply(1);
+    const setup = strip.closest('.gf-setup');
+    if (!setup) return;
+    const over = setup.scrollHeight - setup.clientHeight;
+    if (over > 0) {
+      const total = want.reduce((a, v) => a + v, 0);
+      apply(Math.max(0, (total - over - 4) / Math.max(1, total)));
+    }
+  }
+
+  /** The strip's rows for a list of hole indices on `course`, nine to a row. */
+  _holeStripHTML(course, idxs, cls = '') {
+    const rows = [];
+    idxs.forEach((i, k) => { if (k % 9 === 0) rows.push([]); rows[rows.length - 1].push(i); });
+    return `<div class="gf-strip ${cls}" role="group">${rows.map((row) => `<div class="gf-strip__row">
+      ${row.map((i) => { const h = course.holes[i]; return h ? `<canvas class="gf-strip__hole" data-hole-art="${i}"
+        style="--gf-ar:${holeAspect(h).toFixed(4)}" aria-label="${esc(t('hole_thumb', { n: h.n, par: h.par }))}"></canvas>` : ''; }).join('')}
+    </div>`).join('')}</div>`;
+  }
+
   _sizeStripRows() {
     const strip = this.stripEl;
     if (!strip || !strip.isConnected) return;
@@ -1172,6 +1210,7 @@ class GolfGame {
   }
 
   _enterHole() {
+    this._setMpBack(null);
     this._dropStripObs();
     const hole = this.course.holes[this.holeIdxs[this.pos]];
     // TODAY'S PIN (2026-09-16). Matt: *"3-4 possible pin locations that the course randomly
@@ -3320,7 +3359,32 @@ class GolfGame {
   }
 
   /** A page of the online flow in place of the setup screen (golf/js/mp-ui.js `page`). */
+  /** THE PHONE'S BACK SWIPE AND THE HUB BUTTON STEP BACK ONE ONLINE SCREEN (2026-11-16, Matt: "i can't swipe
+   *  left to right back a screen on this"): the hub asks `back()` first (js/hub.js requestLeave); while an
+   *  online page is up it runs that page's own back and the hub's button reads "‹ Back". */
+  _setMpBack(fn, depth = 1) {
+    this._mpBackFn = fn || null;
+    // ONE HISTORY ENTRY PER ONLINE LEVEL (js/back-stack.js): the phone's swipe pops it and `onBack` runs
+    // this page's own back. Online setup = 0, a page = 1, a page reached from a page = 2.
+    const level = fn ? Math.max(1, depth | 0) : 0;
+    if (level && !this._mpBs) this._mpBs = backStack(() => { const f = this._mpBackFn; if (f) { try { f(); } catch (e) { console.warn('[golf] back', e); this._renderSetup('online'); } } });
+    if (this._mpBs) this._mpBs.sync(level);
+    const step = !!fn;
+    if (step === this._backStep) return;
+    this._backStep = step;
+    try { window.dispatchEvent(new CustomEvent('gamehub:backlabel', { detail: step })); } catch { /* old browser */ }
+  }
+  back() {
+    const f = this._mpBackFn;
+    if (!f) return false;
+    if (this._mpBs) { this._mpBs.back(); return true; }   // through history, so button and swipe are one path
+    try { f(); } catch (e) { console.warn('[golf] back', e); this._renderSetup('online'); }
+    return true;
+  }
+
   _mpPage(html) {
+    // The caller sets its own back and depth (`_setMpBack`) right after: syncing a default here first
+    // would unwind and re-push a history entry on every re-render of the same page.
     this._dropStripObs();
     this._stopLoop();
     this.hole = null;
@@ -3659,6 +3723,7 @@ class GolfGame {
         ${mine && g.pass ? `<button type="button" class="gf-btn gf-mp-wide" data-mp="send">${esc(t('mp_send', { name: String(mp.them.name || '?').split(/\s+/)[0] }))}</button>` : ''}
         ${g.over ? '' : `<button type="button" class="gf-btn gf-mp-wide gf-mp-quiet" data-mp="end">${esc(this._mpEndLabel())}</button>`}
       </div>`);
+    this._setMpBack(() => this._renderSetup('online'), 1);
     this._on(el.querySelector('[data-mp="back"]'), 'click', () => this._renderSetup('online'));
     const play = el.querySelector('[data-mp="play"]');
     if (play) this._on(play, 'click', () => this._mpPlayHole());
@@ -3837,6 +3902,8 @@ class GolfGame {
   _stopLoop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   destroy() {
+    try { this._setMpBack(null); } catch { /* gone */ }
+    if (this._mpBs) { try { this._mpBs.close(); } catch { /* gone */ } this._mpBs = null; }
     try { this._mpLeave(); } catch { /* gone */ }
     if (this._onVis) { document.removeEventListener('visibilitychange', this._onVis); this._onVis = null; }
     this.destroyed = true;
@@ -3996,4 +4063,6 @@ export function destroy() {
   if (typeof window !== 'undefined') delete window.__gfTest;
 }
 export function isInProgress() { return instance ? instance.isInProgress() : false; }
-export default { init, destroy, isInProgress };
+/** The hub's back (button or the phone's swipe): one online screen back, if one is up. */
+export function back() { return !!(instance && instance.back()); }
+export default { init, destroy, isInProgress, back };
