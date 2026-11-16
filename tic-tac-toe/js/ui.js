@@ -33,6 +33,12 @@ function applyMove(s, move) {
   return applyMoveRaw(s, move);
 }
 import { chooseMove } from './ai.js';
+import { isAdminDevice } from '../../js/admin-config.js';
+
+// The new Classic Hard computer (2026-11-16, Matt: Classic Hard makes an occasional mistake). Admin devices only;
+// flip when Matt says "release it".
+const NEW_AI_RELEASED = false;
+function newAI() { try { return NEW_AI_RELEASED || isAdminDevice(); } catch { return false; } }
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { recordTicTacToe, recordHeadToHead, loadStats, deviceId, withMode, modeTag } from '../../js/game-stats.js';
@@ -123,6 +129,7 @@ function saveGame(ui) {
       // shape, not a change to it.
       humanMark: ui._myMark(),
       aiMark: ui._oppMark(),
+      cv: ui.cv2 ? 2 : undefined,   // played against the new Hard (2026-11-16); absent = the old computer
       state: ui.state,
     }));
   } catch { /* a full quota must never break the game */ }
@@ -141,7 +148,7 @@ function loadGame() {
     if (!DIFFICULTIES.some(([k]) => k === raw.difficulty)) return null;
     const s = raw.state;
     if (!validState(s, raw.variant)) return null;
-    return { variant: raw.variant, difficulty: raw.difficulty, humanMark: raw.humanMark, aiMark: raw.aiMark, state: s };
+    return { variant: raw.variant, difficulty: raw.difficulty, humanMark: raw.humanMark, aiMark: raw.aiMark, cv2: raw.cv === 2, state: s };
   } catch { return null; }
 }
 
@@ -562,6 +569,7 @@ class TicTacToeUI {
     this.marks = starter === 'you' ? [X, O] : [O, X];
     clearGame();                 // a new match replaces any saved one
     this._statsCommitted = false;
+    this.cv2 = newAI();   // this match's computer: new or old, fixed for the match
     this.state = newGame(s.variant, X);
     this.view = 'game';
     this._afterStateChange();
@@ -578,6 +586,7 @@ class TicTacToeUI {
   resumeGame(saved) {
     this._setup.difficulty = saved.difficulty;
     this.marks = [saved.humanMark, saved.aiMark];   // solo: seat 0 is the local human
+    this.cv2 = saved.cv2;
     this._statsCommitted = false;
     this.state = saved.state;
     this.view = 'game';
@@ -619,7 +628,7 @@ class TicTacToeUI {
       this.aiTimer = setTimeout(() => {
         this.aiTimer = null;
         if (this._dead || !this.state || this.state.over) return;
-        const move = chooseMove(this.state, this._setup.difficulty);
+        const move = chooseMove(this.state, this._setup.difficulty, Math.random, this.cv2 ? { v2: true } : null);
         applyMove(this.state, move);
         this._afterStateChange();
       }, AI_THINK_MS);
@@ -832,7 +841,10 @@ class TicTacToeUI {
     // X always opens (game.js), so the mark says who went first (2026-11-02). Solo's `first` is the
     // SETTING (it may be 'alternate'), so who actually went is `went`.
     const went = this.marks ? (this._myMark() === X ? 'me' : 'them') : undefined;
-    return this.mp ? { v: variant, first: went } : { v: variant, first: this._setup.firstMode, went };
+    if (this.mp) return { v: variant, first: went };
+    const m = { v: variant, first: this._setup.firstMode, went };
+    if (this.cv2 && variant === 'classic' && this._setup.difficulty === 'pro') m.cv = 2;   // vs the new Hard (2026-11-16)
+    return m;
   }
 
   _commitStats() {

@@ -102,7 +102,7 @@ function proClassic(s, moves) {
 // Classic Hard v2 (2026-11-16, behind the gate in ui.js; results carry `cv: 2`). Perfect play meant
 // 0 wins in 52 for real people. Now, with this chance a move, it plays a move that is NOT the best
 // (when one exists), so a player who spots the slip can win. Tuned by simulation (tools/sim-ttt-hard.mjs).
-export const PRO_V2_SLIP = 0.25;
+export const PRO_V2_SLIP = 0.05;
 function proClassicV2(s, moves, rng, slip) {
   const me = s.turn;
   const vals = moves.map((m) => {
