@@ -706,7 +706,8 @@ class WordWeaver {
     }
   }
 
-  /** The setup screen. AS FEW WORDS AS POSSIBLE (root CLAUDE.md): the title, the player's points, the four
+  /** The setup screen. AS FEW WORDS AS POSSIBLE (root CLAUDE.md): the title, the player's points (a trophy: tap = the
+   *  leaderboard, 2026-11-16), the four
    *  difficulties (shape + name), Play with the level number, How to play. Nothing else. */
   _setupHTML() {
     const band = this.band, total = this.count == null ? Infinity : this.count;
@@ -727,7 +728,7 @@ class WordWeaver {
       <div class="ww-setup">
         <div class="ww-head">
           <h1>${t('title')}</h1>
-          <p class="ww-pts"><b>${pts}</b> ${t('pts_word')}<span class="ww-bal" role="img" aria-label="${t('balance_aria', { n: bal })}">${ICON_STAR}<b>${bal}</b></span></p>
+          <p class="ww-pts"><button type="button" class="ww-ptsbtn" data-act="lb" aria-label="${t('lb_aria', { n: pts })}">${ICON_TROPHY}<b>${pts}</b> ${t('pts_word')}</button><span class="ww-bal" role="img" aria-label="${t('balance_aria', { n: bal })}">${ICON_STAR}<b>${bal}</b></span></p>
           <button type="button" class="ww-lang" data-act="lang" aria-label="${t('lang_aria')}">${this.lang === 'es' ? 'ES' : 'EN'}</button>
         </div>
         ${this._dailyButtonHTML()}
@@ -735,6 +736,15 @@ class WordWeaver {
         ${play}
         <button type="button" class="ww-link" data-act="help">${t('how_title')}</button>
       </div>`;
+  }
+
+  /** The Word Weaver leaderboard, from the setup screen's points (Matt, 2026-11-16: "i should be able to access the
+   *  leaderboard from the word weaver setup screen"). Gridlock's way: the hub's overlay, opened on this game. */
+  async _openLeaderboard() {
+    try {
+      const m = await import('../../js/leaderboard-ui.js');
+      await m.openLeaderboard({ game: 'wordweaver' });
+    } catch (err) { console.error('[word-weaver] leaderboard', err); }
   }
 
   /** The setup screen's ONE Daily button (2026-11-02): today's shared puzzle; a check once this phone finished it. */
@@ -1353,6 +1363,7 @@ class WordWeaver {
     else if (act === 'retry') { if (btn.dataset.daily) this._openDaily(this.lang); else this._open(this.n); }
     else if (act === 'daily') this._openDaily(this.lang);
     else if (act === 'board') this._openBoard();
+    else if (act === 'lb') this._openLeaderboard();
     else if (act === 'play') this._play();
     else if (act === 'lang') this._switchLang();
     else if (act === 'menu') this._toSetup();
