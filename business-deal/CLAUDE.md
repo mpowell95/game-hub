@@ -219,3 +219,14 @@ Matt couldn't Sly/Forced Deal a 3rd Dark Blue sitting beside a full set (the boa
 One-time repair (same day, Matt: "I'm not being penalized for the games error"): `repairForcedDeal1109` in `loadSave` moves his banked Forced Deal back to his hand (play refunded if still that turn), his code only, stamped `gamehub.bd.fix1109.v1`, save re-read to verify. Inert everywhere else; leave it. v45.
 - **Settings recorded (2026-11-16)**: each result carries detail `{ pace }` (`_statsDetail`); `js/game-stats-global.js` `record()` takes a 6th `detail` arg (`g.dt`, play log `d`), queued results keep it (`dt`).
 - **Private play data (2026-11-16)**: logs the whole game (every engine log line, each player's final hand, bank and properties, sets, turns, winner, end reason, time; `_privateLog`) via `__ghStats.record`'s 7th arg `log` (play log `x`, admin only); queued results keep it as `x`; the save keeps 400 log lines (was 60). `game-stats-global.js` copied verbatim. **Bump `sw.js` CACHE (and `APP_VERSION`) at deploy.**
+
+## Bigger tables, stronger computers (2026-11-16, Matt: "it should be more difficult the more opponents you have"; NOT cleared for players)
+
+`ui.js` `NEW_AI_RELEASED = false` (flip when Matt says "release it") + `newAI()` (that or `gamehub.adminDevice.v1` = '1'): admin devices
+only. With it the computers are built with `cv: 2` (`ai.js` `_table`): at 2/3/4 computers each level's knobs move toward the level above
+(`TABLE_W`; Hard has none left), plus table play (`smart`): attacks lean on whoever is closest to winning (`leadBonus`), steal the card that
+would win it for them and never give it away in a Forced Deal (`_winsWith`), Just Say No on a Debt Collector, Birthday or rent that would cost a
+set's property, Pass Go first. ONE computer plays exactly as before. Results at 2+ computers carry mode `cv: 2`; a save keeps `cv`.
+`tools/test-bd-table-ai.mjs` (old computer move for move, gate, marker). SIMULATED (4,000 games a setup, seat 0 = today's Hard brain as the
+person) Medium 1/2/3/4 computers: 72/55/46/40% before, 72/48/37/31% after; Easy 87/76/70/64 to 87/68/57/51; Hard 58/39/29/24 to 58/34/27/23.
+Real (to 2026-11-16, one person each): Medium vs 4 8/11, vs 2 8/10. Re-check real win rates two weeks after release.

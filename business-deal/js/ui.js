@@ -106,6 +106,15 @@
   // holds no earned history. Before this the choice lived only in memory, so
   // every fresh open of the app silently reset the difficulty.
   const SETUP_KEY = 'gamehub.bd.setup.v1';
+
+  // Stronger computers at bigger tables (2026-11-16, Matt: "it should be more difficult the more
+  // opponents you have"). NOT cleared for players: admin devices only until Matt says "release it".
+  const NEW_AI_RELEASED = false;   // flip when Matt says release it
+  // Same question as js/admin-config.js isAdminDevice() (this classic page cannot import it).
+  function newAI() {
+    if (NEW_AI_RELEASED) return true;
+    try { return localStorage.getItem('gamehub.adminDevice.v1') === '1'; } catch (e) { return false; }
+  }
   // The game in progress (2026-11-06, Matt: "yes build it"): written at every move choice,
   // removed once the result is recorded. Holds no earned history (results live in gamehub.stats).
   const SAVE_KEY = 'gamehub.bd.save.v1';
@@ -450,6 +459,7 @@
       if (!g || g.winner || this._resultRecorded) return;
       const data = { v: 1, at: Date.now(), numAI: this._lastNumAI | 0, difficulty: this.difficulty,
         names: g.players.map(p => p.name), meta: this.meta, game: g.saveState(), t0: this._t0 || null };
+      if (this._cv === 2) data.cv = 2;   // a saved game resumes against the computers it was dealt with
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
       catch (e) { console.error('[business-deal] game save FAILED', e); }
     }
@@ -462,6 +472,7 @@
         const sv = loadSave();
         if (sv) {   // saved on an earlier visit, not loaded here: record it from the save
           this.difficulty = sv.difficulty || 'normal'; this._lastNumAI = sv.numAI | 0;
+          this._cv = sv.cv === 2 ? 2 : 0;
           this._logFrom = sv;   // the private play log reads this save (not loaded on this page)
           this._recordResult(false);
           this._clearSave();
@@ -672,6 +683,8 @@
       this._qArmed = false;
       this.difficulty = difficulty || 'normal';
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
+      // cv 2 = the stronger table computers (ai.js _table). A save keeps what it was dealt with.
+      this._cv = save ? (save.cv === 2 ? 2 : 0) : (newAI() ? 2 : 0);
       this._t0 = (save && save.t0) || Date.now(); this._resumed = !!save;   // private play log only
 
       // Opponent identity comes from the hub profile (roster order), falling back
@@ -685,7 +698,8 @@
         const nm = save ? save.names[i + 1] : aiName(i);
         players.push({
           name: nm,
-          agent: new AI.AIAgent({ name: nm, difficulty: this.difficulty }),
+          agent: new AI.AIAgent(this._cv === 2 ? { name: nm, difficulty: this.difficulty, cv: 2 }
+            : { name: nm, difficulty: this.difficulty }),
         });
       }
       this.game = new Game({ verbose: false, players });
@@ -2268,7 +2282,13 @@
       catch (e) { return { played: 0, won: 0, lost: 0 }; }
     }
     /** The options that define this game, recorded with its result (2026-10-30). Pace is display only. */
-    _statsMode() { return { ai: this._lastNumAI | 0 }; }
+    // cv: 2 = played against the stronger table computers; only where they differ (2+ computers;
+    // with one computer cv 2 plays exactly as before, so that result carries no cv).
+    _statsMode() {
+      const m = { ai: this._lastNumAI | 0 };
+      if (this._cv === 2 && m.ai >= 2) m.cv = 2;
+      return m;
+    }
     /** Settings chosen that do not define the game (2026-11-16, Matt: "save all data"): the computers' speed. */
     _statsDetail() { return { pace: String(this.pace || 'normal') }; }
     /** PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded"): the

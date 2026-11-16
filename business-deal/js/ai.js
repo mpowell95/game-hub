@@ -65,6 +65,18 @@
     BANK: 100,
   };
 
+  // cv 2 only (2026-11-16): how far each level's knobs move toward the level
+  // above it, by number of opponents [1, 2, 3, 4]. 1 opponent is always 0
+  // (unchanged). See AIAgent._table.
+  const UP = { easy: 'normal', normal: 'hard', hard: 'hard' };
+  const TABLE_W = {
+    easy:   [0, 0.30, 0.45, 0.50],
+    normal: [0, 0.20, 0.35, 0.40],
+    hard:   [0, 0, 0, 0],
+  };
+  // cv 2 table play bonuses (inside a tier's gap; see leadBonus / _winsWith).
+  const LEAD = { TWO_SETS: 2500, ONE_SET: 300, BLOCK_WIN: 4000, THREAT_X: 8 };
+
   /* ==========================================================================
    * Pure scoring helpers (operate on the read-only `view` data only).
    * ========================================================================*/
@@ -222,6 +234,61 @@
       this.wildNoise = d.wild;           // chance of a careless wildcard color
       this.keepJSN = d.keepJSN;          // how precious Just Say No is to keep
       this._maxPlays = 0;                // highest playsRemaining seen; see chooseMove
+      // ---- Bigger tables, stronger computers (cv 2, 2026-11-16) ----------
+      // Matt: "it should be more difficult the more opponents you have". Only
+      // when the UI passes cv: 2 (ui.js newAI(): admin devices until Matt says
+      // "release it"); without it every line below is skipped and the agent is
+      // the one above, move for move. With ONE opponent cv 2 changes nothing.
+      // With 2-4 opponents (_table) each knob moves toward the next level up by
+      // TABLE_W, and `smart` turns on table play: hit the player one set from
+      // winning, steal the card that would win it for them, never hand them
+      // that card in a Forced Deal, and spend Just Say No on a Debt Collector,
+      // Birthday or rent that would cost a set's property.
+      this.cv = opts.cv === 2 ? 2 : 0;
+      this.smart = false;
+      this._lvl = D[opts.difficulty] ? opts.difficulty : 'hard';
+      this._D = D;
+      this._tn = -1;                     // table size the knobs were last set for
+    }
+
+    /* ---- cv 2: knobs by table size ------------------------------------- */
+    // Each level's knobs move toward the level above it (Easy -> Medium,
+    // Medium -> Hard); Hard has none left to move, so it gains table play only.
+    // Weights SIMULATED (scratchpad sim, 4,000 games a setup, seat 0 = an old
+    // Hard brain standing in for a person): see business-deal/CLAUDE.md.
+    _table(view) {
+      if (this.cv !== 2) return;
+      const n = view && view.opponents ? view.opponents.length : 1;
+      if (n === this._tn) return;
+      this._tn = n;
+      const W = TABLE_W[this._lvl] || TABLE_W.hard;
+      const w = W[Math.max(0, Math.min(n, 4) - 1)];
+      const lo = this._D[this._lvl], hi = this._D[UP[this._lvl]];
+      const mix = (k) => lo[k] + (hi[k] - lo[k]) * w;
+      this.blunderRate = mix('blunder');
+      this.jsnSkill = mix('jsn');
+      this.stopEarly = mix('stop');
+      this.passivity = mix('passive');
+      this.discardNoise = mix('discard');
+      this.wildNoise = mix('wild');
+      this.keepJSN = mix('keepJSN');
+      this.smart = n >= 2;
+    }
+
+    // cv 2 table play: how much more an attack on `opp` is worth because they
+    // are close to winning. 0 unless `smart`.
+    leadBonus(opp) {
+      if (!this.smart || !opp) return 0;
+      let b = this.threatOf(opp) * LEAD.THREAT_X;
+      if (opp.completeSets >= 2) b += LEAD.TWO_SETS;
+      else if (opp.completeSets === 1) b += LEAD.ONE_SET;
+      return b;
+    }
+    // Would `opp` win by completing `color`? (two sets down, this one card short)
+    _winsWith(opp, color) {
+      if (!opp || opp.completeSets < 2) return false;
+      const n = countOf(opp.properties, color);
+      return n < REQ[color] && n + 1 >= REQ[color];
     }
 
     // Does this move take something from somebody? Drives `passivity`.
@@ -237,6 +304,7 @@
 
     /* ---- main move selection ------------------------------------------- */
     chooseMove(view, legalMoves) {
+      if (this.cv === 2) this._table(view);
       // Score EVERY legal move first, before difficulty touches anything. The
       // win check below depends on it: a winning move is very often itself an
       // attack (a Deal Breaker that takes the third set, a Sly Deal that
@@ -398,10 +466,10 @@
       if (doubles > 0) {
         // Only spend a Double the Rent when it produces a real haul (6M+).
         if (charge >= 6) return this.tiers.RENT_COMBO + charge * 100 + collectible * 20
-          + (move.targetPlayerId != null ? this.threatOf(targets[0]) : 0);
+          + (move.targetPlayerId != null ? this.threatOf(targets[0]) + this.leadBonus(targets[0]) : 0);
         return -1; // don't waste the double on a small set
       }
-      const threat = move.targetPlayerId != null ? this.threatOf(targets[0]) : 0;
+      const threat = move.targetPlayerId != null ? this.threatOf(targets[0]) + this.leadBonus(targets[0]) : 0;
       if (charge > 2) return this.tiers.STANDARD_RENT + charge * 80 + collectible * 30 + threat;
       return this.tiers.BANK + collectible * 10; // 1-2M rent: marginal, near filler
     }
@@ -426,6 +494,8 @@
 
     scorePassGo(view) {
       const hand = view.me.hand.length;
+      // cv 2 table play: draw first, while two or more plays are left to use what it brings.
+      if (this.smart && view.playsRemaining >= 2 && hand <= 6) return this.tiers.COMPLETE_VIA_STEAL - 1;
       if (hand <= 4) return this.tiers.PASS_GO;       // refill a thin hand
       if (hand <= 6) return this.tiers.PASS_GO / 2;   // ok if nothing better
       return -50;                                     // near the discard limit
@@ -439,7 +509,7 @@
       const oppPay = payableValue(opp);
       if (oppPay <= 0) return -1;
       const collect = Math.min(amount, oppPay);
-      let s = this.tiers.DEBT_BIRTHDAY + collect * 200 + this.threatOf(opp);
+      let s = this.tiers.DEBT_BIRTHDAY + collect * 200 + this.threatOf(opp) + this.leadBonus(opp);
       if (me.bankValue < opp.bankValue) s += 500; // press when behind on cash
       return s;
     }
@@ -468,7 +538,8 @@
       // reference `opp` at all, so who got robbed was decided entirely by
       // enumeration order (see chooseMove).
       return this.tiers.STEAL_GENERIC + before * 40 + rentForCount(color, before + 1) * 8
-        + this.threatOf(opp);
+        + this.threatOf(opp) + this.leadBonus(opp)
+        + (this.smart && this._winsWith(opp, color) ? LEAD.BLOCK_WIN : 0);
     }
 
     scoreForced(view, move) {
@@ -485,13 +556,16 @@
       const takeVal = (completes
         ? this.tiers.COMPLETE_VIA_STEAL + rentForCount(tColor, before + 1) * 100
         : this.tiers.STEAL_GENERIC + before * 40 + rentForCount(tColor, before + 1) * 8)
-        + this.threatOf(opp);
+        + this.threatOf(opp) + this.leadBonus(opp)
+        + (this.smart && this._winsWith(opp, tColor) ? LEAD.BLOCK_WIN : 0);
 
       // Cost of giving a card away: cheap if it's from a set I'm far from
       // completing; costly if from a set I'm building up.
       const giveColor = mine.color;
       const giveCount = countOf(me.properties, giveColor);
       const giveCost = giveCount * 30 + rentForCount(giveColor, Math.max(1, giveCount)) * 5;
+      // cv 2: never hand the player one set from winning the card that wins it.
+      if (this.smart && this._winsWith(opp, giveColor)) return -1;
       return takeVal - giveCost;
     }
 
@@ -505,7 +579,8 @@
       // Stealing a full set is a massive swing; weight by rent and by how close
       // the opponent is to winning.
       return this.tiers.DEAL_BREAKER_ADV +
-        rentForCount(color, REQ[color]) * 150 + opp.completeSets * 1000 + this.threatOf(opp);
+        rentForCount(color, REQ[color]) * 150 + opp.completeSets * 1000 + this.threatOf(opp)
+        + this.leadBonus(opp);
     }
 
     scoreBuilding(view, move, card) {
@@ -535,6 +610,7 @@
 
     // Just Say No logic (CLAUDE.md "JSN Logic").
     respondToAction(view, ctx) {
+      if (this.cv === 2) this._table(view);
       const me = view.me;
       if (!me.hand.some(c => c.action === A.JUST_SAY_NO)) return false;
       // Easier AIs occasionally fail to defend even when they should.
@@ -556,13 +632,18 @@
           return true; // never surrender a full set
         case A.SLY_DEAL:
         case A.FORCED_DEAL:
+          // cv 2: the attacker is one set from winning; the steal may be the win.
+          if (this.smart && attacker.completeSets >= 2) return true;
           return this.hasValuableSetAtRisk(me);
         case A.DEBT_COLLECTOR:
         case A.BIRTHDAY:
+          // cv 2: cancel when the bank cannot cover it and a set's property would go.
+          if (this.smart) return me.bankValue < (card.action === A.DEBT_COLLECTOR ? 5 : 2) && this.hasSetPropertyAtRisk(me);
           return false; // small cost — just pay it
         default:
           if (card.type === T.RENT) {
             const charge = estimateRent(attacker, card);
+            if (this.smart && me.bankValue < charge && this.hasSetPropertyAtRisk(me)) return true;
             // Cancel only big rent that would force me to pay with property.
             return charge >= 5 && me.bankValue < charge;
           }
@@ -576,6 +657,15 @@
       for (const color of Object.keys(me.properties)) {
         const n = countOf(me.properties, color);
         if (n < REQ[color] && n >= REQ[color] - 1 && n >= 2) return true;
+      }
+      return false;
+    }
+
+    // cv 2: do I hold property in a complete set or one card short of one?
+    hasSetPropertyAtRisk(me) {
+      for (const color of Object.keys(me.properties)) {
+        const n = countOf(me.properties, color);
+        if (n >= 2 && n >= REQ[color] - 1) return true;
       }
       return false;
     }
@@ -627,6 +717,7 @@
 
     // Discard the least useful cards down to the hand limit.
     chooseDiscards(view, count) {
+      if (this.cv === 2) this._table(view);
       const hand = view.me.hand.slice();
       // Easy/Medium sometimes dump whatever is nearest to hand instead of the
       // card a solver would pick. Worth ~0 win rate (52.6% -> 52.4%) and kept
@@ -650,6 +741,7 @@
 
     // Wildcard placement: the color where it best completes / advances a set.
     assignWildColor(view, card, validColors) {
+      if (this.cv === 2) this._table(view);
       // Easy/Medium sometimes park a wildcard on the wrong color — an ordinary,
       // very visible mistake, worth ~0 win rate (51.6%) and kept for exactly
       // that visibility. Still confined to a color that isn't already complete,
