@@ -3004,12 +3004,14 @@
   }
 
   function afterRoll(dd) {
+    plNote(curLetter() + "r" + dd.join(""));
     G.rollDice = dd.map(function (v) { return { v: v, used: false }; });
     HUD.setDice(G.rollDice, false);
     HUD.announce(t("rolledDice", { v: HUD.diceWords(dd) }));
     var res = Engine.applyRoll(G.state, dd);
     var pen = res.events.filter(function (e) { return e.type === "threeDoublesPenalty" || e.type === "threeSixesPenalty"; })[0];
     if (pen) {
+      plNote(curLetter() + "!" + (pen.pawnId || ""));
       // The penalty ends the turn. Name what happened, and hold the dice long enough to
       // read them (longer when there is no piece to fly home, since nothing else moves).
       var stem = G.cfg.mode === "spanish" ? "threeSixes" : "threeDoubles";
@@ -3051,6 +3053,7 @@
   // doubles) keeps the same player, so the message must not claim the turn passed.
   function handleNoMove() {
     G.ui = "animating";
+    plNote(curLetter() + "-");
     var res = Engine.resolveNoMove(G.state);
     var samePlayer = res.state.turn === G.state.turn && Engine.currentPhase(res.state) !== "gameover";
     var hold = noMoveHold(); // already speed-scaled; do not wrap in ms() again
@@ -3064,6 +3067,7 @@
     var moves = Engine.legalMoves(G.state);
     if (moves.length === 0) {
       G.ui = "animating";
+      plNote(curLetter() + "b-");
       var res = Engine.resolveNoMove(G.state);
       var hold = noMoveHold(); // already speed-scaled
       HUD.toast(t("bonusLost"), { kind: "warn", ms: hold });
@@ -3088,6 +3092,7 @@
     G.ui = "animating";
     var oldState = G.state;
     var res = Engine.applyMove(oldState, move);
+    try { var to = move.to || {}; plNote(move.pawnId + ">" + String(to.zone || "?").charAt(0) + (to.pos == null ? "" : to.pos) + (move.amount ? "+" + move.amount : "") + (move.captures ? "x" + move.captures : "")); } catch (e) { }
     syncDiceUsed(res.state.dice);
     HUD.setDice(G.rollDice, false);
     animateTransition(oldState, res.state, res.events, move).then(function () { commit(res.state); });
@@ -3206,7 +3211,29 @@
   }
 
   // ---- persistence ---------------------------------------------------------
-  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ state: G.state, cfg: G.cfg })); } catch (e) { } }
+  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify({ state: G.state, cfg: G.cfg, pl: G.pl || null })); } catch (e) { } }
+
+  // ---- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") ----------
+  // HUB-SIDE PATCH: port to ../Parchis/src/game.js at its next rebuild. Every roll and move in order
+  // (G.pl.mv, carried in the save as `pl`), sent at the end ONLY to the admin play log's `x` (through
+  // __ghStats: record's `log`, or logPlayData for a game that counts for nothing). Never a stat.
+  //   "<C>r56" C rolled 5 and 6 (C = the colour's letter: A amarillo, Z azul, R rojo, V verde)
+  //   "<C>-" no move  "<C>b-" bonus lost  "<C>!<pawn>" three sixes/doubles penalty
+  //   "<pawn>><zone letter><pos>+<steps>x<captured pawn>" a move (zone: t track, p pasillo, m meta)
+  function curLetter() { try { return String(G.state.players[G.state.turn].pawns[0].id).charAt(0) || "?"; } catch (e) { return "?"; } }
+  function plNote(s) { try { if (!G.pl) G.pl = { t0: Date.now(), mv: [] }; if (G.pl.mv.length < 4000) G.pl.mv.push(s); } catch (e) { } }
+  function parchisPrivate(why, st, cfg, pl) {
+    st = st || {}; cfg = cfg || {}; pl = pl || {};
+    var col = function (i) { return (st.players && st.players[i] && st.players[i].color) || String(i); };
+    var order = (st.winners || []).filter(function (i) { return (cfg.active || []).indexOf(col(i)) !== -1; }).map(col);
+    var caps = {}; (pl.mv || []).forEach(function (m) { var k = String(m).indexOf("x"); if (k > 0) { var c = String(m).charAt(0); caps[c] = (caps[c] || 0) + 1; } });
+    var pawns = {}; (st.players || []).forEach(function (p) { if ((cfg.active || []).indexOf(p.color) === -1) return; pawns[p.color] = (p.pawns || []).map(function (w) { return w.id + ":" + String(w.zone || "?").charAt(0) + (w.pos == null ? "" : w.pos); }); });
+    var mv = (pl.mv || []).slice(), cut = 0;
+    while (mv.length && JSON.stringify(mv).length > 16000) { mv.shift(); cut++; }
+    return { why: why, mode: cfg.mode, vs: cfg.vsMode, me: cfg.anchor, humans: cfg.humans, names: cfg.names, skills: cfg.skills,
+      active: cfg.active, order: order, caps: caps, pawns: pawns, turn: st.turn, ms: pl.t0 ? Date.now() - pl.t0 : null,
+      moves: mv, movesCut: cut || undefined };
+  }
   function loadSaved() { try { var raw = localStorage.getItem(STORE_KEY); if (!raw) return null; var o = JSON.parse(raw); return (o && o.state && o.cfg) ? o : null; } catch (e) { return null; } }
   function clearSaved() { try { localStorage.removeItem(STORE_KEY); } catch (e) { } }
   function savePrefs() {
@@ -3275,6 +3302,7 @@
     state.winners = inactive.slice();     // engine skips these seats; game-over count still works
     state.turn = seatIdx(cfg.anchor);      // the human (or player 1) rolls first
     G.state = state;
+    G.pl = { t0: Date.now(), mv: [] };
     savePrefs(); clearSaved(); save();
     HUD.closeOverlay(); HUD.clearToast();
     advance();
@@ -3284,6 +3312,7 @@
     applyLang();
     HUD.configureDice(G.cfg.mode === "spanish" ? 1 : 2);
     G.state = saved.state;
+    G.pl = saved.pl || null;
     HUD.closeOverlay(); HUD.clearToast();
     advance();
   }
@@ -3326,11 +3355,15 @@
     // player has rolled in, replaced by a new one, is a LOSS, and the prompt says so first.
     var sv = loadSaved();
     var pending = !!(sv && sv.cfg && sv.cfg.vsMode === "cpu" && sv.cfg.hm && !sv.cfg.rec && Engine.currentPhase(sv.state) !== "gameover");
-    if (!pending) { startNewGame(buildCfg(setup)); return; }
+    if (!pending) {
+      // a saved game that counts for nothing (pass and play, or never rolled in), left for a new one
+      try { if (sv && sv.cfg && Engine.currentPhase(sv.state) !== "gameover" && !sv.cfg.rec && window.__ghStats && window.__ghStats.logPlayData) window.__ghStats.logPlayData("parchis", "abandon", parchisPrivate("abandon", sv.state, sv.cfg, sv.pl), { mode: parchisStatsMode(sv.cfg), diff: sv.cfg.vsMode === "cpu" ? parchisStatsDiff(sv.cfg) : "pnp" }); } catch (e) { }
+      startNewGame(buildCfg(setup)); return;
+    }
     var es = window.ParchisI18n.getLang() === "es";
     HUD.prompt(es ? "\u00bfPartida nueva?" : "New game?", es ? "Cuenta como derrota." : "Counts as a loss.", [
       { label: es ? "Jugar" : "Play", onClick: function () {
-        try { if (window.__ghStats) window.__ghStats.record("parchis", parchisStatsDiff(sv.cfg), false, false, parchisStatsMode(sv.cfg)); } catch (e) {}
+        try { if (window.__ghStats) window.__ghStats.record("parchis", parchisStatsDiff(sv.cfg), false, false, parchisStatsMode(sv.cfg), null, function () { return parchisPrivate("discard", sv.state, sv.cfg, sv.pl); }); } catch (e) {}
         startNewGame(buildCfg(setup));
       } },
       { label: es ? "Volver" : "Back", kind: "ghost", onClick: showTitle }
@@ -3466,7 +3499,10 @@
         // The EASIEST computer at the table (2026-10-29, Matt; it was the hardest). Hub-side patch:
         // port to ../Parchis/src/game.js (parchisStatsDiff).
         G.cfg.rec = true;
-        window.__ghStats.record("parchis", parchisStatsDiff(G.cfg), winners[0] === G.cfg.anchor, false, parchisStatsMode(G.cfg));
+        window.__ghStats.record("parchis", parchisStatsDiff(G.cfg), winners[0] === G.cfg.anchor, false, parchisStatsMode(G.cfg), null, function () { return parchisPrivate("end", G.state, G.cfg, G.pl); });
+      } else if (window.__ghStats && window.__ghStats.logPlayData) {
+        // pass and play counts for nothing: its whole game goes to the private play log only
+        window.__ghStats.logPlayData("parchis", "pnp", parchisPrivate("end", G.state, G.cfg, G.pl), { mode: parchisStatsMode(G.cfg), diff: "pnp" });
       }
     } catch (e) {}
   }

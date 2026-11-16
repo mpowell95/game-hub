@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1608';
+const CACHE = 'game-hub-v1609';
 
 const ASSETS = [
   './',
@@ -868,9 +868,9 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': 'ab271d9270',
+  './js/game-stats.js': 'ff6deede9b',
   './js/arcade-scores.js': 'a0497ce069',
-  './js/game-stats-global.js': 'a05b72b47b',
+  './js/game-stats-global.js': 'eed519db96',
   './js/game-stats-ui.js': 'b01e8284ed',
   './js/stats-net.js': '83be7bad7a',
   './js/tips-log.js': '7bc02856dd',
@@ -970,8 +970,8 @@ const REST_MANIFEST = {
   './chinchon/js/alert.js': 'e8b5c16343',
   './chinchon/js/ch-ui.js': '73c627d2ca',
   './chinchon/js/strings.js': '014a9aa48a',
-  './parchis/': '6034d44547',
-  './parchis/index.html': '6034d44547',
+  './parchis/': '5f1c730e83',
+  './parchis/index.html': '5f1c730e83',
   './filler/': '170e5c34a3',
   './filler/index.html': '170e5c34a3',
   './filler/css/filler.css': '134923956d',
@@ -1208,7 +1208,7 @@ const REST_MANIFEST = {
   './holdem/': '12bd65a437',
   './holdem/index.html': '12bd65a437',
   './holdem/css/holdem.css': 'a3b206436c',
-  './holdem/js/ui.js': '299bf8b245',
+  './holdem/js/ui.js': 'd522a84718',
   './holdem/js/engine.js': 'b9e54a0c01',
   './holdem/js/ai.js': '3d8353f25c',
   './holdem/js/table.js': '1bd3d97111',

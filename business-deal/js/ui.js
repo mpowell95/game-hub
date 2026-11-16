@@ -34,7 +34,7 @@
   // 2026-09-01 (this said v26 while sw.js was serving v32), which made the
   // stamp on the setup screen - the whole point of which is telling you which
   // build you are on - a lie. Resynced to the cache number; keep them equal.
-  const APP_VERSION = 'v46';
+  const APP_VERSION = 'v47';
 
   // F1 (durability, ARCH-REVIEW.md S4-1/S5-1): _recordResult's write to window.__ghStats used to
   // be a silent no-op if that global wasn't loaded yet (its own nested SW's cache may not have had
@@ -46,11 +46,11 @@
   // which drains the same key on every hub visit regardless of whether __ghStats ever works on
   // this device.
   const PENDING_STATS_KEY = 'gamehub.bd.pendingStats.v1';
-  function _queuePendingStat(game, diff, won, mode, dt) {
+  function _queuePendingStat(game, diff, won, mode, dt, x) {
     try {
       const raw = JSON.parse(localStorage.getItem(PENDING_STATS_KEY) || '[]');
       const list = Array.isArray(raw) ? raw : [];
-      list.push({ game: game, diff: diff, won: won, ts: Date.now(), mode: mode || null, dt: dt || null });
+      list.push({ game: game, diff: diff, won: won, ts: Date.now(), mode: mode || null, dt: dt || null, x: x || null });
       localStorage.setItem(PENDING_STATS_KEY, JSON.stringify(list));
     } catch (e) { console.error('[business-deal] failed to queue pending stat, this play may be lost from the shared leaderboard', e); }
   }
@@ -449,7 +449,7 @@
       const g = this.game;
       if (!g || g.winner || this._resultRecorded) return;
       const data = { v: 1, at: Date.now(), numAI: this._lastNumAI | 0, difficulty: this.difficulty,
-        names: g.players.map(p => p.name), meta: this.meta, game: g.saveState() };
+        names: g.players.map(p => p.name), meta: this.meta, game: g.saveState(), t0: this._t0 || null };
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
       catch (e) { console.error('[business-deal] game save FAILED', e); }
     }
@@ -462,6 +462,7 @@
         const sv = loadSave();
         if (sv) {   // saved on an earlier visit, not loaded here: record it from the save
           this.difficulty = sv.difficulty || 'normal'; this._lastNumAI = sv.numAI | 0;
+          this._logFrom = sv;   // the private play log reads this save (not loaded on this page)
           this._recordResult(false);
           this._clearSave();
         }
@@ -671,6 +672,7 @@
       this._qArmed = false;
       this.difficulty = difficulty || 'normal';
       this._lastNumAI = numAI; this._lastDiff = this.difficulty;   // for Play Again
+      this._t0 = (save && save.t0) || Date.now(); this._resumed = !!save;   // private play log only
 
       // Opponent identity comes from the hub profile (roster order), falling back
       // to Monopoly Deal's built-in flavor. The human keeps the id-based "You" that
@@ -2269,15 +2271,53 @@
     _statsMode() { return { ai: this._lastNumAI | 0 }; }
     /** Settings chosen that do not define the game (2026-11-16, Matt: "save all data"): the computers' speed. */
     _statsDetail() { return { pace: String(this.pace || 'normal') }; }
+    /** PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded"): the
+     *  whole game for the admin play log's `x` only (never the stats store): every engine log line in
+     *  order (each play, payment, Just Say No, draw and discard), each player's final hand, bank and
+     *  properties, turns, who won, the end reason, time played. `sv` = a save not loaded on this page. */
+    _privateLog(why, sv) {
+      const card = (c) => { try { return Deck.describe(c); } catch (e) { return '?'; } };
+      const g = sv ? sv.game : this.game;
+      if (!g) return { why };
+      const live = !sv && this.game;
+      const pl = (g.players || []).map((p, i) => {
+        const props = {};
+        for (const col of Object.keys(p.properties || {})) {
+          const grp = p.properties[col] || {};
+          props[col] = [(grp.cards || []).map(card), grp.house ? 1 : 0, grp.hotel ? 1 : 0];
+        }
+        let sets = null;
+        try { if (live) sets = this.game.completeColors(this.game.players[i]); } catch (e) {}
+        return { n: sv ? (sv.names || [])[i] : p.name, ai: i > 0, hand: (p.hand || []).map(card),
+          bank: (p.bank || []).map(card), bv: (p.bank || []).reduce((s, c) => s + ((c && c.value) || 0), 0),
+          props, sets };
+      });
+      let logs = (g.logs || []).map(String);
+      let cut = 0;
+      while (logs.length > 1 && JSON.stringify(logs).length > 14000) { logs = logs.slice(1); cut++; }
+      const w = live && this.game.winner;
+      const t0 = sv ? sv.t0 : this._t0;
+      return {
+        why, diff: this.difficulty, ai: this._lastNumAI | 0, pace: String(this.pace || 'normal'),
+        turn: g.turn | 0, cur: g.currentPlayerIndex | 0, win: w ? w.id : null, winName: w ? w.name : null,
+        resumed: !!(sv || this._resumed), ms: t0 ? Date.now() - t0 : null, deck: (g.deck || []).length,
+        disc: (g.discard || []).length, pl, logs, logsCut: cut || undefined,
+      };
+    }
     _recordResult(humanWon) {
       // Unified Game Stats (per difficulty), recorded BEFORE the bd-stats increment so the
       // one-time bd-stats fold reads the pre-game value. bd-stats is still kept as-is below.
+      // `log` = the private play data (a thunk; read inside the recorder's own try, never blocks).
+      const sv = this._logFrom || null; this._logFrom = null;
+      const log = () => this._privateLog(sv ? 'discard' : (this.game && this.game.winner ? 'end' : 'discard'), sv);
       try {
         if (window.__ghStats) {
-          window.__ghStats.record('business', this.difficulty, humanWon, false, this._statsMode(), this._statsDetail());
+          window.__ghStats.record('business', this.difficulty, humanWon, false, this._statsMode(), this._statsDetail(), log || null);
         } else {
           console.warn('[business-deal] __ghStats unavailable, queueing this result to sync into the shared leaderboard later', this.difficulty, humanWon);
-          _queuePendingStat('business', this.difficulty, humanWon, this._statsMode(), this._statsDetail());
+          let x = null;
+          try { x = typeof log === 'function' ? log() : (log || null); } catch (e) { x = null; }
+          _queuePendingStat('business', this.difficulty, humanWon, this._statsMode(), this._statsDetail(), x);
         }
       } catch (e) {}
       this._bumpBdStats(humanWon);

@@ -58,3 +58,7 @@ Parchís: launch-out `href:` — Spanish Parchís vs AI. Single-file build from 
 
 - The first roll of the game, the computer's included, now sets `cfg.hm` (patched in `doRoll` of the BUILT `index.html`; port to `../Parchís/src/game.js`).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Private play data (2026-11-16)
+
+Logs every roll and move (`G.pl.mv`, saved as `pl`), finishing order, captures, final pawns, names, skills, time via `__ghStats.record`'s `log` (vs computer) / `__ghStats.logPlayData` (`pnp` at a pass-and-play end, `abandon` when a new game replaces an uncounted one). **Patched in the BUILT `index.html` (`parchisPrivate`, `plNote`); port to `../Parchís/src/game.js`.**
