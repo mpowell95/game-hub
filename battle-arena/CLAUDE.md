@@ -337,13 +337,17 @@ Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and t
   your original one, but to just have arrows on that white line", then "these arrows are terrible" about hand-drawn ticks), and "Full bar" is the battle's own bar (gem, full
   track, "7/7"), not a plain red pill.
 
-## First-match tutorial (2026-11-15, Matt: Ana "didn't really know what was going on ... 4+ things give you an extra turn ... what the berries did ... how many turns she had left ... health")
+## First-match tutorial (2026-11-15/16; Matt: Ana "didn't really know what was going on"; then "tell them to do it ... have them collect them ... we should do that everywhere")
 
-Eight tips, one at a time, on the player's own turn, each the FIRST time it matters (`TIP_ORDER`, `tipTarget` in `ui.js`):
-hp (both health numbers, two rings), moves (the move pips), swap (a real 3-in-a-row boxed; copies of the two tiles trade places on a loop with a two-way arrow, the real two hidden meanwhile, `tipLine`/`placeDemo`; Matt: "make the 'swap' part clearer") on the first turn; then charge (a bar with energy), berry (berries
-> 0), evolve (an evolve option), extra (after the player's first move: a real 4+ move shown the same way while this turn's extra is open; else after one happened, `_sawExtra`), bomb (its row and column boxed, the bomb circled; Matt 2026-11-15). A yellow
-ring on the thing + a bubble + Got it (`.ba-coach`, z 36, under the result card). Blocks the board until Got it
-(`canInput`); in a timed live room it never blocks and goes with the player's move. Seen = `settings.tips[id]` (a
-preference, per phone); shown/done reported via `js/tips-log.js` (`players/<id>/tips`, `tools/read-tips.mjs`).
-Words: `tip_*` in `strings.js`. Test: `tools/test-battlearena-tips.mjs`; `test-battlearena-back.mjs` seeds every tip seen.
-
+Everything the player can DO is a guided step (vs the computer only; never forced online): "Swap these two ..." with the two
+tiles ringed, an arrow, the line boxed, NO Got it, and only that swap works (`guideAllows` in `trySwap`); the real match plays,
+then a tip explains it with the real numbers. Ids (`settings.tips`, once per phone; reported via `js/tips-log.js`):
+`yours` (your monsters are on the right + health; Got it) -> `doSwap` (first move, a line of the player's own color,
+`tipMove`) -> `charged` ("Sproutle: 3 of 6") -> `movesLeft` -> `theirTurn` (a note at the other side's name on its first turn,
+no button, gone when the turn returns). From the 2nd turn, at most one guided step a turn: `doExtra` -> `extraMove`,
+`doBerry` -> `berries`, `doBomb` -> `boom` (`_sawBoom`: the player's own match set it off; no move? the bomb's row/column boxed
+with words); `doEvolve` = "Tap X to evolve it" (board waits; the tap opens the evolve preview); `power` after the first power
+(`_sawPower`); `arena` (the bomb button). Each explanation also shows if the thing happened on its own. Bubbles on the board
+sit above it (`placeTip`). A timed live room never blocks. Mockups: `docs/mockups/battle-arena-tutorial/`. Test:
+`tools/test-battlearena-tips.mjs` (plays it for real); `test-battlearena-back.mjs` seeds every tip seen.
+The Spanish "¡MOVIMIENTO EXTRA!" banner fits at 360 (`html[lang=es] .ba-pop.is-extra`, 2026-11-16).
