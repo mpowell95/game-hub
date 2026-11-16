@@ -112,6 +112,10 @@
    already stops above the home indicator charges for it twice. `--gf-gap-b` is how far our own
    bottom edge sits above the viewport, measured in ui.js's `_fitInsets` every fit; standalone it
    is 0 and this is the plain inset, exactly as before. */
+.gf-root.gf-full { position: fixed; inset: 0; z-index: 1; width: 100%; }
+/* Light text over the course and the setup ground: a soft drop, not the hard 3px offset the buttons
+   wear (on text it read as doubled letters, Matt's screenshots 2026-11-16). */
+.gf-root { --gf-tshadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
 .gf-root { --gf-safe-b: max(0px, calc(env(safe-area-inset-bottom) - var(--gf-gap-b, 0px))); }
 .gf-root .gf-hud { position: absolute; inset: 0; pointer-events: none; }
 .gf-root .gf-hud > * { pointer-events: auto; }
@@ -832,10 +836,17 @@
    own, never a layout class: tools/test-game-conventions.mjs). */
 .gf-root .gf-offtab { display: none !important; }
 .gf-root .gf-online { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+/* A PANEL UNDER THE ONLINE LISTS AND THE MATCH PAGES (2026-11-16, Matt: "Improve these screens"): the
+   lists and scorecard sit on one translucent card, like the HUD's panels, instead of loose on the ground. */
+.gf-root .gf-online:not(.gf-offtab), .gf-root .gf-mp .gf-mp-body {
+  box-sizing: border-box; padding: 14px; background: var(--gf-hatch), rgba(10, 18, 8, 0.42);
+  border: 1px solid rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), var(--gf-shadow);
+}
+.gf-root .gf-mp .gf-mp-top { margin-bottom: -2px; }
 .gf-root .gf-on-sec { display: flex; flex-direction: column; gap: 8px; }
-.gf-root .gf-on-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-on-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 800; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-on-rows { display: flex; flex-direction: column; gap: 8px; }
-.gf-root .gf-mp-note { margin: 0; font-size: 15px; color: #f4f7ee; text-align: center; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-note { margin: 0; font-size: 15px; color: #f4f7ee; text-align: center; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-setup .gf-mrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 12px; min-height: 56px; box-sizing: border-box; }
 .gf-root .gf-setup .gf-mrow.is-mine { border: 2px solid #8a6a00; }
 .gf-root .gf-mrow.is-static { background: rgba(255, 255, 255, .13); color: #fff; border: 1px solid rgba(0, 0, 0, .3); box-shadow: var(--gf-shadow); }
@@ -865,15 +876,16 @@
 .gf-root .gf-mp-top { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 360px; }
 .gf-root .gf-setup .gf-mp-back { display: flex; align-items: center; justify-content: center; padding: 0; width: 44px; }
 .gf-root .gf-mp-back svg { width: 24px; height: 24px; }
-.gf-root .gf-mp-title { margin: 0; font-size: 24px; font-weight: 800; text-shadow: var(--gf-shadow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-mp-title { margin: 0; font-size: 24px; font-weight: 800; text-shadow: var(--gf-tshadow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gf-root .gf-mp-body { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 360px; }
 .gf-root .gf-mp-body > * { width: 100%; }
 .gf-root .gf-mp-list { display: flex; flex-direction: column; gap: 8px; }
-.gf-root .gf-mp-h { margin: 4px 0 0; font-size: 17px; font-weight: 800; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-h { margin: 4px 0 0; font-size: 17px; font-weight: 800; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-mp-search { box-sizing: border-box; width: 100%; min-height: 48px; padding: 8px 12px; font: inherit; font-size: 17px;
   border: 1px solid rgba(0, 0, 0, .45); background: #f2eddd; color: #1b3a1e; -webkit-user-select: text; user-select: text; }
-.gf-root .gf-mp-vs { margin: 0; font-size: 17px; font-weight: 800; text-align: center; text-shadow: var(--gf-shadow); }
-.gf-root .gf-mp-status { margin: 0; font-size: 17px; font-weight: 800; text-align: center; text-shadow: var(--gf-shadow); }
+.gf-root .gf-mp-vs { margin: 0; font-size: 17px; font-weight: 800; text-align: center; text-shadow: var(--gf-tshadow); }
+.gf-root .gf-mp-body > .gf-mp-status { align-self: center; width: auto; margin: 0; padding: 7px 16px; font-size: 17px; font-weight: 800; text-align: center;
+  background: rgba(8, 14, 6, 0.5); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; }
 .gf-root .gf-mp-err { color: #fff; }
 .gf-root .gf-rec { font-size: 17px; }
 .gf-root .gf-hmark { font-size: 22px; width: 26px; text-align: center; font-weight: 800; }
@@ -882,12 +894,12 @@
 .gf-root .gf-scwrap { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .gf-root .gf-sc { width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(6, 12, 4, .45); }
 .gf-root .gf-sc th, .gf-root .gf-sc td { border: 1px solid rgba(255, 255, 255, .55); text-align: center; padding: 3px 0; color: #fff; }
-.gf-root .gf-sc th { width: 66px; font-size: 15px; font-weight: 700; text-align: left; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gf-root .gf-sc th { width: 88px; font-size: 15px; font-weight: 700; text-align: left; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gf-root .gf-sc td { font-size: 17px; font-weight: 800; }
 .gf-root .gf-sc .gf-sc__h td, .gf-root .gf-sc .gf-sc__p td { font-size: 15px; font-weight: 600; }
 .gf-root .gf-sc td.is-now { background: rgba(255, 206, 58, .28); outline: 2px solid #ffce3a; outline-offset: -2px; }
 .gf-root .gf-sc .gf-sc__r.is-mine th { font-weight: 800; text-decoration: underline; }
-.gf-root .gf-sc__tots { display: flex; justify-content: space-between; gap: 10px; font-size: 17px; text-shadow: var(--gf-shadow); }
+.gf-root .gf-sc__tots { display: flex; justify-content: space-between; gap: 10px; font-size: 17px; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-sc__tot.is-mine b { text-decoration: underline; }
 
 /* the hole card, the result and the "are you sure" card in a challenge */
