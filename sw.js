@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1596';
+const CACHE = 'game-hub-v1597';
 
 const ASSETS = [
   './',
@@ -1288,8 +1288,8 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': 'd1dfd2526f',
   './golf/': 'cc7a73041c',
   './golf/index.html': 'cc7a73041c',
-  './golf/css/golf.css': '17aa4a5014',
-  './golf/js/ui.js': '5bbf764637',
+  './golf/css/golf.css': '97fbd92149',
+  './golf/js/ui.js': '777b144a58',
   './golf/js/strings.js': '9cfc74ff01',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
@@ -1304,8 +1304,8 @@ const REST_MANIFEST = {
   './golf/js/save.js': 'ff5f0f70ab',
   './golf/js/progress.js': 'f68fd5dc8d',
   './golf/js/tutorial.js': '750f5299f7',
-  './golf/js/mp.js': '0c191009bc',
-  './golf/js/mp-ui.js': '0565cd6fc3',
+  './golf/js/mp.js': 'ea6cb0c980',
+  './golf/js/mp-ui.js': 'cc18ac15e5',
   './golf/js/alert.js': '266a8282ad',
   './golf/courses/pinevalley.js': 'aabb5248b9',
   './golf/courses/redmesa.js': '633a4b2521',

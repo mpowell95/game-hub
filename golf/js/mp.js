@@ -417,7 +417,14 @@ export function markCounted(id) {
 }
 /** The mode a finished match is recorded with (root CLAUDE.md, "Every result records its MODE"). */
 export function modeOfGame(g, side) {
-  return { course: String(g.course || ''), round: String(g.round || ''), holes: Array.isArray(g.holes) ? g.holes.length : (+g.holes || 0), first: side === 'a' ? 'me' : 'them', online: 1 };
+  return { course: String(g.course || ''), round: String(g.round || ''), holes: Array.isArray(g.holes) ? g.holes.length : (+g.holes || 0), first: side === 'a' ? 'me' : 'them', online: 1,
+    ...(g.po ? { po: 1 } : {}), ...(g.ah ? { ah: 1 } : {}) };
+}
+/** The per-match numbers kept with a result (root CLAUDE.md "Per-match numbers"): both totals, how many
+ *  playoff holes it took, and how it ended (strokes, playoff, tie, resign, timeout). */
+export function detailOfGame(g, side) {
+  return { strokes: g.totals[side], them: g.totals[other(side)], poh: Array.isArray(g.playoff) ? g.playoff.length : 0,
+    ...(g.over && g.over.why ? { end: String(g.over.why) } : {}) };
 }
 /** Record a finished match's result on this device, once. `won`: true, false, or null for a draw.
  *  A VOIDED match is never counted. `mode` and `score` are withMode's thunks. */
@@ -452,7 +459,7 @@ export function recordFinished(rows) {
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const side = sideOf(g, myCode());
     const res = resultOf(g, side);
-    if (!RESULTS.includes(res) || !countResult(g.id || r.id, wonOf(res), g.over.at, () => modeOfGame(g, side), () => ({ detail: () => ({ strokes: g.totals[side], them: g.totals[other(side)] }) }))) return false;
+    if (!RESULTS.includes(res) || !countResult(g.id || r.id, wonOf(res), g.over.at, () => modeOfGame(g, side), () => ({ detail: () => detailOfGame(g, side) }))) return false;
     addUnseen([r.id]);
     return true;
   });

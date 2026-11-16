@@ -936,7 +936,7 @@ class GolfGame {
    *  It costs one forced reflow, once per render of a menu. */
   /** The challenge card's hole strip (2026-11-16, Matt: "I want to be able to see the 3 holes I'm
    *  selecting"): each row as tall as fills its width, at most `maxH`, then shrunk together by any
-   *  overflow so the card never scrolls (58px floor). */
+   *  overflow so the card never scrolls (44px floor). */
   _sizeChStrip(strip, maxH) {
     const rows = [...strip.querySelectorAll('.gf-strip__row')];
     const GAP = 4;
@@ -946,14 +946,19 @@ class GolfGame {
       for (const cv of arts) sum += parseFloat(cv.style.getPropertyValue('--gf-ar')) || 0.33;
       return Math.min(maxH, (row.clientWidth - GAP * (arts.length - 1)) / Math.max(0.1, sum));
     });
-    const apply = (k) => rows.forEach((row, j) => row.style.setProperty('--gf-strip-h', `${Math.max(58, Math.floor(want[j] * k))}px`));
-    apply(1);
+    const apply = (k) => rows.forEach((row, j) => row.style.setProperty('--gf-strip-h', `${Math.max(44, Math.floor(want[j] * k))}px`));
+    let k = 1;
+    apply(k);
     const setup = strip.closest('.gf-setup');
     if (!setup) return;
-    const over = setup.scrollHeight - setup.clientHeight;
-    if (over > 0) {
-      const total = want.reduce((a, v) => a + v, 0);
-      apply(Math.max(0, (total - over - 4) / Math.max(1, total)));
+    // Re-measured after each shrink (a row's height moves the panel's own padding and the button with it):
+    // three passes always settle it, measured at 360x724 where one pass left 2-6 px over (review 2026-11-16).
+    const total = Math.max(1, want.reduce((a, v) => a + v, 0));
+    for (let pass = 0; pass < 3; pass++) {
+      const over = setup.scrollHeight - setup.clientHeight;
+      if (over <= 0) break;
+      k = Math.max(0, k - (over + 4) / total);
+      apply(k);
     }
   }
 
@@ -3467,7 +3472,8 @@ class GolfGame {
     });
     this._mpMountChat();
     if (game.over) this._mpFinish();
-    else if (game.turn === side) this._mpPlayHole();
+    // Mid-turn after a finished hole (play ahead): back to the card, where Next hole and Send both are.
+    else if (game.turn === side && !(game.tp >= 1 && game.pass)) this._mpPlayHole();
     else this._mpCard();
   }
 
@@ -3704,7 +3710,15 @@ class GolfGame {
     const busy = mp.pending.length > 0 || mp.sending;
     const mine = !busy && !g.over && g.turn === mp.side;
     const inPo = g.hole >= g.holes.length;
-    const status = busy ? t('mp_sending') : mine ? (inPo ? t('mp_playoff_hole', { n: this.MP.holeAt(g.holes, g.hole).n }) : t('mp_hole_of', { n: g.hole + 1, all: g.holes.length }))
+    // A FINISHED match says who won, never "<name>'s turn" (review 2026-11-16).
+    const res = g.over ? this.MP.resultOf(g, mp.side) : null;
+    const endLine = !g.over ? '' : res === 'draw' ? t('mp_draw')
+      : t('mp_wins', { name: String((res === 'won' ? this._myName() : mp.them.name) || '?').split(/\s+/)[0] });
+    // How it ended, on its own line under the pill (one line each at 360 wide, Spanish included).
+    const endWhy = !g.over ? '' : g.over.why === 'playoff' ? t('mp_won_playoff')
+      : g.over.why === 'resign' ? t('mp_resigned_by', { name: String((res === 'won' ? mp.them.name : this._myName()) || '?').split(/\s+/)[0] })
+      : g.over.why === 'timeout' ? t('mp_timed_out') : '';
+    const status = g.over ? endLine : busy ? t('mp_sending') : mine ? (inPo ? t('mp_playoff_hole', { n: this.MP.holeAt(g.holes, g.hole).n }) : t('mp_hole_of', { n: g.hole + 1, all: g.holes.length }))
       : t('mp_turn_of', { name: String(mp.them.name || '?').split(/\s+/)[0] });
     const seq = this._mpSeq(g);
     const el = this._mpPage(`
@@ -3719,6 +3733,7 @@ class GolfGame {
     { name: mp.them.name, scores: seq.scores(otherSide) },
   ], g.over ? -1 : g.hole)}
         <p class="gf-mp-status">${esc(status)}</p>
+        ${endWhy ? `<p class="gf-mp-note">${esc(endWhy)}</p>` : ''}
         ${mine ? `<button type="button" class="gf-btn gf-mp-wide is-cta" data-mp="play">${esc(g.tp >= 1 ? t('mp_next_hole') : t('mp_play'))}</button>` : ''}
         ${mine && g.pass ? `<button type="button" class="gf-btn gf-mp-wide" data-mp="send">${esc(t('mp_send', { name: String(mp.them.name || '?').split(/\s+/)[0] }))}</button>` : ''}
         ${g.over ? '' : `<button type="button" class="gf-btn gf-mp-wide gf-mp-quiet" data-mp="end">${esc(this._mpEndLabel())}</button>`}
@@ -3748,7 +3763,7 @@ class GolfGame {
       mp.finished = true;
       if (MP.RESULTS.includes(res)) {
         MP.countResult(mp.id, res === 'won' ? true : res === 'lost' ? false : null, (g.over && g.over.at) || Date.now(),
-          () => MP.modeOfGame(g, side), () => ({ detail: () => ({ strokes: g.totals[side], them: g.totals[otherSide] }) }));
+          () => MP.modeOfGame(g, side), () => ({ detail: () => MP.detailOfGame(g, side) }));
       }
       MP.markResultSeen(mp.id);
       MP.markSeen(mp.id, g.updated);
