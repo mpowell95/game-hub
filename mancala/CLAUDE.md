@@ -287,3 +287,5 @@ Vs the computer only: Restart / Setup after the player's first sowing (`hm` in t
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
 
 **Settings as detail (2026-11-16)**: every result (vs computer, quit loss, live room, and each live-leave modeTag) carries `speed` (`normal`/`slow`, the animation speed) in withMode's detail, never the mode.
+
+Private play data (2026-11-16): logs every move (seat, pit, stones sown, extra turn, capture, time), the final pits, who opened; pass and play via logPlayData 'pnp'.

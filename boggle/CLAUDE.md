@@ -190,3 +190,5 @@ The known gap above is closed: hidden mid-round, the moment and time left are st
 ## Setup centred (2026-11-08)
 
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
+
+Private play data (2026-11-16): logs the board faces, every word submitted (valid, duplicate, invalid) with time, words found with scores, the computer's or opponent's words, total words on the board, via withMode `log`.

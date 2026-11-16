@@ -15,7 +15,7 @@ import { onViewportResize } from '../../js/viewport.js';
 import { qualifyChinchon, codeFor } from '../../js/challenge/hooks.js';
 import { recordWin, loadChallenge } from '../../js/challenge/challenge-store.js';
 import { showCodeReveal } from '../../js/challenge/reveal.js';
-import { recordChinchon, recordHeadToHead, deviceId, easiestDiff, oneTierDown, withMode, modeTag } from '../../js/game-stats.js';
+import { recordChinchon, recordHeadToHead, deviceId, easiestDiff, oneTierDown, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 import { stateHash } from './hash.js';
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
@@ -968,8 +968,45 @@ class ChinchonUI {
 
   // --- engine event hook (rendering + AI pacing + stats) --------------------
 
+  /** PRIVATE PLAY DATA (2026-11-16): per round the deal order and dealer, every draw (source and card), discard
+   *  and close in order, and the round's result per player (hand left, score, total), for the admin play log
+   *  only. Never saved or shown. A match resumed from a save logs from the resume (`res`). */
+  _xnote(type, payload) {
+    try {
+      const g = this.game;
+      if (!g || !payload) return;
+      if (!this._xl || this._xlGame !== g) { this._xlGame = g; this._xl = { t0: Date.now(), rd: [], res: g.round > 1 || (g.players && g.players.some((q) => (q.totalScore | 0) > 0)) ? 1 : 0 }; }
+      const x = this._xl;
+      const seat = (id) => g.players.findIndex((q) => q.id === id);
+      const cur = () => { if (!x.rd.length) x.rd.push({ n: g.round, dealer: g.dealerIndex, deck: null, ev: [] }); return x.rd[x.rd.length - 1]; };
+      if (type === 'roundStart') x.rd.push({ n: g.round, dealer: g.dealerIndex, deck: (g.lastDeckOrder || []).join(','), ev: [] });
+      else if (type === 'draw') { const r = cur(); if (r.ev.length < 300) r.ev.push(['d', seat(payload.playerId), payload.source === 'discard' ? 'D' : 'S', payload.card ? payload.card.id : null, Date.now() - x.t0]); }
+      else if (type === 'discard') { const r = cur(); if (r.ev.length < 300) r.ev.push(['x', seat(payload.playerId), payload.card ? payload.card.id : null, Date.now() - x.t0]); }
+      else if (type === 'close') { const r = cur(); r.ev.push(['c', seat(payload.playerId), Date.now() - x.t0]); }
+      else if (type === 'roundScored') {
+        const r = cur();
+        r.closer = g.whoClosed == null ? null : seat(g.whoClosed); r.how = g.closeType || null;
+        r.sc = g.players.map((q) => [q.roundScore | 0, q.totalScore | 0, (q.hand || []).map((c) => c.id).join(',')]);
+      }
+    } catch { /* logging never blocks play */ }
+  }
+
+  /** What the match knows at its end: every player's name, kind, total and score by round, and every round's
+   *  deal and moves. Admin play log only. */
+  _playLog(end) {
+    const g = this.game;
+    const x = this._xl && this._xlGame === g ? this._xl : { rd: [], res: 1, t0: Date.now() };
+    return {
+      end, rounds: g.round, cfg: g.config ? { ...g.config } : null, start: g._startDealerIndex,
+      winner: g.winner ? g.players.findIndex((q) => q.id === g.winner.id) : null,
+      pl: g.players.map((q) => ({ n: q.name, ai: q.isHuman ? 0 : (q.difficulty || 1), tot: q.totalScore | 0, hist: (q.scoreHistory || []).slice() })),
+      me: g.players.findIndex((q) => q.isHuman), ms: Date.now() - (x.t0 || Date.now()), res: x.res, rd: x.rd,
+    };
+  }
+
   async onEvent(type, payload) {
     if (this._dead) return;
+    this._xnote(type, payload);
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart': {
@@ -1268,7 +1305,7 @@ class ChinchonUI {
       closed: this._matchCloses || 0,
       minusTen: this._matchMinusTens || 0,
       chinchons: this._matchChinchons || 0,
-    }), { detail: () => this._ccDetail(this.game && this.game._startDealerIndex, !!this.mp) });
+    }), () => ({ detail: () => this._ccDetail(this.game && this.game._startDealerIndex, !!this.mp), log: () => this._playLog('over') }));
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
     // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2247,7 +2284,7 @@ class ChinchonUI {
     // WHICH game the set-aside match was (js/game-stats.js withMode, 2026-10-30), from its snapshot.
     withMode(() => (modeOfMatch(q.snap.config, q.snap.players)), pickedDiff(q.snap.players),
       () => recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons }),
-      { detail: () => this._ccDetail(q.snap && q.snap.startDealer, false) });
+      () => ({ detail: () => this._ccDetail(q.snap && q.snap.startDealer, false), log: () => ({ end: 'quit', saved: 1, closed: q.closed, tot: (q.snap.players || []).map((z) => z.totalScore | 0), hist: (q.snap.players || []).map((z) => z.scoreHistory), round: q.snap.round }) }));
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
@@ -2263,7 +2300,7 @@ class ChinchonUI {
     saveJSON(STORE_STATS, this.stats);
     withMode(() => (modeOfMatch(this.game.config, this.game.players)), pickedDiff(this.game.players), () => recordChinchon(soloDiff(this.game.players, this.game.config), false, {
       closed: this._matchCloses || 0, minusTen: this._matchMinusTens || 0, chinchons: this._matchChinchons || 0,
-    }), { detail: () => this._ccDetail(this.game && this.game._startDealerIndex, false) });
+    }), () => ({ detail: () => this._ccDetail(this.game && this.game._startDealerIndex, false), log: () => this._playLog('quit') }));
   }
 
   /** A result's DETAIL (2026-11-16, Matt: "check every game for settings that aren't recorded"): the card
@@ -2518,7 +2555,7 @@ class ChinchonUI {
       net.appendMove(mp.code, mp.seat, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
       // Your first decision arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps, modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })));
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps, modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true), log: () => (this.game ? this._playLog('leave') : null) })));
       }
       return;
     }
@@ -2740,7 +2777,7 @@ class ChinchonUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps, tag: this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })) : null });
+          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps, tag: this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true), log: () => (this.game ? this._playLog('leave') : null) })) : null });
         if (res !== 'none') { this._statsCommitted = true; this._mpBumpLocalStats(res === 'won'); }
       }
       this._mpEndDueToOpponentLeft(res);
@@ -3038,7 +3075,7 @@ class ChinchonUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps, this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })) : null)) this._mpBumpLocalStats(true);
+    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps, this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true), log: () => (this.game ? this._playLog('leave') : null) })) : null)) this._mpBumpLocalStats(true);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -3540,6 +3577,20 @@ class ChinchonUI {
   }
 
   /** The engine ended the match: count it once on this phone, then the result card. */
+  /** PRIVATE PLAY DATA (2026-11-16): the whole challenge match (its seed and every move in the match log, plus
+   *  this phone's own view of the rounds when it was played here), logged once when this phone sees it finished. */
+  _chLogMatch(end, ch, gm) {
+    try {
+      const cg = gm || ch.game || {};
+      const g = this.game;
+      logPlayData('chinchon', 'match', {
+        end, side: ch.side, a: cg.a && cg.a.name, b: cg.b && cg.b.name, seed: cg.seed, len: cg.len, rules: cg.rules || cg.config || undefined,
+        over: cg.over ? { why: cg.over.why, winner: cg.over.winner, at: cg.over.at } : null, log: cg.log || ch.log || [],
+        local: g && !gm ? this._playLog(end) : undefined,
+      }, { mode: () => (this._chMods && this._chMods.MP && typeof this._chMods.MP.chModeOf === 'function' ? this._chMods.MP.chModeOf(cg) : null), diff: 'mp', key: ch.id });
+    } catch { /* never block the result */ }
+  }
+
   async _chFinishNatural() {
     const ch = this.ch;
     if (!ch || ch.finished) return;
@@ -3548,6 +3599,7 @@ class ChinchonUI {
     const w = MP.winnerOfEngine(this.game);
     ch.draw = w === 'draw';
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
+    this._chLogMatch('over', ch);
     MP.countResult(ch.id, w === 'draw' ? null : w === ch.side, {
       closed: this._matchCloses || 0, chinchons: this._matchChinchons || 0, minusTen: this._matchMinusTens || 0,
     }, (ov && ov.at) || Date.now(), () => (typeof MP.chModeOf === 'function' ? MP.chModeOf(ch.game) : null));
@@ -3564,6 +3616,7 @@ class ChinchonUI {
     ch.finished = true;
     const MP = this._chMods.MP;
     const won = g.over.winner === ch.side;
+    this._chLogMatch(g.over.why || 'resign', ch, g);
     MP.countResult(ch.id, won, {}, g.over.at || Date.now(), () => (typeof MP.chModeOf === 'function' ? MP.chModeOf(g) : null));
     MP.markResultSeen(ch.id);
     MP.markSeen(ch.id, g.updated);

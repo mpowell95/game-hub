@@ -202,3 +202,5 @@ Restart / New game after the player's first play or draw (`moved` in the save) =
 
 - **No 30-minute expiry** (supersedes "A save older than 30 minutes... is wiped" above and the loss-on-load from earlier the same day): an old hand resumes. Quitting is a loss once DEALT (every save counts).
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+Private play data (2026-11-16): logs every engine event in order (card played/drawn, colour, penalty draws), the computer seed, who opened, cards left in every hand, time, via withMode `log`.

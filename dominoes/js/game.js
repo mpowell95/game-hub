@@ -190,7 +190,11 @@ export class DominoesGame {
     // Values a seat is KNOWN to be missing, inferred from every draw and pass it makes. Read by
     // the Hard bot only; kept on the engine so it survives a save/restore like everything else.
     this.voids = [[], []];
+    this.plog = [];                 // PRIVATE PLAY DATA (2026-11-16): per round deal, moves, result; never saved or shown
   }
+
+  /** Private play log: one move onto the current round's list. Never throws. */
+  _pl(m) { try { const r = this.plog[this.plog.length - 1]; if (r && r.mv.length < 400) r.mv.push(m); } catch { /* logging never blocks play */ } }
 
   // --- chain view (the four functions above, bound to this game) ---------------------------
   get chain() { return { line: this.line, up: this.up, down: this.down, spinnerId: this.spinnerId, originId: this.originId }; }
@@ -242,6 +246,7 @@ export class DominoesGame {
     this.openerTileId = opener.tileId;
     this.turn = opener.seat;
     this.phase = 'playing';
+    try { this.plog.push({ n: this.round, open: opener.seat, ot: opener.tileId, h0: this.hands[0].slice(), h1: this.hands[1].slice(), yard: this.boneyard.slice(), mv: [] }); } catch { /* logging never blocks play */ }
     return this;
   }
 
@@ -290,6 +295,7 @@ export class DominoesGame {
     const count = this.countEnds();
     const scored = scoreOf(count);
     if (scored) this._award(seat, scored);
+    this._pl([seat, 'p', tileId, side, count, scored || 0]);
 
     const res = { ok: true, seat, tileId, side, count, scored, roundOver: false, matchOver: false, wentOut: false, bonus: 0 };
 
@@ -316,6 +322,7 @@ export class DominoesGame {
     const idx = Math.floor(this.rng() * this.boneyard.length);
     const [tileId] = this.boneyard.splice(idx, 1);
     this.hands[seat].push(tileId);
+    this._pl([seat, 'd', tileId]);
     return { ok: true, tileId, canPlay: this.canPlay(seat), boneyard: this.boneyard.length };
   }
 
@@ -329,6 +336,7 @@ export class DominoesGame {
     this._noteVoids(seat);
     this.boneyard.splice(idx, 1);
     this.hands[seat].push(tileId);
+    this._pl([seat, 'd', tileId]);
     return { ok: true, tileId, canPlay: this.canPlay(seat), boneyard: this.boneyard.length };
   }
 
@@ -337,6 +345,7 @@ export class DominoesGame {
     if (this.phase !== 'playing' || this.turn !== seat) return { ok: false };
     if (this.canPlay(seat) || this.boneyard.length) return { ok: false };
     this._noteVoids(seat);
+    this._pl([seat, 'x']);
     this.passes += 1;
     if (this.passes >= 2) { this._settleBlocked(); return { ok: true, roundOver: true, matchOver: this.phase === 'matchOver' }; }
     this.turn = 1 - seat;
@@ -383,6 +392,7 @@ export class DominoesGame {
     this._award(1, handSum(this.hands[0]));
     this.roundWinner = winner;
     this.roundEndReason = reason;
+    try { const r = this.plog[this.plog.length - 1]; if (r) { r.rs = this.roundScore.slice(); r.w = winner; r.why = reason; r.l0 = this.hands[0].slice(); r.l1 = this.hands[1].slice(); r.tot = this.scores.slice(); } } catch { /* logging never blocks play */ }
     // "Reach OR PASS the target" (addendum A4): a final total of 304 is a normal win.
     if (Math.max(this.scores[0], this.scores[1]) >= this.target) {
       this.matchWinner = this.scores[0] === this.scores[1] ? null : (this.scores[0] > this.scores[1] ? 0 : 1);

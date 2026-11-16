@@ -433,3 +433,5 @@ Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move)
 ## Fits on a short phone (2026-11-08)
 
 `_trimMatches` (after `_fitScene`'s height): on a Safari tab or a 360x668 Android three matches pushed Host / Join off the card; rows now come off the end (at least one kept) and "+N more" counts them. `tools/review-setup-cards.cjs battleship`.
+
+Private play data (2026-11-16): logs every shot (board shot at, r, c, hit/miss, sunk, time), both public grids at the end, the fleets this phone knows, and a finished challenge's whole match, via withMode `log` / logPlayData.

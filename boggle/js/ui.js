@@ -806,7 +806,7 @@ class BoggleUI {
       let res = 'none';
       if (mp.gameNum && mp.statsCommittedGameNum !== mp.gameNum) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordBoggle', winArgs: [MP_DIFFICULTY, true, this._mpMine()], opps: [mp.opp], tag: modeTag(() => (modeOf(mp)), MP_DIFFICULTY) });
+          fn: 'recordBoggle', winArgs: [MP_DIFFICULTY, true, this._mpMine()], opps: [mp.opp], tag: modeTag(() => (modeOf(mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })) });
         if (res !== 'none') mp.statsCommittedGameNum = mp.gameNum;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1008,7 +1008,7 @@ class BoggleUI {
     if (mp.statsCommittedGameNum !== mp.gameNum) {
       mp.statsCommittedGameNum = mp.gameNum;
       LL.endedNormally(STATS_ID, this._mpKey());
-      try { withMode(() => (modeOf(mp)), MP_DIFFICULTY, () => recordBoggle(MP_DIFFICULTY, won, { words: mine.words, score: mine.score, longestWord: mine.longestWord })); } catch { /* never block the result */ }
+      try { withMode(() => (modeOf(mp)), MP_DIFFICULTY, () => recordBoggle(MP_DIFFICULTY, won, { words: mine.words, score: mine.score, longestWord: mine.longestWord }), () => ({ log: () => this._playLog('over', { score: mine.score, theirScore: theirs.score, theirs: theirs.foundWords || [], theirWords: theirs.words, opp: mp.opp ? String(mp.opp.name || '') : undefined }) })); } catch { /* never block the result */ }
       const opp = mp.opp;
       if (opp) { try { recordHeadToHead('boggle', opp, won); } catch { /* never block the result */ } }
       if (won === true) mp.series.wins += 1; else if (won === false) mp.series.losses += 1; else mp.series.ties += 1;
@@ -1158,7 +1158,7 @@ class BoggleUI {
     const mp = this.mp;
     mp.statsCommittedGameNum = mp.gameNum;
     const mine = mp.myResult || this._mpMine();
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, true, { words: mine.words | 0, score: mine.score | 0, longestWord: mine.longestWord }], [mp.opp], modeTag(() => (modeOf(mp)), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, true, { words: mine.words | 0, score: mine.score | 0, longestWord: mine.longestWord }], [mp.opp], modeTag(() => (modeOf(mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     LL.leaveWithForfeit(net, mp.code, mp.role, this._mpOppRole(), mp.gameNum, true).catch(() => { /* best-effort */ });
     this.stopTimer();
     this._mpClearSave();
@@ -1679,16 +1679,19 @@ class BoggleUI {
     this._tapMode = false;
     if (!this.mp) this._moved = true;
     if (this._found.has(word)) {
+      this._bgNote(word, 'd');
       this._feedback = { type: 'duplicate', word };
     } else if (!isValidWord(this._trieRoot, word)) {
+      this._bgNote(word, 'i');
       this._feedback = { type: 'invalid', word };
     } else {
       const score = scoreForWord(word);
+      this._bgNote(word, 'v');
       this._found.set(word, score);
       this._feedback = { type: 'valid', word, score };
       // A live round: your first word arms the leave (js/live-leave.js), refreshed with each word.
       if (this.mp && !this._roundOver && this.mp.statsCommittedGameNum !== this.mp.gameNum) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, false, this._mpMine()], [this.mp.opp], modeTag(() => (modeOf(this.mp)), MP_DIFFICULTY));
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordBoggle', [MP_DIFFICULTY, false, this._mpMine()], [this.mp.opp], modeTag(() => (modeOf(this.mp)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
       }
       haptic(25); // trigger 2: successful submit only, never duplicate/invalid
       saveGame(this); // checkpoint after every scored word
@@ -1912,6 +1915,27 @@ class BoggleUI {
     return !this.mp && this.view === 'game' && !!this._board && !this._roundOver && !this._statsCommitted && !!this._moved;
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): every word submitted (valid, duplicate, invalid) with the time, for the
+   *  admin play log only. Reset with each new board. */
+  _bgNote(word, kind) {
+    try {
+      if (!this._bgx || this._bgx.board !== this._board) this._bgx = { board: this._board, t0: Date.now(), ev: [], res: this._found.size > 0 ? 1 : 0 };
+      if (this._bgx.ev.length < 300) this._bgx.ev.push([word, kind, Date.now() - this._bgx.t0]);
+    } catch { /* logging never blocks play */ }
+  }
+
+  /** What the round knows at its end: the board faces, every word submitted in order, the words found with
+   *  their scores, the total words on the board, the computer's words (solo) or the opponent's (online). */
+  _playLog(end, extra) {
+    const grid = this._board && this._board.grid;
+    const x = this._bgx && this._bgx.board === this._board ? this._bgx : { ev: [], res: this._found.size > 0 ? 1 : 0 };
+    return {
+      end, faces: grid ? grid.map((row) => row.map((tile) => tile.face)) : null, lang: this._setup.wordLang, min: this._setup.timerMinutes,
+      ev: x.ev, res: x.res, found: [...this._found.entries()], solved: this._solved ? this._solved.length : 0,
+      solvedPts: this._solved ? this._solved.reduce((a, e) => a + (e.score | 0), 0) : 0, ...(extra || {}),
+    };
+  }
+
   /** Record the give-up as a loss, once (`_statsCommitted`), with the words found so far. */
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
@@ -1920,7 +1944,7 @@ class BoggleUI {
     const words = [...this._found.entries()];
     const score = words.reduce((s, [, v]) => s + v, 0);
     const longestWord = words.reduce((best, [w]) => (w.length > best.len ? { word: w, len: w.length } : best), { word: '', len: 0 });
-    try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), false, { words: words.length, score, longestWord })); } catch { /* never block leaving */ }
+    try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), false, { words: words.length, score, longestWord }), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1951,7 +1975,7 @@ class BoggleUI {
     const extras = { words: humanWords.length, score: humanScore, longestWord };
     if (!this._statsCommitted) {
       this._statsCommitted = true;
-      try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), won, extras)); } catch { /* never block the result */ }
+      try { withMode(() => (modeOf(this._setup)), this._setup.difficulty, () => recordBoggle(statsDiff(this._setup.difficulty, this._setup.timerMinutes), won, extras), () => ({ log: () => this._playLog('over', { ai: aiWords.map((e) => [e.word, e.score]), aiScore, score: humanScore }) })); } catch { /* never block the result */ }
     }
     this._result = { humanWords, humanScore, aiWords, aiScore, won };
     this._path = [];
