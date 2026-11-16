@@ -497,7 +497,7 @@ const FA = randomFleet('classic'), FB = randomFleet('classic');
   const rules = JSON.parse(src('database.rules.json'));
   ok('`battleship` is in database.rules.json, signed-in read and write (darts\' shape)', rules.rules.battleship && rules.rules.battleship['.read'] === 'auth != null' && rules.rules.battleship.games.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.battleship.index.$code.$id['.write'] === 'auth != null && newData.exists()' && rules.rules.battleship.chat.$id.$k['.write'] === 'auth != null && newData.exists()');
   ok('`battleship` is in the backup branch list', /\n\s*'battleship',/.test(src('backups/rtdb-backup.mjs')));
-  ok('the Remind bell may name battleship matches', /battleship\)~/.test(JSON.stringify(rules.rules.nudges)) && /battleship: 'battleship'/.test(src('js/messages.js')));
+  ok('the Remind bell may name battleship matches', /battleship[|)]/.test(JSON.stringify(rules.rules.nudges)) && /battleship: 'battleship'/.test(src('js/messages.js')));
   const hub = src('js/hub.js');
   ok('hub: Battleship declares its alerts module', /alerts: \(\) => import\('\.\.\/battleship\/js\/alert\.js'\)/.test(hub));
   ok('hub: still a live-room game (LIVE_MP_GAMES) and js/mp-records.js LIVE_GAMES', /'battleship'/.test(hub.match(/const LIVE_MP_GAMES = new Set\(\[[^\]]*\]/)[0]) && /battleship: 'battleship'/.test(src('js/mp-records.js')));
