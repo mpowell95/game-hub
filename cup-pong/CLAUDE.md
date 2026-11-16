@@ -166,6 +166,18 @@ of the soft-throw sweep).
 (solo throw no.), rf (re-flown), r: [[id, u, v]...] (cups standing, cup-widths)}`. Read with `tools/read-play-log.mjs`.
 Evidence only, never read back. Before this, only challenge throws (p, a) were stored.
 
+## The real-life table bounce: LIVE FOR EVERYONE (2026-11-16, Matt: "Make the new bounce live for everyone")
+
+- Every throw (solo, vs computer, every challenge made from 2026-11-16) flies the table below, `physics.js`'s default.
+- **A challenge made before then keeps the OLD table** (`OLD_TABLE` = `model: 'v1'`, the solver table, bit for bit): its rules
+  have no `tb`; `createGame` writes `tb: true`; `mp.js` `tableModel(rules)` picks it for every throw and every replay
+  (`ui.js` `tableModel()`). Never fly an old challenge on the new table: both phones replay throws from the vector.
+- **Coming back = miss** (new table only): off the cups, heading to the shooter, 30 cm (`BACK_OUT`) past the nearest cup.
+  Without it a ball off the front cups dribbled the table to the 6 s cap. 0 outcomes changed in 33,161 throws.
+- Computer at a full rack (test.js): Easy 20 -> 19%, Medium 33 -> 30%, Hard 60% unchanged. `IMPORTANT_SINCE` set (mixed builds
+  in one challenge fly different tables).
+- Test mode (below) now flies the same table as everyone; the card stays for the next experiment.
+
 ## Test mode: admin devices only (2026-11-05, Matt: "Build the fixes and add a test mode for admin only. Don't touch the real game players have")
 
 - A **Test** card (Solo, Computer) on the setup screen only when `isAdminDevice()`; a TEST tag in the HUD.
@@ -185,8 +197,7 @@ Evidence only, never read back. Before this, only challenge throws (p, a) were s
   Run it, and the full-rack grid, on every bounce change.
 - **Nothing recorded, nothing saved, no quit loss**; the real saved match and every stat are untouched; play log
   mode `test-solo` / `test-cpu@<diff>`. Never in challenges (both phones must share one physics).
-- `model` absent = the real game, bit for bit (539/539 real flights identical, 2026-11-05). Moving the test
-  physics to players needs Matt's words, and a per-challenge rules flag so older challenges replay as played.
+- Until 2026-11-16 `model` absent was the old table; now it is the new one and `'v1'` is the old (above).
 
 ## The setup screen (2026-11-07, tabs: Matt's approved mockup B, `docs/mockups/cuppong-setup.html`)
 
@@ -296,7 +307,7 @@ the triangle is `PRESETS.tri10`.
 - **1/480 s step, not skeeball's 1/240** (a fast ball tunnels a 6 mm wall at 1/240). Quadratic air
   drag (`DRAG_K`) and table rolling resistance (`ROLL_DECEL`; without it a miss ran to the 6 s cap).
 - A throw ends `made` (with `bounced`), `off`, or `miss`. **No magnetism, ever.**
-- **The table's bounce** (`MAT`, physics.js; full story and the sweep tables: CLAUDE-HISTORY.md): `tableRest` 0.95 on the first bounce, `tableRestLater`
+- **The OLD table's bounce (`model: 'v1'`, challenges made before 2026-11-16 only)** (`MAT`, physics.js; full story and the sweep tables: CLAUDE-HISTORY.md): `tableRest` 0.95 on the first bounce, `tableRestLater`
   0.68 on later ones (a 0.95 table dribbled to the cap), `tableSkid` 0.6 (share of forward speed kept
   through each table bounce). Matt wanted a bounced ball to go in about as often as a regular throw;
   counting every touch with random racks, bounced 24.7% vs regular 29.1%. **The response is not

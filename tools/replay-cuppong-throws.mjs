@@ -1,6 +1,6 @@
-// tools/replay-cuppong-throws.mjs - READ ONLY: one player's REAL Cup Pong throws, flown again on the live
-// physics and on the admin-only test physics (physics.js model 'test'), side by side (2026-11-16, Matt:
-// "Replay my real throws with the new bounce"). Writes nothing anywhere.
+// tools/replay-cuppong-throws.mjs - READ ONLY: one player's REAL Cup Pong throws, flown again on the OLD table
+// (physics.js OLD_TABLE, every throw before 2026-11-16) and on the NEW real-life table (the default since then),
+// side by side (2026-11-16, Matt: "Replay my real throws with the new bounce"). Writes nothing anywhere.
 //
 //   NODE_USE_ENV_PROXY=1 node tools/replay-cuppong-throws.mjs <CODE>
 //
@@ -13,7 +13,7 @@
 import { readPath } from '../backups/rtdb-backup.mjs';
 import { firebaseConfig } from '../js/firebase-config.js';
 import { signInForReading } from './reader-auth.mjs';
-import { simulateThrow, replayVector } from '../cup-pong/js/physics.js';
+import { simulateThrow, replayVector, OLD_TABLE } from '../cup-pong/js/physics.js';
 import { cupsXZ } from '../cup-pong/js/rack.js';
 import { validateGame, sideOf, freshMatch, applyEntry } from '../cup-pong/js/mp.js';
 
@@ -49,12 +49,15 @@ for (const x of Object.values(log)) {
 
 const id = (o) => (o.kind === 'made' ? o.id : '');
 const first = (r) => r.events.find((e) => e === 'table' || e === 'cup' || e === 'made') || null;
+// `live` = the old table, `test` = the new one (the names from when the new one was test mode only). A throw
+// thrown on the new table (from 2026-11-16, or in test mode) is matched against what was recorded on that one.
 const rows = throws.map((th) => {
   let v = { power: th.power, aim: th.aim };
-  if (id(simulateThrow({ ...v, cups: th.cups }).outcome) !== th.rec && !th.src.startsWith('test')) v = replayVector({ ...v, cups: th.cups }, th.rec);
-  const live = simulateThrow({ ...v, cups: th.cups });
-  const test = simulateThrow({ ...v, cups: th.cups, model: 'test' });
-  return { src: th.src, matched: id(live.outcome) === th.rec, live: { o: id(live.outcome), f: first(live) }, test: { o: id(test.outcome), f: first(test), cap: !!test.outcome.capped } };
+  const was = th.src.startsWith('test') ? null : OLD_TABLE;
+  if (id(simulateThrow({ ...v, cups: th.cups, model: was }).outcome) !== th.rec && !th.src.startsWith('test')) v = replayVector({ ...v, cups: th.cups, model: was }, th.rec);
+  const live = simulateThrow({ ...v, cups: th.cups, model: OLD_TABLE });
+  const test = simulateThrow({ ...v, cups: th.cups });
+  return { src: th.src, matched: id((was ? live : test).outcome) === th.rec, live: { o: id(live.outcome), f: first(live) }, test: { o: id(test.outcome), f: first(test), cap: !!test.outcome.capped } };
 });
 
 const pct = (a, b) => (b ? `${(100 * a / b).toFixed(1)}%` : '-');
@@ -72,11 +75,11 @@ function report(name, list) {
     if (r.live.o && !r.test.o) lost++; else if (!r.live.o && r.test.o) gained++; else if (r.live.o !== r.test.o) moved++;
   }
   const L = s.live, T = s.test;
-  console.log(`\n${name}: ${list.length} throws (the live replay lands as recorded: ${list.filter((r) => r.matched).length})`);
-  console.log(`  made           live ${L.m} (${pct(L.m, list.length)})   test ${T.m} (${pct(T.m, list.length)})`);
-  console.log(`  table first    live ${L.bm}/${L.bt} (${pct(L.bm, L.bt)})   test ${T.bm}/${T.bt} (${pct(T.bm, T.bt)})`);
-  console.log(`  cup first      live ${L.fm}/${L.ft} (${pct(L.fm, L.ft)})   test ${T.fm}/${T.ft} (${pct(T.fm, T.ft)})`);
-  console.log(`  test vs live: ${lost} makes lost, ${gained} gained, ${moved} into another cup; 6 s cap ${cap}`);
+  console.log(`\n${name}: ${list.length} throws (the old-table replay lands as recorded: ${list.filter((r) => r.matched).length})`);
+  console.log(`  made           old ${L.m} (${pct(L.m, list.length)})   new ${T.m} (${pct(T.m, list.length)})`);
+  console.log(`  table first    old ${L.bm}/${L.bt} (${pct(L.bm, L.bt)})   new ${T.bm}/${T.bt} (${pct(T.bm, T.bt)})`);
+  console.log(`  cup first      old ${L.fm}/${L.ft} (${pct(L.fm, L.ft)})   new ${T.fm}/${T.ft} (${pct(T.fm, T.ft)})`);
+  console.log(`  new vs old: ${lost} makes lost, ${gained} gained, ${moved} into another cup; 6 s cap ${cap}`);
 }
 report('ALL', rows);
 report('challenges', rows.filter((r) => r.src === 'challenge'));

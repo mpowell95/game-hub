@@ -668,3 +668,14 @@ dead later bounces. Bounces after the first now keep their speed (the ball is ro
 outlasts the air drag gets a 1-2% forward kick, as a real topspin ball does. `TEST_STOP_V` 0.08 -> 0.15 (a ball resting
 against a cup's slanted side hopped at 0.10 m/s forever). Numbers: cup-pong/CLAUDE.md, "Test mode". The live game is
 untouched (grid identical to main, 814/2370 bounce, 1332/3225 full).
+
+## 2026-11-16: the real-life bounce goes live for everyone
+
+Matt: "Replay my real throws with the new bounce" (2,069 of his throws: made 31.9% -> 31.2%, table first 24.1% -> 20.8%,
+cup first unchanged), then "Make the new bounce live for everyone". The plane table became `physics.js`'s default; the old
+solver table is `model: 'v1'` (`OLD_TABLE`), kept bit for bit for challenges made before this day (no `tb` in their
+rules), because both phones re-fly each throw from its stored vector. test.js's "none hit the 6 s cap" failed on the new
+table (power 0.64, aim 0.0125: off the front cups, back down the table at ~0.4 m/s, every hop kept by the 0.90 bounce);
+fixed with the coming-back miss (`BACK_OUT` 0.30 m), checked to change no outcome in 33,161 throws (full-rack grid +
+20,000 random-rack throws, rule on vs off). IMPORTANT_SINCE set so every phone takes the build at its next launcher visit.
+

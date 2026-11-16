@@ -119,8 +119,13 @@ export function cleanRules(r) {
     gb: !!(r && r.gb === true),                          // Gentleman's against the back wall (2026-10-23)
     i3: !!(r && r.i3 === true),                          // made after the 3-cup island rule (2026-10-29); a record only, every match offers it
     ol: !!(r && r.ol === true),                          // owed cups count as gone for the last cup (2026-11-04)
-    su: !!(r && r.su === true) };                        // STRAIGHT UP: no assists at all (match.js)
+    su: !!(r && r.su === true),                          // STRAIGHT UP: no assists at all (match.js)
+    tb: !!(r && r.tb === true) };                        // the real-life table bounce (2026-11-16); without it, OLD_TABLE
 }
+/** The physics a challenge's throws fly on (2026-11-16, Matt: "Make the new bounce live for everyone"): a
+ *  challenge made from then on carries `tb` and flies the new table; one made before has no `tb` and keeps the
+ *  old solver table, so both phones replay every throw as it was played. Passed as physics.js `model`. */
+export function tableModel(rules) { return cleanRules(rules).tb ? null : 'v1'; }
 const reracksOf = (rules) => (rules.rr === 'inf' ? Infinity : rules.rr);
 
 /** A fresh match under `rules`, in the STORED frame (side 'a' is the challenger and shoots first). */
@@ -711,7 +716,7 @@ export async function createGame({ them, rules, series = 1, seriesNo = 1, series
   const r = cleanRules(rules);
   const doc = {
     v: 1, id, by: me, created: 0, updated: 0, lapse: true,
-    rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, io: true, gb: true, i3: true, ol: true, ...(r.su ? { su: true } : {}) },
+    rules: { gent: r.su ? false : r.gent, rr: r.su ? 0 : r.rr, bk: true, lc: true, fb: true, io: true, gb: true, i3: true, ol: true, tb: true, ...(r.su ? { su: true } : {}) },
     a: { code: me, name: mine.name, emoji: mine.emoji },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂') },
     log: null, over: null,
