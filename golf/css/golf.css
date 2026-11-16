@@ -130,7 +130,7 @@
 .gf-root .gf-tl-row { display: flex; gap: 8px; align-items: center; }
 .gf-root .gf-info { font-size: 13px; min-width: 92px; }
 .gf-root .gf-info b { display: block; font-size: 14px; font-weight: 700; }
-.gf-root .gf-info .gf-mode { color: var(--gf-dim); font-size: 11px; text-transform: lowercase; }
+.gf-root .gf-info .gf-mode { color: #f2f7ea; font-size: 15px; text-transform: lowercase; }
 .gf-root .gf-flag { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 800; text-shadow: var(--gf-shadow); }
 
 .gf-root .gf-tc {
@@ -410,7 +410,8 @@
    Holing out used to do nothing at all: no score, no card, no way on to the next hole. The full
    sunburst banner and nine-column scorecard are Stage C; this is the honest minimum until then. */
 .gf-root .gf-result {
-  position: absolute; inset: 0; z-index: 5;
+  /* Above the quick-chat layer (z 40): its button sat over a tall card's close X (review 2026-11-16). */
+  position: absolute; inset: 0; z-index: 41;
   display: flex; align-items: center; justify-content: center;
   background: rgba(6, 12, 4, 0.62);
   padding: 16px;
@@ -843,11 +844,15 @@
   border: 1px solid rgba(0, 0, 0, 0.45); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), var(--gf-shadow);
 }
 .gf-root .gf-mp .gf-mp-top { margin-bottom: -2px; }
+/* Narrow phones (360 wide): the panel gives its side padding back to the rows, so "Pine Valley · Hoyo 1/3"
+   fits beside the Play pill (review 2026-11-16, Spanish was cut off). */
 .gf-root .gf-on-sec { display: flex; flex-direction: column; gap: 8px; }
 .gf-root .gf-on-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 800; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-on-rows { display: flex; flex-direction: column; gap: 8px; }
 .gf-root .gf-mp-note { margin: 0; font-size: 15px; color: #f4f7ee; text-align: center; text-shadow: var(--gf-tshadow); }
 .gf-root .gf-setup .gf-mrow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 12px; min-height: 56px; box-sizing: border-box; }
+@media (max-width: 380px) { .gf-root .gf-online:not(.gf-offtab), .gf-root .gf-mp .gf-mp-body { padding-left: 8px; padding-right: 8px; }
+  .gf-root .gf-setup .gf-mrow { padding-left: 8px; padding-right: 8px; gap: 8px; } }
 .gf-root .gf-setup .gf-mrow.is-mine { border: 2px solid #8a6a00; }
 .gf-root .gf-mrow.is-static { background: rgba(255, 255, 255, .13); color: #fff; border: 1px solid rgba(0, 0, 0, .3); box-shadow: var(--gf-shadow); }
 .gf-root .gf-mrow-face { font-size: 26px; flex: 0 0 auto; }

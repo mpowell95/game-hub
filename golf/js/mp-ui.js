@@ -91,6 +91,7 @@ function fitList(screen, list, extra) {
 
 const courseName = (id) => (COURSES.some((k) => k.id === id) ? t(`course_${id}`) : '');
 const rowSub = (r) => `${r.yourTurn ? courseName(r.course) : roundLine(r.course, r.round)} · ${r.yourTurn ? (r.pof ? t('mp_playoff') : t('mp_hole_short', { n: Math.max(1, r.hole), all: r.holes || '?' })) : t('mp_turn_of', { name: first(r.name) })}`;
+const rowSubFit = (r) => (r.yourTurn && r.pof ? t('mp_playoff') : rowSub(r));   // a playoff row: the one word, never cut off
 
 /**
  * THE SETUP SCREEN'S ONLINE TAB (Darts' and Cup Pong's tabs): the matches going (your turn first,
@@ -116,7 +117,7 @@ export async function fillOnline(ui, MP, box) {
     <button type="button" class="gf-btn gf-mrow${r.yourTurn ? ' is-mine' : ''}" data-id="${esc(r.id)}">
       <span class="gf-mrow-face" aria-hidden="true">${esc(r.emoji)}</span>
       <span class="gf-mrow-text"><span class="gf-mrow-name">${esc(r.name)}</span>
-        <span class="gf-mrow-sub">${esc(rowSub(r))}</span></span>
+        <span class="gf-mrow-sub">${esc(rowSubFit(r))}</span></span>
       ${r.yourTurn ? `<span class="gf-play-pill">${esc(t('mp_play'))}</span>` : '<span class="gf-mrow-chev" aria-hidden="true">›</span>'}
     </button>`;
   const all = mine.concat(theirs).map(liveRow);
