@@ -21,7 +21,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, recordFlickSoccerTest, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordFlickSoccerTest, recordPassPlay, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -576,6 +576,7 @@ class FlickSoccerUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first flick
+    this._recordPassQuit();   // a pass-and-play match thrown away after its first flick: kept, counts for nothing
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -837,7 +838,9 @@ class FlickSoccerUI {
 
   _record() {
     const m = this.match;
-    if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
+    if (!m || m.winner == null || m.recorded) return;
+    if (this.mode === 'pass') { this._recordPassPlay(m, m.winner === 0 ? 'p1' : 'p2', this.seats); return; }
+    if (this.mode !== 'cpu') return;
     m.recorded = true;
     try {
       // the match's own numbers (2026-11-02): goals for and against (seat 0 = the player), flicks
@@ -1033,6 +1036,29 @@ class FlickSoccerUI {
   _firstSetDetail() {
     const f = this.settings && this.settings.first;
     return FIRSTS.includes(f) ? { firstSet: f } : {};
+  }
+
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.flicksoccer.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' (Blue)
+   *  | 'p2' (Red), or 'quit' for a started match thrown away by a new one. */
+  _recordPassPlay(m, winner, seats) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (seats || []).map((x) => (x && x.name) || '');
+    try {
+      const detail = () => ({ ...(Array.isArray(m.scores) ? { gf: Math.max(0, m.scores[0] | 0), ga: Math.max(0, m.scores[1] | 0), flicks: Math.max(0, m.shots | 0) } : {}), ...this._firstSetDetail() });
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay(STATS_ID, winner, names), { detail });
+      if (!st) console.warn('[flick-soccer] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[flick-soccer] recording pass and play failed', err); }
+  }
+  /** The pass-and-play match a new match would throw away (live, or saved from setup), once a flick was made. */
+  _recordPassQuit() {
+    let m = null, seats = null;
+    if (this.match && this.screen !== 'setup') { if (this.mode === 'pass') { m = this.match; seats = this.seats; } }
+    else { const sv = this._savedMatch(); if (sv && sv.mode === 'pass') { m = sv.match; seats = this._seatsFor('pass'); } }
+    if (!m || m.winner != null || m.recorded || !playerShot(m)) return;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    this._recordPassPlay(m, 'quit', seats);
   }
 
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */

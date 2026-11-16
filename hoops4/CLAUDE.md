@@ -450,3 +450,7 @@ Setup is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`). Online =
 ## What is selected is what you play (2026-11-09)
 
 Matt's two "Medium one shot" wins were recorded Easy: Continue resumed a saved Easy match while the row showed Medium. Now the first setup paint with a save shows THAT match's level and shots (`_syncedSave`, reset by `saveMatch`), and Continue shows only while the row matches the save; another pick leaves only New game.
+
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+A finished pass-and-play match (`p1` Red / `p2` Yellow / `draw`), or a shot-in `passSave` thrown away by a new one (winner `quit`), records ONCE via `recordHoopsPass` = `withMode(modeFor(m, RED), 'pnp', recordPassPlay('hoops4', ...), { detail: both sides' shots/made/missed })`: `games.hoops4.pp`, counted by nothing. Supersedes "A two-players-on-one-phone match records nothing" above.

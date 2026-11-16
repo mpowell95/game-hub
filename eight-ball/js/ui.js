@@ -22,7 +22,7 @@ import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the cards theme standalone too
-import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -554,6 +554,7 @@ class PoolUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first shot
+    this._recordPassQuit();   // a pass-and-play match thrown away after its first shot: kept, counts for nothing
     const s = this.settings;
     const n = seatsOf(s.game);
     const breaker = s.nextBreaker % n;
@@ -586,6 +587,28 @@ class PoolUI {
       const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false), { detail: () => ({ look: lookOf(q.m, this.settings.look) }) });
       if (!st) console.warn('[eight-ball] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the quit loss failed', err); }
+  }
+
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.eightball.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' | 'p2' |
+   *  'p3' (Cutthroat), or 'quit' for a started match thrown away by a new one. */
+  _recordPassPlay(m, winner, seats) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (seats || []).map((x) => (x && x.name) || '');
+    try {
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay(STATS_ID, winner, names), { detail: () => ({ look: lookOf(m, this.settings.look), seats: (m && m.n) | 0, broke: m && Number.isInteger(m.breaker) ? 'p' + (m.breaker + 1) : 'none' }) });
+      if (!st) console.warn('[eight-ball] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[eight-ball] recording pass and play failed', err); }
+  }
+  /** The pass-and-play match a new match would throw away (live, or saved from setup), once a shot was taken. */
+  _recordPassQuit() {
+    let m = null, seats = null;
+    if (this.match) { if (this.mode === 'pass') { m = this.match; seats = this.seats; } }
+    else { const sv = this._savedMatch(); if (sv && sv.mode === 'pass') { m = sv.match; seats = this._seatsFor('pass', sv.diff, sv.match.n); } }
+    if (!m || m.winner != null || m.recorded || !m.ps) return;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    this._recordPassPlay(m, 'quit', seats);
   }
 
   /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
@@ -849,6 +872,7 @@ class PoolUI {
     // The first shot of the match, whoever takes it, makes quitting a loss (2026-10-29, second pass,
     // Matt: quitting after the computer's break was free; `ps` was the player's own first shot).
     if (this.mode === 'cpu' && !opts.replay) m.ps = 1;
+    if (this.mode === 'pass' && !opts.replay) m.ps = 1;   // pass and play: a started match, kept as 'quit' if thrown away (2026-11-16)
     this._save(shot);   // the position the shot was taken from, and the shot
     const ev = begin(m, shot);
     if (!ev) { this._startTurn(false); return; }
@@ -958,7 +982,9 @@ class PoolUI {
 
   _record() {
     const m = this.match;
-    if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
+    if (!m || m.winner == null || m.recorded) return;
+    if (this.mode === 'pass') { this._recordPassPlay(m, 'p' + ((m.winner | 0) + 1), this.seats); return; }
+    if (this.mode !== 'cpu') return;
     m.recorded = true;
     try {
       const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0), { detail: () => ({ look: lookOf(m, this.settings.look) }) });

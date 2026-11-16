@@ -326,3 +326,6 @@ The setup card is tabs **Online | Play** (Cup Pong's, `cup-pong/CLAUDE.md`), rep
 ## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
 
 `modeOfMatch(raw, seat)` adds `first` = who broke the FIRST rack (always `BREAKER`; ui.js read the engine's `breaker`, which moves each rack); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: game and racks). `tools/test-eightball-mp.mjs`.
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+A finished pass-and-play match (Cutthroat: `p3` too), or one thrown away by a new match after a shot (`m.ps`, winner `quit`), records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('eightball', winner, names), { detail: look, seats, broke })` (`_recordPassPlay`, `match.recorded`): `games.eightball.pp`, counted by nothing.
