@@ -446,6 +446,15 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+/* Undo and Redo on their own row, above the rest (2026-11-16): five buttons do not fit one row. */
+.db-root .db-undo-row {
+  order: -1;
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.db-root .db-undo-row .db-btn { flex: 0 1 150px; font-size: 17px; padding: 11px 12px; }
 /* Armed "tap again to confirm" state for the destructive Restart action --
    same treatment as Connect Four's .cf-btn-ghost.is-confirm. */
 .db-root .db-btn-ghost.is-confirm {
