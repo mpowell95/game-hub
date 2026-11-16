@@ -34,7 +34,7 @@ import * as LL from '../../js/live-leave.js';
 import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { onThemeChange } from '../../js/theme.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordAirHockey, loadStats, armQuitLoss, takeQuitLoss, withMode, modeTag } from '../../js/game-stats.js';
+import { recordAirHockey, loadStats, armQuitLoss, takeQuitLoss, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30). The table
  *  is a look; the only thing that defines a match is its length, first to 7 (physics.js PHYS.WIN). */
 const AH_MODE = { to: 7 };
@@ -494,6 +494,7 @@ class AirHockeyUI {
     this.difficulty = sv.diff;
     this._resetFx();
     this.matchBest = sv.best;
+    this._cont = 1;
     this._syncScore();
     this.screen = 'game';
     this._showOnly(null);
@@ -541,8 +542,9 @@ class AirHockeyUI {
       // Online: a round already decided by a leave on this phone (js/live-leave.js) counts once, as that.
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
+      if (counted) logPlayData('airhockey', 'live', () => ({ ...this._ahLog(), score: [gf, ga], won: this.match.winner === 0 }), { mode: AH_MODE, diff: 'mp', key: this._liveKey() });
       const st = counted ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
-        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }), { detail: () => this._ahDetail() });
+        { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }), { detail: () => this._ahDetail(), log: () => this._ahLog() });
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
     this._fillOver();
@@ -590,6 +592,13 @@ class AirHockeyUI {
     const tb = saved || (this.settings && this.settings.table);
     return { table: typeof tb === 'string' && tb ? tb : 'default' };
   }
+  /** PRIVATE play data (2026-11-16): goals in order [scorer 0 me / 1 them, seconds in], the match's length,
+   *  both fastest shots, shot count, the table, the opponent's name. Admin play log only (`x`). */
+  _ahLog(saved) {
+    return ({ goals: this._gl || [], secs: Math.round((performance.now() - (this._t0 || performance.now())) / 100) / 10,
+      myBest: Math.round(this.matchBest || 0), oppBest: Math.round(this._oppBest || 0), shots: this._shotN | 0, cont: this._cont | 0,
+      table: this._ahDetail(saved).table, to: AH_MODE.to, opp: this.online ? String(this.online.oppName || '').slice(0, 24) : 'cpu', cpu: this.online ? null : this.difficulty });
+  }
   /** Online only: leaving a live round after your first touch is a loss (js/live-leave.js). */
   quitCostsLoss() { return this.online ? this._liveCosts() : false; }
   /** The saved match, thrown away: ONE loss through the quit-loss marker (armed and taken at once, so
@@ -599,12 +608,13 @@ class AirHockeyUI {
     if (!sv) return;
     clearSave();
     const [gf, ga] = sv.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => ({ detail: this._ahDetail(sv.table) })));
+    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => ({ detail: this._ahDetail(sv.table), log: () => this._ahLog(sv.table) })));
     if (!takeQuitLoss('airhockey')) console.error('[airhockey] the thrown-away match was not recorded as a loss');
   }
 
   _goal(scorer) {
     const [a, b] = this.match.score;
+    try { if (this._gl && this._gl.length < 40) this._gl.push([scorer, Math.round((performance.now() - this._t0) / 100) / 10]); } catch { /* private log only */ }
     if (this.match.phase !== 'over') this._saveMatch();   // the score so far, the scored-on side to serve
     if (this.online && this.online.armed === this.online.rd && this.match.phase !== 'over') this._liveArm();
     this._syncScore();
@@ -629,6 +639,7 @@ class AirHockeyUI {
 
   _resetFx() {
     this.flash = 0; this.goalT = 0; this.lastShot = 0; this.matchBest = 0;
+    this._gl = []; this._t0 = performance.now(); this._oppBest = 0; this._shotN = 0; this._cont = 0;   // private play log (2026-11-16)
     this.fx.flash = 0; this.fx.goal = -1; this.fx.goalT = 0;
     this.banner.hidden = true;
     this.renderer.clearFx();
@@ -637,6 +648,8 @@ class AirHockeyUI {
   _shots(s) {
     const ev = s.ev;
     if (ev.shot > 0) {
+      if (ev.shotBy === 1 && ev.shot > this._oppBest) this._oppBest = ev.shot;
+      this._shotN = (this._shotN | 0) + 1;
       if (ev.shotBy === 0) { this.lastShot = ev.shot; if (ev.shot > this.matchBest) this.matchBest = ev.shot; }
       if (ev.shot > 450 && !this.reduce) this.renderer.sparks(ev.hx, ev.hy, Math.min(1, ev.shot / 4000));
     }
@@ -1003,7 +1016,7 @@ class AirHockeyUI {
       let forfeit = null;
       try { if (app) forfeit = (await app.api.get(app.api.ref(app.db, `rooms/${on.code}/forfeit`))).val(); } catch { /* offline */ }
       const res = LL.onRoomEnded({ forfeit }, { statsId: 'airhockey', key, n: on.rd, mySeat: on.role,
-        fn: 'recordAirHockey', winArgs: args, opps: [], tag: modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })) });
+        fn: 'recordAirHockey', winArgs: args, opps: [], tag: modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail(), log: () => this._ahLog() })) });
       const title = res === 'won' ? LL.lt('ll_left_win', { name: on.oppName }) : res === 'lost' ? LL.lt('ll_lost', { name: on.oppName }) : null;
       if (title && instance === this && this.screen === 'left') this.root.querySelector('[data-role="leftTitle"]').textContent = title;
     }).catch(() => {});
@@ -1019,7 +1032,7 @@ class AirHockeyUI {
   _liveArgs(won) { const [gf, ga] = this.match.score; return ['mp', won, { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }]; }
   _liveArm() {
     if (!this._liveInPlay()) return;
-    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })));
+    LL.armLeave('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(false), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail(), log: () => this._ahLog() })));
     this.online.armed = this.online.rd;
   }
   _liveQuietMs() { const on = this.online; return on && on.quietSince ? performance.now() - on.quietSince : 0; }
@@ -1028,7 +1041,7 @@ class AirHockeyUI {
   _liveClaim() {
     if (!this._liveCanClaim()) return;
     const on = this.online;
-    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail() })));
+    LL.recordLeaveWin('airhockey', this._liveKey(), 'recordAirHockey', this._liveArgs(true), [], modeTag(AH_MODE, 'mp', () => ({ detail: this._ahDetail(), log: () => this._ahLog() })));
     on.leaving = true;
     LL.leaveWithForfeit(on.net, on.code, on.role, on.role === 'host' ? 'guest' : 'host', on.rd, true).catch(() => {});
     this._teardownOnline(false);

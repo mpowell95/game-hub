@@ -309,3 +309,5 @@ The start card is **Online | Computer** tabs (`_showTab`); the old "Play online"
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Every result (vs computer, its thrown-away save, online and every live-leave path) carries `table` (the look) in its withMode detail; the save now keeps `table` (older saves: the current setting). Never in the mode.
+
+Private play data (2026-11-16): logs goals (scorer, seconds), both best shots, shot count, table, opponent name via withMode `log` / logPlayData.

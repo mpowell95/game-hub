@@ -11,7 +11,7 @@
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
-import { recordResult, noteVoidedResult, recordSpellingBeeGenius, withMode } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, recordSpellingBeeGenius, withMode, logPlayData } from '../../js/game-stats.js';
 import { VOIDED_MATCHES, handAddFor } from '../../js/stats-corrections.js';
 import {
   RANKS, GENIUS, QUEEN, MAX_LEN, loadData, dayKey, dayNumber, dateOfDay, puzzleAt, puzzleOf, fold, answersFor, extrasFor, totalPoints,
@@ -706,12 +706,25 @@ class SpellingBee {
     this.save.days[dayOf(this.puzzle.key, this.rec)] = 1;
     writeSave(this.save);
     noteVoidedDays(this.save);
+    this._privateSummary('genius');
+  }
+
+  /** PRIVATE play data (admin play log `x`, 2026-11-16): the day's points, rank and every word found in order with its
+   *  time, at Genius and at Queen. Every guess is already in beeLog; this adds what that does not hold. Never throws. */
+  _privateSummary(what) {
+    try {
+      if (this.fun) return;
+      logPlayData(STATS_ID, what, () => ({ key: this.puzzle.key, day: this.rec.day || null, lang: this.data.lang === 'es' ? 'es' : 'en', pts: this.score, max: this.max, rank: this.rank(), day_: this._dayStats(),
+        words: this.rec.found || [], times: this._times(), answers: this.answers.length, found: this.found.size, geniusAt: this.rec.geniusAt || null }),
+      { mode: () => ({ lang: this.data.lang === 'es' ? 'es' : 'en' }), diff: 'daily', key: String(this.puzzle.key).slice(0, 40) });
+    } catch { /* private log only */ }
   }
 
   _celebrate(ri) {
     const key = ri === QUEEN ? 'seenQueen' : 'seenGenius';
     if (this.rec[key]) return;
     this.rec[key] = true;
+    if (ri === QUEEN) this._privateSummary('queen');
     if (this.fun) writeFun(this.fun); else writeSave(this.save);
     this._later(() => this._openOverlay('win', `
       <button type="button" class="gh-modal__close" data-ov="close" aria-label="${esc(t('close_aria'))}">&times;</button>

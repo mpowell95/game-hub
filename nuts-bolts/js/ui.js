@@ -2,7 +2,7 @@ import { NutsBoltsGame, getTopRun } from './game.js';
 import { CAP, PALETTE, isBoltComplete, TIER_ORDER, rampStart } from './generator.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordNutsBolts, withMode, loadStats } from '../../js/game-stats.js';
+import { recordNutsBolts, withMode, loadStats, logPlayData } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import STRINGS from './strings.js';
@@ -876,12 +876,13 @@ class NutsBoltsUI {
     if (!this._winRecorded && (this.won[tier] | 0) < level) {
       this._winRecorded = true;
       try {
-        if (withMode({ lvl: 'ladder' }, tier, () => recordNutsBolts(level, this.game.moves, tier), { detail: () => ({ moves: this.game.moves | 0 }) })) {
+        if (withMode({ lvl: 'ladder' }, tier, () => recordNutsBolts(level, this.game.moves, tier), { detail: () => ({ moves: this.game.moves | 0 }), log: () => this.game.privateLog() })) {
           this.won[tier] = level;
           this.persist();
         } else console.error('[nuts-bolts] the solve was NOT recorded (refused)', { tier, level });
       } catch (err) { console.error('[nuts-bolts] recordNutsBolts threw - the solve was NOT recorded', err); }
     }
+    else if (!this._winRecorded) { try { logPlayData('nutsbolts', 'replay', () => this.game.privateLog(), { mode: { lvl: 'ladder' }, diff: tier, key: tier + ':' + level }); } catch { /* private log only */ } }
     this._winRecorded = true;
     const name = this.profile && this.profile.name;
     const title = t('win_title', { n: this.game.level });

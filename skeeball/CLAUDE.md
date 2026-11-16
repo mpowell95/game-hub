@@ -604,3 +604,5 @@ A challenge rack is recorded and shown like any rack, and beside it `sk.chg` (it
 ## Old results never re-shown (2026-11-09)
 
 The launcher bubble shows a finished challenge only if it finished after this phone's storage began (`alert.js` `storageSince` = `statsOwner().at`): a re-added app showed Matt every old "X beat you". Same rule as every other game's results. `tools/test-skee-challenge.mjs`.
+
+Private play data (2026-11-16): logs every swipe (power, aim, clock) and every settled ball via withMode `log` / logPlayData.

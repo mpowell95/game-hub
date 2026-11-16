@@ -550,3 +550,5 @@ Matt re-added the app: `ladder2` (settings, phone-only) was gone and Expert open
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Levels, Replay and both Rush paths: detail `thick` (`on`/`off`, the thick-arrows switch). Never in the mode.
+
+Private play data (2026-11-16): logs every arrow tap and hint with time, level or Rush board data, penalties via withMode `log` / logPlayData.
