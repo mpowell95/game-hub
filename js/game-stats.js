@@ -2222,6 +2222,38 @@ export function recordFlickSoccerTest(difficulty, won) {
   return st;
 }
 
+/** PASS AND PLAY (2026-11-16, Matt: "yes build 1"): two or more people on ONE phone. Kept, with its mode,
+ *  its detail and who won, in `games.<id>.pp` = { played, byMode: {<mode key>: {<diff>: {played}}},
+ *  won: {<seat>: n}, dt: {...} } (a new field, rule 5), and counted by NOTHING else: no total, no byDiff, no
+ *  byMode, no points, no leaderboard (the phone's owner played both sides). `winner` = the winning seat's
+ *  label ('p1', 'p2', 'p3', or 'draw'); `names` = the names typed for each seat, in seat order (play log only).
+ *  Called inside withMode like every result; the play log carries the mode, the detail and the names. */
+export function recordPassPlay(gameId, winner, names) {
+  if (tooFast(gameId)) return null;
+  notePlay(gameId, 'recordPassPlay', arguments);
+  if (GAMES.indexOf(gameId) < 0) return null;
+  const st = loadStats();
+  const g = st.games[gameId];
+  if (!g.pp || typeof g.pp !== 'object' || Array.isArray(g.pp)) g.pp = {};
+  const pp = g.pp;
+  pp.played = Math.max(0, +pp.played || 0) + 1;
+  const w = String(winner == null ? 'none' : winner).replace(MODE_PART_RE, '').slice(0, 12) || 'none';
+  if (!pp.won || typeof pp.won !== 'object' || Array.isArray(pp.won)) pp.won = {};
+  pp.won[w] = Math.max(0, +pp.won[w] || 0) + 1;
+  const key = _mode ? _mode.key : NO_MODE;
+  const diff = _mode ? _mode.diff : '-';
+  if (!_mode) console.error('[game-stats] recordPassPlay ran OUTSIDE withMode: filed under mode \'?\'');
+  if (!pp.byMode || typeof pp.byMode !== 'object' || Array.isArray(pp.byMode)) pp.byMode = {};
+  const m = pp.byMode[key] && typeof pp.byMode[key] === 'object' ? pp.byMode[key] : (pp.byMode[key] = {});
+  const b = m[diff] && typeof m[diff] === 'object' ? m[diff] : (m[diff] = {});
+  b.played = Math.max(0, +b.played || 0) + 1;
+  if (_mode && _mode.dt) noteDetail(pp, _mode.dt);
+  if (_mode) _mode.noted = true;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  return st;
+}
+
 export function recordResult(gameId, difficulty, won) {
   if (tooFast(gameId)) return null;
   notePlay(gameId, 'recordResult', arguments);
