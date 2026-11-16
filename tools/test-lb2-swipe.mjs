@@ -136,7 +136,9 @@ function helpers(w) {
     const q = (s) => document.querySelector(s);
     if (!q('.lb2')) return 'closed';
     if (q('.lb2-sheet')) return q('ul.lb2-help') ? 'help' : 'info';
-    if (q('.lb2-kcard')) return 'pgame';
+    // A person's game page: the kind card, or (admin devices since 2026-11-07, the rows look) the standing card / My Stats v2 body.
+    // Without the second test it read as 'player', the same as the page it was opened from, and the matrix counted wrong.
+    if (q('.lb2-kcard') || q('.lb2-stand') || q('.lb2 .gs-v2')) return 'pgame';
     if (q('.lb2-bar')) return q('.lb2-bar [data-act="fav"]') ? 'board:' + ((q('.lb2-bar h1') || {}).textContent || '') + (q('[data-act="womode"].on') ? ':' + q('[data-act="womode"].on').dataset.v : '') : 'player';
     const on = q('.lb2-head .lb2-seg button.on[data-act="tab"]');
     const t = on ? on.dataset.v : '?';
@@ -160,7 +162,9 @@ function helpers(w) {
   async function openLb() {
     await page.evaluate(async () => { (await import('/js/leaderboard2-ui.js')).closeLeaderboard2(); });
     await wait(300);
-    const btn = page.locator('[data-role="leaderboard"]').first();
+    // The launcher's own way in, so the board gets the hub's Play: since 2026-11-10 the bottom tab bar is the only layout.
+    let btn = page.locator('.hub-tabs [data-tab="leaderboard"]').first();
+    if (!(await btn.count()) || !(await btn.isVisible())) btn = page.locator('[data-role="leaderboard"]').first();
     if (await btn.count() && await btn.isVisible()) { const b = await btn.boundingBox(); await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); }
     else await page.evaluate(async () => { (await import('/js/leaderboard-ui.js')).openLeaderboard(); });
     if (!(await page.locator('.lb2 [data-act="game"]').count())) {
