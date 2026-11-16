@@ -52,7 +52,7 @@ import {
   resolveSigninAsk, setSigninAsk,
 } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
-import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './integrity.js';
+import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts, isClearedPair } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
@@ -360,6 +360,7 @@ const nodeGame = (node) => (node === 'hoops' ? 'hoops4' : node);
 function matchAlerts() {
   const out = [];
   for (const [key, byRule] of Object.entries(obj(_integ.alerts))) {
+    if (isClearedPair(key)) continue;   // Matt cleared this pair (js/integrity.js CLEARED_PAIRS); the row stays stored
     for (const [rk, a] of Object.entries(obj(byRule))) out.push({ key, rk, a: obj(a), gid: nodeGame(String(key).split('~')[0]), at: Number(obj(a).when) || 0 });
   }
   return out.sort((a, b) => b.at - a.at);
@@ -1106,7 +1107,7 @@ function pairData() {
   const pairs = onlinePairs(_players || {}, _pairSrc.indexes, _pairSrc.usernames, codes);
   const alerts = {};   // pair key -> [{ rule, v, lim }]: the server's stored alerts, plus any the rules raise now
   for (const [key, byRule] of Object.entries(obj(_integ.alerts))) {
-    if (!String(key).startsWith('pair~')) continue;
+    if (!String(key).startsWith('pair~') || isClearedPair(key)) continue;
     for (const [rk, a] of Object.entries(obj(byRule))) (alerts[key.slice(5)] || (alerts[key.slice(5)] = [])).push({ rule: rk.split('~')[0], v: obj(a).v, lim: obj(a).lim });
   }
   for (const h of pairAlerts(pairs, codes)) {
