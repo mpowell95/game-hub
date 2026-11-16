@@ -968,6 +968,15 @@ html[lang="es"] .ba-root .ba-pop.is-extra { font-size: min(36px, 6.4vw); }   /* 
   background: #fff; color: #15202e; border: 3px solid #ffce3a; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); pointer-events: auto;
   display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .ba-root .ba-coach-bubble p { margin: 0; font-size: 18px; line-height: 1.35; font-weight: 700; text-wrap: balance; }
+.ba-root .ba-coach-bubble { gap: 8px; }
+.ba-root .ba-coach-row { display: flex; align-items: center; gap: 8px; }
+.ba-root .ba-coach-row + .ba-coach-row { padding-top: 8px; border-top: 1px solid rgba(21, 32, 46, .14); }
+.ba-root .ba-coach-icos { display: inline-flex; gap: 3px; flex: none; }
+.ba-root .ba-coach-ico { display: inline-flex; width: 28px; height: 28px; color: #e03a5a; }
+.ba-root .ba-coach-ico svg { width: 100%; height: 100%; }
+.ba-root .ba-coach.is-note .ba-coach-bubble { padding: 10px 14px; }
+.ba-root .ba-coach.is-note .ba-coach-ring { animation: none; }
+.ba-root .ba-coach.is-fading { opacity: 0; transition: opacity .3s; }
 .ba-root .ba-coach-ok { align-self: flex-end; min-height: 44px; min-width: 112px; padding: 0 18px; border: 0; border-radius: 12px;
   background: #ffce3a; color: #15202e; font: inherit; font-size: 18px; font-weight: 900; touch-action: manipulation; cursor: pointer; }
 .ba-root .ba-coach-ring.is-box { border-radius: 8px; border-width: 3px; }

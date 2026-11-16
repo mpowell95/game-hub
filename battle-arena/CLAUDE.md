@@ -337,17 +337,20 @@ Stormhorn → Thunderhorn, Emberkit → Blazecat. Older notes in this file and t
   your original one, but to just have arrows on that white line", then "these arrows are terrible" about hand-drawn ticks), and "Full bar" is the battle's own bar (gem, full
   track, "7/7"), not a plain red pill.
 
-## First-match tutorial (2026-11-15/16; Matt: Ana "didn't really know what was going on"; then "tell them to do it ... have them collect them ... we should do that everywhere")
+## First-match tutorial (2026-11-15/16; Matt: Ana "didn't really know what was going on"; then "tell them to do it ... have them collect them ... we should do that everywhere"; then his 10 iPhone shots)
 
-Everything the player can DO is a guided step (vs the computer only; never forced online): "Swap these two ..." with the two
-tiles ringed, an arrow, the line boxed, NO Got it, and only that swap works (`guideAllows` in `trySwap`); the real match plays,
-then a tip explains it with the real numbers. Ids (`settings.tips`, once per phone; reported via `js/tips-log.js`):
-`yours` (your monsters are on the right + health; Got it) -> `doSwap` (first move, a line of the player's own color,
-`tipMove`) -> `charged` ("Sproutle: 3 of 6") -> `movesLeft` -> `theirTurn` (a note at the other side's name on its first turn,
-no button, gone when the turn returns). From the 2nd turn, at most one guided step a turn: `doExtra` -> `extraMove`,
-`doBerry` -> `berries`, `doBomb` -> `boom` (`_sawBoom`: the player's own match set it off; no move? the bomb's row/column boxed
-with words); `doEvolve` = "Tap X to evolve it" (board waits; the tap opens the evolve preview); `power` after the first power
-(`_sawPower`); `arena` (the bomb button). Each explanation also shows if the thing happened on its own. Bubbles on the board
-sit above it (`placeTip`). A timed live room never blocks. Mockups: `docs/mockups/battle-arena-tutorial/`. Test:
-`tools/test-battlearena-tips.mjs` (plays it for real); `test-battlearena-back.mjs` seeds every tip seen.
+Seen-list `settings.tips2` (the rebuilt tutorial; the first one's `tips` kept, unread), once per phone, reported via
+`js/tips-log.js`. One idea per ROW in every bubble (`rows`, string or `{icon, text}`); the button reads **Next**.
+First turn: `health` (both HP, "starts at 80 / first to 0 loses") -> `moves` ("2 a turn / 4 in a row: +1 (3 at most)") ->
+`yours` (one line, both languages) -> `food` (each side's gem colours, icons in the rows) -> `doSwap` GUIDED (two tiles
+ringed + arrow, the line boxed, no button, only that swap works: `guideAllows`) -> `charged` (3 rows, real numbers) ->
+`movesLeft` PROMPT ("1 move left / Make your next move.", no button, goes with the move). **The first match (doSwap unseen):
+the player moves first, on a board with a 3 in a row of their own colour** (`startMatch` tries seeds, `ownLine`; ~83% of
+boards have one). `theirTurn`: a small note at the other side's name, fades after 2.5 s (it hid the computer's moves).
+`power` PAUSES the first attack when the bar is full, before it plays (`powerPause` in play()'s 'special'; Matt: "my guy
+already attacked before this popup came up"). From turn 2, one guided step a turn: `doExtra`, `doBerry`, `doBomb`; the
+explanations `extraMove`, `berries`, `boom` are PROMPTS ending "Make your next move."; `doEvolve` = tap the monster;
+`arena`. Vs the computer only for anything forced; a timed live room never blocks. Mockups: `docs/mockups/battle-arena-tutorial/`.
+Test: `tools/test-battlearena-tips.mjs` (plays it for real); `test-battlearena-back.mjs` seeds every tip seen.
 The Spanish "¡MOVIMIENTO EXTRA!" banner fits at 360 (`html[lang=es] .ba-pop.is-extra`, 2026-11-16).
+- **No forward page after a popup closes (2026-11-16, Matt: a right-to-left swipe "shows me this sproutle page for a second then goes back")**: the iPhone's forward swipe slid back the snapshot of a closed card; fixed for every screen in `js/back-stack.js` (filler entry). `test-battlearena-back.mjs` "forward".

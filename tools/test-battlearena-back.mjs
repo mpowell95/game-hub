@@ -20,7 +20,7 @@ async function open(url) {
     localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'test1', emoji: '🦊', playerId: 'DREG5', opponents: [] }));
     localStorage.setItem('gamehub.devAllowSync.v1', '0');
     // The first-match tutorial blocks the board until Got it (tools/test-battlearena-tips.mjs tests it): seen here.
-    try { const k = 'gamehub.battlearena.v1', v = JSON.parse(localStorage.getItem(k) || '{}'); v.tips = { yours: 1, doSwap: 1, charged: 1, movesLeft: 1, power: 1, extraMove: 1, berries: 1, doEvolve: 1, boom: 1, doExtra: 1, doBerry: 1, doBomb: 1, arena: 1, theirTurn: 1 }; localStorage.setItem(k, JSON.stringify(v)); } catch {}
+    try { const k = 'gamehub.battlearena.v1', v = JSON.parse(localStorage.getItem(k) || '{}'); v.tips2 = { health: 1, moves: 1, yours: 1, food: 1, doSwap: 1, charged: 1, movesLeft: 1, power: 1, extraMove: 1, berries: 1, doEvolve: 1, boom: 1, doExtra: 1, doBerry: 1, doBomb: 1, arena: 1, theirTurn: 1 }; localStorage.setItem(k, JSON.stringify(v)); } catch {}
     window.__labels = [];
     window.addEventListener('gamehub:backlabel', (e) => window.__labels.push(!!e.detail));
   });
@@ -161,6 +161,27 @@ const SPEEDS = { fast: { ms: 80, steps: 4, dx: 110 }, normal: { ms: 260, steps: 
   await w.page.click('.hub-back'); await w.page.waitForTimeout(700);
   ok('hub: on the game\'s home its button leaves to the launcher', await w.page.evaluate(() => !window.__baTest && !!document.querySelector('.hub-card')));
   ok('hub: no page errors', !w.errs.length, w.errs.join(' | '));
+  await w.ctx.close();
+}
+// --- no forward page left behind (2026-11-16, Matt: a right-to-left swipe "shows me this sproutle page for a second then goes
+// back"): the iPhone's forward swipe slid the snapshot of a closed card back in. After a card closes there is no forward page.
+{
+  const w = await open(`${BASE}/`);
+  await w.page.waitForSelector('.hub-card[data-id="battle-arena"]', { timeout: 15000 });
+  await w.page.click('.hub-card[data-id="battle-arena"]');
+  await w.page.waitForFunction(() => window.__baTest && window.__baTest.screen === 'home', null, { timeout: 15000 });
+  await w.page.evaluate(() => window.__baTest.startMatch(['sproutle', 'cinderwing']));
+  await w.page.waitForFunction(() => window.__baTest.canInput(), null, { timeout: 15000 });
+  for (const how of ['x', 'back']) {
+    await w.page.click('.ba-mon[data-side="0"][data-mon="0"]', { force: true }); await w.page.waitForTimeout(400);
+    ok(`forward (${how}): tapping a monster opens its card`, await w.page.evaluate(() => !!document.querySelector('.ba-root .gh-overlay')));
+    if (how === 'x') await w.page.click('.ba-root .gh-overlay [data-role="close"]');
+    else await w.page.evaluate(() => history.back());
+    await w.page.waitForTimeout(700);
+    const fw = await w.page.evaluate(async () => { let pops = 0; const f = () => { pops += 1; }; addEventListener('popstate', f); history.forward(); await new Promise((r) => setTimeout(r, 700)); removeEventListener('popstate', f); return { pops, open: !!document.querySelector('.ba-root .gh-overlay'), battle: window.__baTest && window.__baTest.screen }; });
+    ok(`forward (${how}): after the card closes there is no forward page, the battle stays`, fw.pops === 0 && !fw.open && fw.battle === 'battle', JSON.stringify(fw));
+  }
+  ok('forward: no page errors', !w.errs.length, w.errs.join(' | '));
   await w.ctx.close();
 }
 await browser.close();

@@ -21,6 +21,20 @@ let inflight = 0;           // our own history.go() calls still waiting for thei
 let owed = 0;               // entries to unwind at the next flush
 let flushQueued = false;
 let inflightTimer = 0;
+// NO FORWARD PAGE LEFT BEHIND (2026-11-16, Matt: in Battle Arena a right-to-left swipe "shows me this sproutle page for a
+// second then goes back"). Going back (our go(-n), or the phone's back) leaves the closed screen as a FORWARD entry; the
+// iPhone's forward swipe from the right edge then slid that old screen's snapshot in, and onPopState stepped back out of it.
+// So after any step back (while some screen uses this module), a FILLER entry (same depths, `ghbFill`) is pushed: a push drops
+// every forward entry. Arriving off a filler with nothing changed = the back passes straight on (one more history.back());
+// a new level replaces the filler instead of stacking on it; an unwind from a filler counts it.
+const isFill = (st) => !!(st && typeof st === 'object' && st.ghbFill);
+let onFill = false;
+function seal() {
+  if (inflight || owed || isFill(history.state)) return;
+  if (!owners.size || [...owners.values()].some((o) => o.noHist)) return;   // nobody's screens to keep, or history refused
+  try { history.pushState({ ...(history.state && typeof history.state === 'object' ? history.state : {}), ghbFill: 1 }, ''); onFill = true; }
+  catch (err) { console.warn('[back-stack] filler refused', err); }
+}
 
 function depths() {
   const s = history.state;
@@ -30,7 +44,9 @@ function depths() {
 function pushFor(o) {
   const s = history.state && typeof history.state === 'object' ? history.state : {};
   try {
-    history.pushState({ ...s, ghb: { ...depths(), [o.id]: o.hist + 1 } }, '');
+    const next = { ...s, ghb: { ...depths(), [o.id]: o.hist + 1 } };
+    if (isFill(s)) { delete next.ghbFill; history.replaceState(next, ''); onFill = false; }   // the filler becomes the new level
+    else history.pushState(next, '');
     o.hist += 1;
     return true;
   } catch (err) { console.warn('[back-stack] pushState refused', err); o.noHist = true; return false; }
@@ -39,16 +55,18 @@ function pushFor(o) {
 // Push any missing entries, only once no traversal of ours is in flight (a push during one can be
 // lost or land behind it).
 function settle() {
-  if (inflight || owed) return;
+  if (inflight || owed) return 0;
+  let pushed = 0;
   for (const o of [...owners.values()]) {
-    while (!o.noHist && o.hist < o.level) if (!pushFor(o)) break;
+    while (!o.noHist && o.hist < o.level) { if (!pushFor(o)) break; pushed += 1; }
   }
+  return pushed;   // a push already dropped the forward entries
 }
 
 function flush() {
   flushQueued = false;
   if (!owed) { settle(); return; }
-  const n = owed;
+  const n = owed + (isFill(history.state) ? 1 : 0);   // the filler on top is one more step
   owed = 0;
   inflight += 1;
   clearTimeout(inflightTimer);
@@ -64,12 +82,19 @@ function owe(n) {
 
 function onPopState() {
   const d = depths();
+  const leftFill = onFill;
+  onFill = isFill(history.state);
   if (inflight > 0) {
     // Our own unwind landed: the screens already match; read where history really is.
     inflight -= 1;
     if (!inflight) clearTimeout(inflightTimer);
     for (const o of owners.values()) o.hist = Math.max(0, d[o.id] | 0);
-    if (!inflight) settle();
+    if (!inflight && !settle()) seal();
+    return;
+  }
+  // Stepped back off a filler and nothing changed: that back was meant for the screen behind it.
+  if (leftFill && !onFill && [...owners.values()].every((o) => Math.max(0, d[o.id] | 0) === o.hist)) {
+    try { history.back(); } catch { /* no history */ }
     return;
   }
   // The user went back (swipe, Back button, history.back()): each overlay steps to its new depth.
@@ -85,7 +110,7 @@ function onPopState() {
       owe(h - o.level);   // forward into a screen already left: go back out of it
     }
   }
-  settle();
+  if (!settle()) seal();
 }
 // Guarded: Node test scripts import the screens that import this.
 if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('popstate', onPopState);

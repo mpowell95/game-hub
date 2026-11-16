@@ -67,7 +67,8 @@ function readSettings() {
     team: Array.isArray(raw.team) ? raw.team.filter((id) => BY_ID[id]).slice(0, 2) : [],
     // Turn-based games alternate who opens (docs/BUILDING-A-GAME.md, setup defaults).
     nextFirst: raw.nextFirst === 1 ? 1 : 0,
-    tips: raw.tips && typeof raw.tips === 'object' ? raw.tips : {},
+    tips: raw.tips && typeof raw.tips === 'object' ? raw.tips : {},      // the first tutorial's seen-list (2026-11-15), kept
+    tips2: raw.tips2 && typeof raw.tips2 === 'object' ? raw.tips2 : {},   // the tutorial as rebuilt 2026-11-16 (Matt's 10 shots): its own list, so it plays again
   };
 }
 
@@ -157,6 +158,17 @@ function effectLines(sp) {
 }
 
 /** One SHORT line per effect, for the Monsters screen's third-width tiles (the card says it in full). */
+/** Does this board have a swap that lines up 3+ of one of these monsters' gem colours? (The tutorial's first board.) */
+function ownLine(state, team) {
+  const els = team.map((id) => (BY_ID[id] || {}).el).filter(Boolean);
+  const kinds = els.includes('all') ? ELEMENTS : els;
+  for (const mv of E.legalMoves(state)) {
+    const b = state.board.slice(); const t = b[mv.a]; b[mv.a] = b[mv.b]; b[mv.b] = t;
+    if (E.findRuns(b).some((r) => kinds.includes(r.k) && (r.cells.includes(mv.a) || r.cells.includes(mv.b)))) return true;
+  }
+  return false;
+}
+
 function tileLines(sp) {
   const out = [];
   if (sp.dmg) out.push(t('tx_dmg', { n: sp.dmg }));
@@ -834,9 +846,14 @@ class BattleArena {
     this.settleSavedMatch();
     const unlocked = unlockedIds(totalWins());
     const foe = chooseTeam(this.settings.diff, unlocked, team);
-    let seed = 1;
-    try { seed = (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch { seed = Math.floor(Math.random() * 4294967296) >>> 0; }
-    const state = E.newMatch({ seed, teams: [team, foe], first: this.settings.nextFirst, rv: RULES_VERSION });
+    const rnd = () => { try { return (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0; } catch { return Math.floor(Math.random() * 4294967296) >>> 0; } };
+    // The first-match tutorial (Matt, 2026-11-16: "the 3 in a row will show 3 tiles that match one of their selected monsters,
+    // right? regardless of what they choose?"): while its first swap is unseen, the player moves first, on a board that has a
+    // 3 in a row of their own colour (a seed is a seed: the board is still the RNG's, just one of the many that has one).
+    const tutorial = !this.tipSeen('doSwap');
+    const first = tutorial ? ME : this.settings.nextFirst;
+    let seed = rnd(), state = E.newMatch({ seed, teams: [team, foe], first, rv: RULES_VERSION });
+    for (let k = 0; tutorial && k < 60 && !ownLine(state, team); k++) { seed = rnd(); state = E.newMatch({ seed, teams: [team, foe], first, rv: RULES_VERSION }); }
     this.diff = this.settings.diff;
     this.link = null;
     this.state = this.canon = state;
@@ -1318,88 +1335,111 @@ class BattleArena {
     return { guide: mv, parts: [{ cells: mv.line, line: true }, { cells: [mv.from], round: true, point: true }, { cells: [mv.into], round: true }] };
   }
 
-  /** The tip that should show now, or null: { id, tg, text }. In order; the guided ones at most one a turn, from the 2nd turn. */
+  tips() { return this.settings.tips2 || (this.settings.tips2 = {}); }
+  tipSeen(id) { return !!this.tips()[id]; }
+
+  /** The tip that should show now, or null: { id, tg, rows }. Rows = one idea per line (Matt, 2026-11-16: "nothing is cleanly
+   *  separated by rows"); a row is a string or { icon, text }. In order; the guided ones at most one a turn, from the 2nd turn.
+   *  `tg.prompt`: no button, it ends with "Make your next move." and goes with that move. */
   nextTip() {
-    const s = this.state, me = s.sides[ME];
-    const seen = this.settings.tips || (this.settings.tips = {});
+    const s = this.state, me = s.sides[ME], foe = s.sides[CPU];
     const root = this.root;
     const offline = !this.link;
-    const may = (id) => !seen[id];
+    const may = (id) => !this.tipSeen(id);
     const el1 = (el, extra) => (el && el.isConnected ? { parts: [{ el, point: true, ...extra }] } : null);
     const guidedTurn = offline && this._myTurns >= 2 && this._guidedOn !== this._myTurns && s.movesLeft >= 1;
-    const monName0 = (mi) => monName(me.mons[mi].id, me.mons[mi].evo);
-    // 1. Whose monsters, and health.
+    const nm = (mi) => monName(me.mons[mi].id, me.mons[mi].evo);
+    const NEXT = t('tip_nextMove');
+    const prompt = (tg) => ({ ...tg, prompt: true });
+    const them = offline ? null : this.names[CPU];
+    // 1. Health.
+    if (may('health')) {
+      const hp = [0, 1].map((sd) => this.sideEl(sd) && this.sideEl(sd).querySelector('.ba-stat-hp'));
+      if (hp.every(Boolean)) return { id: 'health', rows: [t('tip_health1', { n: me.maxHp || 80 }), t('tip_health2')], tg: { parts: hp.map((el) => ({ el, point: true })) } };
+    }
+    // 2. Moves (and the extra one).
+    if (may('moves')) {
+      const r = el1(root.querySelector('.ba-moves'));
+      if (r) return { id: 'moves', rows: [t('tip_moves1'), t('tip_moves2')], tg: r };
+    }
+    // 3. Whose monsters.
     if (may('yours')) {
       const els = [this.monEl(ME, 0), this.monEl(ME, 1)];
-      const hp = [0, 1].map((sd) => this.sideEl(sd) && this.sideEl(sd).querySelector('.ba-stat-hp'));
-      if (els.every(Boolean) && hp.every(Boolean)) return { id: 'yours', text: offline ? t('tip_yours') : t('tip_yoursVs', { name: this.names[CPU] }), tg: { parts: [...els.map((el) => ({ el, point: true })), ...hp.map((el) => ({ el }))] } };
+      if (els.every(Boolean)) return { id: 'yours', rows: [t('tip_yours')], tg: { parts: els.map((el) => ({ el, point: true })) } };
     }
-    // 2. The first swap, done by the player (before any other move).
+    // 4. What each side's monsters eat.
+    if (may('food')) {
+      const gemEl = (sd, mi) => this.monEl(sd, mi) && this.monEl(sd, mi).querySelector('.ba-bar-gem');
+      const parts = [[ME, 0], [ME, 1], [CPU, 0], [CPU, 1]].map(([sd, mi]) => gemEl(sd, mi));
+      const kinds = (side) => [...new Set(side.mons.map((m) => (BY_ID[m.id] || {}).el).filter(Boolean))];
+      const icons = (side) => kinds(side).map((el) => `<span class="ba-coach-ico">${elementBadge(el)}</span>`).join('');
+      if (parts.every(Boolean)) return { id: 'food', rows: [{ icon: icons(me), text: t('tip_food1') }, { icon: icons(foe), text: them ? t('tip_food2vs', { name: them }) : t('tip_food2') }], tg: { parts: parts.map((el) => ({ el, point: true })) } };
+    }
+    // 5. The first swap, done by the player (before any other move).
     if (may('doSwap') && offline && !this._myMoves) {
       const mv = this.tipMove({ kinds: this.myKinds() }) || this.tipMove({ kinds: ELEMENTS });
-      if (mv) return { id: 'doSwap', text: t('tip_doSwap'), tg: this.guideOf(mv) };
+      if (mv) return { id: 'doSwap', rows: [t('tip_doSwap')], tg: this.guideOf(mv) };
     }
-    // 3. What the gems did.
+    // 6. What the gems did.
     if (may('charged')) {
       const mi = me.mons.findIndex((m) => m.energy > 0 && m.energy < costOf(m.id, s.rv || 1));
       const bar = mi >= 0 && this.monEl(ME, mi) && this.monEl(ME, mi).querySelector('.ba-bar');
-      if (bar) return { id: 'charged', text: t('tip_charged', { name: monName0(mi), n: me.mons[mi].energy, max: costOf(me.mons[mi].id, s.rv || 1) }), tg: { parts: [{ el: bar, point: true }] } };
+      if (bar) {
+        const m = me.mons[mi], el = (BY_ID[m.id] || {}).el;
+        return { id: 'charged', rows: [{ icon: el && el !== 'all' ? `<span class="ba-coach-ico">${elementBadge(el)}</span>` : '', text: t('tip_charged1', { name: nm(mi) }) },
+          t('tip_charged2', { n: m.energy, max: costOf(m.id, s.rv || 1) }), t('tip_charged3', { name: nm(mi) })], tg: { parts: [{ el: bar, point: true }] } };
+      }
     }
-    // 4. Moves left, once a move has been used.
+    // 7. Moves left, once a move has been used: "Make your next move." (no button).
     if (may('movesLeft') && this._myMoves >= 1 && s.movesLeft >= 1) {
       const r = el1(root.querySelector('.ba-moves'));
-      if (r) return { id: 'movesLeft', text: s.movesLeft === 1 ? t('tip_movesLeft1') : t('tip_movesLeft', { n: s.movesLeft }), tg: r };
+      if (r) return { id: 'movesLeft', rows: [s.movesLeft === 1 ? t('tip_movesLeft1') : t('tip_movesLeft', { n: s.movesLeft }), NEXT], tg: prompt(r) };
     }
-    // 5. A power, after the player's first one.
-    if (may('power') && this._sawPower != null) {
-      const r = el1(this.monEl(ME, this._sawPower));
-      if (r) return { id: 'power', text: t('tip_power', { name: monName0(this._sawPower) }), tg: r };
-    }
-    // 6. Extra move: explained once it happened; else done by the player.
+    // 8. Extra move, once it happened.
     if (may('extraMove') && this._sawExtra) {
       const r = el1(root.querySelector('.ba-moves'));
-      if (r) return { id: 'extraMove', text: t('tip_extraMove'), tg: r };
+      if (r) return { id: 'extraMove', rows: [t('tip_extraMove1'), t('tip_extraMove2'), NEXT], tg: prompt(r) };
     }
-    // 7. Berries: explained once collected; else done by the player.
+    // 9. Berries, once collected.
     const berriesMatter = !me.mons.every((m) => m.evo);
     if (may('berries') && berriesMatter && me.berries > 0) {
       const r = el1(this.sideEl(ME) && this.sideEl(ME).querySelector('.ba-stat-berry'));
-      if (r) return { id: 'berries', text: t('tip_berries', { n: me.berries, max: BERRIES_TO_EVOLVE }), tg: r };
+      if (r) return { id: 'berries', rows: [{ icon: `<span class="ba-coach-ico">${ICONS.berry}</span>`, text: t('tip_berries1', { n: me.berries, max: BERRIES_TO_EVOLVE }) }, t('tip_berries2', { max: BERRIES_TO_EVOLVE }), NEXT], tg: prompt(r) };
     }
-    // 8. Evolve: tap the monster (the preview opens).
+    // 10. Evolve: tap the monster (the preview opens).
     if (may('doEvolve')) {
       const mi = E.evolveOptions(s)[0];
       const el = mi != null && this.monEl(ME, mi);
-      if (el) return { id: 'doEvolve', text: t('tip_doEvolve', { name: monName0(mi) }), tg: { tap: mi, parts: [{ el, point: true }] } };
+      if (el) return { id: 'doEvolve', rows: [t('tip_doEvolve', { name: nm(mi) })], tg: { tap: mi, parts: [{ el, point: true }] } };
     }
-    // 9. A bomb: explained after the player set one off; else done by the player; else explained with its row and column.
-    if (may('boom') && this._sawBoom) return { id: 'boom', text: t('tip_boom'), tg: { parts: [{ el: root.querySelector('.ba-board') }] } };
+    // 11. A bomb the player set off.
+    if (may('boom') && this._sawBoom) return { id: 'boom', rows: [t('tip_boom1'), t('tip_boom2'), NEXT], tg: prompt({ parts: [{ el: root.querySelector('.ba-board') }] }) };
     // The guided steps for later turns (one a turn).
     if (guidedTurn && may('doExtra') && !this._sawExtra && !s.extraUsed) {
       const mv = this.tipMove({ min: 4, longest: true });
-      if (mv) return { id: 'doExtra', text: t('tip_doExtra'), tg: this.guideOf(mv) };
+      if (mv) return { id: 'doExtra', rows: [t('tip_doExtra')], tg: this.guideOf(mv) };
     }
     if (guidedTurn && may('doBerry') && berriesMatter && !me.berries) {
       const mv = this.tipMove({ kinds: ['berry'] });
-      if (mv) return { id: 'doBerry', text: t('tip_doBerry'), tg: this.guideOf(mv) };
+      if (mv) return { id: 'doBerry', rows: [t('tip_doBerry')], tg: this.guideOf(mv) };
     }
     if (may('doBomb') && may('boom')) {
       const at = s.board.findIndex((x) => x && x.k === 'bomb');
       if (at >= 0) {
         const mv = guidedTurn ? this.tipMove({ nearBomb: true }) : null;
-        if (mv) return { id: 'doBomb', text: t('tip_doBomb'), tg: this.guideOf(mv) };
+        if (mv) return { id: 'doBomb', rows: [t('tip_doBomb')], tg: this.guideOf(mv) };
         if (this._myTurns >= 2) {
           const r = Math.floor(at / E.COLS), c = at % E.COLS, row = [], col = [];
           for (let k = 0; k < E.COLS; k++) row.push(r * E.COLS + k);
           for (let k = 0; k < E.ROWS; k++) col.push(k * E.COLS + c);
-          return { id: 'doBomb', text: t('tip_bomb'), tg: { parts: [{ cells: row, line: true }, { cells: col, line: true }, { cells: [at], round: true, point: true }] } };
+          return { id: 'doBomb', rows: [t('tip_bomb1'), t('tip_boom2')], tg: { parts: [{ cells: row, line: true }, { cells: col, line: true }, { cells: [at], round: true, point: true }] } };
         }
       }
     }
-    // 10. The arena button, from the 2nd turn.
+    // 12. The arena button, from the 2nd turn.
     if (may('arena') && this._myTurns >= 2) {
       const r = el1(root.querySelector('.ba-stagebtn'));
-      if (r) return { id: 'arena', text: t('tip_arena'), tg: r };
+      if (r) return { id: 'arena', rows: [t('tip_arena')], tg: r };
     }
     return null;
   }
@@ -1409,31 +1449,50 @@ class BattleArena {
     const tip = this.nextTip();
     if (!tip) return;
     if (tip.tg.guide) this._guidedOn = this._myTurns;
-    this.showTip(tip.id, tip.tg, tip.text);
+    this.showTip(tip.id, tip.tg, tip.rows);
   }
 
-  /** The other side's first turn: a note at their name, no button; it goes when the turn comes back. */
+  /** The other side's first turn: a small note at their name, no button, gone by itself in 2.5 s (Matt: it "made it hard
+   *  to watch") or when the turn comes back. */
   theirTurnNote() {
-    const seen = this.settings.tips || (this.settings.tips = {});
-    if (seen.theirTurn || this._tip) return;
+    if (this.tipSeen('theirTurn') || this._tip) return;
     const side = this.sideEl(CPU);
     const el = side && (side.querySelector('.ba-name') || side);
     if (!el) return;
-    this.showTip('theirTurn', { note: true, parts: [{ el, point: true }] }, (this.link ? t('tip_theirTurn', { name: this.names[CPU] }) : t('tip_theirTurnCpu')));
+    this.showTip('theirTurn', { note: true, fade: 2500, parts: [{ el, point: true }] }, [this.link ? t('tip_theirTurn', { name: this.names[CPU] }) : t('tip_theirTurnCpu')]);
   }
 
-  /** Put a tip up. A guided step (`tg.guide` / `tg.tap`) and a note (`tg.note`) have no Got it and never block the screen;
-   *  the guided swap is enforced in trySwap, the guided tap in onMonTap. */
-  showTip(id, tg, text) {
+  /** The player's first power, at the moment the bar is full and BEFORE the attack (Matt: "my guy already attacked before this
+   *  popup came up"). Resolves on Next; never waits in a timed room. */
+  powerPause(mi) {
+    if (this.tipSeen('power') || this.timed) return Promise.resolve();
+    const m = this.state.sides[ME].mons[mi];
+    const el = this.monEl(ME, mi);
+    if (!m || !el) return Promise.resolve();
+    if (this._tip) this.hideTip(false);
+    const name = monName(m.id, m.evo);
+    const words = tileLines(specialOf(m.id, m.evo, this.state.rv || 1)).join(', ');
+    return new Promise((res) => {
+      this.showTip('power', { parts: [{ el, point: true }] }, [t('tip_power1'), t('tip_power2', { name, what: words }), t('tip_power3')]);
+      if (this._tip && this._tip.id === 'power') this._tip.onDone = res; else res();
+    });
+  }
+
+  /** Put a tip up. A guided step (`tg.guide` / `tg.tap`), a prompt (`tg.prompt`) and a note (`tg.note`) have no button and never
+   *  block the screen; the guided swap is enforced in trySwap, the guided tap in onMonTap. */
+  showTip(id, tg, rows) {
     const battle = this.root.querySelector('.ba-battle');
     if (!battle) return;
-    const act = !!(tg.guide || tg.tap != null || tg.note);
+    const act = !!(tg.guide || tg.tap != null || tg.note || tg.prompt);
     const block = !this.timed && !act;
     const ov = document.createElement('div');
-    ov.className = 'ba-coach' + (block ? '' : ' is-free');
+    ov.className = 'ba-coach' + (block ? '' : ' is-free') + (tg.note ? ' is-note' : '');
+    const rowHTML = (Array.isArray(rows) ? rows : [rows]).filter(Boolean).map((r) => (typeof r === 'string'
+      ? `<p class="ba-coach-row">${escapeHTML(r)}</p>`
+      : `<p class="ba-coach-row">${r.icon ? `<span class="ba-coach-icos">${r.icon}</span>` : ''}<span>${escapeHTML(r.text)}</span></p>`)).join('');
     ov.innerHTML = tg.parts.map((p) => `<div class="ba-coach-ring${p.round ? ' is-round' : p.cells ? ' is-box' : ''}${p.line ? ' is-line' : ''}"></div>`).join('')
       + (tg.guide ? `<svg class="ba-coach-swaparrow" aria-hidden="true"><defs><marker id="ba-cs-head" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto-start-reverse"><path d="M0,0 L14,7 L0,14 z" fill="#fff" stroke="#15202e" stroke-width="1.5"/></marker></defs><line stroke="#15202e" stroke-width="10" stroke-linecap="round"/><line class="is-top" stroke="#fff" stroke-width="6" stroke-linecap="round" marker-start="url(#ba-cs-head)" marker-end="url(#ba-cs-head)"/></svg>` : '')
-      + `<div class="ba-coach-bubble" role="dialog" aria-live="polite">${tg.parts.filter((p) => p.point).map(() => '<i class="ba-coach-arrow"></i>').join('')}<p>${escapeHTML(text)}</p>
+      + `<div class="ba-coach-bubble" role="dialog" aria-live="polite">${tg.parts.filter((p) => p.point).map(() => '<i class="ba-coach-arrow"></i>').join('')}${rowHTML}
         ${act ? '' : `<button type="button" class="ba-coach-ok" data-role="tip-ok">${escapeHTML(t('tip_ok'))}</button>`}</div>`;
     battle.appendChild(ov);
     this._tip = { id, tg, ov, block };
@@ -1441,6 +1500,10 @@ class BattleArena {
     noteTipShown('battlearena', id);
     const ok = ov.querySelector('[data-role="tip-ok"]');
     if (ok) this.on(ok, 'click', (e) => { e.stopPropagation(); this.hideTip(true); this.checkTips(); });
+    if (tg.fade) {
+      const tp = this._tip, gen = this.gen;
+      setTimeout(() => { if (gen === this.gen && this._tip === tp) { tp.ov.classList.add('is-fading'); setTimeout(() => { if (this._tip === tp) this.hideTip(true); }, 300); } }, tg.fade);
+    }
   }
 
   /** One part's screen box: its element, or the union of its cells' tiles. */
@@ -1478,7 +1541,7 @@ class BattleArena {
     const pointed = rects.filter((r, k) => tp.tg.parts[k].point);
     const aim = pointed.length ? pointed : rects;
     const cx = aim.reduce((a, r) => a + r.left - b.left + r.width / 2, 0) / aim.length;
-    const w = Math.min(320, b.width - 24);
+    const w = Math.min(tp.tg.note ? 260 : 370, b.width - 24);
     const left = Math.max(12, Math.min(b.width - w - 12, cx - w / 2));
     bub.style.width = w + 'px';
     bub.style.left = left + 'px';
@@ -1521,10 +1584,11 @@ class BattleArena {
     this._tip = null;
     tp.ov.remove();
     if (done) {
-      (this.settings.tips || (this.settings.tips = {}))[tp.id] = 1;
+      this.tips()[tp.id] = 1;
       writeJSON(SETTINGS_KEY, this.settings);
       noteTipDone('battlearena', tp.id);
     }
+    if (tp.onDone) { try { tp.onDone(); } catch { /* the awaited animation goes on */ } }
   }
 
 
@@ -2206,6 +2270,7 @@ class BattleArena {
           this.paintMon(e.side, e.mon);
           const mon = this.monEl(e.side, e.mon);
           if (mon) mon.classList.add('is-full');
+          if (e.side === ME) { await this.powerPause(e.mon); if (gen !== this.gen) return; }   // the tutorial: before the attack
           await this.specialBanner(e.side, e.mon, e.id, e.evo);
           if (gen !== this.gen) return;
           this.paintMon(e.side, e.mon, 0);
