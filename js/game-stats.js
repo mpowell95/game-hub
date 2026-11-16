@@ -1481,6 +1481,8 @@ function drainPendingBusinessDeal(st) {
   for (const e of q) {
     if (!e || GAMES.indexOf(e.game) < 0) continue;
     bumpTotals(st.games[e.game], normDiff(e.diff), e.won);
+    // its PRIVATE play data (2026-11-16): the play log's `x` only (logPlayData never throws)
+    if (e.x != null) logPlayData(e.game, 'queued', e.x, { mode: e.mode || null, diff: e.diff });
   }
   try { localStorage.removeItem(PENDING_BD_KEY); } catch { /* ignore */ }
   console.warn(`[game-stats] drained ${q.length} pending Monopoly Deal stat(s) that were queued while __ghStats was unavailable`);

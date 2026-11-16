@@ -293,6 +293,8 @@ Per-league `CPU_SIGMA_MIN_MS`, `placementNoise` split from `guess` (the human-fl
 
 Every band and constant in `engine/settings.js` is Draft and adjustable from that one file; Phase 2 built the difficulty MECHANISMS (ladder generator, CPU-strength contract, flavor-style budget, `tools/sim-baseball.mjs`). The old `tools/sim-baseball.mjs --assert` bands (several never green: `SEASONS_TO_GOLD`, weakest-slot floors, `CHAMPION_IS_HARDEST`, Little League's champion band) are superseded as a gate by the career tool; reported, not chased. The Locked-statement inventory (each [Locked] doc statement mapped to its test) is in CLAUDE-HISTORY.md, "Status: Phase 2 complete"; "Every settings.js constant, by source" is under "History: Phase 1 (BB-1) + BB-1a".
 
+- **Private play data (2026-11-16)**: logs every engine event as a short string (`career-io.js` `compactEvents`), the score, league, seed, skills, opponent and time: career via `recordGameResult(record, log)` (withMode `log`), Quick Play via `logBaseballPlay` (`quick` at the end, `quickLeft` when left; still counts for nothing). A resumed career game logs only the events since the resume.
+
 ## Open items
 
 Open items: see the root TODO.md, "Baseball".
