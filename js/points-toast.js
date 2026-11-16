@@ -12,12 +12,31 @@ import { isAdminDevice } from './admin-config.js';
 import { makeT } from './i18n.js';
 import STRINGS from './strings.js';
 
+import { puzzlePoints, HINT_STEPS, HINT_UNKNOWN } from './puzzle-points.js';
+import { wwPoints } from './word-weaver-points.js';
+
 const t = makeT(STRINGS);
+
+/** The puzzle boards (2026-11-16, Matt: Minesweeper showed no "+1 pt"; "All games should have that"): Minesweeper,
+ *  Sudoku, Murdoku, Word Weaver, and Nuts & Bolts (its points are still admin devices only). Gridlock and Arrow Maze
+ *  show their own gain. `g` = the record before this win's level counters moved, `after` = once it was recorded. */
+function puzzleWinPoints({ id, d, g, after, help }) {
+  const tier = tierOf(d);
+  if (id === 'sudoku' || id === 'murdoku') {
+    if (!HINT_STEPS[tier]) return null;
+    return { pts: help == null ? HINT_UNKNOWN[tier] : HINT_STEPS[tier][Math.min(3, Math.max(0, help | 0))] };
+  }
+  if (!after) return null;
+  if (id === 'minesweeper' || (id === 'nutsbolts' && isAdminDevice())) return { pts: Math.max(0, puzzlePoints(after, id).pts - puzzlePoints(g, id).pts) };
+  if (id === 'wordweaver') return { pts: Math.max(0, wwPoints(after) - wwPoints(g)) };
+  return null;
+}
 const isPointsBoard = (id) => { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong'); };
 
 /** The points one counted win adds: { pts } or null when the game has no points board. */
 export function winPoints(detail) {
   const { id, d, mode, g } = detail || {};
+  if (id && !isPointsBoard(id)) return puzzleWinPoints(detail);
   if (!id || !isPointsBoard(id) || d === 'solo') return null;
   const m = mode && mode !== '?' && mode !== '-' ? parseModeKey(mode) : null;
   const tier = tierOf(d);

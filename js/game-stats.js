@@ -2020,14 +2020,24 @@ export function rateDecision(stamps, now) {
 // passes). After a WIN is counted, the game's record is announced as `gamehub:win` {id, d, mode, g}; the hub's
 // js/points-toast.js works out the points it added (js/lb-points.js) and shows "+X pts". Display only: the
 // event carries a copy, nothing listens for it to write anything.
+// 2026-11-16 (Matt: Minesweeper showed no "+1 pt"; "All games should have that"): the event also carries
+// `after` (the record once the recorder has finished, copied when the event fires) and `help` (Sudoku /
+// Murdoku: hints + mistakes of this solve, null = unknown), so the puzzle boards' points can be shown too.
 let _curGame = '';
+let _winHelp;
 function announceWin(g, d) {
+  const help = _winHelp;
+  _winHelp = undefined;
   try {
     if (!_curGame || typeof window === 'undefined' || typeof CustomEvent !== 'function') { _curGame = ''; return; }
     const id = _curGame;
     _curGame = '';   // one win per recorder call; a later replay (no tooFast) announces nothing
     const detail = { id, d: String(d == null ? '' : d), mode: _mode ? _mode.key : '', diff: _mode ? _mode.diff : '', g: JSON.parse(JSON.stringify(g)) };
-    setTimeout(() => { try { window.dispatchEvent(new CustomEvent('gamehub:win', { detail })); } catch { /* display only */ } }, 0);
+    if (help !== undefined) detail.help = help;
+    setTimeout(() => {
+      try { detail.after = JSON.parse(JSON.stringify(g)); } catch { /* display only */ }
+      try { window.dispatchEvent(new CustomEvent('gamehub:win', { detail })); } catch { /* display only */ }
+    }, 0);
   } catch { /* display only: never touches the result */ }
 }
 function tooFast(gameId) {
@@ -2312,6 +2322,7 @@ export function recordSudoku(tier, extras = {}) {
   }
   g.total.played += 1;
   g.total.won += 1;
+  _winHelp = hints + mistakes;   // display only: the "+X pts" pill (js/points-toast.js)
   noteMode(g, true, t || normDiff(tier));
   g.sd.solved += 1;
   if (mistakes === 0 && hints === 0) g.sd.perfect += 1;
@@ -2343,11 +2354,12 @@ export function recordMurdoku(tier, { hints } = {}) {
   const st = loadStats();
   const g = st.games.murdoku;
   const d = normDiff(tier);
+  const h = Number.isInteger(hints) && hints >= 0 ? hints : null;
+  _winHelp = h;   // display only: the "+X pts" pill (js/points-toast.js)
   bumpTotals(g, d, true);
   if (!g.mu || typeof g.mu !== 'object' || Array.isArray(g.mu)) g.mu = { clean: {}, hinted: {}, hints: 0 };
   for (const k of ['clean', 'hinted']) if (!g.mu[k] || typeof g.mu[k] !== 'object' || Array.isArray(g.mu[k])) g.mu[k] = {};
   if (!Number.isFinite(g.mu.hints)) g.mu.hints = 0;
-  const h = Number.isInteger(hints) && hints >= 0 ? hints : null;
   if (h === 0) g.mu.clean[d] = (g.mu.clean[d] | 0) + 1;
   else if (h > 0) { g.mu.hinted[d] = (g.mu.hinted[d] | 0) + 1; g.mu.hints += h; }
   // How many hints, per level (2026-11-03, the same as Sudoku's `sd.hc`): `mu.hc[tier].h1|h2|h3` (3 = 3 or more).

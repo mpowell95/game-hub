@@ -104,5 +104,22 @@ try {
   }
 } catch { console.log('  (no backups/lb-z.json: real-data top 3 skipped)'); }
 
+// The puzzle boards' "+X pts" (2026-11-16, Matt: "All games should have that"): js/points-toast.js winPoints.
+try {
+  const { winPoints } = await import('../js/points-toast.js');
+  const ms = (e, m) => ({ total: { played: e + m, won: e + m, lost: 0 }, byDiff: { easy: W(e), medium: W(m) } });
+  ok('Minesweeper Medium win: +3', (winPoints({ id: 'minesweeper', d: 'medium', g: ms(2, 1), after: ms(2, 2) }) || {}).pts === 3);
+  ok('Minesweeper with no "after" copy shows nothing', winPoints({ id: 'minesweeper', d: 'medium', g: ms(2, 1) }) === null);
+  ok('Sudoku Expert, no help: +8', (winPoints({ id: 'sudoku', d: 'expert', help: 0, g: {}, after: {} }) || {}).pts === 8);
+  ok('Sudoku Expert, 1 hint: +5', (winPoints({ id: 'sudoku', d: 'expert', help: 1, g: {}, after: {} }) || {}).pts === 5);
+  ok('Murdoku Hard, 7 hints: +1', (winPoints({ id: 'murdoku', d: 'hard', help: 7, g: {}, after: {} }) || {}).pts === 1);
+  ok('Murdoku Expert, hints unknown: +4 (never the clean value)', (winPoints({ id: 'murdoku', d: 'expert', help: null, g: {}, after: {} }) || {}).pts === 4);
+  const ww = (lv) => ({ total: { played: 1, won: 1, lost: 0 }, byDiff: {}, ww: { lv, es: {}, x: 0 } });
+  ok('Word Weaver level 501, 1 hint: +4', (winPoints({ id: 'wordweaver', d: 'medium', g: ww({}), after: ww({ L501: { s: 2, h: 1, t: 1 } }) }) || {}).pts === 4);
+  ok('Word Weaver replay, nothing better: 0', (winPoints({ id: 'wordweaver', d: 'medium', g: ww({ L501: { s: 2, h: 1, t: 1 } }), after: ww({ L501: { s: 2, h: 1, t: 1 } }) }) || {}).pts === 0);
+  ok('Snake (no points board): nothing', winPoints({ id: 'snake', d: 'easy', g: {}, after: {} }) === null);
+} catch (err) { ok('points-toast.js loads in node', false, String(err)); }
+
+
 console.log(`\nlb-points tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
