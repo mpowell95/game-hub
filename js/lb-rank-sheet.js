@@ -11,7 +11,7 @@
 // tools/test-lb-rank-sheet.mjs pins the numbers and the EN/ES strings.
 import { WO_TIERS, woEarnedPoints } from './arrow-maze-time.js';
 import { GL_TIERS, GL_BAND_START, glLevelPoints, glHintedPoints } from './gridlock-points.js';
-import { WW_TIERS, WW_MULT, wwStarsFor } from './word-weaver-points.js';
+import { WW_TIERS, wwMult, wwStarsFor } from './word-weaver-points.js';
 import { HINT_STEPS, LEVEL_POINTS, LEVEL_CAP } from './puzzle-points.js';
 import { ensurePointsSheetCss, pointsTableHTML, capNoteHTML, shapeHTML, LEVEL_KEY } from './lb-points-sheet.js';
 import { makeT } from './i18n.js';
@@ -74,7 +74,7 @@ const SHEETS = {
   ],
   // Points = stars (0 hints 3, 1 hint 2, 2+ 1) x the band's multiplier (1/2/3/4), both from word-weaver-points.js.
   wordweaver: () => [{ h: 'lbrs_h_lvl', grid: { sup: 'lbrs_ww_sup', cols: ['0', '1', '2+'],
-    rows: WW_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2].map((h) => wwStarsFor(h) * WW_MULT[b]) })) }, foot: 'lbrs_ww_foot' }],
+    rows: WW_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2].map((h) => wwStarsFor(h) * wwMult()[b]) })) }, foot: 'lbrs_ww_foot' }],
   holdem: () => [{ h: 'gs_hb_bank', text: ['lbrs_hb_by1', 'lbrs_hb_by2'] }, { h: 'lbrs_h_wins', text: 'lbrs_hb_by3' }],
   minesweeper: () => [levelTable('minesweeper', 'lbpt_per_board')],
   // Points held for players (2026-11-04): the points table only where the board is on points (admin devices).
