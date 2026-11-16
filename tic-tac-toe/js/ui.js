@@ -20,7 +20,18 @@
 // MP waits for the next entry in the room's move log. Every "self" lookup goes
 // through _localSeat()/_myMark(); see the block comment above _localSeat().
 
-import { newGame, legalMoves, applyMove, X, O } from './game.js';
+import { newGame, legalMoves, applyMove as applyMoveRaw, X, O } from './game.js';
+
+// PRIVATE PLAY DATA (2026-11-16): every move of the game in progress, in order, for the admin play log only
+// (withMode `log`). Never saved, never shown, never in the stats store. A resumed game logs from the resume.
+let _MV = [];
+function applyMove(s, move) {
+  try {
+    if (!s.moves) _MV = [];
+    if (_MV.length < 90) _MV.push([s.turn === X ? 'X' : 'O', typeof move === 'number' ? move : move.board * 9 + move.cell, Date.now()]);
+  } catch { /* logging never blocks play */ }
+  return applyMoveRaw(s, move);
+}
 import { chooseMove } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -786,11 +797,24 @@ class TicTacToeUI {
     return s.variant === 'ultimate' ? s.boards.some((b) => b.some(Boolean)) : s.board.some(Boolean);
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): the moves in order (mark, cell, ms since the first), the final board,
+   *  who went first, and the sub-boards won (Ultimate). Admin play log only. */
+  _playLog(end) {
+    const s = this.state || {};
+    const t0 = _MV.length ? _MV[0][2] : 0;
+    return {
+      end, v: s.variant, mv: _MV.map((m) => [m[0], m[1], m[2] - t0]), n: s.moves | 0, part: (s.moves | 0) !== _MV.length ? 1 : 0,
+      me: this.marks ? (this._myMark() === X ? 'X' : 'O') : null, win: s.winner || null, draw: s.isDraw ? 1 : 0,
+      board: s.variant === 'ultimate' ? { b: (s.boards || []).map((b) => b.map((c) => c || '.').join('')), meta: (s.meta || []).map((c) => c || '.').join('') } : (s.board || []).map((c) => c || '.').join(''),
+      opp: this.mp && this.mp.opp ? String((this.mp.opp && this.mp.opp.name) || '') : undefined,
+    };
+  }
+
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(() => (this._modeOf(this.state.variant)), this._setup.difficulty, () => recordTicTacToe(this.state.variant, this._setup.difficulty, false)); } catch { /* never block leaving */ }
+    try { withMode(() => (this._modeOf(this.state.variant)), this._setup.difficulty, () => recordTicTacToe(this.state.variant, this._setup.difficulty, false), () => ({ log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
   }
 
   /** Record the finished game exactly once on THIS device.
@@ -822,7 +846,7 @@ class TicTacToeUI {
     // a loss written as a win is not additive-safe). null = draw.
     const won = s.isDraw ? null : (s.winner === this._myMark());
     const difficulty = this.mp ? MP_DIFFICULTY : this._setup.difficulty;
-    try { withMode(() => (this._modeOf(s.variant)), difficulty, () => recordTicTacToe(s.variant, difficulty, won)); } catch { /* never block the result */ }
+    try { withMode(() => (this._modeOf(s.variant)), difficulty, () => recordTicTacToe(s.variant, difficulty, won), () => ({ log: () => this._playLog('over') })); } catch { /* never block the result */ }
     // Multiplayer only: capture WHO this was against while the room state is
     // still live. Solo has no `this.mp` and is untouched. Never allowed to
     // block the ordinary result from being recorded.
@@ -942,7 +966,7 @@ class TicTacToeUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(move), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!this.state.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, false], [mp.opp], modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, false], [mp.opp], modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     }
   }
 
@@ -1181,7 +1205,7 @@ class TicTacToeUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordTicTacToe', winArgs: [mp.variant, MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY) });
+          fn: 'recordTicTacToe', winArgs: [mp.variant, MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1363,7 +1387,7 @@ class TicTacToeUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, true], [mp.opp], modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordTicTacToe', [mp.variant, MP_DIFFICULTY, true], [mp.opp], modeTag(() => (this._modeOf(mp.variant)), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.root);
     this.mp = null;

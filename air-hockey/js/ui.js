@@ -594,6 +594,8 @@ class AirHockeyUI {
   }
   /** PRIVATE play data (2026-11-16): goals in order [scorer 0 me / 1 them, seconds in], the match's length,
    *  both fastest shots, shot count, the table, the opponent's name. Admin play log only (`x`). */
+  /** A thrown-away save's detail + private log, for modeTag. */
+  _ahScore(table) { return { detail: this._ahDetail(table), log: () => this._ahLog(table) }; }
   _ahLog(saved) {
     return ({ goals: this._gl || [], secs: Math.round((performance.now() - (this._t0 || performance.now())) / 100) / 10,
       myBest: Math.round(this.matchBest || 0), oppBest: Math.round(this._oppBest || 0), shots: this._shotN | 0, cont: this._cont | 0,
@@ -608,7 +610,7 @@ class AirHockeyUI {
     if (!sv) return;
     clearSave();
     const [gf, ga] = sv.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => ({ detail: this._ahDetail(sv.table), log: () => this._ahLog(sv.table) })));
+    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => this._ahScore(sv.table)));
     if (!takeQuitLoss('airhockey')) console.error('[airhockey] the thrown-away match was not recorded as a loss');
   }
 

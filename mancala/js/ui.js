@@ -20,7 +20,7 @@ import { chooseMove, seededRand } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, recordHeadToHead, recordPassPlay, deviceId, withMode, modeTag } from '../../js/game-stats.js';
+import { recordResult, recordHeadToHead, recordPassPlay, deviceId, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -386,11 +386,18 @@ class MancalaUI {
       && !this._statsCommitted && !!this._humanMoved;
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): every move [seat, pit, stones sown, extra turn, capture, ms], the pits
+   *  at the end (14 numbers), who opened, speed, the level. Admin play log only. */
+  _playLog(end) {
+    const s = this.state || {};
+    return { end, mode: this.mode, level: this.level, opener: this.mp ? this.mp.opener : this._opener, me: this.mp ? this._localSeat() : P1, mv: this._mv || [], n: this.movesMade | 0, part: (this.movesMade | 0) !== (this._mv ? this._mv.length : 0) ? 1 : 0, pits: s.pits ? s.pits.slice() : null, win: s.winner == null ? null : s.winner, speed: this.speed === 'slow' ? 'slow' : 'normal', opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
+  }
+
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], false), { detail: () => ({ ...mancalaDetail(this.state, P1), ...speedDetail(this), quit: 1 }) }); } catch { /* never block leaving */ }
+    try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], false), () => ({ detail: () => ({ ...mancalaDetail(this.state, P1), ...speedDetail(this), quit: 1 }), log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -997,6 +1004,10 @@ class MancalaUI {
     const result = applyMove(this.state, pit);
     if (!result) return;
     const { state: next, events } = result;
+    try {   // PRIVATE PLAY DATA (2026-11-16): every move, for the admin play log only
+      if (!this.movesMade || !this._mv) { if (!this.movesMade) this._t0 = Date.now(); this._mv = []; }
+      if (this._mv.length < 200) this._mv.push([this.state.turn, pit, events.path ? events.path.length : 0, events.extraTurn ? 1 : 0, events.capture ? 1 : 0, Date.now() - (this._t0 || Date.now())]);
+    } catch { /* logging never blocks play */ }
     this.busy = true;
     this.movesMade += 1;
     // Any sowing, the computer's included, makes quitting a loss (2026-10-29, second pass, Matt).
@@ -1216,15 +1227,17 @@ class MancalaUI {
         // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
       } else if (this.mp) {
         LL.endedNormally(STATS_ID, this._mpKey());
-        try { withMode(() => (mancalaMode(this.mp.opener, this._localSeat())), MP_DIFFICULTY, () => recordResult('mancala', MP_DIFFICULTY, won), { detail: () => ({ ...mancalaDetail(s, this._localSeat()), ...speedDetail(this) }) }); } catch { /* never block the result */ }
+        try { withMode(() => (mancalaMode(this.mp.opener, this._localSeat())), MP_DIFFICULTY, () => recordResult('mancala', MP_DIFFICULTY, won), () => ({ detail: () => ({ ...mancalaDetail(s, this._localSeat()), ...speedDetail(this) }), log: () => this._playLog('over') })); } catch { /* never block the result */ }
         // Multiplayer only: capture WHO this was against while the room state is still live.
         // Never allowed to block the ordinary result from being recorded.
         const opp = this.mp.opp;
         if (opp) { try { recordHeadToHead('mancala', opp, won); } catch { /* never block the result */ } }
       } else if (this.mode === 'bot') {
-        try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], won), { detail: () => ({ ...mancalaDetail(s, P1), ...speedDetail(this) }) }); } catch { /* never block the result */ }
+        try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], won), () => ({ detail: () => ({ ...mancalaDetail(s, P1), ...speedDetail(this) }), log: () => this._playLog('over') })); } catch { /* never block the result */ }
       } else if (this.mode === 'friend') {
         this._recordPassPlay(s, this._opener, won === true ? 'p1' : won === false ? 'p2' : 'draw');
+        // Also kept privately with every move (2026-11-16).
+        logPlayData('mancala', 'pnp', this._playLog('over'), { mode: () => mancalaMode(this._opener, P1), diff: 'pnp' });
       }
     }
     if (this.mp) this._mpAfterGameEnd();
@@ -1411,7 +1424,7 @@ class MancalaUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(pit), hash)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!result.state.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this) })));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this), log: () => this._playLog('leave') })));
     }
   }
 
@@ -1632,7 +1645,7 @@ class MancalaUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this) })) });
+          fn: 'recordResult', winArgs: ['mancala', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this), log: () => this._playLog('leave') })) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1805,7 +1818,7 @@ class MancalaUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this) })));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['mancala', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (mancalaMode(mp.opener, this._localSeat())), MP_DIFFICULTY, () => ({ detail: () => speedDetail(this), log: () => this._playLog('leave') })));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.container);
     this.mp = null;

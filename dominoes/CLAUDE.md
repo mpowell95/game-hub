@@ -454,3 +454,5 @@ A match thrown away after the player's first play or draw (`moved` in the save) 
 
 - Quitting is a loss once DEALT: every saved match counts (`movedIn`), `_moved` true at the deal.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+Private play data (2026-11-16): logs per round the deal (both hands and the boneyard), every play/draw/pass in order, round scores, winner and hands left, via withMode `log`.

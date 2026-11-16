@@ -278,3 +278,5 @@ only, Pro now solves exactly from `MEDIUM_READ` = 22 lines left with a bitmask t
 in `_bit`; 2.5 s deadline falls back to the heuristic and resumes). Tests (scratch harness, 2026-11-09): new Hard beat old
 Hard 34-4-2; a player reading from 24 left beat old Hard 97% first / 90% second, new Hard 73% / 68%; the same reader beats
 Hard on Small 96% / 100%. Slowest move 1.3 s on a laptop (once a game). Small and Large unchanged.
+
+Private play data (2026-11-16): logs every edge in order plus every Undo and Redo, the score and chain; a solo win or tie after Undo is NOT counted but logged via logPlayData 'notcounted' (never start counting it).

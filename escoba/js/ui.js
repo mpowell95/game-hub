@@ -18,7 +18,7 @@ import { renderCardFace as cardFaceHTML, preloadDeck } from './cards.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { loadStats, recordEscoba, recordHeadToHead, deviceId, easiestDiff, withMode, modeTag } from '../../js/game-stats.js';
+import { loadStats, recordEscoba, recordHeadToHead, deviceId, easiestDiff, withMode, modeTag, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): players at
  *  the table, each computer's difficulty in seat order (`ai`, solo), target score, card numbering and
  *  capture hints. `src` is the Game or its snapshot (both carry players; the config or the snapshot
@@ -846,7 +846,44 @@ class EscobaUI {
     this.game.playMatch().catch((err) => { if (!this._dead) console.error('Escoba resume error', err); });
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): per round the deal (deck order), the dealer, every play in order
+   *  [seat, card, cards taken, escoba] and the round's scores, for the admin play log only. Never saved or shown.
+   *  A resumed match logs from the resume (`res`). */
+  _xnote(type, payload) {
+    try {
+      const g = this.game;
+      if (!g) return;
+      const x = this._xl || (this._xl = { t0: Date.now(), rd: [], res: 0 });
+      const cc = (c) => (c ? String(c.suit).slice(0, 2) + c.rank : null);
+      const cur = () => x.rd[x.rd.length - 1];
+      const seat = (id) => g.players.findIndex((q) => q.id === id);
+      if (type === 'roundStart') x.rd.push({ n: g.round, dealer: g.dealer, deck: (g.lastDeckOrder || []).join(','), mv: [] });
+      else if (type === 'play') {
+        if (!cur()) x.rd.push({ n: g.round, dealer: g.dealer, deck: null, mv: [] });
+        if (cur().mv.length < 120) cur().mv.push([seat(payload.playerId), cc(payload.card), (payload.captured || []).map(cc).join(','), payload.escoba ? 1 : 0, Date.now() - x.t0]);
+      } else if (type === 'sweepLeftovers') { if (cur()) cur().sw = [seat(payload.playerId), (payload.cards || []).map(cc).join(',')]; }
+      else if (type === 'roundScored') {
+        if (!cur()) x.rd.push({ n: g.round, dealer: g.dealer, deck: null, mv: [] });
+        cur().sc = g.players.map((q) => [q.roundScore | 0, q.totalScore | 0, (q.roundItems || []).map((i) => i.key).join(',')]);
+      }
+    } catch { /* logging never blocks play */ }
+  }
+
+  /** What the match knows at its end: every player's name, kind and totals, the round-by-round score
+   *  history, and every round's deal and plays. Admin play log only. */
+  _playLog(end) {
+    const g = this.game;
+    const x = this._xl || { rd: [], res: this._chRes ? 1 : 0 };
+    return {
+      end, rounds: g.round, target: g.config && g.config.targetScore, deck: g.config && g.config.deckMode, dealer0: x.rd[0] ? x.rd[0].dealer : g.dealer,
+      winner: g.winner ? g.players.findIndex((q) => q.id === g.winner.id) : null, why: g.matchEndReason || null,
+      pl: g.players.map((q) => ({ n: q.name, ai: q.isHuman ? 0 : (q.difficulty || 1), tot: q.totalScore | 0, hist: (q.scoreHistory || []).slice(), esc: q.matchEscobas | 0 })),
+      me: g.players.findIndex((q) => q.isHuman), ms: Date.now() - (x.t0 || Date.now()), res: x.res, rd: x.rd,
+    };
+  }
+
   _bindGame() {
+    this._xl = { t0: Date.now(), rd: [], res: this.game && this.game.round > 0 ? 1 : 0 };
     this.game.onEvent = (type, payload) => this.onEvent(type, payload);
     // THE LAW rule 1, made structural: the engine calls this synchronously, inside the same
     // statement that decides the match (game.js's checkMatchEnd), so there is no await, no emit
@@ -887,6 +924,7 @@ class EscobaUI {
 
   async onEvent(type, payload) {
     if (this._dead) return;
+    this._xnote(type, payload);
     const p = payload && payload.playerId != null ? this.game.byId(payload.playerId) : null;
     switch (type) {
       case 'roundStart':
@@ -1126,7 +1164,7 @@ class EscobaUI {
     // A table of computers counts at the EASIEST one's tier (2026-10-29, Matt): before, the first
     // computer's tier, so one Hard and one Easy computer filed a win as Hard.
     const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players);
-    withMode(() => (modeOf(this.game, this._matchAssist)), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() }), { detail: () => this._valsDetail() });
+    withMode(() => (modeOf(this.game, this._matchAssist)), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() }), () => ({ detail: () => this._valsDetail(), log: () => this._playLog('over') }));
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2145,7 +2183,7 @@ class EscobaUI {
     if (this.mp || this.ch) return null;
     if (this.game && this.el && !this.el.game.hidden) {
       if (this._matchEnded || this._statsCommitted || this.game.winner || !this._moved) return null;
-      return { difficulty: soloDiff(this.game.players), escobas: this._matchEscobasNow(), mode: modeOf(this.game, this._matchAssist), picked: pickedDiff(this.game.players) };
+      return { difficulty: soloDiff(this.game.players), escobas: this._matchEscobasNow(), mode: modeOf(this.game, this._matchAssist), picked: pickedDiff(this.game.players), live: true };
     }
     const save = this._loadSave();
     if (!save || save.mp || !savedMoved(save)) return null;
@@ -2160,7 +2198,7 @@ class EscobaUI {
     if (!q) return;
     this._statsCommitted = true;
     this._clearSave();
-    withMode(() => (q.mode), q.picked, () => recordEscoba(q.difficulty, false, { escobas: q.escobas }), { detail: () => this._valsDetail() });
+    withMode(() => (q.mode), q.picked, () => recordEscoba(q.difficulty, false, { escobas: q.escobas }), () => ({ detail: () => this._valsDetail(), log: () => (q.live && this.game ? this._playLog('quit') : { end: 'quit', saved: 1, escobas: q.escobas }) }));
   }
 
   // --- multiplayer (M1 pilot) -------------------------------------------------
@@ -2309,7 +2347,7 @@ class EscobaUI {
       const hash = stateHash(this.game);
       // Your first card arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps, modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })));
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps, modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail(), log: () => (this.game ? this._playLog('leave') : null) })));
       }
       try {
         await net.appendMove(mp.code, mp.seat, seq, move, hash);
@@ -2531,7 +2569,7 @@ class EscobaUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps, tag: this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })) : null });
+          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps, tag: this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail(), log: () => (this.game ? this._playLog('leave') : null) })) : null });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -2808,7 +2846,7 @@ class EscobaUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps, this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })) : null);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps, this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail(), log: () => (this.game ? this._playLog('leave') : null) })) : null);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -2858,7 +2896,7 @@ class EscobaUI {
     const count = Array.isArray(save.snap.players) ? save.snap.players.length : 2;
     const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
       mySeat: seat, role: seat, seats: count, fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: save.matchEscobas | 0 }],
-      tag: modeTag(() => (modeOf(save.snap, save.assist !== false)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })),
+      tag: modeTag(() => (modeOf(save.snap, save.assist !== false)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail(), log: () => (this.game ? this._playLog('leave') : null) })),
       oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
     if (this._dead) return;
     if (!chk.go) {
@@ -3295,6 +3333,11 @@ class EscobaUI {
     const o = this._chOutcome();
     if (!o) return;
     ch.counted = true;
+    // PRIVATE PLAY DATA (2026-11-16): the whole challenge match, logged once when this phone sees it finished.
+    try {
+      const cg = ch.game || {};
+      logPlayData('escoba', 'match', { end: o.why || 'over', seed: ch.seed, len: ch.len, deck: ch.deck, a: cg.a && cg.a.name, b: cg.b && cg.b.name, side: ch.side, winner: o.winner, scores: o.scores, esc: o.escobas, log: (cg.log || ch.log || []).map((m) => [m.by, m.c, m.k]), over: cg.over ? { why: cg.over.why, at: cg.over.at } : null }, { mode: () => (typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(cg) : null), diff: 'mp', key: ch.id });
+    } catch { /* never block the result */ }
     const won = o.winner === 'draw' ? null : o.winner === ch.side;
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
     const mode = () => (typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(ch.game || ch, ch.side) : null);   // a thunk: read inside withMode (2026-11-02)

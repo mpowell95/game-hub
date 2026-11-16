@@ -565,6 +565,7 @@ class FillerUI {
     }
     clearGame();                 // a new game replaces any saved one
     this.state = newGame();
+    this._fnew();
     if (starter === P2) this.state.turn = P2;
     // Reset the per-game idempotence guard so THIS game's own result gets recorded when it ends
     // (finish()'s `if (!this._statsCommitted)` would otherwise silently skip every game after the
@@ -726,6 +727,7 @@ class FillerUI {
     if (this.mp) this._mpAfterLocalMove(color);
     const mover = s.turn;
     const captured = applyMove(s, color);
+    this._fnote(mover, color, captured);
     const rippleMs = this.animateMove(mover, color, captured);
     this.refresh();
     this._afterMove(rippleMs);
@@ -736,6 +738,7 @@ class FillerUI {
     if (!s || s.over) return;
     const color = chooseColor(s, this.level);
     const captured = applyMove(s, color);
+    this._fnote(P2, color, captured);
     const rippleMs = this.animateMove(P2, color, captured);
     this.busy = false;
     this.refresh();
@@ -812,13 +815,13 @@ class FillerUI {
         // decided by a leave on this phone already (js/live-leave.js): it counts once, as that
       } else if (this.mp) {
         LL.endedNormally(STATS_ID, this._mpKey());
-        try { withMode(() => (fillerMode(s, this._localSeat())), MP_DIFFICULTY, () => recordResult('filler', MP_DIFFICULTY, won), { detail: () => (fillerDetail(s, this._localSeat())) }); } catch { /* never block the result */ }
+        try { withMode(() => (fillerMode(s, this._localSeat())), MP_DIFFICULTY, () => recordResult('filler', MP_DIFFICULTY, won), () => ({ detail: () => (fillerDetail(s, this._localSeat())), log: () => this._playLog('over') })); } catch { /* never block the result */ }
         // Multiplayer only: capture WHO this was against while the room state is still live.
         // Never allowed to block the ordinary result from being recorded.
         const opp = this.mp.opp;
         if (opp) { try { recordHeadToHead('filler', opp, won); } catch { /* never block the result */ } }
       } else {
-        try { withMode(() => (fillerMode(s, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], won), { detail: () => (fillerDetail(s, P1)) }); } catch { /* never block the result */ }
+        try { withMode(() => (fillerMode(s, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], won), () => ({ detail: () => (fillerDetail(s, P1)), log: () => this._playLog('over') })); } catch { /* never block the result */ }
       }
     }
     if (this.mp) this._mpAfterGameEnd();
@@ -960,11 +963,29 @@ class FillerUI {
     return s.moves >= 1;   // any colour picked, the computer's opening included (2026-10-29, second pass)
   }
 
+  /** PRIVATE PLAY DATA (2026-11-16): a new game's STARTING board (the 63 colours; the game keeps no seed
+   *  for solo, and the board is recoloured in place as it is played) for the admin play log only. */
+  _fnew(seed) {
+    try { this._fl = { start: Array.from(this.state.colors).join(''), seed: seed == null ? null : seed, mv: [], t0: Date.now(), first: this.state.turn }; } catch { this._fl = null; }
+  }
+  _fnote(mover, color, captured) {
+    try {
+      if (!this._fl) this._fl = { start: null, seed: null, mv: [], t0: Date.now(), first: null };
+      if (!this._fl.mv.length && this._fl.start) this._fl.first = mover;
+      if (this._fl.mv.length < 200) this._fl.mv.push([mover, color, captured ? captured.length : 0, Date.now() - this._fl.t0]);
+    } catch { /* logging never blocks play */ }
+  }
+  /** The starting board, every colour picked with who and the squares it won, the final counts, the level. */
+  _playLog(end) {
+    const s = this.state || {}, f = this._fl || {};
+    return { end, start: f.start || null, seed: f.seed, first: f.first, mv: f.mv || [], n: s.moves | 0, part: (f.mv ? f.mv.length : 0) !== (s.moves | 0) ? 1 : 0, counts: s.counts ? s.counts.slice(1) : null, win: s.winner, level: this.mp ? undefined : this.level, me: this.mp ? this._localSeat() : P1, opp: this.mp && this.mp.opp ? String(this.mp.opp.name || '') : undefined };
+  }
+
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
     if (this.mp || !this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(() => (fillerMode(this.state, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], false), { detail: () => ({ ...fillerDetail(this.state, P1), quit: 1 }) }); } catch { /* never block leaving */ }
+    try { withMode(() => (fillerMode(this.state, P1)), LEVEL_KEY[this.level], () => recordResult('filler', LEVEL_KEY[this.level], false), () => ({ detail: () => ({ ...fillerDetail(this.state, P1), quit: 1 }), log: () => this._playLog('quit') })); } catch { /* never block leaving */ }
     clearGame();
   }
 
@@ -1065,7 +1086,7 @@ class FillerUI {
     net.appendMove(mp.code, mp.role, seq, this._mpEncodeMove(color), h)
       .catch(() => { this._setMpStatus('mp_status_connection_error'); });
     if (!trial.over && !this._statsCommitted) {
-      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (fillerMode(trial, this._localSeat())), MP_DIFFICULTY));
+      LL.armLeave(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, false], [mp.opp], modeTag(() => (fillerMode(trial, this._localSeat())), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     }
   }
 
@@ -1120,6 +1141,7 @@ class FillerUI {
     mp.recoveryAttempts = 0;
     if (mp.replayMode && mp.appliedSeq >= mp.maxKnownSeq) mp.replayMode = false;
     this.state = trial;
+    this._fnote(mover, color, captured);
     this.busy = true;
     const rippleMs = this.animateMove(mover, color, captured);
     this.refresh();
@@ -1248,6 +1270,7 @@ class FillerUI {
     this._statsCommitted = false;
     clearGame();   // an MP match supersedes any solo save
     this.state = newGame(mulberry32(round.deck >>> 0));
+    this._fnew(round.deck >>> 0);
     if (round.dealer === P2) this.state.turn = P2;
     this.view = 'game';
     this.busy = false;
@@ -1322,7 +1345,7 @@ class FillerUI {
       let res = 'none';
       if (this._mpInGame() && !this._statsCommitted) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: mp.gameNum, mySeat: mp.role,
-          fn: 'recordResult', winArgs: ['filler', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY) });
+          fn: 'recordResult', winArgs: ['filler', MP_DIFFICULTY, true], opps: [mp.opp], tag: modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })) });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -1495,7 +1518,7 @@ class FillerUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY));
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordResult', ['filler', MP_DIFFICULTY, true], [mp.opp], modeTag(() => (fillerMode(this.state, this._localSeat())), MP_DIFFICULTY, () => ({ log: () => this._playLog('leave') })));
     if (this._reactions) this._reactions.setActive(false);
     LL.hideClaim(this.container);
     this.mp = null;

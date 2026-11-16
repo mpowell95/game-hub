@@ -11,7 +11,7 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { backStack } from '../../js/back-stack.js';
 import { makeT, myName } from '../../js/i18n.js';
-import { recordResult, loadStats, withMode } from '../../js/game-stats.js';
+import { recordResult, loadStats, withMode, logPlayData } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { STRINGS } from './strings.js';
@@ -19,7 +19,7 @@ import * as E from './engine.js';
 import { chooseMove, chooseTeam } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, costOf, RULES_VERSION, ELEMENT_COLOR, ELEMENTS, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
-import { mirror, mirrorEvents, entryOf, moveOf, teamMode, matchDetail } from './online.js';
+import { mirror, mirrorEvents, entryOf, moveOf, teamMode, onlineMode, matchDetail } from './online.js';
 /** A match vs the computer: the player's drafted team (side 0) and who opened. */
 const modeOf = (s) => ({ ...teamMode(s, 0), first: s && s.first === 1 ? 'them' : 'me' });
 import { playAttack, evolveScene } from './attacks.js';
@@ -857,6 +857,8 @@ class BattleArena {
     this.diff = this.settings.diff;
     this.link = null;
     this.state = this.canon = state;
+    this._bstart = { seed, team: team.slice(), foe: foe.slice(), first, tutorial: tutorial ? 1 : 0 };   // private play data (2026-11-16)
+    this._bj = { mv: [], t0: Date.now(), res: 0 };
     this.recorded = false;
     // Quitting is a loss once the board is shown (2026-10-29, second pass, Matt): re-dealing a bad
     // board, or quitting after the computer's opening move, was free until the player had moved.
@@ -880,7 +882,7 @@ class BattleArena {
     this.clearSave();
     const won = save.state.winner != null ? save.state.winner === ME : false;
     try {
-      const st = withMode(() => (modeOf(save.state)), save.diff, () => recordResult('battlearena', save.diff, won), { detail: () => matchDetail(save.state, ME) });
+      const st = withMode(() => (modeOf(save.state)), save.diff, () => recordResult('battlearena', save.diff, won), () => ({ detail: () => matchDetail(save.state, ME), log: () => ({ end: save.state.winner != null ? 'over' : 'quit', saved: 1, n: save.state.moveNo | 0, first: save.state.first, win: save.state.winner, hp: save.state.sides.map((q) => q.hp | 0) }) }));
       if (!st) console.warn('[battle-arena] set-aside match not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] set-aside match not recorded', err); }
   }
@@ -889,6 +891,7 @@ class BattleArena {
     this.diff = save.diff;
     this.link = null;
     this.state = this.canon = save.state;
+    this._bstart = null; this._bj = { mv: [], t0: Date.now(), res: 1 };   // private play data: a resumed match logs from the resume
     this.recorded = false;
     this.pm = !!save.pm;
     this.renderBattle();
@@ -899,6 +902,7 @@ class BattleArena {
   startOnline(link, canon, queue = []) {
     if (this.link && this.link !== link) { try { this.link.destroy(); } catch {} }
     this.link = link;
+    this._bstart = null; this._bj = { mv: [], t0: Date.now(), res: 0 };   // private play data (2026-11-16)
     this.diff = 'mp';
     this.canon = canon;
     this.state = this.view(canon);
@@ -1249,6 +1253,13 @@ class BattleArena {
     this._playingMine = mine;
     this.state = res.state;
     this.canon = res.canon || res.state;
+    try {   // private play data (2026-11-16): every move, both sides, in order
+      const m = res.move || res.lg;
+      if (m) {
+        if (!this._bj) this._bj = { mv: [], t0: Date.now(), res: 1 };
+        if (this._bj.mv.length < 300) this._bj.mv.push([m.side, m.type === 'swap' ? 's' : m.type === 'evolve' ? 'e' : 'p', m.type === 'swap' ? m.a : m.mon, m.type === 'swap' ? m.b : null, this.canon.moveNo | 0, Date.now() - this._bj.t0]);
+      }
+    } catch { /* logging never blocks play */ }
     this.save();
     // Online: this player's move goes out the moment it is made (before its animation), so the
     // other phone can start showing it while this one still is.
@@ -1664,6 +1675,7 @@ class BattleArena {
       for (const el of this.tiles.values()) el.classList.remove('is-cpu');
     }
     const res = E.apply(this.state, { ...mv, side: CPU });
+    if (res.ok) res.lg = { ...mv, side: CPU };   // for the private play log (commit)
     if (!res.ok) { console.error('[battle-arena] computer move refused', res.error, mv); this.busy = false; return; }
     this.busy = false;
     await this.commit(res);
@@ -2462,13 +2474,14 @@ class BattleArena {
       // ONLINE: the link records it ('mp' bucket, once per match through its own ledger; a live
       // room also writes head-to-head). Never the computer's save slot or who-opens-next.
       this.recorded = true;
+      try { logPlayData('battlearena', 'match', this._playLog('over'), { mode: () => onlineMode(this.canon, this.link.seat, this.link.kind), diff: 'mp', key: String(this.link.id || (this.link.room && this.link.room.code) || '') }); } catch { /* never block the result */ }
       try { this.link.finish(this.canon, s.winner === ME); } catch (err) { console.error('[battle-arena] online record failed', err); }
     }
     if (!this.recorded) {
       this.recorded = true;
       // ONCE per match: every write in the shared store is additive, so a second call inflates.
       try {
-        const st = withMode(() => (modeOf(s)), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME), { detail: () => matchDetail(s, ME) });
+        const st = withMode(() => (modeOf(s)), this.diff, () => recordResult('battlearena', this.diff, s.winner === ME), () => ({ detail: () => matchDetail(s, ME), log: () => this._playLog('over') }));
         if (!st) console.warn('[battle-arena] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[battle-arena] record failed', err); }
       this.clearSave();
@@ -2592,6 +2605,21 @@ class BattleArena {
     this.on(el.querySelector('[data-role="home"]'), 'click', (e) => quit(e.currentTarget, () => this.renderHome()));
   }
 
+  /** What the match knows at its end, for the admin play log only: the seed, both teams, who opened, every move in
+   *  order (side, s/e/p, tiles or monster, moves so far, ms), and each side's HP, turns, berries and evolutions. */
+  _playLog(end) {
+    const c = this.canon || this.state || {};
+    const st = this._bstart || {};
+    const sd = (q) => (q ? { hp: q.hp | 0, turns: q.turns | 0, berries: q.berries | 0, mons: (q.mons || []).map((m) => [m.id, m.evo ? 1 : 0, m.energy | 0]) } : null);
+    const g = this.link && this.link.game;
+    return {
+      end, seed: st.seed != null ? st.seed : null, team: st.team || null, foe: st.foe || null, first: c.first, rv: c.rv || 1, arena: c.arena, tut: st.tutorial || 0,
+      mv: (this._bj && this._bj.mv) || [], n: c.moveNo | 0, turns: c.turnNo | 0, win: c.winner == null ? null : c.winner, sides: (c.sides || []).map(sd),
+      res: this._bj ? this._bj.res : 0, ms: this._bj ? Date.now() - this._bj.t0 : 0, diff: this.diff, via: this.link ? this.link.kind : null,
+      game: g ? { seed: g.seed, rv: g.rv || 1, a: g.a && g.a.name, b: g.b && g.b.name, ta: g.a && g.a.team, tb: g.b && g.b.team, log: (g.log || []).map((e) => [e.by, e.k, e.a != null ? e.a : e.m, e.b != null ? e.b : null]), over: g.over ? { winner: g.over.winner, why: g.over.why } : null } : undefined,
+    };
+  }
+
   quitCostsLoss() {
     return !this.link && !!this.state && this.state.winner == null && !this.recorded && !!this.pm;
   }
@@ -2601,7 +2629,7 @@ class BattleArena {
     if (!this.quitCostsLoss()) return;
     this.recorded = true;
     try {
-      const st = withMode(() => (modeOf(this.state)), this.diff, () => recordResult('battlearena', this.diff, false), { detail: () => matchDetail(this.state, ME, 'quit') });
+      const st = withMode(() => (modeOf(this.state)), this.diff, () => recordResult('battlearena', this.diff, false), () => ({ detail: () => matchDetail(this.state, ME, 'quit'), log: () => this._playLog('quit') }));
       if (!st) console.warn('[battle-arena] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[battle-arena] quit loss not recorded', err); }
   }
