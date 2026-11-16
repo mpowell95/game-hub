@@ -166,6 +166,15 @@ mistake.
   have no time but still count as solved (rule 4). The win banner shows the time.
 - Tests: `tools/test-arrow-maze-time.mjs`, `tools/players-agg.test.mjs`.
 
+## A failed try's hearts do not count (2026-11-16)
+
+Matt (Hard 247: out of lives, clean Try again, 1 point): *"That's not right."* Hearts lost cost points only in
+the try that CLEARS the level (`_tryHearts` = 3 - lives); hints still ride every try (Restart, Try again, New game,
+other storages, replays). Log `tm` = the clearing try's hearts when fewer than `m` (`m` stays every heart, for
+the clock's penalties); `woSlipsScored` reads it. `wo.sl` and the carry key now hold hints only. Matt's 247
+fixed once by `repairWayOutTry1116` (`js/game-stats.js`, run from `js/hub.js`, stamped). Tests:
+`tools/test-arrow-maze-time.mjs`, `tools/test-arrow-maze-replay.mjs`.
+
 ## Slips stay with the level; one level, one score (2026-10-29)
 
 Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29". Tests: `tools/test-hint-holes.mjs`,

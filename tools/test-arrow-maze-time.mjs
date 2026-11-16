@@ -236,5 +236,43 @@ ok('Expert 8: an old board, or a finish before the switch, keeps the old table; 
     miss.length === 1 && miss[0].l === 302 && miss[0].best === 4 && miss[0].full === 8 && miss[0].gain === 4, JSON.stringify(miss));
 }
 
+// A FAILED TRY'S HEARTS DO NOT COUNT (2026-11-16, Matt: out of lives on Hard 247, a clean Try again, 1 point).
+{
+  localStorage.clear();
+  localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'zzztm', emoji: '🧪', preferredColor: null, opponents: [], playerId: 'ZZTMK', updatedAt: new Date().toISOString() }));
+  const base = { timeMs: 90000, penaltyMs: 60000, arrows: 46, rounds: 40, hints: 0, timed: true, gen: 11 };
+  G.recordWayOut('hard', { ...base, mistakes: 3, tm: 0, slips: 0, n: 301, level: 301 });
+  G.recordWayOut('hard', { ...base, mistakes: 4, tm: 1, slips: 1, n: 302, level: 302 });
+  G.recordWayOut('hard', { ...base, mistakes: 3, hints: 1, tm: 0, slips: 1, prior: 1, n: 303, level: 303 });
+  G.recordWayOut('hard', { ...base, mistakes: 2, n: 304, level: 304 });   // an older build: no tm, every heart counts
+  const wo = G.loadStats().games.wayout.wo, L = wo.log.hard, cl = T.woClMap(wo.cl.hard);
+  ok('tm: out of lives then clean = full points (4), m kept 3, tm 0 stored', cl.get(301) === 4 && L[0].m === 3 && L[0].tm === 0);
+  ok('tm: the clearing try\'s own heart still costs (3)', cl.get(302) === 3 && L[1].tm === 1);
+  ok('tm: a hint from the failed try still costs (3)', cl.get(303) === 3);
+  ok('tm: no tm = every heart counted, as before (2)', cl.get(304) === 2 && L[3].tm === undefined);
+  const miss = T.woMissed({ wo }, 'hard').map((x) => x.l);
+  ok('tm: Replay lists only what can still be won (302, 304)', JSON.stringify(miss.sort()) === '[302,304]', JSON.stringify(miss));
+  ok('tm: woSlipsScored reads tm, clamps it to m, ignores a null', T.woSlipsScored({ m: 3, h: 0, tm: 0 }) === 0 && T.woSlipsScored({ m: 1, tm: 5 }) === 1 && T.woSlipsScored({ m: 2, h: 1 }) === 3);
+}
+// The one-time repair of Matt's Hard 247 (a made-up code here, never his).
+{
+  localStorage.clear();
+  localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'zzzfix', emoji: '🧪', preferredColor: null, opponents: [], playerId: 'ZZFXK', updatedAt: new Date().toISOString() }));
+  const realDate = Date.now;
+  Date.now = () => Date.UTC(2026, 10, 16, 17, 30, 46);
+  G.recordWayOut('hard', { timeMs: 154424, penaltyMs: 60000, arrows: 55, rounds: 42, mistakes: 3, hints: 0, timed: true, n: 247, slips: 3, prior: 0, level: 247, gen: 11 });
+  Date.now = realDate;
+  const st0 = G.loadStats().games.wayout;
+  const p0 = T.woPoints(st0), pts0 = st0.wo.pts.hard;
+  ok('repair: before, 247 earned 1', T.woClMap(st0.wo.cl.hard).get(247) === 1);
+  ok('repair: another code does nothing', G.repairWayOutTry1116({ code: 'ZZOTK' }) === 0 && localStorage.getItem('gamehub.repair.wo1116.v1') === null);
+  ok('repair: adds 3', G.repairWayOutTry1116({ code: 'ZZFXK' }) === 3);
+  const st1 = G.loadStats().games.wayout;
+  ok('repair: 247 now 4, log tm 0, m 3 kept, total +3, wo.pts +3', T.woClMap(st1.wo.cl.hard).get(247) === 4 && st1.wo.log.hard[0].tm === 0
+    && st1.wo.log.hard[0].m === 3 && T.woPoints(st1) === p0 + 3 && st1.wo.pts.hard === pts0 + 3);
+  ok('repair: stamped, never again', !!localStorage.getItem('gamehub.repair.wo1116.v1') && G.repairWayOutTry1116({ code: 'ZZFXK' }) === 0);
+  ok('repair: not in Replay any more', !T.woMissed(st1, 'hard').some((x) => x.l === 247));
+}
+
 console.log(`\nArrow Maze timer tests: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

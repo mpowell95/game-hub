@@ -1259,7 +1259,12 @@ class Hub {
     }
     // ONE-TIME REPAIR (2026-11-09, js/repair-1109.js): one phone only; it syncs first itself, then
     // reloads onto its old device id. Everyone else: resolves false at once, sync as always.
-    import('./repair-1109.js')
+    // ONE-TIME REPAIR (2026-11-16, js/game-stats.js repairWayOutTry1116): Matt's Arrow Maze Hard 247,
+    // before this sync so the fixed points go up with it. Everyone else: nothing.
+    import('./game-stats.js')
+      .then((m) => m.repairWayOutTry1116())
+      .catch(() => 0)
+      .then(() => import('./repair-1109.js'))
       .then((r) => r.repairReinstall1109())
       .catch(() => false)
       .then((moved) => {
