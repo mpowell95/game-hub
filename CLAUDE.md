@@ -52,7 +52,8 @@ incident (full text: `js/CLAUDE.md`):
 Not recording which mode/options a game was played with lost game data (Darts' Cricket vs 301, Pool's 8/9-ball,
 every online match's terms) = THE LAW broken. **Every record call goes through `withMode(mode, chosenDiff, ...)`**
 (`js/game-stats.js`; deferred results pass `modeTag(...)` to `armQuitLoss`/`armLeave`/`recordLeaveWin`), carrying
-EVERY option that defines the game, online included. Stored `games.<id>.byMode`; each bucket also keeps EVERY score's running total (`hs`/`hn` higher-is-better,
+EVERY option that defines the game, online included, AND every setting the player chose (looks, controls: Snake's
+D-pad went unrecorded until 2026-11-16). Stored `games.<id>.byMode`; each bucket also keeps EVERY score's running total (`hs`/`hn` higher-is-better,
 `ls`/`ln` lower-is-better; from 2026-11-06, Matt: "You should be saving all data related to all games played"). A new option or a new game is not
 done until it is recorded. **Enforced on EVERY file (2026-11-02, Matt: "FIX THIS PERMANENTLY")**: `tools/test-game-modes.mjs`
 runs `tools/scan-game-modes.mjs`, a full scan with no list of files (Filler and Mancala were never on the old list); its
