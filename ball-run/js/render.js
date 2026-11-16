@@ -7,7 +7,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
-  CAMERA_LAG, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
+  CAMERA_LAG, CAMERA_LAG_HZ, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
 } from './config.js';
 
@@ -696,8 +696,18 @@ export class Renderer {
    */
   _layoutCamera(sim, reducedMotion) {
     const track = sim.track;
-    this._camLagLateral += (sim.lateralOffset - this._camLagLateral) * CAMERA_LAG;
-    this._camLagY += (sim.y - this._camLagY) * CAMERA_LAG;
+    // BY TIME, NOT BY FRAME (2026-11-16, Matt: "I'll move it quickly to the left ... as the camera adjusts
+    // to follow the ball, the ball moves slowly to the right"). CAMERA_LAG was applied once per screen
+    // frame, so the follow was 2-4x slower whenever a phone drew 60 or 30 frames a second instead of 120
+    // (Safari's Low Power Mode, a busy moment after an update): the camera trailed and the ball seemed to
+    // slide back. It is now CAMERA_LAG per 1/120 s (CAMERA_LAG_HZ), i.e. exactly the old feel on a 120 Hz
+    // iPhone, at every frame rate. A frame over 0.1 s counts as 0.1 s.
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = this._camLast == null ? 1 / CAMERA_LAG_HZ : Math.min(0.1, Math.max(0, (now - this._camLast) / 1000));
+    this._camLast = now;
+    const k = 1 - Math.pow(1 - CAMERA_LAG, dt * CAMERA_LAG_HZ);
+    this._camLagLateral += (sim.lateralOffset - this._camLagLateral) * k;
+    this._camLagY += (sim.y - this._camLagY) * k;
 
     const camZ = sim.z - CAMERA_BACK; // matches the pre-fix camera's fixed CAMERA_BACK offset behind the ball
     const lookZ = sim.z + CAMERA_LOOK_AHEAD;
@@ -729,6 +739,7 @@ export class Renderer {
   resetCamera(lateral) {
     this._camLagLateral = lateral;
     this._camLagY = 0;
+    this._camLast = null;
   }
 
   /** `loseContext` defaults to true (leaving the hub entirely: release the GPU context so

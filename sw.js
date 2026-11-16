@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1614';
+const CACHE = 'game-hub-v1615';
 
 const ASSETS = [
   './',
@@ -1163,11 +1163,11 @@ const REST_MANIFEST = {
   './ball-run/index.html': '5907192c6a',
   './ball-run/css/ball-run.css': 'ee3e50486e',
   './ball-run/js/ui.js': 'a591df53f0',
-  './ball-run/js/config.js': '98ec5079f8',
+  './ball-run/js/config.js': '2d1891c2ff',
   './ball-run/js/track.js': '7e7c04a63d',
   './ball-run/js/sim.js': 'f80ba32cf5',
   './ball-run/js/input.js': '7f41531072',
-  './ball-run/js/render.js': '26c7f09478',
+  './ball-run/js/render.js': '07f4c7436d',
   './ball-run/js/strings.js': '861d6696a9',
   './ball-run/vendor/three.module.min.js': 'd719de9cf8',
   './boggle/': '2dd28572e9',
