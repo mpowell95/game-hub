@@ -282,7 +282,6 @@
 .sn-root .sn-pad--classic .sn-padbtn {
   border: 2px solid var(--sn-pixel); background: var(--sn-card);
 }
-.sn-root .sn-pad--classic .sn-padbtn:active { background: var(--sn-lcd); transform: translateY(1px); }
 
 /* Compass: Matt's own design — the same individual bordered squares as classic, but a true
    3-row layout (up alone / left+right alone / down alone), not classic's 2-row cross. No
@@ -290,12 +289,10 @@
 .sn-root .sn-pad--compass .sn-padbtn {
   border: 2px solid var(--sn-pixel); background: var(--sn-card);
 }
-.sn-root .sn-pad--compass .sn-padbtn:active { background: var(--sn-lcd); transform: translateY(1px); }
 
 /* Circle: a translucent disc backdrop, borderless floating chevrons, a dim center dot. */
 .sn-root .sn-pad--circle { border-radius: 50%; background: rgba(var(--sn-lcd-rgb), 0.55); }
 .sn-root .sn-pad--circle .sn-padbtn { font-size: 1.3rem; }
-.sn-root .sn-pad--circle .sn-padbtn:active .sn-pad-glyph { transform: scale(0.85); display: inline-block; }
 .sn-root .sn-pad--circle .sn-pad-mid {
   display: block; width: 46%; height: 46%; border-radius: 50%; background: var(--sn-pixel); opacity: 0.55;
 }
@@ -330,10 +327,19 @@
 /* Solid + arrows: the same flat cross, with light arrows visible against the fill. */
 .sn-root .sn-pad--solidArrows .sn-padbtn { color: var(--sn-card); }
 
-.sn-root .sn-pad--circle .sn-padbtn:active,
-.sn-root .sn-pad--gamepad .sn-padbtn:active,
-.sn-root .sn-pad--solid .sn-padbtn:active,
-.sn-root .sn-pad--solidArrows .sn-padbtn:active { opacity: 0.6; }
+/* The pressed arrow (2026-11-16): ui.js puts .is-press on the arrow being pressed (by touch, a
+   slide or a key), the same on every style: the arrow's cell fills and its glyph sinks a little.
+   Bordered squares fill with the LCD green; the light cross and the disc darken; the dark crosses
+   lighten. The glyph's scale needs inline-block (a bare span ignores transform). */
+.sn-root .sn-pad-glyph { display: inline-block; transition: transform 60ms; }
+.sn-root .sn-padbtn { transition: background-color 60ms; }
+.sn-root .sn-padbtn.is-press .sn-pad-glyph { transform: scale(0.82); }
+.sn-root .sn-pad--classic .sn-padbtn.is-press,
+.sn-root .sn-pad--compass .sn-padbtn.is-press { background: var(--sn-lcd); transform: translateY(1px); }
+.sn-root .sn-pad--circle .sn-padbtn.is-press { background: rgba(63, 125, 44, 0.3); border-radius: 50%; }
+.sn-root .sn-pad--gamepad .sn-padbtn.is-press { background: rgba(63, 125, 44, 0.3); }
+.sn-root .sn-pad--solid .sn-padbtn.is-press,
+.sn-root .sn-pad--solidArrows .sn-padbtn.is-press { background: rgba(255, 255, 255, 0.28); }
 
 /* --- dark theme (2026-07-24, HANDOFF-FB-THEME.md Phase 2) -----------------------------------
    js/theme.js stamps `.gh-dark` on <html>; every surface themes by overriding ITS OWN
@@ -354,6 +360,9 @@
    center dot) because THOSE sit on the still-light --sn-lcd background regardless of theme. */
 :root.gh-dark .sn-root .sn-pad--classic .sn-padbtn,
 :root.gh-dark .sn-root .sn-pad--compass .sn-padbtn { border-color: var(--sn-accent); color: var(--sn-lcd); }
+/* pressed, the cell fills with the light LCD green, so the arrow goes dark to stay visible */
+:root.gh-dark .sn-root .sn-pad--classic .sn-padbtn.is-press,
+:root.gh-dark .sn-root .sn-pad--compass .sn-padbtn.is-press { color: var(--sn-pixel); }
 :root.gh-dark .sn-root .sn-help-art { color: var(--sn-lcd); }
 /* solidArrows' glyph is `color: var(--sn-card)` (white-on-dark-cross in light mode); --sn-card
    is now dark too, so pin it to the light LCD tone instead of letting it follow --sn-card. */

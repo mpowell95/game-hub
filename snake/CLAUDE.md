@@ -209,3 +209,16 @@ pad's size and the box holding it were two independent numbers until this pass, 
 short-screen trims moved only the box: measured in the hub at 390x664, a 62px pad sat in a 40px
 swatch and its bottom row was drawn straight through the option's own label. `overflow: hidden` on
 the swatch would have been worse - it would crop the shape the picker exists to show.
+
+## The D-pad's feel, and which pad people use (2026-11-16, Matt: "build 1-3")
+
+- **The whole pad is live**: a press goes to the NEAREST arrow (`_wirePad` in `ui.js`), so a cross's corners and
+  middle turn the snake (36% of a cross answered before). Only the very centre of a cross (`CENTER_DEAD`) does
+  nothing; the Circle's corners outside the disc are not the pad.
+- **Slide to steer**: the pointer is captured; rolling onto another arrow turns without lifting (`SLIDE_PX` margin,
+  passing the centre keeps the last turn).
+- **The pressed arrow lights up on every style** (`.is-press`, at least `PRESS_MIN_MS`; keys light it too). The old
+  per-style `:active` rules are gone.
+- **Every run records its pad** (Matt: "I don't want to remove any if anybody uses it"): withMode detail
+  `{ pad, padTaps, swipes, keys }` → `games.snake.dt.pad.<style>` per person. Runs before 2026-11-16 never stored it
+  (the choice lived only in `gamehub.snake.v1` on each phone). Do NOT remove a style while any person's `dt.pad` has it.
