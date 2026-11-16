@@ -12,7 +12,7 @@
 // the server, every shot written the moment it is taken, so leaving one loses nothing either.
 
 import {
-  newMatch, validMatch, step, atRest, freeze, settle, begin, play, nextRack, runToRest, maxShotSteps,
+  RULES_NOW, newMatch, validMatch, step, atRest, freeze, settle, begin, play, nextRack, runToRest, maxShotSteps,
   aimContact, rayStop, canPlace, nearestPlace, onEight, needCall, targetsOf, cloneBalls, ballsOf,
   seatsOf, CUE, R, W, H, DT, HEAD_Y, POCKETS, RACK_OPTIONS, MODES, TABLE_NOW, TB, useTable, tableOf,
 } from './engine.js';
@@ -469,6 +469,8 @@ class PoolUI {
   _savedMatch() {
     const s = readJSON(SAVE_KEY);
     if (!s || !OPPS.includes(s.mode) || !validMatch(s.match) || s.match.winner != null) return null;
+    // A saved game here is never replayed from a log, so it takes today's rules (rules 4, 2026-11-16).
+    if ((s.match.rv || 1) < RULES_NOW) s.match.rv = RULES_NOW;
     return s;
   }
 

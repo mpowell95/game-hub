@@ -31,11 +31,14 @@ export const TABLE_NOW = 7;
 /** RULES VERSIONS, kept per match like the table (`m.rv`, none = 1), for the same reason: an online
  *  match replays its log. 1: a shot that pots nothing and sends no ball to a cushion after the hit
  *  is a foul (WPA 6.3). 2 (2026-10-23, Matt: "it shouldn't be a foul... drop it"): it is not. */
-export const RULES_NOW = 3;
+export const RULES_NOW = 4;
 /** 3 (2026-10-24, Matt, after Moonis sank a solid off the break and the table stayed open: "Fix"):
  *  a ball potted on a clean break decides the groups, the first one in giving the breaker its group
  *  (bar rules; WPA keeps the table open). */
-const knownRules = (rv) => (rv === 1 || rv === 2 || rv === 3 ? rv : null);
+/** 4 (2026-11-16, Matt: the computer potted one of its own and one of his on one shot and went again,
+ *  "That's not how pool works"): in 8-ball, once the groups are set, a shot that drops any of the
+ *  other player's balls ends the turn (no foul; the ball stays down). WPA lets the shooter go on. */
+const knownRules = (rv) => (rv === 1 || rv === 2 || rv === 3 || rv === 4 ? rv : null);
 const T1 = (() => {
   const R = 2.8, G = 8.1, S = 6.2, HOLE = 5.4;
   return {
@@ -798,12 +801,15 @@ export function settle(m, ev) {
       const wins = isBreak ? !foul : (!foul && targets.length === 1 && targets[0] === EIGHT && counts(EIGHT));
       return endRack(m, wins ? seat : seat ^ 1, foul);
     }
+    const hadGroups = m.groups;
     if (!foul && !m.groups && (!isBreak || (m.rv || 1) >= 3)) {
       const g = counted.map((i) => groupOf(i, '8')).find(Boolean);
       if (g) m.groups = seat === 0 ? [g, g === 'a' ? 'b' : 'a'] : [g === 'a' ? 'b' : 'a', g];
     }
     const mine = m.groups ? counted.filter((i) => groupOf(i, '8') === m.groups[seat]) : counted;
-    return passOn(m, foul, !foul && mine.length > 0);
+    // Rules 4: one of theirs down too ends the turn.
+    const theirs = hadGroups && (m.rv || 1) >= 4 && pots.some((i) => groupOf(i, '8') === hadGroups[seat ^ 1]);
+    return passOn(m, foul, !foul && !theirs && mine.length > 0);
   }
 
   if (m.mode === '9') {
