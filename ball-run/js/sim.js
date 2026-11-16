@@ -80,6 +80,10 @@ export class Sim {
     this.lives = 0;
     this.invincibleUntil = 0;
     this.orbsCollected = 0;
+    // Per-run facts saved with the result (2026-11-16, Matt: "save all data from every play"). Plain
+    // counters, read by ui.js's runDetail(); nothing in the sim reads them back.
+    this.stats = { obst: 0, splits: 0, jumps: 0, jumpMiss: 0, lifeGot: 0, lifeUsed: 0, saves: {}, topSpeed: this.speed };
+    this.crashCause = null; // 'obstacle' | 'edge' | 'void' | 'landing' (crashReason stays 'obstacle'|'edge' for the screens)
     // Transient event queue (Phase 4 follow-up): `{ type: 'orb'|'life'|'lifeSpent' }` pushed the
     // instant each happens, so render.js/ui.js can trigger a one-shot animation (a "+1" floater,
     // "extra life used!") tied to the actual moment rather than inferring it from a value change
@@ -104,6 +108,7 @@ export class Sim {
     // --- Speed model (brief section 7) ---
     const ramped = this.cfg.baseSpeed + this.cfg.speedRampPerSec * this.elapsed + this.cfg.tierBonus * this.tiersPassed;
     this.speed = Math.min(this.cfg.maxSpeed, ramped);
+    if (this.speed > this.stats.topSpeed) this.stats.topSpeed = this.speed;
     this.z += this.speed * dt;
     this.rollAngle -= (this.speed * dt) / BALL_RADIUS;
 
@@ -181,7 +186,7 @@ export class Sim {
       const halfCube = OBSTACLE_SIZE / 2;
       for (const cube of seg.obstacles) {
         if (Math.abs(this.lateralOffset - cube.lateral) < halfCube + BALL_RADIUS) {
-          if (!this.spendLifeIfAny()) { this.beginCrash('obstacle'); return; }
+          if (!this.spendLifeIfAny('obstacle')) { this.crashCause = 'obstacle'; this.beginCrash('obstacle'); return; }
           break; // one spent life covers every cube this tick, not one consumed per cube
         }
       }
@@ -195,14 +200,14 @@ export class Sim {
     // Jump offset-landing thing - 0 everywhere else), so the void's true position relative to cx
     // is their sum.
     if (!invincible && frame.voidHalfWidth > 0 && Math.abs(this.lateralOffset - (frame.wCenter + frame.voidCenter)) < frame.voidHalfWidth) {
-      if (!this.spendLifeIfAny()) { this.beginCrash('edge'); return; }
+      if (!this.spendLifeIfAny('void')) { this.crashCause = 'void'; this.beginCrash('edge'); return; }
     }
 
     // --- Edge fall: ball's CENTER passes the track edge (brief section 5). `frame.wCenter` is a
     // Jump offset-landing pad's own center, relative to cx (0 everywhere else, including every
     // grounded segment outside that one variety). ---
     if (!invincible && Math.abs(this.lateralOffset - frame.wCenter) > halfWidth) {
-      if (!this.spendLifeIfAny()) { this.beginCrash('edge'); return; }
+      if (!this.spendLifeIfAny('edge')) { this.crashCause = 'edge'; this.beginCrash('edge'); return; }
     }
 
     this.updateScore();
@@ -218,15 +223,18 @@ export class Sim {
       this.orbsCollected += 1;
     } else if (pickup.type === 'life') {
       this.lives = Math.min(cfg.maxLives, this.lives + 1);
+      this.stats.lifeGot += 1;
     }
     this.pickupEvents.push({ type: pickup.type });
   }
 
   /** If a life is banked, spend one and open the invincibility grace window; returns whether a
    *  life was actually available so the caller can fall through to a real crash when it wasn't. */
-  spendLifeIfAny() {
+  spendLifeIfAny(what) {
     if (this.lives <= 0) return false;
     this.lives -= 1;
+    this.stats.lifeUsed += 1;
+    if (what) this.stats.saves[what] = (this.stats.saves[what] | 0) + 1;
     this.invincibleUntil = this.elapsed + this.track.map.pickups.lifeInvincibleS;
     this.pickupEvents.push({ type: 'lifeSpent' });
     return true;
@@ -243,8 +251,8 @@ export class Sim {
       const seg = segs[i];
       if (seg.index <= this._lastScoredSegmentIndex) continue;
       if (seg.z1 > this.z) break; // ascending order: nothing past this one has been cleared yet either
-      if (seg.type === 'obstacle') this.score += 1;
-      else if (seg.scoreOnce) this.score += 1;
+      if (seg.type === 'obstacle') { this.score += 1; this.stats.obst += 1; }
+      else if (seg.scoreOnce) { this.score += 1; this.stats.splits += 1; }
       this._lastScoredSegmentIndex = seg.index;
     }
   }
@@ -287,6 +295,7 @@ export class Sim {
 
     const ramped = this.cfg.baseSpeed + this.cfg.speedRampPerSec * this.elapsed + this.cfg.tierBonus * this.tiersPassed;
     this.speed = Math.min(this.cfg.maxSpeed, ramped);
+    if (this.speed > this.stats.topSpeed) this.stats.topSpeed = this.speed;
     this.z += this.speed * dt;
     this.rollAngle -= (this.speed * dt) / BALL_RADIUS;
 
@@ -324,7 +333,9 @@ export class Sim {
         // was never shown the landing zone before I had to commit" - a life now buys a real
         // second chance on a landing the player couldn't have seen coming in time to react.
         const invincible = this.elapsed < this.invincibleUntil;
-        if (!invincible && !this.spendLifeIfAny()) {
+        this.stats.jumpMiss += 1;
+        if (!invincible && !this.spendLifeIfAny('landing')) {
+          this.crashCause = 'landing';
           // "Yes, missing the landing kills you. Matt confirmed." Same FALLING state/animation as
           // every other edge fall - no new game-over path.
           this.beginCrash('edge');
@@ -335,6 +346,7 @@ export class Sim {
       this.vy = 0;
       this.state = RunState.PLAYING;
       if (!missed) {
+        this.stats.jumps += 1;
         this.score += 1; // "+1 on a successful landing" (section 3) - a one-time event, not the
                           // generic segment-crossing scan updateScore() uses for obstacles/Splits.
                           // A missed-but-saved landing scores nothing - surviving a miss is not
