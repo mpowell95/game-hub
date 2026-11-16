@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1616;
-const CACHE = 'game-hub-v1616';
+const IMPORTANT_SINCE = 1617;
+const CACHE = 'game-hub-v1617';
 
 const ASSETS = [
   './',
@@ -855,7 +855,7 @@ const REST_MANIFEST = {
   './js/layout.js': '1d8dc93ca3',
   './js/back-stack.js': 'e9ee5ac036',
   './js/lb-rules.js': '6986191ea1',
-  './js/lb-points.js': '5f672fd4d8',
+  './js/lb-points.js': '3d16d7a40b',
   './js/lb-points-sheet.js': 'aed5a372ef',
   './js/lb-rank-sheet.js': '69753750ba',
   './js/puzzle-points.js': 'b474d8114f',

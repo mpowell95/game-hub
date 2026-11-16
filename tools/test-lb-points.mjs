@@ -46,6 +46,13 @@ ok('Cup Pong 2 reracks: no bonus', gamePoints(rec({ hard: W(1) }, { byMode: { 'g
 ok('Darts Cricket in order x2 (2/4/6)', gamePoints(rec({ easy: W(1), medium: W(1), hard: W(1) }, { byMode: { 'kind=cricket-order|first=me': { easy: W(1), medium: W(1), hard: W(1) } } }), 'darts').pts === 12);
 ok('...no-points Cricket in order too', pointsForWin('darts', 'hard', { kind: 'cricket-order-np', first: 'me' }) === 6);
 ok('...plain Cricket and 301 unchanged', pointsForWin('darts', 'hard', { kind: 'cricket' }) === 3 && pointsForWin('darts', 'hard', { kind: '301' }) === 3);
+// Dots and Boxes: Medium on the small board with the computer going first pays 1, under the 20-point limit (Matt, 2026-11-16).
+{ const k = 'first=opponent|size=small|undo=0|went=them';
+  ok('Dots small Medium, computer first: 21 wins = 20 points', gamePoints(rec({ intermediate: W(21) }, { byMode: { [k]: { intermediate: W(21) } } }), 'dotsboxes').pts === 20);
+  ok('Dots small Medium, computer first: 5 wins = 5, and Hard beside it is untouched', gamePoints(rec({ intermediate: W(5), pro: W(2) }, { byMode: { [k]: { intermediate: W(5), pro: W(2) } } }), 'dotsboxes').pts === 15);
+  ok('Dots small Medium going first still pays 3', gamePoints(rec({ intermediate: W(2) }, { byMode: { 'first=you|size=small|undo=0|went=me': { intermediate: W(2) } } }), 'dotsboxes').pts === 6);
+  ok('Dots small Medium, computer first, at the Medium level only', gamePoints(rec({ intermediate: W(21) }, { byMode: { [k]: { intermediate: W(21) } } }), 'dotsboxes', 2).pts === 20);
+  ok('Dots pointsForWin small Medium, computer first = 1', pointsForWin('dotsboxes', 'intermediate', { size: 'small', first: 'opponent', went: 'them' }) === 1); }
 ok('a multiplier never counts more wins than the level holds', gamePoints(rec({ pro: W(1) }, { byMode: { 'size=large': { pro: W(5) } } }), 'dotsboxes').pts === 10);
 ok('online wins never take the mode bonus', gamePoints(rec({ mp: W(1) }, { byMode: { 'size=large': { mp: W(1) } } }), 'dotsboxes').pts === 3);
 ok('legacy wins (no level) = 1', gamePoints(rec({ legacy: W(4) }), 'business').pts === 4);

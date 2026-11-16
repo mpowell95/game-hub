@@ -453,6 +453,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   beeAlerts, integrityFlags, integrityAlerts, bug/device reports, selfies, pushSubs (2026-11-15) and change nothing (`tools/reader-auth.mjs`). Use it before saying "I can't see that".
 - **Cup Pong: bounce never beats a direct throw (2026-11-16):** `node tools/test-cuppong-bounce.mjs` (best aim point per rack, about a minute; run after any table change).
 - **Cup Pong bounce check (2026-11-16):** `tools/replay-cuppong-throws.mjs <CODE>` (real throws, live vs test physics; read only).
+- **Dots and Boxes farm closed (2026-11-16, Matt: "ship it now")**: Medium, small board, computer goes first pays 1 a win under the 20-point limit (`js/lb-points.js` `capMode` / `dbFarm`; King of Games won 21 of 23 in 7 minutes). Read time; lift it when the Medium computer is fixed.
 - **Farming check, run weekly (2026-11-16, Matt: "Standing check: Yes, please build"): `node tools/read-farming.mjs`** (read only; any person's setup with 20+ games paying over 1.5 points per game played; `docs/WINS-POINTS-REVIEW.md`).
 - **Arrow Maze points per minute: `node tools/read-arrow-pace.mjs`** (Expert 8 since 2026-11-02; Matt wants it revisited with more data).
 - **Firebase-writing scripts are Matt-only, dry-run by default** (`tools/clear-skeeball-stats.mjs`,
