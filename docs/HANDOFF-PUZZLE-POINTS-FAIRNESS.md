@@ -13,6 +13,17 @@ everyone" (root `CLAUDE.md`).
 Seven solo games pay leaderboard points for each level or board cleared, more for harder levels. The numbers were
 picked by feel. Find out whether they make sense and are fair, and say what you would change, if anything.
 
+## REAL HUMAN PLAYS ONLY (Matt, 2026-11-16: "everything should be based on actual, human plays")
+
+- Every finding and every proposed number must come from real players' real games: times, wins, losses, hints,
+  mistakes, quits, read from the database.
+- **Not evidence:** simulations, solvers, generator grading, board counts, the code's own guesses, or your own
+  judgement of how hard a level "should" be. `tools/minesweeper-odds.mjs` is a simulation, not human play.
+- **Leave out non-human and test plays:** the test profile test1 / `DREG5`, any made-up test code, test-automation
+  plays, and admin-only TEST-area plays (`testGames`).
+- Where a level has too few human plays to judge, say so and leave its value alone. Never fill the gap with a guess.
+- Every number in the report shows how many human plays it rests on.
+
 This is open-ended. Some angles worth considering (not a checklist, and not a hint at the answer):
 
 - **Within a game:** is Expert really worth 8x Easy (or 20x in Minesweeper)? Compare against time per level, win
@@ -21,7 +32,8 @@ This is open-ended. Some angles worth considering (not a checklist, and not a hi
   mix across games on one board, but medals and the Medal Count do. Should they line up at all?
 - **Farming:** can someone pile up points by grinding easy levels? Nuts & Bolts Easy is capped at 20; nothing else is.
 - **Hints and mistakes:** are the cuts consistent from game to game, and do they hurt about the right amount?
-- **Luck:** Minesweeper boards can force a guess. Should a forced loss count the same as a skill loss?
+- **Luck:** Minesweeper boards can force a guess. Should a forced loss count the same as a skill loss? (Use the real
+  loss reasons in `tools/read-minesweeper.mjs`, not the simulation.)
 - **Ladders vs picks:** Arrow Maze, Gridlock, and Word Weaver make you play levels in order; Sudoku, Murdoku,
   Minesweeper, and Nuts & Bolts let you pick a difficulty and replay it. Does that change what is fair?
 - **Small data:** some games have very few plays. Say plainly where the data is too thin to judge.
@@ -51,11 +63,12 @@ stored data. It does move places and medals for real people, so show who moves.
 
 - `node tools/read-arrow-pace.mjs` - Arrow Maze points per minute, per person and per difficulty.
 - `node tools/read-minesweeper.mjs` - wins and losses per level, and why each board was lost.
-- `node tools/minesweeper-odds.mjs` - how winnable each level is for a perfect player, and how often it must guess.
 - `node tools/read-lb-snapshot.mjs` - a local copy of the server-built leaderboard (`backups/lb-z.json`).
 - `node tools/read-play-log.mjs <CODE>` - every finished game with its time and mode.
-- Most of these need the env var `GAMEHUB_READER` (the reader key) and `NODE_USE_ENV_PROXY=1`. If you do not have
-  the key, say so and work from the code and whatever data you can reach.
+- Most of these need the env var `GAMEHUB_READER` (the reader key) and `NODE_USE_ENV_PROXY=1`. If you cannot reach
+  real player data, STOP and tell Matt. Do not evaluate without it.
+- Plays logged before a game started saving a detail (e.g. hint counts per solve) are missing that detail. Say which
+  dates each number covers.
 
 ## Rules that apply
 
