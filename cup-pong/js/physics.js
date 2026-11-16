@@ -15,7 +15,7 @@
 // NO MAGNETISM, EVER (skeeball's standing ban): nothing steers a ball toward a cup.
 //
 // Deterministic: fixed 1/480 s step, fixed solver iterations, no rng. One fresh world per throw.
-// Public surface: startThrow({ power, aim, cups }) -> st, step(st, dt), takeEvents(st),
+// Public surface: startThrow({ power, aim, cups, model }) -> st, step(st, dt), takeEvents(st),
 // simulateThrow(params) for the tests.
 
 import * as CANNON from '../../skeeball/js/vendor/cannon-es.js';
@@ -80,10 +80,12 @@ export function innerR(y) {
   return CUP.botR + (CUP.topR - CUP.botR) * f;
 }
 
-// --- THE TEST MODEL (admin-only test mode, 2026-11-05; Matt: "Build the fixes and add a test mode for
-// admin only. Don't touch the real game players have") ------------------------------------------------
-// Everything players use above and below is unchanged: `model` absent = the real game, bit for bit.
-// With `model: 'test'`:
+// --- THE TABLE (built as admin-only test mode 2026-11-05; LIVE FOR EVERYONE 2026-11-16, Matt: "Make the new
+// bounce live for everyone") ---------------------------------------------------------------------------------
+// `model` absent (or 'test', the old test mode's name) = this table, for every throw. `model: OLD_TABLE` ('v1')
+// = the solver table every throw flew on before 2026-11-16, bit for bit: ONLY for a challenge made before then
+// (its rules have no `tb`, cup-pong/js/mp.js tableModel), so both phones replay its throws as they were played.
+// How this table differs from v1:
 //  1. THE TABLE IS A PLANE, NOT A SOLVER CONTACT. Measured 2026-11-05: the solver's bounce kept anywhere
 //     from 75% to 104% of the ball's falling speed depending only on WHERE IN A 1/480 s STEP the ball met
 //     the table (a 0.002 power change flipped it), so the same throw bounced high or low at random. The
@@ -106,7 +108,8 @@ export const TEST = { rest: 0.90, mu: 0.25 };
 // 0.08 a ball resting against a cup's side never stopped (the cup's slanted wall kept pressing it into the table,
 // and each press came back as a 0.1 m/s hop, to the 6 s cap).
 const TEST_STOP_V = 0.15;
-const SHELL = 2 / 3;               // I / (m r^2) of a thin hollow sphere
+const SHELL = 2 / 3;
+const BACK_OUT = 0.30;            // m in front of the nearest cup: a ball coming back past it is a miss               // I / (m r^2) of a thin hollow sphere
 
 /** The table's grip on the ball for one contact: `jn` is the push up through the ball (per kg, m/s).
  *  Friction pushes against the slip of the ball's bottom point, at most mu x jn, and never past rolling. */
@@ -121,7 +124,7 @@ function tableGrip(ball, jn) {
   w.x += -fz / (SHELL * r); w.z += fx / (SHELL * r);
 }
 
-/** The test table (model 'test'), after each step: the ball meeting the table top is reflected here. */
+/** The table (every model but 'v1'), after each step: the ball meeting the table top is reflected here. */
 function testTable(st) {
   const { ball } = st;
   const p = ball.position, v = ball.velocity;
@@ -139,6 +142,9 @@ function testTable(st) {
   st.events.push({ type: 'table', v: down, x: p.x, z: p.z });
 }
 
+/** The model for the solver table every throw flew on before 2026-11-16 (old challenges only). */
+export const OLD_TABLE = 'v1';
+
 function buildWorld(cups, model) {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
   world.broadphase = new CANNON.NaiveBroadphase();   // ~12 bodies: nothing to gain, and stable order
@@ -153,7 +159,7 @@ function buildWorld(cups, model) {
   world.addContactMaterial(cmTable);
   world.addContactMaterial(new CANNON.ContactMaterial(matBall, matCup, { friction: MAT.cupFric, restitution: MAT.cupRest }));
 
-  if (model !== 'test') {                            // the test table is a plane (testTable), not a body
+  if (model === OLD_TABLE) {                         // v1's table is a solver body; every other model's is a plane (testTable)
     const table = new CANNON.Body({ mass: 0, material: matTable });
     table.addShape(new CANNON.Box(new CANNON.Vec3(TABLE.width / 2, TABLE.thick / 2, TABLE.len / 2)));
     table.position.set(0, -TABLE.thick / 2, 0);
@@ -174,7 +180,7 @@ function buildWorld(cups, model) {
   const ball = new CANNON.Body({ mass: BALL.mass, material: matBall, shape: new CANNON.Sphere(BALL.r) });
   ball.linearDamping = 0;          // drag is applied by hand below: it is quadratic, not linear
   ball.angularDamping = 0.05;
-  if (model === 'test') {          // a ping pong ball is a thin shell, not cannon's solid sphere (2/5)
+  if (model !== OLD_TABLE) {       // a ping pong ball is a thin shell, not cannon's solid sphere (2/5)
     const I = SHELL * BALL.mass * BALL.r * BALL.r;
     ball.inertia.set(I, I, I);
     ball.invInertia.set(1 / I, 1 / I, 1 / I);
@@ -201,8 +207,8 @@ export const heading = (aim) => Math.max(-THROW.aimMax, Math.min(THROW.aimMax, a
  * `power` and `aim` come from the swipe (ui.js); `aim` is the HEADING in radians.
  */
 export function startThrow({ power = 0.5, aim = 0, cups = [], model = null } = {}) {
-  const test = model === 'test';
-  const { world, ball, cupBodies, cmTable } = buildWorld(cups, test ? 'test' : null);
+  const test = model !== OLD_TABLE;     // the plane table (testTable)
+  const { world, ball, cupBodies, cmTable } = buildWorld(cups, test ? null : OLD_TABLE);
   const v = launchSpeed(power);
   const a = heading(aim);
   ball.position.set(0, THROW.y0, THROW.z0);
@@ -284,6 +290,14 @@ function substep(st) {
       }
     }
   }
+  // COMING BACK (the plane table only, 2026-11-16): off the cups and heading back toward the shooter, more than
+  // BACK_OUT in front of the nearest cup. Nothing at that end can send it back to the cups, so it is a miss; on the
+  // real-life table such a ball dribbled the length of the table to the 6 s cap (v1's dead bounces stopped it).
+  if (st.test && st.touchedCup && ball.velocity.z > 0 && st.cups.length
+    && p.z > Math.max(...st.cups.map((k) => k.z)) + BACK_OUT) {
+    finish(st, { kind: 'miss', t: st.t, back: true });
+    return;
+  }
   // OFF THE TABLE: below the top by more than the ball, or long gone.
   if (p.y < -BALL.r * 3 || Math.abs(p.z) > TABLE.len / 2 + 1.5 || Math.abs(p.x) > 1.5) {
     finish(st, { kind: 'off', t: st.t });
@@ -348,14 +362,14 @@ const REPLAY_TRIES = (() => {
   for (let i = -5; i <= 5; i++) for (let j = -5; j <= 5; j++) out.push([i, j]);
   return out.sort((x, y) => (x[0] ** 2 + x[1] ** 2) - (y[0] ** 2 + y[1] ** 2)).slice(0, 61);
 })();
-export function replayVector({ power, aim, cups }, made) {
+export function replayVector({ power, aim, cups, model = null }, made) {
   const want = made || '';
   const lands = (o) => (o && o.kind === 'made' ? o.id : '') === want;
   const until = Date.now() + 400;      // a throw from an older physics may match none: never hang the phone
   for (const [i, j] of REPLAY_TRIES) {
     if (Date.now() > until) break;
     const p = power + i * REPLAY_BOX / 5, a = aim + j * REPLAY_BOX / 5;
-    if (lands(simulateThrow({ power: p, aim: a, cups }).outcome)) return { power: p, aim: a };
+    if (lands(simulateThrow({ power: p, aim: a, cups, model }).outcome)) return { power: p, aim: a };
   }
   return { power, aim };
 }

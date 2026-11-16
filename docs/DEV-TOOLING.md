@@ -178,3 +178,10 @@ Read-only. Who has seen each in-game tip: each person's devices' `players/<id>/t
 Battle Arena's first-match tutorial on a dev server: the three first-turn tips in order, each blocking the board until
 Got it, the five later ones when each first matters, saved once and reported, none on a second match or a phone that
 saw them, never blocking in a timed match. `NODE_PATH=$(npm root -g) BASE=http://localhost:8123 node tools/test-battlearena-tips.mjs`.
+
+## tools/replay-cuppong-throws.mjs (2026-11-16)
+
+READ ONLY. One player's real Cup Pong throws (every challenge throw, racks rebuilt from each match log, plus the play log's
+solo / vs computer / test throws), flown on the live physics and on test mode's (`model: 'test'`), side by side: made,
+table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/replay-cuppong-throws.mjs <CODE>`. Needs
+`GAMEHUB_READER` for the play log (challenge throws only without it). Run on every bounce change.

@@ -57,6 +57,8 @@ ok('the challenger can create a match', res.ok, JSON.stringify(res));
 const id = res.id;
 ok('a new challenge is made under "only the called island counts" (io)', res.game.rules.io === true && MP.freshMatch(res.game.rules).islandOnly === true);
 ok('a new challenge is made under "island only with 3+ cups" (i3)', res.game.rules.i3 === true && MP.freshMatch(res.game.rules).islandThree === true);
+ok('a new challenge flies the new table bounce (tb, 2026-11-16)', res.game.rules.tb === true && MP.tableModel(res.game.rules) === null);
+ok('a challenge without tb keeps the old table', MP.tableModel({ gent: true, rr: 2 }) === 'v1' && MP.cleanRules({ tb: 'yes' }).tb === false);
 ok('a challenge begun before i3 gets the 3-cup rule too (Matt: Moonis called island on the last cup)', MP.freshMatch({ gent: true, rr: 2 }).islandThree === true);
 {
   const m = MP.freshMatch({ gent: true, rr: 2 });
@@ -339,9 +341,11 @@ const rules = JSON.parse(readFileSync('database.rules.json', 'utf8'));
   const e = g.log[18];
   const m = MP.buildLocal(g, 'a', 18); if (!m.queue.length) m.startTurn();
   const cups = cupsXZ(m.target());
-  ok('the rounded vector alone flies off the table (the bug Matt saw)', PH.simulateThrow({ power: e.p, aim: e.a, cups }).outcome.kind !== 'made');
-  const v = PH.replayVector({ power: e.p, aim: e.a, cups }, e.m);
-  const o = PH.simulateThrow({ power: v.power, aim: v.aim, cups }).outcome;
+  const model = MP.tableModel(g.rules);   // made before 2026-11-16: the old table, as it was played
+  ok('a challenge made before the new bounce replays on the old table (v1)', model === PH.OLD_TABLE);
+  ok('the rounded vector alone flies off the table (the bug Matt saw)', PH.simulateThrow({ power: e.p, aim: e.a, cups, model }).outcome.kind !== 'made');
+  const v = PH.replayVector({ power: e.p, aim: e.a, cups, model }, e.m);
+  const o = PH.simulateThrow({ power: v.power, aim: v.aim, cups, model }).outcome;
   ok('replayVector flies it into k2, inside the rounding', o.kind === 'made' && o.id === 'k2'
     && Math.abs(v.power - e.p) <= PH.REPLAY_BOX && Math.abs(v.aim - e.a) <= PH.REPLAY_BOX);
   const x = MP.cleanEntry({ by: 'a', k: 't', p: 0.123456789012, a: -0.0987654321, m: '' });

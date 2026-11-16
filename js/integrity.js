@@ -360,6 +360,12 @@ export const PAIR_NODES = {
   eightball: 'eightball', archery: 'archery', chinchon: 'chinchon', escoba: 'escoba', battlearena: 'battlearena',
   battleship: 'battleship',
 };
+/** Pairs Matt has CLEARED by hand: { '<A>~<B>' (codes sorted): 'why' }. No pair alert is raised for them,
+ *  and the admin page hides their stored alerts (the stored rows stay, as evidence; nothing is deleted). */
+export const CLEARED_PAIRS = {
+  '9F7FB~QZCC4': '2026-11-16, Matt on Joe vs MattyIce: "He\'s totally fine and legit."',
+};
+export const isClearedPair = (key) => Object.prototype.hasOwnProperty.call(CLEARED_PAIRS, String(key || '').replace(/^pair~/, ''));
 const PAIR_RESULTS = ['won', 'lost', 'draw'];
 const codeOf = (v) => String(v || '').trim().toUpperCase();
 /** The players/ node an h2h opponent device id names (js/mp-records.js recordForDevice, the same pick). */
@@ -479,6 +485,7 @@ export function pairAlerts(pairs, codes, L = PAIR_LIMITS) {
   const total = {};
   for (const p of pairs) { total[p.a] = (total[p.a] || 0) + p.games; total[p.b] = (total[p.b] || 0) + p.games; }
   for (const p of pairs) {
+    if (isClearedPair(p.key)) continue;
     for (const [side, me, them, w, l, resigned] of [['a', p.a, p.b, p.wa, p.wb, p.ra], ['b', p.b, p.a, p.wb, p.wa, p.rb]]) {
       if (w >= L.LOPSIDED_MIN_WINS && l <= L.LOPSIDED_MAX_SHARE * p.games) {
         out.push({ key: p.key, rule: 'pair-lopsided', side, v: `${w}-${l} vs ${nm(them)}`, lim: `${pct(L.LOPSIDED_MAX_SHARE)}%` });
@@ -592,4 +599,4 @@ export const GAME_NAMES = {
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { PAIR_LIMITS, PAIR_NODES, pairCodes, onlinePairs, pairAlerts, RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
+export default { PAIR_LIMITS, PAIR_NODES, CLEARED_PAIRS, isClearedPair, pairCodes, onlinePairs, pairAlerts, RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };

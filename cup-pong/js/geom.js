@@ -53,7 +53,9 @@ export const THROW = {
   aimMax: 0.30,              // heading clamp, radians - well past the table's edge either way
 };
 
-/** Contact materials. A ping pong ball on a table bounces high; on a thin plastic cup it loses
+/** Contact materials. Since 2026-11-16 the TABLE values (tableRest, tableRestLater, tableSkid, tableFric) fly only
+ *  challenges made before then (physics.js OLD_TABLE); every other throw uses physics.js TEST's real-life table.
+ *  A ping pong ball on a table bounces high; on a thin plastic cup it loses
  *  more. `tableRest` is the bounce-shot lever (see cup-pong/CLAUDE.md, "Bounce shots"). */
 // tableRest 0.88 -> 0.65 (Matt, 2026-10-02: a bounced ball must NOT go in more often than a regular
 // throw). Measured on the full-rack 7,881-throw grid, counting only balls whose first cup contact

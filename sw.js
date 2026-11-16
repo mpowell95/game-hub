@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1588;
-const CACHE = 'game-hub-v1591';
+const IMPORTANT_SINCE = 1593;
+const CACHE = 'game-hub-v1593';
 
 const ASSETS = [
   './',
@@ -896,8 +896,8 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'a1d0989fa0',
-  './js/admin-ui.js': '5d0d6de15d',
-  './js/integrity.js': '03072e0106',
+  './js/admin-ui.js': '5f77ad9e28',
+  './js/integrity.js': 'ef044f4b3a',
   './js/play-log-queue.js': '5a64cdfdac',
   './js/play-log.js': '250ce128a0',
   './js/contexto-history.js': '343da78a44',
@@ -1234,14 +1234,14 @@ const REST_MANIFEST = {
   './skeeball/js/swipe.js': 'c596f565de',
   './cup-pong/index.html': 'ab902b5c0c',
   './cup-pong/css/cup-pong.css': 'f6b8445a3f',
-  './cup-pong/js/ui.js': '07972146fe',
-  './cup-pong/js/geom.js': 'b4007cdf47',
+  './cup-pong/js/ui.js': '228d6267a6',
+  './cup-pong/js/geom.js': 'caf7948160',
   './cup-pong/js/rack.js': 'e71b12e980',
-  './cup-pong/js/physics.js': '5524194403',
+  './cup-pong/js/physics.js': '7c573e0865',
   './cup-pong/js/render.js': '905aee5064',
   './cup-pong/js/strings.js': '102a189c24',
   './cup-pong/js/match.js': '5ab3ad4992',
-  './cup-pong/js/mp.js': '67299b5a06',
+  './cup-pong/js/mp.js': '155149caf9',
   './cup-pong/js/mp-ui.js': '26cf15ec6d',
   './cup-pong/js/alert.js': 'f8da086ab8',
   './cup-pong/js/cpu.js': '03725812df',
