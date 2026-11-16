@@ -433,3 +433,7 @@ Vs the bot: Restart / Exit after the player's first SHOT (placing is not a move)
 ## Fits on a short phone (2026-11-08)
 
 `_trimMatches` (after `_fitScene`'s height): on a Safari tab or a 360x668 Android three matches pushed Host / Join off the card; rows now come off the end (at least one kept) and "+N more" counts them. `tools/review-setup-cards.cjs battleship`.
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+Challenge mode adds `first` (the receiver, side b, shoots first). `rowFor` writes `md` = `modeOfMatch(game, side)`, so a result counted from the list files under the match's own byMode key (it was `'?'`). Older rows: `first` from `sent` only. `tools/test-battleship-mp.mjs`.

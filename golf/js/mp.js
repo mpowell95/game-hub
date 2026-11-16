@@ -448,8 +448,9 @@ export function noteVoided() {
   return n;
 }
 /** A row's mode, when the match itself is not to hand. */
-const rowMode = (r) => ({ course: String(r.course || ''), round: String(r.round || ''), holes: ms(r.holes), first: r.sent ? 'me' : 'them', online: 1 });
-const rowDetail = (r) => ({ strokes: ms(r.mineTotal), them: ms(r.theirsTotal) });
+/** Rows written from 2026-11-16 carry the match's own mode and detail (`md`, `dt`); older ones what they hold. */
+export const rowMode = (r) => r.md || ({ course: String(r.course || ''), round: String(r.round || ''), holes: ms(r.holes), first: r.sent ? 'me' : 'them', online: 1 });
+export const rowDetail = (r) => r.dt || ({ strokes: ms(r.mineTotal), them: ms(r.theirsTotal) });
 /** Count every finished row not yet counted here, and queue it for the Game Over popup. */
 export function recordFinished(rows) {
   countingSince(LEDGER_KEY);
@@ -507,6 +508,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -518,7 +528,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md), dt: rowMd(r.dt),
       course: COURSE_RE.test(String(r.course || '')) ? String(r.course) : '', round: ROUND_RE.test(String(r.round || '')) ? String(r.round) : '',
       holes: ms(r.holes), hole: ms(r.hole), done: ms(r.done), pof: r.pof === 1,
       mine: ms(r.mine), theirs: ms(r.theirs), par: ms(r.par), mineTotal: ms(r.mineTotal), theirsTotal: ms(r.theirsTotal),
@@ -626,6 +636,7 @@ function rowFor(game, side, writer) {
     hole: game.hole + 1, done: game.common.done, pof: game.hole >= game.holes.length ? 1 : 0,
     mine: game.common[side], theirs: game.common[other(side)], par: game.common.par,
     mineTotal: game.totals[side], theirsTotal: game.totals[other(side)],
+    md: rowMd(modeOfGame(game, side)), dt: rowMd(detailOfGame(game, side)),   // the match's mode and detail from this side (2026-11-16)
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),

@@ -310,6 +310,15 @@ export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   return true;
 }
 const wonOf = (result) => result === 'won';
+/** WHICH game a challenge was (root CLAUDE.md, "Every result records its MODE"): who shot first. The
+ *  challenger (side 'a') shoots first in every round. `side` defaults to this phone's side. */
+export function modeOfMatch(g, side = mySideOf(g)) {
+  return side === 'a' || side === 'b' ? { first: side === 'a' ? 'me' : 'them' } : null;
+}
+function mySideOf(g) { try { return sideOf(g, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16), else what an older row proves: who sent it
+ *  (the sender is side 'a', who shoots first; every archery row carries `sent`). */
+export const modeOfRow = (r) => (r && r.md) || { first: r && r.sent ? 'me' : 'them' };
 export function noteVoided() {
   const me = myCode();
   if (!me) return 0;
@@ -332,12 +341,12 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), g.over.at)) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, wonOf(res), g.over.at, () => modeOfMatch(g))) return false;
     addUnseen([r.id]);
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated);
+  for (const r of todo) countResult(r.id, wonOf(r.result), r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -365,6 +374,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -377,7 +395,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs), round: Math.max(1, ms(r.round) || 1),
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch('archery', r.id)));
@@ -480,6 +498,7 @@ function rowFor(game, side, writer) {
     round: Math.min(game.stage + 1, 4),
     lastBy: writer === side ? 'me' : 'them',
     kind: 'archery',
+    md: rowMd(modeOfMatch(game, side)),       // the match's mode from this side (2026-11-16)
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),
   };

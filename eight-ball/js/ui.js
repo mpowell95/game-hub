@@ -1461,7 +1461,7 @@ class PoolUI {
     const m = this.match;
     if (resigned) m.winner = mp.game.over.winner;
     const ov = mp.game && mp.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }), { detail: () => ({ look: lookOf(m, this.settings.look) }) });   // once per phone, whoever ended it
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => { const md = this.MP.modeOfMatch(mp.game, mp.seat) || {}; return md.first ? md : { ...md, ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }; }, { detail: () => ({ look: lookOf(m, this.settings.look) }) });   // once per phone, whoever ended it
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';

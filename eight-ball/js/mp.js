@@ -437,11 +437,16 @@ export function markCounted(id) {
  *  bucket. A VOIDED match (js/stats-corrections.js) is never counted. */
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from the
  *  match (termsOf) every term; from an index row only what the row carries (game and racks). */
-export function modeOfMatch(raw) {
+export function modeOfMatch(raw, seat = mySeatOf(raw)) {
   const x = termsOf(raw);
-  return { game: x.mode, racks: x.racks, call: x.opts.call ? 1 : 0, bank: x.opts.bank ? 1 : 0, obst: x.opts.obst ? 1 : 0, aids: x.aids };
+  return { game: x.mode, racks: x.racks, call: x.opts.call ? 1 : 0, bank: x.opts.bank ? 1 : 0, obst: x.opts.obst ? 1 : 0, aids: x.aids,
+    // who broke the FIRST rack, from `seat` (2026-11-16): always BREAKER in a challenge
+    ...(Number.isInteger(seat) && seat >= 0 ? { first: seat === BREAKER ? 'me' : 'them' } : {}) };
 }
-const modeOfRow = (r) => ({ game: MODES.includes(r && r.mode) ? r.mode : '8', racks: RACK_OPTIONS.includes(+(r && r.racks)) ? +r.racks : 1 });
+function mySeatOf(raw) { try { return seatOf(raw, myCode()); } catch { return -1; } }
+/** A row's mode: its `md` (rows written from 2026-11-16: the match's whole mode), else what an older
+ *  row carries (game and racks). */
+export const modeOfRow = (r) => (r && r.md) || { game: MODES.includes(r && r.mode) ? r.mode : '8', racks: RACK_OPTIONS.includes(+(r && r.racks)) ? +r.racks : 1 };
 export function countResult(id, won, finishedAt = Date.now(), mode = null, score = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
@@ -508,6 +513,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -526,7 +540,7 @@ function rowsFromIndex(val, now = decideNow()) {
       mine: ms(r.mine), theirs: ms(r.theirs),
       mode: MODES.includes(r.mode) ? r.mode : '8', racks: RACK_OPTIONS.includes(+r.racks) ? +r.racks : 1,
       n: +r.n === 3 ? 3 : 2,
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       cancelled: ended === 'cancelled' || ended === 'declined',
     };
   }).filter((r) => ID_RE.test(r.id) && r.with && !isVoidedMatch(STATS_ID, r.id)));
@@ -649,6 +663,7 @@ export function rowFor(game, seat, writer, tw = game.n === 3 ? timeoutWinner(gam
     pl: senderPlayed(game),                     // the sender has shot: calling off costs a loss (2026-10-29)
     mine: game.scores[seat] || 0, theirs,
     mode: game.mode, racks: game.racks, n: game.n,
+    md: rowMd(modeOfMatch(game, seat)),       // the match's mode from this seat (2026-11-16)
     lastBy: writer === seat ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, seat), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),
