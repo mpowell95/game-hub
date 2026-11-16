@@ -498,3 +498,5 @@ Challenges: `modeOfMatch(raw, side)` adds `first` (who kicked off, `starter`); `
 ## Pass and play is kept (2026-11-16, Matt: "yes build 1")
 
 A finished pass-and-play match (`p1` Blue / `p2` Red), or one thrown away by a new match after a flick (winner `quit`), records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('flicksoccer', ...), { detail: gf, ga, flicks, firstSet })` (`_recordPassPlay`, `match.recorded`): `games.flicksoccer.pp`, counted by nothing.
+
+Private play data (2026-11-16): logs every flick (`m.xl`: seat, disc, aim, power, goal, own goal, score after), line-ups, AI seed, final pitch via withMode `log` (vs computer incl. Expert/Test, quit loss) / logPlayData (`pnp`, a challenge as `match` once per phone with each flick's outcome: `mp.js` OUTCOMES).

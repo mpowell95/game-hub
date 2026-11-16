@@ -329,3 +329,5 @@ The setup card is tabs **Online | Play** (Cup Pong's, `cup-pong/CLAUDE.md`), rep
 ## Pass and play is kept (2026-11-16, Matt: "yes build 1")
 
 A finished pass-and-play match (Cutthroat: `p3` too), or one thrown away by a new match after a shot (`m.ps`, winner `quit`), records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('eightball', winner, names), { detail: look, seats, broke })` (`_recordPassPlay`, `match.recorded`): `games.eightball.pp`, counted by nothing.
+
+Private play data (2026-11-16): logs every shot (`m.xl`: rack, seat, aim, power, spin, cue spot, call, pots, pockets, counted, foul, outcome), seed, terms, scores, final table via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, a challenge as `match` once per phone, outcomes kept beside the validated game in `mp.js` OUTCOMES).

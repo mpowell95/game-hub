@@ -454,3 +454,5 @@ Matt's two "Medium one shot" wins were recorded Easy: Continue resumed a saved E
 ## Pass and play is kept (2026-11-16, Matt: "yes build 1")
 
 A finished pass-and-play match (`p1` Red / `p2` Yellow / `draw`), or a shot-in `passSave` thrown away by a new one (winner `quit`), records ONCE via `recordHoopsPass` = `withMode(modeFor(m, RED), 'pnp', recordPassPlay('hoops4', ...), { detail: both sides' shots/made/missed })`: `games.hoops4.pp`, counted by nothing. Supersedes "A two-players-on-one-phone match records nothing" above.
+
+Private play data (2026-11-16): logs every shot (`m.xl`, kept in the save: player, power, aim, seed, column or miss, what happened) and the moves via withMode / modeTag `log` (vs computer, quit loss, live rooms incl. leave and claim) / logPlayData (`pnp` finished or thrown away, a challenge as `match` once per phone: `mp.js logMatchOnce`).

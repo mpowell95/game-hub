@@ -251,3 +251,5 @@ Vs the computer (finish and quit loss): detail `pace` (Computer speed) and `firs
 ## Pass and play is kept (2026-11-16, Matt: "yes build 1")
 
 A finished pass-and-play match (and one thrown away by a new match after a dart, winner `quit`) records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('darts', 'p1'|'p2'|'draw'|'quit', names), { detail: turns/scores, `firstSet` })` (`_recordPassPlay`, the match's `recorded` flag): `games.darts.pp`, counted by nothing. Supersedes "not recorded" under Screens.
+
+Private play data (2026-11-16): logs every dart (`m.xl`: seat, x, y, number, ring, points, marks, event, seconds), scores, marks, overtime, seats via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, `practice`, `free` every 10 rounds, a challenge as `match` once per phone: `mp.js logMatchOnce`, finished-while-away rows read once).
