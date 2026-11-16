@@ -546,3 +546,7 @@ Each record stamps its first slip (`wo.sf`) and first clear (`wo.ct`) per level 
 ## The level never starts below what the stats show cleared (2026-11-09)
 
 Matt re-added the app: `ladder2` (settings, phone-only) was gone and Expert opened on 201, though `wo.cl` showed clears to 344. `loadSettings` now raises each band's level to `clearedFloor(k)` = 1 + the highest level in `wo.cl[k]` (or `wo.leg[k].e`), only ever up. Checked in a browser: Expert cl to 306 opens on 307. The Replay news popup is stamped seen without showing when the stats' finish log has a clear from before 2026-10-28 (a re-added app).
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Levels, Replay and both Rush paths: detail `thick` (`on`/`off`, the thick-arrows switch). Never in the mode.

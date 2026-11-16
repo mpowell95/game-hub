@@ -459,7 +459,9 @@ class ArcheryUI {
     } else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
     const seed = (Math.random() * 4294967296) >>> 0;
-    this._begin({ mode, diff: s.difficulty, match: newMatch(seed, starter) });
+    const match = newMatch(seed, starter);
+    if (mode === 'cpu') match.fs = s.first;   // the First setting it began under, for the result's detail (2026-11-16)
+    this._begin({ mode, diff: s.difficulty, match });
   }
   _passPlay() { this._newMatch('pass'); }
 
@@ -477,6 +479,14 @@ class ArcheryUI {
     return sv && !sv.match.recorded && sv.match.shots.some((s) => s && s.length > 0) ? { diff: sv.diff, m: sv.match } : null;
   }
 
+  /** A result's DETAIL (2026-11-16, Matt: "check every game for settings that aren't recorded"): the First
+   *  setting chosen (me / them / alt); `who went first` is already the mode. Matches begun before
+   *  2026-11-16 carry no `fs`, so the current setting stands in. */
+  _arDetail(m) {
+    const f = (m && m.fs) || (this.settings && this.settings.first);
+    return { firstSet: typeof f === 'string' && f ? f : 'default' };
+  }
+
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
   _recordQuitLoss() {
     const q = this._quitPending();
@@ -484,7 +494,7 @@ class ArcheryUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('archery', q.diff, false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('archery', q.diff, false), { detail: () => this._arDetail(q.m) });
       if (!st) console.warn('[archery] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[archery] recording the quit loss failed', err); }
   }
@@ -996,7 +1006,7 @@ class ArcheryUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('archery', this.diff, m.winner === 0));
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('archery', this.diff, m.winner === 0), { detail: () => this._arDetail(m) });
         if (!st) console.warn('[archery] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[archery] recording the result failed', err); }
     }
