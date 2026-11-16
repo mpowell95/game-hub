@@ -27,7 +27,8 @@
 // saved match is a loss, asked twice. isInProgress(): true only for an online match.
 
 import { TABLE, PHYS, createMatch, resetMatch, advance, clampTarget } from './physics.js';
-import { createCpu, cpuThink, DIFFS } from './ai.js';
+import { createCpu, cpuThink, DIFFS, levelFor } from './ai.js';
+import { isAdminDevice } from '../../js/admin-config.js';
 import { createRenderer, TABLES } from './render.js';
 import { STRINGS } from './strings.js';
 import * as LL from '../../js/live-leave.js';
@@ -38,6 +39,12 @@ import { recordAirHockey, loadStats, armQuitLoss, takeQuitLoss, withMode, modeTa
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30). The table
  *  is a look; the only thing that defines a match is its length, first to 7 (physics.js PHYS.WIN). */
 const AH_MODE = { to: 7 };
+// THE NEW MEDIUM COMPUTER (2026-11-16, docs/HANDOFF-WINS-GAMES-FIXES.md "Air Hockey"; ai.js MEDIUM_V2).
+// NOT cleared for players: admin devices only until Matt says "release it". A match against it carries
+// `cv: 2` (this.cv, in its save and in its recorded mode); without it the computer plays as before.
+const NEW_AI_RELEASED = false;   // flip when Matt says release it
+const newAI = () => NEW_AI_RELEASED || isAdminDevice();
+const modeFor = (cv) => (cv === 2 ? { ...AH_MODE, cv: 2 } : AH_MODE);
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { onlineGateText, codeMayPlayOnline } from '../../js/online-gate.js';
@@ -88,7 +95,7 @@ function readSave() {
     const [a, b] = s.score;
     const okGoal = (n) => Number.isInteger(n) && n >= 0 && n < PHYS.WIN;
     if (!okGoal(a) || !okGoal(b)) return null;
-    return { diff: s.diff, score: [a, b], serve: s.serve, best: Number.isFinite(+s.best) && +s.best > 0 ? +s.best : 0, table: TABLES.includes(s.table) ? s.table : null };
+    return { diff: s.diff, score: [a, b], serve: s.serve, best: Number.isFinite(+s.best) && +s.best > 0 ? +s.best : 0, table: TABLES.includes(s.table) ? s.table : null, cv: s.cv === 2 ? 2 : 0 };
   } catch { return null; }
 }
 const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.error('[airhockey] saved match not cleared', err); } };
@@ -469,7 +476,8 @@ class AirHockeyUI {
   _play() {
     this._takeDiscard();   // a saved match thrown away for a new one is a loss
     resetMatch(this.match, 0);
-    this.cpu = createCpu(this.settings.difficulty, 1, (Date.now() & 0xffff) + 1);
+    this.cv = this.settings.difficulty === 'medium' && newAI() ? 2 : 0;
+    this.cpu = createCpu(levelFor(this.settings.difficulty, this.cv), 1, (Date.now() & 0xffff) + 1);
     this.difficulty = this.settings.difficulty;
     this._resetFx();
     this.banner.hidden = true;
@@ -490,7 +498,8 @@ class AirHockeyUI {
     this.match.score[0] = sv.score[0];
     this.match.score[1] = sv.score[1];
     this.match.lastGoal = sv.score[0] + sv.score[1] > 0 ? 1 - sv.serve : -1;
-    this.cpu = createCpu(sv.diff, 1, (Date.now() & 0xffff) + 1);
+    this.cv = sv.cv;   // a saved match goes on against the computer it started with
+    this.cpu = createCpu(levelFor(sv.diff, this.cv), 1, (Date.now() & 0xffff) + 1);
     this.difficulty = sv.diff;
     this._resetFx();
     this.matchBest = sv.best;
@@ -500,6 +509,8 @@ class AirHockeyUI {
     this._showOnly(null);
     this._start();
   }
+  /** The result's mode: online `{to: 7}`; vs the computer + `cv: 2` against the new Medium. */
+  _mode() { return this.online ? AH_MODE : modeFor(this.cv); }
   _pause() {
     if (this.screen !== 'game') return;
     const qb = this.root.querySelector('[data-act="quit"]');
@@ -543,7 +554,7 @@ class AirHockeyUI {
       const counted = !!this.online && LL.alreadyCounted(this._liveKey());
       if (this.online && !counted) LL.endedNormally('airhockey', this._liveKey());
       if (counted) logPlayData('airhockey', 'live', () => ({ ...this._ahLog(), score: [gf, ga], won: this.match.winner === 0 }), { mode: AH_MODE, diff: 'mp', key: this._liveKey() });
-      const st = counted ? true : withMode(AH_MODE, this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
+      const st = counted ? true : withMode(() => this._mode(), this.online ? 'mp' : this.difficulty, () => recordAirHockey(this.online ? 'mp' : this.difficulty, this.match.winner === 0,
         { goalsFor: gf, goalsAgainst: ga, shot: this.matchBest }), { detail: () => this._ahDetail(), log: () => this._ahLog() });
       if (!st) console.warn('[airhockey] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[airhockey] recording the result failed', err); }
@@ -582,7 +593,7 @@ class AirHockeyUI {
     if (this.online || !this.difficulty || this.match.phase === 'over') return;
     const [a, b] = this.match.score;
     const serve = a + b === 0 ? 0 : 1 - this.match.lastGoal;   // the player who was scored on serves
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), diff: this.difficulty, score: [a, b], serve, best: this.matchBest || 0, table: this.settings && this.settings.table })); }
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), diff: this.difficulty, score: [a, b], serve, best: this.matchBest || 0, table: this.settings && this.settings.table, ...(this.cv === 2 ? { cv: 2 } : {}) })); }
     catch (err) { console.error('[airhockey] match not saved', err); }
   }
   /** The match's DETAIL (2026-11-16, Matt: "check every game for settings that aren't recorded"): the
@@ -610,7 +621,7 @@ class AirHockeyUI {
     if (!sv) return;
     clearSave();
     const [gf, ga] = sv.score;
-    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(AH_MODE, sv.diff, () => this._ahScore(sv.table)));
+    armQuitLoss('airhockey', 'recordAirHockey', [sv.diff, false, { goalsFor: gf, goalsAgainst: ga, shot: sv.best }], modeTag(() => (modeFor(sv.cv)), sv.diff, () => this._ahScore(sv.table)));
     if (!takeQuitLoss('airhockey')) console.error('[airhockey] the thrown-away match was not recorded as a loss');
   }
 

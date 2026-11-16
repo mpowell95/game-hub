@@ -423,5 +423,23 @@ ok('flicking to the right aims right', flickLanding(0, 1.6, 100, -500, FLICK_MID
   eq('help targets: never in 301', assistTargets(newMatch(0, '301'), 0), []);
 }
 
+// 9. The NEW Hard computer (2026-11-16): only a match carrying `cv: 2` throws tighter; every other
+// match (no cv, saved and online ones included) gets exactly the dart it got before, for the same dice.
+{
+  const r = () => 0.3;
+  const old = newMatch(0, '301'), nu = newMatch(0, '301'); nu.cv = 2;
+  const before = computerThrow(old, 'hard', r);
+  const p = targetPoint(20, 'treble');
+  const k = Math.sqrt(-2 * Math.log(0.3));
+  eq('old Hard: unchanged spread (0.10R)', [before.x, before.y].map((v) => v.toFixed(9)),
+    [p.x + k * Math.cos(0.6 * Math.PI) * 0.10, p.y + k * Math.sin(0.6 * Math.PI) * 0.10].map((v) => v.toFixed(9)));
+  ok('new Hard (cv 2) groups tighter than old Hard', Math.hypot(computerThrow(nu, 'hard', r).x - p.x, computerThrow(nu, 'hard', r).y - p.y) < Math.hypot(before.x - p.x, before.y - p.y));
+  for (const d of ['easy', 'medium']) {
+    const a = newMatch(0, 'cricket'), b = newMatch(0, 'cricket'); b.cv = 2;
+    eq(`cv 2 leaves ${d} untouched`, computerThrow(b, d, r), computerThrow(a, d, r));
+  }
+  eq('a match with cv still validates', !!validMatch(JSON.parse(JSON.stringify(nu))), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

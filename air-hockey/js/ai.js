@@ -33,6 +33,14 @@ export const LEVELS = {
 };
 export const DIFFS = ['easy', 'medium', 'hard', 'expert'];
 
+// THE NEW MEDIUM (2026-11-16, docs/HANDOFF-WINS-GAMES-FIXES.md "Air Hockey"): Medium was won 60 of 62
+// times by real people, Hard 4 of 15; aim about 55-65%. Most of the way to Hard where it matters
+// (reaction, misread, defence speed and position, shot aim). Used only for a match marked `cv: 2`
+// (ui.js, behind `newAI()`); `LEVELS.medium` above is left exactly as it was.
+export const MEDIUM_V2 = { speed: 810, react: 0.22, aimErr: 0.32, strike: 0.98, bank: 0.18, misread: 0.32, guard: 420, shade: 0.6, home: 128 };
+/** The level a match plays: the new Medium for a `cv: 2` Medium match, else `LEVELS[diff]` as always. */
+export function levelFor(diff, cv) { return diff === 'medium' && cv === 2 ? MEDIUM_V2 : diff; }
+
 /** Small seeded PRNG, so a headless sim is repeatable. */
 export function rng(seed) {
   let a = seed >>> 0;

@@ -253,3 +253,10 @@ Vs the computer (finish and quit loss): detail `pace` (Computer speed) and `firs
 A finished pass-and-play match (and one thrown away by a new match after a dart, winner `quit`) records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('darts', 'p1'|'p2'|'draw'|'quit', names), { detail: turns/scores, `firstSet` })` (`_recordPassPlay`, the match's `recorded` flag): `games.darts.pp`, counted by nothing. Supersedes "not recorded" under Screens.
 
 Private play data (2026-11-16): logs every dart (`m.xl`: seat, x, y, number, ring, points, marks, event, seconds), scores, marks, overtime, seats via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, `practice`, `free` every 10 rounds, a challenge as `match` once per phone: `mp.js logMatchOnce`, finished-while-away rows read once).
+
+## New Hard computer (2026-11-16, ADMIN DEVICES ONLY, NOT cleared for players)
+
+`docs/HANDOFF-WINS-GAMES-FIXES.md`, "Darts". `engine.js` `SPREAD_V2` (x01 0.077R) / `SPREAD_V2_CRICKET` (0.081R), used only for a
+match with `cv: 2`, set in `ui.js _newMatch` vs the computer at Hard when `newAI()` (`NEW_AI_RELEASED = false`, flip when Matt says
+release it, or `isAdminDevice()`); `modeOf` adds `cv: 2`. Simulated person (gaussian 0.09R, wins 60% vs old Hard), 6,000 games a kind:
+new Hard 34-40%. `darts/js/test.js` section 9 pins the old Hard unchanged.

@@ -224,7 +224,7 @@ for (const [g, id] of []) {   // none left: every game vs the computer saves sin
     && /act === 'play' && readSave\(\) && b\.dataset\.armed !== '1'\) \{ b\.dataset\.armed = '1'; b\.textContent = t\('quit_loss'\);/.test(c));
   ok('Q4 air-hockey: saved at the start and after every goal; the finish clears the save BEFORE recording; an old marker is still taken at init',
     /this\._showOnly\(null\);[\s\S]{0,200}this\._saveMatch\(\);\s*this\._start\(\);/.test(c) && /if \(this\.match\.phase !== 'over'\) this\._saveMatch\(\);/.test(c)
-    && /if \(!this\.online\) clearSave\(\);[\s\S]{0,600}recordAirHockey\(/.test(c) && /export function init[\s\S]{0,300}takeQuitLoss\('airhockey'\)/.test(c)
+    && /if \(!this\.online\) clearSave\(\);[\s\S]{0,700}recordAirHockey\(/.test(c) && /export function init[\s\S]{0,300}takeQuitLoss\('airhockey'\)/.test(c)
     && !/armQuitLoss\('airhockey'[^\n]*\n(?![\s\S]{0,120}takeQuitLoss)/.test(c));
 }
 {

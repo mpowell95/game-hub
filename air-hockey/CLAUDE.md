@@ -311,3 +311,10 @@ The start card is **Online | Computer** tabs (`_showTab`); the old "Play online"
 Every result (vs computer, its thrown-away save, online and every live-leave path) carries `table` (the look) in its withMode detail; the save now keeps `table` (older saves: the current setting). Never in the mode.
 
 Private play data (2026-11-16): logs goals (scorer, seconds), both best shots, shot count, table, opponent name via withMode `log` / logPlayData.
+
+## New Medium computer (2026-11-16, ADMIN DEVICES ONLY, NOT cleared for players)
+
+`docs/HANDOFF-WINS-GAMES-FIXES.md`, "Air Hockey". `ai.js` `MEDIUM_V2` (most of the way to Hard), chosen by `levelFor(diff, cv)`;
+`ui.js` `NEW_AI_RELEASED = false` (flip when Matt says release it), `newAI()` = that or `isAdminDevice()`. A Medium match vs it has
+`this.cv = 2`: in its save (`cv`, a continued match keeps the computer it started with) and its mode (`{to: 7, cv: 2}`). Simulated
+person (the same brain, calibrated to win 100% vs old Medium and 30% vs Hard; real 97% / 27%), 400 games each: new Medium 59%.

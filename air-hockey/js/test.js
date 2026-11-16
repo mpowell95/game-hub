@@ -16,7 +16,7 @@
 //      owned by both or by neither for long, the match ends at 7 on both, and a rematch works.
 
 import { TABLE, PHYS, GOAL_X0, GOAL_X1, createMatch, resetMatch, advance, clampTarget } from './physics.js';
-import { createCpu, cpuThink, rng } from './ai.js';
+import { createCpu, cpuThink, rng, LEVELS, MEDIUM_V2, levelFor } from './ai.js';
 import { createLiveSession } from './live.js';
 
 const { W, H, PUCK_R: PR, MALLET_R: MR, CORNER: C } = TABLE;
@@ -157,6 +157,17 @@ function chaser(seed, speed = 1100, react = 0.3) {
   ok('Medium is a fair fight for a beginner (wins some, loses some)', wins.medium >= 3 && wins.medium <= 8, `${wins.medium}/${N}`);
   ok('Hard beats a beginner', wins.hard <= 1, `${wins.hard}/${N}`);
   ok('...but a beginner still scores on Hard (at least 1.5 goals a match)', perMatch.hard >= 1.5, `${perMatch.hard.toFixed(1)} a match`);
+}
+
+// ---- 3c. the NEW Medium (2026-11-16, behind newAI() in ui.js, marked cv: 2) ---------------------
+// Only a cv 2 Medium match gets it; every other match plays the level it always did.
+{
+  ok('levelFor: no marker = the old level, untouched', ['easy', 'medium', 'hard', 'expert'].every((d) => levelFor(d, 0) === d && levelFor(d, undefined) === d));
+  ok('levelFor: cv 2 changes Medium only', levelFor('medium', 2) === MEDIUM_V2 && ['easy', 'hard', 'expert'].every((d) => levelFor(d, 2) === d));
+  ok('old Medium numbers unchanged', JSON.stringify(LEVELS.medium) === JSON.stringify({ speed: 650, react: 0.28, aimErr: 0.45, strike: 0.85, bank: 0.1, misread: 0.42, guard: 280, shade: 0.8, home: 145 }));
+  const between = ['speed', 'guard', 'strike', 'bank'].every((k) => MEDIUM_V2[k] >= LEVELS.medium[k] && MEDIUM_V2[k] <= LEVELS.hard[k])
+    && ['react', 'aimErr', 'misread', 'shade', 'home'].every((k) => MEDIUM_V2[k] <= LEVELS.medium[k] && MEDIUM_V2[k] >= LEVELS.hard[k]);
+  ok('new Medium sits between old Medium and Hard on every knob', between);
 }
 
 // ---- 4. swipe speed -> shot speed --------------------------------------------------------------

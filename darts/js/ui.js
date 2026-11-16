@@ -58,7 +58,12 @@ const kindFrom = (s) => (s.game === 'cricket'
   : s.game);
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the kind
  *  (301/201/101/cricket...) and who threw first. */
-const modeOf = (m) => ({ kind: kindOf(m), first: m && m.starter === 1 ? 'them' : 'me' });
+const modeOf = (m) => ({ kind: kindOf(m), first: m && m.starter === 1 ? 'them' : 'me', ...(m && m.cv === 2 ? { cv: 2 } : {}) });
+
+// THE NEW HARD COMPUTER (2026-11-16, docs/HANDOFF-WINS-GAMES-FIXES.md "Darts"; engine.js SPREAD_V2).
+// NOT cleared for players: admin devices only until Matt says "release it".
+const NEW_AI_RELEASED = false;   // flip when Matt says release it
+const newAI = () => NEW_AI_RELEASED || isAdminDevice();
 /** The finished match's own numbers (2026-11-02, withMode's detail), seat 0 = the player: turns
  *  thrown, and the scores it ended on (x01: points LEFT each side; Cricket: points), overtime or not. */
 const dartsDetail = (m) => {
@@ -539,6 +544,9 @@ class DartsUI {
     writeJSON(SETTINGS_KEY, s);
     const match = newMatch(starter, kindFrom(s), true, true);
     if (s.mode === 'cpu' || s.mode === 'pass') match.fs = s.first;   // the First throw setting it began under, for the result's detail (2026-11-16)
+    // A match against the NEW Hard computer carries `cv: 2` for its whole life (saved, continued, and
+    // in its recorded mode); without it the computer throws exactly as before.
+    if (s.mode === 'cpu' && s.difficulty === 'hard' && newAI()) match.cv = 2;
     this._begin({ mode: s.mode, diff: s.difficulty, match }, true);
   }
 

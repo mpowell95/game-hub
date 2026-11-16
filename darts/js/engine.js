@@ -251,6 +251,12 @@ export function validMatch(m) {
 // medium was 0.17 (1.5 Cricket marks a turn, a strong pub player), now 0.24 (about 1.0). Easy and
 // Hard moved with it to keep the steps even: easy 0.30 -> 0.36, hard 0.085 -> 0.10.
 export const SPREAD = { easy: 0.36, medium: 0.24, hard: 0.10 };
+/** The NEW Hard computer (2026-11-16, docs/HANDOFF-WINS-GAMES-FIXES.md "Darts": Hard was won 60% of the
+ *  time, aim about 35%). Used only by a match created with `cv: 2` (ui.js, behind `newAI()`), so every
+ *  match without it, saved or online, throws exactly as before. Easy and Medium are unchanged. */
+export const SPREAD_V2 = { hard: 0.077 };
+/** Cricket rewards accuracy more steeply than 301, so its new Hard groups a touch wider for the same aim. */
+export const SPREAD_V2_CRICKET = { hard: 0.081 };
 
 /** Where the computer aims with `left` points to go. Exact finishes first, by the size of the
  *  target (a single is easier than a double, which is easier than a treble or the bull); otherwise
@@ -297,7 +303,8 @@ export function computerThrow(state, diff, rnd = Math.random) {
     ? (inOvertime(state) ? { num: 25, ring: 'bull' } : isCricket(state.kind) ? chooseCricketTarget(state, diff) : chooseTarget(state.scores[state.turn], diff))
     : chooseTarget(state, diff);
   const p = targetPoint(tgt.num, tgt.ring);
-  const s = SPREAD[diff] || SPREAD.medium;
+  const v2 = typeof state === 'object' && state && state.cv === 2 && (isCricket(state.kind) ? SPREAD_V2_CRICKET : SPREAD_V2)[diff];
+  const s = v2 || SPREAD[diff] || SPREAD.medium;
   const [gx, gy] = gauss2(rnd);
   return { x: p.x + gx * s, y: p.y + gy * s, aim: tgt };
 }
