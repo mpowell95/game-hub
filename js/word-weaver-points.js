@@ -40,21 +40,16 @@
 // stars x its band's multiplier, Easy x1, Medium x2, Hard x3, Expert x4, summed over every DISTINCT
 // level completed. Read from the per-level map at display time, so nothing stored changes and nothing
 // earned is lost (a level finished before the bands existed simply counts at its band's rate).
-// ADMIN DEVICES ONLY (Matt, 2026-11-16, chose x1/x3/x6/x12 from docs/HANDOFF-WORD-WEAVER-MULTIPLIERS.md, "Admin devices
-// first"): Medium x3, Hard x6, Expert x12 (WW_MULT_ADMIN, via wwMult()); players keep WW_MULT until Matt says
-// "release it". Release = make WW_MULT these numbers and drop the switch. Hard and Expert rest on few timed levels.
-
-import { isAdminDevice } from './admin-config.js';
+// (2026-11-16: x1/3/6/12 was tried on admin devices for an hour and REMOVED, Matt: "24 points for a single game? ...
+// that's insanity". Do not raise these without Matt asking.)
 
 export const WW_TIERS = ['easy', 'medium', 'hard', 'expert'];
 export const WW_BAND_SIZE = 500;
 export const WW_BAND_START = { easy: 1, medium: 501, hard: 1001, expert: 1501 };
 /** What a star is worth in each band (the leaderboard's points). */
 export const WW_MULT = { easy: 1, medium: 2, hard: 3, expert: 4 };
-/** The new multipliers, admin devices only until Matt says "release it" (2026-11-16). */
-export const WW_MULT_ADMIN = { easy: 1, medium: 3, hard: 6, expert: 12 };
-/** The multipliers this device shows: WW_MULT_ADMIN on an admin device, else WW_MULT. Display only. */
-export function wwMult() { return isAdminDevice() ? WW_MULT_ADMIN : WW_MULT; }
+/** The multipliers (every device). */
+export function wwMult() { return WW_MULT; }
 
 /** The band (difficulty) level n belongs to. */
 export function wwBandOf(n) {

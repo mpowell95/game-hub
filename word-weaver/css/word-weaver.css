@@ -619,5 +619,13 @@
 }
 .ww-root.is-picking .ww-pill { display: none; }
 /* The bonus star balance on the setup screen (2026-11-02, Matt: "shows how many stars you have"). */
-.ww-root .ww-bal { display: inline-flex; align-items: center; gap: 4px; margin-left: 14px; vertical-align: bottom; }
+/* The points open the leaderboard (2026-11-16): a trophy + the number, a 44px tap target, no extra words. */
+.ww-root .ww-ptsbtn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; margin: 0;
+  border: 0; border-radius: 22px; background: var(--ww-chip); color: #fff;
+  font: inherit; font-size: 17px; font-weight: 700; touch-action: manipulation; cursor: pointer; vertical-align: middle;
+}
+.ww-root .ww-ptsbtn svg { width: 22px; height: 22px; color: var(--ww-path); flex: none; }
+.ww-root .ww-ptsbtn b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.ww-root .ww-bal { display: inline-flex; align-items: center; gap: 4px; margin-left: 14px; vertical-align: middle; }
 .ww-root .ww-bal svg { width: 22px; height: 22px; color: var(--ww-path); }

@@ -27,7 +27,8 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   (the stats store's `ww.lv`, plus the pending queue). Past the data's last level: "More levels soon"; a band's
   last level done: "<Band> done" with a Back button.
 - **The setup screen is where the game opens** (Matt, 2026-10-28): title, the player's POINTS (`wwPoints`, the
-  leaderboard number; the done screen keeps stars), the bonus star BALANCE beside them (star + number, `.ww-bal`; Matt, 2026-11-02: "shows how many stars you have"; = the in-game chip:
+  leaderboard number; a trophy BUTTON, tap = the leaderboard on Word Weaver, `.ww-ptsbtn`, 2026-11-16, Matt: "i should be able to
+  access the leaderboard from the word weaver setup screen"; the done screen keeps stars), the bonus star BALANCE beside them (star + number, `.ww-bal`; Matt, 2026-11-02: "shows how many stars you have"; = the in-game chip:
   `pendingBonuses` counts the queue, every unrecorded ladder attempt in both languages and every unrecorded daily, each once), the four difficulties (`diffShapeSVG` + name; selected = `#ffce3a`
   outline + check), one Play button ("Play <n>"), How to play. **Nothing else** (root CLAUDE.md, "as few words as
   possible"). The pick is saved in `gamehub.wordweaver.v1`.
@@ -46,7 +47,7 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   of the shortest unfound grid word (ties: earlier in `w`; cells a found word already shows are skipped). Each
   reveal is one hint, **recorded at once in the synced stats store** (`recordWordWeaverHint`, `ww.hint`/`ww.esHint`;
   Matt, 2026-10-29: "Close the hint gap"): reopening a level takes the larger of the save's and the store's count, and a
-  level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side). **Admin devices: x1 / 3 / 6 / 12** (Matt, 2026-11-16, `wwMult()`; players unchanged until "release it"; Hard and Expert provisional, re-check at ~30 timed levels each: `docs/HANDOFF-WORD-WEAVER-MULTIPLIERS.md`).
+  level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side). (x1 / 3 / 6 / 12 was tried on admin devices 2026-11-16 and REMOVED within the hour, Matt: "24 points for a single game? ... insanity". Do not raise without his ask.)
 - **Bonus stars BUY hints (Matt, 2026-11-02, "build it"; mockup `docs/mockups/word-weaver-hint-shop.html`)**: the bulb opens
   a bottom sheet: **Letter 40, Square 60, Word 120** bonus stars (`WW_PRICE`, `js/word-weaver-points.js`), greyed when
   unaffordable, plus the PLAIN letter (shows the stars it leaves; costs a level star as before). A bought hint never lowers the
