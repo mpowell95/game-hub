@@ -9,7 +9,22 @@ import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
   CAMERA_LAG, CAMERA_LAG_HZ, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
+  UX_COLORS, UX_DECK_DEPTH, UX_FOG_NEAR, UX_FOG_FAR, UX_CAM_HEIGHT, UX_CAM_LOOK_FRAC, UX_RUNUP_SEGS,
 } from './config.js';
+
+// ---------------------------------------------------------------------------------------------
+// MOCKUP PROTOTYPE (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). NOT CLEARED FOR PLAYERS.
+// Every Orbital readability cue from the UX review sits behind UX_PROTO and is OFF unless the page
+// URL carries ?uxproto=1 or a harness calls setUxProto(true) (tools/ballrun-ux/harness.html).
+// With it off, this file renders exactly what main renders. Render-only: no sim/track changes.
+// ---------------------------------------------------------------------------------------------
+// UX_PROTO is false, or an options object: {} = every cue; { cam: true } also tries the higher camera.
+let UX_PROTO = (() => {
+  if (typeof location === 'undefined') return false;
+  const m = /[?&]uxproto=(1|cam)\b/.exec(location.search);
+  return m ? (m[1] === 'cam' ? { cam: true } : {}) : false;
+})();
+export function setUxProto(on) { UX_PROTO = on ? (typeof on === 'object' ? on : {}) : false; }
 
 const FLOOR_POOL_SIZE = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
 const WALL_POOL_SIZE = (SEGMENTS_AHEAD + SEGMENTS_BEHIND) * 2; // left + right per segment
@@ -136,6 +151,55 @@ function buildTunnelWallTexture(colors) {
   return tex;
 }
 
+/** MOCKUP PROTOTYPE helper: a fixed-capacity batch of quads rebuilt every frame into ONE dynamic
+ *  BufferGeometry (one draw call per batch). quad(q[12], t[8], c0..c3) copies numbers only. */
+class QuadBatch {
+  constructor(cap, withUv, withColor) {
+    this.cap = cap;
+    this.geo = new THREE.BufferGeometry();
+    this.pos = new Float32Array(cap * 12);
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    const nrm = new Float32Array(cap * 12);
+    for (let i = 0; i < cap * 4; i++) nrm[i * 3 + 1] = 1;
+    this.geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    if (withUv) {
+      this.uv = new Float32Array(cap * 8);
+      this.geo.setAttribute('uv', new THREE.BufferAttribute(this.uv, 2).setUsage(THREE.DynamicDrawUsage));
+    }
+    if (withColor) {
+      this.col = new Float32Array(cap * 12);
+      this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
+    }
+    const idx = new Uint16Array(cap * 6);
+    for (let i = 0; i < cap; i++) {
+      idx[i * 6] = i * 4; idx[i * 6 + 1] = i * 4 + 2; idx[i * 6 + 2] = i * 4 + 1;
+      idx[i * 6 + 3] = i * 4; idx[i * 6 + 4] = i * 4 + 3; idx[i * 6 + 5] = i * 4 + 2;
+    }
+    this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.n = 0;
+    this._c = new THREE.Color();
+  }
+  begin() { this.n = 0; }
+  quad(q, t, c0, c1, c2, c3) {
+    if (this.n >= this.cap) return;
+    const i = this.n++;
+    this.pos.set(q, i * 12);
+    if (this.uv) this.uv.set(t, i * 8);
+    if (this.col) {
+      for (let k = 0; k < 4; k++) {
+        this._c.setHex(k === 0 ? c0 : k === 1 ? c1 : k === 2 ? c2 : c3, THREE.SRGBColorSpace);
+        this.col[i * 12 + k * 3] = this._c.r; this.col[i * 12 + k * 3 + 1] = this._c.g; this.col[i * 12 + k * 3 + 2] = this._c.b;
+      }
+    }
+  }
+  end() {
+    this.geo.setDrawRange(0, this.n * 6);
+    this.geo.attributes.position.needsUpdate = true;
+    if (this.uv) this.geo.attributes.uv.needsUpdate = true;
+    if (this.col) this.geo.attributes.color.needsUpdate = true;
+  }
+}
+
 export class Renderer {
   /** `mapKey` selects the map's color set (config.js's `MAPS`) for every texture/material this
    *  renderer builds. Textures/materials are built once, here, in the constructor — a map
@@ -174,6 +238,10 @@ export class Renderer {
     this._buildAccentPool();
     this._buildGatePool();
     this._buildPickupPools();
+    // MOCKUP PROTOTYPE: Orbital only (the map with holes, gaps and heights).
+    const mc = mapConfig(mapKey);
+    this.ux = UX_PROTO && (mc.jump || mc.split) ? { ...UX_PROTO, jumpCfg: mc.jump || null } : null;
+    if (this.ux) this._buildUxProto();
   }
 
   _buildTextures() {
@@ -354,6 +422,312 @@ export class Renderer {
     }
   }
 
+  // =============================================================================================
+  // MOCKUP PROTOTYPE (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). NOT CLEARED FOR PLAYERS.
+  // Orbital's deck drawn as ONE solid slab per frame (top, side skirts, front faces), with:
+  //   F1 trapezoid segments that follow w0->w1, void0->void1 and y0->y1 (no stair steps, no
+  //      see-through risers on the slope back up after a drop: the "drops look like holes" cause);
+  //   F2 deadly void = amber/black stripes on its lip and walls, and down the middle before it opens;
+  //   F3 jump = cyan chevrons on the run-up, a cyan lip, a dotted flight arc to each landing lane,
+  //      a cyan-rimmed landing pad with a front face and pillars (replaces the amber gate posts);
+  //   F4 fog: the deck fades out before the generation window ends, so the far end never looks
+  //      like a cliff;
+  //   F5 a fall from a lowered pad starts at the pad's height (render() above).
+  // Fixed-capacity buffers + setDrawRange (4 draw calls + 1 instanced). The per-segment closures in
+  // _layoutUx allocate; a real build would hoist them.
+  // =============================================================================================
+  _buildUxProto() {
+    const C = UX_COLORS;
+    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    const canvasTex = (w, h, draw, repeat) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      draw(c.getContext('2d'), w, h);
+      const t = new THREE.CanvasTexture(c);
+      if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 4;
+      return t;
+    };
+    const u = this._ux = { ends: [{}, {}], p: [0, 0, 0], q: new Float32Array(12), t: new Float32Array(8), arcLat: 0 };
+    u.tileTex = canvasTex(256, 256, (g, w) => {
+      g.fillStyle = hex(C.deckTile); g.fillRect(0, 0, w, w);
+      g.strokeStyle = hex(C.deckGrout); g.lineWidth = 8;
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(w, 0); g.moveTo(0, 0); g.lineTo(0, w); g.stroke();
+    }, true);
+    u.stripeTex = canvasTex(128, 128, (g, w) => {
+      g.fillStyle = hex(C.hazardB); g.fillRect(0, 0, w, w);
+      g.fillStyle = hex(C.hazardA);
+      for (let k = -2; k < 3; k++) {
+        g.beginPath();
+        g.moveTo(k * w / 2, 0); g.lineTo(k * w / 2 + w / 4, 0); g.lineTo(k * w / 2 + w / 4 + w, w); g.lineTo(k * w / 2 + w, w);
+        g.closePath(); g.fill();
+      }
+    }, true);
+    u.chevTex = canvasTex(256, 256, (g, w) => {
+      g.clearRect(0, 0, w, w);
+      g.strokeStyle = hex(C.jump); g.lineWidth = 34; g.lineCap = 'butt'; g.lineJoin = 'miter';
+      g.beginPath(); g.moveTo(30, 200); g.lineTo(w / 2, 70); g.lineTo(w - 30, 200); g.stroke();
+    }, true);
+
+    u.top = new QuadBatch(220, true, false);
+    u.topMat = new THREE.MeshStandardMaterial({ map: u.tileTex, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide });
+    u.fx = new QuadBatch(700, false, true);
+    u.fxMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    u.haz = new QuadBatch(400, true, false);
+    u.hazMat = new THREE.MeshBasicMaterial({ map: u.stripeTex, side: THREE.DoubleSide });
+    u.chev = new QuadBatch(40, true, false);
+    u.chevMat = new THREE.MeshBasicMaterial({ map: u.chevTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    for (const [b, m] of [[u.top, u.topMat], [u.fx, u.fxMat], [u.haz, u.hazMat], [u.chev, u.chevMat]]) {
+      b.mesh = new THREE.Mesh(b.geo, m);
+      b.mesh.frustumCulled = false;
+      this.scene.add(b.mesh);
+    }
+    u.chev.mesh.renderOrder = 2;
+
+    u.dotGeo = new THREE.SphereGeometry(0.17, 10, 8);
+    u.dotMat = new THREE.MeshBasicMaterial({ color: C.jump });
+    u.dots = new THREE.InstancedMesh(u.dotGeo, u.dotMat, 40);
+    u.dots.frustumCulled = false;
+    u.dots.count = 0;
+    this.scene.add(u.dots);
+    u.m4 = new THREE.Matrix4();
+
+    this.scene.fog = new THREE.Fog(this.colors.void, UX_FOG_NEAR, UX_FOG_FAR);
+    for (const g of this.gatePool) g.visible = false;
+  }
+
+  _layoutUx(sim) {
+    const u = this._ux, C = UX_COLORS, D = UX_DECK_DEPTH;
+    const track = sim.track, ballZ = sim.z;
+    const zFront = ballZ + SEGMENTS_AHEAD * SEGMENT_LENGTH;
+    const zBack = ballZ - SEGMENTS_BEHIND * SEGMENT_LENGTH;
+    const segs = track.segments;
+    u.top.begin(); u.fx.begin(); u.haz.begin(); u.chev.begin();
+    for (const g of this.gatePool) g.visible = false;
+
+    const landHold = this.ux.jumpCfg ? this.ux.jumpCfg.landingHoldSegs : 4;
+    let landLeft = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (seg.z1 < zBack) continue;
+      if (seg.z0 > zFront) break;
+      if (seg.jumpLanding) landLeft = landHold;
+      const onPad = landLeft > 0;
+      if (landLeft > 0) landLeft--;
+      if (seg.isGap || seg.isTunnel) continue;
+
+      const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
+      const nx = Math.cos(yaw), nz = -Math.sin(yaw);
+      const wc = seg.wCenter || 0, vcRel = seg.voidCenter || 0;
+      const hasVoid = (seg.void0 || 0) > 0.001 || (seg.void1 || 0) > 0.001;
+      const prev = segs[i - 1];
+      const afterGap = !!(prev && prev.isGap);
+      // Next gap within the run-up window?
+      let runUp = false, lastBeforeGap = false;
+      for (let k = 1; k <= UX_RUNUP_SEGS; k++) {
+        const n = segs[i + k];
+        if (!n) break;
+        if (n.isGap) { runUp = true; lastBeforeGap = k === 1; break; }
+      }
+
+      // Lateral strips at each end: [lo, hi] pairs (1 or 2 strips).
+      const ends = u.ends;
+      for (let e = 0; e < 2; e++) {
+        const w = e ? seg.w1 : seg.w0, v = e ? (seg.void1 || 0) : (seg.void0 || 0);
+        const r = ends[e];
+        r.cx = e ? seg.cx1 : seg.cx0; r.z = e ? seg.z1 : seg.z0; r.y = e ? (seg.y1 || 0) : (seg.y0 || 0);
+        r.lo = wc - w / 2; r.hi = wc + w / 2;
+        r.vlo = wc + vcRel - v; r.vhi = wc + vcRel + v;
+      }
+      const a = ends[0], b = ends[1];
+      const P = (r, lat, dy) => { u.p[0] = r.cx + lat * nx; u.p[1] = r.y + dy; u.p[2] = r.z + lat * nz; return u.p; };
+      const strip = (batch, l0, h0, l1, h1, dy, uvMode, c0, c1) => {
+        // near-left, near-right, far-right, far-left
+        const q = u.q;
+        P(a, l0, dy); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+        P(a, h0, dy); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2];
+        P(b, h1, dy); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+        P(b, l1, dy); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2];
+        const t = u.t;
+        if (uvMode === 0) { // world tiles
+          t[0] = l0 / TILE_SIZE; t[1] = a.z / TILE_SIZE; t[2] = h0 / TILE_SIZE; t[3] = a.z / TILE_SIZE;
+          t[4] = h1 / TILE_SIZE; t[5] = b.z / TILE_SIZE; t[6] = l1 / TILE_SIZE; t[7] = b.z / TILE_SIZE;
+        } else if (uvMode === 1) { // stripes along z
+          t[0] = 0; t[1] = a.z / 0.9; t[2] = 0.5; t[3] = a.z / 0.9; t[4] = 0.5; t[5] = b.z / 0.9; t[6] = 0; t[7] = b.z / 0.9;
+        } else { // chevrons: one across the width, one per 2 units of z
+          t[0] = 0; t[1] = a.z / 2; t[2] = 1; t[3] = a.z / 2; t[4] = 1; t[5] = b.z / 2; t[6] = 0; t[7] = b.z / 2;
+        }
+        batch.quad(q, t, c0, c1, c1, c0);
+      };
+      // Vertical face along z at lateral lat0 (near) / lat1 (far), from dyTop down to dyBot.
+      const wall = (batch, lat0, lat1, dyTop, dyBot, cTop, cBot, stripes) => {
+        const q = u.q;
+        P(a, lat0, dyTop); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+        P(b, lat1, dyTop); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2];
+        P(b, lat1, dyBot); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+        P(a, lat0, dyBot); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2];
+        const t = u.t;
+        if (stripes) { t[0] = a.z / 0.9; t[1] = 1; t[2] = b.z / 0.9; t[3] = 1; t[4] = b.z / 0.9 - 0.5; t[5] = 0; t[6] = a.z / 0.9 - 0.5; t[7] = 0; }
+        batch.quad(q, t, cTop, cTop, cBot, cBot);
+      };
+      // Face across the track at the near end (z0), lateral lo..hi, from dyTop down to dyBot.
+      const front = (lo, hi, dyTop, dyBot, cTop, cBot) => {
+        const q = u.q;
+        P(a, lo, dyTop); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+        P(a, hi, dyTop); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2];
+        P(a, hi, dyBot); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+        P(a, lo, dyBot); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2];
+        u.fx.quad(q, u.t, cTop, cTop, cBot, cBot);
+      };
+      const voidCol = this.colors.void;
+      const rimCol = onPad ? C.jump : C.rim;
+      const rimW = onPad ? 0.22 : 0.12;
+
+      if (hasVoid) {
+        // Two deck strips around the void.
+        strip(u.top, a.lo, a.vlo, b.lo, b.vlo, 0, 0, 0, 0);
+        strip(u.top, a.vhi, a.hi, b.vhi, b.hi, 0, 0, 0, 0);
+        // F2: striped lip on both void edges + striped void walls.
+        const band = 0.42;
+        strip(u.haz, Math.max(a.lo, a.vlo - band), a.vlo, Math.max(b.lo, b.vlo - band), b.vlo, 0.015, 1, 0, 0);
+        strip(u.haz, a.vhi, Math.min(a.hi, a.vhi + band), b.vhi, Math.min(b.hi, b.vhi + band), 0.015, 1, 0, 0);
+        wall(u.haz, a.vlo, b.vlo, 0, -D * 0.8, 0, 0, true);
+        wall(u.haz, a.vhi, b.vhi, 0, -D * 0.8, 0, 0, true);
+      } else {
+        strip(u.top, a.lo, a.hi, b.lo, b.hi, 0, 0, 0, 0);
+        if (seg.telegraph) {
+          // F2: the middle that is about to open is striped from the moment the deck starts widening.
+          strip(u.haz, wc - 0.3, wc + 0.3, wc - 0.3, wc + 0.3, 0.015, 1, 0, 0);
+        }
+      }
+      // Outer rims (pale steel; cyan on a landing pad) and outer skirts.
+      strip(u.fx, a.lo, a.lo + rimW, b.lo, b.lo + rimW, 0.02, 0, rimCol, rimCol);
+      strip(u.fx, a.hi - rimW, a.hi, b.hi - rimW, b.hi, 0.02, 0, rimCol, rimCol);
+      wall(u.fx, a.lo, b.lo, 0, -D, C.skirtTop, voidCol, false);
+      wall(u.fx, a.hi, b.hi, 0, -D, C.skirtTop, voidCol, false);
+
+      // F3: landing pad (first segment after a gap): front face, cyan front lip, pillars.
+      if (afterGap) {
+        if (hasVoid) {
+          front(a.lo, a.vlo, 0, -D, C.skirtTop, voidCol);
+          front(a.vhi, a.hi, 0, -D, C.skirtTop, voidCol);
+        } else {
+          front(a.lo, a.hi, 0, -D, C.skirtTop, voidCol);
+        }
+        // lip: a flat cyan band on the pad's near edge
+        const lipZ = 0.3;
+        const q = u.q;
+        const lip = (lo, hi) => {
+          P(a, lo, 0.025); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+          P(a, hi, 0.025); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2] ;
+          P(a, hi, 0.025); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2] + lipZ;
+          P(a, lo, 0.025); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2] + lipZ;
+          u.fx.quad(q, u.t, C.jump, C.jump, C.jump, C.jump);
+        };
+        if (hasVoid) { lip(a.lo, a.vlo); lip(a.vhi, a.hi); } else lip(a.lo, a.hi);
+        // pillars under the pad corners (and the split pad's void edges)
+        const pillar = (lat) => {
+          const pw = 0.32;
+          P(a, lat - pw / 2, -D); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2] + 0.4;
+          P(a, lat + pw / 2, -D); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2] + 0.4;
+          P(a, lat + pw / 2, -D - 9); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2] + 0.4;
+          P(a, lat - pw / 2, -D - 9); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2] + 0.4;
+          u.fx.quad(q, u.t, C.pillar, C.pillar, voidCol, voidCol);
+        };
+        pillar(a.lo + 0.3); pillar(a.hi - 0.3);
+        if (hasVoid) { pillar(a.vlo - 0.3); pillar(a.vhi + 0.3); }
+      }
+
+      // F3: run-up chevrons + the launch lip on the last segment before the gap.
+      if (runUp && !hasVoid) {
+        const inset = 0.45;
+        strip(u.chev, a.lo + inset, a.hi - inset, b.lo + inset, b.hi - inset, 0.02, 2, 0, 0);
+        if (lastBeforeGap) {
+          const q = u.q;
+          P(b, b.lo, 0.03); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2] - 0.32;
+          P(b, b.hi, 0.03); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2] - 0.32;
+          P(b, b.hi, 0.03); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+          P(b, b.lo, 0.03); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2];
+          u.fx.quad(q, u.t, C.jump, C.jump, C.jump, C.jump);
+          // Height sign on posts beside the lip, outside the deck: down triangle = drop, up = rise.
+          const gapSeg = segs[i + 1];
+          const ly = gapSeg && gapSeg.jumpMeta ? gapSeg.jumpMeta.landingY : 0;
+          if (Math.abs(ly) > 0.01) {
+            const sign = (lat) => {
+              const pw = 0.12, tw = 1.0, th = 0.85, postH = 1.5;
+              P(b, lat - pw / 2, 0); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+              P(b, lat + pw / 2, 0); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2];
+              P(b, lat + pw / 2, postH); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+              P(b, lat - pw / 2, postH); q[9] = u.p[0]; q[10] = u.p[1]; q[11] = u.p[2];
+              u.fx.quad(q, u.t, C.pillar, C.pillar, C.jump, C.jump);
+              const down = ly < 0;
+              const yb = postH, yt = postH + th;
+              // triangle as a quad with two shared corners
+              P(b, lat - tw / 2, down ? yt : yb); q[0] = u.p[0]; q[1] = u.p[1]; q[2] = u.p[2];
+              P(b, lat + tw / 2, down ? yt : yb); q[3] = u.p[0]; q[4] = u.p[1]; q[5] = u.p[2];
+              P(b, lat, down ? yb : yt); q[6] = u.p[0]; q[7] = u.p[1]; q[8] = u.p[2];
+              q[9] = q[6]; q[10] = q[7]; q[11] = q[8];
+              u.fx.quad(q, u.t, C.jump, C.jump, C.jump, C.jump);
+            };
+            sign(b.lo - 0.7); sign(b.hi + 0.7);
+          }
+        }
+      }
+    }
+    u.top.end(); u.fx.end(); u.haz.end(); u.chev.end();
+    this._layoutUxArc(sim);
+  }
+
+  /** F3: a dotted flight arc from the ball to each landing lane, the SAME formula sim.launchJump uses
+   *  (impulse from the ball's current speed), shown from the moment the gap is in view until landing. */
+  _layoutUxArc(sim) {
+    const u = this._ux, dots = u.dots;
+    let n = 0;
+    const jc = this.ux.jumpCfg;
+    if (jc && (sim.state === 'playing' || sim.state === 'airborne')) {
+      const segs = sim.track.segments;
+      let gap = null, land = null;
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i];
+        if (s.jumpMeta && s.z0 + s.jumpMeta.gapLength > sim.z) { gap = s; for (let k = i; k < segs.length; k++) if (segs[k].jumpLanding) { land = segs[k]; break; } break; }
+      }
+      if (gap && land && gap.z0 - sim.z < SEGMENTS_AHEAD * SEGMENT_LENGTH * 0.8) {
+        if (sim.state === 'playing') u.arcLat = sim.lateralOffset;
+        const L = gap.jumpMeta.gapLength, Y = gap.jumpMeta.landingY;
+        const T = L / Math.max(1, sim.speed);
+        const vy0 = Y / T + 0.5 * jc.gravity * T;
+        const wc = land.wCenter || 0, v = land.void0 || 0, hw = land.w0 / 2;
+        const lanes = v > 0.001 ? [wc - (hw + v) / 2, wc + (hw + v) / 2] : [wc];
+        const N = 13;
+        for (const target of lanes) {
+          for (let k = 1; k < N; k++) {
+            const s = k / N;
+            const z = gap.z0 + s * L;
+            if (z < sim.z + 0.9) continue;
+            const t = s * T;
+            const y = vy0 * t - 0.5 * jc.gravity * t * t + BALL_RADIUS;
+            const lat = u.arcLat + (target - u.arcLat) * s;
+            const p = sim.track.worldPointAt(z, lat);
+            u.m4.makeTranslation(p.x, y, p.z);
+            if (n < 40) dots.setMatrixAt(n++, u.m4);
+          }
+        }
+      }
+    }
+    dots.count = n;
+    dots.instanceMatrix.needsUpdate = true;
+  }
+
+  _disposeUx() {
+    const u = this._ux;
+    for (const b of [u.top, u.fx, u.haz, u.chev]) b.geo.dispose();
+    u.topMat.dispose(); u.fxMat.dispose(); u.hazMat.dispose(); u.chevMat.dispose();
+    u.tileTex.dispose(); u.stripeTex.dispose(); u.chevTex.dispose();
+    u.dotGeo.dispose(); u.dotMat.dispose(); u.dots.dispose();
+    this.scene.fog = null;
+  }
+
   resize(width, height) {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
@@ -375,7 +749,9 @@ export class Renderer {
     // physics-integrated flight arc while AIRBORNE. NOT `ballPoint.y` (worldPointAt's track-only
     // interpolation) - see track.js's worldPointAt doc comment for why those two deliberately
     // diverge mid-flight.
-    const ballY = sim.state === 'falling' ? Math.max(-14, sim.fallY) + BALL_RADIUS : sim.y + BALL_RADIUS;
+    // MOCKUP PROTOTYPE fix: a fall starts from the height the ball was at (a lowered landing pad), not from 0.
+    const fallBase = this.ux ? sim.y : 0;
+    const ballY = sim.state === 'falling' ? fallBase + Math.max(-14, sim.fallY) + BALL_RADIUS : sim.y + BALL_RADIUS;
 
     this.ball.position.set(ballWorldX, ballY, ballWorldZ);
     this.ball.rotation.x = sim.rollAngle;
@@ -404,6 +780,7 @@ export class Renderer {
     this._layoutFloor(track, sim.z);
     this._layoutObstacles(track, sim.z);
     this._layoutPickups(track, sim.z, sim.elapsed);
+    if (this.ux) this._layoutUx(sim);
 
     this._layoutCamera(sim, reducedMotion);
 
@@ -447,6 +824,15 @@ export class Renderer {
         mesh2.visible = false;
         accentA.visible = false;
         accentB.visible = false;
+        if (left) left.visible = false;
+        if (right) right.visible = false;
+        wallIdx += 2;
+        continue;
+      }
+
+      // MOCKUP PROTOTYPE: every non-tunnel deck segment is drawn by _layoutUx as one solid slab.
+      if (this.ux && !seg.isTunnel) {
+        mesh.visible = false; mesh2.visible = false; accentA.visible = false; accentB.visible = false;
         if (left) left.visible = false;
         if (right) right.visible = false;
         wallIdx += 2;
@@ -517,7 +903,7 @@ export class Renderer {
         mesh.rotation.y = yaw;
         mesh.scale.set(width, dz, 1);
         if (seg.isTunnel) {
-          mesh.material = seg.showSpeedLabel ? this.tunnelFloorLabelMat : this.tunnelFloorMat;
+          mesh.material = seg.showSpeedLabel && !this.ux ? this.tunnelFloorLabelMat : this.tunnelFloorMat; // MOCKUP PROTOTYPE: no words on the floor
         } else {
           mesh.material = this.floorMatPool[i];
           // Tile the grid at its real world size (TILE_SIZE per repeat) and
@@ -665,7 +1051,8 @@ export class Renderer {
       // A gentle medallion spin around Y with a slight fixed forward tilt - unlike the old
       // octahedron, a heart tumbling on X too would read as an unrecognizable blob partway
       // through the rotation, so only Y turns continuously here.
-      mesh.rotation.set(0.15, spin, 0);
+      // MOCKUP PROTOTYPE: a full turn shows the heart edge-on half the time; a wobble keeps it a heart.
+      mesh.rotation.set(0.15, this.ux ? Math.sin(elapsed * 2.2) * 0.55 : spin, 0);
     }
   }
 
@@ -723,8 +1110,11 @@ export class Renderer {
         shakeY = Math.cos(sim.crashTimer * 1.3 + this._shakeSeed) * 0.08 * decay;
       }
     }
-    this.camera.position.set(camPoint.x + shakeX, CAMERA_HEIGHT + this._camLagY + shakeY, camPoint.z);
-    this.camera.lookAt(lookPoint.x, CAMERA_HEIGHT * CAMERA_LOOK_HEIGHT_FRAC + this._camLagY, lookPoint.z);
+    // MOCKUP PROTOTYPE (cam option only): a higher, steeper camera shows more deck and less empty sky.
+    const camH = this.ux && this.ux.cam ? UX_CAM_HEIGHT : CAMERA_HEIGHT;
+    const lookFrac = this.ux && this.ux.cam ? UX_CAM_LOOK_FRAC : CAMERA_LOOK_HEIGHT_FRAC;
+    this.camera.position.set(camPoint.x + shakeX, camH + this._camLagY + shakeY, camPoint.z);
+    this.camera.lookAt(lookPoint.x, camH * lookFrac + this._camLagY, lookPoint.z);
 
     const speedFrac = Math.max(0, Math.min(1, (sim.speed - sim.cfg.baseSpeed) / (sim.cfg.maxSpeed - sim.cfg.baseSpeed)));
     const fovKick = reducedMotion ? 0 : CAMERA_MAX_FOV_KICK * speedFrac;
@@ -782,6 +1172,7 @@ export class Renderer {
     // synchronously on teardown. Only when actually leaving the game (loseContext) - see the
     // dispose() doc comment for why an in-place restart must skip this.
     if (loseContext && typeof this.renderer.forceContextLoss === 'function') this.renderer.forceContextLoss();
+    if (this.ux) this._disposeUx();
     this.scene.clear();
   }
 }

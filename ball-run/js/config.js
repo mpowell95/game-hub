@@ -352,3 +352,26 @@ export const DEFAULT_MAP = 'classic';
 export function mapConfig(key) {
   return MAPS[key] || MAPS[DEFAULT_MAP];
 }
+
+// --- MOCKUP PROTOTYPE (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). NOT CLEARED FOR PLAYERS. ---------
+// Read only by render.js's UX_PROTO path (off unless ?uxproto=1 or the tools/ballrun-ux harness).
+// Two cue families, told apart by SHAPE first and hue second (Matt is red/green colorblind;
+// amber vs cyan sits on the blue-yellow axis he sees):
+//   deadly hole / void = amber + black diagonal STRIPES on its edges and walls;
+//   jump you fly       = cyan forward CHEVRONS, a cyan lip, a DOTTED arc, a cyan-rimmed pad on pillars.
+export const UX_COLORS = {
+  deckTile: 0x242e45,   // a touch lighter than Orbital's 0x1c2333 so the deck separates from the void
+  deckGrout: 0x52648a,
+  skirtTop: 0x46577a,   // the slab's side/front faces, fading to the void colour at the bottom
+  rim: 0x8ea3c8,        // the deck's ordinary outer edge (falling off): a pale steel line
+  jump: 0x5fe3ff,       // chevrons, lip, arc dots, landing-pad rim (the ball's own hue family)
+  pillar: 0x6f8fb3,
+  hazardA: 0xffce3a,    // stripes: amber...
+  hazardB: 0x16120a,    // ...and near-black
+};
+export const UX_DECK_DEPTH = 1.1;   // slab thickness under the deck, world units
+export const UX_FOG_NEAR = 56;      // the deck dissolves into the void before the generation window ends (72 units ahead)
+export const UX_FOG_FAR = 74;
+export const UX_RUNUP_SEGS = 4;     // segments of chevrons before a jump's gap (8 world units)
+export const UX_CAM_HEIGHT = 4.8;   // cam option only (was CAMERA_HEIGHT 3.6)
+export const UX_CAM_LOOK_FRAC = 0.24; // cam option only (was CAMERA_LOOK_HEIGHT_FRAC 0.42)
