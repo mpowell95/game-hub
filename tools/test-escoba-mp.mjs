@@ -214,6 +214,33 @@ use('B');
 let rowsB = await MP.readMyGames();
 ok('Ana\'s list has the finished match', rowsB.length === 1 && rowsB[0].over && MP.RESULTS.includes(rowsB[0].result));
 ok('a finished match is counted on her phone once', MP.recordFinished(rowsB) === 1 && MP.recordFinished(rowsB) === 0);
+
+// --- a NEW match's index rows carry its mode (`md`, 2026-11-16): counted from the row or from the match,
+// the result files under the SAME byMode key; an older row (no md) still counts with what it proves.
+{
+  const GS = await import('../js/game-stats.js');
+  const ID = id1, NODE_ = 'escoba', CODES = { A: 'MATTA', B: 'ANABB' };
+  const docMode = (g) => MP.chModeOf(g);
+  const rowMode = (r) => MP.chModeOfRow(r);
+  const oldKey = (r, p) => GS.modeKey({ n: 2, len: r.len });
+  for (const p of Object.keys(CODES)) {
+    use(p);
+    const g = await MP.readGame(ID);
+    const row = (await MP.readMyGames()).find((r) => r.id === ID);
+    const dk = GS.modeKey(docMode(g)), rk = GS.modeKey(rowMode(row));
+    ok(`row mode (phone ${p}): the row and the match give the same mode key`, !!row && !!row.md && dk === rk && /first=/.test(dk), `${dk} vs ${rk}`);
+    const path = `${NODE_}/index/${CODES[p]}/${ID}`;
+    const keep = getAt(path).md;
+    setAt(`${path}/md`, null);
+    const old = (await MP.readMyGames()).find((r) => r.id === ID);
+    ok(`row mode (phone ${p}): an older row (no md) keeps today's fallback`, !!old && old.md === null && GS.modeKey(rowMode(old)) === oldKey(old, p), old && GS.modeKey(rowMode(old)));
+    setAt(`${path}/md`, keep);
+  }
+  use('B');
+  const gs = GS.loadStats().games.escoba || {};
+  const want = GS.modeKey(docMode(await MP.readGame(ID)));
+  ok('row mode: the result counted from the list is filed under the match\'s own mode key', !!(gs.byMode && gs.byMode[want]), `${want} in ${Object.keys(gs.byMode || {}).join(' | ')}`);
+}
 {
   const st = JSON.parse(stores.B.get('gamehub.stats') || '{}');
   const es = st.games && st.games.escoba;

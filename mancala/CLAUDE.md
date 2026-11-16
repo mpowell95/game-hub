@@ -287,3 +287,7 @@ Vs the computer only: Restart / Setup after the player's first sowing (`hm` in t
 Matt: "they should look centered and balanced". While the setup shows (the one screen with the Online tabs), CSS at the end of this game's stylesheet stretches the page area (`.hub-main` / `.hub-game` / the root, all scoped by `:has`) and the card sits in the middle with auto margins. Every other screen lays out as before. Checked on six phone sizes: `tools/review-setup-cards.cjs`.
 
 **Settings as detail (2026-11-16)**: every result (vs computer, quit loss, live room, and each live-leave modeTag) carries `speed` (`normal`/`slow`, the animation speed) in withMode's detail, never the mode.
+
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+Two players on one phone (`mode: 'friend'`) was left out of stats on purpose until now; Matt asked for it. A finished game (`p1` bottom / `p2` top / `draw`), or a started one thrown away by a new game or a live room (winner `quit`), records ONCE via `_recordPassPlay` = `withMode(mancalaMode(opener, P1), 'pnp', recordPassPlay('mancala', ...), { detail: mine, theirs, speed })` (`_statsCommitted` / the save cleared): `games.mancala.pp`, counted by nothing.

@@ -148,6 +148,33 @@ use(L === 'a' ? 'A' : 'B');
 const rowsL = await MP.readMyGames();
 ok('the loser\'s list has the finished match', rowsL.length === 1 && rowsL[0].over && rowsL[0].result === 'lost');
 ok('a finished match is counted on their phone once', MP.recordFinished(rowsL) === 1 && MP.recordFinished(rowsL) === 0);
+
+// --- a NEW match's index rows carry its mode (`md`, 2026-11-16): counted from the row or from the match,
+// the result files under the SAME byMode key; an older row (no md) still counts with what it proves.
+{
+  const GS = await import('../js/game-stats.js');
+  const ID = id, NODE_ = 'flicksoccer', CODES = { A: 'MATTA', B: 'ANABB' };
+  const docMode = (g) => MP.modeOfMatch(g);
+  const rowMode = (r) => MP.modeOfRow(r);
+  const oldKey = (r, p) => GS.modeKey({ goals: r.goals });
+  for (const p of Object.keys(CODES)) {
+    use(p);
+    const g = await MP.readGame(ID);
+    const row = (await MP.readMyGames()).find((r) => r.id === ID);
+    const dk = GS.modeKey(docMode(g)), rk = GS.modeKey(rowMode(row));
+    ok(`row mode (phone ${p}): the row and the match give the same mode key`, !!row && !!row.md && dk === rk && /first=/.test(dk), `${dk} vs ${rk}`);
+    const path = `${NODE_}/index/${CODES[p]}/${ID}`;
+    const keep = getAt(path).md;
+    setAt(`${path}/md`, null);
+    const old = (await MP.readMyGames()).find((r) => r.id === ID);
+    ok(`row mode (phone ${p}): an older row (no md) keeps today's fallback`, !!old && old.md === null && GS.modeKey(rowMode(old)) === oldKey(old, p), old && GS.modeKey(rowMode(old)));
+    setAt(`${path}/md`, keep);
+  }
+  use('' + (L === 'a' ? 'A' : 'B') + '');
+  const gs = GS.loadStats().games.flicksoccer || {};
+  const want = GS.modeKey(docMode(await MP.readGame(ID)));
+  ok('row mode: the result counted from the list is filed under the match\'s own mode key', !!(gs.byMode && gs.byMode[want]), `${want} in ${Object.keys(gs.byMode || {}).join(' | ')}`);
+}
 const stL = JSON.parse(stores[L === 'a' ? 'A' : 'B'].get('gamehub.stats') || '{}');
 ok('...as an mp loss in their stats', stL.games && stL.games.flicksoccer && stL.games.flicksoccer.byDiff.mp.lost === 1, JSON.stringify(stL.games && stL.games.flicksoccer));
 ok('...and queued for their Game Over popup', MP.readUnseen().includes(id));

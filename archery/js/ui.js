@@ -17,7 +17,7 @@ import { Renderer, ARROW_COLORS, FLIGHT_T } from './render.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, withMode } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, withMode } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the one
  *  option a match vs the computer has, who shoots first. (Online challenges have no options.) */
 const modeOf = (m) => ({ first: m && m.starter === 1 ? 'them' : 'me' });
@@ -398,6 +398,7 @@ class ArcheryUI {
    *  match is going and Computer when none is (2026-11-07), decided again once the matches are read. */
   _showSetup(tab) {
     if (tab) this._tab = tab;
+    this._recordPassQuit();   // pass and play is not saved: leaving it for setup throws it away (2026-11-16)
     this._mpLeave();
     this._clearPlay();
     this.screen = 'setup';
@@ -487,6 +488,28 @@ class ArcheryUI {
     return { firstSet: typeof f === 'string' && f ? f : 'default' };
   }
 
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.archery.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' | 'p2', or
+   *  'quit' for a match with an arrow shot that is left (pass and play is not saved, so leaving loses it). */
+  _recordPassPlay(m, winner) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (this.seats || []).map((x) => (x && x.name) || '');
+    try {
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay('archery', winner, names), { detail: () => {
+        const tt = totals(m);
+        return { pts: tt[0] | 0, pts2: tt[1] | 0, arrows: m.shots[0].length | 0, arrows2: m.shots[1].length | 0, shootoff: m.stage >= ROUNDS ? 1 : 0 };
+      } });
+      if (!st) console.warn('[archery] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[archery] recording pass and play failed', err); }
+  }
+  /** The live pass-and-play match about to be left or replaced, once an arrow has flown. */
+  _recordPassQuit() {
+    const m = this.match;
+    if (this.mode !== 'pass' || !m || m.winner != null || m.recorded || !m.shots.some((x) => x && x.length > 0)) return;
+    this._recordPassPlay(m, 'quit');
+  }
+
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
   _recordQuitLoss() {
     const q = this._quitPending();
@@ -515,6 +538,7 @@ class ArcheryUI {
   }
 
   _begin(g) {
+    this._recordPassQuit();   // a started pass-and-play match replaced: kept as 'quit' (2026-11-16)
     this._clearPlay();
     this.mode = g.mode;
     this.diff = g.diff;
@@ -1003,6 +1027,7 @@ class ArcheryUI {
     if (!m || m.winner == null) return;
     this._bottom(null);
     if (this.mode === 'mp') { this._mpFinish(m.winner === this.mp.mySeat, false); return; }
+    if (this.mode === 'pass' && !m.recorded) this._recordPassPlay(m, m.winner === 0 ? 'p1' : 'p2');
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
@@ -1573,6 +1598,7 @@ class ArcheryUI {
 
   destroy() {
     this._stop();
+    this._recordPassQuit();   // leaving the game mid pass and play loses the match: kept as 'quit' (2026-11-16)
     this._mpLeave();
     clearTimeout(this._bannerTimer);
     clearTimeout(this._toastTimer);

@@ -271,3 +271,7 @@ Solo: the menu's New game / Quit to setup, and New game over a resumable match, 
 - Live room (`js/live-leave.js`): Leave or the hub's confirmed back after your first card = your loss (`'mp'` + head-to-head) and the other phone's win, the forfeit written with the room's end; closing the app arms the loss (the rejoin still works, and checks the room first); 90 s silent = "Claim win"; one result per match (`gamehub.liveCounted.v1`). This supersedes "an abandoned game is not recorded" above.
 - 3-4 seats: only the leaver records; the table ends as before. Solo: quitting is a loss once DEALT (every save counts); a live room taking the one save slot records the solo match it replaces.
 - Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass): leaving live rooms, quitting once dealt".
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+Challenges: `chModeOf(raw, side)` adds `first` (the challenger leads); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (older rows: the length). `tools/test-escoba-mp.mjs`.

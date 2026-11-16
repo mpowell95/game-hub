@@ -247,3 +247,7 @@ The setup card is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`),
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer (finish and quit loss): detail `pace` (Computer speed) and `firstSet` (the match keeps it as `fs`, older matches: the current setting). Never in the mode.
+
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+A finished pass-and-play match (and one thrown away by a new match after a dart, winner `quit`) records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('darts', 'p1'|'p2'|'draw'|'quit', names), { detail: turns/scores, `firstSet` })` (`_recordPassPlay`, the match's `recorded` flag): `games.darts.pp`, counted by nothing. Supersedes "not recorded" under Screens.

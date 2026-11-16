@@ -215,3 +215,10 @@ Setup = **Online | Computer | 2 players** tabs. Online = Matches (Play pill on y
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer (finish and quit loss): detail `firstSet` (the First setting; the match keeps it as `fs`, older matches: the current setting). Never in the mode.
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+`rowFor` writes `md` = `modeOfMatch(game, side)` (`{first}`; the challenger shoots first), so a result counted from the list files under the match's own byMode key (it was `'?'`). Older rows: `first` from `sent`. `tools/test-archery-mp.mjs`.
+## Pass and play is kept (2026-11-16, Matt: "yes build 1")
+
+Supersedes "pass and play ... record nothing" under Hub integration. A finished pass-and-play match records ONCE via `withMode(modeOf(m), 'pnp', recordPassPlay('archery', 'p1'|'p2', names), { detail: pts, pts2, arrows, arrows2, shootoff })` (`_recordPassPlay`, `match.recorded`). Pass and play is not saved, so leaving it after an arrow (Menu > Quit, a new match, the hub) records it as `quit`. `games.archery.pp` (the test record while admin-only), counted by nothing.

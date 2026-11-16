@@ -7,7 +7,7 @@
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
-import { recordResult, armQuitLoss, takeQuitLoss, withMode, modeTag, oneTierDown } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, armQuitLoss, takeQuitLoss, withMode, modeTag, oneTierDown } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the shot
  *  rule (one shot, or until you sink one). A live room's rule is the host's (room config), on the
  *  Match either way. The player always shoots first vs the computer; the caption is words, not a rule. */
@@ -66,6 +66,18 @@ function readSave(vsCpu) {
   } catch { return null; }
 }
 const clearSave = (vsCpu) => { try { localStorage.removeItem(saveKeyOf(vsCpu)); } catch (err) { console.error('[hoops4] saved match not cleared', err); } };
+/** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+ *  `games.hoops4.pp`, counted by nothing. Winner 'p1' (Red) | 'p2' (Yellow) | 'draw', or 'quit' for a
+ *  started match thrown away by a new one. Detail = both sides' shots and makes. */
+function recordHoopsPass(m, winner) {
+  try {
+    const st = withMode(() => (modeFor(m, RED)), 'pnp', () => recordPassPlay('hoops4', winner, [t('red'), t('yellow')]), { detail: () => {
+      const a = hoopsDetail(m, RED) || {}, b = hoopsDetail(m, YELLOW) || {};
+      return { ...a, shots2: b.shots | 0, made2: b.made | 0, missed2: b.missed | 0 };
+    } });
+    if (!st) console.warn('[hoops4] pass and play not recorded (rate gate or store refused it)');
+  } catch (err) { console.error('[hoops4] recording pass and play failed', err); }
+}
 /** Any shot taken in it, the computer's included (or one in the air): throwing it away is a loss. */
 const savedMoved = (sv) => !!sv && (sv.match.moves.length > 0 || sv.match.shots[0] + sv.match.shots[1] > 0 || !!sv.fly);
 
@@ -1110,7 +1122,7 @@ class Hoops4 {
   // A MATCH VS THE COMPUTER IS SAVED (2026-11-06; docs/INTEGRITY-CHECKS-SPEC.md "Games that SAVE and
   // resume"). Leaving it (Back to setup, the hub's back, a closed app, a challenge opened) costs
   // nothing: it is there to Continue. Only THROWING IT AWAY once any shot was taken (New game, from
-  // the Menu or the setup screen) is a loss, asked twice. Pass and play saves too and records nothing.
+  // the Menu or the setup screen) is a loss, asked twice. Pass and play saves too; its end (or a started one thrown away) is kept by recordPassPlay, counted by nothing.
   /** The level of the computer in `m` (its own, so a continued match keeps it), else the setting's. */
   cpuDiff(m = this.match) {
     const skill = m && m.vsCpu ? m.cpuSkill : this.settings.opponent;
@@ -1137,6 +1149,12 @@ class Hoops4 {
     armQuitLoss('hoops4', 'recordResult', ['hoops4', this.statsDiff(m), false], modeTag(() => (modeFor(m, RED)), this.cpuDiff(m)));
     if (!takeQuitLoss('hoops4')) console.error('[hoops4] the thrown-away match was not recorded as a loss');
   }
+  /** Throw the saved pass-and-play match away: the save first, then, if anyone shot in it, kept once as 'quit'. */
+  takePassDiscard() {
+    const sv = readSave(false);
+    clearSave(false);
+    if (savedMoved(sv)) recordHoopsPass(sv.match, 'quit');
+  }
   /** The match as it stands, saved (vs the computer or pass and play; `fly`: a shot in the air). A
    *  finished match keeps the save it had until finish() clears it, then records. */
   saveMatch(fly = null) {
@@ -1162,6 +1180,7 @@ class Hoops4 {
     let resumed = null;
     if (!opts.keepMp) {
       if (opts.resume) resumed = readSave(vsCpu);
+      if (!resumed && !vsCpu) this.takePassDiscard();   // a started pass-and-play match thrown away: kept as 'quit' (2026-11-16)
       if (!resumed) { if (vsCpu) this.takeDiscard(); else clearSave(false); }
     }
     const oneShot = opts.oneShot === undefined ? this.settings.shots === 'one' : !!opts.oneShot;
@@ -1797,7 +1816,7 @@ class Hoops4 {
       try {
         // 'mp' is the repo's own difficulty for a multiplayer match (js/game-stats.js) - it is
         // unmapped in js/difficulty-tiers.js, so it never lands in a difficulty tier. A
-        // two-players-on-one-phone match records nothing, because there is no "you" in it.
+        // two-players-on-one-phone match is kept by recordPassPlay (2026-11-16), counted by nothing.
         // A TURN-BY-TURN match: counted once per device through the ledger (mp.js), and scored
         // from the STORED winner when there is one - a resignation replays into an unfinished
         // board, whose m.winner would have scored the winner a loss.
@@ -1817,7 +1836,7 @@ class Hoops4 {
         } else if (this.mp) { LL.endedNormally('hoops4', this._liveKey()); withMode(() => (modeFor(m, this.myPlayer)), 'mp', () => recordResult('hoops4', 'mp', m.winner === this.myPlayer), { detail: () => (hoopsDetail(m, this.myPlayer)) }); }
         else if (m.vsCpu) {
           withMode(() => (modeFor(m, RED)), this.cpuDiff(m), () => recordResult('hoops4', this.statsDiff(m), r.won), { detail: () => (hoopsDetail(m, RED)) });
-        }
+        } else recordHoopsPass(m, m.winner === RED ? 'p1' : m.winner === YELLOW ? 'p2' : 'draw');
       } catch (e) { console.error('[hoops4] recordResult failed', e); }
     }
     const r = m.result();

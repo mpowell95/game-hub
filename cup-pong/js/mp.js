@@ -416,11 +416,15 @@ export function markCounted(id) {
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
  *  the match its player-chosen rules (Gentleman's, reracks, Straight Up) and series length; from an
  *  index row what the row carries (Straight Up, series). The other rule flags are versions, not choices. */
-export function modeOfMatch(g) {
+export function modeOfMatch(g, side = mySideOf(g)) {
   const r = cleanRules(g && g.rules);
-  return { gent: r.gent ? 1 : 0, rr: r.rr, su: r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(g && g.series)) ? +g.series : 1 };
+  return { gent: r.gent ? 1 : 0, rr: r.rr, su: r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(g && g.series)) ? +g.series : 1,
+    ...(side === 'a' || side === 'b' ? { first: side === 'a' ? 'me' : 'them' } : {}) };   // who went first (ui.js's own rule), 2026-11-16
 }
-const modeOfRow = (r) => ({ su: r && r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(r && r.series)) ? +r.series : 1 });
+function mySideOf(g) { try { return sideOf(g, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16: the match's whole mode), else what an older
+ *  row carries (Straight Up, series). */
+export const modeOfRow = (r) => (r && r.md) || { su: r && r.su ? 1 : 0, series: SERIES_LENGTHS.includes(+(r && r.series)) ? +r.series : 1 };
 /** Record a finished match's result on this device, once (THE LAW rule 2: never twice). */
 export function countResult(id, won, finishedAt = Date.now(), mode = null) {
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
@@ -476,6 +480,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -489,7 +502,7 @@ function rowsFromIndex(val, now = decideNow()) {
       updated: late ? late.at : ms(r.updated), yourTurn: !ended && !late && !!r.yourTurn, over: !!r.over || !!ended || !!late, rebuttal: !ended && !!r.rebuttal,
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       mine: ms(r.mine), theirs: ms(r.theirs),
       series: SERIES_LENGTHS.includes(+r.series) ? +r.series : 1, seriesNo: Math.max(1, ms(r.seriesNo) || 1),
       seriesOf: typeof r.seriesOf === 'string' && ID_RE.test(r.seriesOf) ? r.seriesOf : id, su: r.su === true,
@@ -641,6 +654,7 @@ function rowFor(game, side, writer) {
     lastBy: writer === side ? 'me' : 'them',
     series: game.series || 1, seriesNo: game.seriesNo || 1, seriesOf: game.seriesOf || game.id,
     ...(game.rules && game.rules.su ? { su: true } : {}),
+    md: rowMd(modeOfMatch(game, side)),         // the match's mode from this side (2026-11-16)
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(game.over && game.over.via ? { via: game.over.via } : {}),   // a costly cancel/decline: the series ends (2026-10-29)
     ...(ended ? { why: ended } : {}),

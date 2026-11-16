@@ -20,7 +20,7 @@ import { chooseMove, seededRand } from './ai.js';
 import { stateHash } from './hash.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, recordHeadToHead, deviceId, withMode, modeTag } from '../../js/game-stats.js';
+import { recordResult, recordHeadToHead, recordPassPlay, deviceId, withMode, modeTag } from '../../js/game-stats.js';
 import { makeT } from '../../js/i18n.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import * as net from '../../js/net.js';
@@ -394,6 +394,32 @@ class MancalaUI {
     clearGame();
   }
 
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.mancala.pp`, counted by nothing. `winner` 'p1' (bottom) | 'p2' (top) | 'draw' | 'quit'. */
+  _recordPassPlay(state, opener, winner) {
+    const names = [this.hasProfileName ? this.humanName : t('player_1'), t('player_2')];
+    try {
+      const st = withMode(() => (mancalaMode(opener, P1)), 'pnp', () => recordPassPlay('mancala', winner, names), { detail: () => ({ ...mancalaDetail(state, P1), ...speedDetail(this) }) });
+      if (!st) console.warn('[mancala] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[mancala] recording pass and play failed', err); }
+  }
+  /** A started pass-and-play game about to be thrown away (a new game, or a live room, over it): kept
+   *  once as 'quit'. The live game while it is on screen, else the saved one. */
+  _recordPassQuit() {
+    if (!this.mp && this.view === 'game' && this.mode === 'friend' && this.state) {
+      if (this.state.over || this._statsCommitted || !(this.movesMade > 0)) return;
+      this._statsCommitted = true;
+      this._recordPassPlay(this.state, this._opener, 'quit');
+      clearGame();
+      return;
+    }
+    if (this.view === 'game' && this.state && !this.mp) return;   // a game vs the computer is on screen
+    const sv = loadGame();
+    if (!sv || sv.mode !== 'friend' || !(sv.movesMade > 0)) return;
+    clearGame();
+    this._recordPassPlay({ pits: sv.pits }, sv.op, 'quit');
+  }
+
   /** A quit that costs a loss needs a second tap, the button saying so; anything else acts at once. */
   _confirmQuit(btn, action) {
     if (!this._quitCostsLoss()) { action(); return; }
@@ -650,6 +676,7 @@ class MancalaUI {
     const starter = this.nextStarter === P2 ? P2 : P1;
     this.nextStarter = starter === P1 ? P2 : P1;
     this.persistSettings();
+    this._recordPassQuit();      // a started pass-and-play game thrown away: kept, counts for nothing (2026-11-16)
     clearGame();                 // a new game replaces any saved one
     this.state = newGame(starter);
     this._opener = starter;
@@ -1196,6 +1223,8 @@ class MancalaUI {
         if (opp) { try { recordHeadToHead('mancala', opp, won); } catch { /* never block the result */ } }
       } else if (this.mode === 'bot') {
         try { withMode(() => (mancalaMode(this._opener, P1)), LEVEL_KEY[this.level], () => recordResult('mancala', LEVEL_KEY[this.level], won), { detail: () => ({ ...mancalaDetail(s, P1), ...speedDetail(this) }) }); } catch { /* never block the result */ }
+      } else if (this.mode === 'friend') {
+        this._recordPassPlay(s, this._opener, won === true ? 'p1' : won === false ? 'p2' : 'draw');
       }
     }
     if (this.mp) this._mpAfterGameEnd();
@@ -1554,6 +1583,7 @@ class MancalaUI {
     mp.movesById = new Map(entries.map((m) => [m.seq, m]));
     mp.maxKnownSeq = entries.reduce((mx, e) => Math.max(mx, e.seq | 0), 0);
     this._statsCommitted = false;
+    this._recordPassQuit();   // a saved pass-and-play game it throws away is kept first (2026-11-16)
     clearGame();   // an MP match supersedes any solo save
     this.state = newGame(round.dealer === P2 ? P2 : P1);
     mp.opener = round.dealer === P2 ? P2 : P1;   // who opened THIS game (stats mode, 2026-11-02)

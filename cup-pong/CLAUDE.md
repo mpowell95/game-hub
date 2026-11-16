@@ -363,3 +363,7 @@ Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss ax
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer: detail `rm` (Make your own Grid/Free). The thrown-away match's quit loss now carries its numbers so far (`detailOf` of the saved tally), `rm` and `quit: 1`. Never in the mode.
+
+## Index rows carry the mode (2026-11-16, Matt: "save all data from every play/game/turn/round/level for all games")
+
+`modeOfMatch(g, side)` adds `first` (ui.js's rule, side a); `rowFor` writes `md` = that mode, so a count from the list files under the same byMode key as one from the match (rows had only Straight Up and series, still the fallback for older rows). `tools/test-cuppong-mp.mjs`.

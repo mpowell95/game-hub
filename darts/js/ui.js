@@ -15,7 +15,7 @@ import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, s
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, recordPassPlay, oneTierDown, withMode } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -528,6 +528,7 @@ class DartsUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first dart
+    this._recordPassQuit();   // a pass-and-play match thrown away after its first dart: kept, counts for nothing
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -535,7 +536,7 @@ class DartsUI {
     else { starter = s.nextStarter; s.nextStarter = starter ^ 1; }
     writeJSON(SETTINGS_KEY, s);
     const match = newMatch(starter, kindFrom(s), true, true);
-    if (s.mode === 'cpu') match.fs = s.first;   // the First throw setting it began under, for the result's detail (2026-11-16)
+    if (s.mode === 'cpu' || s.mode === 'pass') match.fs = s.first;   // the First throw setting it began under, for the result's detail (2026-11-16)
     this._begin({ mode: s.mode, diff: s.difficulty, match }, true);
   }
 
@@ -586,6 +587,28 @@ class DartsUI {
       const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false), { detail: () => this._dtSetDetail(q.m) });
       if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[darts] recording the quit loss failed', err); }
+  }
+
+  /** PASS AND PLAY is kept (2026-11-16, Matt: "yes build 1"): js/game-stats.js recordPassPlay, in
+   *  `games.darts.pp`, counted by nothing. Once per match (its `recorded` flag); winner 'p1' | 'p2' |
+   *  'draw', or 'quit' for a started match thrown away by a new one. */
+  _recordPassPlay(m, winner, seats) {
+    if (!m || m.recorded) return;
+    m.recorded = true;
+    const names = (seats || []).map((x) => (x && x.name) || '');
+    try {
+      const st = withMode(() => (modeOf(m)), 'pnp', () => recordPassPlay('darts', winner, names), { detail: () => ({ ...(dartsDetail(m) || {}), firstSet: (m && m.fs) || (this.settings && this.settings.first) || 'default' }) });
+      if (!st) console.warn('[darts] pass and play not recorded (rate gate or store refused it)');
+    } catch (err) { console.error('[darts] recording pass and play failed', err); }
+  }
+  /** The pass-and-play match a new match would throw away (live, or saved from setup), once a dart has flown. */
+  _recordPassQuit() {
+    let m = null, seats = null;
+    if (this.match) { if (this.mode === 'pass') { m = this.match; seats = this.seats; } }
+    else { const sv = this._savedMatch(); if (sv && sv.mode === 'pass') { m = sv.match; seats = this._seatsFor('pass'); } }
+    if (!m || m.winner != null || m.recorded || !playerThrew(m)) return;
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
+    this._recordPassPlay(m, 'quit', seats);
   }
 
   /** A tap that would throw such a match away asks twice, the button saying it counts as a loss. */
@@ -951,6 +974,7 @@ class DartsUI {
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
+    if (this.mode === 'pass' && !m.recorded) this._recordPassPlay(m, m.winner === DRAW ? 'draw' : m.winner === 0 ? 'p1' : 'p2', this.seats);
     this._save();
     this._say(this._winSay());
     this.screen = 'result';

@@ -132,6 +132,33 @@ ok('no more shots after it is over', (await MP.appendLog(id, 10, [rest('b', 2, 7
 const rowsB = await MP.readMyGames();
 ok('their list has the finished match', rowsB.length === 1 && rowsB[0].over && rowsB[0].result === 'lost');
 ok('a finished match is counted on their phone once', MP.recordFinished(rowsB) === 1 && MP.recordFinished(rowsB) === 0);
+
+// --- a NEW match's index rows carry its mode (`md`, 2026-11-16): counted from the row or from the match,
+// the result files under the SAME byMode key; an older row (no md) still counts with what it proves.
+{
+  const GS = await import('../js/game-stats.js');
+  const ID = id, NODE_ = 'golf', CODES = { A: 'TESTA', B: 'TESTB' };
+  const docMode = (g) => MP.modeOfGame(g, MP.sideOf(g, CODES[phone]));
+  const rowMode = (r) => MP.rowMode(r);
+  const oldKey = (r, p) => GS.modeKey({ course: r.course, round: r.round, holes: r.holes, first: r.sent ? 'me' : 'them', online: 1 });
+  for (const p of Object.keys(CODES)) {
+    use(p);
+    const g = await MP.readGame(ID);
+    const row = (await MP.readMyGames()).find((r) => r.id === ID);
+    const dk = GS.modeKey(docMode(g)), rk = GS.modeKey(rowMode(row));
+    ok(`row mode (phone ${p}): the row and the match give the same mode key`, !!row && !!row.md && dk === rk && /first=/.test(dk), `${dk} vs ${rk}`);
+    const path = `${NODE_}/index/${CODES[p]}/${ID}`;
+    const keep = getAt(path).md;
+    setAt(`${path}/md`, null);
+    const old = (await MP.readMyGames()).find((r) => r.id === ID);
+    ok(`row mode (phone ${p}): an older row (no md) keeps today's fallback`, !!old && old.md === null && GS.modeKey(rowMode(old)) === oldKey(old, p), old && GS.modeKey(rowMode(old)));
+    setAt(`${path}/md`, keep);
+  }
+  use('B');
+  const gs = GS.loadStats().games.golf || {};
+  const want = GS.modeKey(docMode(await MP.readGame(ID)));
+  ok('row mode: the result counted from the list is filed under the match\'s own mode key', !!(gs.byMode && gs.byMode[want]), `${want} in ${Object.keys(gs.byMode || {}).join(' | ')}`);
+}
 const gB = stats('B').games && stats('B').games.golf;
 ok('...as an mp loss in their stats', gB && gB.byDiff.mp.lost === 1, JSON.stringify(gB));
 ok('...noted with its match id', gB && gB.mpIds && gB.mpIds[id] === 'l');

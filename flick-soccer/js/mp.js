@@ -372,7 +372,11 @@ export function markCounted(id) {
  *  VOIDED match (js/stats-corrections.js) is never counted, and is not marked counted either. */
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
  *  the match its goals and aiming help; from an index row its goals (all a row carries). */
-export const modeOfMatch = (raw) => ({ goals: goalsOfGame(raw), aids: aidsOfGame(raw) });
+export const modeOfMatch = (raw, side = mySideOf(raw)) => ({ goals: goalsOfGame(raw), aids: aidsOfGame(raw),
+  ...(side === 'a' || side === 'b' ? { first: starterOfGame(raw) === (side === 'b' ? 1 : 0) ? 'me' : 'them' } : {}) });   // who kicked off (2026-11-16)
+function mySideOf(raw) { try { return sideOf(raw, myCode()); } catch { return null; } }
+/** A row's mode: its `md` (rows written from 2026-11-16: the match's whole mode), else its goals. */
+export const modeOfRow = (r) => (r && r.md) || { goals: goalsOfGame(r) };
 /** This player's own two line-ups in a challenge (kick-off, defending), as the result's DETAIL
  *  (2026-11-16, never the mode: it would split byMode). `side` is 'a'/'b' or seat 0/1; a role with no
  *  pair reads that seat's `forms` line-up, as the engine plays it (kickoffForms). */
@@ -422,7 +426,7 @@ export function recordFinished(rows) {
     return true;
   });
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
-  for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => ({ goals: goalsOfGame(r) }));
+  for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
   return todo.length;
 }
@@ -450,6 +454,15 @@ export function sortRows(rows) {
     return ms(y.updated) - ms(x.updated);
   });
 }
+/** The mode an index row carries (`md`, 2026-11-16): the match's own mode from that row's side, written by
+ *  rowFor with the same function the match is counted with, so a result counted from the list files under
+ *  the SAME byMode key as one counted from the match. Primitives only; anything else reads as none. */
+function rowMd(md) {
+  if (!md || typeof md !== 'object' || Array.isArray(md)) return null;
+  const o = {};
+  for (const k of Object.keys(md).slice(0, 16)) { const v = md[k]; if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') o[k] = v; }
+  return Object.keys(o).length ? o : null;
+}
 function rowsFromIndex(val, now = decideNow()) {
   if (!val || typeof val !== 'object') return [];
   return sortRows(Object.keys(val).map((id) => {
@@ -465,7 +478,7 @@ function rowsFromIndex(val, now = decideNow()) {
       result: late ? late.result : !ended && RESULTS.includes(r.result) ? r.result : null,
       why: ended || (late ? TIMEOUT : typeof r.why === 'string' ? r.why : ''),
       mine: ms(r.mine), theirs: ms(r.theirs), goals: GOAL_OPTIONS.includes(+r.goals) ? +r.goals : 2,
-      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent,
+      ended, open: ended ? '' : rowOpen(r), expires: ms(r.expires), sent: !!r.sent, md: rowMd(r.md),
       cancelled: ended === 'cancelled' || ended === 'declined',
     };
     // A voided match (js/stats-corrections.js) is left out of every list and record built from here.
@@ -596,6 +609,7 @@ function rowFor(game, side, writer) {
     pl: senderPlayed(game),                     // the sender has played: calling off costs a loss (2026-10-29)
     mine: game.scores[side], theirs: game.scores[other(side)],
     goals: game.goals,
+    md: rowMd(modeOfMatch(game, side)),       // the match's mode from this side (2026-11-16)
     lastBy: writer === side ? 'me' : 'them',
     ...(game.over && !ended ? { result: resultOf(game, side), why: String(game.over.why || '') } : {}),
     ...(ended ? { why: ended } : {}),

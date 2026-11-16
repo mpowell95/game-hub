@@ -2337,7 +2337,7 @@ class BattleshipUI {
       // Counted once per match on this phone, through mp.js's ledger (the launcher's list read may
       // have counted it already, without these extras). Challenges write no head-to-head.
       const ov = this.ch.game && this.ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-      const chMode = () => (typeof CH.modeOfMatch === 'function' ? CH.modeOfMatch(this.ch.game) : null);   // a thunk: read inside withMode (2026-11-02)
+      const chMode = () => (typeof CH.modeOfMatch === 'function' ? CH.modeOfMatch(this.ch.game, this.ch.side) : null);   // a thunk: read inside withMode (2026-11-02)
       try { CH.countResult(this.ch.id, won, extras, (ov && ov.at) || Date.now(), chMode); CH.markResultSeen(this.ch.id); } catch (err) { console.error('[battleship] counting the challenge failed', err); }
       return;
     }

@@ -3297,7 +3297,7 @@ class EscobaUI {
     ch.counted = true;
     const won = o.winner === 'draw' ? null : o.winner === ch.side;
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    const mode = () => (typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(ch.game || ch) : null);   // a thunk: read inside withMode (2026-11-02)
+    const mode = () => (typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(ch.game || ch, ch.side) : null);   // a thunk: read inside withMode (2026-11-02)
     // + the value badges and capture hints this match was played with, as DETAIL (2026-11-16)
     const score = () => ({ detail: () => ({ ...this._valsDetail(), assist: this._matchAssist ? 'on' : 'off' }) });
     try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now(), mode, score); } catch (err) { console.error('[escoba] could not count the challenge', err); }
