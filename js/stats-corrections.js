@@ -78,6 +78,12 @@ export const HAND_RESULTS = {
   // Matt's Nov 8 2:22 AM Test mode win was the first entry here; it now counts through FLICK_TEST_COUNTS below with
   // every other Test game (Matt, 2026-11-08: "count all test games"), so it is not listed twice.
   flicksoccer: [],
+  // Matt's Dots and Boxes win, Nov 16 12:22 PM ET, 14-2, Medium board vs Medium (intermediate), he went second. He
+  // tapped Undo (he had not seen the computer's move), then played the SAME edge again, so it said "Not counted" and
+  // recorded nothing. Matt: "This should count as a win for me". Redo (same day) makes that case count from now on.
+  dotsboxes: [
+    { code: 'QZCC4', won: true, diff: 'intermediate', chosen: 'intermediate', mode: 'first=alternate|size=medium|undo=0|went=them', detail: { mine: 14, theirs: 2 } },
+  ],
 };
 // FLICK SOCCER TEST GAMES COUNT (Matt, 2026-11-08: "count all test games"; "it's the same thing, just with the next
 // change"). Builds from v1507 record a Test mode game like any other result (its mode carries test=1). Games played

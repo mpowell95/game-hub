@@ -33,6 +33,9 @@ function asFinish(f) {
   // (2026-10-29) s = the slips the finish was SCORED with when more than its own m + h (carried from
   // earlier attempts); p = slips from before its attempt began, which a replay never wins back.
   for (const k of ['s', 'p']) if (Number(f[k]) > 0) out[k] = Math.round(Number(f[k]));
+  // (2026-11-16) tm = hearts lost in the CLEARING try, when fewer than m: a failed try's hearts do not
+  // cost points (Matt). Absent = every heart counted, as before.
+  if (f.tm != null && Number.isFinite(Number(f.tm)) && Number(f.tm) >= 0) out.tm = Math.round(Number(f.tm));
   return out;
 }
 /** A finish list. Firebase hands arrays back as objects keyed 0..n, so it may arrive either way. */
@@ -335,7 +338,8 @@ export function woShownLevel(band, l, g) {
   return g === 5 && band === 'expert' && l >= 151 ? l - 151 + BAND_START.expert : l;
 }
 /** The slips a finish was scored with: its own hints and hearts lost, or the carried `s`. */
-const slipsOf = (f) => Math.max((f.m | 0) + (f.h | 0), f.s | 0);
+export const woSlipsScored = (f) => Math.max((f.tm != null ? Math.min(f.tm | 0, f.m | 0) : (f.m | 0)) + (f.h | 0), f.s | 0);
+const slipsOf = woSlipsScored;
 /** The levels of `band` on this record that earned less than they still can, best attempt first
  *  counted: [{ l, g, n (shown number), best, full, p, gain }], most points to win first, then by level.
  *  `full` is what a perfect replay can reach: the level's points, or less when slips from before its

@@ -12,7 +12,7 @@
 import { readPath } from '../backups/rtdb-backup.mjs';
 import { firebaseConfig } from '../js/firebase-config.js';
 import { signInForReading } from './reader-auth.mjs';
-import { woList, woEarnedPoints, WO_TIERS } from '../js/arrow-maze-time.js';
+import { woList, woEarnedPoints, woSlipsScored, WO_TIERS } from '../js/arrow-maze-time.js';
 
 const args = process.argv.slice(2);
 const ALL = args.includes('--all');
@@ -43,7 +43,7 @@ for (const p of Object.values(players || {})) {
   }
 }
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-const slipsOf = (f) => Math.max((f.m | 0) + (f.h | 0), f.s | 0);
+const slipsOf = woSlipsScored;
 function line(label, L) {
   const sec = L.reduce((s, f) => s + f.t / 1000, 0);
   const pts = L.reduce((s, f) => s + woEarnedPoints(f.band, slipsOf(f), f.g, f.d), 0);

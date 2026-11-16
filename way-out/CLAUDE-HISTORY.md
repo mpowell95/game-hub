@@ -646,3 +646,15 @@ local Monday 00:00 (DST-safe, `new Date(y, m, d + 7)`).
   stored keys, Math.max per key).
 - `tools/test-rush-weeks.mjs` runs the OLD writer (js/ at 0abbb83, from git) and proves its runs still read
   and count, plus the New York and Madrid edges.
+
+## A failed try's hearts do not count (2026-11-16)
+
+Matt, Nov 16: *"For arrows, I failed a level and replayed it without any errors. But I got 1 point instead of
+full points. That's not right."* His play log: Hard 247, three hearts lost (12:28-12:29 PM ET), Try again,
+cleared with none (12:30 PM), scored with 3 slips = 1 point of 4. The 2026-10-17 build had counted every slip
+"across Restart / Try again" (a session's reading, not Matt's words; his were about a hint and a lost life on the
+level that is completed). Since then only the clearing try's hearts count; hints count across every try (the
+2026-10-29 hole was hints learning a board). Older log entries have no `tm` and are read as before (every heart).
+A level failed before this deploy may still carry its old heart count in `wo.sl` (max only, never lowered).
+Matt's 247 is repaired once on the phone that holds it (`repairWayOutTry1116`: `tm: 0`, level set 1 -> 4,
+`wo.pts.hard` +3, verified by re-read, stamped `gamehub.repair.wo1116.v1`).
