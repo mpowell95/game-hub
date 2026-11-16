@@ -1426,7 +1426,8 @@ class BattleArena {
     const ghost = (el, r, x, y) => {
       const g = el.cloneNode(true);
       g.className = 'ba-tile ba-coach-ghost';
-      Object.assign(g.style, { left: (r.left - b.left) + 'px', top: (r.top - b.top) + 'px', width: r.width + 'px', height: r.height + 'px', transform: '' });
+      // visibility '' : on a re-place the real tile is already hidden, and a copy of it would be too
+      Object.assign(g.style, { left: (r.left - b.left) + 'px', top: (r.top - b.top) + 'px', width: r.width + 'px', height: r.height + 'px', transform: '', visibility: '' });
       g.style.setProperty('--dx', x + 'px'); g.style.setProperty('--dy', y + 'px');
       tp.ov.insertBefore(g, tp.ov.querySelector('.ba-coach-swaparrow'));
     };
