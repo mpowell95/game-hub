@@ -363,3 +363,5 @@ Unlimited reracks record one step down (`statsDiff`). Solo untouched (no loss ax
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer: detail `rm` (Make your own Grid/Free). The thrown-away match's quit loss now carries its numbers so far (`detailOf` of the saved tally), `rm` and `quit: 1`. Never in the mode.
+
+Private play data (2026-11-16): vs the computer logs EVERY throw, the computer's too (`_xl`, in the save: side, power, aim, cup, bounced, cups left both sides, rule events), final racks, reracks, islands via withMode / modeTag `log` (finish, quit loss); solo racks with the clear (`log`) or as `solo` abandon; Test games as `test`; a challenge as `match` once per phone (`mp.js logMatchOnce`). The per-throw `throw` entries are unchanged.

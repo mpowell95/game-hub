@@ -215,3 +215,5 @@ Setup = **Online | Computer | 2 players** tabs. Online = Matches (Play pill on y
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer (finish and quit loss): detail `firstSet` (the First setting; the match keeps it as `fs`, older matches: the current setting). Never in the mode.
+
+Private play data (2026-11-16): logs every arrow (x, y, score, stage), each stage's wind, seed, totals and where each local arrow was AIMED (`m.xa`) via withMode `log` (vs computer, quit loss) / logPlayData (`pnp` finished or left, `practice` every 10 rounds and on leaving, a challenge as `match` once per phone: `mp.js logMatchOnce`).

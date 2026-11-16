@@ -450,3 +450,5 @@ Setup is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`). Online =
 ## What is selected is what you play (2026-11-09)
 
 Matt's two "Medium one shot" wins were recorded Easy: Continue resumed a saved Easy match while the row showed Medium. Now the first setup paint with a save shows THAT match's level and shots (`_syncedSave`, reset by `saveMatch`), and Continue shows only while the row matches the save; another pick leaves only New game.
+
+Private play data (2026-11-16): logs every shot (`m.xl`, kept in the save: player, power, aim, seed, column or miss, what happened) and the moves via withMode / modeTag `log` (vs computer, quit loss, live rooms incl. leave and claim) / logPlayData (`pnp` finished or thrown away, a challenge as `match` once per phone: `mp.js logMatchOnce`).

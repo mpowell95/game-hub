@@ -25,7 +25,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode, logPlayData } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, play, nextRack, seatsOf, ballsOf, MODES, RACK_OPTIONS, TABLE_NOW, RULES_NOW } from './engine.js';
@@ -243,10 +243,14 @@ export function validateGame(raw) {
   if (keys.length > MAX_LOG) return null;
   const log = [];
   const m = freshMatch(terms);
+  const outs = [];   // each shot's outcome, for the PRIVATE play log only (OUTCOMES below)
   for (const key of keys) {
     const e = cleanEntry(src[key], n);
     if (!e) return null;
-    if (!applyEntry(m, e)) return null;
+    const rack0 = m.rack;
+    const r = applyEntry(m, e);
+    if (!r) return null;
+    try { const l = m.last || {}; outs.push([rack0, e.by, r.kind || '', r.foul || 0, Array.isArray(l.pots) ? l.pots : [], Array.isArray(l.counted) ? l.counted : []]); } catch { /* private log only */ }
     log.push(e);
     fixAfter(m, terms, log.length);
   }
@@ -269,7 +273,7 @@ export function validateGame(raw) {
     over = { winner: m.winner, why: 'racks', at: ms(raw.updated) };
   }
   const id = typeof raw.id === 'string' && ID_RE.test(raw.id) ? raw.id : null;
-  return {
+  const game = {
     v: 1, id, ...terms, n,
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -281,7 +285,12 @@ export function validateGame(raw) {
     over,
     scores: m.scores.slice(),
   };
+  OUTCOMES.set(game, { outs, b: m.b, groups: m.groups, out: m.out, rack: m.rack, shots: m.shots });
+  return game;
 }
+/** Each validated match's shot outcomes and final table, kept beside it (never on it, never written):
+ *  read only by privateMatch for the admin play log. */
+const OUTCOMES = new WeakMap();
 
 export function seatOf(game, code) {
   const me = asCode(code);
@@ -482,7 +491,61 @@ export function recordFinished(rows) {
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => modeOfRow(r));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every shot (aim, power, spin, cue ball spot, call) with what it potted and any foul, the terms and seed (the table replays from them), every player rack score, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.eightball.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData(STATS_ID, 'match', () => privateMatch(game, why), { mode: () => modeOfMatch(game), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[eight-ball] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[eight-ball] finished matches not logged privately', err); }
+}
+/** The match as private data. */
+export function privateMatch(game, why = null) {
+  const x = OUTCOMES.get(game) || {};
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const outs = Array.isArray(x.outs) ? x.outs : [];
+  const me = seatOf(game, myCode());
+  const shots = (game.log || []).slice(0, 260).map((e, i) => {
+    const o = outs[i] || [];
+    return [o[0] == null ? null : o[0], e.by, e.dx, e.dy, e.p, e.s, e.x == null ? null : e.x, e.y == null ? null : e.y, e.c == null ? -1 : e.c, o[4] || null, o[5] || null, o[3] || 0, o[2] || '', e.at && game.created ? Math.round((e.at - game.created) / 1000) : null];
+  });
+  return {
+    v: 1, id: game.id, me, mode: game.mode, racks: game.racks, opts: game.opts, aids: game.aids, seed: game.seed, tb: game.tb, rv: game.rv, n: game.n,
+    players: (game.p || []).map((p) => ({ name: p.name || '', emoji: p.emoji || '' })), sentBy: 0, breaker: BREAKER,
+    created: game.created || null, updated: game.updated || null, over: game.over || (why ? { why } : null), scores: game.scores,
+    rack: x.rack == null ? null : x.rack, groups: x.groups || null, out: x.out || null,
+    fin: Array.isArray(x.b) ? x.b.map((o) => (o && o.on ? [r1(o.x), r1(o.y)] : 0)) : null,
+    total: (game.log || []).length, cols: 'rack,seat,dx,dy,p,spin,x,y,call,pots,counted,foul,kind,sec', shotLog: shots,
+  };
 }
 /** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
 export const timeoutsSettled = () => confirmsSettled(NODE);
@@ -563,7 +626,9 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[eight-ball] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) { console.warn('[eight-ball] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -573,7 +638,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); } }
       catch (err) { console.warn('[eight-ball] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };

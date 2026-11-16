@@ -11,13 +11,13 @@
 // ring round it runs down; let go and the camera chases the arrow for 0.75 s; cut to the target, the
 // number pops 0.6 s later with a burst of stars; 2 s on the target, then back to the line.
 import { newMatch, shoot, totals, stageShots, arrowsFor, isShootOff, windFor, driftOf, landing, panicPoint,
-  drainGauge, swayAt, GAUGE, newHand, stepHand, cpuShot, gauss, DIFFS, ROUNDS, validMatch, scoreAt, hashStr, BOSS } from './engine.js';
+  drainGauge, swayAt, GAUGE, newHand, stepHand, cpuShot, gauss, DIFFS, ROUNDS, validMatch, scoreAt, hashStr, BOSS, shotOrder } from './engine.js';
 import { Renderer, ARROW_COLORS, FLIGHT_T } from './render.js';
 
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, withMode } from '../../js/game-stats.js';
+import { recordResult, withMode, logPlayData } from '../../js/game-stats.js';
 /** WHICH game was played, recorded with its result (js/game-stats.js withMode, 2026-10-30): the one
  *  option a match vs the computer has, who shoots first. (Online challenges have no options.) */
 const modeOf = (m) => ({ first: m && m.starter === 1 ? 'them' : 'me' });
@@ -378,6 +378,7 @@ class ArcheryUI {
   }
 
   _clearPlay() {
+    this._xlLeave();
     this.timers = [];
     this.phase = 'idle';
     this.drag = null;
@@ -487,6 +488,63 @@ class ArcheryUI {
     return { firstSet: typeof f === 'string' && f ? f : 'default' };
   }
 
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // A match on this phone (vs the computer, pass and play) is sent ONLY to the admin play log (withMode's
+  // `log`; logPlayData for pass and play): every arrow in order with its score and stage, each round's
+  // wind, the seed, and where each local arrow was AIMED (`m.xa`, kept on the match). Practice logs its
+  // arrows every 10 rounds and on leaving. Never a stat, never shown. Online: mp.js logMatchOnce.
+  _xlAim(m, seat, aim, panicked) {
+    try {
+      if (!Array.isArray(m.xa)) { m.xa = []; m.xt0 = Date.now(); }
+      if (m.xa.length >= 200) return;
+      const r4 = (v) => Math.round((+v || 0) * 1e4) / 1e4;
+      m.xa.push([seat | 0, r4(aim && aim.x), r4(aim && aim.y), panicked ? 1 : 0, m.shots[0].length + m.shots[1].length, Math.round((Date.now() - (+m.xt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[archery] aim not kept for the private log', err); }
+  }
+  _xlData(m, end, mode = this.mode, diff = this.diff) {
+    const stages = [];
+    for (let st = 0; st <= Math.min(m.stage | 0, 20); st++) { const w = windFor(m.seed, st); stages.push([w.mph, w.dir]); }
+    return {
+      v: 1, end, mode, diff, seed: m.seed, starter: m.starter, winner: m.winner, stage: m.stage, totals: totals(m),
+      seats: (this.seats || []).map((x) => (x && x.name) || ''), fs: m.fs || null, wind: stages,
+      cols: 'seat,x,y,s,stage', arrows: shotOrder(m).map((a) => [a.seat, a.x, a.y, a.s, a.st]),
+      aimCols: 'seat,aimX,aimY,panic,arrowIndex,sec', aims: Array.isArray(m.xa) ? m.xa : [],
+    };
+  }
+  /** Pass and play counts for nothing: logged privately, once (finished, or left unfinished: not saved). */
+  _xlLog(m, end) {
+    try {
+      if (!m || m.xlDone || !m.shots.some((s) => s && s.length)) return;
+      m.xlDone = true;
+      const diff = this.diff;
+      logPlayData('archery', 'pnp', () => this._xlData(m, end, 'pass', diff), { mode: () => modeOf(m), diff: 'pnp' });
+    } catch (err) { console.error('[archery] private play data not logged', err); }
+  }
+  _xlPractice(p, sh, s) {
+    try {
+      if (!p.xl) p.xl = [];
+      const w = windFor(p.seed, p.stage);
+      const r4 = (v) => Math.round((+v || 0) * 1e4) / 1e4;
+      p.xl.push([sh.hit.x, sh.hit.y, s, p.stage, w.mph, w.dir, r4(sh.aim && sh.aim.x), r4(sh.aim && sh.aim.y), sh.panicked ? 1 : 0]);
+      if (p.xl.length >= 30) this._xlPracticeFlush(p);
+    } catch (err) { console.warn('[archery] practice arrow not kept for the private log', err); }
+  }
+  _xlPracticeFlush(p) {
+    try {
+      if (!p || !p.xl || !p.xl.length) return;
+      const arrows = p.xl;
+      p.xl = [];
+      logPlayData('archery', 'practice', { v: 1, cols: 'x,y,s,stage,mph,dir,aimX,aimY,panic', arrows, best: p.best, n: p.n, sum: p.sum }, { mode: { kind: 'practice' }, diff: 'practice' });
+    } catch (err) { console.error('[archery] practice not logged privately', err); }
+  }
+  /** Leaving a play: practice sends what it has; pass and play (never saved) is logged as left. */
+  _xlLeave() {
+    try {
+      if (this.mode === 'practice') this._xlPracticeFlush(this.practice);
+      else if (this.mode === 'pass' && this.match && this.match.winner == null) this._xlLog(this.match, 'left');
+    } catch { /* private log only */ }
+  }
+
   /** Record that match as a loss, once (its own `recorded` flag, then the slot is cleared). */
   _recordQuitLoss() {
     const q = this._quitPending();
@@ -494,7 +552,7 @@ class ArcheryUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('archery', q.diff, false), { detail: () => this._arDetail(q.m) });
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('archery', q.diff, false), { detail: () => this._arDetail(q.m), log: () => this._xlData(q.m, 'quit', 'cpu', q.diff) });
       if (!st) console.warn('[archery] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[archery] recording the quit loss failed', err); }
   }
@@ -913,6 +971,7 @@ class ArcheryUI {
     // the result when it lands.
     if (this.mode === 'practice') this.shot.res = null;
     else {
+      if (this.mode !== 'mp') this._xlAim(m, seat, aim, panicked);
       this.shot.res = shoot(m, this.shot.hit.x, this.shot.hit.y);
       this._save();
       if (this.mode === 'mp') { this.mp.applied++; this._mpRecord(this.shot.hit.x, this.shot.hit.y); }
@@ -977,6 +1036,7 @@ class ArcheryUI {
     const p = this.practice;
     const s = scoreAt(sh.hit.x, sh.hit.y);
     p.arrows.push({ x: sh.hit.x, y: sh.hit.y, s });
+    this._xlPractice(p, sh, s);
     p.sum += s; p.n++;
     this.turnArrows.push({ x: sh.hit.x, y: sh.hit.y, color: ARROW_COLORS.me, dir, hit: this._pendingHit || 0 });
     this._pendingHit = 0;
@@ -1006,10 +1066,11 @@ class ArcheryUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('archery', this.diff, m.winner === 0), { detail: () => this._arDetail(m) });
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('archery', this.diff, m.winner === 0), { detail: () => this._arDetail(m), log: () => this._xlData(m, 'end', 'cpu', this.diff) });
         if (!st) console.warn('[archery] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[archery] recording the result failed', err); }
     }
+    if (this.mode === 'pass') this._xlLog(m, 'end');   // pass and play counts for nothing: private log only
     this._save();
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';
@@ -1300,6 +1361,7 @@ class ArcheryUI {
     mp.timedOut = !!(resigned && ov && ov.why === 'timeout');   // 7 days on a turn (2026-10-29)
     this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' }));   // once per phone; the finish time keeps a fresh storage honest
     this.MP.markResultSeen(mp.id);
+    try { this.MP.logMatchOnce(mp.game); } catch { /* private log only */ }
     this._say(t('say_win', { name: this.seats[this.match.winner].name }));
     this.screen = 'result';
     this.phase = 'idle';
@@ -1348,6 +1410,7 @@ class ArcheryUI {
   _mpEndedNoResult(text) {
     const mp = this.mp;
     if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (mp) { try { this.MP.logMatchOnce(mp.game, 'called-off'); } catch { /* private log only */ } }
     this._openOnline();
     this._toast(text, 3200);
   }
@@ -1573,6 +1636,7 @@ class ArcheryUI {
 
   destroy() {
     this._stop();
+    this._xlLeave();
     this._mpLeave();
     clearTimeout(this._bannerTimer);
     clearTimeout(this._toastTimer);

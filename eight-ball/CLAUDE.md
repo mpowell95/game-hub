@@ -322,3 +322,5 @@ Play over a saved match vs the computer the player has shot in (`m.ps`) = ONE lo
 ## Setup tabs (2026-11-07)
 
 The setup card is tabs **Online | Play** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill, paged "+N more"; record chip opens History; a 3-player row names both others) and Challenge (Anyone + the 4 most recent two-person opponents; a face opens the challenge card, Cutthroat adds the second player there) (`mp-ui.js fillOnline`); Play = the old Game / Computer-or-2-players / Difficulty / options / Racks / Continue / Play. Opens on Online when a match is going, else Play; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is centred (2026-11-08, Matt).
+
+Private play data (2026-11-16): logs every shot (`m.xl`: rack, seat, aim, power, spin, cue spot, call, pots, pockets, counted, foul, outcome), seed, terms, scores, final table via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, a challenge as `match` once per phone, outcomes kept beside the validated game in `mp.js` OUTCOMES).

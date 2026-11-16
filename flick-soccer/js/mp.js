@@ -32,7 +32,7 @@ import { readPath, watchPath } from '../../js/live-read.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { readOpponentProfiles } from '../../js/stats-net.js';
 import { buildIdentity, canonicalName, isPlaceholderName } from '../../js/players-agg.js';
-import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode } from '../../js/game-stats.js';
+import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, countingSince, withMode, logPlayData } from '../../js/game-stats.js';
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { newMatch, flick, runToRest, settle, cleanForms, cleanPairs, GOAL_OPTIONS, DISCS } from './engine.js';
@@ -195,10 +195,13 @@ export function validateGame(raw) {
   const starter = starterOfGame(raw);
   const pairs = pairsOfGame(raw);
   const m = newMatch(goals, starter, forms, pairs);
+  const outs = [];   // each flick's outcome, for the PRIVATE play log only (OUTCOMES below)
   for (const key of keys) {
     const e = cleanEntry(src[key]);
     if (!e) return null;
-    if (!applyEntry(m, e)) return null;
+    const ev = applyEntry(m, e);
+    if (!ev) return null;
+    outs.push([ev, m.scores[0], m.scores[1]]);
     log.push(e);
   }
   let over = null;
@@ -223,7 +226,7 @@ export function validateGame(raw) {
   // Side b still has to choose a line-up (own-lineup challenges, 2026-10-13). Only meaningful before
   // the first flick: nobody can flick until it is done, so a log with entries has no pick pending.
   const pick = raw.pick === 'b' && !log.length && !over ? 'b' : null;
-  return {
+  const game = {
     v: 1, id, goals, forms, starter, pick, ...(pairs ? { pairs } : {}), aids: aidsOfGame(raw),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -238,7 +241,12 @@ export function validateGame(raw) {
     over,
     scores: { a: m.scores[0], b: m.scores[1] },
   };
+  OUTCOMES.set(game, { outs, b: m.b });
+  return game;
 }
+/** Each validated match's flick outcomes and final pitch, kept beside it (never on it, never written):
+ *  read only by privateMatch for the admin play log. */
+const OUTCOMES = new WeakMap();
 
 export function sideOf(game, code) {
   const me = asCode(code);
@@ -424,7 +432,57 @@ export function recordFinished(rows) {
   const todo = fresh.filter((r) => r.why !== TIMEOUT && mayCountChallenge(LEDGER_KEY, r.updated));
   for (const r of todo) countResult(r.id, r.result === 'won', r.updated, () => ({ goals: goalsOfGame(r) }));
   addUnseen(todo.map((r) => r.id));
+  logFinishedRows(rows);
   return todo.length;
+}
+
+// --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+// Every finished match this phone sees is logged ONCE per phone to the admin play log (js/game-stats.js
+// logPlayData; never a stat, never shown): every flick (disc, aim, power) with what it led to (a goal, the score), the line-ups and aiming help, the end.
+// Codes are never in it (names only). A match that finished while this phone was away is read once from
+// the server (only those finished from 2026-11-16 on; older ones were never logged), so none is missed.
+const MLOG_KEY = 'gamehub.flicksoccer.mlogged.v1';
+const MLOG_SINCE = Date.UTC(2026, 10, 16, 5);   // 2026-11-16 00:00 Eastern
+const mlogTried = new Set();
+function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
+/** Log a finished match once on this phone. `why` stands in for `over` (a lapsed or called-off row). */
+export function logMatchOnce(game, why = null) {
+  try {
+    if (!game || !game.id || !(game.over || why)) return false;
+    const seen = mlogSeen();
+    if (seen.includes(game.id)) return false;
+    const id = logPlayData(STATS_ID, 'match', () => privateMatch(game, why), { mode: () => modeOfMatch(game), diff: 'mp', key: game.id });
+    if (!id) return false;
+    seen.push(game.id);
+    localStorage.setItem(MLOG_KEY, JSON.stringify(seen.slice(-400)));
+    return true;
+  } catch (err) { console.error('[flick-soccer] match not logged privately', err); return false; }
+}
+/** Finished rows this phone never logged: read each match once (at most 4 a call, once a page load). */
+export function logFinishedRows(rows) {
+  try {
+    const seen = new Set(mlogSeen());
+    const todo = (Array.isArray(rows) ? rows : []).filter((r) => r && r.id && r.over && (+r.updated || 0) >= MLOG_SINCE && !seen.has(r.id) && !mlogTried.has(r.id)).slice(0, 4);
+    for (const r of todo) {
+      mlogTried.add(r.id);
+      readGame(r.id).then((g) => { if (g) logMatchOnce(g, r.ended || r.why || 'over'); }, () => {});
+    }
+  } catch (err) { console.error('[flick-soccer] finished matches not logged privately', err); }
+}
+/** The match as private data. */
+export function privateMatch(game, why = null) {
+  const x = OUTCOMES.get(game) || {};
+  const outs = Array.isArray(x.outs) ? x.outs : [];
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '' });
+  return {
+    v: 1, id: game.id, me: sideOf(game, myCode()), a: who(game.a), b: who(game.b), goals: game.goals, starter: game.starter,
+    forms: game.forms, pairs: game.pairs || null, aids: game.aids, created: game.created || null, updated: game.updated || null,
+    over: game.over || (why ? { why } : null), scores: game.scores,
+    fin: Array.isArray(x.b) ? x.b.map((o) => [r1(o.x), r1(o.y)]) : null,
+    cols: 'side,disc,dx,dy,power,event,scoreA,scoreB,sec',
+    flicks: (game.log || []).slice(0, 300).map((e, i) => { const o = outs[i] || []; return [e.by, e.k, e.dx, e.dy, e.p, o[0] || '', o[1] == null ? null : o[1], o[2] == null ? null : o[2], e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]; }),
+  };
 }
 /** Resolves once every timeout queued by recordFinished has been confirmed (or not) and counted. */
 export const timeoutsSettled = () => confirmsSettled(NODE);
@@ -505,7 +563,9 @@ export async function readGame(id) {
     const game = validateGame(snap.val());
     if (!game) { console.error(`[flick-soccer] ${NODE}/games/${id} did not validate; refusing to open it.`); return null; }
     game.id = id;
-    return withTimeout(game);
+    const g = withTimeout(game);
+    if (g && g.over) logMatchOnce(g);   // private play data, once per phone
+    return g;
   } catch (err) { console.warn('[flick-soccer] could not read that match', err); return null; }
 }
 /** READ-ONLY live listener on one match: `cb` gets the validated match on every change. */
@@ -515,7 +575,7 @@ export async function watchGame(id, cb) {
     const boot = await ready();
     if (!boot || typeof boot.api.onValue !== 'function') return () => {};
     const stop = boot.api.onValue(boot.api.ref(boot.db, `${NODE}/games/${id}`), (snap) => {
-      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; cb(withTimeout(g)); } }
+      try { const g = validateGame(snap && snap.exists() ? snap.val() : null); if (g) { g.id = id; const w = withTimeout(g); if (w && w.over) logMatchOnce(w); cb(w); } }
       catch (err) { console.warn('[flick-soccer] match watch', err); }
     }, () => {});
     return () => { try { stop(); } catch { /* detached */ } };

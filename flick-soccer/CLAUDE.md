@@ -491,3 +491,5 @@ Play (or Pass & play) over a saved match vs the computer the player has flicked 
 ## Setup tabs (2026-11-07)
 
 The setup card is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`), replacing the Multiplayer row and its home screen. Online = Matches (your turn first, Play pill, paged "+N more" so the card never scrolls; record chip opens History), Challenge (Anyone + the 4 most recent people), Pass & play (`mp-ui.js fillOnline`); Computer = Difficulty / Goals / Offense and Defense / First / Test / Continue / Play. Opens on Online when a match is going, else Computer; a tapped tab wins (`_tab`); badge = your turns. Every "back to multiplayer" is `_showSetup('online')`. The card is centred (2026-11-08, Matt).
+
+Private play data (2026-11-16): logs every flick (`m.xl`: seat, disc, aim, power, goal, own goal, score after), line-ups, AI seed, final pitch via withMode `log` (vs computer incl. Expert/Test, quit loss) / logPlayData (`pnp`, a challenge as `match` once per phone with each flick's outcome: `mp.js` OUTCOMES).

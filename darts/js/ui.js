@@ -7,7 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
-import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding, inOvertime, dartsPerTurn } from './engine.js';
+import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding, inOvertime, dartsPerTurn, dartRow, XL_COLS } from './engine.js';
 import { isAdmin } from '../../js/challenge/hooks.js';
 import { isAdminDevice } from '../../js/admin-config.js';
 import { createRenderer, SEAT_COLOR } from './render.js';
@@ -15,7 +15,7 @@ import { makeCamera, unproject, pose, solveLength, makeFlight, at as flightAt, s
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordResult, oneTierDown, withMode } from '../../js/game-stats.js';
+import { recordResult, oneTierDown, withMode, logPlayData } from '../../js/game-stats.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 
@@ -447,6 +447,7 @@ class DartsUI {
   }
   _showSetup(tab) {
     if (tab) this._tab = tab;
+    this._xlLeave();
     this._mpLeave();
     this.screen = 'setup';
     this.match = null;
@@ -528,6 +529,7 @@ class DartsUI {
 
   _newMatch() {
     this._recordQuitLoss();   // a match against the computer thrown away after the player's first dart
+    this._xlAbandonPass();    // a pass-and-play match thrown away unfinished: logged privately only
     const s = this.settings;
     let starter;
     if (s.first === 'me') starter = 0;
@@ -548,11 +550,82 @@ class DartsUI {
     return { pace: typeof st.pace === 'string' && st.pace ? st.pace : 'default', firstSet: typeof f === 'string' && f ? f : 'default' };
   }
 
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Every dart of a match on this phone (vs the computer, pass and play, practice) is kept on the match as
+  // `m.xl` (rows: engine.js dartRow + seconds since the first logged dart) and sent ONLY to the admin play
+  // log (withMode's `log`, or logPlayData for plays that count for nothing). Never a stat, never shown.
+  // Free throw logs its darts every 10 rounds and on leaving. Online matches: mp.js logMatchOnce.
+  _xl(m, seat, x, y, res) {
+    try {
+      if (!Array.isArray(m.xl)) { m.xl = []; m.xt0 = Date.now(); m.xlT0 = m.turns | 0; }
+      if (m.xl.length >= 450) return;   // keeps the entry under 20,000 characters
+      const row = dartRow(seat, x, y, res);
+      row.push(Math.round((Date.now() - (+m.xt0 || Date.now())) / 100) / 10);
+      m.xl.push(row);
+    } catch (err) { console.warn('[darts] dart not kept for the private log', err); }
+  }
+  _xlData(m, end, mode = this.mode, diff = this.diff) {
+    const st = this.settings || {};
+    return {
+      v: 1, end, mode, diff, kind: kindOf(m), eq: !!m.eq, ot: !!m.ot, starter: m.starter, winner: m.winner,
+      scores: m.scores, marks: m.marks || null, bo: m.bo || null, out: m.out == null ? null : m.out, turns: m.turns,
+      seats: (this.seats || []).map((s) => (s && s.name) || ''), pace: st.pace || null, fs: m.fs || st.first || null,
+      cols: XL_COLS + ',sec', fromTurn: m.xlT0 | 0, darts: Array.isArray(m.xl) ? m.xl : [],
+    };
+  }
+  /** A match that counts for nothing (pass and play, practice against yourself), once. */
+  _xlLog(m, end) {
+    try {
+      if (!m || m.xlDone || !Array.isArray(m.xl) || !m.xl.length) return;
+      m.xlDone = true;
+      const mode = this.mode, diff = this.diff;
+      logPlayData('darts', mode === 'pass' ? 'pnp' : 'practice', () => this._xlData(m, end, mode, diff), { mode: () => modeOf(m), diff: mode === 'pass' ? 'pnp' : 'practice' });
+    } catch (err) { console.error('[darts] private play data not logged', err); }
+  }
+  _xlFree(x, y, hit) {
+    try {
+      const fr = this.free;
+      if (!fr) return;
+      if (!fr.xl) { fr.xl = []; fr.xt0 = Date.now(); }
+      const r3 = (v) => Math.round(v * 1000) / 1000;
+      fr.xl.push([r3(x), r3(y), hit.num | 0, hit.mult | 0, hit.pts | 0, Math.round((Date.now() - fr.xt0) / 100) / 10]);
+      if (fr.xl.length >= 30) this._xlFreeFlush();
+    } catch (err) { console.warn('[darts] free throw not kept for the private log', err); }
+  }
+  _xlFreeFlush() {
+    try {
+      const fr = this.free;
+      if (!fr || !fr.xl || !fr.xl.length) return;
+      const darts = fr.xl;
+      fr.xl = [];
+      logPlayData('darts', 'free', { v: 1, cols: 'x,y,num,mult,pts,sec', darts, total: fr.darts, points: fr.points, best: fr.best }, { mode: { kind: 'free' }, diff: 'practice' });
+    } catch (err) { console.error('[darts] free throws not logged privately', err); }
+  }
+  /** Leaving a play: free throw sends what it has; practice against yourself (never saved) is logged as
+   *  left. Pass and play is saved and resumes, so it is logged when it ends or is thrown away. */
+  _xlLeave() {
+    try {
+      if (this.mode === 'free') this._xlFreeFlush();
+      else if (this.mode === 'self' && this.match && this.match.winner == null) this._xlLog(this.match, 'left');
+    } catch { /* private log only */ }
+  }
+  _xlAbandonPass() {
+    try {
+      let m = this.match && this.mode === 'pass' ? this.match : null;
+      if (!m && !this.match) { const sv = this._savedMatch(); m = sv && sv.mode === 'pass' ? sv.match : null; }
+      if (!m || m.winner != null) return;
+      const mode = this.mode;
+      this.mode = 'pass';
+      try { this._xlLog(m, 'abandon'); } finally { this.mode = mode; }
+    } catch { /* private log only */ }
+  }
+
   /** Practice (2026-10-08, Matt: "play against yourself or just keep throwing as many darts in a row
    *  as you want"). 'self': the chosen game with you on both seats. 'free': no rules and no end, three
    *  darts a round, the board cleared between rounds. Neither records a result, and neither saves:
    *  the one save slot keeps the match you have against the computer. */
   _practice(which) {
+    this._xlLeave();
     const s = this.settings;
     if (which === 'free') {
       this.free = { darts: 0, points: 0, round: 0, best: 0 };
@@ -583,7 +656,7 @@ class DartsUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false), { detail: () => this._dtSetDetail(q.m) });
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult('darts', statsDiff(q.diff, kindOf(q.m)), false), { detail: () => this._dtSetDetail(q.m), log: () => this._xlData(q.m, 'quit', 'cpu', q.diff) });
       if (!st) console.warn('[darts] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[darts] recording the quit loss failed', err); }
   }
@@ -620,6 +693,7 @@ class DartsUI {
   }
 
   _begin(g, fresh) {
+    this._xlLeave();
     this.mode = g.mode;
     this.diff = g.diff;
     this.match = g.match;
@@ -800,6 +874,7 @@ class DartsUI {
     const name = this.seats[seat].name;
     if (this.mode === 'free') { this._landFree(f); return; }
     const res = throwDart(m, f.bx, f.by);
+    if (this.mode !== 'mp') this._xl(m, seat, f.bx, f.by, res);   // private play data (mp: the match log)
     const hit = res.hit;
     this._thrown = (this._thrown | 0) + 1;
     if (this.mode === 'mp') {
@@ -893,6 +968,7 @@ class DartsUI {
     const hit = scoreAt(f.bx, f.by);
     this._thrown = (this._thrown | 0) + 1;
     m.darts.push({ x: f.bx, y: f.by, pts: hit.pts, ring: hit.ring });
+    this._xlFree(f.bx, f.by, hit);
     if (hit.ring === 'off') {
       const end = flightAt(f.fl, f.fl.T);
       this.falling = { tip: end.tip.slice(), axis: end.axis, seat: 0, spin: f.spin, vy: 0, a: 1 };
@@ -947,10 +1023,12 @@ class DartsUI {
     if (this.mode === 'cpu' && !m.recorded) {
       m.recorded = true;
       try {
-        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: () => ({ ...(dartsDetail(m) || {}), ...this._dtSetDetail(m) }) });
+        const st = withMode(() => (modeOf(m)), this.diff, () => recordResult('darts', statsDiff(this.diff, kindOf(m)), m.winner === DRAW ? null : m.winner === 0), { detail: () => ({ ...(dartsDetail(m) || {}), ...this._dtSetDetail(m) }), log: () => this._xlData(m, 'end', 'cpu', this.diff) });
         if (!st) console.warn('[darts] result not recorded (rate gate or store refused it)');
       } catch (err) { console.error('[darts] recording the result failed', err); }
     }
+    // Pass and play / practice against yourself count for nothing: logged privately only (2026-11-16).
+    if ((this.mode === 'pass' || this.mode === 'self') && !m.xlDone) this._xlLog(m, 'end');
     this._save();
     this._say(this._winSay());
     this.screen = 'result';
@@ -1292,6 +1370,7 @@ class DartsUI {
     // once per phone, whoever ended it (null: a draw); the finish time keeps a fresh storage honest
     this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ kind: kindOf(this.match), first: this.match && this.match.starter === mp.mySeat ? 'me' : 'them' }));
     this.MP.markResultSeen(mp.id);
+    try { this.MP.logMatchOnce(mp.game); } catch { /* private log only */ }
     this._say(this._winSay());
     this.screen = 'result';
     this.phase = 'idle';
@@ -1349,6 +1428,7 @@ class DartsUI {
   _mpEndedNoResult(text) {
     const mp = this.mp;
     if (mp) { mp.finished = true; try { this.MP.markSeen(mp.id, mp.game && mp.game.updated); } catch { /* bubble again */ } }
+    if (mp) { try { this.MP.logMatchOnce(mp.game, 'called-off'); } catch { /* private log only */ } }
     this._openOnline();
     this._toast(text, 3200);
   }
@@ -1572,6 +1652,7 @@ class DartsUI {
 
   destroy() {
     this._stop();
+    this._xlLeave();
     this._mpLeave();
     clearTimeout(this._bannerTimer);
     clearTimeout(this._toastTimer);

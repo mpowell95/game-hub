@@ -247,3 +247,5 @@ The setup card is tabs **Online | Computer** (Cup Pong's, `cup-pong/CLAUDE.md`),
 ## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
 
 Vs the computer (finish and quit loss): detail `pace` (Computer speed) and `firstSet` (the match keeps it as `fs`, older matches: the current setting). Never in the mode.
+
+Private play data (2026-11-16): logs every dart (`m.xl`: seat, x, y, number, ring, points, marks, event, seconds), scores, marks, overtime, seats via withMode `log` (vs computer, quit loss) / logPlayData (`pnp`, `practice`, `free` every 10 rounds, a challenge as `match` once per phone: `mp.js logMatchOnce`, finished-while-away rows read once).

@@ -21,7 +21,7 @@ import { CLUBS, PUTTER, isPutter, clubById, autoSelectClub, stepClub, lieOf, mus
 import { Swing, PHASE, bandsFor, overZone, mishit, puttMishit, barPosOf, SWING_MAX, BLOCK_FROM, BAR_HALF, ARC_A0_DEG, ARC_DEG_PER_UNIT } from './swing.js';
 import { resolveShot, simulatePutt, aimDots, flightPoint, groundPoint, puttRangeFt, windFor, dropNear, amongTrees, FT_PER_YD, PUTT_GAMMA } from './shot.js';
 import { buildMap, makeCamera, drawFrame, PALETTE, paletteFor, fillsFor, VIEW_W_YDS, VIEW_W_GREEN_YDS } from './render.js';
-import { recordGolf, withMode } from '../../js/game-stats.js';
+import { recordGolf, withMode, logPlayData } from '../../js/game-stats.js';
 import { loadStats } from '../../js/game-stats.js';
 import { STRINGS } from './strings.js';
 import TUTORIAL_COURSE from '../courses/tutorial.js';
@@ -604,6 +604,7 @@ class GolfGame {
    *  With 18 selected there is exactly one set, so its row is a single wide button rather than a
    *  grid of one - a chooser with one option is not a choice and should not look like one. */
   _renderSetup(tab) {
+    this._xlLeave();
     if (tab) this._tab = tab;
     this._setMpBack(null);
     this._mpLeave();
@@ -1119,6 +1120,7 @@ class GolfGame {
 
   /** Start a scored round: a course plus the slice of its holes this round plays. */
   _startRound(roundId) {
+    this._xlRound = [];   // the private play log's hole summaries (2026-11-16)
     this.roundId = roundId;
     this.holeIdxs = roundHoles(this.course, roundId);
     this.pos = 0;
@@ -1143,6 +1145,7 @@ class GolfGame {
    *  and stand there for ever (THE LAW rule 2: bests only ever improve, so a wrong low one can
    *  never be corrected). */
   _startPractice(holeIdx) {
+    this._xlRound = [];   // the private play log's hole summaries (2026-11-16)
     this.roundId = 'practice';
     this.holeIdxs = [holeIdx];
     this.pos = 0;
@@ -1160,6 +1163,7 @@ class GolfGame {
    *  `holeKey` writes `tutorial:1` and `progress.js` can see it; and `this.coach` exists, which is
    *  the only thing the play screen checks. */
   _startTutorial() {
+    this._xlRound = [];   // the private play log's hole summaries (2026-11-16)
     this.course = TUTORIAL_COURSE;
     this.roundId = 'practice';
     this.holeIdxs = [0];
@@ -1242,6 +1246,7 @@ class GolfGame {
     this.map = buildMap(hole, this.course.theme);
     this.ball = [...hole.tee];
     this.shotN = 1;
+    this._xlH = []; this._xlHt0 = Date.now(); this._xlFire = null; this._xlFinished = null;   // the private shot log (2026-11-16)
     this.holed = false;
     this.pickedUp = false;
     this.lastShotYd = null;
@@ -1745,6 +1750,7 @@ class GolfGame {
     // rest, so force-quitting mid-flight on a bad shot reopened with the ball before the shot and no
     // stroke taken: a free mulligan. The shot's inputs go into the save; resolveShot / simulatePutt
     // are pure (no randomness), so a resume replays the SAME shot and settles it the normal way.
+    try { this._xlFire = { lie, club: this._putting() ? 'P' : this._activeClub().id, pos, power, deg: m.deg, dm: m.distanceMul, aim: spec.aimRad }; } catch { this._xlFire = null; }
     this.pendingShot = spec;
     this._saveRound();
     this.anim = this._buildShotAnim(spec, performance.now() + WINDUP_MS);
@@ -2180,7 +2186,8 @@ class GolfGame {
         eagles: this.roundStats.eagles,
         aces: this.roundStats.aces,
         longestDriveYd: Math.round(this.roundStats.longestDriveYd),
-      }), () => ({ lo: strokes, detail: { strokes, birdies: this.roundStats.birdies | 0, eagles: this.roundStats.eagles | 0, aces: this.roundStats.aces | 0 } }));
+      }), () => ({ lo: strokes, detail: { strokes, birdies: this.roundStats.birdies | 0, eagles: this.roundStats.eagles | 0, aces: this.roundStats.aces | 0 },
+        log: () => ({ v: 1, course: this.course.id, round: this.roundId, key, scores: this.scores, stats: this.roundStats, holes: this._xlRound || [] }) }));
     } catch (e) {
       console.error('[golf] recording the round FAILED', e);
       return;
@@ -2211,14 +2218,70 @@ class GolfGame {
   _recordHole(hole, strokes) {
     if (globalThis.__gfNoRecord) return;
     if (!Number.isFinite(strokes) || strokes <= 0) return;
+    this._xlHoleDone(hole, strokes);
     try {
       // a hole's own record, not a round (no total is counted); its mode says which hole
       withMode(() => ({ hole: holeKey(this.course, hole.n), ...(this.mp ? { online: 1 } : {}) }), this.course.id, () => recordGolf(this.course.id, {
         holeOnly: true, holeScores: { [holeKey(this.course, hole.n)]: strokes },
-      }));
+      }), () => ({ log: () => this._xlHoleData(hole, strokes, 'end') }));
     } catch (e) {
       console.error('[golf] recording the hole record FAILED', e);
     }
+  }
+
+  // --- PRIVATE play data (2026-11-16, Matt: "ALL data from ALL games played should be recorded") -------
+  // Every shot of a hole (club, lie, aim, power, needle stop, miss, from, rest, how far, water / out of
+  // bounds / blocked / holed, penalty strokes, tree drops) is kept in `_xlH` and sent ONLY to the admin
+  // play log with the hole's own record (withMode's `log` in `_recordHole`: every hole, round, practice,
+  // tutorial and online alike); the round's record carries each hole's summary (pin, wind, putts,
+  // penalties, picked up). A hole left unfinished is logged as 'left' (logPlayData). Never a stat.
+  _xlShotRow(a, from, wat) {
+    try {
+      if (!Array.isArray(this._xlH)) this._xlH = [];
+      if (this._xlH.length >= 40) return;
+      const f = this._xlFire || {};
+      this._xlFire = null;
+      const r1 = (v) => (Number.isFinite(+v) ? Math.round(+v * 10) / 10 : null);
+      const r3 = (v) => (Number.isFinite(+v) ? Math.round(+v * 1000) / 1000 : null);
+      const res = a.res || {};
+      const at = wat ? wat.splash : (res.oob ? res.oob.at : res.rest) || [];
+      const flags = (res.holed ? 'h' : '') + (wat ? 'w' : '') + (res.oob ? 'o' : '') + (res.blocked ? 'b' : '');
+      this._xlH.push([this.shotN, f.club || (a.type === 'putt' ? 'P' : (a.club && a.club.id) || ''), f.lie || '', r1((f.aim == null ? 0 : f.aim) * 180 / Math.PI),
+        r3(f.power), r3(f.pos), r3(f.deg), r3(f.dm), r1(from[0]), r1(from[1]), r1(at[0]), r1(at[1]), r1(this.lastShotYd), flags, (res.penalty | 0),
+        Math.round((Date.now() - (this._xlHt0 || Date.now())) / 100) / 10]);
+    } catch (err) { console.warn('[golf] shot not kept for the private log', err); }
+  }
+  _xlEv(kind, at) {
+    try { if (Array.isArray(this._xlH) && this._xlH.length < 40) this._xlH.push([this.shotN, kind, Math.round(at[0] * 10) / 10, Math.round(at[1] * 10) / 10]); } catch { /* private log only */ }
+  }
+  _xlHoleData(hole, strokes, end) {
+    const shots = Array.isArray(this._xlH) ? this._xlH : [];
+    const w = windFor(hole);
+    return {
+      v: 1, end, course: this.course && this.course.id, round: this.roundId, tutorial: !!this.tutorialRun, online: this.mp ? 1 : 0,
+      n: hole.n, par: hole.par, pinIdx: this.pinIdx == null ? null : this.pinIdx, pin: hole.pin, wind: w ? { speed: w.speed, bearing: w.bearing } : null,
+      strokes, pickedUp: !!this.pickedUp, putts: shots.filter((s) => s[1] === 'P').length, penalties: shots.reduce((n, s) => n + (s[14] | 0), 0),
+      cols: 'shot,club,lie,aimDeg,power,needle,missDeg,distMul,fromX,fromY,restX,restY,yd,flags(h holed,w water,o oob,b blocked),penalty,sec', shots,
+    };
+  }
+  /** The hole is finished: its summary joins the round's log; the shots go with the hole's record. */
+  _xlHoleDone(hole, strokes) {
+    try {
+      const d = this._xlHoleData(hole, strokes, 'end');
+      (this._xlRound || (this._xlRound = [])).push([d.n, d.par, d.pinIdx, d.strokes, d.pickedUp ? 1 : 0, d.putts, d.penalties, d.wind ? d.wind.speed : null, d.wind ? d.wind.bearing : null]);
+      this._xlFinished = hole;
+    } catch { /* private log only */ }
+  }
+  /** A hole left with shots played and no score: logged as left (its record never comes). */
+  _xlLeave() {
+    try {
+      const h = this.hole;
+      if (globalThis.__gfNoRecord || !h || !Array.isArray(this._xlH) || !this._xlH.length || this._xlFinished === h || this.holed || this.pickedUp) { return; }
+      const shots = this._xlH;
+      this._xlH = [];
+      const data = { ...this._xlHoleData(h, null, 'left'), shots };
+      logPlayData('golf', 'left', data, { mode: { hole: holeKey(this.course, h.n), ...(this.mp ? { online: 1 } : {}) }, diff: this.course && this.course.id });
+    } catch (err) { console.error('[golf] unfinished hole not logged privately', err); }
   }
 
   _storedBest(key) {
@@ -2262,6 +2325,7 @@ class GolfGame {
     // ball was ABOUT to go before it had gone anywhere - the ring told you the outcome while you
     // were still watching the flight (Matt's playtest, 2026-09-04).
     this.lastShotYd = distYd(from, wat ? wat.splash : (a.res.oob ? a.res.oob.at : a.res.rest));
+    this._xlShotRow(a, from, wat);
     // LONGEST DRIVE is a lifetime best in the stored shape, so it is measured where a golfer
     // measures one: the TEE SHOT, and only when it was actually a driver. A holed 4 iron from the
     // fairway is not a drive, however far it went.
@@ -2506,6 +2570,7 @@ class GolfGame {
       const moved = dropNear(this.hole, this.ball, (k, p) => k === 'trees' || k === 'water' || k === 'oob' || amongTrees(this.hole, p));
       if (moved) {
         this.ball = [...moved.rest];
+        this._xlEv('treedrop', moved.rest);
         this.shotN += 1;
         // A challenge's hole ends at its cap even when a drop is what reached it (the match log
         // refuses a score past double par plus one).
@@ -3766,6 +3831,7 @@ class GolfGame {
           () => MP.modeOfGame(g, side), () => ({ detail: () => MP.detailOfGame(g, side) }));
       }
       MP.markResultSeen(mp.id);
+      try { MP.logMatchOnce(g); } catch { /* private log only */ }
       MP.markSeen(mp.id, g.updated);
       // A round finished on this phone before the app closed, but not yet recorded, is recorded now.
       this._mpRecordRound(g.scores[side]);
@@ -3802,6 +3868,7 @@ class GolfGame {
     mp.game = g;
     if (this.MP.isCalledOff(g) && !mp.finished) {
       mp.finished = true;
+      try { this.MP.logMatchOnce(g, 'called-off'); } catch { /* private log only */ }
       this._renderSetup('online');
       this._toast(this._mpEndText(g, mp.side), 3200);
       return;
@@ -3917,6 +3984,7 @@ class GolfGame {
   _stopLoop() { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
 
   destroy() {
+    this._xlLeave();
     try { this._setMpBack(null); } catch { /* gone */ }
     if (this._mpBs) { try { this._mpBs.close(); } catch { /* gone */ } this._mpBs = null; }
     try { this._mpLeave(); } catch { /* gone */ }
