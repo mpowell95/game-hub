@@ -290,6 +290,8 @@ until a choice is saved.
 
 ## Stats
 
+**Settings as detail (2026-11-16)**: vs computer and quit loss carry `firstSet` (who kicks off as SET: `alt`/`me`/`them`); challenges carry this player's own line-ups `off`/`def` (`mp.js` `lineupDetail`). Detail only, never the mode.
+
 **Expert's results (admin only) go to `recordFlickSoccerTest('expert', won)`**, inside the same `withMode`: kept with
 their mode in `games.flicksoccer.fx` (`byDiff.expert`, `byMode`), counted by NOTHING (no total, no points, no
 leaderboard) until Matt releases the level (`tools/test-game-modes.mjs`, section 9).

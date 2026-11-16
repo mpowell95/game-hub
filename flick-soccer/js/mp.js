@@ -373,6 +373,16 @@ export function markCounted(id) {
 /** WHICH game a challenge was, recorded with its result (js/game-stats.js withMode, 2026-10-30): from
  *  the match its goals and aiming help; from an index row its goals (all a row carries). */
 export const modeOfMatch = (raw) => ({ goals: goalsOfGame(raw), aids: aidsOfGame(raw) });
+/** This player's own two line-ups in a challenge (kick-off, defending), as the result's DETAIL
+ *  (2026-11-16, never the mode: it would split byMode). `side` is 'a'/'b' or seat 0/1; a role with no
+ *  pair reads that seat's `forms` line-up, as the engine plays it (kickoffForms). */
+export function lineupDetail(raw, side) {
+  const s = side === 'b' || side === 1 ? 1 : side === 'a' || side === 0 ? 0 : -1;
+  if (s < 0 || !raw) return {};
+  const pairs = pairsOfGame(raw), forms = formsOfGame(raw);
+  const p = (pairs && pairs[s]) || [];
+  return { off: p[0] || forms[s], def: p[1] || forms[s] };
+}
 export function countResult(id, won, finishedAt = Date.now(), mode = null, score = null) {
   if (isVoidedMatch(STATS_ID, id)) return false;
   // A timeout this page could not confirm on live server time is shown, never counted (2026-10-29).
@@ -407,7 +417,7 @@ export function recordFinished(rows) {
   // (2026-10-29, second pass: a phone clock set forward made rows "time out"). The rest count now.
   queueConfirm(NODE, fresh.filter((r) => r.why === TIMEOUT), readGame, (r, g) => {
     const res = resultOf(g, sideOf(g, myCode()));
-    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at, () => modeOfMatch(g))) return false;
+    if (!RESULTS.includes(res) || !countResult(r.id, res === 'won', g.over.at, () => modeOfMatch(g), () => ({ detail: () => lineupDetail(g, sideOf(g, myCode())) }))) return false;
     addUnseen([r.id]);
     return true;
   });

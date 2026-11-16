@@ -305,3 +305,7 @@ Matt: "We should add resume to the other games that don't save". Vs the computer
 ## Setup tabs (2026-11-07)
 
 The start card is **Online | Computer** tabs (`_showTab`); the old "Play online" overlay is gone, its lobby (invite, create, join, wait) is the Online panel, same handlers. Opens on Computer (live rooms only); a tapped tab wins. `_atSetup()` (menu or online) guards the lobby callbacks. Starting a match vs the computer closes a waiting room. Layout only.
+
+## Settings in the result detail (2026-11-16, Matt: "check every game for settings that aren't recorded")
+
+Every result (vs computer, its thrown-away save, online and every live-leave path) carries `table` (the look) in its withMode detail; the save now keeps `table` (older saves: the current setting). Never in the mode.

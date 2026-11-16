@@ -1268,7 +1268,7 @@ class ChinchonUI {
       closed: this._matchCloses || 0,
       minusTen: this._matchMinusTens || 0,
       chinchons: this._matchChinchons || 0,
-    }));
+    }), { detail: () => this._ccDetail(this.game && this.game._startDealerIndex, !!this.mp) });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo play
     // has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2246,7 +2246,8 @@ class ChinchonUI {
     saveJSON(STORE_STATS, this.stats);
     // WHICH game the set-aside match was (js/game-stats.js withMode, 2026-10-30), from its snapshot.
     withMode(() => (modeOfMatch(q.snap.config, q.snap.players)), pickedDiff(q.snap.players),
-      () => recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons }));
+      () => recordChinchon(q.difficulty, false, { closed: q.closed, minusTen: q.minusTen, chinchons: q.chinchons }),
+      { detail: () => this._ccDetail(q.snap && q.snap.startDealer, false) });
   }
 
   /** Record the quit as a loss, once (`_statsCommitted`), in both places a finished match goes. */
@@ -2262,7 +2263,29 @@ class ChinchonUI {
     saveJSON(STORE_STATS, this.stats);
     withMode(() => (modeOfMatch(this.game.config, this.game.players)), pickedDiff(this.game.players), () => recordChinchon(soloDiff(this.game.players, this.game.config), false, {
       closed: this._matchCloses || 0, minusTen: this._matchMinusTens || 0, chinchons: this._matchChinchons || 0,
-    }));
+    }), { detail: () => this._ccDetail(this.game && this.game._startDealerIndex, false) });
+  }
+
+  /** A result's DETAIL (2026-11-16, Matt: "check every game for settings that aren't recorded"): the card
+   *  deck (a look), the computer's pace (vs the computer only) and who dealt the first round. Never part
+   *  of the mode (that would split stored byMode buckets). `sd` = the seat that dealt round 1 (unknown on
+   *  a match saved before 2026-11-16 = '?'); vs the computer the human is seat 0; online the HOST's seat 0
+   *  always deals first (the engine's default), and this phone is `mp.seat`. */
+  _ccDetail(sd, live) {
+    const s = this._setup || {};
+    const d = { deck: typeof s.deck === 'string' && s.deck ? s.deck : 'default' };
+    if (!live) d.pace = typeof s.pace === 'string' && s.pace ? s.pace : 'default';
+    let first = Number.isInteger(sd) ? sd : null;
+    if (first == null && live) first = 0;
+    const me = live ? (this.mp && Number.isInteger(this.mp.seat) ? this.mp.seat : null) : 0;
+    d.dealt = first == null || me == null ? '?' : first === me ? 'me' : 'them';
+    return d;
+  }
+  /** The same detail for a match being rejoined from its save (this.mp not built yet; `seat` = the save's). */
+  _ccRejoinDetail(sd, seat) {
+    const s = this._setup || {};
+    const first = Number.isInteger(sd) ? sd : 0;   // online: seat 0 always deals first
+    return { deck: typeof s.deck === 'string' && s.deck ? s.deck : 'default', dealt: Number.isInteger(seat) ? (first === seat ? 'me' : 'them') : '?' };
   }
 
   _stepRule(field, d) {
@@ -2495,7 +2518,7 @@ class ChinchonUI {
       net.appendMove(mp.code, mp.seat, seq, moveIfLocal, hash).catch(() => { this._setMpStatus('mp_status_connection_error'); });
       // Your first decision arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps, modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY));
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, false, this._mpExtras()], mp.opps, modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })));
       }
       return;
     }
@@ -2717,7 +2740,7 @@ class ChinchonUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps, tag: this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY) : null });
+          fn: 'recordChinchon', winArgs: [MP_DIFFICULTY, true, this._mpExtras()], opps: mp.opps, tag: this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })) : null });
         if (res !== 'none') { this._statsCommitted = true; this._mpBumpLocalStats(res === 'won'); }
       }
       this._mpEndDueToOpponentLeft(res);
@@ -3015,7 +3038,7 @@ class ChinchonUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps, this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY) : null)) this._mpBumpLocalStats(true);
+    if (LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordChinchon', [MP_DIFFICULTY, true, this._mpExtras()], mp.opps, this.game ? modeTag(() => (modeOfMatch(this.game.config, this.game.players)), MP_DIFFICULTY, () => ({ detail: this._ccDetail(this.game && this.game._startDealerIndex, true) })) : null)) this._mpBumpLocalStats(true);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -3099,7 +3122,7 @@ class ChinchonUI {
     const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
       mySeat: seat, role: seat, seats: count, fn: 'recordChinchon',
       winArgs: [MP_DIFFICULTY, true, { closed: 0, minusTen: 0, chinchons: 0 }],
-      tag: modeTag(() => (modeOfMatch(save.snap.config, save.snap.players)), MP_DIFFICULTY),
+      tag: modeTag(() => (modeOfMatch(save.snap.config, save.snap.players)), MP_DIFFICULTY, () => ({ detail: this._ccRejoinDetail(save.snap.startDealer, seat) })),
       oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
     if (this._dead) return;
     if (!chk.go) {

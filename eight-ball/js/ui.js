@@ -46,6 +46,9 @@ const modeOf = (m, me = 0) => {
   return { game: m && m.mode, racks: m && m.racks, call: o.call ? 1 : 0, bank: o.bank ? 1 : 0, obst: o.obst ? 1 : 0,
     ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === me ? 'me' : 'them' } : {}) };
 };
+/** The look the balls were drawn in, as the match's DETAIL (2026-11-16, never the mode: it would split
+ *  byMode). 9-ball always paints classic (render.js ballPaint), so it records 'classic' there. */
+const lookOf = (m, look) => (m && m.mode === '9' ? 'classic' : (LOOKS.includes(look) ? look : 'classic'));
 const OPPS = ['cpu', 'pass'];
 const OPTS = ['call', 'bank', 'obst'];
 /** GamePigeon's controls (Matt, 2026-10-22, replacing the slingshot, which ran out of screen with
@@ -580,7 +583,7 @@ class PoolUI {
     q.m.recorded = true;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* nothing to clear */ }
     try {
-      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false));
+      const st = withMode(() => (modeOf(q.m)), q.diff, () => recordResult(STATS_ID, statsDiff(q.diff, q.m.racks), false), { detail: () => ({ look: lookOf(q.m, this.settings.look) }) });
       if (!st) console.warn('[eight-ball] quit loss not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the quit loss failed', err); }
   }
@@ -958,7 +961,7 @@ class PoolUI {
     if (!m || m.winner == null || m.recorded || this.mode !== 'cpu') return;
     m.recorded = true;
     try {
-      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0));
+      const st = withMode(() => (modeOf(m)), this.diff, () => recordResult(STATS_ID, statsDiff(this.diff, m.racks), m.winner === 0), { detail: () => ({ look: lookOf(m, this.settings.look) }) });
       if (!st) console.warn('[eight-ball] result not recorded (rate gate or store refused it)');
     } catch (err) { console.error('[eight-ball] recording the result failed', err); }
   }
@@ -1458,7 +1461,7 @@ class PoolUI {
     const m = this.match;
     if (resigned) m.winner = mp.game.over.winner;
     const ov = mp.game && mp.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
-    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }));   // once per phone, whoever ended it
+    this.MP.countResult(mp.id, won, (ov && ov.at) || Date.now(), () => ({ ...(this.MP.modeOfMatch(mp.game) || {}), ...(m && Number.isInteger(m.breaker) ? { first: m.breaker === mp.seat ? 'me' : 'them' } : {}) }), { detail: () => ({ look: lookOf(m, this.settings.look) }) });   // once per phone, whoever ended it
     this.MP.markResultSeen(mp.id);
     this._say(t('say_win', { name: this.seats[m.winner].name }));
     this.screen = 'result';

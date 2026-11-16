@@ -957,7 +957,7 @@ class UnoUI {
     if (!this._statsCommitted) {
       this._statsCommitted = true;
       // WHICH game (js/game-stats.js withMode, 2026-10-30): players at the table.
-      try { withMode(() => ({ n: g.n }), this.difficulty, () => recordResult('uno', this.difficulty, won)); } catch { /* never block the result */ }
+      try { withMode(() => ({ n: g.n }), this.difficulty, () => recordResult('uno', this.difficulty, won), { detail: () => this._setDetail(g) }); } catch { /* never block the result */ }
     }
     clearGame();
     const winnerSeat = this.seats[g.winner];
@@ -1062,11 +1062,18 @@ class UnoUI {
     return !!(this.game && this.view === 'game' && this.game.phase !== 'over' && this._moved && !this._statsCommitted);
   }
 
+  /** Every setting chosen, and who opened (2026-11-16, Matt: "save all data"). `first` is '?' for a
+   *  game resumed from a save made before the opener was saved. */
+  _setDetail(g) {
+    const sp = g && g._startPlayer;
+    return { pace: String(this.pace), sort: String(this.handSort), first: Number.isInteger(sp) ? (sp === HUMAN ? 'me' : 'them') : '?' };
+  }
+
   /** Record the quit as a loss, once (`_statsCommitted`). */
   _recordQuitLoss() {
     if (!this._quitCostsLoss()) return;
     this._statsCommitted = true;
-    try { withMode(() => ({ n: this.game.n }), this.difficulty, () => recordResult('uno', this.difficulty, false)); } catch { /* never block leaving */ }
+    try { withMode(() => ({ n: this.game.n }), this.difficulty, () => recordResult('uno', this.difficulty, false), { detail: () => this._setDetail(this.game) }); } catch { /* never block leaving */ }
     clearGame();
   }
 

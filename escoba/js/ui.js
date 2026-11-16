@@ -1126,7 +1126,7 @@ class EscobaUI {
     // A table of computers counts at the EASIEST one's tier (2026-10-29, Matt): before, the first
     // computer's tier, so one Hard and one Easy computer filed a win as Hard.
     const difficulty = this.mp ? MP_DIFFICULTY : soloDiff(this.game.players);
-    withMode(() => (modeOf(this.game, this._matchAssist)), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() }));
+    withMode(() => (modeOf(this.game, this._matchAssist)), this.mp ? MP_DIFFICULTY : pickedDiff(this.game.players), () => recordEscoba(difficulty, won, { escobas: this._matchEscobasNow() }), { detail: () => this._valsDetail() });
     // Multiplayer only: capture WHO this was against while the room state is still live. Solo
     // play has no `mp`, so it is untouched. Never allowed to block the result being recorded.
     //
@@ -2134,6 +2134,13 @@ class EscobaUI {
    *  the player has played a card in it: quitting it is a LOSS (2026-10-29, docs/INTEGRITY-CHECKS-SPEC.md
    *  "Holes closed 2026-10-29: quitting and easier settings"). Leaving the hub is not quitting: the
    *  save resumes it. Online rooms and challenges are untouched. */
+  /** The card value badges' setting as the result's DETAIL (2026-11-16, never the mode: it would split
+   *  byMode). Read inside withMode / modeTag; no setup = no fact. */
+  _valsDetail() {
+    const s = this._setup;
+    return s ? { vals: s.showValues ? 'on' : 'off' } : {};
+  }
+
   _quitPending() {
     if (this.mp || this.ch) return null;
     if (this.game && this.el && !this.el.game.hidden) {
@@ -2153,7 +2160,7 @@ class EscobaUI {
     if (!q) return;
     this._statsCommitted = true;
     this._clearSave();
-    withMode(() => (q.mode), q.picked, () => recordEscoba(q.difficulty, false, { escobas: q.escobas }));
+    withMode(() => (q.mode), q.picked, () => recordEscoba(q.difficulty, false, { escobas: q.escobas }), { detail: () => this._valsDetail() });
   }
 
   // --- multiplayer (M1 pilot) -------------------------------------------------
@@ -2302,7 +2309,7 @@ class EscobaUI {
       const hash = stateHash(this.game);
       // Your first card arms the leave (js/live-leave.js): leaving from now on is your loss.
       if (!this._statsCommitted && this._mpInMatch()) {
-        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps, modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY));
+        LL.armLeave(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, false, { escobas: this._matchEscobasNow() }], mp.opps, modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })));
       }
       try {
         await net.appendMove(mp.code, mp.seat, seq, move, hash);
@@ -2524,7 +2531,7 @@ class EscobaUI {
       let res = 'none';
       if (!this._statsCommitted && this._mpInMatch()) {
         res = LL.onRoomEnded(room, { statsId: STATS_ID, key: this._mpKey(), n: 1, mySeat: mp.seat, seats: seatCount,
-          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps, tag: this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY) : null });
+          fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], opps: mp.opps, tag: this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })) : null });
         if (res !== 'none') this._statsCommitted = true;
       }
       this._mpEndDueToOpponentLeft(res);
@@ -2801,7 +2808,7 @@ class EscobaUI {
     if (!this._mpCanClaim()) return;
     const mp = this.mp;
     this._statsCommitted = true;
-    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps, this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY) : null);
+    LL.recordLeaveWin(STATS_ID, this._mpKey(), 'recordEscoba', [MP_DIFFICULTY, true, { escobas: this._matchEscobasNow() }], mp.opps, this.game ? modeTag(() => (modeOf(this.game, this._matchAssist)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })) : null);
     LL.hideClaim(this.root);
     if (this.game) this.game.abort();
     this._matchEnded = true;
@@ -2851,7 +2858,7 @@ class EscobaUI {
     const count = Array.isArray(save.snap.players) ? save.snap.players.length : 2;
     const chk = await LL.checkRejoin(net, code, { statsId: STATS_ID, key: LL.liveKey(STATS_ID, code, 1), n: 1,
       mySeat: seat, role: seat, seats: count, fn: 'recordEscoba', winArgs: [MP_DIFFICULTY, true, { escobas: save.matchEscobas | 0 }],
-      tag: modeTag(() => (modeOf(save.snap, save.assist !== false)), MP_DIFFICULTY),
+      tag: modeTag(() => (modeOf(save.snap, save.assist !== false)), MP_DIFFICULTY, () => ({ detail: () => this._valsDetail() })),
       oppsOf: (room) => this._mpOpponentsFrom(room, seat, count) });
     if (this._dead) return;
     if (!chk.go) {
@@ -3291,7 +3298,9 @@ class EscobaUI {
     const won = o.winner === 'draw' ? null : o.winner === ch.side;
     const ov = ch.game && ch.game.over;   // its finish time keeps a fresh storage honest (2026-10-29)
     const mode = () => (typeof this.MP.chModeOf === 'function' ? this.MP.chModeOf(ch.game || ch) : null);   // a thunk: read inside withMode (2026-11-02)
-    try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now(), mode); } catch (err) { console.error('[escoba] could not count the challenge', err); }
+    // + the value badges and capture hints this match was played with, as DETAIL (2026-11-16)
+    const score = () => ({ detail: () => ({ ...this._valsDetail(), assist: this._matchAssist ? 'on' : 'off' }) });
+    try { this.MP.countResult(ch.id, won, o.escobas[ch.side], (ov && ov.at) || Date.now(), mode, score); } catch (err) { console.error('[escoba] could not count the challenge', err); }
     try { this.MP.markResultSeen(ch.id); } catch { /* the popup shows once more */ }
   }
 
