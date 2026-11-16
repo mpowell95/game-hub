@@ -36,6 +36,11 @@ const DPAD_STYLES = [
 ];
 const DPAD_STYLE_IDS = DPAD_STYLES.map((s) => s.id);
 const DEFAULT_DPAD_STYLE = 'compass';
+// The pad's feel (2026-11-16): a press inside this share of the pad's width from a cross's
+// centre is no arrow; a slide must be this much nearer the new arrow; a lit arrow stays lit this long.
+const CENTER_DEAD = 0.07;
+const SLIDE_PX = 10;
+const PRESS_MIN_MS = 110;
 
 function readJSON(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } }
 function saveSettings(s) {
@@ -236,6 +241,7 @@ class SnakeUI {
     this.started = false;
     this.paused = false;
     this.recorded = false;
+    this.padUses = 0; this.swipeUses = 0; this.keyUses = 0;
     this.best = bestFor(this.settings.difficulty);
     this.root.innerHTML = `
       <div class="sn-root">
@@ -273,15 +279,77 @@ class SnakeUI {
       const dx = p.clientX - touch.x, dy = p.clientY - touch.y;
       touch = null;
       if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;        // a tap, not a swipe
+      this.swipeUses = (this.swipeUses | 0) + 1;
       this._steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
     }, { passive: true });
     wrap.addEventListener('click', () => { if (this.paused) this._resume(); });
-    this.root.querySelector('[data-role="pad"]').addEventListener('pointerdown', (e) => {
-      const b = e.target.closest('[data-dir]');
-      if (!b) return;
+    this._wirePad();
+  }
+
+  /** The D-pad (2026-11-16, Matt: "build 1-3"):
+   *  1. The WHOLE pad is live. A press goes to the arrow whose centre is nearest, so the corners
+   *     and the middle of a cross (64% of it was dead before) turn the snake too. Only a press in
+   *     the very middle of a cross (no nearest arrow) does nothing.
+   *  2. Slide to steer: the pointer is captured, so rolling a thumb onto another arrow turns
+   *     without lifting. A slide must be clearly nearer the new arrow (SLIDE_PX), and passing
+   *     through the middle keeps the last turn, so a thumb resting on a border never wobbles.
+   *  3. The pressed arrow lights up the same way on every style (`.is-press`), held at least
+   *     PRESS_MIN_MS so a quick tap is still seen. Keys light it up too. */
+  _wirePad() {
+    const pad = this.pad;
+    if (!pad) return;
+    const btns = [...pad.querySelectorAll('[data-dir]')];
+    const nearest = (x, y, cur) => {
+      const r = pad.getBoundingClientRect();
+      const cross = this.settings.dpadStyle !== 'classic';
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      if (cross && Math.hypot(x - cx, y - cy) < r.width * CENTER_DEAD) return null;
+      let best = null, bd = Infinity, curD = Infinity;
+      for (const b of btns) {
+        const q = b.getBoundingClientRect();
+        const d = Math.hypot(x - (q.left + q.width / 2), y - (q.top + q.height / 2));
+        if (d < bd) { bd = d; best = b.dataset.dir; }
+        if (b.dataset.dir === cur) curD = d;
+      }
+      if (cur && best !== cur && curD - bd < SLIDE_PX) return cur;
+      return best;
+    };
+    let held = null;      // { id, dir } while a finger or the mouse is down on the pad
+    const press = (dir) => {
+      if (!dir || (held && held.dir === dir)) return;
+      if (held) held.dir = dir;
+      this.padUses = (this.padUses | 0) + 1;
+      this._lightPad(dir, true);
+      this._steer(dir);
+    };
+    pad.addEventListener('pointerdown', (e) => {
       e.preventDefault();                    // keep focus/scroll side effects off the board
-      this._steer(b.dataset.dir);
+      try { pad.setPointerCapture(e.pointerId); } catch { /* an old browser: no slide, taps still work */ }
+      held = { id: e.pointerId, dir: null };
+      press(nearest(e.clientX, e.clientY, null));
     });
+    pad.addEventListener('pointermove', (e) => {
+      if (!held || held.id !== e.pointerId) return;
+      press(nearest(e.clientX, e.clientY, held.dir));
+    });
+    const lift = (e) => {
+      if (!held || held.id !== e.pointerId) return;
+      held = null;
+      this._lightPad(null, false);
+    };
+    pad.addEventListener('pointerup', lift);
+    pad.addEventListener('pointercancel', lift);
+    pad.addEventListener('lostpointercapture', lift);
+  }
+
+  /** Lights one arrow (`on`) or lets the lit one go out, never sooner than PRESS_MIN_MS. */
+  _lightPad(dir, on) {
+    if (!this.pad) return;
+    clearTimeout(this._padTimer);
+    const set = (d) => this.pad && this.pad.querySelectorAll('[data-dir]').forEach((b) => b.classList.toggle('is-press', b.dataset.dir === d));
+    if (on) { this._padLitAt = performance.now(); set(dir); return; }
+    const wait = Math.max(0, PRESS_MIN_MS - (performance.now() - (this._padLitAt || 0)));
+    this._padTimer = setTimeout(() => set(null), wait);
   }
 
   _sizeCanvas() {
@@ -374,6 +442,9 @@ class SnakeUI {
     const dir = map[e.key];
     if (!dir) return;
     e.preventDefault();
+    this.keyUses = (this.keyUses | 0) + 1;
+    this._lightPad(dir, true);
+    this._lightPad(null, false);
     this._steer(dir);
   }
 
@@ -414,7 +485,7 @@ class SnakeUI {
     // Record ONCE per run, before showing the modal, so a fast "play again" can't skip it.
     if (!this.recorded) {
       this.recorded = true;
-      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0 })); }
+      try { withMode(() => ({ walls: this.settings.walls === 'off' ? 'off' : 'on' }), this.settings.difficulty, () => recordSnake(this.game.length, this.settings.difficulty, this.settings.walls), () => ({ hi: this.game.length | 0, detail: () => ({ pad: this.settings.dpadStyle, padTaps: this.padUses | 0, swipes: this.swipeUses | 0, keys: this.keyUses | 0 }) })); }
       catch (err) { console.error('[snake] stats record failed — this run is not counted', err); }
     }
     const newBest = this.game.length > this.best;
@@ -490,6 +561,7 @@ class SnakeUI {
 
   destroy() {
     this._stopLoop();
+    clearTimeout(this._padTimer);
     document.removeEventListener('keydown', this._onKey);
     document.removeEventListener('visibilitychange', this._onVis);
     this.root.removeEventListener('touchmove', this._onTouchMove);

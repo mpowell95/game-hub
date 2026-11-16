@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1593;
-const CACHE = 'game-hub-v1602';
+const CACHE = 'game-hub-v1603';
 
 const ASSETS = [
   './',
@@ -1184,8 +1184,8 @@ const REST_MANIFEST = {
   './boggle/data/words-es.txt': '2c0210e78a',
   './snake/': 'cdc67fe34f',
   './snake/index.html': 'cdc67fe34f',
-  './snake/css/snake.css': 'c109ec9312',
-  './snake/js/ui.js': '02493e58c8',
+  './snake/css/snake.css': '2d15a57146',
+  './snake/js/ui.js': '3ebc4d6f57',
   './snake/js/game.js': 'f69fbe6fe8',
   './snake/js/strings.js': '7d8a6ccce9',
   './brick-blitz/': 'e317493d38',
