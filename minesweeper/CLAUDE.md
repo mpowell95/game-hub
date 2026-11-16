@@ -397,3 +397,9 @@ A started board thrown away (the face's New board, or New game over a level's pa
 ## Time away counts; two tabs (2026-10-29, second pass)
 
 Hidden with a started board on screen: the clock is banked and the moment stamped (also into the level's save as `away`); back, or resumed from that save, the time away is charged (`js/server-time.js measureAway`, topped up by the server's clock). The menu and How to play still pause. A board is played and saved only while its level's slot still holds it unfinished (`slotHolds`), so a mine dug in one tab ends it in the other. Spec: `docs/INTEGRITY-CHECKS-SPEC.md`, "Holes closed 2026-10-29 (second pass)"; `node tools/test-puzzle-holes.mjs [--browser]`.
+
+## High contrast (2026-11-16, Matt: dark mode at the lowest brightness hid the boxes and numbers)
+
+Setup option, shown in dark mode only: `settings.contrast` → `.ms-root.is-hc` (`.gh-dark .ms-root.is-hc`
+in the CSS). Black opened squares, lighter closed boxes with a bright edge, near-full-brightness numbers,
+lifted flag colours. A look only: not a game option, not recorded in the mode.

@@ -97,6 +97,9 @@ function loadSettings() {
       // The switch was removed 2026-10-16 (Matt: "remove the 'No guessing' toggle"); the stored
       // value is still read and carried, and no longer deals anything.
       noGuess: v.noGuess === true,
+      // HIGH CONTRAST (2026-11-16, Matt: dark mode at the lowest brightness hid the boxes and
+      // numbers): dark mode only, black opened squares, lighter boxes, brighter numbers. Look only.
+      contrast: v.contrast === true,
     };
   } catch { return { version: 1, level: 'easy', safeFirst: true, longPress: true, vibrate: false, marks: true }; }
 }
@@ -211,6 +214,7 @@ class MinesweeperUI {
 
     this.root = document.createElement('div');
     this.root.className = 'ms-root';
+    this.root.classList.toggle('is-hc', !!this.settings.contrast);
     container.appendChild(this.root);
 
     this._away = null;
@@ -370,6 +374,7 @@ class MinesweeperUI {
         ${opt('marks', 'marks_opt', '')}
         ${opt('longPress', 'long_press', '')}
         ${canVibrate ? opt('vibrate', 'vibrate', '') : ''}
+        ${document.documentElement.classList.contains('gh-dark') ? opt('contrast', 'contrast_opt', '') : ''}
       </div></div>
       ${ctaHTML}
       <div class="ms-linkrow">
@@ -394,6 +399,7 @@ class MinesweeperUI {
         // Switching vibration ON buzzes once, so the control proves itself instead of being a
         // promise you only find out about mid-game.
         if (k === 'vibrate' && this.settings.vibrate) this._buzz();
+        if (k === 'contrast') this.root.classList.toggle('is-hc', !!this.settings.contrast);
         this.renderMenu();
         return;
       }
