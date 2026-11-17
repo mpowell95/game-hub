@@ -54,6 +54,13 @@ Runs before this kept only score + distance, on the phone that played them.
 `docs/BALL-RUN-UX-REVIEW.md` (findings by severity, file:line, effort); before/after mockup `docs/mockups/ball-run-ux/index.html`;
 the prototype renderer code as `docs/mockups/ball-run-ux/prototype.patch` (cues behind `?uxproto=1`). Built 2026-11-17: see "Hazard and jump cues" below.
 
+## Drawn smooth at any frame rate (2026-11-16, Matt: "it gets choppy the faster you move")
+
+The sim steps at 60 Hz (`SIM_HZ`); a 120 Hz iPhone drew every other frame without movement, then a whole step (1.3 ball
+widths at top speed). `ui.js _renderBlended` draws z / lateral / y / roll blended between the last two steps by `_acc / SIM_DT`
+and puts the sim's numbers back right after (drawing only; play and scoring unchanged). Not the draw count: measured flat with speed.
+`tools/test-ballrun-smooth.cjs` (0 still frames at 120 and 60 fps).
+
 ## The camera follows by TIME (2026-11-16, Matt: "the ball moves slowly to the right" as the camera catches up)
 
 `CAMERA_LAG` (0.12) is applied per 1/120 s (`CAMERA_LAG_HZ`), not per screen frame (`render.js _layoutCamera`): at 60 or

@@ -701,6 +701,7 @@ class BallRunUI {
     const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
     this._seed = seed;
     this.sim = new Sim(this.map, this.difficulty, seed);
+    this._prev = null;   // the blended draw starts fresh each run (_renderBlended)
     this._eq = null; this._eqVal = 0;
     try { if (classicScoringOn(this.map, this.difficulty)) this._eq = new ClassicEquiv(seed); } catch (err) { console.error('[ball-run] classic scoring not set up; the Orbital score counts', err); this._eq = null; }
     this.syncCues();
@@ -761,6 +762,7 @@ class BallRunUI {
     while (this._acc >= SIM_DT && steps < MAX_STEPS_PER_FRAME) {
       const dragAxis = this.input.consumeDragAxis();
       const keyAxis = this.input.keyAxis();
+      this._keepPrev();
       this.sim.step(dragAxis, keyAxis);
       this._acc -= SIM_DT;
       steps++;
@@ -774,7 +776,7 @@ class BallRunUI {
     // silently dropping one.
     if (this.sim.pickupEvents.length) this.handlePickupEvents(this.sim.pickupEvents.splice(0));
 
-    this.renderer.render(this.sim, this.reducedMotion);
+    this._renderBlended();
     this.updateHud();
 
     if (this.sim.isOver()) this.onGameOver();
@@ -787,6 +789,28 @@ class BallRunUI {
     if (!this._eq) return sim.score;
     try { if (!sim.crashReason) this._eqVal = this._eq.at(sim.z); } catch (err) { console.error('[ball-run] classic scoring failed; the Orbital score counts', err); this._eq = null; return sim.score; }
     return this._eqVal;
+  }
+
+  /** SMOOTH AT ANY FRAME RATE (2026-11-16, Matt: "it gets choppy the faster you move"). The sim steps 60
+   *  times a second (SIM_HZ) but an iPhone draws 120 frames: every other frame the world did not move and
+   *  the next jumped a whole step (1.3 ball widths at top speed), so the judder grew with speed. Each
+   *  frame now DRAWS the ball's state blended between the last two steps by how far into the next step
+   *  the clock is (the standard fixed-timestep fix). Drawing only: the sim's own numbers are put back
+   *  before anything else reads them, so play, scoring and the run are unchanged. */
+  _keepPrev() {
+    const s = this.sim, p = this._prev || (this._prev = {});
+    p.z = s.z; p.lat = s.lateralOffset; p.y = s.y; p.roll = s.rollAngle; p.state = s.state; p.ok = true;
+  }
+
+  _renderBlended() {
+    const s = this.sim, p = this._prev;
+    const moving = s.state === 'playing' || s.state === 'airborne';
+    if (!p || !p.ok || !moving || p.state !== s.state) { this.renderer.render(s, this.reducedMotion); return; }
+    const a = Math.max(0, Math.min(1, this._acc / SIM_DT));
+    const z = s.z, lat = s.lateralOffset, y = s.y, roll = s.rollAngle;
+    s.z = p.z + (z - p.z) * a; s.lateralOffset = p.lat + (lat - p.lat) * a; s.y = p.y + (y - p.y) * a; s.rollAngle = p.roll + (roll - p.roll) * a;
+    try { this.renderer.render(s, this.reducedMotion); }
+    finally { s.z = z; s.lateralOffset = lat; s.y = y; s.rollAngle = roll; }
   }
 
   updateHud(force) {
@@ -1003,6 +1027,8 @@ class BallRunUI {
 // --- Module contract --------------------------------------------------------
 
 let instance = null;
+/** Test seam only (tools/test-ballrun-smooth.cjs drives frame() with a fake clock). */
+export function __instance() { return instance; }
 
 export function init(container) {
   if (instance) instance.destroy();
