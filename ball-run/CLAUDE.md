@@ -86,11 +86,15 @@ pixel and word exactly as before. Review, findings and before/after: `docs/BALL-
   (`CUE_COLORS`), and a per-vertex fade of the far deck (`CUE_FADE_*`; `THREE.Fog` cost ~12% of a software frame). Both
   maps: world-space tunnel chevrons without "SPEED UP"; the heart wobbles instead of spinning; a fall from a lowered pad
   starts at its height. Batched: 27-38 draw calls on Orbital vs 116-129 off. Created once, released in `dispose()`.
-- **ui.js / css / strings**: two Orbital How to play pages (stripes = hole, arrows = jump), the game-over line "{n}
+- **ui.js / css / strings**: How to play rebuilt (next bullet), the game-over line "{n}
   point(s)" (`score_one`/`score_many`), a picture of what ended the run (`sim.crashCause`), "Back to hub" reads "Setup"
   (it only ever went to setup), the setup card centred below the Hub button, HUD and game-over numbers at 17px near white.
 - Not built: the higher camera (optional; Matt tuned that feel). Sim, track, scoring and stats untouched (old vs new
   trajectories identical, 84 runs, both maps).
+- **How to play, cues on (2026-11-17, Matt: "the how to play is atrocious. please improve.")**: real game frames
+  (`ball-run/img/help/*.jpg`, 720x900, <= 40 KB, made by `tools/ballrun-ux/help-frames.cjs`) with a shape overlay, one
+  one-line caption (`hp_*`); Classic pages 1-4, Orbital 1-8; same-size cards, fits 390x664; `tools/ballrun-ux/help-shots.cjs`
+  checks all of it and proves the players' help (cues off) is identical to main (`COMPARE=<main server>`).
 - **To release to everyone**: make `cuesOn()` return `true` (or delete the gate and the `.br-cues` CSS scoping), bump
   CACHE, run `tools/validate-sw-assets.mjs`, deploy. Shots: `tools/ballrun-ux/shots.cjs` / `ui-shots.cjs ADMIN=1`.
 

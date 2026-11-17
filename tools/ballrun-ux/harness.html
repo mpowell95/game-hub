@@ -19,6 +19,7 @@
 <script type="module">
 import { Sim } from '../../ball-run/js/sim.js';
 import { Renderer } from '../../ball-run/js/render.js';
+import * as THREE from '../../ball-run/vendor/three.module.min.js';
 import { BALL_DIAMETER, OBSTACLE_SIZE, CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK } from '../../ball-run/js/config.js';
 
 const canvas = document.getElementById('c');
@@ -119,6 +120,23 @@ window.H = {
     }
     const ms = (performance.now() - t0) / frames;
     return { ms: +ms.toFixed(3), maxCalls: calls, maxTriangles: tris };
+  },
+  /** Screen position (CSS px) of the track point at z, lateral `lat`, height y, in the last drawn frame. */
+  project(z, lat, y = 0) {
+    const p = sim.track.worldPointAt(z, lat);
+    const v = new THREE.Vector3(p.x, y, p.z).project(renderer.camera);
+    return { x: (v.x + 1) / 2 * canvas.clientWidth, y: (1 - v.y) / 2 * canvas.clientHeight };
+  },
+  /** The first segment matching a test, from the current window (for picking overlay targets). */
+  seg(kind, n = 0) {
+    const s = sim.track.segments;
+    const hits = s.filter((g) => (kind === 'land' ? g.jumpLanding : kind === 'gap' ? !!g.jumpMeta
+      : kind === 'life' ? g.pickup && g.pickup.type === 'life' : kind === 'orb' ? g.pickup && g.pickup.type === 'orb'
+      : kind === 'obst' ? g.type === 'obstacle' : kind === 'void' ? g.void1 > 0 && !g.isGap : kind === 'tunnel' ? g.isTunnel : false) && g.z1 > sim.z);
+    const g = hits[n];
+    return g ? { z0: g.z0, z1: g.z1, w: g.w0, wc: g.wCenter || 0, vc: g.voidCenter || 0, v: g.void1 || 0, y: g.y0 || 0,
+      pick: g.pickup ? g.pickup.lateral : null, cubes: g.obstacles ? g.obstacles.map((c) => c.lateral) : null,
+      meta: g.jumpMeta || null } : null;
   },
   state() { return { z: sim.z, y: sim.y, state: sim.state, lat: sim.lateralOffset, speed: sim.speed }; },
 };
