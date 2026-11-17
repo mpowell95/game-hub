@@ -44,6 +44,14 @@ export const STRINGS = {
     prev_page_aria: 'Previous page',
     next_page_aria: 'Next page',
     ok: 'OK',
+    // Cues (admin devices only until "release it")
+    help_5: 'Stripes: a hole. Go around.',
+    help_6: 'Arrows: a jump. Steer to the pad.',
+    score_one: '{n} point',
+    score_many: '{n} points',
+    go_void: 'Into a hole!',
+    go_landing: 'Missed the pad!',
+    setup: 'Setup',
   },
   es: {
     title: 'CARRERA DE BOLAS',
@@ -82,6 +90,13 @@ export const STRINGS = {
     prev_page_aria: 'Página anterior',
     next_page_aria: 'Página siguiente',
     ok: 'Aceptar',
+    help_5: 'Rayas: un agujero. Rodéalo.',
+    help_6: 'Flechas: un salto. Ve hacia la plataforma.',
+    score_one: '{n} punto',
+    score_many: '{n} puntos',
+    go_void: '¡A un agujero!',
+    go_landing: '¡Fallaste la plataforma!',
+    setup: 'Ajustes',
   },
 };
 

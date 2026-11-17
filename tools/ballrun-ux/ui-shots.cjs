@@ -1,6 +1,6 @@
-// MOCKUP PROTOTYPE SHOTS (2026-11-16, Ball Run UX review). Dev only.
+// Ball Run screen shots (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). Dev only.
 // The real Ball Run page (setup, help pages, HUD, game over) at 402x874, DPR 1, profile test1 /
-// DREG5, sync off. Pass ?uxproto=1 with UX=1 to see the render cues in a live run.
+// DREG5, sync off. ADMIN=1 marks the browser an admin device (gamehub.adminDevice.v1 = '1'): cues on.
 //   BASE=http://localhost:8123 node tools/ballrun-ux/ui-shots.cjs <outDir>
 const { chromium } = require('playwright');
 const path = require('path');
@@ -8,20 +8,21 @@ const fs = require('fs');
 
 const OUT = process.argv[2] || path.join(process.cwd(), '.visual-out', 'ballrun-ux');
 const BASE = process.env.BASE || 'http://localhost:8123';
-const UX = process.env.UX === '1';
+const ADMIN = process.env.ADMIN === '1';
 fs.mkdirSync(OUT, { recursive: true });
 
 (async () => {
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const ctx = await browser.newContext({ viewport: { width: 402, height: 874 }, deviceScaleFactor: 1, hasTouch: true });
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((admin) => {
     try {
+      if (admin) localStorage.setItem('gamehub.adminDevice.v1', '1');
       localStorage.setItem('gamehub.devAllowSync.v1', '0');
       localStorage.setItem('gamehub.profile', JSON.stringify({ version: 1, name: 'test1', emoji: '🙂', playerId: 'DREG5', opponents: [] }));
       localStorage.setItem('ballrun.map', 'orbital');
       localStorage.setItem('ballrun.difficulty', 'medium');
     } catch {}
-  });
+  }, ADMIN);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log('pageerror:', e.message));
   const shot = async (name) => {
@@ -29,26 +30,15 @@ fs.mkdirSync(OUT, { recursive: true });
     await page.screenshot({ path: f, type: 'jpeg', quality: 85 });
     console.log(f);
   };
-  await page.goto(`${BASE}/ball-run/${UX ? '?uxproto=1' : ''}`);
+  await page.goto(`${BASE}/ball-run/`);
   await page.waitForSelector('.br-root');
-  if (UX) {
-    // MOCKUP CSS (not in ball-run.css): HUD and game-over numbers at the hub's text floor (17px body,
-    // near white), and the setup card centred below the floating Hub button.
-    await page.addStyleTag({ content: `
-      .br-root .br-setup { min-height: 100%; box-sizing: border-box; justify-content: center; padding-top: max(54px, var(--gh-st, env(safe-area-inset-top))); }
-      .br-root .br-hud-distance, .br-root .br-hud-orbs { font-size: 17px; color: #eef0ff; font-weight: 800; }
-      .br-root .br-orb-dot { width: 12px; height: 12px; }
-      .br-root .br-hud-score { font-size: 2rem; }
-      .br-root .br-go-distance { font-size: 17px; color: #eef0ff; }
-      .br-root .br-help-text { font-size: 17px; }
-    ` });
-  }
   await page.waitForTimeout(800);
   // First open auto-opens the how-to pager.
   if (await page.isVisible('.br-help-overlay')) {
-    for (let i = 1; i <= 4; i++) {
+    const pages = await page.$$eval('.br-help-dots .br-dot', (d) => d.length);
+    for (let i = 1; i <= pages; i++) {
       await shot(`ui-help-${i}`);
-      if (i < 4) await page.click('[data-action="help-next"]');
+      if (i < pages) await page.click('[data-action="help-next"]');
       await page.waitForTimeout(200);
     }
     await page.click('[data-action="help-ok"]');
@@ -62,6 +52,5 @@ fs.mkdirSync(OUT, { recursive: true });
   await page.waitForSelector('[data-role="gameover"]:not([hidden])', { timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(600);
   await shot('ui-gameover');
-  // FPS sample under SwiftShader (software GL; NOT a phone number, only a relative cost check).
   await browser.close();
 })();

@@ -521,3 +521,13 @@ values, the whole Orbital color set); whether Splits/Jumps should count toward t
 way tunnels do; whether a missed-Jump-landing fall should read differently from a normal edge
 fall, since the ball is already falling from height; a wider variant map (mentioned once in the
 spec's Phase 4 aside, never scoped).
+
+## 2026-11-17: hazard and jump cues built, admin devices only
+
+Matt (2026-11-16): "you have no idea whats a hole andwhat's about to be a jump. jumps are really impossible to detect.
+and drops look exactly like holes." A review (`docs/BALL-RUN-UX-REVIEW.md`) found the cause of the last one in
+`render.js`: every floor segment was one flat plate at its MIDPOINT height, so the 3-segment slope back up after a drop
+drew as a staircase whose risers (facing the camera) were never drawn: three black bars across the track, each
+identical to a hole. Holes (Split voids) and jump gaps were both drawn as nothing on a zero-thickness deck, and the
+deck also ended in a hard black cut 72 units out every frame. Matt approved the mockup ("looks great - build it") and
+the build went in behind `isAdminDevice()`. Frame-time and trajectory evidence are in that commit's message.

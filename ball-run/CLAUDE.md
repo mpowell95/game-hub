@@ -61,6 +61,27 @@ CLASSIC track with the same seed gives for the same distance (`ClassicEquiv`: Cl
 crash). HUD, best and the recorded result use it (`scoreNow`); the Orbital score is `raw` in the private log (`eq: 1`).
 Everyone else and every other map/level unchanged. Runs before it are not converted (rule 4). `tools/test-ballrun-classic-equiv.mjs`.
 
+## Hazard and jump cues, ADMIN DEVICES ONLY (2026-11-17, Matt on the mockup: "looks great - build it")
+
+**Not cleared for players until Matt says "release it".** One switch: `cuesOn()` in `ui.js` = `isAdminDevice()`, read at
+mount and at every run start, passed as `new Renderer(canvas, map, { cues })` and as `.br-cues` on the root. Off = every
+pixel and word exactly as before. Review, findings and before/after: `docs/BALL-RUN-UX-REVIEW.md`.
+- **render.js** (`_buildCues`/`_layoutCues`/`_layoutArc`/`_disposeCues`, `QuadBatch`): every floor is a per-segment
+  trapezoid following width, void and height (no stair edges; the slope back up after a drop is a ramp, not see-through
+  plates, the "drops look like holes" bug). Orbital adds a slab under the deck, amber/black STRIPES on every void (hole),
+  cyan CHEVRONS + lip + dotted flight ARC (`Sim.launchJump`'s formula) + landing pad with front face, rim and pillars on
+  every jump (the amber gate posts are off), down/up TRIANGLE posts for a drop/rise, a lighter deck with rims
+  (`CUE_COLORS`), and a per-vertex fade of the far deck (`CUE_FADE_*`; `THREE.Fog` cost ~12% of a software frame). Both
+  maps: world-space tunnel chevrons without "SPEED UP"; the heart wobbles instead of spinning; a fall from a lowered pad
+  starts at its height. Batched: 27-38 draw calls on Orbital vs 116-129 off. Created once, released in `dispose()`.
+- **ui.js / css / strings**: two Orbital How to play pages (stripes = hole, arrows = jump), the game-over line "{n}
+  point(s)" (`score_one`/`score_many`), a picture of what ended the run (`sim.crashCause`), "Back to hub" reads "Setup"
+  (it only ever went to setup), the setup card centred below the Hub button, HUD and game-over numbers at 17px near white.
+- Not built: the higher camera (optional; Matt tuned that feel). Sim, track, scoring and stats untouched (old vs new
+  trajectories identical, 84 runs, both maps).
+- **To release to everyone**: make `cuesOn()` return `true` (or delete the gate and the `.br-cues` CSS scoping), bump
+  CACHE, run `tools/validate-sw-assets.mjs`, deploy. Shots: `tools/ballrun-ux/shots.cjs` / `ui-shots.cjs ADMIN=1`.
+
 ## Second map: Orbital (BALLRUNMAP2ORBITALSPEC.md, all four phases shipped 2026-07-29)
 
 Spec source: `HANDOFF-BALLRUN-NEWMAP.md` (four correctness landmines live there). Phase 1 was a pure

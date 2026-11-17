@@ -9,16 +9,16 @@
 </head>
 <body>
 <!--
-  MOCKUP PROTOTYPE HARNESS (2026-11-16, Ball Run UX review). Dev only, never deployed (tools/).
+  Ball Run shot harness (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). Dev only, never deployed (tools/).
   Builds the REAL Sim + Renderer from ball-run/js for a fixed seed, steps the sim with a simple
   autopilot (invincible while stepping, so a frame can be reached on any seed), stops at a chosen
-  z and draws one frame. `ux` = 1 turns on the render.js mockup cues (render.js UX_PROTO).
-  Driven by tools/ballrun-ux/shots.cjs.
+  z and draws one frame. `cues` = 1 builds the Renderer as an admin device would (cues on).
+  Driven by tools/ballrun-ux/shots.cjs; H.bench() for frame-time comparisons.
 -->
 <canvas id="c"></canvas>
 <script type="module">
 import { Sim } from '../../ball-run/js/sim.js';
-import { Renderer, setUxProto } from '../../ball-run/js/render.js';
+import { Renderer } from '../../ball-run/js/render.js';
 import { BALL_DIAMETER, OBSTACLE_SIZE, CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK } from '../../ball-run/js/config.js';
 
 const canvas = document.getElementById('c');
@@ -47,11 +47,10 @@ function safeLateral(track, z, cur) {
 }
 
 window.H = {
-  init(seed, diff = 'medium', ux = 0, map = 'orbital') {
+  init(seed, diff = 'medium', cues = 0, map = 'orbital') {
     if (renderer) renderer.dispose(false);
-    setUxProto(ux || false);
     sim = new Sim(map, diff, seed);
-    renderer = new Renderer(canvas, map);
+    renderer = new Renderer(canvas, map, { cues: !!cues });
     renderer.resize(canvas.clientWidth, canvas.clientHeight);
     renderer.resetCamera(0);
     return true;
@@ -102,12 +101,24 @@ window.H = {
     return out;
   },
   /** Relative cost check (SwiftShader is software GL: compare before vs after only, never as phone fps). */
-  bench(frames = 120) {
+  /** Mean ms per frame over `frames` (sim step + render; `finish` waits for the GPU too).
+   *  SwiftShader is software GL: compare cues off vs on only, never read it as a phone's fps. */
+  bench(frames = 240, finish = true) {
+    const gl = renderer.renderer.getContext();
+    const px = new Uint8Array(4);
     const t0 = performance.now();
-    for (let i = 0; i < frames; i++) { sim.invincibleUntil = 1e9; sim.step(0, 0); renderer.render(sim, false); }
+    let calls = 0, tris = 0;
+    for (let i = 0; i < frames; i++) {
+      sim.invincibleUntil = 1e9;
+      sim.lateralOffset = safeLateral(sim.track, sim.z, sim.lateralOffset);
+      sim.step(0, 0);
+      renderer.render(sim, false);
+      calls = Math.max(calls, renderer.renderer.info.render.calls);
+      tris = Math.max(tris, renderer.renderer.info.render.triangles);
+      if (finish) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // waits for the frame to be drawn
+    }
     const ms = (performance.now() - t0) / frames;
-    const info = renderer.renderer.info.render;
-    return { ms: +ms.toFixed(2), calls: info.calls, triangles: info.triangles };
+    return { ms: +ms.toFixed(3), maxCalls: calls, maxTriangles: tris };
   },
   state() { return { z: sim.z, y: sim.y, state: sim.state, lat: sim.lateralOffset, speed: sim.speed }; },
 };

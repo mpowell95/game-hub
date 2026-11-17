@@ -1,6 +1,6 @@
-// MOCKUP PROTOTYPE SHOTS (2026-11-16, Ball Run UX review). Dev only.
-// Renders the same seed + z with the render.js cues off (before) and on (after), at 402x874, DPR 1,
-// JPEG q85, into OUT (default: ./.visual-out/ballrun-ux). Needs `node server.mjs` on :8123.
+// Ball Run cue shots (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). Dev only.
+// Renders the same seed + z with the cues off (what players see: "off") and on (admin devices: "on"),
+// at 402x874, DPR 1, JPEG q85, into OUT (default: ./.visual-out/ballrun-ux). Needs `node server.mjs`.
 //   node tools/ballrun-ux/shots.cjs [outDir] [only-name-substring]
 const { chromium } = require('playwright');
 const path = require('path');
@@ -44,10 +44,9 @@ const SHOTS = [
   { name: 'tunnel', seed: 2, ev: 'tunnel', n: 0, dz: 18 },
   { name: 'heart', seed: 1, ev: 'life', n: 0, dz: 14 },
   { name: 'orb', seed: 1, ev: 'orb', n: 1, dz: 12 },
-  // Optional higher camera (UX_CAM_*), on top of every other cue
-  { name: 'cam-drop-close', seed: 6, ev: 'jump', n: 0, dz: 8, cam: true },
-  { name: 'cam-split-far', seed: 2, ev: 'voidOpen', n: 0, dz: 45, cam: true },
-  { name: 'cam-rise-far', seed: 3, ev: 'jump', n: 0, dz: 45, cam: true },
+  // Classic: only the tunnel floor changes with cues on; everything else must be identical
+  { name: 'classic-tunnel', seed: 2, map: 'classic', ev: 'tunnel', n: 0, dz: 18 },
+  { name: 'classic-obstacles', seed: 2, map: 'classic', ev: 'obst', n: 0, dz: 22 },
 ];
 
 (async () => {
@@ -68,7 +67,7 @@ const SHOTS = [
     if (ONLY && !s.name.includes(ONLY)) continue;
     for (const ux of [0, 1]) {
       const info = await page.evaluate(({ s, ux }) => {
-        H.init(s.seed, s.diff || 'medium', ux ? (s.cam ? { cam: true } : 1) : 0);
+        H.init(s.seed, s.diff || 'medium', ux, s.map || 'orbital');
         const evs = H.events(1400).filter((e) => e.k === s.ev);
         const e = evs[s.n];
         if (!e) return { err: 'no event ' + s.ev + ' #' + s.n };
@@ -78,7 +77,7 @@ const SHOTS = [
         return { e, r };
       }, { s, ux });
       if (info.err) { console.log(s.name, info.err); continue; }
-      const file = path.join(OUT, `${s.name}-${ux ? 'after' : 'before'}.jpg`);
+      const file = path.join(OUT, `${s.name}-${ux ? 'on' : 'off'}.jpg`);
       await page.screenshot({ path: file, type: 'jpeg', quality: 85 });
       console.log(file, JSON.stringify(info));
     }

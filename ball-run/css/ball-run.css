@@ -498,3 +498,25 @@
 @media (prefers-reduced-motion: reduce) {
   .br-root * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* --- Cues: ADMIN DEVICES ONLY until Matt says "release it" (2026-11-17, "looks great - build it").
+   ui.js puts .br-cues on the root from isAdminDevice(); without it nothing below applies. --- */
+
+/* Setup centred, below the hub's floating "‹ Hub" (root rule: max(safe top, 54px)). */
+.br-root.br-cues .br-setup {
+  min-height: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+  padding-top: max(54px, var(--gh-st, env(safe-area-inset-top)));
+}
+/* HUD and game-over numbers at the hub's text floor: 17px, near white. */
+.br-root.br-cues .br-hud-score { font-size: 2rem; }
+.br-root.br-cues .br-hud-distance,
+.br-root.br-cues .br-hud-orbs { font-size: 17px; font-weight: 800; color: var(--br-ink); }
+.br-root.br-cues .br-orb-dot { width: 12px; height: 12px; }
+.br-root.br-cues .br-go-distance { font-size: 17px; color: var(--br-ink); }
+.br-root.br-cues .br-help-text { font-size: 17px; }
+/* What ended the run. */
+.br-go-cause { display: flex; justify-content: center; margin: 0 0 6px; }
+.br-go-cause[hidden] { display: none; }
+.br-go-cause svg { width: 64px; height: 64px; }
