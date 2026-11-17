@@ -1258,6 +1258,15 @@ export const GAME_ART = {
             <rect x="48" y="71.5" width="64" height="6.5" fill="hsl(200 62% 50%)"/><rect x="48" y="70" width="64" height="1.8" fill="hsl(200 70% 64%)"/><rect x="51" y="63.5" width="61" height="6.5" fill="hsl(212 62% 50%)"/><rect x="51" y="62" width="61" height="1.8" fill="hsl(212 70% 64%)"/><rect x="49" y="55.5" width="59" height="6.5" fill="hsl(224 62% 50%)"/><rect x="49" y="54" width="59" height="1.8" fill="hsl(224 70% 64%)"/><rect x="49" y="47.5" width="59" height="6.5" fill="hsl(236 62% 50%)"/><rect x="49" y="46" width="59" height="1.8" fill="hsl(236 70% 64%)"/><rect x="53" y="39.5" width="55" height="6.5" fill="hsl(248 62% 50%)"/><rect x="53" y="38" width="55" height="1.8" fill="hsl(248 70% 64%)"/><rect x="50" y="31.5" width="52" height="6.5" fill="hsl(260 62% 50%)"/><rect x="50" y="30" width="52" height="1.8" fill="hsl(260 70% 64%)"/><rect x="50" y="23.5" width="52" height="6.5" fill="hsl(272 62% 50%)"/><rect x="50" y="22" width="52" height="1.8" fill="hsl(272 70% 64%)"/><rect x="76" y="14" width="52" height="8" fill="hsl(284 62% 50%)"/>
             <rect x="118" y="34" width="4" height="7" fill="hsl(284 62% 50%)" transform="rotate(24 120 37)"/>
           </svg>`,
+  // Tennis (2026-11-17): a link to Richard Davey's game. Two bats, a ball, a dashed net, on his grey.
+  tennis: `<svg viewBox="0 0 160 90" aria-hidden="true">
+         <rect width="160" height="90" fill="#2a2a2f"/>
+         <rect x="20" y="8" width="120" height="74" fill="#111114"/>
+         <g fill="#FFFC00"><rect x="78.5" y="12" width="3" height="7"/><rect x="78.5" y="25" width="3" height="7"/><rect x="78.5" y="38" width="3" height="7"/><rect x="78.5" y="51" width="3" height="7"/><rect x="78.5" y="64" width="3" height="7"/></g>
+         <rect x="28" y="30" width="5" height="20" fill="#FFFFFF"/>
+         <rect x="127" y="44" width="5" height="20" fill="#FFFFFF"/>
+         <rect x="98" y="36" width="6" height="6" fill="#FFFFFF"/>
+       </svg>`,
 };
 
 export default GAME_ART;
