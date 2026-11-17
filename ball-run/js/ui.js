@@ -371,40 +371,51 @@ const HELP_PAGES = [
 // run; off = every screen exactly as before.
 function cuesOn() { try { return isAdminDevice(); } catch { return false; } }
 
-// Orbital's two extra How to play pages (cues on): stripes = a hole, arrows + arc = a jump, in the
-// colours render.js's cue layer really uses (config.js CUE_COLORS).
-function stillHole() {
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_5')}">
-    <defs><pattern id="br-hz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="14" height="14" fill="#16120a"/><rect width="7" height="14" fill="#ffce3a"/></pattern></defs>
-    <rect width="200" height="200" fill="#03060f"/>
-    <path d="M10 196 L80 40 L120 40 L190 196 Z" fill="#242e45"/>
-    <path d="M74 196 L96 70 L104 70 L126 196 Z" fill="#03060f"/>
-    <path d="M62 196 L92 70 L96 70 L74 196 Z" fill="url(#br-hz)"/>
-    <path d="M126 196 L104 70 L108 70 L138 196 Z" fill="url(#br-hz)"/>
-    <circle cx="100" cy="168" r="17" fill="#8fe9ff" opacity="0.35"/>
-    <path d="M86 154 L114 182 M114 154 L86 182" stroke="#eef0ff" stroke-width="6" stroke-linecap="round"/>
-  </svg>`;
-}
-function stillJump() {
-  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_6')}">
-    <rect width="200" height="200" fill="#03060f"/>
-    <path d="M10 196 L58 110 L142 110 L190 196 Z" fill="#242e45"/>
-    <path d="M70 66 L130 66 L134 82 L66 82 Z" fill="#242e45"/>
-    <rect x="66" y="82" width="68" height="8" fill="#46577a"/>
-    <rect x="66" y="80" width="68" height="4" fill="#5fe3ff"/>
-    <rect x="72" y="90" width="4" height="60" fill="#6f8fb3"/><rect x="124" y="90" width="4" height="60" fill="#6f8fb3"/>
-    <g fill="none" stroke="#5fe3ff" stroke-width="7"><path d="M60 176 L100 156 L140 176"/><path d="M68 148 L100 132 L132 148"/></g>
-    <rect x="58" y="108" width="84" height="4" fill="#5fe3ff"/>
-    <g fill="#5fe3ff"><circle cx="100" cy="100" r="3.5"/><circle cx="100" cy="90" r="3.5"/><circle cx="100" cy="82" r="3.5"/><circle cx="100" cy="76" r="3.5"/></g>
-    <circle cx="100" cy="176" r="15" fill="#8fe9ff"/>
-  </svg>`;
-}
-const HELP_PAGES_ORBITAL_CUES = [
-  ...HELP_PAGES,
-  { still: stillHole, textKey: 'help_5' },
-  { still: stillJump, textKey: 'help_6' },
+// How to play, cues on (2026-11-17, Matt: "the how to play is atrocious. please improve."): every picture is a
+// REAL frame from the game renderer with cues on (ball-run/img/help/*.jpg, 720x900 = the 360x450 box at 2x, made
+// by tools/ballrun-ux/help-frames.cjs), one short caption, one overlay. Classic shows pages 1-4 in its own colours;
+// Orbital shows 1-8. Players (cues off) keep HELP_PAGES above exactly.
+// `mark`: 'steer' = a finger on a two-way arrow; [x, y, side] = an arrow pointing at (x, y) in the 360x450 box,
+// coming from above-left ('l') or above-right ('r') (tools/ballrun-ux/help-frames.cjs prints the projected targets).
+function helpImg(name) { return new URL(`../img/help/${name}.jpg`, import.meta.url).href; }
+const CUE_HELP_CLASSIC = [
+  { img: 'steer-classic', key: 'hp_steer', mark: 'steer' },
+  { img: 'blocks-classic', key: 'hp_blocks', mark: [115, 132, 'r'] },
+  { img: 'edge-classic', key: 'hp_edge', mark: [207, 256, 'r'] },
+  { img: 'tunnel-classic', key: 'hp_tunnel', mark: [184, 120, 'r'] },
 ];
+const CUE_HELP_ORBITAL = [
+  { img: 'steer-orbital', key: 'hp_steer', mark: 'steer' },
+  { img: 'blocks-orbital', key: 'hp_blocks', mark: [245, 131, 'l'] },
+  { img: 'edge-orbital', key: 'hp_edge', mark: [207, 256, 'r'] },
+  { img: 'tunnel-orbital', key: 'hp_tunnel', mark: [180, 120, 'r'] },
+  { img: 'hole', key: 'hp_hole', mark: [298, 200, 'l'] },
+  { img: 'jump', key: 'hp_jump', mark: [114, 171, 'l'] },
+  { img: 'droprise', key: 'hp_droprise', mark: [130, 116, 'r'] },
+  { img: 'pickups', key: 'hp_pickups', mark: [212, 160, 'r'] },
+];
+
+/** The overlay drawn on a help picture: shape only (white with a dark outline), never colour alone. */
+function helpMarkSVG(mark) {
+  const open = '<svg class="br-help-mark" viewBox="0 0 360 450" aria-hidden="true">';
+  const ink = 'fill="#fff" stroke="#0b0d14" stroke-width="5" stroke-linejoin="round"';
+  if (mark === 'steer') {
+    return `${open}<g ${ink}>
+      <path d="M96 404 L122 384 V396 H238 V384 L264 404 L238 424 V412 H122 V424 Z"/>
+      <path d="M166 446 V392 a14 14 0 0 1 28 0 V446 Z"/>
+    </g></svg>`;
+  }
+  const [x, y, side] = mark;
+  const dx = side === 'l' ? -1 : 1;
+  // An arrow from 78 px away at 45 degrees; its head stops 12 px short of the target.
+  const tx = x + dx * 55, ty = y - 55, k = 12 / 78;
+  const hx = x + dx * 55 * k, hy = y - 55 * k;
+  const ang = Math.atan2(hy - ty, hx - tx), c = Math.cos(ang), sn = Math.sin(ang);
+  const p = (a, b) => `${(hx + a * c - b * sn).toFixed(1)} ${(hy + a * sn + b * c).toFixed(1)}`;
+  return `${open}<g ${ink}>
+    <path d="M${p(-62, -6)} L${p(-20, -6)} L${p(-20, -16)} L${p(0, 0)} L${p(-20, 16)} L${p(-20, 6)} L${p(-62, 6)} Z"/>
+  </g></svg>`;
+}
 
 // Game over, cues on: a picture of what ended the run (sim.crashCause), so the hazards teach themselves.
 const CAUSE_ICONS = {
@@ -965,7 +976,10 @@ class BallRunUI {
     if (this._pausedForHelp) { this._pausedForHelp = false; if (this.sim && !this.sim.isOver()) this.startLoop(); }
   }
 
-  helpPages() { return this._cues && this.map === 'orbital' ? HELP_PAGES_ORBITAL_CUES : HELP_PAGES; }
+  helpPages() {
+    if (!this._cues) return HELP_PAGES;
+    return this.map === 'orbital' ? CUE_HELP_ORBITAL : CUE_HELP_CLASSIC;
+  }
 
   helpGo(i) {
     this.helpPage = Math.max(0, Math.min(this.helpPages().length - 1, i));
@@ -975,8 +989,16 @@ class BallRunUI {
   renderHelpPage() {
     const pages = this.helpPages();
     const page = pages[this.helpPage];
-    this.el.helpStill.innerHTML = page.still();
-    this.el.helpText.textContent = t(page.textKey);
+    if (page.img) {
+      // Cues on: a real frame + its overlay; the next page's picture is fetched ahead so paging never flashes.
+      this.el.helpStill.innerHTML = `<img class="br-help-img" src="${helpImg(page.img)}" alt="" draggable="false">${helpMarkSVG(page.mark)}`;
+      this.el.helpText.textContent = t(page.key);
+      const next = pages[this.helpPage + 1];
+      if (next) { const im = new Image(); im.src = helpImg(next.img); }
+    } else {
+      this.el.helpStill.innerHTML = page.still();
+      this.el.helpText.textContent = t(page.textKey);
+    }
     this.el.helpDots.innerHTML = pages.map((_, i) =>
       `<span class="br-dot${i === this.helpPage ? ' is-active' : ''}"></span>`).join('');
     this.el.helpPrev.disabled = this.helpPage === 0;

@@ -520,3 +520,31 @@
 .br-go-cause { display: flex; justify-content: center; margin: 0 0 6px; }
 .br-go-cause[hidden] { display: none; }
 .br-go-cause svg { width: 64px; height: 64px; }
+
+/* How to play, cues on (2026-11-17): a real game frame per page in a fixed 4:5 box, every card the same size,
+   the whole sheet fits 390x664 with no scroll. The box width is capped by the screen's height. */
+.br-root.br-cues .br-help-overlay { padding: 16px; }
+.br-root.br-cues .br-help-panel { gap: 12px; max-width: 360px; }
+.br-root.br-cues .br-help-title { font-size: 26px; line-height: 1.2; }
+.br-root.br-cues .br-help-card {
+  width: min(100%, 360px, calc((100dvh - 230px) * 0.8));
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  background: var(--br-panel-2);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.br-root.br-cues .br-help-still { position: relative; width: 100%; aspect-ratio: 4 / 5; border-radius: 0; }
+.br-root.br-cues .br-help-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.br-root.br-cues .br-help-still .br-help-mark { position: absolute; inset: 0; width: 100%; height: 100%; }
+.br-root.br-cues .br-help-text {
+  margin: 0;
+  padding: 12px 8px;
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--br-ink);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.br-root.br-cues .br-help-dots .br-dot { width: 11px; height: 11px; }
+.br-root.br-cues .br-help-nav .br-btn { min-height: 48px; }
