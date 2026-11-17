@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1617;
-const CACHE = 'game-hub-v1622';
+const CACHE = 'game-hub-v1623';
 
 const ASSETS = [
   './',
@@ -406,6 +406,19 @@ const ASSETS = [
   './ball-run/js/render.js',
   './ball-run/js/strings.js',
   './ball-run/vendor/three.module.min.js',
+  // How to play pictures (2026-11-17, admin devices until release): LAZY, fetched only when the help opens.
+  './ball-run/img/help/blocks-classic.jpg',
+  './ball-run/img/help/blocks-orbital.jpg',
+  './ball-run/img/help/droprise.jpg',
+  './ball-run/img/help/edge-classic.jpg',
+  './ball-run/img/help/edge-orbital.jpg',
+  './ball-run/img/help/hole.jpg',
+  './ball-run/img/help/jump.jpg',
+  './ball-run/img/help/pickups.jpg',
+  './ball-run/img/help/steer-classic.jpg',
+  './ball-run/img/help/steer-orbital.jpg',
+  './ball-run/img/help/tunnel-classic.jpg',
+  './ball-run/img/help/tunnel-orbital.jpg',
   // Boggle module (data/words.txt is the ~1.6MB dictionary the solver and human
   // input validation both need -- it must be precached or the game is broken
   // offline, same as any code asset)
@@ -686,7 +699,7 @@ const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
 
 // --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-... [docs/SW-NOTES.md #10]
-const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json|word-weaver\/data\/(es\/)?[a-z0-9-]+\.json)$/;
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json|word-weaver\/data\/(es\/)?[a-z0-9-]+\.json|ball-run\/img\/help\/[a-z-]+\.jpg)$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -1161,15 +1174,27 @@ const REST_MANIFEST = {
   './dots-boxes/js/hash.js': '4efa5d47bf',
   './dots-boxes/js/strings.js': '3dbd1717e2',
   './ball-run/index.html': '5907192c6a',
-  './ball-run/css/ball-run.css': 'd285d337ff',
-  './ball-run/js/ui.js': 'a2c70ee877',
+  './ball-run/css/ball-run.css': '99e29fa753',
+  './ball-run/js/ui.js': '52ce659df6',
   './ball-run/js/config.js': 'cd5e08061e',
   './ball-run/js/track.js': '7e7c04a63d',
   './ball-run/js/sim.js': 'f80ba32cf5',
   './ball-run/js/input.js': '7f41531072',
   './ball-run/js/render.js': 'f15e88118c',
-  './ball-run/js/strings.js': 'bed2940f4a',
+  './ball-run/js/strings.js': '1d53e2bd3f',
   './ball-run/vendor/three.module.min.js': 'd719de9cf8',
+  './ball-run/img/help/blocks-classic.jpg': 'a917e7c316',
+  './ball-run/img/help/blocks-orbital.jpg': '9acd4cb541',
+  './ball-run/img/help/droprise.jpg': '443246be34',
+  './ball-run/img/help/edge-classic.jpg': '47df7006c8',
+  './ball-run/img/help/edge-orbital.jpg': '2c513886d1',
+  './ball-run/img/help/hole.jpg': '7a274b64b0',
+  './ball-run/img/help/jump.jpg': '106a7911cf',
+  './ball-run/img/help/pickups.jpg': '631fdc822d',
+  './ball-run/img/help/steer-classic.jpg': '307c7de2f2',
+  './ball-run/img/help/steer-orbital.jpg': '659f406ebf',
+  './ball-run/img/help/tunnel-classic.jpg': 'f8670a79b0',
+  './ball-run/img/help/tunnel-orbital.jpg': '2b224fad08',
   './boggle/': '2dd28572e9',
   './boggle/index.html': '2dd28572e9',
   './boggle/css/boggle.css': '316f33537e',
