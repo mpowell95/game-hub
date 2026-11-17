@@ -1702,3 +1702,7 @@ Matt: "remove Cup Baseball from the gamehub and archive it. we're not moving for
 ## 2026-11-13: Number Merge archived
 
 Built the same day (admin only). Matt, on learning it is the 2048 genre: "remove this from the gamehub". Folder moved to `archive/number-merge/` (restore steps in its CLAUDE.md); every app trace removed (launcher, tile art, strings, My Stats tab and screen, leaderboard row and metric, lb rules, ADMIN_ONLY, the `nm` recorder and merge branch, its test); `numbermerge` kept in `GAMES` and added to `ARCHIVED_GAMES`, so any stored play (real and test records, the `nm` sub-counter) stays on the phones and in `players/`.
+
+## 2026-11-17: Oxford comma made a hard requirement
+
+Matt: "Make a rule somewhere that you are REQUIRED to use Oxford commas. NEVER send me anything you have created that omits or excludes an Oxford comma. I can't fucking stand it." The 2026-10-28 line in CLAUDE.md ("Accessibility + copy conventions") was strengthened: required, covers everything a session creates (mockups, artifacts, commit messages, replies), and says to scan every list before sending.
