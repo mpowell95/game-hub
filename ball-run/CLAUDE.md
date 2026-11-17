@@ -52,7 +52,7 @@ Runs before this kept only score + distance, on the phone that played them.
 ## UX review and Orbital readability MOCKUP (2026-11-16, Matt: "jumps are really impossible to detect. and drops look exactly like holes")
 
 `docs/BALL-RUN-UX-REVIEW.md` (findings by severity, file:line, effort); before/after mockup `docs/mockups/ball-run-ux/index.html`;
-the prototype renderer code as `docs/mockups/ball-run-ux/prototype.patch` (cues behind `?uxproto=1`). NOT built: mockup only until Matt says "build it".
+the prototype renderer code as `docs/mockups/ball-run-ux/prototype.patch` (cues behind `?uxproto=1`). Built 2026-11-17: see "Hazard and jump cues" below.
 
 ## The camera follows by TIME (2026-11-16, Matt: "the ball moves slowly to the right" as the camera catches up)
 
