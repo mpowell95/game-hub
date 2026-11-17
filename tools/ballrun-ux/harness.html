@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ball Run UX harness</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+</head>
+<body>
+<!--
+  Ball Run shot harness (2026-11-16, docs/BALL-RUN-UX-REVIEW.md). Dev only, never deployed (tools/).
+  Builds the REAL Sim + Renderer from ball-run/js for a fixed seed, steps the sim with a simple
+  autopilot (invincible while stepping, so a frame can be reached on any seed), stops at a chosen
+  z and draws one frame. `cues` = 1 builds the Renderer as an admin device would (cues on).
+  Driven by tools/ballrun-ux/shots.cjs; H.bench() for frame-time comparisons.
+-->
+<canvas id="c"></canvas>
+<script type="module">
+import { Sim } from '../../ball-run/js/sim.js';
+import { Renderer } from '../../ball-run/js/render.js';
+import { BALL_DIAMETER, OBSTACLE_SIZE, CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK } from '../../ball-run/js/config.js';
+
+const canvas = document.getElementById('c');
+let sim = null, renderer = null;
+
+function safeLateral(track, z, cur) {
+  // Pick a lateral that stays safe the longest over the next ~14 units (pure helper for shots).
+  let best = cur, bestReach = -1;
+  for (let lat = -7; lat <= 7.001; lat += 0.1) {
+    let reach = 0;
+    for (let dz = 0; dz <= 14; dz += 0.5) {
+      const f = track.frameAt(z + dz);
+      const seg = f.segment;
+      if (!seg) break;
+      if (seg.isGap) { reach = dz; continue; }
+      const m = 0.45;
+      if (Math.abs(lat - f.wCenter) > f.width / 2 - m) break;
+      if (f.voidHalfWidth > 0 && Math.abs(lat - (f.wCenter + f.voidCenter)) < f.voidHalfWidth + m) break;
+      if (seg.obstacles && seg.obstacles.some((c) => Math.abs(lat - c.lateral) < OBSTACLE_SIZE / 2 + 0.5 + m)) break;
+      reach = dz + 0.5;
+    }
+    const score = reach * 10 - Math.abs(lat - cur);
+    if (score > bestReach) { bestReach = score; best = lat; }
+  }
+  return best;
+}
+
+window.H = {
+  init(seed, diff = 'medium', cues = 0, map = 'orbital') {
+    if (renderer) renderer.dispose(false);
+    sim = new Sim(map, diff, seed);
+    renderer = new Renderer(canvas, map, { cues: !!cues });
+    renderer.resize(canvas.clientWidth, canvas.clientHeight);
+    renderer.resetCamera(0);
+    return true;
+  },
+  /** Step until sim.z >= z (autopilot steers; invincible while stepping). */
+  advanceTo(z, lateralBias = null) {
+    let guard = 0;
+    while (sim.z < z && guard++ < 200000) {
+      sim.invincibleUntil = 1e9;
+      if (sim.state === 'playing' || sim.state === 'airborne') {
+        const target = lateralBias != null ? lateralBias : safeLateral(sim.track, sim.z, sim.lateralOffset);
+        const d = target - sim.lateralOffset;
+        sim.lateralOffset += Math.max(-0.25, Math.min(0.25, d));
+        sim.lateralVelocity = 0;
+      }
+      sim.step(0, 0);
+      if (sim.state === 'gameover' || sim.state === 'falling' || sim.state === 'crashing') return { z: sim.z, state: sim.state };
+    }
+    sim.invincibleUntil = 0;
+    return { z: sim.z, state: sim.state, y: sim.y, lat: sim.lateralOffset };
+  },
+  setLateral(l) { sim.lateralOffset = l; },
+  draw() {
+    renderer.resetCamera(sim.lateralOffset);
+    renderer._camLagY = sim.y;
+    const sf = Math.max(0, Math.min(1, (sim.speed - sim.cfg.baseSpeed) / (sim.cfg.maxSpeed - sim.cfg.baseSpeed)));
+    renderer.camera.fov = CAMERA_BASE_FOV + CAMERA_MAX_FOV_KICK * sf;
+    renderer.camera.updateProjectionMatrix();
+    renderer.render(sim, false);
+    renderer.render(sim, false);
+    return true;
+  },
+  /** Find event start z values on this seed's track (generated up to `upTo`). */
+  events(upTo = 1200) {
+    const t = sim.track;
+    t.ensureAhead(upTo);
+    const out = [];
+    const s = t.segments;
+    for (let i = 0; i < s.length; i++) {
+      const g = s[i];
+      if (g.jumpMeta) out.push({ k: 'jump', z: g.z0, gap: g.jumpMeta.gapLength, y: g.jumpMeta.landingY });
+      if (g.telegraph && !(s[i - 1] && s[i - 1].telegraph)) out.push({ k: 'split', z: g.z0 });
+      if ((g.void1 > 0) && !g.isGap && g.type === 'split' && !(s[i - 1] && s[i - 1].void1 > 0)) out.push({ k: 'voidOpen', z: g.z0 });
+      if (g.isTunnel && !(s[i - 1] && s[i - 1].isTunnel)) out.push({ k: 'tunnel', z: g.z0 });
+      if (g.type === 'obstacle') out.push({ k: 'obst', z: g.z0 });
+      if (g.pickup) out.push({ k: g.pickup.type, z: g.z0 });
+    }
+    return out;
+  },
+  /** Relative cost check (SwiftShader is software GL: compare before vs after only, never as phone fps). */
+  /** Mean ms per frame over `frames` (sim step + render; `finish` waits for the GPU too).
+   *  SwiftShader is software GL: compare cues off vs on only, never read it as a phone's fps. */
+  bench(frames = 240, finish = true) {
+    const gl = renderer.renderer.getContext();
+    const px = new Uint8Array(4);
+    const t0 = performance.now();
+    let calls = 0, tris = 0;
+    for (let i = 0; i < frames; i++) {
+      sim.invincibleUntil = 1e9;
+      sim.lateralOffset = safeLateral(sim.track, sim.z, sim.lateralOffset);
+      sim.step(0, 0);
+      renderer.render(sim, false);
+      calls = Math.max(calls, renderer.renderer.info.render.calls);
+      tris = Math.max(tris, renderer.renderer.info.render.triangles);
+      if (finish) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // waits for the frame to be drawn
+    }
+    const ms = (performance.now() - t0) / frames;
+    return { ms: +ms.toFixed(3), maxCalls: calls, maxTriangles: tris };
+  },
+  state() { return { z: sim.z, y: sim.y, state: sim.state, lat: sim.lateralOffset, speed: sim.speed }; },
+};
+window.__ready = true;
+</script>
+</body>
+</html>
