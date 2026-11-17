@@ -433,6 +433,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.
 - **Private play data (2026-11-16):** `tools/test-private-log.mjs`.
 - **Ball Run Orbital Hard = Classic points, admin only (2026-11-16):** `tools/test-ballrun-classic-equiv.mjs`.
+- **Ball Run smooth at 120 Hz (2026-11-16):** `tools/test-ballrun-smooth.cjs` (dev server).
 - **Ball Run cues, admin only (2026-11-17):** `tools/ballrun-ux/shots.cjs` (cues off vs on, same seed and z), `ui-shots.cjs` (`ADMIN=1`), `harness.html` (`H.bench()` frame times).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
