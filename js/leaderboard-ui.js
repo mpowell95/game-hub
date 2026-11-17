@@ -635,13 +635,12 @@ function boardView(list, id) {
       tier: (g) => (_tier == null ? boardTierOf(g, id) : null),
       // Spelling Bee: days played is already 📅 under the name.
       sub: (g) => (id === 'spellingbee' && beeBoard() ? '' : t('lb_played_count', { n: boardPlaysOf(g, id) })),
-      // Cup Pong's reracks go on their own line under "played": on one line the column grew wide
-      // enough to run over the name and the tier pill (2026-10-28).
+      // Cup Pong's reracks line was REMOVED (2026-11-17, Matt: "Delete the entire line... not helpful"); fewer reracks
+      // still breaks a tie (cpReracksOf), it is just not printed.
       sub2: (g) => {
         // Sudoku / Murdoku: the number above is no-hint solves (2026-10-29).
         if (noHintTierOf(g, id)) return tx('lb_nohint', 'no hints');
-        const cr = id === 'cuppong' ? cpReracksOf(g) : null;
-        return cr && cr.w ? tx('lb_cp_reracks', `${cr.r} reracks in ${cr.w} wins`, { n: cr.r, w: cr.w }) : '';
+        return '';
       },
       subHtml: id === 'spellingbee' && beeBoard() ? beeChipsHTML : id === 'contexto' ? (g) => ctSubHTML(ctOf(g)) : null,
       // Leaderboard v2 only (2026-11-01): the row's number is a no-hint count (its "no hints" pill). Unread here.
