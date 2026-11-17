@@ -824,7 +824,26 @@ function playerHTML(top) {
   // Matt, 2026-11-02: "the Me page is way easier to read than someone else's profile": the same medal tiles as Me
   // (the Hall of Fame Medals row), and the games sorted best place first by default, with a sort picker.
   const mp = ((_model.hof.find((x) => x.key === top.key) || {}).p) || [0, 0, 0];
-  const tiles = `<div class="lb2-tiles">${[1, 2, 3].map((n) => `<button type="button" class="lb2-tile lb2-mtile" data-act="tab" data-v="hof">${medal(n, 'sm')}<b class="num">${fmt(mp[n - 1])}</b></button>`).join('')}</div>`;
+  // A medal tile shows only the games that medal came from; tap it again for every game (Matt, 2026-11-17: "When I
+  // click on the silver medals ... I expect to see the games he has a silver medal in"; it used to open Hall of Fame).
+  const fm = [1, 2, 3].includes(top.medal) ? top.medal : 0;
+  const tiles = `<div class="lb2-tiles">${[1, 2, 3].map((n) => `<button type="button" class="lb2-tile lb2-mtile${fm === n ? ' on' : ''}" data-act="pmedal" data-v="${n}" aria-pressed="${fm === n}">${medal(n, 'sm')}<b class="num">${fmt(mp[n - 1])}</b></button>`).join('')}</div>`;
+  if (fm) {
+    // The same standings the tile counts (a language-split game gives one row per language), so the list and the number agree.
+    const byId = new Map((pg ? pg.games : []).map((x) => [x.id, x]));
+    const rows = [];
+    for (const st of _model.standings) {
+      const r = st.rows.find((x) => x.key === top.key);
+      if (!r || r.rank !== fm || r.noMedal) continue;
+      rows.push({ id: st.base || baseOf(st.game), mk: st.game, tie: !!r.tie });
+    }
+    rows.sort((a, b) => mkTitle(a.mk).localeCompare(mkTitle(b.mk), getLang()));
+    const mlist = rows.length ? `<div class="lb2-card">${rows.map((x) => { const v = byId.get(x.id); return `<button type="button" class="lb2-row sm" data-act="pgame" data-game="${esc(x.id)}">
+      ${art(x.id)}<span class="lb2-grow"><span class="lb2-t1">${esc(mkTitle(x.mk))}</span>${v ? `<span class="lb2-t2 lb2-vline num">${valHTML(x.id, v)}</span>` : ''}</span>
+      <span class="lb2-right">${med(fm, x.tie, 'sm')}</span>${CHEV}</button>`; }).join('')}</div>`
+      : `<div class="lb2-card"><p class="lb2-empty-t">${esc(t2('lb2_nothing'))}</p></div>`;
+    return `${bar}<div class="lb2-scroll" data-role="scroll"><div class="lb2-body lb2-pad">${tag ? `<p class="lb2-tag">${esc(tag)}</p>` : ''}${tiles}<div><h2 class="lb2-h2 lb2-h2m">${esc(t2('lb2_games_h'))}</h2>${mlist}</div></div></div>`;
+  }
   const rankOf = (id) => { const p = defPlace(id, top.key); return p && p.rank ? p.rank : Infinity; };
   const list = pg ? pg.games.slice() : [];
   if (_pSort === 'best') list.sort((a, b) => (rankOf(a.id) - rankOf(b.id)) || ((b.plays | 0) - (a.plays | 0)));
@@ -1060,6 +1079,11 @@ function onClick(e) {
       // history entry and the screen leave together; it used to pop the screen and unwind history after).
       if (below && below.kind === 'player' && below.key === top.key) { if (_bs) _bs.back(); else stepBack(); return; }
       pushLevel({ kind: 'player', key: top.key, all: false }); return;
+    }
+    case 'pmedal': {
+      const top = _stack[_stack.length - 1], n = Number(v);
+      if (!top || top.kind !== 'player' || ![1, 2, 3].includes(n)) return;
+      top.medal = top.medal === n ? 0 : n; render({ keepScroll: true }); return;
     }
     case 'back': goBack(); return;
     case 'melist': {
@@ -1420,6 +1444,8 @@ html[lang="es"] .lb2-bar.lb2-bar-big h1{font-size:24px}
 .lb2-tile{min-height:84px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 4px;background:var(--l2-surf);border:1px solid var(--l2-line);text-align:center}
 .lb2-tile b{font-size:26px}
 .lb2-mtile{flex-direction:row;gap:10px;font:inherit;color:inherit;cursor:pointer}
+.lb2-mtile.on{border:3px solid var(--l2-accent);background:var(--l2-chip)}
+.lb2-h2m{min-height:44px;display:flex;align-items:center;margin-bottom:8px}
 .lb2-recq{color:var(--l2-muted)}
 .lb2-h2row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .lb2-h2row .lb2-h2{margin-bottom:0}
