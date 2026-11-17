@@ -521,7 +521,7 @@ function beeSlotsHTML(b) {
 const nohintPill = () => `<span class="lb2-pill lb2-nh">${esc(t2('lb2_nohint'))}</span>`;
 /** Under the name: lifetime only ("24 played"); the difficulty went to the number and the group divider. */
 function rowSub(r) {
-  // Cup Pong's "10 reracks in 40 wins" gets its own line (2026-11-16, Matt: "unclear" squeezed after "played").
+  // sub2 (Sudoku/Murdoku "no hints" on the old board) gets its own line; Cup Pong's reracks line was removed 2026-11-17.
   const inner = sepHTML(r.subHtml || '') + (r.sub ? esc(sepText(r.sub)) : '');
   const two = !r.nohint && r.sub2 ? `<span class="lb2-sub">${esc(sepText(r.sub2))}</span>` : '';
   return (inner ? `<span class="lb2-sub">${inner}</span>` : '') + two;
