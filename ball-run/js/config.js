@@ -352,3 +352,25 @@ export const DEFAULT_MAP = 'classic';
 export function mapConfig(key) {
   return MAPS[key] || MAPS[DEFAULT_MAP];
 }
+
+// --- Hazard and jump cues, ADMIN DEVICES ONLY until Matt says "release it" (2026-11-17, Matt on the mockup:
+// "looks great - build it"; docs/BALL-RUN-UX-REVIEW.md). render.js draws these only when ui.js passes
+// `cues: true` (isAdminDevice(), read once per run). Two cue families, told apart by SHAPE first and hue
+// second (Matt is red/green colorblind; amber vs cyan sits on the blue-yellow axis he sees):
+//   deadly hole (Split void, a split pad's gap) = amber + black diagonal STRIPES on its lips and walls;
+//   jump the ball flies                         = cyan forward CHEVRONS, a cyan lip, a DOTTED flight arc,
+//                                                 a cyan-rimmed landing pad with a front face and pillars.
+export const CUE_COLORS = {
+  deckTile: 0x242e45,   // Orbital's deck, a touch lighter than 0x1c2333 so it separates from the void
+  deckGrout: 0x52648a,
+  skirtTop: 0x46577a,   // the slab's side/front faces, fading to the void colour at the bottom
+  rim: 0x8ea3c8,        // an ordinary outer edge (falling off): a pale steel line
+  jump: 0x5fe3ff,       // chevrons, lip, arc dots, landing-pad rim, height signs
+  pillar: 0x6f8fb3,
+  hazardA: 0xffce3a,    // stripes: amber...
+  hazardB: 0x16120a,    // ...and near-black
+};
+export const DECK_DEPTH = 1.1;   // slab thickness under Orbital's deck, world units
+export const CUE_FADE_NEAR = 56; // the deck fades to black (per vertex) before the 72-unit generation window
+export const CUE_FADE_FAR = 74;   // ends; 56 keeps a hazard 45 units out fully lit
+export const RUNUP_SEGS = 4;     // segments of chevrons before a jump's gap (8 world units)

@@ -5,11 +5,11 @@ improved significantly. especially orbital. you have no idea whats a hole andwha
 really impossible to detect. and drops look exactly like holes. Have the agent review this and give detailed
 feedback, then mockup fixes". **A review and mockups only. Nothing here is cleared for players.**
 
-- Mockup page (before/after pairs): `mockup.html` (images in `img/` beside it) and `mockup-embedded.html` (one file), made by the session in its scratchpad from `tools/ballrun-ux/shots.cjs` + `ui-shots.cjs` output; see "How the
-  shots were made" at the end.
-- Prototype code: `ball-run/js/render.js` (everything behind `UX_PROTO`, off unless the URL has `?uxproto=1`, or
-  `?uxproto=cam` for the camera option) and the `UX_*` block at the end of `ball-run/js/config.js`. With the flag
-  off the renderer draws exactly what `main` draws. No sim, track or scoring change.
+**BUILT 2026-11-17, ADMIN DEVICES ONLY** (Matt on the mockup: "looks great - build it"; not cleared for players
+until he says "release it"). What shipped and how to flip it for everyone: `ball-run/CLAUDE.md`, "Hazard and jump
+cues". Everything below is the review as written on 2026-11-16 (the `?uxproto` switch it mentions was the mockup's and is
+gone; the higher camera, S8, was not built). Fog (S7) was built as a per-vertex fade instead: `THREE.Fog` cost about
+12% of a frame in Chromium's software renderer.
 
 Line numbers below are `main` at d67935d44 unless marked "branch".
 
@@ -202,6 +202,6 @@ floating "‹ Hub" (`max(safe top, 54px)`). **Mockup:** centred, top padding 54p
   stops at a chosen z, draws one frame; `H.bench()` for the cost numbers.
 - `shots.cjs`: every hazard pair, same seed and z, prototype off then on (seeds: Split 2, flat jump 7, drop 6, rise 3,
   offset 11, split pad 2, Split with blocks 4, heart/orb 1; Medium).
-- `ui-shots.cjs`: the real page (help, setup, HUD, game over) as test1 / DREG5 with sync off; `UX=1` adds
-  `?uxproto=1` and the mockup CSS.
+- `ui-shots.cjs`: the real page (help, setup, HUD, game over) as test1 / DREG5 with sync off; `ADMIN=1` marks the
+  browser an admin device (`gamehub.adminDevice.v1` = '1'), i.e. cues on.
 - Run: `PORT=8127 node server.mjs`, then `BASE=http://localhost:8127 node tools/ballrun-ux/shots.cjs <outDir>`.

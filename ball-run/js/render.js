@@ -9,6 +9,7 @@ import {
   SEGMENT_LENGTH, SEGMENTS_AHEAD, SEGMENTS_BEHIND, BALL_RADIUS, BALL_DIAMETER, OBSTACLE_SIZE, TILE_SIZE,
   CAMERA_LAG, CAMERA_LAG_HZ, CAMERA_HEIGHT, CAMERA_BACK, CAMERA_LOOK_AHEAD, CAMERA_LOOK_HEIGHT_FRAC,
   CAMERA_BASE_FOV, CAMERA_MAX_FOV_KICK, CRASH_SHAKE_MS, mapConfig,
+  CUE_COLORS, DECK_DEPTH, CUE_FADE_NEAR, CUE_FADE_FAR, RUNUP_SEGS,
 } from './config.js';
 
 const FLOOR_POOL_SIZE = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
@@ -56,6 +57,13 @@ const ACCENT_POOL_SIZE = FLOOR_POOL_SIZE * 2;
 // what made a hazardous landing pad unreadable until the player was already airborne and out of
 // time to react.
 const GATE_POOL_SIZE = 4;
+
+// Hazard and jump cues (admin devices only, see _buildCues).
+const STRIPE_LEN = 0.9;          // world units per amber/black stripe pair along a void's lip
+const HAZARD_BAND = 0.42;        // width of the striped band on each lip of a void
+const TUNNEL_CHEVRON_LEN = 2.5;  // world units per tunnel floor chevron
+const ARC_DOTS_PER_LANE = 13;    // flight-arc dots per landing lane (one lane, or two on a split pad)
+const ARC_DOTS_MAX = 2 * ARC_DOTS_PER_LANE;
 
 // One repeatable TILE_SIZE-unit tile: grout drawn only on the top/left edges
 // so REPEAT-wrapping produces a single continuous grid line per tile boundary
@@ -136,12 +144,81 @@ function buildTunnelWallTexture(colors) {
   return tex;
 }
 
+const WHITE = new Float32Array([1, 1, 1]);
+
+/** A fixed-capacity batch of quads rebuilt every frame into ONE dynamic BufferGeometry: one draw
+ *  call for the whole batch, no allocation per frame (quad() copies numbers into preallocated
+ *  arrays; end() only moves the draw range and flags the attributes). Used by the cue layer.
+ *  Every corner's colour is faded toward black by its distance ahead (fadeZ0..fadeZ1), so the deck
+ *  dissolves before the generation window ends: per vertex, at no per-pixel cost (a THREE.Fog cost
+ *  about 12% of a frame in Chromium's software renderer). */
+class QuadBatch {
+  constructor(cap, withUv) {
+    this.cap = cap;
+    this.geo = new THREE.BufferGeometry();
+    this.pos = new Float32Array(cap * 12);
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    const nrm = new Float32Array(cap * 12);
+    for (let i = 0; i < cap * 4; i++) nrm[i * 3 + 1] = 1; // every lit quad here is a deck top: up
+    this.geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    this.uv = null;
+    if (withUv) {
+      this.uv = new Float32Array(cap * 8);
+      this.geo.setAttribute('uv', new THREE.BufferAttribute(this.uv, 2).setUsage(THREE.DynamicDrawUsage));
+    }
+    this.col = new Float32Array(cap * 12);
+    this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
+    this.fadeZ0 = Infinity; // full colour before this z
+    this.fadeZ1 = Infinity; // black from this z
+    // Quad corners 0 near-left, 1 near-right, 2 far-right, 3 far-left; wound so a deck top faces up.
+    const idx = new Uint16Array(cap * 6);
+    for (let i = 0; i < cap; i++) {
+      idx[i * 6] = i * 4; idx[i * 6 + 1] = i * 4 + 2; idx[i * 6 + 2] = i * 4 + 1;
+      idx[i * 6 + 3] = i * 4; idx[i * 6 + 4] = i * 4 + 3; idx[i * 6 + 5] = i * 4 + 2;
+    }
+    this.geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.geo.setDrawRange(0, 0);
+    this.n = 0;
+    this.mesh = null;
+  }
+
+  begin() { this.n = 0; }
+
+  /** q: 12 floats (4 corners), t: 8 uvs, c0..c3: linear RGB triplets (Float32Array(3)) per corner,
+   *  or null for white (a textured batch). */
+  quad(q, t, c0, c1, c2, c3) {
+    if (this.n >= this.cap) return;
+    const i = this.n++;
+    this.pos.set(q, i * 12);
+    if (this.uv) this.uv.set(t, i * 8);
+    this._corner(i * 12, q[2], c0 || WHITE);
+    this._corner(i * 12 + 3, q[5], c1 || WHITE);
+    this._corner(i * 12 + 6, q[8], c2 || WHITE);
+    this._corner(i * 12 + 9, q[11], c3 || WHITE);
+  }
+
+  _corner(o, z, c) {
+    const f = z <= this.fadeZ0 ? 1 : z >= this.fadeZ1 ? 0 : (this.fadeZ1 - z) / (this.fadeZ1 - this.fadeZ0);
+    this.col[o] = c[0] * f; this.col[o + 1] = c[1] * f; this.col[o + 2] = c[2] * f;
+  }
+
+  end() {
+    this.geo.setDrawRange(0, this.n * 6);
+    if (this.n === 0) return;
+    this.geo.attributes.position.needsUpdate = true;
+    if (this.uv) this.geo.attributes.uv.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+  }
+
+  dispose() { this.geo.dispose(); }
+}
+
 export class Renderer {
   /** `mapKey` selects the map's color set (config.js's `MAPS`) for every texture/material this
    *  renderer builds. Textures/materials are built once, here, in the constructor — a map
    *  change is picked up by tearing down and constructing a fresh Renderer at setup time (ui.js
    *  already does this on every run start/restart), never by mutating an existing one per frame. */
-  constructor(canvas, mapKey) {
+  constructor(canvas, mapKey, opts = {}) {
     this.canvas = canvas;
     this.colors = mapConfig(mapKey).colors;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -174,6 +251,15 @@ export class Renderer {
     this._buildAccentPool();
     this._buildGatePool();
     this._buildPickupPools();
+
+    // Hazard and jump cues: ADMIN DEVICES ONLY until Matt says "release it". ui.js reads
+    // isAdminDevice() once per run and passes it here; false = exactly the old renderer.
+    const mc = mapConfig(mapKey);
+    this.cues = !!opts.cues;
+    this.deck = this.cues && !!(mc.jump || mc.split); // Orbital: the solid deck, holes, jumps
+    this._jumpCfg = mc.jump || null;
+    this._cue = null;
+    if (this.cues) this._buildCues();
   }
 
   _buildTextures() {
@@ -354,6 +440,342 @@ export class Renderer {
     }
   }
 
+  // =============================================================================================
+  // HAZARD AND JUMP CUES, ADMIN DEVICES ONLY until Matt says "release it" (2026-11-17, Matt on the
+  // mockup: "looks great - build it"; docs/BALL-RUN-UX-REVIEW.md, ball-run/CLAUDE.md "Cues").
+  // Built only when ui.js passes `cues: true`; with it off nothing below is created or run and every
+  // pixel is the old renderer's. Everything is created once here, pooled, and released in
+  // _disposeCues(); the per-frame path writes numbers into preallocated arrays only.
+  //
+  // `this.deck` (Orbital) draws the deck itself as one solid slab per frame:
+  //   - each segment is a trapezoid following w0->w1, void0->void1, y0->y1 and wCenter, so the slope
+  //     back up after a drop is a ramp, not floating plates with see-through risers (the "drops look
+  //     like holes" cause), and width changes have straight edges;
+  //   - a deadly void has amber/black stripes on its lips and walls, and a striped centre strip from the
+  //     first widening segment;
+  //   - a jump has cyan chevrons on its run-up, a cyan lip, a dotted flight arc to each landing lane, a
+  //     landing pad with a front face, a cyan rim and pillars, and down/up triangle posts for a drop/rise
+  //     (these replace the amber gate posts);
+  //   - outer edges get a pale rim and a slab face; the deck fades out before the generation window ends.
+  // Both maps (cues on): tunnel floors with world-space chevrons (no squash, no "SPEED UP" text).
+  // =============================================================================================
+  _buildCues() {
+    const C = CUE_COLORS;
+    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    const canvasTex = (w, h, draw) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      draw(c.getContext('2d'), w, h);
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    };
+    const lin = (n) => { const c = new THREE.Color(); c.setHex(n, THREE.SRGBColorSpace); return new Float32Array([c.r, c.g, c.b]); };
+    const u = this._cue = {
+      q: new Float32Array(12), t: new Float32Array(8), m4: new THREE.Matrix4(),
+      // the current segment's two ends (a = z0, b = z1) and its local right vector
+      aCx: 0, aZ: 0, aY: 0, bCx: 0, bZ: 0, bY: 0, nx: 1, nz: 0,
+      arcLat: 0,
+      col: {
+        rim: lin(C.rim), jump: lin(C.jump), skirt: lin(C.skirtTop), pillar: lin(C.pillar), void: lin(this.colors.void),
+      },
+      batches: [],
+    };
+    const add = (batch, mat, order) => {
+      batch.mesh = new THREE.Mesh(batch.geo, mat);
+      batch.mesh.frustumCulled = false; // positions are rewritten every frame
+      if (order) batch.mesh.renderOrder = order;
+      this.scene.add(batch.mesh);
+      u.batches.push(batch);
+      return batch;
+    };
+
+    // Tunnel floor (both maps): one chevron per TUNNEL_CHEVRON_LEN units, texture in world space.
+    u.tunTex = canvasTex(256, 256, (g, w) => {
+      g.fillStyle = hex(this.colors.trackTile); g.fillRect(0, 0, w, w);
+      g.strokeStyle = hex(this.colors.chevron); g.lineWidth = 26; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(24, 190); g.lineTo(w / 2, 70); g.lineTo(w - 24, 190); g.stroke();
+    });
+    u.tunMat = new THREE.MeshStandardMaterial({ map: u.tunTex, vertexColors: true, roughness: 0.7, metalness: 0.05, side: THREE.DoubleSide });
+    u.tun = add(new QuadBatch(SEGMENTS_AHEAD + SEGMENTS_BEHIND, true), u.tunMat);
+
+    // The deck's top (both maps): one trapezoid per segment, tiled in world space. Classic keeps its
+    // own colours (only its stair-stepped edges change); Orbital gets the lighter cue deck.
+    u.tileTex = canvasTex(256, 256, (g, w) => {
+      g.fillStyle = hex(this.deck ? C.deckTile : this.colors.trackTile); g.fillRect(0, 0, w, w);
+      g.strokeStyle = hex(this.deck ? C.deckGrout : this.colors.trackGrout); g.lineWidth = this.deck ? 8 : 6;
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(w, 0); g.moveTo(0, 0); g.lineTo(0, w); g.stroke();
+    });
+    u.topMat = new THREE.MeshStandardMaterial({ map: u.tileTex, vertexColors: true, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide });
+    u.top = add(new QuadBatch((SEGMENTS_AHEAD + SEGMENTS_BEHIND) * 2, true), u.topMat);
+
+    if (this.deck) {
+      u.stripeTex = canvasTex(128, 128, (g, w) => {
+        g.fillStyle = hex(C.hazardB); g.fillRect(0, 0, w, w);
+        g.fillStyle = hex(C.hazardA);
+        for (let k = -2; k < 3; k++) {
+          g.beginPath();
+          g.moveTo(k * w / 2, 0); g.lineTo(k * w / 2 + w / 4, 0); g.lineTo(k * w / 2 + w / 4 + w, w); g.lineTo(k * w / 2 + w, w);
+          g.closePath(); g.fill();
+        }
+      });
+      u.chevTex = canvasTex(256, 256, (g, w) => {
+        g.clearRect(0, 0, w, w);
+        g.strokeStyle = hex(C.jump); g.lineWidth = 34; g.lineJoin = 'miter';
+        g.beginPath(); g.moveTo(30, 200); g.lineTo(w / 2, 70); g.lineTo(w - 30, 200); g.stroke();
+      });
+      u.fxMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+      u.hazMat = new THREE.MeshBasicMaterial({ map: u.stripeTex, vertexColors: true, side: THREE.DoubleSide });
+      u.chevMat = new THREE.MeshBasicMaterial({ map: u.chevTex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      const segs = SEGMENTS_AHEAD + SEGMENTS_BEHIND;
+      u.fx = add(new QuadBatch(segs * 12, false), u.fxMat);
+      u.haz = add(new QuadBatch(segs * 5, true), u.hazMat);
+      u.chev = add(new QuadBatch(RUNUP_SEGS * 2, true), u.chevMat, 2);
+
+      u.dotGeo = new THREE.SphereGeometry(0.17, 8, 6);
+      u.dotMat = new THREE.MeshBasicMaterial({ color: C.jump });
+      u.dots = new THREE.InstancedMesh(u.dotGeo, u.dotMat, ARC_DOTS_MAX);
+      u.dots.frustumCulled = false;
+      u.dots.count = 0;
+      this.scene.add(u.dots);
+    }
+  }
+
+  /** Sets the current segment's two ends and local right vector (no allocation). */
+  _cueSeg(seg) {
+    const u = this._cue;
+    const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
+    u.nx = Math.cos(yaw); u.nz = -Math.sin(yaw);
+    u.aCx = seg.cx0; u.aZ = seg.z0; u.aY = seg.y0 || 0;
+    u.bCx = seg.cx1; u.bZ = seg.z1; u.bY = seg.y1 || 0;
+  }
+
+  /** Writes the point at end e (0 = z0, 1 = z1), lateral `lat`, height offset dy, into q[k..k+2]. */
+  _cuePt(e, lat, dy, k, dz = 0) {
+    const u = this._cue, q = u.q;
+    q[k] = (e ? u.bCx : u.aCx) + lat * u.nx;
+    q[k + 1] = (e ? u.bY : u.aY) + dy;
+    q[k + 2] = (e ? u.bZ : u.aZ) + lat * u.nz + dz;
+  }
+
+  /** A flat strip on the deck from lateral l0..h0 (near end) to l1..h1 (far end). uvMode 0 world
+   *  tiles, 1 stripes along z, 2 one chevron across the width per 2 units, 3 tunnel chevrons. */
+  _cueStrip(batch, l0, h0, l1, h1, dy, uvMode, c0, c1) {
+    const u = this._cue, t = u.t;
+    this._cuePt(0, l0, dy, 0); this._cuePt(0, h0, dy, 3); this._cuePt(1, h1, dy, 6); this._cuePt(1, l1, dy, 9);
+    const az = u.aZ, bz = u.bZ;
+    if (uvMode === 0) {
+      t[0] = l0 / TILE_SIZE; t[1] = az / TILE_SIZE; t[2] = h0 / TILE_SIZE; t[3] = az / TILE_SIZE;
+      t[4] = h1 / TILE_SIZE; t[5] = bz / TILE_SIZE; t[6] = l1 / TILE_SIZE; t[7] = bz / TILE_SIZE;
+    } else if (uvMode === 1) {
+      t[0] = 0; t[1] = az / STRIPE_LEN; t[2] = 0.5; t[3] = az / STRIPE_LEN; t[4] = 0.5; t[5] = bz / STRIPE_LEN; t[6] = 0; t[7] = bz / STRIPE_LEN;
+    } else {
+      const len = uvMode === 2 ? 2 : TUNNEL_CHEVRON_LEN;
+      t[0] = 0; t[1] = az / len; t[2] = 1; t[3] = az / len; t[4] = 1; t[5] = bz / len; t[6] = 0; t[7] = bz / len;
+    }
+    batch.quad(u.q, t, c0, c0, c1, c1);
+  }
+
+  /** A vertical face along the segment at lateral lat0 (near) / lat1 (far), dyTop down to dyBot. */
+  _cueWall(batch, lat0, lat1, dyTop, dyBot, cTop, cBot, stripes) {
+    const u = this._cue, t = u.t;
+    this._cuePt(0, lat0, dyTop, 0); this._cuePt(1, lat1, dyTop, 3); this._cuePt(1, lat1, dyBot, 6); this._cuePt(0, lat0, dyBot, 9);
+    if (stripes) {
+      t[0] = u.aZ / STRIPE_LEN; t[1] = 1; t[2] = u.bZ / STRIPE_LEN; t[3] = 1;
+      t[4] = u.bZ / STRIPE_LEN - 0.5; t[5] = 0; t[6] = u.aZ / STRIPE_LEN - 0.5; t[7] = 0;
+    }
+    batch.quad(u.q, t, cTop, cTop, cBot, cBot);
+  }
+
+  /** A face across the track at end e from lateral lo..hi, dyTop down to dyBot, pushed dz along z. */
+  _cueAcross(e, lo, hi, dyTop, dyBot, dz, cTop, cBot) {
+    const u = this._cue;
+    this._cuePt(e, lo, dyTop, 0, dz); this._cuePt(e, hi, dyTop, 3, dz); this._cuePt(e, hi, dyBot, 6, dz); this._cuePt(e, lo, dyBot, 9, dz);
+    u.fx.quad(u.q, u.t, cTop, cTop, cBot, cBot);
+  }
+
+  /** A flat band lying on the deck at end e, lateral lo..hi, from dz0 to dz1 along z. */
+  _cueBand(e, lo, hi, dy, dz0, dz1, c) {
+    const u = this._cue;
+    this._cuePt(e, lo, dy, 0, dz0); this._cuePt(e, hi, dy, 3, dz0); this._cuePt(e, hi, dy, 6, dz1); this._cuePt(e, lo, dy, 9, dz1);
+    u.fx.quad(u.q, u.t, c, c, c, c);
+  }
+
+  /** A height sign beside the launch lip (end b): a post, then a triangle pointing down (drop) or up (rise). */
+  _cueSign(lat, down) {
+    const u = this._cue, q = u.q, C = u.col;
+    const pw = 0.12, tw = 1.0, th = 0.85, postH = 1.5;
+    this._cuePt(1, lat - pw / 2, 0, 0); this._cuePt(1, lat + pw / 2, 0, 3); this._cuePt(1, lat + pw / 2, postH, 6); this._cuePt(1, lat - pw / 2, postH, 9);
+    u.fx.quad(q, u.t, C.pillar, C.pillar, C.jump, C.jump);
+    const yb = postH, yt = postH + th;
+    this._cuePt(1, lat - tw / 2, down ? yt : yb, 0); this._cuePt(1, lat + tw / 2, down ? yt : yb, 3); this._cuePt(1, lat, down ? yb : yt, 6);
+    q[9] = q[6]; q[10] = q[7]; q[11] = q[8]; // a triangle: a quad with two shared corners
+    u.fx.quad(q, u.t, C.jump, C.jump, C.jump, C.jump);
+  }
+
+  _layoutCues(sim) {
+    const u = this._cue, C = u.col, D = DECK_DEPTH;
+    const segs = sim.track.segments;
+    const zFront = sim.z + SEGMENTS_AHEAD * SEGMENT_LENGTH;
+    const zBack = sim.z - SEGMENTS_BEHIND * SEGMENT_LENGTH;
+    // Orbital: the deck fades out before the window's hard end (Classic keeps its look).
+    const f0 = this.deck ? sim.z + CUE_FADE_NEAR : Infinity, f1 = this.deck ? sim.z + CUE_FADE_FAR : Infinity;
+    for (let k = 0; k < u.batches.length; k++) { const b = u.batches[k]; b.fadeZ0 = f0; b.fadeZ1 = f1; b.begin(); }
+    const landHold = this._jumpCfg ? this._jumpCfg.landingHoldSegs : 0;
+    let landLeft = 0;
+
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (seg.z0 > zFront) break;
+      if (seg.jumpLanding) landLeft = landHold;
+      const onPad = landLeft > 0;
+      if (landLeft > 0) landLeft--;
+      if (seg.z1 < zBack || seg.isGap) continue;
+      this._cueSeg(seg);
+      const wc = seg.wCenter || 0;
+      const aLo = wc - seg.w0 / 2, aHi = wc + seg.w0 / 2, bLo = wc - seg.w1 / 2, bHi = wc + seg.w1 / 2;
+
+      if (seg.isTunnel) {
+        this._cueStrip(u.tun, aLo, aHi, bLo, bHi, 0, 3, null, null);
+        continue;
+      }
+      if (!this.deck) {
+        this._cueStrip(u.top, aLo, aHi, bLo, bHi, 0, 0, null, null); // Classic: no voids, gaps or heights
+        continue;
+      }
+
+      const vc = wc + (seg.voidCenter || 0);
+      const av = seg.void0 || 0, bv = seg.void1 || 0;
+      const hasVoid = av > 0.001 || bv > 0.001;
+      const aVlo = vc - av, aVhi = vc + av, bVlo = vc - bv, bVhi = vc + bv;
+
+      if (hasVoid) {
+        this._cueStrip(u.top, aLo, aVlo, bLo, bVlo, 0, 0, null, null);
+        this._cueStrip(u.top, aVhi, aHi, bVhi, bHi, 0, 0, null, null);
+        // the deadly void: striped lips and walls
+        this._cueStrip(u.haz, Math.max(aLo, aVlo - HAZARD_BAND), aVlo, Math.max(bLo, bVlo - HAZARD_BAND), bVlo, 0.015, 1, null, null);
+        this._cueStrip(u.haz, aVhi, Math.min(aHi, aVhi + HAZARD_BAND), bVhi, Math.min(bHi, bVhi + HAZARD_BAND), 0.015, 1, null, null);
+        this._cueWall(u.haz, aVlo, bVlo, 0, -D * 0.8, null, null, true);
+        this._cueWall(u.haz, aVhi, bVhi, 0, -D * 0.8, null, null, true);
+      } else {
+        this._cueStrip(u.top, aLo, aHi, bLo, bHi, 0, 0, null, null);
+        // the middle that is about to open, striped from the first widening segment
+        if (seg.telegraph) this._cueStrip(u.haz, wc - 0.3, wc + 0.3, wc - 0.3, wc + 0.3, 0.015, 1, null, null);
+      }
+
+      // outer rims (cyan on a landing pad) and the slab's outer faces
+      const rimC = onPad ? C.jump : C.rim;
+      const rimW = onPad ? 0.22 : 0.12;
+      this._cueStrip(u.fx, aLo, aLo + rimW, bLo, bLo + rimW, 0.02, 0, rimC, rimC);
+      this._cueStrip(u.fx, aHi - rimW, aHi, bHi - rimW, bHi, 0.02, 0, rimC, rimC);
+      this._cueWall(u.fx, aLo, bLo, 0, -D, C.skirt, C.void, false);
+      this._cueWall(u.fx, aHi, bHi, 0, -D, C.skirt, C.void, false);
+
+      // landing pad (first segment after a gap): front face, cyan front lip, pillars
+      const prev = segs[i - 1];
+      if (prev && prev.isGap) {
+        if (hasVoid) {
+          this._cueAcross(0, aLo, aVlo, 0, -D, 0, C.skirt, C.void);
+          this._cueAcross(0, aVhi, aHi, 0, -D, 0, C.skirt, C.void);
+          this._cueBand(0, aLo, aVlo, 0.025, 0, 0.3, C.jump);
+          this._cueBand(0, aVhi, aHi, 0.025, 0, 0.3, C.jump);
+        } else {
+          this._cueAcross(0, aLo, aHi, 0, -D, 0, C.skirt, C.void);
+          this._cueBand(0, aLo, aHi, 0.025, 0, 0.3, C.jump);
+        }
+        this._cuePillar(aLo + 0.3); this._cuePillar(aHi - 0.3);
+        if (hasVoid) { this._cuePillar(aVlo - 0.3); this._cuePillar(aVhi + 0.3); }
+      }
+
+      // jump run-up: chevrons, and on the last segment before the gap the lip + height signs
+      if (!hasVoid) {
+        let gapAhead = 0;
+        for (let k = 1; k <= RUNUP_SEGS; k++) {
+          const n = segs[i + k];
+          if (!n) break;
+          if (n.isGap) { gapAhead = k; break; }
+        }
+        if (gapAhead) {
+          this._cueStrip(u.chev, aLo + 0.45, aHi - 0.45, bLo + 0.45, bHi - 0.45, 0.02, 2, null, null);
+          if (gapAhead === 1) {
+            this._cueBand(1, bLo, bHi, 0.03, -0.32, 0, C.jump);
+            const meta = segs[i + 1].jumpMeta;
+            const ly = meta ? meta.landingY : 0;
+            if (Math.abs(ly) > 0.01) { this._cueSign(bLo - 0.7, ly < 0); this._cueSign(bHi + 0.7, ly < 0); }
+          }
+        }
+      }
+    }
+    for (let k = 0; k < u.batches.length; k++) u.batches[k].end();
+    if (this.deck) this._layoutArc(sim);
+  }
+
+  /** A pillar under the landing pad's near edge at lateral `lat`, from the slab's bottom into the void. */
+  _cuePillar(lat) {
+    const u = this._cue, C = u.col, pw = 0.32, D = DECK_DEPTH;
+    this._cuePt(0, lat - pw / 2, -D, 0, 0.4); this._cuePt(0, lat + pw / 2, -D, 3, 0.4);
+    this._cuePt(0, lat + pw / 2, -D - 9, 6, 0.4); this._cuePt(0, lat - pw / 2, -D - 9, 9, 0.4);
+    u.fx.quad(u.q, u.t, C.pillar, C.pillar, C.void, C.void);
+  }
+
+  /** The dotted flight arc: the SAME formula as Sim.launchJump (impulse from the ball's current
+   *  speed), from the ball's lateral to each landing lane's centre, shown from the moment the next
+   *  gap is in view until the ball lands. */
+  _layoutArc(sim) {
+    const u = this._cue, dots = u.dots, jc = this._jumpCfg;
+    let n = 0;
+    if (jc && (sim.state === 'playing' || sim.state === 'airborne')) {
+      const segs = sim.track.segments;
+      let gap = null, land = null;
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i];
+        if (s.jumpMeta && s.z0 + s.jumpMeta.gapLength > sim.z) {
+          for (let k = i; k < segs.length; k++) if (segs[k].jumpLanding) { land = segs[k]; break; }
+          gap = s;
+          break;
+        }
+      }
+      if (gap && land && gap.z0 - sim.z < SEGMENTS_AHEAD * SEGMENT_LENGTH * 0.8) {
+        if (sim.state === 'playing') u.arcLat = sim.lateralOffset;
+        const L = gap.jumpMeta.gapLength, Y = gap.jumpMeta.landingY;
+        const T = L / Math.max(1, sim.speed);
+        const vy0 = Y / T + 0.5 * jc.gravity * T;
+        const wc = land.wCenter || 0, v = land.void0 || 0, hw = land.w0 / 2;
+        const lanes = v > 0.001 ? 2 : 1;
+        for (let lane = 0; lane < lanes; lane++) {
+          const target = lanes === 1 ? wc : wc + (lane ? 1 : -1) * (hw + v) / 2;
+          for (let k = 1; k < ARC_DOTS_PER_LANE; k++) {
+            const s = k / ARC_DOTS_PER_LANE;
+            const z = gap.z0 + s * L;
+            if (z < sim.z + 0.9) continue;
+            const t = s * T;
+            const y = vy0 * t - 0.5 * jc.gravity * t * t + BALL_RADIUS;
+            const lat = u.arcLat + (target - u.arcLat) * s;
+            const seg = sim.track.segmentAt(z);
+            const f = Math.min(1, Math.max(0, (z - seg.z0) / (seg.z1 - seg.z0)));
+            const cx = seg.cx0 + (seg.cx1 - seg.cx0) * f;
+            const yaw = Math.atan2(seg.cx1 - seg.cx0, seg.z1 - seg.z0);
+            u.m4.makeTranslation(cx + lat * Math.cos(yaw), y, z - lat * Math.sin(yaw));
+            if (n < ARC_DOTS_MAX) dots.setMatrixAt(n++, u.m4);
+          }
+        }
+      }
+    }
+    dots.count = n;
+    if (n) dots.instanceMatrix.needsUpdate = true;
+  }
+
+  _disposeCues() {
+    const u = this._cue;
+    for (const b of u.batches) { b.dispose(); this.scene.remove(b.mesh); }
+    for (const k of ['tunMat', 'topMat', 'fxMat', 'hazMat', 'chevMat', 'tunTex', 'tileTex', 'stripeTex', 'chevTex', 'dotGeo', 'dotMat']) {
+      if (u[k]) u[k].dispose();
+    }
+    if (u.dots) { u.dots.dispose(); this.scene.remove(u.dots); }
+    this._cue = null;
+  }
+
   resize(width, height) {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
@@ -375,7 +797,10 @@ export class Renderer {
     // physics-integrated flight arc while AIRBORNE. NOT `ballPoint.y` (worldPointAt's track-only
     // interpolation) - see track.js's worldPointAt doc comment for why those two deliberately
     // diverge mid-flight.
-    const ballY = sim.state === 'falling' ? Math.max(-14, sim.fallY) + BALL_RADIUS : sim.y + BALL_RADIUS;
+    // A fall starts from the height the ball was at (cues on: a lowered landing pad no longer snaps the
+    // ball up to 0 first; sim.y holds the height at the moment the fall began).
+    const fallBase = this.cues ? sim.y : 0;
+    const ballY = sim.state === 'falling' ? fallBase + Math.max(-14, sim.fallY) + BALL_RADIUS : sim.y + BALL_RADIUS;
 
     this.ball.position.set(ballWorldX, ballY, ballWorldZ);
     this.ball.rotation.x = sim.rollAngle;
@@ -404,6 +829,7 @@ export class Renderer {
     this._layoutFloor(track, sim.z);
     this._layoutObstacles(track, sim.z);
     this._layoutPickups(track, sim.z, sim.elapsed);
+    if (this.cues) this._layoutCues(sim);
 
     this._layoutCamera(sim, reducedMotion);
 
@@ -447,6 +873,17 @@ export class Renderer {
         mesh2.visible = false;
         accentA.visible = false;
         accentB.visible = false;
+        if (left) left.visible = false;
+        if (right) right.visible = false;
+        wallIdx += 2;
+        continue;
+      }
+
+      // Cues on: every floor is drawn by _layoutCues instead (the tunnel's walls still come from the
+      // pool below).
+      const cueFloor = this.cues;
+      if (cueFloor && !seg.isTunnel) {
+        mesh.visible = false; mesh2.visible = false; accentA.visible = false; accentB.visible = false;
         if (left) left.visible = false;
         if (right) right.visible = false;
         wallIdx += 2;
@@ -512,7 +949,7 @@ export class Renderer {
       } else {
         mesh2.visible = false;
 
-        mesh.visible = true;
+        mesh.visible = !cueFloor;
         mesh.position.set(midCx + wCenter * nx, midY, midZ + wCenter * nz);
         mesh.rotation.y = yaw;
         mesh.scale.set(width, dz, 1);
@@ -665,7 +1102,8 @@ export class Renderer {
       // A gentle medallion spin around Y with a slight fixed forward tilt - unlike the old
       // octahedron, a heart tumbling on X too would read as an unrecognizable blob partway
       // through the rotation, so only Y turns continuously here.
-      mesh.rotation.set(0.15, spin, 0);
+      // Cues on: a wobble instead of a full turn, which showed the heart edge-on half the time.
+      mesh.rotation.set(0.15, this.cues ? Math.sin(elapsed * 2.2) * 0.55 : spin, 0);
     }
   }
 
@@ -775,6 +1213,7 @@ export class Renderer {
     this._obstacleGeo.dispose(); this._obstacleEdgesGeo.dispose();
     this.obstacleMat.dispose(); this.obstacleEdgeMat.dispose();
     this.tileTex.dispose(); this.tunnelFloorTex.dispose(); this.tunnelFloorLabelTex.dispose(); this.tunnelWallTex.dispose();
+    if (this._cue) this._disposeCues();
     this.renderer.dispose();
     // Non-negotiable 7 continued: dispose() alone leaves the WebGL context to be reclaimed by
     // GC, not immediately - repeated hub<->game remounts can pile up toward the browser's

@@ -366,6 +366,54 @@ const HELP_PAGES = [
   { still: stillSpeedpoint, textKey: 'help_4' },
 ];
 
+// HAZARD AND JUMP CUES, ADMIN DEVICES ONLY until Matt says "release it" (2026-11-17, Matt on the mockup:
+// "looks great - build it"; docs/BALL-RUN-UX-REVIEW.md). `cuesOn()` is read once at mount and once per
+// run; off = every screen exactly as before.
+function cuesOn() { try { return isAdminDevice(); } catch { return false; } }
+
+// Orbital's two extra How to play pages (cues on): stripes = a hole, arrows + arc = a jump, in the
+// colours render.js's cue layer really uses (config.js CUE_COLORS).
+function stillHole() {
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_5')}">
+    <defs><pattern id="br-hz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="14" height="14" fill="#16120a"/><rect width="7" height="14" fill="#ffce3a"/></pattern></defs>
+    <rect width="200" height="200" fill="#03060f"/>
+    <path d="M10 196 L80 40 L120 40 L190 196 Z" fill="#242e45"/>
+    <path d="M74 196 L96 70 L104 70 L126 196 Z" fill="#03060f"/>
+    <path d="M62 196 L92 70 L96 70 L74 196 Z" fill="url(#br-hz)"/>
+    <path d="M126 196 L104 70 L108 70 L138 196 Z" fill="url(#br-hz)"/>
+    <circle cx="100" cy="168" r="17" fill="#8fe9ff" opacity="0.35"/>
+    <path d="M86 154 L114 182 M114 154 L86 182" stroke="#eef0ff" stroke-width="6" stroke-linecap="round"/>
+  </svg>`;
+}
+function stillJump() {
+  return `<svg viewBox="0 0 200 200" role="img" aria-label="${t('help_6')}">
+    <rect width="200" height="200" fill="#03060f"/>
+    <path d="M10 196 L58 110 L142 110 L190 196 Z" fill="#242e45"/>
+    <path d="M70 66 L130 66 L134 82 L66 82 Z" fill="#242e45"/>
+    <rect x="66" y="82" width="68" height="8" fill="#46577a"/>
+    <rect x="66" y="80" width="68" height="4" fill="#5fe3ff"/>
+    <rect x="72" y="90" width="4" height="60" fill="#6f8fb3"/><rect x="124" y="90" width="4" height="60" fill="#6f8fb3"/>
+    <g fill="none" stroke="#5fe3ff" stroke-width="7"><path d="M60 176 L100 156 L140 176"/><path d="M68 148 L100 132 L132 148"/></g>
+    <rect x="58" y="108" width="84" height="4" fill="#5fe3ff"/>
+    <g fill="#5fe3ff"><circle cx="100" cy="100" r="3.5"/><circle cx="100" cy="90" r="3.5"/><circle cx="100" cy="82" r="3.5"/><circle cx="100" cy="76" r="3.5"/></g>
+    <circle cx="100" cy="176" r="15" fill="#8fe9ff"/>
+  </svg>`;
+}
+const HELP_PAGES_ORBITAL_CUES = [
+  ...HELP_PAGES,
+  { still: stillHole, textKey: 'help_5' },
+  { still: stillJump, textKey: 'help_6' },
+];
+
+// Game over, cues on: a picture of what ended the run (sim.crashCause), so the hazards teach themselves.
+const CAUSE_ICONS = {
+  obstacle: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="16" y="14" width="32" height="32" rx="2" fill="#aab2bd" stroke="#ffce3a" stroke-width="2"/><circle cx="32" cy="54" r="7" fill="#8fe9ff"/></svg>`,
+  edge: `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M4 30 H36 V38 H4 Z" fill="#242e45"/><rect x="4" y="28" width="32" height="3" fill="#8ea3c8"/><circle cx="48" cy="48" r="7" fill="#8fe9ff"/><path d="M40 20 Q46 26 48 38" fill="none" stroke="#eef0ff" stroke-width="2.5" stroke-dasharray="3 4"/></svg>`,
+  void: `<svg viewBox="0 0 64 64" aria-hidden="true"><defs><pattern id="br-hzi" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#16120a"/><rect width="4" height="8" fill="#ffce3a"/></pattern></defs><rect x="2" y="24" width="20" height="10" fill="#242e45"/><rect x="42" y="24" width="20" height="10" fill="#242e45"/><rect x="16" y="24" width="6" height="22" fill="url(#br-hzi)"/><rect x="42" y="24" width="6" height="22" fill="url(#br-hzi)"/><circle cx="32" cy="44" r="7" fill="#8fe9ff"/></svg>`,
+  landing: `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="40" width="18" height="8" fill="#242e45"/><rect x="40" y="30" width="22" height="8" fill="#242e45"/><rect x="40" y="29" width="22" height="3" fill="#5fe3ff"/><g fill="#5fe3ff"><circle cx="24" cy="30" r="2"/><circle cx="30" cy="24" r="2"/><circle cx="36" cy="22" r="2"/></g><circle cx="34" cy="54" r="7" fill="#8fe9ff"/></svg>`,
+};
+
 class BallRunUI {
   constructor(container) {
     ensureStylesheet();
@@ -487,6 +535,7 @@ class BallRunUI {
           <div class="br-overlay" data-role="gameover" hidden>
             <div class="br-panel">
               <button type="button" class="br-help-close" data-action="close-gameover" aria-label="${t('close')}">&times;</button>
+              <div class="br-go-cause" data-role="go-cause" hidden></div>
               <h2 data-role="go-title">${t('run_over')}</h2>
               <p class="br-go-score" data-role="go-score"></p>
               <p class="br-go-distance" data-role="go-distance"></p>
@@ -542,6 +591,7 @@ class BallRunUI {
       resumeGate: q('[data-role="resume-gate"]'),
       resumeBtn: q('[data-role="resume"]'),
       gameover: q('[data-role="gameover"]'),
+      goCause: q('[data-role="go-cause"]'),
       goTitle: q('[data-role="go-title"]'),
       goScore: q('[data-role="go-score"]'),
       goDistance: q('[data-role="go-distance"]'),
@@ -557,6 +607,7 @@ class BallRunUI {
     };
 
     this.syncBestUi();
+    this.syncCues();
 
     this.el.mapCards.addEventListener('click', (e) => {
       const card = e.target.closest('[data-map]');
@@ -624,6 +675,14 @@ class BallRunUI {
 
   // --- Screens ------------------------------------------------------------
 
+  /** Cues on/off (admin devices only): read here at mount and again at every run start. */
+  syncCues() {
+    this._cues = cuesOn();
+    this.el.root.classList.toggle('br-cues', this._cues);
+    // "Back to hub" only ever returned to this game's setup screen; with cues on it says so.
+    this.el.goHub.textContent = this._cues ? t('setup') : t('back_to_hub');
+  }
+
   showSetup() {
     this.stopLoop();
     this.teardownRun();
@@ -644,7 +703,8 @@ class BallRunUI {
     this.sim = new Sim(this.map, this.difficulty, seed);
     this._eq = null; this._eqVal = 0;
     try { if (classicScoringOn(this.map, this.difficulty)) this._eq = new ClassicEquiv(seed); } catch (err) { console.error('[ball-run] classic scoring not set up; the Orbital score counts', err); this._eq = null; }
-    this.renderer = new Renderer(this.el.canvas, this.map);
+    this.syncCues();
+    this.renderer = new Renderer(this.el.canvas, this.map, { cues: this._cues });
     this.input = new InputController(this.el.canvas);
     this._resultRecorded = false;
 
@@ -871,8 +931,18 @@ class BallRunUI {
       try { syncMyStats(); } catch (err) { console.error('[ball-run] syncMyStats failed', err); }
     }
 
-    this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? t('fell_off') : t('crashed');
-    this.el.goScore.textContent = t('obstacles_passed', { n: score });
+    if (this._cues) {
+      const cause = CAUSE_ICONS[this.sim.crashCause] ? this.sim.crashCause : (this.sim.crashReason === 'edge' ? 'edge' : 'obstacle');
+      this.el.goCause.innerHTML = CAUSE_ICONS[cause];
+      this.el.goCause.hidden = false;
+      this.el.goTitle.textContent = cause === 'void' ? t('go_void') : cause === 'landing' ? t('go_landing')
+        : cause === 'edge' ? t('fell_off') : t('crashed');
+      this.el.goScore.textContent = t(score === 1 ? 'score_one' : 'score_many', { n: score });
+    } else {
+      this.el.goCause.hidden = true;
+      this.el.goTitle.textContent = this.sim.crashReason === 'edge' ? t('fell_off') : t('crashed');
+      this.el.goScore.textContent = t('obstacles_passed', { n: score });
+    }
     this.el.goDistance.textContent = t('distance_m', { n: distance });
     this.el.goBest.innerHTML = isNewBest
       ? `<span class="br-star" aria-hidden="true">&#9733;</span> ${t('new_best')}`
@@ -895,19 +965,22 @@ class BallRunUI {
     if (this._pausedForHelp) { this._pausedForHelp = false; if (this.sim && !this.sim.isOver()) this.startLoop(); }
   }
 
+  helpPages() { return this._cues && this.map === 'orbital' ? HELP_PAGES_ORBITAL_CUES : HELP_PAGES; }
+
   helpGo(i) {
-    this.helpPage = Math.max(0, Math.min(HELP_PAGES.length - 1, i));
+    this.helpPage = Math.max(0, Math.min(this.helpPages().length - 1, i));
     this.renderHelpPage();
   }
 
   renderHelpPage() {
-    const page = HELP_PAGES[this.helpPage];
+    const pages = this.helpPages();
+    const page = pages[this.helpPage];
     this.el.helpStill.innerHTML = page.still();
     this.el.helpText.textContent = t(page.textKey);
-    this.el.helpDots.innerHTML = HELP_PAGES.map((_, i) =>
+    this.el.helpDots.innerHTML = pages.map((_, i) =>
       `<span class="br-dot${i === this.helpPage ? ' is-active' : ''}"></span>`).join('');
     this.el.helpPrev.disabled = this.helpPage === 0;
-    this.el.helpNextBtn.disabled = this.helpPage === HELP_PAGES.length - 1;
+    this.el.helpNextBtn.disabled = this.helpPage === pages.length - 1;
   }
 
   // --- Teardown -----------------------------------------------------------
