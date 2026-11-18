@@ -27,7 +27,7 @@ export function lookColor(look) { return COLORS[kindOf(look)][colorIdx(look)]; }
 
 // --- surroundings and platform, per the VIEWER's look --------------------------------------------
 const SCENE = {
-  sumo: { bg0: '#2a1712', bg1: '#120806', plat: '#d9b77e', plat2: '#c99f5f', edge: '#f1dcae', rope: '#e8d7a0', ropeDk: '#a88d4f', line: '#ffffff' },
+  sumo: { bg0: '#2a1712', bg1: '#120806', plat: '#c79a5e', plat2: '#ad8047', edge: '#e6d39a', rope: '#e3cf8f', ropeDk: '#7d6430', line: '#ffffff' },
   car: { bg0: '#1f6fa8', bg1: '#0d3f66', plat: '#5d6b7c', plat2: '#4d5a69', edge: '#f2b705', rope: '#1b1f27', ropeDk: '#0b0d12', line: '#e9eef5' },
   puck: { bg0: '#2b2f3a', bg1: '#14161c', plat: '#eef3f8', plat2: '#dde6ef', edge: '#8a98ab', rope: '#3d6fb0', ropeDk: '#244a7c', line: '#E0532F' },
 };
@@ -81,19 +81,36 @@ export function drawPlatform(ctx, kind, cx, cy, half) {
   ctx.fillStyle = g;
   roundRect(ctx, x0, y0, w, w, half * 0.06); ctx.fill();
   if (kind === 'sumo') {
-    // the straw-bale ring (tawara) inset, with its knots, and the two white start lines
-    ctx.lineWidth = Math.max(3, half * 0.05);
-    ctx.strokeStyle = s.ropeDk;
-    roundRect(ctx, x0 + half * 0.1, y0 + half * 0.1, w - half * 0.2, w - half * 0.2, half * 0.05); ctx.stroke();
-    ctx.lineWidth = Math.max(2, half * 0.03);
-    ctx.strokeStyle = s.rope;
-    roundRect(ctx, x0 + half * 0.1, y0 + half * 0.1, w - half * 0.2, w - half * 0.2, half * 0.05); ctx.stroke();
+    // a DOHYO: the square clay mound, the swept sand band (janome) round the straw circle, the circle of
+    // straw bales (tawara) with its gaps, and the two white shikiri lines where the wrestlers crouch
+    const rr = half * 0.84;
+    ctx.fillStyle = 'rgba(255,240,210,0.22)';
+    ctx.beginPath(); ctx.arc(cx, cy, rr + half * 0.08, 0, Math.PI * 2); ctx.fill();
+    const bale = Math.max(4, half * 0.075);
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = bale + 2; ctx.strokeStyle = s.ropeDk;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = bale; ctx.strokeStyle = s.rope;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+    // the bales' ties, and the four gaps (tokudawara) at the sides
+    ctx.strokeStyle = s.ropeDk; ctx.lineWidth = Math.max(1, half * 0.012);
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2;
+      const c1 = Math.cos(a), s1 = Math.sin(a);
+      ctx.beginPath(); ctx.moveTo(cx + c1 * (rr - bale / 2), cy + s1 * (rr - bale / 2)); ctx.lineTo(cx + c1 * (rr + bale / 2), cy + s1 * (rr + bale / 2)); ctx.stroke();
+    }
+    ctx.lineWidth = bale + 3; ctx.strokeStyle = s.plat;
+    for (let q = 0; q < 4; q++) { const a = q * Math.PI / 2; ctx.beginPath(); ctx.arc(cx, cy, rr, a - 0.05, a + 0.05); ctx.stroke(); }
+    // the clay inside the ring, a touch lighter
+    ctx.fillStyle = 'rgba(255,235,200,0.16)';
+    ctx.beginPath(); ctx.arc(cx, cy, rr - bale / 2, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = s.line;
-    ctx.fillRect(cx - half * 0.2, cy - half * 0.16, half * 0.4, Math.max(2, half * 0.018));
-    ctx.fillRect(cx - half * 0.2, cy + half * 0.14, half * 0.4, Math.max(2, half * 0.018));
-    // sand texture
-    ctx.fillStyle = 'rgba(120,80,30,0.08)';
-    for (let i = 0; i < 60; i++) { const a = (i * 137.5) % 360, r = (i * 37) % 100; ctx.fillRect(cx + Math.cos(a) * half * r / 110, cy + Math.sin(a) * half * r / 110, 2, 2); }
+    const lw = Math.max(2, half * 0.03), lh = half * 0.2;
+    ctx.fillRect(cx - half * 0.16 - lw / 2, cy - lh / 2, lw, lh);
+    ctx.fillRect(cx + half * 0.16 - lw / 2, cy - lh / 2, lw, lh);
+    // clay texture
+    ctx.fillStyle = 'rgba(110,70,30,0.10)';
+    for (let i = 0; i < 70; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 70) * 0.95; ctx.fillRect(cx + Math.cos(a) * half * d, cy + Math.sin(a) * half * d, 2, 2); }
   } else if (kind === 'car') {
     // a rubber arena floor with a checker band, ringed by a striped tyre wall
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -178,95 +195,144 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
     ctx.beginPath(); ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
   }
-  ctx.rotate(ang);
-  if (kind === 'sumo') drawSumo(ctx, r, c);
-  else if (kind === 'car') drawCar(ctx, r, c);
-  else drawPuck(ctx, r, c);
-  ctx.rotate(-ang);
+  if (kind === 'sumo') {
+    // upright, seen from the front; the marker is the belt's buckle
+    drawSumo(ctx, r, c);
+    ctx.translate(0, r * 0.45);
+  } else {
+    ctx.rotate(ang);
+    if (kind === 'car') drawCar(ctx, r, c); else drawPuck(ctx, r, c);
+    ctx.rotate(-ang);
+    // the side marker sits ON the piece (car: the driver's helmet; puck: the middle), drawn upright
+    const mo = kind === 'car' ? -r * 0.28 : 0;
+    ctx.translate(Math.cos(ang) * mo, Math.sin(ang) * mo);
+  }
   drawMarker(ctx, side, r, kind);
   ctx.restore();
 }
 
+// Cars and pucks are drawn FACING +x (ctx already rotated to the aim); the sumo stands upright. Sizes are
+// fractions of r so a 30-40 px piece on a phone keeps the parts that say what it is: the sumo's topknot, face,
+// belly and coloured belt; the car's fat black rubber ring, bonnet and driver; the puck's raised rim and grooves.
+function disc(ctx, x, y, rr) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); }
+// The SUMO is drawn from the FRONT and always upright (Matt, 2026-11-18: the top-down disc "look[s] like nothing"):
+// topknot, face, a big round belly, the mawashi belt in the side's colour with its front flap and cords, thick
+// legs, both arms out shoving. The aim arrow shows where it is going.
 function drawSumo(ctx, r, c) {
-  const skin = '#f0c49a', skinDk = '#c98f62';
-  // arms, reaching forward
-  ctx.fillStyle = skinDk;
-  ctx.beginPath(); ctx.ellipse(r * 0.38, -r * 0.72, r * 0.36, r * 0.24, -0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(r * 0.38, r * 0.72, r * 0.36, r * 0.24, 0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = skin;
-  ctx.beginPath(); ctx.arc(r * 0.62, -r * 0.62, r * 0.19, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(r * 0.62, r * 0.62, r * 0.19, 0, Math.PI * 2); ctx.fill();
-  // body
-  const g = ctx.createRadialGradient(-r * 0.2, -r * 0.25, r * 0.1, 0, 0, r);
-  g.addColorStop(0, '#ffe0c0'); g.addColorStop(1, skinDk);
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.9, 0, Math.PI * 2); ctx.fill();
-  // mawashi (belt) seen from above, as a band around the hips, and its knot at the back
-  ctx.strokeStyle = c.main;
-  ctx.lineWidth = r * 0.22;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.78, 0, Math.PI * 2); ctx.stroke();
-  ctx.strokeStyle = c.dark;
-  ctx.lineWidth = r * 0.05;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.89, 0, Math.PI * 2); ctx.stroke();
+  const skin = '#f2c29b', skinLt = '#ffe3c9', skinDk = '#c98b5c', line = '#4a2a18', hair = '#15110e';
+  const lw = Math.max(1, r * 0.05);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // legs: short, thick, planted wide, feet out
+  ctx.fillStyle = skin; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  for (const sx of [-1, 1]) {
+    ctx.beginPath(); ctx.ellipse(sx * r * 0.4, r * 0.66, r * 0.21, r * 0.26, sx * -0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(sx * r * 0.5, r * 0.9, r * 0.2, r * 0.09, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  // arms out to the sides, open hands shoving (tsuppari)
+  for (const sx of [-1, 1]) {
+    ctx.strokeStyle = line; ctx.lineWidth = r * 0.34;
+    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.08); ctx.lineTo(sx * r * 0.8, -r * 0.3); ctx.stroke();
+    ctx.strokeStyle = skin; ctx.lineWidth = r * 0.25;
+    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.08); ctx.lineTo(sx * r * 0.8, -r * 0.3); ctx.stroke();
+    ctx.fillStyle = skinLt; ctx.strokeStyle = line; ctx.lineWidth = lw;
+    disc(ctx, sx * r * 0.85, -r * 0.36, r * 0.15); ctx.fill(); ctx.stroke();
+  }
+  // the big round belly
+  const g = ctx.createRadialGradient(-r * 0.15, -r * 0.05, r * 0.05, 0, r * 0.12, r * 0.75);
+  g.addColorStop(0, skinLt); g.addColorStop(0.6, skin); g.addColorStop(1, skinDk);
+  ctx.fillStyle = g; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.ellipse(0, r * 0.14, r * 0.66, r * 0.58, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // chest line and navel
+  ctx.strokeStyle = 'rgba(90,50,25,0.45)'; ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.beginPath(); ctx.arc(-r * 0.2, -r * 0.06, r * 0.16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+  ctx.beginPath(); ctx.arc(r * 0.2, -r * 0.06, r * 0.16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+  // the mawashi: a thick belt round the hips, its front flap, the sagari cords hanging
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(0, r * 0.14, r * 0.66, r * 0.58, 0, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = c.main;
-  ctx.beginPath(); ctx.ellipse(-r * 0.86, 0, r * 0.2, r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
-  // head: dark hair, the topknot bun pointing back
-  ctx.fillStyle = '#1d1a18';
-  ctx.beginPath(); ctx.arc(r * 0.18, 0, r * 0.36, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-r * 0.12, 0, r * 0.2, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.beginPath(); ctx.arc(r * 0.24, -r * 0.12, r * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-r, r * 0.24, r * 2, r * 0.42);
+  ctx.fillStyle = c.dark;
+  ctx.fillRect(-r, r * 0.24, r * 2, r * 0.05);
+  ctx.restore();
+  ctx.fillStyle = c.main; ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath(); ctx.moveTo(-r * 0.15, r * 0.6); ctx.lineTo(r * 0.15, r * 0.6); ctx.lineTo(r * 0.11, r * 0.9); ctx.lineTo(-r * 0.11, r * 0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.lineWidth = Math.max(1, r * 0.045);
+  for (const sx of [-0.42, -0.3, 0.3, 0.42]) { ctx.beginPath(); ctx.moveTo(sx * r, r * 0.6); ctx.lineTo(sx * r * 0.95, r * 0.8); ctx.stroke(); }
+  // the head: hair slicked back, the topknot (chonmage) on top, a fierce face
+  const hy = -r * 0.5, hr = r * 0.31;
+  ctx.fillStyle = skin; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  for (const sx of [-1, 1]) { disc(ctx, sx * hr * 0.98, hy + r * 0.04, r * 0.07); ctx.fill(); ctx.stroke(); }
+  disc(ctx, 0, hy, hr); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = hair;
+  ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 1.04, Math.PI * 1.96); ctx.quadraticCurveTo(0, hy - hr * 0.35, -hr, hy - hr * 0.08); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, hy - hr * 1.1, r * 0.22, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+  disc(ctx, 0, hy - hr * 0.92, r * 0.07); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.beginPath(); ctx.ellipse(0, hy - hr * 1.13, r * 0.14, r * 0.045, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+  ctx.fillStyle = hair;
+  disc(ctx, -r * 0.11, hy + r * 0.03, r * 0.045); ctx.fill();
+  disc(ctx, r * 0.11, hy + r * 0.03, r * 0.045); ctx.fill();
+  ctx.strokeStyle = hair; ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath(); ctx.moveTo(-r * 0.19, hy - r * 0.07); ctx.lineTo(-r * 0.05, hy - r * 0.03); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(r * 0.19, hy - r * 0.07); ctx.lineTo(r * 0.05, hy - r * 0.03); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-r * 0.07, hy + r * 0.16); ctx.lineTo(r * 0.07, hy + r * 0.16); ctx.stroke();
+  ctx.fillStyle = 'rgba(224,83,47,0.28)';
+  disc(ctx, -r * 0.19, hy + r * 0.12, r * 0.05); ctx.fill();
+  disc(ctx, r * 0.19, hy + r * 0.12, r * 0.05); ctx.fill();
 }
 
 function drawCar(ctx, r, c) {
-  // rubber bumper ring
-  ctx.fillStyle = '#20232b';
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = r * 0.05;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.93, 0, Math.PI * 2); ctx.stroke();
-  // body
-  const g = ctx.createLinearGradient(-r, -r, r, r);
-  g.addColorStop(0, c.main); g.addColorStop(1, c.dark);
+  // the fat black rubber bumper ring all the way round, with a shine on top
+  ctx.fillStyle = '#16181e';
+  disc(ctx, 0, 0, r); ctx.fill();
+  ctx.strokeStyle = '#3a3f4b'; ctx.lineWidth = r * 0.06;
+  disc(ctx, 0, 0, r * 0.9); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = r * 0.05; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.9, Math.PI * 1.1, Math.PI * 1.55); ctx.stroke();
+  // the car body: a rounded tub, longer than wide, bonnet at the front
+  const g = ctx.createLinearGradient(0, -r * 0.7, 0, r * 0.7);
+  g.addColorStop(0, c.main); g.addColorStop(0.55, c.main); g.addColorStop(1, c.dark);
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.8, 0, Math.PI * 2); ctx.fill();
-  // bonnet stripe
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillRect(r * 0.2, -r * 0.1, r * 0.55, r * 0.2);
-  // seat (back) and the driver
-  ctx.fillStyle = '#2b2f3a';
-  ctx.beginPath(); ctx.ellipse(-r * 0.32, 0, r * 0.22, r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#f0c49a';
-  ctx.beginPath(); ctx.arc(-r * 0.12, 0, r * 0.22, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#e7ecf4';
-  ctx.beginPath(); ctx.arc(-r * 0.15, 0, r * 0.2, Math.PI * 0.6, Math.PI * 1.4); ctx.lineTo(-r * 0.15, 0); ctx.fill();
-  // steering wheel
-  ctx.strokeStyle = '#e7ecf4';
-  ctx.lineWidth = r * 0.07;
-  ctx.beginPath(); ctx.arc(r * 0.2, 0, r * 0.16, 0, Math.PI * 2); ctx.stroke();
-  // the pole to the ceiling net, seen from above as a dot at the back
-  ctx.fillStyle = '#9aa3b2';
-  ctx.beginPath(); ctx.arc(-r * 0.62, 0, r * 0.08, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); roundRectPath(ctx, -r * 0.7, -r * 0.6, r * 1.42, r * 1.2, r * 0.42); ctx.fill();
+  ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath(); roundRectPath(ctx, -r * 0.7, -r * 0.6, r * 1.42, r * 1.2, r * 0.42); ctx.stroke();
+  // two racing stripes on the bonnet, headlights
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillRect(r * 0.24, -r * 0.13, r * 0.36, r * 0.07); ctx.fillRect(r * 0.24, r * 0.06, r * 0.36, r * 0.07);
+  ctx.fillStyle = '#fff6c8'; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = Math.max(1, r * 0.03);
+  for (const sy of [-1, 1]) { disc(ctx, r * 0.6, sy * r * 0.36, r * 0.09); ctx.fill(); ctx.stroke(); }
+  // the open cockpit behind the bonnet: seat, hands on the wheel; the driver's helmet is the side marker (drawPiece)
+  ctx.fillStyle = '#23262e';
+  ctx.beginPath(); roundRectPath(ctx, -r * 0.6, -r * 0.42, r * 0.66, r * 0.84, r * 0.2); ctx.fill();
+  ctx.strokeStyle = '#d8dde6'; ctx.lineWidth = r * 0.08; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(r * 0.12, -r * 0.22); ctx.lineTo(r * 0.12, r * 0.22); ctx.stroke();
+  ctx.fillStyle = '#f2c29b';
+  disc(ctx, r * 0.04, -r * 0.24, r * 0.075); ctx.fill(); disc(ctx, r * 0.04, r * 0.24, r * 0.075); ctx.fill();
+  // the pole to the ceiling net, at the back
+  ctx.fillStyle = '#b8c0cc'; ctx.strokeStyle = '#4b5260'; ctx.lineWidth = Math.max(1, r * 0.03);
+  disc(ctx, -r * 0.66, 0, r * 0.09); ctx.fill(); ctx.stroke();
 }
 
 function drawPuck(ctx, r, c) {
+  // an air-hockey puck: a raised rim, a flat top, two pressed grooves, a hard shine
   ctx.fillStyle = c.dark;
-  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.1, 0, 0, r);
+  disc(ctx, 0, 0, r); ctx.fill();
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r * 0.95);
   g.addColorStop(0, c.light); g.addColorStop(1, c.main);
   ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.86, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = c.dark;
-  ctx.globalAlpha *= 0.6;
-  ctx.lineWidth = r * 0.06;
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha /= 0.6;
+  disc(ctx, 0, 0, r * 0.86); ctx.fill();
+  ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.07);
+  disc(ctx, 0, 0, r * 0.86); ctx.stroke();
+  ctx.lineWidth = Math.max(1, r * 0.045);
+  disc(ctx, 0, 0, r * 0.66); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = Math.max(1, r * 0.07); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.76, Math.PI * 1.1, Math.PI * 1.45); ctx.stroke();
 }
 
 /** The side marker: a white circle ('a') or a white triangle ('b') on a dark disc, never colour alone. */
 export function drawMarker(ctx, side, r, kind = 'sumo') {
-  const m = r * 0.3;
-  const cx = kind === 'sumo' ? -r * 0.42 : kind === 'car' ? r * 0.5 : 0;
+  const m = r * (kind === 'puck' ? 0.32 : kind === 'sumo' ? 0.23 : 0.27);
+  const cx = 0;
   ctx.save();
   ctx.fillStyle = 'rgba(15,18,26,0.82)';
   ctx.beginPath(); ctx.arc(cx, 0, m * 1.15, 0, Math.PI * 2); ctx.fill();

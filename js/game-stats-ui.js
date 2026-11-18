@@ -59,7 +59,7 @@ const TABS = [
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   // Word Ladder (2026-11-13, word-ladder/): admin only, devOnly like the hub's entry. Its `wl` sub-counter: wordLadderScreen.
   { id: 'wordladder', labelKey: 'game_title_wordladder', devOnly: true },
-  // Shove Off (2026-11-18, shove-off/): admin only, devOnly like the hub's entry. Online challenges only ('mp').
+  // Shove Off (2026-11-18, shove-off/): admin only, devOnly like the hub's entry. Online ('mp') + vs the computer (easy/medium/hard).
   { id: 'shoveoff', labelKey: 'game_title_shoveoff', devOnly: true },
   // Tower Stack (2026-11-01, tower/; released 2026-11-13). Its `tw` sub-counter: towerScreen.
   { id: 'tower', labelKey: 'game_title_tower' },

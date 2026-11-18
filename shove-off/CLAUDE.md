@@ -9,7 +9,8 @@
 Matt filmed GamePigeon's Knockout (2026-11-18): *"Yes, this is gamepigeons knockout. And yes I want our own
 version of this"*. Looks: *"Can we have sumo wrestlers, bumper boats/cars, and plain pucks as options? Two colors
 of each. And let people choose which they play with. Like tower stack or brick lock"*. Tie: *"Sudden death"*.
-Modes: *"Online challenges"* ONLY. Our OWN game: never GamePigeon's name, penguins, art or look.
+Modes: *"Online challenges"*, and vs the computer (2026-11-18, *"Add computer play to the game so i can test it"*).
+Our OWN game: never GamePigeon's name, penguins, art or look.
 
 ## Status: ADMIN ONLY (`devOnly: true`), NOT cleared for players
 
@@ -26,9 +27,10 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   `gamehub.shoveoff.outbox.v1`, keeps them with no signal) and arrows not yet launched are kept per match and round
   in `gamehub.shoveoff.draft.v1`. Exports `back()`: the hub button / back swipe step back one screen
   (`js/back-stack.js`; setup 0, people / challenge / match 1, challenge from people 2), hub pill reads "‹ Back".
-- Settings `gamehub.shoveoff.v1` = `{ look, tab }`, saved on tap. Other keys: `.seen.v1`, `.shown.v1` (rounds already
+- Settings `gamehub.shoveoff.v1` = `{ look, tab: 'online'|'cpu', diff }` (older `matches`/`challenge` = Online), saved on tap. Other keys: `.seen.v1`, `.shown.v1` (rounds already
   slid on this phone), `.counted.v1` (the ledger), `.unseenResults.v1`, `.mlogged.v1`, `.open.v1` (sessionStorage).
-- Files: `js/engine.js` (rules + physics, PURE), `js/mp.js` (data), `js/alert.js`, `js/ui.js` (screens), `js/art.js`
+- Files: `js/engine.js` (rules + physics, PURE), `js/mp.js` (data), `js/cpu.js` (the computer, PURE),
+  `js/cpu-game.js` (computer save + result), `js/alert.js`, `js/ui.js` (screens), `js/art.js`
   (all drawing), `js/strings.js` (EN + ES "Empujón"), `css/shove-off.css`, `index.html` (name gate, no-zoom, noindex).
 
 ## Rules (engine.js) and every choice made (Matt may want to change any of these)
@@ -52,8 +54,14 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 - Colours: hub safe palette. Sumo vermilion / blue, Bumper cars yellow / teal, Pucks black / white. **The two sides
   always differ by SHAPE too**: the challenger's pieces wear a white CIRCLE, the receiver's a white TRIANGLE. If both
   chose the identical look, the receiver's pieces are drawn in that look's other colour (`art.js` `sideLooks`).
-- The PLATFORM follows the VIEWER's look: Sumo = clay ring with straw bales in a dark hall; Bumper cars = rubber
-  arena with a striped tyre wall on water; Pucks = air table on a dark floor. Original canvas art, no images.
+- The PLATFORM follows the VIEWER's look: Sumo = a dohyo (square clay mound, straw-bale circle with its four gaps,
+  two white shikiri lines) in a dark hall; Bumper cars = rubber arena with a striped tyre wall on water; Pucks = air
+  table on a dark floor. Original canvas art, no images.
+- **Art (redrawn 2026-11-18, Matt: "the sumo guys ... look like nothing")**: the SUMO is drawn from the FRONT and
+  always UPRIGHT (topknot, face, belly, mawashi belt in the side colour with flap and cords, legs, arms out shoving);
+  the side marker is its belt buckle. Bumper cars (fat black rubber ring, bonnet stripes, headlights, cockpit; the
+  marker is the driver's helmet) and pucks (raised rim, groove, shine) turn to face their aim. The launcher tile
+  (`js/game-art.js`) = the same wrestlers on a dohyo. Close-ups: `art.js` at r 17 px is the size to check.
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
   the receiver sees their CURRENT choice).
 
@@ -91,10 +99,33 @@ bit for bit (**change a physics number = re-pin it on purpose**).
   every piece before and after (`privateMatch`). Index rows carry `md`/`dt` so a count from the list has them.
   `VOIDED_MATCHES` honoured.
 
+## Vs the computer (`cpu.js` + `cpu-game.js`, 2026-11-18, admin only like the rest)
+
+- Same engine and rules. The player is side `a` (circles), the computer `b` (triangles) in the player's kind's OTHER
+  colour (`cpuLook`). Easy / Medium / Hard recorded as `recordResult('shoveoff', diff, won|null)` via `withMode`:
+  mode `{ cpu: 1, look, them, sd }`, detail `{ rounds, kos, lost, sdr, end }`, the private log every round + seed.
+  While admin only: the TEST record. No quick chat. `isInProgress()` stays false (it saves).
+- **The computer never sees the player's aims**: `chooseAims(m, side, diff, seed)` copies only the pieces and the
+  platform (`sent` emptied), is called at the START of each round (round 1 at New game; the next right after a
+  resolve, from the new board) and its aims are SAVED with the round (`cpu: { r, aims }`), so leaving and coming back
+  never makes it choose again. Seeded (`rng`, `roundSeed`): same seed, same aims. Search: per piece, candidate aims
+  (at each foe, at each foe from the side that drives it to its nearest edge, sideways glances on Hard, back to the
+  middle, random), simulated with the engine against guesses of the player's move (Easy: standing still; Medium +
+  charging; Hard + edge shoves + backing off, mixing the average with the worst); score = foes off x10, own off x11,
+  edge risk; Easy 1 pass and picks among its top 3 with sloppy aim, Medium 2 passes slightly sloppy, Hard 3 exact.
+  Seeded series: Hard beat Easy 37 of 40, Medium 9 of 10, Hard beat Medium 8 of 10. Hard takes ~120 ms a round on a desktop.
+- **Save `gamehub.shoveoff.save.v1`** `{ v, diff, look, cpuLook, seed, log (same shape as online), cpu, started }`:
+  written after every round (also the round that decides it: a close mid-slide cannot replay it) and cleared BEFORE
+  the result is recorded. A decided save left behind is recorded on the next setup paint (`settle`). Continue on the
+  Computer tab. **New game (setup or menu) over a match with a round played = ONE loss** (end `quit`), two taps,
+  "Counts as a loss.". Arrows not launched: `gamehub.shoveoff.draft.v1` under `cpu`.
+
 ## Screens (fewest words)
 
-Setup: title, record chip, "?", the six looks (3 kinds x 2 colours), tabs Matches | Challenge (opens on Matches
-when a match is going). Challenge: Anyone (search, paged list) + 4 recent first names -> the challenge card (their
+Setup: title, record chip, "?", the six looks (3 kinds x 2 colours), tabs Online | Computer (Online: the matches list,
+then Anyone + recent names; opens on Online when a match is going, else Computer). Computer: Easy / Medium / Hard
+(circle / square / diamond, `diffShapeSVG`), Play, or Continue (the saved level's shape) + New game. Vs the computer:
+menu = How to play, New game, Settings; game over = Again, Settings. Challenge: Anyone (search, paged list) + 4 recent first names -> the challenge card (their
 face and name, your look, Challenge). Match: both players' face, first name and pieces left as icons (yellow frame =
 still owes this round), "Round N" / "Sudden death", the board, bottom: menu, "2 / 4" -> Launch -> "Sent ✓ Waiting for
 <name>". A resolved round plays on screen: both sides' arrows (1.1 s), the slide, the shrink. Menu: How to play,
@@ -104,7 +135,8 @@ Cancel / Decline / Resign (two taps; "Counts as a loss." when it does), Matches.
 ## Tests
 
 `node shove-off/js/test.js` (engine: fairness, aims, collisions, falls, shrink, sudden death, draw ceiling,
-determinism + text scan), `node tools/test-shoveoff-mp.mjs` (challenges end to end), plus `tools/test-push.mjs`,
+determinism + text scan; the computer: valid aims, seeded, never reads the player's aims, Hard beats Easy over 40
+games), `node tools/test-shoveoff-mp.mjs` (challenges end to end; computer save, Continue, result, quit loss), plus `tools/test-push.mjs`,
 `tools/test-challenges.mjs`, `tools/test-no-deletes-rules.mjs`, `tools/check-no-scroll.mjs shove-off`.
 Screens were checked in headless Chromium against an in-memory database (393x852 and 360x640, light/dark, EN/ES);
 **real phones, the real database and real push are unverified.**

@@ -811,7 +811,7 @@ export const GAMES = [
   },
   {
     // Shove Off (2026-11-18, Matt on GamePigeon's Knockout: "I want our own version of this"): both players aim
-    // their four pieces in secret, everything slides at once, the platform shrinks. Online challenges only
+    // their four pieces in secret, everything slides at once, the platform shrinks. Online challenges + vs the computer
     // (shove-off/CLAUDE.md). Hub id = folder `shove-off`; stats id `shoveoff`.
     id: 'shove-off',
     added: '2026-11-18',            // sort-only (the launcher's Newest order); never the New pill
@@ -822,7 +822,7 @@ export const GAMES = [
     // Turn-by-turn challenges: the launcher's bubble and the Multiplayer screen.
     alerts: () => import('../shove-off/js/alert.js'),
     immersive: true,
-    accent: '#163e63',
+    accent: '#2a1712',
     art: GAME_ART['shove-off'],
     // ADMIN ONLY until Matt says "release it": no `released` date.
     devOnly: true,

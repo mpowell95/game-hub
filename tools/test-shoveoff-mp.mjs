@@ -225,5 +225,54 @@ ok('nothing was ever deleted (no null writes)', deletes === 0, String(deletes));
 ok('records per opponent fold finished rows', (() => { use('A'); const R = MP.recordsFrom(MP.rowsFromIndex(getAt('shoveoff/index/TESTA')), 'TESTA'); return R.opponents.length === 1 && R.opponents[0].played >= 3; })());
 void ME; void GS;
 
+// --- vs the computer (shove-off/js/cpu-game.js, 2026-11-18): the save, Continue, the result, the quit loss -------
+{
+  const CG = await import('../shove-off/js/cpu-game.js');
+  stores.C = new Map();
+  stores.C.set('gamehub.profile', JSON.stringify({ name: 'test2', emoji: '🐢', playerId: 'TESTC' }));
+  use('C');
+  const cpuStats = () => statsOf('C');
+  let sv = CG.newSave('hard', 'sumo0', 77);
+  ok('cpu: a new match picks the computer\'s look (other colour) and its round-1 aims BEFORE the player aims',
+    sv.cpuLook === 'sumo1' && sv.cpu && sv.cpu.r === 1 && !!E.parseAims(E.newMatch(), 'b', sv.cpu.aims) && sv.log.length === 0);
+  ok('cpu: saved and read back (Continue)', CG.writeSave(sv) && JSON.stringify(CG.readSave().cpu) === JSON.stringify(sv.cpu));
+  const r1aims = sv.cpu.aims;
+  // the player's aims cannot change the computer's already-chosen aims
+  const m1 = CG.playRound(sv, '100,0;-100,0;0,100;0,-100');
+  ok('cpu: a round plays the stored computer aims as they were chosen', m1 && sv.log.length === 2 && sv.log[1].by === 'b' && sv.log[1].aims === r1aims && sv.cpu === null);
+  CG.ensureCpuAims(sv); CG.writeSave(sv);
+  const again = CG.readSave();
+  ok('cpu: the next round\'s aims are saved with the round (reopening never chooses again)', again.cpu && again.cpu.r === 2 && JSON.stringify(CG.ensureCpuAims(again)) === JSON.stringify(again.cpu));
+  ok('cpu: a match with a round played is "started"; New game over it = ONE loss, save cleared first',
+    CG.started(again) && CG.finish(again, true) && CG.readSave() === null && cpuStats() && cpuStats().byDiff.hard && cpuStats().byDiff.hard.lost === 1 && cpuStats().byDiff.hard.played === 1,
+    JSON.stringify(cpuStats()));
+  ok('cpu: the quit is recorded with its mode (cpu, both looks) and detail (end quit)',
+    Object.keys(cpuStats().byMode || {}).some((k) => /cpu=1/.test(k) && /look=sumo0/.test(k) && /them=sumo1/.test(k)) && cpuStats().dt && cpuStats().dt._n === 1, JSON.stringify(cpuStats().byMode));
+  // play a whole match out (the player shoves everything at full power at the nearest computer piece)
+  sv = CG.newSave('easy', 'car1', 5);
+  let guard = 0, m = null;
+  while (guard++ < 60) {
+    m = MP.replay(sv.log);
+    if (m.winner != null) break;
+    const list = Array.from({ length: E.slotCount(m) }, () => null);
+    for (const p of E.alive(m, 'a')) {
+      const q = E.alive(m, 'b').sort((u, v) => ((u.x - p.x) ** 2 + (u.y - p.y) ** 2) - ((v.x - p.x) ** 2 + (v.y - p.y) ** 2))[0];
+      list[p.i] = E.clampAim((q.x - p.x) * 99, (q.y - p.y) * 99);
+    }
+    CG.playRound(sv, E.aimsToString(list));
+    CG.ensureCpuAims(sv);
+  }
+  CG.writeSave(sv);
+  ok('cpu: settle records a decided save once (closed during the last slide)', CG.settle() === true && CG.settle() === false && CG.readSave() === null);
+  const raw = JSON.parse(stores.C.get('gamehub.stats'));
+  const tst = raw.testGames && raw.testGames.shoveoff;
+  ok('cpu: the finished match is in its own level\'s bucket, in the TEST record while admin only',
+    !!tst && tst.byDiff.easy && tst.byDiff.easy.played === 1 && tst.byDiff.hard.played === 1, JSON.stringify(Object.keys(raw)));
+  ok('cpu: the private play log has every round of the computer matches', (() => {
+    const q = JSON.parse(stores.C.get('gamehub.playlog.v1') || '[]');
+    return q.filter((e) => e && e.g === 'shoveoff' && typeof e.x === 'string' && /"cpu":"(hard|easy)"/.test(e.x) && /"rounds"/.test(e.x)).length === 2;
+  })(), stores.C.get('gamehub.playlog.v1'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

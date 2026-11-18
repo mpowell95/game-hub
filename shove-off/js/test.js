@@ -157,5 +157,55 @@ void still;
   ok('no clock in the simulation', !/Date\.|performance\./.test(src));
 }
 
+// --- 8. the computer (cpu.js, 2026-11-18) ------------------------------------------------------------
+{
+  const C = await import('./cpu.js');
+  const valid = (m, s, aims) => {
+    const str = E.aimsToString(aims);
+    return !!E.parseAims(m, s, str) && E.slotsOf(m, s).every((i) => aims[i] && Number.isInteger(aims[i][0]) && Number.isInteger(aims[i][1]));
+  };
+  const m0 = E.newMatch();
+  let allOk = true;
+  for (const d of C.DIFFS) for (const s of ['a', 'b']) if (!valid(m0, s, C.chooseAims(m0, s, d, 7))) allOk = false;
+  // a board with pieces out and a sudden-death board too
+  const m1 = E.newMatch(); m1.pieces[1].alive = false; m1.pieces[6].alive = false;
+  for (const d of C.DIFFS) if (!valid(m1, 'b', C.chooseAims(m1, 'b', d, 9)) || C.chooseAims(m1, 'b', d, 9)[2] !== null) allOk = false;
+  const msd = E.newMatch(); msd.sd = 1; msd.H = E.SD_H; msd.pieces = [{ s: 'a', i: 0, x: -230, y: 0, alive: true }, { s: 'b', i: 0, x: 230, y: 0, alive: true }];
+  for (const d of C.DIFFS) if (!valid(msd, 'b', C.chooseAims(msd, 'b', d, 3))) allOk = false;
+  ok('the computer aims every living piece (integers, inside the cap, "-" for a piece that is out), every level, sudden death too', allOk);
+  ok('the computer is deterministic for a seed', C.DIFFS.every((d) => JSON.stringify(C.chooseAims(m0, 'b', d, 42)) === JSON.stringify(C.chooseAims(m0, 'b', d, 42))));
+  ok('...and a different seed can change Easy', JSON.stringify(C.chooseAims(m0, 'b', 'easy', 1)) !== JSON.stringify(C.chooseAims(m0, 'b', 'easy', 2)));
+  // FAIR: the player's aims for this round (m.sent.a) never change the computer's choice; nor does chooseAims touch m
+  const peek = E.newMatch();
+  E.applyAims(peek, 'a', 1, '560,0;-560,0;0,560;0,-560');
+  const before = JSON.stringify(peek);
+  const withSent = C.chooseAims(peek, 'b', 'hard', 5);
+  const clean = E.newMatch();
+  ok('the computer never reads the player\'s aims: the same board with or without them sent gives the same choice',
+    JSON.stringify(withSent) === JSON.stringify(C.chooseAims(clean, 'b', 'hard', 5)));
+  ok('...and choosing leaves the match untouched', JSON.stringify(peek) === before);
+  const src = readFileSync(new URL('./cpu.js', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  ok('...by construction: cpu.js reads `sent` nowhere but where it empties its copy, and has no Math.random', !/\.sent\[/.test(src.replace(/m\.sent\[s\] = mine; m\.sent\[E\.other\(s\)\] = theirs;/, '')) && !/Math\.random/.test(src));
+  ok('the computer plays its own look\'s other colour', C.cpuLook('sumo0') === 'sumo1' && C.cpuLook('car1') === 'car0' && C.cpuLook('puck0') === 'puck1');
+  // Hard beats Easy over a seeded series of 40 games, sides alternating
+  const play = (da, db, seed) => {
+    const m = E.newMatch();
+    let n = 0;
+    while (m.winner == null && n++ < 60) {
+      const sa = C.chooseAims(m, 'a', da, C.roundSeed(seed, m.round)), sb = C.chooseAims(m, 'b', db, C.roundSeed(seed + 7, m.round));
+      E.applyAims(m, 'a', m.round, E.aimsToString(sa));
+      E.applyAims(m, 'b', m.round, E.aimsToString(sb));
+    }
+    return m.winner;
+  };
+  let hard = 0, easy = 0, draws = 0;
+  for (let g = 0; g < 40; g++) {
+    const hs = g % 2 ? 'a' : 'b';
+    const w = play(hs === 'a' ? 'hard' : 'easy', hs === 'b' ? 'hard' : 'easy', 1000 + g);
+    if (w === hs) hard++; else if (w === E.DRAW || w == null) draws++; else easy++;
+  }
+  ok(`Hard beats Easy more often than not in 40 seeded games (hard ${hard}, easy ${easy}, draws ${draws})`, hard > easy && hard > 20);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

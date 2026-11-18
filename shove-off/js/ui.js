@@ -1,5 +1,6 @@
 // shove-off/js/ui.js - SHOVE OFF (2026-11-18), module entry (init / destroy / isInProgress / back).
-// Matt filmed GamePigeon's Knockout: "I want our own version of this". ONLINE CHALLENGES ONLY.
+// Matt filmed GamePigeon's Knockout: "I want our own version of this". Online challenges, and (2026-11-18, Matt: "Add
+// computer play to the game so i can test it") vs the computer: cpu.js chooses, cpu-game.js saves and records.
 //
 // isInProgress(): always FALSE. Nothing is lost by leaving: every round's aims are written to the match
 // the moment Launch is tapped (kept in an outbox when there is no signal), and arrows not yet launched
@@ -12,7 +13,9 @@
 import * as E from './engine.js';
 import * as A from './art.js';
 import * as MP from './mp.js';
+import * as CG from './cpu-game.js';
 import { STRINGS } from './strings.js';
+import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { onThemeChange } from '../../js/theme.js';
@@ -34,11 +37,13 @@ const SHRINK_MS = 700;
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { s = {}; }
-  return { look: A.LOOKS.includes(s.look) ? s.look : 'sumo0', tab: s.tab === 'challenge' ? 'challenge' : 'matches' };
+  // tab: 'online' | 'cpu' (the older 'matches' / 'challenge' both mean Online)
+  return { look: A.LOOKS.includes(s.look) ? s.look : 'sumo0', tab: s.tab === 'cpu' ? 'cpu' : 'online', diff: CG.asDiff(s.diff) };
 }
 function saveSettings(s) {
-  try { localStorage.setItem(KEY, JSON.stringify({ look: s.look, tab: s.tab })); } catch (err) { console.warn('[shoveoff] settings not saved', err); }
+  try { localStorage.setItem(KEY, JSON.stringify({ look: s.look, tab: s.tab, diff: s.diff })); } catch (err) { console.warn('[shoveoff] settings not saved', err); }
 }
+const DIFF_TIER = { easy: 1, medium: 2, hard: 3 };
 function readDraft(id, r) {
   try { const d = (JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') || {})[id]; return d && d.r === r && Array.isArray(d.a) ? d.a : null; } catch { return null; }
 }
@@ -171,6 +176,7 @@ class ShoveOff {
   _showSetup() {
     this._leaveMatch();
     this._closeOverlays();
+    try { CG.settle(); } catch (err) { console.error('[shoveoff] settle', err); }
     this._scr('setup');
     this._setBack(null);
     this._renderSetup();
@@ -182,7 +188,7 @@ class ShoveOff {
     if (this.destroyed || this.screen !== 'setup') return;
     this.rows = rows;
     try { MP.recordFinished(rows); } catch (err) { console.warn('[shoveoff] recordFinished', err); }
-    if (!this._tabPicked) this.s.tab = rows.some((r) => !r.over) ? 'matches' : 'challenge';
+    if (!this._tabPicked) this.s.tab = rows.some((r) => !r.over) ? 'online' : 'cpu';
     this._renderSetup();
     this._showUnseen(rows);
   }
@@ -218,17 +224,27 @@ class ShoveOff {
         </div>
         ${this._looksHTML(this.s.look)}
         <div class="so-tabs" role="tablist">
-          <button type="button" class="so-tab${tab === 'matches' ? ' is-on' : ''}" data-act="tab" data-v="matches" role="tab" aria-selected="${tab === 'matches'}">${esc(t('tab_matches'))}${mine ? `<span class="so-badge">${mine}</span>` : ''}</button>
-          <button type="button" class="so-tab${tab === 'challenge' ? ' is-on' : ''}" data-act="tab" data-v="challenge" role="tab" aria-selected="${tab === 'challenge'}">${esc(t('tab_challenge'))}</button>
+          <button type="button" class="so-tab${tab === 'online' ? ' is-on' : ''}" data-act="tab" data-v="online" role="tab" aria-selected="${tab === 'online'}">${esc(t('tab_online'))}${mine ? `<span class="so-badge">${mine}</span>` : ''}</button>
+          <button type="button" class="so-tab${tab === 'cpu' ? ' is-on' : ''}" data-act="tab" data-v="cpu" role="tab" aria-selected="${tab === 'cpu'}">${esc(t('tab_cpu'))}</button>
         </div>
-        <div class="so-panel" data-role="panel">${tab === 'matches' ? this._matchesHTML(live) : this._challengeHTML()}</div>
+        <div class="so-panel" data-role="panel">${tab === 'online' ? `<div class="so-online">${live.length ? '<div class="so-rows"></div>' : ''}${this._challengeHTML()}</div>` : this._cpuHTML()}</div>
       </div>`;
     this._paintThumbs(box);
-    if (tab === 'matches') { const l = box.querySelector('.so-rows'); if (l) { l._all = live; l._start = this._mStart | 0; this._fitRows(l, (r) => this._rowHTML(r)); } }
+    if (tab === 'online') { const l = box.querySelector('.so-rows'); if (l) { l._all = live; l._start = this._mStart | 0; this._fitRows(l, (r) => this._rowHTML(r)); } }
   }
-  _matchesHTML(live) {
-    if (!live.length) return `<p class="so-empty">${esc(t('no_matches'))}</p>`;
-    return '<div class="so-rows"></div>';
+  /** The Computer tab: Easy / Medium / Hard, then Play, or Continue (the saved match's level) + New game. */
+  _cpuHTML() {
+    const sv = CG.readSave();
+    const live = sv && CG.gameOf(sv, MP.meLabel(), t('cpu')).over == null ? sv : null;
+    return `<div class="so-diffs" role="radiogroup" aria-label="${esc(t('aria_diff'))}">${CG.DIFFS.map((d) => `
+        <button type="button" class="so-diff${d === this.s.diff ? ' is-sel' : ''}" data-act="diff" data-v="${d}" role="radio" aria-checked="${d === this.s.diff}">${diffShapeSVG(DIFF_TIER[d])}<span>${esc(t('d_' + d))}</span></button>`).join('')}
+      </div>
+      <div class="so-cpubtns">${live
+        ? `<button type="button" class="so-go" data-act="cpucont">${diffShapeSVG(DIFF_TIER[live.diff])}<span>${esc(t('continue'))}</span></button>
+           <button type="button" class="so-alt" data-act="cpunew">${esc(t('new_game'))}</button>
+           <p class="so-loss" data-role="cpuloss" hidden>${esc(t('counts_loss'))}</p>`
+        : `<button type="button" class="so-go" data-act="cpunew">${esc(t('play'))}</button>`}
+      </div>`;
   }
   _rowHTML(r) {
     const sub = r.open === 'sent' && !r.yourTurn ? t('row_sent') : (r.sd ? t('sudden') : t('round_n', { n: r.rnd })) + ' · ' + t('left_vs', { a: r.mine, b: r.theirs });
@@ -341,6 +357,73 @@ class ShoveOff {
     this._openMatch(res.id, res.game);
   }
 
+  // --- VS THE COMPUTER (cpu-game.js: the save, the result; cpu.js: the computer's aims) ------------
+  /** New game (Play, New game, Again): over a started save that is ONE loss, asked twice by the caller. */
+  _newCpu() {
+    CG.settle();                                          // a save already decided counts as it ended
+    const old = CG.readSave();
+    if (old && CG.started(old)) CG.finish(old, true);     // the save is cleared first, then the loss recorded
+    else if (old) CG.clearSave();
+    writeDraft('cpu', 0, null);                           // no arrows left over from an earlier match
+    const sv = CG.newSave(this.s.diff, this.s.look);
+    if (!CG.writeSave(sv)) this._toast(t('not_saved'));
+    this._openCpu(sv);
+  }
+  _openCpu(sv) {
+    this._closeOverlays();
+    this._leaveMatch();
+    this._scr('play');
+    this._setBack(() => this._showSetup(), 1);
+    this.mp = { cpu: true, id: 'cpu', sv, game: null, side: 'a', them: null, draft: null, stop: null, pending: null, shown: 0 };
+    // the computer's aims for this round exist BEFORE the player aims (chosen from the board only, kept in the save)
+    if (!sv.cpu && CG.ensureCpuAims(sv)) CG.writeSave(sv);
+    const g = CG.gameOf(sv, MP.meLabel(), t('cpu'));
+    this.mp.shown = g.resolved;                         // reopening never replays an old round
+    this._takeCpu(g);
+    this._layout();
+  }
+  _takeCpu(g) {
+    const mp = this.mp;
+    mp.game = g;
+    mp.them = g.b;
+    mp.m = MP.replay(g.log) || E.newMatch();
+    if (!mp.draft || mp.draft.r !== g.round) {
+      const d = readDraft('cpu', g.round);
+      mp.draft = { r: g.round, a: d && d.length <= E.slotCount(mp.m) ? d : [] };
+    }
+    if (g.resolved > mp.shown && !this.anim) this._animateRound(g.resolved);
+    else if (!this.anim) { this._renderHud(); this._renderFoot(); this._draw(); }
+    if (g.over && !this.anim) this._finish();
+  }
+  _launchCpu() {
+    const mp = this.mp;
+    const g = mp.game;
+    const slots = E.slotCount(mp.m);
+    const list = [];
+    for (let i = 0; i < slots; i++) list.push(E.slotsOf(mp.m, 'a').includes(i) ? mp.draft.a[i] || null : null);
+    const str = E.aimsToString(list);
+    if (!E.parseAims(mp.m, 'a', str)) { this._toast(t('aim_all')); return; }
+    const m = CG.playRound(mp.sv, str);
+    if (!m) { this._toast(t('aim_all')); return; }
+    // saved even when it decided the match (a close mid-slide must not let the round be played again);
+    // _finishCpu clears it and records
+    if (!CG.writeSave(mp.sv)) this._toast(t('not_saved'));
+    writeDraft('cpu', g.round, null);
+    this._takeCpu(CG.gameOf(mp.sv, MP.meLabel(), t('cpu')));
+    // The next round's computer aims, chosen from the NEW board only (never from anything the player does next),
+    // while the reveal is on screen, then saved; a close before this runs is caught by _openCpu.
+    if (m.winner == null) setTimeout(() => { if (this.mp === mp && !this.destroyed && CG.ensureCpuAims(mp.sv)) CG.writeSave(mp.sv); }, 0);
+  }
+  /** The match vs the computer is over: clear the save, record ONE result, show it. */
+  _finishCpu() {
+    const mp = this.mp, g = mp.game;
+    if (!mp.counted) { mp.counted = true; CG.finish(mp.sv); }
+    if (mp.shownOver) return;
+    mp.shownOver = true;
+    const me = MP.meLabel();
+    this._openOver({ result: MP.resultOf(g, 'a'), them: g.b, why: g.over.why, cpu: true, me });
+  }
+
   // --- PLAY -------------------------------------------------------------------------------------
   async _openMatch(id, have = null) {
     this._closeOverlays();
@@ -391,10 +474,10 @@ class ShoveOff {
     let count = 0, idx = -1;
     const per = new Map();
     for (let i = 0; i < g.log.length; i++) { const c = (per.get(g.log[i].r) || 0) + 1; per.set(g.log[i].r, c); if (c === 2 && ++count === n) { idx = i; break; } }
-    if (idx < 0) { MP.markShown(g.id, n); return; }
+    if (idx < 0) { this._markShown(n); return; }
     const frames = [];
     const m = MP.replay(g.log, idx + 1, idx, frames);
-    if (!m) { MP.markShown(g.id, n); return; }
+    if (!m) { this._markShown(n); return; }
     const rec = m.rounds[m.rounds.length - 1];
     this.anim = { n, rec, frames, t0: performance.now(), m };
     this._renderHud(rec.before);
@@ -417,7 +500,7 @@ class ShoveOff {
     this.anim = null;
     const mp = this.mp;
     if (!mp || !mp.game) return;
-    MP.markShown(mp.game.id, a.n);
+    this._markShown(a.n);
     // More rounds than shown (both sent twice while away): show the next, else settle.
     if (mp.game.resolved > a.n) { this._animateRound(mp.game.resolved); return; }
     this._renderHud(); this._renderFoot(); this._draw();
@@ -429,6 +512,7 @@ class ShoveOff {
     const g = mp && mp.game;
     if (!g || !g.over) return;
     this._renderHud(); this._renderFoot(); this._draw();
+    if (mp.cpu) { this._finishCpu(); return; }
     if (MP.isCalledOff(g)) { if (!mp.shownOver) { mp.shownOver = true; this._toast(t(g.over.why === 'declined' ? 'mp_declined' : 'mp_cancelled'), 3200); } return; }
     try { MP.countGame(g); } catch (err) { console.error('[shoveoff] count', err); }
     MP.markResultSeen(g.id);
@@ -440,10 +524,16 @@ class ShoveOff {
       rematch: { code: mp.them.code, name: mp.them.name, emoji: mp.them.emoji } });
   }
 
+  _markShown(n) {
+    const mp = this.mp;
+    if (!mp || !mp.game) return;
+    if (mp.cpu) mp.shown = Math.max(mp.shown | 0, n); else MP.markShown(mp.game.id, n);
+  }
   _myLook() {
     const mp = this.mp;
     const g = mp && mp.game;
     if (!g) return this.s.look;
+    if (mp.cpu) return g.a.look;
     // The receiver plays in the look chosen NOW until their first send fixes it in the match.
     const fixed = g.log.some((e) => e.by === mp.side) || mp.side !== MP.recipientOf(g);
     return fixed ? g[mp.side].look : this.s.look;
@@ -648,6 +738,7 @@ class ShoveOff {
   async _launch() {
     const mp = this.mp, g = mp && mp.game;
     if (!g || !this._canAim()) return;
+    if (mp.cpu) { this._launchCpu(); return; }
     const slots = E.slotCount(mp.m);
     const list = [];
     for (let i = 0; i < slots; i++) list.push(E.slotsOf(mp.m, mp.side).includes(i) ? mp.draft.a[i] || null : null);
@@ -706,7 +797,9 @@ class ShoveOff {
     const mp = this.mp, g = mp && mp.game;
     const ov = this.el('[data-ov="menu"]');
     let action = null, loss = false;
-    if (g && !g.over) {
+    if (mp && mp.cpu) {
+      if (g && !g.over) { action = 'newcpu'; loss = CG.started(mp.sv); }
+    } else if (g && !g.over) {
       const life = MP.lifeOf(g);
       if (!life.expired) {
         if (!life.open) { action = 'resign'; loss = true; }
@@ -716,9 +809,9 @@ class ShoveOff {
     ov.innerHTML = `<div class="so-card so-menu" role="dialog" aria-modal="true" aria-label="${esc(t('menu'))}">
       <button type="button" class="so-x" data-act="close" aria-label="${esc(t('close'))}">${X_SVG}</button>
       <button type="button" class="so-mbtn" data-act="help">${esc(t('help'))}</button>
-      ${action ? `<button type="button" class="so-mbtn so-danger" data-act="end" data-v="${action}">${esc(t('end_' + action))}</button>
+      ${action ? `<button type="button" class="so-mbtn so-danger" data-act="end" data-v="${action}">${esc(t(action === 'newcpu' ? 'new_game' : 'end_' + action))}</button>
         <p class="so-loss" data-role="loss" hidden>${loss ? esc(t('counts_loss')) : ''}</p>` : ''}
-      <button type="button" class="so-mbtn" data-act="tosetup">${esc(t('to_setup'))}</button>
+      <button type="button" class="so-mbtn" data-act="tosetup">${esc(t(mp && mp.cpu ? 'settings' : 'to_setup'))}</button>
     </div>`;
     ov.hidden = false;
   }
@@ -733,6 +826,7 @@ class ShoveOff {
     }
     const mp = this.mp, g = mp && mp.game;
     if (!g) return;
+    if (btn.dataset.v === 'newcpu') { this._newCpu(); return; }
     btn.disabled = true;
     const res = btn.dataset.v === 'resign' ? await MP.resignGame(g.id) : await MP.cancelGame(g.id);
     if (this.destroyed || this.mp !== mp) return;
@@ -756,8 +850,9 @@ class ShoveOff {
       <h2 class="so-overhead">${esc(head)}</h2>
       ${why ? `<p class="so-overwhy">${esc(why)}</p>` : ''}
       <div class="so-overbtns">
-        ${o.rematch && o.rematch.code ? `<button type="button" class="so-go" data-act="rematch">${esc(t('again'))}</button>` : ''}
-        <button type="button" class="so-alt" data-act="tosetup">${esc(t('to_setup'))}</button>
+        ${o.cpu ? `<button type="button" class="so-go" data-act="cpuagain">${esc(t('again'))}</button>`
+          : o.rematch && o.rematch.code ? `<button type="button" class="so-go" data-act="rematch">${esc(t('again'))}</button>` : ''}
+        <button type="button" class="so-alt" data-act="tosetup">${esc(t(o.cpu ? 'settings' : 'to_setup'))}</button>
       </div>
     </div>`;
     ov.hidden = false;
@@ -767,7 +862,7 @@ class ShoveOff {
   async _mountChat() {
     this._unmountChat();
     const mp = this.mp;
-    if (!mp || !mp.game) return;
+    if (!mp || !mp.game || mp.cpu) return;          // no quick chat against the computer
     let UI, DATA;
     try { [UI, DATA] = await Promise.all([import('../../js/match-chat-ui.js'), import('../../js/match-chat.js')]); } catch { return; }
     if (this.destroyed || this.mp !== mp || this._chat) return;
@@ -841,7 +936,23 @@ class ShoveOff {
     else if (act === 'launch') this._launch();
     else if (act === 'menu') this._openMenu();
     else if (act === 'end') this._end(b);
-    else if (act === 'tosetup') this._showSetup();
+    else if (act === 'tosetup') { if (this.mp && this.mp.cpu) { this.s.tab = 'cpu'; this._tabPicked = true; } this._showSetup(); }
+    else if (act === 'diff') {
+      this.s.diff = CG.asDiff(b.dataset.v); saveSettings(this.s);
+      for (const x of b.parentNode.querySelectorAll('.so-diff')) { const on = x.dataset.v === this.s.diff; x.classList.toggle('is-sel', on); x.setAttribute('aria-checked', String(on)); }
+    }
+    else if (act === 'cpucont') { const sv = CG.readSave(); if (sv) this._openCpu(sv); else this._renderSetup(); }
+    else if (act === 'cpunew') {
+      // over a started match: two taps, the first says it counts as a loss
+      const sv = CG.readSave();
+      if (sv && CG.started(sv) && !b.dataset.armed) {
+        b.dataset.armed = '1'; b.textContent = t('sure');
+        const l = this.root.querySelector('[data-role="cpuloss"]'); if (l) l.hidden = false;
+        return;
+      }
+      this._newCpu();
+    }
+    else if (act === 'cpuagain') this._newCpu();
     else if (act === 'overagain') { const g = this.mp && this.mp.game; if (g) { this.mp.shownOver = false; this._finish(); } }
     else if (act === 'rematch') { const o = this._overInfo; this._closeOverlays(); if (o && o.rematch) this._showChallenge(o.rematch, 1); }
   }
