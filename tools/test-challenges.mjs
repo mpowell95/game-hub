@@ -67,14 +67,15 @@ ok('summarize does not mutate its input', rows[0].id === 'd1' && rows.length ===
 // Chinchón and Escoba joined 2026-10-18 (turn-by-turn challenges beside their live rooms).
 // Battle Arena joined 2026-10-24, Battleship 2026-10-27 (challenges beside their live rooms).
 // Golf joined 2026-11-10.
-ok('every registry source is one of the twelve challenge games',
-  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'battleship', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'golf', 'hoops4', 'skeeball']));
+ok('every registry source is one of the thirteen challenge games (Shove Off joined 2026-11-18)',
+  JSON.stringify(C.CHALLENGE_GAMES.slice().sort()) === JSON.stringify(['archery', 'battle-arena', 'battleship', 'chinchon', 'cuppong', 'darts', 'eight-ball', 'escoba', 'flick-soccer', 'golf', 'hoops4', 'shove-off', 'skeeball']));
 
 // --- the handoff contract, per game ---------------------------------------------------------------
 const them = { code: 'ANABB', name: 'Ana', emoji: '🦊' };
 for (const [game, path, take] of [
   ['darts', './darts/js/alert.js', 'takeOpen'],
   ['golf', './golf/js/alert.js', 'takeOpen'],
+  ['shove-off', './shove-off/js/alert.js', 'takeOpen'],
   ['archery', './archery/js/alert.js', 'takeOpen'],
   ['chinchon', './chinchon/js/alert.js', 'takeOpen'],
   ['escoba', './escoba/js/alert.js', 'takeOpen'],
@@ -185,7 +186,7 @@ ok('the Challenges screen writes no gamehub.* key and no Firebase node',
 
   // Every challenge game says what may be done to a match and does it through its own writer.
   ok('every source has action and end', C.CHALLENGE_GAMES.every((g) => typeof C.SOURCES[g].action === 'function' && typeof C.SOURCES[g].end === 'function'));
-  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js'], ['golf', './golf/js/mp.js']]) {
+  for (const [g, path] of [['hoops4', './hoops4/js/mp.js'], ['cuppong', './cup-pong/js/mp.js'], ['darts', './darts/js/mp.js'], ['flick-soccer', './flick-soccer/js/mp.js'], ['archery', './archery/js/mp.js'], ['escoba', './escoba/js/mp.js'], ['battle-arena', './battle-arena/js/mp.js'], ['battleship', './battleship/js/mp.js'], ['golf', './golf/js/mp.js'], ['shove-off', './shove-off/js/mp.js']]) {
     const M = await import(new URL(path, __ROOT_URL).href);
     ok(`${g}: mp.js exports cancelGame, resignGame, lifeOf, recipientOf, isCalledOff, readGame, sideOf, myCode`,
       ['cancelGame', 'resignGame', 'lifeOf', 'recipientOf', 'isCalledOff', 'readGame', 'sideOf', 'myCode'].every((k) => typeof M[k] === 'function'));

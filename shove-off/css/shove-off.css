@@ -1,0 +1,181 @@
+/* shove-off/css/shove-off.css - Shove Off (2026-11-18). Every rule is scoped under .so-root.
+   Text: body >= 17px, secondary >= 15px, titles >= 24px; light text near white on dark. */
+.so-root {
+  --so-top: max(var(--gh-st, env(safe-area-inset-top, 0px)), 8px);
+  --so-bot: env(safe-area-inset-bottom, 0px);
+  --so-bg0: #f2f5fa; --so-bg1: #dfe7f2;
+  --so-card: #ffffff; --so-ink: #141a24; --so-sub: #3b4656; --so-line: #d3dbe7;
+  --so-chip: #eef2f8; --so-accent: #ffce3a; --so-go: #1F5FA8; --so-go-ink: #ffffff; --so-mine: #fff7da;
+  position: absolute; inset: 0; overflow: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--so-ink);
+  background: linear-gradient(160deg, var(--so-bg0), var(--so-bg1));
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+:root.gh-dark .so-root {
+  --so-bg0: #18202d; --so-bg1: #0d121b;
+  --so-card: #1d2635; --so-ink: #f5f8fc; --so-sub: #e2e8f1; --so-line: #344156;
+  --so-chip: #263248; --so-mine: #3a3218;
+}
+.so-root *, .so-root *::before, .so-root *::after { box-sizing: border-box; -webkit-touch-callout: none; }
+.so-root button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+.so-root [hidden] { display: none !important; }
+
+/* --- screens: the card centred, always below the hub's floating button row --------------------- */
+.so-root .so-scr {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(var(--so-top) + 52px) 14px calc(var(--so-bot) + 14px);
+}
+.so-root .so-card {
+  width: 100%; max-width: 420px; max-height: 100%;
+  background: var(--so-card); border-radius: 22px; padding: 18px 16px 16px;
+  box-shadow: 0 10px 30px rgba(10, 20, 40, 0.18);
+  display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: hidden;
+}
+.so-root .so-head { display: flex; align-items: center; gap: 10px; }
+.so-root .so-title { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.01em; flex: 1; white-space: nowrap; }
+.so-root .so-rec { font-size: 17px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: var(--so-chip); }
+.so-root .so-q {
+  width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--so-line); background: var(--so-chip);
+  font-size: 22px; font-weight: 800; display: grid; place-items: center; flex: none;
+}
+
+/* --- looks: three kinds, two colours each ------------------------------------------------------ */
+.so-root .so-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.so-root .so-lookcol { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.so-root .so-lookname { grid-column: 1 / -1; text-align: center; font-size: 15px; font-weight: 600; color: var(--so-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-root .so-look {
+  position: relative; padding: 0; border: 3px solid transparent; border-radius: 12px; background: none;
+  height: 54px; min-width: 0; overflow: hidden;
+}
+.so-root .so-look canvas { display: block; width: 100%; height: 100%; border-radius: 9px; }
+.so-root .so-look.is-sel { border-color: var(--so-accent); box-shadow: 0 0 0 2px rgba(0,0,0,0.25); }
+.so-root .so-chk {
+  position: absolute; right: 2px; top: 2px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--so-accent); color: #141a24; font-size: 14px; font-weight: 900; display: grid; place-items: center;
+}
+
+/* --- tabs ---------------------------------------------------------------------------------------- */
+.so-root .so-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--so-chip); padding: 4px; border-radius: 14px; }
+.so-root .so-tab {
+  height: 44px; border: 0; border-radius: 11px; background: none; font-size: 17px; font-weight: 700; color: var(--so-sub);
+  display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+}
+.so-root .so-tab.is-on { background: var(--so-card); color: var(--so-ink); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+.so-root .so-badge { min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; background: var(--so-accent); color: #141a24; font-size: 15px; font-weight: 800; display: inline-grid; place-items: center; }
+.so-root .so-panel { min-height: 0; display: flex; flex-direction: column; }
+
+/* --- rows ------------------------------------------------------------------------------------------ */
+.so-root .so-rows { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.so-root .so-row {
+  display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 12px; width: 100%;
+  border: 2px solid var(--so-line); border-radius: 14px; background: var(--so-card); text-align: left;
+}
+.so-root .so-row.is-mine { background: var(--so-mine); border-color: var(--so-accent); }
+.so-root .so-face { font-size: 30px; width: 40px; text-align: center; flex: none; }
+.so-root .so-rowtext { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.so-root .so-rowname { font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-root .so-rowsub { font-size: 15px; color: var(--so-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-root .so-pill { flex: none; padding: 8px 16px; border-radius: 999px; background: var(--so-go); color: var(--so-go-ink); font-weight: 800; font-size: 17px; }
+.so-root .so-chev { flex: none; font-size: 26px; color: var(--so-sub); }
+.so-root .so-more { height: 44px; border: 0; border-radius: 12px; background: var(--so-chip); font-size: 17px; font-weight: 700; }
+.so-root .so-empty { margin: 8px 0; text-align: center; font-size: 17px; color: var(--so-sub); }
+
+/* --- Challenge: Anyone + recent faces ------------------------------------------------------------ */
+.so-root .so-faces { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.so-root .so-facebtn { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 4px 0; }
+.so-root .so-facedot { width: 54px; height: 54px; border-radius: 50%; background: var(--so-chip); border: 2px solid var(--so-line); font-size: 30px; display: grid; place-items: center; }
+.so-root .so-facebtn.is-any .so-facedot { background: var(--so-go); color: #fff; border-color: var(--so-go); font-size: 32px; font-weight: 700; }
+.so-root .so-facename { font-size: 15px; font-weight: 600; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.so-root .so-search {
+  height: 48px; border-radius: 12px; border: 2px solid var(--so-line); background: var(--so-chip); color: var(--so-ink);
+  padding: 0 14px; font-size: 17px; -webkit-user-select: text; user-select: text; width: 100%;
+}
+.so-root .so-who { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.so-root .so-bigface { font-size: 56px; line-height: 1.1; }
+.so-root .so-whoname { font-size: 26px; font-weight: 800; }
+.so-root .so-go {
+  height: 54px; border: 0; border-radius: 16px; background: var(--so-go); color: var(--so-go-ink);
+  font-size: 20px; font-weight: 800; padding: 0 26px; min-width: 160px;
+  box-shadow: 0 4px 0 #123c6e;
+}
+.so-root .so-go:disabled { opacity: 0.6; }
+.so-root .so-alt { height: 50px; border: 2px solid var(--so-line); border-radius: 16px; background: var(--so-chip); font-size: 18px; font-weight: 700; padding: 0 22px; }
+
+/* --- play ---------------------------------------------------------------------------------------- */
+.so-root .so-play { padding: 0; display: block; background: #0d121b; }
+.so-root .so-board { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+.so-root .so-hud { position: absolute; left: 0; right: 0; top: calc(var(--so-top) + 48px); padding: 0 10px; pointer-events: none; }
+.so-root .so-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.so-root .so-pc {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 14px;
+  background: rgba(10, 14, 22, 0.72); color: #f7f9fc; border: 2px solid rgba(255,255,255,0.12); min-width: 0;
+}
+.so-root .so-pc.is-them { flex-direction: row-reverse; text-align: right; }
+.so-root .so-pc.is-owe { border-color: var(--so-accent); }
+.so-root .so-pcface { font-size: 28px; flex: none; }
+.so-root .so-pctext { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.so-root .so-pc.is-them .so-pctext { align-items: flex-end; }
+.so-root .so-pcname { font-size: 17px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.so-root .so-icons { display: flex; gap: 2px; }
+.so-root .so-icons canvas { width: 22px; height: 22px; }
+.so-root .so-roundline { margin: 8px auto 0; width: max-content; padding: 4px 14px; border-radius: 999px; background: rgba(10, 14, 22, 0.6); color: #f7f9fc; font-size: 17px; font-weight: 700; height: 44px; line-height: 36px; }
+.so-root .so-foot {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(var(--so-bot) + 12px);
+  display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 8px;
+}
+.so-root .so-menubtn {
+  width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); background: rgba(10, 14, 22, 0.72); color: #f7f9fc;
+  display: grid; place-items: center;
+}
+.so-root .so-footmid { display: flex; justify-content: center; min-width: 0; }
+.so-root .so-status {
+  margin: 0; padding: 12px 18px; border-radius: 16px; background: rgba(10, 14, 22, 0.72); color: #f7f9fc;
+  font-size: 17px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.so-root .so-status b { color: var(--so-accent); margin-right: 6px; }
+.so-root .so-count { font-size: 22px; font-weight: 800; min-width: 110px; letter-spacing: 0.04em; }
+.so-root .so-launch { background: #F2B705; color: #141a24; box-shadow: 0 4px 0 #8c6a00; min-width: 200px; }
+
+/* --- overlays -------------------------------------------------------------------------------------- */
+.so-root .so-ov {
+  position: absolute; inset: 0; z-index: 45; background: rgba(6, 10, 18, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--so-top) + 52px) 14px calc(var(--so-bot) + 14px);
+  overscroll-behavior: contain;
+}
+.so-root .so-ov .so-card { position: relative; }
+.so-root .so-x {
+  position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 50%; border: 0;
+  background: var(--so-chip); display: grid; place-items: center;
+}
+.so-root .so-card.so-help { gap: 10px; padding-top: 60px; }
+.so-root .so-goal { margin: 0; font-size: 19px; font-weight: 800; white-space: nowrap; }
+.so-root .so-hl { margin: 0; font-size: 17px; white-space: nowrap; color: var(--so-ink); }
+.so-root .so-diagram { width: 100%; height: auto; max-height: 34vh; display: block; }
+.so-root .so-card.so-menu { padding-top: 60px; gap: 10px; }
+.so-root .so-mbtn { height: 52px; border-radius: 14px; border: 2px solid var(--so-line); background: var(--so-chip); font-size: 18px; font-weight: 700; }
+.so-root .so-danger { color: #b8341a; border-color: #e0532f; }
+:root.gh-dark .so-root .so-danger { color: #ff9b80; }
+.so-root .so-loss { margin: 0; text-align: center; font-size: 17px; font-weight: 700; }
+.so-root .so-card.so-over { align-items: center; text-align: center; padding-top: 22px; }
+.so-root .so-overface { font-size: 64px; line-height: 1.1; }
+.so-root .so-overhead { margin: 0; font-size: 28px; font-weight: 800; }
+.so-root .so-overwhy { margin: 0; font-size: 17px; color: var(--so-sub); }
+.so-root .so-overbtns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.so-root .so-toast {
+  position: absolute; left: 50%; bottom: calc(var(--so-bot) + 84px); transform: translateX(-50%); z-index: 50;
+  background: rgba(10, 14, 22, 0.9); color: #f7f9fc; padding: 12px 18px; border-radius: 14px; font-size: 17px;
+  max-width: calc(100% - 32px); text-align: center; pointer-events: none;
+}
+
+@media (max-height: 700px) {
+  .so-root .so-look { height: 46px; }
+  .so-root .so-card { gap: 10px; padding: 14px 14px 12px; }
+  .so-root .so-facedot { width: 48px; height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .so-root * { transition: none !important; }
+}

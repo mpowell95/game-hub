@@ -83,7 +83,7 @@ const TOUR_FB = {
 // the same Report a bug form as the launcher, with this game preselected. Opt-in per game: add a hub
 // id here once that game's top-right corner is checked clear on its setup AND play screens; anything of
 // the game's own in that corner is moved by a `html.gh-gamebug` rule in css/hub.css (not the game's files).
-const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder']);
+const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder', 'shove-off']);
 
 const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
@@ -820,6 +820,24 @@ export const GAMES = [
     accent: '#24406f',
     art: GAME_ART['word-ladder'],
     // ADMIN ONLY until Matt says "release it": no `released` date (the New pill and New games bubble read it).
+    devOnly: true,
+  },
+  {
+    // Shove Off (2026-11-18, Matt on GamePigeon's Knockout: "I want our own version of this"): both players aim
+    // their four pieces in secret, everything slides at once, the platform shrinks. Online challenges only
+    // (shove-off/CLAUDE.md). Hub id = folder `shove-off`; stats id `shoveoff`.
+    id: 'shove-off',
+    added: '2026-11-18',            // sort-only (the launcher's Newest order); never the New pill
+    title: { en: 'Shove Off', es: 'Empujón' },
+    blurb: { en: 'Aim in secret, then everything slides. Last one on the platform wins.',
+      es: 'Apunta en secreto y todo se desliza. Gana el último en la plataforma.' },
+    module: '../shove-off/js/ui.js',
+    // Turn-by-turn challenges: the launcher's bubble and the Multiplayer screen.
+    alerts: () => import('../shove-off/js/alert.js'),
+    immersive: true,
+    accent: '#163e63',
+    art: GAME_ART['shove-off'],
+    // ADMIN ONLY until Matt says "release it": no `released` date.
     devOnly: true,
   },
 ];

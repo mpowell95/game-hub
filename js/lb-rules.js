@@ -55,6 +55,7 @@ export const LB_RULES = {
   wayout: { by: 'points' },
   wordweaver: { by: 'points' },
   wordladder: { by: 'solves' },   // admin only: levels finished (no points yet)
+  shoveoff: { by: 'wins' },       // admin only: online challenges only
   yahtzee: { by: 'wins' },
 };
 
