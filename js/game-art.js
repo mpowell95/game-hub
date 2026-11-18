@@ -1258,26 +1258,42 @@ export const GAME_ART = {
             <rect x="48" y="71.5" width="64" height="6.5" fill="hsl(200 62% 50%)"/><rect x="48" y="70" width="64" height="1.8" fill="hsl(200 70% 64%)"/><rect x="51" y="63.5" width="61" height="6.5" fill="hsl(212 62% 50%)"/><rect x="51" y="62" width="61" height="1.8" fill="hsl(212 70% 64%)"/><rect x="49" y="55.5" width="59" height="6.5" fill="hsl(224 62% 50%)"/><rect x="49" y="54" width="59" height="1.8" fill="hsl(224 70% 64%)"/><rect x="49" y="47.5" width="59" height="6.5" fill="hsl(236 62% 50%)"/><rect x="49" y="46" width="59" height="1.8" fill="hsl(236 70% 64%)"/><rect x="53" y="39.5" width="55" height="6.5" fill="hsl(248 62% 50%)"/><rect x="53" y="38" width="55" height="1.8" fill="hsl(248 70% 64%)"/><rect x="50" y="31.5" width="52" height="6.5" fill="hsl(260 62% 50%)"/><rect x="50" y="30" width="52" height="1.8" fill="hsl(260 70% 64%)"/><rect x="50" y="23.5" width="52" height="6.5" fill="hsl(272 62% 50%)"/><rect x="50" y="22" width="52" height="1.8" fill="hsl(272 70% 64%)"/><rect x="76" y="14" width="52" height="8" fill="hsl(284 62% 50%)"/>
             <rect x="118" y="34" width="4" height="7" fill="hsl(284 62% 50%)" transform="rotate(24 120 37)"/>
           </svg>`,
-  // Shove Off (2026-11-18, shove-off/): a sumo ring on the water, a red wrestler (circle marker) shoving a blue one
-  // (triangle marker) over the edge, the platform's next, smaller edge dashed. Never colour alone.
+  // Shove Off (2026-11-18, shove-off/; redrawn the same day, Matt: "the sumo guys don't look like sumo wrestlers at
+  // all"): a dohyo (clay square, straw circle, white lines), a red wrestler (circle on his belt) shoving a blue one
+  // (triangle) over the straw. Never colour alone.
   'shove-off': `<svg viewBox="0 0 160 90" aria-hidden="true">
-          <rect width="160" height="90" fill="#163e63"/>
-          <path d="M0 18 Q20 13 40 18 T80 18 T120 18 T160 18 M0 74 Q20 69 40 74 T80 74 T120 74 T160 74" stroke="#ffffff" stroke-opacity=".16" stroke-width="2" fill="none"/>
-          <rect x="34" y="11" width="70" height="70" rx="5" fill="#000" opacity=".3" transform="translate(3 4)"/>
-          <rect x="34" y="11" width="70" height="70" rx="5" fill="#d9b77e" stroke="#f1dcae" stroke-width="2.5"/>
-          <rect x="44" y="21" width="50" height="50" rx="4" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-dasharray="4 3"/>
-          <g transform="translate(56 58)">
-            <ellipse cx="9" cy="-7" rx="6" ry="4" fill="#c98f62" transform="rotate(-30 9 -7)"/><ellipse cx="2" cy="9" rx="6" ry="4" fill="#c98f62" transform="rotate(40 2 9)"/>
-            <circle r="11" fill="#f0c49a"/><circle r="9.4" fill="none" stroke="#E0532F" stroke-width="3"/>
-            <circle cx="2.5" cy="-2.5" r="4.3" fill="#1d1a18"/><circle cx="-5" cy="5" r="3.2" fill="#14161c"/><circle cx="-5" cy="5" r="1.7" fill="#fff"/>
-          </g>
-          <path d="M70 46 L91 30" stroke="#ffce3a" stroke-width="4" stroke-linecap="round"/><path d="M96 26 L86 28 L91 36 Z" fill="#ffce3a"/>
-          <g transform="translate(112 22) rotate(-20)" opacity=".8">
-            <circle r="13" fill="none" stroke="#ffffff" stroke-width="1.6" opacity=".55"/>
-            <circle r="8.5" fill="#f0c49a"/><circle r="7.2" fill="none" stroke="#1F5FA8" stroke-width="2.6"/>
-            <circle cx="2" cy="-1" r="3.3" fill="#1d1a18"/><circle cx="-4" cy="3" r="2.6" fill="#14161c"/><path d="M-4 1 L-2 4.5 L-6 4.5 Z" fill="#fff"/>
-          </g>
-          <path d="M126 40 q4 -3 8 0 M130 48 q4 -3 8 0" stroke="#ffffff" stroke-width="1.8" fill="none" opacity=".7"/>
+          <defs>
+            <clipPath id="soTileBelly"><ellipse cx="0" cy="1.7" rx="7.9" ry="7"/></clipPath>
+            <g id="soTileSumo">
+              <g fill="#f2c29b" stroke="#4a2a18" stroke-width=".6">
+                <ellipse cx="-4.8" cy="7.9" rx="2.5" ry="3.1"/><ellipse cx="4.8" cy="7.9" rx="2.5" ry="3.1"/>
+                <ellipse cx="-6" cy="10.8" rx="2.4" ry="1.1"/><ellipse cx="6" cy="10.8" rx="2.4" ry="1.1"/>
+              </g>
+              <path d="M-6 -1 L-9.6 -3.6 M6 -1 L9.6 -3.6" stroke="#4a2a18" stroke-width="4.1" stroke-linecap="round"/>
+              <path d="M-6 -1 L-9.6 -3.6 M6 -1 L9.6 -3.6" stroke="#f2c29b" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="-10.2" cy="-4.3" r="1.8" fill="#ffe3c9" stroke="#4a2a18" stroke-width=".6"/><circle cx="10.2" cy="-4.3" r="1.8" fill="#ffe3c9" stroke="#4a2a18" stroke-width=".6"/>
+              <ellipse cx="0" cy="1.7" rx="7.9" ry="7" fill="#f2c29b" stroke="#4a2a18" stroke-width=".6"/>
+              <rect x="-9" y="2.9" width="18" height="5" fill="currentColor" clip-path="url(#soTileBelly)"/>
+              <path d="M-1.8 7.2 L1.8 7.2 L1.3 10.8 L-1.3 10.8 Z" fill="currentColor"/>
+              <circle cx="0" cy="-6" r="3.7" fill="#f2c29b" stroke="#4a2a18" stroke-width=".6"/>
+              <path d="M-3.7 -6.4 A3.7 3.7 0 0 1 3.7 -6.4 Q0 -7.6 -3.7 -6.4 Z" fill="#15110e"/>
+              <ellipse cx="0" cy="-10.1" rx="2.6" ry="1.2" fill="#15110e"/><circle cx="0" cy="-9" r=".8" fill="#15110e"/>
+              <circle cx="-1.3" cy="-5.6" r=".55" fill="#15110e"/><circle cx="1.3" cy="-5.6" r=".55" fill="#15110e"/>
+              <path d="M-.8 -4.1 L.8 -4.1" stroke="#15110e" stroke-width=".5"/>
+              <circle cx="0" cy="5.4" r="3" fill="#0f121a" opacity=".85"/>
+            </g>
+          </defs>
+          <rect width="160" height="90" fill="#241310"/>
+          <rect x="44" y="9" width="72" height="72" rx="4" fill="#000" opacity=".35" transform="translate(2 3)"/>
+          <rect x="44" y="9" width="72" height="72" rx="4" fill="#c79a5e" stroke="#e6d39a" stroke-width="2"/>
+          <circle cx="80" cy="45" r="30" fill="#d6ad72"/>
+          <circle cx="80" cy="45" r="30" fill="none" stroke="#7d6430" stroke-width="5"/>
+          <circle cx="80" cy="45" r="30" fill="none" stroke="#e3cf8f" stroke-width="3.6" stroke-dasharray="5.3 1"/>
+          <path d="M72 40 V50 M88 40 V50" stroke="#fff" stroke-width="1.6"/>
+          <g transform="translate(68 51) scale(1.6)" color="#E0532F"><use href="#soTileSumo"/><circle cx="0" cy="5.4" r="1.8" fill="#fff"/></g>
+          <path d="M86 40 L95 33" stroke="#ffce3a" stroke-width="3" stroke-linecap="round"/><path d="M99 30 L91 31 L95 37 Z" fill="#ffce3a"/>
+          <g transform="translate(112 24) rotate(28) scale(1.4)" color="#1F5FA8"><use href="#soTileSumo"/><path d="M0 3.5 L1.8 6.6 L-1.8 6.6 Z" fill="#fff"/></g>
+          <path d="M131 12 q4 -2 7 1 M134 21 q4 -2 7 1" stroke="#ffffff" stroke-width="1.6" fill="none" opacity=".75"/>
         </svg>`,
 };
 

@@ -102,12 +102,26 @@
   box-shadow: 0 4px 0 #123c6e;
 }
 .so-root .so-go:disabled { opacity: 0.6; }
+/* the Computer tab: three difficulties (shape + word, never colour alone), then Play / Continue + New game */
+.so-root .so-online { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.so-root .so-diffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.so-root .so-diff {
+  height: 56px; border-radius: 14px; border: 2px solid var(--so-line); background: var(--so-chip); color: var(--so-ink);
+  font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; padding: 0 6px;
+}
+.so-root .so-diff svg { width: 18px; height: 18px; flex: none; }
+.so-root .so-diff.is-sel { border-color: var(--so-accent); background: var(--so-mine); box-shadow: inset 0 0 0 2px var(--so-accent); }
+.so-root .so-cpubtns { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.so-root .so-cpubtns .so-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 220px; }
+.so-root .so-cpubtns .so-go svg { width: 20px; height: 20px; fill: #ffffff; }
+.so-root .so-cpubtns .so-alt { min-width: 220px; }
 .so-root .so-alt { height: 50px; border: 2px solid var(--so-line); border-radius: 16px; background: var(--so-chip); font-size: 18px; font-weight: 700; padding: 0 22px; }
 
 /* --- play ---------------------------------------------------------------------------------------- */
 .so-root .so-play { padding: 0; display: block; background: #0d121b; }
 .so-root .so-board { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
-.so-root .so-hud { position: absolute; left: 0; right: 0; top: calc(var(--so-top) + 48px); padding: 0 10px; pointer-events: none; }
+/* below the hub's floating "‹ Hub" / bug row (max(safe top, 54px), 36px tall) on every phone */
+.so-root .so-hud { position: absolute; left: 0; right: 0; top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 42px); padding: 0 10px; pointer-events: none; }
 .so-root .so-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .so-root .so-pc {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 14px;
