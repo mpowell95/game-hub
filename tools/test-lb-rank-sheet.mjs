@@ -57,6 +57,7 @@ for (const id of Object.keys(LB_RULES)) {
   const [lvl, rush] = rankSheetModel('wayout');
   ok('arrow maze: two cards, the table and Rush', lvl.grid && rush.text === 'lbrs_wo_rush');
   ok('arrow maze: columns 0, 1, 2, 3+', lvl.grid.cols.join() === '0,1,2,3+');
+  ok('arrow maze: says a failed try\'s lives do not count (2026-11-16 rule)', lvl.foot === 'lbrs_wo_foot' && !!STRINGS.en.lbrs_wo_foot && !!STRINGS.es.lbrs_wo_foot);
   WO_TIERS.forEach((b, i) => {
     const v = lvl.grid.rows[i].vals;
     ok(`arrow maze ${b}: a clear is ${v[0]}`, v[0] === WO_BAND_POINTS[b] && lvl.grid.rows[i].ic === i + 1);

@@ -69,7 +69,8 @@ const SHEETS = {
   // (0, 1, 2, 3+; read from woEarnedPoints, today's boards), and Rush in one line.
   wayout: () => [
     { h: 'lbrs_h_lvl', grid: { sup: 'lbrs_wo_sup', cols: ['0', '1', '2', '3+'],
-      rows: WO_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2, 3].map((n) => woEarnedPoints(b, n)) })) } },
+      rows: WO_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: [0, 1, 2, 3].map((n) => woEarnedPoints(b, n)) })) },
+      foot: 'lbrs_wo_foot' },   // 2026-11-16 (woSlipsScored `tm`): a failed try's hearts do not cost points
     { h: 'lbrs_h_rush', text: 'lbrs_wo_rush' },
   ],
   // Points = stars (0 hints 3, 1 hint 2, 2+ 1) x the band's multiplier (1/2/3/4), both from word-weaver-points.js.
@@ -155,7 +156,7 @@ function ensureRankSheetCss() {
     '.lbrs-ic{display:inline-flex;justify-content:center;width:26px;flex:none}',
     '.lbrs-emo{font-size:20px;line-height:1}',
     '.lbrs-medal{width:26px;height:auto;display:block}',
-    '.lbrs-foot{padding:0 14px 12px;font-size:14px;color:var(--ps-note)}',
+    '.lbrs-foot{padding:0 14px 12px;font-size:15px;color:var(--ps-note)}',
     // Points grids (Arrow Maze, Sudoku, Murdoku, Word Weaver, Gridlock). Headers bright (Matt, 2026-11-03).
     '.lbrs-grid{width:100%;border-collapse:collapse;font-size:17px;font-variant-numeric:tabular-nums}',
     '.lbrs-grid th{font-size:14px;font-weight:700;color:var(--ps-th);text-align:center;width:44px;padding:4px 0 7px;white-space:nowrap}',

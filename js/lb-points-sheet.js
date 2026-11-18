@@ -66,6 +66,12 @@ const ONLINE_OPP = {
   escoba: { n: [1, 2, 3], mode: (n) => ({ n: n + 1 }) },
   eightball: { n: [1, 2], mode: (n) => ({ game: n === 2 ? 'ct' : '8' }) },
 };
+// A setup that pays differently from its cell (2026-11-18, Matt: "All of those pages should be updated. For any game
+// where the points changed"): one line under the table, its number and limit from the real maths (cellFacts).
+// Dots and Boxes: Medium, Small board, the computer goes first (js/lb-points.js dbFarm, 2026-11-16).
+const EXCEPT = {
+  dotsboxes: [{ k: 'lbpt_x_db_farm', tier: 2, mode: { size: 'small', went: 'them' } }],
+};
 // Pool's Cutthroat: 2 computers, every number x2; the example is Hard at 3 racks.
 const CUTTHROAT = { id: 'eightball', tier: 3, mode: { racks: 3, game: 'ct' } };
 
@@ -104,6 +110,7 @@ export function sheetModel(id) {
       : { kind: 'online', rows: [{ tier: 'on', pts: pointsTable(id).on, cap: false }] });
   }
   if (id === CUTTHROAT.id) cards.push({ kind: 'cutthroat', ex: { tier: CUTTHROAT.tier, racks: CUTTHROAT.mode.racks, pts: pointsForWin(id, L3[CUTTHROAT.tier - 1], CUTTHROAT.mode) } });
+  for (const x of EXCEPT[id] || []) cards.push({ kind: 'except', key: x.k, rows: [{ tier: x.tier, ...cellFacts(id, L3[x.tier - 1], L3[x.tier - 1], x.mode) }] });
   if (cards.some((c) => c.rows && c.rows.some((r) => r.cap))) cards.push({ kind: 'limit' });
   if (TABLE.has(id)) {
     const ai = TABLE_EX.map((x) => L3[x - 1]).join('-');
@@ -166,6 +173,8 @@ export function pointsSheetHTML(id) {
       online: onlineRow,
     });
   }
+  const ex = cards.filter((c) => c.kind === 'except').map((c) => `<div class="lbpt-note lbpt-x"><span>${esc(t(c.key, { lv: t(LEVEL_KEY[c.rows[0].tier]) }))}</span>`
+    + `${c.rows[0].cap ? capCell(c.rows[0].pts) : `<b>${esc(c.rows[0].pts)}</b>`}</div>`).join('');
   const cap = cards.some((c) => c.kind === 'limit') ? capNoteHTML(CAP, pointsTable(id).ownCap ? 'lbpt_cap_lv' : 'lbpt_cap') : '';   // ownCap: each level its own limit (2026-11-08)
   const tb = cards.find((c) => c.kind === 'table');
   const note = tb ? `<div class="lbpt-note"><b>${esc(t('lbpt_tables_b'))}</b> ${esc(t('lbpt_tables'))}<br>${esc(t('lbpt_tables_ex', {
@@ -177,7 +186,7 @@ export function pointsSheetHTML(id) {
     sup: t('lbpt_h_opponents'), cols: onl.opp.map((o) => String(o.n)), cls: 'lbpt-gap',
     rows: [{ ic: 'on', label: t('lb_pts_online'), vals: onl.opp.map((o) => ({ v: o.pts })) }],
   }) : '';
-  return `<div class="lbps"><div class="lbps-card">${table}${cap}${note}${ctNote}${opp}</div></div>`;
+  return `<div class="lbps"><div class="lbps-card">${table}${ex}${cap}${note}${ctNote}${opp}</div></div>`;
 }
 
 // Light and dark (`.gh-dark` on <html>, js/theme.js). Headers bright (Matt, 2026-11-03: "all those column headers
@@ -226,6 +235,8 @@ export function ensurePointsSheetCss() {
     '.lbpt-dot{display:inline-flex;width:26px;height:26px;border-radius:13px;background:#ffce3a;flex:none}',
     ':root:not(.gh-dark) .lbpt-cap,:root:not(.gh-dark) .lbpt-dot{box-shadow:inset 0 0 0 1px #d9a400}',
     '.lbpt-note{padding:12px 14px 14px;font-size:17px;line-height:1.4;color:var(--ps-note);border-top:1px solid var(--ps-row)}',
+    '.lbpt-x{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--ps-ink)}',
+    '.lbpt-x b{font-size:22px;font-weight:800;min-width:30px;text-align:center}',
     '.lbpt-note b{color:var(--ps-th)}',
   ].join('\n');
   document.head.appendChild(el);
