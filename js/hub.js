@@ -644,19 +644,6 @@ export const GAMES = [
     devOnly: true,
   },
   {
-    // TENNIS (2026-11-17, Matt: "Can we just link to it"): Richard Davey's game at his own site, not copied
-    // into the hub. A plain link out: no stats, no saves, needs the internet, and his page has sound (Matt
-    // chose to keep it). ADMIN ONLY until Matt says "release it".
-    id: 'tennis',
-    added: '2026-11-17',            // sort-only (the launcher's Newest order); never the New pill
-    title: 'Tennis',
-    blurb: 'Pong that gets weird. By Richard Davey.',
-    href: 'https://tennis.sixfingerpunch.com/',
-    accent: '#FFFC00',
-    art: GAME_ART['tennis'],
-    devOnly: true,
-  },
-  {
     // Phase 0 (BB-0-phase-0-handoff.md): stats plumbing and a placeholder screen only, no game.
     // devOnly, unlike Golf's admin-config gate - there is nothing behind this tile yet for the
     // admin config's "live/testing" distinction to be meaningful about. No `released` date: that

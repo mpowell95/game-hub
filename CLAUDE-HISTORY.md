@@ -1706,3 +1706,7 @@ Built the same day (admin only). Matt, on learning it is the 2048 genre: "remove
 ## 2026-11-17: Oxford comma made a hard requirement
 
 Matt: "Make a rule somewhere that you are REQUIRED to use Oxford commas. NEVER send me anything you have created that omits or excludes an Oxford comma. I can't fucking stand it." The 2026-10-28 line in CLAUDE.md ("Accessibility + copy conventions") was strengthened: required, covers everything a session creates (mockups, artifacts, commit messages, replies), and says to scan every list before sending.
+
+## Tennis link removed (2026-11-18)
+
+Matt: "remove the Tennis link thing". The admin-only Tennis tile (a link out to Richard Davey's site, added 2026-11-17) and its tile art were removed from `js/hub.js` and `js/game-art.js`. It never recorded stats, so no player data was involved.
