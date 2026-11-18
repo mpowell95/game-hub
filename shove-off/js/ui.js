@@ -29,7 +29,8 @@ const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&':
 const first = (n) => String(n || '').trim().split(/\s+/)[0] || String(n || '');
 const X_SVG = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>';
 const DOTS_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="5" cy="12" r="2.3" fill="currentColor"/><circle cx="12" cy="12" r="2.3" fill="currentColor"/><circle cx="19" cy="12" r="2.3" fill="currentColor"/></svg>';
-const WORLD = E.H0 + 60;                     // half the world the board shows (the platform plus a margin of water)
+const WORLD = E.H0 + 60;                     // rv 1: half the world the board shows (the square plus a margin of water)
+const EDGE_PX = 9;                           // rv 2: the round-1 circle spans the width minus this much each side
 const STEPS_PER_FRAME = 2;                   // a round's slide plays at twice the simulation's step rate
 const REVEAL_MS = 1100;                      // both sides' arrows shown before the slide
 const SHRINK_MS = 700;
@@ -386,7 +387,7 @@ class ShoveOff {
     const mp = this.mp;
     mp.game = g;
     mp.them = g.b;
-    mp.m = MP.replay(g.log) || E.newMatch();
+    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g));
     if (!mp.draft || mp.draft.r !== g.round) {
       const d = readDraft('cpu', g.round);
       mp.draft = { r: g.round, a: d && d.length <= E.slotCount(mp.m) ? d : [] };
@@ -454,9 +455,9 @@ class ShoveOff {
     const r = g.round;
     if (!mp.draft || mp.draft.r !== r) {
       const d = readDraft(g.id, r);
-      mp.draft = { r, a: d && d.length <= E.slotCount(MP.replay(g.log) || E.newMatch()) ? d : [] };
+      mp.draft = { r, a: d && d.length <= E.slotCount(MP.replayGame(g) || E.newMatch(MP.rvOf(g))) ? d : [] };
     }
-    mp.m = MP.replay(g.log) || E.newMatch();
+    mp.m = MP.replayGame(g) || E.newMatch(MP.rvOf(g));
     const shown = MP.readShown(g.id);
     if (g.resolved > shown && g.resolved > 0 && !this.anim) {
       this._animateRound(g.resolved);
@@ -476,7 +477,7 @@ class ShoveOff {
     for (let i = 0; i < g.log.length; i++) { const c = (per.get(g.log[i].r) || 0) + 1; per.set(g.log[i].r, c); if (c === 2 && ++count === n) { idx = i; break; } }
     if (idx < 0) { this._markShown(n); return; }
     const frames = [];
-    const m = MP.replay(g.log, idx + 1, idx, frames);
+    const m = MP.replayGame(g, idx + 1, idx, frames);
     if (!m) { this._markShown(n); return; }
     const rec = m.rounds[m.rounds.length - 1];
     this.anim = { n, rec, frames, t0: performance.now(), m };
@@ -617,8 +618,18 @@ class ShoveOff {
     const hud = this.el('.so-hud').getBoundingClientRect();
     const foot = this.el('.so-foot').getBoundingClientRect();
     const top = hud.bottom - rect.top + 6, bottom = foot.top - rect.top - 6;
-    const size = Math.max(120, Math.min(W - 16, bottom - top));
-    this.view = { W, H, cx: W / 2, cy: top + (bottom - top) / 2, k: size / (2 * WORLD) };
+    const g = this.mp && this.mp.game;
+    const RL = E.RULES[g ? (MP.rvOf(g) || 1) : E.RV];
+    let k;
+    if (RL.shape === 'circle') {
+      // rv 2: the round-1 circle fills the width (EDGE_PX each side) or the height between the HUD and the foot
+      const rad = Math.max(60, Math.min((W - 2 * EDGE_PX) / 2, (bottom - top) / 2));
+      k = rad / RL.H0;
+    } else {
+      const size = Math.max(120, Math.min(W - 16, bottom - top));
+      k = size / (2 * WORLD);
+    }
+    this.view = { W, H, cx: W / 2, cy: top + (bottom - top) / 2, k };
     this._draw();
   }
   _toScreen(x, y) { const v = this.view; return [v.cx + x * v.k, v.cy + y * v.k]; }
@@ -638,7 +649,7 @@ class ShoveOff {
     const face = (p, aim) => (aim ? Math.atan2(aim[1], aim[0]) : Math.atan2(-p.y, -p.x));
     if (this.anim) { this._drawAnim(ctx, kind, looks, r, face); return; }
     const m = mp.m;
-    A.drawPlatform(ctx, kind, v.cx, v.cy, m.H * v.k);
+    A.drawPlatform(ctx, kind, v.cx, v.cy, m.H * v.k, E.rulesOf(m).shape);
     const showMine = !g.over;
     const myAims = this._sent() ? (mp.pending && mp.pending.r === g.round ? (E.parseAims(m, mp.side, mp.pending.aims) || []) : this._sentAims()) : mp.draft.a;
     const canAim = this._canAim();
@@ -672,10 +683,11 @@ class ShoveOff {
     else if (el < REVEAL_MS + slideMs + SHRINK_MS) { phase = 'shrink'; k = (el - REVEAL_MS - slideMs) / SHRINK_MS; }
     else { this._animDone(); return; }
     const Hpx = rec.H * v.k, H1px = rec.H1 * v.k;
+    const shape = E.rulesOf(a.m).shape;
     if (phase === 'shrink') {
-      A.drawGhostEdge(ctx, kind, v.cx, v.cy, Hpx, 1 - k);
-      A.drawPlatform(ctx, kind, v.cx, v.cy, H1px + (Hpx - H1px) * (1 - easeOut(k)));
-    } else A.drawPlatform(ctx, kind, v.cx, v.cy, Hpx);
+      A.drawGhostEdge(ctx, kind, v.cx, v.cy, Hpx, 1 - k, shape);
+      A.drawPlatform(ctx, kind, v.cx, v.cy, H1px + (Hpx - H1px) * (1 - easeOut(k)), shape);
+    } else A.drawPlatform(ctx, kind, v.cx, v.cy, Hpx, shape);
     const frame = phase === 'reveal' ? null : phase === 'slide' ? a.frames[k] : a.frames[a.frames.length - 1];
     rec.before.forEach((p, i) => {
       if (!p.alive) return;
@@ -684,7 +696,8 @@ class ShoveOff {
       if (frame) { wx = frame[i * 2]; wy = frame[i * 2 + 1]; }
       const fell = rec.falls.indexOf(i) >= 0;
       if (fell && phase !== 'reveal') {
-        const fs = Math.max(0, a.frames.findIndex((f) => Math.abs(f[i * 2]) > rec.H || Math.abs(f[i * 2 + 1]) > rec.H));
+        const fi = rec.falls.indexOf(i);
+        const fs = rec.fallAt ? rec.fallAt[fi] : Math.max(0, a.frames.findIndex((f) => Math.abs(f[i * 2]) > rec.H || Math.abs(f[i * 2 + 1]) > rec.H));
         const since = (phase === 'slide' ? k : a.frames.length + 20) - fs;
         if (since > 0) { const q = Math.min(1, since / 26); scale = 1 - q * 0.65; alpha = 1 - q; if (q < 1) A.drawSplash(ctx, kind, ...this._toScreen(wx, wy), r, q); }
       }
@@ -774,6 +787,7 @@ class ShoveOff {
       ${helpSVG()}
       <p class="so-hl">${esc(t('help_aim'))}</p>
       <p class="so-hl">${esc(t('help_eg'))}</p>
+      <p class="so-hl">${esc(t('help_off'))}</p>
       <p class="so-hl">${esc(t('help_shrink'))}</p>
       <p class="so-hl">${esc(t('help_sd'))}</p>
     </div>`;
@@ -991,8 +1005,8 @@ function easeOut(k) { return 1 - (1 - k) * (1 - k); }
 function helpSVG() {
   return `<svg class="so-diagram" viewBox="0 0 260 150" role="img" aria-label="${esc(t('help_aria'))}">
     <rect x="0" y="0" width="260" height="150" rx="12" fill="#163e63"/>
-    <rect x="40" y="12" width="126" height="126" rx="8" fill="#d9b77e" stroke="#f1dcae" stroke-width="3"/>
-    <rect x="58" y="30" width="90" height="90" rx="6" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 5"/>
+    <circle cx="103" cy="75" r="64" fill="#d9b77e" stroke="#f1dcae" stroke-width="3"/>
+    <circle cx="103" cy="75" r="46" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 5"/>
     <circle cx="76" cy="96" r="13" fill="#E0532F" stroke="#7a2412" stroke-width="2"/><circle cx="76" cy="96" r="5" fill="#fff"/>
     <path d="M90 88 L132 64" stroke="#ffce3a" stroke-width="5" stroke-linecap="round"/><path d="M138 60 L124 62 L131 73 Z" fill="#ffce3a"/>
     <circle cx="140" cy="58" r="13" fill="#1F5FA8" stroke="#0e2f57" stroke-width="2"/><path d="M140 51 L146 62 L134 62 Z" fill="#fff"/>

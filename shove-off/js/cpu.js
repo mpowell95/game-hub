@@ -39,7 +39,7 @@ export const roundSeed = (seed, round) => (((seed >>> 0) * 31 + (round | 0) * 26
 
 /** A copy of the match with nobody's aims in it: everything the computer may look at. */
 function snapshot(m) {
-  return { round: m.round, H: m.H, sd: m.sd, sdr: m.sdr, winner: null, end: '', rounds: [], sent: { a: null, b: null },
+  return { rv: E.asRv(m.rv), round: m.round, H: m.H, sd: m.sd, sdr: m.sdr, winner: null, end: '', rounds: [], sent: { a: null, b: null },
     pieces: m.pieces.map((p) => ({ s: p.s, i: p.i, x: p.x, y: p.y, alive: p.alive })) };
 }
 const copy = (snap) => ({ ...snap, rounds: [], sent: { a: null, b: null }, pieces: snap.pieces.map((p) => ({ ...p })) });
@@ -49,10 +49,13 @@ function dirTo(x0, y0, x1, y1, len) {
   const d = Math.sqrt(dx * dx + dy * dy) || 1;
   return [dx / d * len, dy / d * len];
 }
-/** The direction from the middle to the edge a piece is nearest (the way a shove should drive it). */
-function outward(p) {
+/** The direction from the middle to the edge a piece is nearest (the way a shove should drive it): rv 1's
+ *  square, the nearest side; rv 2's circle, straight out from the middle. */
+function outward(p, circle = false) {
+  if (circle) { const d = Math.sqrt(p.x * p.x + p.y * p.y); return d > 1 ? [p.x / d, p.y / d] : [1, 0]; }
   return Math.abs(p.x) >= Math.abs(p.y) ? [p.x >= 0 ? 1 : -1, 0] : [0, p.y >= 0 ? 1 : -1];
 }
+const isCircle = (m) => E.rulesOf(m).shape === 'circle';
 const living = (m, s) => m.pieces.filter((p) => p.alive && p.s === s);
 
 /** A guess of what the other side will do this round (by slot), from the same snapshot. */
@@ -66,7 +69,7 @@ function guessAims(m, s, kind) {
     for (const q of foes) { const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2; if (d < bd) { bd = d; best = q; } }
     if (!best) continue;
     if (kind === 'edge') {
-      const [ux, uy] = outward(best);
+      const [ux, uy] = outward(best, isCircle(m));
       list[p.i] = E.clampAim(...dirTo(p.x, p.y, best.x - ux * E.R * 1.8, best.y - uy * E.R * 1.8, E.MAX_AIM));
     } else list[p.i] = E.clampAim(...dirTo(p.x, p.y, best.x, best.y, E.MAX_AIM));
   }
@@ -74,7 +77,7 @@ function guessAims(m, s, kind) {
 }
 
 /** How good a played-out round is for side `s` (higher = better). */
-function scoreRound(rec, s, winner) {
+function scoreRound(rec, s, winner, circle = false) {
   let mine = 0, theirs = 0;
   for (const k of rec.falls.concat(rec.shrinkFalls)) { if (rec.before[k].s === s) mine++; else theirs++; }
   let v = theirs * 10 - mine * 11;
@@ -83,7 +86,7 @@ function scoreRound(rec, s, winner) {
   const H1 = rec.H1;
   for (const p of rec.after) {
     if (!p.alive) continue;
-    const e = Math.max(Math.abs(p.x), Math.abs(p.y)) / H1;     // 0 = the middle, 1 = the edge
+    const e = (circle ? Math.sqrt(p.x * p.x + p.y * p.y) : Math.max(Math.abs(p.x), Math.abs(p.y))) / H1;     // 0 = the middle, 1 = the edge
     const risk = Math.max(0, e - 0.5);
     if (p.s === s) v -= risk * 7; else v += risk * 3;
   }
@@ -95,7 +98,7 @@ function trial(snap, s, mine, theirs) {
   const m = copy(snap);
   m.sent[s] = mine; m.sent[E.other(s)] = theirs;
   const rec = E.resolveRound(m);
-  return scoreRound(rec, s, m.winner);
+  return scoreRound(rec, s, m.winner, isCircle(m));
 }
 
 function candidates(snap, p, cfg, rnd) {
@@ -103,7 +106,7 @@ function candidates(snap, p, cfg, rnd) {
   const foes = living(snap, p.s === 'a' ? 'b' : 'a');
   for (const q of foes) {
     for (const k of cfg.pow) out.push(dirTo(p.x, p.y, q.x, q.y, E.MAX_AIM * k));
-    if (cfg.edge) { const [ux, uy] = outward(q); out.push(dirTo(p.x, p.y, q.x - ux * E.R * 1.8, q.y - uy * E.R * 1.8, E.MAX_AIM)); }
+    if (cfg.edge) { const [ux, uy] = outward(q, isCircle(snap)); out.push(dirTo(p.x, p.y, q.x - ux * E.R * 1.8, q.y - uy * E.R * 1.8, E.MAX_AIM)); }
     if (cfg.side) {
       const [dx, dy] = dirTo(p.x, p.y, q.x, q.y, 1);
       out.push(dirTo(p.x, p.y, q.x + -dy * E.R * 0.9, q.y + dx * E.R * 0.9, E.MAX_AIM));

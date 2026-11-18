@@ -9,8 +9,8 @@
 export const LOOKS = ['sumo0', 'sumo1', 'car0', 'car1', 'puck0', 'puck1'];
 export const KINDS = ['sumo', 'car', 'puck'];
 const COLORS = {
-  sumo: [{ main: '#E0532F', dark: '#9c3017' }, { main: '#1F5FA8', dark: '#123c6e' }],
-  car: [{ main: '#F2B705', dark: '#a67c00' }, { main: '#178A7A', dark: '#0c5a4f' }],
+  sumo: [{ main: '#E0532F', dark: '#8f2a12', light: '#f08a6c' }, { main: '#1F5FA8', dark: '#0f3260', light: '#5f93d4' }],
+  car: [{ main: '#F2B705', dark: '#a67c00', light: '#ffd84d' }, { main: '#178A7A', dark: '#0c5a4f', light: '#3fbfac' }],
   puck: [{ main: '#262a33', dark: '#0d0f14', light: '#5b6274' }, { main: '#f1eee6', dark: '#b9b3a3', light: '#ffffff' }],
 };
 export const kindOf = (look) => (String(look || '').replace(/\d+$/, '') || 'sumo');
@@ -67,8 +67,10 @@ export function drawSurround(ctx, kind, W, H, t = 0) {
   ctx.restore();
 }
 
-/** The platform, a square of half-size `half` px centred at (cx, cy). */
-export function drawPlatform(ctx, kind, cx, cy, half) {
+/** The platform centred at (cx, cy): rv 2's CIRCLE of radius `half` px (`shape` 'circle'), or rv 1's square of
+ *  half-size `half` px (matches made before 2026-11-18 keep their square). */
+export function drawPlatform(ctx, kind, cx, cy, half, shape = 'square') {
+  if (shape === 'circle') { drawRing(ctx, kind, cx, cy, half); return; }
   const s = SCENE[kind] || SCENE.sumo;
   const x0 = cx - half, y0 = cy - half, w = half * 2;
   ctx.save();
@@ -149,15 +151,112 @@ export function drawPlatform(ctx, kind, cx, cy, half) {
 }
 
 /** The previous (larger) platform melting away: a faint outline. */
-export function drawGhostEdge(ctx, kind, cx, cy, half, alpha) {
+export function drawGhostEdge(ctx, kind, cx, cy, half, alpha, shape = 'square') {
   if (alpha <= 0) return;
   const s = SCENE[kind] || SCENE.sumo;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = s.plat2;
   ctx.beginPath();
-  roundRectPath(ctx, cx - half, cy - half, half * 2, half * 2, half * 0.06);
+  if (shape === 'circle') ctx.arc(cx, cy, half, 0, Math.PI * 2);
+  else roundRectPath(ctx, cx - half, cy - half, half * 2, half * 2, half * 0.06);
   ctx.fill();
+  if (shape === 'circle') { ctx.lineWidth = Math.max(3, half * 0.03); ctx.strokeStyle = s.edge; ctx.stroke(); }
+  ctx.restore();
+}
+
+/**
+ * rv 2: the round platform, radius `rad` px; the circle IS the edge (a piece more than half over it falls).
+ * Sumo: a dohyo, its square clay mound bleeding past the ring (it can run off the screen's sides), the straw
+ * bales ending exactly at the edge. Bumper cars: a round rubber arena with its striped tyre wall on the edge,
+ * on water. Pucks: a round air table with its rim on the edge, on a dark floor.
+ */
+function drawRing(ctx, kind, cx, cy, rad) {
+  const s = SCENE[kind] || SCENE.sumo;
+  const full = () => { ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); };
+  ctx.save();
+  if (kind === 'sumo') {
+    const half = rad * 1.16;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    roundRect(ctx, cx - half + rad * 0.03, cy - half + rad * 0.05, half * 2, half * 2, rad * 0.05); ctx.fill();
+    const g = ctx.createLinearGradient(cx - half, cy - half, cx + half, cy + half);
+    g.addColorStop(0, s.plat2); g.addColorStop(1, '#94693a');
+    ctx.fillStyle = g;
+    roundRect(ctx, cx - half, cy - half, half * 2, half * 2, rad * 0.05); ctx.fill();
+    // clay texture on the mound
+    ctx.fillStyle = 'rgba(80,50,20,0.12)';
+    for (let i = 0; i < 90; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 90) * 1.15; ctx.fillRect(cx + Math.cos(a) * rad * d, cy + Math.sin(a) * rad * d, 2, 2); }
+    // the ring's floor: the lighter swept clay inside the bales
+    const bale = Math.max(5, rad * 0.06);
+    const fl = ctx.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
+    fl.addColorStop(0, '#e2bd83'); fl.addColorStop(1, s.plat);
+    ctx.fillStyle = fl;
+    full(); ctx.fill();
+    // the straw bales: their OUTER side is the edge
+    const rr = rad - bale / 2;
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = bale + 2; ctx.strokeStyle = s.ropeDk;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = bale; ctx.strokeStyle = s.rope;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = s.ropeDk; ctx.lineWidth = Math.max(1, rad * 0.01);
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2, c1 = Math.cos(a), s1 = Math.sin(a);
+      ctx.beginPath(); ctx.moveTo(cx + c1 * (rr - bale / 2), cy + s1 * (rr - bale / 2)); ctx.lineTo(cx + c1 * (rr + bale / 2), cy + s1 * (rr + bale / 2)); ctx.stroke();
+    }
+    // the two white shikiri lines
+    ctx.fillStyle = s.line;
+    const lw = Math.max(2, rad * 0.025), lh = rad * 0.17;
+    ctx.fillRect(cx - rad * 0.14 - lw / 2, cy - lh / 2, lw, lh);
+    ctx.fillRect(cx + rad * 0.14 - lw / 2, cy - lh / 2, lw, lh);
+    // a bright lip on the outside of the bales: where the edge is
+    ctx.lineWidth = Math.max(2, rad * 0.012); ctx.strokeStyle = s.edge;
+    full(); ctx.stroke();
+  } else if (kind === 'car') {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.arc(cx + rad * 0.03, cy + rad * 0.05, rad, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(cx - rad, cy - rad, cx + rad, cy + rad);
+    g.addColorStop(0, s.plat); g.addColorStop(1, s.plat2);
+    ctx.fillStyle = g;
+    full(); ctx.fill();
+    ctx.save(); full(); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
+    const cell = Math.max(10, rad / 6);
+    for (let x = cx - rad + cell; x < cx + rad; x += cell) { ctx.beginPath(); ctx.moveTo(x, cy - rad); ctx.lineTo(x, cy + rad); ctx.stroke(); }
+    for (let y = cy - rad + cell; y < cy + rad; y += cell) { ctx.beginPath(); ctx.moveTo(cx - rad, y); ctx.lineTo(cx + rad, y); ctx.stroke(); }
+    ctx.restore();
+    ctx.strokeStyle = s.line; ctx.globalAlpha = 0.35; ctx.lineWidth = Math.max(2, rad * 0.02);
+    ctx.beginPath(); ctx.arc(cx, cy, rad * 0.3, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // the tyre wall: its outer side is the edge
+    const tw = Math.max(5, rad * 0.05);
+    ctx.lineWidth = tw; ctx.strokeStyle = s.edge;
+    ctx.beginPath(); ctx.arc(cx, cy, rad - tw / 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([Math.max(6, rad * 0.07), Math.max(6, rad * 0.07)]);
+    ctx.strokeStyle = s.rope;
+    ctx.beginPath(); ctx.arc(cx, cy, rad - tw / 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.arc(cx + rad * 0.03, cy + rad * 0.05, rad, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createLinearGradient(cx - rad, cy - rad, cx + rad, cy + rad);
+    g.addColorStop(0, s.plat); g.addColorStop(1, s.plat2);
+    ctx.fillStyle = g;
+    full(); ctx.fill();
+    ctx.save(); full(); ctx.clip();
+    ctx.fillStyle = 'rgba(60,80,110,0.18)';
+    const hole = Math.max(9, rad / 9);
+    for (let y = cy - rad + hole / 2; y < cy + rad; y += hole) for (let x = cx - rad + hole / 2; x < cx + rad; x += hole) ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
+    ctx.restore();
+    ctx.strokeStyle = s.rope; ctx.lineWidth = Math.max(2, rad * 0.02);
+    ctx.beginPath(); ctx.arc(cx, cy, rad * 0.28, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = s.line;
+    ctx.beginPath(); ctx.moveTo(cx - rad * 0.94, cy); ctx.lineTo(cx + rad * 0.94, cy); ctx.stroke();
+    // the rim: its outer side is the edge
+    const rw = Math.max(4, rad * 0.035);
+    ctx.lineWidth = rw; ctx.strokeStyle = s.edge;
+    ctx.beginPath(); ctx.arc(cx, cy, rad - rw / 2, 0, Math.PI * 2); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -196,7 +295,12 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
     ctx.setLineDash([]);
   }
   if (kind === 'sumo') {
-    // upright, seen from the front; the marker is the belt's buckle
+    // a round mat in the SIDE's colour behind the wrestler (Matt, 2026-11-18: the two sides looked alike, only the
+    // belts differed), then the wrestler upright, seen from the front, a little smaller so the mat shows all round;
+    // the marker is the belt's buckle
+    drawBase(ctx, r, c);
+    const ws = 0.86;
+    ctx.scale(ws, ws);
     drawSumo(ctx, r, c);
     ctx.translate(0, r * 0.45);
   } else {
@@ -215,6 +319,18 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
 // fractions of r so a 30-40 px piece on a phone keeps the parts that say what it is: the sumo's topknot, face,
 // belly and coloured belt; the car's fat black rubber ring, bonnet and driver; the puck's raised rim and grooves.
 function disc(ctx, x, y, rr) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); }
+// The side's colour as a solid round base (sumo's mat): main colour, a dark rim, and a thin light ring outside
+// so it stands off any floor. Both sides also wear their circle / triangle marker (never colour alone).
+function drawBase(ctx, r, c) {
+  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
+  g.addColorStop(0, c.light || c.main); g.addColorStop(0.55, c.main); g.addColorStop(1, c.dark);
+  ctx.fillStyle = g;
+  disc(ctx, 0, 0, r); ctx.fill();
+  ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1.5, r * 0.1);
+  disc(ctx, 0, 0, r * 0.95); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1, r * 0.05);
+  disc(ctx, 0, 0, r * 1.02); ctx.stroke();
+}
 // The SUMO is drawn from the FRONT and always upright (Matt, 2026-11-18: the top-down disc "look[s] like nothing"):
 // topknot, face, a big round belly, the mawashi belt in the side's colour with its front flap and cords, thick
 // legs, both arms out shoving. The aim arrow shows where it is going.
@@ -282,11 +398,16 @@ function drawSumo(ctx, r, c) {
 }
 
 function drawCar(ctx, r, c) {
-  // the fat black rubber bumper ring all the way round, with a shine on top
-  ctx.fillStyle = '#16181e';
+  // the fat rubber bumper ring all the way round IN THE SIDE'S COLOUR (2026-11-18: a black ring on both sides
+  // made them look alike), a black inner lip, a shine on top
+  ctx.fillStyle = c.dark;
   disc(ctx, 0, 0, r); ctx.fill();
-  ctx.strokeStyle = '#3a3f4b'; ctx.lineWidth = r * 0.06;
+  ctx.strokeStyle = c.main; ctx.lineWidth = r * 0.13;
   disc(ctx, 0, 0, r * 0.9); ctx.stroke();
+  ctx.strokeStyle = '#16181e'; ctx.lineWidth = r * 0.07;
+  disc(ctx, 0, 0, r * 0.79); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1, r * 0.05);
+  disc(ctx, 0, 0, r * 1.02); ctx.stroke();
   ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = r * 0.05; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.arc(0, 0, r * 0.9, Math.PI * 1.1, Math.PI * 1.55); ctx.stroke();
   // the car body: a rounded tub, longer than wide, bonnet at the front
@@ -314,9 +435,12 @@ function drawCar(ctx, r, c) {
 }
 
 function drawPuck(ctx, r, c) {
-  // an air-hockey puck: a raised rim, a flat top, two pressed grooves, a hard shine
+  // an air-hockey puck: a raised rim, a flat top, two pressed grooves, a hard shine; an outline in the OTHER
+  // puck's tone so the white puck stands off the white table and the black one off the dark floor
   ctx.fillStyle = c.dark;
   disc(ctx, 0, 0, r); ctx.fill();
+  ctx.strokeStyle = c.light === '#ffffff' ? '#262a33' : '#f1eee6'; ctx.lineWidth = Math.max(1.2, r * 0.07);
+  disc(ctx, 0, 0, r * 1.0); ctx.stroke();
   const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r * 0.95);
   g.addColorStop(0, c.light); g.addColorStop(1, c.main);
   ctx.fillStyle = g;
@@ -331,7 +455,7 @@ function drawPuck(ctx, r, c) {
 
 /** The side marker: a white circle ('a') or a white triangle ('b') on a dark disc, never colour alone. */
 export function drawMarker(ctx, side, r, kind = 'sumo') {
-  const m = r * (kind === 'puck' ? 0.32 : kind === 'sumo' ? 0.23 : 0.27);
+  const m = r * (kind === 'puck' ? 0.32 : kind === 'sumo' ? 0.3 : 0.27);
   const cx = 0;
   ctx.save();
   ctx.fillStyle = 'rgba(15,18,26,0.82)';
@@ -400,7 +524,7 @@ export function drawThumb(canvas, look, w, h, dpr = 1) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const kind = kindOf(look);
   drawSurround(ctx, kind, w, h, 0);
-  drawPlatform(ctx, kind, w / 2, h / 2, Math.min(w, h) * 0.42);
+  drawPlatform(ctx, kind, w / 2, h / 2, Math.min(w, h) * 0.46, 'circle');
   drawPiece(ctx, w / 2, h / 2, Math.min(w, h) * 0.26, look, 'a', -Math.PI / 2);
 }
 

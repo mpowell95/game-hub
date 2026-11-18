@@ -30,7 +30,7 @@ import { recordResult, noteVoidedResult, withChallengeMatch, mayCountChallenge, 
 import { isVoidedMatch, voidedResultFor } from '../../js/stats-corrections.js';
 import { onlineGate, codeMayPlayOnline } from '../../js/online-gate.js';
 import { automationBlocks } from '../../js/automation.js';
-import { newMatch, applyAims, owes, aliveCount, tally, DRAW } from './engine.js';
+import { newMatch, applyAims, owes, aliveCount, tally, DRAW, RV } from './engine.js';
 import { isNoResult, rowEnding, rowOpen, expiresAt, TIMEOUT, forfeitAt, FORFEIT_FROM, callOffCosts, rowStale } from '../../js/challenge-life.js';
 import { stampFor, clockNow, decideNow, liveTime, noteTimeout, timeoutUnsure, queueConfirm, confirmsSettled } from '../../js/challenge-clock.js';
 
@@ -102,15 +102,25 @@ export function cleanEntry(e) {
   return { by: e.by, r, aims: e.aims, at: ms(e.at) };
 }
 
-/** Replay a log into an engine match. `upto` entries; `frames` asks the LAST resolved round for its
- *  picture (the UI's animation). Returns the match, or null if an entry does not replay. */
-export function replay(log, upto = log.length, framesFor = -1, frames = null) {
-  const m = newMatch();
+/** Replay a log into an engine match under rules version `rv` (absent = 1: every match made before
+ *  2026-11-18's circle replays as it always did). `upto` entries; `frames` asks the LAST resolved round for
+ *  its picture (the UI's animation). Returns the match, or null if an entry does not replay. */
+export function replay(log, upto = log.length, framesFor = -1, frames = null, rv = 1) {
+  const m = newMatch(rv);
   for (let i = 0; i < upto; i++) {
     const e = log[i];
     if (!applyAims(m, e.by, e.r, e.aims, i === framesFor ? frames : null)) return null;
   }
   return m;
+}
+/** Replay a game (or a computer save): its own log under its own rules version. */
+export function replayGame(g, upto = null, framesFor = -1, frames = null) {
+  return replay(g.log, upto == null ? g.log.length : upto, framesFor, frames, rvOf(g));
+}
+/** A document's rules version: absent = 1 (the first rules), 2 = the circle. Anything else is not a match. */
+export function rvOf(raw) {
+  const v = raw && raw.rv;
+  return v == null ? 1 : v === 2 ? 2 : 0;
 }
 
 /** Who went first: the challenger (`by`) is side 'a' unless a document says otherwise. */
@@ -129,7 +139,9 @@ export function validateGame(raw) {
   const keys = Object.keys(src).sort();
   if (keys.length > MAX_LOG) return null;
   const log = [];
-  const m = newMatch();
+  const rv = rvOf(raw);
+  if (!rv) return null;
+  const m = newMatch(rv);
   for (const k of keys) {
     const e = cleanEntry(src[k]);
     if (!e) return null;
@@ -156,6 +168,7 @@ export function validateGame(raw) {
   const ow = over ? { a: false, b: false } : owes(m);
   return {
     v: 1, id,
+    ...(rv === 2 ? { rv } : {}),
     ...(raw.lapse === true ? { lapse: true } : {}),
     by: asCode(raw.by),
     created: ms(raw.created),
@@ -244,12 +257,12 @@ export function resultOf(game, side) {
 /** Every option that defines the match: online, both looks, who went first, whether sudden death came. */
 export function modeOfGame(game, side) {
   const s = side === 'b' ? 'b' : 'a';
-  return { on: 1, look: game[s].look, them: game[other(s)].look, first: recipientOf(game) === s ? 'them' : 'me', sd: game.sd > 0 ? 1 : 0 };
+  return { on: 1, look: game[s].look, them: game[other(s)].look, first: recipientOf(game) === s ? 'them' : 'me', sd: game.sd > 0 ? 1 : 0, ...(rvOf(game) === 2 ? { rv: 2 } : {}) };
 }
 /** The match's numbers: rounds played, their pieces knocked off, own pieces lost, sudden-death rounds. */
 export function detailOfGame(game, side) {
   const s = side === 'b' ? 'b' : 'a';
-  const m = replay(game.log);
+  const m = replayGame(game);
   if (!m) return { rounds: 0 };
   const tl = tally(m);
   return { rounds: m.rounds.length, kos: tl[other(s)].lost, lost: tl[s].lost, sdr: m.sdr, end: (game.over && game.over.why) || '' };
@@ -370,11 +383,11 @@ const mlogTried = new Set();
 function mlogSeen() { try { const a = JSON.parse(localStorage.getItem(MLOG_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; } }
 const r1 = (v) => Math.round(v);
 export function privateMatch(game, why = null) {
-  const m = replay(game.log) || newMatch();
+  const m = replayGame(game) || newMatch(rvOf(game) || 1);
   const me = sideOf(game, myCode());
   const who = (p) => ({ name: (p && p.name) || '', emoji: (p && p.emoji) || '', look: (p && p.look) || '' });
   return {
-    v: 1, id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
+    v: 1, rv: rvOf(game), id: game.id, me, first: recipientOf(game) === 'a' ? 'b' : 'a',
     a: who(game.a), b: who(game.b), created: game.created || null, updated: game.updated || null,
     over: game.over || (why ? { why } : null), sd: m.sd, sdr: m.sdr, n: game.log.length,
     sent: game.log.map((e) => [e.by, e.r, e.aims, e.at && game.created ? Math.round((e.at - game.created) / 1000) : null]),
@@ -595,7 +608,7 @@ export async function createGame({ them, look = 'sumo0' }) {
   const mine = meLabel();
   const id = mintGameId();
   const doc = {
-    v: 1, id, lapse: true, by: me, created: 0, updated: 0,
+    v: 1, rv: RV, id, lapse: true, by: me, created: 0, updated: 0,
     a: { code: me, name: mine.name, emoji: mine.emoji, look: asLook(look) },
     b: { code: to, name: String(them.name || ''), emoji: String(them.emoji || '🙂'), look: 'sumo0' },
     log: null, over: null,
@@ -650,7 +663,7 @@ export async function sendAims(id, r, aims, look = null) {
     if (lifeOf(fresh).expired) return fail('expired');
     if (r !== fresh.round) return fail('moved-on');
     // The rules must accept it before anything is written.
-    const test = replay(fresh.log);
+    const test = replayGame(fresh);
     if (!test || !applyAims(test, side, r, aims)) return fail('rules-refused');
     const lifeBefore = lifeOf(fresh);
     const have = fresh.log.length;
