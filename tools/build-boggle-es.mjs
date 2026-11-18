@@ -39,6 +39,8 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 //   * NOUNS AND ADJECTIVES: the lemma, its plural (hunspell flag S) and its
 //     feminine forms (flag G, which carries both feminine singular and
 //     feminine plural). "Adjectives in plural and both sexes should be good."
+//   * PREFIXED FORMS (de-, re-, a-, in-...) from the .dic's PFX flags, with
+//     the same suffix/verb treatment as their base (2026-11-18: dedo, acero).
 //   * PROPER NOUNS ARE EXCLUDED (any entry whose lemma is not entirely
 //     lowercase), matching ENABLE, which carries none.
 //
@@ -118,6 +120,43 @@ export function applySuffix(word, rules) {
     if (!r.re.test(word)) continue;
     if (r.strip && !word.endsWith(r.strip)) continue;
     out.push((r.strip ? word.slice(0, -r.strip.length) : word) + r.add);
+  }
+  return out;
+}
+
+// Prefixes (2026-11-18, Matt's screenshot: "DEDO" refused). RLA-ES writes
+// some everyday words ONLY as a prefix rule on a shorter entry: "dedo" is
+// do/gS (de- + do), "acero" a- + cero, "avena" a- + vena, "redes" re- + des.
+// hunspell accepts every one; reading suffixes only dropped ~5,400 real words.
+// Each prefixed form becomes its own entry carrying the lemma's other (suffix
+// and verb) flags, since every PFX rule in the file is cross-product (Y).
+export function parsePrefixRules(affText) {
+  const rules = new Map();
+  for (const line of affText.split('\n')) {
+    const parts = line.trim().split(/\s+/);
+    if (parts[0] !== 'PFX' || parts.length < 5) continue;
+    const [, flag, strip, add, cond] = parts;
+    if (!rules.has(flag)) rules.set(flag, []);
+    rules.get(flag).push({
+      strip: strip === '0' ? '' : strip,
+      add: add === '0' ? '' : add.split('/')[0],
+      re: new RegExp(`^${cond === '.' ? '' : cond}`),
+    });
+  }
+  return rules;
+}
+
+export function expandPrefixes(entries, pfx) {
+  const out = new Map();
+  for (const [lemma, flags] of entries) {
+    for (const f of flags) {
+      for (const r of pfx.get(f) || []) {
+        if (!r.re.test(lemma) || (r.strip && !lemma.startsWith(r.strip))) continue;
+        const word = r.add + lemma.slice(r.strip.length);
+        if (!out.has(word)) out.set(word, new Set());
+        for (const g of flags) if (!pfx.has(g)) out.get(word).add(g);
+      }
+    }
   }
   return out;
 }
@@ -277,6 +316,7 @@ async function main() {
   const entries = parseDic(dicText);
   const sfx = parseSuffixRules(affText, ['S', 'G']);
   const words = buildWordSet(entries, sfx);
+  for (const w of buildWordSet(expandPrefixes(entries, parsePrefixRules(affText)), sfx)) words.add(w);
   const sorted = [...words].sort();
 
   fs.writeFileSync(outPath, `${sorted.join('\n')}\n`, 'utf8');

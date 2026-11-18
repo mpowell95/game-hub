@@ -122,7 +122,7 @@ DEFAULT until the player has chosen once; a stored `wordLang` always wins.
 
 - **The list is GENERATED**: `tools/build-boggle-es.mjs` fetches **RLA-ES** (LibreOffice es_ES hunspell,
   tri-licensed GPL-3+/LGPL-3+/**MPL 1.1+**; the MPL notice is in `boggle/data/CREDITS.md`) and expands
-  the Boggle subset into `words-es.txt` (149,873 words per the generator; 159,778 in the first count).
+  the Boggle subset into `words-es.txt` (155,256 words since 2026-11-18, when prefix rules were added: "dedo" is de- + do in RLA-ES; 149,873 before).
   Re-run, then `tools/validate-sw-assets.mjs`, commit both. Never hand-edit.
 - **Matt's scope calls**: verbs carry **infinitive, gerund and participle only** (no conjugations);
   participles inflect (hablado/a/os/as); nouns/adjectives carry plural (flag `S`) and both genders
