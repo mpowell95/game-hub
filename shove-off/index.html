@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <script src="../js/no-zoom.js"></script>
+  <title>Shove Off</title>
+  <link rel="stylesheet" href="css/shove-off.css">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #eef2f8; }
+    html.gh-dark, html.gh-dark body { background: #0d121b; }
+    #shove-off { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="shove-off"></div>
+  <script type="module">
+    // The app is not playable without a name (js/name-gate.js): this standalone page is a door too.
+    import { requireName } from '../js/name-gate.js';
+    import { init } from './js/ui.js';
+    await requireName();
+    init(document.getElementById('shove-off'));
+  </script>
+</body>
+</html>

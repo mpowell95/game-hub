@@ -383,6 +383,60 @@ export function decideGolf({ code, id, before, after }) {
   return mk('turn', (s) => s.turn(who, Math.max(1, n(after.hole)), n(after.holes), n(after.mine), n(after.theirs), n(after.done)));
 }
 
+// --- SHOVE OFF CHALLENGES (2026-11-18) ------------------------------------------------------------
+// shove-off/js/mp.js writes shoveoff/index/<code>/<id> from each person's side, `lastBy` saying whose
+// write it was. Rounds are SIMULTANEOUS: a row's `yourTurn` is "you have not sent this round's aims", so
+// both rows can be true at once. The rows change only when the challenge is delivered, answered, a round
+// RESOLVES (both rows: your move again) or the match ends; one side sending first touches only its own
+// row, so the other is never told about it. Your own writes never notify you.
+const SHOVE_TEXT = {
+  en: {
+    title: 'Shove Off',
+    challenge: (w) => `${w} challenged you. Your move!`,
+    turn: (w, r, a, b) => `Round ${r} vs ${w}: you ${a}, ${w} ${b}. Your move!`,
+    sudden: (w) => `Sudden death vs ${w}. Your move!`,
+    theyWon: (w) => `${w} won.`,
+    youWon: (w) => `You beat ${w}!`,
+    youWonResign: (w) => `You won! ${w} resigned.`,
+    draw: (w) => `A draw with ${w}.`,
+  },
+  es: {
+    title: 'Empujón',
+    challenge: (w) => `${w} te ha retado. ¡Te toca!`,
+    turn: (w, r, a, b) => `Ronda ${r} contra ${w}: tú ${a}, ${w} ${b}. ¡Te toca!`,
+    sudden: (w) => `Muerte súbita contra ${w}. ¡Te toca!`,
+    theyWon: (w) => `${w} ganó.`,
+    youWon: (w) => `¡Has ganado a ${w}!`,
+    youWonResign: (w) => `¡Ganaste! ${w} se rindió.`,
+    draw: (w) => `Empate con ${w}.`,
+  },
+};
+export function decideShoveOff({ code, id, before, after }) {
+  if (!after || !code || !id) return null;
+  if (after.lastBy === 'me') return null;
+  const who = clean(after.name) || 'Someone';
+  const n = (v) => (Number.isFinite(+v) ? Math.max(0, Math.round(+v)) : 0);
+  const mk = (kind, body) => ({
+    kind, who,
+    text: (lang) => { const s = SHOVE_TEXT[lang] || SHOVE_TEXT.en; return { title: s.title, body: body(s) }; },
+  });
+  if (after.over) {
+    if (before && before.over) return null;
+    if (after.result === 'won' && after.why === 'resign') return mk('over', (s) => s.youWonResign(who));
+    if (after.result === 'lost') return mk('over', (s) => s.theyWon(who));
+    if (after.result === 'won') return mk('over', (s) => s.youWon(who));
+    if (after.result === 'draw') return mk('over', (s) => s.draw(who));
+    return null;
+  }
+  if (!after.yourTurn) return null;
+  if (!before) return mk('challenge', (s) => s.challenge(who));
+  // Already your move in the same round: nothing new. A round that moved on IS news (the round you had
+  // not sent yet cannot resolve, so in practice yourTurn was false before a resolve; checked anyway).
+  if (before.yourTurn && !before.over && n(before.rnd) === n(after.rnd)) return null;
+  if (after.sd) return mk('turn', (s) => s.sudden(who));
+  return mk('turn', (s) => s.turn(who, Math.max(1, n(after.rnd)), n(after.mine), n(after.theirs)));
+}
+
 // --- FLICK SOCCER CHALLENGES (2026-10-11) -------------------------------------------------------------
 // flick-soccer/js/mp.js writes flicksoccer/index/<code>/<id> from each person's side, with `lastBy`
 // saying whose write it was ('me' = this row's owner). Darts' rules:
@@ -712,6 +766,7 @@ export const REMINDER_GAMES = [
   { node: 'battlearena', game: 'battle-arena', tag: 'battlearena', en: 'Battle Arena', es: 'Arena de Batalla' },
   { node: 'battleship', game: 'battleship', tag: 'battleship', en: 'Battleship', es: 'Hundir la Flota' },
   { node: 'golf', game: 'golf', tag: 'golf', en: 'Golf', es: 'Golf' },
+  { node: 'shoveoff', game: 'shove-off', tag: 'shoveoff', en: 'Shove Off', es: 'Empujón' },
 ];
 const REMIND_TEXT = {
   en: (w) => `Reminder: your turn vs ${w}`,

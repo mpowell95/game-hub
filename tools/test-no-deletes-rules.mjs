@@ -126,7 +126,7 @@ const DB = {
 // Allow / Deny sign in (2026-11-15): a waiting request from a new phone ('u-new') to join AAAAA.
 DB.signIns = { AAAAA: { req0000001: { uid: 'u-new', name: 'Me', device: 'Android · Chrome', at: NOW - 1000, via: 'link', state: 'waiting', pushedAt: NOW - 900, seen: { 'u-me': { first: 1, last: 1, n: 1 } } } } };
 const SI = 'signIns/AAAAA/req0000001';
-const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'golf', 'hoops', 'skeeChallenges'];
+const MP = ['cuppong', 'darts', 'flicksoccer', 'eightball', 'archery', 'chinchon', 'escoba', 'battlearena', 'battleship', 'golf', 'shoveoff', 'hoops', 'skeeChallenges'];
 for (const n of MP) DB[n] = { games: { g1: game('AAAAA', 'BBBBB') }, index: { AAAAA: { g1: { result: '' } }, BBBBB: { g1: { result: '' } } }, chat: { g1: { c1: { by: 'AAAAA', t: 'c', v: 'gg' } } } };
 
 // --- LEGIT: what the app really sends - every one must still work ------------------------------------------------

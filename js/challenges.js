@@ -103,6 +103,15 @@ export const SOURCES = {
     action: logGameAction,
     end: logGameEnd,
   },
+  // Shove Off (2026-11-18): shove-off/js/mp.js, a log of each side's aims per round. Rounds are
+  // SIMULTANEOUS: both rows can say "your turn" at once (each row's yourTurn is its own side's).
+  'shove-off': {
+    load: () => import('../shove-off/js/mp.js'),
+    read: (M) => M.readMyGames(),
+    watch: (M, cb) => M.watchMyGames(cb),
+    action: logGameAction,
+    end: logGameEnd,
+  },
   'flick-soccer': {
     load: () => import('../flick-soccer/js/mp.js'),
     read: (M) => M.readMyGames(),

@@ -1267,6 +1267,27 @@ export const GAME_ART = {
          <rect x="127" y="44" width="5" height="20" fill="#FFFFFF"/>
          <rect x="98" y="36" width="6" height="6" fill="#FFFFFF"/>
        </svg>`,
+  // Shove Off (2026-11-18, shove-off/): a sumo ring on the water, a red wrestler (circle marker) shoving a blue one
+  // (triangle marker) over the edge, the platform's next, smaller edge dashed. Never colour alone.
+  'shove-off': `<svg viewBox="0 0 160 90" aria-hidden="true">
+          <rect width="160" height="90" fill="#163e63"/>
+          <path d="M0 18 Q20 13 40 18 T80 18 T120 18 T160 18 M0 74 Q20 69 40 74 T80 74 T120 74 T160 74" stroke="#ffffff" stroke-opacity=".16" stroke-width="2" fill="none"/>
+          <rect x="34" y="11" width="70" height="70" rx="5" fill="#000" opacity=".3" transform="translate(3 4)"/>
+          <rect x="34" y="11" width="70" height="70" rx="5" fill="#d9b77e" stroke="#f1dcae" stroke-width="2.5"/>
+          <rect x="44" y="21" width="50" height="50" rx="4" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <g transform="translate(56 58)">
+            <ellipse cx="9" cy="-7" rx="6" ry="4" fill="#c98f62" transform="rotate(-30 9 -7)"/><ellipse cx="2" cy="9" rx="6" ry="4" fill="#c98f62" transform="rotate(40 2 9)"/>
+            <circle r="11" fill="#f0c49a"/><circle r="9.4" fill="none" stroke="#E0532F" stroke-width="3"/>
+            <circle cx="2.5" cy="-2.5" r="4.3" fill="#1d1a18"/><circle cx="-5" cy="5" r="3.2" fill="#14161c"/><circle cx="-5" cy="5" r="1.7" fill="#fff"/>
+          </g>
+          <path d="M70 46 L91 30" stroke="#ffce3a" stroke-width="4" stroke-linecap="round"/><path d="M96 26 L86 28 L91 36 Z" fill="#ffce3a"/>
+          <g transform="translate(112 22) rotate(-20)" opacity=".8">
+            <circle r="13" fill="none" stroke="#ffffff" stroke-width="1.6" opacity=".55"/>
+            <circle r="8.5" fill="#f0c49a"/><circle r="7.2" fill="none" stroke="#1F5FA8" stroke-width="2.6"/>
+            <circle cx="2" cy="-1" r="3.3" fill="#1d1a18"/><circle cx="-4" cy="3" r="2.6" fill="#14161c"/><path d="M-4 1 L-2 4.5 L-6 4.5 Z" fill="#fff"/>
+          </g>
+          <path d="M126 40 q4 -3 8 0 M130 48 q4 -3 8 0" stroke="#ffffff" stroke-width="1.8" fill="none" opacity=".7"/>
+        </svg>`,
 };
 
 export default GAME_ART;

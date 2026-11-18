@@ -59,6 +59,8 @@ const TABS = [
   { id: 'wordweaver', labelKey: 'game_title_wordweaver' },
   // Word Ladder (2026-11-13, word-ladder/): admin only, devOnly like the hub's entry. Its `wl` sub-counter: wordLadderScreen.
   { id: 'wordladder', labelKey: 'game_title_wordladder', devOnly: true },
+  // Shove Off (2026-11-18, shove-off/): admin only, devOnly like the hub's entry. Online challenges only ('mp').
+  { id: 'shoveoff', labelKey: 'game_title_shoveoff', devOnly: true },
   // Tower Stack (2026-11-01, tower/; released 2026-11-13). Its `tw` sub-counter: towerScreen.
   { id: 'tower', labelKey: 'game_title_tower' },
   { id: 'escoba', labelKey: 'game_title_escoba' },
@@ -129,7 +131,7 @@ const HUB_ID = {
   hillclimb: 'hill-climb', brickblitz: 'brick-blitz', airhockey: 'air-hockey',
   wayout: 'way-out', flicksoccer: 'flick-soccer', eightball: 'eight-ball',
   spellingbee: 'spelling-bee', battlearena: 'battle-arena',
-  wordweaver: 'word-weaver', wordladder: 'word-ladder',
+  wordweaver: 'word-weaver', wordladder: 'word-ladder', shoveoff: 'shove-off',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
 const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
