@@ -35,7 +35,17 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 
 ## Rules (engine.js) and every choice made (Matt may want to change any of these)
 
-- Square platform, half-size `H0` 1000 units; piece radius `R` 100; 4 pieces each, interleaved on a ring
+- **RULES VERSIONS (2026-11-18, THE LAW)**: every match document and computer save carries `rv`; ABSENT = rv 1 (the
+  first rules below: the square, a centre off = out), replayed bit for bit forever (test.js pins 4 real old logs; never
+  change an rv 1 number). **rv 2 = every NEW match and computer game** (Matt: *"make it so the piece falls off if 51% of
+  it is off the circle. Make the circle begin bigger"*): the platform is a CIRCLE for every look (`m.H` = its radius),
+  start radius 1050, x0.88 a round, floor 483 (after 7 rounds, as before), sudden death 550, start ring = rv 1's x1.05,
+  `SPEED_K` 0.0735 (a full shove from the middle travels ~1175, past the edge). **A piece falls the moment MORE than 51%
+  of its area is outside the circle** (`fallDist(H)`: the centre distance where 49% is inside, by a fixed 2048-step
+  integral + 50 bisections, only + - * / sqrt, cached per radius; it is within 2 units of the line itself). Any other
+  `rv` is refused whole (a save: kept, not used). Mode carries `rv: 2` (absent on old results, so their buckets stand).
+  All rv numbers live in `E.RULES`; `MP.replayGame(g)` replays anything under its own rules.
+- rv 1: square platform, half-size `H0` 1000 units; piece radius `R` 100 (both versions); 4 pieces each, interleaved on a ring
   (`START`): a quarter turn maps every challenger spot onto a receiver spot, so neither side has better spots.
 - A round: both aim every living piece in secret (drag from a piece; the arrow's direction is where it slides, its
   length how hard, capped at `MAX_AIM` 560). Launch appears once every living piece has an arrow; a tap on a piece
@@ -43,7 +53,7 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 - When both have sent, everything slides at once: speed = aim x `SPEED_K` 0.07 per step, friction `DAMP` 0.965 per
   step, stops under 0.05/step, equal-mass bounces (`REST` 0.92), at most `MAX_STEPS` 900. A piece whose CENTRE
   leaves the platform at any step falls in at once.
-- **The platform shrinks AFTER each round** (round 1 is the full platform): half-size x `SHRINK` 0.88, floor `H_MIN`
+- **The platform shrinks AFTER each round** (round 1 is the full platform): rv 1 half-size x `SHRINK` 0.88, floor `H_MIN`
   460 (reached after 7 rounds). A piece whose centre is outside the new edge falls too ("the edge melts").
 - One side out: the other wins (`why: 'off'`). **Both out in the same round = SUDDEN DEATH**: one piece each on the
   small platform (`SD_H` 520) at mirrored spots (-230, 0) / (230, 0); a sudden-death round where both survive
@@ -54,12 +64,18 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 - Colours: hub safe palette. Sumo vermilion / blue, Bumper cars yellow / teal, Pucks black / white. **The two sides
   always differ by SHAPE too**: the challenger's pieces wear a white CIRCLE, the receiver's a white TRIANGLE. If both
   chose the identical look, the receiver's pieces are drawn in that look's other colour (`art.js` `sideLooks`).
-- The PLATFORM follows the VIEWER's look: Sumo = a dohyo (square clay mound, straw-bale circle with its four gaps,
-  two white shikiri lines) in a dark hall; Bumper cars = rubber arena with a striped tyre wall on water; Pucks = air
-  table on a dark floor. Original canvas art, no images.
+- The PLATFORM follows the VIEWER's look. rv 2 (`art.js` `drawRing`): the circle's outer edge IS the drawn edge: Sumo =
+  the straw bales on a dohyo (its square clay mound runs off the screen's sides), Bumper cars = round arena with the
+  tyre wall on water, Pucks = round air table. rv 1 keeps the old square drawings. **Size (`ui.js` `EDGE_PX` 9)**: the
+  round-1 circle spans the width minus 9 px a side (or the height between HUD and foot, if smaller), so a piece is
+  r 17.9 px at 393 wide (rv 1 was 17.8) and 16.4 at 360x640 (rv 1 16.2). Original canvas art, no images.
+- **The two sides differ at a glance (2026-11-18, Matt: "it's only the wrestlers clothes you made different")**: the
+  sumo stands on a round mat in its SIDE's colour (vermilion / blue, dark rim, thin white ring; wrestler at 0.86 so the
+  mat shows all round; buckle marker r x0.3); a bumper car's rubber ring is its side's colour (it was black on both);
+  pucks get an outline in the other puck's tone. Circle / triangle markers stay. HUD icons follow (`drawPiece`).
 - **Art (redrawn 2026-11-18, Matt: "the sumo guys ... look like nothing")**: the SUMO is drawn from the FRONT and
   always UPRIGHT (topknot, face, belly, mawashi belt in the side colour with flap and cords, legs, arms out shoving);
-  the side marker is its belt buckle. Bumper cars (fat black rubber ring, bonnet stripes, headlights, cockpit; the
+  the side marker is its belt buckle. Bumper cars (fat rubber ring, bonnet stripes, headlights, cockpit; the
   marker is the driver's helmet) and pucks (raised rim, groove, shine) turn to face their aim. The launcher tile
   (`js/game-art.js`) = the same wrestlers on a dohyo. Close-ups: `art.js` at r 17 px is the size to check.
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
@@ -135,8 +151,10 @@ Cancel / Decline / Resign (two taps; "Counts as a loss." when it does), Matches.
 ## Tests
 
 `node shove-off/js/test.js` (engine: fairness, aims, collisions, falls, shrink, sudden death, draw ceiling,
-determinism + text scan; the computer: valid aims, seeded, never reads the player's aims, Hard beats Easy over 40
-games), `node tools/test-shoveoff-mp.mjs` (challenges end to end; computer save, Continue, result, quit loss), plus `tools/test-push.mjs`,
+determinism + text scan; rv 1 old logs pinned; rv 2: 50% off stays / 52% off falls against the exact lens area and a
+grid count, real slides, the circle's numbers, a pinned rv 2 round; the computer: valid aims, seeded, never reads the
+player's aims, Hard beats Easy over 40 games in each version (rv 2: 35-5)), `node tools/test-shoveoff-mp.mjs` (challenges end to end; computer save, Continue, result, quit loss), plus `tools/test-push.mjs`,
 `tools/test-challenges.mjs`, `tools/test-no-deletes-rules.mjs`, `tools/check-no-scroll.mjs shove-off`.
-Screens were checked in headless Chromium against an in-memory database (393x852 and 360x640, light/dark, EN/ES);
+Screenshots: `node tools/shoveoff-shots.mjs [outDir]` (dev server; every look aiming, a piece going over, round 6,
+close-ups of both sides). Screens were checked in headless Chromium against an in-memory database (393x852 and 360x640, light/dark, EN/ES);
 **real phones, the real database and real push are unverified.**

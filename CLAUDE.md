@@ -423,7 +423,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Who has seen each in-game tip (2026-11-15):** `tools/read-tips.mjs [<game>] [--days N]` (read only; `js/tips-log.js`, `players/<id>/tips`); Battle Arena's tutorial: `tools/test-battlearena-tips.mjs`.
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
-- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism), `tools/test-shoveoff-mp.mjs` (challenges).
+- **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/shoveoff-shots.mjs` (screenshots).
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`. **Allow / Deny sign in (2026-11-15):** `tools/test-signin-ask.mjs`, `tools/test-signin-rules-emu.mjs` (rules on the real emulator).

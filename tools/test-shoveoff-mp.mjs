@@ -54,7 +54,7 @@ const THEM = { code: 'TESTB', name: 'Tester Two', emoji: '🦊' };
 const ME = { code: 'TESTA', name: 'test1', emoji: '🐙' };
 /** Aims for side s of game g (replayed): f(piece) -> [dx, dy]. */
 function aims(g, s, f) {
-  const m = MP.replay(g.log);
+  const m = MP.replayGame(g);
   const list = Array.from({ length: E.slotCount(m) }, () => null);
   for (const p of E.alive(m, s)) list[p.i] = E.clampAim(...f(p));
   return E.aimsToString(list);
@@ -67,6 +67,7 @@ const statsOf = (p) => { const st = JSON.parse(stores[p].get('gamehub.stats') ||
 use('A');
 let res = await MP.createGame({ them: THEM, look: 'car1' });
 ok('the challenger creates a match, with their look', res.ok && res.game.a.look === 'car1', JSON.stringify(res));
+ok('a NEW match is made under the circle rules (rv 2), stored in the document', res.ok && res.game.rv === 2 && getAt(`shoveoff/games/${res.id}`).rv === 2 && MP.replayGame(res.game).H === 1050);
 const id = res.id;
 ok('created: only the challenger has a row, and it is their move', !!getAt(`shoveoff/index/TESTA/${id}`) && getAt(`shoveoff/index/TESTA/${id}`).yourTurn === true && !getAt(`shoveoff/index/TESTB/${id}`));
 let g = res.game;
@@ -109,7 +110,7 @@ let guard = 0;
 while (!g.over && guard++ < 40) {
   use('A'); g = await MP.readGame(id);
   if (g.over) break;
-  if (g.owes.a) { res = await MP.sendAims(id, g.round, aims(g, 'a', (p) => { const t = E.alive(MP.replay(g.log), 'b')[0]; return t ? [(t.x - p.x) * 9, (t.y - p.y) * 9] : soft(p); })); if (!res.ok) { console.log(res); break; } g = res.game; }
+  if (g.owes.a) { res = await MP.sendAims(id, g.round, aims(g, 'a', (p) => { const t = E.alive(MP.replayGame(g), 'b')[0]; return t ? [(t.x - p.x) * 9, (t.y - p.y) * 9] : soft(p); })); if (!res.ok) { console.log(res); break; } g = res.game; }
   if (g.over) break;
   use('B'); g = await MP.readGame(id);
   if (g.owes.b) { res = await MP.sendAims(id, g.round, aims(g, 'b', soft)); if (!res.ok) { console.log(res); break; } g = res.game; }
@@ -234,7 +235,7 @@ void ME; void GS;
   const cpuStats = () => statsOf('C');
   let sv = CG.newSave('hard', 'sumo0', 77);
   ok('cpu: a new match picks the computer\'s look (other colour) and its round-1 aims BEFORE the player aims',
-    sv.cpuLook === 'sumo1' && sv.cpu && sv.cpu.r === 1 && !!E.parseAims(E.newMatch(), 'b', sv.cpu.aims) && sv.log.length === 0);
+    sv.cpuLook === 'sumo1' && sv.cpu && sv.cpu.r === 1 && !!E.parseAims(E.newMatch(2), 'b', sv.cpu.aims) && sv.log.length === 0);
   ok('cpu: saved and read back (Continue)', CG.writeSave(sv) && JSON.stringify(CG.readSave().cpu) === JSON.stringify(sv.cpu));
   const r1aims = sv.cpu.aims;
   // the player's aims cannot change the computer's already-chosen aims
@@ -252,7 +253,7 @@ void ME; void GS;
   sv = CG.newSave('easy', 'car1', 5);
   let guard = 0, m = null;
   while (guard++ < 60) {
-    m = MP.replay(sv.log);
+    m = MP.replayGame(sv);
     if (m.winner != null) break;
     const list = Array.from({ length: E.slotCount(m) }, () => null);
     for (const p of E.alive(m, 'a')) {
@@ -272,6 +273,47 @@ void ME; void GS;
     const q = JSON.parse(stores.C.get('gamehub.playlog.v1') || '[]');
     return q.filter((e) => e && e.g === 'shoveoff' && typeof e.x === 'string' && /"cpu":"(hard|easy)"/.test(e.x) && /"rounds"/.test(e.x)).length === 2;
   })(), stores.C.get('gamehub.playlog.v1'));
+}
+
+// --- RULES VERSIONS (2026-11-18, THE LAW): matches and saves made before rv 2 replay EXACTLY as before ----------
+{
+  // a real old-rules log (pinned in shove-off/js/test.js, made by the engine as it was before rv 2): b wins, 3 rounds
+  const OLD = 'a|1|-256,-498;269,451;116,-121;-183,-100 b|1|105,-404;-339,444;110,-548;81,119 a|2|-;-25,-532;492,162;- b|2|-192,428;-;-190,-58;-3,134 a|3|-;-;-24,-387;- b|3|-174,-531;-;-;269,-72';
+  const entries = OLD.split(' ').map((e, i) => { const [by, r, aims] = e.split('|'); return [String(i).padStart(4, '0'), { by, r: +r, aims, at: 1700000000000 + i }]; });
+  const doc = (extra) => ({ v: 1, id: 'oldmatch01', by: 'TESTA', created: 1700000000000, updated: 1700000009000,
+    a: { code: 'TESTA', name: 'test1', emoji: '🐙', look: 'sumo0' }, b: { code: 'TESTB', name: 'Tester Two', emoji: '🦊', look: 'car0' },
+    log: Object.fromEntries(entries), over: { winner: 'b', why: 'off', at: 1700000009000 }, ...extra });
+  const old = MP.validateGame(doc({}));
+  ok('an OLD match document (no rv) is still a valid match, replayed under the old square rules, to its old result',
+    !!old && !old.rv && old.over.winner === 'b' && old.resolved === 3 && old.left.a === 0 && MP.replayGame(old).H < 1000 && MP.replayGame(old).rv === 1, JSON.stringify(old && old.left));
+  const oldMode = MP.modeOfGame(old, 'a');
+  ok('...its mode is exactly what it was (no rv key: old results stay in their old bucket)', !('rv' in oldMode) && oldMode.on === 1);
+  const as2 = MP.validateGame(doc({ rv: 2 }));
+  ok('the same log claimed as rv 2 does not pass as the same match (its stored result no longer replays)', as2 === null || as2.over.winner !== 'b' || as2.resolved !== 3);
+  ok('an unknown rules version is refused whole (never replayed under the wrong rules)', MP.validateGame(doc({ rv: 3 })) === null && MP.validateGame(doc({ rv: '2' })) === null);
+  const g2 = MP.validateGame({ ...doc({ rv: 2 }), log: null, over: null });
+  ok('an rv 2 match\'s mode carries rv: 2', !!g2 && g2.rv === 2 && MP.modeOfGame(g2, 'a').rv === 2);
+}
+{
+  const CG = await import('../shove-off/js/cpu-game.js');
+  stores.D = new Map();
+  stores.D.set('gamehub.profile', JSON.stringify({ name: 'test3', emoji: '🐸', playerId: 'TESTD' }));
+  use('D');
+  // a computer save written by the build before rv 2: no rv field, one round played
+  const oldSave = { v: 1, diff: 'medium', look: 'puck0', cpuLook: 'puck1', seed: 99, started: 1700000000000,
+    log: [{ by: 'a', r: 1, aims: '-181,-32;172,79;87,479;-152,162' }, { by: 'b', r: 1, aims: '522,-200;-522,200;279,-164;-531,177' }],
+    cpu: { r: 2, aims: '-503,-246;227,65;-113,-548;237,86' } };
+  stores.D.set(CG.SAVE_KEY, JSON.stringify(oldSave));
+  const sv = CG.readSave();
+  const m = sv && MP.replayGame(sv);
+  ok('an OLD computer save (no rv) is read and Continues under the old square rules', !!sv && sv.rv == null && !!m && m.rv === 1 && m.round === 2 && m.H < 1000 && m.H > 800);
+  ok('...its saved computer aims for the next round are kept, not chosen again', JSON.stringify(CG.ensureCpuAims(sv)) === JSON.stringify(oldSave.cpu));
+  const m2 = CG.playRound(sv, '-;-;-;29,369'.split(';').map((x, i) => (E.slotsOf(m, 'a').includes(i) ? (x === '-' ? '0,150' : x) : '-')).join(';'));
+  ok('...and plays on under the old rules (the save never gains a rules version)', !!m2 && m2.rv === 1 && sv.rv == null && CG.writeSave(sv) && JSON.parse(stores.D.get(CG.SAVE_KEY)).rv === undefined);
+  ok('...its mode has no rv key (old results stay in their old bucket)', !('rv' in CG.modeOf(sv, m2)));
+  const fresh = CG.newSave('easy', 'sumo1', 3);
+  ok('a NEW computer game is made under the circle rules (rv 2) and its mode says so', fresh.rv === 2 && MP.replayGame(fresh).H === 1050 && CG.modeOf(fresh, MP.replayGame(fresh)).rv === 2);
+  ok('a save from newer rules than this build knows is kept, not used', (() => { stores.D.set(CG.SAVE_KEY, JSON.stringify({ ...oldSave, rv: 3 })); const r = CG.readSave(); return r === null && !!stores.D.get(CG.SAVE_KEY); })());
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

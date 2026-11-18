@@ -11,7 +11,8 @@
 // + - * / and Math.sqrt (each correctly rounded by IEEE 754 in every engine), a FIXED step (no clock),
 // a fixed step cap, and a fixed order over pieces and pairs. No Math.sin/cos/atan2/exp/pow/hypot in
 // here: shove-off/js/test.js scans this file's text for them. Trig is only for DRAWING (art.js).
-// Aims are INTEGERS in platform units (the round-1 platform is 2000 units across).
+// Aims are INTEGERS in platform units (the round-1 platform is 2000 units across in rv 1, 2100 in rv 2).
+// RULES VERSIONS: see RULES below (rv 1 square + centre, rv 2 circle + 51%).
 
 export const H0 = 1000;          // round 1: the platform is the square |x| <= 1000, |y| <= 1000
 export const R = 100;            // every piece's radius
@@ -38,6 +39,76 @@ export const START = {
 // Sudden death: one piece each, mirror images across the middle.
 export const SD_START = { a: [[-230, 0]], b: [[230, 0]] };
 
+// --- RULES VERSIONS (2026-11-18, THE LAW) ------------------------------------------------------------
+// rv 1 = the first rules: a SQUARE platform, a piece falls the moment its CENTRE is off it. Every match and
+// computer save made before rv 2 carries no `rv` and replays under these numbers forever, bit for bit
+// (shove-off/js/test.js pins real old logs). Never change an rv 1 number.
+// rv 2 (Matt, 2026-11-18: "make it so the piece falls off if 51% of it is off the circle. Make the circle
+// begin bigger"): the platform is a CIRCLE of radius H (m.H is the radius in rv 2, the half-size in rv 1),
+// and a piece falls the moment MORE THAN 51% of its area is outside it (`fallDist`). Start radius 1050 (the
+// rv 1 square's half-size was 1000, the straw ring drawn on it 840), x0.88 a round down to 483 (7 rounds,
+// as before), sudden death on 550, the start ring x1.05, and a full shove x1.05 harder so it still carries
+// from the middle past the edge by about as much as before (~1175 units travelled vs the edge at ~1050).
+export const RV = 2;              // the rules every NEW match and computer game is made with
+export const OFF_SHARE = 0.51;    // rv 2: a piece with more than this share of its area off the circle falls
+export const RULES = {
+  1: { shape: 'square', H0, SHRINK, H_MIN, SD_H, SPEED_K, START, SD_START },
+  2: {
+    shape: 'circle', H0: 1050, SHRINK: 0.88, H_MIN: 483, SD_H: 550, SPEED_K: 0.0735,
+    START: {
+      a: [[588, 189], [-588, -189], [-242, 242], [242, -242]],
+      b: [[-189, 588], [189, -588], [242, 242], [-242, -242]],
+    },
+    SD_START: { a: [[-240, 0]], b: [[240, 0]] },
+  },
+};
+export const asRv = (v) => (v === 2 ? 2 : 1);
+export const rulesOf = (m) => RULES[(m && m.rv) === 2 ? 2 : 1];
+
+// rv 2's fall line. A disc of radius r whose centre is d from the middle of a circle of radius Rc: the share
+// of its area inside the circle, by integrating along the line through both centres (at each point t on it,
+// the overlap is twice the smaller of the two half-chords). Midpoint rule, FIXED step count: only + - * / and
+// sqrt, so every browser gets the same bits. test.js checks it against the exact lens formula.
+const AREA_N = 2048;
+export function insideShare(Rc, r, d) {
+  const t0 = d - r, h = (2 * r) / AREA_N;
+  const R2 = Rc * Rc, r2 = r * r;
+  let sum = 0, own = 0;
+  for (let i = 0; i < AREA_N; i++) {
+    const u = -r + (i + 0.5) * h;
+    const t = t0 + (i + 0.5) * h;
+    const a2 = r2 - u * u;
+    if (a2 <= 0) continue;
+    const a = Math.sqrt(a2);
+    own += a;
+    const b2 = R2 - t * t;
+    if (b2 <= 0) continue;
+    sum += a2 < b2 ? a : Math.sqrt(b2);
+  }
+  return sum / own;   // the disc's own area by the same rule, so a disc fully inside is exactly 1
+}
+const FALL = new Map();
+/** rv 2: the centre distance past which a piece of radius r has more than OFF_SHARE of itself off a circle of
+ *  radius Rc (bisection on insideShare, a fixed 50 halvings). Cached per Rc (a pure function of it). */
+export function fallDist(Rc, r = R) {
+  const key = Rc + '|' + r;
+  const got = FALL.get(key);
+  if (got !== undefined) return got;
+  const want = 1 - OFF_SHARE;
+  let lo = Rc - r, hi = Rc + r;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (insideShare(Rc, r, mid) >= want) lo = mid; else hi = mid;
+  }
+  FALL.set(key, lo);
+  return lo;
+}
+/** Is a piece centred at (x, y) off a platform of size H (half-size or radius) under match m's rules? */
+export function isOff(m, x, y, H) {
+  if (rulesOf(m).shape === 'circle') { const f = fallDist(H); return x * x + y * y > f * f; }
+  return x > H || x < -H || y > H || y < -H;
+}
+
 const other = (s) => (s === 'a' ? 'b' : 'a');
 export { other };
 
@@ -47,9 +118,11 @@ function placePieces(layout) {
   return out;
 }
 
-/** A fresh match. `round` counts every round played (sudden death included), from 1. */
-export function newMatch() {
-  return { round: 1, H: H0, sd: 0, sdr: 0, pieces: placePieces(START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
+/** A fresh match under rules version `rv` (absent = 1, the first rules: every old log replays with it).
+ *  `round` counts every round played (sudden death included), from 1. */
+export function newMatch(rv = 1) {
+  const v = asRv(rv), P = RULES[v];
+  return { rv: v, round: 1, H: P.H0, sd: 0, sdr: 0, pieces: placePieces(P.START), sent: { a: null, b: null }, winner: null, end: '', rounds: [] };
 }
 
 export const alive = (m, s) => m.pieces.filter((p) => p.alive && p.s === s);
@@ -105,12 +178,15 @@ export function slide(m, aims, frames = null) {
   const n = P.length;
   const vx = new Array(n).fill(0), vy = new Array(n).fill(0);
   const live = P.map((p) => p.alive);
+  const RL = rulesOf(m);
+  const circle = RL.shape === 'circle';
   for (let k = 0; k < n; k++) {
     if (!live[k]) continue;
     const a = aims[P[k].s] && aims[P[k].s][P[k].i];
-    if (a) { vx[k] = a[0] * SPEED_K; vy[k] = a[1] * SPEED_K; }
+    if (a) { vx[k] = a[0] * RL.SPEED_K; vy[k] = a[1] * RL.SPEED_K; }
   }
   const H = m.H;
+  const F = circle ? fallDist(H) : 0, F2 = F * F;   // rv 2: off once the centre is past F (51% off)
   const D = 2 * R, D2 = D * D;
   const falls = [];
   // Fallen pieces keep drifting in the picture only (never in the physics).
@@ -149,11 +225,11 @@ export function slide(m, aims, frames = null) {
         }
       }
     }
-    // 3. fall: a centre off the platform is out, at once
+    // 3. fall: rv 1 a centre off the square, rv 2 more than 51% off the circle: out, at once
     for (let k = 0; k < n; k++) {
       if (!live[k]) continue;
       const p = P[k];
-      if (p.x > H || p.x < -H || p.y > H || p.y < -H) {
+      if (circle ? p.x * p.x + p.y * p.y > F2 : (p.x > H || p.x < -H || p.y > H || p.y < -H)) {
         live[k] = false; p.alive = false;
         falls.push({ k, step });
         gx[k] = p.x; gy[k] = p.y; gvx[k] = vx[k]; gvy[k] = vy[k];
@@ -197,15 +273,16 @@ export function resolveRound(m, frames = null) {
   const before = m.pieces.map((p) => ({ s: p.s, i: p.i, x: p.x, y: p.y, alive: p.alive }));
   const H = m.H;
   const res = slide(m, aims, frames);
-  const H1 = Math.max(H_MIN, H * SHRINK);
+  const RL = rulesOf(m);
+  const H1 = Math.max(RL.H_MIN, H * RL.SHRINK);
   const shrinkFalls = [];
   m.pieces.forEach((p, k) => {
     if (!p.alive) return;
-    if (p.x > H1 || p.x < -H1 || p.y > H1 || p.y < -H1) { p.alive = false; shrinkFalls.push(k); }
+    if (isOff(m, p.x, p.y, H1)) { p.alive = false; shrinkFalls.push(k); }
   });
   const rec = {
     r: m.round, sd: m.sd > 0 ? 1 : 0, H, H1, before, aims, steps: res.steps,
-    falls: res.falls.map((f) => f.k), shrinkFalls,
+    falls: res.falls.map((f) => f.k), fallAt: res.falls.map((f) => f.step), shrinkFalls,
     after: m.pieces.map((p) => ({ s: p.s, i: p.i, x: p.x, y: p.y, alive: p.alive })),
   };
   m.rounds.push(rec);
@@ -227,9 +304,10 @@ export function resolveRound(m, frames = null) {
   return rec;
 }
 function startSuddenDeath(m) {
+  const RL = rulesOf(m);
   m.sd += 1;
-  m.H = SD_H;
-  m.pieces = placePieces(SD_START);
+  m.H = RL.SD_H;
+  m.pieces = placePieces(RL.SD_START);
 }
 
 /**

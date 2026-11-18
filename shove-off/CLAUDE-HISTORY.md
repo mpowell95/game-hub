@@ -27,3 +27,25 @@ Continue, New game over a started match is a loss). Choices: the computer plays 
 colour (sumo vs sumo on one dohyo) rather than another kind; "started" = one round played; the next round's aims
 are chosen right after Launch, while the reveal shows (a short hitch then, never while aiming). The HUD moved below
 the hub's floating Back / bug row (`max(safe top, 54px) + 42px`): with no safe area it sat under them.
+
+## 2026-11-18 (evening): the circle, the 51% rule, sides that differ (rules version 2)
+
+Matt, after playing the computer with the Sumo look: *"make the pieces move different. the colors of the background are
+the same. it's only the wrestlers clothes you made different. make it so the piece falls off if 51% of it is off the
+circle. Make the circle begin bigger. there's plenty of more space on the screen that's not being used"*. The parent
+session read "move different" as "more different". The sumo pieces now stand on a mat in their side's colour, the
+bumper cars' rubber rings took their side's colour, and pucks got a contrasting outline.
+
+Matt played on the straw ring drawn INSIDE the square and treated it as the edge, while the rules used the square (a
+piece had to pass well beyond the ring). The edge is now that circle, for every look (both phones replay one engine).
+Because existing matches and computer saves must replay exactly (THE LAW), the change is a RULES VERSION: `rv` absent =
+the old square; new matches and games carry `rv: 2`. Four logs made by the old engine are pinned bit for bit in test.js.
+
+The 51% line is computed, not approximated: the share of a disc inside a circle by a fixed-step integral along the line
+through both centres (sqrt only), and 50 bisections for the 49%-inside distance, cached per radius. It sits within 2
+units of the circle itself (the circle's curve and the 1% roughly cancel), so on screen "the centre crosses the line".
+
+Size: the piece's on-screen size was kept at least what it was (r 17.8 px at 393 wide), which fixes the circle at about
+1050 units for a 375 px circle; the circle's AREA (3.46 M) is a little less than the old square's (4 M) but 56% more
+than the straw ring Matt was actually playing in (840 radius). Seeded computer series, rv 1 then rv 2: Hard v Medium
+14-4 / 14-3, Medium v Easy 16-4 / 17-3, average rounds 3.9 / 4.3 (Hard v Medium), Hard v Easy 37-3 / 35-5.
