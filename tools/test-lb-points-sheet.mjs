@@ -6,7 +6,7 @@
 // points, or exactly 20 when the row shows the limit.
 //   node tools/test-lb-points-sheet.mjs
 import { sheetModel, pointsSheetHTML } from '../js/lb-points-sheet.js';
-import { gamePoints, POINT_GAMES, CAP } from '../js/lb-points.js';
+import { gamePoints, pointsForWin, POINT_GAMES, CAP } from '../js/lb-points.js';
 import { ASSUMED_MODES } from '../js/stats-corrections.js';
 import STRINGS from '../js/strings.js';
 
@@ -20,7 +20,7 @@ for (const id of POINT_GAMES) {
   const cards = sheetModel(id);
   ok(`${id}: has a sheet`, cards.length > 0);
   const kinds = cards.map((c) => c.kind);
-  const rank = { opt: 0, count: 0, cpu: 0, online: 2, limit: 3, table: 4, cutthroat: 5 };
+  const rank = { opt: 0, count: 0, cpu: 0, online: 2, except: 2.5, limit: 3, table: 4, cutthroat: 5 };
   ok(`${id}: order options, online, limit, tables note`, kinds.every((k, i) => !i || rank[k] >= rank[kinds[i - 1]]), kinds);
   ok(`${id}: no "older wins" row (dropped, session 7)`, !kinds.includes('older'));
   const limited = rows(id).filter((x) => x.r.cap).length;
@@ -85,7 +85,15 @@ ok('Monopoly Deal: no older-wins row', !sheetModel('business').some((c) => c.kin
 // Strings: every key the sheet can ask for exists in EN and ES, and the rendered sheet has nothing unfilled.
 const keys = new Set(['lbpt_diff', 'lbpt_per_win', 'lbpt_cap', 'lbpt_tables_b', 'lbpt_tables', 'lbpt_tables_ex', 'lbps_vs_cpu', 'lb_pts_online',
   'gs_diff_beginner', 'gs_diff_intermediate', 'gs_diff_pro', 'gs_diff_expert']);
-for (const id of POINT_GAMES) for (const c of sheetModel(id)) if (c.key) { keys.add('lbpt_k_' + c.key); keys.add('lbpt_h_' + id); }
+// A setup that pays differently from its cell is listed under the table (2026-11-18, Matt: "For any game where the
+// points changed"): Dots and Boxes Medium, Small board, computer first = 1, limited, from the real maths.
+{
+  const x = sheetModel('dotsboxes').find((c) => c.kind === 'except');
+  ok('dotsboxes: the computer-first Small Medium line is on the sheet', !!x && x.key === 'lbpt_x_db_farm');
+  ok('dotsboxes: that line pays what lb-points pays (1) and is limited', x && x.rows[0].pts === pointsForWin('dotsboxes', 'medium', { size: 'small', went: 'them' }) && x.rows[0].pts === 1 && x.rows[0].cap === true);
+  keys.add('lbpt_x_db_farm');
+}
+for (const id of POINT_GAMES) for (const c of sheetModel(id)) if (c.key && c.kind !== 'except') { keys.add('lbpt_k_' + c.key); keys.add('lbpt_h_' + id); }
 for (const k of keys) ok(`string ${k} in EN and ES`, STRINGS.en[k] != null && STRINGS.es[k] != null);
 ok('no em dashes', [...keys].every((k) => !/—/.test(String(STRINGS.en[k]) + String(STRINGS.es[k]))));
 const mem = {};
