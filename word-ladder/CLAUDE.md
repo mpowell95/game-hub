@@ -54,6 +54,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   then goes back (the next tap cancels it at once: no move is ever lost); every earlier word's changed letter has How to play's gold
   outline; dashed empty rungs (full target-tile slots on faint gold rails, crossbars only BETWEEN rows, shrinking only when room is short) between the word and
   the target = par - moves - 1, never below 0 (moves left at par, no spoiler);
+  **a picked letter previews the next word in the FIRST rung (Matt, 2026-11-19): the other letters faint grey, the picked spot blank** (none when no rung is left);
   the done screen lights the ladder row by row (60ms, 600ms at most), fills the stars one at a time, THEN pops the heading ("Par!"
   at 3 stars, else "Solved"); at 3 stars a small gold burst behind the stars and a shine across the target row; one progress line (`Medium · 12 of 150`, or the daily's date and a ticking "Next in H:MM:SS" to local midnight
   of `bestNow()`). Next is live at once. Every animation is off under `prefers-reduced-motion`.
