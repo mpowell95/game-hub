@@ -26,6 +26,7 @@ import { record, formatBoardMetric, GOLF_COURSE_PAR } from './leaderboard-rank.j
 import { woPoints, RUSH_MODES, woRushBest, woRushBestMap, woRushRuns } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars, glNoHint } from './gridlock-points.js';
 import { WW_TIERS, wwPoints, wwStars, wwCleared, wwThreeStars, wwExtra, wwDailyCount, wwCollected, wwSpent } from './word-weaver-points.js';
+import { WL_TIERS, wlPoints, wlCleared, wlStarsTotal, wlAtPar } from './word-ladder-points.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { backStack } from './back-stack.js';
 import { gamePoints } from './lb-points.js';
@@ -134,7 +135,7 @@ const HUB_ID = {
   wordweaver: 'word-weaver', wordladder: 'word-ladder', shoveoff: 'shove-off',
 };
 export const hubIdOf = (id) => HUB_ID[id] || id;
-const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
+const UNIT_KEY = { ballrun: 'lb_unit_obstacles', snake: 'lb_unit_longest', nutsbolts: 'lb_unit_solved', sudoku: 'lb_unit_solved', contexto: 'lb_unit_solved', murdoku: 'lb_unit_solved', wayout: 'lb_unit_points', gridlock: 'lb_unit_points', wordweaver: 'lb_unit_points', wordladder: 'lb_unit_points', minesweeper: 'lb_unit_cleared', hillclimb: 'lb_unit_meters', brickblitz: 'lb_unit_points', tower: 'lb_unit_blocks', skeeball: 'lb_unit_points', golf: 'lb_unit_points' };
 export const unitKeyOf = (id) => UNIT_KEY[id] || 'lb_unit_wins';
 
 /** Every game, as { id (stats id), hubId, title } in the ACTIVE language, alphabetical by the
@@ -1454,6 +1455,8 @@ function headlineOf(id, rec) {
   if (id === 'gridlock') return { n: glPoints(rec), unitKey: unitKeyOf(id) };
   // Word Weaver: points (stars x the band's 1/2/3/4) over distinct levels, the leaderboard's own number.
   if (id === 'wordweaver') return { n: wwPoints(rec), unitKey: unitKeyOf(id) };
+  // Word Ladder: points (band x stars) over distinct level numbers, the leaderboard's own number (js/word-ladder-points.js).
+  if (id === 'wordladder') return { n: wlPoints(rec), unitKey: unitKeyOf(id) };
   // Baseball (phase 0): career wins, the same `total.won` maths every competitive game uses -
   // stated explicitly rather than left to the generic fallback below, since this list is read as
   // the contract for what each game's headline number means.
@@ -1593,6 +1596,9 @@ function wordLadderScreen(rec) {
   // Earlier puzzles = levels finished before they were remade (kept, counted above, and shown as what they are, rule 3).
   const earlier = rows.filter((r) => r.old.length).length;
   return `
+    <div class="gs-tallies">
+      <div class="gs-tally"><b>${wlPoints(rec)}</b><span>${t('lb_unit_points')}</span></div>
+    </div>
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${ladder.length}</b><span>${tf('gs_wl_levels', 'Levels')}</span></div>
       <div class="gs-tally"><b>${stars}</b><span>${tf('gs_wl_stars', 'Stars')}</span></div>
@@ -2275,6 +2281,16 @@ function rowsWordWeaver(rec) {
     + (cells.length ? rh(t('lb_sort_points')) + levelStripHTML(cells) : '')
     + rh(rowTitle('st_numbers')) + tilesHTML([[nf(wwExtra(rec)), tf('gs_ww_extra', 'Extra words')], [nf(wwDailyCount(rec)), t('st_daily')], [nf(wwCollected(rec)), t('st_bonus'), t('st_spent_n', { n: nf(wwSpent(rec)) })]]);
 }
+function rowsWordLadder(rec) {
+  const wl = (rec && rec.wl) || {};
+  const n = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.keys(m).length : 0);
+  if (!n0(((rec && rec.total) || {}).won) && !n(wl.lv) && !n(wl.es) && !n(wl.dl)) return wordLadderScreen(rec);
+  const cells = WL_TIERS.filter((k) => wlCleared(rec, k) > 0)
+    .map((k) => ({ tier: LV_TIER[k], word: lvWord(k), big: nf(wlPoints(rec, k)), sm: [levelsN(wlCleared(rec, k))] }));
+  return tilesHTML([[nf(wlCleared(rec)), t('st_levels')], [nf(wlStarsTotal(rec)), tf('lb_sort_stars', 'Stars')], [nf(wlAtPar(rec)), tf('gs_wl_three', 'At par')]])
+    + (cells.length ? rh(t('lb_sort_points')) + levelStripHTML(cells) : '')
+    + rh(rowTitle('st_numbers')) + tilesHTML([[nf(n(wl.dl)), t('st_daily')]]);
+}
 function rowsWayout(rec) {
   const solved = n0(((rec && rec.total) || {}).won);
   const wo = (rec && rec.wo) || {};
@@ -2443,6 +2459,7 @@ function rowsScreenFor(id, rec, code) {
   switch (id) {
     case 'gridlock': return rowsGridlock(rec);
     case 'wordweaver': return rowsWordWeaver(rec);
+    case 'wordladder': return rowsWordLadder(rec);
     case 'wayout': return rowsWayout(rec);
     case 'sudoku': return rowsSudoku(rec);
     case 'murdoku': return rowsMurdoku(rec);

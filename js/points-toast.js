@@ -14,11 +14,12 @@ import STRINGS from './strings.js';
 
 import { puzzlePoints, HINT_STEPS, HINT_UNKNOWN } from './puzzle-points.js';
 import { wwPoints } from './word-weaver-points.js';
+import { wlPoints } from './word-ladder-points.js';
 
 const t = makeT(STRINGS);
 
 /** The puzzle boards (2026-11-16, Matt: Minesweeper showed no "+1 pt"; "All games should have that"): Minesweeper,
- *  Sudoku, Murdoku, Word Weaver, and Nuts & Bolts (its points are still admin devices only). Gridlock and Arrow Maze
+ *  Sudoku, Murdoku, Word Weaver, Word Ladder, and Nuts & Bolts (its points are still admin devices only). Gridlock and Arrow Maze
  *  show their own gain. `g` = the record before this win's level counters moved, `after` = once it was recorded. */
 function puzzleWinPoints({ id, d, g, after, help }) {
   const tier = tierOf(d);
@@ -29,6 +30,8 @@ function puzzleWinPoints({ id, d, g, after, help }) {
   if (!after) return null;
   if (id === 'minesweeper' || (id === 'nutsbolts' && isAdminDevice())) return { pts: Math.max(0, puzzlePoints(after, id).pts - puzzlePoints(g, id).pts) };
   if (id === 'wordweaver') return { pts: Math.max(0, wwPoints(after) - wwPoints(g)) };
+  // Word Ladder (2026-11-19): a level's first solve, or a better result on it (more stars), adds its band x stars.
+  if (id === 'wordladder') return { pts: Math.max(0, wlPoints(after) - wlPoints(g)) };
   return null;
 }
 const isPointsBoard = (id) => { const r = LB_RULES[id]; return !!r && (r.by === 'wins' || r.by === 'cuppong'); };

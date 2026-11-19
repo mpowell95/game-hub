@@ -55,7 +55,7 @@ import { corrections, isAdminDevice } from './admin-config.js';
 import { watchPlayers, watchBoard } from './stats-net.js';
 import { beeBoard, watchBeeBoard, beeTotals } from './bee-board.js';
 import { loadProfile } from './profile-store.js';
-import { statsId, holdemBalance, holdemSuspect, isTestGame, wlSolved } from './game-stats.js';
+import { statsId, holdemBalance, holdemSuspect, isTestGame } from './game-stats.js';
 import { ctMedalScore, ctBest, ctAvgGuesses, compareContexto } from './leaderboard-rank.js';
 import { bucketsOf, tierMix, golfBestAt, hasBoardMetric, compareBoardMetric, compareTierFirst,
   boardRankTier, formatBoardMetric, formatTimeMetric, GOLF_BOARD_COURSE, LOWER_IS_BETTER } from './leaderboard-rank.js';
@@ -64,6 +64,7 @@ import { GAME_ART } from './game-art.js';
 import { WO_TIERS, woPoints, RUSH_MODES, woRushBestMap, woRushRuns, woWeekKey } from './arrow-maze-time.js';
 import { GL_TIERS, glPoints, glCleared, glThreeStars } from './gridlock-points.js';
 import { WW_TIERS, wwPoints, wwCleared, wwThreeStars, wwCollected, wwSpent } from './word-weaver-points.js';
+import { WL_TIERS, wlPoints, wlCleared, wlAtPar } from './word-ladder-points.js';
 import { loadFavorites } from './favorites.js';
 import { gamePoints, pointsKey } from './lb-points.js';
 import { PUZZLE_POINT_GAMES, puzzlePoints } from './puzzle-points.js';
@@ -611,6 +612,7 @@ function boardView(list, id) {
   // Word Weaver: a band tab for every band anyone has completed a level in (the per-level map, so
   // levels finished before the bands, filed under 'ladder', still make their band's tab).
   if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
+  if (id === 'wordladder') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wlCleared((g.games || {}).wordladder, WL_TIERS[k - 1]) > 0));
   if (id === 'tictactoe') tabsExtra.push({ view: 'ultimate', label: t('lb_tt_ultimate') }, { view: 'classic', label: t('lb_tt_classic') });
   if (id === 'snake') tabsExtra.push({ view: 'off', label: t('lb_sn_walls_off') }, { view: 'on', label: t('lb_sn_walls_on') });
   if (id === 'cuppong' && list.some((g) => cpSoloBest(g) !== null)) tabsExtra.push({ view: 'solo', label: tx('lb_tab_solo', 'Solo') });
@@ -1075,8 +1077,9 @@ function gameMetricAt(g, id, tier) {
   // Word Weaver ranks on POINTS: stars x the band's multiplier (1/2/3/4), over distinct levels
   // completed (js/word-weaver-points.js, Matt 2026-10-29); at a tier, that band's own points.
   if (id === 'wordweaver') return wwPoints(g.games.wordweaver, tier == null ? null : WW_TIERS[tier - 1]);
-  // Word Ladder (admin only): DISTINCT levels completed, from the merged per-level maps (a level done on two phones once).
-  if (id === 'wordladder') return wlSolved(g.games.wordladder, tier == null ? null : ['easy', 'medium', 'hard', 'expert'][tier - 1]);
+  // Word Ladder ranks on POINTS (2026-11-19, js/word-ladder-points.js): band x stars over each DISTINCT level number,
+  // both languages, from the merged per-level maps (a level done on two phones, or on an old and a remade puzzle, once).
+  if (id === 'wordladder') return wlPoints(g.games.wordladder, tier == null ? null : WL_TIERS[tier - 1]);
   // Sudoku / Murdoku: a row with a no-hint solve is ranked and shown by its no-hint solves (2026-10-29).
   if (NOHINT_GAMES.has(id) && noHintTierOf(g, id)) return noHintAt(g, id, tier);
   // Every wins board ranks on POINTS (Matt, 2026-11-02, js/lb-points.js): every win adds, harder levels
@@ -1184,6 +1187,9 @@ function boardPlaysOf(g, id) {
   // Word Weaver at a band: the levels completed in it (one play each), read from the per-level map,
   // so plays recorded before the bands (byDiff 'ladder') still show under their band.
   if (id === 'wordweaver' && _tier != null) return wwCleared(g.games.wordweaver, WW_TIERS[_tier - 1]);
+  // Word Ladder: the DISTINCT levels finished (a replay or a second phone is not a second play), so a tie on points
+  // goes to the better average (fewer levels for the same points; Matt, 2026-11-06).
+  if (id === 'wordladder') return wlCleared(g.games.wordladder, _tier == null ? null : WL_TIERS[_tier - 1]);
   return id === 'skeeball' ? skPlaysAt(g, _machine) : playsAtTier(g, [id], _tier);
 }
 
@@ -1223,7 +1229,7 @@ function boardTierOf(g, id) {
   // Arrow Maze: ONE number across all four difficulties, never hardest-difficulty-first (Matt,
   // 2026-10-14: a slow Expert player must not outrank a good Hard one; the points already make a
   // harder difficulty worth more: 1/2/4/6 a level). A filter still shows one difficulty's own points.
-  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver' || isPointsBoard(id) || isPuzzlePts(id)) && _tier == null) return null;
+  if ((id === 'wayout' || id === 'gridlock' || id === 'wordweaver' || id === 'wordladder' || isPointsBoard(id) || isPuzzlePts(id)) && _tier == null) return null;
   if (_tier != null) return _tier;
   // BOTH accessors, always: plays prove this game HAS a difficulty axis (Skeeball's bucket is keyed
   // by machine, golf's by course, Hill Climb's by stage - none of them map to a tier), and the
@@ -2355,6 +2361,11 @@ const TEXTURE = {
     // Bonus stars (2026-11-02, Matt: "keep track of total stars collected and spent for the leaderboard stats").
     { labelKey: 'lb_tex_ww_bonus', en: 'Bonus stars collected', get: (g) => wwCollected(g.games.wordweaver) },
     { labelKey: 'lb_tex_ww_spent', en: 'Bonus stars spent', get: (g) => wwSpent(g.games.wordweaver) },
+  ],
+  // Word Ladder (2026-11-19): distinct levels finished, and how many in par moves.
+  wordladder: [
+    { labelKey: 'lb_tex_ww_cleared', get: (g) => wlCleared(g.games.wordladder) },
+    { labelKey: 'lb_tex_wl_par', en: 'Levels at par', get: (g) => wlAtPar(g.games.wordladder) },
   ],
   minesweeper: [
     { labelKey: 'lb_tex_ms_cleared', get: (g) => ((g.games.minesweeper || {}).ms || {}).cleared | 0 },
@@ -3664,6 +3675,7 @@ export function lb2ScoreSpecs(list, id) {
   if (id === 'minesweeper') return { tiers: [null, 1, 2, 3, 4], views: [{ view: '', label: '', tiered: true }], rankBy: [], langs: null };
   let tiers = fieldTiersPresent(list, [id]);
   if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
+  if (id === 'wordladder') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wlCleared((g.games || {}).wordladder, WL_TIERS[k - 1]) > 0));
   const views = [{ view: '', label: id === 'snake' || id === 'brickblitz' ? all : '', tiered: true }];
   if (id === 'snake') views.push({ view: 'off', label: t('lb_sn_walls_off'), tiered: false }, { view: 'on', label: t('lb_sn_walls_on'), tiered: false });
   if (id === 'brickblitz') {
@@ -3828,6 +3840,7 @@ export function lb2Tabs(list, id) {
   return lb2With(id, {}, () => {
     let tiers = id === 'tictactoe' ? [] : fieldTiersPresent(list, [id]);
     if (id === 'wordweaver') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wwCleared((g.games || {}).wordweaver, WW_TIERS[k - 1]) > 0));
+  if (id === 'wordladder') tiers = [1, 2, 3, 4].filter((k) => list.some((g) => wlCleared((g.games || {}).wordladder, WL_TIERS[k - 1]) > 0));
     const row = [null, ...tiers].map((tr) => tab({ tier: tr }, tr === 2 && tiers.length > 3 ? tx('lb_tab_med', 'Med') : tierWord(tr), tr));
     if (id === 'tictactoe') row.push(tab({ view: 'ultimate' }, t('lb_tt_ultimate')), tab({ view: 'classic' }, t('lb_tt_classic')));
     if (id === 'snake') row.push(tab({ view: 'off' }, t('lb_sn_walls_off')), tab({ view: 'on' }, t('lb_sn_walls_on')));

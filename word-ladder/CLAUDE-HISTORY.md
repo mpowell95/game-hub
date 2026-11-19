@@ -159,3 +159,32 @@ git 5dd10bc, records solves of remade and kept levels with it, then reads and re
 byte-identical, board count and stars unchanged, a replay not double counted, a worse replay never lowering, two phones merged
 once). Headless play on localhost (test1 / DREG5): remade levels in every remade band and language by taps at par, plus a store
 seeded with old solves (stars 23 kept, Expert 0/100 then 1/100, My Stats 9 levels and 7 earlier puzzles): 44 of 44 checks.
+
+## 2026-11-19: points ready for the leaderboard, Redo, and every action in the private log
+
+Matt, on the revised points table (Easy 1/1/1, Medium 2/1/1, Hard 3/2/1, Expert 5/3/1): "Cool. Make sure it's ready to be added
+to the leaderboard with the 'how scores are calculated' screen. And add a redo button (we added one to some games yesterday). And
+make sure all the game info and guesses and whatever are errors and undos are tracked so we can show stats later if something is
+interesting or if I want to investigate something". The game stays ADMIN ONLY (not cleared for players).
+
+- **Points** (`js/word-ladder-points.js`): read time from `wlLevels`, so a level counts once per language at its best over every
+  puzzle version; old solves of remade levels pay at their stored stars (Matt, earlier: "Keep whatever points I've earned").
+  The board switched from "levels solved, hardest first" (`solves`) to one points number over all bands, like Word Weaver;
+  ties go to fewer distinct levels (the better average, the 2026-11-06 rule). `recordWordLadder` now announces a stars rise on
+  a level already finished, so the "+X pts" pill also shows an improvement (no play or win is counted for it). Checked with the
+  board run directly (`lb2Board`), as if released, and with the server's own copy of `players-agg.js` (deep-equal grouping).
+  The game's hidden state is unchanged: `isGameOnLauncher('wordladder')` is false, so no board, sheet, or pill reaches anyone.
+- **Integrity**: `wordladder-under-par` added as an ALERT, not STRONG: the bound is solid from the code (par is the minimum over
+  every accepted word and words are never dropped; each stored entry is one whole attempt), but no snapshot replay was possible
+  without the reader key. Promote it after `node tools/test-integrity.mjs --db <snapshot>` shows 0 honest hits.
+- **Redo**: Dots and Boxes' rule (Redo puts things back exactly), so Redo REFUNDS the Undo's move. Counting it as a move instead
+  would make Undo then Redo cost two moves for no change, punishing a mis-tap; the refund cannot be gamed because any new step or
+  hint clears Redo and Undo only shows a word already played. Retyping the undone word is treated as the same Redo.
+- **The log**: until today each finished level logged its chain and a coarse `seq` (seconds, valid/invalid/hint/undo), and an
+  attempt left and resumed lost everything before the resume (`seq` lived in memory only). Now the attempt's save keeps its log, so
+  one attempt is one log across visits, with ms timings, letter picks, every key and its outcome, redo, How to play, time hidden,
+  leaving and returning; unfinished attempts are logged as `left` when left and `abandon` when they can never be finished.
+- **Proof** (dev server 8135, test1 / DREG5, headless Chromium, EN and ES at 360x640 and 402x874): undo / redo / retype / Ctrl+Y /
+  Shift+Backspace / leave and return with Redo kept, a non-word, a key before a letter, hints, How to play, a faked hidden app;
+  every code (`k K n = p x w u r R B L ? ?- v- v+ h F`) found in the finished entry's `x`, times rising, `detail` still only
+  moves/par/hints, a `left` entry, the win event worth +1 (pill shown by hand in the page), the sheet fits 360px. 4 x 23 checks.

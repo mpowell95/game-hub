@@ -54,7 +54,7 @@ export const LB_RULES = {
   uno: { by: 'wins' },
   wayout: { by: 'points' },
   wordweaver: { by: 'points' },
-  wordladder: { by: 'solves' },   // admin only: levels finished (no points yet)
+  wordladder: { by: 'points' },   // admin only until released: band x stars per level (js/word-ladder-points.js, 2026-11-19)
   shoveoff: { by: 'wins' },       // admin only: online challenges + vs the computer (easy/medium/hard)
   yahtzee: { by: 'wins' },
 };

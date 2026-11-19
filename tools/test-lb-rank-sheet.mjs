@@ -118,7 +118,7 @@ ok('hill climb: Ranked by Hardest stage, Furthest distance on it', rankSheetMode
 // Node has no localStorage, so setLang would be a no-op and the Spanish pass would render English: a small shim.
 const mem = {};
 globalThis.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); }, removeItem: (k) => { delete mem[k]; } };
-const keysOf = (c) => [...(c.rows || []).map((r) => r.k), ...(c.steps || []), ...[].concat(c.text || []), ...(c.foot ? [c.foot] : []),
+const keysOf = (c) => [...(c.rows || []).map((r) => r.k), ...(c.steps || []), ...[].concat(c.text || []), ...[].concat(c.foot || []),
   ...(c.grid ? [c.grid.sup, ...c.grid.rows.map((r) => r.k)] : []), ...(c.table ? [c.table.left, ...c.table.cols, ...c.table.rows.flatMap((r) => [r.k, r.vk].filter(Boolean))] : []),
   ...(c.gl ? ['lbrs_gl_levels', 'lbrs_gl_points', 'lbrs_gl_nohint', 'lbrs_gl_hint', ...c.gl.map((g) => g.k)] : [])];
 for (const id of RANK_SHEET_GAMES) {

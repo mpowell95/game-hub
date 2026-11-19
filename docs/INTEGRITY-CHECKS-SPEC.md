@@ -817,3 +817,12 @@ re-flown on Continue) and when it lands.
 - **Counted once**: the result clears the save BEFORE recording. `init()` still takes a marker an older build armed.
 Tests: `tools/test-quit-loss.mjs` (Q4 yahtzee / cup-baseball lines, Q5 Yahtzee), `node cup-baseball/js/test.js`,
 `node tools/test-yahtzee-ai.mjs`.
+
+## Word Ladder (2026-11-19, ALERT only; the game is admin only)
+
+`wordladder-under-par` (`js/integrity.js`): a stored level or day entry `{ s, m, p, h }` with moves under its own par, more hints
+than moves, or stars its moves and hints do not give (`wlStars`). Proof from the code: par is the fewest changes over EVERY accepted
+word and words are never dropped, so a later data change only LOWERS par (a stored entry keeps the par it was played at); every move,
+undo, and hint adds a move (a Redo only refunds the Undo it takes back, never below the chain's length); `wlBest` keeps one attempt
+WHOLE. Not yet replayed over a snapshot (no reader key in that session): an alert, never a void, until
+`node tools/test-integrity.mjs --db <snapshot>` shows 0 hits. Tests: `tools/test-word-ladder-points.mjs`.
