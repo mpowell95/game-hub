@@ -1,13 +1,15 @@
 /* word-ladder/css/word-ladder.css - every rule scoped under .wl-root. One night-blue look in light and dark
-   (like Nuts & Bolts, dark by design): bright text, white tiles. Colourblind-safe: a matching letter is teal AND
-   carries a dot; the selected letter is #ffce3a AND has a thick outline and a caret; the target has a flag. */
+   (like Nuts & Bolts, dark by design): bright text, white tiles. A matching letter is a solid green tile with navy
+   letters (Matt's call, 2026-11-14); the selected letter is #ffce3a AND has a thick outline and a caret; each earlier
+   word's changed letter has a gold outline; the target has a flag. Buttons and tiles have a bottom edge that presses
+   in (Word Weaver's / Battle Arena's feel). Every animation is off under prefers-reduced-motion. */
 .wl-root {
   --wl-bg: #17284a; --wl-bg2: #24406f; --wl-ink: #10203c; --wl-on: #f5f8ff; --wl-tile: #ffffff;
-  --wl-match: #22b84f; --wl-sel: #ffce3a; --wl-gold: #f2b705;
+  --wl-match: #22b84f; --wl-match-edge: #15803a; --wl-sel: #ffce3a; --wl-gold: #f2b705; --wl-gold-edge: #a37a00;
   --wl-top: var(--gh-st, env(safe-area-inset-top, 0px));
   /* The bottom of the hub's floating Hub button (it sits at max(safe top, 54px), 36px tall). */
   --wl-below: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 36px);
-  --wl-big: 56px; --wl-small: 35px;
+  --wl-big: 56px; --wl-small: 35px; --wl-rung: 14px;
   position: fixed; inset: 0; z-index: 1; overflow: hidden;
   width: 100%; height: 100dvh;
   color: var(--wl-on);
@@ -22,7 +24,7 @@
 .wl-root .wl-setup { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   padding: calc(var(--wl-below) + 16px) 16px max(env(safe-area-inset-bottom, 0px), 16px); }
 .wl-root .wl-home { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 16px; position: relative; }
-.wl-root .wl-hero { width: 220px; height: auto; display: block; }
+.wl-root .wl-hero { height: 150px; width: auto; display: block; }
 .wl-root .wl-title { margin: 0; font-size: clamp(26px, 8vw, 32px); font-weight: 800; text-align: center; line-height: 1.15; }
 .wl-root .wl-sub { display: flex; align-items: center; gap: 16px; }
 .wl-root .wl-total { display: inline-flex; align-items: center; gap: 6px; font-size: 24px; }
@@ -30,8 +32,15 @@
 .wl-root .wl-lang { min-width: 56px; height: 44px; border-radius: 12px; border: 2px solid rgba(255,255,255,.7);
   background: rgba(255,255,255,.08); font-size: 18px; font-weight: 800; letter-spacing: .04em; }
 .wl-root .wl-segs { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.wl-root .wl-seg { min-height: 52px; padding: 0 10px; border-radius: 14px; border: 2px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08);
-  display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 18px; font-weight: 800; white-space: nowrap; }
+.wl-root .wl-seg { min-height: 64px; padding: 6px 12px 7px; border-radius: 14px; border: 2px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08);
+  display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 5px; font-size: 18px; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(0,0,0,.3); transition: transform .08s, box-shadow .08s; }
+.wl-root .wl-seg:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+.wl-root .wl-seg-n { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.wl-root .wl-seg-p { display: flex; align-items: center; gap: 8px; }
+.wl-root .wl-seg-p small { font-size: 15px; font-weight: 700; color: #e6edfa; min-width: 3.6em; text-align: right; font-variant-numeric: tabular-nums; }
+.wl-root .wl-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.18); overflow: hidden; display: block; }
+.wl-root .wl-bar > i { display: block; height: 100%; border-radius: 3px; background: var(--wl-gold); min-width: 0; }
 .wl-root .wl-seg svg { width: 18px; height: 18px; flex: none; }
 .wl-root .wl-seg svg.lb-dshape-x2 { width: 30px; }
 .wl-root .wl-seg svg.lb-dshape-t3, .wl-root .wl-seg svg.lb-dshape-t4 { fill: var(--wl-on); }   /* black diamonds on night blue */
@@ -39,13 +48,17 @@
 .wl-root .wl-btn[disabled] { opacity: .6; }
 .wl-root .wl-btn { width: 100%; min-height: 56px; border-radius: 16px; border: 2px solid rgba(255,255,255,.7);
   background: rgba(255,255,255,.08); font-size: 20px; font-weight: 800;
-  display: flex; align-items: center; justify-content: center; gap: 10px; }
-.wl-root .wl-btn-main { background: var(--wl-gold); color: var(--wl-ink); border-color: var(--wl-gold); font-size: 22px; }
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  box-shadow: 0 4px 0 rgba(0,0,0,.3); transition: transform .08s, box-shadow .08s; }
+.wl-root .wl-btn:not([disabled]):active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+.wl-root .wl-btn-main { background: var(--wl-gold); color: var(--wl-ink); border-color: var(--wl-gold); font-size: 22px; box-shadow: 0 4px 0 var(--wl-gold-edge); }
+.wl-root .wl-btn-main:not([disabled]):active { box-shadow: 0 1px 0 var(--wl-gold-edge); }
 .wl-root .wl-btn-daily.is-done { border-style: solid; }
 .wl-root .wl-ok { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
   background: var(--wl-on); color: var(--wl-ink); font-style: normal; }
 .wl-root .wl-help { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(255,255,255,.7);
-  background: transparent; font-size: 22px; font-weight: 800; }
+  background: transparent; font-size: 22px; font-weight: 800; box-shadow: 0 3px 0 rgba(0,0,0,.3); }
+.wl-root .wl-help:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
 .wl-root .wl-err { font-size: 20px; margin: 0; }
 .wl-root .wl-wait { width: 44px; height: 44px; border-radius: 50%; border: 4px solid rgba(255,255,255,.25); border-top-color: var(--wl-on);
   animation: wl-spin 0.9s linear infinite; }
@@ -61,27 +74,56 @@
 .wl-root .wl-chip svg { width: 20px; height: 20px; }
 /* Row 2: the game's own back arrow TOP LEFT under the Hub button (docs/BUILDING-A-GAME.md Part 0). */
 .wl-root .wl-row2 { flex: none; margin-top: 16px; height: 44px; display: flex; align-items: center; justify-content: space-between; }
-.wl-root .wl-icon { width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255,255,255,.12);
-  display: grid; place-items: center; font-size: 20px; font-weight: 800; }
-.wl-root .wl-icon:disabled { opacity: .35; cursor: default; }
+.wl-root .wl-icon { width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255,255,255,.14);
+  display: grid; place-items: center; font-size: 20px; font-weight: 800;
+  box-shadow: 0 3px 0 rgba(0,0,0,.32); transition: transform .08s, box-shadow .08s; }
+.wl-root .wl-icon:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.32); }
+.wl-root .wl-icon:disabled { opacity: .35; cursor: default; box-shadow: none; }
 .wl-root .wl-count { display: flex; gap: 18px; font-size: 18px; }
 .wl-root .wl-count b { font-size: 22px; }
 .wl-root .wl-ladder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; overflow: hidden; }
 .wl-root .wl-w { display: flex; gap: 8px; align-items: center; }
 .wl-root .wl-t { width: var(--wl-small); height: var(--wl-small); border-radius: 8px; display: grid; place-items: center; position: relative;
-  background: rgba(255,255,255,.88); color: var(--wl-ink); font-weight: 800; font-size: calc(var(--wl-small) * .58); line-height: 1; border: 0; padding: 0; }
-.wl-root .wl-t.is-match { background: var(--wl-match); color: #fff; }
+  background: rgba(255,255,255,.88); color: var(--wl-ink); font-weight: 800; font-size: calc(var(--wl-small) * .58); line-height: 1; border: 0; padding: 0;
+  box-shadow: 0 2px 0 rgba(0,0,0,.28); }
+/* Navy letters on the green (6.2:1; white was 2.4:1). */
+.wl-root .wl-t.is-match { background: var(--wl-match); color: var(--wl-ink); box-shadow: 0 2px 0 var(--wl-match-edge); }
+/* The letter each earlier word changed: the gold outline How to play's picture uses. */
+.wl-root .wl-t.is-chg { outline: 3px solid var(--wl-gold); outline-offset: 1px; }
+.wl-root .wl-final .wl-goal.is-won .wl-t.is-chg { outline-color: var(--wl-on); }
 /* A right letter in the right place: a solid green tile, nothing else (Matt, 2026-11-14: "Just make it green"; a dot under
    the letter and then a folded corner were both rejected). Green on the white/grey tiles reads by lightness too. */
 .wl-root .wl-more { height: 22px; font-size: 22px; line-height: 22px; opacity: .8; }
 .wl-root .wl-now { margin-top: 4px; }
 .wl-root .wl-now .wl-t { width: var(--wl-big); height: var(--wl-big); font-size: calc(var(--wl-big) * .6); border-radius: 12px; background: var(--wl-tile);
-  box-shadow: 0 3px 0 rgba(0,0,0,.25); }
-.wl-root .wl-now .wl-t.is-match { background: var(--wl-match); }
+  box-shadow: 0 4px 0 #9aa6bb; transition: transform .08s, box-shadow .08s; }
+.wl-root .wl-now .wl-t:active { transform: translateY(2px); box-shadow: 0 2px 0 #9aa6bb; }
+.wl-root .wl-now .wl-t.is-match { background: var(--wl-match); box-shadow: 0 4px 0 var(--wl-match-edge); }
+/* A word not on the list: the tried letter in a navy tile with a gold X, for a moment (no red, colourblind-safe). */
+.wl-root .wl-now .wl-t.is-bad { background: var(--wl-ink); color: var(--wl-on); box-shadow: 0 4px 0 #050c1a, inset 0 0 0 3px var(--wl-gold); }
+.wl-root .wl-now .wl-t.is-bad::after { content: ''; position: absolute; top: -9px; right: -9px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--wl-gold) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 7l10 10M17 7L7 17' stroke='%2310203c' stroke-width='3.4' stroke-linecap='round'/%3E%3C/svg%3E") center / 16px no-repeat;
+  animation: wl-pop .18s ease-out; }
+/* A step just made: the new word drops in, the changed tile flips, a tile turning green fills. */
+.wl-root .wl-now.is-new { animation: wl-drop .2s ease-out; }
+.wl-root .wl-now .wl-t.is-flip { animation: wl-flip .18s ease-out; }
+.wl-root .wl-now .wl-t.is-flip.is-fill { animation: wl-flip .18s ease-out, wl-fill .32s ease-out; }
+@keyframes wl-drop { from { transform: translateY(-14px); opacity: .4; } to { transform: none; opacity: 1; } }
+@keyframes wl-flip { 0% { transform: scaleY(.15); } 65% { transform: scale(1.1); } 100% { transform: none; } }
+@keyframes wl-fill { 0%, 35% { background: var(--wl-tile); box-shadow: 0 4px 0 #9aa6bb; } 100% { background: var(--wl-match); } }
+@keyframes wl-pop { 0% { transform: scale(.3); } 70% { transform: scale(1.15); } 100% { transform: none; } }
+/* The first-move tip: the letter to tap pulses, then its key. */
+.wl-root .wl-t.is-tip, .wl-root .wl-key.is-tip { animation: wl-pulse 1.1s ease-in-out infinite; }
+@keyframes wl-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,206,58,.95), 0 4px 0 #9aa6bb; } 55% { box-shadow: 0 0 0 9px rgba(255,206,58,0), 0 4px 0 #9aa6bb; } }
+.wl-root .wl-key.is-tip { background: var(--wl-sel); }
 .wl-root .wl-now .wl-t.is-sel { outline: 5px solid var(--wl-sel); outline-offset: 2px; }
 .wl-root .wl-now .wl-t.is-sel::before { content: ''; position: absolute; left: 50%; bottom: -17px; transform: translateX(-50%);
   border: 8px solid transparent; border-bottom: 0; border-top-color: var(--wl-sel); }
 .wl-root .wl-link { width: 4px; height: 14px; border-radius: 2px; background: repeating-linear-gradient(var(--wl-on) 0 4px, transparent 4px 8px); opacity: .6; margin-top: 8px; }
+/* Empty rungs: one per move left to finish at par (never below 0). */
+.wl-root .wl-rungs { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.wl-root .wl-rung { display: flex; gap: 8px; }
+.wl-root .wl-rung i { width: calc(var(--wl-big) * .8); height: var(--wl-rung); border-radius: 6px; border: 2px dashed rgba(255,255,255,.5); }
 .wl-root .wl-goal { position: relative; }
 .wl-root .wl-goal .wl-t { width: calc(var(--wl-big) * .8); height: calc(var(--wl-big) * .8); font-size: calc(var(--wl-big) * .48);
   background: transparent; color: var(--wl-on); border: 3px dashed var(--wl-gold); }
@@ -96,20 +138,35 @@
    (a documented departure from the 44x44 floor: ten keys must fit one row, as on every phone keyboard). */
 .wl-root .wl-kb { flex: none; display: flex; flex-direction: column; gap: 8px; margin: 0 -6px; }
 .wl-root .wl-kr { display: flex; justify-content: center; gap: 3px; }
-.wl-root .wl-key { flex: 1 1 0; max-width: 46px; min-width: 0; height: 50px; border-radius: 8px; border: 0; background: rgba(255,255,255,.9); color: var(--wl-ink);
-  font-size: 20px; font-weight: 800; padding: 0; box-shadow: 0 2px 0 rgba(0,0,0,.3); }
-.wl-root .wl-key:active { background: var(--wl-sel); }
+.wl-root .wl-key { flex: 1 1 0; max-width: 46px; min-width: 0; height: 50px; border-radius: 8px; border: 0; background: rgba(255,255,255,.92); color: var(--wl-ink);
+  font-size: 20px; font-weight: 800; padding: 0; box-shadow: 0 3px 0 #7d8aa3; transition: transform .06s, box-shadow .06s; }
+.wl-root .wl-key:active { background: var(--wl-sel); transform: translateY(2px); box-shadow: 0 1px 0 #7d8aa3; }
 
 /* --- done --- */
 .wl-root .wl-is-done { padding-top: calc(var(--wl-below) + 12px); }
 .wl-root .wl-final { gap: 5px; justify-content: center; }
 .wl-root .wl-final .wl-goal.is-won .wl-t { width: var(--wl-small); height: var(--wl-small); font-size: calc(var(--wl-small) * .58);
-  border: 0; background: var(--wl-gold); color: var(--wl-ink); }
+  border: 0; background: var(--wl-gold); color: var(--wl-ink); box-shadow: 0 2px 0 var(--wl-gold-edge); }
+/* Just finished: each row lights up in turn (60ms apart), then the stars fill one at a time. */
+.wl-root .wl-final .wl-w.is-lit { animation: wl-lit .34s ease-out both; animation-delay: var(--d, 0ms); }
+@keyframes wl-lit { 0% { opacity: .35; transform: scale(.94); filter: brightness(.7); } 55% { opacity: 1; transform: scale(1.06); filter: brightness(1.3); } 100% { transform: none; filter: none; } }
+.wl-root .wl-star { position: relative; display: block; width: 40px; height: 40px; }
+.wl-root .wl-star svg { position: absolute; inset: 0; }
+.wl-root .wl-star svg + svg { filter: drop-shadow(0 2px 0 var(--wl-gold-edge)); }
+.wl-root .is-fresh .wl-star.is-on svg + svg { animation: wl-star .32s cubic-bezier(.3,1.6,.5,1) both; }
+.wl-root .is-fresh .wl-star.is-on:nth-child(1) svg + svg { animation-delay: var(--d0, 0ms); }
+.wl-root .is-fresh .wl-star.is-on:nth-child(2) svg + svg { animation-delay: calc(var(--d0, 0ms) + 160ms); }
+.wl-root .is-fresh .wl-star.is-on:nth-child(3) svg + svg { animation-delay: calc(var(--d0, 0ms) + 320ms); }
+@keyframes wl-star { 0% { transform: scale(0) rotate(-30deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.wl-root .wl-prog { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 17px; font-weight: 700; color: #33415c; white-space: nowrap; }
+.wl-root .wl-prog svg { width: 20px; height: 20px; flex: none; }
+.wl-root .wl-prog svg.lb-dshape-x2 { width: 30px; }
+.wl-root .wl-next-in { font-variant-numeric: tabular-nums; }
 .wl-root .wl-card { flex: none; position: relative; margin: 8px auto 0; width: 100%; max-width: 400px; border-radius: 20px;
   background: #fff; color: var(--wl-ink); padding: 20px 18px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px;
   box-shadow: 0 8px 30px rgba(0,0,0,.35); }
 .wl-root .wl-card .wl-x, .wl-root .wl-sheet .wl-x { position: absolute; top: 8px; right: 8px; background: rgba(16,32,60,.08); color: var(--wl-ink); }
-.wl-root .wl-card-h { margin: 0; font-size: 26px; font-weight: 800; }
+.wl-root .wl-card-h { margin: 0; font-size: 28px; font-weight: 800; }
 .wl-root .wl-stars { display: flex; gap: 8px; color: var(--wl-ink); }
 .wl-root .wl-count-card { color: var(--wl-ink); }
 .wl-root .wl-card .wl-btn { border-color: var(--wl-gold); }
@@ -135,14 +192,39 @@
 .wl-root .wl-flag-in { display: inline-block; vertical-align: -4px; color: var(--wl-gold); }
 .wl-root .wl-flag-in svg { stroke: none; }
 .wl-root .wl-gotit { margin-top: 14px; min-height: 52px; }
+/* How to play's star key: two little columns, moves and hints, each row a label and three stars. */
+.wl-root .wl-sk { display: flex; justify-content: center; gap: 22px; margin: 12px 0 2px; }
+.wl-root .wl-sk-c { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 8px; row-gap: 4px; }
+.wl-root .wl-sk-l { font-size: 17px; font-weight: 800; text-align: right; white-space: nowrap; display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.wl-root .wl-sk-s { display: inline-flex; gap: 1px; }
+.wl-root .wl-sk-b { display: inline-grid; color: #c98d00; }
+.wl-root .wl-sk-b svg { width: 20px; height: 20px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .wl-root .wl-now.is-shake { animation: none; }
+  .wl-root .wl-now.is-shake, .wl-root .wl-now.is-new, .wl-root .wl-now .wl-t.is-flip, .wl-root .wl-now .wl-t.is-bad::after,
+  .wl-root .wl-final .wl-w.is-lit, .wl-root .is-fresh .wl-star.is-on svg + svg { animation: none !important; }
   .wl-root .wl-wait { animation: none; }
+  /* The tip still points, without moving: a thick gold ring. */
+  .wl-root .wl-t.is-tip, .wl-root .wl-key.is-tip { animation: none; box-shadow: 0 0 0 4px var(--wl-sel), 0 4px 0 #9aa6bb; }
+  .wl-root .wl-btn, .wl-root .wl-icon, .wl-root .wl-key, .wl-root .wl-seg, .wl-root .wl-now .wl-t { transition: none; }
 }
 /* Short phones (360x640): the picture shrinks so the four difficulties, Play, Daily and ? fit without scrolling. */
 @media (max-height: 720px) {
-  .wl-root .wl-hero { width: 140px; }
-  .wl-root .wl-home { gap: 12px; }
+  .wl-root .wl-hero { height: 92px; }
+  .wl-root .wl-home { gap: 10px; }
   .wl-root .wl-title { font-size: clamp(24px, 7vw, 28px); }
+  .wl-root .wl-seg { min-height: 58px; padding: 4px 10px 5px; gap: 3px; }
+  .wl-root .wl-btn { min-height: 52px; }
+  /* The play screen gives the ladder more room: less space above the counters, a tighter keyboard. */
+  .wl-root .wl-row2 { margin-top: 10px; }
+  .wl-root .wl-kb { gap: 6px; }
+  .wl-root .wl-key { height: 46px; }
+  .wl-root .wl-tools { padding-bottom: 4px; }
+  /* How to play fits a 360x640 phone with room to spare. */
+  .wl-root .wl-sheet { padding-top: 12px; }
+  .wl-root .wl-how-svg { height: 136px; width: auto; margin-top: 8px; }
+  .wl-root .wl-sheet p { margin-top: 4px; }
+  .wl-root .wl-sk { margin-top: 8px; }
+  .wl-root .wl-sk-c { row-gap: 2px; }
+  .wl-root .wl-gotit { margin-top: 10px; }
 }

@@ -14,7 +14,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 | Folder / hub id / stats id | `word-ladder/` / `word-ladder` / `wordladder` |
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
 | Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
-| Settings | `gamehub.wordladder.v1` `{ lang, seen, band }` (puzzle language; nothing saved = the hub's language) |
+| Settings | `gamehub.wordladder.v1` `{ lang, seen, band, tip1 }` (puzzle language; nothing saved = the hub's language; `tip1` = the first-move tip shown) |
 | Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, s, p, chain, moves, hints, done, recorded }` (older saves also carry an unread `sel`) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
 
@@ -25,7 +25,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   that shakes the word and says "Tap a letter first". The new word must change exactly that one
   letter and be on the word list, else "Not a word" and a shake. A letter already right (same as the target's at that
   place) is a SOLID BRIGHT GREEN tile (`--wl-match` #22b84f; "make it a better green", 2026-11-14), nothing else (Matt, 2026-11-14: "Just make it green"; a dot under the letter and
-  then a folded corner were both rejected; his call over the shape-plus-colour rule). The target row has dashed gold tiles and a flag.
+  then a folded corner were both rejected; his call over the shape-plus-colour rule), its letter NAVY (6.2:1; white was 2.6:1, 2026-11-19). The target row has dashed gold tiles and a flag.
 - **Moves count every change, Undo too** (an undo is a move back). Par = the fewest changes possible.
 - **Stars**: moves at par 3, par +1 or +2 = 2, more = 1; 1 hint caps at 2, 2+ hints at 1 (`starsFor`, = `wlStars` in
   `js/game-stats.js`). **Hint** = plays the next word on a shortest path from where you are (the commonest one) and
@@ -48,6 +48,17 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   first time a device reaches a level (`seen` in `gamehub.wordladder.v1`, a preference), with a drawn example ladder
   (`howSVG`: each step's changed letter outlined gold, arrows, the flag) and a Got it button; until the first move the
   line above Undo/Hint reads "Change one letter. Get to <target>." (`_coach`). Each help line fits one row at 360px.
+
+- **Feel (2026-11-19 UI/UX review, graded C+; `CLAUDE-HISTORY.md`)**: a step drops the new word in and flips the changed tile
+  (~180ms; a tile turning green fills); a word not on the list shows the tried letter in a navy tile with a gold X for ~0.7 s, shakes,
+  then goes back (the next tap cancels it at once: no move is ever lost); every earlier word's changed letter has How to play's gold
+  outline; dashed empty rungs between the word and the target = par - moves - 1, never below 0 (moves left at par, no spoiler);
+  the done screen lights the ladder row by row (60ms, 600ms at most) then fills the stars one at a time; heading "Par!" at 3 stars,
+  else "Solved"; one progress line (`Medium · 12 of 150`, or the daily's date and a ticking "Next in H:MM:SS" to local midnight
+  of `bestNow()`). Next is live at once. Every animation is off under `prefers-reduced-motion`.
+- **First-move tip (2026-11-19)**: on a device's first level only, after the auto How to play's Got it, the letter that starts
+  the level's par path (`h[1]`) pulses, then its key once that letter is tapped; it ends at the first move. Nothing is picked
+  for the player. Shown once (`tip1`), reported via `js/tips-log.js` (`wordladder` / `first-move`; `tools/read-tips.mjs wordladder`).
 
 ## Data (GENERATED: `node tools/build-word-ladder-data.mjs`, never hand-edited)
 
@@ -92,9 +103,13 @@ one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`,
 
 ## Layout
 
-Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it:
-back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes from the
-room; earlier words folded under a ⋮ when they do not fit; tiles never under 32px, so earlier words' letters stay over 11px). The
+Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it (10px
+on short phones): back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes
+from the room; when earlier words do not fit: the FIRST word, a ⋮, then the last ones; the tile shrinks (not under 34px) until
+3 earlier words show, so a 360x640 Expert ladder keeps 28-29px earlier tiles with 16px letters; the rungs take what is left).
+Start screen: the title picture is a real ladder (COLD CORD WORD WARD WARM, cold to warm; Spanish MAR MAL SAL SOL), each
+difficulty shows `12/100` and a thin bar. How to play's star rules are a drawn key (Par / +1 / +2 / More, and bulb 0 / 1 / 2+,
+each with its stars). Buttons, keys, and tiles have a bottom edge that presses in. The
 done screen's ladder (`_fitFinal`, refit on resize) keeps 30-44px tiles and shows the first word, a ⋮ and the last words when it
 is too long (2026-11-13 review: an 18-word ladder had shrunk to 16px tiles, 9px letters, and overflowed). **Keys are 10 across like a phone keyboard, so narrower
 than 44px** (33px at 360, 37px at 402, edge to edge with 3px gaps; a documented departure from the 44x44 floor; 50px tall).

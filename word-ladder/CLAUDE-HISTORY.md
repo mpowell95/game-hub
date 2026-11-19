@@ -73,3 +73,21 @@ Hard and Expert: a rising par (4 at the start of the band, 5-6 at its end).
 languages): every band's first level by taps at par, an invalid word, a key before a letter, undo, hint, leave and resume,
 the daily, Ñ by taps, How to play, the done card, the back swipe, the hub's Back, and history not growing: 132 of 133
 checks passed; the one failure was the hub's Messages read refused on localhost (not Word Ladder).
+
+
+## 2026-11-19: the UI/UX review's list, built (admin only, not cleared for players)
+
+Matt: "have a different agent review the game for UI/UX ... I still will not be satisfied or release it until the reviewer is
+impressed." The reviewer graded C+ (flat: no motion on a correct step, no finish moment, a sparse middle, the white letters on
+green hard to read, the stars explained in text). Built from its ranked list: the step animation (drop, flip, green fill); the
+finish (rows light up 60ms apart, stars pop one at a time, "Par!" / "Solved", progress or the daily's date and countdown); the
+gold outline on each earlier word's changed letter (play and done); navy letters on the green (Matt's green kept, no shapes, as he
+asked); the wrong word shown in its tile (navy, gold X, no red) before the shake; dashed rungs for the moves left at par
+(par - moves - 1: counted from the start, shrinking with every move, undo included, so it never claims a path exists from
+here); the first word kept in sight when earlier words fold, and at least 3 earlier words at 360x640 (the tile shrinks first;
+a shorter keyboard and less space above the counters on short phones); the first-move tip (the par path's letter, then key,
+once per device, reported); How to play's star key drawn; the title picture as a real ladder (English COLD to WARM, Spanish
+MAR to SOL); progress per difficulty on the start screen; Spanish "Llega a la palabra 🏁." and "Primero toca una letra";
+pressable depth on buttons, keys, and tiles. Not built, on purpose: smart keys that play a letter without a tapped tile (Matt's
+rule, 2026-11-14), any change to level data, removing the game's own back arrow. Nothing recorded, saved, or logged changed
+(only the additive `tip1` preference).
