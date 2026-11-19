@@ -42,6 +42,10 @@ for (const lang of ['en', 'es']) {
     }
   };
   levels.levels.forEach((l, i) => check(l, `${lang} level ${i + 1}`, i + 1));
+  // Each level's puzzle version (`v`, absent = 1) is the engine's REMADE table: progress is stored under it.
+  levels.levels.forEach((l, i) => ok((l.v || 1) === E.levelVersion(lang, i + 1), `${lang} level ${i + 1}: v ${l.v || 1} but REMADE says ${E.levelVersion(lang, i + 1)}`));
+  // Days already played never change (the 2026-11-19 remake touched only days 8 on, 2026-11-21 and later).
+  daily.levels.slice(0, 8).forEach((l, i) => ok(!l.v, `${lang} day ${i}: a past day was remade`));
   daily.levels.forEach((l, i) => check(l, `${lang} day ${i}`, 0));
 }
 
@@ -62,6 +66,13 @@ ok(a.chain.join(' ') === 'COLD CORD' && a.moves === 1 && a.hints === 2 && !a.don
 ok(E.cleanAttempt(null, lv, dict).chain.join() === 'COLD', 'no save = the start word');
 const other = E.cleanAttempt({ chain: ['CARD', 'CORD'], moves: 1, hints: 1 }, lv, dict);
 ok(other.chain.join() === 'COLD' && other.moves === 0 && other.hints === 0, 'a save from another puzzle counts no moves or hints here');
+const lv2 = E.cleanLevel({ s: 'COLD', t: 'WARM', p: 4, h: 'COLD CORD WORD WARD WARM', v: 2 });
+ok(lv2.v === 2 && lv.v === 1, 'cleanLevel keeps the puzzle version (absent = 1)');
+const oldVer = E.cleanAttempt({ s: 'COLD', chain: ['COLD', 'CORD'], moves: 1, hints: 1 }, lv2, dict);
+ok(oldVer.chain.join() === 'COLD' && oldVer.moves === 0 && oldVer.hints === 0, 'a save from an earlier version of a remade level (same start) counts nothing');
+const sameVer = E.cleanAttempt({ s: 'COLD', ver: 2, chain: ['COLD', 'CORD'], moves: 1 }, lv2, dict);
+ok(sameVer.chain.join() === 'COLD,CORD' && sameVer.moves === 1, 'a save of the same version resumes');
+ok(E.levelVersion('en', 250) === 1 && E.levelVersion('en', 251) === 2 && E.levelVersion('es', 1) === 2 && E.levelVersion('es', 101) === 1 && E.levelVersion('es', 500) === 2, 'levelVersion');
 const kept = E.cleanAttempt({ chain: ['COLD', 'CORD', 'GONE', 'WARM'], moves: 3, hints: 1, done: true, recorded: true }, lv, dict);
 ok(kept.done && kept.chain.length === 4 && kept.moves === 3, 'a finished, recorded save is kept even if a word left the list');
 

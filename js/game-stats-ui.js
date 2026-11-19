@@ -12,7 +12,7 @@
 // per-game screens) are both exported so the Leaderboard's player detail screen can reuse them
 // verbatim - see the export block at the bottom of this file.
 
-import { loadStoredStats, statsId, holdemBalance } from './game-stats.js';
+import { loadStoredStats, statsId, holdemBalance, wlLevels } from './game-stats.js';
 import { loadProfile } from './profile-store.js';
 import { isGameLive, corrections, isAdminDevice } from './admin-config.js';
 import { correctStats, fullLevelStats, adjustStats, adjustModesStats, withHandAdjust, handResultsStats, flickTestStats, TOWER_BEFORE } from './stats-corrections.js';
@@ -1581,12 +1581,17 @@ function airHockeyScreen(rec) {
 function wordLadderScreen(rec) {
   const wl = (rec && rec.wl) || {};
   const ents = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.values(m).filter((e) => e && typeof e === 'object') : []);
-  const ladder = [...ents(wl.lv), ...ents(wl.es)];
+  // Each level NUMBER once (2026-11-19 remake): its best over every puzzle version, so an old solve of a remade level
+  // still counts and a replay of the new puzzle is never counted twice (wlLevels).
+  const rows = [...wlLevels(rec).values()];
+  const ladder = rows.map((r) => r.e);
   const daily = ents(wl.dl);
   if (!ladder.length && !daily.length && !((rec && rec.total && rec.total.played) | 0)) return emptyState(tf('game_title_wordladder', 'Word Ladder'));
   const stars = ladder.reduce((n, e) => n + (e.s | 0), 0);
   // At par = ladder levels finished in par moves (hints or not); the daily has its own tally.
   const three = ladder.filter((e) => (e.m | 0) > 0 && (e.p | 0) > 0 && (e.m | 0) <= (e.p | 0)).length;
+  // Earlier puzzles = levels finished before they were remade (kept, counted above, and shown as what they are, rule 3).
+  const earlier = rows.filter((r) => r.old.length).length;
   return `
     <div class="gs-tallies is-4">
       <div class="gs-tally"><b>${ladder.length}</b><span>${tf('gs_wl_levels', 'Levels')}</span></div>
@@ -1594,6 +1599,7 @@ function wordLadderScreen(rec) {
       <div class="gs-tally"><b>${three}</b><span>${tf('gs_wl_three', 'At par')}</span></div>
       <div class="gs-tally"><b>${daily.length}</b><span>${tf('gs_wl_daily', 'Daily')}</span></div>
     </div>
+    ${earlier ? `<div class="gs-tallies"><div class="gs-tally"><b>${earlier}</b><span>${tf('gs_wl_earlier', 'Earlier puzzles')}</span></div></div>` : ''}
     ${diffTable(rec && rec.byDiff)}`;
 }
 

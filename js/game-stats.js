@@ -3703,13 +3703,50 @@ export function wlBandOf(n) { return n >= 401 ? 'expert' : n >= 251 ? 'hard' : n
 /** Distinct ladder levels completed (English + Spanish), optionally one band: the board number, counted from the merged
  *  per-level maps, so a level finished on two phones counts once (2026-11-13 review). The daily is not a level. */
 export function wlSolved(gm, band) {
-  const wl = (gm && gm.wl) || {};
   let c = 0;
-  for (const m of [wl.lv, wl.es]) if (m && typeof m === 'object') for (const k of Object.keys(m)) {
-    const lv = Number(k.slice(1));
-    if (Number.isInteger(lv) && lv >= 1 && (!band || wlBandOf(lv) === band)) c++;
-  }
+  for (const r of wlLevels(gm).values()) if (!band || wlBandOf(r.n) === band) c++;
   return c;
+}
+/** REMADE LEVELS (2026-11-19, Matt: "Yes, remake the levels. Keep whatever points I've earned, if any"): the puzzle version
+ *  of each level number, = word-ladder/js/engine.js REMADE (tools/test-word-ladder.mjs checks they agree; the data's `v`
+ *  is checked by word-ladder/js/data-test.js). [first, last, version]; a number in no range is version 1.
+ *  A result is stored under its puzzle: `L<n>` for version 1 (every entry before the remake), `L<n>v<ver>` after
+ *  (wlKey). An entry is NEVER moved, renamed, or dropped (rule 5): an old solve of a remade number stays `L<n>` and
+ *  still counts (wlSolved, the stars), shown on My Stats as an earlier puzzle (rule 3). */
+export const WL_REMADE = { en: [[251, 500, 2]], es: [[1, 100, 2], [251, 500, 2]] };
+export function wlVersion(lang, n) {
+  for (const [a, b, v] of WL_REMADE[lang === 'es' ? 'es' : 'en']) if (n >= a && n <= b) return v;
+  return 1;
+}
+/** The stats key of level `n`'s puzzle version `ver` (1 = `L<n>`, the key every result had before the remake). */
+export function wlKey(n, ver) { const v = Math.floor(Number(ver) || 1); return v > 1 ? `L${n}v${v}` : `L${n}`; }
+/** { n, v } of a stats key (`L12` = level 12 version 1, `L401v2` = level 401 version 2), or null. */
+export function wlParseKey(k) {
+  const m = /^L(\d+)(?:v(\d+))?$/.exec(String(k));
+  if (!m) return null;
+  const n = Number(m[1]), v = m[2] ? Number(m[2]) : 1;
+  return n >= 1 && v >= 1 ? { n, v } : null;
+}
+/** Every ladder level NUMBER finished, per language: Map '<en|es>:<n>' -> { lang, n, e: the best entry over every puzzle
+ *  version of that number (wlBest: more stars first), cur: the CURRENT version's entry or null, old: earlier versions'
+ *  entries }. A number counts ONCE however many of its versions were finished (never double counted), and an old solve
+ *  keeps counting after a remake (never lost). Pure. */
+export function wlLevels(gm) {
+  const wl = (gm && gm.wl) || {};
+  const out = new Map();
+  for (const [lang, m] of [['en', wl.lv], ['es', wl.es]]) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) continue;
+    for (const k of Object.keys(m)) {
+      const p = wlParseKey(k), e = m[k];
+      if (!p || !e || typeof e !== 'object' || Array.isArray(e)) continue;
+      const id = `${lang}:${p.n}`;
+      const row = out.get(id) || { lang, n: p.n, e: null, cur: null, old: [] };
+      row.e = wlBest(row.e, e);
+      if (p.v === wlVersion(lang, p.n)) row.cur = e; else row.old.push(e);
+      out.set(id, row);
+    }
+  }
+  return out;
 }
 /** Word Ladder stars, the same rule as word-ladder/js/engine.js starsFor (moves at par 3, up to 2 over 2, else 1;
  *  1 hint caps at 2, 2+ at 1). */
@@ -3720,9 +3757,9 @@ function wlStars(moves, par, hints) {
 const WL_TIERS = ['easy', 'medium', 'hard', 'expert'];
 /** Word Ladder: a ladder level finished. The FIRST completion of a level on this store is one play and one win in its
  *  band (`band`, one of easy/medium/hard/expert, from word-ladder/js/engine.js bandOf); a later one only improves its
- *  entry. `lang: 'es'` = the Spanish ladder (`wl.es`). The caller wraps it in withMode({ mode: 'ladder', lang }, band, ...).
+ *  entry. `lang: 'es'` = the Spanish ladder (`wl.es`). `ver` = the level's puzzle version (wlKey). The caller wraps it in withMode({ mode: 'ladder', lang }, band, ...).
  *  Returns the store, or null when rate-gated or `level` is not a positive integer (nothing written: rule 4). */
-export function recordWordLadder(level, { moves, par, hints, lang, band } = {}) {
+export function recordWordLadder(level, { moves, par, hints, lang, band, ver } = {}) {
   if (tooFast('wordladder')) return null;
   notePlay('wordladder', 'recordWordLadder', arguments);
   const n = Number(level);
@@ -3731,7 +3768,9 @@ export function recordWordLadder(level, { moves, par, hints, lang, band } = {}) 
   const g = st.games.wordladder;
   ensureWl(g);
   const map = lang === 'es' ? (g.wl.es || (g.wl.es = {})) : g.wl.lv;
-  const k = 'L' + n;
+  // The puzzle actually solved: `ver` = the level's data `v` (absent = 1: every attempt saved before the 2026-11-19
+  // remake was a version 1 puzzle). A remade number's new result never lands on (or improves) the old puzzle's entry.
+  const k = wlKey(n, ver);
   if (!map[k]) bumpTotals(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder', true);
   else if (_mode) _mode.noted = true;
   const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };

@@ -107,3 +107,55 @@ only; nothing recorded, saved, or logged changed.
 The coach line had 4-7px under the target at 360x640 (now 17-18px); the key's tip arrow covered the key above (now short, in
 the gap); the tip ring looked like the selected outline (now dashed); the streak's double chevron read as "rank up" (now a small
 flame); the rails' crossbars ran through the empty slots (now only between rows).
+
+## 2026-11-19: the levels remade, earned progress kept
+
+Matt: "1. Yes, remake the levels. Keep whatever points I've earned, if any. 2. Revaluate once the difficulties are modified."
+Still admin only; nothing released.
+
+**What was remade** (`node tools/build-word-ladder-data.mjs --remake en:251-500,es:1-100,es:251-500 --daily-from 8`): English
+Hard and Expert (251-500), Spanish Easy (1-100), Spanish Hard and Expert (251-500): 600 levels. English Easy, both Mediums,
+and every English daily are unchanged. Spanish dailies from day 8 (2026-11-21) on were remade only when bad: par under 3 (day
+433 VENDE->MENTE, par 2), a par reachable only through a word outside Word Weaver's lists (day 216, OIGAN->HADAS), or a start or
+target on the rude list (CAGO, CAGAR): days 216, 279, 293, 356, 362, 428, 430, 433, 438, 506, 516, 533, 602, 645, 676, 686, 689,
+and 722 (2027-06-17 to 2028-11-04). Day 661 kept its puzzle, only its hint path changed (it went through CAGO). Days 0-7 never.
+
+**How**: for each band, every candidate ladder (start and target common, par the true minimum over every accepted word AND
+reachable through Word Weaver words, so no Scrabble-only step is ever needed) is measured: par, whether greedy play (always
+change toward the target, commonest word first) finishes at par, and the number of shortest paths. Each level then takes the
+par and greedy outcome its band's curve asks for at its place (`REMAKE_SPECS`: Easy par 3.15 to 3.55 and greedy 86% to 76%;
+Hard par 4.3 to 5.5 and greedy 52% to 30%; Expert par 5.0 to 6.4 and greedy 26% to 10%, English flatter: few 6-letter
+ladders exist), drawn from an even sequence (xorshift pairs ran 47% greedy where 31% was asked), last level first (the scarce
+long ladders go to the end of the band). English 6-letter ladders through Word Weaver words are scarce (about 160 of par 5 or
+more), so Expert's start and target may be any Word Weaver word (grid or extra), a word up to 5 times; a few were read as poor
+ends and are steps only (`NOT_END`: CUTLER, REDDER, HITHER, STOKER, TUCKER, NEIGHS, FRANCS, CASACA, CASABA). The rude list gained
+CAG..., TARADO, and NALGAS (BUTTS is on the English one): legal steps, never a start, target, or hint.
+
+**Before and after** (`docs/WORD-LADDER-POINTS-PROPOSAL.md` too; par = average; greedy = finishes at par; paths = median
+shortest paths; branch = average neighbours of the par path's words; uncommon = par needs a word outside Word Weaver's lists):
+
+| Band (halves) | Before: par / greedy / paths / branch / uncommon | After |
+|---|---|---|
+| EN Easy 1-50 / 51-100 | 3.2, 3.5 / 82%, 78% / 3, 4 / 20 / 0% | unchanged |
+| EN Medium 101-175 / 176-250 | 4.0, 4.5 / 72%, 49% / 3, 6 / 15.5 / 0% | unchanged |
+| EN Hard 251-325 / 326-400 | 4.6, 4.6 / 64%, 67% / 4, 3 / 10.4 / 0% | 4.6, 5.2 / 47%, 35% / 7, 3 / 14.3, 12.2 / 0% |
+| EN Expert 401-450 / 451-500 | 4.9, 5.1 / 48%, 42% / 2, 2 / 7.4 / 78%, 98% | 4.8, 5.6 / 32%, 20% / 4, 6 / 9.3, 8.6 / 0% |
+| ES Easy 1-50 / 51-100 | 3.1, 3.3 / 96%, 96% / 3, 4 / 14.7 / 0% | 3.3, 3.4 / 84%, 78% / 4, 2 / 14.4, 12.8 / 0% |
+| ES Medium 101-175 / 176-250 | 4.0, 4.5 / 84%, 65% / 8, 12 / 17 / 0-1% | unchanged |
+| ES Hard 251-325 / 326-400 | 4.7, 4.7 / 56%, 67% / 4, 4 / 11.4 / 3-4% | 4.6, 5.2 / 47%, 35% / 9, 4 / 14.8, 11.1 / 0% |
+| ES Expert 401-450 / 451-500 | 4.2, 4.5 / 76%, 60% / 3, 2 / 8.7 / 6%, 54% | 5.4, 6.1 / 24%, 12% / 14, 5 / 11.5, 8.2 / 0% |
+
+Honest limits: English Expert's first half (par 4.8) has a lower average par than English Hard's second half (5.2); it is still
+harder by length (6 letters), greedy rate (32% against 35%), and branching (9.3 against 12.2). The shortest-path count is not a
+clean step (longer pars have more ways through).
+
+**Earned progress (THE LAW)**: progress was keyed by level NUMBER, so after a remake `L401` would name a different puzzle. Now
+each remade level and day carries `v: 2`; a result is stored under `wlKey(n, ver)` (`L401v2`), the old `L401` never moves, and
+`wlLevels` counts each number once at its best entry over all versions (board, stars, any future points). My Stats shows the old
+ones as "Earlier puzzles". The start screen's bars and Play <n> follow the current puzzles (Matt replays remade levels), a save
+from an older version never resumes (`cleanAttempt` checks `ver`), and a save from before this change has no `ver` = version 1,
+which is exactly what it was played on. Proven against real history: `tools/test-word-ladder.mjs` loads `js/game-stats.js` from
+git 5dd10bc, records solves of remade and kept levels with it, then reads and replays them with today's code (entries
+byte-identical, board count and stars unchanged, a replay not double counted, a worse replay never lowering, two phones merged
+once). Headless play on localhost (test1 / DREG5): remade levels in every remade band and language by taps at par, plus a store
+seeded with old solves (stars 23 kept, Expert 0/100 then 1/100, My Stats 9 levels and 7 earlier puzzles): 44 of 44 checks.

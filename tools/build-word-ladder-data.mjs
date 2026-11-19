@@ -33,6 +33,11 @@
 // 251-400 Hard (5 letters, par 4-6), 401-500 Expert (6 letters, par 4-6) (2026-11-14; until then Hard/Expert were 4-5 letters).
 // `--keep-all` (2026-11-19): every level and daily stays; only par and the hint path are worked out again (new words).
 // `--keep-through 250` (used 2026-11-14) keeps levels 1-250 and every daily as shipped and remakes only 251-500. Bands: word-ladder/js/engine.js.
+// `--remake en:251-500,es:1-100,es:251-500 --daily-from 8` (used 2026-11-19): remakes only those ranges (REMAKE_SPECS: a rising
+// curve inside each band, every par path through Word Weaver words) and the future dailies from day 8 that have a par under 3, a
+// rude end, or a par only through an obscure word; everything else keeps its start, target, par, and number. Remade levels and
+// days carry `v` (version 2); results are stored per version (js/game-stats.js wlKey), so earned progress is kept. Run it on
+// the data as committed BEFORE a remake (it bumps `v` each time), and add the ranges to engine.js REMADE and game-stats WL_REMADE.
 // Daily: 4 letters par 4-6 or 5 letters par 4-5, common words. No start/target PAIR repeats anywhere; a word is a start
 // or target at most MAX_USES times in each language. Seeded: the same sources always give the same data.
 //
@@ -40,6 +45,7 @@
 // everything; after it, only append (word-ladder/js/data-test.js pins the shipped levels by hash).
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const RARE = 200000;
@@ -50,6 +56,108 @@ const MAX_USES = 3;
 const KEEP_ALL = process.argv.includes('--keep-all');
 const KEEP = (() => { const i = process.argv.indexOf('--keep-through'); return i > 0 ? Number(process.argv[i + 1]) | 0 : 0; })();   // a word is a start or target at most this often per language
 
+// --remake en:251-500,es:1-100,es:251-500 --daily-from 8 (2026-11-19): see build(). Each range is split at the band edges
+// (Easy 1, Medium 101, Hard 251, Expert 401) and each band made with its REMAKE_SPECS row.
+const BAND_FIRST = [['easy', 1], ['medium', 101], ['hard', 251], ['expert', 401]];
+const DAILY_FROM = (() => { const i = process.argv.indexOf('--daily-from'); return i > 0 ? Number(process.argv[i + 1]) | 0 : Infinity; })();
+
+/** Rising curves inside a band (x = 0 at its first level, 1 at its last): `par(x)` = the average par wanted, `greedy(x)` =
+ *  how often greedy play (always change toward the target, commonest word first) should finish at par. Start and target:
+ *  `ends` 'grid' = Word Weaver grid words, 'ww' = any Word Weaver word (grid or extra; 6-letter grid words alone give
+ *  too few ladders), both with rank cap `cap`. Every step of the par path is a Word Weaver word (grid or extra). */
+const REMAKE_SPECS = {
+  easy: { len: 3, pmin: 3, pmax: 4, cap: Infinity, ends: 'grid', par: (x) => 3.15 + 0.4 * x, greedy: (x) => 0.86 - 0.1 * x },
+  hard: { len: 5, pmin: 4, pmax: 7, cap: 15000, ends: 'grid', par: (x) => 4.3 + 1.2 * x, greedy: (x) => 0.52 - 0.22 * x },
+  expert: { len: 6, pmin: 4, pmax: 8, cap: Infinity, ends: 'ww', maxUses: 4, par: (x) => 5.0 + 1.4 * x, greedy: (x) => 0.26 - 0.16 * x,
+    // English has few 6-letter ladders through Word Weaver words (about 160 of par 5 or more): a flatter curve, or the
+    // start of the band gets only the par-4 ladders greedy play solves.
+    en: { maxUses: 5, par: (x) => 4.9 + 0.9 * x, greedy: (x) => 0.3 - 0.14 * x } },
+};
+// Word Weaver words read by hand as poor starts or targets for a remade level (names first, old or odd words): steps only.
+const NOT_END = new Set('CUTLER REDDER HITHER STOKER TUCKER NEIGHS FRANCS CASACA CASABA'.split(' '));
+const hamming = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+/** Greedy play: from `s`, always the not-yet-seen neighbour with the most letters right, commonest first (`ord`). True
+ *  when it reaches `t` in exactly `p` moves. */
+function greedyAtPar(nb, ord, s, t, p) {
+  let w = s, k = 0;
+  const seen = new Set([w]);
+  while (w !== t && k < 30) {
+    const c = nb.get(w).filter((x) => !seen.has(x));
+    if (!c.length) break;
+    c.sort((a, b) => hamming(a, t) - hamming(b, t) || ord.get(a) - ord.get(b));
+    w = c[0]; seen.add(w); k++;
+  }
+  return w === t && k === p;
+}
+/** Every candidate ladder of a band: pool[p][g] = [{ s, t, p, np }] (g 1 = greedy finishes at par, np = shortest paths over
+ *  every accepted word), most paths first. Par is the true minimum and a par path exists through Word Weaver words. */
+function remakePool(lang, spec, { byLen, graphs, commonGraphs, grid, ranks, rank }) {
+  const nb = graphs[spec.len], cnb = commonGraphs[spec.len];
+  const ord = new Map(byLen[spec.len].map((w, i) => [w, i]));
+  const isEnd = (w) => cnb.has(w) && !NOT_END.has(w) && rank(w) <= spec.cap && (spec.ends === 'ww' || grid.has(w)) && (grid.has(w) || ranks.has(w));
+  const pool = {};
+  for (const s of byLen[spec.len].filter(isEnd)) {
+    const d = bfs(nb, s), dc = bfs(cnb, s);
+    const memo = new Map([[s, 1]]);
+    const cnt = (w) => {
+      if (memo.has(w)) return memo.get(w);
+      let c = 0;
+      for (const n of nb.get(w)) if (d.get(n) === d.get(w) - 1) c += cnt(n);
+      c = Math.min(c, 1e6);
+      memo.set(w, c);
+      return c;
+    };
+    for (const [t, p] of dc) {
+      if (p < spec.pmin || p > spec.pmax || d.get(t) !== p || !isEnd(t)) continue;
+      const g = greedyAtPar(nb, ord, s, t, p) ? 1 : 0;
+      ((pool[p] ||= {})[g] ||= []).push({ s, t, p, g, np: cnt(t) });
+    }
+  }
+  for (const p of Object.keys(pool)) for (const g of Object.keys(pool[p])) pool[p][g].sort((a, b) => b.np - a.np || (a.s + a.t < b.s + b.t ? -1 : 1));
+  console.log(lang, spec.len, 'pool', Object.fromEntries(Object.entries(pool).map(([p, o]) => [p, `${(o[1] || []).length} greedy / ${(o[0] || []).length} not`])));
+  return pool;
+}
+/** One ladder for position x of a band: the par and greedy outcome its curve wants (the nearest bucket that still has a
+ *  ladder whose pair is unused and whose words are used under MAX_USES times); later in the band, fewer shortest paths. */
+function pickFromPool(pool, spec, x, R, used, uses, n) {
+  // Par and the greedy outcome are drawn from an even (low-discrepancy) sequence over the level number, so a band gets
+  // the mix its curve asks for (the xorshift draws in pairs ran 47% greedy where 31% was asked).
+  const u1 = (n * 0.6180339887) % 1, u2 = (n * 0.7548776662 + 0.5) % 1;
+  const want = spec.par(x);
+  const p0 = Math.min(spec.pmax, Math.max(spec.pmin, Math.floor(want) + (u1 < want - Math.floor(want) ? 1 : 0)));
+  const g0 = u2 < spec.greedy(x) ? 1 : 0;
+  const order = [];
+  for (const dp of [0, 1, -1, 2, -2, 3, -3]) for (const g of [g0, 1 - g0]) order.push([p0 + dp, g]);
+  // Same par first with the other greedy outcome only after one step of par either way.
+  order.sort((a, b) => (Math.abs(a[0] - p0) + (a[1] === g0 ? 0 : 1.5)) - (Math.abs(b[0] - p0) + (b[1] === g0 ? 0 : 1.5)));
+  for (const [p, g] of order) {
+    const list = ((pool[p] || {})[g] || []).filter((c) => !used.has([c.s, c.t].sort().join('-')) && (uses.get(c.s) || 0) < (spec.maxUses || MAX_USES) && (uses.get(c.t) || 0) < (spec.maxUses || MAX_USES));
+    if (!list.length) continue;
+    const pos = Math.min(0.999, Math.max(0, x * 0.75 + R() * 0.25));
+    return { ...list[Math.floor(pos * list.length)] };
+  }
+  return null;
+}
+
+const REMAKE = (() => {
+  const i = process.argv.indexOf('--remake');
+  if (i < 0) return null;
+  const out = [];
+  for (const part of String(process.argv[i + 1] || '').split(',')) {
+    const m = /^(en|es):(\d+)-(\d+)$/.exec(part);
+    if (!m) throw new Error('--remake: bad range ' + part);
+    BAND_FIRST.forEach(([band, first], k) => {
+      const last = k + 1 < BAND_FIRST.length ? BAND_FIRST[k + 1][1] - 1 : LEVELS;
+      const lo = Math.max(first, +m[2]), hi = Math.min(last, +m[3]);
+      if (lo > hi) return;
+      if (!REMAKE_SPECS[band]) throw new Error('--remake: no spec for ' + band);
+      // The curve runs over the WHOLE band, so a part of a band continues it.
+      out.push({ lang: m[1], lo, hi, spec: { ...REMAKE_SPECS[band], ...(REMAKE_SPECS[band][m[1]] || {}), first, last } });
+    });
+  }
+  return out;
+})();
+
 // Rude words and their forms (both languages; Word Weaver's and Spelling Bee's block lists, short form). Never a hint
 // when a clean shortest path exists. Anchored at both ends, so GRAPE, SCRAPE, ASSET and TITLE are untouched.
 const RUDE = {
@@ -59,7 +167,9 @@ const RUDE = {
     'TWATS?', 'WANK\\w*', 'WHORES?'].join('|') + ')$'),
   es: new RegExp('^(' + ['PUT(A|O|AS|OS)', 'CUL(O|OS)', 'MIERDA', 'COÑ(O|A|AZO)', 'POLL(A|AS)', 'VERG(A|AS)', 'PENES?', 'TET(A|AS)', 'CAGON',
     'HUEVON', 'PICHA', 'JOD\\w*', 'MAMADA', 'PAJ(A|ERO)', 'ZORRAS?', 'MARIC\\w*', 'FOLL\\w*', 'CABRON\\w*', 'PEDOS?', 'CHINGA\\w*',
-    'PENDEJ\\w*', 'PINCHE', 'NAZIS?', 'VAGINA'].join('|') + ')$'),
+    'PENDEJ\\w*', 'PINCHE', 'NAZIS?', 'VAGINA',
+    // 2026-11-19 remake: CAGADO came up on a hint path, NALGAS as a start (BUTTS is on the English list); TARADO is an insult.
+    'CAG(A|O|AS|AN|AR|ADO|ADA|ADOS|ADAS|UE|UES|UEN)', 'TARAD(O|A|OS|AS)', 'NALGAS?'].join('|') + ')$'),
 };
 
 function rng(seed) {
@@ -312,8 +422,65 @@ function build(lang) {
     levels.push(...oldL.map((l, i) => redo(l, 'level ' + (i + 1))));
     daily = oldD.map((l, i) => redo(l, 'day ' + i));
   }
+  if (REMAKE) {
+    // --remake (2026-11-19, Matt: "Yes, remake the levels. Keep whatever points I've earned"): only the ranges named for
+    // this language are made again; every other level and every daily keep their start, target, par, path and number.
+    // A remade level carries `v` (its puzzle version, one more than before): a result is stored under its version
+    // (js/game-stats.js wlKey), so an old solve of that number stays stored, counted, and shown as an earlier puzzle.
+    // The version table is also in word-ladder/js/engine.js REMADE and js/game-stats.js WL_REMADE (data-test checks).
+    const oldL = JSON.parse(fs.readFileSync(path.join(dirIn, 'levels.json'), 'utf8')).levels;
+    const oldD = JSON.parse(fs.readFileSync(path.join(dirIn, 'daily.json'), 'utf8')).levels;
+    const ranges = REMAKE.filter((r) => r.lang === lang);
+    const inRemake = (n) => ranges.some((r) => n >= r.lo && n <= r.hi);
+    const isCommon = (w) => (grid.has(w) || ranks.has(w)) && !RUDE[lang].test(w);
+    const commonGraphs = {};
+    for (const k of Object.keys(byLen)) commonGraphs[k] = graph(byLen[k].filter(isCommon));
+    const pairKey = (l) => [l.s, l.t].sort().join('-');
+    const note = (l) => { used.add(pairKey(l)); uses.set(l.s, (uses.get(l.s) || 0) + 1); uses.set(l.t, (uses.get(l.t) || 0) + 1); };
+    // A future daily is remade when its par is under 3, a start or target is rude, or par needs a word outside Word Weaver's lists.
+    const badDay = (l, d) => { if (d < DAILY_FROM) return false; const cg = commonGraphs[l.s.length]; return l.p < 3 || !cg.has(l.s) || !cg.has(l.t) || bfs(cg, l.t).get(l.s) !== l.p; };
+    oldL.forEach((l, i) => { if (!inRemake(i + 1)) note(l); else used.add(pairKey(l)); });   // an old puzzle never comes back under another number
+    oldD.forEach((l, d) => { if (!badDay(l, d)) note(l); else used.add(pairKey(l)); });
+    for (const r of ranges) {
+      const pool = remakePool(lang, r.spec, { byLen, graphs, commonGraphs, grid, ranks, rank });
+      R = rng((lang === 'es' ? 9173 : 4421) + 31 * r.lo + r.hi);
+      // The LAST level first: the hardest ladders are the scarcest (few long 6-letter ladders), so the end of the band
+      // takes them before the start does, and any fallback to an easier ladder lands early in the band.
+      for (let n = r.hi; n >= r.lo; n--) {
+        const x = (n - r.spec.first) / (r.spec.last - r.spec.first);
+        const l = pickFromPool(pool, r.spec, x, R, used, uses, n);
+        if (!l) throw new Error(`${lang} level ${n}: the pool ran out`);
+        note(l);
+        l.h = bestPath(commonGraphs[l.s.length], l.s, l.t, rank).join(' ');
+        oldL[n - 1] = { s: l.s, t: l.t, p: l.p, h: l.h, v: (oldL[n - 1].v || 1) + 1 };
+      }
+      console.log(lang, 'remade', r.lo + '-' + r.hi);
+    }
+    R = rng((lang === 'es' ? 9173 : 4421) + 977);
+    oldD.forEach((l, d) => {
+      if (!badDay(l, d)) return;
+      let nl = null;
+      for (let tries = 0; tries < 40 && !nl; tries++) {
+        const c = pick(dailyPlan(d));
+        if (bfs(commonGraphs[c.s.length], c.t).get(c.s) === c.p) nl = c;   // pick() already noted it; the grid path guarantees this
+      }
+      if (!nl) throw new Error(`${lang} day ${d}: no daily`);
+      console.log(`DAY ${lang} ${d} ${l.s}->${l.t} p${l.p} => ${nl.s}->${nl.t} p${nl.p}`);
+      oldD[d] = { ...nl, v: (l.v || 1) + 1 };
+    });
+    // A kept level or day whose hint path holds a word now on the rude list gets a clean path of the same length (its
+    // start, target, par, and number stay: the path is only the hint).
+    for (const [arr, what] of [[oldL, 'level'], [oldD, 'day']]) arr.forEach((l, i) => {
+      if (!l.h.split(' ').some((w) => RUDE[lang].test(w))) return;
+      const h = bestPath(graphs[l.s.length], l.s, l.t, rank).join(' ');
+      console.log(`HINT ${lang} ${what} ${what === 'level' ? i + 1 : i}: ${l.h} => ${h}`);
+      arr[i] = { ...l, h };
+    });
+    levels.push(...oldL);
+    daily = oldD;
+  }
   for (let n = levels.length + 1; n <= LEVELS; n++) { levels.push(pick(plan(n))); if (n % 50 === 0) console.log(lang, 'level', n); }
-  if (!KEEP && !KEEP_ALL) for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
+  if (!KEEP && !KEEP_ALL && !REMAKE) for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
   const dir = path.join(ROOT, 'word-ladder/data', lang);
   fs.mkdirSync(dir, { recursive: true });
   const w = {};
@@ -325,5 +492,9 @@ function build(lang) {
   console.log(lang, 'words', Object.fromEntries(Object.entries(byLen).map(([k, v]) => [k, v.length])), 'levels', levels.length, 'daily', daily.length);
 }
 
-if (process.argv.includes('--fetch-es-forms')) await fetchEsForms();
-else for (const lang of ['en', 'es']) build(lang);
+// Exported for the measuring tools (the generator itself runs only when called directly).
+export { loadWords, loadRanks, graph, bfs, bestPath, greedyAtPar, RUDE, RARE };
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  if (process.argv.includes('--fetch-es-forms')) await fetchEsForms();
+  else for (const lang of ['en', 'es']) build(lang);
+}

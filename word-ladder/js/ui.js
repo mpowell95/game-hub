@@ -13,7 +13,7 @@ import * as E from './engine.js';
 import STRINGS from './strings.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordWordLadder, recordWordLadderDaily, withMode, loadStats } from '../../js/game-stats.js';
+import { recordWordLadder, recordWordLadderDaily, withMode, loadStats, wlKey, wlLevels } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
@@ -69,6 +69,8 @@ function loadLang() {
   const s = readJSON(KEY, {});
   return s.lang === 'es' || s.lang === 'en' ? s.lang : (getLang() === 'es' ? 'es' : 'en');
 }
+/** The puzzle version an attempt was played on (its level's `v`); a save from before the 2026-11-19 remake has none = 1. */
+function wlVer(a) { return Math.max(1, Math.floor(Number((a && (a.ver || (a.level && a.level.v))) || 1))); }
 function wlRec() {
   try { return ((loadStats().games || {}).wordladder || {}).wl || {}; } catch { return {}; }
 }
@@ -184,26 +186,33 @@ class WordLadder {
     return old && typeof old === 'object' && Number.isInteger(old.n) && old.n >= lo && old.n <= hi ? old : null;
   }
   /** The level to play in a band: its attempt in progress, else its lowest level not completed; null = band done. */
+  /** Level n's CURRENT puzzle finished (its version's entry, wlKey). A remade level's old solve stays stored and counted
+   *  (board, stars) but the new puzzle is there to play (2026-11-19, Matt: replays remade levels, keeps what he earned). */
+  _solved(lang, n, map = this._map(lang)) { return !!map[wlKey(n, E.levelVersion(lang, n))]; }
+  /** The level to play in a band: its attempt in progress, else its lowest level not completed; null = band done.
+   *  An attempt saved on an earlier version of its level is not this band's attempt any more. */
   _nextN(lang, band = this.band) {
     const map = this._map(lang);
-    const a = this._bandAttempt(lang, band);
-    if (a && Number.isInteger(a.n) && a.n >= 1 && !(a.done && a.recorded) && !map['L' + a.n]) return a.n;
+    let a = this._bandAttempt(lang, band);
+    if (a && !(Number.isInteger(a.n) && wlVer(a) === E.levelVersion(lang, a.n))) a = null;
+    if (a && a.n >= 1 && !(a.done && a.recorded) && !this._solved(lang, a.n, map)) return a.n;
     const [lo, hi] = E.bandRange(band);
-    for (let n = lo; n <= hi; n++) if (!map['L' + n] && !(a && a.n === n && a.done && a.recorded)) return n;
+    for (let n = lo; n <= hi; n++) if (!this._solved(lang, n, map) && !(a && a.n === n && a.done && a.recorded)) return n;
     return null;
   }
-  /** [solved, total] levels of a band in one language (the start screen's and the done card's progress). */
+  /** [solved, total] levels of a band in one language (the start screen's and the done card's progress): current puzzles. */
   _bandCount(lang, band, also) {
     const map = this._map(lang);
     const [lo, hi] = E.bandRange(band);
     let n = 0;
-    for (let i = lo; i <= hi; i++) if (map['L' + i] || i === also) n++;
+    for (let i = lo; i <= hi; i++) if (this._solved(lang, i, map) || i === also) n++;
     return [n, hi - lo + 1];
   }
+  /** Stars earned: each level NUMBER once, at its best over every puzzle version (wlLevels), so an old solve keeps its
+   *  stars and a replay of the remade puzzle never adds them twice. */
   _totalStars() {
-    const wl = wlRec();
     let n = 0;
-    for (const m of [wl.lv, wl.es]) if (m && typeof m === 'object') for (const e of Object.values(m)) n += (e && e.s) | 0;
+    try { for (const r of wlLevels({ wl: wlRec() }).values()) n += (r.e && r.e.s) | 0; } catch { /* no stats */ }
     return n;
   }
   _todayKey(lang) { return `${lang}-${dayKey(new Date(bestNow()))}`; }
@@ -268,10 +277,10 @@ class WordLadder {
     try {
       if (a.kind === 'daily') {
         res = withMode(() => ({ mode: 'daily', lang: a.lang }), 'daily', () => recordWordLadderDaily(a.key, { moves: a.moves, par: a.p, hints: a.hints }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, ver: wlVer(a), key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
       } else {
-        res = withMode(() => ({ mode: 'ladder', lang: a.lang }), () => E.bandOf(a.n), () => recordWordLadder(a.n, { moves: a.moves, par: a.p, hints: a.hints, lang: a.lang, band: E.bandOf(a.n) }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
+        res = withMode(() => ({ mode: 'ladder', lang: a.lang }), () => E.bandOf(a.n), () => recordWordLadder(a.n, { moves: a.moves, par: a.p, hints: a.hints, lang: a.lang, band: E.bandOf(a.n), ver: wlVer(a) }),
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, ver: wlVer(a), key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
       }
     } catch (err) { console.error('[word-ladder] result NOT recorded yet, retried on the next open', err); res = null; }
     if (!res) { if (!quiet) console.error('[word-ladder] the recorder refused the result; kept as not recorded, retried on the next open'); return false; }
@@ -279,7 +288,7 @@ class WordLadder {
     return true;
   }
   _saveAttempt(a) {
-    const rec = { v: 1, n: a.n, s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, done: !!a.done, recorded: !!a.recorded };
+    const rec = { v: 1, n: a.n, ver: wlVer(a), s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, done: !!a.done, recorded: !!a.recorded };
     if (a.kind === 'daily') {
       const all = readJSON(DAILY_KEY, { v: 1, d: {} });
       if (!all.d || typeof all.d !== 'object') all.d = {};
@@ -362,7 +371,7 @@ class WordLadder {
     if (!level) { console.error('[word-ladder] level does not add up, not drawn', kind, n); this._soon(); return; }
     const c = E.cleanAttempt(a, level, d.dict);
     this.data = d;
-    this.cur = { kind, lang, n, key, level, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, seq: [], t0: Date.now(), res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
+    this.cur = { kind, lang, n, key, level, ver: level.v || 1, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, seq: [], t0: Date.now(), res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
