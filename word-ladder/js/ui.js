@@ -37,6 +37,8 @@ const SVG = {
   cal: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   flag: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
+  flagIn: '<svg viewBox="4.6 2.6 13.4 19.8" width="14" height="20" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
+  streak: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 13l7-6 7 6M5 19l7-6 7 6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   clock: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const STAR_PATH = 'M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z';
@@ -205,6 +207,22 @@ class WordLadder {
     return n;
   }
   _todayKey(lang) { return `${lang}-${dayKey(new Date(bestNow()))}`; }
+  /** The daily streak in one language, worked out when shown (never stored): the days in a row, by the phone's LOCAL
+   *  date, with a finished daily in the save or the stats (`wl.dl`), ending today, or yesterday while today is open. */
+  _streak(lang) {
+    const done = new Set();
+    for (const [k, a] of Object.entries(readJSON(DAILY_KEY, { d: {} }).d || {})) if (a && a.done && k.startsWith(lang + '-')) done.add(k);
+    for (const k of Object.keys(wlRec().dl || {})) if (k.startsWith(lang + '-')) done.add(k);
+    const now = new Date(bestNow());
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (!done.has(`${lang}-${dayKey(d)}`)) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (done.has(`${lang}-${dayKey(d)}`) && n < 5000) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+  _streakHTML(n) {
+    return n ? `<span class="wl-streak" aria-label="${esc(t('streak_aria', { n }))}">${SVG.streak}<b>${n}</b></span>` : '';
+  }
   _dailyDone(lang) {
     const k = this._todayKey(lang);
     const a = (readJSON(DAILY_KEY, { d: {} }).d || {})[k];
@@ -303,7 +321,7 @@ class WordLadder {
           </div>
           <div class="wl-segs" role="radiogroup" aria-label="${esc(t('diff_aria'))}">${segs}</div>
           ${play}
-          <button type="button" class="wl-btn wl-btn-daily${done ? ' is-done' : ''}" data-act="daily" aria-label="${esc(t(done ? 'daily_done_aria' : 'daily_aria'))}">${SVG.cal}<span>${esc(t('daily'))}</span>${done ? `<i class="wl-ok">${SVG.check}</i>` : ''}</button>
+          <button type="button" class="wl-btn wl-btn-daily${done ? ' is-done' : ''}" data-act="daily" aria-label="${esc(t(done ? 'daily_done_aria' : 'daily_aria'))}">${SVG.cal}<span>${esc(t('daily'))}</span>${done ? `<i class="wl-ok">${SVG.check}</i>` : ''}${this._streakHTML(this._streak(this.lang))}</button>
           <button type="button" class="wl-help" data-act="help" aria-label="${esc(t('help_aria'))}">?</button>
         </div>
       </div>`;
@@ -503,26 +521,31 @@ class WordLadder {
     // when some are folded away, the ⋮ row (28).
     const past = this.cur.chain.length - 1;
     const nR = this._rungs();
-    const mid = nR ? nR * 10 - 4 + 8 : 22;
+    const mid = nR ? nR * 10 - 4 + 8 : 22;   // the rungs' least room (6px each); they grow into what is left
     const per = (b) => Math.round(b * 0.62) + 6;
     const room = (b) => H - (b + 4) - Math.round(b * 0.8) - 12 - mid - 6;
     const rowsFor = (b) => {
       const all = Math.floor(room(b) / per(b));
       return all >= past ? all : Math.floor((room(b) - 28) / per(b));
     };
-    let big = Math.max(40, Math.min(64, Math.floor((W - 16 - (len - 1) * 8) / len)));
+    // Up to 64px, or 80 on a tall phone (the room under the ladder was empty on 393/402x852+; 2026-11-19 re-grade).
+    let big = Math.max(40, Math.min(H > 360 ? 80 : 64, Math.floor((W - 16 - (len - 1) * 8) / len)));
     const want = Math.min(3, past);
     while (big > 34 && rowsFor(big) < want) big -= 2;
     this.root.style.setProperty('--wl-big', big + 'px');
-    this.root.style.setProperty('--wl-small', Math.round(big * 0.62) + 'px');
     const fit = Math.max(1, rowsFor(big));
-    // The rungs share what is left over.
+    // What is left over (tall phones had empty room under the ladder, 2026-11-19 re-grade): the rungs grow first, up to a
+    // full target tile; then, when every earlier word is shown, those grow from 0.62 up to 0.8 of the big tile.
+    const shown = Math.min(past, fit), folded = past > fit;
+    let left = room(big) + mid - shown * per(big) - (folded ? 28 : 0) - 8;
     if (nR) {
-      const shown = Math.min(past, fit), folded = past > fit;
-      const left = room(big) + mid - shown * per(big) - (folded ? 28 : 0) - 8;
-      const rh = Math.max(6, Math.min(20, Math.floor((left + 4) / nR) - 4));
+      const rh = Math.max(6, Math.min(Math.round(big * 0.8), Math.floor((left + 4) / nR) - 4));
       this.root.style.setProperty('--wl-rung', rh + 'px');
+      left -= nR * (rh + 4) - 4 - (mid - 8);
     }
+    let small = Math.round(big * 0.62);
+    if (shown && !folded && left > 0) small = Math.min(Math.round(big * 0.8), small + Math.floor(left / shown));
+    this.root.style.setProperty('--wl-small', small + 'px');
     if (fit !== this._maxPast) { this._maxPast = fit; this._drawLadder(); }
   }
 
@@ -637,7 +660,7 @@ class WordLadder {
     const head = esc(t(stars === 3 ? 'res_par' : 'res_ok'));
     let sub;
     if (c.kind === 'daily') {
-      sub = `<p class="wl-prog">${SVG.cal}<span>${esc(this._dateText(c.key))}</span></p>
+      sub = `<p class="wl-prog">${SVG.cal}<span>${esc(this._dateText(c.key))}</span>${this._streakHTML(this._streak(c.lang))}</p>
           <p class="wl-prog wl-next-in" data-role="nextin">${SVG.clock}<span></span></p>`;
     } else {
       const band = c.band || E.bandOf(c.n);
@@ -646,12 +669,12 @@ class WordLadder {
     }
     this._finalAnim = !!fresh;
     this.root.innerHTML = `
-      <div class="wl-game wl-is-done${fresh ? ' is-fresh' : ''}">
+      <div class="wl-game wl-is-done${fresh ? ' is-fresh' : ''}${stars === 3 ? ' is-par' : ''}">
         <div class="wl-ladder wl-final" data-role="final"></div>
         <div class="wl-card" role="dialog" aria-label="${head}">
           <button type="button" class="wl-icon wl-x" data-act="setup" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
           <h2 class="wl-card-h">${head}</h2>
-          <div class="wl-stars" data-role="stars" aria-label="${esc(t('stars_aria', { n: stars }))}">${[1, 2, 3].map((i) => `<span class="wl-star${i <= stars ? ' is-on' : ''}">${starSVG(false)}${i <= stars ? starSVG(true) : ''}</span>`).join('')}</div>
+          <div class="wl-stars${fresh && stars === 3 ? ' is-burst' : ''}" data-role="stars" data-n="${stars}" aria-label="${esc(t('stars_aria', { n: stars }))}">${[1, 2, 3].map((i) => `<span class="wl-star${i <= stars ? ' is-on' : ''}">${starSVG(false)}${i <= stars ? starSVG(true) : ''}</span>`).join('')}</div>
           <div class="wl-count wl-count-card"><span>${esc(t('moves'))} <b>${c.moves}</b></span><span>${esc(t('par'))} <b>${c.p}</b></span>${c.hints ? `<span class="wl-hints-n" aria-label="${esc(t('hints_aria', { n: c.hints }))}">${SVG.hint}<b>${c.hints}</b></span>` : ''}</div>
           ${sub}
           ${c.kind === 'daily'
@@ -705,11 +728,17 @@ class WordLadder {
     el.innerHTML = rows.map((k, i) => {
       if (k == null) return '<div class="wl-more" aria-hidden="true">⋮</div>';
       const w = chain[k], chg = k > 0 ? changedAt(chain[k - 1], w) : -1;
-      return `<div class="wl-w ${k === chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}${anim ? ' is-lit' : ''}"${anim ? ` style="--d:${i * step}ms"` : ''}>${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}${j === chg ? ' is-chg' : ''}">${ch}</span>`).join('')}</div>`;
+      return `<div class="wl-w ${k === chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}${anim ? ' is-lit' : ''}"${anim ? ` style="--d:${i * step}ms"` : ''}>${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}${j === chg ? ' is-chg' : ''}" style="--j:${j}">${ch}</span>`).join('')}</div>`;
     }).join('');
-    // The stars start after the last row has lit.
+    // The stars start after the last row has lit; the heading pops in once the last star has landed (stars 160ms apart,
+    // each 320ms); at 3 stars the burst and the target row's sweep land with the third.
+    const g = this.root.querySelector('.wl-is-done');
     const st = this.root.querySelector('[data-role="stars"]');
-    if (st) st.style.setProperty('--d0', (anim ? rows.length * step + 120 : 0) + 'ms');
+    if (g && st) {
+      const d0 = anim ? rows.length * step + 120 : 0, n = Number(st.dataset.n) || 1;
+      g.style.setProperty('--d0', d0 + 'ms');
+      g.style.setProperty('--dh', (d0 + (n - 1) * 160 + 300) + 'ms');
+    }
     this._finalAnim = false;   // a refit on resize redraws still
   }
 
@@ -721,7 +750,7 @@ class WordLadder {
     ov.innerHTML = `<div class="wl-sheet" role="dialog" aria-label="${esc(t('how_title'))}">
       <button type="button" class="wl-icon wl-x" data-act="close-help" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
       <h2 class="wl-card-h">${esc(t('how_title'))}</h2>
-      <p class="wl-how-b">${String(t('how_goal', { flag: '\u0000' })).split('\u0000').map(esc).join(`<i class="wl-flag-in">${SVG.flag}</i>`)}</p>
+      <p class="wl-how-b">${String(t('how_goal', { flag: '\u0000' })).split('\u0000').map(esc).join(`<i class="wl-flag-in">${SVG.flagIn}</i>`)}</p>
       ${howSVG(String(t('how_eg')).split(' '))}
       <p class="wl-how-cap">${esc(t('how_step'))}</p>
       <p>${esc(t('how_tap'))}</p>
@@ -853,25 +882,38 @@ function starKey() {
 }
 
 /** The title picture: a real ladder, one word on each rung, cold to warm, each step's changed letter outlined gold.
- *  English COLD CORD WORD WARD WARM; Spanish MAR MAL SAL SOL (sea to sun). */
+ *  English COLD CORD WORD WARD WARM; Spanish MAR MAL SAL SOL (sea to sun). Short phones get the short ladder (first two
+ *  words, a ⋮, the last), so its tiles stay big enough to read (2026-11-19 re-grade); CSS shows one of the two. */
 function heroSVG(lang) {
-  const words = lang === 'es' ? ['MAR', 'MAL', 'SAL', 'SOL'] : ['COLD', 'CORD', 'WORD', 'WARD', 'WARM'];
-  const fills = lang === 'es' ? ['#8fd0ff', '#c9e4f2', '#ffd98a', '#ffb347'] : ['#8fd0ff', '#bfe0f5', '#f1ead8', '#ffd08a', '#ffad5c'];
-  const n = words.length, len = words[0].length, cell = 24, gap = 7, rowH = 33;
-  const w = len * cell + (len - 1) * gap, railL = 4, x0 = railL + 14, W = x0 * 2 + w, H = n * rowH + 8;
+  const es = lang === 'es';
+  const words = es ? ['MAR', 'MAL', 'SAL', 'SOL'] : ['COLD', 'CORD', 'WORD', 'WARD', 'WARM'];
+  const fills = es ? ['#8fd0ff', '#c9e4f2', '#ffd98a', '#ffb347'] : ['#8fd0ff', '#bfe0f5', '#f1ead8', '#ffd08a', '#ffad5c'];
+  const all = words.map((w, i) => ({ w, f: fills[i], chg: i ? changedAt(words[i - 1], w) : -1 }));
+  const short = [all[0], all[1], null, { ...all[all.length - 1], chg: -1 }];
+  return ladderSVG(all, 'wl-hero-full') + ladderSVG(short, 'wl-hero-short');
+}
+function ladderSVG(rows, cls) {
+  const len = rows[0].w.length, cell = 24, gap = 7, rowH = 33, dotH = 18;
+  const w = len * cell + (len - 1) * gap, railL = 4, x0 = railL + 14, W = x0 * 2 + w;
+  const H = rows.reduce((h, r) => h + (r ? rowH : dotH), 0) + 8;
   let out = `<path d="M${railL} 2V${H - 2}M${W - railL} 2V${H - 2}" stroke="#c98d00" stroke-width="5" stroke-linecap="round"/>`;
-  words.forEach((wd, r) => {
-    const y = 7 + r * rowH;
+  let y = 7;
+  for (const r of rows) {
+    if (!r) {
+      for (let k = 0; k < 3; k++) out += `<circle cx="${W / 2}" cy="${y + 1 + k * 5}" r="1.9" fill="#f5f8ff"/>`;
+      y += dotH;
+      continue;
+    }
     out += `<path d="M${railL} ${y + cell / 2}H${W - railL}" stroke="#c98d00" stroke-width="4"/>`;
-    const chg = r ? changedAt(words[r - 1], wd) : -1;
-    [...wd].forEach((ch, i) => {
+    [...r.w].forEach((ch, i) => {
       const x = x0 + i * (cell + gap);
-      if (i === chg) out += `<rect x="${x - 3.5}" y="${y - 3.5}" width="${cell + 7}" height="${cell + 7}" rx="7" fill="none" stroke="#f2b705" stroke-width="3"/>`;
-      out += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="5" fill="${fills[r]}" stroke="#10203c" stroke-width="1.5"/>`;
+      if (i === r.chg) out += `<rect x="${x - 3.5}" y="${y - 3.5}" width="${cell + 7}" height="${cell + 7}" rx="7" fill="none" stroke="#f2b705" stroke-width="3"/>`;
+      out += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="5" fill="${r.f}" stroke="#10203c" stroke-width="1.5"/>`;
       out += `<text x="${x + cell / 2}" y="${y + 17.5}" text-anchor="middle" font-size="15" font-weight="800" font-family="system-ui,sans-serif" fill="#10203c">${ch}</text>`;
     });
-  });
-  return `<svg class="wl-hero" viewBox="0 0 ${W} ${H}" aria-hidden="true">${out}</svg>`;
+    y += rowH;
+  }
+  return `<svg class="wl-hero ${cls}" viewBox="0 0 ${W} ${H}" aria-hidden="true">${out}</svg>`;
 }
 
 let instance = null;
