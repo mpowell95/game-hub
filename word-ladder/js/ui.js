@@ -491,7 +491,11 @@ class WordLadder {
     }).join('');
     const nR = this._rungs();
     const rungRow = `<div class="wl-rung">${'<i></i>'.repeat(tg.length)}</div>`;
-    const middle = nR ? `<div class="wl-rungs" aria-hidden="true">${rungRow.repeat(nR)}</div>` : '<div class="wl-link" aria-hidden="true"></div>';
+    // A letter picked: the first rung previews the next word, the other letters in faint grey, the picked spot blank
+    // (Matt, 2026-11-19: "you should see the other letters appear as faint gray letters in the below boxes").
+    const ghostRow = c.sel != null && nR
+      ? `<div class="wl-rung is-ghost">${[...w].map((ch, i) => (i === c.sel ? '<i></i>' : `<i><b>${ch}</b></i>`)).join('')}</div>` : '';
+    const middle = nR ? `<div class="wl-rungs" aria-hidden="true">${ghostRow || rungRow}${rungRow.repeat(nR - 1)}</div>` : '<div class="wl-link" aria-hidden="true"></div>';
     el.innerHTML = `${rows}
       <div class="wl-w wl-now${anim ? ' is-new' : ''}" data-role="now">${nowTiles}</div>
       ${middle}

@@ -149,6 +149,7 @@
 .wl-root .wl-rung::before { top: -5.5px; }
 .wl-root .wl-rung:last-child::after { bottom: -9px; }
 .wl-root .wl-rung i { position: relative; width: calc(var(--wl-big) * .8); height: var(--wl-rung); border-radius: 8px; border: 2px dashed rgba(255,255,255,.55); background: rgba(255,255,255,.06); }
+.wl-root .wl-rung i b { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 800; font-size: min(calc(var(--wl-rung) * .55), calc(var(--wl-big) * .45)); line-height: 1; color: rgba(255,255,255,.32); pointer-events: none; }
 .wl-root .wl-goal { position: relative; }
 .wl-root .wl-goal .wl-t { width: calc(var(--wl-big) * .8); height: calc(var(--wl-big) * .8); font-size: calc(var(--wl-big) * .48);
   background: transparent; color: var(--wl-on); border: 3px dashed var(--wl-gold); }
