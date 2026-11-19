@@ -38,7 +38,7 @@ const SVG = {
   check: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   flag: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
   flagIn: '<svg viewBox="4.6 2.6 13.4 19.8" width="14" height="20" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
-  streak: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 13l7-6 7 6M5 19l7-6 7 6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  streak: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5c.6 3.2 2.6 4.9 4.3 6.9 1.6 1.9 2.7 3.8 2.7 6.1A7 7 0 0112 22a7 7 0 01-7-6.5c0-2.6 1.3-4.5 3-6.1.3 1.6 1 2.7 2.2 3.3C9.9 9 10.6 5.4 12 2.5z" fill="currentColor"/><path d="M12 13.2c1.6 1.5 2.8 2.8 2.8 4.5a2.8 2.8 0 01-5.6 0c0-1.7 1.2-3 2.8-4.5z" fill="#fff3c4"/></svg>',
   clock: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 const STAR_PATH = 'M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z';
@@ -521,9 +521,9 @@ class WordLadder {
     // when some are folded away, the ⋮ row (28).
     const past = this.cur.chain.length - 1;
     const nR = this._rungs();
-    const mid = nR ? nR * 10 - 4 + 8 : 22;   // the rungs' least room (6px each); they grow into what is left
+    const mid = nR ? nR * 14 - 8 + 8 : 22;   // the rungs' least room (6px each, 8px gaps); they grow into what is left
     const per = (b) => Math.round(b * 0.62) + 6;
-    const room = (b) => H - (b + 4) - Math.round(b * 0.8) - 12 - mid - 6;
+    const room = (b) => H - (b + 4) - Math.round(b * 0.8) - 12 - mid - 6 - 4;   // 4: a little air above the coach line
     const rowsFor = (b) => {
       const all = Math.floor(room(b) / per(b));
       return all >= past ? all : Math.floor((room(b) - 28) / per(b));
@@ -539,9 +539,9 @@ class WordLadder {
     const shown = Math.min(past, fit), folded = past > fit;
     let left = room(big) + mid - shown * per(big) - (folded ? 28 : 0) - 8;
     if (nR) {
-      const rh = Math.max(6, Math.min(Math.round(big * 0.8), Math.floor((left + 4) / nR) - 4));
+      const rh = Math.max(6, Math.min(Math.round(big * 0.8), Math.floor((left + 8) / nR) - 8));
       this.root.style.setProperty('--wl-rung', rh + 'px');
-      left -= nR * (rh + 4) - 4 - (mid - 8);
+      left -= nR * (rh + 8) - 8 - (mid - 8);
     }
     let small = Math.round(big * 0.62);
     if (shown && !folded && left > 0) small = Math.min(Math.round(big * 0.8), small + Math.floor(left / shown));

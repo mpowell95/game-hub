@@ -52,7 +52,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 - **Feel (2026-11-19 UI/UX review, graded C+; `CLAUDE-HISTORY.md`)**: a step drops the new word in and flips the changed tile
   (~180ms; a tile turning green fills); a word not on the list shows the tried letter in a navy tile with a gold X for ~0.7 s, shakes,
   then goes back (the next tap cancels it at once: no move is ever lost); every earlier word's changed letter has How to play's gold
-  outline; dashed empty rungs (full target-tile slots on faint gold rails, shrinking only when room is short) between the word and
+  outline; dashed empty rungs (full target-tile slots on faint gold rails, crossbars only BETWEEN rows, shrinking only when room is short) between the word and
   the target = par - moves - 1, never below 0 (moves left at par, no spoiler);
   the done screen lights the ladder row by row (60ms, 600ms at most), fills the stars one at a time, THEN pops the heading ("Par!"
   at 3 stars, else "Solved"); at 3 stars a small gold burst behind the stars and a shine across the target row; one progress line (`Medium · 12 of 150`, or the daily's date and a ticking "Next in H:MM:SS" to local midnight
@@ -60,8 +60,9 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 - **First-move tip (2026-11-19)**: on a device's first level only, after the auto How to play's Got it, the letter that starts
   the level's par path (`h[1]`) pulses, then its key once that letter is tapped; it ends at the first move. Nothing is picked
   for the player. Shown once (`tip1`), reported via `js/tips-log.js` (`wordladder` / `first-move`; `tools/read-tips.mjs wordladder`).
-  Unmissable (re-grade, 2026-11-19): a thick bright ring that stays on, a pulsing glow, and a bouncing arrow above (still under reduced motion).
-- **Daily streak (2026-11-19)**: a climbing mark + number on the Daily button and the daily done card: days in a row with a finished
+  Unmissable (re-grade, 2026-11-19): a DASHED bright ring (unlike the selected letter's solid one) that stays on, a pulsing glow,
+  and a bouncing arrow above; on a key the arrow is short and sits in the gap above it (still under reduced motion).
+- **Daily streak (2026-11-19)**: a small flame (SVG) + number on the Daily button and the daily done card: days in a row with a finished
   daily, by the phone's LOCAL date, per language, ending today (or yesterday while today is open). WORKED OUT WHEN SHOWN from the
   daily save and `wl.dl` (`_streak`), never stored.
 
@@ -108,7 +109,7 @@ one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`,
 
 ## Layout
 
-Night blue in light and dark (bright text). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it (10px
+Night blue in light and dark (bright text). The coach line sits at least 16px under the target (`.wl-msg` margin + `_fit`'s reserve). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it (10px
 on short phones): back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes
 from the room; when earlier words do not fit: the FIRST word, a ⋮, then the last ones; the tile shrinks (not under 34px) until
 3 earlier words show, so a 360x640 Expert ladder keeps 28-29px earlier tiles with 16px letters; the rungs take what is left).

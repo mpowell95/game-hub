@@ -120,27 +120,34 @@
 @keyframes wl-pop { 0% { transform: scale(.3); } 70% { transform: scale(1.15); } 100% { transform: none; } }
 /* The first-move tip: the letter to tap has a thick bright ring that stays on, a glow that pulses, and a pointer bouncing
    above it; then the same on its key. Reduced motion: the ring and the pointer, still. */
-.wl-root .wl-t.is-tip, .wl-root .wl-key.is-tip { outline: 5px solid #ffe066; outline-offset: 3px; z-index: 2;
+.wl-root .wl-t.is-tip, .wl-root .wl-key.is-tip { outline: 4px dashed #ffe066; outline-offset: 4px; z-index: 2;
   animation: wl-pulse 1.1s ease-in-out infinite; }
-.wl-root .wl-key.is-tip { position: relative; outline-width: 4px; outline-offset: 2px; background: var(--wl-sel); }
+.wl-root .wl-key.is-tip { position: relative; outline-width: 3px; outline-offset: 2px; background: var(--wl-sel); }
 @keyframes wl-pulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(255,224,102,.9), 0 4px 0 #9aa6bb; } 55% { box-shadow: 0 0 0 16px rgba(255,224,102,0), 0 4px 0 #9aa6bb; } }
 .wl-root .wl-t.is-tip::after, .wl-root .wl-key.is-tip::after { content: ''; position: absolute; left: 50%; top: -44px; width: 30px; height: 30px; margin-left: -15px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Cpath d='M9 2h8v10h6L13 24 3 12h6z' fill='%23ffe066' stroke='%2310203c' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
   animation: wl-point .7s ease-in-out infinite alternate; pointer-events: none; }
-.wl-root .wl-key.is-tip::after { top: -36px; }
+/* On a key: a short arrow in the gap above it, so it never covers the key above (2026-11-19 review). */
+.wl-root .wl-key.is-tip::after { top: -15px; width: 18px; height: 13px; margin-left: -9px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 13'%3E%3Cpath d='M2 2h14L9 11z' fill='%23ffe066' stroke='%2310203c' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E");
+  animation-name: wl-point-k; }
+@keyframes wl-point-k { from { transform: translateY(-3px); } to { transform: translateY(1px); } }
 @keyframes wl-point { from { transform: translateY(-5px); } to { transform: translateY(2px); } }
 .wl-root .wl-now .wl-t.is-sel { outline: 5px solid var(--wl-sel); outline-offset: 2px; }
 .wl-root .wl-now .wl-t.is-sel::before { content: ''; position: absolute; left: 50%; bottom: -17px; transform: translateX(-50%);
   border: 8px solid transparent; border-bottom: 0; border-top-color: var(--wl-sel); }
 .wl-root .wl-link { width: 4px; height: 14px; border-radius: 2px; background: repeating-linear-gradient(var(--wl-on) 0 4px, transparent 4px 8px); opacity: .6; margin-top: 8px; }
 /* Empty rungs: one per move left to finish at par (never below 0). */
-.wl-root .wl-rungs { position: relative; display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding: 0 12px; }
+.wl-root .wl-rungs { position: relative; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 0 12px; }
 /* The faint rails the empty rungs hang on, so they read as rungs to fill. */
 .wl-root .wl-rungs::before, .wl-root .wl-rungs::after { content: ''; position: absolute; top: -6px; bottom: -6px; width: 4px; border-radius: 2px; background: rgba(242,183,5,.35); }
 .wl-root .wl-rungs::before { left: 0; }
 .wl-root .wl-rungs::after { right: 0; }
 .wl-root .wl-rung { position: relative; display: flex; gap: 8px; }
-.wl-root .wl-rung::before { content: ''; position: absolute; left: -12px; right: -12px; top: 50%; height: 3px; margin-top: -1.5px; background: rgba(242,183,5,.22); }
+/* Crossbars between the rows only (above each rung and under the last), never through the empty slots. */
+.wl-root .wl-rung::before, .wl-root .wl-rung:last-child::after { content: ''; position: absolute; left: -12px; right: -12px; height: 3px; border-radius: 2px; background: rgba(242,183,5,.35); }
+.wl-root .wl-rung::before { top: -5.5px; }
+.wl-root .wl-rung:last-child::after { bottom: -9px; }
 .wl-root .wl-rung i { position: relative; width: calc(var(--wl-big) * .8); height: var(--wl-rung); border-radius: 8px; border: 2px dashed rgba(255,255,255,.55); background: rgba(255,255,255,.06); }
 .wl-root .wl-goal { position: relative; }
 .wl-root .wl-goal .wl-t { width: calc(var(--wl-big) * .8); height: calc(var(--wl-big) * .8); font-size: calc(var(--wl-big) * .48);
@@ -148,7 +155,7 @@
 .wl-root .wl-flag { position: absolute; left: -32px; top: 50%; transform: translateY(-50%); color: var(--wl-gold); display: grid; }
 .wl-root .wl-now.is-shake { animation: wl-shake .4s ease; }
 @keyframes wl-shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
-.wl-root .wl-msg { flex: none; height: 26px; text-align: center; font-size: 18px; font-weight: 700; color: var(--wl-sel); white-space: nowrap; }
+.wl-root .wl-msg { flex: none; height: 26px; margin-top: 12px; text-align: center; font-size: 18px; font-weight: 700; color: var(--wl-sel); white-space: nowrap; }
 .wl-root .wl-msg.is-coach { color: var(--wl-on); }
 .wl-root .wl-tools { flex: none; display: flex; justify-content: space-between; padding: 0 4px 8px; }
 .wl-root .wl-tool { width: 56px; height: 48px; }

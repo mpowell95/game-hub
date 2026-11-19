@@ -101,3 +101,9 @@ the period; the strings never had one); tall phones fill their room (bigger tile
 keys); the title picture's short version for short phones (fewer, bigger rungs); a daily streak, worked out when shown from the
 saved dailies (never a stored counter, so nothing new to keep safe); rungs as full tile slots on faint gold rails. Still admin
 only; nothing recorded, saved, or logged changed.
+
+### Graded A- ("impressed"), last small fixes the same day
+
+The coach line had 4-7px under the target at 360x640 (now 17-18px); the key's tip arrow covered the key above (now short, in
+the gap); the tip ring looked like the selected outline (now dashed); the streak's double chevron read as "rank up" (now a small
+flame); the rails' crossbars ran through the empty slots (now only between rows).
