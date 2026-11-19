@@ -15,7 +15,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
 | Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
 | Settings | `gamehub.wordladder.v1` `{ lang, seen, band, tip1 }` (puzzle language; nothing saved = the hub's language; `tip1` = the first-move tip shown) |
-| Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, s, p, chain, moves, hints, done, recorded }` (older saves also carry an unread `sel`) |
+| Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, ver, s, p, chain, moves, hints, done, recorded }` (`ver` = the puzzle version, 2026-11-19; absent = 1; older saves also carry an unread `sel`) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
 
 ## Rules (`js/engine.js`, pure)
@@ -80,15 +80,25 @@ Word Weaver's GRID words alone (common, hand-checked) when the level is made; st
 SELFIE (`ADD_EN`); hand lists `ADD_ES`. **Nothing once accepted is ever dropped.** `--keep-all` keeps every start, target and
 number and works out par and the hint path again (14 Spanish levels and 12 dailies got shorter). Rude words sort last; the
 hint takes the shortest path whose rarest word is the commonest (`hintFrom`). Accented desktop keys type the plain vowel.
-**Open (proposal only)**: English Expert's par needs a non-Word-Weaver word on 78-98% of levels; Spanish 451-500 54%;
-`docs/WORD-LADDER-POINTS-PROPOSAL.md` (points, not built).
-**APPEND-ONLY once released**: progress is by level number. Levels 251-500 were remade ONCE, 2026-11-14 (`--keep-through 250`:
-1-250 and every daily untouched), for the 5- and 6-letter difficulties; Expert's middle steps may be any accepted word (`anyPath`;
-6-letter grid words rarely chain), its start and target stay common.
+**APPEND-ONLY once released**: progress is by level number. Levels 251-500 were remade ONCE, 2026-11-14 (`--keep-through 250`).
+**Remade again 2026-11-19 (Matt: "Yes, remake the levels. Keep whatever points I've earned")**: English 251-500, Spanish 1-100 and
+251-500, and 18 future Spanish dailies (days 216-722, par under 3, a rude end, or par only through an obscure word; days 0-7 never),
+by `--remake en:251-500,es:1-100,es:251-500 --daily-from 8` (`REMAKE_SPECS`: a rising par and a falling greedy rate across each band,
+easiest level first; every par path through Word Weaver words, start and target common, never rude). A remade level or day carries
+`v: 2`; the version table is `REMADE` (engine) = `WL_REMADE` (`js/game-stats.js`), checked by both tests. Medium and English Easy
+untouched. Before/after numbers: `CLAUDE-HISTORY.md`. Points (proposal only, not built): `docs/WORD-LADDER-POINTS-PROPOSAL.md`.
+**A further remake** = the same `--remake` (v becomes 3) and a new `REMADE` row; never reuse a number's key for another puzzle.
 
 ## Stats (`wl` sub-counter)
 
-`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
+**Remade levels keep what was earned (2026-11-19)**: a result is keyed by its PUZZLE, `wlKey(n, ver)`: `L<n>` = version 1 (every
+entry before the remake), `L<n>v2` = the remade puzzle (`recordWordLadder(..., { ver })`, the level's `v`; a save without `ver` = 1).
+Old entries are never moved or dropped. `wlLevels(gm)` = each level NUMBER once, its best entry over every version, so the board
+(`wlSolved`), the stars, and any future points count an old solve as before and a replay never twice. My Stats: Levels / Stars / At
+par per number + "Earlier puzzles" (numbers solved on an old version). The start screen's progress and Play <n> follow the CURRENT
+puzzles (`_solved`); a save from an older version never resumes (`cleanAttempt`). A first solve of a remade puzzle is one new play
+in `byDiff` (byDiff is not the board). Test: `tools/test-word-ladder.mjs` runs the OLD writer from git (5dd10bc), then this code.
+`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
 the BETTER attempt kept WHOLE: more stars, then fewer moves, then fewer hints; never one attempt's moves with another's hints,
 rule 4; earliest time). First completion = one play + win in its band (`daily` for the
 daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (levels, stars,
