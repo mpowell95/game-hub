@@ -18,9 +18,10 @@ import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
+import { noteTipShown, noteTipDone } from '../../js/tips-log.js';
 
 const t = makeT(STRINGS);
-const KEY = 'gamehub.wordladder.v1';            // settings: { lang }
+const KEY = 'gamehub.wordladder.v1';            // settings: { lang, seen, band, tip1 }
 const SAVE_KEY = 'gamehub.wordladder.save.v1';  // { en: attempt | null, es: attempt | null }
 const DAILY_KEY = 'gamehub.wordladder.daily.v1';// { v: 1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -36,7 +37,13 @@ const SVG = {
   cal: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   flag: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 21V4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M6 4h11l-2.5 4L17 12H6" fill="currentColor"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="8.6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+const STAR_PATH = 'M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z';
+/** A row of three small stars, `n` filled (How to play's star key). */
+const miniStars = (n) => [1, 2, 3].map((i) => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="${STAR_PATH}" fill="${i <= n ? '#f2b705' : 'none'}" stroke="${i <= n ? '#8a6500' : '#9aa6bb'}" stroke-width="1.8" stroke-linejoin="round"/></svg>`).join('');
+/** The position where two equal-length words differ (-1 when none). */
+const changedAt = (a, b) => { if (!a || !b) return -1; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return i; return -1; };
 const starSVG = (on) => `<svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="${on ? '#f2b705' : 'none'}" stroke="${on ? '#8a6500' : 'currentColor'}" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 
 // --- storage (every write verified by a fresh re-read, rule 6) --------------------------------------------------
@@ -183,6 +190,14 @@ class WordLadder {
     for (let n = lo; n <= hi; n++) if (!map['L' + n] && !(a && a.n === n && a.done && a.recorded)) return n;
     return null;
   }
+  /** [solved, total] levels of a band in one language (the start screen's and the done card's progress). */
+  _bandCount(lang, band, also) {
+    const map = this._map(lang);
+    const [lo, hi] = E.bandRange(band);
+    let n = 0;
+    for (let i = lo; i <= hi; i++) if (map['L' + i] || i === also) n++;
+    return [n, hi - lo + 1];
+  }
   _totalStars() {
     const wl = wlRec();
     let n = 0;
@@ -261,18 +276,26 @@ class WordLadder {
 
   // --- screens ----------------------------------------------------------------------------------------------
   _setup() {
+    this._clearTimers();
     this.screen = 'setup';
     this.cur = null;
     const n = this._nextN(this.lang, this.band);
     const done = this._dailyDone(this.lang);
-    const segs = E.TIERS.map((k, i) => `<button type="button" class="wl-seg${k === this.band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === this.band}">${diffShapeSVG(i + 1)}<b>${esc(t('tier_' + k))}</b></button>`).join('');
+    // Each difficulty shows how far along it is: "12/100" and a thin bar (like Gridlock's start screen).
+    const segs = E.TIERS.map((k, i) => {
+      const [got, all] = this._bandCount(this.lang, k);
+      const pct = Math.round((got / all) * 100);
+      return `<button type="button" class="wl-seg${k === this.band ? ' is-selected' : ''}" data-act="band" data-band="${k}" role="radio" aria-checked="${k === this.band}" aria-label="${esc(t('seg_aria', { name: t('tier_' + k), n: got, m: all }))}">
+        <span class="wl-seg-n">${diffShapeSVG(i + 1)}<b>${esc(t('tier_' + k))}</b></span>
+        <span class="wl-seg-p"><i class="wl-bar"><i style="width:${pct}%"></i></i><small>${got}/${all}</small></span></button>`;
+    }).join('');
     const play = n == null
       ? `<button type="button" class="wl-btn wl-btn-main" disabled>${esc(t('band_done', { name: t('tier_' + this.band) }))}</button>`
       : `<button type="button" class="wl-btn wl-btn-main" data-act="play">${esc(t('play_n', { n }))}</button>`;
     this.root.innerHTML = `
       <div class="wl-setup">
         <div class="wl-home">
-          ${heroSVG()}
+          ${heroSVG(this.lang)}
           <h1 class="wl-title">${esc(t('title'))}</h1>
           <div class="wl-sub">
             ${this._totalStars() ? `<span class="wl-total" aria-label="${esc(t('total_aria', { n: this._totalStars() }))}">${starSVG(true)}<b>${this._totalStars()}</b></span>` : ''}
@@ -339,6 +362,7 @@ class WordLadder {
 
 
   _play() {
+    this._clearTimers();
     this.screen = 'play';
     const c = this.cur;
     const chip = c.kind === 'daily' ? `${SVG.cal}<span>${esc(t('daily'))}</span>` : esc(t('level_n', { n: c.n }));
@@ -363,8 +387,43 @@ class WordLadder {
     this._drawLadder();
     this._fit();
     this._sync();
-    // The first time on this device, How to play opens by itself (Matt, 2026-11-13: "not clear how to play AT ALL").
-    if (!loadSettings().seen) { saveSettings({ seen: 1 }); this._help(); }
+    // The first time on this device, How to play opens by itself (Matt, 2026-11-13: "not clear how to play AT ALL"),
+    // and after its Got it the first move is shown by doing it (_startTip), once per device.
+    if (!loadSettings().seen) {
+      saveSettings({ seen: 1 });
+      this._tipArmed = !loadSettings().tip1 && c.chain.length === 1;
+      this._help();
+    }
+  }
+
+  // --- the first move, taught by doing it (2026-11-19 UI review) ------------------------------------------------
+  /** After the first How to play's Got it, on this device's first level only: the letter that starts a shortest path
+   *  pulses, then (once it is tapped) its key. Nothing is picked for the player (Matt, 2026-11-14): the pulse only points.
+   *  Shown once (`tip1` in the settings, a preference); who saw it is reported (js/tips-log.js). */
+  _startTip() {
+    this._tipArmed = false;
+    const c = this.cur;
+    if (this.screen !== 'play' || !c || c.chain.length !== 1 || loadSettings().tip1) return;
+    const next = (c.level.h || [])[1];
+    const pos = changedAt(c.chain[0], next);
+    if (pos < 0) return;
+    this._tip = { pos, ch: next[pos] };
+    saveSettings({ tip1: 1 });
+    try { noteTipShown('wordladder', 'first-move'); } catch { /* a report only */ }
+    this._drawLadder();
+  }
+  _endTip() {
+    if (!this._tip) return;
+    this._tip = null;
+    try { noteTipDone('wordladder', 'first-move'); } catch { /* a report only */ }
+    for (const k of this.root.querySelectorAll('.wl-key.is-tip')) k.classList.remove('is-tip');
+  }
+  _paintTipKey() {
+    for (const k of this.root.querySelectorAll('.wl-key.is-tip')) k.classList.remove('is-tip');
+    const tp = this._tip, c = this.cur;
+    if (!tp || !c || c.sel !== tp.pos) return;
+    const k = this.root.querySelector(`.wl-key[data-key="${tp.ch}"]`);
+    if (k) k.classList.add('is-tip');
   }
 
   /** The goal, said on the screen until the first move: "Change one letter. Get to AYE." */
@@ -378,37 +437,60 @@ class WordLadder {
     m.classList.toggle('was-coach', on);
   }
 
-  /** The ladder: earlier words (small), the word being changed (big, tappable), the target (flag). */
-  _drawLadder() {
+  /** Empty rungs between the word being changed and the target: the moves left to finish at par, counted from the
+   *  start (par minus moves so far, minus the target's own step), never below 0. Honest: it never says where the path
+   *  goes, only how many changes par allows from here. */
+  _rungs() {
+    const c = this.cur;
+    return c ? Math.max(0, c.p - c.moves - 1) : 0;
+  }
+
+  /** The ladder: earlier words (small; the letter each one changed outlined gold), the word being changed (big,
+   *  tappable), empty rungs (moves left at par), the target (flag). `anim` = { pos, fill } animates a step just made. */
+  _drawLadder(anim) {
     const el = this.root.querySelector('[data-role="ladder"]');
     if (!el) return;
-    const c = this.cur, tg = c.level.t, w = this._word();
-    const tiles = (word, cls, tap) => [...word].map((ch, i) => {
-      const m = ch === tg[i] ? ' is-match' : '';
-      if (!tap) return `<span class="wl-t${m}">${ch}</span>`;
-      return `<button type="button" class="wl-t${m}${i === c.sel ? ' is-sel' : ''}" data-pos="${i}" aria-label="${esc(t('letter_aria', { n: i + 1, l: ch }))}"${i === c.sel ? ' aria-pressed="true"' : ''}>${ch}</button>`;
-    }).join('');
-    const past = c.chain.slice(0, -1);
+    const c = this.cur, tg = c.level.t, w = this._word(), chain = c.chain;
+    const tip = this._tip && c.sel !== this._tip.pos ? this._tip.pos : -1;
+    const small = (k) => {
+      const word = chain[k], chg = k > 0 ? changedAt(chain[k - 1], word) : -1;
+      return `<div class="wl-w wl-past">${[...word].map((ch, i) => `<span class="wl-t${ch === tg[i] ? ' is-match' : ''}${i === chg ? ' is-chg' : ''}">${ch}</span>`).join('')}</div>`;
+    };
+    const past = chain.length - 1;
     const maxPast = this._maxPast || 1;
-    let shown = past;
-    let gap = false;
-    // Too many to fit: the last ones, under a ⋮ (the start word is the first of the ladder, kept in the save).
-    if (past.length > maxPast) { shown = past.slice(past.length - maxPast); gap = true; }
-    const rows = (gap ? '<div class="wl-more" aria-hidden="true">⋮</div>' : '') + shown.map((p) => `<div class="wl-w wl-past">${tiles(p, '', false)}</div>`).join('');
+    let rows = '';
+    if (past <= maxPast) for (let k = 0; k < past; k++) rows += small(k);
+    else {
+      // Too many to fit: the first word, a ⋮, then the last ones (the start stays in sight; 2026-11-19 review).
+      const tail = maxPast >= 2 ? maxPast - 1 : maxPast;
+      if (maxPast >= 2) rows += small(0);
+      rows += '<div class="wl-more" aria-hidden="true">⋮</div>';
+      for (let k = past - tail; k < past; k++) rows += small(k);
+    }
+    const nowTiles = [...w].map((ch, i) => {
+      const cls = `wl-t${ch === tg[i] ? ' is-match' : ''}${i === c.sel ? ' is-sel' : ''}${i === tip ? ' is-tip' : ''}${anim && anim.pos === i ? (anim.fill ? ' is-flip is-fill' : ' is-flip') : ''}`;
+      return `<button type="button" class="${cls}" data-pos="${i}" aria-label="${esc(t('letter_aria', { n: i + 1, l: ch }))}"${i === c.sel ? ' aria-pressed="true"' : ''}>${ch}</button>`;
+    }).join('');
+    const nR = this._rungs();
+    const rungRow = `<div class="wl-rung">${'<i></i>'.repeat(tg.length)}</div>`;
+    const middle = nR ? `<div class="wl-rungs" aria-hidden="true">${rungRow.repeat(nR)}</div>` : '<div class="wl-link" aria-hidden="true"></div>';
     el.innerHTML = `${rows}
-      <div class="wl-w wl-now" data-role="now">${tiles(w, '', true)}</div>
-      <div class="wl-link" aria-hidden="true"></div>
+      <div class="wl-w wl-now${anim ? ' is-new' : ''}" data-role="now">${nowTiles}</div>
+      ${middle}
       <div class="wl-w wl-goal" aria-label="${esc(t('target_aria', { w: tg }))}"><i class="wl-flag">${SVG.flag}</i>${[...tg].map((ch) => `<span class="wl-t">${ch}</span>`).join('')}</div>`;
     const mv = this.root.querySelector('[data-role="moves"]');
     if (mv) mv.textContent = String(c.moves);
     const hb = this.root.querySelector('[data-role="hints"]');
     if (hb) { hb.textContent = String(c.hints); hb.hidden = !c.hints; }
     const undo = this.root.querySelector('[data-act="undo"]');
-    if (undo) undo.disabled = c.chain.length < 2;
+    if (undo) undo.disabled = chain.length < 2;
     this._coach();
+    this._paintTipKey();
   }
 
-  /** Tile size from the room the ladder has (never scrolls): the width for 5 letters and the height for its rows. */
+  /** Tile size from the room the ladder has (never scrolls): the width for the letters and the height for its rows.
+   *  At least 3 earlier words stay in sight when there are 3 (the first, a ⋮, the last ones), the tile shrinking for
+   *  them first; the empty rungs take what is left (6-20px each). */
   _fit() {
     if (this.screen !== 'play' || !this.cur) return;
     const el = this.root.querySelector('[data-role="ladder"]');
@@ -416,44 +498,84 @@ class WordLadder {
     const len = this.cur.level.t.length;
     const H = el.clientHeight, W = el.clientWidth;
     if (!H || !W) { if (this.root.isConnected && !this._dead) requestAnimationFrame(() => this._fit()); return; }
-    // Rows: the word being changed (big), the link (34 with margins), the target (0.8 big), then earlier words
-    // (0.62 big + 6 each) and, when some are folded away, the ⋮ row (28).
+    // Rows (the ladder's flex gap is 6): the word being changed (big + 4 margin), the target (0.8 big), the middle
+    // (the dashed link, 22; or the rungs, 6px each + 4 gaps at least), then earlier words (0.62 big + 6 each) and,
+    // when some are folded away, the ⋮ row (28).
     const past = this.cur.chain.length - 1;
+    const nR = this._rungs();
+    const mid = nR ? nR * 10 - 4 + 8 : 22;
+    const per = (b) => Math.round(b * 0.62) + 6;
+    const room = (b) => H - (b + 4) - Math.round(b * 0.8) - 12 - mid - 6;
     const rowsFor = (b) => {
-      const room = H - b - Math.round(b * 0.8) - 34;
-      const per = Math.round(b * 0.62) + 6;
-      const all = Math.floor(room / per);
-      return all >= past ? all : Math.floor((room - 28) / per);
+      const all = Math.floor(room(b) / per(b));
+      return all >= past ? all : Math.floor((room(b) - 28) / per(b));
     };
     let big = Math.max(40, Math.min(64, Math.floor((W - 16 - (len - 1) * 8) / len)));
-    while (big > 32 && rowsFor(big) < Math.min(1, past)) big -= 2;
+    const want = Math.min(3, past);
+    while (big > 34 && rowsFor(big) < want) big -= 2;
     this.root.style.setProperty('--wl-big', big + 'px');
     this.root.style.setProperty('--wl-small', Math.round(big * 0.62) + 'px');
     const fit = Math.max(1, rowsFor(big));
+    // The rungs share what is left over.
+    if (nR) {
+      const shown = Math.min(past, fit), folded = past > fit;
+      const left = room(big) + mid - shown * per(big) - (folded ? 28 : 0) - 8;
+      const rh = Math.max(6, Math.min(20, Math.floor((left + 4) / nR) - 4));
+      this.root.style.setProperty('--wl-rung', rh + 'px');
+    }
     if (fit !== this._maxPast) { this._maxPast = fit; this._drawLadder(); }
   }
 
-  _msg(text) {
+  _msg(text, noShake) {
     const m = this.root.querySelector('[data-role="msg"]');
     if (!m) return;
     m.textContent = text;
     clearTimeout(this._msgT);
     m.classList.remove('is-coach', 'was-coach');
     this._msgT = setTimeout(() => { if (m.isConnected) { m.textContent = ''; this._coach(); } }, 1600);
+    if (!noShake) this._shake();
+  }
+  _shake() {
     const now = this.root.querySelector('[data-role="now"]');
     if (now) { now.classList.remove('is-shake'); void now.offsetWidth; now.classList.add('is-shake'); }
+  }
+
+  /** A word that is not on the list: the tried letter shows in its tile (navy, a gold X) for a moment, the word shakes,
+   *  then the tile goes back. Never blocks: the next tap puts the word back at once and is played as usual. */
+  _bad(pos, ch) {
+    this._cancelBad();
+    const tile = this.root.querySelector(`.wl-now [data-pos="${pos}"]`);
+    if (!tile) return;
+    tile.textContent = ch;
+    tile.classList.remove('is-match', 'is-flip', 'is-fill');
+    tile.classList.add('is-bad');
+    this._badOn = true;
+    this._badT = [
+      setTimeout(() => this._shake(), 260),
+      setTimeout(() => { this._badT = null; this._cancelBad(); }, 680),
+    ];
+  }
+  _cancelBad() {
+    if (this._badT) { for (const x of this._badT) clearTimeout(x); this._badT = null; }
+    if (this._badOn) { this._badOn = false; if (this.screen === 'play' && this.cur) this._drawLadder(); }
   }
 
   /** Change the selected letter to `ch`. */
   _letter(ch) {
     const c = this.cur;
     if (!c || this.screen !== 'play') return;
+    this._cancelBad();
     const w = this._word();
     if (c.sel == null) { this._msg(t('pick_first')); return; }   // a key before a letter: say so
     const next = w.slice(0, c.sel) + ch + w.slice(c.sel + 1);
     if (next === w) return;
     const why = E.checkMove(this.data.dict, w, next);
-    if (why !== 'ok') { this._wlNote((why === 'word' ? 'x:' : 'o:') + next); this._msg(t(why === 'word' ? 'not_word' : 'one_letter')); return; }
+    if (why !== 'ok') {
+      this._wlNote((why === 'word' ? 'x:' : 'o:') + next);
+      this._msg(t(why === 'word' ? 'not_word' : 'one_letter'), true);
+      this._bad(c.sel, ch);
+      return;
+    }
     this._step(next, false);
   }
   /** PRIVATE play log only (admin play log `x`, never saved): every try in order, with the clock. */
@@ -462,7 +584,10 @@ class WordLadder {
   }
   _step(next, hint) {
     const c = this.cur;
+    this._cancelBad();
+    this._endTip();
     this._wlNote((hint ? 'h:' : 'w:') + next);
+    const prev = this._word();
     c.chain = [...c.chain, next];
     c.moves += 1;
     if (hint) c.hints += 1;
@@ -471,17 +596,19 @@ class WordLadder {
       c.recorded = false;
       this._saveAttempt(c);
       this._record(c);           // FIRST: before any screen (THE LAW)
-      this._done();
+      this._done(true);
       return;
     }
     c.sel = null;
     this._saveAttempt(c);
-    this._drawLadder();
+    const pos = changedAt(prev, next);
+    this._drawLadder({ pos, fill: pos >= 0 && next[pos] === c.level.t[pos] && prev[pos] !== c.level.t[pos] });
     this._fit();
   }
   _undo() {
     const c = this.cur;
     if (!c || c.chain.length < 2) return;
+    this._cancelBad();
     this._wlNote('u');
     c.chain = E.undoChain(c.chain);
     c.moves += 1;               // an undo is a move (par counts every change)
@@ -493,49 +620,97 @@ class WordLadder {
   _hint() {
     const c = this.cur;
     if (!c) return;
+    this._cancelBad();
     if (!this.dist) this.dist = E.distancesTo(this.data.dict, c.level.t, this.data.alpha);
     const next = E.hintFrom(this.data.dict, this._word(), c.level.t, this.data.alpha, this.dist);
     if (next) this._step(next, true);
   }
 
-  _done() {
+  /** The finish: the ladder lights up row by row, the stars fill one at a time, the heading names the result (Par! at
+   *  3 stars), one line of progress (the difficulty's levels done, or the daily's date and the time to the next one).
+   *  `fresh` = just finished (the animation runs); reopening a finished daily shows it still. Next is live at once. */
+  _done(fresh) {
+    this._clearTimers();
     this.screen = 'done';
     const c = this.cur;
     const stars = E.starsFor(c.moves, c.p, c.hints);
-    const head = c.kind === 'daily' ? esc(t('daily')) : esc(t('level_n', { n: c.n }));
+    const head = esc(t(stars === 3 ? 'res_par' : 'res_ok'));
+    let sub;
+    if (c.kind === 'daily') {
+      sub = `<p class="wl-prog">${SVG.cal}<span>${esc(this._dateText(c.key))}</span></p>
+          <p class="wl-prog wl-next-in" data-role="nextin">${SVG.clock}<span></span></p>`;
+    } else {
+      const band = c.band || E.bandOf(c.n);
+      const [got, all] = this._bandCount(c.lang, band, c.n);
+      sub = `<p class="wl-prog" aria-label="${esc(t('seg_aria', { name: t('tier_' + band), n: got, m: all }))}">${diffShapeSVG(E.TIERS.indexOf(band) + 1)}<span>${esc(t('tier_' + band))} · ${esc(t('prog', { n: got, m: all }))}</span></p>`;
+    }
+    this._finalAnim = !!fresh;
     this.root.innerHTML = `
-      <div class="wl-game wl-is-done">
+      <div class="wl-game wl-is-done${fresh ? ' is-fresh' : ''}">
         <div class="wl-ladder wl-final" data-role="final"></div>
         <div class="wl-card" role="dialog" aria-label="${head}">
           <button type="button" class="wl-icon wl-x" data-act="setup" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
           <h2 class="wl-card-h">${head}</h2>
-          <div class="wl-stars" aria-label="${esc(t('stars_aria', { n: stars }))}">${[1, 2, 3].map((i) => starSVG(i <= stars)).join('')}</div>
+          <div class="wl-stars" data-role="stars" aria-label="${esc(t('stars_aria', { n: stars }))}">${[1, 2, 3].map((i) => `<span class="wl-star${i <= stars ? ' is-on' : ''}">${starSVG(false)}${i <= stars ? starSVG(true) : ''}</span>`).join('')}</div>
           <div class="wl-count wl-count-card"><span>${esc(t('moves'))} <b>${c.moves}</b></span><span>${esc(t('par'))} <b>${c.p}</b></span>${c.hints ? `<span class="wl-hints-n" aria-label="${esc(t('hints_aria', { n: c.hints }))}">${SVG.hint}<b>${c.hints}</b></span>` : ''}</div>
+          ${sub}
           ${c.kind === 'daily'
             ? `<button type="button" class="wl-btn wl-btn-main" data-act="setup">${esc(t('back'))}</button>`
             : `<button type="button" class="wl-btn wl-btn-main" data-act="next">${esc(t('next'))}</button>`}
         </div>
       </div>`;
     this._fitFinal();
+    if (c.kind === 'daily') { this._tickNext(); this._tick = setInterval(() => this._tickNext(), 1000); }
     this._sync();
   }
+  /** "Thu, Nov 19" / "jue, 19 nov" for a daily key `<lang>-YYYY-MM-DD`. */
+  _dateText(key) {
+    const m = /(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(bestNow());
+    try { return new Intl.DateTimeFormat(getLang() === 'es' ? 'es' : 'en', { weekday: 'short', month: 'short', day: 'numeric' }).format(d); } catch { return d.toDateString(); }
+  }
+  /** The time to the next daily ladder: the phone's next LOCAL midnight on the server's clock (bestNow). */
+  _tickNext() {
+    const el = this.root.querySelector('[data-role="nextin"] span');
+    if (!el) { this._clearTimers(); return; }
+    const now = new Date(bestNow());
+    const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+    const s = Math.max(0, Math.round((mid - now.getTime()) / 1000));
+    const p = (n) => String(n).padStart(2, '0');
+    el.textContent = t('next_in', { t: `${Math.floor(s / 3600)}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}` });
+  }
+  _clearTimers() {
+    if (this._tick) { clearInterval(this._tick); this._tick = null; }
+    if (this._badT) { for (const x of this._badT) clearTimeout(x); this._badT = null; }
+    this._badOn = false;
+  }
   /** The finished ladder above the card. Tiles 30-44px; a ladder too long for the room shows its first word, a ⋮ and
-   *  the last words that fit (2026-11-13 review: an 18-word ladder shrank to 16px tiles with 9px letters and overflowed). */
+   *  the last words that fit (2026-11-13 review: an 18-word ladder shrank to 16px tiles with 9px letters and overflowed).
+   *  Each word's changed letter is outlined; just finished, the rows light up one after another (60ms each). */
   _fitFinal() {
     const el = this.root.querySelector('[data-role="final"]');
     if (!el || !this.cur) return;
     const c = this.cur, chain = c.chain, len = c.level.t.length, tg = c.level.t;
     const H = el.clientHeight || 300, W = el.clientWidth || 300;
     const fitRows = (sz) => Math.floor((H + 5) / (sz + 5));
-    let s = Math.max(30, Math.min(44, Math.floor((H + 5) / chain.length) - 5, Math.floor((W - 40 - (len - 1) * 8) / len)));
-    let rows = chain.slice();
+    const s = Math.max(30, Math.min(44, Math.floor((H + 5) / chain.length) - 5, Math.floor((W - 40 - (len - 1) * 8) / len)));
+    let rows = chain.map((w, k) => k);
     if (fitRows(s) < chain.length) {
       const room = Math.max(3, Math.floor((H + 5 - 27) / (s + 5)));   // 27 = the ⋮ row and its gap
-      rows = [chain[0], null, ...chain.slice(chain.length - (room - 1))];
+      rows = [0, null, ...rows.slice(chain.length - (room - 1))];
     }
     this.root.style.setProperty('--wl-small', s + 'px');
-    el.innerHTML = rows.map((w, i) => w == null ? '<div class="wl-more" aria-hidden="true">⋮</div>'
-      : `<div class="wl-w ${i === rows.length - 1 ? 'wl-goal is-won' : 'wl-past'}">${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}">${ch}</span>`).join('')}</div>`).join('');
+    const anim = this._finalAnim;
+    const step = Math.min(60, Math.floor(600 / rows.length));
+    el.innerHTML = rows.map((k, i) => {
+      if (k == null) return '<div class="wl-more" aria-hidden="true">⋮</div>';
+      const w = chain[k], chg = k > 0 ? changedAt(chain[k - 1], w) : -1;
+      return `<div class="wl-w ${k === chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}${anim ? ' is-lit' : ''}"${anim ? ` style="--d:${i * step}ms"` : ''}>${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}${j === chg ? ' is-chg' : ''}">${ch}</span>`).join('')}</div>`;
+    }).join('');
+    // The stars start after the last row has lit.
+    const st = this.root.querySelector('[data-role="stars"]');
+    if (st) st.style.setProperty('--d0', (anim ? rows.length * step + 120 : 0) + 'ms');
+    this._finalAnim = false;   // a refit on resize redraws still
   }
 
 
@@ -551,8 +726,7 @@ class WordLadder {
       <p class="wl-how-cap">${esc(t('how_step'))}</p>
       <p>${esc(t('how_tap'))}</p>
       <p><span class="wl-t wl-t-demo is-match">A</span> ${esc(t('how_dot'))}</p>
-      <p>${esc(t('how_stars'))}</p>
-      <p>${esc(t('how_hint'))}</p>
+      ${starKey()}
       <p>${esc(t('how_undo'))}</p>
       <button type="button" class="wl-btn wl-btn-main wl-gotit" data-act="close-help">${esc(t('got_it'))}</button>
     </div>`;
@@ -571,6 +745,8 @@ class WordLadder {
     }
     if (b.dataset.key) { this._letter(b.dataset.key); return; }
     if (b.dataset.pos != null) {
+      if (this.screen !== 'play' || !this.cur) return;
+      this._cancelBad();
       this.cur.sel = Number(b.dataset.pos) | 0;
       this._drawLadder();
       return;
@@ -599,6 +775,7 @@ class WordLadder {
     if (this.screen === 'help') this.screen = this._helpPrev || 'setup';
     if (this.screen === 'play') this._fit();   // a resize while the sheet was up
     this._sync();
+    if (this._tipArmed && this.screen === 'play') this._startTip();
   }
   _key(e) {
     const tg = e.target;
@@ -607,6 +784,7 @@ class WordLadder {
     if (e.key === 'Escape' && this._level() > 0) { this._goBack(); e.preventDefault(); return; }
     if (this.screen !== 'play' || !this.cur) return;
     const len = this.cur.level.t.length;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') this._cancelBad();
     if (e.key === 'ArrowLeft') { this.cur.sel = this.cur.sel == null ? len - 1 : (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'ArrowRight') { this.cur.sel = this.cur.sel == null ? 0 : (this.cur.sel + 1) % len; this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'Backspace') { this._undo(); e.preventDefault(); return; }
@@ -624,6 +802,7 @@ class WordLadder {
     document.removeEventListener('keydown', this._onKey);
     try { if (this._offResize) this._offResize(); } catch { /* gone */ }
     clearTimeout(this._msgT);
+    this._clearTimers();
     try { if (this._bs) this._bs.close(); } catch { /* gone */ }
     this._bs = null;
     this._dead = true;
@@ -663,12 +842,36 @@ function howSVG(words) {
   return `<svg class="wl-how-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${out}</svg>`;
 }
 
-function heroSVG() {
-  return `<svg class="wl-hero" viewBox="0 0 160 90" aria-hidden="true">
-    <path d="M52 6v80M108 6v80" stroke="#f2b705" stroke-width="6" stroke-linecap="round"/>
-    ${[18, 40, 62].map((y) => `<path d="M52 ${y}h56" stroke="#f2b705" stroke-width="5"/>`).join('')}
-    ${['C', 'O', 'L', 'D'].map((ch, i) => `<rect x="${14 + i * 34}" y="${i % 2 ? 26 : 48}" width="26" height="26" rx="5" fill="#fff" stroke="#1e2f4d" stroke-width="2"/><text x="${27 + i * 34}" y="${(i % 2 ? 26 : 48) + 19}" text-anchor="middle" font-size="17" font-weight="800" font-family="system-ui,sans-serif" fill="#1e2f4d">${ch}</text>`).join('')}
-  </svg>`;
+/** How to play's star key, drawn not written: moves (par, +1 / +2, more) and hints (0, 1, 2+), each with its stars. */
+function starKey() {
+  const bulb = `<i class="wl-sk-b">${SVG.hint}</i>`;
+  const row = (label, n) => `<span class="wl-sk-l">${label}</span><span class="wl-sk-s">${miniStars(n)}</span>`;
+  return `<div class="wl-sk" role="img" aria-label="${esc(t('how_stars_aria'))}">
+    <div class="wl-sk-c">${row(esc(t('par')), 3)}${row('+1 / +2', 2)}${row(esc(t('how_more')), 1)}</div>
+    <div class="wl-sk-c">${row(`${bulb}0`, 3)}${row(`${bulb}1`, 2)}${row(`${bulb}2+`, 1)}</div>
+  </div>`;
+}
+
+/** The title picture: a real ladder, one word on each rung, cold to warm, each step's changed letter outlined gold.
+ *  English COLD CORD WORD WARD WARM; Spanish MAR MAL SAL SOL (sea to sun). */
+function heroSVG(lang) {
+  const words = lang === 'es' ? ['MAR', 'MAL', 'SAL', 'SOL'] : ['COLD', 'CORD', 'WORD', 'WARD', 'WARM'];
+  const fills = lang === 'es' ? ['#8fd0ff', '#c9e4f2', '#ffd98a', '#ffb347'] : ['#8fd0ff', '#bfe0f5', '#f1ead8', '#ffd08a', '#ffad5c'];
+  const n = words.length, len = words[0].length, cell = 24, gap = 7, rowH = 33;
+  const w = len * cell + (len - 1) * gap, railL = 4, x0 = railL + 14, W = x0 * 2 + w, H = n * rowH + 8;
+  let out = `<path d="M${railL} 2V${H - 2}M${W - railL} 2V${H - 2}" stroke="#c98d00" stroke-width="5" stroke-linecap="round"/>`;
+  words.forEach((wd, r) => {
+    const y = 7 + r * rowH;
+    out += `<path d="M${railL} ${y + cell / 2}H${W - railL}" stroke="#c98d00" stroke-width="4"/>`;
+    const chg = r ? changedAt(words[r - 1], wd) : -1;
+    [...wd].forEach((ch, i) => {
+      const x = x0 + i * (cell + gap);
+      if (i === chg) out += `<rect x="${x - 3.5}" y="${y - 3.5}" width="${cell + 7}" height="${cell + 7}" rx="7" fill="none" stroke="#f2b705" stroke-width="3"/>`;
+      out += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="5" fill="${fills[r]}" stroke="#10203c" stroke-width="1.5"/>`;
+      out += `<text x="${x + cell / 2}" y="${y + 17.5}" text-anchor="middle" font-size="15" font-weight="800" font-family="system-ui,sans-serif" fill="#10203c">${ch}</text>`;
+    });
+  });
+  return `<svg class="wl-hero" viewBox="0 0 ${W} ${H}" aria-hidden="true">${out}</svg>`;
 }
 
 let instance = null;
