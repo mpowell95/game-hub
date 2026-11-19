@@ -17,6 +17,14 @@ export function bandRange(band) {
   return [BANDS[i][1], i + 1 < BANDS.length ? BANDS[i + 1][1] - 1 : LAST_LEVEL];
 }
 export const TIERS = ['easy', 'medium', 'hard', 'expert'];
+/** REMADE LEVELS (2026-11-19, Matt: "Yes, remake the levels. Keep whatever points I've earned"): [first, last, version] per
+ *  language; every other level is version 1. = js/game-stats.js WL_REMADE (tools/test-word-ladder.mjs) and the data's
+ *  `v` (word-ladder/js/data-test.js). A result is recorded under its version, so an old solve of a remade number is kept. */
+export const REMADE = { en: [[251, 500, 2]], es: [[1, 100, 2], [251, 500, 2]] };
+export function levelVersion(lang, n) {
+  for (const [a, b, v] of REMADE[lang === 'es' ? 'es' : 'en']) if (n >= a && n <= b) return v;
+  return 1;
+}
 export function bandOf(n) {
   let b = 'easy';
   for (const [tier, first] of BANDS) if (n >= first) b = tier;
@@ -117,7 +125,8 @@ export function cleanLevel(l) {
   const s = String(l.s || ''), t = String(l.t || ''), p = Math.floor(Number(l.p) || 0);
   const h = String(l.h || '').split(' ').filter(Boolean);
   if (!s || s.length !== t.length || p < 1 || h.length !== p + 1 || h[0] !== s || h[h.length - 1] !== t) return null;
-  return { s, t, p, h };
+  const v = Math.max(1, Math.floor(Number(l.v) || 1));   // the puzzle version (a remade level or day is 2); absent = 1
+  return { s, t, p, h, v };
 }
 
 /** A saved attempt, read back safely: { chain: [words...], moves, hints, done, recorded }. The chain always starts at
@@ -128,6 +137,8 @@ export function cleanAttempt(a, level, dict) {
   // for a 4-move ladder, one move carried over from the old LIES puzzle).
   if (a && Array.isArray(a.chain) && a.chain.length && String(a.chain[0]) !== level.s) a = null;
   if (a && a.s && String(a.s) !== level.s) a = null;
+  // ...or on an earlier VERSION of this level or day (the 2026-11-19 remake; a save without `ver` was made on version 1).
+  if (a && Math.max(1, Math.floor(Number(a.ver) || 1)) !== (level.v || 1)) a = null;
   // A finished, RECORDED attempt is kept as saved even if a word has since left the list (it was legal when played).
   if (a && a.done && a.recorded && Array.isArray(a.chain) && a.chain[a.chain.length - 1] === level.t && a.chain.length >= 2) {
     const n0 = (v) => Math.max(0, Math.floor(Number(v) || 0));
