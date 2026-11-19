@@ -37,7 +37,7 @@ for (const lang of ['en', 'es']) {
     pairs.add(key);
     if (n) {
       const band = E.bandOf(n);
-      const [lo, hi] = { easy: [3, 4], medium: [4, 5], hard: [4, 8], expert: [3, 8] }[band];
+      const [lo, hi] = { easy: [3, 4], medium: [4, 5], hard: [3, 8], expert: [3, 8] }[band];   // hard 3: 2026-11-19, conjugations opened shortcuts (MIREN MIRAN DIRAN DIGAN)
       ok(l.p >= lo && l.p <= hi, `${where}: par ${l.p} outside ${band} ${lo}-${hi}`);
     }
   };
@@ -52,6 +52,10 @@ ok(E.bandRange('easy').join() === '1,100' && E.bandRange('expert').join() === '4
 const dict = E.makeDict({ w: { 4: 'COLD CORD WORD WARD WARM CARD' } });
 ok(E.checkMove(dict, 'COLD', 'CORD') === 'ok' && E.checkMove(dict, 'COLD', 'WORD') === 'two' && E.checkMove(dict, 'COLD', 'COLX') === 'word', 'checkMove');
 ok(E.hintFrom(dict, 'COLD', 'WARM', E.ALPHABET.en) === 'CORD', 'hint is the next word on a shortest path');
+// The hint takes the shortest path whose rarest word is the commonest (ZAA is commoner than AAZ, but ZAA's only way on
+// is the rarest word, ZZA; 2026-11-19: hints walked into TIT, CUNT and RAPE that way).
+const d2 = E.makeDict({ w: { 3: 'ZAA AAZ AZZ ZZZ AAA ZZA' } });
+ok(E.hintFrom(d2, 'AAA', 'ZZZ', E.ALPHABET.en) === 'AAZ' && E.hintFrom(d2, 'ZAA', 'ZZZ', E.ALPHABET.en) === 'ZZA', 'hint avoids a path through a rare word');
 const lv = E.cleanLevel({ s: 'COLD', t: 'WARM', p: 4, h: 'COLD CORD WORD WARD WARM' });
 const a = E.cleanAttempt({ chain: ['COLD', 'CORD', 'XXXX', 'WORD'], moves: 1, hints: 2 }, lv, dict);
 ok(a.chain.join(' ') === 'COLD CORD' && a.moves === 1 && a.hints === 2 && !a.done, 'a bad saved word ends the chain there');

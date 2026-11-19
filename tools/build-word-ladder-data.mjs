@@ -13,6 +13,12 @@
 //     A level's start, target AND hint path are GRID words only (Word Weaver's common, hand-checked list): par is the
 //     shortest path over every accepted word and a path of that length exists through grid words alone.
 //     words.json lists grid words first, so the game's hint (the earliest word on a shortest path) prefers them.
+//   * SPANISH also takes tools/word-ladder-es-forms.txt (2026-11-19; written by `--fetch-es-forms`, which downloads
+//     lemmatization-lists and FrequencyWords; committed, so a normal run stays offline): verb forms said in films and TV
+//     (HABLAN, LEE), verb forms with a pronoun joined on (DEJAME, VERTE), and the Ñ spelling of each Boggle word (Boggle
+//     folds Ñ to N). ADD_EN / ADD_ES: hand-read everyday words neither list has (EMAIL, SELFIE; LINAJE, GATITO).
+//     Nothing once accepted is ever dropped (a saved ladder may hold it; a dropped word can lengthen a par).
+//   * RUDE words stay legal steps but sort LAST, so neither the game's hint nor the hint path takes one unless it must.
 //   * How COMMON a word is: tools/word-weaver-ranks-{en,es}.txt (FrequencyWords 2018 line numbers, CC BY-SA 4.0). A
 //     word with no rank counts as rare (RARE). Start and target words are common (rank caps in plan()); the hint path
 //     is the shortest path with the most common words (least summed rank).
@@ -25,6 +31,7 @@
 //
 // THE RAMP (plan): 1-100 Easy (3 letters, par 3-4; 4 letters once the 3-letter pairs run out), 101-250 Medium (4 letters, par 4-5),
 // 251-400 Hard (5 letters, par 4-6), 401-500 Expert (6 letters, par 4-6) (2026-11-14; until then Hard/Expert were 4-5 letters).
+// `--keep-all` (2026-11-19): every level and daily stays; only par and the hint path are worked out again (new words).
 // `--keep-through 250` (used 2026-11-14) keeps levels 1-250 and every daily as shipped and remakes only 251-500. Bands: word-ladder/js/engine.js.
 // Daily: 4 letters par 4-6 or 5 letters par 4-5, common words. No start/target PAIR repeats anywhere; a word is a start
 // or target at most MAX_USES times in each language. Seeded: the same sources always give the same data.
@@ -40,7 +47,20 @@ const LEVELS = 500;
 const DAILY = 730;
 const EPOCH = '2026-11-13';
 const MAX_USES = 3;
+const KEEP_ALL = process.argv.includes('--keep-all');
 const KEEP = (() => { const i = process.argv.indexOf('--keep-through'); return i > 0 ? Number(process.argv[i + 1]) | 0 : 0; })();   // a word is a start or target at most this often per language
+
+// Rude words and their forms (both languages; Word Weaver's and Spelling Bee's block lists, short form). Never a hint
+// when a clean shortest path exists. Anchored at both ends, so GRAPE, SCRAPE, ASSET and TITLE are untouched.
+const RUDE = {
+  en: new RegExp('^(' + ['ASS(ES)?', 'ARSES?', 'BITCH(ES|ED|Y)?', 'BOOBS?', 'BUTTS?', 'COCKS?', 'CRAP(S|PY|PED)?', 'CUNTS?', 'DAMN(S|ED)?',
+    'DICKS?', 'DILDOS?', 'DYKES?', 'FAGS?', 'FART(S|ED)?', 'FUCK\\w*', 'HOMOS?', 'JIZZ', 'NIGG\\w*', 'NUDES?', 'PENIS', 'PISS(ED|ES)?',
+    'POOPS?', 'PORNO?S?', 'PRICKS?', 'PUSSY', 'RAP(E|ES|ED|ER|IST)', 'SEX(Y|ES)?', 'SHIT\\w*', 'SLUTS?', 'TITS?', 'TITTY', 'TURDS?',
+    'TWATS?', 'WANK\\w*', 'WHORES?'].join('|') + ')$'),
+  es: new RegExp('^(' + ['PUT(A|O|AS|OS)', 'CUL(O|OS)', 'MIERDA', 'COÑ(O|A|AZO)', 'POLL(A|AS)', 'VERG(A|AS)', 'PENES?', 'TET(A|AS)', 'CAGON',
+    'HUEVON', 'PICHA', 'JOD\\w*', 'MAMADA', 'PAJ(A|ERO)', 'ZORRAS?', 'MARIC\\w*', 'FOLL\\w*', 'CABRON\\w*', 'PEDOS?', 'CHINGA\\w*',
+    'PENDEJ\\w*', 'PINCHE', 'NAZIS?', 'VAGINA'].join('|') + ')$'),
+};
 
 function rng(seed) {
   let s = seed >>> 0 || 1;
@@ -60,10 +80,105 @@ function loadWords(lang) {
   // too (ENABLE for English, boggle/data/words-es.txt for Spanish), bad words included. Start, target and the
   // hint path stay Word Weaver GRID words (common, clean).
   const broad = fs.readFileSync(path.join(ROOT, 'boggle/data', lang === 'es' ? 'words-es.txt' : 'words.txt'), 'utf8').split(/\r?\n/);
-  for (const w of broad) set.add(w.trim().toUpperCase());
+  if (lang === 'es') {
+    // Spanish (2026-11-19 review): Boggle's list has NO conjugated verbs (HABLAN, LEE, COMEN refused) and folds Ñ to N
+    // (SENOR accepted, the real SEÑOR only from Word Weaver). tools/word-ladder-es-forms.txt (lemmatization-lists, ODbL;
+    // written by --fetch-es-forms) brings every inflected form whose lemma or form is in Boggle's list, and gives each
+    // Boggle word its Ñ spelling where the spelled list has it (Spelling Bee's `variants`): PENA and PEÑA, SENOR and SEÑOR.
+    // Only forms said in films and TV (FrequencyWords es top 50k) come in: every form of every verb in the dictionary
+    // made Expert ladders 2 moves long through words nobody uses (BOLLAS, DABAS).
+    const { all: L, brought } = loadEsForms();
+    const spell = new Map();   // N-folded -> the spellings seen in the spelled list
+    for (const w of L) { const k = w.replace(/Ñ/g, 'N'); if (!spell.has(k)) spell.set(k, []); spell.get(k).push(w); }
+    for (const raw of broad) {
+      const w = raw.trim().toUpperCase();
+      if (!w) continue;
+      // The folded spelling stays accepted too: a word once accepted is never refused later (a saved ladder could hold
+      // it, and taking a word out can make an existing level's par longer).
+      set.add(w);
+      for (const x of spell.get(w) || []) set.add(x);
+    }
+    for (const w of brought) set.add(w);
+    for (const w of ADD_ES) set.add(w);
+  } else {
+    for (const w of broad) set.add(w.trim().toUpperCase());
+    for (const w of ADD_EN) set.add(w);
+  }
   const ok = lang === 'es' ? /^[A-ZÑ]{3,6}$/ : /^[A-Z]{3,6}$/;
   return { all: [...set].filter((w) => ok.test(w)), grid };
 }
+// Everyday English that ENABLE (1990s) does not carry (2026-11-19 review: EMAIL, APP and SELFIE were refused). Steps only:
+// never a start or target (those are Word Weaver grid words).
+const ADD_EN = `APP APPS BLOG BLOGS BLOGGED VLOG VLOGS EMAIL EMAILS EMOJI EMOJIS SELFIE ONLINE MEME MEMES TEXTED TEXTER
+WIFI WEBSITE PODCAST INBOX UNDO EMAILED`.split(/\s+/).filter(Boolean);
+
+// Everyday Spanish neither list carries (2026-11-19 review, each read by hand from the words said in films and TV that
+// lemmatization-lists has but Boggle's list lacks, names and brands left out; the rude ones read too (CAGON, COÑAZO) are left out because a shortcut through one became a hint).
+const ADD_ES = `MAMI PAPI LINAJE NIÑEZ ANTAÑO AIRBAG ALITAS BOLITA CAJITA CODAZO COPITA COSITA CULITO MUCAMA OJITOS PAJITA PALITO
+PELAJE PLAZOS RIMEL ROÑOSO TRULLO YUANES OVEROL MANDON GUASON CARDIO BURO BIFE GATITO GATITA OSITO OSITA NIÑITO NIÑITA
+MAMITA PAPITO BESITO CARITA CASITA PERRITO`.split(/\s+/).filter(Boolean);
+
+/** tools/word-ladder-es-forms.txt: { all: every 3-6 letter lemma and form of lemmatization-lists (accents off, Ñ kept),
+ *  brought: the forms whose lemma or form is in Boggle's list (marked +) }. */
+const ES_FORMS = path.join(ROOT, 'tools/word-ladder-es-forms.txt');
+function loadEsForms() {
+  const all = [], brought = [];
+  for (const line of fs.readFileSync(ES_FORMS, 'utf8').split(/\r?\n/)) {
+    if (!line || line[0] === '#') continue;
+    const [w, f] = line.split(' ');
+    all.push(w);
+    if (f === '+') brought.push(w);
+  }
+  return { all, brought };
+}
+/** --fetch-es-forms: download lemmatization-lists (Spanish) once and write tools/word-ladder-es-forms.txt (committed, so
+ *  a normal run stays offline). */
+async function fetchEsForms() {
+  const URL_ = 'https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-es.txt';
+  const res = await fetch(URL_);
+  if (!res.ok) throw new Error(`${URL_}: HTTP ${res.status}`);
+  const txt = (await res.text()).replace(/^\uFEFF/, '');
+  const fold = (w) => w.toUpperCase().normalize('NFD').replace(/([AEIOU])[\u0300-\u036f]/g, '$1').replace(/N\u0303/g, 'Ñ').normalize('NFC');
+  const FREQ = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt';
+  const fr = await fetch(FREQ);
+  if (!fr.ok) throw new Error(`${FREQ}: HTTP ${fr.status}`);
+  const said = new Set();
+  for (const line of (await fr.text()).split(/\r?\n/)) { const w = (line.split(' ')[0] || '').trim(); if (w) { const f = fold(w); said.add(f); said.add(f.replace(/Ñ/g, 'N')); } }
+  const boggle = new Set(fs.readFileSync(path.join(ROOT, 'boggle/data/words-es.txt'), 'utf8').split(/\r?\n/).map((w) => w.trim()));
+  const flat = (w) => w.replace(/Ñ/g, 'N');
+  const WORD = /^[A-ZÑ]{3,6}$/;
+  const all = new Map();
+  for (const line of txt.split(/\r?\n/)) {
+    const [lemma, form] = line.split('\t');
+    if (!lemma || !form || /[^a-záéíóúüñ]/.test(lemma) || /[^a-záéíóúüñ]/.test(form)) continue;
+    const L = fold(lemma), F = fold(form);
+    if (WORD.test(L) && !all.has(L)) all.set(L, false);
+    if (WORD.test(F)) all.set(F, all.get(F) || ((boggle.has(flat(L)) || boggle.has(flat(F))) && (said.has(F) || said.has(flat(F)))));
+  }
+  // A verb form with its pronoun joined on (DEJAME, VERTE, PONTE, DIGAME, OIRLO: lemmatization-lists has none of them),
+  // when it is said in films and TV. The verb form = a form whose lemma is an -AR, -ER or -IR verb.
+  const verbForm = new Set();
+  for (const line of txt.split(/\r?\n/)) {
+    const [lemma, form] = line.split('\t');
+    if (lemma && form && /(ar|er|ir|ír)$/.test(lemma) && !/[^a-záéíóúüñ]/.test(form + lemma)) { verbForm.add(fold(form)); verbForm.add(fold(lemma)); }
+  }
+  const CLITIC = ['NOS', 'LOS', 'LAS', 'LES', 'ME', 'TE', 'SE', 'LO', 'LA', 'LE'];
+  // Names the rule would catch (each read 2026-11-19).
+  const NAMES = new Set('ADELA ADELE DANTE DOYLE ESME LEILA MANILA MANOLO ORESTE SALOME TOOLE VILA VILO VALA CARLA CARLO CARLOS MARLA MARLO'.split(' '));
+  for (const w of said) {
+    if (!WORD.test(w) || w.length < 4 || all.get(w) || NAMES.has(w)) continue;
+    if (CLITIC.some((c) => w.endsWith(c) && w.length - c.length >= 2 && verbForm.has(w.slice(0, -c.length)))) all.set(w, true);
+  }
+  const head = '# GENERATED by tools/build-word-ladder-data.mjs --fetch-es-forms: never hand-edit.\n' +
+    '# lemmatization-lists Spanish (Michal Boleslav Mechura, ODbL 1.0, https://github.com/michmech/lemmatization-lists):\n' +
+    '# every lemma and form of 3-6 letters, accents off, Ñ kept. "+" = brought in as a Word Ladder step (its lemma or the\n' +
+    '# form is in boggle/data/words-es.txt, and the form is in FrequencyWords es 2018 top 50k, Hermit Dave, CC BY-SA 4.0).\n' +
+    '# Also "+": a said word that is a verb form with a pronoun joined on (DEJAME, VERTE). The rest only give Boggle\n' +
+    '# words their Ñ spelling.\n';
+  fs.writeFileSync(ES_FORMS, head + [...all].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([w, b]) => (b ? w + ' +' : w)).join('\n') + '\n');
+  console.log('es forms', all.size, 'brought', [...all.values()].filter(Boolean).length);
+}
+
 function loadRanks(lang) {
   const m = new Map();
   for (const line of fs.readFileSync(path.join(ROOT, `tools/word-weaver-ranks-${lang}.txt`), 'utf8').split('\n')) {
@@ -130,7 +245,9 @@ function build(lang) {
   const { all: words, grid } = loadWords(lang);
   const ranks = loadRanks(lang);
   // Grid words first (common and hand-checked), then the rest of the accepted list, each by how often it is said.
-  const rank = (w) => (grid.has(w) ? 0 : RARE) + (ranks.get(w) ?? RARE);
+  // A rude word is still a legal step (Matt: ASS "is" a word) but sorts LAST, so the hint and the hint path take it only
+  // when every shortest path needs it (2026-11-19 review: the hint showed TIT, BITCH, RAPE, PISS and CUNT).
+  const rank = (w) => (RUDE[lang].test(w) ? 4 * RARE : 0) + (grid.has(w) ? 0 : RARE) + (ranks.get(w) ?? RARE);
   const byLen = {};
   for (const w of words) (byLen[w.length] ||= []).push(w);
   for (const k of Object.keys(byLen)) byLen[k].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1));
@@ -178,8 +295,25 @@ function build(lang) {
     const R2 = rng((lang === 'es' ? 9173 : 4421) + 7 * KEEP);
     R = R2;
   }
+  if (KEEP_ALL) {
+    // --keep-all (2026-11-19, the word-list review): EVERY level and daily keeps its start and target and its number; only
+    // its par and hint path are worked out again over the new word list (par stays the true minimum, so a level can get
+    // SHORTER when a new word opens a shortcut). The changes are printed, so a session can list them.
+    const oldL = JSON.parse(fs.readFileSync(path.join(dirIn, 'levels.json'), 'utf8')).levels;
+    const oldD = JSON.parse(fs.readFileSync(path.join(dirIn, 'daily.json'), 'utf8')).levels;
+    const redo = (l, where) => {
+      const nb = graphs[l.s.length];
+      const p = bfs(nb, l.t).get(l.s);
+      if (!(p >= 1)) throw new Error(`${lang} ${where}: ${l.s} -> ${l.t} no longer joins`);
+      const h = p === l.p && l.h.split(' ').every((w) => nb.has(w) && !RUDE[lang].test(w)) ? l.h : bestPath(nb, l.s, l.t, rank).join(' ');
+      if (p !== l.p) console.log(`PAR ${lang} ${where} ${l.s}->${l.t}: ${l.p} -> ${p} (${h})`);
+      return { s: l.s, t: l.t, p, h };
+    };
+    levels.push(...oldL.map((l, i) => redo(l, 'level ' + (i + 1))));
+    daily = oldD.map((l, i) => redo(l, 'day ' + i));
+  }
   for (let n = levels.length + 1; n <= LEVELS; n++) { levels.push(pick(plan(n))); if (n % 50 === 0) console.log(lang, 'level', n); }
-  if (!KEEP) for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
+  if (!KEEP && !KEEP_ALL) for (let d = 0; d < DAILY; d++) { daily.push(pick(dailyPlan(d))); if (d % 100 === 0) console.log(lang, 'day', d); }
   const dir = path.join(ROOT, 'word-ladder/data', lang);
   fs.mkdirSync(dir, { recursive: true });
   const w = {};
@@ -191,4 +325,5 @@ function build(lang) {
   console.log(lang, 'words', Object.fromEntries(Object.entries(byLen).map(([k, v]) => [k, v.length])), 'levels', levels.length, 'daily', daily.length);
 }
 
-for (const lang of ['en', 'es']) build(lang);
+if (process.argv.includes('--fetch-es-forms')) await fetchEsForms();
+else for (const lang of ['en', 'es']) build(lang);

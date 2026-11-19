@@ -85,13 +85,29 @@ export function distancesTo(dict, target, alphabet) {
   return d;
 }
 
-/** The hint from `cur`: the next word on a shortest path to `target`, preferring the commonest (dictionary order);
- *  null when `cur` is the target or no path exists. */
+/** The hint from `cur`: the next word on a shortest path to `target`. Of all the shortest paths it takes the one whose
+ *  RAREST word is the most common (dictionary order: grid words first, rude words last), then the commonest next word;
+ *  null when `cur` is the target or no path exists. (2026-11-19: picking only the commonest NEXT word walked hints into
+ *  places where every way on was obscure or rude: BUY BUT ... TIT TIP.) */
 export function hintFrom(dict, cur, target, alphabet, dist = distancesTo(dict, target, alphabet)) {
   if (cur === target || !dist.has(cur)) return null;
+  // worst(w) = the rarest word still to come on the best shortest path from w (the target itself not counted).
+  const memo = dist.__worst || (dist.__worst = new Map());
+  const worst = (w) => {
+    if (w === target) return -1;
+    if (memo.has(w)) return memo.get(w);
+    let best = Infinity;
+    for (const n of neighbours(dict, w, alphabet)) if (dist.get(n) === dist.get(w) - 1) best = Math.min(best, n === target ? -1 : Math.max(dict.order(n), worst(n)));
+    memo.set(w, best);
+    return best;
+  };
   const want = dist.get(cur) - 1;
-  let best = null;
-  for (const n of neighbours(dict, cur, alphabet)) if (dist.get(n) === want && (!best || dict.order(n) < dict.order(best))) best = n;
+  let best = null, bw = Infinity;
+  for (const n of neighbours(dict, cur, alphabet)) {
+    if (dist.get(n) !== want) continue;
+    const w = n === target ? -1 : Math.max(dict.order(n), worst(n));
+    if (!best || w < bw || (w === bw && dict.order(n) < dict.order(best))) { best = n; bw = w; }
+  }
   return best;
 }
 

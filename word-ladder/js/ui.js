@@ -610,7 +610,9 @@ class WordLadder {
     if (e.key === 'ArrowLeft') { this.cur.sel = this.cur.sel == null ? len - 1 : (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'ArrowRight') { this.cur.sel = this.cur.sel == null ? 0 : (this.cur.sel + 1) % len; this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'Backspace') { this._undo(); e.preventDefault(); return; }
-    const ch = String(e.key || '').toUpperCase();
+    // A Spanish keyboard's á / é / ü types its plain vowel (the word list has no accents); Ñ stays Ñ.
+    let ch = String(e.key || '').toUpperCase();
+    if (ch.length === 1 && ch !== 'Ñ') ch = ch.normalize('NFD').replace(/[̀-ͯ]/g, '');
     if (ch.length === 1 && (this.data.alpha || '').includes(ch)) { this._letter(ch); e.preventDefault(); }
   }
 
