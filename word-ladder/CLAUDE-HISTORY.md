@@ -91,3 +91,13 @@ MAR to SOL); progress per difficulty on the start screen; Spanish "Llega a la pa
 pressable depth on buttons, keys, and tiles. Not built, on purpose: smart keys that play a letter without a tapped tile (Matt's
 rule, 2026-11-14), any change to level data, removing the game's own back arrow. Nothing recorded, saved, or logged changed
 (only the additive `tip1` preference).
+
+### Re-grade B+ ("not a clean yes, but close"), second pass the same day
+
+Built from the reviewer's notes: the first-move tip made unmissable (a ring that stays on, a glow, a bouncing arrow; the same on
+the key); the finish reordered (the heading pops in only after the last star lands; at 3 stars a gold burst and a shine across
+the target row; Next still live at once); the flag in How to play's goal line drawn cropped (its blank sides read as a space before
+the period; the strings never had one); tall phones fill their room (bigger tiles, full-size rungs, bigger earlier words, taller
+keys); the title picture's short version for short phones (fewer, bigger rungs); a daily streak, worked out when shown from the
+saved dailies (never a stored counter, so nothing new to keep safe); rungs as full tile slots on faint gold rails. Still admin
+only; nothing recorded, saved, or logged changed.
