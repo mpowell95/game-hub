@@ -55,8 +55,15 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 dictionary, ENABLE / `boggle/data/words-es.txt`, so every real word is a legal step, rude ones included (2026-11-13,
 Matt: ASS was refused, "Yes it is" a word); grid words first, most common first), `levels.json` (500), `daily.json` (730). A level = `{ s, t, p, h }`.
 **Par is the true minimum over EVERY accepted word** (so nobody beats it) and a path of that length exists through
-Word Weaver's GRID words alone (common, hand-checked); start, target and the hint path are grid words.
-`node word-ladder/js/data-test.js` (~1 min) checks every level and day of both languages by breadth-first search.
+Word Weaver's GRID words alone (common, hand-checked) when the level is made; start and target are grid words, the hint path prefers them.
+`node word-ladder/js/data-test.js` (~2.5 min) checks every level and day of both languages by breadth-first search.
+**Words review (2026-11-19, `CLAUDE-HISTORY.md`)**: Spanish adds verb forms said in films and TV, verb forms with a pronoun
+(DEJAME), and every Boggle word's Ñ spelling (`tools/word-ladder-es-forms.txt`, `--fetch-es-forms`); English adds APP, EMAIL,
+SELFIE (`ADD_EN`); hand lists `ADD_ES`. **Nothing once accepted is ever dropped.** `--keep-all` keeps every start, target and
+number and works out par and the hint path again (14 Spanish levels and 12 dailies got shorter). Rude words sort last; the
+hint takes the shortest path whose rarest word is the commonest (`hintFrom`). Accented desktop keys type the plain vowel.
+**Open (proposal only)**: English Expert's par needs a non-Word-Weaver word on 78-98% of levels; Spanish 451-500 54%;
+`docs/WORD-LADDER-POINTS-PROPOSAL.md` (points, not built).
 **APPEND-ONLY once released**: progress is by level number. Levels 251-500 were remade ONCE, 2026-11-14 (`--keep-through 250`:
 1-250 and every daily untouched), for the 5- and 6-letter difficulties; Expert's middle steps may be any accepted word (`anyPath`;
 6-letter grid words rarely chain), its start and target stay common.
@@ -69,7 +76,7 @@ rule 4; earliest time). First completion = one play + win in its band (`daily` f
 daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (levels, stars,
 at par = ladder levels in par moves, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`). Leaderboard rule
 `solves` (`js/lb-rules.js`); the board number is `wlSolved` (DISTINCT levels from the merged maps, both languages, by band via
-`wlBandOf`), never `byDiff` wins: a second phone starts at level 1 and would count a level twice. No points yet. No integrity
+`wlBandOf`), never `byDiff` wins: a second phone starts at level 1 and would count a level twice. No points yet (proposal: `docs/WORD-LADDER-POINTS-PROPOSAL.md`). No integrity
 rule yet (`GAME_NAMES` has it; candidate STRONG rule `m >= p`, replay over real data first). **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
 decide `CARRY_TEST` with Matt, add every file to `sw.js` ASSETS with `data/**` in LAZY, bump CACHE.
 

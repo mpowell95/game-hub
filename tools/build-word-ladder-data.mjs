@@ -13,6 +13,12 @@
 //     A level's start, target AND hint path are GRID words only (Word Weaver's common, hand-checked list): par is the
 //     shortest path over every accepted word and a path of that length exists through grid words alone.
 //     words.json lists grid words first, so the game's hint (the earliest word on a shortest path) prefers them.
+//   * SPANISH also takes tools/word-ladder-es-forms.txt (2026-11-19; written by `--fetch-es-forms`, which downloads
+//     lemmatization-lists and FrequencyWords; committed, so a normal run stays offline): verb forms said in films and TV
+//     (HABLAN, LEE), verb forms with a pronoun joined on (DEJAME, VERTE), and the Ñ spelling of each Boggle word (Boggle
+//     folds Ñ to N). ADD_EN / ADD_ES: hand-read everyday words neither list has (EMAIL, SELFIE; LINAJE, GATITO).
+//     Nothing once accepted is ever dropped (a saved ladder may hold it; a dropped word can lengthen a par).
+//   * RUDE words stay legal steps but sort LAST, so neither the game's hint nor the hint path takes one unless it must.
 //   * How COMMON a word is: tools/word-weaver-ranks-{en,es}.txt (FrequencyWords 2018 line numbers, CC BY-SA 4.0). A
 //     word with no rank counts as rare (RARE). Start and target words are common (rank caps in plan()); the hint path
 //     is the shortest path with the most common words (least summed rank).
