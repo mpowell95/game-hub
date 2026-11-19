@@ -13,7 +13,7 @@ import * as E from './engine.js';
 import STRINGS from './strings.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordWordLadder, recordWordLadderDaily, withMode, loadStats, wlKey, wlLevels } from '../../js/game-stats.js';
+import { recordWordLadder, recordWordLadderDaily, withMode, loadStats, wlKey, wlLevels, logPlayData } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
@@ -33,6 +33,7 @@ const SVG = {
   back: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   x: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
   undo: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M9 7L4 12l5 5" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 12H14a5 5 0 010 10h-2" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>',
+  redo: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><g transform="matrix(-1 0 0 1 24 0)"><path d="M9 7L4 12l5 5" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 12H14a5 5 0 010 10h-2" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round"/></g></svg>',
   hint: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3z" fill="currentColor"/><rect x="9" y="17.5" width="6" height="2.2" rx="1" fill="currentColor"/><rect x="10" y="20.6" width="4" height="1.8" rx=".9" fill="currentColor"/></svg>',
   cal: '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   check: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -71,6 +72,36 @@ function loadLang() {
 }
 /** The puzzle version an attempt was played on (its level's `v`); a save from before the 2026-11-19 remake has none = 1. */
 function wlVer(a) { return Math.max(1, Math.floor(Number((a && (a.ver || (a.level && a.level.v))) || 1))); }
+
+// --- THE PRIVATE PLAY LOG (2026-11-19, Matt: "make sure all the game info and guesses and whatever are errors and undos
+// are tracked so we can show stats later"). Admin play log `x` only (withMode `log` / logPlayData), never the stats store,
+// never shown to players. Format: word-ladder/CLAUDE.md, "The private play log". Each attempt keeps its log in its own
+// save (`log`, additive: { t0, at, away, seq, cut }) so leaving and coming back keeps one log per attempt.
+const SEQ_SAVE = 1500;   // entries kept in the save (oldest dropped first, counted in `cut`)
+function newLog(now = Date.now()) { return { t0: now, at: now, away: 0, seq: [], cut: 0 }; }
+/** A saved attempt's log, cleaned (a bad one starts afresh: it is evidence only). */
+function cleanLog(l, now = Date.now()) {
+  if (!l || typeof l !== 'object' || !Array.isArray(l.seq) || !(Number(l.t0) > 0)) return newLog(now);
+  const n = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  return { t0: n(l.t0), at: n(l.at) || n(l.t0), away: n(l.away), seq: l.seq.filter((e) => typeof e === 'string').slice(-SEQ_SAVE), cut: n(l.cut) };
+}
+/** The play log's `x` for an attempt: the puzzle, the result, and every action in order. Trimmed OLDEST FIRST to fit
+ *  the log's 20,000 characters (js/game-stats.js X_MAX), `cut` = entries dropped. */
+function playData(a, extra = {}) {
+  const lg = a.log || {};
+  const now = Date.now(), t0 = Number(lg.t0) || 0;
+  const wall = t0 ? Math.max(0, now - t0) : null;
+  const lv = a.level || {};
+  const stars = a.done ? E.starsFor(a.moves, a.p, a.hints) : null;
+  const out = { kind: a.kind, ver: wlVer(a), key: a.key || null, n: a.n, lang: a.lang, band: a.kind === 'daily' ? null : (a.band || E.bandOf(a.n)),
+    start: a.s || lv.s || null, target: lv.t || null, par: a.p, path: Array.isArray(lv.h) ? lv.h : null,
+    chain: a.chain, moves: a.moves, hints: a.hints, stars, redo: (a.redo || []).length,
+    secs: wall == null ? null : Math.round(Math.max(0, wall - (lg.away | 0)) / 1000), wall, away: lg.away | 0,
+    res: a.res | 0, cut: lg.cut | 0, seq: (lg.seq || []).slice(), ...extra };
+  let j = JSON.stringify(out);
+  while (j.length > 19900 && out.seq.length) { const k = Math.max(1, Math.ceil(out.seq.length / 10)); out.seq.splice(0, k); out.cut += k; j = JSON.stringify(out); }
+  return out;
+}
 function wlRec() {
   try { return ((loadStats().games || {}).wordladder || {}).wl || {}; } catch { return {}; }
 }
@@ -111,6 +142,9 @@ class WordLadder {
     this._onKey = (e) => this._key(e);
     this.root.addEventListener('click', this._onClick);
     document.addEventListener('keydown', this._onKey);
+    // Time away while a level is open (the app hidden, the phone locked): logged as `v-` and `v+:<ms away>`.
+    this._onVis = () => this._visibility();
+    document.addEventListener('visibilitychange', this._onVis);
     // THE PHONE'S BACK SWIPE steps back one screen, as in every leaderboard (js/back-stack.js; Matt, 2026-11-13: "make sure
     // the swipe back feature we built into all leaderboard screens also works here"). Levels: start screen 0, a level /
     // the daily / its done card 1, How to play +1. The hub's top-left button takes the same step ("‹ Back") via back().
@@ -277,10 +311,10 @@ class WordLadder {
     try {
       if (a.kind === 'daily') {
         res = withMode(() => ({ mode: 'daily', lang: a.lang }), 'daily', () => recordWordLadderDaily(a.key, { moves: a.moves, par: a.p, hints: a.hints }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, ver: wlVer(a), key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => playData(a) });
       } else {
         res = withMode(() => ({ mode: 'ladder', lang: a.lang }), () => E.bandOf(a.n), () => recordWordLadder(a.n, { moves: a.moves, par: a.p, hints: a.hints, lang: a.lang, band: E.bandOf(a.n), ver: wlVer(a) }),
-          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => ({ kind: a.kind, ver: wlVer(a), key: a.key || null, n: a.n, lang: a.lang, start: a.s || (a.level && a.level.s) || null, target: a.level ? a.level.t : null, par: a.p, chain: a.chain, seq: a.seq || [], moves: a.moves, hints: a.hints, secs: a.t0 ? Math.round((Date.now() - a.t0) / 1000) : null, res: a.res | 0 }) });
+          { detail: () => ({ moves: a.moves, par: a.p, hints: a.hints }), log: () => playData(a) });
       }
     } catch (err) { console.error('[word-ladder] result NOT recorded yet, retried on the next open', err); res = null; }
     if (!res) { if (!quiet) console.error('[word-ladder] the recorder refused the result; kept as not recorded, retried on the next open'); return false; }
@@ -289,6 +323,10 @@ class WordLadder {
   }
   _saveAttempt(a) {
     const rec = { v: 1, n: a.n, ver: wlVer(a), s: a.level ? a.level.s : a.s, p: a.p, chain: a.chain, moves: a.moves, hints: a.hints, done: !!a.done, recorded: !!a.recorded };
+    // Additive (2026-11-19): Redo's words (newest undo last) and the private play log, kept with the attempt.
+    if (!a.done && Array.isArray(a.redo) && a.redo.length) rec.redo = a.redo.slice();
+    if (a.log && Array.isArray(a.log.seq)) { if (a.log.seq.length > SEQ_SAVE) { a.log.cut = (a.log.cut | 0) + a.log.seq.length - SEQ_SAVE; a.log.seq.splice(0, a.log.seq.length - SEQ_SAVE); } rec.log = a.log; }
+    if (a.ab) rec.ab = 1;
     if (a.kind === 'daily') {
       const all = readJSON(DAILY_KEY, { v: 1, d: {} });
       if (!all.d || typeof all.d !== 'object') all.d = {};
@@ -304,6 +342,7 @@ class WordLadder {
   // --- screens ----------------------------------------------------------------------------------------------
   _setup() {
     this._clearTimers();
+    this._leaveLevel();
     this.screen = 'setup';
     this.cur = null;
     const n = this._nextN(this.lang, this.band);
@@ -359,6 +398,7 @@ class WordLadder {
       const list = d.daily.levels || [];
       level = E.cleanLevel(list[((dn % list.length) + list.length) % list.length]);
       key = `${lang}-${dayKey(today)}`;
+      this._abandonDays(lang, key);
       a = (readJSON(DAILY_KEY, { d: {} }).d || {})[key] || null;
       n = Math.max(0, dn);
     } else {
@@ -369,9 +409,18 @@ class WordLadder {
       a = s && s.n === n ? s : null;
     }
     if (!level) { console.error('[word-ladder] level does not add up, not drawn', kind, n); this._soon(); return; }
+    // A save on another puzzle (a remade level or day) is dropped by cleanAttempt: its unfinished attempt is logged first
+    // as ABANDONED (private play log only; it counts for nothing).
+    const stale = !!a && !a.done && (a.moves | 0) > 0 && ((Array.isArray(a.chain) && a.chain.length > 0 && String(a.chain[0]) !== level.s)
+      || (!!a.s && String(a.s) !== level.s) || wlVer(a) !== (level.v || 1));
+    if (stale) this._logAbandon({ kind, lang, key, band: kind === 'daily' ? null : this.band, ...a }, 'replaced');
     const c = E.cleanAttempt(a, level, d.dict);
     this.data = d;
-    this.cur = { kind, lang, n, key, level, ver: level.v || 1, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, seq: [], t0: Date.now(), res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
+    const now = Date.now();
+    const same = !!a && !stale && !c.done;
+    const log = a && !stale ? cleanLog(a.log, now) : newLog(now);   // a finished, unrecorded save keeps its own log
+    if (same && a.log) { const gone = Math.max(0, now - log.at); log.away += gone; log.seq.push('B:' + gone + '@' + Math.max(0, now - log.t0)); }
+    this.cur = { kind, lang, n, key, level, ver: level.v || 1, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, log, redo: same ? this._cleanRedo(a.redo, c, d.dict) : [], res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
@@ -405,7 +454,10 @@ class WordLadder {
         <div class="wl-ladder" data-role="ladder"></div>
         <div class="wl-msg" data-role="msg" aria-live="polite"></div>
         <div class="wl-tools">
-          <button type="button" class="wl-icon wl-tool" data-act="undo" aria-label="${esc(t('undo_aria'))}">${SVG.undo}</button>
+          <div class="wl-tools-l">
+            <button type="button" class="wl-icon wl-tool" data-act="undo" aria-label="${esc(t('undo_aria'))}">${SVG.undo}</button>
+            <button type="button" class="wl-icon wl-tool" data-act="redo" aria-label="${esc(t('redo_aria'))}">${SVG.redo}</button>
+          </div>
           <button type="button" class="wl-icon wl-tool wl-hintbtn" data-act="hint" aria-label="${esc(t('hint_aria'))}">${SVG.hint}<i class="wl-badge" data-role="hints"${c.hints ? '' : ' hidden'}>${c.hints}</i></button>
         </div>
         <div class="wl-kb" data-role="kb">${kb.map((row) => `<div class="wl-kr">${[...row].map((ch) =>
@@ -437,6 +489,7 @@ class WordLadder {
     this._tip = { pos, ch: next[pos] };
     saveSettings({ tip1: 1 });
     try { noteTipShown('wordladder', 'first-move'); } catch { /* a report only */ }
+    this._wlNote('T');
     this._drawLadder();
   }
   _endTip() {
@@ -515,6 +568,8 @@ class WordLadder {
     if (hb) { hb.textContent = String(c.hints); hb.hidden = !c.hints; }
     const undo = this.root.querySelector('[data-act="undo"]');
     if (undo) undo.disabled = chain.length < 2;
+    const redo = this.root.querySelector('[data-act="redo"]');
+    if (redo) redo.disabled = !(c.redo && c.redo.length);
     this._coach();
     this._paintTipKey();
   }
@@ -596,38 +651,97 @@ class WordLadder {
     if (this._badOn) { this._badOn = false; if (this.screen === 'play' && this.cur) this._drawLadder(); }
   }
 
-  /** Change the selected letter to `ch`. */
-  _letter(ch) {
+  /** Change the selected letter to `ch` (`src` 'kb' = a physical keyboard, else the on-screen keys). */
+  _letter(ch, src) {
     const c = this.cur;
     if (!c || this.screen !== 'play') return;
     this._cancelBad();
     const w = this._word();
-    if (c.sel == null) { this._msg(t('pick_first')); return; }   // a key before a letter: say so
+    this._wlNote((src === 'kb' ? 'K:' : 'k:') + ch);
+    if (c.sel == null) { this._noteSave('n'); this._msg(t('pick_first')); return; }   // a key before a letter: say so
     const next = w.slice(0, c.sel) + ch + w.slice(c.sel + 1);
-    if (next === w) return;
+    if (next === w) { this._noteSave('='); return; }
     const why = E.checkMove(this.data.dict, w, next);
     if (why !== 'ok') {
-      this._wlNote((why === 'word' ? 'x:' : 'o:') + next);
+      this._noteSave((why === 'word' ? 'x:' : 'o:') + next);
       this._msg(t(why === 'word' ? 'not_word' : 'one_letter'), true);
       this._bad(c.sel, ch);
       return;
     }
-    this._step(next, false);
+    this._step(next, 'word');
   }
   /** PRIVATE play log only (admin play log `x`, never saved): every try in order, with the clock. */
   _wlNote(e) {
-    try { const c = this.cur; if (c && c.seq && c.seq.length < 600) c.seq.push(e + '@' + Math.round((Date.now() - (c.t0 || Date.now())) / 1000)); } catch { /* private log only */ }
+    try {
+      const c = this.cur;
+      if (!c || !c.log || c.done) return;
+      const now = Date.now();
+      c.log.seq.push(e + '@' + Math.max(0, now - c.log.t0));
+      c.log.at = now;
+    } catch { /* private log only */ }
   }
-  _step(next, hint) {
+  /** A line of the log, saved with the attempt at once (a tap that changes nothing else still keeps its line). */
+  _noteSave(e) { this._wlNote(e); if (this.cur && !this.cur.done && this.screen !== 'loading') this._saveAttempt(this.cur); }
+  /** Leaving a level unfinished (the start screen, the Hub, the app closed): the attempt so far goes to the private log
+   *  as `left` (counts for nothing; the save keeps going, and coming back adds `B:<ms away>`). */
+  _leaveLevel() {
+    const c = this.cur;
+    if (!c || c.done || !c.log || this.screen === 'loading') return;
+    this._wlNote('L');
+    this._saveAttempt(c);
+    if (c.log.seq.length > 1 || c.moves > 0) {
+      try { logPlayData('wordladder', 'left', playData(c), { mode: { mode: c.kind === 'daily' ? 'daily' : 'ladder', lang: c.lang }, diff: c.kind === 'daily' ? 'daily' : (c.band || E.bandOf(c.n)), key: c.kind === 'daily' ? c.key : `${c.lang}:${c.n}` }); } catch (err) { console.error('[word-ladder] left attempt not logged', err); }
+    }
+  }
+  /** An unfinished attempt that will never be finished (its puzzle was remade, or its day has passed): logged once. */
+  _logAbandon(a, why) {
+    try {
+      const lg = a.log ? cleanLog(a.log) : undefined;
+      logPlayData('wordladder', 'abandon', playData({ ...a, log: lg }, { why }), { mode: { mode: a.kind === 'daily' ? 'daily' : 'ladder', lang: a.lang }, diff: a.kind === 'daily' ? 'daily' : (a.band || E.bandOf(a.n)), key: a.kind === 'daily' ? a.key : `${a.lang}:${a.n}` });
+    } catch (err) { console.error('[word-ladder] abandoned attempt not logged', err); }
+  }
+  /** Earlier days of this language left unfinished: each logged once as abandoned (`ab` stamped in the daily save). */
+  _abandonDays(lang, today) {
+    try {
+      const all = readJSON(DAILY_KEY, { v: 1, d: {} });
+      if (!all.d || typeof all.d !== 'object') return;
+      let changed = false;
+      for (const [k, a] of Object.entries(all.d)) {
+        if (!a || typeof a !== 'object' || a.done || a.ab || k === today || !k.startsWith(lang + '-') || !((a.moves | 0) > 0)) continue;
+        this._logAbandon({ kind: 'daily', key: k, lang, ...a }, 'day-over');
+        all.d[k] = { ...a, ab: 1 };
+        changed = true;
+      }
+      if (changed) writeJSON(DAILY_KEY, all);
+    } catch (err) { console.error('[word-ladder] earlier days not checked', err); }
+  }
+  /** Redo's saved words, kept only while each one still steps on from the chain (and the moves allow the refunds). */
+  _cleanRedo(r, c, dict) {
+    if (!Array.isArray(r) || !r.length || c.done) return [];
+    let w = c.chain[c.chain.length - 1];
+    for (let i = r.length - 1; i >= 0; i--) { const x = String(r[i] || ''); if (E.checkMove(dict, w, x) !== 'ok') return []; w = x; }
+    return c.moves - r.length >= c.chain.length - 1 + r.length ? r.map(String) : [];
+  }
+  /** A step. `how` = 'hint', 'redo' (the Redo button or key), or 'word' (a word played; the undone word typed again
+   *  is a Redo too). */
+  _step(next, how) {
     const c = this.cur;
     this._cancelBad();
     this._endTip();
-    this._wlNote((hint ? 'h:' : 'w:') + next);
+    const hint = how === 'hint';
+    // REDO TAKES BACK AN UNDO (2026-11-19; Dots and Boxes' Redo, 8247e98, "puts them back exactly"): the undone word
+    // comes back and the Undo's move is refunded, so Undo then Redo leaves the ladder and its Moves exactly as they were.
+    // Nothing can be gained: any other step clears Redo, and Undo only shows a word already played.
+    const top = c.redo && c.redo.length ? c.redo[c.redo.length - 1] : null;
+    const redo = !hint && top === next;
+    this._wlNote((hint ? 'h:' : redo ? (how === 'redo' ? 'r:' : 'R:') : 'w:') + next);
     const prev = this._word();
     c.chain = [...c.chain, next];
-    c.moves += 1;
+    if (redo) { c.redo.pop(); c.moves = Math.max(c.chain.length - 1, c.moves - 1); }
+    else { c.redo = []; c.moves += 1; }
     if (hint) c.hints += 1;
     if (next === c.level.t) {
+      this._wlNote('F');
       c.done = true;
       c.recorded = false;
       this._saveAttempt(c);
@@ -645,7 +759,8 @@ class WordLadder {
     const c = this.cur;
     if (!c || c.chain.length < 2) return;
     this._cancelBad();
-    this._wlNote('u');
+    this._wlNote('u:' + this._word());
+    (c.redo || (c.redo = [])).push(this._word());
     c.chain = E.undoChain(c.chain);
     c.moves += 1;               // an undo is a move (par counts every change)
     c.sel = null;
@@ -659,7 +774,15 @@ class WordLadder {
     this._cancelBad();
     if (!this.dist) this.dist = E.distancesTo(this.data.dict, c.level.t, this.data.alpha);
     const next = E.hintFrom(this.data.dict, this._word(), c.level.t, this.data.alpha, this.dist);
-    if (next) this._step(next, true);
+    if (next) this._step(next, 'hint'); else this._noteSave('h0');
+  }
+  _redo() {
+    const c = this.cur;
+    if (!c || this.screen !== 'play' || !c.redo || !c.redo.length) return;
+    this._cancelBad();
+    const next = c.redo[c.redo.length - 1];
+    if (E.checkMove(this.data.dict, this._word(), next) !== 'ok') { c.redo = []; this._drawLadder(); return; }   // never break the ladder
+    this._step(next, 'redo');
   }
 
   /** The finish: the ladder lights up row by row, the stars fill one at a time, the heading names the result (Par! at
@@ -758,6 +881,7 @@ class WordLadder {
 
   _help() {
     const prev = this.screen;
+    if (prev === 'play') this._noteSave('?');
     const ov = document.createElement('div');
     ov.className = 'wl-ov';
     ov.innerHTML = `<div class="wl-sheet" role="dialog" aria-label="${esc(t('how_title'))}">
@@ -790,6 +914,7 @@ class WordLadder {
       if (this.screen !== 'play' || !this.cur) return;
       this._cancelBad();
       this.cur.sel = Number(b.dataset.pos) | 0;
+      this._noteSave('p' + this.cur.sel);
       this._drawLadder();
       return;
     }
@@ -801,6 +926,7 @@ class WordLadder {
     else if (act === 'help') this._help();
     else if (act === 'close-help') this._goBack();
     else if (act === 'undo') this._undo();
+    else if (act === 'redo') this._redo();
     else if (act === 'hint') this._hint();
     else if (act === 'band') {
       if (E.TIERS.includes(b.dataset.band) && b.dataset.band !== this.band) { this.band = b.dataset.band; saveSettings({ band: this.band }); this._setup(); }
@@ -815,31 +941,47 @@ class WordLadder {
     const ov = this.root.querySelector('.wl-ov');
     if (ov) ov.remove();
     if (this.screen === 'help') this.screen = this._helpPrev || 'setup';
-    if (this.screen === 'play') this._fit();   // a resize while the sheet was up
+    if (this.screen === 'play') { this._noteSave('?-'); this._fit(); }   // a resize while the sheet was up
     this._sync();
     if (this._tipArmed && this.screen === 'play') this._startTip();
   }
   _key(e) {
     const tg = e.target;
     if (tg && tg.closest && (tg.closest('input, textarea, select, [contenteditable]') || (tg !== document.body && !this.root.contains(tg)))) return;
+    // Redo: Ctrl+Y, Ctrl+Shift+Z (Cmd on a Mac), or Shift+Backspace.
+    const kl = String(e.key || '').toLowerCase();
+    if (this.screen === 'play' && this.cur && (((e.ctrlKey || e.metaKey) && !e.altKey && (kl === 'y' || (e.shiftKey && kl === 'z'))) || (e.shiftKey && e.key === 'Backspace'))) { this._redo(); e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape' && this._level() > 0) { this._goBack(); e.preventDefault(); return; }
     if (this.screen !== 'play' || !this.cur) return;
     const len = this.cur.level.t.length;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') this._cancelBad();
-    if (e.key === 'ArrowLeft') { this.cur.sel = this.cur.sel == null ? len - 1 : (this.cur.sel + len - 1) % len; this._drawLadder(); e.preventDefault(); return; }
-    if (e.key === 'ArrowRight') { this.cur.sel = this.cur.sel == null ? 0 : (this.cur.sel + 1) % len; this._drawLadder(); e.preventDefault(); return; }
+    if (e.key === 'ArrowLeft') { this.cur.sel = this.cur.sel == null ? len - 1 : (this.cur.sel + len - 1) % len; this._noteSave('p' + this.cur.sel + 'a'); this._drawLadder(); e.preventDefault(); return; }
+    if (e.key === 'ArrowRight') { this.cur.sel = this.cur.sel == null ? 0 : (this.cur.sel + 1) % len; this._noteSave('p' + this.cur.sel + 'a'); this._drawLadder(); e.preventDefault(); return; }
     if (e.key === 'Backspace') { this._undo(); e.preventDefault(); return; }
     // A Spanish keyboard's á / é / ü types its plain vowel (the word list has no accents); Ñ stays Ñ.
     let ch = String(e.key || '').toUpperCase();
     if (ch.length === 1 && ch !== 'Ñ') ch = ch.normalize('NFD').replace(/[̀-ͯ]/g, '');
-    if (ch.length === 1 && (this.data.alpha || '').includes(ch)) { this._letter(ch); e.preventDefault(); }
+    if (ch.length === 1 && (this.data.alpha || '').includes(ch)) { this._letter(ch, 'kb'); e.preventDefault(); }
+  }
+
+  _visibility() {
+    const c = this.cur;
+    if (!c || c.done || !c.log || (this.screen !== 'play' && this.screen !== 'help')) return;
+    if (document.hidden) { this._hidAt = Date.now(); this._noteSave('v-'); return; }
+    if (!this._hidAt) return;
+    const gone = Math.max(0, Date.now() - this._hidAt);
+    this._hidAt = 0;
+    c.log.away += gone;
+    this._noteSave('v+:' + gone);
   }
 
   destroy() {
     // Forget the words and levels: the hub keeps this module loaded for the life of the page, so without this a phone
     // kept a data update out until the app was closed (2026-11-13: Matt's phone refused LIEN from the old list).
     for (const k of Object.keys(_data)) delete _data[k];
+    try { if (this.screen === 'play' || this.screen === 'help') this._leaveLevel(); } catch { /* private log only */ }
+    document.removeEventListener('visibilitychange', this._onVis);
     this.root.removeEventListener('click', this._onClick);
     document.removeEventListener('keydown', this._onKey);
     try { if (this._offResize) this._offResize(); } catch { /* gone */ }
@@ -858,6 +1000,10 @@ class WordLadder {
       state: () => this.cur && { ...this.cur },
       type: (w) => { const c = this.cur; const cur = this._word(); for (let i = 0; i < cur.length; i++) if (cur[i] !== w[i]) { c.sel = i; this._letter(w[i]); return; } },
       hint: () => this._hint(),
+      undo: () => this._undo(),
+      redo: () => this._redo(),
+      key: (ch) => this._letter(ch),
+      pick: (i) => { this.cur.sel = i; this._noteSave('p' + i); this._drawLadder(); },
     };
   }
 }

@@ -160,6 +160,8 @@
 .wl-root .wl-msg.is-coach { color: var(--wl-on); }
 .wl-root .wl-tools { flex: none; display: flex; justify-content: space-between; padding: 0 4px 8px; }
 .wl-root .wl-tool { width: 56px; height: 48px; }
+/* Undo and Redo side by side on the left (Redo, 2026-11-19), the hint on the right. */
+.wl-root .wl-tools-l { display: flex; gap: 8px; }
 /* The keyboard: 10 keys across like a phone keyboard. Keys are 50px tall, narrower than 44px on a 360px phone
    (a documented departure from the 44x44 floor: ten keys must fit one row, as on every phone keyboard). */
 .wl-root .wl-kb { flex: none; display: flex; flex-direction: column; gap: 8px; margin: 0 -6px; }

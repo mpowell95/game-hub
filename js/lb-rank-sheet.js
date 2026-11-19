@@ -13,6 +13,7 @@ import { WO_TIERS, woEarnedPoints } from './arrow-maze-time.js';
 import { GL_TIERS, GL_BAND_START, glLevelPoints, glHintedPoints } from './gridlock-points.js';
 import { WW_TIERS, wwMult, wwStarsFor } from './word-weaver-points.js';
 import { HINT_STEPS, LEVEL_POINTS, LEVEL_CAP } from './puzzle-points.js';
+import { WL_TIERS, WL_POINTS } from './word-ladder-points.js';
 import { ensurePointsSheetCss, pointsTableHTML, capNoteHTML, shapeHTML, LEVEL_KEY } from './lb-points-sheet.js';
 import { makeT } from './i18n.js';
 import { isAdminDevice } from './admin-config.js';
@@ -80,8 +81,14 @@ const SHEETS = {
   minesweeper: () => [levelTable('minesweeper', 'lbpt_per_board')],
   // Points held for players (2026-11-04): the points table only where the board is on points (admin devices).
   nutsbolts: () => (isAdminDevice() ? [levelTable('nutsbolts', 'lbpt_per_level')] : [hardest('lbrs_nb_by')]),
-  // Word Ladder (2026-11-13, admin only): levels finished, like Nuts & Bolts' player sheet. Revisit at release.
-  wordladder: () => [hardest('lbrs_nb_by')],
+  // Word Ladder (2026-11-19, Matt: "ready to be added to the leaderboard with the 'how scores are calculated' screen"):
+  // points per level by band x stars (3, 2, 1), read from word-ladder-points.js WL_POINTS; how stars are earned and
+  // capped by hints; each level once; earlier (remade) puzzles at their stars; the daily pays nothing.
+  wordladder: () => [
+    { h: 'lbrs_h_lvl', grid: { sup: 'lbrs_wl_sup', cols: ['3', '2', '1'],
+      rows: WL_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: WL_POINTS[b].slice() })) }, foot: ['lbrs_wl_stars', 'lbrs_wl_hints'] },
+    { text: ['lbrs_wl_once', 'lbrs_wl_old', 'lbrs_wl_daily'] },
+  ],
   murdoku: () => [helpGrid('lbrs_mk_sup')],
   sudoku: () => [helpGrid('lbrs_su_sup')],
   skeeball: () => [{ h: 'lbrs_total', text: 'lbrs_sk_by1' }, { h: 'gs_sk_best_game', text: 'lbrs_sk_by2' }],
@@ -130,7 +137,7 @@ function cardHTML(c) {
   else if (c.steps) body = `<ol class="lbrs-ol">${c.steps.map((k) => `<li>${esc(t(k))}</li>`).join('')}</ol>`;
   else if (c.text) body = `<div class="lbrs-one">${[].concat(c.text).map((k) => esc(t(k))).join('<br>')}</div>`;
   else if (c.rows) body = c.rows.map((r) => `<div class="lbrs-r">${icon(r.ic)}<span class="lbrs-n">${esc(t(r.k))}</span></div>`).join('');
-  const foot = c.foot ? `<div class="lbrs-foot">${esc(t(c.foot))}</div>` : '';
+  const foot = c.foot ? `<div class="lbrs-foot">${[].concat(c.foot).map((k) => esc(t(k))).join('<br>')}</div>` : '';
   return `<div class="lbps-card">${head}${body}${foot}</div>`;
 }
 /** The sheet's body for a non-points game, or '' when it has none. */

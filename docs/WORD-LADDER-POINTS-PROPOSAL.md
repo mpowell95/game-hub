@@ -1,7 +1,9 @@
 # Word Ladder points: proposal (revised 2026-11-19, after the remake)
 
 Written by a session, not by Matt. Matt's words: "1. Yes, remake the levels. Keep whatever points I've earned, if any.
-2. Revaluate once the difficulties are modified." A PROPOSAL only: nothing here is built. Word Ladder stays admin only.
+2. Revaluate once the difficulties are modified." **BUILT 2026-11-19** (Matt: "Cool. Make sure it's ready to be added to the
+leaderboard"): the recommended table below, `js/word-ladder-points.js`; see `word-ladder/CLAUDE.md`, "Points and the leaderboard".
+Not built: the hint cap across phones ("What stops farming"). Word Ladder stays admin only.
 The first version of this proposal (same day, before the remake) is in git history; its table is replaced below.
 
 ## What changed

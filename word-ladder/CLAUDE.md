@@ -15,7 +15,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
 | Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
 | Settings | `gamehub.wordladder.v1` `{ lang, seen, band, tip1 }` (puzzle language; nothing saved = the hub's language; `tip1` = the first-move tip shown) |
-| Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, ver, s, p, chain, moves, hints, done, recorded }` (`ver` = the puzzle version, 2026-11-19; absent = 1; older saves also carry an unread `sel`) |
+| Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, ver, s, p, chain, moves, hints, done, recorded, redo?, log?, ab? }` (`ver` = the puzzle version, 2026-11-19; absent = 1; older saves also carry an unread `sel`; `redo` = Redo's words, newest undo last; `log` = the private play log so far; `ab` = a past day logged as abandoned) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
 
 ## Rules (`js/engine.js`, pure)
@@ -27,6 +27,11 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
   place) is a SOLID BRIGHT GREEN tile (`--wl-match` #22b84f; "make it a better green", 2026-11-14), nothing else (Matt, 2026-11-14: "Just make it green"; a dot under the letter and
   then a folded corner were both rejected; his call over the shape-plus-colour rule), its letter NAVY (6.2:1; white was 2.6:1, 2026-11-19). The target row has dashed gold tiles and a flag.
 - **Moves count every change, Undo too** (an undo is a move back). Par = the fewest changes possible.
+- **Redo (2026-11-19, Matt: "add a redo button")**: beside Undo, same look; Ctrl+Y, Ctrl/Cmd+Shift+Z, or Shift+Backspace.
+  **Redo takes back an Undo**: the undone word returns and the Undo's move is refunded, so Undo then Redo leaves the ladder
+  and Moves exactly as before (Dots and Boxes' Redo, 8247e98, "puts them back exactly"). Nothing can be gained: any other
+  step (a word or a hint) clears Redo, and Undo shows only a word already played. Typing the undone word again is the same
+  Redo (`R:` in the log). Off when nothing is undone; saved with the attempt (`redo`, checked on load by `_cleanRedo`).
 - **Stars**: moves at par 3, par +1 or +2 = 2, more = 1; 1 hint caps at 2, 2+ hints at 1 (`starsFor`, = `wlStars` in
   `js/game-stats.js`). **Hint** = plays the next word on a shortest path from where you are (the commonest one) and
   counts as a move.
@@ -39,7 +44,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 - **Daily**: one ladder a day per language, the same for everyone: the phone's LOCAL date of `bestNow()`
   (`js/server-time.js`, the server's clock where known); day 0 = the data's epoch 2026-11-13; after the 730 days the
   list repeats. No board yet (a `wlDaily/` node would need a rules change: follow `wwDaily`, back up first).
-- Desktop: letters type, ← → move the caret, Backspace = Undo.
+- Desktop: letters type, ← → move the caret, Backspace = Undo, Shift+Backspace or Ctrl+Y = Redo.
 - **The phone's back swipe steps back one screen, as in every leaderboard (2026-11-13, Matt)**: `js/back-stack.js`, levels
   start screen 0, a level / daily / done card 1, How to play +1. The swipe, the hub's top-left button (`back()`; it reads
   "‹ Back" via `gamehub:backlabel` while there is a step, "‹ Hub" on the start screen), the game's own back arrow, the X's
@@ -86,27 +91,45 @@ hint takes the shortest path whose rarest word is the commonest (`hintFrom`). Ac
 by `--remake en:251-500,es:1-100,es:251-500 --daily-from 8` (`REMAKE_SPECS`: a rising par and a falling greedy rate across each band,
 easiest level first; every par path through Word Weaver words, start and target common, never rude). A remade level or day carries
 `v: 2`; the version table is `REMADE` (engine) = `WL_REMADE` (`js/game-stats.js`), checked by both tests. Medium and English Easy
-untouched. Before/after numbers: `CLAUDE-HISTORY.md`. Points (proposal only, not built): `docs/WORD-LADDER-POINTS-PROPOSAL.md`.
+untouched. Before/after numbers: `CLAUDE-HISTORY.md`. Points: "Points and the leaderboard" below.
 **A further remake** = the same `--remake` (v becomes 3) and a new `REMADE` row; never reuse a number's key for another puzzle.
 
 ## Stats (`wl` sub-counter)
 
 **Remade levels keep what was earned (2026-11-19)**: a result is keyed by its PUZZLE, `wlKey(n, ver)`: `L<n>` = version 1 (every
 entry before the remake), `L<n>v2` = the remade puzzle (`recordWordLadder(..., { ver })`, the level's `v`; a save without `ver` = 1).
-Old entries are never moved or dropped. `wlLevels(gm)` = each level NUMBER once, its best entry over every version, so the board
-(`wlSolved`), the stars, and any future points count an old solve as before and a replay never twice. My Stats: Levels / Stars / At
+Old entries are never moved or dropped. `wlLevels(gm)` = each level NUMBER once, its best entry over every version, so the board,
+the stars, and the points count an old solve as before and a replay never twice. My Stats: Levels / Stars / At
 par per number + "Earlier puzzles" (numbers solved on an old version). The start screen's progress and Play <n> follow the CURRENT
 puzzles (`_solved`); a save from an older version never resumes (`cleanAttempt`). A first solve of a remade puzzle is one new play
 in `byDiff` (byDiff is not the board). Test: `tools/test-word-ladder.mjs` runs the OLD writer from git (5dd10bc), then this code.
 `wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
 the BETTER attempt kept WHOLE: more stars, then fewer moves, then fewer hints; never one attempt's moves with another's hints,
 rule 4; earliest time). First completion = one play + win in its band (`daily` for the
-daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (levels, stars,
-at par = ladder levels in par moves, daily). While admin-only the plays go to the TEST record (`ADMIN_ONLY`). Leaderboard rule
-`solves` (`js/lb-rules.js`); the board number is `wlSolved` (DISTINCT levels from the merged maps, both languages, by band via
-`wlBandOf`), never `byDiff` wins: a second phone starts at level 1 and would count a level twice. No points yet (proposal: `docs/WORD-LADDER-POINTS-PROPOSAL.md`). No integrity
-rule yet (`GAME_NAMES` has it; candidate STRONG rule `m >= p`, replay over real data first). **At release**: drop `devOnly` (hub + TABS), add `released`, remove from `ADMIN_ONLY`,
-decide `CARRY_TEST` with Matt, add every file to `sw.js` ASSETS with `data/**` in LAZY, bump CACHE.
+daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (points, levels, stars,
+at par = ladder levels in par moves, daily; the rows look `rowsWordLadder`). While admin-only the plays go to the TEST record (`ADMIN_ONLY`).
+
+## Points and the leaderboard (BUILT 2026-11-19, Matt: "Cool. Make sure it's ready to be added to the leaderboard")
+
+`js/word-ladder-points.js` (`WL_POINTS`, `wlPoints`, `wlCleared`): a level pays by band and stars, Easy 1/1/1, Medium 2/1/1,
+Hard 3/2/1, Expert 5/3/1 (3/2/1 stars); each level NUMBER once per language at its best over every version (`wlLevels`: old solves
+of remade levels at their stored stars); English and Spanish both count; the daily pays 0. Read time, from the merged maps (never
+`byDiff`). Board: `gameMetricAt` = `wlPoints`, one number over all bands (`boardTierOf` null), band tabs = bands with a level,
+a tie goes to FEWER distinct levels (`boardPlaysOf` = `wlCleared`: the better average). `lb-rules.js` `by: 'points'`; the "See how
+scores are calculated" sheet = `lb-rank-sheet.js` `wordladder` (the table, how stars come, the hint cap, once per level, earlier
+puzzles, daily 0; EN/ES). "+X pts": a first solve or a better result on a level (`recordWordLadder` announces a stars rise) via
+`points-toast.js`; never for a test play. My Stats: unit points, headline `wlPoints`. Integrity: `wordladder-under-par` (moves
+under the entry's own par, hints over moves, stars the moves do not give), an ALERT until a snapshot replay shows 0 honest hits.
+The server board needs nothing (it runs the same `aggregatePlayers`). Tests: `node tools/test-word-ladder-points.mjs`
+(the table, recorders, the pill, phone = server grouping, the board run as if released, the sheet, the alert, still hidden).
+**HIDDEN while admin only** (`isGameOnLauncher` false: off every board, no pill). Not built: the proposal's hint-before-finish cap
+across phones (`wl.hint`, Word Weaver's `ww.hint`): a hint solve replayed clean on a second phone still pays 3 stars.
+
+**Release checklist (only when Matt says "release it")**: `js/hub.js` entry: drop `devOnly`, add `released`; `js/game-stats-ui.js`
+TABS: drop `devOnly`; `js/game-stats.js`: remove from `ADMIN_ONLY`, decide `CARRY_TEST` with Matt (test plays carried or not);
+`sw.js` ASSETS every file, `data/**` in LAZY, `node tools/validate-sw-assets.mjs`, bump CACHE. Points, board, sheet, and pill need
+no change (they switch on with `isGameOnLauncher`). Run `node tools/test-word-ladder-points.mjs` (its "hidden" checks then fail by
+design: flip them).
 
 **Data reaches the phone on the next open (2026-11-13)**: `destroy()` forgets the loaded words and levels, so going back to
 the Hub and in again fetches them fresh (the hub keeps this module loaded for the life of the page; before this a phone
@@ -141,7 +164,21 @@ midnight stays saved under its day but the Daily button then opens the new day (
 ## Tests
 
 `node word-ladder/js/data-test.js`, `node tools/test-word-ladder.mjs` (recorders, merge, board count, stars = engine), `node tools/test-game-conventions.mjs`, `node tools/test-game-modes.mjs`,
-`node tools/test-i18n-strings.mjs`, `node tools/players-agg.test.mjs`, `node tools/test-lb-rules.mjs`.
-The localhost-only seam `window.__wlTest` (`state()`, `type(word)`, `hint()`).
+`node tools/test-i18n-strings.mjs`, `node tools/players-agg.test.mjs`, `node tools/test-lb-rules.mjs`, `node tools/test-word-ladder-points.mjs`.
+The localhost-only seam `window.__wlTest` (`state()`, `type(word)`, `hint()`, `undo()`, `redo()`, `key(L)`, `pick(i)`).
 
-Private play data (2026-11-16): logs start, target, chain, every try (valid, invalid, hint, undo) with time via withMode `log` / logPlayData.
+## The private play log (2026-11-19, Matt: "make sure all the game info and guesses ... errors and undos are tracked")
+
+Admin-only `playLog/<CODE>` `x` (read: `node tools/read-play-log.mjs <CODE>`); never in the stats store, never shown. `detail`
+(public, summed) stays `{ moves, par, hints }`. Entries (`e`): the finished level or daily (the withMode `log`, with `m`/`d`);
+`left` = an unfinished attempt when the level is left (start screen, Hub, app closed; cumulative, the last one is the latest);
+`abandon` = never finishable (`why`: `replaced` = its puzzle was remade, `day-over` = an earlier daily, logged once, `ab` stamped).
+`left`/`abandon` go through `logPlayData` (count for nothing), `k` = `<lang>:<n>` or the day key. `x` = `{ kind, ver, key, n, lang,
+band, start, target, par, path (the hint path), chain, moves, hints, stars, redo, secs (active), wall (ms since first open), away
+(ms hidden or gone), res, cut, seq, why? }`. `seq` = every action, `<code>[:<arg>]@<ms since the attempt began>`: `p<i>` letter
+picked (`p<i>a` by arrow key), `k:<L>` on-screen key, `K:<L>` keyboard key, then its outcome: `w:<WORD>` a step, `x:<WORD>` not a
+word, `o:<WORD>` not one letter, `n` no letter picked, `=` same letter; `u:<WORD>` undo (word taken off), `r:<WORD>` Redo,
+`R:<WORD>` the undone word retyped (a Redo), `h:<WORD>` hint (`h0` none), `?` / `?-` How to play opened / closed, `v-` / `v+:<ms>`
+app hidden / back, `L` left the level, `B:<ms>` back after ms away, `T` first-move tip shown, `F` finished. The attempt's save keeps
+its `log` (last 1,500 entries, `cut` counts dropped ones) so one attempt is one log across visits; `x` is trimmed oldest first
+to 20,000 characters. Proof: the dev-server play in `CLAUDE-HISTORY.md` (2026-11-19) saw every code land.

@@ -3771,9 +3771,14 @@ export function recordWordLadder(level, { moves, par, hints, lang, band, ver } =
   // The puzzle actually solved: `ver` = the level's data `v` (absent = 1: every attempt saved before the 2026-11-19
   // remake was a version 1 puzzle). A remade number's new result never lands on (or improves) the old puzzle's entry.
   const k = wlKey(n, ver);
-  if (!map[k]) bumpTotals(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder', true);
-  else if (_mode) _mode.noted = true;
   const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };
+  if (!map[k]) bumpTotals(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder', true);
+  else {
+    if (_mode) _mode.noted = true;
+    // A better result on a level already finished (more stars = more points, js/word-ladder-points.js): announced like
+    // a win so the "+X pts" pill shows the gain (display only; no play or win is counted, js/points-toast.js).
+    if (e.s > (Number(map[k].s) || 0)) announceWin(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder');
+  }
   map[k] = wlBest(map[k], e);
   st.updatedAt = new Date().toISOString();
   persist(st);

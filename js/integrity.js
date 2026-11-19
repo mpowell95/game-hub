@@ -196,6 +196,25 @@ export const RULES = [
       }
       return null;
     } },
+  // Word Ladder (2026-11-19, ALERT while unproven on real data): every stored level or day entry { s, m, p, h } is one
+  // whole attempt (js/game-stats.js wlBest). Par is the fewest changes over EVERY accepted word and words are never
+  // dropped, so moves under that entry's own par, more hints than moves, or stars its moves and hints do not give
+  // should be impossible. Kept an ALERT (never a void) until a replay over a whole snapshot shows 0 honest hits
+  // (tools/test-integrity.mjs --db); then it may become STRONG.
+  { id: 'wordladder-under-par', game: 'wordladder', void: false, text: 'a ladder in fewer moves than par, or stars its moves do not give',
+    test(g) {
+      const wl = obj(g.wl);
+      for (const [mk, m] of [['lv', wl.lv], ['es', wl.es], ['dl', wl.dl]]) {
+        for (const [k, e0] of Object.entries(obj(m))) {
+          const e = obj(e0), mv = num(e.m), p = num(e.p), h = num(e.h), st = num(e.s);
+          if (p > 0 && mv < p) return { v: mv, lim: p, at: `${mk}:${k}` };
+          if (h > mv) return { v: h, lim: mv, at: `${mk}:${k}` };
+          const want = p > 0 ? Math.min(mv <= p ? 3 : mv <= p + 2 ? 2 : 1, h === 0 ? 3 : h === 1 ? 2 : 1) : 0;
+          if (want && st > want) return { v: st, lim: want, at: `${mk}:${k}` };
+        }
+      }
+      return null;
+    } },
   // Hold'em: a ledger play could not have produced (js/game-stats.js holdemSuspect, already sorted last
   // on the Leaderboard).
   { id: 'holdem-ledger', game: 'holdem', void: false, text: 'a bankroll play could not produce',

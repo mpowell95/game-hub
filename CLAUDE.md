@@ -144,7 +144,7 @@ and gap (`lb2Gap`), then Record / Opponent (difficulties + Online) / modes / Tur
 set in `v2ScreenFor` from `isAdminDevice()`; My Stats' game pages on admin devices too). Display only.
 **Level columns (2026-11-08, Matt: "nice, build it"; `docs/mockups/lb2-player-game-v2.html`)**: every level is a tinted column in its
 own muted colour (`levelStripHTML`, `gs-t1..4`/`gs-tmp`); Flick Soccer's columns open first to 1/2/3 on tap (byMode `goals`, the rest =
-"Earlier games"); Gridlock, Word Weaver, Arrow Maze, Sudoku, Murdoku, Nuts & Bolts, Snake, Ball Run, Hill Climb, Brick Breaker, Golf,
+"Earlier games"); Gridlock, Word Weaver, Word Ladder, Arrow Maze, Sudoku, Murdoku, Nuts & Bolts, Snake, Ball Run, Hill Climb, Brick Breaker, Golf,
 Tower Stack (high / low / average per difficulty, 2026-11-14) have their own rows screens (`rowsScreenFor`); Skeeball machine cards tinted. Still admin devices only until "release it".
 
 **Every leaderboard tie (Matt, 2026-11-06: "all ties across the gamehub should be treated this way")**: the BETTER
@@ -363,6 +363,7 @@ Full map, invariants and history: `js/CLAUDE.md` (auto-loaded when working there
 | `game-stats-ui.js` / `leaderboard-ui.js` | My Stats / Leaderboards overlays (wins-only; per-game VS chip; admin-only games off By Game; tabs By Player / By Game top 3 / You, last tab remembered) |
 | `arrow-maze-time.js` / `gridlock-points.js` | Arrow Maze timer, ladder bands, points, Rush; Gridlock bands, stars, points. Network-first |
 | `word-weaver-points.js` | Word Weaver's stars (0 hints 3, 1 hint 2, 2+ 1), bands (Easy 1, Medium 501, Hard 1001, Expert 1501), per-level merge (`wwMerge`: most hints any record used), points = stars x 1/2/3/4 by band (x1/3/6/12 tried on admin devices 2026-11-16 and REMOVED, Matt: "that's insanity"; never raise without his ask) = its leaderboard number; bonus stars buy hints (`WW_PRICE` 40/60/120, `wwBalance`/`wwCollected`/`wwSpent`, `ww.sp`/`ww.by`, 2026-11-02; old free hints `ww.fu`/`ww.fl` kept); bonus squares `ww.b` (2026-11-02); the DAILY puzzle `ww.dl`/`ww.dh` (`wwDaily`, `wwDailyMerge`, `wwDailyCount`; no points, 2026-11-02) |
+| `word-ladder-points.js` | Word Ladder's points (2026-11-19, BUILT, hidden while the game is admin only): band x stars per level (Easy 1/1/1, Medium 2/1/1, Hard 3/2/1, Expert 5/3/1), each number once per language at its best (`wlLevels`), daily 0; the board, sheet, My Stats, the pill read it. `tools/test-word-ladder-points.mjs` |
 | `leaderboard-rank.js` | pure rating maths + board comparators |
 | `puzzle-points.js` | Sudoku / Murdoku / Nuts & Bolts / Minesweeper points (Matt, 2026-11-03; ADMIN DEVICES ONLY, `isPuzzlePts` in `leaderboard-ui.js`): Sudoku/Murdoku Easy 1; Medium 2, 1; Hard 4, 3, 2, 1; Expert 8, 5, 3, 1 by help used (`sd.hc`/`mu.hc` `h1/h2/h3`, saved from 2026-11-03; older helped solves half: 1, 1, 2, 4); Nuts & Bolts 1/2/4/8 a level, Easy at most 20 (no level 1); Minesweeper 1/3/8/20 a clear. `docs/LB-PUZZLE-POINTS-PROPOSAL.md`, `tools/test-puzzle-points.mjs` |
 | `points-toast.js` | the "+X pts" pill when a win is counted (`gamehub:win` from `game-stats.js`): every wins board, and since 2026-11-16 (Matt: "All games should have that") Minesweeper, Sudoku, Murdoku, Word Weaver, Nuts & Bolts (admin devices); Gridlock and Arrow Maze show their own. **A new points game must show its gain.** Display only; `tools/test-lb-points.mjs` |
@@ -424,6 +425,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Spelling Bee lost-word restore (2026-11-09):** `tools/test-bee-restore.mjs`.
 - **Golf challenges (2026-11-10):** `tools/test-golf-mp.mjs`.
 - **Shove Off (2026-11-18):** `node shove-off/js/test.js` (engine, determinism, rules versions), `tools/test-shoveoff-mp.mjs` (challenges), `tools/shoveoff-shots.mjs` (screenshots).
+- **Word Ladder points, Redo, the private log (2026-11-19):** `tools/test-word-ladder-points.mjs` (table, pill, phone = server grouping, the board as if released, the sheet, the alert, still hidden).
 - **Word Ladder data (2026-11-13):** `tools/build-word-ladder-data.mjs` (generator), `node word-ladder/js/data-test.js` (every par checked), `tools/test-word-ladder.mjs` (recorders, merge).
 - **One-time repair, Matt's re-added phone (2026-11-09):** `js/repair-1109.js` (RESTORE.md (b): sync first, back up, old device id + stats back, rollback on failure), `tools/test-repair-1109.mjs`.
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`. **Allow / Deny sign in (2026-11-15):** `tools/test-signin-ask.mjs`, `tools/test-signin-rules-emu.mjs` (rules on the real emulator).
