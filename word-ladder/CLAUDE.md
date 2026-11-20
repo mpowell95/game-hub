@@ -147,11 +147,25 @@ clean finish before another phone's hint keeps its stars. Read time; stored entr
 on the second phone reads only that phone's store, so it can show more than the board pays. Tests: `test-word-ladder-points.mjs`
 sections 9-10 (two phones, finished and unfinished hints, the old writer from git 8172fe4, server = phone).
 
-**Release checklist (only when Matt says "release it")**: `js/hub.js` entry: drop `devOnly`, add `released`; `js/game-stats-ui.js`
-TABS: drop `devOnly`; `js/game-stats.js`: remove from `ADMIN_ONLY`, decide `CARRY_TEST` with Matt (test plays carried or not);
-`sw.js` ASSETS every file, `data/**` in LAZY, `node tools/validate-sw-assets.mjs`, bump CACHE. Points, board, sheet, and pill need
-no change (they switch on with `isGameOnLauncher`). Run `node tools/test-word-ladder-points.mjs` (its "hidden" checks then fail by
-design: flip them).
+**Release checklist (verified 2026-11-20 by a dry run on a throwaway copy; only when Matt says "release it")**:
+1. `js/hub.js` Word Ladder entry: delete the `// ADMIN ONLY ...` comment and `devOnly: true`, add `released: '<YYYY-MM-DD>'` (the
+   release day: the New pill and the New games bubble read it).
+2. `js/game-stats-ui.js` TABS: `{ id: 'wordladder', labelKey: 'game_title_wordladder' }` (drop `devOnly: true`).
+3. `js/game-stats.js` `ADMIN_ONLY`: remove `wordladder: 'word-ladder',`. `CARRY_TEST`: Matt's call; add `wordladder: true` to carry
+   his and testers' plays (`combineWlRecords` is in `CARRY_COMBINE`: counters the larger, each level `wlBest` whole, hints kept;
+   both ways proved: carried = the test levels and points in the real record, stamp `carried.wordladder`; not carried = 0, the test
+   record kept).
+4. `sw.js` ASSETS, beside Word Weaver: `./word-ladder/`, `index.html`, `css/word-ladder.css`, `js/ui.js`, `js/engine.js`,
+   `js/strings.js`, and `data/{en,es}/{words,levels,daily}.json` (never `data-test.js`, `CLAUDE*.md`, `data/CREDITS.md`); `LAZY_REST`
+   gains `word-ladder\/data\/(en|es)\/[a-z]+\.json|`. Then `node tools/validate-sw-assets.mjs` (drops it from `HELD_BACK`, hashes
+   its files; its only FAIL is the old `tools/ballrun-ux/harness.html`), bump `CACHE` past main, commit `sw.js` + `version.json`.
+5. Tests whose "admin only" checks flip by design: `tools/test-word-ladder-points.mjs` section 8 (hidden) and the pill's test-play
+   check; `tools/test-word-ladder.mjs`'s old-writer section (its old writer stored into the TEST record: compare
+   `loadStoredStats().testGames` there, or the carried record with `CARRY_TEST`). Everything else stayed green.
+What the dry run saw with the service worker on: install; the warm takes the code, not the data; the New bubble shows and opens the
+game; EN Easy 1 by taps online with "+1 pt" in the top bar row; the daily; ES Easy 1; the 6 data files cached after that first
+play; OFFLINE, a reload, EN and ES Easy 2 played and the daily opened. Offline before ever opening it: "Can't load / Try again"
+(LAZY by design). Leaderboard board and "See how scores are calculated" open; My Stats shows 4 points.
 
 **Data reaches the phone on the next open (2026-11-13)**: `destroy()` forgets the loaded words and levels, so going back to
 the Hub and in again fetches them fresh (the hub keeps this module loaded for the life of the page; before this a phone
