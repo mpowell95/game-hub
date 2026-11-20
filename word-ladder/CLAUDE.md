@@ -92,7 +92,19 @@ by `--remake en:251-500,es:1-100,es:251-500 --daily-from 8` (`REMAKE_SPECS`: a r
 easiest level first; every par path through Word Weaver words, start and target common, never rude). A remade level or day carries
 `v: 2`; the version table is `REMADE` (engine) = `WL_REMADE` (`js/game-stats.js`), checked by both tests. Medium and English Easy
 untouched. Before/after numbers: `CLAUDE-HISTORY.md`. Points: "Points and the leaderboard" below.
-**A further remake** = the same `--remake` (v becomes 3) and a new `REMADE` row; never reuse a number's key for another puzzle.
+**Remade a third time 2026-11-20 (v3; the review after Matt's "Yes")**: Spanish Easy 1-100 (start, target, and par path only
+through `ES_EASY_WORDS`, a hand-read list: no DES, ZAR, MIE, PRO, POL), Spanish Expert 401-500 (-ADO/-ADA/-IDO/-IDA ends at most
+12%: `sufRe`/`sufMax`), and English Expert ONLY the 29 levels whose start repeated within 10 levels (`--respread en:401-500`: each
+re-picked at its old par, not greedy-solvable first). Every remade band: no start again within 10 levels, no end within 4
+(`START_GAP`/`END_GAP`, relaxed only if the pool runs out). `NOT_END`/`NOT_STEP`: hand-read words never an end or a par-path step
+(the archaic future subjunctive NEGARE, PAGARE, GANARE; HITHER, CUTLER). Command: `--remake es:1-100,es:401-500 --respread
+en:401-500` on the data as of 8172fe4. `REMADE` is first match wins (v3 singles before `[251, 500, 2]`). Difficulty before/after:
+`CLAUDE-HISTORY.md` (2026-11-20). **A further remake** = a new run on the committed data (v becomes 4) and new `REMADE` rows;
+never reuse a number's key for another puzzle.
+**Accents, display only (2026-11-20)**: Spanish `words.json` `a` = "PLAIN:ACCENTED ..." (`tools/word-ladder-es-accents.txt`, written by
+`--fetch-es-accents`: only where the plain spelling is not a word of its own, so ESTA, PAPA, MAS stay plain). `makeDict().show(w)`;
+the game shows it on tiles, the ghost row, the target, the done card, and the coach line (`_show`). Typing, matching, saves, stats,
+and the log stay on the plain word; `has()` never knows the accented spelling.
 
 ## Stats (`wl` sub-counter)
 
@@ -152,6 +164,12 @@ now store `s`. Matt's daily that day (KICK LICK LICE LIVE LOVE, saved as 5) is s
 one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`, verified by re-read; the entry only improves).
 
 ## Layout
+
+**Rungs and the ghost row (2026-11-20 review)**: at least ONE empty rung whenever the word is not one step from the target
+(`_rungs`: after an Undo or over par it fell to 0 and read as one step away); a picked letter always draws the ghost row, on the
+last step in the dashed link's place (`_fit` keeps one rung's room). **The "+X pts" pill sits in the top bar's row** while Word
+Ladder is mounted (`--gh-ptsgain-top` on `<html>`, set at mount, removed in `destroy()`; `js/points-toast.js` falls back to its
+old 128px for every other game): at 128px it covered the finished ladder.
 
 Night blue in light and dark (bright text). The coach line sits at least 16px under the target (`.wl-msg` margin + `_fit`'s reserve). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it (10px
 on short phones): back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes

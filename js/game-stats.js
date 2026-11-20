@@ -3736,7 +3736,9 @@ export function wlSolved(gm, band) {
  *  A result is stored under its puzzle: `L<n>` for version 1 (every entry before the remake), `L<n>v<ver>` after
  *  (wlKey). An entry is NEVER moved, renamed, or dropped (rule 5): an old solve of a remade number stays `L<n>` and
  *  still counts (wlSolved, the stars), shown on My Stats as an earlier puzzle (rule 3). */
-export const WL_REMADE = { en: [[251, 500, 2]], es: [[1, 100, 2], [251, 500, 2]] };
+// First match wins. v3 (2026-11-20, the third remake: Spanish Easy and Expert whole; English Expert only the 29 levels
+// whose start repeated within 10 levels, `--respread`); v2 = 2026-11-19.
+export const WL_REMADE = { en: [[402, 403, 3], [408, 408, 3], [418, 418, 3], [420, 420, 3], [430, 430, 3], [435, 435, 3], [438, 439, 3], [441, 441, 3], [443, 443, 3], [446, 446, 3], [452, 453, 3], [457, 457, 3], [459, 460, 3], [463, 463, 3], [466, 466, 3], [468, 468, 3], [472, 472, 3], [475, 475, 3], [478, 478, 3], [481, 481, 3], [486, 486, 3], [488, 488, 3], [491, 491, 3], [494, 494, 3], [500, 500, 3], [251, 500, 2]], es: [[1, 100, 3], [251, 400, 2], [401, 500, 3]] };
 export function wlVersion(lang, n) {
   for (const [a, b, v] of WL_REMADE[lang === 'es' ? 'es' : 'en']) if (n >= a && n <= b) return v;
   return 1;

@@ -59,12 +59,14 @@ export function winPoints(detail) {
   return { pts: pointsForWin(id, d, m) };
 }
 
+// A game may move the pill with `--gh-ptsgain-top` on <html> while it is mounted (Word Ladder, 2026-11-20: at 128px it sat
+// on the finished ladder; it sets the top-bar row and removes it in destroy()). Unset = the old place, every other game.
 let _css = false;
 function ensureCss() {
   if (_css || typeof document === 'undefined') return;
   _css = true;
   const s = document.createElement('style');
-  s.textContent = '.gh-ptsgain{position:fixed;left:50%;top:calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 128px);transform:translate(-50%,-8px);'
+  s.textContent = '.gh-ptsgain{position:fixed;left:50%;top:var(--gh-ptsgain-top,calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 128px));transform:translate(-50%,-8px);'
     + 'z-index:2147483000;padding:8px 18px;border-radius:999px;background:#ffce3a;color:#1c2430;font:800 20px/1.2 system-ui,-apple-system,sans-serif;'
     + 'box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}'
     + '.gh-ptsgain.is-on{opacity:1;transform:translate(-50%,0)}'

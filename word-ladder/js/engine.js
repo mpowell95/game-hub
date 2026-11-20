@@ -20,7 +20,9 @@ export const TIERS = ['easy', 'medium', 'hard', 'expert'];
 /** REMADE LEVELS (2026-11-19, Matt: "Yes, remake the levels. Keep whatever points I've earned"): [first, last, version] per
  *  language; every other level is version 1. = js/game-stats.js WL_REMADE (tools/test-word-ladder.mjs) and the data's
  *  `v` (word-ladder/js/data-test.js). A result is recorded under its version, so an old solve of a remade number is kept. */
-export const REMADE = { en: [[251, 500, 2]], es: [[1, 100, 2], [251, 500, 2]] };
+// First match wins. v3 (2026-11-20, the third remake: Spanish Easy and Expert whole; English Expert only the 29 levels
+// whose start repeated within 10 levels, `--respread`); v2 = 2026-11-19.
+export const REMADE = { en: [[402, 403, 3], [408, 408, 3], [418, 418, 3], [420, 420, 3], [430, 430, 3], [435, 435, 3], [438, 439, 3], [441, 441, 3], [443, 443, 3], [446, 446, 3], [452, 453, 3], [457, 457, 3], [459, 460, 3], [463, 463, 3], [466, 466, 3], [468, 468, 3], [472, 472, 3], [475, 475, 3], [478, 478, 3], [481, 481, 3], [486, 486, 3], [488, 488, 3], [491, 491, 3], [494, 494, 3], [500, 500, 3], [251, 500, 2]], es: [[1, 100, 3], [251, 400, 2], [401, 500, 3]] };
 export function levelVersion(lang, n) {
   for (const [a, b, v] of REMADE[lang === 'es' ? 'es' : 'en']) if (n >= a && n <= b) return v;
   return 1;
@@ -50,7 +52,14 @@ export function makeDict(json) {
     lists[k] = String(w[k] || '').split(' ').filter(Boolean);
     lists[k].forEach((word, i) => order.set(word, i));
   }
+  // `a` (2026-11-20, Spanish): "PLAIN:ACCENTED ..." for DISPLAY only (PALIDA:PÁLIDA); never used to match a word.
+  const accent = new Map();
+  for (const pair of String((json && json.a) || '').split(' ')) {
+    const i = pair.indexOf(':');
+    if (i > 0 && order.has(pair.slice(0, i)) && [...pair.slice(i + 1)].length === i) accent.set(pair.slice(0, i), pair.slice(i + 1));
+  }
   return {
+    show: (x) => accent.get(x) || x,
     has: (x) => order.has(x),
     order: (x) => (order.has(x) ? order.get(x) : Infinity),
     list: (len) => lists[String(len)] || [],

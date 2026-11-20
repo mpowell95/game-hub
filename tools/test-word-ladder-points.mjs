@@ -219,6 +219,11 @@ ok('integrity: more hints than moves, or stars the moves do not give = an alert'
     ok('real history: today\'s reader gives the same stars as the old one', before === after, [before, after]);
     const other = { lv: {}, hu: { L401v2: { c: 2, t: C - 1 }, L402v2: { c: 2, t: C - 1 } }, hues: { L5v2: { c: 2, t: C - 1 } } };
     const r2 = aggregatePlayers(JSON.parse(JSON.stringify(Object.fromEntries([dev('dev-a', { wordladder: oldG }, 100), dev('dev-b', { wordladder: wlg(other, 0) }, 200)])))).find((x) => x.name === 'Zed Ladder').games.wordladder;
+    // The third remake (2026-11-20): 402 (English) and Spanish 5 are version 3 now; the v2 results above stay counted.
+    ok('v3 remake: 402 and Spanish 5 are version 3, 401 still 2', G.wlVersion('en', 402) === 3 && G.wlVersion('es', 5) === 3 && G.wlVersion('en', 401) === 2);
+    const rows3 = G.wlLevels(oldG);
+    ok('v3 remake: the v2 solves of 402 and Spanish 5 are kept as earlier puzzles, still counted', rows3.get('en:402').cur === null && rows3.get('en:402').old.length === 1 && rows3.get('es:5').cur === null && rows3.get('es:5').e.s === 3);
+    ok('v3 remake: points unchanged by the remake (old writer\'s record read by today\'s code)', P.wlPoints(oldG) === 5 + 3 + 1, P.wlPoints(oldG));
     ok('real history: another phone\'s hints never lower them (stars and points as before)', P.wlStarsTotal(r2) === P.wlStarsTotal(oldG) && P.wlPoints(r2) === P.wlPoints(oldG), [P.wlPoints(r2), P.wlPoints(oldG)]);
   }
 }

@@ -1724,3 +1724,30 @@ git 8172fe4 (main before the change): same stars and points before and after, ev
 Also added `combineWlRecords` (counters the larger, entries `wlBest` whole) to `CARRY_COMBINE`, so a release can choose
 `CARRY_TEST.wordladder`; without it the generic Battle Arena combiner would have taken the max of each entry field (the
 larger moves with the larger stars, a result nobody played).
+
+## 2026-11-20: Word Ladder, the release dry run, the third remake (v3), accents, rungs, the pill (admin only still)
+
+Written by a session; the coordinator's UI review of main 8172fe4 (not Matt's words) asked for the rungs, the pill, the
+start spread, Spanish Easy words, Spanish Expert's -ADO ends, and accents. Nothing released.
+
+- **Rungs**: after an Undo (moves up) or on the last steps over par, `par - moves - 1` fell to 0 and the ladder read "start,
+  target" as one step away, and the ghost row (Matt's faint grey letters) vanished with the rungs. Now at least one rung while
+  the word differs from the target in 2+ letters, and the ghost row always draws on a pick.
+- **The "+X pts" pill** sat at 128px, on the finished ladder's top row at 402x874. Word Ladder moves it to the top bar's row
+  via `--gh-ptsgain-top` (every other game unchanged).
+- **Third remake (v3)**, `--remake es:1-100,es:401-500 --respread en:401-500` on the data as of 8172fe4. English Expert 401,
+  402, and 403 all started from HIGHER (25 start repeats within 10 levels); a whole-band remake there lost difficulty (par 4.7,
+  greedy 64%) because English has too few long 6-letter ladders once the v2 puzzles are excluded, so only the 29 repeating
+  levels were re-picked, each at its old par. Measured (par / greedy play finishing at par / branching on the par path /
+  median shortest paths / start repeats within 10 / -ADO-type ends):
+
+  | Band | Before (v2) | After (v3) |
+  |---|---|---|
+  | EN Expert | 5.18 / 26% / 9.4 / 5 / 25 / 0 | 5.26 / 28% / 9.3 / 6 / 2 / 0 |
+  | ES Easy | 3.35 / 81% / 13.9 / 3 / 8 / 0 | 3.35 / 81% / 13.7 / 4 / 0 / 0 |
+  | ES Expert | 5.71 / 18% / 10.3 / 9 / 18 / 34 | 5.71 / 19% / 9.1 / 5 / 0 / 12 |
+
+  Results on v2 puzzles stay under their `L<n>v2` keys and still count (proved with the writer from git 8172fe4).
+- **Accents**: from lemmatization-lists and FrequencyWords (4,788 pairs), display only, never matched.
+- **The release dry run** found one real-branch bug: `word-ladder/js/data-test.js` was not in the validator's EXCLUDED list,
+  so the release commit's `validate-sw-assets.mjs` would have FAILed. Fixed on the branch.

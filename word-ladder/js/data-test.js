@@ -47,6 +47,16 @@ for (const lang of ['en', 'es']) {
   // Days already played never change (the 2026-11-19 remake touched only days 8 on, 2026-11-21 and later).
   daily.levels.slice(0, 8).forEach((l, i) => ok(!l.v, `${lang} day ${i}: a past day was remade`));
   daily.levels.forEach((l, i) => check(l, `${lang} day ${i}`, 0));
+  // Accents for DISPLAY only (2026-11-20, Spanish `a`): each pair's plain word is on the list, the accented spelling is the
+  // same word with only accents added, and nothing a player types or matches changes (`has` reads the plain list only).
+  const raw = read('words.json');
+  const pairsA = String(raw.a || '').split(' ').filter(Boolean);
+  const fold = (w) => w.normalize('NFD').replace(/([AEIOU])[\u0300-\u036f]/g, '$1').replace(/N\u0303/g, 'Ñ').normalize('NFC');
+  ok(lang === 'es' ? pairsA.length > 1000 : pairsA.length === 0, `${lang}: accent pairs ${pairsA.length}`);
+  let badA = 0;
+  for (const pr of pairsA) { const [pl, ac] = pr.split(':'); if (!dict.has(pl) || fold(ac) !== pl || ac === pl || dict.has(ac)) badA++; }
+  ok(badA === 0, `${lang}: ${badA} accent pairs do not fold back to a listed word`);
+  if (lang === 'es') ok(dict.show('PALIDA') === 'PÁLIDA' && dict.show('CAJON') === 'CAJÓN' && dict.show('ESTA') === 'ESTA' && dict.show('MAS') === 'MAS' && !dict.has('PÁLIDA'), 'es: PÁLIDA and CAJÓN shown, ESTA and MAS plain, only the plain spelling is a word');
 }
 
 // The engine's rules.
@@ -72,7 +82,7 @@ const oldVer = E.cleanAttempt({ s: 'COLD', chain: ['COLD', 'CORD'], moves: 1, hi
 ok(oldVer.chain.join() === 'COLD' && oldVer.moves === 0 && oldVer.hints === 0, 'a save from an earlier version of a remade level (same start) counts nothing');
 const sameVer = E.cleanAttempt({ s: 'COLD', ver: 2, chain: ['COLD', 'CORD'], moves: 1 }, lv2, dict);
 ok(sameVer.chain.join() === 'COLD,CORD' && sameVer.moves === 1, 'a save of the same version resumes');
-ok(E.levelVersion('en', 250) === 1 && E.levelVersion('en', 251) === 2 && E.levelVersion('es', 1) === 2 && E.levelVersion('es', 101) === 1 && E.levelVersion('es', 500) === 2, 'levelVersion');
+ok(E.levelVersion('en', 250) === 1 && E.levelVersion('en', 251) === 2 && E.levelVersion('en', 401) === 2 && E.levelVersion('en', 402) === 3 && E.levelVersion('es', 1) === 3 && E.levelVersion('es', 101) === 1 && E.levelVersion('es', 300) === 2 && E.levelVersion('es', 500) === 3, 'levelVersion (v3: 2026-11-20)');
 const kept = E.cleanAttempt({ chain: ['COLD', 'CORD', 'GONE', 'WARM'], moves: 3, hints: 1, done: true, recorded: true }, lv, dict);
 ok(kept.done && kept.chain.length === 4 && kept.moves === 3, 'a finished, recorded save is kept even if a word left the list');
 
