@@ -4,8 +4,9 @@
 > Read it there before touching anything that records or stores. The working rules are in `js/CLAUDE.md`.
 
 Change one letter at a time, every step a real word, from a start word to a target (COLD, CORD, WORD, WARD, WARM).
-Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONLY (`devOnly: true`) until Matt says
-"release it"**: no `released` date, no announcement, no popup, no New bubble, no Game Hub message.
+Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **RELEASED 2026-11-20 (Matt: "Release it", v1633)**: `released: '2026-11-20'`
+(the New pill and New games bubble), out of `ADMIN_ONLY`, `CARRY_TEST.wordladder` (Matt: "Yes", test plays count), files in `sw.js`
+ASSETS with `data/**` LAZY, points on the leaderboard. No announcement or Game Hub message (none asked for).
 
 ## Hub integration
 
@@ -147,7 +148,7 @@ clean finish before another phone's hint keeps its stars. Read time; stored entr
 on the second phone reads only that phone's store, so it can show more than the board pays. Tests: `test-word-ladder-points.mjs`
 sections 9-10 (two phones, finished and unfinished hints, the old writer from git 8172fe4, server = phone).
 
-**Release checklist (verified 2026-11-20 by a dry run on a throwaway copy; only when Matt says "release it")**:
+**Release checklist (verified 2026-11-20 by a dry run; DONE 2026-11-20, v1633)**:
 1. `js/hub.js` Word Ladder entry: delete the `// ADMIN ONLY ...` comment and `devOnly: true`, add `released: '<YYYY-MM-DD>'` (the
    release day: the New pill and the New games bubble read it).
 2. `js/game-stats-ui.js` TABS: `{ id: 'wordladder', labelKey: 'game_title_wordladder' }` (drop `devOnly: true`).

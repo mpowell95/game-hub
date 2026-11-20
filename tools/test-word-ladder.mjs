@@ -14,7 +14,7 @@ const G = await import('../js/game-stats.js');
 const E = await import('../word-ladder/js/engine.js');
 
 const gm = () => (G.loadStats().games || {}).wordladder;
-ok('admin-only: plays go to the test record', G.isTestGame('wordladder'));
+ok('released 2026-11-20: plays go to the real record', !G.isTestGame('wordladder'));
 
 G.withMode(() => ({ mode: 'ladder', lang: 'en' }), 'easy', () => G.recordWordLadder(1, { moves: 5, par: 3, hints: 0, band: 'easy' }), { detail: () => ({ moves: 5, par: 3, hints: 0 }) });
 let g = gm();
@@ -35,7 +35,7 @@ ok('bad level number records nothing', G.withMode(() => ({ mode: 'ladder' }), 'e
 G.withMode(() => ({ mode: 'daily', lang: 'en' }), 'daily', () => G.recordWordLadderDaily('en-2026-11-13', { moves: 4, par: 4, hints: 0 }));
 ok('daily: one play under byDiff.daily, entry keyed by language and day', gm().byDiff.daily.won === 1 && gm().wl.dl['en-2026-11-13'].s === 3);
 ok('daily: a malformed key records nothing', G.withMode(() => ({ mode: 'daily' }), 'daily', () => G.recordWordLadderDaily('2026-11-13', { moves: 1, par: 1 })) === null);
-ok('the stored REAL record did not get the test plays', !((G.loadStoredStats().games || {}).wordladder || {}).wl || !Object.keys(G.loadStoredStats().games.wordladder.wl.lv || {}).length);
+ok('released: the stored REAL record holds the plays', Object.keys(((G.loadStoredStats().games || {}).wordladder || {}).wl.lv || {}).length > 0);
 
 // wlBest keeps the better attempt whole
 const b = G.wlBest({ s: 1, m: 4, h: 2, p: 3, t: 20 }, { s: 2, m: 9, h: 0, p: 3, t: 10 });
