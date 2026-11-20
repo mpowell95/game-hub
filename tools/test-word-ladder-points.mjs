@@ -130,11 +130,11 @@ const STR = (await import('../js/strings.js')).default;
 const cards = S.rankSheetModel('wordladder');
 ok('sheet: one table, Stars 3 / 2 / 1, a row per band = WL_POINTS', cards[0].grid && cards[0].grid.sup === 'lbrs_wl_sup' && cards[0].grid.cols.join() === '3,2,1'
   && cards[0].grid.rows.map((r) => r.vals.join('/')).join(' ') === '1/1/1 2/1/1 3/2/1 5/3/1');
-ok('sheet: how stars are earned, the hint cap, each level once, earlier puzzles, the daily', cards[0].foot.join() === 'lbrs_wl_stars,lbrs_wl_hints' && cards[1].text.join() === 'lbrs_wl_once,lbrs_wl_old,lbrs_wl_daily');
+ok('sheet: how stars are earned, the hint cap (any phone), each level once, earlier puzzles, the daily', cards[0].foot.join() === 'lbrs_wl_stars,lbrs_wl_hints,lbrs_wl_anyphone' && cards[1].text.join() === 'lbrs_wl_once,lbrs_wl_old,lbrs_wl_daily');
 const words = ['lbrs_wl_sup', 'lbrs_wl_stars', 'lbrs_wl_hints', 'lbrs_wl_once', 'lbrs_wl_old', 'lbrs_wl_daily'];
 ok('sheet strings in EN and ES, no em dash', words.every((k) => STR.en[k] && STR.es[k] && !/—/.test(STR.en[k] + STR.es[k])));
 const html = S.rankSheetHTML('wordladder');
-ok('sheet renders the table and every line', /<td class="lbrs-full">5<\/td>/.test(html) && html.includes(STR.en.lbrs_wl_daily) && html.includes(STR.en.lbrs_wl_hints));
+ok('sheet renders the table and every line', /<td class="lbrs-full">5<\/td>/.test(html) && html.includes(STR.en.lbrs_wl_daily) && html.includes(STR.en.lbrs_wl_hints) && html.includes(STR.en.lbrs_wl_anyphone));
 const { LB_RULES } = await import('../js/lb-rules.js');
 ok('(i) rule: points', LB_RULES.wordladder.by === 'points');
 
