@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1617;
-const CACHE = 'game-hub-v1632';
+const CACHE = 'game-hub-v1633';
 
 const ASSETS = [
   './',
@@ -299,6 +299,18 @@ const ASSETS = [
   './word-weaver/data/es/levels-6.json',
   './word-weaver/data/es/levels-7.json',
   './word-weaver/data/es/daily.json',
+  './word-ladder/',
+  './word-ladder/index.html',
+  './word-ladder/css/word-ladder.css',
+  './word-ladder/js/ui.js',
+  './word-ladder/js/engine.js',
+  './word-ladder/js/strings.js',
+  './word-ladder/data/en/words.json',
+  './word-ladder/data/en/levels.json',
+  './word-ladder/data/en/daily.json',
+  './word-ladder/data/es/words.json',
+  './word-ladder/data/es/levels.json',
+  './word-ladder/data/es/daily.json',
   './flick-soccer/',
   './flick-soccer/index.html',
   './flick-soccer/css/flick-soccer.css',
@@ -700,7 +712,7 @@ const SHELL = ASSETS.filter(isShellAsset);
 const REST = ASSETS.filter((p) => !isShellAsset(p));
 
 // --- the LAZY tier: in ASSETS, but never downloaded until somebody opens the game (2026-09-... [docs/SW-NOTES.md #10]
-const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json|word-weaver\/data\/(es\/)?[a-z0-9-]+\.json|ball-run\/img\/help\/[a-z-]+\.jpg)$/;
+const LAZY_REST = /^\.\/(boggle\/data\/words[a-z-]*\.txt|contexto\/data\/[a-z]+\.(json|bin)|spelling-bee\/data\/bee(-es)?\.json|word-weaver\/data\/(es\/)?[a-z0-9-]+\.json|word-ladder\/data\/(en|es)\/[a-z]+\.json|ball-run\/img\/help\/[a-z-]+\.jpg)$/;
 const isLazyAsset = (p) => LAZY_REST.test(p);
 
 const LAZY = REST.filter(isLazyAsset);
@@ -852,7 +864,7 @@ const REST_MANIFEST = {
   './css/hub.css': '6498bfd5a0',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': '95d5c26c87',
+  './js/hub.js': 'cbb247a126',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'e8758cc628',
   './js/signin-ask.js': '9f55d083d6',
@@ -882,10 +894,10 @@ const REST_MANIFEST = {
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
   './js/firebase-config.js': '66cb4bbdb3',
-  './js/game-stats.js': '9073893331',
+  './js/game-stats.js': '0d09d8b656',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': 'eed519db96',
-  './js/game-stats-ui.js': 'c03dbaccdc',
+  './js/game-stats-ui.js': 'c9613990e6',
   './js/stats-net.js': '83be7bad7a',
   './js/tips-log.js': '7bc02856dd',
   './js/firebase-boot.js': 'e7380681ea',
@@ -1100,6 +1112,18 @@ const REST_MANIFEST = {
   './word-weaver/data/es/levels-6.json': '50feb4362f',
   './word-weaver/data/es/levels-7.json': 'a412b67c60',
   './word-weaver/data/es/daily.json': 'd5f8928f0e',
+  './word-ladder/': '638ecda624',
+  './word-ladder/index.html': '638ecda624',
+  './word-ladder/css/word-ladder.css': '8f9c827abd',
+  './word-ladder/js/ui.js': '7c687969b4',
+  './word-ladder/js/engine.js': '32b53ba553',
+  './word-ladder/js/strings.js': '3d2cbbc8da',
+  './word-ladder/data/en/words.json': 'ddef70e757',
+  './word-ladder/data/en/levels.json': 'ce46661123',
+  './word-ladder/data/en/daily.json': 'ab0ddca2b8',
+  './word-ladder/data/es/words.json': 'b6a7dd0bef',
+  './word-ladder/data/es/levels.json': 'd686881744',
+  './word-ladder/data/es/daily.json': 'd5148a45f2',
   './flick-soccer/': '1e587a65ea',
   './flick-soccer/index.html': '1e587a65ea',
   './flick-soccer/css/flick-soccer.css': '617002d42b',

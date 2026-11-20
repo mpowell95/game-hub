@@ -806,8 +806,7 @@ export const GAMES = [
     immersive: true,
     accent: '#24406f',
     art: GAME_ART['word-ladder'],
-    // ADMIN ONLY until Matt says "release it": no `released` date (the New pill and New games bubble read it).
-    devOnly: true,
+    released: '2026-11-20',
   },
   {
     // Shove Off (2026-11-18, Matt on GamePigeon's Knockout: "I want our own version of this"): both players aim

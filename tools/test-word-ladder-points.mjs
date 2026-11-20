@@ -73,7 +73,7 @@ ok('a Spanish Easy level: +1', events.length === 3 && (winPoints(events[2]) || {
 G.withMode(() => ({ mode: 'daily', lang: 'en' }), 'daily', () => G.recordWordLadderDaily('en-2026-11-19', { moves: 4, par: 4, hints: 0 }));
 await flush();
 ok('the daily: a win, +0 (no pill)', P.wlPoints(gm()) === 6 && !(((winPoints(events[events.length - 1]) || {}).pts) > 0));
-ok('admin only: the pill never shows a test play (startPointsToast skips isTestGame)', G.isTestGame('wordladder')
+ok('released 2026-11-20: Word Ladder is no longer a test game, and the pill still skips test games', !G.isTestGame('wordladder')
   && /if \(!det \|\| isTestGame\(det\.id\)\) return;/.test(fs.readFileSync(path.join(ROOT, 'js/points-toast.js'), 'utf8')));
 
 // --- 4. two phones, merged on the phone and on the SERVER (functions/shared, the same aggregatePlayers) ----------------
@@ -236,18 +236,18 @@ ok('integrity: more hints than moves, or stars the moves do not give = an alert'
   ok('carry: the test record began as a copy, so counters take the larger (2 played, never 3)', c.total.played === 2 && c.byDiff.easy.won === 2);
   ok('carry: each level the better attempt WHOLE (L1 3 stars, 3 moves), never mixed fields', JSON.stringify(c.wl.lv.L1) === JSON.stringify({ s: 3, m: 3, h: 0, p: 3, t: 5, w: 9 }) && c.wl.lv.L2.s === 1);
   ok('carry: hint counters and the daily kept', c.wl.hu.L2.c === 2 && c.wl.dl['en-2026-11-19'].s === 3);
-  ok('carry: CARRY_COMBINE has wordladder; CARRY_TEST does not list it yet', G.CARRY_COMBINE.wordladder === G.combineWlRecords && !G.CARRY_TEST.wordladder);
+  ok('carry: CARRY_COMBINE has wordladder and CARRY_TEST lists it (Matt, 2026-11-20: test plays count)', G.CARRY_COMBINE.wordladder === G.combineWlRecords && G.CARRY_TEST.wordladder === true);
   ok('carry: neither input changed', real.wl.lv.L1.s === 2 && !real.wl.hu);
 }
 
-// --- 8. HIDDEN while admin only: the release flips flags only --------------------------------------------------------
+// --- 8. RELEASED 2026-11-20 (Matt: "Release it"): the flags flipped --------------------------------------------------------
 const hub = fs.readFileSync(path.join(ROOT, 'js/hub.js'), 'utf8');
 const hubEntry = hub.slice(hub.indexOf("id: 'word-ladder'"), hub.indexOf("id: 'word-ladder'") + 900);
-ok('hidden: the hub entry is devOnly, no released date', /devOnly: true/.test(hubEntry) && !/released:/.test(hubEntry));
-ok('hidden: My Stats TABS row is devOnly', /\{ id: 'wordladder', labelKey: 'game_title_wordladder', devOnly: true \}/.test(gsSrc));
-ok('hidden: ADMIN_ONLY holds it (its plays go to the test record)', G.isTestGame('wordladder'));
+ok('released: the hub entry has a released date, no devOnly', !/devOnly: true/.test(hubEntry) && /released: '2026-11-20'/.test(hubEntry));
+ok('released: My Stats TABS row is not devOnly', /\{ id: 'wordladder', labelKey: 'game_title_wordladder' \}/.test(gsSrc));
+ok('released: not in ADMIN_ONLY (plays go to the real record)', !G.isTestGame('wordladder'));
 const GSU = await import('../js/game-stats-ui.js');
-ok('hidden: isGameOnLauncher(wordladder) is false (the leaderboard\'s only gate)', GSU.isGameOnLauncher('wordladder') === false);
+ok('released: isGameOnLauncher(wordladder) is true (on the leaderboard)', GSU.isGameOnLauncher('wordladder') === true);
 
 console.log(`\nword-ladder points tests: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
