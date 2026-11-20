@@ -13,7 +13,7 @@ import * as E from './engine.js';
 import STRINGS from './strings.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordWordLadder, recordWordLadderDaily, withMode, loadStats, wlKey, wlLevels, logPlayData } from '../../js/game-stats.js';
+import { recordWordLadder, recordWordLadderDaily, recordWordLadderHint, withMode, loadStats, wlKey, wlLevels, logPlayData } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
@@ -422,6 +422,7 @@ class WordLadder {
     if (same && a.log) { const gone = Math.max(0, now - log.at); log.away += gone; log.seq.push('B:' + gone + '@' + Math.max(0, now - log.t0)); }
     this.cur = { kind, lang, n, key, level, ver: level.v || 1, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, log, redo: same ? this._cleanRedo(a.redo, c, d.dict) : [], res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
+    if (same && c.hints > 0) this._noteHints(this.cur);   // an attempt hinted before the hint counter existed
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
     this._play();
@@ -739,7 +740,7 @@ class WordLadder {
     c.chain = [...c.chain, next];
     if (redo) { c.redo.pop(); c.moves = Math.max(c.chain.length - 1, c.moves - 1); }
     else { c.redo = []; c.moves += 1; }
-    if (hint) c.hints += 1;
+    if (hint) { c.hints += 1; this._noteHints(c); }
     if (next === c.level.t) {
       this._wlNote('F');
       c.done = true;
@@ -767,6 +768,14 @@ class WordLadder {
     this._saveAttempt(c);
     this._drawLadder();
     this._fit();
+  }
+  /** The hint cap across phones (2026-11-20, js/game-stats.js wlCapped): the hints used on a ladder level go into the
+   *  stats store the moment they are used, so a hinted attempt left unfinished here still caps a clean finish on
+   *  another phone. Never for the daily (it pays nothing). A failed write is logged, never thrown into play. */
+  _noteHints(c) {
+    if (!c || c.kind === 'daily' || !(c.hints > 0) || !Number.isInteger(c.n)) return;
+    try { recordWordLadderHint(c.n, c.hints, { lang: c.lang, ver: c.ver || 1 }); }
+    catch (err) { console.error('[word-ladder] hint not recorded', err); }
   }
   _hint() {
     const c = this.cur;

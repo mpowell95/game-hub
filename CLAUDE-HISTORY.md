@@ -1710,3 +1710,17 @@ Matt: "Make a rule somewhere that you are REQUIRED to use Oxford commas. NEVER s
 ## Tennis link removed (2026-11-18)
 
 Matt: "remove the Tennis link thing". The admin-only Tennis tile (a link out to Richard Davey's site, added 2026-11-17) and its tile art were removed from `js/hub.js` and `js/game-art.js`. It never recorded stats, so no player data was involved.
+
+## 2026-11-20: Word Ladder, the hint cap across phones (admin only still)
+
+Written by a session. Matt, asked "You're confident it's good to go?", said "Yes" to closing the hint loophole: a level
+solved with hints on one phone, replayed with no hints on a second phone (which starts at level 1 and now knows the
+answer), paid 3 stars, because `wlBest` keeps the better attempt whole. Built Word Weaver's precedent (`wwMerge`: the most
+hints any record used cap the stars): `wl.hu` / `wl.hues` per puzzle key, written at each hint (so an unfinished hinted
+attempt counts), merged in `players-agg.js` with every finished entry's own hints; the cap reads at `wlLevels`. Grandfathering
+by a new field, `w` (the kept attempt's own finish time): `wlBest` keeps `t` as the earliest of all attempts, so `t` cannot
+say when the KEPT attempt was played, and an entry from the old writer (no `w`) is never capped. Proved with the writer from
+git 8172fe4 (main before the change): same stars and points before and after, even beside another phone's hint counters.
+Also added `combineWlRecords` (counters the larger, entries `wlBest` whole) to `CARRY_COMBINE`, so a release can choose
+`CARRY_TEST.wordladder`; without it the generic Battle Arena combiner would have taken the max of each entry field (the
+larger moves with the larger stars, a result nobody played).

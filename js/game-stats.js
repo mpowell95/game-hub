@@ -1148,7 +1148,7 @@ let _mode = null;
 export const NO_MODE = '?';
 const NOT_A_RESULT = new Set([
   'recordHeadToHead', 'recordGridlockHint', 'recordWordWeaverFreeLost', 'recordWordWeaverFreeHint',
-  'recordWordWeaverHint', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy', 'recordHoldemBank', 'recordHoldemHand',
+  'recordWordWeaverHint', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy', 'recordWordLadderHint', 'recordHoldemBank', 'recordHoldemHand',
   'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordLiveResult', 'quitLoss',
   'noteWayOutSlips', 'recordSpellingBeeGenius',
 ]);
@@ -1902,8 +1902,28 @@ export function combineCopiedRecords(real, test) {
   const r = plainObj(real) ? real : {}, t = plainObj(test) ? test : {};
   return mergeCopied(r, t, '') || {};
 }
+/** Word Ladder (2026-11-20, ready for a release that carries its test plays; CARRY_TEST is Matt's call): its test record
+ *  STARTED AS A COPY of the real one (swapInTestGames), like Battle Arena's, so counters take the LARGER of the two
+ *  (mergeCopied), never a sum. Each level / day entry is the better attempt kept WHOLE (wlBest: never the larger moves
+ *  of one with the stars of another, rule 4); hint counters the most hints, the earliest time (wlHintBest). Pure. */
+export function combineWlRecords(real, test) {
+  const r = plainObj(real) ? real : {}, t = plainObj(test) ? test : {};
+  const out = mergeCopied({ ...r, wl: undefined }, { ...t, wl: undefined }, '') || {};
+  delete out.wl;
+  const rw = plainObj(r.wl) ? r.wl : {}, tw = plainObj(t.wl) ? t.wl : {};
+  if (Object.keys(rw).length || Object.keys(tw).length) {
+    const w = mergeCopied({ ...rw, lv: undefined, es: undefined, dl: undefined, hu: undefined, hues: undefined },
+      { ...tw, lv: undefined, es: undefined, dl: undefined, hu: undefined, hues: undefined }, '') || {};
+    for (const k of ['lv', 'es', 'dl', 'hu', 'hues']) delete w[k];
+    for (const k of ['lv', 'es', 'dl']) if (rw[k] || tw[k]) w[k] = mergeMap(rw[k], tw[k], wlBest);
+    for (const k of ['hu', 'hues']) if (rw[k] || tw[k]) w[k] = mergeMap(rw[k], tw[k], wlHintBest);
+    if (!w.lv) w.lv = {};
+    out.wl = w;
+  }
+  return out;
+}
 // Every game that may ever be listed in CARRY_TEST needs its combiner here (tools/test-tower.mjs checks Tower's).
-export const CARRY_COMBINE = { wordweaver: combineWwRecords, tower: combineTowerRecords, battlearena: combineCopiedRecords };
+export const CARRY_COMBINE = { wordweaver: combineWwRecords, tower: combineTowerRecords, battlearena: combineCopiedRecords, wordladder: combineWlRecords };
 // A carried game whose test HEAD-TO-HEAD started as a copy too (live rooms write h2h): combined the same way, once.
 const CARRY_H2H = { battlearena: combineCopiedRecords };
 /** The record as it COUNTS: real + test for a carried game whose store has not been stamped yet (read time). */
@@ -3677,7 +3697,7 @@ export const WL_DAY_RE = /^(en|es)-\d{4}-\d{2}-\d{2}$/;
 function ensureWl(g) {
   if (!g.wl || typeof g.wl !== 'object' || Array.isArray(g.wl)) g.wl = { lv: {} };
   if (!g.wl.lv || typeof g.wl.lv !== 'object' || Array.isArray(g.wl.lv)) g.wl.lv = {};
-  for (const k of ['es', 'dl']) if (g.wl[k] !== undefined && (!g.wl[k] || typeof g.wl[k] !== 'object' || Array.isArray(g.wl[k]))) g.wl[k] = {};
+  for (const k of ['es', 'dl', 'hu', 'hues']) if (g.wl[k] !== undefined && (!g.wl[k] || typeof g.wl[k] !== 'object' || Array.isArray(g.wl[k]))) g.wl[k] = {};
 }
 /** Two entries of one level (or day) combined: stars only rise, moves and hints only fall, the earliest time. Pure. */
 export function wlBest(a, b) {
@@ -3696,6 +3716,9 @@ export function wlBest(a, b) {
   if (p) out.p = p;
   const t = [n(a.t), n(b.t)].filter(Boolean);
   if (t.length) out.t = Math.min(...t);
+  // `w` (2026-11-20) = when the KEPT attempt itself was finished (`t` is the earliest of all). Only entries written
+  // from 2026-11-20 carry it; an entry without it was earned before the hint cap and is never capped (wlLevels).
+  if (n(best.w)) out.w = n(best.w);
   return out;
 }
 /** Word Ladder's band of a ladder level (= word-ladder/js/engine.js BANDS: Easy 1, Medium 101, Hard 251, Expert 401). */
@@ -3734,11 +3757,13 @@ export function wlParseKey(k) {
 export function wlLevels(gm) {
   const wl = (gm && gm.wl) || {};
   const out = new Map();
-  for (const [lang, m] of [['en', wl.lv], ['es', wl.es]]) {
+  for (const [lang, m, hm] of [['en', wl.lv, wl.hu], ['es', wl.es, wl.hues]]) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) continue;
     for (const k of Object.keys(m)) {
-      const p = wlParseKey(k), e = m[k];
+      const p = wlParseKey(k);
+      let e = m[k];
       if (!p || !e || typeof e !== 'object' || Array.isArray(e)) continue;
+      e = wlCapped(e, hm && typeof hm === 'object' && !Array.isArray(hm) ? hm[k] : null);
       const id = `${lang}:${p.n}`;
       const row = out.get(id) || { lang, n: p.n, e: null, cur: null, old: [] };
       row.e = wlBest(row.e, e);
@@ -3747,6 +3772,32 @@ export function wlLevels(gm) {
     }
   }
   return out;
+}
+/** THE HINT CAP ACROSS PHONES (2026-11-20, Matt: "Yes" to closing the loophole: a level hinted on one phone, then
+ *  replayed clean on a second phone for 3 stars). `wl.hu` (English) / `wl.hues` (Spanish) `{ wlKey: { c, t } }` = the
+ *  MOST hints this store ever used on that puzzle (c, only grows) and the first hint's time (t), written the moment a
+ *  hint is used (recordWordLadderHint), so an unfinished hinted attempt counts too. js/players-agg.js merges them
+ *  (most hints, earliest time) and adds each finished entry's own hints (an older hinted finish caps as well).
+ *  The cap (Word Weaver's wwMerge rule): a level's stars at most what the most hints allow (1 hint 2, 2+ 1), when the
+ *  first hint came at or before the finish that is kept. GRANDFATHERED: an entry without `w` (written before this day,
+ *  by the old writer) is never capped, so nothing earned before is lowered. Read time only; nothing stored changes. */
+export const WL_HINT_FROM = Date.UTC(2026, 10, 19, 5);   // 2026-11-19 00:00 America/New_York (before any entry with `w`)
+export function wlHintBest(a, b) {
+  const ok = (e) => e && typeof e === 'object' && !Array.isArray(e) && Math.floor(Number(e.c) || 0) >= 1;
+  const cl = (e) => ({ c: Math.floor(Number(e.c)), t: Math.max(0, Math.floor(Number(e.t) || 0)) });
+  if (!ok(a)) return ok(b) ? cl(b) : null;
+  if (!ok(b)) return cl(a);
+  const x = cl(a), y = cl(b);
+  const t = [x.t, y.t].filter(Boolean);
+  return { c: Math.max(x.c, y.c), t: t.length ? Math.min(...t) : 0 };
+}
+/** One entry with the hint cap applied (a copy when capped; `e` itself otherwise). */
+export function wlCapped(e, hint) {
+  const w = Math.floor(Number(e && e.w) || 0);
+  const h = wlHintBest(hint, null);
+  if (!h || w < WL_HINT_FROM || !h.t || h.t > w) return e;
+  const cap = h.c === 1 ? 2 : 1;
+  return (Number(e.s) || 0) > cap ? { ...e, s: cap } : e;
 }
 /** Word Ladder stars, the same rule as word-ladder/js/engine.js starsFor (moves at par 3, up to 2 over 2, else 1;
  *  1 hint caps at 2, 2+ at 1). */
@@ -3771,7 +3822,8 @@ export function recordWordLadder(level, { moves, par, hints, lang, band, ver } =
   // The puzzle actually solved: `ver` = the level's data `v` (absent = 1: every attempt saved before the 2026-11-19
   // remake was a version 1 puzzle). A remade number's new result never lands on (or improves) the old puzzle's entry.
   const k = wlKey(n, ver);
-  const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: Date.now() };
+  const now = Date.now();
+  const e = { s: wlStars(moves, par, hints), m: Math.max(0, Math.floor(Number(moves) || 0)), p: Math.max(0, Math.floor(Number(par) || 0)), h: Math.max(0, Math.floor(Number(hints) || 0)), t: now, w: now };
   if (!map[k]) bumpTotals(g, WL_TIERS.indexOf(band) >= 0 ? band : 'ladder', true);
   else {
     if (_mode) _mode.noted = true;
@@ -3782,6 +3834,32 @@ export function recordWordLadder(level, { moves, par, hints, lang, band, ver } =
   map[k] = wlBest(map[k], e);
   st.updatedAt = new Date().toISOString();
   persist(st);
+  return st;
+}
+/** Word Ladder: a hint used on ladder level `level` (2026-11-20, the hint cap across phones; see wlCapped). `count` =
+ *  hints used on that attempt so far; `wl.hu` / `wl.hues` [wlKey(level, ver)] only grows (Math.max), the first hint's
+ *  time is kept. Not a result (NOT_A_RESULT): no rate gate, no mode. Returns the store, or null for a bad level. */
+export function recordWordLadderHint(level, count, { lang, ver } = {}) {
+  notePlay('wordladder', 'recordWordLadderHint', arguments);
+  const n = Number(level);
+  if (!(Number.isInteger(n) && n >= 1)) return null;
+  const c = Math.max(1, Math.floor(Number(count) || 0));
+  const st = loadStats();
+  const g = st.games.wordladder;
+  ensureWl(g);
+  const mk = lang === 'es' ? 'hues' : 'hu';
+  const map = g.wl[mk] || (g.wl[mk] = {});
+  const k = wlKey(n, ver);
+  const next = wlHintBest(map[k], { c, t: Date.now() });
+  if (JSON.stringify(next) === JSON.stringify(map[k])) return st;
+  map[k] = next;
+  st.updatedAt = new Date().toISOString();
+  persist(st);
+  // THE LAW rule 6: verify by a fresh re-read.
+  try {
+    const back = ((((loadStats().games || {}).wordladder || {}).wl || {})[mk] || {})[k];
+    if (!back || (back.c | 0) < c) console.error('[game-stats] Word Ladder hint: not on re-read', k, back);
+  } catch (err) { console.error('[game-stats] Word Ladder hint: re-read failed', err); }
   return st;
 }
 /** Word Ladder's DAILY ladder: that day's puzzle finished. `key` = '<en|es>-<YYYY-MM-DD>'. The first completion is one

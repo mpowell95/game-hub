@@ -145,6 +145,96 @@ ok('integrity: an honest record trips nothing', hit(rec.wl).length === 0 && hit(
 ok('integrity: under par = an ALERT', (() => { const h = hit({ lv: { L5: { s: 3, m: 2, p: 3, h: 0 } } }); return h.length === 1 && h[0].rule === 'wordladder-under-par' && h[0].void === false; })());
 ok('integrity: more hints than moves, or stars the moves do not give = an alert', hit({ es: { L5: { s: 1, m: 2, p: 2, h: 3 } } }).length === 1 && hit({ dl: { 'en-2026-11-19': { s: 3, m: 9, p: 4, h: 0 } } }).length === 1);
 
+// --- 9. THE HINT CAP ACROSS PHONES (2026-11-20): a hint on any phone caps that puzzle's stars everywhere -----------------
+{
+  const C = G.WL_HINT_FROM, T1 = C + 60e3, T2 = C + 120e3, OLD1 = C - 86400e3, OLD2 = C - 3600e3;
+  const person = (a, b) => {
+    const d = Object.fromEntries([dev('dev-a', { wordladder: wlg(a, 1) }, 100), dev('dev-b', { wordladder: wlg(b, 1) }, 200)]);
+    return { d, g: aggregatePlayers(JSON.parse(JSON.stringify(d))).find((x) => x.name === 'Zed Ladder').games.wordladder };
+  };
+  const clean = (t) => ({ s: 3, m: 5, p: 5, h: 0, t, w: t });
+  // (a) phone A: 1 hint, never finished; phone B: a clean finish after it.
+  let r = person({ lv: {}, hu: { L401v2: { c: 1, t: T1 } } }, { lv: { L401v2: clean(T2) } });
+  ok('cap: hinted UNFINISHED on A (1 hint), clean on B after = 2 stars, 3 points', P.wlPoints(r.g) === 3 && P.wlStarsTotal(r.g) === 2, r.g.wl);
+  // (b) phone A finished with 2 hints (1 star); phone B clean after.
+  r = person({ lv: { L402v2: { s: 1, m: 7, p: 5, h: 2, t: T1, w: T1 } } }, { lv: { L402v2: clean(T2) } });
+  ok('cap: hinted FINISHED on A (2 hints), clean on B after = 1 star', P.wlStarsTotal(r.g) === 1 && P.wlPoints(r.g) === 1, r.g.wl);
+  // (c) the clean finish came FIRST, the hint on another phone later: earned, never lowered.
+  r = person({ lv: {}, hu: { L401v2: { c: 2, t: T2 } } }, { lv: { L401v2: clean(T1) } });
+  ok('cap: a clean finish BEFORE the other phone\'s hint keeps 3 stars', P.wlStarsTotal(r.g) === 3);
+  // (d) entries from before this change (no `w`): never capped, whatever the other phone holds.
+  r = person({ lv: { L401: { s: 1, m: 7, p: 5, h: 2, t: OLD1 } } }, { lv: { L401: { s: 3, m: 5, p: 5, h: 0, t: OLD2 } } });
+  ok('grandfathered: an old hinted finish + an old clean finish (no w) stays 3 stars, 5 points', P.wlStarsTotal(r.g) === 3 && P.wlPoints(r.g) === 5);
+  r = person({ lv: {}, hu: { L401: { c: 2, t: OLD1 } } }, { lv: { L401: { s: 3, m: 5, p: 5, h: 0, t: OLD2 } } });
+  ok('grandfathered: even an earlier hint counter never caps an entry without w', P.wlStarsTotal(r.g) === 3);
+  // (e) languages and versions are separate puzzles.
+  r = person({ lv: {}, hu: { L401: { c: 2, t: T1 } }, hues: { L401v2: { c: 2, t: T1 } } }, { lv: { L401v2: clean(T2) } });
+  ok('cap: a hint on the OLD puzzle or the other language caps nothing', P.wlStarsTotal(r.g) === 3);
+  // (f) the server builds the same person.
+  if (server) {
+    const d = person({ lv: { L5: { s: 2, m: 3, p: 3, h: 1, t: T1, w: T1 } }, hu: { L7: { c: 1, t: T1 } } }, { lv: { L5: { s: 3, m: 3, p: 3, h: 0, t: T2, w: T2 }, L7: { s: 3, m: 3, p: 3, h: 0, t: T2, w: T2 } } }).d;
+    const a = aggregatePlayers(JSON.parse(JSON.stringify(d))), b = server.aggregatePlayers(JSON.parse(JSON.stringify(d)));
+    const norm = (list) => JSON.stringify(list.map((g) => [g.name, g.games.wordladder]).sort());
+    ok('cap: the SERVER groups hints exactly as the phone (deep-equal), 2 + 2 stars', norm(a) === norm(b) && P.wlStarsTotal(b.find((x) => x.name === 'Zed Ladder').games.wordladder) === 4);
+  }
+  // (g) the real recorders on one store: the hint counter only grows, then caps a later clean finish there.
+  store.clear();
+  localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzladderhint', playerId: 'ZZZH5' }));
+  G.recordWordLadderHint(260, 2, { lang: 'es', ver: 2 });
+  G.recordWordLadderHint(260, 1, { lang: 'es', ver: 2 });
+  const hu = gm().wl.hues && gm().wl.hues.L260v2;
+  ok('recordWordLadderHint: wl.hues[L260v2] = { c: 2, t } (Math.max, the first time kept)', hu && hu.c === 2 && hu.t >= C && !gm().wl.hu);
+  ok('recordWordLadderHint is not a result: no play counted', (gm().total.played | 0) === 0);
+  ok('recordWordLadderHint refuses a bad level', G.recordWordLadderHint(0, 1) === null && G.recordWordLadderHint(2.5, 1) === null);
+  await new Promise((res) => setTimeout(res, 3));
+  rl(260, { moves: 5, par: 5, hints: 0, lang: 'es', ver: 2 });
+  const e = gm().wl.es.L260v2;
+  ok('a new entry carries w (its own finish time)', e && e.w >= C && e.w === e.t);
+  ok('...and the same store\'s hints cap it: 1 star, Hard 1 point', P.wlStarsTotal(gm()) === 1 && P.wlPoints(gm()) === 1);
+  ok('the stored entry itself is untouched (s 3): read time only', e.s === 3);
+  ok('NOT_A_RESULT and the scan AUX both list recordWordLadderHint', /'recordWordLadderHint'/.test(fs.readFileSync(path.join(ROOT, 'js/game-stats.js'), 'utf8'))
+    && /recordWordLadderHint:/.test(fs.readFileSync(path.join(ROOT, 'tools/scan-game-modes.mjs'), 'utf8')));
+  // (h) REAL HISTORY: the writer as it was on main before this change (git 8172fe4) wrote entries with no `w`; today's
+  // reader leaves every one of them as stored, even with a hint counter from another phone.
+  let src = null;
+  try { src = execFileSync('git', ['show', '8172fe4:js/game-stats.js'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 << 20 }); } catch { src = null; }
+  if (!src) ok('real history: the old writer (git 8172fe4) could be read', false);
+  else {
+    const os = await import('node:os');
+    const jsDir = new URL('../js/', import.meta.url).href;
+    src = src.replace(/from '\.\/([^']+)'/g, (_, f) => `from '${jsDir}${f}'`);
+    const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'wl-old-')), 'game-stats-8172fe4.mjs');
+    fs.writeFileSync(tmp, src);
+    store.clear();
+    localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzladderold', playerId: 'ZZZO6' }));
+    const OLD = await import('file://' + tmp);
+    const orec = (n, o) => OLD.withMode(() => ({ mode: 'ladder', lang: o.lang || 'en' }), o.band, () => OLD.recordWordLadder(n, o));
+    orec(401, { moves: 5, par: 5, hints: 0, band: 'expert', ver: 2 });
+    orec(402, { moves: 6, par: 5, hints: 1, band: 'expert', ver: 2 });
+    orec(5, { moves: 3, par: 3, hints: 0, lang: 'es', band: 'easy', ver: 2 });
+    const oldG = JSON.parse(JSON.stringify(OLD.loadStats().games.wordladder));
+    ok('real history: the old writer\'s entries carry no w', Object.values(oldG.wl.lv).concat(Object.values(oldG.wl.es)).every((x) => !('w' in x)));
+    const before = OLD.wlLevels ? [...OLD.wlLevels(oldG).values()].map((x) => x.e.s).join() : null;
+    const after = [...G.wlLevels(oldG).values()].map((x) => x.e.s).join();
+    ok('real history: today\'s reader gives the same stars as the old one', before === after, [before, after]);
+    const other = { lv: {}, hu: { L401v2: { c: 2, t: C - 1 }, L402v2: { c: 2, t: C - 1 } }, hues: { L5v2: { c: 2, t: C - 1 } } };
+    const r2 = aggregatePlayers(JSON.parse(JSON.stringify(Object.fromEntries([dev('dev-a', { wordladder: oldG }, 100), dev('dev-b', { wordladder: wlg(other, 0) }, 200)])))).find((x) => x.name === 'Zed Ladder').games.wordladder;
+    ok('real history: another phone\'s hints never lower them (stars and points as before)', P.wlStarsTotal(r2) === P.wlStarsTotal(oldG) && P.wlPoints(r2) === P.wlPoints(oldG), [P.wlPoints(r2), P.wlPoints(oldG)]);
+  }
+}
+
+// --- 10. ready for a release that carries test plays (CARRY_TEST is Matt's call): combineWlRecords ----------------------
+{
+  const real = { total: { played: 1, won: 1, lost: 0 }, byDiff: { easy: { played: 1, won: 1, lost: 0 } }, wl: { lv: { L1: { s: 2, m: 5, p: 3, h: 0, t: 5 } } } };
+  const test = { total: { played: 2, won: 2, lost: 0 }, byDiff: { easy: { played: 2, won: 2, lost: 0 } }, wl: { lv: { L1: { s: 3, m: 3, p: 3, h: 0, t: 9, w: 9 }, L2: { s: 1, m: 9, p: 3, h: 2, t: 8 } }, hu: { L2: { c: 2, t: 7 } }, dl: { 'en-2026-11-19': { s: 3, m: 4, p: 4, h: 0, t: 3 } } } };
+  const c = G.combineWlRecords(real, test);
+  ok('carry: the test record began as a copy, so counters take the larger (2 played, never 3)', c.total.played === 2 && c.byDiff.easy.won === 2);
+  ok('carry: each level the better attempt WHOLE (L1 3 stars, 3 moves), never mixed fields', JSON.stringify(c.wl.lv.L1) === JSON.stringify({ s: 3, m: 3, h: 0, p: 3, t: 5, w: 9 }) && c.wl.lv.L2.s === 1);
+  ok('carry: hint counters and the daily kept', c.wl.hu.L2.c === 2 && c.wl.dl['en-2026-11-19'].s === 3);
+  ok('carry: CARRY_COMBINE has wordladder; CARRY_TEST does not list it yet', G.CARRY_COMBINE.wordladder === G.combineWlRecords && !G.CARRY_TEST.wordladder);
+  ok('carry: neither input changed', real.wl.lv.L1.s === 2 && !real.wl.hu);
+}
+
 // --- 8. HIDDEN while admin only: the release flips flags only --------------------------------------------------------
 const hub = fs.readFileSync(path.join(ROOT, 'js/hub.js'), 'utf8');
 const hubEntry = hub.slice(hub.indexOf("id: 'word-ladder'"), hub.indexOf("id: 'word-ladder'") + 900);

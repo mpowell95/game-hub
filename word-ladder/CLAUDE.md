@@ -13,7 +13,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 |---|---|
 | Folder / hub id / stats id | `word-ladder/` / `word-ladder` / `wordladder` |
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
-| Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
+| Recorder | `recordWordLadder(level, { moves, par, hints, lang, band, ver })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints); `recordWordLadderHint(level, count, { lang, ver })` at each hint (not a result) |
 | Settings | `gamehub.wordladder.v1` `{ lang, seen, band, tip1 }` (puzzle language; nothing saved = the hub's language; `tip1` = the first-move tip shown) |
 | Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, ver, s, p, chain, moves, hints, done, recorded, redo?, log?, ab? }` (`ver` = the puzzle version, 2026-11-19; absent = 1; older saves also carry an unread `sel`; `redo` = Redo's words, newest undo last; `log` = the private play log so far; `ab` = a past day logged as abandoned) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
@@ -103,7 +103,7 @@ the stars, and the points count an old solve as before and a replay never twice.
 par per number + "Earlier puzzles" (numbers solved on an old version). The start screen's progress and Play <n> follow the CURRENT
 puzzles (`_solved`); a save from an older version never resumes (`cleanAttempt`). A first solve of a remade puzzle is one new play
 in `byDiff` (byDiff is not the board). Test: `tools/test-word-ladder.mjs` runs the OLD writer from git (5dd10bc), then this code.
-`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
+`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t, w? }` (`wlBest`:
 the BETTER attempt kept WHOLE: more stars, then fewer moves, then fewer hints; never one attempt's moves with another's hints,
 rule 4; earliest time). First completion = one play + win in its band (`daily` for the
 daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (points, levels, stars,
@@ -122,8 +122,18 @@ puzzles, daily 0; EN/ES). "+X pts": a first solve or a better result on a level 
 under the entry's own par, hints over moves, stars the moves do not give), an ALERT until a snapshot replay shows 0 honest hits.
 The server board needs nothing (it runs the same `aggregatePlayers`). Tests: `node tools/test-word-ladder-points.mjs`
 (the table, recorders, the pill, phone = server grouping, the board run as if released, the sheet, the alert, still hidden).
-**HIDDEN while admin only** (`isGameOnLauncher` false: off every board, no pill). Not built: the proposal's hint-before-finish cap
-across phones (`wl.hint`, Word Weaver's `ww.hint`): a hint solve replayed clean on a second phone still pays 3 stars.
+**HIDDEN while admin only** (`isGameOnLauncher` false: off every board, no pill).
+
+**The hint cap across phones (2026-11-20, Matt: "Yes")**: a hint on ANY phone caps that puzzle's stars everywhere (1 hint 2, 2+ 1),
+Word Weaver's `wwMerge` rule. `wl.hu` (English) / `wl.hues` (Spanish) `{ wlKey: { c, t } }` = the most hints this store used on
+that puzzle (only grows) and the first hint's time, written AT EACH HINT (`recordWordLadderHint`, in `NOT_A_RESULT` / the scan's
+`AUX`; also on resuming a hinted attempt), never for the daily. `players-agg.js` merges them (most, earliest) and adds every
+finished entry's own `h` at its finish time. `wlCapped` (inside `wlLevels`, so the board, My Stats, stars, points, the pill, and
+the server agree) caps an entry when the first hint came at or before ITS finish, `w` (new field: the kept attempt's own finish
+time; `t` stays the earliest). **Grandfathered: an entry without `w` (the old writer, before 2026-11-20) is never capped**, and a
+clean finish before another phone's hint keeps its stars. Read time; stored entries never change. Known limit: the "+X pts" pill
+on the second phone reads only that phone's store, so it can show more than the board pays. Tests: `test-word-ladder-points.mjs`
+sections 9-10 (two phones, finished and unfinished hints, the old writer from git 8172fe4, server = phone).
 
 **Release checklist (only when Matt says "release it")**: `js/hub.js` entry: drop `devOnly`, add `released`; `js/game-stats-ui.js`
 TABS: drop `devOnly`; `js/game-stats.js`: remove from `ADMIN_ONLY`, decide `CARRY_TEST` with Matt (test plays carried or not);
