@@ -13,7 +13,7 @@ Built 2026-11-13 (Matt: "start a new session to build Word Ladder"). **ADMIN ONL
 |---|---|
 | Folder / hub id / stats id | `word-ladder/` / `word-ladder` / `wordladder` |
 | Entry | module `../word-ladder/js/ui.js`, **immersive**, prefix `.wl-root` / `.wl-`, in `BUG_BTN_GAMES` |
-| Recorder | `recordWordLadder(level, { moves, par, hints, lang, band })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints) |
+| Recorder | `recordWordLadder(level, { moves, par, hints, lang, band, ver })`, `recordWordLadderDaily(key, { moves, par, hints })` (`js/game-stats.js`), both in `withMode` (`{ mode: 'ladder'|'daily', lang }`, detail moves/par/hints); `recordWordLadderHint(level, count, { lang, ver })` at each hint (not a result) |
 | Settings | `gamehub.wordladder.v1` `{ lang, seen, band, tip1 }` (puzzle language; nothing saved = the hub's language; `tip1` = the first-move tip shown) |
 | Saves | `gamehub.wordladder.save.v1` `{ '<lang>:<band>': attempt }` (+ the old `en`/`es`, kept); `gamehub.wordladder.daily.v1` `{ v:1, d: { '<en|es>-<YYYY-MM-DD>': attempt } }`; attempt = `{ v, n, ver, s, p, chain, moves, hints, done, recorded, redo?, log?, ab? }` (`ver` = the puzzle version, 2026-11-19; absent = 1; older saves also carry an unread `sel`; `redo` = Redo's words, newest undo last; `log` = the private play log so far; `ab` = a past day logged as abandoned) |
 | `isInProgress()` | always `false`: every move is saved, leaving is lossless |
@@ -92,7 +92,19 @@ by `--remake en:251-500,es:1-100,es:251-500 --daily-from 8` (`REMAKE_SPECS`: a r
 easiest level first; every par path through Word Weaver words, start and target common, never rude). A remade level or day carries
 `v: 2`; the version table is `REMADE` (engine) = `WL_REMADE` (`js/game-stats.js`), checked by both tests. Medium and English Easy
 untouched. Before/after numbers: `CLAUDE-HISTORY.md`. Points: "Points and the leaderboard" below.
-**A further remake** = the same `--remake` (v becomes 3) and a new `REMADE` row; never reuse a number's key for another puzzle.
+**Remade a third time 2026-11-20 (v3; the review after Matt's "Yes")**: Spanish Easy 1-100 (start, target, and par path only
+through `ES_EASY_WORDS`, a hand-read list: no DES, ZAR, MIE, PRO, POL), Spanish Expert 401-500 (-ADO/-ADA/-IDO/-IDA ends at most
+12%: `sufRe`/`sufMax`), and English Expert ONLY the 29 levels whose start repeated within 10 levels (`--respread en:401-500`: each
+re-picked at its old par, not greedy-solvable first). Every remade band: no start again within 10 levels, no end within 4
+(`START_GAP`/`END_GAP`, relaxed only if the pool runs out). `NOT_END`/`NOT_STEP`: hand-read words never an end or a par-path step
+(the archaic future subjunctive NEGARE, PAGARE, GANARE; HITHER, CUTLER). Command: `--remake es:1-100,es:401-500 --respread
+en:401-500` on the data as of 8172fe4. `REMADE` is first match wins (v3 singles before `[251, 500, 2]`). Difficulty before/after:
+`CLAUDE-HISTORY.md` (2026-11-20). **A further remake** = a new run on the committed data (v becomes 4) and new `REMADE` rows;
+never reuse a number's key for another puzzle.
+**Accents, display only (2026-11-20)**: Spanish `words.json` `a` = "PLAIN:ACCENTED ..." (`tools/word-ladder-es-accents.txt`, written by
+`--fetch-es-accents`: only where the plain spelling is not a word of its own, so ESTA, PAPA, MAS stay plain). `makeDict().show(w)`;
+the game shows it on tiles, the ghost row, the target, the done card, and the coach line (`_show`). Typing, matching, saves, stats,
+and the log stay on the plain word; `has()` never knows the accented spelling.
 
 ## Stats (`wl` sub-counter)
 
@@ -103,7 +115,7 @@ the stars, and the points count an old solve as before and a replay never twice.
 par per number + "Earlier puzzles" (numbers solved on an old version). The start screen's progress and Play <n> follow the CURRENT
 puzzles (`_solved`); a save from an older version never resumes (`cleanAttempt`). A first solve of a remade puzzle is one new play
 in `byDiff` (byDiff is not the board). Test: `tools/test-word-ladder.mjs` runs the OLD writer from git (5dd10bc), then this code.
-`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t }` (`wlBest`:
+`wl.lv` (English) / `wl.es` (Spanish) `{ 'L<n>' | 'L<n>v<ver>': entry }`, `wl.dl { key: entry }`, entry `{ s, m, p, h, t, w? }` (`wlBest`:
 the BETTER attempt kept WHOLE: more stars, then fewer moves, then fewer hints; never one attempt's moves with another's hints,
 rule 4; earliest time). First completion = one play + win in its band (`daily` for the
 daily). Merged per person in `js/players-agg.js`; shown by `wordLadderScreen` in `js/game-stats-ui.js` (points, levels, stars,
@@ -122,14 +134,38 @@ puzzles, daily 0; EN/ES). "+X pts": a first solve or a better result on a level 
 under the entry's own par, hints over moves, stars the moves do not give), an ALERT until a snapshot replay shows 0 honest hits.
 The server board needs nothing (it runs the same `aggregatePlayers`). Tests: `node tools/test-word-ladder-points.mjs`
 (the table, recorders, the pill, phone = server grouping, the board run as if released, the sheet, the alert, still hidden).
-**HIDDEN while admin only** (`isGameOnLauncher` false: off every board, no pill). Not built: the proposal's hint-before-finish cap
-across phones (`wl.hint`, Word Weaver's `ww.hint`): a hint solve replayed clean on a second phone still pays 3 stars.
+**HIDDEN while admin only** (`isGameOnLauncher` false: off every board, no pill).
 
-**Release checklist (only when Matt says "release it")**: `js/hub.js` entry: drop `devOnly`, add `released`; `js/game-stats-ui.js`
-TABS: drop `devOnly`; `js/game-stats.js`: remove from `ADMIN_ONLY`, decide `CARRY_TEST` with Matt (test plays carried or not);
-`sw.js` ASSETS every file, `data/**` in LAZY, `node tools/validate-sw-assets.mjs`, bump CACHE. Points, board, sheet, and pill need
-no change (they switch on with `isGameOnLauncher`). Run `node tools/test-word-ladder-points.mjs` (its "hidden" checks then fail by
-design: flip them).
+**The hint cap across phones (2026-11-20, Matt: "Yes")**: a hint on ANY phone caps that puzzle's stars everywhere (1 hint 2, 2+ 1),
+Word Weaver's `wwMerge` rule. `wl.hu` (English) / `wl.hues` (Spanish) `{ wlKey: { c, t } }` = the most hints this store used on
+that puzzle (only grows) and the first hint's time, written AT EACH HINT (`recordWordLadderHint`, in `NOT_A_RESULT` / the scan's
+`AUX`; also on resuming a hinted attempt), never for the daily. `players-agg.js` merges them (most, earliest) and adds every
+finished entry's own `h` at its finish time. `wlCapped` (inside `wlLevels`, so the board, My Stats, stars, points, the pill, and
+the server agree) caps an entry when the first hint came at or before ITS finish, `w` (new field: the kept attempt's own finish
+time; `t` stays the earliest). **Grandfathered: an entry without `w` (the old writer, before 2026-11-20) is never capped**, and a
+clean finish before another phone's hint keeps its stars. Read time; stored entries never change. Known limit: the "+X pts" pill
+on the second phone reads only that phone's store, so it can show more than the board pays. Tests: `test-word-ladder-points.mjs`
+sections 9-10 (two phones, finished and unfinished hints, the old writer from git 8172fe4, server = phone).
+
+**Release checklist (verified 2026-11-20 by a dry run on a throwaway copy; only when Matt says "release it")**:
+1. `js/hub.js` Word Ladder entry: delete the `// ADMIN ONLY ...` comment and `devOnly: true`, add `released: '<YYYY-MM-DD>'` (the
+   release day: the New pill and the New games bubble read it).
+2. `js/game-stats-ui.js` TABS: `{ id: 'wordladder', labelKey: 'game_title_wordladder' }` (drop `devOnly: true`).
+3. `js/game-stats.js` `ADMIN_ONLY`: remove `wordladder: 'word-ladder',`. `CARRY_TEST`: Matt's call; add `wordladder: true` to carry
+   his and testers' plays (`combineWlRecords` is in `CARRY_COMBINE`: counters the larger, each level `wlBest` whole, hints kept;
+   both ways proved: carried = the test levels and points in the real record, stamp `carried.wordladder`; not carried = 0, the test
+   record kept).
+4. `sw.js` ASSETS, beside Word Weaver: `./word-ladder/`, `index.html`, `css/word-ladder.css`, `js/ui.js`, `js/engine.js`,
+   `js/strings.js`, and `data/{en,es}/{words,levels,daily}.json` (never `data-test.js`, `CLAUDE*.md`, `data/CREDITS.md`); `LAZY_REST`
+   gains `word-ladder\/data\/(en|es)\/[a-z]+\.json|`. Then `node tools/validate-sw-assets.mjs` (drops it from `HELD_BACK`, hashes
+   its files; its only FAIL is the old `tools/ballrun-ux/harness.html`), bump `CACHE` past main, commit `sw.js` + `version.json`.
+5. Tests whose "admin only" checks flip by design: `tools/test-word-ladder-points.mjs` section 8 (hidden) and the pill's test-play
+   check; `tools/test-word-ladder.mjs`'s old-writer section (its old writer stored into the TEST record: compare
+   `loadStoredStats().testGames` there, or the carried record with `CARRY_TEST`). Everything else stayed green.
+What the dry run saw with the service worker on: install; the warm takes the code, not the data; the New bubble shows and opens the
+game; EN Easy 1 by taps online with "+1 pt" in the top bar row; the daily; ES Easy 1; the 6 data files cached after that first
+play; OFFLINE, a reload, EN and ES Easy 2 played and the daily opened. Offline before ever opening it: "Can't load / Try again"
+(LAZY by design). Leaderboard board and "See how scores are calculated" open; My Stats shows 4 points.
 
 **Data reaches the phone on the next open (2026-11-13)**: `destroy()` forgets the loaded words and levels, so going back to
 the Hub and in again fetches them fresh (the hub keeps this module loaded for the life of the page; before this a phone
@@ -142,6 +178,12 @@ now store `s`. Matt's daily that day (KICK LICK LICE LIVE LOVE, saved as 5) is s
 one-time `_repair1113` (his code only, stamp `gamehub.wordladder.repair1113.v1`, verified by re-read; the entry only improves).
 
 ## Layout
+
+**Rungs and the ghost row (2026-11-20 review)**: at least ONE empty rung whenever the word is not one step from the target
+(`_rungs`: after an Undo or over par it fell to 0 and read as one step away); a picked letter always draws the ghost row, on the
+last step in the dashed link's place (`_fit` keeps one rung's room). **The "+X pts" pill sits in the top bar's row** while Word
+Ladder is mounted (`--gh-ptsgain-top` on `<html>`, set at mount, removed in `destroy()`; `js/points-toast.js` falls back to its
+old 128px for every other game): at 128px it covered the finished ladder.
 
 Night blue in light and dark (bright text). The coach line sits at least 16px under the target (`.wl-msg` margin + `_fit`'s reserve). Row 1 = the Hub button's row: only the level chip. Row 2, 16px under it (10px
 on short phones): back arrow (to setup) top left, Moves / Par, How to play. The ladder fits by measurement (`_fit`: tile sizes

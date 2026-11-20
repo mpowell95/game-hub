@@ -131,6 +131,7 @@ const EXCLUDED = [
   // `node js/test.js` convention).
   { re: /(^|\/)js\/test\.js$/, why: "headless engine test (node-only, not deployed) - e.g. escoba/js/test.js's own header comment" },
   { re: /^word-weaver\/js\/data-test(-es)?\.js$/, why: "Word Weaver's level-data tests (node word-weaver/js/data-test.js), node-only, not deployed" },
+  { re: /^word-ladder\/js\/data-test\.js$/, why: "Word Ladder's level-data tests (node word-ladder/js/data-test.js), node-only, not deployed (found by the 2026-11-20 release dry run)" },
   { re: /(^|\/)js\/sim\.js$/, why: "headless match simulation (node-only, not deployed) - e.g. chinchon/js/sim.js's own header comment" },
   // "Reference screenshots in mancala/reference/ (gitignored)" - CLAUDE.md, Mancala row.
   { re: /^mancala\/reference\//, why: 'design reference screenshots, gitignored - CLAUDE.md Mancala row' },

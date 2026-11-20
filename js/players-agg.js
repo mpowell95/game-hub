@@ -9,7 +9,7 @@
 // the (lowercased) profile name, then to the device id. Legacy records with no code group by name,
 // exactly like today, so nothing regresses.
 
-import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame, wlBest } from './game-stats.js';
+import { GAMES, ARCHIVED_GAMES, NB_TIERS, nbParseRanges, CARRY_TEST, carriedGame, wlBest, wlHintBest } from './game-stats.js';
 import { mergeBoards, mergeUnlocked } from './arcade-scores.js';
 import { correctStats, isVoidedMatch, FULL_LEVEL, fullLevelGame, adjustGame, adjustModesGame, withHandAdjust, HAND_RESULTS, handResultsGame, flickTestGame } from './stats-corrections.js';
 import { WO_TIERS, woList, RUSH_MODES, woRushRuns, woRushBestMap, woCapCl, woLegacyAdd } from './arrow-maze-time.js';
@@ -799,6 +799,22 @@ export function aggregatePlayers(all, corrections) {
           if (!sm || typeof sm !== 'object' || Array.isArray(sm)) continue;
           const dm = dst.wl[mk] || (dst.wl[mk] = {});
           for (const k of Object.keys(sm)) dm[k] = wlBest(dm[k], sm[k]);
+        }
+        // The hint cap across phones (2026-11-20, js/game-stats.js wlCapped): every device's hint counters (most hints,
+        // earliest time) PLUS each finished entry's own hints at its finish time, so a hint taken on one phone (finished
+        // there or not) caps a clean finish on another that came after it. Read time; nothing stored changes.
+        for (const [lm, hk] of [['lv', 'hu'], ['es', 'hues']]) {
+          const sh = src.wl[hk], sm = src.wl[lm];
+          const add = (k, e) => { const dh = dst.wl[hk] || (dst.wl[hk] = {}); const m = wlHintBest(dh[k], e); if (m) dh[k] = m; };
+          if (sh && typeof sh === 'object' && !Array.isArray(sh)) for (const k of Object.keys(sh)) add(k, sh[k]);
+          if (sm && typeof sm === 'object' && !Array.isArray(sm)) {
+            for (const k of Object.keys(sm)) {
+              const e = sm[k];
+              const h = e && typeof e === 'object' ? Math.floor(Number(e.h) || 0) : 0;
+              const t = h >= 1 ? Math.floor(Number(e.w) || Number(e.t) || 0) : 0;
+              if (t) add(k, { c: h, t });
+            }
+          }
         }
       } else if (g === 'tower' && src.tw) {
         // Tower (2026-11-01). Counters ADD; every best (overall, per difficulty, streak) takes Math.max.

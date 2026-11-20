@@ -13,7 +13,7 @@ import * as E from './engine.js';
 import STRINGS from './strings.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
-import { recordWordLadder, recordWordLadderDaily, withMode, loadStats, wlKey, wlLevels, logPlayData } from '../../js/game-stats.js';
+import { recordWordLadder, recordWordLadderDaily, recordWordLadderHint, withMode, loadStats, wlKey, wlLevels, logPlayData } from '../../js/game-stats.js';
 import { bestNow, startServerTime } from '../../js/server-time.js';
 import { loadProfile } from '../../js/profile-store.js';
 import { backStack } from '../../js/back-stack.js';
@@ -150,6 +150,9 @@ class WordLadder {
     // the daily / its done card 1, How to play +1. The hub's top-left button takes the same step ("‹ Back") via back().
     this._bs = backStack((n) => this._stepBack(n));
     this._offResize = onViewportResize(() => (this.screen === 'done' ? this._fitFinal() : this._fit()));
+    // The "+X pts" pill (js/points-toast.js) in the top bar's row, between "‹ Back" and the bug button: at its usual
+    // 128px it sat on the finished ladder's top row (2026-11-20 review). Removed in destroy(): no other game moves.
+    try { document.documentElement.style.setProperty('--gh-ptsgain-top', 'calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 2px)'); } catch { /* no DOM */ }
     try { startServerTime(); } catch { /* the day falls back to the phone's clock */ }
     this._repair1113();
     this._flushAll();
@@ -422,9 +425,19 @@ class WordLadder {
     if (same && a.log) { const gone = Math.max(0, now - log.at); log.away += gone; log.seq.push('B:' + gone + '@' + Math.max(0, now - log.t0)); }
     this.cur = { kind, lang, n, key, level, ver: level.v || 1, p: level.p, chain: c.chain, moves: c.moves, hints: c.hints, done: c.done, recorded: c.recorded, sel: null, band: kind === 'daily' ? null : this.band, log, redo: same ? this._cleanRedo(a.redo, c, d.dict) : [], res: (c.chain && c.chain.length > 1) ? 1 : 0 };   // no letter picked: the player chooses (Matt, 2026-11-14)
     this.dist = null;
+    if (same && c.hints > 0) this._noteHints(this.cur);   // an attempt hinted before the hint counter existed
     if (c.done) { if (!c.recorded) this._record(this.cur); this._done(); return; }
     this._saveAttempt(this.cur);
     this._play();
+  }
+  /** A word's letters as SHOWN (2026-11-20): the Spanish accented spelling where the data has one (words.json `a`,
+   *  PÁLIDA for PALIDA), else the word itself. Display only: moves, matching, saves, and stats use the plain word. */
+  _show(word) {
+    const w = String(word || '');
+    let d = w;
+    try { if (this.data && this.data.dict && this.data.dict.show) d = this.data.dict.show(w); } catch { /* plain */ }
+    const a = [...d];
+    return a.length === w.length ? a : [...w];
   }
   _soon(text) {
     this.screen = 'soon';
@@ -512,7 +525,7 @@ class WordLadder {
     if (!m || !this.cur) return;
     const on = this.cur.chain.length === 1;
     m.classList.toggle('is-coach', on);
-    if (on) m.textContent = t('coach', { w: this.cur.level.t });
+    if (on) m.textContent = t('coach', { w: this._show(this.cur.level.t).join('') });
     else if (m.classList.contains('was-coach')) m.textContent = '';
     m.classList.toggle('was-coach', on);
   }
@@ -522,7 +535,14 @@ class WordLadder {
    *  goes, only how many changes par allows from here. */
   _rungs() {
     const c = this.cur;
-    return c ? Math.max(0, c.p - c.moves - 1) : 0;
+    if (!c) return 0;
+    // At least ONE whenever the word is not one step from the target (2026-11-20 review: after an Undo, or over par,
+    // the rungs fell to 0 and the ladder read "start, then target" as if one step away). Letters still different
+    // from the target, minus one, is the fewest steps left at the least, so a word one letter off shows none.
+    const w = this._word(), tg = c.level.t;
+    let diff = 0;
+    for (let i = 0; i < tg.length; i++) if (w[i] !== tg[i]) diff++;
+    return Math.max(c.p - c.moves - 1, diff >= 2 ? 1 : 0, 0);
   }
 
   /** The ladder: earlier words (small; the letter each one changed outlined gold), the word being changed (big,
@@ -534,7 +554,8 @@ class WordLadder {
     const tip = this._tip && c.sel !== this._tip.pos ? this._tip.pos : -1;
     const small = (k) => {
       const word = chain[k], chg = k > 0 ? changedAt(chain[k - 1], word) : -1;
-      return `<div class="wl-w wl-past">${[...word].map((ch, i) => `<span class="wl-t${ch === tg[i] ? ' is-match' : ''}${i === chg ? ' is-chg' : ''}">${ch}</span>`).join('')}</div>`;
+      const dw = this._show(word);
+      return `<div class="wl-w wl-past">${[...word].map((ch, i) => `<span class="wl-t${ch === tg[i] ? ' is-match' : ''}${i === chg ? ' is-chg' : ''}">${dw[i]}</span>`).join('')}</div>`;
     };
     const past = chain.length - 1;
     const maxPast = this._maxPast || 1;
@@ -547,21 +568,24 @@ class WordLadder {
       rows += '<div class="wl-more" aria-hidden="true">⋮</div>';
       for (let k = past - tail; k < past; k++) rows += small(k);
     }
+    const dnow = this._show(w);
     const nowTiles = [...w].map((ch, i) => {
       const cls = `wl-t${ch === tg[i] ? ' is-match' : ''}${i === c.sel ? ' is-sel' : ''}${i === tip ? ' is-tip' : ''}${anim && anim.pos === i ? (anim.fill ? ' is-flip is-fill' : ' is-flip') : ''}`;
-      return `<button type="button" class="${cls}" data-pos="${i}" aria-label="${esc(t('letter_aria', { n: i + 1, l: ch }))}"${i === c.sel ? ' aria-pressed="true"' : ''}>${ch}</button>`;
+      return `<button type="button" class="${cls}" data-pos="${i}" aria-label="${esc(t('letter_aria', { n: i + 1, l: ch }))}"${i === c.sel ? ' aria-pressed="true"' : ''}>${dnow[i]}</button>`;
     }).join('');
     const nR = this._rungs();
     const rungRow = `<div class="wl-rung">${'<i></i>'.repeat(tg.length)}</div>`;
     // A letter picked: the first rung previews the next word, the other letters in faint grey, the picked spot blank
     // (Matt, 2026-11-19: "you should see the other letters appear as faint gray letters in the below boxes").
-    const ghostRow = c.sel != null && nR
-      ? `<div class="wl-rung is-ghost">${[...w].map((ch, i) => (i === c.sel ? '<i></i>' : `<i><b>${ch}</b></i>`)).join('')}</div>` : '';
-    const middle = nR ? `<div class="wl-rungs" aria-hidden="true">${ghostRow || rungRow}${rungRow.repeat(nR - 1)}</div>` : '<div class="wl-link" aria-hidden="true"></div>';
+    // Always drawn when a letter is picked, even on the last step (it takes the dashed link's place; _fit keeps a rung's room).
+    const ghostRow = c.sel != null
+      ? `<div class="wl-rung is-ghost">${[...w].map((ch, i) => (i === c.sel ? '<i></i>' : `<i><b>${dnow[i]}</b></i>`)).join('')}</div>` : '';
+    const middle = nR ? `<div class="wl-rungs" aria-hidden="true">${ghostRow || rungRow}${rungRow.repeat(nR - 1)}</div>`
+      : ghostRow ? `<div class="wl-rungs" aria-hidden="true">${ghostRow}</div>` : '<div class="wl-link" aria-hidden="true"></div>';
     el.innerHTML = `${rows}
       <div class="wl-w wl-now${anim ? ' is-new' : ''}" data-role="now">${nowTiles}</div>
       ${middle}
-      <div class="wl-w wl-goal" aria-label="${esc(t('target_aria', { w: tg }))}"><i class="wl-flag">${SVG.flag}</i>${[...tg].map((ch) => `<span class="wl-t">${ch}</span>`).join('')}</div>`;
+      <div class="wl-w wl-goal" aria-label="${esc(t('target_aria', { w: tg }))}"><i class="wl-flag">${SVG.flag}</i>${this._show(tg).map((ch) => `<span class="wl-t">${ch}</span>`).join('')}</div>`;
     const mv = this.root.querySelector('[data-role="moves"]');
     if (mv) mv.textContent = String(c.moves);
     const hb = this.root.querySelector('[data-role="hints"]');
@@ -588,8 +612,8 @@ class WordLadder {
     // (the dashed link, 22; or the rungs, 6px each + 4 gaps at least), then earlier words (0.62 big + 6 each) and,
     // when some are folded away, the ⋮ row (28).
     const past = this.cur.chain.length - 1;
-    const nR = this._rungs();
-    const mid = nR ? nR * 14 - 8 + 8 : 22;   // the rungs' least room (6px each, 8px gaps); they grow into what is left
+    const nR = Math.max(1, this._rungs());   // with none, the room of one is kept for the ghost row (a letter picked)
+    const mid = nR * 14 - 8 + 8;   // the rungs' least room (6px each, 8px gaps); they grow into what is left
     const per = (b) => Math.round(b * 0.62) + 6;
     const room = (b) => H - (b + 4) - Math.round(b * 0.8) - 12 - mid - 6 - 4;   // 4: a little air above the coach line
     const rowsFor = (b) => {
@@ -739,7 +763,7 @@ class WordLadder {
     c.chain = [...c.chain, next];
     if (redo) { c.redo.pop(); c.moves = Math.max(c.chain.length - 1, c.moves - 1); }
     else { c.redo = []; c.moves += 1; }
-    if (hint) c.hints += 1;
+    if (hint) { c.hints += 1; this._noteHints(c); }
     if (next === c.level.t) {
       this._wlNote('F');
       c.done = true;
@@ -767,6 +791,14 @@ class WordLadder {
     this._saveAttempt(c);
     this._drawLadder();
     this._fit();
+  }
+  /** The hint cap across phones (2026-11-20, js/game-stats.js wlCapped): the hints used on a ladder level go into the
+   *  stats store the moment they are used, so a hinted attempt left unfinished here still caps a clean finish on
+   *  another phone. Never for the daily (it pays nothing). A failed write is logged, never thrown into play. */
+  _noteHints(c) {
+    if (!c || c.kind === 'daily' || !(c.hints > 0) || !Number.isInteger(c.n)) return;
+    try { recordWordLadderHint(c.n, c.hints, { lang: c.lang, ver: c.ver || 1 }); }
+    catch (err) { console.error('[word-ladder] hint not recorded', err); }
   }
   _hint() {
     const c = this.cur;
@@ -863,8 +895,8 @@ class WordLadder {
     const step = Math.min(60, Math.floor(600 / rows.length));
     el.innerHTML = rows.map((k, i) => {
       if (k == null) return '<div class="wl-more" aria-hidden="true">⋮</div>';
-      const w = chain[k], chg = k > 0 ? changedAt(chain[k - 1], w) : -1;
-      return `<div class="wl-w ${k === chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}${anim ? ' is-lit' : ''}"${anim ? ` style="--d:${i * step}ms"` : ''}>${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}${j === chg ? ' is-chg' : ''}" style="--j:${j}">${ch}</span>`).join('')}</div>`;
+      const w = chain[k], chg = k > 0 ? changedAt(chain[k - 1], w) : -1, dw = this._show(w);
+      return `<div class="wl-w ${k === chain.length - 1 ? 'wl-goal is-won' : 'wl-past'}${anim ? ' is-lit' : ''}"${anim ? ` style="--d:${i * step}ms"` : ''}>${[...w].map((ch, j) => `<span class="wl-t${ch === tg[j] ? ' is-match' : ''}${j === chg ? ' is-chg' : ''}" style="--j:${j}">${dw[j]}</span>`).join('')}</div>`;
     }).join('');
     // The stars start after the last row has lit; the heading pops in once the last star has landed (stars 160ms apart,
     // each 320ms); at 3 stars the burst and the target row's sweep land with the third.
@@ -888,7 +920,7 @@ class WordLadder {
       <button type="button" class="wl-icon wl-x" data-act="close-help" aria-label="${esc(t('close_aria'))}">${SVG.x}</button>
       <h2 class="wl-card-h">${esc(t('how_title'))}</h2>
       <p class="wl-how-b">${String(t('how_goal', { flag: '\u0000' })).split('\u0000').map(esc).join(`<i class="wl-flag-in">${SVG.flagIn}</i>`)}</p>
-      ${howSVG(String(t('how_eg')).split(' '))}
+      ${howSVG(String(t('how_eg')).split(' ').map((x) => this._show(x).join('')))}
       <p class="wl-how-cap">${esc(t('how_step'))}</p>
       <p>${esc(t('how_tap'))}</p>
       <p><span class="wl-t wl-t-demo is-match">A</span> ${esc(t('how_dot'))}</p>
@@ -980,6 +1012,7 @@ class WordLadder {
     // Forget the words and levels: the hub keeps this module loaded for the life of the page, so without this a phone
     // kept a data update out until the app was closed (2026-11-13: Matt's phone refused LIEN from the old list).
     for (const k of Object.keys(_data)) delete _data[k];
+    try { document.documentElement.style.removeProperty('--gh-ptsgain-top'); } catch { /* no DOM */ }
     try { if (this.screen === 'play' || this.screen === 'help') this._leaveLevel(); } catch { /* private log only */ }
     document.removeEventListener('visibilitychange', this._onVis);
     this.root.removeEventListener('click', this._onClick);

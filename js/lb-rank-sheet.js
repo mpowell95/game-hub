@@ -86,7 +86,7 @@ const SHEETS = {
   // capped by hints; each level once; earlier (remade) puzzles at their stars; the daily pays nothing.
   wordladder: () => [
     { h: 'lbrs_h_lvl', grid: { sup: 'lbrs_wl_sup', cols: ['3', '2', '1'],
-      rows: WL_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: WL_POINTS[b].slice() })) }, foot: ['lbrs_wl_stars', 'lbrs_wl_hints'] },
+      rows: WL_TIERS.map((b, i) => ({ ic: i + 1, k: LEVEL_KEY[i + 1], vals: WL_POINTS[b].slice() })) }, foot: ['lbrs_wl_stars', 'lbrs_wl_hints', 'lbrs_wl_anyphone'] },
     { text: ['lbrs_wl_once', 'lbrs_wl_old', 'lbrs_wl_daily'] },
   ],
   murdoku: () => [helpGrid('lbrs_mk_sup')],

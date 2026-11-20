@@ -71,10 +71,28 @@ const REMAKE_SPECS = {
   expert: { len: 6, pmin: 4, pmax: 8, cap: Infinity, ends: 'ww', maxUses: 4, par: (x) => 5.0 + 1.4 * x, greedy: (x) => 0.26 - 0.16 * x,
     // English has few 6-letter ladders through Word Weaver words (about 160 of par 5 or more): a flatter curve, or the
     // start of the band gets only the par-4 ladders greedy play solves.
-    en: { maxUses: 5, par: (x) => 4.9 + 0.9 * x, greedy: (x) => 0.3 - 0.14 * x } },
+    en: { maxUses: 5, par: (x) => 4.9 + 0.9 * x, greedy: (x) => 0.3 - 0.14 * x },
+    // 2026-11-20 review: over a third of the Spanish Expert ladders started or ended on an -ADO/-ADA/-IDO/-IDA word.
+    es: { sufRe: /(ADOS?|ADAS?|IDOS?|IDAS?)$/, sufMax: 0.12, greedy: (x) => 0.2 - 0.14 * x } },
 };
+// 2026-11-20 review (the third remake, v3): Spanish Easy opened on DES DAS DAR ZAR with MIE, PRO, and POL soon after.
+// Spanish Easy ladders now use ONLY these words, start, target, and every step of the par path (read by hand: words
+// any native speaker knows; no verb form that only lives in the subjunctive like DES, no MIE, PRO, POL, ZAR, UMA, OIA,
+// ERE, FER, CHA, CIA, SAN). Par stays the true minimum over every accepted word.
+const ES_EASY_WORDS = new Set(`QUE POR LOS ESO LAS MAS ASI HAY NOS SER FUE VEZ SOY VOY ESE TAN SUS DOS ESA HAS SIN VER AHI
+UNO MIS SEA VAS TAL TUS HOY OYE MAL AUN MIO VEN VEO IBA VES AÑO TIO FIN FUI DAR IDO AMO PAR DIO VOZ PIE VIO MES LEY DAS
+TEN ORO DOY BAR MAR OIR SUR OJO RIO VEA AMA USA VOS RED PAN USO PON GAS CAE DEN LIO OSO PEZ FEO SED VIA RIE FEA ALA USE
+AVE CAN BUS EGO GOL AJO TOS ZOO EJE ARO UÑA UVA OSA COL ECO ROL SAL SOL TIA MIA TUYO SUYO LUZ MAS RIA PAZ DIA MAYO`.split(/\s+/).filter((w) => w.length === 3));
+REMAKE_SPECS.easy.es = { only: ES_EASY_WORDS };
+// No start word again within START_GAP levels of a remade band, and neither end again within END_GAP (2026-11-20: English
+// Expert 401, 402, and 403 all started from HIGHER). Relaxed step by step only if the pool runs out.
+const START_GAP = 10, END_GAP = 4;
 // Word Weaver words read by hand as poor starts or targets for a remade level (names first, old or odd words): steps only.
-const NOT_END = new Set('CUTLER REDDER HITHER STOKER TUCKER NEIGHS FRANCS CASACA CASABA'.split(' '));
+const NOT_END = new Set(('CUTLER REDDER HITHER STOKER TUCKER NEIGHS FRANCS CASACA CASABA'
+  // 2026-11-20 test plays: the future subjunctive (archaic: NEGARE, PAGARE, GANARE), NOMINE, NOMINO, DELATE, DEBITO, MANTEN, SALIAS.
+  + ' NEGARE PAGARE GANARE NOMINE NOMINO DELATE DEBITO MANTEN SALIAS').split(' '));
+// Never a step of a remade level's par path either (read by hand, same day): old, odd, or a surname.
+const NOT_STEP = new Set('CUTLER REDDER HITHER NEGARE PAGARE GANARE NOMINE NOMINO DELATE MANTEN SALIAS'.split(' '));
 const hamming = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
 /** Greedy play: from `s`, always the not-yet-seen neighbour with the most letters right, commonest first (`ord`). True
  *  when it reaches `t` in exactly `p` moves. */
@@ -92,9 +110,11 @@ function greedyAtPar(nb, ord, s, t, p) {
 /** Every candidate ladder of a band: pool[p][g] = [{ s, t, p, np }] (g 1 = greedy finishes at par, np = shortest paths over
  *  every accepted word), most paths first. Par is the true minimum and a par path exists through Word Weaver words. */
 function remakePool(lang, spec, { byLen, graphs, commonGraphs, grid, ranks, rank }) {
-  const nb = graphs[spec.len], cnb = commonGraphs[spec.len];
+  const nb = graphs[spec.len];
+  // spec.only (Spanish Easy, 2026-11-20): start, target, and the par path only through that hand-read list.
+  const cnb = spec.only ? graph(byLen[spec.len].filter((w) => spec.only.has(w))) : commonGraphs[spec.len];
   const ord = new Map(byLen[spec.len].map((w, i) => [w, i]));
-  const isEnd = (w) => cnb.has(w) && !NOT_END.has(w) && rank(w) <= spec.cap && (spec.ends === 'ww' || grid.has(w)) && (grid.has(w) || ranks.has(w));
+  const isEnd = (w) => cnb.has(w) && !NOT_END.has(w) && (spec.only ? spec.only.has(w) : rank(w) <= spec.cap && (spec.ends === 'ww' || grid.has(w)) && (grid.has(w) || ranks.has(w)));
   const pool = {};
   for (const s of byLen[spec.len].filter(isEnd)) {
     const d = bfs(nb, s), dc = bfs(cnb, s);
@@ -115,11 +135,12 @@ function remakePool(lang, spec, { byLen, graphs, commonGraphs, grid, ranks, rank
   }
   for (const p of Object.keys(pool)) for (const g of Object.keys(pool[p])) pool[p][g].sort((a, b) => b.np - a.np || (a.s + a.t < b.s + b.t ? -1 : 1));
   console.log(lang, spec.len, 'pool', Object.fromEntries(Object.entries(pool).map(([p, o]) => [p, `${(o[1] || []).length} greedy / ${(o[0] || []).length} not`])));
+  pool.cnb = cnb;
   return pool;
 }
 /** One ladder for position x of a band: the par and greedy outcome its curve wants (the nearest bucket that still has a
  *  ladder whose pair is unused and whose words are used under MAX_USES times); later in the band, fewer shortest paths. */
-function pickFromPool(pool, spec, x, R, used, uses, n) {
+function pickFromPool(pool, spec, x, R, used, uses, n, near, suf) {
   // Par and the greedy outcome are drawn from an even (low-discrepancy) sequence over the level number, so a band gets
   // the mix its curve asks for (the xorshift draws in pairs ran 47% greedy where 31% was asked).
   const u1 = (n * 0.6180339887) % 1, u2 = (n * 0.7548776662 + 0.5) % 1;
@@ -130,33 +151,67 @@ function pickFromPool(pool, spec, x, R, used, uses, n) {
   for (const dp of [0, 1, -1, 2, -2, 3, -3]) for (const g of [g0, 1 - g0]) order.push([p0 + dp, g]);
   // Same par first with the other greedy outcome only after one step of par either way.
   order.sort((a, b) => (Math.abs(a[0] - p0) + (a[1] === g0 ? 0 : 1.5)) - (Math.abs(b[0] - p0) + (b[1] === g0 ? 0 : 1.5)));
-  for (const [p, g] of order) {
-    const list = ((pool[p] || {})[g] || []).filter((c) => !used.has([c.s, c.t].sort().join('-')) && (uses.get(c.s) || 0) < (spec.maxUses || MAX_USES) && (uses.get(c.t) || 0) < (spec.maxUses || MAX_USES));
-    if (!list.length) continue;
-    const pos = Math.min(0.999, Math.max(0, x * 0.75 + R() * 0.25));
-    return { ...list[Math.floor(pos * list.length)] };
+  // `near`: Map level -> { s, t } already picked in this run; `suf`: { n, picked } for the suffix share (spec.sufRe).
+  const close = (c, sg, eg) => {
+    if (!near) return false;
+    for (const [m, l] of near) {
+      const dd = Math.abs(m - n);
+      if (dd <= sg && l.s === c.s) return true;
+      if (dd <= eg && (l.s === c.t || l.t === c.s || l.t === c.t)) return true;
+    }
+    return false;
+  };
+  const sufN = (c) => (spec.sufRe ? (spec.sufRe.test(c.s) ? 1 : 0) + (spec.sufRe.test(c.t) ? 1 : 0) : 0);
+  const sufOk = (c) => { const k = sufN(c); return !k || (k === 1 && suf && suf.n + 1 <= Math.max(1, Math.floor(spec.sufMax * (suf.picked + 1)))); };
+  // Difficulty first: the wanted par and greedy outcome (and one step either way) are tried with the gaps relaxed before an
+  // easier or harder ladder is taken (English Expert's long 6-letter ladders share few start words).
+  const tiers = [];
+  const exact = order.filter(([p]) => p === p0), up = order.filter(([p]) => p >= p0 && p <= p0 + 1), near1 = order.filter(([p]) => Math.abs(p - p0) <= 1);
+  // The start gap is kept first (a harder par of one more is fine), then relaxed; an easier par only after that.
+  // --respread (spec.hardFirst): a ladder greedy play cannot finish at par, at this par or one more, before any other.
+  if (spec.hardFirst) for (const [sg, eg] of [[START_GAP, END_GAP]]) for (const o of [exact, up]) tiers.push([o.filter(([, g]) => g === 0), sg, eg, true, 3]);
+  for (const [sg, eg, sx, ux] of [[START_GAP, END_GAP, true, 0], [START_GAP, END_GAP, true, 3]]) for (const o of [exact, up]) tiers.push([o, sg, eg, sx, ux]);
+  for (const o of [exact, up, near1, order]) for (const [sg, eg, sx, ux] of [[START_GAP, END_GAP, true, 3], [8, 3, true, 3], [6, 2, true, 3], [4, 1, true, 3], [3, 1, false, 3], [0, 0, false, 3]]) tiers.push([o, sg, eg, sx, ux]);
+  // `ux`: a word may be a start or target up to 3 more times than maxUses before a level gets an easier par.
+  for (const [ord, sg, eg, sx, ux] of tiers) {
+    const mu = (spec.maxUses || MAX_USES) + (spec.relaxUses ? ux : 0);
+    for (const [p, g] of ord) {
+      const list = ((pool[p] || {})[g] || []).filter((c) => !used.has([c.s, c.t].sort().join('-')) && (uses.get(c.s) || 0) < mu && (uses.get(c.t) || 0) < mu
+        && !close(c, sg, eg) && (!sx || sufOk(c)));
+      if (!list.length) continue;
+      const pos = Math.min(0.999, Math.max(0, x * 0.75 + R() * 0.25));
+      const out = { ...list[Math.floor(pos * list.length)] };
+      if (suf) { suf.picked++; suf.n += sufN(out); }
+      return out;
+    }
   }
   return null;
 }
 
-const REMAKE = (() => {
-  const i = process.argv.indexOf('--remake');
+const ranges = (flag) => {
+  const i = process.argv.indexOf(flag);
   if (i < 0) return null;
   const out = [];
   for (const part of String(process.argv[i + 1] || '').split(',')) {
     const m = /^(en|es):(\d+)-(\d+)$/.exec(part);
-    if (!m) throw new Error('--remake: bad range ' + part);
+    if (!m) throw new Error(flag + ': bad range ' + part);
     BAND_FIRST.forEach(([band, first], k) => {
       const last = k + 1 < BAND_FIRST.length ? BAND_FIRST[k + 1][1] - 1 : LEVELS;
       const lo = Math.max(first, +m[2]), hi = Math.min(last, +m[3]);
       if (lo > hi) return;
-      if (!REMAKE_SPECS[band]) throw new Error('--remake: no spec for ' + band);
+      if (!REMAKE_SPECS[band]) throw new Error(flag + ': no spec for ' + band);
       // The curve runs over the WHOLE band, so a part of a band continues it.
       out.push({ lang: m[1], lo, hi, spec: { ...REMAKE_SPECS[band], ...(REMAKE_SPECS[band][m[1]] || {}), first, last } });
     });
   }
   return out;
-})();
+};
+const REMAKE = ranges('--remake');
+// --respread en:401-500 (2026-11-20): ONLY the levels of the range whose start word was already a start within START_GAP
+// levels before (or an end within END_GAP) are made again, each at its old par, not greedy-solvable where the pool allows;
+// every other level stays as it is (English Expert's long 6-letter ladders are too few to remake the whole band at the
+// same difficulty). Each re-picked level gets the next version. May be given with --remake (other ranges).
+const RESPREAD = ranges('--respread');
 
 // Rude words and their forms (both languages; Word Weaver's and Spelling Bee's block lists, short form). Never a hint
 // when a clean shortest path exists. Anchored at both ends, so GRAPE, SCRAPE, ASSET and TITLE are untouched.
@@ -287,6 +342,62 @@ async function fetchEsForms() {
     '# words their Ñ spelling.\n';
   fs.writeFileSync(ES_FORMS, head + [...all].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([w, b]) => (b ? w + ' +' : w)).join('\n') + '\n');
   console.log('es forms', all.size, 'brought', [...all.values()].filter(Boolean).length);
+}
+
+/** ACCENTS FOR DISPLAY ONLY (2026-11-20 review: PALIDA for pálida, CAJON for cajón). tools/word-ladder-es-accents.txt
+ *  (written by --fetch-es-accents, committed) = "PLAIN ACCENTED" per line. Typing, matching, par, and stats stay on the
+ *  plain spelling; only tiles, the done card, and How to play show the accented one. A word gets its accent only when the
+ *  plain spelling is not a word of its own: not in lemmatization-lists, and said under a tenth as often as the accented one
+ *  in FrequencyWords (so ESTA, PAPA, MAS, SI, TE, and SOLO stay plain). Several accented spellings: the commonest, only
+ *  when it is said 5 times as often as the next. */
+const ES_ACCENTS = path.join(ROOT, 'tools/word-ladder-es-accents.txt');
+function loadEsAccents() {
+  const m = new Map();
+  if (!fs.existsSync(ES_ACCENTS)) return m;
+  for (const line of fs.readFileSync(ES_ACCENTS, 'utf8').split(/\r?\n/)) {
+    if (!line || line[0] === '#') continue;
+    const [p, a] = line.split(' ');
+    if (p && a && a.length === p.length) m.set(p, a);
+  }
+  return m;
+}
+async function fetchEsAccents() {
+  const up = (w) => w.toUpperCase();
+  const plain = (W) => W.normalize('NFD').replace(/([AEIOU])[\u0300-\u036f]/g, '$1').replace(/N\u0303/g, 'Ñ').normalize('NFC');
+  const LEM = 'https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-es.txt';
+  const FREQ = 'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/es/es_50k.txt';
+  const [lr, fr] = await Promise.all([fetch(LEM), fetch(FREQ)]);
+  if (!lr.ok || !fr.ok) throw new Error('accents: HTTP ' + lr.status + ' ' + fr.status);
+  const lem = new Set();
+  for (const line of (await lr.text()).replace(/^\uFEFF/, '').split(/\r?\n/)) for (const w of line.split('\t')) if (w && !/[^a-záéíóúüñ]/.test(w)) lem.add(up(w).normalize('NFC'));
+  const freq = new Map();
+  for (const line of (await fr.text()).split(/\r?\n/)) {
+    const [w, c] = line.trim().split(' ');
+    if (w && !/[^a-záéíóúüñ]/.test(w)) { const W = up(w).normalize('NFC'); freq.set(W, (freq.get(W) || 0) + (Number(c) || 0)); }
+  }
+  const variants = new Map();   // plain -> Set of accented spellings
+  for (const W of new Set([...lem, ...freq.keys()])) {
+    if (W.length < 3 || W.length > 6) continue;
+    const P = plain(W);
+    if (P === W) continue;
+    if (!variants.has(P)) variants.set(P, new Set());
+    variants.get(P).add(W);
+  }
+  const out = [];
+  for (const [P, set] of variants) {
+    if (lem.has(P)) continue;
+    const vs = [...set].sort((a, b) => (freq.get(b) || 0) - (freq.get(a) || 0));
+    const top = vs[0], fTop = freq.get(top) || 0;
+    if ((freq.get(P) || 0) >= fTop / 10 && (freq.get(P) || 0) > 0) continue;
+    if (vs[1] && (freq.get(vs[1]) || 0) * 5 > fTop) continue;
+    out.push(P + ' ' + top);
+  }
+  out.sort();
+  const head = '# GENERATED by tools/build-word-ladder-data.mjs --fetch-es-accents: never hand-edit. PLAIN ACCENTED, for DISPLAY only.\n' +
+    '# lemmatization-lists Spanish (Michal Boleslav Mechura, ODbL 1.0) and FrequencyWords es 2018 top 50k (Hermit Dave, CC BY-SA 4.0).\n' +
+    '# Only where the plain spelling is not a word of its own (see loadEsAccents in the generator).\n';
+  fs.writeFileSync(ES_ACCENTS, head + out.join('\n') + '\n');
+  console.log('es accents', out.length);
 }
 
 function loadRanks(lang) {
@@ -422,7 +533,7 @@ function build(lang) {
     levels.push(...oldL.map((l, i) => redo(l, 'level ' + (i + 1))));
     daily = oldD.map((l, i) => redo(l, 'day ' + i));
   }
-  if (REMAKE) {
+  if (REMAKE || RESPREAD) {
     // --remake (2026-11-19, Matt: "Yes, remake the levels. Keep whatever points I've earned"): only the ranges named for
     // this language are made again; every other level and every daily keep their start, target, par, path and number.
     // A remade level carries `v` (its puzzle version, one more than before): a result is stored under its version
@@ -430,9 +541,20 @@ function build(lang) {
     // The version table is also in word-ladder/js/engine.js REMADE and js/game-stats.js WL_REMADE (data-test checks).
     const oldL = JSON.parse(fs.readFileSync(path.join(dirIn, 'levels.json'), 'utf8')).levels;
     const oldD = JSON.parse(fs.readFileSync(path.join(dirIn, 'daily.json'), 'utf8')).levels;
-    const ranges = REMAKE.filter((r) => r.lang === lang);
-    const inRemake = (n) => ranges.some((r) => n >= r.lo && n <= r.hi);
-    const isCommon = (w) => (grid.has(w) || ranks.has(w)) && !RUDE[lang].test(w);
+    const ranges = (REMAKE || []).filter((r) => r.lang === lang);
+    // --respread: which levels repeat a start (scanned upward; the first of each stays).
+    const spread = (RESPREAD || []).filter((r) => r.lang === lang);
+    const respread = new Set();
+    for (const r of spread) {
+      const kept = [];
+      for (let n = r.lo; n <= r.hi; n++) {
+        const l = oldL[n - 1];
+        const bad = kept.some(([m, k]) => (n - m <= START_GAP && k.s === l.s) || (n - m <= END_GAP && (k.s === l.t || k.t === l.s || k.t === l.t)));
+        if (bad) respread.add(n); else kept.push([n, l]);
+      }
+    }
+    const inRemake = (n) => ranges.some((r) => n >= r.lo && n <= r.hi) || respread.has(n);
+    const isCommon = (w) => (grid.has(w) || ranks.has(w)) && !RUDE[lang].test(w) && !NOT_STEP.has(w);
     const commonGraphs = {};
     for (const k of Object.keys(byLen)) commonGraphs[k] = graph(byLen[k].filter(isCommon));
     const pairKey = (l) => [l.s, l.t].sort().join('-');
@@ -444,17 +566,40 @@ function build(lang) {
     for (const r of ranges) {
       const pool = remakePool(lang, r.spec, { byLen, graphs, commonGraphs, grid, ranks, rank });
       R = rng((lang === 'es' ? 9173 : 4421) + 31 * r.lo + r.hi);
+      const near = new Map(), suf = { n: 0, picked: 0 };
       // The LAST level first: the hardest ladders are the scarcest (few long 6-letter ladders), so the end of the band
       // takes them before the start does, and any fallback to an easier ladder lands early in the band.
       for (let n = r.hi; n >= r.lo; n--) {
         const x = (n - r.spec.first) / (r.spec.last - r.spec.first);
-        const l = pickFromPool(pool, r.spec, x, R, used, uses, n);
+        const l = pickFromPool(pool, r.spec, x, R, used, uses, n, near, suf);
         if (!l) throw new Error(`${lang} level ${n}: the pool ran out`);
         note(l);
-        l.h = bestPath(commonGraphs[l.s.length], l.s, l.t, rank).join(' ');
+        near.set(n, l);
+        l.h = bestPath(pool.cnb, l.s, l.t, rank).join(' ');
         oldL[n - 1] = { s: l.s, t: l.t, p: l.p, h: l.h, v: (oldL[n - 1].v || 1) + 1 };
       }
       console.log(lang, 'remade', r.lo + '-' + r.hi);
+    }
+    for (const r of spread) {
+      const pool = remakePool(lang, r.spec, { byLen, graphs, commonGraphs, grid, ranks, rank });
+      R = rng((lang === 'es' ? 9173 : 4421) + 53 * r.lo + r.hi);
+      const near = new Map();
+      for (let n = r.lo; n <= r.hi; n++) if (!respread.has(n)) near.set(n, oldL[n - 1]);
+      const done = [];
+      for (let n = r.hi; n >= r.lo; n--) {   // the hardest (last) first: their long ladders are the scarcest
+        if (!respread.has(n)) continue;
+        const old = oldL[n - 1];
+        const x = (n - r.spec.first) / (r.spec.last - r.spec.first);
+        const spec = { ...r.spec, par: () => old.p, greedy: () => 0, relaxUses: true, hardFirst: true };
+        const l = pickFromPool(pool, spec, x, R, used, uses, n, near, null);
+        if (!l) throw new Error(`${lang} level ${n}: the pool ran out`);
+        note(l);
+        near.set(n, l);
+        l.h = bestPath(pool.cnb, l.s, l.t, rank).join(' ');
+        oldL[n - 1] = { s: l.s, t: l.t, p: l.p, h: l.h, v: (old.v || 1) + 1 };
+        done.unshift(`${n} ${old.s}->${old.t} p${old.p} => ${l.s}->${l.t} p${l.p}`);
+      }
+      console.log(lang, 'respread', r.lo + '-' + r.hi, respread.size, 'levels:\n  ' + done.join('\n  '));
     }
     R = rng((lang === 'es' ? 9173 : 4421) + 977);
     oldD.forEach((l, d) => {
@@ -485,7 +630,10 @@ function build(lang) {
   fs.mkdirSync(dir, { recursive: true });
   const w = {};
   for (const k of ['3', '4', '5', '6']) w[k] = (byLen[k] || []).join(' ');
-  fs.writeFileSync(path.join(dir, 'words.json'), JSON.stringify({ v: 1, w }) + '\n');
+  // `a` (2026-11-20, Spanish): "PLAIN:ACCENTED ..." for display only (loadEsAccents); absent in English.
+  const acc = lang === 'es' ? loadEsAccents() : new Map();
+  const a = Object.values(byLen).flat().filter((x) => acc.has(x)).map((x) => x + ':' + acc.get(x)).join(' ');
+  fs.writeFileSync(path.join(dir, 'words.json'), JSON.stringify(a ? { v: 1, w, a } : { v: 1, w }) + '\n');
   const lines = (arr) => '[\n' + arr.map((l) => JSON.stringify(l)).join(',\n') + '\n]';
   fs.writeFileSync(path.join(dir, 'levels.json'), `{"v":1,"count":${levels.length},"levels":${lines(levels)}}\n`);
   fs.writeFileSync(path.join(dir, 'daily.json'), `{"v":1,"epoch":"${EPOCH}","count":${daily.length},"levels":${lines(daily)}}\n`);
@@ -496,5 +644,6 @@ function build(lang) {
 export { loadWords, loadRanks, graph, bfs, bestPath, greedyAtPar, RUDE, RARE };
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   if (process.argv.includes('--fetch-es-forms')) await fetchEsForms();
+  else if (process.argv.includes('--fetch-es-accents')) await fetchEsAccents();
   else for (const lang of ['en', 'es']) build(lang);
 }

@@ -1710,3 +1710,44 @@ Matt: "Make a rule somewhere that you are REQUIRED to use Oxford commas. NEVER s
 ## Tennis link removed (2026-11-18)
 
 Matt: "remove the Tennis link thing". The admin-only Tennis tile (a link out to Richard Davey's site, added 2026-11-17) and its tile art were removed from `js/hub.js` and `js/game-art.js`. It never recorded stats, so no player data was involved.
+
+## 2026-11-20: Word Ladder, the hint cap across phones (admin only still)
+
+Written by a session. Matt, asked "You're confident it's good to go?", said "Yes" to closing the hint loophole: a level
+solved with hints on one phone, replayed with no hints on a second phone (which starts at level 1 and now knows the
+answer), paid 3 stars, because `wlBest` keeps the better attempt whole. Built Word Weaver's precedent (`wwMerge`: the most
+hints any record used cap the stars): `wl.hu` / `wl.hues` per puzzle key, written at each hint (so an unfinished hinted
+attempt counts), merged in `players-agg.js` with every finished entry's own hints; the cap reads at `wlLevels`. Grandfathering
+by a new field, `w` (the kept attempt's own finish time): `wlBest` keeps `t` as the earliest of all attempts, so `t` cannot
+say when the KEPT attempt was played, and an entry from the old writer (no `w`) is never capped. Proved with the writer from
+git 8172fe4 (main before the change): same stars and points before and after, even beside another phone's hint counters.
+Also added `combineWlRecords` (counters the larger, entries `wlBest` whole) to `CARRY_COMBINE`, so a release can choose
+`CARRY_TEST.wordladder`; without it the generic Battle Arena combiner would have taken the max of each entry field (the
+larger moves with the larger stars, a result nobody played).
+
+## 2026-11-20: Word Ladder, the release dry run, the third remake (v3), accents, rungs, the pill (admin only still)
+
+Written by a session; the coordinator's UI review of main 8172fe4 (not Matt's words) asked for the rungs, the pill, the
+start spread, Spanish Easy words, Spanish Expert's -ADO ends, and accents. Nothing released.
+
+- **Rungs**: after an Undo (moves up) or on the last steps over par, `par - moves - 1` fell to 0 and the ladder read "start,
+  target" as one step away, and the ghost row (Matt's faint grey letters) vanished with the rungs. Now at least one rung while
+  the word differs from the target in 2+ letters, and the ghost row always draws on a pick.
+- **The "+X pts" pill** sat at 128px, on the finished ladder's top row at 402x874. Word Ladder moves it to the top bar's row
+  via `--gh-ptsgain-top` (every other game unchanged).
+- **Third remake (v3)**, `--remake es:1-100,es:401-500 --respread en:401-500` on the data as of 8172fe4. English Expert 401,
+  402, and 403 all started from HIGHER (25 start repeats within 10 levels); a whole-band remake there lost difficulty (par 4.7,
+  greedy 64%) because English has too few long 6-letter ladders once the v2 puzzles are excluded, so only the 29 repeating
+  levels were re-picked, each at its old par. Measured (par / greedy play finishing at par / branching on the par path /
+  median shortest paths / start repeats within 10 / -ADO-type ends):
+
+  | Band | Before (v2) | After (v3) |
+  |---|---|---|
+  | EN Expert | 5.18 / 26% / 9.4 / 5 / 25 / 0 | 5.26 / 28% / 9.3 / 6 / 2 / 0 |
+  | ES Easy | 3.35 / 81% / 13.9 / 3 / 8 / 0 | 3.35 / 81% / 13.7 / 4 / 0 / 0 |
+  | ES Expert | 5.71 / 18% / 10.3 / 9 / 18 / 34 | 5.71 / 19% / 9.1 / 5 / 0 / 12 |
+
+  Results on v2 puzzles stay under their `L<n>v2` keys and still count (proved with the writer from git 8172fe4).
+- **Accents**: from lemmatization-lists and FrequencyWords (4,788 pairs), display only, never matched.
+- **The release dry run** found one real-branch bug: `word-ladder/js/data-test.js` was not in the validator's EXCLUDED list,
+  so the release commit's `validate-sw-assets.mjs` would have FAILed. Fixed on the branch.
