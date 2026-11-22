@@ -16,8 +16,8 @@ Phase 2 (built 2026-10-24): online, turn-by-turn challenges AND live rooms (see 
 inside, mulberry32), `apply(state, move) -> {ok, state, events, error}` never mutates its input;
 moves `{type:'swap', a, b}` / `{type:'evolve', mon}`; `events` (listed at the file's end) drive every
 animation · `js/monsters.js` roster, unlock thresholds, `unlockedIds(wins)` · `js/cpu.js` Easy (any
-legal swap) / Medium (best first-step clear) / Hard (plays each swap out + follow-up, avoids handing
-over a special); `chooseTeam` · `js/art.js` all SVG: 12 monsters x normal/evolved (120 box, facing
+legal swap) / Medium (best first-step clear) / Hard (plans the whole turn on 12 guessed boards, minus the other
+side's best reply; never peeks); `chooseTeam` · `js/art.js` all SVG: 12 monsters x normal/evolved (120 box, facing
 right, no ids/gradients), gems (shape + icon per element) · `js/attacks.js` every monster's own special
 attack + the evolution scene (presentation only, one particle canvas) · `js/ui.js` home, draft, card, battle,
 module contract · `js/strings.js` EN/ES (move names `sp_<id>[_evo]`) · `js/test.js` (dev only) ·
@@ -356,3 +356,13 @@ The Spanish "¡MOVIMIENTO EXTRA!" banner fits at 360 (`html[lang=es] .ba-pop.is-
 - **No forward page after a popup closes (2026-11-16, Matt: a right-to-left swipe "shows me this sproutle page for a second then goes back")**: the iPhone's forward swipe slid back the snapshot of a closed card; fixed for every screen in `js/back-stack.js` (filler entry). `test-battlearena-back.mjs` "forward".
 
 Private play data (2026-11-16): logs the seed, both teams, who opened, every move in order, each side's HP/turns/berries/evolutions, and a finished online match's whole record, via withMode `log` / logPlayData.
+
+## A harder Hard, still no peeking (2026-11-22, Matt: "So fix the difficulty")
+
+Hard beat Medium only 59%. Two guesses at the falls were too few: its averages were mostly noise. `hardMove` (cpu.js) now plays
+its 5 best first moves (plus evolving: Hard decides when, Easy/Medium still evolve at once) on 12 guessed boards each, its best
+2 follow-ups, scores where the turn leaves both teams (`sideValue`: HP, shield, bar progress x special, evolution, berries,
+curse), minus 0.8 x the other side's best reply. 400 matches, sides swapped: **Hard beats Medium 77%, Easy 94%** (Medium beats
+Easy ~86%). Guesses 2/6/12 = 59/72/77%; no reply term = 65%. ~78 ms a move on a laptop; `cpuTurn` takes the think time out
+of the 650 ms pause. "No peeking" test unchanged and passing. Saves hold the state, not the computer's choices: nothing replays.
+
