@@ -289,7 +289,10 @@ adult words. But just use normal ones. Fetishized being anywhere near sock is cr
 - **English closeness = ConceptNet Numberbatch** (common-sense vectors); vocabulary, forms, and secrets byte-identical, so
   every puzzle keeps its word. sock: stocking shoe footwear; monkey 1048, troll 5578. wiki-news vectors tried, worse.
 - **Adult words** (`FAR` in the generator, `far` in each json) stay guessable but rank LAST for every secret; the engine
-  skips them in the exact lists too. Spanish got `far` only (`--far-only`): a full Spanish rebuild no longer reproduces
-  the shipped words (Boggle's list grew), which would renumber every Spanish puzzle.
+  skips them in the exact lists too.
+- **Spanish (2026-11-22, Matt: "Fix the Spanish rankings too")**: closeness = the AVERAGE of Common Crawl and Numberbatch
+  (`--lang es --nb-only`; Numberbatch alone was worse in Spanish: reloj -> once, doce; cama -> yacimiento). calcetín: zapato
+  zapatilla calzado talón (muñeco, conejo gone). Only `es.bin` changed. **Never full-rebuild Spanish**: it no longer
+  reproduces the shipped words (Boggle's list grew), which would renumber every Spanish puzzle.
 - Ranks shown for old saves' guesses changed (recomputed on render); results and stats did not.
 

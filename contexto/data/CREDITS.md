@@ -10,10 +10,11 @@ Do not edit them by hand; re-run the generator.
   from the full vectors. They are shared under the same licence.
   Reference: E. Grave, P. Bojanowski, P. Gupta, A. Joulin, T. Mikolov, "Learning Word Vectors
   for 157 Languages", LREC 2018.
-- **English closeness (since 2026-11-21):** ConceptNet Numberbatch 19.08 (`numberbatch-en-19.08`),
+- **Closeness (English since 2026-11-21, Spanish blended with Common Crawl since 2026-11-22):**
+  ConceptNet Numberbatch 19.08 (`numberbatch-en-19.08`; Spanish from the multilingual `numberbatch-19.08`),
   by Luminoso Technologies / the ConceptNet project, https://github.com/commonsense/conceptnet-numberbatch,
-  licensed **CC BY-SA 4.0**. English ranks come from these vectors (the vocabulary and word
-  frequencies still come from the Common Crawl file above). Shared under the same licence.
+  licensed **CC BY-SA 4.0**. English ranks come from these vectors, Spanish from their average with
+  Common Crawl (the vocabulary and word frequencies still come from the Common Crawl files above). Shared under the same licence.
   Reference: R. Speer, J. Chin, C. Havasi, "ConceptNet 5.5: An Open Multilingual Graph of General
   Knowledge", AAAI 2017.
 - **Inflected forms:** lemmatization-lists by Michal Boleslav Mechura,
