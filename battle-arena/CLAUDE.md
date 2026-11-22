@@ -142,6 +142,7 @@ LEFT by profile name + emoji, their moves played exactly like the computer's (`u
 `node tools/test-game-conventions.mjs`; `node tools/test-battlearena-mp.mjs` (online: replay, placeholder,
 mirror, a full challenge and a full live match, cancel/decline/resign/expire, gate, structure). Two-phone
 recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see CLAUDE-HISTORY.md).
+`node tools/test-battlearena-two-phones.mjs` (2026-11-22, dev server): two real browser phones sharing one fake database in Node, a challenge, a live room and a resign played through the real screens to the finish, every turn compared (see DEV-TOOLING.md).
 `test-battlearena-mp.mjs` was FLAKY (about 1 run in 3) until 2026-10-28: its computer moves were random and a lucky
 chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
 for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
