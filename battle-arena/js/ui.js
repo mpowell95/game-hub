@@ -1664,9 +1664,14 @@ class BattleArena {
   async cpuTurn() {
     const gen = this.gen;
     this.busy = true;
-    await this.sleep(CPU_THINK_MS);
+    // Hard thinks for real (~0.1 s on a laptop, more on an older phone): that time comes out of the pause, so every level
+    // waits the same CPU_THINK_MS. A short wait first lets the screen paint the turn change before the thinking starts.
+    await this.sleep(50);
     if (gen !== this.gen) return;
+    const t0 = Date.now();
     const mv = chooseMove(this.state, this.diff);
+    await this.sleep(Math.max(0, CPU_THINK_MS - 50 - (Date.now() - t0)));
+    if (gen !== this.gen) return;
     if (!mv) { this.busy = false; return; }
     if (mv.type === 'swap') {
       for (const i of [mv.a, mv.b]) { const el = this.tiles.get(this.state.board[i].id); if (el) el.classList.add('is-cpu'); }
