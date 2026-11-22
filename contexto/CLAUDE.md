@@ -281,3 +281,15 @@ The SERVER also fills `fewestNH` on the leaderboard from `ctHistory/` (`function
 ## Lost puzzles come back on admin devices (2026-11-09)
 
 `_restoreHistory()` before the first puzzle: reads `ctHistory/<CODE>` (admin-read only, so a quiet no-op for players), adds every puzzle the save has fewer guesses for, with its `done` and `recorded` flags (nothing counts twice). Once per storage per language (`gamehub.contexto.restored.v1`), at most 3 s.
+
+## Normal meanings (2026-11-21)
+
+Matt, after Thomas gave up on #55 "sock" (Common Crawl put fetish 38, vandal 10, troll 28, anon 41 near it): *"Keep
+adult words. But just use normal ones. Fetishized being anywhere near sock is crazy."*
+- **English closeness = ConceptNet Numberbatch** (common-sense vectors); vocabulary, forms, and secrets byte-identical, so
+  every puzzle keeps its word. sock: stocking shoe footwear; monkey 1048, troll 5578. wiki-news vectors tried, worse.
+- **Adult words** (`FAR` in the generator, `far` in each json) stay guessable but rank LAST for every secret; the engine
+  skips them in the exact lists too. Spanish got `far` only (`--far-only`): a full Spanish rebuild no longer reproduces
+  the shipped words (Boggle's list grew), which would renumber every Spanish puzzle.
+- Ranks shown for old saves' guesses changed (recomputed on render); results and stats did not.
+

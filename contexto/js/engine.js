@@ -48,6 +48,9 @@ export function buildModel(json, buf) {
   for (const f in forms) { const ff = fold(f); if (!formFold.has(ff)) formFold.set(ff, forms[f]); }
   const secretPos = new Map(secrets.map((w, si) => [w, si]));
   const cut = json.ranked || N;
+  // Adult words (2026-11-21, tools/build-contexto-data.mjs "NORMAL MEANINGS"): still words and
+  // guesses, but ranked LAST against every secret, never close. A file without `far` has none.
+  const far = new Set(json.far || []);
   const isRanked = (i) => i < cut || secretPos.has(i);
   let R = 0;
   for (let i = 0; i < N; i++) if (isRanked(i)) R++;
@@ -76,7 +79,10 @@ export function buildModel(json, buf) {
     if (si === undefined) throw new Error('contexto: not a secret word');
     const r = new Int32Array(N);
     r[secret] = 1;
-    for (let j = 0; j < k; j++) r[nb[si * k + j]] = j + 2;
+    // A far word in an older exact list (Spanish keeps its 2026-10 .bin) is skipped; the words
+    // after it move up one place, and it is ranked last below.
+    let next = 2;
+    for (let j = 0; j < k; j++) { const w = nb[si * k + j]; if (!far.has(w)) r[w] = next++; }
     const u = units();
     const rest = [];
     const sims = new Float32Array(N);
@@ -85,8 +91,8 @@ export function buildModel(json, buf) {
       sims[i] = dot(u, i, secret);
       rest.push(i);
     }
-    rest.sort((a, b) => sims[b] - sims[a] || a - b);
-    rest.forEach((i, j) => { r[i] = k + 2 + j; });
+    rest.sort((a, b) => (far.has(a) - far.has(b)) || sims[b] - sims[a] || a - b);
+    rest.forEach((i, j) => { r[i] = next + j; });
     const byRank = new Int32Array(R + 1);
     for (let i = 0; i < N; i++) if (r[i]) byRank[r[i]] = i;
     // For an unranked guess: every ranked word's compressed closeness, best first.
@@ -122,6 +128,7 @@ export function buildModel(json, buf) {
     rankOf(secret, i) {
       const { r, ladder } = ranks(secret);
       if (r[i]) return r[i];
+      if (far.has(i)) return ladder.length + 1;   // an unranked adult word: last place
       // An unranked guess: 2 + how many ranked words are closer (binary search, best first).
       const d = dot(units(), i, secret);
       let lo = 0, hi = ladder.length;
