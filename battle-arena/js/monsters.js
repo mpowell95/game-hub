@@ -33,7 +33,7 @@ export const ELEMENT_COLOR = {
  *  Thundrake, Blazelynx became Thornbear, Firedrake, Frostclaw, Thunderhorn, Blazecat. Never rename an id. */
 export const MONSTERS = [
   { id: 'thornpaw', name: 'Thornpaw', evoName: 'Thornbear', el: 'leaf', cost: 6,
-    sp: { dmg: 5, heal: 7, convert: 3 }, evo: { dmg: 8, heal: 10, convert: 4 } },
+    sp: { dmg: 5, heal: 7, convert: 3 }, evo: { dmg: 8, heal: 11, convert: 4 } },
   { id: 'sproutle', name: 'Sproutle', evoName: 'Mossback', el: 'leaf', cost: 6,
     sp: { dmg: 10, heal: 5 }, evo: { dmg: 15, heal: 9 } },
   { id: 'driplet', name: 'Driplet', evoName: 'Tidefang', el: 'water', cost: 5,
@@ -43,16 +43,16 @@ export const MONSTERS = [
   { id: 'hexowl', name: 'Hexowl', evoName: 'Grimhoot', el: 'shadow', cost: 5,
     sp: { dmg: 6, curse: { tick: 5, turns: 2 } }, evo: { dmg: 11, curse: { tick: 5, turns: 3 } } },
   { id: 'stormhorn', name: 'Stormhorn', evoName: 'Thunderhorn', el: 'spark', cost: 5,
-    sp: { dmg: 12, chain: 1 }, evo: { dmg: 17, chain: 2 } },
+    sp: { dmg: 12, chain: 1 }, evo: { dmg: 18, chain: 2 } },
 
   { id: 'emberkit', name: 'Emberkit', evoName: 'Blazecat', el: 'fire', cost: 7, unlock: 3,
-    sp: { dmg: 13, col: 1 }, evo: { dmg: 19, col: 2 } },
+    sp: { dmg: 13, col: 1 }, evo: { dmg: 20, col: 2 } },
   { id: 'pebbleop', name: 'Lavapup', evoName: 'Lavatusk', el: 'fire', cost: 7, unlock: 6,
     sp: { dmg: 13, shield: 7 }, evo: { dmg: 18, shield: 11 } },
   { id: 'frostling', name: 'Frostling', evoName: 'Frostclaw', el: 'water', cost: 6, unlock: 10,
-    sp: { dmg: 10, freeze: true }, evo: { dmg: 14, freeze: true } },
+    sp: { dmg: 9, freeze: true }, evo: { dmg: 13, freeze: true } },
   { id: 'gloomite', name: 'Gloomite', evoName: 'Dreadmaw', el: 'shadow', cost: 6, unlock: 15,
-    sp: { dmg: 10, drain: 2 }, evo: { dmg: 15, drain: 3 } },
+    sp: { dmg: 10, drain: 2 }, evo: { dmg: 16, drain: 3 } },
   { id: 'zapup', name: 'Sparkpup', evoName: 'Sparktail', el: 'spark', cost: 4, unlock: 20,
     sp: { dmg: 7, block: 2 }, evo: { dmg: 11, block: 3 } },
   // ALL: every gem of any element charges it, at half rate (1 per 2 gems).
@@ -68,8 +68,9 @@ export const BY_ID = Object.fromEntries(MONSTERS.map((m) => [m.id, m]));
  *  frozen: never edit them. A future rebalance adds V2 here and bumps RULES_VERSION to 3. */
 export const RULES_VERSION = 5;   // 3 (2026-11-14): two monsters of one element SHARE the gems (engine.js charge), retuned
 // 4 (2026-11-15): a special fires at most once a turn per monster; calmer bombs (engine.js v4)
-// 5 (2026-11-22, Matt: "Fix everything"): numbers only, v4's rules. Driplet + Stormhorn won too often; Frostling was the
-//   strongest monster, Cinderwing the weakest. Driplet cost 5 dmg 14 (evo 19), Frostling cost 6 dmg 10 (14), Cinderwing dmg 14.
+// 5 (2026-11-22, Matt: "Fix everything"): numbers only, v4's rules. Tuned on Medium AND the new Hard: Driplet cost 5 dmg 14
+//   (evo 19), Frostling cost 6 (dmg 9 / 13 as before), Cinderwing dmg 14; evolved only: Thornbear heal 11, Thunderhorn 18,
+//   Blazecat 20, Dreadmaw 16.
 const V1 = {
   emberkit: { cost: 6, sp: { dmg: 12, col: 1 }, evo: { dmg: 18, col: 2 } },
   sproutle: { cost: 6, sp: { dmg: 10, heal: 10 }, evo: { dmg: 15, heal: 15 } },
