@@ -5,7 +5,8 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // build-contexto-data.mjs - GENERATOR for contexto/data/{en,es}.{json,bin} (Contexto's word
 // data). Run it, then `node tools/validate-sw-assets.mjs`, then commit the data files and sw.js.
 //
-//   node tools/build-contexto-data.mjs [--lang en|es] [--cache <dir>] [--top 200000]
+//   node tools/build-contexto-data.mjs [--lang en|es] [--cache <dir>] [--top 200000] [--far-only]
+//   Since 2026-11-21: English is `--lang en` (full build); Spanish is `--lang es --far-only` ONLY.
 //
 // Behind a proxy (a cloud session), prefix NODE_USE_ENV_PROXY=1 so Node's fetch uses it.
 //
@@ -17,6 +18,9 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // in similar contexts end up pointing the same way (cosine similarity).
 //
 // SOURCES (downloaded, never committed; cached in --cache, default <os tmp>/contexto-cache)
+//   * ConceptNet Numberbatch 19.08, English (Luminoso / ConceptNet, CC BY-SA 4.0,
+//     github.com/commonsense/conceptnet-numberbatch): ENGLISH CLOSENESS since 2026-11-21. See
+//     "Normal meanings" below.
 //   * fastText Common Crawl vectors, cc.en.300 / cc.es.300 (Facebook AI Research, CC BY-SA 3.0,
 //     https://fasttext.cc/docs/en/crawl-vectors.html). The .vec files are sorted by frequency, so
 //     only the first --top lines are streamed (~70 MB of a 1.3 GB download).
@@ -49,6 +53,7 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // itself (contexto/js/ui.js), so it survives either way.
 
 import fs from 'node:fs';
+import readline from 'node:readline';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -72,7 +77,41 @@ const MAX_VOCAB = 40000;
 // ranked words by closeness (contexto/js/engine.js), so it can share a number with one of them.
 const RANKED = 15000;
 
+// NORMAL MEANINGS (2026-11-21). Matt, on the 'sock' puzzle (#55), where the Common Crawl vectors put
+// fetish 38, vandal 10, troll 28 and anon 41 near sock (web forums: "sock puppet" accounts, porn):
+// "Keep adult words. But just use normal ones. Fetishized being anywhere near sock is crazy."
+//   1. ENGLISH closeness comes from ConceptNet Numberbatch (built from ConceptNet's common-sense
+//      links, so everyday meanings win): sock -> stocking shoe footwear pantyhose; monkey 19 ->
+//      ~1250, troll 28 -> ~1400, vandal 10 -> ~8600. The VOCABULARY (which words exist, their
+//      frequency order, forms, secrets) still comes from Common Crawl exactly as before, so every
+//      puzzle number keeps its word and every save resolves. Tried and rejected the same day:
+//      fastText wiki-news vectors (Wikipedia's own "sockpuppet" sense: vandal 5, troll 7, hoax).
+//      A word Numberbatch lacks (~200 of 33,000, 4 ranked) takes the mean of its 10 nearest
+//      Common Crawl neighbours' Numberbatch vectors.
+//   2. ADULT words (FAR below) are kept as words and guesses but are never close to anything:
+//      never in a secret's exact top K, and the engine (json.far) ranks them LAST. Every secret is
+//      a family word, so no puzzle needs one near it. Both languages. Ordinary words that only
+//      sound adult (naked, nude, lingerie, escort, caliente) are NOT on it: their closeness is normal.
+//      SPANISH is patched with --far-only (adds `far` to the shipped es.json, nothing else): a full
+//      Spanish rebuild no longer reproduces the shipped file (Boggle's words-es.txt grew 5,378
+//      words later, commit 20246a4), which would renumber every Spanish puzzle. Never full-rebuild
+//      Spanish without first making it reproduce the shipped words, forms and secrets exactly.
+const FAR = {
+  en: `fetish fetishism fetishist fetishize erotic erotica erotically kinky kink sexy sexual sexually
+sexuality sex sexed sexting porn porno pornographic pornography pornstar stripper striptease hooker
+prostitute prostitution brothel orgasm orgasmic foreplay masturbate masturbation bondage dominatrix
+raunchy slutty slut horny lust lustful seductive seduce seduction sensual sensuality intercourse
+lewd smut smutty xxx threesome voyeur voyeurism playboy nympho pimp sadomasochism masochism
+masochist sadist sadism kinkster libido aphrodisiac arousal aroused arouse genital genitalia penis
+vagina nipple bdsm hentai milf camgirl busty`,
+  es: `fetiche fetichismo fetichista erótico erótica erotismo sexy sexual sexualidad sexo porno
+pornografía pornográfico stripper prostituta prostitución burdel orgasmo masturbación bondage
+lujuria lujurioso seductor seductora seducción sensual sensualidad proxeneta sadomasoquismo
+masoquista sádico libido afrodisíaco excitación genital pene vagina pezón`,
+};
+
 const SRC = {
+  nb: (l) => `https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-${l}-19.08.txt.gz`,
   vec: (l) => `https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.${l}.300.vec.gz`,
   lem: (l) => `https://raw.githubusercontent.com/michmech/lemmatization-lists/master/lemmatization-${l}.txt`,
   bad: (l) => `https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/${l}`,
@@ -246,6 +285,51 @@ function jacobi(A, n) {
   return { vals: Array.from({ length: n }, (_, i) => A[i * n + i]), V };
 }
 
+// English closeness from Numberbatch (see NORMAL MEANINGS). Replaces each vocabulary word's vector
+// in place; the vocabulary itself is untouched. Streams the .gz (~325 MB, cached as is).
+async function useNumberbatch(lang, vocab, index) {
+  fs.mkdirSync(CACHE, { recursive: true });
+  const file = path.join(CACHE, `nb-${lang}.txt.gz`);
+  if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
+    console.log(`  fetching ${SRC.nb(lang)}`);
+    const res = await fetch(SRC.nb(lang));
+    if (!res.ok) throw new Error(`${SRC.nb(lang)}: HTTP ${res.status}`);
+    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  }
+  const nbv = new Array(vocab.length).fill(null);
+  const rl = readline.createInterface({ input: fs.createReadStream(file).pipe(zlib.createGunzip()) });
+  let first = true;
+  for await (const line of rl) {
+    if (first) { first = false; continue; }
+    const sp = line.indexOf(' ');
+    const i = index.get(line.slice(0, sp));
+    if (i === undefined) continue;
+    const v = new Float32Array(line.slice(sp + 1).split(' ').map(Number));
+    if (v.length !== 300) continue;
+    let n = 0; for (let k = 0; k < 300; k++) n += v[k] * v[k];
+    n = Math.sqrt(n) || 1; for (let k = 0; k < 300; k++) v[k] /= n;
+    nbv[i] = v;
+  }
+  const missing = [];
+  for (let i = 0; i < vocab.length; i++) if (!nbv[i]) missing.push(i);
+  const fill = missing.map((i) => {
+    const cv = vocab[i].v, best = [];
+    for (let j = 0; j < vocab.length; j++) {
+      if (!nbv[j]) continue;
+      let d = 0; const v = vocab[j].v; for (let k = 0; k < 300; k++) d += v[k] * cv[k];
+      if (best.length < 10 || d > best[best.length - 1][0]) { best.push([d, j]); best.sort((a, b) => b[0] - a[0]); if (best.length > 10) best.pop(); }
+    }
+    const m = new Float32Array(300);
+    for (const [, j] of best) for (let k = 0; k < 300; k++) m[k] += nbv[j][k];
+    let n = 0; for (let k = 0; k < 300; k++) n += m[k] * m[k];
+    n = Math.sqrt(n) || 1; for (let k = 0; k < 300; k++) m[k] /= n;
+    return m;
+  });
+  missing.forEach((i, x) => { nbv[i] = fill[x]; });
+  for (let i = 0; i < vocab.length; i++) vocab[i].v = nbv[i];
+  console.log(`  Numberbatch closeness: ${vocab.length - missing.length} words, ${missing.length} filled from neighbours`);
+}
+
 async function build(lang) {
   console.log(`\n== ${lang} ==`);
   const lemText = await cached(`lem-${lang}.txt`, SRC.lem(lang));
@@ -327,6 +411,7 @@ async function build(lang) {
   for (const [f, l] of pendingForms) if (index.has(l) && !index.has(f)) forms[f] = index.get(l);
   const N = vocab.length;
   const ranked = Math.min(RANKED, N);
+  if (lang === 'en') await useNumberbatch(lang, vocab, index);
   console.log(`  vocab ${N} lemmas (${ranked} ranked), ${Object.keys(forms).length} forms mapped`);
 
   // Secrets: must be vocabulary words. A missing one is reported and skipped, never guessed at.
@@ -368,6 +453,11 @@ async function build(lang) {
 
   // Exact neighbours at full precision, among the RANKED words only (the common ones and the
   // secrets; see RANKED above).
+  const isFar = new Uint8Array(N);
+  const far = [];
+  for (const w of new Set(FAR[lang].split(/\s+/).filter(Boolean))) if (index.has(w) && !secrets.includes(index.get(w))) { isFar[index.get(w)] = 1; far.push(index.get(w)); }
+  far.sort((a, b) => a - b);
+  console.log(`  ${far.length} adult words ranked last`);
   const isRanked = new Uint8Array(N);
   for (let i = 0; i < ranked; i++) isRanked[i] = 1;
   for (const s of secrets) isRanked[s] = 1;
@@ -378,14 +468,14 @@ async function build(lang) {
     const sv = vocab[s].v;
     for (let i = 0; i < N; i++) { const v = vocab[i].v; let d = 0; for (let k = 0; k < D; k++) d += v[k] * sv[k]; sims[i] = d; idx[i] = i; }
     sims[s] = Infinity;
-    for (let i = 0; i < N; i++) if (!isRanked[i]) sims[i] = -Infinity;
+    for (let i = 0; i < N; i++) if (!isRanked[i] || isFar[i]) sims[i] = -Infinity;
     const top = Array.from(idx).sort((a, b) => sims[b] - sims[a] || a - b).slice(1, K + 1);
     nb.set(top, si * K);
   });
 
   const outDir = path.join(ROOT, 'contexto/data');
   fs.mkdirSync(outDir, { recursive: true });
-  const json = { v: 1, lang, dim: DIM, k: K, ranked, words: vocab.map((c) => c.w), forms, secrets };
+  const json = { v: 1, lang, dim: DIM, k: K, ranked, far, words: vocab.map((c) => c.w), forms, secrets };
   fs.writeFileSync(path.join(outDir, `${lang}.json`), JSON.stringify(json));
   const bin = Buffer.concat([Buffer.from(scales.buffer), Buffer.from(q.buffer), Buffer.from(nb.buffer)]);
   fs.writeFileSync(path.join(outDir, `${lang}.bin`), bin);
@@ -395,4 +485,18 @@ async function build(lang) {
   (lang === 'en' ? ['cat', 'winter', 'music'] : ['gato', 'invierno', 'música']).forEach(show);
 }
 
-for (const l of LANGS) await build(l);
+// --far-only: add the FAR list to an existing <lang>.json and change nothing else (see NORMAL
+// MEANINGS). The engine skips a far word in the exact neighbour lists too, so the .bin stays.
+function farOnly(lang) {
+  const file = path.join(ROOT, 'contexto/data', `${lang}.json`);
+  const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const index = new Map(j.words.map((w, i) => [w, i]));
+  const secrets = new Set(j.secrets);
+  const far = [...new Set(FAR[lang].split(/\s+/).filter(Boolean))].filter((w) => index.has(w) && !secrets.has(index.get(w))).map((w) => index.get(w)).sort((a, b) => a - b);
+  const { v, lang: l, dim, k, ranked, far: _old, ...rest } = j;
+  fs.writeFileSync(file, JSON.stringify({ v, lang: l, dim, k, ranked, far, ...rest }));
+  console.log(`== ${lang} == far only: ${far.length} adult words ranked last (${far.map((i) => j.words[i]).join(' ')})`);
+}
+
+if (args.includes('--far-only')) for (const l of LANGS) farOnly(l);
+else for (const l of LANGS) await build(l);
