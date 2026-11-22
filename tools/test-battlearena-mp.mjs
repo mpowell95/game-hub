@@ -60,6 +60,15 @@ const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
   ok('rules: version 1 numbers are frozen (Sproutle heal 10, Rainbit 20)', specialOf('sproutle', false, 1).heal === 10 && specialOf('prismote', false, 1).dmg === 20);
   ok('rules: version 2 numbers are frozen (Rainbit cost 16 dmg 18, Thornpaw heal 7)', costOf('prismote', 2) === 16 && specialOf('prismote', false, 2).dmg === 18 && specialOf('thornpaw', false, 2).heal === 7);
   ok('rules: version 3 numbers are frozen (Thornpaw cost 5 heal 8, Hexowl dmg 8, Rainbit cost 17)', costOf('thornpaw', 3) === 5 && specialOf('thornpaw', false, 3).heal === 8 && !specialOf('thornpaw', false, 3).dmg && specialOf('hexowl', false, 3).dmg === 8 && costOf('prismote', 3) === 17);
+  ok('rules: version 4 numbers are frozen (Driplet cost 4 dmg 12, Frostling cost 5 dmg 9, Cinderwing dmg 13)', costOf('driplet', 4) === 4 && specialOf('driplet', false, 4).dmg === 12 && costOf('frostling', 4) === 5 && specialOf('frostling', false, 4).dmg === 9 && specialOf('cinderwing', false, 4).dmg === 13);
+  // An open v4 challenge (stamped rv 4) replays on v4's numbers: the same log gives the same state as a v4 start.
+  {
+    const T4 = { a: ['driplet', 'stormhorn'], b: ['frostling', 'cinderwing'] };
+    let s4 = O.startState(777, T4, 0, 4); const log4 = [];
+    for (let i = 0; i < 60 && s4.winner == null; i++) { const mv = chooseMove(s4, 'medium', () => 0.3); log4.push(O.entryOf({ ...mv, side: s4.turn })); s4 = E.apply(s4, mv).state; }
+    const r4 = O.replay(777, T4, log4, 0, 4);
+    ok('rules: an open v4 challenge replays to the same state under today\'s code', s4.rv === 4 && r4.ok && same(r4.state, s4));
+  }
   // An OLD stored challenge (no rv) replays exactly as before: the same log gives the same state under v1 and differs under v2.
   const T = { a: ['sproutle', 'prismote'], b: ['thornpaw', 'driplet'] };
   let s1 = O.startState(4242, T), log = [];

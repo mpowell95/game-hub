@@ -440,6 +440,13 @@ ok('the starters cover all five gem colours (Hexowl is the shadow one)', ['fire'
   const BOMBED = ['FWSLDFW', 'SLDFWSL', 'DFWSLDF', 'WSX5DLWS', 'LFFSFLD'];
   const boomed = (rv) => { const st = setup(TEAM, BOMBED); st.rv = rv; return apply(st, swap(4, 3, 4, 4)).events.some((e) => e.t === 'bomb'); };
   ok('rules v4: a match made by the swap still sets off a bomb next to it', boomed(4) && boomed(3));
+  // Rules v5 (2026-11-22): numbers only. A v4 match keeps v4's numbers; v5 keeps v4's rules.
+  ok('rules v5: Driplet cost 5 dmg 14 (v4: 4 / 12), Frostling cost 6 (v4: 5), Cinderwing dmg 14 (v4: 13)',
+    costOf('driplet', 5) === 5 && specialOf('driplet', false, 5).dmg === 14 && costOf('driplet', 4) === 4 && specialOf('driplet', false, 4).dmg === 12
+    && costOf('frostling', 5) === 6 && costOf('frostling', 4) === 5 && specialOf('cinderwing', false, 5).dmg === 14 && specialOf('cinderwing', false, 4).dmg === 13);
+  ok('rules v5: once a turn still holds', !fires(5, true).fired && fires(5, false).fired);
+  ok('rules v5: unchanged monsters read the same in v4 and v5', ['thornpaw', 'sproutle', 'hexowl', 'stormhorn', 'emberkit', 'pebbleop', 'gloomite', 'zapup', 'prismote']
+    .every((id) => costOf(id, 4) === costOf(id, 5) && JSON.stringify(specialOf(id, true, 4)) === JSON.stringify(specialOf(id, true, 5))));
   // Soak, v4: never twice in a turn; a bomb goes off only on the swap's own match (before anything has fallen) or at 0;
   // never more than one bomb on the board.
   const rnd = seeded(404), all = MONSTERS.map((m) => m.id);
