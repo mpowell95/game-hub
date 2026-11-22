@@ -142,6 +142,7 @@ LEFT by profile name + emoji, their moves played exactly like the computer's (`u
 `node tools/test-game-conventions.mjs`; `node tools/test-battlearena-mp.mjs` (online: replay, placeholder,
 mirror, a full challenge and a full live match, cancel/decline/resign/expire, gate, structure). Two-phone
 recording: a mocked Firebase SDK served to two Playwright pages (2026-10-24, see CLAUDE-HISTORY.md).
+`node tools/test-battlearena-two-phones.mjs` (2026-11-22, dev server): two real browser phones sharing one fake database in Node, a challenge, a live room and a resign played through the real screens to the finish, every turn compared (see DEV-TOOLING.md).
 `test-battlearena-mp.mjs` was FLAKY (about 1 run in 3) until 2026-10-28: its computer moves were random and a lucky
 chain of 4+ matches sometimes KO'd the receiver in the challenger's FIRST turn (a legal finish: about 1 first turn in 90
 for the hard computer, 1 in 3,000 medium, never easy). Now its challenge turns are seeded (repeatable), the lifecycle
@@ -366,3 +367,13 @@ curse), minus 0.8 x the other side's best reply. 400 matches, sides swapped: **H
 Easy ~86%). Guesses 2/6/12 = 59/72/77%; no reply term = 65%. ~78 ms a move on a laptop; `cpuTurn` takes the think time out
 of the 650 ms pause. "No peeking" test unchanged and passing. Saves hold the state, not the computer's choices: nothing replays.
 
+
+## Rules version 5: rebalanced for the new Hard (2026-11-22, Matt: "Fix everything")
+
+Numbers only (`RULES_VERSION` 5, `V4` frozen in `OLD`; v5 keeps v4's rules, engine `v4(s)` is `rv >= 4`). Driplet cost 5 dmg 14
+(evo 19); Frostling cost 6; Cinderwing dmg 14; evolved only: Thornbear heal 11, Thunderhorn 18, Blazecat 20, Dreadmaw 16.
+Every team vs every team, both AIs: **every monster 48-53% on Medium (600 games a team), 48-54% on Hard (60 a team, 4-guess
+Hard)**. v4 was 48-55% on Medium and 43-58% on the full Hard (Rainbit high, Thornpaw and Cinderwing low); Driplet + Stormhorn
+58% → 56% on Medium. **Thornpaw is still touchy**: base heal 8 took it from 44% to 57% on Hard, so only the evolved heal moved.
+Tuner: every legal team (no same element) vs random teams, sides and first mover alternated; Hard tuning used a 4-guess Hard for speed (not checked against the full 12-guess one).
+Open v4 challenges and saves replay on v4 (`test-battlearena-mp` "an open v4 challenge replays").
