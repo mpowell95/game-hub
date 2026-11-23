@@ -16,7 +16,7 @@ import { loadProfile } from '../../js/profile-store.js';
 import { diffShapeSVG, tierOf } from '../../js/difficulty-tiers.js';
 import { STRINGS } from './strings.js';
 import * as E from './engine.js';
-import { chooseMove, chooseTeam } from './cpu.js';
+import { chooseMove, chooseTeam, HARD_BUDGET_MS } from './cpu.js';
 import { MONSTERS, BY_ID, unlockedIds, specialOf, costOf, RULES_VERSION, ELEMENT_COLOR, ELEMENTS, monName, BERRIES_TO_EVOLVE } from './monsters.js';
 import { monsterSVG, gemSVG, elementBadge, arenaSVG, lobbyBG } from './art.js';
 import { mirror, mirrorEvents, entryOf, moveOf, teamMode, onlineMode, matchDetail } from './online.js';
@@ -1669,7 +1669,7 @@ class BattleArena {
     await this.sleep(50);
     if (gen !== this.gen) return;
     const t0 = Date.now();
-    const mv = chooseMove(this.state, this.diff);
+    const mv = chooseMove(this.state, this.diff, Math.random, { now: Date.now, until: t0 + HARD_BUDGET_MS });
     await this.sleep(Math.max(0, CPU_THINK_MS - 50 - (Date.now() - t0)));
     if (gen !== this.gen) return;
     if (!mv) { this.busy = false; return; }

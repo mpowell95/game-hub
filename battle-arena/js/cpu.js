@@ -16,6 +16,10 @@ export const LEVELS = ['easy', 'medium', 'hard'];
 const HARD_GUESSES = 12, HARD_FIRST = 5, HARD_SECOND = 2, HARD_REPLY = 2;
 /** How much of the other side's best next move Hard counts against a plan (0 = ignore it: 65% instead of 77%). */
 const HARD_REPLY_WEIGHT = 0.8;
+/** On the screen Hard thinks at most ~HARD_BUDGET_MS (then finishes the round it is in), but never fewer than HARD_MIN_ROUNDS
+ *  guesses (2026-11-23: a phone 4-6x slower than a laptop froze 1.5-3 s on the full 12). */
+export const HARD_BUDGET_MS = 300;
+const HARD_MIN_ROUNDS = 3;
 
 /** What a special is worth, roughly in HP. */
 function specialValue(id, evo, rv) {
@@ -86,10 +90,10 @@ export function chooseEvolve(state, side) {
   return best;
 }
 
-export function chooseMove(state, level, rand = Math.random) {
+export function chooseMove(state, level, rand = Math.random, opts = {}) {
   const side = state.turn;
   if (level === 'hard') {
-    const mv = hardMove(state, side, rand);
+    const mv = hardMove(state, side, rand, opts);
     if (mv) return mv;
   }
   // Evolving costs a move; Easy and Medium take it when they can (Easy only half the time). Hard weighs it like any move.
@@ -171,19 +175,25 @@ function planValue(st, side, rand, depth) {
   return best === -Infinity ? evalFor(st, side) : best;
 }
 
-function hardMove(state, side, rand) {
-  let best = null, bestV = -Infinity;
-  for (const { mv } of candidates(state, side, HARD_FIRST)) {
-    let v = 0, n = 0;
-    for (let k = 0; k < HARD_GUESSES; k++) {
+function hardMove(state, side, rand, opts = {}) {
+  // Round by round (each round = one more guess for EVERY first move), so a cut leaves them all with the same number of guesses.
+  // `opts.now` + `opts.until` = a time limit (the screen's: a slow phone must not freeze); without them (tests, the soak) it
+  // always plays all HARD_GUESSES rounds, so the search stays pure. At least HARD_MIN_ROUNDS rounds run whatever the clock says.
+  const cands = candidates(state, side, HARD_FIRST);
+  const sum = cands.map(() => 0), n = cands.map(() => 0);
+  for (let k = 0; k < HARD_GUESSES; k++) {
+    cands.forEach(({ mv }, i) => {
       const r = apply(guessOf(state, rand), mv);
-      if (!r.ok) break;
-      v += planValue(r.state, side, rand, 1); n++;
-    }
-    if (!n) continue;
-    v = v / n + rand() * 0.01;   // ties: not always the first
-    if (v > bestV) { bestV = v; best = mv; }
+      if (r.ok) { sum[i] += planValue(r.state, side, rand, 1); n[i]++; }
+    });
+    if (k + 1 >= HARD_MIN_ROUNDS && opts.now && opts.until && opts.now() >= opts.until) break;
   }
+  let best = null, bestV = -Infinity;
+  cands.forEach(({ mv }, i) => {
+    if (!n[i]) return;
+    const v = sum[i] / n[i] + rand() * 0.01;   // ties: not always the first
+    if (v > bestV) { bestV = v; best = mv; }
+  });
   return best;
 }
 
