@@ -62,3 +62,8 @@ untouchable... on easy guaranteed win games").
 ## Context (all live 2026-11-02)
 Online-pair alerts (v1421, watch only); Lost records on Me (v1419); stats screens rebuilt (admin); every result logs
 mode + detail (v1410). Leaderboard v2 still admin-only; Matt has not said "release it".
+
+## Battle Arena (2026-11-23)
+
+Matt picked "1 / 3 / 6, online 3": Easy 1 (in the 20-point group; won ~86% in testing), Medium 3, Hard 6, online 3
+(`js/lb-points.js` `battlearena`, `js/lb-points-sheet.js` ONLINE). Testing data was thin (~22 games, mostly one person).

@@ -63,6 +63,8 @@ const P = {
   uno: { lv: [1, 2, 3], on: 2, mode: (m, t, v) => (+m.n >= 3 ? v * (+m.n - 1) : undefined) },
   yahtzee: { lv: [1, 1, 1], on: 1 },
   airhockey: { lv: [1, 2, 5], on: 3 },
+  // Battle Arena (Matt, 2026-11-23, picked "1 / 3 / 6, online 3"): Easy in the 20-point group (won ~86% in testing).
+  battlearena: { lv: [1, 3, 6], cap: [1], on: 3 },
 };
 const DB_PTS = { medium: [1, 4, 8], large: [2, 6, 10] };   // Dots and Boxes; Small = its `lv`
 /** Dots and Boxes: Medium, small board, the computer went first (saved mode `went`, else the `first` setting). */
