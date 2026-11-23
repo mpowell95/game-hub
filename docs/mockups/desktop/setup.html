@@ -1,0 +1,137 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Desktop Setup</title><style>
+*{box-sizing:border-box;margin:0}
+body{font:17px/1.4 Inter,system-ui,Segoe UI,sans-serif;background:#c9d3e2;color:#14213d;padding:24px;display:flex;flex-direction:column;align-items:center;gap:32px}
+.lbl{font-size:24px;font-weight:800;width:1440px}
+.scr{width:1440px;height:900px;position:relative;overflow:hidden;border-radius:12px;box-shadow:0 4px 20px #0002;display:grid;place-items:center}
+.hub{position:absolute;left:24px;top:24px;background:#fff;border-radius:12px;padding:9px 16px;font-weight:800;font-size:17px;box-shadow:0 2px 8px #0002}
+.q{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:20px}
+/* darts */
+.wood{background:repeating-linear-gradient(90deg,#5a3418 0 3px,#4a2a13 3px 7px,#633b1c 7px 12px)}
+.dc{width:1000px;background:#fbf4e6;border:4px solid #e9d9b8;border-radius:22px;padding:30px 36px;display:grid;grid-template-columns:1fr 340px;gap:40px;box-shadow:0 10px 40px #0006}
+.dh{grid-column:1/-1;display:flex;align-items:center;gap:16px}
+.dh h1{font-size:40px;color:#b8272c;font-weight:900}.dh .q{background:#efe2c8;color:#5b4632;margin-left:auto}
+.tabs{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;background:#efe2c8;border-radius:16px;padding:5px}
+.tabs b{text-align:center;padding:12px;font-size:20px;color:#5b4632;font-weight:600;border-radius:12px}.tabs b.on{background:#fff;border:2px solid #b8272c;color:#14213d;font-weight:800}
+.opt h3{font-size:15px;font-weight:800;letter-spacing:.06em;color:#6b5236;margin:0 0 8px 4px}
+.opt+.opt{margin-top:20px}
+.seg{display:flex;background:#efe2c8;border-radius:14px;padding:4px}
+.seg span{flex:1;text-align:center;padding:11px 6px;font-size:18px;color:#4a3826;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:8px}
+.seg span.on{background:#fff;border:2px solid #b8272c;font-weight:700;color:#14213d}
+.sh{width:13px;height:13px;display:inline-block}.ci{border-radius:50%;background:#2a9d3a}.sq{background:#1f5fa8}.di{background:#14213d;transform:rotate(45deg) scale(.8)}
+.right{display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:24px}
+.btns{display:flex;gap:12px;width:100%}
+.b1{flex:2;background:#b8272c;color:#fff;font-weight:800;font-size:22px;text-align:center;padding:16px;border-radius:16px}
+.b2{flex:1;background:#fff;border:2px solid #e2d2b2;font-size:20px;text-align:center;padding:14px;border-radius:16px}
+/* online */
+.cols{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:36px}
+.cols h2{font-size:24px;font-weight:800;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:14px;background:#fff;border-radius:14px;padding:12px 16px;margin-bottom:10px;border:2px solid #efe2c8}
+.row.turn{border-color:#ffce3a}
+.fa{width:44px;height:44px;border-radius:50%;background:#efe2c8;display:grid;place-items:center;font-size:24px;flex:none}
+.row .n{font-weight:800;font-size:18px}.row .s{font-size:15px;color:#4a3826}
+.pl{margin-left:auto;background:#b8272c;color:#fff;font-weight:800;border-radius:12px;padding:8px 18px}
+.wt{margin-left:auto;font-size:15px;color:#4a3826}
+.ppl{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ppl .row{margin:0}
+.any{grid-column:1/-1;justify-content:center;font-weight:800;font-size:19px;background:#b8272c;color:#fff;border-color:#b8272c}
+/* sudoku */
+.lt{background:#f2f5fa}
+.sc{width:900px;background:#fff;border-radius:22px;padding:40px;display:grid;grid-template-columns:300px 1fr;gap:44px;box-shadow:0 2px 12px #0001;align-items:center}
+.sl{text-align:center}.sl h1{font-size:40px;font-weight:900;margin-top:18px}
+.grid9{width:220px;height:220px;margin:0 auto;border-radius:24px;background:#ece6f6;padding:22px}
+.grid9 div{width:100%;height:100%;border:3px solid #5a6680;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr)}
+.grid9 i{border:1px solid #9aa4b8;font-style:normal;font-weight:700;color:#3b4a63;display:grid;place-items:center;font-size:20px}
+.diffs{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.diffs span{border:2px solid #dde3ee;border-radius:16px;padding:22px;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}
+.diffs span.on{border-color:#f2c230;background:#fff6d8}
+.st{background:#1a6bd6;color:#fff;font-weight:800;font-size:22px;text-align:center;padding:18px;border-radius:999px;margin-top:22px}
+.hp{text-align:center;color:#3b4a63;font-weight:700;font-size:18px;margin-top:16px}
+/* golf */
+.green{background:linear-gradient(#1f4a28,#2f6b36)}
+.gc{width:1180px;display:grid;grid-template-columns:420px 1fr;gap:32px}
+.gb{background:#e7e0c8;color:#22401f;font-weight:800;font-size:19px;text-align:center;padding:14px;border-radius:6px;box-shadow:0 3px 0 #0004}
+.gb.on{background:#ffcf33;color:#2b2200}
+.gl{display:flex;flex-direction:column;gap:12px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.desc{background:#14261a;border:2px solid #cfd8c0;color:#f2f5ea;padding:14px 16px;font-size:17px;border-radius:4px}
+.desc small{display:block;font-size:15px;color:#e1e8d6;margin-bottom:4px}
+.holes{display:grid;grid-template-columns:repeat(9,1fr);gap:8px}
+.ho{height:150px;background:#45762f;border:2px solid #cfd8c0;position:relative;overflow:hidden}
+.ho:before{content:"";position:absolute;left:30%;right:30%;top:10%;bottom:8%;background:#86b35a;border-radius:30px;transform:skewX(var(--k))}
+.ho:after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:#bfe38c;left:calc(50% - 8px);top:12%}
+.ho.w{background:#2f8be0}
+.ho i{position:absolute;left:4px;bottom:2px;color:#fff;font-style:normal;font-weight:800;font-size:15px;z-index:1;text-shadow:0 1px 2px #000}
+.set{background:#f4efdc;border-radius:6px;padding:12px;text-align:center;box-shadow:0 3px 0 #0004}
+.set b{font-size:20px;display:block}.set span{font-size:15px;color:#5a4a20;display:block}
+</style></head><body>
+
+<div class="lbl">Darts: Computer</div>
+<div class="scr wood"><div class="hub">‹ Hub</div>
+<div class="dc">
+ <div class="dh"><h1>Darts</h1><div class="q">?</div></div>
+ <div class="tabs"><b>Online</b><b class="on">Computer</b></div>
+ <div>
+  <div class="opt"><h3>GAME</h3><div class="seg"><span class="on">301</span><span>201</span><span>101</span><span>Cricket</span></div></div>
+  <div class="opt"><h3>PLAY THE COMPUTER</h3><div class="seg"><span><i class="sh ci"></i>Easy</span><span class="on"><i class="sh sq"></i>Medium</span><span><i class="sh di"></i>Hard</span></div></div>
+  <div class="opt"><h3>COMPUTER SPEED</h3><div class="seg"><span>Slow</span><span class="on">Normal</span><span>Fast</span></div></div>
+  <div class="opt"><h3>FIRST THROW</h3><div class="seg"><span class="on">Alternate</span><span>Me</span><span>Computer</span></div></div>
+ </div>
+ <div class="right">
+  <svg width="300" height="300" viewBox="-50 -50 100 100"><circle r="50" fill="#1b1b1b"/><circle r="40" fill="#c7302f"/><circle r="37" fill="#e9dfc6"/><circle r="25" fill="#2f8a3c"/><circle r="22" fill="#1b1b1b"/><circle r="7" fill="#2f8a3c"/><circle r="3" fill="#c7302f"/><g stroke="#888" stroke-width=".4"><path d="M0-40V40M-40 0H40M-28-28 28 28M28-28-28 28M-15-37 15 37M15-37-15 37M-37-15 37 15M37-15-37 15"/></g></svg>
+  <div class="btns"><div class="b2">Practice</div><div class="b1">Play</div></div>
+ </div>
+</div></div>
+
+<div class="lbl">Darts: Online</div>
+<div class="scr wood"><div class="hub">‹ Hub</div>
+<div class="dc">
+ <div class="dh"><h1>Darts</h1><div class="q">?</div></div>
+ <div class="tabs"><b class="on">Online</b><b>Computer</b></div>
+ <div class="cols">
+  <div><h2>Matches</h2>
+   <div class="row turn"><div class="fa">🦊</div><div><div class="n">Kay</div><div class="s">301 · 142 to 188</div></div><div class="pl">Play</div></div>
+   <div class="row"><div class="fa">🐻</div><div><div class="n">Hal</div><div class="s">Cricket</div></div><div class="wt">Hal's turn</div></div>
+   <div class="row"><div class="fa">🦉</div><div><div class="n">Ivy</div><div class="s">101</div></div><div class="wt">Ivy's turn</div></div>
+  </div>
+  <div><h2>Challenge</h2>
+   <div class="ppl">
+    <div class="row"><div class="fa">🦊</div><div class="n">Kay</div></div>
+    <div class="row"><div class="fa">🐻</div><div class="n">Hal</div></div>
+    <div class="row"><div class="fa">🦉</div><div class="n">Ivy</div></div>
+    <div class="row"><div class="fa">🐢</div><div class="n">Zed</div></div>
+    <div class="row any">Anyone</div>
+   </div>
+  </div>
+ </div>
+</div></div>
+
+<div class="lbl">Sudoku</div>
+<div class="scr lt"><div class="hub">‹ Hub</div>
+<div class="sc">
+ <div class="sl"><div class="grid9"><div><i>6</i><i></i><i>3</i><i></i><i>1</i><i></i><i>8</i><i></i><i>5</i></div></div><h1>Sudoku</h1></div>
+ <div>
+  <div class="diffs"><span class="on"><i class="sh ci"></i>Easy</span><span><i class="sh sq"></i>Medium</span><span><i class="sh di"></i>Hard</span><span><i class="sh di"></i><i class="sh di"></i>Expert</span></div>
+  <div class="st">Start</div>
+  <div class="hp">How to play</div>
+ </div>
+</div></div>
+
+<div class="lbl">Golf</div>
+<div class="scr green"><div class="hub">‹ Hub</div>
+<div class="gc">
+ <div class="gl">
+  <div class="g2"><div class="gb">Online</div><div class="gb on">Solo</div></div>
+  <div class="gb on">Pine Valley</div><div class="gb">Red Mesa</div><div class="gb">Oasis Sands</div><div class="gb">Coral Keys</div>
+  <div class="desc"><small>18 holes · par 72 · 6582 yds</small>Parkland. Tree lined, water on 9 holes.</div>
+  <div class="g3"><div class="gb">Tutorial</div><div class="gb">Practice</div><div class="gb">Leaderboard</div></div>
+ </div>
+ <div class="gl">
+  <div class="g3"><div class="gb on">3 holes</div><div class="gb">9 holes</div><div class="gb">18 holes</div></div>
+  <div class="holes">
+   <div class="ho" style="--k:8deg"><i>1</i></div><div class="ho w" style="--k:0deg"><i>2</i></div><div class="ho" style="--k:-6deg"><i>3</i></div><div class="ho" style="--k:10deg"><i>4</i></div><div class="ho" style="--k:-4deg"><i>5</i></div><div class="ho" style="--k:3deg"><i>6</i></div><div class="ho" style="--k:-9deg"><i>7</i></div><div class="ho" style="--k:6deg"><i>8</i></div><div class="ho" style="--k:-2deg"><i>9</i></div>
+   <div class="ho" style="--k:-7deg"><i>10</i></div><div class="ho" style="--k:5deg"><i>11</i></div><div class="ho" style="--k:-3deg"><i>12</i></div><div class="ho" style="--k:9deg"><i>13</i></div><div class="ho" style="--k:-8deg"><i>14</i></div><div class="ho" style="--k:2deg"><i>15</i></div><div class="ho" style="--k:-5deg"><i>16</i></div><div class="ho" style="--k:7deg"><i>17</i></div><div class="ho" style="--k:-1deg"><i>18</i></div>
+  </div>
+  <div class="g3"><div class="set"><b>1-3</b><span>par 12</span><span>Best: -</span></div><div class="set"><b>4-6</b><span>par 11</span><span>Best: -</span></div><div class="set"><b>7-9</b><span>par 13</span><span>Best: -</span></div><div class="set"><b>10-12</b><span>par 12</span><span>Best: -</span></div><div class="set"><b>13-15</b><span>par 13</span><span>Best: -</span></div><div class="set"><b>16-18</b><span>par 11</span><span>Best: -</span></div></div>
+ </div>
+</div></div>
+</body></html>
