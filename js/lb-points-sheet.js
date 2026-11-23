@@ -49,7 +49,7 @@ const OPTIONS = {
 };
 // Games a win can come from online (an mp.js room; js/hub.js LIVE_MP_GAMES lists only some of them). Connect 4,
 // Dominoes, Uno, Parchís and Monopoly Deal have no online play, so their online value can never be earned.
-const ONLINE = new Set(['airhockey', 'battleship', 'boggle', 'chinchon', 'cuppong', 'darts', 'dotsboxes', 'eightball',
+const ONLINE = new Set(['airhockey', 'battlearena', 'battleship', 'boggle', 'chinchon', 'cuppong', 'darts', 'dotsboxes', 'eightball',
   'escoba', 'filler', 'flicksoccer', 'hoops4', 'mancala', 'tictactoe', 'yahtzee']);
 // A table of 2 or 3 computers: each computer's own points added up (js/lb-points.js tableSum, lb-rules `table`).
 const TABLE = new Set(['chinchon', 'escoba', 'parchis']);
