@@ -109,7 +109,9 @@ const recorders = [...src.matchAll(/^export function (record[A-Za-z0-9]*)\(/gm)]
 // costs and write-offs, not plays (gating one would let a free hint go unrecorded). recordWordWeaverDailyHint
 // (2026-11-02) is recordWordWeaverHint's twin for the daily puzzle; the daily result itself (recordWordWeaverDaily) is gated.
 // recordWordWeaverBuy (2026-11-02) counts bonus stars SPENT on a bought hint: a cost, never a play.
-const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult', 'recordWordWeaverFreeHint', 'recordWordWeaverFreeLost', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy']);
+// recordWordLadderHint (2026-11-20, js/game-stats.js) notes a hint used on a Word Ladder level, which caps that level's
+// stars on every phone: a cost, not a play (recordGridlockHint's twin). The result itself (recordWordLadder) is gated.
+const EXEMPT = new Set(['recordHeadToHead', 'recordBaseballCareerStarted', 'recordBaseballCareerFinished', 'recordHoldemBank', 'recordHoldemHand', 'recordGridlockHint', 'recordWordWeaverHint', 'recordLiveResult', 'recordWordWeaverFreeHint', 'recordWordWeaverFreeLost', 'recordWordWeaverDailyHint', 'recordWordWeaverBuy', 'recordWordLadderHint']);
 ok('found the recorders', recorders.length >= 18);
 for (const r of recorders) {
   if (EXEMPT.has(r)) continue;

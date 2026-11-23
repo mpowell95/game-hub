@@ -347,8 +347,12 @@ check('a player code is normalised and validated',
   check('the hub reaches the alert module through a registry entry, not by name',
     /alerts: \(\) => import\('\.\.\/hoops4\/js\/alert\.js'\)/.test(hub)
     && /typeof g\.alerts !== 'function'/.test(hub));
+  // 2026-10-18 (js/hub.js, Matt: "3-5 seconds"): the check moved from _afterPaint (idle time) to
+  // _rightAfterPaint (one frame, then straight away). Still off the first paint: that helper must
+  // wait for a frame, never call straight through.
   check('the alert check runs AFTER the launcher has painted, never on the critical path',
-    /_afterPaint\(\(\) => this\._checkGameAlerts\(\)/.test(hub));
+    /_rightAfterPaint\(\(\) => this\._checkGameAlerts\(\)/.test(hub)
+    && /_rightAfterPaint\(fn\) \{[\s\S]{0,400}requestAnimationFrame\(\(\) => setTimeout\(go, 0\)\)/.test(hub));
   check('a game tile cannot break the launcher', /console\.warn\('\[hub\] alert check failed for'/.test(hub));
 
   // [KNOWN-BUG PROBE] THE BUBBLE THAT WOULD NOT GO AWAY (2026-09-22). Matt, having played the
@@ -364,8 +368,11 @@ check('a player code is normalised and validated',
     && /_dismissGameAlert\(id\) \{[\s\S]{0,700}this\._gameAlerts = \(this\._gameAlerts \|\| \[\]\)\.filter\(\(x\) => x !== state\);\n    this\._paintGameAlert\(\);/.test(hub));
   check('[KNOWN-BUG PROBE] the alert check clears a stale alert, not just sets a new one',
     /this\._gameAlerts = found;\n    this\._paintGameAlert\(\);/.test(hub));
+  // Read from showLauncher's own body (not a fixed character window, which outgrew 1400 as
+  // unrelated lines were added above the call).
+  const showLauncherBody = (hub.match(/\n  async showLauncher\(\) \{\n([\s\S]*?)\n  \}\n/) || [])[1] || '';
   check('[KNOWN-BUG PROBE] returning to the launcher re-asks who is waiting',
-    /showLauncher\(\)[\s\S]{0,1400}this\._checkGameAlerts\(\);/.test(hub));
+    /^\s*this\._checkGameAlerts\(\);/m.test(showLauncherBody));
 
   // The two states differ by their WORDS, not only their colour (Matt is red/green colourblind).
   const strings = readFileSync(new URL('./js/strings.js', __ROOT_URL), 'utf8');

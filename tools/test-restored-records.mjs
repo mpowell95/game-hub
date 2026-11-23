@@ -7,8 +7,10 @@
 //   2. The server-board path (withRestoredBoard) gives Matt's row EXACTLY what aggregating players/ plus the
 //      restored records gives - every game, comp, totalPlays, devices - and leaves every other row alone.
 //   3. A restored id already on the board adds nothing; an owner with no row gets no invented row.
-//   4. Structural: both leaderboards apply it only behind isAdminDevice(), and functions/boards.js (the board
-//      everyone else reads) does not use it - "admin only still".
+//   4. Structural: both leaderboards apply it on the board AND the players path for EVERY device (released with
+//      leaderboard v2 on 2026-11-04, v1462: CLAUDE.md "Leaderboard v2: RELEASED to everyone", Matt: "Yes, obviously";
+//      until then admin devices only), and functions/boards.js (the board the server builds) does not use it, so it
+//      stays read time only and is added once, on the phone.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,7 +70,8 @@ const src = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 for (const f of ['js/leaderboard-ui.js', 'js/leaderboard2-ui.js']) {
   const lines = src(f).split(/\r?\n/).filter((l) => /withRestored(Records|Board)\(/.test(l));
   ok(`${f}: applied on the board AND the players path`, lines.some((l) => l.includes('withRestoredBoard(')) && lines.some((l) => l.includes('withRestoredRecords(')));
-  ok(`${f}: every use is behind isAdminDevice()`, lines.length > 0 && lines.every((l) => /isAdminDevice\(\)\s*\?\s*withRestored/.test(l)), lines.join(' | '));
+  // Every device since 2026-11-04 (was: every use behind isAdminDevice()): no admin gate on any use.
+  ok(`${f}: applied for every device (no isAdminDevice() gate, released 2026-11-04)`, lines.length > 0 && lines.every((l) => !/isAdminDevice\(/.test(l)), lines.join(' | '));
 }
 ok('functions/boards.js (everyone\'s board) does not use it', !/withRestored|RESTORED_RECORDS/.test(src('functions/boards.js')));
 

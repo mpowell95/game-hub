@@ -191,7 +191,13 @@ const fn = read('./functions/index.js');
 check('the Cloud Function watches the per-player index', /ref: '\/skeeChallenges\/index\/\{code\}\/\{id\}'/.test(fn) && /decideSkee/.test(fn));
 const hub = read('./js/hub.js');
 check('the hub registers Skeeball\'s alerts module', /alerts: \(\) => import\('\.\.\/skeeball\/js\/alert\.js'\)/.test(hub));
-check('the hub collects EVERY game\'s alert, not the first', /found\.push\(\{ game: g\.id, alert, mod \}\)/.test(hub) && !/one bubble at a time/.test(hub));
+// 2026-10-18 (js/hub.js, Matt: "3-5 seconds"): the games are asked ALL AT ONCE, each answer kept in
+// its own slot, and the full list is every slot that found something (was a found.push in a loop).
+check('the hub collects EVERY game\'s alert, not the first',
+  /results\[i\] = \{ game: g\.id, alert, mod \}/.test(hub)
+  && /const found = results\.filter\(Boolean\);/.test(hub)
+  && /await Promise\.all\(list\.map\(/.test(hub)
+  && !/one bubble at a time/.test(hub));
 check('two or more alerts draw a small pill per tile', /list\.length > 1/.test(hub) && /hub-alert is-mini/.test(hub) && /\.hub-alert\.is-mini/.test(read('./css/hub.css')));
 check('a pill opens ITS OWN game', /this\._openAlertGame\(bubble\.dataset\.game\)/.test(hub));
 const sw = read('./sw.js');
