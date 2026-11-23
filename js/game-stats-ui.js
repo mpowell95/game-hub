@@ -110,7 +110,7 @@ const TABS = [
   { id: 'spellingbee', labelKey: 'game_title_spellingbee' },
   // Battle Arena (2026-10-24, battle-arena/): admin only at first, NOT devOnly here (Darts' reasoning
   // above; devOnly since 2026-10-28, Archery's note). total/byDiff only, so the generic screen draws it.
-  { id: 'battlearena', labelKey: 'game_title_battlearena', devOnly: true },
+  { id: 'battlearena', labelKey: 'game_title_battlearena' },
   // Golf is being rebuilt (golf-reference-spec.md) and is admin-only for the duration: the
   // adminConfig override `games.golf.live = false` hides it, so no code flag is involved and
   // releasing it is a tap on the admin page. The tab renders only for whoever can reach the game.

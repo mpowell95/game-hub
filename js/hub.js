@@ -702,9 +702,7 @@ export const GAMES = [
     immersive: true,
     accent: '#E0532F',
     art: GAME_ART['battle-arena'],
-    // ADMIN ONLY at first, like every new game here. No `released` date on purpose: it is the only
-    // input to the launcher's New pill and must be the day Matt releases it from the admin page.
-    devOnly: true,
+    released: '2026-11-23',         // Matt: "if you're sure, then release it"; the New pill and the New games bubble count from here
   },
   {
     // Murdoku (2026-09-29): place every suspect on a floor plan, one per row and column, from

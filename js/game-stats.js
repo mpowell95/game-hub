@@ -1756,7 +1756,7 @@ function resetKingOfGamesSkeeball(st) {
 // Stats id -> hub id for every game js/hub.js marks devOnly (tools/test-leaderboard-rank.mjs fails
 // if this, the hub's list and game-stats-ui.js TABS drift apart). The release commit drops the id.
 export const ADMIN_ONLY = {
-  archery: 'archery', battlearena: 'battle-arena', baseball: 'baseball',
+  archery: 'archery', baseball: 'baseball',
   shoveoff: 'shove-off',
 };
 /** Is this stats id admin-only right now (its code default, unless Matt switched it live)? */

@@ -38,14 +38,14 @@ localStorage.setItem('gamehub.profile', JSON.stringify({ name: 'zzzprobe', playe
 localStorage.setItem('gamehub.adminConfig.v1', JSON.stringify({ games: { baseball: { live: true } } }));
 // Plays recorded BEFORE this existed sit in the real records (Matt: "leave them, count them"),
 // plus an old test record for Baseball that must never come back once it is live.
-// (Archery stands in for Gridlock, Word Weaver and Tower Stack here since their releases.)
+// (Archery stands in for Gridlock, Word Weaver and Tower Stack here since their releases; Shove Off for Battle Arena since 2026-11-23.)
 const legacyGl = { total: { played: 22, won: 22, lost: 0 }, byDiff: { easy: { played: 22, won: 22, lost: 0 } } };
 const legacyBa = { total: { played: 6, won: 3, lost: 3 }, byDiff: { mp: { played: 6, won: 3, lost: 3 } } };
 localStorage.setItem('gamehub.stats', JSON.stringify({
   version: 1,
-  games: { archery: legacyGl, battlearena: legacyBa, cupbaseball: { total: { played: 4, won: 1, lost: 3 }, byDiff: { easy: { played: 4, won: 1, lost: 3 } } }, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} },
+  games: { archery: legacyGl, shoveoff: legacyBa, cupbaseball: { total: { played: 4, won: 1, lost: 3 }, byDiff: { easy: { played: 4, won: 1, lost: 3 } } }, uno: { total: { played: 2, won: 1, lost: 1 }, byDiff: {} },
     numbermerge: { total: { played: 3, won: 3, lost: 0 }, byDiff: { classic: { played: 3, won: 3, lost: 0 } }, nm: { games: 3, best: 556, bestTile: 2048, dl: {} } } },
-  h2h: { battlearena: { devOld: { name: 'Old', w: 1, l: 0 } } },
+  h2h: { shoveoff: { devOld: { name: 'Old', w: 1, l: 0 } } },
   testGames: { cupbaseball: { total: { played: 9, won: 2, lost: 7 }, byDiff: { hard: { played: 9, won: 2, lost: 7 } } }, baseball: { total: { played: 5, won: 5, lost: 0 }, byDiff: { easy: { played: 5, won: 5, lost: 0 } } },
     numbermerge: { total: { played: 7, won: 7, lost: 0 }, byDiff: { daily: { played: 7, won: 7, lost: 0 } }, nm: { games: 7, best: 900, bestTile: 512, dl: { '2026-11-13': { sc: 64, tl: 64, mv: 9, t: 5 } } } } },
 }));
@@ -53,18 +53,18 @@ const raw = () => JSON.parse(store.get('gamehub.stats'));
 
 const G = await import('../js/game-stats.js');
 
-ok('Archery and Battle Arena are admin-only right now', G.isTestGame('archery') && G.isTestGame('battlearena'));
+ok('Archery and Shove Off are admin-only right now', G.isTestGame('archery') && G.isTestGame('shoveoff'));
 ok('Baseball, switched live from the admin page, is not', !G.isTestGame('baseball'));
 ok('Cup Baseball, archived 2026-11-13, is no longer a test game (its stored records are left where they are)', !G.isTestGame('cupbaseball'));
 ok('a released game is never a test game', !G.isTestGame('uno') && !G.isTestGame('darts') && !G.isTestGame('gridlock') && !G.isTestGame('wordweaver') && !G.isTestGame('tower'));
 
 const before = JSON.stringify(raw().games.archery);
 G.recordResult('archery', 'easy', true);
-G.recordResult('battlearena', 'mp', true);
+G.recordResult('shoveoff', 'mp', true);
 let r = raw();
-ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.archery.total.played === 23 && r.testGames.battlearena.total.played === 7 && r.testGames.battlearena.total.won === 4);
+ok('an admin-only play lands in testGames (which started as a copy of the real record)', r.testGames.archery.total.played === 23 && r.testGames.shoveoff.total.played === 7 && r.testGames.shoveoff.total.won === 4);
 ok('the real Archery record is byte-for-byte unchanged', JSON.stringify(r.games.archery) === before);
-ok('the real Battle Arena record is unchanged', JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
+ok('the real Shove Off record is unchanged', JSON.stringify(r.games.shoveoff) === JSON.stringify(legacyBa));
 ok('the tester\'s progress carries on in the test record', r.testGames.archery.byDiff.easy.played === 23 && r.testGames.archery.total.won === 23);
 ok('...and the real record did not gain the game', r.games.archery.byDiff.easy.played === 22);
 
@@ -75,10 +75,10 @@ ok('loadStoredStats() shows the REAL record (pre-change plays kept, visible)', s
 ok('loadStoredStats() carries the test record apart', stored.testGames.archery.total.played === 23);
 ok('no hidden swap marker leaks into JSON', JSON.stringify(stored) === JSON.stringify(JSON.parse(JSON.stringify(stored))) && !Object.getOwnPropertySymbols(stored).length);
 
-G.recordHeadToHead('battlearena', { deviceId: 'devNew', name: 'New' }, true);
+G.recordHeadToHead('shoveoff', { deviceId: 'devNew', name: 'New' }, true);
 r = raw();
-ok('an admin-only h2h row goes to testH2h (started as a copy)', !!(r.testH2h && r.testH2h.battlearena && r.testH2h.battlearena.devNew && r.testH2h.battlearena.devOld));
-ok('the real h2h is unchanged', JSON.stringify(r.h2h.battlearena) === JSON.stringify({ devOld: { name: 'Old', w: 1, l: 0 } }));
+ok('an admin-only h2h row goes to testH2h (started as a copy)', !!(r.testH2h && r.testH2h.shoveoff && r.testH2h.shoveoff.devNew && r.testH2h.shoveoff.devOld));
+ok('the real h2h is unchanged', JSON.stringify(r.h2h.shoveoff) === JSON.stringify({ devOld: { name: 'Old', w: 1, l: 0 } }));
 
 G.recordResult('baseball', 'easy', true);
 r = raw();
@@ -102,10 +102,9 @@ ok('archived Number Merge: test record and its daily kept', r.testGames.numberme
 ok('archived Number Merge: in GAMES and ARCHIVED_GAMES, not a test game', G.GAMES.includes('numbermerge') && G.ARCHIVED_GAMES.includes('numbermerge') && !G.isTestGame('numbermerge'));
 ok('archived Cup Baseball: still in the store\'s GAMES and in ARCHIVED_GAMES (out of every total)', G.GAMES.includes('cupbaseball') && G.ARCHIVED_GAMES.includes('cupbaseball'));
 
-// Battle Arena is listed in CARRY_TEST (Matt, 2026-11-13) but is still admin-only: nothing is carried yet.
-r = raw();
-ok('Battle Arena listed to carry, but while admin-only nothing is carried or stamped', G.CARRY_TEST.battlearena === true
-  && G.carriedGame(r, 'battlearena') === r.games.battlearena && !(r.carried && r.carried.battlearena) && JSON.stringify(r.games.battlearena) === JSON.stringify(legacyBa));
+// Battle Arena, released 2026-11-23 (Matt: "if you're sure, then release it"): no longer a test game; its test plays are
+// carried by CARRY_TEST (tools/test-battlearena-carry.mjs). Shove Off stands in for it above.
+ok('Battle Arena, released 2026-11-23, is not a test game and is listed to carry', !G.isTestGame('battlearena') && G.CARRY_TEST.battlearena === true);
 
 // --- the readers: everything that shows or uploads stats reads the stored shape ---
 const src = (p) => readFileSync(new URL(p, __ROOT_URL), 'utf8');
