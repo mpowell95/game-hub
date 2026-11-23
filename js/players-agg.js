@@ -270,8 +270,12 @@ export function sdNoHintOf(game) {
  *  Each group's `games[g]` is in the CANONICAL stats shape ({ total, byDiff, +grid/cc/es/nb }) so the
  *  same object doubles as a valid `st.games` for the Stats screens. Group also carries roll-ups:
  *  { key, playerId, name, emoji, message, messageAt, devices, updatedAt, games, comp:{played,won,lost},
- *  solo:{solved,bestLevel,moves}, totalPlays }. */
-export function aggregatePlayers(all, corrections) {
+ *  solo:{solved,bestLevel,moves}, totalPlays }.
+ *  `opts.noHand` (2026-11-23): skip the per-person hand numbers (HAND_RESULTS, HAND_ADJUST, console adjust). For
+ *  withRestoredBoard, which merges a few restored records into a board row that already has them: applied a second
+ *  time they doubled (Matt's row: +1 Dots and Boxes win, +2 Hoops Medium wins). */
+export function aggregatePlayers(all, corrections, opts) {
+  const noHand = !!(opts && opts.noHand);
   const groups = new Map();
   const ident = buildIdentity(all);
   for (const id of Object.keys(all || {})) {
@@ -1057,9 +1061,9 @@ export function aggregatePlayers(all, corrections) {
     // FULL LEVEL (js/stats-corrections.js, 2026-11-08): shortened matches SHOWN at the level picked, per PERSON, after
     // every merge (the result carries `fl`, which js/lb-points.js reads so the points stay the sheet's).
     // Matt's HAND RESULTS (js/stats-corrections.js, 2026-11-08): added before the full-level move, filed as the recorder would.
-    for (const g of Object.keys(HAND_RESULTS)) { if (grp.games[g]) grp.games[g] = handResultsGame(grp.games[g], g, grp.playerId); }
+    if (!noHand) for (const g of Object.keys(HAND_RESULTS)) { if (grp.games[g]) grp.games[g] = handResultsGame(grp.games[g], g, grp.playerId); }
     // Matt's ADJUST BY GAME TYPE (2026-11-09, adjustModesGame): filed as the recorder would, before the full-level move.
-    const adj = grp.playerId ? withHandAdjust(corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null, grp.playerId) : null;
+    const adj = grp.playerId && !noHand ? withHandAdjust(corrections && corrections.adjust ? corrections.adjust[grp.playerId] : null, grp.playerId) : null;
     if (adj && typeof adj === 'object') for (const g of Object.keys(adj)) { if (grp.games[g]) grp.games[g] = adjustModesGame(grp.games[g], g, adj[g]); }
     for (const g of Object.keys(FULL_LEVEL)) { if (grp.games[g]) grp.games[g] = fullLevelGame(grp.games[g], g, grp.playerId); }
     // Matt's console ADJUSTMENTS (js/stats-corrections.js adjustGame, 2026-11-07): per PERSON, after every merge.
