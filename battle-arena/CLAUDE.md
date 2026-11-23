@@ -398,3 +398,16 @@ The checklist above, plus: `tools/test-admin-only-plays.mjs` now uses Shove Off 
 played for real on two phones: a LIVE ROOM on any version, and a challenge on rules v5 (the one real challenge, MattyIce vs
 Anita Bonita, Nov 13, was v1 and finished cleanly on both phones).
 
+
+## Admin: unlocks and every match (2026-11-23, Matt: "Make sure I can see what characters people have unlocked ... Make sure we know what monsters he's using and how he's playing and everything")
+
+- **Admin > Games > Battle Arena**: "Monsters unlocked" lists every player (wins, N / 12, next unlock). **A person's page in Battle
+  Arena**: every monster on its own row (Unlocked / at N wins, per PHONE: the game unlocks by that phone's own wins), "Teams used"
+  (byMode `t1`/`t2`, won of played), and each match from the play log's private `x` (level, both teams, result, who opened, HP,
+  moves, time). **Tap a match**: both teams' final state, then the game's own engine REPLAYS it from `x` (seed, teams, every move):
+  damage, specials per monster, evolutions, extra moves, heals, bombs, energy by gem, time per move, turn by turn, and whether
+  the replay's final HP matches the record. `js/admin-ui.js` `baPersonHTML` / `baUnlocksAllHTML` / `baPlayPage` / `baReplay`. Read only.
+- **A resumed match logs WHOLE now**: the save carries `bs` (seed, teams, first) and `bj` (moves so far, play time, `rz` resumes);
+  before, a match closed and resumed logged only the moves after the resume (`res: 1`). Live rooms log `live` (seed, teams, seat,
+  opponent). `tools/test-battlearena-resume-log.cjs` (closes and resumes a real match; the log replays to the same end).
+- Real data checked the same day: King of Games' 7 matches all replay exactly (final HP matches on every one).

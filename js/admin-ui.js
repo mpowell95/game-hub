@@ -35,7 +35,8 @@ import { BOARDS as ALL_BOARDS, DEFAULT_BOARD, boardById, liveBoards } from '../s
 // Skeeball machines this page names: every machine but the archived (POPONGO, Matt 2026-11-02). Its stored racks,
 // and any void on them, are untouched and still apply; `ALL_BOARDS` still counts a person's voided machines.
 const BOARDS = liveBoards(ALL_BOARDS);
-import { statsId, holdemBalance, GAMES as STATS_GAMES, ARCHIVED_GAMES } from './game-stats.js';
+import { statsId, holdemBalance, GAMES as STATS_GAMES, ARCHIVED_GAMES, carriedGame } from './game-stats.js';
+import { MONSTERS as BA_MONSTERS, unlockedIds as baUnlocked, monName as baName, costOf as baCost } from '../battle-arena/js/monsters.js';
 import { hubIdOf } from './game-stats-ui.js';
 import { dayKey } from './arcade-scores.js';
 import { aggregatePlayers, buildIdentity, SOLO } from './players-agg.js';
@@ -665,6 +666,7 @@ function renderView(cfg, v) {
     case 'hm': return hmPage(v.id);
     case 'pairs': return pairsPage();
     case 'pair': return pairPage(v.key);
+    case 'baplay': return baPlayPage(v.code, v.id, v.key);
     default: return nowTab(cfg);
   }
 }
@@ -741,6 +743,7 @@ function gamePage(cfg, hubId) {
   const alerts = alertRows(cfg, sid);
   if (alerts.length) body += gh(tx('adm_alerts', 'Alerts'), alerts.length) + grp(alerts);
   const players = (_agg || []).filter((p) => playsIn(p, sid) > 0 && !isHiddenName(p.name)).sort((a, b) => playsIn(b, sid) - playsIn(a, sid));
+  if (sid === 'battlearena' && players.length) body += baUnlocksAllHTML(players);
   if (players.length) {
     body += gh(tx('adm_players', 'Players'), players.length)
       + grp(players.slice(0, 6).map((p) => playerInGameRow(cfg, p, sid))
@@ -979,7 +982,8 @@ function gamePlayerPage(cfg, sid, key) {
       title: (voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')),
       acts: [voided ? btn(tx('adm_undo', 'Undo'), gameVoid(key, sid, false)) : btn(tx('adm_void', 'Void'), gameVoid(key, sid, true), 'x')] })]);
   }
-  body += playsHTML(p, sid);
+  if (sid === 'battlearena') body += baPersonHTML(key, g);
+  body += playsHTML(p, sid, key);
   return { title: p.name, body };
 }
 
@@ -1048,7 +1052,7 @@ function argsText(a) {
   };
   return (Array.isArray(v) ? v : [v]).map(part).filter(Boolean).join(' · ').slice(0, 120);
 }
-function playsHTML(p, sid) {
+function playsHTML(p, sid, key) {
   const code = (p.playerId || '').toUpperCase();
   if (!code) return '';
   const got = _plays.get(code);
@@ -1058,7 +1062,192 @@ function playsHTML(p, sid) {
   if (got === 'error') return head + grp([more(tx('adm_retry', 'Try again'), () => readPlays(code))]);
   const mine = got.filter((x) => x.g === sid && x.f);
   if (!mine.length) return head + `<p class="adm-empty">${esc(tx('adm_no_plays', 'No plays logged.'))}</p>`;
+  if (sid === 'battlearena') return head + grp(mine.slice(0, 60).map((x) => { const d = baX(x); return row({ cls: 'wrap', title: when(+x.t), sub: d ? baPlayLine(d) : argsText(x.a), sub2: d ? baPlayLine2(d) : '', go: d ? () => push({ k: 'baplay', code, id: x.id, key }) : null }); }));
   return head + grp(mine.slice(0, 60).map((x) => row({ title: (when(+x.t)), sub: argsText(x.a) })));
+}
+
+// --- Battle Arena: unlocks, teams and every match (2026-11-23, Matt: "Make sure I can see what characters people have
+// unlocked ... Make sure we know what monsters he's using and how he's playing and everything"). Read only. Unlocks are
+// DERIVED from each PHONE's own wins (the game reads its own store), so a person with two phones is shown per phone.
+// A match's whole story is the play log's private `x` (seed, both teams, who opened, every move with its time); the
+// match page replays it on the game's own engine for specials, evolutions, extra moves, damage and turn by turn.
+const baNames = (ids) => (Array.isArray(ids) ? ids.map((id) => baName(id) || id).join(' + ') : '');
+function baUnlockInfo(won) {
+  const have = baUnlocked(won);
+  const next = BA_MONSTERS.filter((m) => m.unlock && won < m.unlock).sort((a, b) => a.unlock - b.unlock)[0] || null;
+  return { have, next };
+}
+function baPhones(key) {
+  return idsOf(key).map((id) => {
+    const rec = obj(_players[id]);
+    const g = obj(carriedGame(obj(rec.stats), 'battlearena'));
+    return { id, build: obj(rec.device).build || '', played: +obj(g.total).played || 0, won: +obj(g.total).won || 0 };
+  }).filter((d) => d.played > 0);
+}
+/** Every monster, one row each: unlocked, or the wins it opens at (and how many to go). */
+function baMonsterRows(won) {
+  const have = new Set(baUnlocked(won));
+  return BA_MONSTERS.map((m) => row({ title: m.name,
+    value: have.has(m.id) ? tx('adm_ba_open', 'Unlocked') : tx('adm_ba_at', 'at {n} wins', { n: m.unlock }),
+    vcls: have.has(m.id) ? '' : 'x', sub: have.has(m.id) ? '' : tx('adm_ba_to_go', '{k} to go', { k: m.unlock - won }) }));
+}
+function baPersonHTML(key, g) {
+  let out = '';
+  const phones = baPhones(key);
+  phones.forEach((d, i) => {
+    const label = phones.length > 1 ? `${tx('adm_ba_unlocked', 'Monsters unlocked')} · ${tx('adm_ba_phone', 'phone {i}', { i: i + 1 })}${d.build ? ` (${d.build})` : ''}` : tx('adm_ba_unlocked', 'Monsters unlocked');
+    out += gh(label, `${baUnlocked(d.won).length} / ${BA_MONSTERS.length} · ${tx('adm_ba_wins', '{w} wins', { w: fmt(d.won) })}`) + grp(baMonsterRows(d.won));
+  });
+  const tally = new Map();
+  for (const [k, byDiff] of Object.entries(obj(g.byMode))) {
+    const m = {};
+    for (const part of String(k).split('|')) { const i = part.indexOf('='); if (i > 0) m[part.slice(0, i)] = part.slice(i + 1); }
+    if (!m.t1) continue;
+    const label = baNames([m.t1, m.t2].filter(Boolean));
+    const t = tally.get(label) || { p: 0, w: 0 };
+    for (const d of Object.values(obj(byDiff))) { t.p += +obj(d).played || 0; t.w += +obj(d).won || 0; }
+    tally.set(label, t);
+  }
+  const teams = [...tally.entries()].filter(([, t]) => t.p > 0).sort((a, b) => b[1].p - a[1].p || b[1].w - a[1].w);
+  if (teams.length) out += gh(tx('adm_ba_teams', 'Teams used'), teams.length) + grp(teams.map(([label, t]) => row({ title: label, value: `${fmt(t.w)} / ${fmt(t.p)}`, sub: tx('adm_ba_won_of', '{w} won of {p}', { w: fmt(t.w), p: fmt(t.p) }) })));
+  return out;
+}
+function baUnlocksAllHTML(players) {
+  const rows = players.map((p) => {
+    const phones = baPhones(p.key);
+    if (!phones.length) return null;
+    const best = phones.reduce((a, b) => (b.won > a.won ? b : a));
+    const { have, next } = baUnlockInfo(best.won);
+    return { p, won: best.won, have, next, n: phones.length };
+  }).filter(Boolean).sort((a, b) => b.won - a.won || a.p.name.localeCompare(b.p.name));
+  if (!rows.length) return '';
+  return gh(tx('adm_ba_unlocked', 'Monsters unlocked'), rows.length) + grp(rows.map((r) => row({ icon: whoHTML(r.p.emoji), title: r.p.name,
+    value: `${r.have.length} / ${BA_MONSTERS.length}`,
+    sub: tx('adm_ba_wins', '{w} wins', { w: fmt(r.won) }) + (r.n > 1 ? ` · ${tx('adm_ba_best_phone', 'best phone')}` : ''),
+    sub2: r.next ? tx('adm_ba_next_short', 'Next: {m} at {n}', { m: r.next.name, n: r.next.unlock }) : tx('adm_ba_all', 'Every monster unlocked'),
+    go: () => push({ k: 'gplayer', sid: 'battlearena', key: r.p.key }) })));
+}
+/** A play-log entry's private Battle Arena data, or null. */
+function baX(e) {
+  let x = e && e.x;
+  if (typeof x === 'string') { try { x = JSON.parse(x); } catch { return null; } }
+  return x && typeof x === 'object' && (x.team || x.game || x.sides) ? x : null;
+}
+const baMins = (ms) => { const s = Math.round((+ms || 0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+function baResult(x) {
+  if (x.via) return x.win == null ? tx('adm_ba_unfinished', 'Not finished') : tx('adm_ba_over', 'Over');
+  return x.win === 0 ? tx('adm_won_w', 'won') : x.win === 1 ? tx('adm_lost_w', 'lost') : tx('adm_ba_quit', 'quit');
+}
+function baPlayLine(x) {
+  const level = x.via ? tx('adm_ba_online', 'Online') : diffLabel(x.diff || '');
+  const teams = x.team ? `${baNames(x.team)} vs ${baNames(x.foe)}`
+    : x.game ? `${x.game.a || '?'} (${baNames(x.game.ta)}) vs ${x.game.b || '?'} (${baNames(x.game.tb)})`
+    : x.live ? `${baNames(x.live.seat === 1 ? x.live.b : x.live.a)} vs ${x.live.them || '?'} (${baNames(x.live.seat === 1 ? x.live.a : x.live.b)})` : '';
+  return [level, teams].filter(Boolean).join(' · ');
+}
+function baPlayLine2(x) {
+  const sd = Array.isArray(x.sides) ? x.sides : [];
+  const hp = sd.length === 2 ? `HP ${fmt(obj(sd[0]).hp)}-${fmt(obj(sd[1]).hp)}` : '';
+  return [baResult(x), x.via ? '' : (x.first === 0 ? tx('adm_ba_first', 'went first') : tx('adm_ba_second', 'went second')), hp,
+    tx('adm_ba_moves', '{n} moves', { n: fmt(x.n) }), baMins(x.ms)].filter(Boolean).join(' · ');
+}
+let _baEngine = null;   // the game's engine, loaded the first time a match page opens
+function baEngine() {
+  if (_baEngine === null) {
+    _baEngine = 'loading';
+    import('../battle-arena/js/engine.js').then((E) => { _baEngine = E; render(); }).catch((err) => { console.error('[admin] battle arena engine', err); _baEngine = 'error'; render(); });
+  }
+  return _baEngine && typeof _baEngine === 'object' ? _baEngine : null;
+}
+/** Replays a vs-computer match from its seed, teams and moves: per side totals, turn by turn, think times. null = cannot. */
+function baReplay(E, x) {
+  if (x.via || x.seed == null || !Array.isArray(x.team) || !Array.isArray(x.foe) || !Array.isArray(x.mv) || !x.mv.length) return null;
+  let s = E.newMatch({ seed: x.seed, teams: [x.team, x.foe], first: x.first === 1 ? 1 : 0, rv: x.rv || 1 });
+  const side = () => ({ specials: {}, evolved: [], extras: 0, dealt: 0, healed: 0, shield: 0, bombs: 0, gems: {}, moves: 0, times: [] });
+  const tot = [side(), side()];
+  const turns = [];
+  let cur = null, lastT = 0, ok = true;
+  for (const m of x.mv) {
+    const [who, k, a, b, , t] = m;
+    if (!cur || cur.side !== who) { cur = { side: who, moves: 0, dealt: 0, specials: [], evolved: [], extra: 0, bombs: 0 }; turns.push(cur); }
+    const move = k === 's' ? { type: 'swap', a, b } : k === 'e' ? { type: 'evolve', mon: a } : { type: 'pass' };
+    const r = E.apply(s, { ...move, side: who });
+    if (!r.ok) { ok = false; break; }
+    const T = tot[who] || side();
+    T.moves++; cur.moves++;
+    if (t != null) { T.times.push(Math.max(0, (+t || 0) - lastT)); lastT = +t || 0; }
+    for (const e of r.events) {
+      if (e.t === 'special') { const nm = baName(e.id, e.evo); tot[e.side].specials[nm] = (tot[e.side].specials[nm] || 0) + 1; if (e.side === cur.side) cur.specials.push(nm); }
+      else if (e.t === 'evolve') { tot[e.side].evolved.push(baName(e.id)); if (e.side === cur.side) cur.evolved.push(baName(e.id)); }
+      else if (e.t === 'extra') { tot[e.side].extras++; if (e.side === cur.side) cur.extra++; }
+      else if (e.t === 'damage') { const by = 1 - e.side; tot[by].dealt += e.n | 0; if (by === cur.side) cur.dealt += e.n | 0; }
+      else if (e.t === 'heal') tot[e.side].healed += e.n | 0;
+      else if (e.t === 'shield') tot[e.side].shield += e.n | 0;
+      else if (e.t === 'bomb' && e.boom === undefined) { tot[cur.side].bombs++; cur.bombs++; }
+      else if (e.t === 'energy' && e.k) { tot[e.side].gems[e.k] = (tot[e.side].gems[e.k] || 0) + (e.gained | 0); }
+    }
+    s = r.state;
+  }
+  const sd = Array.isArray(x.sides) ? x.sides : [];
+  const matches = ok && sd.length === 2 && s.sides[0].hp === (obj(sd[0]).hp | 0) && s.sides[1].hp === (obj(sd[1]).hp | 0);
+  return { ok, matches, tot, turns, complete: !x.res };
+}
+const baMedian = (a) => { if (!a.length) return 0; const b = a.slice().sort((p, q) => p - q); return b[Math.floor(b.length / 2)]; };
+function baPlayPage(code, id, key) {
+  const title = tx('adm_ba_match', 'Match');
+  const got = _plays.get(code);
+  const e = Array.isArray(got) ? got.find((r) => r.id === id) : null;
+  const x = baX(e);
+  if (!x) return { title, body: waitBody() };
+  const p = key ? personByKey(key) : null;
+  const me = (p && p.name) || tx('adm_ba_player', 'Player');
+  const them = x.via ? tx('adm_ba_them', 'Opponent') : tx('adm_ba_computer', 'Computer');
+  let body = grp([
+    row({ title: tx('adm_ba_when', 'When'), value: when(+e.t) }),
+    row({ title: tx('adm_ba_level', 'Level'), value: x.via ? tx('adm_ba_online', 'Online') : diffLabel(x.diff || '') }),
+    row({ title: tx('adm_ba_result', 'Result'), value: baResult(x) }),
+    ...(x.via ? [] : [row({ title: tx('adm_ba_opened', 'Went'), value: x.first === 0 ? tx('adm_ba_first', 'went first') : tx('adm_ba_second', 'went second') })]),
+    row({ title: tx('adm_ba_time', 'Play time'), value: baMins(x.ms) }),
+    row({ title: tx('adm_ba_moves_t', 'Moves'), value: `${fmt(x.n)} · ${tx('adm_ba_turns', '{n} turns', { n: fmt(x.turns) })}` }),
+    ...(x.rz ? [row({ title: tx('adm_ba_resumed', 'Closed and resumed'), value: fmt(x.rz) })] : []),
+    ...(x.tut ? [row({ title: tx('adm_ba_tutorial', 'First-match tutorial'), value: tx('adm_yes', 'Yes') })] : []),
+  ], true);
+  const sd = Array.isArray(x.sides) ? x.sides : [];
+  const teamRows = (q, ids) => (obj(q).mons || []).map(([mid, evo, energy]) => row({ title: baName(mid, !!evo), value: `${fmt(energy)} / ${fmt(baCost(mid, x.rv || 1))}`, sub: evo ? tx('adm_ba_evolved', 'Evolved') : '' }));
+  if (sd.length === 2) {
+    body += gh(me, `HP ${fmt(sd[0].hp)}`) + grp([...teamRows(sd[0]), row({ title: tx('adm_ba_berries', 'Berries'), value: fmt(sd[0].berries) })]);
+    body += gh(them, `HP ${fmt(sd[1].hp)}`) + grp([...teamRows(sd[1]), row({ title: tx('adm_ba_berries', 'Berries'), value: fmt(sd[1].berries) })]);
+  }
+  const E = baEngine();
+  if (!x.via) {
+    if (!E) body += _baEngine === 'error' ? '' : waitBody();
+    else {
+      const R = baReplay(E, x);
+      if (!R) body += `<p class="adm-empty">${esc(tx('adm_ba_noreplay', 'This match was resumed on an older build: only the moves after the resume were logged.'))}</p>`;
+      else {
+        const sideRows = (T) => [
+          row({ title: tx('adm_ba_dealt', 'Damage dealt'), value: fmt(T.dealt) }),
+          row({ cls: 'wrap', title: tx('adm_ba_specials', 'Specials'), value: fmt(Object.values(T.specials).reduce((a, b) => a + b, 0)), sub: Object.entries(T.specials).map(([n, c]) => `${n} ×${c}`).join(', ') }),
+          ...(T.evolved.length ? [row({ title: tx('adm_ba_evolves', 'Evolved'), value: T.evolved.join(', ') })] : []),
+          row({ title: tx('adm_ba_extras', 'Extra moves'), value: fmt(T.extras) }),
+          ...(T.healed ? [row({ title: tx('adm_ba_healed', 'Healed'), value: fmt(T.healed) })] : []),
+          ...(T.shield ? [row({ title: tx('adm_ba_shield', 'Shield'), value: fmt(T.shield) })] : []),
+          ...(T.bombs ? [row({ title: tx('adm_ba_bombs', 'Bombs set off'), value: fmt(T.bombs) })] : []),
+          row({ title: tx('adm_ba_gems', 'Energy collected'), value: fmt(Object.values(T.gems).reduce((a, b) => a + b, 0)), sub: Object.entries(T.gems).map(([k, n]) => `${k} ${n}`).join(', ') }),
+        ];
+        const T0 = R.tot[0];
+        body += gh(tx('adm_ba_how', 'How {name} played', { name: me }))
+          + grp([...sideRows(T0), row({ cls: 'wrap', title: tx('adm_ba_think', 'Time per move'), value: `${(baMedian(T0.times) / 1000).toFixed(1)} s`, sub: tx('adm_ba_think_sub', 'Typical of {n} moves. Slowest {s} s. Includes the animations.', { n: fmt(T0.times.length), s: (Math.max(0, ...T0.times) / 1000).toFixed(1) }) })]);
+        body += gh(tx('adm_ba_how', 'How {name} played', { name: them })) + grp(sideRows(R.tot[1]));
+        body += gh(tx('adm_ba_turnby', 'Turn by turn'), R.turns.length) + grp(R.turns.map((tn, i) => row({ cls: 'wrap',
+          title: `${i + 1}. ${tn.side === 0 ? me : them}`,
+          value: tn.dealt ? `-${fmt(tn.dealt)}` : '',
+          sub: [tx('adm_ba_moves', '{n} moves', { n: fmt(tn.moves) }), ...tn.specials.map((n) => `${n} ${tx('adm_ba_special_w', 'special')}`), ...tn.evolved.map((n) => `${tx('adm_ba_evolved', 'Evolved')} ${n}`), ...(tn.extra ? [tx('adm_ba_extra_w', 'extra move')] : []), ...(tn.bombs ? [tx('adm_ba_bomb_w', 'bomb')] : [])].join(' · ') })));
+        body += `<p class="adm-empty">${esc(R.matches ? tx('adm_ba_replay_ok', 'Replayed from the logged moves: the final HP matches.') : tx('adm_ba_replay_off', 'Replayed from the logged moves: the final HP does NOT match the recorded result.'))}</p>`;
+      }
+    }
+  }
+  return { title, body };
 }
 
 // --- People -------------------------------------------------------------------------------------------
