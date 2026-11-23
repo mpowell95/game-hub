@@ -385,3 +385,8 @@ Measured in Chromium with the CPU slowed 4x / 6x (an older phone): the full 12-g
 HARD_BUDGET_MS }` (300 ms; at least `HARD_MIN_ROUNDS` 3): worst 0.39 / 0.66 s, inside the 650 ms pause. Tests and the soak
 pass no limit (pure search). **Correction:** under rules v5, Hard beats Medium 73.6% (1,200 matches, the same with and
 without the round-by-round change; the 77% above was measured on v4's numbers). A 4x-slow phone's Hard (75 ms) ~75% (400).
+
+## Leaderboard points (2026-11-23, Matt picked "1 / 3 / 6, online 3")
+
+Easy 1 a win (in the 20-point group), Medium 3, Hard 6, online 3 (`js/lb-points.js`). Before, the game was not in the points
+table, so its board would have ranked by plain wins. Off the board for players until the release, like the rest of the game.
