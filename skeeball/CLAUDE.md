@@ -422,6 +422,10 @@ watchdog killed rolling balls: displacement anchor stays primary, **speed is onl
 bounds it (kills 77 -> 8). BRICK CITY only; no basket moved or resized. `node tools/test-brickcity-throat.mjs`
 (born red 13/16; deliberately NOT in `tools/run-all-tests.mjs`, ~3.5 min), `tools/test-brickcity-corner100.mjs`,
 `tools/test-brickcity-stall.mjs`, `tools/test-skeeball-capture-frame.mjs` stay green.
+- **Sideways rim-out (2026-11-23, Matt: "fix all")**: a ball captured at rim height could roll off the mouth sideways,
+  stay "captured" with no floor and sink through the tread. A captured centre more than `r + collarThick + ballR` from
+  the axis and above `ballR * 1.05` now rims out (`side: true`). Over both 861-throw grids, 1 throw changed (still a 0;
+  it now ends as a normal miss). The probe's fixed 92% paid floor became "every unpaid capture rimmed out".
 
 ## The capture blind spot, closed on every machine (2026-08-26)
 

@@ -813,7 +813,8 @@ export function withRestoredBoard(board, agg) {
   if (!Object.keys(missing).length) return board;
   const ident = agg.buildIdentity(missing);
   const list = board.list.slice(), idsByKey = new Map(board.idsByKey || []);
-  for (const d of agg.aggregatePlayers(missing)) {
+  // noHand: the board row already carries the owner's hand numbers; adding them again doubled them (2026-11-23).
+  for (const d of agg.aggregatePlayers(missing, null, { noHand: true })) {
     const i = list.findIndex((g) => (d.playerId && g.playerId === d.playerId) || g.key === d.key);
     if (i < 0) continue;
     const row = JSON.parse(JSON.stringify(list[i]));

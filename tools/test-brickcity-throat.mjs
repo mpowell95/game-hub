@@ -90,8 +90,12 @@ for (let pi = 0; pi <= 20; pi++) {
       }
       if (st.emergencyUsed && wdSpeed === null) wdSpeed = v;
     }
+    const rimouts = st.events.filter((e) => e.type === 'rimout');
     rows.push({ power, aim, cap, maxPastRim, maxSpeed, maxJump, jumpAt, wdSpeed,
-      clamped: st.clamped | 0, outcome: st.outcome, resolved: st.done });
+      clamped: st.clamped | 0, outcome: st.outcome, resolved: st.done,
+      // still captured when the throw ended, and paid something other than that basket
+      lost: !!(st.captured && !(st.outcome && st.outcome.hole === st.captured)),
+      rimouts: rimouts.length, sideOuts: rimouts.filter((e) => e.side).length });
   }
 }
 console.log(`\n${rows.length} throws.`);
@@ -110,12 +114,27 @@ ok('every throw resolves', rows.every((r) => r.resolved), '');
 // 1b. AND IT GETS PAID. With the ball held over the mouth, the pass-through commit (d < r + ballR)
 //     can no longer fail, so a capture that is not honoured means the ball genuinely bounced back
 //     out over the rim. Born red at 64% (284 of 793 lost).
+//
+//     GUARD (2026-11-23, Matt: "fix all"): THIS USED TO BE A FIXED 92% FLOOR, and it asserts the
+//     sentence above directly now. The floor was a measurement of the maxSpeed 6.60 build (93.1%);
+//     Matt's power dial (6.20, 2026-09-05) moved more throws onto the middle row, where real
+//     bounce-outs happen, and the same grid read 91.3% with 31 of its 32 unpaid captures genuine
+//     rim-outs. The 32nd was a real bug the floor could not name: a ball that rolled off the mouth
+//     SIDEWAYS at rim height, stayed "captured" with no floor and sank through the tread 33 cm away
+//     (physics.js section 1, the sideways rim-out). So: a capture that is not paid must have left
+//     the basket over the rim, and no throw may END still captured by a basket it was not paid.
 {
   const caps = rows.filter((r) => r.cap);
-  const paid = caps.filter((r) => r.outcome && r.outcome.hole === r.cap);
-  const rate = paid.length / Math.max(1, caps.length);
-  ok('at least 92% of captured balls are paid the hole that captured them',
-    rate >= 0.92, `${paid.length} of ${caps.length} (${(rate * 100).toFixed(0)}%)`);
+  const unpaid = caps.filter((r) => !(r.outcome && r.outcome.hole === r.cap));
+  const lost = rows.filter((r) => r.lost);
+  ok('no ball ends a throw still captured by a basket that did not pay it', lost.length === 0,
+    lost.slice(0, 4).map((r) => `p${r.power.toFixed(3)} a${r.aim.toFixed(2)} ${r.cap} -> ${r.outcome && r.outcome.hole}`).join('; '));
+  const silent = unpaid.filter((r) => r.rimouts === 0);
+  ok('every captured ball that is not paid left its basket by a rim-out', silent.length === 0,
+    silent.slice(0, 4).map((r) => `p${r.power.toFixed(3)} a${r.aim.toFixed(2)} ${r.cap} -> ${r.outcome && r.outcome.hole}`).join('; '));
+  console.log(`      (${caps.length - unpaid.length} of ${caps.length} captures paid, `
+    + `${(100 * (caps.length - unpaid.length) / Math.max(1, caps.length)).toFixed(1)}%; `
+    + `${rows.reduce((n, r) => n + r.sideOuts, 0)} sideways rim-outs over the grid)`);
 }
 
 // 1c. NO PENETRATION POPS. A ball leaves this machine's ramp at maxSpeed and only loses energy
@@ -184,6 +203,9 @@ ok('physics: capture switches that basket\'s throat on',
 ok('physics: a rimout needs the ball WHOLLY above the rim, with no radial term',
   /fc\.h > \(hDef\.collarH \|\| 0\) \+ G\.ballR \* 1\.05/.test(phys)
   && !/fc\.h > G\.ballR \* 1\.05 && d > hDef\.r/.test(phys), '');
+ok('physics: a captured ball clear of its collar sideways gets the floor back (the sideways rim-out)',
+  /d > hDef\.r \+ G\.collarThick \+ G\.ballR && fc\.h > G\.ballR \* 1\.05/.test(phys)
+  && /type: 'rimout', hole: st\.captured, side: true/.test(phys), '');
 ok('physics: the solver-artefact ceiling is 1.5x the board\'s own maxSpeed',
   /G\.maxSpeed : 8\) \* 1\.5/.test(phys) && /ball\.velocity\.scale\(vMax \/ vNow, ball\.velocity\)/.test(phys), '');
 ok('physics: the watchdog keeps the displacement anchor AND vetoes on speed, with a bounded rope',

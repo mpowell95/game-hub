@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1641';
+const CACHE = 'game-hub-v1642';
 
 const ASSETS = [
   './',
@@ -919,11 +919,11 @@ const REST_MANIFEST = {
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
   './js/live-leave.js': 'bf8180c9e6',
-  './js/stats-corrections.js': '147d638bc5',
+  './js/stats-corrections.js': 'ec4a8d89d2',
   './js/bee-fairplay.js': '7a17ef9239',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': 'ec69152638',
+  './js/players-agg.js': '0ec1e9d5a4',
   './js/game-art.js': '2ba8b833bd',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
@@ -1327,7 +1327,7 @@ const REST_MANIFEST = {
   './skeeball/js/machines/basketball/physics.js': '0be92b613b',
   './skeeball/js/machines/basketball/machine.js': '3f7f45738b',
   './skeeball/js/machines/basketball/render.js': 'e4579e6a71',
-  './skeeball/js/machines/brickcity/physics.js': 'f9dde01190',
+  './skeeball/js/machines/brickcity/physics.js': 'dfe45fec67',
   './skeeball/js/machines/brickcity/machine.js': '37b4fc044e',
   './skeeball/js/machines/brickcity/render.js': '4c3caf4e38',
   './skeeball/js/machines/runaway/physics.js': '853802b205',

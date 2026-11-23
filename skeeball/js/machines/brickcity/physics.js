@@ -430,6 +430,19 @@ function substep(st) {
       st.events.push({ type: 'rimout', hole: st.captured });
       st.captured = null;
       ball.collisionFilterMask = GROUP_FLOOR | st.restMask;
+    } else if (d > hDef.r + G.collarThick + G.ballR && fc.h > G.ballR * 1.05) {
+      // OUT OVER THE RIM SIDEWAYS (2026-11-23, Matt: "fix all"). A ball captured while it is still
+      // level with the rim top (centre under the height test above) can roll off the mouth
+      // SIDEWAYS: its own collar is off, and the throat only runs from the rim DOWN. It then stayed
+      // "captured" with no floor under it, rode the throat's top edge, and sank through the solid
+      // tread 33 cm from the basket as a miss - power 0.775 / aim -0.15 into topL, once in the
+      // 861-throw grid of tools/test-brickcity-throat.mjs. A centre more than r + collarThick +
+      // ballR from the axis is clear of the collar wall, and above ballR * 1.05 it is clear of the
+      // tread, so nothing it gets back can overlap it (the 10.4 m/s guard above). Inside the
+      // throat a centre is held at d <= r, so this never fires on a ball that is in the basket.
+      st.events.push({ type: 'rimout', hole: st.captured, side: true });
+      st.captured = null;
+      ball.collisionFilterMask = GROUP_FLOOR | st.restMask;
     }
     return;
   }

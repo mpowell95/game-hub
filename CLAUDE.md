@@ -444,6 +444,9 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
   `version.json`. Commit `sw.js` after changing any game file.
 - **Mockup Pad** (Matt's markup artifact) lives in `tools/mockup-pad/`; its README says how to republish.
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
+  **A new node-only test (no server, no emulator, under a minute) joins its `SUITES` the day it is written** (2026-11-23: 54
+  were missing and several had been red for weeks unseen). `smoke-match`/`smoke-ui` and the `*-stats` suites need jsdom
+  (`npm install --no-save jsdom`), else they SKIP and rot.
 - **`tools/test-visual.mjs`: never `--all` without asking Matt.**
 - **Run `backups/rtdb-backup.mjs` before ANY Firebase write, rules change or schema change.**
 - **Online pairs (2026-11-02):** `tools/test-online-pairs.mjs [--db <snapshot>]` (the sock-account alerts; `--db` lists every pair and alert).
