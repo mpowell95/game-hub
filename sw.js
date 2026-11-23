@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1646';
+const CACHE = 'game-hub-v1647';
 
 const ASSETS = [
   './',
@@ -913,7 +913,7 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'a1d0989fa0',
-  './js/admin-ui.js': 'b9ae40310a',
+  './js/admin-ui.js': '8da35cf065',
   './js/integrity.js': '54554dc9ad',
   './js/play-log-queue.js': '8a29ef8f25',
   './js/play-log.js': 'a4d025ca04',
@@ -1142,7 +1142,7 @@ const REST_MANIFEST = {
   './battle-arena/': '7ca18e3ee7',
   './battle-arena/index.html': '7ca18e3ee7',
   './battle-arena/css/battle-arena.css': '5bf010f86e',
-  './battle-arena/js/ui.js': '0fee2cfe4e',
+  './battle-arena/js/ui.js': '5ae3c49e39',
   './battle-arena/js/engine.js': 'e960e9703f',
   './battle-arena/js/monsters.js': '95e243bc04',
   './battle-arena/js/cpu.js': 'c5449b074f',

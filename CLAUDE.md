@@ -439,6 +439,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Device keys (2026-11-04):** `tools/test-device-key.mjs`. **Allow / Deny sign in (2026-11-15):** `tools/test-signin-ask.mjs`, `tools/test-signin-rules-emu.mjs` (rules on the real emulator).
 - **Battle Arena's back swipe (2026-11-13):** `tools/test-battlearena-back.mjs` (dev server; real touch swipes, the phone's gesture, the hub button).
 - **Battle Arena's test plays carried at release (2026-11-13):** `tools/test-battlearena-carry.mjs` (a test record that started as a copy is never added twice).
+- **Battle Arena's whole match logged across a resume (2026-11-23):** `tools/test-battlearena-resume-log.cjs`; Admin shows unlocks, teams and each match replayed (`battle-arena/CLAUDE.md`, "Admin").
 - **Full level + console adjustments (2026-11-07):** `tools/test-full-level.mjs` (EVERY game's shortened setting shown at the level picked, points unchanged, `FULL_LEVEL_GAMES`; a new one-level-down rule must join it; Matt's own edits in `adminConfig/v1/corrections/adjust/<CODE>/<game>/<level>`, added at read time, the ONE way a hand edit to stats sticks; tapped in on Admin > People > person > game > Adjust, or typed in the console).
 - **Puzzle points (2026-11-03):** `tools/test-puzzle-points.mjs` (help counts saved, merged, the four tables).
 - **Server read caches (2026-11-09):** `tools/test-server-cache.mjs`.

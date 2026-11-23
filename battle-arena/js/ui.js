@@ -80,7 +80,8 @@ function readSave() {
   if (s.state.sides.some((sd) => !Array.isArray(sd.mons) || sd.mons.some((m) => !BY_ID[m.id]))) return null;
   // `pm`: quitting is now a loss. Since the second pass (2026-10-29) every saved match counts: the board
   // is dealt and shown at once (it was after the player's first move, `pm` false before that).
-  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state, pm: true };
+  return { v: 1, diff: DIFFS.includes(s.diff) ? s.diff : 'easy', state: s.state, pm: true,
+    bs: s.bs && typeof s.bs === 'object' ? s.bs : null, bj: s.bj && typeof s.bj === 'object' && Array.isArray(s.bj.mv) ? s.bj : null };   // private play data (2026-11-23)
 }
 
 /** Is a match handed over to this game's next mount (alert.js armOpen / armChallenge)? */
@@ -891,7 +892,11 @@ class BattleArena {
     this.diff = save.diff;
     this.link = null;
     this.state = this.canon = save.state;
-    this._bstart = null; this._bj = { mv: [], t0: Date.now(), res: 1 };   // private play data: a resumed match logs from the resume
+    // Private play data: a save from 2026-11-23 on carries its start and moves (`bs`/`bj`), so the whole match is logged;
+    // an older save logs from the resume (`res: 1`). `rz` counts resumes.
+    const bj = save.bj && Array.isArray(save.bj.mv) ? save.bj : null;
+    this._bstart = save.bs && typeof save.bs === 'object' ? save.bs : null;
+    this._bj = bj ? { mv: bj.mv.slice(0, 300), t0: Date.now() - (+bj.el || 0), res: bj.res | 0, rz: (bj.rz | 0) + 1 } : { mv: [], t0: Date.now(), res: 1, rz: 1 };
     this.recorded = false;
     this.pm = !!save.pm;
     this.renderBattle();
@@ -926,7 +931,11 @@ class BattleArena {
 
   save() {
     if (!this.state || this.link) return;            // the one save slot is the match vs the computer
-    writeJSON(SAVE_KEY, { v: 1, diff: this.diff, state: this.state, pm: !!this.pm });
+    // `bs` / `bj` (2026-11-23, Matt: "make sure you're tracking every detail of every game"): the match's start and its moves
+    // so far ride in the save, so a match closed and resumed later still logs its seed, both teams and EVERY move (it used to
+    // log only the moves after the resume). `el` = play time so far (time away from the app is not counted). Additive fields.
+    const bj = this._bj ? { mv: this._bj.mv, el: Math.max(0, Date.now() - this._bj.t0), res: this._bj.res | 0, rz: this._bj.rz | 0 } : null;
+    writeJSON(SAVE_KEY, { v: 1, diff: this.diff, state: this.state, pm: !!this.pm, bs: this._bstart || null, bj });
   }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch {} }
 
@@ -2620,8 +2629,11 @@ class BattleArena {
     return {
       end, seed: st.seed != null ? st.seed : null, team: st.team || null, foe: st.foe || null, first: c.first, rv: c.rv || 1, arena: c.arena, tut: st.tutorial || 0,
       mv: (this._bj && this._bj.mv) || [], n: c.moveNo | 0, turns: c.turnNo | 0, win: c.winner == null ? null : c.winner, sides: (c.sides || []).map(sd),
-      res: this._bj ? this._bj.res : 0, ms: this._bj ? Date.now() - this._bj.t0 : 0, diff: this.diff, via: this.link ? this.link.kind : null,
+      res: this._bj ? this._bj.res : 0, rz: this._bj ? this._bj.rz | 0 : 0, ms: this._bj ? Date.now() - this._bj.t0 : 0, diff: this.diff, via: this.link ? this.link.kind : null,
       game: g ? { seed: g.seed, rv: g.rv || 1, a: g.a && g.a.name, b: g.b && g.b.name, ta: g.a && g.a.team, tb: g.b && g.b.team, log: (g.log || []).map((e) => [e.by, e.k, e.a != null ? e.a : e.m, e.b != null ? e.b : null]), over: g.over ? { winner: g.over.winner, why: g.over.why } : null } : undefined,
+      // A live room (2026-11-23, Matt: "tracking every detail of every game"): its seed, both teams, who opened, this
+      // phone's seat and the other person, so a live match can be replayed like the others.
+      live: this.link && this.link.kind === 'live' && this.link.room ? (() => { const m = this.link.room.match || {}; return { seed: m.seed, a: m.a, b: m.b, first: m.first, rv: m.rv, seat: this.link.seat, them: (this.link.them || {}).name || null, code: this.link.room.code || null }; })() : undefined,
     };
   }
 

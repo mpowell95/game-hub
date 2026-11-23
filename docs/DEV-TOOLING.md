@@ -196,3 +196,4 @@ READ ONLY. One player's real Cup Pong throws (every challenge throw, racks rebui
 solo / vs computer / test throws), flown on the live physics and on test mode's (`model: 'test'`), side by side: made,
 table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/replay-cuppong-throws.mjs <CODE>`. Needs
 `GAMEHUB_READER` for the play log (challenge throws only without it). Run on every bounce change.
+- `tools/test-battlearena-resume-log.cjs` (2026-11-23, dev server): a Battle Arena match vs the computer closed and resumed still logs its seed, both teams and every move; the log replays to the same end.
