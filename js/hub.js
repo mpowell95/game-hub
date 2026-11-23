@@ -98,7 +98,7 @@ const PHONE_GAMES = new Set(['air-hockey', 'ball-run', 'brick-blitz', 'hoops4', 
   'hill-climb', 'eight-ball', 'skeeball', 'snake', 'tower', 'archery', 'baseball', 'shove-off']);
 function deskOn() {
   // Admin > gear > Desktop view (js/desk-preview.js): a phone lays the launcher out as a computer would.
-  try { return isCompact() && isAdminDevice() && (matchMedia(DESK_MQ).matches || deskPreviewActive()); } catch { return false; }
+  try { return isCompact() && (matchMedia(DESK_MQ).matches || (isAdminDevice() && deskPreviewActive())); } catch { return false; }
 }
 
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
