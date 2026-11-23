@@ -137,7 +137,15 @@ let _model = null;
 let _tab = 'boards';
 let _q = '';
 let _srch = false;        // the Games list's search field is open
-let _stack = [];          // [{ kind: 'board', game, sel } | { kind: 'player', key, all } | { kind: 'pgame', key, game }]
+let _stack = [];
+// DESKTOP (html.gh-deskpg; docs/mockups/desktop/pages.html, Matt 2026-11-23: "build it"; ADMIN DEVICES ONLY until he
+// releases it, js/hub.js): the Games tab is two columns, the list left and one game's board right. That board is
+// `_deskBoard`, a board entry kept OUTSIDE the stack (picking a game on the left swaps it, no history step); a
+// screen opened from it (a person) goes on the stack as on the phone and covers both columns. Display only.
+let _deskBoard = null;
+const deskSplit = () => document.documentElement.classList.contains('gh-deskpg') && _tab === 'boards' && !_stack.length && !!_model && _connected;
+/** The screen's current entry: the stack's top, else the desktop's board on the right. */
+const topEntry = () => _stack[_stack.length - 1] || (deskSplit() ? _deskBoard : undefined);          // [{ kind: 'board', game, sel } | { kind: 'player', key, all } | { kind: 'pgame', key, game }]
 let _entryGame = null;
 let _onPlay = null;
 let _canPlay = () => false;
@@ -953,6 +961,14 @@ function infoHTML(game) {
 function screenHTML() {
   _pidx = [];
   if (!_connected || !_model) return `${headHTML()}<div class="lb2-scroll"><p class="lb2-empty-t">${esc(t2(navigator.onLine === false ? 'lb2_offline' : 'lb2_loading'))}</p></div>`;
+  if (deskSplit()) {
+    const left = boardsHTML();
+    const ids = [...left.matchAll(/data-act="game" data-game="([^"]+)"/g)].map((m) => m[1]);
+    if (!_deskBoard || !_model.byGame[_deskBoard.game]) _deskBoard = ids.length ? { kind: 'board', game: ids[0], sel: null } : null;
+    const sheet = _help ? helpHTML() : '';
+    return `<div class="lb2-split"><div class="lb2-dsl">${left}</div><div class="lb2-dsr">${_deskBoard ? boardScreenHTML(_deskBoard) : ''}</div></div>`
+      + sheet + (_info && _deskBoard ? infoHTML(_deskBoard.game) : '');
+  }
   const top = _stack[_stack.length - 1];
   if (top && top.kind === 'board') return boardScreenHTML(top) + (_info ? infoHTML(top.game) : '');
   if (top && top.kind === 'player') return playerHTML(top);
@@ -978,10 +994,15 @@ function render({ keepScroll = false, restore = false } = {}) {
   // A reopened screen (Play, then Back): the scroll is applied again by each data tick until the list is
   // tall enough to hold it, then released.
   if (_pend && _connected && (!sc || top <= 0 || sc.scrollTop >= top - 1 || Date.now() > _pend)) _pend = 0;
-  watchPin(page, sc);
+  watchPin(page, page.querySelector('.lb2-dsr [data-role="scroll"]') || sc);
+  markDeskSel(page);
   fitNames(page);
   if (focused) { const q = page.querySelector('[data-role="q"]'); if (q) { q.focus(); try { q.setSelectionRange(q.value.length, q.value.length); } catch { /* type=search */ } } }
   if (_bs) _bs.sync(levelNow());
+}
+function markDeskSel(page) {
+  if (!page || !_deskBoard) return;
+  for (const b of page.querySelectorAll('.lb2-dsl [data-act="game"]')) b.classList.toggle('is-sel', b.dataset.game === _deskBoard.game);
 }
 /** A name in a top bar stays on ONE line (2026-11-16, Matt: "I don't like how his name is on two lines"): the font
  *  steps down until it fits, never under 16px; past that the end is cut with "…".
@@ -1013,7 +1034,7 @@ export function __fitNamesForTest() { const page = document.querySelector('.lb2'
 /** Screens deep (1 = the first screen): the game it was opened on is level 1, the help sheet one more. */
 function levelNow() {
   const entry = _entryGame && _stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame ? 1 : 0;
-  const top = _stack[_stack.length - 1];
+  const top = topEntry();
   return 1 + _stack.length - entry + (_help && !_stack.length ? 1 : 0) + (_info && infoOn(top) ? 1 : 0);
 }
 /** The pinned own row: hidden while the viewer's row on the board is fully on screen. */
@@ -1050,7 +1071,7 @@ function savedScroll() {
 function pushLevel(entry) { saveScroll(); _info = false; _stack.push(entry); render(); }
 function openGame(game, sel) { pushLevel({ kind: 'board', game, sel: sel || null }); }
 function openPerson(key) {
-  const top = _stack[_stack.length - 1];
+  const top = topEntry();
   // From a game's board: that person's stats for that game (the viewer's own too).
   if (top && top.kind === 'board') { pushLevel({ kind: 'pgame', key, game: top.game }); return; }
   if (key === _meKey) { _stack = []; _tab = 'me'; render(); return; }
@@ -1062,7 +1083,7 @@ function stepBack() {
   return false;
 }
 function setSel(patch) {
-  const top = _stack[_stack.length - 1];
+  const top = topEntry();
   if (!top || top.kind !== 'board') return;
   top.sel = selFor(top.game, { ...(top.sel || {}), ...patch });
   top.fold = false;
@@ -1086,11 +1107,13 @@ function onClick(e) {
       if (_srch) { const q = _host.querySelector('[data-role="q"]'); if (q) q.focus(); }
       return;
     }
-    case 'game': openGame(el.dataset.game, el.dataset.lang ? { lang: el.dataset.lang } : null); return;
+    case 'game':
+      if (deskSplit()) { _deskBoard = { kind: 'board', game: el.dataset.game, sel: el.dataset.lang ? { lang: el.dataset.lang } : null }; _info = false; render({ keepScroll: true }); return; }
+      openGame(el.dataset.game, el.dataset.lang ? { lang: el.dataset.lang } : null); return;
     case 'person': { const k = _pidx[Number(el.dataset.pi)]; if (k != null) openPerson(k); return; }
-    case 'pgame': { const top = _stack[_stack.length - 1]; if (top && top.kind === 'player') pushLevel({ kind: 'pgame', key: top.key, game: el.dataset.game }); return; }
+    case 'pgame': { const top = topEntry(); if (top && top.kind === 'player') pushLevel({ kind: 'pgame', key: top.key, game: el.dataset.game }); return; }
     case 'pall': {
-      const top = _stack[_stack.length - 1];
+      const top = topEntry();
       if (!top || top.kind !== 'pgame') return;
       const below = _stack[_stack.length - 2];
       // Opened from their page: this IS back (through history, like the back button and the swipe, so the
@@ -1099,7 +1122,7 @@ function onClick(e) {
       pushLevel({ kind: 'player', key: top.key, all: false }); return;
     }
     case 'pmedal': {
-      const top = _stack[_stack.length - 1], n = Number(v);
+      const top = topEntry(), n = Number(v);
       if (!top || top.kind !== 'player' || ![1, 2, 3].includes(n)) return;
       top.medal = top.medal === n ? 0 : n; render({ keepScroll: true }); return;
     }
@@ -1117,15 +1140,15 @@ function onClick(e) {
     }
     case 'favfirst': saveFavFirst(!favFirst()); render(); return;
     case 'gsortc': if (SORTS.includes(el.dataset.v)) { saveSort(el.dataset.v); render(); } return;
-    case 'fav': { const top = _stack[_stack.length - 1]; if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
+    case 'fav': { const top = topEntry(); if (top) { toggleFavorite(hubIdOf(top.game)); render({ keepScroll: true }); } return; }
     case 'hofview': saveScroll(); _hofView = v === 'wins' || v === 'pct' ? v : 'medals'; render({ restore: true }); return;
     case 'fold': {
-      const top = _stack[_stack.length - 1];
+      const top = topEntry();
       if (top && top.kind === 'board') top.fold = true; else _hofFold = true;
       render({ keepScroll: true }); return;
     }
     case 'stab': {
-      const top = _stack[_stack.length - 1];
+      const top = topEntry();
       if (!top || top.kind !== 'board') return;
       const [ri, i] = String(v).split(':').map(Number);
       const tab = (tabsOf(top.game).rows[ri] || [])[i];
@@ -1133,7 +1156,7 @@ function onClick(e) {
       return;
     }
     case 'womode': case 'worush': case 'woview': {
-      const top = _stack[_stack.length - 1];
+      const top = topEntry();
       if (!top || top.kind !== 'board') return;
       if (act === 'womode') top.rush = v === 'rush'; else if (act === 'worush') top.rmode = v; else top.rview = v;
       render(); return;
@@ -1181,7 +1204,7 @@ function applyRestore(s) {
     // The entry game keeps its meaning (back from it closes) only while it is still the first screen.
     if (_entryGame && !(_stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame)) _entryGame = null;
   }
-  _info = !!s.info && infoOn(_stack[_stack.length - 1]);
+  _info = !!s.info && infoOn(topEntry());
   if (s.rootScroll && typeof s.rootScroll === 'object') Object.assign(_rootScroll, s.rootScroll);
   _pend = Date.now() + 8000;
 }
@@ -1189,10 +1212,10 @@ function onChange(e) {
   if (e.target && e.target.dataset.role === 'hofcat') { const v = e.target.value; _hofCat = /^\d$/.test(v) ? Number(v) : v; _hofFold = false; render(); return; }
   if (e.target && e.target.dataset.role === 'psort') { _pSort = e.target.value; render({ keepScroll: true }); return; }
   if (e.target && e.target.dataset.role === 'hofsort') { _hofSort = e.target.value; _hofFold = false; render(); return; }
-  if (e.target && e.target.dataset.role === 'woview') { const top = _stack[_stack.length - 1]; if (top && top.kind === 'board') { top.rview = e.target.value; render(); } return; }
+  if (e.target && e.target.dataset.role === 'woview') { const top = topEntry(); if (top && top.kind === 'board') { top.rview = e.target.value; render(); } return; }
   if (e.target && e.target.dataset.role === 'gsort') { if (SORTS.includes(e.target.value)) { saveSort(e.target.value); render(); } return; }
   if (!e.target || e.target.dataset.role !== 'stab') return;
-  const top = _stack[_stack.length - 1];
+  const top = topEntry();
   if (!top || top.kind !== 'board') return;
   const [ri, i] = String(e.target.value).split(':').map(Number);
   const tab = (tabsOf(top.game).rows[ri] || [])[i];
@@ -1202,7 +1225,7 @@ function onInput(e) {
   if (!e.target || e.target.dataset.role !== 'q') return;
   _q = e.target.value || '';
   const box = _host && _host.querySelector('[data-role="glist"]');
-  if (box) { _pidx = []; box.innerHTML = boardsListHTML(); }
+  if (box) { if (!deskSplit()) _pidx = []; box.innerHTML = boardsListHTML(); markDeskSel(_host.querySelector('.lb2-page')); }
 }
 function onKey(e) { if (e.key === 'Escape' && _host && _bs) _bs.back(); }
 /** The phone's back gesture (and the back button, Esc): n screens back; past the first, close. */
@@ -1210,7 +1233,7 @@ function onBackSteps(n) {
   _backSeq++;
   for (let i = 0; i < n && _host; i++) {
     if (_help && !_stack.length) { _help = false; render({ keepScroll: true }); continue; }
-    if (_info && infoOn(_stack[_stack.length - 1])) { _info = false; render({ keepScroll: true }); continue; }
+    if (_info && infoOn(topEntry())) { _info = false; render({ keepScroll: true }); continue; }
     if (!stepBack()) { closeLeaderboard2(); return; }
   }
 }
@@ -1669,6 +1692,21 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-scroll{overflow-x:hidden;touch-action:pan-y}
 .lb2-body,.lb2-card{max-width:100%;min-width:0}
 .lb2 .gs-v2{min-width:0;max-width:100%;overflow-x:hidden}
+/* DESKTOP (html.gh-deskpg, admin devices until Matt releases it): docs/mockups/desktop/pages.html. Under the floating tab
+   bar; the Games tab is the list left and one board right (.lb2-split); every other screen a wider single column. */
+html.gh-compact.gh-deskpg .lb2{padding-top:16px;padding-bottom:104px}
+html.gh-deskpg .lb2-page{width:min(760px,100%)}
+html.gh-deskpg .lb2-page:has(> .lb2-split){width:min(1240px,100%)}
+html.gh-deskpg .lb2 button,html.gh-deskpg .lb2 select{cursor:pointer}
+.lb2-split{flex:1;min-height:0;display:grid;grid-template-columns:420px minmax(0,1fr);gap:28px;padding:0 32px}
+.lb2-dsl,.lb2-dsr{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.lb2-dsl .lb2-head{padding-left:0;padding-right:0}
+.lb2-dsl .lb2-row.is-sel{background:var(--l2-you)}
+.lb2-dsl .lb2-row.is-sel .lb2-t1{color:var(--l2-youText)}
+.lb2-dsr{margin-top:12px;border-radius:16px;background:var(--l2-surf);border:1px solid var(--l2-line)}
+.lb2-dsr .lb2-bar{padding:12px 12px 4px 16px}
+.lb2-dsr .lb2-bar [data-act="back"]{display:none}
+.lb2-dsr .lb2-card{border:0;box-shadow:none}
 `;
   document.head.appendChild(el);
 }

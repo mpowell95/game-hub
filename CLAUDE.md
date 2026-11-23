@@ -160,6 +160,11 @@ floating tab bar, new-games bubble in the sort row, games split "Desktop friendl
 (`:not(.gh-ingame)`). Phones NEVER get it (Matt: "NO player should see the desktop view on their phone").
 **Desktop view on a phone (2026-11-23, Matt; ADMIN ONLY, always)**: Admin > gear > Desktop view (`js/desk-preview.js`, `gamehub.deskPreview.v1`): a touch
 phone lays the LAUNCHER out 1440 px wide via the viewport meta, zoomed out; a game gets the normal viewport; "Phone view" ends it.
+**The other pages on desktop (2026-11-23, Matt: "build it" on `docs/mockups/desktop/pages.html`; ADMIN DEVICES ONLY until "release it")**:
+`html.gh-deskpg` (= gh-desk + `isAdminDevice()`, `js/hub.js`; the profile page's own `deskPg()`). Multiplayer: matches left, games
+right (`.cx-cols`, display: contents on phones). Messages: the list stays left (`.msg-side`, display only), the card shows one
+conversation. Leaderboards: Games tab = list left + `_deskBoard` right (`.lb2-split`, outside the stack). Profile: two columns + the
+floating bar. Release = drop `isAdminDevice()` in both places. Shots + click-through: `tools/desk-pages-shots.cjs` (`INTERACT=1`).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
@@ -447,6 +452,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 - **Ball Run Orbital Hard = Classic points, admin only (2026-11-16):** `tools/test-ballrun-classic-equiv.mjs`.
 - **Ball Run smooth at 120 Hz (2026-11-16):** `tools/test-ballrun-smooth.cjs` (dev server).
 - **Ball Run cues, admin only (2026-11-17):** `tools/ballrun-ux/shots.cjs` (cues off vs on, same seed and z), `ui-shots.cjs` (`ADMIN=1`), `harness.html` (`H.bench()` frame times).
+- **Desktop pages (2026-11-23):** `tools/desk-pages-shots.cjs [w h theme lang admin]` (fake database; `INTERACT=1` clicks through every page).
 - **Every result's mode (2026-11-02):** `tools/test-game-modes.mjs` (runs `tools/scan-game-modes.mjs`, the full scan; run it alone for file:line).
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and

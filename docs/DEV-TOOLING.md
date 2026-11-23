@@ -196,3 +196,8 @@ solo / vs computer / test throws), flown on the live physics and on test mode's 
 table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/replay-cuppong-throws.mjs <CODE>`. Needs
 `GAMEHUB_READER` for the play log (challenge throws only without it). Run on every bounce change.
 - `tools/test-battlearena-resume-log.cjs` (2026-11-23, dev server): a Battle Arena match vs the computer closed and resumed still logs its seed, both teams and every move; the log replays to the same end.
+- `tools/desk-pages-shots.cjs` (2026-11-23, dev server on 8123): Multiplayer, Messages, Leaderboards, and Profile on the desktop layout
+  (`html.gh-deskpg`) against a FAKE database (matches, messages, a few people; writes refused, nothing leaves localhost). Args
+  `[w=1440] [h=900] [theme=light] [lang=en] [admin=1]` (`admin` 0 = a player's view, the old pages); shots in `.visual-out/desk-pages/`.
+  `INTERACT=1` clicks through each page (switch conversations, tabs close Messages, a board's person and back, the pick sheet, a
+  Profile screen) and prints what opened.

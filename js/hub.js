@@ -1387,6 +1387,10 @@ class Hub {
     const desk = compact && deskOn();
     this._desk = desk;
     document.documentElement.classList.toggle('gh-desk', desk);
+    // The other pages' desktop layouts (Multiplayer, Messages, Leaderboards, Profile; docs/mockups/desktop/pages.html,
+    // Matt 2026-11-23: "build it"): ADMIN DEVICES ONLY until Matt says "release it". Release = drop isAdminDevice() here
+    // and in profile/index.html's deskPg().
+    document.documentElement.classList.toggle('gh-deskpg', desk && isAdminDevice());
     this._deskView();
     // Compact edit mode also REMOVES favorites, so one is enough there.
     if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;
@@ -1621,6 +1625,10 @@ class Hub {
         const k = tab.dataset.tab;
         // The Multiplayer screen sits UNDER the bar (2026-10-18), so another tab puts it away first.
         if (k !== 'challenges') this._closeMultiplayer();
+        // Desktop layout: Messages sits under the bar too (html.gh-deskpg, js/messages-ui.js), so another tab puts it away.
+        if (k !== 'messages' && document.documentElement.classList.contains('gh-deskpg')) {
+          import('./messages-ui.js').then((m) => m.closeMessages()).catch(() => {});
+        }
         if (k === 'games') { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { window.scrollTo(0, 0); } }
         else if (k === 'challenges') this.openChallenges();
         else if (k === 'messages') this.el.messages.click();

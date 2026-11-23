@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1648';
+const CACHE = 'game-hub-v1649';
 
 const ASSETS = [
   './',
@@ -854,7 +854,7 @@ const REST_MANIFEST = {
   './css/hub.css': '042be6c9bc',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'e1568ca837',
+  './js/hub.js': '55f75fee14',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'e8758cc628',
   './js/signin-ask.js': '9f55d083d6',
@@ -903,10 +903,10 @@ const REST_MANIFEST = {
   './js/messages.js': '4e008582d0',
   './js/device-key.js': '4a749275f3',
   './js/live-read.js': '0c8419185d',
-  './js/messages-ui.js': '5d36cb4705',
+  './js/messages-ui.js': 'a3bfcf0ead',
   './js/hub-messages.js': 'c91ce9936a',
   './js/challenges.js': '83208cb320',
-  './js/challenges-ui.js': 'aab356634b',
+  './js/challenges-ui.js': '4011d21b9d',
   './js/challenge-life.js': '1236d89bc4',
   './js/challenges-strings.js': '4fae13fbd4',
   './js/mp-records.js': '8c1ff025c7',
@@ -930,7 +930,7 @@ const REST_MANIFEST = {
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
   './js/leaderboard-ui.js': 'df1f1b9ccc',
-  './js/leaderboard2-ui.js': '2f5eb2ffbb',
+  './js/leaderboard2-ui.js': 'fd4f0cf0aa',
   './js/leaderboard2-boards.js': '97be9b11eb',
   './js/leaderboard2-strings.js': 'd840d644ba',
   './js/leaderboard-rank.js': 'aa4d6adac9',
