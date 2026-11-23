@@ -313,24 +313,23 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
     ctx.rotate(q.a); ctx.scale(1 - q.k, 1 + q.k * 0.6); ctx.rotate(-q.a);
   }
   if (o.tilt) ctx.rotate(o.tilt);
-  if (kind === 'sumo') {
-    // a round mat in the SIDE's colour behind the wrestler (Matt, 2026-11-18: the two sides looked alike, only the
-    // belts differed), then the wrestler upright, seen from the front, a little smaller so the mat shows all round;
-    // the marker is the belt's buckle
-    drawBase(ctx, r, c);
-    const ws = 0.86;
-    ctx.scale(ws, ws);
-    drawSumo(ctx, r, c);
-    ctx.translate(0, r * 0.45);
+  if (kind === 'sumo' || kind === 'car') {
+    // FIGURES on a round base in the SIDE's colour (Matt, 2026-11-18: the two sides must differ by more than
+    // clothes), standing upright and rising above it like a game piece; the side marker is a badge on the base's
+    // front right, clear of the figure. (Cars stay upright too: they lean into their slide, ui.js.)
+    drawBase(ctx, r, c, kind);
+    ctx.save();
+    if (kind === 'sumo') { ctx.translate(0, -r * 0.1); ctx.scale(1.0, 1.0); drawSumo(ctx, r, c); }
+    else { ctx.translate(0, -r * 0.06); ctx.scale(0.92, 0.92); drawCar(ctx, r, c); }
+    ctx.restore();
+    ctx.translate(r * 0.7, r * 0.7);
+    drawMarker(ctx, side, r * 0.95, kind);
   } else {
     ctx.rotate(ang);
-    if (kind === 'car') drawCar(ctx, r, c); else drawPuck(ctx, r, c);
+    drawPuck(ctx, r, c);
     ctx.rotate(-ang);
-    // the side marker sits ON the piece (car: the driver's helmet; puck: the middle), drawn upright
-    const mo = kind === 'car' ? -r * 0.28 : 0;
-    ctx.translate(Math.cos(ang) * mo, Math.sin(ang) * mo);
+    drawMarker(ctx, side, r, kind);
   }
-  drawMarker(ctx, side, r, kind);
   ctx.restore();
 }
 
@@ -340,9 +339,11 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
 function disc(ctx, x, y, rr) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); }
 // The side's colour as a solid round base (sumo's mat): main colour, a dark rim, and a thin light ring outside
 // so it stands off any floor. Both sides also wear their circle / triangle marker (never colour alone).
-function drawBase(ctx, r, c) {
+function drawBase(ctx, r, c, kind = 'sumo') {
   const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r);
-  g.addColorStop(0, c.light || c.main); g.addColorStop(0.55, c.main); g.addColorStop(1, c.dark);
+  // the car's own body is the side's colour, so its base is the darker shade (the car stands out of it)
+  if (kind === 'car') { g.addColorStop(0, c.main); g.addColorStop(0.5, c.dark); g.addColorStop(1, c.dark); }
+  else { g.addColorStop(0, c.light || c.main); g.addColorStop(0.55, c.main); g.addColorStop(1, c.dark); }
   ctx.fillStyle = g;
   disc(ctx, 0, 0, r); ctx.fill();
   ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1.5, r * 0.1);
@@ -354,103 +355,142 @@ function drawBase(ctx, r, c) {
 // topknot, face, a big round belly, the mawashi belt in the side's colour with its front flap and cords, thick
 // legs, both arms out shoving. The aim arrow shows where it is going.
 function drawSumo(ctx, r, c) {
-  const skin = '#f2c29b', skinLt = '#ffe3c9', skinDk = '#c98b5c', line = '#4a2a18', hair = '#15110e';
-  const lw = Math.max(1, r * 0.05);
+  // 2026-11-23 redraw (Matt: "the sumos don't look like sumos"): a rikishi crouched in the ready stance, seen from
+  // the front, standing on his coloured base: a body much wider than tall, no neck, the fan-shaped topknot (oicho-mage)
+  // on top, hands on his knees, legs bent wide, and the mawashi as a thick belt that runs down between the legs, with
+  // its fringe of cords (sagari) hanging at the front. The figure rises above the base, like a game piece.
+  const skin = '#f0b98d', skinLt = '#ffdcbc', skinDk = '#b9784a', line = '#3b2214', hair = '#121014';
+  const lw = Math.max(1.2, r * 0.07);
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  // legs: short, thick, planted wide, feet out
-  ctx.fillStyle = skin; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  const body = (path) => { ctx.fillStyle = skin; ctx.strokeStyle = line; ctx.lineWidth = lw; path(); ctx.fill(); ctx.stroke(); };
+  // feet, then thighs bent out wide
   for (const sx of [-1, 1]) {
-    ctx.beginPath(); ctx.ellipse(sx * r * 0.4, r * 0.66, r * 0.21, r * 0.26, sx * -0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(sx * r * 0.5, r * 0.9, r * 0.2, r * 0.09, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    body(() => { ctx.beginPath(); ctx.ellipse(sx * r * 0.66, r * 0.74, r * 0.22, r * 0.11, 0, 0, Math.PI * 2); });
+    body(() => { ctx.beginPath(); ctx.ellipse(sx * r * 0.5, r * 0.47, r * 0.3, r * 0.24, sx * 0.55, 0, Math.PI * 2); });
   }
-  // arms out to the sides, open hands shoving (tsuppari)
-  for (const sx of [-1, 1]) {
-    ctx.strokeStyle = line; ctx.lineWidth = r * 0.34;
-    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.08); ctx.lineTo(sx * r * 0.8, -r * 0.3); ctx.stroke();
-    ctx.strokeStyle = skin; ctx.lineWidth = r * 0.25;
-    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.08); ctx.lineTo(sx * r * 0.8, -r * 0.3); ctx.stroke();
-    ctx.fillStyle = skinLt; ctx.strokeStyle = line; ctx.lineWidth = lw;
-    disc(ctx, sx * r * 0.85, -r * 0.36, r * 0.15); ctx.fill(); ctx.stroke();
-  }
-  // the big round belly
-  const g = ctx.createRadialGradient(-r * 0.15, -r * 0.05, r * 0.05, 0, r * 0.12, r * 0.75);
-  g.addColorStop(0, skinLt); g.addColorStop(0.6, skin); g.addColorStop(1, skinDk);
+  // the big round body (wider than tall), shaded
+  const g = ctx.createRadialGradient(-r * 0.2, -r * 0.12, r * 0.05, 0, r * 0.1, r * 0.78);
+  g.addColorStop(0, skinLt); g.addColorStop(0.55, skin); g.addColorStop(1, skinDk);
   ctx.fillStyle = g; ctx.strokeStyle = line; ctx.lineWidth = lw;
-  ctx.beginPath(); ctx.ellipse(0, r * 0.14, r * 0.66, r * 0.58, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  // chest line and navel
-  ctx.strokeStyle = 'rgba(90,50,25,0.45)'; ctx.lineWidth = Math.max(1, r * 0.035);
-  ctx.beginPath(); ctx.arc(-r * 0.2, -r * 0.06, r * 0.16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
-  ctx.beginPath(); ctx.arc(r * 0.2, -r * 0.06, r * 0.16, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
-  // the mawashi: a thick belt round the hips, its front flap, the sagari cords hanging
+  ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.66, r * 0.54, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // chest and belly creases
+  ctx.strokeStyle = 'rgba(80,40,20,0.5)'; ctx.lineWidth = Math.max(1, r * 0.045);
+  for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(sx * r * 0.22, -r * 0.14, r * 0.17, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke(); }
+  // the mawashi: a thick belt round the hips (clipped to the body), then the strip down between the legs
   ctx.save();
-  ctx.beginPath(); ctx.ellipse(0, r * 0.14, r * 0.66, r * 0.58, 0, 0, Math.PI * 2); ctx.clip();
-  ctx.fillStyle = c.main;
-  ctx.fillRect(-r, r * 0.24, r * 2, r * 0.42);
-  ctx.fillStyle = c.dark;
-  ctx.fillRect(-r, r * 0.24, r * 2, r * 0.05);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.66, r * 0.54, 0, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = c.main; ctx.fillRect(-r, r * 0.22, r * 2, r * 0.4);
+  ctx.fillStyle = c.dark; ctx.fillRect(-r, r * 0.22, r * 2, r * 0.06); ctx.fillRect(-r, r * 0.56, r * 2, r * 0.06);
   ctx.restore();
-  ctx.fillStyle = c.main; ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.04);
-  ctx.beginPath(); ctx.moveTo(-r * 0.15, r * 0.6); ctx.lineTo(r * 0.15, r * 0.6); ctx.lineTo(r * 0.11, r * 0.9); ctx.lineTo(-r * 0.11, r * 0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = c.main; ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.beginPath(); ctx.moveTo(-r * 0.17, r * 0.55); ctx.lineTo(r * 0.17, r * 0.55); ctx.lineTo(r * 0.12, r * 0.82); ctx.lineTo(-r * 0.12, r * 0.82); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // the sagari: stiff cords hanging from the front of the belt
+  ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.055);
+  for (const x of [-0.34, -0.25, 0.25, 0.34]) { ctx.beginPath(); ctx.moveTo(x * r, r * 0.6); ctx.lineTo(x * r * 0.96, r * 0.8); ctx.stroke(); }
+  // arms: shoulders round, hands planted on the knees, elbows out
+  for (const sx of [-1, 1]) {
+    ctx.strokeStyle = line; ctx.lineWidth = r * 0.3;
+    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.24); ctx.quadraticCurveTo(sx * r * 0.86, r * 0.02, sx * r * 0.6, r * 0.34); ctx.stroke();
+    ctx.strokeStyle = skin; ctx.lineWidth = r * 0.3 - lw * 2;
+    ctx.beginPath(); ctx.moveTo(sx * r * 0.5, -r * 0.24); ctx.quadraticCurveTo(sx * r * 0.86, r * 0.02, sx * r * 0.6, r * 0.34); ctx.stroke();
+    body(() => { ctx.beginPath(); ctx.ellipse(sx * r * 0.58, r * 0.38, r * 0.15, r * 0.11, 0, 0, Math.PI * 2); });
+  }
+  // the head sits straight on the shoulders: round cheeks, fierce brows, a frown
+  const hy = -r * 0.5, hr = r * 0.3;
+  body(() => { ctx.beginPath(); ctx.ellipse(0, hy, hr * 1.08, hr, 0, 0, Math.PI * 2); });
+  // slicked-back hair, then the topknot: a ginkgo-leaf fan folded forward on top, tied at its base
+  ctx.fillStyle = hair;
+  ctx.beginPath(); ctx.ellipse(0, hy, hr * 1.08, hr, 0, Math.PI * 1.02, Math.PI * 1.98); ctx.quadraticCurveTo(0, hy - hr * 0.45, -hr * 1.08, hy - hr * 0.05); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.06, hy - hr * 0.8);
+  ctx.quadraticCurveTo(-r * 0.3, hy - hr * 1.2, -r * 0.27, hy - hr * 1.62);
+  ctx.quadraticCurveTo(0, hy - hr * 1.95, r * 0.27, hy - hr * 1.62);
+  ctx.quadraticCurveTo(r * 0.3, hy - hr * 1.2, r * 0.06, hy - hr * 0.8);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.beginPath(); ctx.moveTo(-r * 0.14, hy - hr * 1.55); ctx.quadraticCurveTo(0, hy - hr * 1.78, r * 0.14, hy - hr * 1.55); ctx.stroke();
+  ctx.fillStyle = '#f4f0e6';
+  ctx.fillRect(-r * 0.07, hy - hr * 0.95, r * 0.14, r * 0.05);
+  // face
+  ctx.strokeStyle = hair; ctx.lineWidth = Math.max(1.2, r * 0.06);
+  ctx.beginPath(); ctx.moveTo(-r * 0.2, hy - r * 0.02); ctx.lineTo(-r * 0.05, hy + r * 0.03); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(r * 0.2, hy - r * 0.02); ctx.lineTo(r * 0.05, hy + r * 0.03); ctx.stroke();
+  ctx.fillStyle = hair;
+  disc(ctx, -r * 0.11, hy + r * 0.08, r * 0.04); ctx.fill();
+  disc(ctx, r * 0.11, hy + r * 0.08, r * 0.04); ctx.fill();
   ctx.lineWidth = Math.max(1, r * 0.045);
-  for (const sx of [-0.42, -0.3, 0.3, 0.42]) { ctx.beginPath(); ctx.moveTo(sx * r, r * 0.6); ctx.lineTo(sx * r * 0.95, r * 0.8); ctx.stroke(); }
-  // the head: hair slicked back, the topknot (chonmage) on top, a fierce face
-  const hy = -r * 0.5, hr = r * 0.31;
-  ctx.fillStyle = skin; ctx.strokeStyle = line; ctx.lineWidth = lw;
-  for (const sx of [-1, 1]) { disc(ctx, sx * hr * 0.98, hy + r * 0.04, r * 0.07); ctx.fill(); ctx.stroke(); }
-  disc(ctx, 0, hy, hr); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = hair;
-  ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 1.04, Math.PI * 1.96); ctx.quadraticCurveTo(0, hy - hr * 0.35, -hr, hy - hr * 0.08); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(0, hy - hr * 1.1, r * 0.22, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-  disc(ctx, 0, hy - hr * 0.92, r * 0.07); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = Math.max(1, r * 0.03);
-  ctx.beginPath(); ctx.ellipse(0, hy - hr * 1.13, r * 0.14, r * 0.045, 0, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-  ctx.fillStyle = hair;
-  disc(ctx, -r * 0.11, hy + r * 0.03, r * 0.045); ctx.fill();
-  disc(ctx, r * 0.11, hy + r * 0.03, r * 0.045); ctx.fill();
-  ctx.strokeStyle = hair; ctx.lineWidth = Math.max(1, r * 0.04);
-  ctx.beginPath(); ctx.moveTo(-r * 0.19, hy - r * 0.07); ctx.lineTo(-r * 0.05, hy - r * 0.03); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(r * 0.19, hy - r * 0.07); ctx.lineTo(r * 0.05, hy - r * 0.03); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-r * 0.07, hy + r * 0.16); ctx.lineTo(r * 0.07, hy + r * 0.16); ctx.stroke();
-  ctx.fillStyle = 'rgba(224,83,47,0.28)';
-  disc(ctx, -r * 0.19, hy + r * 0.12, r * 0.05); ctx.fill();
-  disc(ctx, r * 0.19, hy + r * 0.12, r * 0.05); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, hy + r * 0.25, r * 0.08, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+  ctx.fillStyle = 'rgba(224,83,47,0.3)';
+  disc(ctx, -r * 0.21, hy + r * 0.15, r * 0.06); ctx.fill();
+  disc(ctx, r * 0.21, hy + r * 0.15, r * 0.06); ctx.fill();
 }
 
 function drawCar(ctx, r, c) {
-  // the fat rubber bumper ring all the way round IN THE SIDE'S COLOUR (2026-11-18: a black ring on both sides
-  // made them look alike), a black inner lip, a shine on top
-  ctx.fillStyle = c.dark;
-  disc(ctx, 0, 0, r); ctx.fill();
-  ctx.strokeStyle = c.main; ctx.lineWidth = r * 0.13;
-  disc(ctx, 0, 0, r * 0.9); ctx.stroke();
-  ctx.strokeStyle = '#16181e'; ctx.lineWidth = r * 0.07;
-  disc(ctx, 0, 0, r * 0.79); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1, r * 0.05);
-  disc(ctx, 0, 0, r * 1.02); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = r * 0.05; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.arc(0, 0, r * 0.9, Math.PI * 1.1, Math.PI * 1.55); ctx.stroke();
-  // the car body: a rounded tub, longer than wide, bonnet at the front
-  const g = ctx.createLinearGradient(0, -r * 0.7, 0, r * 0.7);
-  g.addColorStop(0, c.main); g.addColorStop(0.55, c.main); g.addColorStop(1, c.dark);
-  ctx.fillStyle = g;
-  ctx.beginPath(); roundRectPath(ctx, -r * 0.7, -r * 0.6, r * 1.42, r * 1.2, r * 0.42); ctx.fill();
-  ctx.strokeStyle = c.dark; ctx.lineWidth = Math.max(1, r * 0.05);
-  ctx.beginPath(); roundRectPath(ctx, -r * 0.7, -r * 0.6, r * 1.42, r * 1.2, r * 0.42); ctx.stroke();
-  // two racing stripes on the bonnet, headlights
+  // 2026-11-23 redraw (Matt: "the bumper cars don't look like bumper cars"): seen from the FRONT and a little above,
+  // upright like the sumo: the fat black rubber bumper all the way round, the rounded tub in the side's colour with
+  // big headlights, the driver behind the wheel, a tall seat back, and the pole up to the ceiling net with a spark.
+  const line = '#141820';
+  const lw = Math.max(1.2, r * 0.06);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // the pole (behind everything), a spark where it touches the ceiling
+  ctx.strokeStyle = line; ctx.lineWidth = r * 0.13;
+  ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.42, -r * 1.22); ctx.stroke();
+  ctx.strokeStyle = '#c4ccd8'; ctx.lineWidth = r * 0.07;
+  ctx.beginPath(); ctx.moveTo(r * 0.3, -r * 0.3); ctx.lineTo(r * 0.42, -r * 1.22); ctx.stroke();
+  ctx.fillStyle = '#ffe14d'; ctx.strokeStyle = '#8a5a00'; ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.08 : r * 0.2; const x = r * 0.43 + Math.cos(a) * rr, y = -r * 1.26 + Math.sin(a) * rr; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // the rubber bumper skirt: a fat black ring, its top catching the light
+  ctx.fillStyle = '#1b1e25'; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.ellipse(0, r * 0.36, r * 0.98, r * 0.56, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.33, r * 0.88, r * 0.47, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  // the seat back, tall and round, behind the driver
+  const dk = c.dark, mn = c.main, lt = c.light || c.main;
+  ctx.fillStyle = dk; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath(); roundRectPath(ctx, -r * 0.55, -r * 0.62, r * 1.1, r * 0.8, r * 0.32); ctx.fill(); ctx.stroke();
+  // the driver: a round head with a cap of hair, shoulders, eyes on the floor ahead
+  const hy = -r * 0.3, hr = r * 0.23;
+  ctx.fillStyle = '#e9b28a'; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.ellipse(0, r * 0.02, r * 0.3, r * 0.17, 0, Math.PI, 0); ctx.fill(); ctx.stroke();
+  disc(ctx, 0, hy, hr); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#4a2c16';
+  ctx.beginPath(); ctx.arc(0, hy, hr, Math.PI * 1.05, Math.PI * 1.95); ctx.quadraticCurveTo(0, hy - hr * 0.35, -hr, hy - hr * 0.1); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = line;
+  disc(ctx, -r * 0.08, hy + r * 0.03, r * 0.035); ctx.fill(); disc(ctx, r * 0.08, hy + r * 0.03, r * 0.035); ctx.fill();
+  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.04);
+  ctx.beginPath(); ctx.arc(0, hy + r * 0.07, r * 0.08, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+  // the tub: rounded, in the side's colour, shaded, sitting in the bumper
+  const g = ctx.createLinearGradient(0, -r * 0.05, 0, r * 0.62);
+  g.addColorStop(0, lt); g.addColorStop(0.45, mn); g.addColorStop(1, dk);
+  ctx.fillStyle = g; ctx.strokeStyle = line; ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.8, r * 0.12);
+  ctx.quadraticCurveTo(-r * 0.8, -r * 0.02, -r * 0.55, -r * 0.02);
+  ctx.lineTo(-r * 0.3, r * 0.06);
+  ctx.quadraticCurveTo(0, r * 0.12, r * 0.3, r * 0.06);
+  ctx.lineTo(r * 0.55, -r * 0.02);
+  ctx.quadraticCurveTo(r * 0.8, -r * 0.02, r * 0.8, r * 0.12);
+  ctx.lineTo(r * 0.78, r * 0.42);
+  ctx.quadraticCurveTo(r * 0.74, r * 0.66, r * 0.4, r * 0.68);
+  ctx.lineTo(-r * 0.4, r * 0.68);
+  ctx.quadraticCurveTo(-r * 0.74, r * 0.66, -r * 0.78, r * 0.42);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // the steering wheel, hands on it
+  ctx.strokeStyle = line; ctx.lineWidth = Math.max(1.4, r * 0.08);
+  ctx.beginPath(); ctx.ellipse(0, r * 0.05, r * 0.2, r * 0.07, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#e9b28a'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.04);
+  disc(ctx, -r * 0.19, r * 0.05, r * 0.07); ctx.fill(); ctx.stroke();
+  disc(ctx, r * 0.19, r * 0.05, r * 0.07); ctx.fill(); ctx.stroke();
+  // big round headlights and a chrome stripe across the nose
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillRect(r * 0.24, -r * 0.13, r * 0.36, r * 0.07); ctx.fillRect(r * 0.24, r * 0.06, r * 0.36, r * 0.07);
-  ctx.fillStyle = '#fff6c8'; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = Math.max(1, r * 0.03);
-  for (const sy of [-1, 1]) { disc(ctx, r * 0.6, sy * r * 0.36, r * 0.09); ctx.fill(); ctx.stroke(); }
-  // the open cockpit behind the bonnet: seat, hands on the wheel; the driver's helmet is the side marker (drawPiece)
-  ctx.fillStyle = '#23262e';
-  ctx.beginPath(); roundRectPath(ctx, -r * 0.6, -r * 0.42, r * 0.66, r * 0.84, r * 0.2); ctx.fill();
-  ctx.strokeStyle = '#d8dde6'; ctx.lineWidth = r * 0.08; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(r * 0.12, -r * 0.22); ctx.lineTo(r * 0.12, r * 0.22); ctx.stroke();
-  ctx.fillStyle = '#f2c29b';
-  disc(ctx, r * 0.04, -r * 0.24, r * 0.075); ctx.fill(); disc(ctx, r * 0.04, r * 0.24, r * 0.075); ctx.fill();
-  // the pole to the ceiling net, at the back
-  ctx.fillStyle = '#b8c0cc'; ctx.strokeStyle = '#4b5260'; ctx.lineWidth = Math.max(1, r * 0.03);
-  disc(ctx, -r * 0.66, 0, r * 0.09); ctx.fill(); ctx.stroke();
+  ctx.fillRect(-r * 0.5, r * 0.47, r * 1.0, r * 0.06);
+  for (const sx of [-1, 1]) {
+    ctx.fillStyle = '#fff7cf'; ctx.strokeStyle = line; ctx.lineWidth = Math.max(1, r * 0.045);
+    disc(ctx, sx * r * 0.5, r * 0.3, r * 0.13); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; disc(ctx, sx * r * 0.5 - r * 0.04, r * 0.26, r * 0.04); ctx.fill();
+  }
 }
 
 function drawPuck(ctx, r, c) {

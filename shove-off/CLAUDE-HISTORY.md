@@ -59,3 +59,14 @@ found. Added `js/fx.js` and the motion listed in CLAUDE.md, "Animations". Draw t
 median ~1.2 ms, p95 ~3 ms (~12 ms at a 2x pixel ratio). A first version cached the platform too and rebuilt it at
 every shrink (spikes to 120 ms), so only the ground is cached. Impact bursts were first too big and faded into dull
 brown "suns", and hits squashed pieces flat; both toned down after looking at frame-by-frame captures. Still admin only.
+
+## 2026-11-23 (later): sumo and bumper cars redrawn
+
+Matt: *"the new animations are sweet. But the pieces are still eh. The pucks are good. but the bumper cars don't look
+like bumper cars, and the sumos don't look like sumos"*. Both had been drawn INSIDE a coloured disc with the big white
+side marker in their middle (the sumo's belly, the car's cockpit), so at 36 px they read as coins. Now each is a figure
+standing on its base and rising above it, with the marker moved to a small badge on the base. The sumo got the parts
+that say sumo at a glance (the fan topknot, a body wider than tall, the belt running between the legs, the cord fringe,
+the crouch); the car is seen from the front with the three things every bumper car has (the fat rubber skirt, the
+driver at a wheel, the pole up to the ceiling with a spark). A car on a base of its own colour blurred into one blob, so
+the car's base is the darker shade. Engine untouched.
