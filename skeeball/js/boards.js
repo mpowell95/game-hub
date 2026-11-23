@@ -884,6 +884,17 @@ export const BOARDS = [
         + 'real risk), 0.97X for the 40s and the 20, and 0.8X / 0.875X skill mouths at the top. '
         + 'A uniform face cannot express that ladder, and a face that is widest in the MIDDLE is '
         + 'a wall - his words, on the build that had it backwards.',
+      // Added 2026-11-23. The aim numbers landed 2026-09-02 without a waiver, so this rule had
+      // been red since then. This entry only records that tuning; it does not change how the game plays.
+      'throw.range': 'aimMax 0.235 is the corner-100 aim fix of 2026-09-02, answering Matt\'s '
+        + 'report that a swipe aimed at the corner 100 "sometimes scores, sometimes misses '
+        + 'completely" (he rejected the 0.12 cap before it: "Just fix that"). This machine also '
+        + 'sets aimCurve 1, so serve angle is proportional to swipe angle, and 0.38 rad of swipe / '
+        + '0.235 = 1.62 puts an 8.9 deg swipe (where the basket is drawn) on the 5.5 deg serve that '
+        + 'lands on it. The spec\'s reason for the 0.30 floor still holds: re-measured 2026-11-23, '
+        + 'full aim reaches the side wall (ball edge at boardW/2) at powers 0.2, 0.5, 0.8, and 1.0, '
+        + 'and aim 0.6 does from power 0.5 up, scoring nothing. tools/test-brickcity-corner100.mjs '
+        + 'pins 0.235. minSpeed 2.60 < maxSpeed 6.20 is not the broken half.',
     },
   },
 

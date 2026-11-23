@@ -265,8 +265,10 @@ OUTER diameter is its mouth plus two `collarThick` (0.012 m = 0.0825X = 0.33 in)
 Everything not in that table — `ballMass`, `laneLen`, `laneW`, `bedThick`, `humpLen`,
 `humpAngles` (the 70-degree launch), `troughLen`, `troughDepth`, `boardLipY`, `boardTilt`,
 `steps`, `boardLen`, `railH`, `laneRailH`, `backboardH`, `cupSegments`, `collarThick`, `ringH`,
-`ringThick`, `lipLowFrac`, `captureDrop`, `minSpeed`, `maxSpeed`, `aimMax` and the whole `mat`
-block — is HOT SHOT's, copied verbatim. **The face is the only thing that changes.**
+`ringThick`, `lipLowFrac`, `captureDrop`, `minSpeed`, and the whole `mat` block — is HOT SHOT's,
+copied verbatim. **The face is the only thing that changes**, apart from two later tunings: `aimMax`
+0.235 with `aimCurve` 1 (the corner 100s, 2026-09-02, below) and `maxSpeed` 6.20 (the power dial,
+2026-09-05, Matt's OK; the comment is in `boards.js`).
 
 ### Why the 100s are 3.20 in
 
@@ -589,6 +591,11 @@ Per `MACHINE-SPEC.md` section 20, keyed by rule id, in the board entry's `specWa
   10.5X ceiling, and `boardTilt` is nominal because `steps` replaces the single tilted face.
 - **`holes.uniform`** — mouth size IS the difficulty ladder on this machine, so the three rows are
   deliberately three sizes. A uniform face cannot express that ladder.
+- **`throw.range`** (added 2026-11-23) — `aimMax` 0.235 is under the spec's 0.30 floor. It is the
+  2026-09-02 corner-100 aim fix above (with `aimCurve` 1), which shipped without a waiver, so the
+  spec test had been red on it since then. The floor exists so a side wall can be hit on purpose,
+  and that still holds: full aim reaches the wall at every power measured. Nothing in the game
+  changed when the waiver was written.
 
 ## Verification
 
