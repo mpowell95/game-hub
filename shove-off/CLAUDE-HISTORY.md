@@ -49,3 +49,13 @@ Size: the piece's on-screen size was kept at least what it was (r 17.8 px at 393
 1050 units for a 375 px circle; the circle's AREA (3.46 M) is a little less than the old square's (4 M) but 56% more
 than the straw ring Matt was actually playing in (840 radius). Seeded computer series, rv 1 then rv 2: Hard v Medium
 14-4 / 14-3, Medium v Easy 16-4 / 17-3, average rounds 3.9 / 4.3 (Hard v Medium), Hard v Easy 37-3 / 35-5.
+
+## 2026-11-23: full review + animations
+
+Matt: *"Do a full review/test of the knockout game we started building last week. Make it as fun as possible (include
+animations and stuff)"*. Review: engine (64), challenges (66), push, challenges list, no-scroll, and conventions all
+green; three full matches vs the computer played through real pointer drags on the canvas with no errors. No game bugs
+found. Added `js/fx.js` and the motion listed in CLAUDE.md, "Animations". Draw time at 4x CPU slowdown (headless):
+median ~1.2 ms, p95 ~3 ms (~12 ms at a 2x pixel ratio). A first version cached the platform too and rebuilt it at
+every shrink (spikes to 120 ms), so only the ground is cached. Impact bursts were first too big and faded into dull
+brown "suns", and hits squashed pieces flat; both toned down after looking at frame-by-frame captures. Still admin only.

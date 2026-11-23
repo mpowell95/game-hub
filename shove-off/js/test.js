@@ -328,5 +328,24 @@ const replayLog = (log, rv) => { const m = E.newMatch(rv); for (const e of log) 
   console.log('     rv 2 pinned sum', sum, 'steps', f.rounds[0].steps);
 }
 
+// --- 11. the animations' garnish (fx.js, 2026-11-23): reads the frames, never feeds the engine ---------------
+{
+  const FX = await import('./fx.js');
+  const m = E.newMatch(2);
+  const a = E.alive(m, 'a')[0], b = E.alive(m, 'b').find((q) => q.i === a.i) || E.alive(m, 'b')[0];
+  const dx = b.x - a.x, dy = b.y - a.y, l = Math.sqrt(dx * dx + dy * dy);
+  const aimA = E.slotsOf(m, 'a').map((i) => (i === a.i ? [Math.round(dx / l * 520), Math.round(dy / l * 520)] : tiny(m.pieces.find((p) => p.s === 'a' && p.i === i))));
+  const aimB = E.slotsOf(m, 'b').map((i) => tiny(m.pieces.find((p) => p.s === 'b' && p.i === i)));
+  const before = JSON.stringify(m.pieces);
+  const frames = [];
+  E.applyAims(m, 'a', 1, E.aimsToString(aimA)); E.applyAims(m, 'b', 1, E.aimsToString(aimB), frames);
+  const rec = m.rounds[0];
+  const hits = FX.findHits(rec.before, frames, rec.falls, rec.fallAt, E.R, E.MAX_AIM * E.rulesOf(m).SPEED_K);
+  ok('fx: a hard shove at a piece is found as a hit, strength 0..1', hits.length > 0 && hits.every((h) => h.s >= 0 && h.s <= 1) && hits.some((h) => (h.i === m.pieces.indexOf(m.pieces.find((p) => p.s === 'a' && p.i === a.i)))));
+  ok('fx: the round record starts from the untouched board', JSON.stringify(rec.before.map((p) => ({ s: p.s, i: p.i, x: p.x, y: p.y, alive: p.alive }))) === JSON.stringify(JSON.parse(before).map((p) => ({ s: p.s, i: p.i, x: p.x, y: p.y, alive: p.alive }))));
+  const src = readFileSync(new URL('./engine.js', import.meta.url), 'utf8');
+  ok('fx: the engine never imports the garnish', !/^\s*import[^\n]*(fx|art|ui)\.js/m.test(src));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

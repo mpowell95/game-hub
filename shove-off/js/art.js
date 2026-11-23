@@ -41,18 +41,7 @@ export function drawSurround(ctx, kind, W, H, t = 0) {
   ctx.fillRect(0, 0, W, H);
   ctx.save();
   if (kind === 'car') {
-    // water: soft ripples drifting
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.lineWidth = 2;
-    const step = 34;
-    for (let y = -step; y < H + step; y += step) {
-      ctx.beginPath();
-      for (let x = 0; x <= W; x += 8) {
-        const yy = y + Math.sin((x / 46) + t * 1.4 + y * 0.07) * 4;
-        if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
-      }
-      ctx.stroke();
-    }
+    if (t != null) drawWater(ctx, W, H, t);       // null: the board draws its own moving water over this
   } else if (kind === 'sumo') {
     // a dark hall: floor boards and a warm glow
     ctx.strokeStyle = 'rgba(255,220,180,0.05)';
@@ -63,6 +52,25 @@ export function drawSurround(ctx, kind, W, H, t = 0) {
     ctx.fillStyle = 'rgba(255,255,255,0.03)';
     const tile = 40;
     for (let y = 0; y < H; y += tile) for (let x = ((y / tile) % 2) * tile; x < W; x += tile * 2) ctx.fillRect(x, y, tile, tile);
+  }
+  ctx.restore();
+}
+
+/** The bumper cars' water: soft ripples, drifting with `t` (seconds). One ripple repeats every WATER_PERIOD px
+ *  sideways, so the board can draw it once that much wider and slide it (ui.js). */
+export const WATER_PERIOD = 46 * Math.PI * 2;
+export function drawWater(ctx, W, H, t = 0) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+  ctx.lineWidth = 2;
+  const step = 34;
+  for (let y = -step; y < H + step; y += step) {
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 8) {
+      const yy = y + Math.sin((x / 46) + t * 1.4 + y * 0.07) * 4;
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -284,16 +292,27 @@ export function drawPiece(ctx, x, y, r, look, side, ang = 0, o = {}) {
   ctx.globalAlpha = o.alpha == null ? 1 : o.alpha;
   ctx.translate(x, y);
   ctx.scale(sc, sc);
-  // shadow
+  // shadow (stays on the ground when the piece hops: `lift` px; it shrinks a little as the piece rises)
+  const lift = o.lift || 0;
+  const sh = 1 - Math.min(0.35, lift / (r * 3));
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath(); ctx.ellipse(r * 0.08, r * 0.14, r * 1.02, r * 0.98, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(r * 0.08, r * 0.14, r * 1.02 * sh, r * 0.98 * sh, 0, 0, Math.PI * 2); ctx.fill();
   if (o.ring) {
+    // "aim me": a dashed ring that turns (`spin` radians)
     ctx.strokeStyle = '#ffce3a';
     ctx.lineWidth = Math.max(2.5, r * 0.12);
     ctx.setLineDash([r * 0.3, r * 0.2]);
+    ctx.lineDashOffset = -(o.spin || 0) * r;
     ctx.beginPath(); ctx.arc(0, 0, r * 1.22, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
   }
+  if (lift) ctx.translate(0, -lift);
+  // a hit squashes the piece along the hit's line (`squash` = { a: angle, k: 0..0.4 }); a wobble tilts it
+  if (o.squash && o.squash.k > 0.005) {
+    const q = o.squash;
+    ctx.rotate(q.a); ctx.scale(1 - q.k, 1 + q.k * 0.6); ctx.rotate(-q.a);
+  }
+  if (o.tilt) ctx.rotate(o.tilt);
   if (kind === 'sumo') {
     // a round mat in the SIDE's colour behind the wrestler (Matt, 2026-11-18: the two sides looked alike, only the
     // belts differed), then the wrestler upright, seen from the front, a little smaller so the mat shows all round;
@@ -501,6 +520,23 @@ export function drawArrow(ctx, x, y, dx, dy, r, o = {}) {
   ctx.lineTo(ex - ux * hl - -uy * hw, ey - uy * hl - ux * hw);
   ctx.closePath();
   ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+/** While aiming: how hard, as an arc round the piece (`frac` 0..1, clockwise from the top), brighter and wider
+ *  at full power. Length, not colour, carries it (colourblind-safe). */
+export function drawPower(ctx, x, y, r, frac, pulse = 0) {
+  if (frac <= 0) return;
+  const full = frac >= 0.999;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = Math.max(5, r * 0.32);
+  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
+  if (full) { ctx.shadowColor = '#ffce3a'; ctx.shadowBlur = 8 + 6 * pulse; }
+  ctx.strokeStyle = full ? '#fff1b0' : '#ffce3a';
+  ctx.lineWidth = Math.max(3, r * (full ? 0.24 : 0.18));
+  ctx.beginPath(); ctx.arc(x, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
   ctx.restore();
 }
 
