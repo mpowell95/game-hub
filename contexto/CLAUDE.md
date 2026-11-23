@@ -294,5 +294,12 @@ adult words. But just use normal ones. Fetishized being anywhere near sock is cr
   (`--lang es --nb-only`; Numberbatch alone was worse in Spanish: reloj -> once, doce; cama -> yacimiento). calcetín: zapato
   zapatilla calzado talón (muñeco, conejo gone). Only `es.bin` changed. **Never full-rebuild Spanish**: it no longer
   reproduces the shipped words (Boggle's list grew), which would renumber every Spanish puzzle.
+- **Every answer scanned (2026-11-23, Matt: "do any and all scans")**: Numberbatch alone had quirks too (fox -> broadcasting 3,
+  television 5; penguin -> publisher; father -> mater), so BOTH languages are now a weighted average of the two models
+  (`NB_WEIGHT` en 0.6, es 0.3; `--nb-only`), the weight picked by counting each model's quirks in every answer's top 100
+  (English: 0 web-text, 55 Numberbatch, mostly far down; Spanish: 26 translation leaks like banco -> ribera). The adult-word scan
+  (words nearest the adult words, checked against every answer's top 300) added ~60 English and ~65 Spanish words plus slurs and
+  strong profanity to `FAR` (molester was near child, transvestite 12th for clown, consolador 4th for juguete). Everyday double
+  meanings stay normal (cracker, prick, douche, capullo, hostia). Scan scripts: build `--mix cc|nb --out <dir>` and compare.
 - Ranks shown for old saves' guesses changed (recomputed on render); results and stats did not.
 

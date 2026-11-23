@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1643';
+const CACHE = 'game-hub-v1644';
 
 const ASSETS = [
   './',
@@ -1031,10 +1031,10 @@ const REST_MANIFEST = {
   './contexto/js/ui.js': '2ca694e089',
   './contexto/js/engine.js': '7699703139',
   './contexto/js/strings.js': 'e3ddf5db70',
-  './contexto/data/en.json': '0347409118',
-  './contexto/data/en.bin': 'f1154ce6a6',
-  './contexto/data/es.json': 'eafe9d2fec',
-  './contexto/data/es.bin': 'e547576ab8',
+  './contexto/data/en.json': 'f14db885ab',
+  './contexto/data/en.bin': '7d18bc749f',
+  './contexto/data/es.json': '394b94cef7',
+  './contexto/data/es.bin': 'd2d1d276d5',
   './spelling-bee/': '747dba8977',
   './spelling-bee/index.html': '747dba8977',
   './spelling-bee/css/spelling-bee.css': '03c3a4c420',
