@@ -65,7 +65,8 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   always differ by SHAPE too**: the challenger's pieces wear a white CIRCLE, the receiver's a white TRIANGLE. If both
   chose the identical look, the receiver's pieces are drawn in that look's other colour (`art.js` `sideLooks`).
 - The PLATFORM follows the VIEWER's look. rv 2 (`art.js` `drawRing`): the circle's outer edge IS the drawn edge: Sumo =
-  the straw bales on a dohyo (its square clay mound runs off the screen's sides), Bumper cars = round arena with the
+  a ROUND raised clay ring, straw bales at its edge, its shadow and clay side showing the drop (2026-11-23, Matt: "do you
+  fall off the edge of the circle? or is the platform a square?": the square clay mound behind it was removed; never draw one), Bumper cars = round arena with the
   tyre wall on water, Pucks = round air table. rv 1 keeps the old square drawings. **Size (`ui.js` `EDGE_PX` 9)**: the
   round-1 circle spans the width minus 9 px a side (or the height between HUD and foot, if smaller), so a piece is
   r 17.9 px at 393 wide (rv 1 was 17.8) and 16.4 at 360x640 (rv 1 16.2). Original canvas art, no images.

@@ -184,16 +184,13 @@ function drawRing(ctx, kind, cx, cy, rad) {
   const full = () => { ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); };
   ctx.save();
   if (kind === 'sumo') {
-    const half = rad * 1.16;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    roundRect(ctx, cx - half + rad * 0.03, cy - half + rad * 0.05, half * 2, half * 2, rad * 0.05); ctx.fill();
-    const g = ctx.createLinearGradient(cx - half, cy - half, cx + half, cy + half);
-    g.addColorStop(0, s.plat2); g.addColorStop(1, '#94693a');
-    ctx.fillStyle = g;
-    roundRect(ctx, cx - half, cy - half, half * 2, half * 2, rad * 0.05); ctx.fill();
-    // clay texture on the mound
-    ctx.fillStyle = 'rgba(80,50,20,0.12)';
-    for (let i = 0; i < 90; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 90) * 1.15; ctx.fillRect(cx + Math.cos(a) * rad * d, cy + Math.sin(a) * rad * d, 2, 2); }
+    // A ROUND raised clay ring on the dark hall floor (2026-11-23, Matt: "do you fall off the edge of the circle? or is
+    // the platform a square? it's confusing": a square clay mound used to sit behind the ring). Its shadow and its
+    // darker clay side show the drop all the way round; nothing square is drawn.
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); ctx.arc(cx + rad * 0.02, cy + rad * 0.07, rad * 1.01, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a5326';
+    ctx.beginPath(); ctx.arc(cx, cy + rad * 0.035, rad, 0, Math.PI * 2); ctx.fill();
     // the ring's floor: the lighter swept clay inside the bales
     const bale = Math.max(5, rad * 0.06);
     const fl = ctx.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
