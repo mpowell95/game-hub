@@ -1019,3 +1019,54 @@ html.gh-sideways .gh-rotate {
 }
 html.gh-sideways .gh-rotate p { margin: 0; }
 html:not([lang="es"]) .gh-rotate .gh-rot-es, html[lang="es"] .gh-rotate .gh-rot-en { display: none; }
+
+/* ===== THE DESKTOP LAUNCHER (js/hub.js DESK_MQ, 2026-11-23, ADMIN DEVICES ONLY until Matt says "release it") =====
+   Matt's approved mockup docs/mockups/desktop/a.html. `html.gh-desk` is stamped only on a wide window with a mouse.
+   Launcher only (:not(.gh-ingame)): every game mounts exactly as before. */
+.hub-tab-lbl, .hub-sec { display: none; }
+html.gh-desk:not(.gh-ingame) .hub-top {
+  padding: 28px max(32px, calc((100% - 1176px) / 2)) 10px;
+  background: var(--hub-bg); backdrop-filter: none; border-bottom: 0;
+}
+html.gh-desk:not(.gh-ingame) .hub-top-title { font-size: 28px; font-weight: 800; }
+html.gh-desk:not(.gh-ingame) .hub-main { max-width: 1240px; padding: 0 32px 130px; }
+html.gh-desk:not(.gh-ingame) .hub-grid { max-width: none; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 24px 18px; }
+html.gh-desk:not(.gh-ingame) .hub-card-art { border-radius: 12px; }
+html.gh-desk:not(.gh-ingame) .hub-card-label { font-size: 17px; font-weight: 700; }
+html.gh-desk:not(.gh-ingame) .hub-card { cursor: pointer; }
+html.gh-desk:not(.gh-ingame) .hub-card:hover .hub-card-art { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+html.gh-desk:not(.gh-ingame) .hub-tags { top: 7px; left: 7px; }
+html.gh-desk:not(.gh-ingame) .hub-soon-tag, html.gh-desk:not(.gh-ingame) .hub-new-tag { font-size: 12px; padding: 2px 8px; }
+html.gh-desk:not(.gh-ingame) .hub-listhead-label { font-size: 15px; }
+/* The two groups. */
+html.gh-desk:not(.gh-ingame) .hub-sec {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 6px 0 -6px;
+  font-size: 24px; font-weight: 800; color: var(--hub-ink);
+}
+html.gh-desk:not(.gh-ingame) .hub-card + .hub-sec { margin-top: 26px; padding-top: 30px; border-top: 1px solid var(--hub-surface-2); }
+.hub-sec-ico { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hub-sec-n { font-size: 15px; font-weight: 700; color: var(--hub-ink); background: var(--hub-surface-2); border-radius: 10px; padding: 2px 10px; }
+/* The tab bar floats, centered, with labels. */
+html.gh-desk.gh-compact:not(.gh-ingame) .hub-tabs {
+  left: 50%; right: auto; bottom: 22px; transform: translateX(-50%);
+  grid-auto-columns: auto; gap: 4px; padding: 6px; border: 1px solid var(--hub-surface-2); border-radius: 18px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+html.gh-desk:not(.gh-ingame) .hub-tab {
+  flex-direction: row; gap: 10px; min-height: 48px; padding: 0 18px; border-radius: 12px;
+}
+html.gh-desk:not(.gh-ingame) .hub-tab::after { display: none; }
+html.gh-desk:not(.gh-ingame) .hub-tab:hover { background: var(--hub-surface-2); }
+html.gh-desk:not(.gh-ingame) .hub-tab.is-on { background: color-mix(in srgb, var(--hub-accent) 14%, transparent); }
+html.gh-desk:not(.gh-ingame) .hub-tab-ico { width: 24px; height: 24px; }
+html.gh-desk:not(.gh-ingame) .hub-tab-av { font-size: 22px; line-height: 24px; height: 24px; }
+html.gh-desk:not(.gh-ingame) .hub-tab-lbl { display: inline; font-size: 17px; font-weight: 700; white-space: nowrap; }
+html.gh-desk:not(.gh-ingame) .hub-tab-badge { top: 2px; left: 30px; }
+/* The bubbles above the bar stay the bar's width, no wider. */
+html.gh-desk:not(.gh-ingame) .hub-dock { left: 0; right: 0; }
+/* The new-games bubble in the sort row (js/hub.js `_paintNewDock`, `is-row`): sort on the left, bubble on the right. */
+html.gh-desk:not(.gh-ingame) .hub-listhead { min-height: 60px; margin-bottom: 4px; }
+html.gh-desk:not(.gh-ingame) .hub-listhead > .hub-sort:only-child { margin-left: 0; }
+.hub-dock.is-row { position: static; margin-left: auto; width: 440px; max-width: 50%; box-shadow: none; }
+.hub-dock.is-row::after { display: none; }
+html.gh-desk:not(.gh-ingame) .hub-sortbtn { font-size: 15px; min-height: 40px; padding: 0 16px; }

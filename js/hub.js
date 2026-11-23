@@ -88,6 +88,16 @@ const BUG_BTN_GAMES = new Set(['gridlock', 'tower', 'word-weaver', 'word-ladder'
 const LIVE_MP_GAMES = new Set(['air-hockey', 'battle-arena', 'battleship', 'boggle', 'chinchon', 'dots-boxes', 'escoba',
   'filler', 'holdem', 'mancala', 'tic-tac-toe', 'yahtzee']);
 const tabSvg = (k) => `<svg class="hub-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${TAB_ICON[k]}</svg>`;
+// THE DESKTOP LAUNCHER (2026-11-23, Matt: "build it" on docs/mockups/desktop/a.html; ADMIN DEVICES ONLY until he says
+// "release it"). On a computer (wide window, a mouse) the launcher widens to 6 across, the tab bar floats with labels, and
+// the games split into "Desktop friendly" and "Best on phone". `html.gh-desk` is the only switch (css/hub.css); games
+// mount as before (every rule is :not(.gh-ingame)). PHONE_GAMES = hub ids played by flicking, aiming or tilting.
+const DESK_MQ = '(min-width: 900px) and (hover: hover) and (pointer: fine)';
+const PHONE_GAMES = new Set(['air-hockey', 'ball-run', 'brick-blitz', 'hoops4', 'cuppong', 'darts', 'flick-soccer', 'golf',
+  'hill-climb', 'eight-ball', 'skeeball', 'snake', 'tower', 'archery', 'baseball', 'shove-off']);
+function deskOn() {
+  try { return isCompact() && isAdminDevice() && matchMedia(DESK_MQ).matches; } catch { return false; }
+}
 
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
 // happen while a game module is loading or mounting. Idempotent; see js/error-log.js.
@@ -917,6 +927,13 @@ class Hub {
     // Comfortable <-> Compact (js/layout.js): repaint the launcher, never under a mounted game
     // (render() rewrites the game area too); the class on <html> is already stamped either way.
     this._layoutUnsub = onLayoutChange(() => { if (!this.current && this.root) { this.render(); this._paintReplyBadge(); } });
+    // The desktop launcher (DESK_MQ): a window resized across the line repaints the launcher, never under a game.
+    try {
+      const mq = matchMedia(DESK_MQ);
+      const onDesk = () => { if (!this.current && this.root && deskOn() !== !!this._desk) { this.render(); this._paintReplyBadge(); } };
+      mq.addEventListener('change', onDesk);
+      this._deskUnsub = () => mq.removeEventListener('change', onDesk);
+    } catch { /* no matchMedia: the phone layout */ }
     // Compact's tab bar: repaired in place if iOS 26 places it halfway up the screen (js/tabbar-fix.js).
     this._tabBarUnsub = watchTabBar();
     // EVERYTHING BELOW WAITS FOR THE LAUNCHER TO PAINT (2026-09-01).
@@ -1362,6 +1379,9 @@ class Hub {
     // drops it below 2, fall out of edit mode gracefully rather than leaving a dangling toggle.
     const compact = isCompact();
     this._compact = compact;
+    const desk = compact && deskOn();
+    this._desk = desk;
+    document.documentElement.classList.toggle('gh-desk', desk);
     // Compact edit mode also REMOVES favorites, so one is enough there.
     if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;
     // The divider only earns its place between two non-empty groups; with zero favorites
@@ -1390,7 +1410,7 @@ class Hub {
           + `<button type="button" class="hub-sortbtn" data-sort="new" aria-pressed="${sort === 'new'}">${t('hub_sort_new')}</button>`
           + `</div></div>`
         : '')
-      + restGames.map((g) => this.cardHTML(g, false)).join('');
+      + (desk ? this._deskSectionsHTML(restGames) : restGames.map((g) => this.cardHTML(g, false)).join(''));
     const chGames = this._challengeGames();
     const hasMp = chGames.length > 0 || this._liveGames().length > 0;
     this.root.innerHTML = `
@@ -1505,6 +1525,7 @@ class Hub {
     this.el.grid.parentElement.addEventListener('click', (e) => {
       // The sort control. Persisted on selection (the same rule every game's setup screen follows),
       // so the launcher opens the way it was left.
+      if (e.target.closest('[data-role="new-dock"]')) { e.preventDefault(); this._onNewDockTap(e); return; }   // desktop: in the sort row
       const sortBtn = e.target.closest('.hub-sortbtn');
       if (sortBtn) {
         saveSort(sortBtn.dataset.sort);
@@ -1760,7 +1781,22 @@ class Hub {
   /** Games / Challenges / Messages / Leaderboards / Profile, icons only (Matt: "Most apps wouldn't
    *  have those words there"). The open tab is yellow AND underlined by a bar, never hue alone.
    *  Challenges only when this launcher has a challenge game, like the comfortable layout's bar. */
+  /** The desktop launcher's two groups (DESK_MQ): each keeps the chosen sort; an empty group is not drawn. */
+  _deskSectionsHTML(games) {
+    const ico = (d) => `<svg class="hub-sec-ico" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+    const groups = [
+      ['desk', tf('hub_sec_desk', 'Desktop friendly'), ico('<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>'),
+        games.filter((g) => !PHONE_GAMES.has(g.id))],
+      ['phone', tf('hub_sec_phone', 'Best on phone'), ico('<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>'),
+        games.filter((g) => PHONE_GAMES.has(g.id))],
+    ];
+    return groups.filter((x) => x[3].length).map(([k, label, icon, list]) =>
+      `<h2 class="hub-sec" data-sec="${k}">${icon}<span>${label}</span><span class="hub-sec-n">${list.length}</span></h2>`
+      + list.map((g) => this.cardHTML(g, false)).join('')).join('');
+  }
+
   _tabsHTML(prof, hasChallenges) {
+    const lbl = (s) => `<span class="hub-tab-lbl">${String(s).replace(/[<>&"]/g, '')}</span>`;
     const badge = (k) => `<span class="hub-tab-badge" data-role="tab-badge-${k}" hidden></span>`;
     const emoji = prof && prof.emoji ? String(prof.emoji) : '';
     const face = emoji ? `<span class="hub-tab-av" aria-hidden="true">${emoji.replace(/[<>&"]/g, '')}</span>` : tabSvg('profile');
@@ -1770,11 +1806,11 @@ class Hub {
       sessionStorage.setItem(TABS_KEY, JSON.stringify(st));
     } catch { /* the profile page then draws Multiplayer too */ }
     return `<nav class="hub-tabs" data-role="tabs" aria-label="${tf('hub_tabs_aria', 'Sections')}">
-        <button type="button" class="hub-tab is-on" data-tab="games" aria-current="page" aria-label="${t('hub_games_aria')}">${tabSvg('games')}</button>
-        ${hasChallenges ? `<button type="button" class="hub-tab" data-tab="challenges" aria-label="${t('hub_challenges_btn')}">${tabSvg('challenges')}${badge('challenges')}</button>` : ''}
-        <button type="button" class="hub-tab" data-tab="messages" aria-label="${t('msg_title')}">${tabSvg('messages')}${badge('messages')}</button>
-        <button type="button" class="hub-tab" data-tab="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${tabSvg('leaderboard')}</button>
-        <a class="hub-tab" data-tab="profile" href="profile/" aria-label="${t('hub_profile_btn')}">${face}${badge('profile')}</a>
+        <button type="button" class="hub-tab is-on" data-tab="games" aria-current="page" aria-label="${t('hub_games_aria')}">${tabSvg('games')}${lbl(tf('hub_tab_games', 'Games'))}</button>
+        ${hasChallenges ? `<button type="button" class="hub-tab" data-tab="challenges" aria-label="${t('hub_challenges_btn')}">${tabSvg('challenges')}${lbl(t('hub_challenges_btn'))}${badge('challenges')}</button>` : ''}
+        <button type="button" class="hub-tab" data-tab="messages" aria-label="${t('msg_title')}">${tabSvg('messages')}${lbl(t('msg_title'))}${badge('messages')}</button>
+        <button type="button" class="hub-tab" data-tab="leaderboard" aria-label="${t('hub_leaderboard_aria')}">${tabSvg('leaderboard')}${lbl(t('hub_leaderboard_btn'))}</button>
+        <a class="hub-tab" data-tab="profile" href="profile/" aria-label="${t('hub_profile_btn')}">${face}${lbl((prof && prof.name) || t('hub_profile_btn'))}${badge('profile')}</a>
       </nav>`;
   }
 
@@ -2349,9 +2385,14 @@ class Hub {
       <button type="button" class="hub-dock-x" data-role="new-dock-x" aria-label="${t('hub_alert_dismiss')}">&times;</button>`;
     // A your-turn / game-over bubble already there: this one sits ABOVE it, so both are seen (2026-11-13: with a game
     // always waiting on Matt, "the turn bubble wins the spot" meant he never saw the new game).
+    // The desktop launcher (DESK_MQ) puts it in the sort row instead, off the tiles (Matt's mockup A).
+    const deskHost = this._desk && this.root.querySelector('.hub-grid .hub-listhead:not(.hub-favhead)');
     const turn = tabs.querySelector('[data-role="alert-dock"]');
-    if (turn) { el.classList.add('is-stacked'); el.style.setProperty('--below', `${(turn.offsetHeight || 64) + 10}px`); }
-    tabs.appendChild(el);
+    if (deskHost) { el.classList.add('is-row'); deskHost.appendChild(el); }
+    else {
+      if (turn) { el.classList.add('is-stacked'); el.style.setProperty('--below', `${(turn.offsetHeight || 64) + 10}px`); }
+      tabs.appendChild(el);
+    }
     // Who has SEEN it (js/new-dock-log.js, mirrored to players/<id>/newDock): only once it is really on screen, never
     // while hidden by the name gate, the add-to-home-screen sheet, an overlay, another tab or a hidden app (CSS hides
     // the bubble then). Checked now and every second while this bubble is on the page (2026-11-13: a new phone's bubble
@@ -3450,6 +3491,7 @@ class Hub {
     }
     if (this._themeUnsub) this._themeUnsub();
     if (this._layoutUnsub) this._layoutUnsub();
+    if (this._deskUnsub) this._deskUnsub();
     if (this._tabBarUnsub) this._tabBarUnsub();
     if (this._endTour) this._endTour();
     clearTimeout(this._tourTimer);
