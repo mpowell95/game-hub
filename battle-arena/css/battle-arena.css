@@ -917,18 +917,6 @@ html[lang="es"] .ba-root .ba-pop.is-extra { font-size: min(36px, 6.4vw); }   /* 
   text-shadow: 3px 0 0 #000, -3px 0 0 #000, 0 3px 0 #000, 0 -3px 0 #000, 0 5px 0 #000;
 }
 
-/* --- TEST MODE (2026-10-28): a hazard-striped tag on EVERY screen while the game is being tested with
- * real players. ui.js TEST_MODE; remove at release. Above every overlay, never takes a tap. */
-.ba-root.is-test::after {
-  content: attr(data-test); position: absolute; z-index: 60; pointer-events: none;
-  top: calc(var(--gh-st, env(safe-area-inset-top, 0px)) + 4px); left: 50%; transform: translateX(-50%);
-  padding: 4px 12px 3px 15px; border-radius: 7px; border: 2px solid #1f1a14;
-  font: 900 16px/1.1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: .16em; color: #1f1a14;
-  background: repeating-linear-gradient(-45deg, #f2b705 0 8px, #ffd84a 8px 16px); box-shadow: 0 2px 0 rgba(0, 0, 0, .45);
-}
-/* In a match the top rows are the two teams and MOVES; the tag sits on the stage just under them. */
-.ba-root.is-test:has(.ba-battle)::after { top: calc(max(var(--gh-st, env(safe-area-inset-top, 0px)), 54px) + 5px); }
-
 /* HOME TABS (2026-11-07): Online | Computer. The hero keeps its own height and the floor menu fills the rest from the
    top, so the tabs sit in one place whichever panel is open. */
 .ba-root .ba-home-hero { flex: 0 0 auto; gap: 8px; padding-bottom: 8px; }

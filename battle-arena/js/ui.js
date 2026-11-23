@@ -50,8 +50,8 @@ const REMOTE_SHOW_MS = 450;       // the other person's swap: the two tiles ligh
 const MOVE_HEXES = 2;
 // TEST MODE (2026-10-28, Matt: real players he tests with must know "it's in test mode. That must be
 // obvious and always clearly present"): a TEST tag on every screen of this game (CSS `.ba-root.is-test
-// ::after`). REMOVE AT RELEASE, together with the devOnly line and the push title's "(TEST)".
-const TEST_MODE = true;
+// ::after`). Released 2026-11-23 (Matt: "release it"): off, its CSS removed; the flag stays so a future test can turn it on.
+const TEST_MODE = false;
 
 let instance = null;
 
