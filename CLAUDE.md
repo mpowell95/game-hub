@@ -451,7 +451,7 @@ Every script's description and flags: **`docs/DEV-TOOLING.md`** (add new tools t
 
 - **Run `node tools/validate-sw-assets.mjs` before every deploy**; it rewrites `REST_MANIFEST` and
   `version.json`. Commit `sw.js` after changing any game file.
-- **Mockup Pad** (Matt's markup artifact) lives in `tools/mockup-pad/`; its README says how to republish.
+- **Mockup Pad** (Matt's markup artifact) moved to the `mpowell95/personal` repo, `mockup-pad/` (2026-11-23).
 - **Never run `tools/run-all-tests.mjs` unless Matt asks by name.** Run only the suites for what changed.
   **A new node-only test (no server, no emulator, under a minute) joins its `SUITES` the day it is written** (2026-11-23: 54
   were missing and several had been red for weeks unseen). `smoke-match`/`smoke-ui` and the `*-stats` suites need jsdom

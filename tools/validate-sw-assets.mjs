@@ -123,7 +123,6 @@ const SCAN_EXT = new Set(['.js', '.css', '.html']);
 // Deliberate exclusions, transcribed from the comments already in this repo (not re-invented
 // here - see the cited source of each):
 const EXCLUDED = [
-  { re: /^tools\/mockup-pad\//, why: "Mockup Pad, Matt's claude.ai artifact photo editor (tools/mockup-pad/README.md), kept here as source, never served to a player" },
   { re: /^tools\/lb2-harness\.html$/, why: "Leaderboard v2 parity harness (tools/test-lb2-parity.mjs), dev-only, never served to a player" },
   { re: /^tools\/ballrun-ux\/harness\.html$/, why: "Ball Run benchmark harness (H.bench() frame times, root CLAUDE.md Dev tooling), dev-only benchmark page, never served to a player" },
   // Every game's headless engine test/sim runner is node-only and explicitly "not
