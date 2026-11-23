@@ -287,7 +287,34 @@ function ensureCss() {
   .msg-id { font: 12px/1.5 var(--gh-font-mono); user-select: all; word-break: break-all;
             background: var(--gh-surface-2); border-radius: var(--gh-r-md); padding: var(--gh-sp-3);
             margin: var(--gh-sp-2) 0 0; }
-  `;
+    /* Desktop (html.gh-deskpg; docs/mockups/desktop/pages.html): the list left, one conversation right, under the
+     floating tab bar like the Multiplayer screen. */
+  .msg-overlay.msg-desk { z-index: 19; display: flex; justify-content: center; align-items: stretch;
+                          background: var(--gh-bg); backdrop-filter: none; -webkit-backdrop-filter: none; padding: 28px 32px 104px; }
+  .msg-deskwrap { width: min(1176px, 100%); min-height: 0; display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 28px; }
+  .msg-side { min-height: 0; display: flex; flex-direction: column; padding: 16px; border-radius: 16px;
+              background: var(--gh-surface); border: 1px solid var(--gh-border); font-family: var(--gh-font); color: var(--gh-ink); }
+  .msg-side-top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .msg-side-back { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+                   background: var(--gh-surface-2); color: var(--gh-ink); font-size: 24px; font-weight: 700; line-height: 1; }
+  .msg-side-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 28px; font-weight: 800; white-space: nowrap; }
+  .msg-side-top .gh-btn { flex: 0 0 auto; font-size: 17px; }
+  .msg-side-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .msg-side .msg-row { cursor: pointer; }
+  .msg-side .msg-row.is-sel { background: color-mix(in srgb, var(--gh-accent) 14%, var(--gh-surface)); }
+  .msg-desk .msg-row-name { font-size: 18px; }
+  .msg-desk .msg-row-prev, .msg-desk .msg-row-when { font-size: 15px; }
+  .msg-side-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .msg-side-acts:empty { display: none; }
+  .msg-desk .msg-modal { width: 100%; max-height: none; height: 100%; }
+  .msg-desk .msg-modal > .gh-modal__close { display: none; }
+  .msg-desk .msg-modal.msg-convo .msg-back { display: none; }
+  .msg-desk .gh-modal__title { font-size: 22px; }
+  .msg-desk .msg-bubble { font-size: 17px; }
+  .msg-desk .msg-preset { font-size: 15px; padding: 8px 14px; }
+  .msg-desk .msg-presets { flex-wrap: wrap; overflow: visible; }
+  .msg-desk .msg-head-hide { font-size: 15px; }
+`;
   document.head.appendChild(style);
 }
 
@@ -333,7 +360,108 @@ function closeOverlay() {
   _view += 1;                                   // orphan every in-flight render
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
   if (_onKey) { document.removeEventListener('keydown', _onKey); _onKey = null; }
+  if (_onSideChange) { window.removeEventListener(MESSAGES_CHANGED, _onSideChange); _onSideChange = null; }
+  _sel = null;
+  if (_host && _host.classList.contains('msg-desk')) lightTab('games', 'messages');
   if (_host) { _host.remove(); _host = null; }
+}
+/** Put Messages away (js/hub.js: another tab on the desktop layout, where Messages sits under the tab bar). */
+export function closeMessages() { closeOverlay(); }
+
+// --- the desktop layout (html.gh-deskpg; docs/mockups/desktop/pages.html, Matt 2026-11-23: "build it") ----------
+// ADMIN DEVICES ONLY until Matt releases it (js/hub.js). The conversation list stays on the left (.msg-side) while
+// the card on the right shows one conversation; the card's screens and code are the phone's, unchanged. The side
+// list is display only: it reads the same inbox (cachedThreads, then readMyThreads) and a tap opens that
+// conversation in the card, as a tap on the phone's list does.
+/** The floating tab bar's lit tab (js/hub.js `_mpTabOn` does the same for Multiplayer). `onlyFrom`: change it only
+ *  while that tab is the lit one, so putting Messages away after another tab opened never steals its light. */
+function lightTab(k, onlyFrom) {
+  const tabs = document.querySelector('.hub-tabs');
+  if (!tabs) return;
+  const lit = tabs.querySelector('.hub-tab.is-on');
+  if (onlyFrom && (!lit || lit.dataset.tab !== onlyFrom)) return;
+  for (const el of tabs.querySelectorAll('[data-tab]')) {
+    const on = el.dataset.tab === k;
+    el.classList.toggle('is-on', on);
+    if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+  }
+}
+const isDesk = () => !!(_host && _host.classList.contains('msg-desk'));
+let _sel = null;
+let _onSideChange = null;
+let _sideRows = null;
+function sideRowsHTML(rows, me) {
+  return rows.map((r) => `
+    <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}${r.code === _sel ? ' is-sel' : ''}"
+          data-wi="${whoIx(r)}" data-sc="${r.code === _sel ? 1 : 0}">
+      ${rowIconHTML(r)}
+      <span class="msg-row-main">
+        <span class="msg-row-name">${esc(r.name || playerWord())}</span>
+        <span class="msg-row-prev">${esc((r.from === me ? t('msg_you_prefix') : '') + (r.preview || ''))}</span>
+      </span>
+      <span class="msg-row-when">${esc(whenText(r.at))}</span>
+    </button></li>`).join('');
+}
+function paintSide(card) {
+  const side = _host && _host.querySelector('[data-role="side"]');
+  if (!side) return;
+  const me = myCode();
+  const rows = _sideRows || [];
+  side.innerHTML = `<div class="msg-side-top">
+      <button type="button" class="msg-side-back" data-role="side-close" aria-label="${esc(t('msg_close'))}">&#8249;</button>
+      <h2 class="msg-side-title">${esc(t('msg_title'))}</h2>
+      <button type="button" class="gh-btn gh-btn--primary gh-btn--sm" data-role="side-new">${esc(t('msg_new_btn'))}</button>
+    </div>
+    ${rows.length ? `<ul class="msg-list msg-side-list">${sideRowsHTML(rows, me)}</ul>`
+    : `<p class="msg-lead">${esc(_sideRows ? (navigator.onLine === false ? t('msg_offline') : t('msg_empty')) : t('msg_loading'))}</p>`}
+    <div class="msg-side-acts" data-role="side-acts"></div>`;
+  side.querySelector('[data-role="side-close"]').addEventListener('click', closeOverlay);
+  side.querySelector('[data-role="side-new"]').addEventListener('click', () => { markSide(null); renderPicker(card); });
+  side.querySelectorAll('.msg-row').forEach((b) => b.addEventListener('click', () => {
+    const w = whoAt(b);
+    if (!w) return;
+    if (w.code === HUB_CODE) renderHubThread(card);
+    else renderThread(card, w);
+  }));
+  addSideAdmin(card, side);
+}
+async function addSideAdmin(card, side) {
+  const { isAdminDevice } = await import('./admin-config.js');
+  if (!isAdminDevice() || !side.isConnected) return;
+  const acts = side.querySelector('[data-role="side-acts"]');
+  if (!acts) return;
+  acts.innerHTML = `<button type="button" class="gh-btn" data-role="buginbox">${esc(t('bug_inbox_btn'))}</button>`
+    + `<button type="button" class="gh-btn" data-role="alladmin">${esc(t('msg_admin_btn'))}</button>`;
+  const inbox = acts.querySelector('[data-role="buginbox"]');
+  inbox.addEventListener('click', async () => {
+    try { (await import('./bug-report-ui.js')).openBugInbox(); }
+    catch (err) { console.error('[messages] bug inbox failed to load', err); }
+  });
+  acts.querySelector('[data-role="alladmin"]').addEventListener('click', () => { markSide(null); renderAdmin(card); });
+  try {
+    const n = await (await import('./bug-report-ui.js')).adminUnreadCount();
+    if (inbox.isConnected && n > 0) inbox.textContent = t('bug_inbox_btn_new', { n });
+  } catch { /* offline: the plain label is already correct */ }
+}
+/** Light the open conversation's row (null = none). */
+function markSide(code) {
+  _sel = code;
+  if (!_host) return;
+  const card = _host.querySelector('.msg-modal');
+  if (card) card.classList.toggle('msg-convo', !!code);
+  for (const b of _host.querySelectorAll('.msg-side .msg-row')) {
+    const w = whoAt(b);
+    b.classList.toggle('is-sel', !!w && w.code === code);
+  }
+}
+async function loadSide(card) {
+  const host = _host;
+  const cached = cachedThreads();
+  if (cached && cached.length) { _sideRows = cached; paintSide(card); }
+  else paintSide(card);
+  const rows = await readMyThreads();
+  if (_host !== host) return;
+  if (rows.length || !_sideRows) { _sideRows = rows; paintSide(card); }
 }
 
 /** `guardClose` refuses a scrim tap or Escape once something is typed, so a mis-tap cannot throw
@@ -344,8 +472,10 @@ function mountOverlay(ariaLabel) {
   closeOverlay();
   const host = document.createElement('div');
   host.className = 'gh-overlay msg-overlay';
-  host.innerHTML = `<div class="gh-modal msg-modal" role="dialog" aria-modal="true"
-       aria-label="${esc(ariaLabel)}"></div>`;
+  const desk = document.documentElement.classList.contains('gh-deskpg');
+  if (desk) { host.classList.add('msg-desk'); lightTab('messages'); }
+  host.innerHTML = `${desk ? '<div class="msg-deskwrap"><aside class="msg-side" data-role="side"></aside>' : ''}<div class="gh-modal msg-modal" role="dialog" aria-modal="true"
+       aria-label="${esc(ariaLabel)}"></div>${desk ? '</div>' : ''}`;
   document.body.appendChild(host);
   _host = host;
   _bs = backStack(stepBack);
@@ -440,6 +570,12 @@ export async function openMessages(opts = {}) {
     shellHTML(card, { title: t('msg_title'), body: `<p class="msg-lead">${esc(t('msg_no_code'))}</p>` });
     return;
   }
+  if (isDesk()) {
+    _sideRows = null;
+    _onSideChange = () => { readMyThreads().then((rows) => { if (_host && rows.length) { _sideRows = rows; paintSide(card); } }).catch(() => {}); };
+    window.addEventListener(MESSAGES_CHANGED, _onSideChange);
+    loadSide(card);
+  }
   if (opts.to === HUB_CODE) return renderHubThread(card);
   if (opts.to) return renderThread(card, { code: opts.to, name: opts.toName || '', emoji: opts.toEmoji || '🙂' });
   return renderList(card);
@@ -505,6 +641,12 @@ async function renderList(card) {
 }
 
 function paintList(card, rows, me, gen) {
+  // Desktop: the list is already on the left, so the card opens the newest conversation.
+  if (isDesk() && rows.length) {
+    const w = { code: rows[0].code, name: rows[0].name || '', emoji: rows[0].emoji || '🙂' };
+    if (w.code === HUB_CODE) renderHubThread(card); else renderThread(card, w);
+    return;
+  }
   const body = rows.length
     ? `<ul class="msg-list">${rows.map((r) => `
         <li><button type="button" class="msg-row${isUnread(r, me) ? ' is-unread' : ''}"
@@ -731,6 +873,7 @@ function joinInvite(game, code) {
  */
 function renderHubThread(card) {
   ++_view;
+  markSide(HUB_CODE);
   if (_unwatch) { try { _unwatch(); } catch { /* already gone */ } _unwatch = null; }
   _guardClose = null;
   const me = myCode();
@@ -775,6 +918,7 @@ function playFresh(game, btn) {
 
 async function renderThread(card, who) {
   const gen = ++_view;
+  markSide(who.code);
   _guardClose = null;
   const me = myCode();
   const title = who.name || playerWord();

@@ -122,6 +122,9 @@ function ensureCss() {
           font-size: var(--gh-fs-xs); font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
           color: var(--gh-muted); }
   .cx-scroll > .cx-h:first-child, .cx-scroll > .cx-flash + .cx-h { margin-top: 4px; }
+  .cx-cols, .cx-col { display: contents; }
+  .cx-scroll > .cx-cols:first-child > .cx-col:first-child > .cx-h:first-child,
+  .cx-scroll > .cx-flash + .cx-cols > .cx-col:first-child > .cx-h:first-child { margin-top: 4px; }
   .cx-h-n { font-variant-numeric: tabular-nums; }
   .cx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .cx-list.is-tight { gap: 6px; }
@@ -214,6 +217,44 @@ function ensureCss() {
   .cx-person[aria-pressed="true"] { border: 2px solid #ffce3a; padding: 5px 11px; }
   .cx-tick { flex: 0 0 auto; width: 18px; color: #ffce3a; font-weight: 900; }
   .cx-sheet .gh-btn { margin-top: 12px; }
+  /* Desktop (html.gh-deskpg = a wide window with a mouse, admin devices until Matt releases it; js/hub.js):
+     Matt's mockup docs/mockups/desktop/pages.html. Matches left, games right, the floating tab bar below. */
+  html.gh-deskpg .cx-overlay { padding-bottom: 104px; }
+  html.gh-deskpg .cx-page { width: min(1240px, 100%); }
+  html.gh-deskpg .cx-top { padding: 28px 32px 16px; }
+  html.gh-deskpg .cx-title { font-size: 28px; font-weight: 800; }
+  html.gh-deskpg .cx-rec { min-height: 40px; padding: 0 16px; font-size: 17px; }
+  html.gh-deskpg .cx-scroll { padding: 0 32px 24px; }
+  html.gh-deskpg .cx-scroll > :not(.cx-cols) { max-width: 760px; }
+  html.gh-deskpg .cx-cols { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 32px; align-items: start; }
+  html.gh-deskpg .cx-cols:has(> .cx-col:only-child) { grid-template-columns: minmax(0, 1fr); }
+  html.gh-deskpg .cx-col { display: block; min-width: 0; }
+  html.gh-deskpg .cx-h { margin: 0 0 14px; font-size: 24px; font-weight: 800; letter-spacing: 0; text-transform: none;
+                         color: var(--gh-ink); align-items: center; }
+  html.gh-deskpg .cx-list + .cx-h { margin-top: 30px; }
+  html.gh-deskpg .cx-h-n { font-size: 15px; font-weight: 700; color: var(--gh-muted); background: var(--gh-surface-2);
+                           border-radius: 10px; padding: 2px 9px; }
+  html.gh-deskpg .cx-list { gap: 10px; }
+  html.gh-deskpg .cx-live { min-height: 64px; padding: 8px 6px 8px 12px; }
+  html.gh-deskpg .cx-live.is-yours { min-height: 80px; padding: 10px 8px 10px 12px; border-color: #ffce3a; border-width: 3px; }
+  html.gh-deskpg .cx-live.is-yours .cx-thumb { width: 80px; height: 45px; border-radius: 8px; }
+  html.gh-deskpg .cx-thumb { width: 64px; height: 36px; }
+  html.gh-deskpg .cx-name { font-size: 18px; }
+  html.gh-deskpg .cx-sub, html.gh-deskpg .cx-left { font-size: 15px; }
+  html.gh-deskpg .cx-sub { white-space: normal; text-wrap: balance; }
+  html.gh-deskpg .cx-pill { padding: 9px 18px; font-size: 17px; }
+  html.gh-deskpg .cx-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px 16px; }
+  html.gh-deskpg .cx-cols:has(> .cx-col:only-child) .cx-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  @media (max-width: 1279px) {
+    html.gh-deskpg .cx-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    html.gh-deskpg .cx-cols:has(> .cx-col:only-child) .cx-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  }
+  html.gh-deskpg .cx-tile-name { margin-top: 7px; font-size: 17px; text-align: left; line-height: 1.2; }
+  html.gh-deskpg .cx-tile-art .hub-soon-tag { font-size: 12px; padding: 2px 8px; }
+  html.gh-deskpg .cx-tile:hover .cx-tile-art { box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+  html.gh-deskpg .cx-open, html.gh-deskpg .cx-more, html.gh-deskpg .cx-bell { cursor: pointer; }
+  html.gh-deskpg .cx-sheet { left: 0; right: 0; top: 8%; bottom: auto; margin: 0 auto; width: min(560px, 100%); max-height: 76%;
+                             border-radius: 22px; padding: 18px 20px; }
   `;
   document.head.appendChild(style);
 }
@@ -502,10 +543,13 @@ export async function openChallenges(opts = {}) {
     }
     const lang = getLang();
     const tiles = allGames.slice().sort((a, b) => a.name.localeCompare(b.name, lang));
-    body += tiles.length ? `<h3 class="cx-h">${esc(t('cx_games'))}</h3>
+    // Two columns on the desktop layout (html.gh-deskpg, docs/mockups/desktop/pages.html): the matches left, the
+    // games right. On a phone both wrappers are display: contents, so the page reads exactly as before.
+    const games = tiles.length ? `<h3 class="cx-h">${esc(t('cx_games'))}</h3>
       <div class="cx-tiles">${tiles.map((g) => `<button type="button" class="cx-tile" data-tile="${esc(g.id)}">
           <span class="cx-tile-art" aria-hidden="true">${art(g.id)}${testTag(g)}</span><span class="cx-tile-name">${esc(g.name)}</span>
         </button>`).join('')}</div>` : '';
+    body = `<div class="cx-cols">${body ? `<div class="cx-col cx-col-turns">${body}</div>` : ''}${games ? `<div class="cx-col cx-col-games">${games}</div>` : ''}</div>`;
     const tot = records().total;
     shell(card, { title: t('cx_title'), rec: noCode ? '' : `${tot.won}–${tot.lost}`, body: flashHTML() + warn + body });
     if (!current(gen)) return;

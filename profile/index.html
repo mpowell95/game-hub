@@ -35,6 +35,10 @@
       // iOS 26 top-edge blur test (2026-11-09, Matt: "yes build the blur test, admin only"): every top
       // row sits 48px lower on an admin device (css/hub.css --gh-st). Cached admin answer, same key as isAdminDevice().
       if (localStorage.getItem('gamehub.adminDevice.v1') === '1') document.documentElement.className += ' gh-edgepad';
+      // The desktop layout (js/hub.js deskOn(): a wide window with a mouse) and its pages' layout, ADMIN DEVICES ONLY
+      // until Matt releases it (Matt 2026-11-23: "build it" on docs/mockups/desktop/pages.html). Kept current by deskPg() below.
+      if (localStorage.getItem('gamehub.adminDevice.v1') === '1'
+        && matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)').matches) document.documentElement.className += ' gh-desk gh-deskpg';
     } catch (e) { /* private mode: the deferred module still themes it a moment later */ }
   </script>
   <style>
@@ -60,6 +64,26 @@
     .pf-view[hidden] { display: none; }
     /* Compact layout: the hub's tab bar is drawn here too (css/hub.css .hub-tabs); room for it. */
     html.gh-compact .pf-app { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+    /* DESKTOP (html.gh-deskpg; docs/mockups/desktop/pages.html): the face, Admin, and My Stats left, Settings right,
+       the hub's floating tab bar (css/hub.css html.gh-desk) below. Every other screen keeps the phone column. */
+    html.gh-deskpg .pf-app:has(> .pf-view[data-view="main"]:not([hidden])) { max-width: 1240px; padding: 0 32px 130px; }
+    html.gh-deskpg .pf-view[data-view="main"] { display: grid; grid-template-columns: 400px minmax(0, 1fr); column-gap: 28px; align-items: start; }
+    html.gh-deskpg .pf-view[data-view="main"][hidden] { display: none; }
+    html.gh-deskpg .pf-view[data-view="main"] > .pf-nav { grid-column: 1 / -1; padding-left: 0; padding-right: 0; }
+    html.gh-deskpg .pf-view[data-view="main"] > .pf-body { display: contents; }
+    html.gh-deskpg .pf-view[data-view="main"] > .pf-hero { grid-column: 1; grid-row: 2 / span 2; align-self: stretch; justify-content: center;
+      gap: 6px; margin-top: 20px; padding: 28px 20px; border-radius: 16px; background: var(--p-card); }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-hero .pf-av { width: 120px; height: 120px; border-radius: 60px; font-size: 68px; background: var(--p-bg, rgba(127,127,127,.12)); }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-hn { font-size: 30px; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-hs, html.gh-deskpg .pf-view[data-view="main"] .pf-he { font-size: 17px; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > .pf-grp:first-child { grid-column: 1; grid-row: 4; margin-top: 18px; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > :not(:first-child) { grid-column: 2; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > .pf-gh { grid-row: 2; margin: 20px 14px 8px; font-size: 15px; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > .pf-gh + .pf-grp { grid-row: 3; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > .pf-grp:not(:first-child) { margin-top: 18px; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-body > .pf-gh + .pf-grp { margin-top: 0; }
+    html.gh-deskpg .pf-view[data-view="main"] .pf-r { min-height: 54px; font-size: 17px; }
+    html.gh-deskpg .pf-r:hover { background: rgba(127, 127, 127, .08); }
     /* content-box: hub.css's global border-box made a 44px row swallow the notch padding, and the
        title rode up under the status bar (the admin page's same fix, 2026-10-29). */
     .pf-nav { box-sizing: content-box; height: 44px; padding: var(--gh-st, env(safe-area-inset-top, 0px)) 16px 0; margin-top: 6px;
@@ -1360,15 +1384,17 @@
       try { st = JSON.parse(sessionStorage.getItem('hub.tabs') || '{}') || {}; } catch { st = {}; }
       const b = st.badges || {};
       const badge = (k) => (b[k] > 0 ? `<span class="hub-tab-badge">${b[k] > 9 ? '9+' : b[k]}</span>` : '');
-      const tab = (k, label) => `<button type="button" class="hub-tab" data-tab="${k}" aria-label="${escAttr(label)}">${tabSvg(k)}${badge(k)}</button>`;
+      // Labels show only on the desktop layout (css/hub.css .hub-tab-lbl), as on the launcher.
+      const lbl = (label) => `<span class="hub-tab-lbl" aria-hidden="true">${escAttr(label)}</span>`;
+      const tab = (k, label, shown) => `<button type="button" class="hub-tab" data-tab="${k}" aria-label="${escAttr(label)}">${tabSvg(k)}${lbl(shown || label)}${badge(k)}</button>`;
       const face = state.emoji ? `<span class="hub-tab-av" aria-hidden="true">${escAttr(state.emoji)}</span>` : tabSvg('profile');
       if (!bar) { bar = document.createElement('nav'); bar.className = 'hub-tabs'; document.body.appendChild(bar); }
       bar.setAttribute('aria-label', tf('hub_tabs_aria', 'Sections'));
-      bar.innerHTML = tab('games', t('hub_games_aria'))
+      bar.innerHTML = tab('games', t('hub_games_aria'), tf('hub_tab_games', 'Games'))
         + (st.mp === false ? '' : tab('challenges', t('hub_challenges_btn')))
         + tab('messages', t('msg_title'))
-        + tab('leaderboard', t('hub_leaderboard_aria'))
-        + `<button type="button" class="hub-tab is-on" data-tab="profile" aria-current="page" aria-label="${escAttr(t('hub_profile_btn'))}">${face}${badge('profile')}</button>`;
+        + tab('leaderboard', t('hub_leaderboard_aria'), t('hub_leaderboard_btn'))
+        + `<button type="button" class="hub-tab is-on" data-tab="profile" aria-current="page" aria-label="${escAttr(t('hub_profile_btn'))}">${face}${lbl(state.name || t('hub_profile_btn'))}${badge('profile')}</button>`;
     }
     // How many screens deep this page is (the list = 0), so one history.go() reaches the list or the hub.
     // An overlay open over it (My Stats, Messages) holds entries of its own on top (js/back-stack.js).
@@ -1393,6 +1419,17 @@
       else location.href = '../';
     });
     onLayoutChange(renderTabs);
+    // The desktop layout follows the window (and the admin answer) live, like the launcher's.
+    const DESK_MQ = matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)');
+    function deskPg() {
+      let admin = false;
+      try { admin = localStorage.getItem('gamehub.adminDevice.v1') === '1'; } catch { admin = false; }
+      const on = getLayout() === 'compact' && admin && DESK_MQ.matches;
+      document.documentElement.classList.toggle('gh-desk', on);
+      document.documentElement.classList.toggle('gh-deskpg', on);
+    }
+    try { DESK_MQ.addEventListener('change', deskPg); } catch { /* old Safari: the page load decides */ }
+    deskPg();
 
     ensurePlayerId();
     hydrate();
