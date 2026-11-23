@@ -150,13 +150,31 @@ export function checkWord(level, state, word) {
   return { kind: 'bad' };
 }
 
-/** Record an accepted word in the state (mutates it); returns the check's result. */
+/** Record an accepted word in the state (mutates it); returns the check's result. A grid word also claims every
+ *  word it leaves fully showing (`res.also`, see claimCovered). */
 export function applyWord(level, state, word) {
   const res = checkWord(level, state, word);
   const s = String(word).toUpperCase();
-  if (res.kind === 'grid') state.found.push(s);
+  if (res.kind === 'grid') { state.found.push(s); res.also = claimCovered(level, state); }
   else if (res.kind === 'extra') state.extra.push(s);
   return res;
+}
+
+/** A grid word whose every square is already showing (filled by the words crossing it, or by hints) counts as
+ *  found, as in Wordscapes (2026-11-23, King of Games' bug report: Medium 548's SHE is made of HERS, HER and SEE;
+ *  found last, the grid was full, the level never ended and the hint was dead). Mutates the state; returns the
+ *  words it claimed. */
+export function claimCovered(level, state) {
+  const out = [];
+  if (!level || !Array.isArray(level.w)) return out;
+  for (;;) {
+    const shown = foundCells(level, state);
+    for (const k of state.revealed) shown.add(k);
+    const e = level.w.find((w) => !state.found.includes(w[0]) && cellsOf(w).every((q) => shown.has(keyOf(q.r, q.c))));
+    if (!e) return out;
+    state.found.push(e[0]);
+    out.push(e[0]);
+  }
 }
 
 /** Every cell a found word covers, as a Set of 'r,c'. */
@@ -245,5 +263,7 @@ export function cleanState(level, raw) {
   const bc = bonusCells(level);
   if (Array.isArray(raw.sym)) for (const k of raw.sym) if (typeof k === 'string' && bc.includes(k) && !st.sym.includes(k) && !st.revealed.includes(k)) st.sym.push(k);
   st.recorded = raw.recorded === true;
+  // A save left with every square showing but a covered word never swiped (the 2026-11-23 bug) opens done.
+  claimCovered(level, st);
   return st;
 }

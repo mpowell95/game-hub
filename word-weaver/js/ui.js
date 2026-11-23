@@ -16,7 +16,7 @@ import { makeT, onLangChange, getLang } from '../../js/i18n.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { recordWordWeaver, recordWordWeaverHint, recordWordWeaverBuy, recordWordWeaverDaily, recordWordWeaverDailyHint, withMode, loadStats } from '../../js/game-stats.js';
 import { WW_TIERS, WW_BAND_START, wwBandOf, wwBandEnd, wwLevels, wwHints, wwPoints, wwBalance, WW_PRICE, wwDaily, wwDailyHints } from '../../js/word-weaver-points.js';
-import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells, loadDailyData, dailyLevel } from './engine.js';
+import { loadIndex, loadLevel, bonusCells, cellsOf, applyWord, claimCovered, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells, loadDailyData, dailyLevel } from './engine.js';
 import { today, dayNumber, dateOfDay, dailyAttempt, dailyAttempts, writeDailyAttempt, clockStart, clockPause, clockResume, clockSolve, perfNow } from './daily.js';
 import { postDaily, readMyStart, watchDaily, shownRows, fmtSec } from './board.js';
 import { myCode } from '../../js/messages.js';
@@ -224,6 +224,7 @@ const SVGA = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 const ICON_SHUFFLE = `<svg ${SVGA}><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>`;
 const ICON_BULB = `<svg ${SVGA}><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z"/></svg>`;
 const ICON_BACK = `<svg ${SVGA}><path d="M15 5l-7 7l7 7"/></svg>`;
+const ICON_ERASE = `<svg ${SVGA}><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17.5 9.5l-5 5M12.5 9.5l5 5"/></svg>`;
 const STAR_D = 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z';
 const ICON_STAR = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${STAR_D}"/></svg>`;
 const ICON_CAL = `<svg ${SVGA}><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>`;
@@ -762,7 +763,8 @@ class WordWeaver {
       ltrs += `<g class="ww-ltr" data-i="${i}"><circle class="ww-lc" r="${LETTER_R}"/><text class="ww-lt" dy=".36em">${esc(L[i])}</text></g>`;
     }
     return `
-      <div class="ww-pillrow"><div class="ww-pill" role="status" aria-live="polite"></div></div>
+      <div class="ww-pillrow"><div class="ww-pillwrap"><div class="ww-pill" role="status" aria-live="polite"></div>`
+        + `<button type="button" class="ww-erase" data-act="erase" aria-label="${t('erase_aria')}" hidden>${ICON_ERASE}</button></div></div>
       <div class="ww-dock">
         <button type="button" class="ww-side ww-l" data-act="shuffle" aria-label="${t('shuffle_aria')}">${ICON_SHUFFLE}</button>
         <div class="ww-wheelbox">
@@ -959,6 +961,9 @@ class WordWeaver {
   _paintPill() {
     const pill = this.root && this.root.querySelector('.ww-pill');
     if (!pill) return;
+    // The delete button shows while letters are picked, except mid-swipe (lifting enters the word anyway).
+    const er = this.root.querySelector('.ww-erase');
+    if (er) er.hidden = !this.sel.length || !!(this.drag && this.drag.moved);
     if (this.sel.length) {
       if (this.pillTimer) { this._cancel(this.pillTimer); this.pillTimer = 0; }
       this.pillHold = null;
@@ -1022,9 +1027,12 @@ class WordWeaver {
   }
 
   /** SWIPE or TAP (2026-10-29). A touch that slides onto a second letter is a swipe: lift enters the word. A touch
-   *  that stays on one letter is a tap: it adds that letter and nothing is entered; tapping the last picked letter
-   *  again takes it back off; the centre check (shown while letters are picked) enters the word. Taps and a swipe
-   *  join: letters tapped first stay, the swipe carries on from them. */
+   *  that stays on one letter is a tap: it adds that letter and nothing is entered; tapping a picked letter takes it
+   *  and every letter after it back off; the centre check (shown while letters are picked) enters the word. Taps and
+   *  a swipe join: letters tapped first stay, the swipe carries on from them.
+   *  ERASING (2026-11-23, King of Games' bug report: "can't erase"): a tap on a picked letter that was NOT the last
+   *  one used to count as a swipe (its finger wobble "moved" off the last letter) and entered the word instead of
+   *  erasing. A touch is a swipe only once it reaches a letter OTHER than the one it started on. */
   _pointerDown(ev) {
     if (this.view !== 'play' || this.finishing || this.drag) return;
     if (ev.button != null && ev.button !== 0) return;
@@ -1037,7 +1045,8 @@ class WordWeaver {
       this._submitSel();
       return;
     }
-    this.drag = { id: ev.pointerId, svg, moved: false, undo: hit >= 0 && hit === picked[picked.length - 1] };
+    // `cut` = where the touched letter sits among the picked ones (-1: not picked); a tap there erases from it on.
+    this.drag = { id: ev.pointerId, svg, moved: false, start: hit, cut: hit >= 0 ? picked.indexOf(hit) : -1 };
     try { svg.setPointerCapture(ev.pointerId); } catch { /* capture is a nicety */ }
     if (hit >= 0 && !this.sel.includes(hit)) this.sel.push(hit);
     this.tail = null;
@@ -1048,9 +1057,14 @@ class WordWeaver {
     const d = this.drag;
     if (!d || ev.pointerId !== d.id) return;
     const hit = this._letterAt(ev.clientX, ev.clientY);
-    if (hit >= 0) {
+    // (A touch that starts between letters and slides onto the last picked one is still a tap, as before.)
+    if (hit >= 0 && (d.moved || (hit !== d.start && !(d.start < 0 && hit === this.sel[this.sel.length - 1])))) {
+      if (!d.moved) {
+        d.moved = true;                                  // onto another letter: a swipe
+        // A swipe that starts on an earlier picked letter carries on from THAT letter.
+        if (d.cut >= 0) this.sel = this.sel.slice(0, d.cut + 1);
+      }
       const n = this.sel.length;
-      if (hit !== this.sel[n - 1]) d.moved = true;   // onto another letter: a swipe
       if (n >= 2 && hit === this.sel[n - 2]) this.sel.pop();          // slid back onto the previous letter: un-select
       else if (!this.sel.includes(hit)) this.sel.push(hit);
     }
@@ -1067,8 +1081,17 @@ class WordWeaver {
     this.tail = null;
     if (ev.type !== 'pointerup') { this.sel = []; this._paintWheel(false); return; }
     if (d.moved) { this._submitSel(); return; }
-    // A tap: its letter stays picked; the last picked letter tapped again comes back off.
-    if (d.undo) this.sel.pop();
+    // A tap: a new letter stays picked; a picked letter tapped again comes back off, with every letter after it.
+    if (d.cut >= 0) this.sel = this.sel.slice(0, d.cut);
+    this._paintWheel(false);
+  }
+
+  /** The delete button beside the word (2026-11-23, King of Games: "Delete button doesn't work"; there was none):
+   *  takes the last picked letter off. */
+  _erase() {
+    if (this.view !== 'play' || this.finishing || this.drag || !this.sel.length) return;
+    this.sel.pop();
+    this.tail = null;
     this._paintWheel(false);
   }
 
@@ -1090,6 +1113,7 @@ class WordWeaver {
     const before = foundCells(this.level, this.st);
     const res = applyWord(this.level, this.st, W);
     this._wwNote(W, res.kind);
+    for (const c of res.also || []) this._wwNote(c, 'covered');   // filled by its crossings: found without a swipe
     switch (res.kind) {
       case 'grid': {
         this._save();
@@ -1261,11 +1285,7 @@ class WordWeaver {
       } catch (err) { console.error('[word-weaver] hint NOT recorded in the stats store', err); }
     }
     // A word whose every letter is now showing counts as found, as in Wordscapes (no swipe needed).
-    const shown = foundCells(this.level, this.st);
-    for (const r of this.st.revealed) shown.add(r);
-    for (const e of this.level.w) {
-      if (!this.st.found.includes(e[0]) && cellsOf(e).every((q) => shown.has(q.r + ',' + q.c))) this.st.found.push(e[0]);
-    }
+    for (const c of claimCovered(this.level, this.st)) this._wwNote(c, 'covered');
     this._save();
     this._paintGrid();
     for (const k of keys) this._anim(this.cells.get(k), 'is-flash');
@@ -1351,7 +1371,8 @@ class WordWeaver {
     }
     if (!btn || !this.root.contains(btn)) return;
     const act = btn.dataset.act;
-    if (act === 'shuffle') this._shuffle();
+    if (act === 'erase') this._erase();
+    else if (act === 'shuffle') this._shuffle();
     else if (act === 'hint') this._hint();
     else if (act === 'buy') this._buy(btn.dataset.kind);
     else if (act === 'plain') this._plainHint();
