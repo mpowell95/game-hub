@@ -51,9 +51,16 @@ cpSync(REPO, site, {
 });
 // Pin the copy to the OLD version whatever the working tree says, so the test is about the
 // transition and not about which build happens to be checked out.
-const setVersion = (v) => {
+//
+// IMPORTANT_SINCE IS PINNED TOO (2026-11-23). sw.js's real IMPORTANT_SINCE (1637 that day) is far
+// above these fake versions, so every v551 page counted as "behind an important build" and
+// js/hub.js _mustTake() rightly reloaded it, which turned case 5 red with nothing wrong in the app.
+// 0 means "no important build" (the hold applies); case 7 sets it on purpose.
+const setVersion = (v, important = 0) => {
   const p = join(site, 'sw.js');
-  writeFileSync(p, readFileSync(p, 'utf8').replace(/game-hub-v\d+/g, v));
+  writeFileSync(p, readFileSync(p, 'utf8')
+    .replace(/game-hub-v\d+/g, v)
+    .replace(/const IMPORTANT_SINCE = \d+;/, `const IMPORTANT_SINCE = ${important};`));
   writeFileSync(join(site, 'version.json'), `${JSON.stringify({ cache: v }, null, 2)}\n`);
 };
 setVersion(FROM);
@@ -327,6 +334,27 @@ const until = async (page, fn, ms = 30000, step = 500) => {
   const took = await until(page, async () => (await settle(page.evaluate(() => window.__mark))) === undefined
     && (await chip(page)) === 'v552', 30000);
   ok('a fresh open reloads onto a build that lands in its first seconds', took >= 0,
+    `chip: ${JSON.stringify(await chip(page))}, controller: ${await controller(page)}`);
+  await page.context().close();
+}
+
+// --- case 7: an IMPORTANT build reaches a player's page mid-session (2026-11-23) ------------------
+// The other half of case 5: when the new build is marked important (sw.js IMPORTANT_SINCE above the
+// page's build), the hold does not apply and the page takes it at once (js/hub.js _mustTake).
+{
+  setVersion(FROM);
+  const page = await newPage('hold', { midSession: true });
+  await page.goto(BASE, { waitUntil: 'load' });
+  await until(page, async () => (await controller(page)) === FROM, 20000);
+  await page.goto(BASE, { waitUntil: 'load' });   // load under the worker
+  await until(page, async () => (await settle(page.evaluate(() => window.__ghHub && window.__ghHub._loadedVersion))) === SHORT(FROM), 20000);
+  await until(page, () => warmed(page), 60000);
+  await settle(page.evaluate(() => { window.__mark = 'player-page'; }));
+  setVersion(TO, Number(SHORT(TO).slice(1)));      // THE DEPLOY, marked important
+  await settle(page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update())));
+  const took = await until(page, async () => (await settle(page.evaluate(() => window.__mark))) === undefined
+    && (await chip(page)) === 'v552', 30000);
+  ok('an important build reloads a player\'s page mid-session', took >= 0,
     `chip: ${JSON.stringify(await chip(page))}, controller: ${await controller(page)}`);
   await page.context().close();
 }
