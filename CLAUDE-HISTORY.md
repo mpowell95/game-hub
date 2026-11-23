@@ -1751,3 +1751,10 @@ start spread, Spanish Easy words, Spanish Expert's -ADO ends, and accents. Nothi
 - **Accents**: from lemmatization-lists and FrequencyWords (4,788 pairs), display only, never matched.
 - **The release dry run** found one real-branch bug: `word-ladder/js/data-test.js` was not in the validator's EXCLUDED list,
   so the release commit's `validate-sw-assets.mjs` would have FAILed. Fixed on the branch.
+
+## 2026-11-23: Mockup Pad moved out
+
+Matt asked to move Mockup Pad (his claude.ai markup artifact) into his `personal` repo. Its source
+and README now live in `mpowell95/personal`, `mockup-pad/`. Removed `tools/mockup-pad/` here, its
+row in `docs/DEV-TOOLING.md`, and its exclusion line in `tools/validate-sw-assets.mjs`. The live
+artifact URL is unchanged.
