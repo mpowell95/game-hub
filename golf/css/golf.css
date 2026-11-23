@@ -917,3 +917,25 @@
   max-width: calc(100% - 32px); padding: 10px 16px; background: rgba(6, 12, 4, .9); color: #fff; font-size: 17px; font-weight: 700;
   border: 1px solid rgba(255, 255, 255, .7); text-align: center; pointer-events: none; }
 .gf-root .gf-mpres.gf-panel { background: var(--gf-hatch), rgba(16, 20, 12, 0.95); }
+
+/* DESKTOP (html.gh-deskpg = a computer on an admin device until Matt says "release it"; docs/mockups/desktop/setup.html,
+   Matt 2026-11-23: "build it"): the Solo setup as two columns, Online/Solo, the courses, the course card and the buttons
+   left; the hole count, every hole and the hole sets right. Only when the strip shows (Solo); Online keeps one column. */
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) {
+  display: grid; grid-template-columns: 420px minmax(0, 728px); column-gap: 32px; row-gap: 12px;
+  justify-content: center; align-content: center; align-items: start; grid-auto-flow: row dense;
+}
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > * { grid-column: 1; width: 100%; max-width: none; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > :is(.gf-modepick, .gf-strip, .gf-card:not(.gf-panel)) { grid-column: 2; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > .gf-modepick { grid-row: 1; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > .gf-strip { grid-row: 2 / span 2; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > .gf-card:not(.gf-panel) { grid-row: 4; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) > .gf-coursegrid { grid-template-columns: 1fr; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-btn,
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-chip { min-height: 54px; font-size: 19px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-roundbtn { min-height: 92px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-roundbtn span { font-size: 21px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-roundbtn small { font-size: 15px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-card-meta { font-size: 15px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-card-blurb { font-size: 17px; }
+html.gh-deskpg .gf-root .gf-setup:has(> .gf-strip:not(.gf-offtab)) .gf-rounds { gap: 12px; }

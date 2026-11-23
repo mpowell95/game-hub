@@ -470,7 +470,12 @@ class GolfGame {
       this._fitInsets();
       if (`${hf}px` === prev) return;
       if (this.canvas) this._sizeCanvas();
-      if (this.stripEl) this._sizeStripRows();
+      // Re-sized rows are repainted at their new size, as below (a thumbnail painted at the old size stretched).
+      if (this.stripEl && this.stripEl.isConnected) {
+        this._sizeStripRows();
+        for (const cv of this.stripEl.querySelectorAll('[data-hole-art]')) delete cv.dataset.painted;
+        this._paintHoleStrip(this.stripEl);
+      }
       return;
     }
 
@@ -1004,7 +1009,11 @@ class GolfGame {
       // floor under it, and it needs no reflow.
       const cs = getComputedStyle(setup);
       const gapY = parseFloat(cs.rowGap) || 0;
-      const kids = [...setup.children];
+      // The desktop layout (html.gh-deskpg, golf.css) is two columns: only the strip's OWN column shares its height.
+      const sx = strip.getBoundingClientRect().left;
+      const kids = cs.display === 'grid'
+        ? [...setup.children].filter((k) => Math.abs(k.getBoundingClientRect().left - sx) < 2)
+        : [...setup.children];
       let other = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
         + gapY * Math.max(0, kids.length - 1);
       for (const k of kids) if (k !== strip) other += k.getBoundingClientRect().height;
@@ -1020,10 +1029,19 @@ class GolfGame {
       const MIN_ROW = 54;
       if (avail > 0 && wanted > avail) scale = Math.max((MIN_ROW * rows.length) / wanted, avail / wanted);
     }
+    let changed = false;
     rows.forEach((row, i) => {
       if (!want[i]) return;
-      row.style.setProperty('--gf-strip-h', `${(want[i] * scale).toFixed(2)}px`);
+      const v = `${(want[i] * scale).toFixed(2)}px`;
+      if (row.style.getPropertyValue('--gf-strip-h') !== v) changed = true;
+      row.style.setProperty('--gf-strip-h', v);
     });
+    // A row that changed height AFTER some thumbnails were painted (the desktop layout settles a frame later) would
+    // show those stretched: repaint them at the new size. The second pass changes nothing, so this ends.
+    if (changed) {
+      const stale = [...strip.querySelectorAll('[data-hole-art][data-painted]')];
+      if (stale.length) { for (const cv of stale) delete cv.dataset.painted; this._paintHoleStrip(strip); }
+    }
   }
 
   /** The hole strip's observer holds a reference to every thumbnail canvas in it, so it has to go

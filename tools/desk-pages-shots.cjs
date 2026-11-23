@@ -105,6 +105,26 @@ for (const n of ['cuppong', 'darts', 'battleship', 'chinchon']) fakeDb[n] = { in
     console.log(errs.length ? 'PAGE ERRORS:\n' + errs.join('\n') : 'no page errors');
     await browser.close(); return;
   }
+  if (process.env.SETUP) {
+    // Game setup screens (docs/mockups/desktop/setup.html): SETUP=darts,sudoku,golf. Each tab of a tabbed card too.
+    for (const id of process.env.SETUP.split(',')) {
+      await home();
+      await page.click(`.hub-card[data-id="${id}"]`); await page.waitForTimeout(2500); await shot('setup-' + id);
+      const tabs = page.locator('[data-ov="setup"] [data-act="tab"]:not([aria-pressed="true"]), .gf-root [data-tab]:not(.is-on)');
+      if (id === 'darts' && await tabs.count()) { await tabs.first().click(); await page.waitForTimeout(1200); await shot('setup-' + id + '-2'); }
+      if (id === 'darts') { await page.click('[data-ov="setup"] [data-role="games"] button:last-child'); await page.waitForTimeout(600); await shot('setup-darts-cricket'); }
+      if (id === 'golf') {
+        await page.click('.gf-setup [data-mode="9"]'); await page.waitForTimeout(1200); await shot('setup-golf-9');
+        await page.click('.gf-setup [data-gtab="online"]'); await page.waitForTimeout(1500); await shot('setup-golf-online');
+      }
+      if (id === 'sudoku' || id === 'golf') {
+        const over = await page.evaluate(() => { const r = document.querySelector('.sd-root, .gf-setup'); return r ? [r.scrollHeight - r.clientHeight, r.scrollWidth - r.clientWidth] : null; });
+        console.log(id, 'overflow (h, w):', over);
+      }
+    }
+    console.log(errs.length ? 'PAGE ERRORS:\n' + errs.join('\n') : 'no page errors', '\nshots:', OUT, TAG);
+    await browser.close(); return;
+  }
   await home(); await shot('games');
   for (const [k, name] of [['challenges', 'mp'], ['messages', 'msg'], ['leaderboard', 'lb']]) {
     await home();

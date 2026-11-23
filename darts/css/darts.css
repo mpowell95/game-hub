@@ -571,3 +571,46 @@
 .dt-root .dt-online .dt-mp-note { font-size: 15px; color: var(--dt-ink); }
 .dt-root .dt-face.is-any { flex: 1.4 1 0; }
 .dt-root .dt-more { min-height: 44px; border: 0; background: none; color: inherit; font: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; cursor: pointer; touch-action: manipulation; }
+
+/* DESKTOP (html.gh-deskpg = a computer on an admin device until Matt says "release it"; docs/mockups/desktop/setup.html,
+   Matt 2026-11-23: "build it"). One wide card: Computer = the options left, a dartboard and Practice / Play right;
+   Online = Matches left, Challenge and Pass & play right. Phones never match this. */
+html.gh-deskpg .dt-root .dt-ov-setup > .dt-card { width: min(1000px, 100%); padding: 30px 36px; gap: 18px; border-radius: 22px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-logo { font-size: 40px; text-align: left; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-tag { text-align: left; font-size: 17px; margin-top: -10px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-q { top: 26px; right: 30px; width: 48px; height: 48px; font-size: 22px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-tabs .dt-tab { min-height: 52px; font-size: 20px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"] { position: relative; gap: 16px; padding-right: 380px; min-height: 400px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"]::before {
+  content: ''; position: absolute; top: 0; right: 20px; width: 300px; height: 300px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-50 -50 100 100'%3E%3Ccircle r='50' fill='%231b1b1b'/%3E%3Ccircle r='40' fill='%23c7302f'/%3E%3Ccircle r='37' fill='%23e9dfc6'/%3E%3Ccircle r='25' fill='%232f8a3c'/%3E%3Ccircle r='22' fill='%231b1b1b'/%3E%3Ccircle r='7' fill='%232f8a3c'/%3E%3Ccircle r='3' fill='%23c7302f'/%3E%3Cpath d='M0-40V40M-40 0H40M-28-28 28 28M28-28-28 28M-15-37 15 37M15-37-15 37M-37-15 37 15M37-15-37 15' stroke='%23888' stroke-width='.4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"] > .dt-go-row { position: absolute; right: 0; bottom: 0; width: 340px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"] > .dt-go[data-act="continue"] { position: absolute; right: 0; bottom: 68px; width: 340px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"]:has(> .dt-go[data-act="continue"]:not([hidden]))::before { width: 240px; height: 240px; right: 50px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-label { font-size: 15px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-seg .dt-seg-item { min-height: 46px; font-size: 18px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-go-row .gh-btn { min-height: 60px; font-size: 21px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-go { min-height: 56px; font-size: 21px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; row-gap: 14px; align-items: start; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online > [data-role="matches"] { grid-column: 1; grid-row: 1 / span 4; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online > :not([data-role="matches"]) { grid-column: 2; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online:not(:has(> [data-role="matches"])) { grid-template-columns: minmax(0, 520px); justify-content: center; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online:not(:has(> [data-role="matches"])) > * { grid-column: 1; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-on-head { font-size: 24px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online .dt-mrow-name { font-size: 18px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-face-name { font-size: 17px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-face-dot { width: 60px; height: 60px; font-size: 34px; }
+html.gh-deskpg .dt-root .dt-ov-setup .dt-online > .gh-btn { min-height: 52px; font-size: 18px; }
+/* Beside the "‹ Hub" pill, not under it (the card starts 140 px in on a computer), and tighter on a short window. */
+html.gh-deskpg .dt-root .dt-ov-setup { padding-top: 24px; }
+@media (max-height: 860px) {
+  html.gh-deskpg .dt-root .dt-ov-setup > .dt-card { padding: 22px 32px; gap: 12px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-logo { font-size: 34px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-q { top: 20px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-tabs .dt-tab { min-height: 46px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"] { gap: 10px; min-height: 340px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-seg .dt-seg-item { min-height: 40px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-panel[data-panel="cpu"]::before { width: 250px; height: 250px; right: 45px; }
+  html.gh-deskpg .dt-root .dt-ov-setup .dt-go-row .gh-btn { min-height: 52px; }
+}

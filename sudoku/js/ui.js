@@ -617,8 +617,22 @@ class SudokuUI {
     if (!vh) return;
     this.root.style.left = Math.round(r.left) + 'px';
     this.root.style.width = Math.round(r.width || window.innerWidth || 0) + 'px';
+    // The CSS fallback's inset: 0 left right: 0 in place, so a menu narrower than the slot (max-width 420px,
+    // auto margins) was centred between the slot's left edge and the WINDOW's right edge: off to the right on any
+    // screen wider than the slot (2026-11-23, a computer). Pin right to the slot's own right edge.
+    this.root.style.right = Math.max(0, Math.round((document.documentElement.clientWidth || window.innerWidth || 0) - r.right)) + 'px';
     this.root.style.top = Math.round(r.top) + 'px';
     this.root.style.height = Math.max(200, Math.round(vh - r.top)) + 'px';
+    // Opened from a scrolled launcher, the slot is measured BEFORE the hub scrolls back to the top, so it read
+    // hundreds of px too high and the screen sat under the header (2026-11-23). Measure once more after that.
+    if (!this._posAgain) {
+      this._posAgain = requestAnimationFrame(() => requestAnimationFrame(() => {
+        this._posAgain = 0;
+        if (!this.root || !this.container || !this.root.isConnected) return;
+        const r2 = this.container.getBoundingClientRect();
+        if (Math.round(r2.top) !== Math.round(r.top) || Math.round(r2.left) !== Math.round(r.left)) { this._positionRoot(); this._fit(); }
+      }));
+    }
   }
 
   _fit() {

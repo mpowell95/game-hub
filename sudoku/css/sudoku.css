@@ -344,3 +344,24 @@
 @media (prefers-reduced-motion: reduce) {
   .sd-root * { transition-duration: 1ms !important; }
 }
+
+/* DESKTOP (html.gh-deskpg = a computer on an admin device until Matt says "release it"; docs/mockups/desktop/setup.html,
+   Matt 2026-11-23: "build it"): the setup screen as two columns, picture and name left, difficulty and Start right. */
+html.gh-deskpg .sd-menu {
+  max-width: 900px; display: grid; grid-template-columns: 300px minmax(0, 1fr); column-gap: 48px; row-gap: 16px;
+  align-content: center; align-items: center;
+}
+html.gh-deskpg .sd-menu > .sd-hero { grid-column: 1; grid-row: 1; width: 220px; height: 220px; padding: 22px; border-radius: 24px; align-self: end; justify-self: center; }
+html.gh-deskpg .sd-menu > .sd-menu-header { grid-column: 1; grid-row: 2; align-self: start; }
+html.gh-deskpg .sd-menu > .sd-menu-header h1 { font-size: 40px; }
+html.gh-deskpg .sd-menu > .sd-menu-header p { font-size: 17px; }
+html.gh-deskpg .sd-menu > .sd-menu-card { grid-column: 2; grid-row: 1 / span 2; padding: 28px; gap: 18px; }
+html.gh-deskpg .sd-menu > .sd-menu-card .gh-field__label { display: none; }
+html.gh-deskpg .sd-menu > .sd-menu-card .sd-seg-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+html.gh-deskpg .sd-menu > .sd-menu-card .sd-seg { min-height: 72px; font-size: 20px; border-width: 2px; border-radius: 16px; }
+html.gh-deskpg .sd-menu > .sd-menu-card .gh-btn { min-height: 60px; font-size: 21px; }
+html.gh-deskpg .sd-menu > [data-action="howto"] { grid-column: 2; grid-row: 3; font-size: 18px; }
+/* The hub's game slot is only 720 px wide, so the setup screen spans the WINDOW and centres itself (top and height stay
+   _positionRoot's). */
+html.gh-deskpg .sd-root.sd-menu { left: 0 !important; right: 0 !important; width: auto !important; }
+html.gh-deskpg .sd-menu > .sd-menu-header p { display: none; }
