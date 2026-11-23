@@ -153,6 +153,12 @@ snake...): the average at the board's course/difficulty (byMode `hs`/`ls`), else
 hole, Brick/Tower/Skeeball/Cup Pong solo), else tied, NEVER fewer plays (Matt: "It should NOT go to player B because they have fewer rounds").
 Only equal on both is tied. `boardMetricCmp` / `tieByAverage`.
 
+## Desktop launcher (2026-11-23, Matt: "build it" on `docs/mockups/desktop/a.html`; ADMIN DEVICES ONLY until "release it")
+
+`html.gh-desk` (`js/hub.js` `deskOn()`: compact + `isAdminDevice()` + `DESK_MQ` wide window with a mouse): 6 across, labelled
+floating tab bar, new-games bubble in the sort row, games split "Desktop friendly" / "Best on phone" (`PHONE_GAMES`). Launcher only
+(`:not(.gh-ingame)`). Release = drop `isAdminDevice()` from `deskOn()`. Phones unchanged.
+
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
 A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key
