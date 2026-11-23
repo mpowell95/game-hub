@@ -68,7 +68,8 @@ console.log('\n--- I1 / I2 Sudoku ---');
 console.log('\n--- I2 / I3 Murdoku ---');
 {
   const ui = src('murdoku/js/ui.js');
-  ok('I2 a full wrong board (the clue check) counts like a hint', /if \(chk\.full && !this\.guided && this\.hints !== null\) this\.hints \+= 1;/.test(ui));
+  // Since 335c9418 (private play log) the same line also counts `_wrongFull` for the log; the hint count is unchanged.
+  ok('I2 a full wrong board (the clue check) counts like a hint', /if \(chk\.full && !this\.guided && this\.hints !== null\) (\{ )?this\.hints \+= 1;/.test(ui));
   ok('I3 every write re-reads the slot: another case or a finished one leaves this board; the larger hint count wins',
     /if \(!cur \|\| caseId\(cur\.puzzle\) !== caseId\(this\.puz\) \|\| \(cur\.solved && !this\.solved\)\) return false;/.test(ui)
     && /this\.hints = Math\.max\(this\.hints, cur\.hints\);/.test(ui) && /if \(cur\.recorded\) this\.recorded = true;/.test(ui));
@@ -127,20 +128,22 @@ console.log('\n--- I4 time away ---');
 // --- I6 Arrow Maze -------------------------------------------------------------------------------
 console.log('\n--- I6 Arrow Maze ---');
 {
-  const t0 = Date.UTC(2026, 9, 30, 12);
+  // After Expert went to 8 points (2026-11-02, js/arrow-maze-time.js WO_EXPERT8_SINCE, Matt: "Make expert 8 points"):
+  // a clean Expert clear is 8, one after 3 slips 1 (WO_SLIP_POINTS 8, 5, 3, 1). Was 6 -> 1 on the old table.
+  const t0 = Date.UTC(2026, 10, 10, 12);
   // Safari learns Expert 201 with 3 hints, then the Home Screen app clears it clean.
   const safari = device(() => { G.noteWayOutSlips('expert', 201, 3, t0); });
   const app = device(() => { G.recordWayOut('expert', { timeMs: 60000, penaltyMs: 0, arrows: 80, rounds: 20, mistakes: 0, hints: 0, timed: true, n: 201, level: 201, gen: 10, at: t0 + 600000 }); });
   ok('I6 stamps: the slip and the clear each carry their first time', safari.games.wayout.wo.sf.expert.L201 === t0 && app.games.wayout.wo.ct.expert.L201 === t0 + 600000);
   const both = A.aggregatePlayers({ s: rec('Probe', 'ZQXJ7', safari), a: rec('Probe', 'ZQXJ7', app) })[0];
-  ok('I6 the clean clear AFTER hints on another storage is capped at the hints\' points (6 -> 1)',
-    T.woPoints(app.games.wayout) === 6 && T.woPoints(both.games.wayout, 'expert') === 1 && both.games.wayout.wo.sl.expert.L201 === 3);
+  ok('I6 the clean clear AFTER hints on another storage is capped at the hints\' points (8 -> 1)',
+    T.woPoints(app.games.wayout) === 8 && T.woPoints(both.games.wayout, 'expert') === 1 && both.games.wayout.wo.sl.expert.L201 === 3);
   const later = device(() => { G.noteWayOutSlips('expert', 201, 3, t0 + 3600000); });
   const both2 = A.aggregatePlayers({ s: rec('Probe', 'ZQXJ7', later), a: rec('Probe', 'ZQXJ7', app) })[0];
-  ok('I6 slips on another storage AFTER the clear (a new phone replaying) take nothing away', T.woPoints(both2.games.wayout, 'expert') === 6);
+  ok('I6 slips on another storage AFTER the clear (a new phone replaying) take nothing away', T.woPoints(both2.games.wayout, 'expert') === 8);
   const legacy = JSON.parse(JSON.stringify(app)); delete legacy.games.wayout.wo.ct;
   const both3 = A.aggregatePlayers({ s: rec('Probe', 'ZQXJ7', safari), a: rec('Probe', 'ZQXJ7', legacy) })[0];
-  ok('I6 a clear with no stamp (before this) is never capped (nothing lowered)', T.woPoints(both3.games.wayout, 'expert') === 6);
+  ok('I6 a clear with no stamp (before this) is never capped (nothing lowered)', T.woPoints(both3.games.wayout, 'expert') === 8);
   const h = device(() => { G.recordWayOut('expert', { timeMs: 60000, penaltyMs: 0, arrows: 80, rounds: 20, mistakes: 0, hints: 2, timed: true, n: 202, level: 202, gen: 10 }); });
   ok('I6 hints carry over: the clearing try\'s hints are in `p` (a replay can never win them back)',
     h.games.wayout.wo.log.expert[0].p === 2 && T.woMissed(h.games.wayout, 'expert').length === 0);
@@ -163,7 +166,14 @@ console.log('\n--- I8 name gate ---');
   const ng = src('js/name-gate.js');
   ok('I8 "That\'s me": the claim\'s age by the server\'s clock, 0 to 24 h; no server time, no offer',
     /let now = liveNow\(\);/.test(ng) && /const age = claim && Number\(claim\.at\) > 0 && now != null \? now - Number\(claim\.at\) : -1;/.test(ng)
-    && /if \(age >= 0 && age < ME_WINDOW_MS\) \{/.test(ng) && !/Date\.now\(\) - claim\.at/.test(ng));
+    && /let route = thatsMeRoute\(\{ gated: false, ageMs: age \}\);/.test(ng) && /if \(route === 'link'\) \{[\s\S]{0,80}?meCode = claim\.code;/.test(ng)
+    && !/Date\.now\(\) - claim\.at/.test(ng));
+  // The 0-to-24 h window moved into js/signin-rules.js thatsMeRoute (2026-11-15, Allow / Deny sign in): run it.
+  const { thatsMeRoute, ME_WINDOW_MS } = await import('../js/signin-rules.js');
+  ok('I8 thatsMeRoute: under 24 h links, 24 h or older or no server time (-1) never links',
+    ME_WINDOW_MS === 24 * 3600 * 1000 && thatsMeRoute({ gated: false, ageMs: 0 }) === 'link' && thatsMeRoute({ gated: false, ageMs: ME_WINDOW_MS - 1 }) === 'link'
+    && thatsMeRoute({ gated: false, ageMs: ME_WINDOW_MS }) === 'none' && thatsMeRoute({ gated: false, ageMs: -1 }) === 'none'
+    && thatsMeRoute({ gated: true, ageMs: -1 }) === 'ask' && thatsMeRoute({ gated: true, ageMs: ME_WINDOW_MS }) === 'ask');
 }
 
 // --- I9 Word Weaver, Gridlock ----------------------------------------------------------------------

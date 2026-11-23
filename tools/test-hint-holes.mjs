@@ -88,10 +88,15 @@ function cut(text, name) {
 }
 const lb = src('js/leaderboard-ui.js');
 const fns = ['noHintMap', 'noHintAt', 'noHintTierOf', 'compareNoHint', 'compareAllWins', 'winsAtTier', 'playsAtTier'].map((n) => cut(lb, n)).join('\n');
-const board = new Function('bucketsOf', 'tierOf', 'boardRankTier', 'compareTierFirst',
+// Sudoku and Murdoku moved to POINTS for everyone on 2026-11-04 (js/puzzle-points.js; CLAUDE.md "Leaderboard v2:
+// RELEASED", Matt: "release it"): `isPuzzlePts` is true for both, so the no-hint order below is switched off on
+// the real board (checked after this block). The order itself is still run here with `isPuzzlePts` false, the
+// way the board ranks if a puzzle game ever leaves points.
+const mkBoard = (puzzlePts) => new Function('bucketsOf', 'tierOf', 'boardRankTier', 'compareTierFirst', 'isPuzzlePts',
   `let _tier = null; const NOHINT_GAMES = new Set(['sudoku', 'murdoku']);\n${fns}
    return { order: (id) => (a, b) => compareNoHint(a, b, id) || compareAllWins(a, b, id), noHintAt, noHintTierOf, setTier: (t) => { _tier = t; } };`)(
-  R.bucketsOf, D.tierOf, R.boardRankTier, R.compareTierFirst);
+  R.bucketsOf, D.tierOf, R.boardRankTier, R.compareTierFirst, puzzlePts);
+const board = mkBoard(() => false);
 const hintKing = rec('King', 'KKKKK', device(() => { for (let i = 0; i < 25; i++) G.recordSudoku('expert', { hints: 40 }); }));
 const easyClean = rec('Ella', 'EEEEE', device(() => { G.recordSudoku('easy', { hints: 0 }); }));
 const hardClean = rec('Hal', 'HHHHH', device(() => { G.recordSudoku('hard', { hints: 0 }); G.recordSudoku('easy', { hints: 0 }); G.recordSudoku('easy', { hints: 0 }); }));
@@ -114,6 +119,16 @@ board.setTier(null);
 ok('C1 board: the number shown on a no-hint row is its no-hint count (gameMetricAt), with "no hints" under it',
   /if \(NOHINT_GAMES\.has\(id\) && noHintTierOf\(g, id\)\) return noHintAt\(g, id, tier\);/.test(lb) && /return tx\('lb_nohint', 'no hints'\)/.test(lb)
   && /if \(NOHINT_GAMES\.has\(id\)\) return \(a, b\) => compareNoHint\(a, b, id\) \|\| compareAllWins\(a, b, id\);/.test(lb));
+// What every player sees today: Sudoku and Murdoku on POINTS (hints already paid for in the points, js/puzzle-points.js;
+// tools/test-puzzle-points.mjs), so the no-hint rule is off on the real board and in its "to pass" line.
+const live = mkBoard((id) => ['sudoku', 'murdoku', 'nutsbolts', 'minesweeper'].includes(id) && id !== 'nutsbolts');
+ok('C1 board (live): on points the no-hint tier is 0 for every Sudoku and Murdoku row',
+  people.every((g) => live.noHintTierOf(g, 'sudoku') === 0 && live.noHintTierOf(g, 'murdoku') === 0));
+ok('C1 board (live): isPuzzlePts is checked before the no-hint rule, Sudoku and Murdoku are puzzle-points games for everyone',
+  /function isPuzzlePts\(id\) \{ return PUZZLE_POINT_GAMES\.includes\(id\) && \(id !== 'nutsbolts' \|\| isAdminDevice\(\)\); \}/.test(lb)
+  && /if \(isPuzzlePts\(id\)\) return \(a, b\) => compareBoardRow\(a, b, id\);\s*\n[^\n]*\n\s*if \(NOHINT_GAMES\.has\(id\)\)/.test(lb)
+  && /if \(isPuzzlePts\(id\)\) return puzzlePoints\([\s\S]{0,3000}?if \(NOHINT_GAMES\.has\(id\) && noHintTierOf\(g, id\)\)/.test(lb)
+  && /PUZZLE_POINT_GAMES = \['sudoku', 'murdoku'/.test(src('js/puzzle-points.js')));
 const S = (await import('../js/strings.js')).default;
 ok('C1 strings: "no hints" EN/ES', S.en.lb_nohint === 'no hints' && S.es.lb_nohint === 'sin pistas');
 
@@ -185,14 +200,19 @@ ok('C4 noteWayOutSlips keeps the most slips per level (max only)', G.noteWayOutS
   && G.loadStats().games.wayout.wo.sl.expert.L300 === 2 && T.woSlipsOf(G.loadStats().games.wayout, 'expert', 300) === 2);
 ok('C4 noteWayOutSlips refuses junk', G.noteWayOutSlips('rush', 3, 1) === false && G.noteWayOutSlips('expert', 0, 1) === false);
 const ui = src('way-out/js/ui.js');
-ok('C4 New game carries the thrown-away try\'s slips; it resets only the clock',
-  /if \(c && c\.n === level && c\.key === srcKey\(src\)\) addCarry\(tier, level, src, \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\)\);/.test(ui));
-ok('C4 every hint and lost heart is stored at once', (ui.match(/this\._noteSlip\(\);/g) || []).length === 2);
-ok('C4 the clear is scored with max(carried + this try, other storages, this storage\'s stored slips from another tab)',
-  /const mine = \(this\._carry \| 0\) \+ \(c\.mistakes \| 0\) \+ \(c\.hints \| 0\);/.test(ui) && /const slips = Math\.max\(mine, other, elsewhere\);/.test(ui)
+// Since 2026-11-16 (way-out/CLAUDE.md "A failed try's hearts do not count", Matt: "That's not right") only HINTS
+// ride every try; lost hearts cost points only in the try that clears the level (`_tryHearts`).
+ok('C4 New game carries the thrown-away try\'s hints (hearts no longer, 2026-11-16); it resets only the clock',
+  /if \(c && c\.n === level && c\.key === srcKey\(src\)\) addCarry\(tier, level, src, c\.hints \| 0\);/.test(ui));
+ok('C4 every hint is stored at once (a lost heart is not carried since 2026-11-16)', (ui.match(/this\._noteSlip\(\);/g) || []).length === 1
+  && /this\.clock\.hints \+= 1;\s*\n\s*this\._noteSlip\(\);/.test(ui) && /_noteSlip\(\) \{[\s\S]{0,200}?const s = this\._hintSlips\(\);/.test(ui));
+ok('C4 the clear is scored with max(carried hints + this try\'s hints and hearts, other storages, this storage\'s stored slips from another tab)',
+  /const tryHearts = this\._tryHearts\(\);/.test(ui) && /_tryHearts\(\) \{ return Math\.max\(0, LIVES - \(this\.lives \| 0\)\); \}/.test(ui)
+  && /const mine = \(this\._carry \| 0\) \+ \(c\.hints \| 0\) \+ tryHearts;/.test(ui) && /const slips = Math\.max\(mine, other, elsewhere\);/.test(ui)
   && /this\._carry = Math\.max\(this\._carry \| 0, readCarry\(this\.tier, this\.level, this\.src\)\);/.test(ui) && /woEarnedPoints\(this\.tier, slips\)/.test(ui));
 ok('C4 a replay\'s slips ride its Restart and leaving until a replay of it is cleared',
-  /this\._replayCarry = readReplaySlips\(band, miss\.n\);/.test(ui) && /slips: this\._slipsNow\(\) \}\)\)?;/.test(ui) && /else clearReplaySlips\(this\.tier, this\.level\);/.test(ui));
+  /this\._replayCarry = readReplaySlips\(band, miss\.n\);/.test(ui) && /slips: this\._slipsNow\(\) \}\)/.test(ui) && /else clearReplaySlips\(this\.tier, this\.level\);/.test(ui)
+  && /if \(this\.replay\) \{ writeReplaySlips\(this\.tier, this\.level, s\); return; \}/.test(ui));
 
 console.log(`\nhint-holes tests: ${pass} passed, ${fail} failed.`);
 if (fail) process.exit(1);

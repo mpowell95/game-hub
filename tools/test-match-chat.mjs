@@ -84,6 +84,10 @@ ok('a line lands and is verified', res.ok && res.entry && res.entry.by === 'a' &
 ok('it is written BESIDE the match, not inside it', !!getAt('cuppong/chat/match0001') && getAt('cuppong/games/match0001') === undefined);
 ok('the watch hears it', seen && seen.length === 1 && seen[0].v === 'gl');
 
+// An ANSWER comes later than what it answers. In memory both sends can land in the same millisecond,
+// and chatFrom then orders the pair by the random part of the key (a coin toss: this check failed
+// about half the time). Wait for the clock to move, as it always has on a real phone.
+{ const t0 = Date.now(); while (Date.now() === t0) await new Promise((r) => setTimeout(r, 1)); }
 res = await C.sendChat({ node: 'cuppong', id: 'match0001', side: 'b' }, { t: 'c', v: 'thanks!' });
 ok('the other side can answer', res.ok && seen.length === 2 && seen[1].by === 'b');
 ok('two lines are two children (additive, never a set over the list)', Object.keys(getAt('cuppong/chat/match0001')).length === 2);

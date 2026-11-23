@@ -368,12 +368,15 @@ async function runHistory(w) {
   await h.wait(600);
   const s4 = await h.sig();
   rec('back button clicked twice at once: no further than the Games list', s4 === memo.games || s4 === 'closed', s4);
-  // 5. a tab switch from deep inside (history.go(-2) under the hood), then a swipe straight away.
-  await reach(w, h, 'player', memo);
+  // 5. a tab switch from a tile (not the tab bar), then a swipe straight away.
+  // 2026-11-23: this used a person page's medal tile, which since 2026-11-17 filters that person's games
+  // instead (js/leaderboard2-ui.js data-act="pmedal"; Matt: "I expect to see the games he has a silver
+  // medal in"). The only tile that still switches tabs is the Me page's medal tile (opens Hall of Fame).
+  await reach(w, h, 'me', memo);
   await h.tap('.lb2 .lb2-tile[data-act="tab"]');
   await back();
   await h.wait(700);
-  rec('tab switch from a person page, then back at once: leaderboard closed, nothing left behind', (await h.sig()) === 'closed' && (await h.depth()) === 0 && (await h.onSentinel()), `${await h.sig()} depth ${await h.depth()}`);
+  rec('tab switch from the Me page\'s medal tile, then back at once: leaderboard closed, nothing left behind', (await h.sig()) === 'closed' && (await h.depth()) === 0 && (await h.onSentinel()), `${await h.sig()} depth ${await h.depth()}`);
   // 6. in and out ten times at speed.
   await h.openLb();
   h.setQuick(true);
