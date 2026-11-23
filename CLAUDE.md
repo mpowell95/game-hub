@@ -165,6 +165,8 @@ phone lays the LAUNCHER out 1440 px wide via the viewport meta, zoomed out; a ga
 right (`.cx-cols`, display: contents on phones). Messages: the list stays left (`.msg-side`, display only), the card shows one
 conversation. Leaderboards: Games tab = list left + `_deskBoard` right (`.lb2-split`, outside the stack). Profile: two columns + the
 floating bar. Release = drop `isAdminDevice()` in both places. Shots + click-through: `tools/desk-pages-shots.cjs` (`INTERACT=1`).
+**Game setup screens on desktop (2026-11-23, Matt: "build it" on `docs/mockups/desktop/setup.html`; same gate, `html.gh-deskpg`)**: Darts (options left, board + Play right;
+Online = Matches | Challenge), Sudoku (picture left, difficulty right), Golf Solo (courses left, holes right). CSS only in each game's css; shots `SETUP=darts,sudoku,golf`.
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 

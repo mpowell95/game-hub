@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1649';
+const CACHE = 'game-hub-v1650';
 
 const ASSETS = [
   './',
@@ -1156,7 +1156,7 @@ const REST_MANIFEST = {
   './battle-arena/js/alert.js': '1ce70ea5b1',
   './darts/': '52a5ff72da',
   './darts/index.html': '52a5ff72da',
-  './darts/css/darts.css': '9ad12bcb14',
+  './darts/css/darts.css': '3d41315d2a',
   './darts/js/ui.js': 'abf2a5c956',
   './darts/js/engine.js': 'dafb88a4a3',
   './darts/js/render.js': 'd05671e727',
@@ -1167,8 +1167,8 @@ const REST_MANIFEST = {
   './darts/js/alert.js': 'af058ae8e6',
   './sudoku/': '05215bc88a',
   './sudoku/index.html': '05215bc88a',
-  './sudoku/css/sudoku.css': '146887ebaf',
-  './sudoku/js/ui.js': 'cbf36b689c',
+  './sudoku/css/sudoku.css': 'ccfca74929',
+  './sudoku/js/ui.js': 'fc49402092',
   './sudoku/js/game.js': '2d66f12e98',
   './sudoku/js/generator.js': '2d3d2c92f1',
   './sudoku/js/solver.js': 'c12fe83ae8',
@@ -1341,8 +1341,8 @@ const REST_MANIFEST = {
   './skeeball/js/strings.js': 'd1dfd2526f',
   './golf/': 'cc7a73041c',
   './golf/index.html': 'cc7a73041c',
-  './golf/css/golf.css': '97fbd92149',
-  './golf/js/ui.js': '622aa7bf7e',
+  './golf/css/golf.css': '505d26e93a',
+  './golf/js/ui.js': '88e37ff721',
   './golf/js/strings.js': '9cfc74ff01',
   './golf/js/holes.js': '6011b2a797',
   './golf/js/obstacles.js': '96c7fbf66c',
