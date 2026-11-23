@@ -377,3 +377,11 @@ Hard)**. v4 was 48-55% on Medium and 43-58% on the full Hard (Rainbit high, Thor
 58% → 56% on Medium. **Thornpaw is still touchy**: base heal 8 took it from 44% to 57% on Hard, so only the evolved heal moved.
 Tuner: every legal team (no same element) vs random teams, sides and first mover alternated; Hard tuning used a 4-guess Hard for speed (not checked against the full 12-guess one).
 Open v4 challenges and saves replay on v4 (`test-battlearena-mp` "an open v4 challenge replays").
+
+## Hard's time limit on the screen (2026-11-23, Matt: "check everything again")
+
+Measured in Chromium with the CPU slowed 4x / 6x (an older phone): the full 12-guess Hard froze the screen up to 1.6 / 2.9 s.
+`hardMove` now runs round by round (one more guess for EVERY first move) and `cpuTurn` passes `{ now, until: t0 +
+HARD_BUDGET_MS }` (300 ms; at least `HARD_MIN_ROUNDS` 3): worst 0.39 / 0.66 s, inside the 650 ms pause. Tests and the soak
+pass no limit (pure search). **Correction:** under rules v5, Hard beats Medium 73.6% (1,200 matches, the same with and
+without the round-by-round change; the 77% above was measured on v4's numbers). A 4x-slow phone's Hard (75 ms) ~75% (400).
