@@ -9,8 +9,8 @@
 // hidden games, and closed headings that said nothing. Now: a full-screen page with four tabs and
 // one row style everywhere (name left, value right, a tap goes deeper, like iPhone Settings).
 //
-//   Now      - only what needs Matt: Spelling Bee and integrity flags (Keep / Void / Undo) and new
-//              accounts that cannot play online yet (No / Allow). Keep marks a flag checked
+//   Now      - only what needs Matt: Spelling Bee and integrity flags (Dismiss / Void / Undo) and new
+//              accounts that cannot play online yet (No / Allow). Dismiss marks a flag checked
 //              (adminConfig/v1/reviewed, read by nothing but this page), so the list empties.
 //   Games    - every game in one grid, admin-only first. A game's page: who sees it, its testers,
 //              its machines (Skeeball), what is flagged or voided in it, its players. A player's
@@ -410,7 +410,7 @@ function nowRows(cfg) {
       sub: `${titleOfStats('spellingbee')} · ${shortDate(b.at)} ${langOf(b.bk)} · ${b.voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')}`,
       sub2: b.f.summary || '',
       acts: [
-        btn(tx('adm_keep', 'Keep'), () => setReviewed('bee', b.bk, b.code, true)),
+        btn(tx('adm_keep', 'Dismiss'), () => setReviewed('bee', b.bk, b.code, true)),
         b.voided ? btn(tx('adm_undo', 'Undo'), andReview(() => setBeeUndone(b.bk, b.code, true), 'bee', b.bk, b.code))
           : btn(tx('adm_void', 'Void'), andReview(() => setBeeUndone(b.bk, b.code, false), 'bee', b.bk, b.code), 'x'),
       ],
@@ -424,7 +424,7 @@ function nowRows(cfg) {
       sub: `${titleOfStats(f.gid)}${f.at ? ` · ${shortDate(f.at)}` : ''} · ${f.voided ? tx('adm_voided', 'Voided') : tx('adm_counts', 'Counts')}`,
       sub2: f.list.map((x) => hitText(x)).join('; '),
       acts: [
-        btn(tx('adm_keep', 'Keep'), () => setReviewed('iv', f.id, f.gid, true)),
+        btn(tx('adm_keep', 'Dismiss'), () => setReviewed('iv', f.id, f.gid, true)),
         f.voided ? btn(tx('adm_undo', 'Undo'), andReview(() => setIntegrityVoided(f.id, f.gid, false), 'iv', f.id, f.gid))
           : btn(tx('adm_void', 'Void'), andReview(() => setIntegrityVoided(f.id, f.gid, true), 'iv', f.id, f.gid), 'x'),
       ],
@@ -439,7 +439,7 @@ function nowRows(cfg) {
       acts: [
         // An online-pairs alert (2026-11-02) opens that pair's page.
         ...(String(m.key).startsWith('pair~') ? [`<button type="button" class="adm-a" ${act(() => push({ k: 'pair', key: String(m.key).slice(5) }))}>${esc(tx('adm_see', 'See'))}</button>`] : []),
-        btn(tx('adm_keep', 'Keep'), () => setReviewed('ma', m.key, m.rk, true)),
+        btn(tx('adm_keep', 'Dismiss'), () => setReviewed('ma', m.key, m.rk, true)),
       ],
     }));
   }

@@ -923,7 +923,7 @@ no Default buttons.
   (`integrity/void`, `integrity/undo`; Undo wins). Code hand voids: `js/integrity.js` `HAND_VOIDS`.
 - **Its own full-screen page (rebuilt 2026-10-29 from Matt's approved mockup; the accordion was 33 screens long)**:
   tabs Now / Games / People / Sent + a gear (this phone). ONE row style (iPhone Settings). Now = only unchecked flags
-  (Keep / Void / Undo) and new accounts (No / Allow); **Keep = `adminConfig/v1/reviewed/<bee|iv|ma>/<a>/<b>`, read by
+  (Dismiss / Void / Undo; was "Keep" until 2026-11-23, Matt: "I don't like the word Keep") and new accounts (No / Allow); **Dismiss = `adminConfig/v1/reviewed/<bee|iv|ma>/<a>/<b>`, read by
   nothing but this page**. Voids live on each GAME's page and a player's page in that game; a person's page links there.
   Plays since Oct 28 come from `playLog/<CODE>` (last 400, on tap). No per-play void exists (bests can't be un-merged).
   "Reset golf stats" removed (Matt, 2026-10-29). Designed for Matt's iPhone 16 Pro only (402x874).
