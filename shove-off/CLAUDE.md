@@ -73,11 +73,14 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
   sumo stands on a round mat in its SIDE's colour (vermilion / blue, dark rim, thin white ring; wrestler at 0.86 so the
   mat shows all round; buckle marker r x0.3); a bumper car's rubber ring is its side's colour (it was black on both);
   pucks get an outline in the other puck's tone. Circle / triangle markers stay. HUD icons follow (`drawPiece`).
-- **Art (redrawn 2026-11-18, Matt: "the sumo guys ... look like nothing")**: the SUMO is drawn from the FRONT and
-  always UPRIGHT (topknot, face, belly, mawashi belt in the side colour with flap and cords, legs, arms out shoving);
-  the side marker is its belt buckle. Bumper cars (fat rubber ring, bonnet stripes, headlights, cockpit; the
-  marker is the driver's helmet) and pucks (raised rim, groove, shine) turn to face their aim. The launcher tile
-  (`js/game-art.js`) = the same wrestlers on a dohyo. Close-ups: `art.js` at r 17 px is the size to check.
+- **Art (redrawn 2026-11-23, Matt: "the bumper cars don't look like bumper cars, and the sumos don't look like sumos";
+  pucks kept)**: sumo and car are upright FIGURES on a round base in the side's colour (car: the darker shade), rising
+  above it like game pieces; the circle / triangle marker is a badge on the base's front right. SUMO: crouched, body
+  wider than tall, no neck, fan topknot (oicho-mage), hands on knees, mawashi in the side colour down between the legs,
+  sagari cords. CAR: front view, fat black rubber bumper, tub in the side colour, big headlights, driver at the wheel,
+  seat back, the pole with a spark on top (it pokes above the piece). Cars lean into the slide (ui.js), no longer turn to
+  their aim; pucks still turn and spin. Close-ups: `art.js` at r 18 px on a 3x screen is the size to check. The launcher
+  tile (`js/game-art.js`) is unchanged.
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
   the receiver sees their CURRENT choice).
 
