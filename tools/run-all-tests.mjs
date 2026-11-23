@@ -30,6 +30,7 @@ const SUITES = [
   { file: 'chinchon/js/test.js' },
   { file: 'chinchon/js/sim.js' },
   { file: 'escoba/js/test.js' },
+  { file: 'shove-off/js/test.js' },
   { file: 'connect-four/js/test.js' },
   { file: 'nuts-bolts/js/test.js' },
   { file: 'sudoku/js/test.js' },

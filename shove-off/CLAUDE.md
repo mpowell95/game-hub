@@ -81,6 +81,19 @@ Ships to players only when Matt says "release it". Release = drop `devOnly` + ad
 - The match fixes each side's look: the challenger's at create, the receiver's with their first send (until then
   the receiver sees their CURRENT choice).
 
+## Animations (`js/fx.js`, 2026-11-23, Matt: "Make it as fun as possible (include animations and stuff)")
+
+Garnish only, read from the engine's frames, never fed back (test.js section 11). Aiming: pieces breathe, an unaimed
+piece's dashed ring turns, a piece near the edge teeters, the dragged piece lifts and gets a power arc (strains at
+full), a let-go bounces, "2 / 4" bumps, Launch pops in and glows. Round: arrows shoot out (ease-out-back), every piece
+winds up against its aim, launch puffs, trails, a burst + speed lines + squash + shake on each hit (`findHits`), cars
+steer along their path, pucks spin, sumo waddle; a fall = tumble + per-look spray (water / clay dust / chips) + shake +
+its score-bar icon knocked out (`_hudKO`) at that moment; the shrink crumbles the old edge. Decided round: the winner's
+pieces hop (`PARTY_MS`), confetti on a win (`.so-fx` canvas above the card), card pops in, face jumps (win) / wobbles
+(loss). "Round N" / "Sudden death" banner slams in as a round begins; sudden death = breathing vermilion edge glow.
+Bumper cars' water drifts. Reduced motion: no garnish, the slide still moves. The ground is cached (`_bg`); the
+platform is drawn live (caching it cost 30-120 ms rebuilds). No sound, no vibration.
+
 ## Determinism (critical)
 
 Both phones replay the match from the log. `engine.js` uses ONLY `+ - * /` and `Math.sqrt` (plus exact

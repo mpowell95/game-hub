@@ -14,6 +14,7 @@ import * as E from './engine.js';
 import * as A from './art.js';
 import * as MP from './mp.js';
 import * as CG from './cpu-game.js';
+import * as FX from './fx.js';
 import { STRINGS } from './strings.js';
 import { diffShapeSVG } from '../../js/difficulty-tiers.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -34,6 +35,11 @@ const EDGE_PX = 9;                           // rv 2: the round-1 circle spans t
 const STEPS_PER_FRAME = 2;                   // a round's slide plays at twice the simulation's step rate
 const REVEAL_MS = 1100;                      // both sides' arrows shown before the slide
 const SHRINK_MS = 700;
+const PARTY_MS = 1100;                       // the round that decides it: the winner's pieces hop before the card
+const ARROW_GROW_MS = 380;                   // the reveal: arrows shoot out of the pieces...
+const WINDUP_MS = 320;                       // ...then every piece pulls back before it goes
+const FALL_STEPS = 40;                       // a fallen piece tumbles away over this many simulation steps
+const TRAIL = 7;                             // frames of motion trail behind a fast piece
 
 function loadSettings() {
   let s = {};
@@ -88,15 +94,22 @@ class ShoveOff {
       <section class="so-scr" data-scr="challenge" hidden></section>
       <section class="so-scr so-play" data-scr="play" hidden>
         <canvas class="so-board" aria-label=""></canvas>
+        <div class="so-banner" aria-hidden="true" hidden></div>
         <div class="so-hud"></div>
         <div class="so-foot"></div>
       </section>
       <div class="so-ov" data-ov="help" hidden></div>
       <div class="so-ov" data-ov="menu" hidden></div>
       <div class="so-ov" data-ov="over" hidden></div>
+      <canvas class="so-fx" aria-hidden="true"></canvas>
       <div class="so-toast" role="status" aria-live="polite" hidden></div>`;
     host.appendChild(this.root);
     this.canvas = this.root.querySelector('.so-board');
+    this.fxCanvas = this.root.querySelector('.so-fx');
+    this.P = new FX.Particles();                 // board garnish: hits, splashes, dust, crumbs (fx.js)
+    this.PC = new FX.Particles();                // confetti, above the overlays
+    this.shake = new FX.Shake();
+    this._bgCache = null;                        // the still picture behind the pieces (_bg)
     this.root.addEventListener('click', this._onClick = (e) => this._click(e));
     this.root.addEventListener('input', this._onInput = (e) => { if (e.target.matches('[data-role="search"]')) this._paintPeople(); });
     this.canvas.addEventListener('pointerdown', this._onDown = (e) => this._down(e));
@@ -382,6 +395,8 @@ class ShoveOff {
     this.mp.shown = g.resolved;                         // reopening never replays an old round
     this._takeCpu(g);
     this._layout();
+    if (this._canAim()) this._roundBanner();
+    this._loop();
   }
   _takeCpu(g) {
     const mp = this.mp;
@@ -439,6 +454,8 @@ class ShoveOff {
     if (this.destroyed || this.mp !== mp) return;
     if (!game) { this._toast(t('mp_gone')); this._showSetup(); return; }
     this._takeGame(game, true);
+    if (this._canAim()) this._roundBanner();
+    this._loop();
     mp.stop = await MP.watchGame(id, (g) => { if (this.mp === mp && !this.destroyed) this._takeGame(g, false); });
     if (this.destroyed || this.mp !== mp) { try { mp.stop && mp.stop(); } catch { /* detached */ } return; }
     this._mountChat();
@@ -480,19 +497,41 @@ class ShoveOff {
     const m = MP.replayGame(g, idx + 1, idx, frames);
     if (!m) { this._markShown(n); return; }
     const rec = m.rounds[m.rounds.length - 1];
-    this.anim = { n, rec, frames, t0: performance.now(), m };
+    // Drawing only (fx.js): the hits, each piece's path length (puck spin, sumo waddle) and heading (cars).
+    const RL = E.rulesOf(m);
+    const N = rec.before.length;
+    const hits = FX.findHits(rec.before, frames, rec.falls, rec.fallAt || [], E.R, E.MAX_AIM * RL.SPEED_K);
+    const path = [], head = [];
+    for (let i = 0; i < N; i++) {
+      const L = new Float32Array(frames.length), Hd = new Float32Array(frames.length);
+      const p = rec.before[i], aim = rec.aims[p.s] && rec.aims[p.s][p.i];
+      let px = p.x, py = p.y, acc = 0, h = aim ? Math.atan2(aim[1], aim[0]) : this._faceOf(p);
+      for (let k = 0; k < frames.length; k++) {
+        const x = frames[k][i * 2], y = frames[k][i * 2 + 1], dx = x - px, dy = y - py, d = Math.sqrt(dx * dx + dy * dy);
+        acc += d;
+        if (d > 0.8) { let to = Math.atan2(dy, dx), dh = to - h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; h += dh * 0.25; }
+        L[k] = acc; Hd[k] = h; px = x; py = y;
+      }
+      path.push(L); head.push(Hd);
+    }
+    this.anim = { n, rec, frames, t0: performance.now(), m, hits, path, head, hitAt: 0, fallsDone: new Set(), sq: new Map(), launched: false, shrunk: false, partied: false };
     this._renderHud(rec.before);
     this._renderFoot();
     this._layout();
     this._loop();
   }
+  /** One draw a frame while anything moves: a round playing, a drag, particles, a shake, or the aiming screen
+   *  (the "aim me" rings turn, the water drifts; that idle redraw runs at ~30 fps). */
   _loop() {
     if (this.raf) return;
-    const tick = () => {
+    let last = 0;
+    const tick = (now) => {
       this.raf = 0;
       if (this.destroyed) return;
-      try { this._draw(); } catch (err) { console.error('[shoveoff] draw', err); }
-      if (this.anim || this.drag) this.raf = requestAnimationFrame(tick);
+      const busy = this.anim || this.drag || this.P.busy || this.shake.busy || this._popUntil > performance.now();
+      const idle = !busy && this.screen === 'play' && this._canAim() && !FX.reduced();
+      if (busy || (idle && now - last > 30)) { last = now; try { this._draw(); } catch (err) { console.error('[shoveoff] draw', err); } }
+      if (busy || idle) this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
   }
@@ -502,10 +541,45 @@ class ShoveOff {
     const mp = this.mp;
     if (!mp || !mp.game) return;
     this._markShown(a.n);
+    // where every piece ended up facing, so it does not snap back to the middle while the next round is aimed
+    a.rec.before.forEach((p, i) => { if (a.head[i] && a.head[i].length) this._faceSet(p, a.head[i][a.head[i].length - 1]); });
     // More rounds than shown (both sent twice while away): show the next, else settle.
     if (mp.game.resolved > a.n) { this._animateRound(mp.game.resolved); return; }
     this._renderHud(); this._renderFoot(); this._draw();
     if (mp.game.over) this._finish();
+    else this._roundBanner(a.m);
+    this._loop();
+  }
+  /** "Round N" / "Sudden death" slams onto the board as a round begins (same words as the pill above). */
+  _roundBanner(m = null) {
+    const mp = this.mp, g = mp && mp.game;
+    const b = this.el('.so-banner');
+    if (!g || g.over || !b) return;
+    const sd = m ? m.sd > 0 : g.sd > 0;
+    b.textContent = sd ? t('sudden') : t('round_n', { n: g.round });
+    b.classList.toggle('is-sd', sd);
+    b.hidden = true; void b.offsetWidth;          // restart the animation
+    b.hidden = false;
+    clearTimeout(this._bannerT);
+    this._bannerT = setTimeout(() => { b.hidden = true; }, FX.reduced() ? 900 : 1500);
+  }
+  _faceOf(p) {
+    const mem = this.mp && this.mp.face;
+    const f = mem && mem.get(p.s + p.i);
+    return f != null ? f : Math.atan2(-p.y, -p.x);
+  }
+  _faceSet(p, a) { const mp = this.mp; if (!mp) return; if (!mp.face) mp.face = new Map(); mp.face.set(p.s + p.i, a); }
+  /** A piece of `side` fell: its icon in the score bar is knocked out with a jolt (the final paint keeps it out). */
+  _hudKO(side) {
+    const icons = [...this.root.querySelectorAll(`.so-hud canvas[data-icon="${side}"][data-out="0"]`)];
+    const c = icons[icons.length - 1];
+    if (!c) return;
+    c.dataset.out = '1';
+    const looks = this._looks();
+    A.drawIcon(c, looks[side], side, 22, Math.min(2, window.devicePixelRatio || 1), true);
+    c.classList.remove('is-ko'); void c.offsetWidth; c.classList.add('is-ko');
+    const card = c.closest('.so-pc');
+    if (card) { card.classList.remove('is-hit'); void card.offsetWidth; card.classList.add('is-hit'); }
   }
 
   _finish() {
@@ -587,15 +661,18 @@ class ShoveOff {
     const g = mp && mp.game;
     if (!g) { foot.innerHTML = `<p class="so-status">${esc(t('loading'))}</p>`; return; }
     let mid;
+    if (this.anim || g.over || this._sent()) this._lastHave = null;
     if (this.anim) mid = '';
     else if (g.over) mid = `<button type="button" class="so-go" data-act="overagain">${esc(t('result'))}</button>`;
     else if (this._sent()) mid = `<p class="so-status"><b>${esc(t('sent'))}</b> ${esc(t('waiting', { name: first(mp.them.name) || t('anon') }))}</p>`;
     else {
       const need = E.slotsOf(mp.m, mp.side);
       const have = need.filter((i) => mp.draft.a[i]).length;
+      const bump = this._lastHave != null && have > this._lastHave ? ' is-bump' : '';
+      this._lastHave = have;
       mid = have >= need.length && need.length
-        ? `<button type="button" class="so-go so-launch" data-act="launch"${this._sending ? ' disabled' : ''}>${esc(t('launch'))}</button>`
-        : `<p class="so-status so-count" aria-label="${esc(t('aria_aimed', { a: have, b: need.length }))}">${have} / ${need.length}</p>`;
+        ? `<button type="button" class="so-go so-launch${bump ? ' is-in' : ''}" data-act="launch"${this._sending ? ' disabled' : ''}>${esc(t('launch'))}</button>`
+        : `<p class="so-status so-count${bump}" aria-label="${esc(t('aria_aimed', { a: have, b: need.length }))}">${have} / ${need.length}</p>`;
     }
     foot.innerHTML = `<button type="button" class="so-menubtn" data-act="menu" aria-label="${esc(t('menu'))}">${DOTS_SVG}</button>
       <div class="so-footmid">${mid}</div><span class="so-footpad" aria-hidden="true"></span>`;
@@ -634,30 +711,102 @@ class ShoveOff {
   }
   _toScreen(x, y) { const v = this.view; return [v.cx + x * v.k, v.cy + y * v.k]; }
   _toWorld(px, py) { const v = this.view; return [(px - v.cx) / v.k, (py - v.cy) / v.k]; }
+  /** The still ground (and, for any but the bumper cars, its texture), drawn once per look and screen size into an
+   *  offscreen canvas and copied each frame; the cars' water is drawn once a ripple-period wider and slid
+   *  sideways. The platform is drawn live (it shrinks, and caching it cost a 30-120 ms rebuild at each change). */
+  _bg(ctx, kind, now) {
+    const v = this.view, dpr = this.dpr;
+    const key = [kind, v.W, v.H, dpr].join('|');
+    let c = this._bgCache;
+    if (!c || c.key !== key) {
+      const cv = c ? c.cv : document.createElement('canvas');
+      cv.width = Math.round(v.W * dpr); cv.height = Math.round(v.H * dpr);
+      const x = cv.getContext('2d');
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      A.drawSurround(x, kind, v.W, v.H, kind === 'car' ? null : 0);
+      let wv = null;
+      if (kind === 'car') {
+        wv = (c && c.wv) || document.createElement('canvas');
+        wv.width = Math.round((v.W + A.WATER_PERIOD) * dpr); wv.height = cv.height;
+        const wx = wv.getContext('2d'); wx.setTransform(dpr, 0, 0, dpr, 0, 0); wx.clearRect(0, 0, v.W + A.WATER_PERIOD, v.H);
+        A.drawWater(wx, v.W + A.WATER_PERIOD, v.H, 0);
+      }
+      c = { key, cv, wv };
+      this._bgCache = c;
+    }
+    ctx.drawImage(c.cv, 0, 0, v.W, v.H);
+    if (c.wv) {
+      const off = FX.reduced() ? 0 : ((now / 1000) * 1.4 * 46) % A.WATER_PERIOD;
+      ctx.drawImage(c.wv, -off, 0, v.W + A.WATER_PERIOD, v.H);
+    }
+  }
   _draw() {
     if (this.screen !== 'play' || !this.view) return;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
-    const v = this.view;
+    const v = this.view, now = performance.now();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const mp = this.mp, g = mp && mp.game;
     const kind = A.kindOf(g ? this._myLook() : this.s.look);
-    A.drawSurround(ctx, kind, v.W, v.H, 0);
-    if (!g) return;
+    const m = mp && mp.m;
+    this._bg(ctx, kind, now);
+    if (!g || !m) return;
+    const shape = E.rulesOf(m).shape;
+    const [sx, sy] = FX.reduced() ? [0, 0] : this.shake.offset(now);
+    ctx.save();
+    ctx.translate(sx, sy);
+    // the platform (the shrink draws its own, in _drawAnim)
+    const shrinking = this.anim && now - this.anim.t0 >= REVEAL_MS + this._slideMs();
+    if (!shrinking) A.drawPlatform(ctx, kind, v.cx, v.cy, (this.anim ? this.anim.rec.H : m.H) * v.k, shape);
     const looks = this._looks();
     const r = E.R * v.k;
-    const face = (p, aim) => (aim ? Math.atan2(aim[1], aim[0]) : Math.atan2(-p.y, -p.x));
-    if (this.anim) { this._drawAnim(ctx, kind, looks, r, face); return; }
-    const m = mp.m;
-    A.drawPlatform(ctx, kind, v.cx, v.cy, m.H * v.k, E.rulesOf(m).shape);
+    if (this.anim) this._drawAnim(ctx, kind, looks, r, now);
+    else this._drawIdle(ctx, looks, r, now);
+    this.P.draw(ctx, now);
+    ctx.restore();
+    if ((this.anim ? this.anim.rec.sd : g.sd > 0 && !g.over) && !FX.reduced()) this._vignette(ctx, now);
+  }
+  /** Sudden death: the screen's edges glow and breathe. */
+  _vignette(ctx, now) {
+    const v = this.view;
+    const k = 0.5 + 0.5 * Math.sin(now / 420);
+    const gr = ctx.createRadialGradient(v.cx, v.cy, Math.min(v.W, v.H) * 0.35, v.cx, v.cy, Math.max(v.W, v.H) * 0.75);
+    gr.addColorStop(0, 'rgba(224,83,47,0)');
+    gr.addColorStop(1, `rgba(224,83,47,${0.18 + 0.14 * k})`);
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, v.W, v.H);
+  }
+  /** Between rounds: the pieces, my arrows, the power ring on the one being dragged. Pieces breathe, an unaimed
+   *  piece's ring turns, a piece close to falling teeters, the dragged one is lifted. */
+  _drawIdle(ctx, looks, r, now) {
+    const mp = this.mp, g = mp.game, m = mp.m, v = this.view;
     const showMine = !g.over;
     const myAims = this._sent() ? (mp.pending && mp.pending.r === g.round ? (E.parseAims(m, mp.side, mp.pending.aims) || []) : this._sentAims()) : mp.draft.a;
     const canAim = this._canAim();
+    const calm = FX.reduced();
+    const RL = E.rulesOf(m);
+    const edge = RL.shape === 'circle' ? E.fallDist(m.H) : m.H;
+    const T = now / 1000;
+    const drag = this.drag;
     for (const p of m.pieces) {
       if (!p.alive) continue;
       const [x, y] = this._toScreen(p.x, p.y);
       const aim = p.s === mp.side && showMine ? myAims[p.i] : null;
-      A.drawPiece(ctx, x, y, r, looks[p.s], p.s, face(p, aim), { ring: canAim && p.s === mp.side && !aim });
+      const o = { ring: canAim && p.s === mp.side && !aim, spin: T * 0.9 };
+      if (!calm) {
+        const d = RL.shape === 'circle' ? Math.sqrt(p.x * p.x + p.y * p.y) : Math.max(Math.abs(p.x), Math.abs(p.y));
+        const near = (d - edge * 0.78) / (edge * 0.22);
+        if (near > 0) o.tilt = Math.sin(T * 9 + p.i * 2) * 0.16 * Math.min(1, near);      // teetering on the edge
+        o.scale = 1 + Math.sin(T * 2.2 + p.i * 1.7 + (p.s === 'b' ? 1 : 0)) * 0.025;      // breathing
+        const pop = mp.pop && mp.pop.get(p.s + p.i);
+        if (drag && drag.p === p) { o.scale = 1.12; o.lift = r * 0.18; }
+        else if (pop && now - pop < 260) { const q = (now - pop) / 260; o.scale = 1 + Math.sin(q * Math.PI) * 0.12; }
+        if (drag && drag.p === p && aim) {
+          const len = Math.sqrt(aim[0] * aim[0] + aim[1] * aim[1]);
+          if (len >= E.MAX_AIM - 1) o.tilt = (o.tilt || 0) + Math.sin(T * 60) * 0.06;     // straining at full power
+        }
+      }
+      A.drawPiece(ctx, x, y, r, looks[p.s], p.s, aim ? Math.atan2(aim[1], aim[0]) : this._faceOf(p), o);
     }
     if (showMine) for (const p of m.pieces) {
       if (!p.alive || p.s !== mp.side) continue;
@@ -665,48 +814,181 @@ class ShoveOff {
       if (!a) continue;
       const [x, y] = this._toScreen(p.x, p.y);
       A.drawArrow(ctx, x, y, a[0] * v.k, a[1] * v.k, r, { alpha: this._sent() ? 0.55 : 1 });
+      if (drag && drag.p === p) A.drawPower(ctx, x, y, r, Math.min(1, Math.sqrt(a[0] * a[0] + a[1] * a[1]) / E.MAX_AIM), 0.5 + 0.5 * Math.sin(T * 12));
     }
   }
+  _slideMs() { const a = this.anim; return a ? Math.ceil(a.frames.length / STEPS_PER_FRAME) * (1000 / 60) : 0; }
   _sentAims() {
     const mp = this.mp, g = mp.game;
     const e = g.log.find((x) => x.by === mp.side && x.r === g.round);
     return e ? (E.parseAims(mp.m, mp.side, e.aims) || []) : [];
   }
-  _drawAnim(ctx, kind, looks, r, face) {
+  /** A round playing: reveal (arrows shoot out, pieces wind up), slide (trails, hits, falls), shrink (the edge
+   *  crumbles), and, when it decided the match, the winner's pieces hopping. Only the garnish reads the clock;
+   *  where every piece is comes from the engine's frames. */
+  _drawAnim(ctx, kind, looks, r, now) {
     const a = this.anim, v = this.view;
     const rec = a.rec;
-    const el = performance.now() - a.t0;
-    const slideMs = Math.ceil(a.frames.length / STEPS_PER_FRAME) * (1000 / 60);
-    let phase, k = 0;
+    const el = now - a.t0;
+    const slideMs = this._slideMs();
+    const party = a.m.winner != null && a.m.winner !== E.DRAW;
+    const calm = FX.reduced();
+    const tEnd = REVEAL_MS + slideMs + SHRINK_MS + (party ? PARTY_MS : 0);
+    let phase, k = 0, q = 0;
     if (el < REVEAL_MS) phase = 'reveal';
     else if (el < REVEAL_MS + slideMs) { phase = 'slide'; k = Math.min(a.frames.length - 1, Math.floor((el - REVEAL_MS) / (1000 / 60) * STEPS_PER_FRAME)); }
-    else if (el < REVEAL_MS + slideMs + SHRINK_MS) { phase = 'shrink'; k = (el - REVEAL_MS - slideMs) / SHRINK_MS; }
+    else if (el < REVEAL_MS + slideMs + SHRINK_MS) { phase = 'shrink'; q = (el - REVEAL_MS - slideMs) / SHRINK_MS; }
+    else if (el < tEnd) { phase = 'party'; q = (el - REVEAL_MS - slideMs - SHRINK_MS) / PARTY_MS; }
     else { this._animDone(); return; }
     const Hpx = rec.H * v.k, H1px = rec.H1 * v.k;
     const shape = E.rulesOf(a.m).shape;
-    if (phase === 'shrink') {
-      A.drawGhostEdge(ctx, kind, v.cx, v.cy, Hpx, 1 - k, shape);
-      A.drawPlatform(ctx, kind, v.cx, v.cy, H1px + (Hpx - H1px) * (1 - easeOut(k)), shape);
-    } else A.drawPlatform(ctx, kind, v.cx, v.cy, Hpx, shape);
-    const frame = phase === 'reveal' ? null : phase === 'slide' ? a.frames[k] : a.frames[a.frames.length - 1];
+    const last = a.frames.length - 1;
+    const fk = phase === 'reveal' ? -1 : phase === 'slide' ? k : last;
+    const frame = fk < 0 ? null : a.frames[fk];
+    if (phase === 'shrink' || phase === 'party') {
+      if (phase === 'shrink') A.drawGhostEdge(ctx, kind, v.cx, v.cy, Hpx, 1 - q, shape);
+      A.drawPlatform(ctx, kind, v.cx, v.cy, phase === 'party' ? H1px : H1px + (Hpx - H1px) * (1 - easeOut(q)), shape);
+    }
+    // --- one-time garnish as each moment arrives ---
+    if (!calm) {
+      if (phase !== 'reveal' && !a.launched) {
+        a.launched = true;
+        rec.before.forEach((p, i) => {
+          const aim = p.alive && rec.aims[p.s] && rec.aims[p.s][p.i];
+          if (!aim) return;
+          const len = Math.sqrt(aim[0] * aim[0] + aim[1] * aim[1]) || 1;
+          FX.launchPuff(this.P, kind, ...this._toScreen(p.x, p.y), r, aim[0] / len, aim[1] / len, len / E.MAX_AIM);
+        });
+      }
+      while (a.hitAt < a.hits.length && a.hits[a.hitAt].k <= fk) {
+        const h = a.hits[a.hitAt++];
+        const [hx, hy] = this._toScreen(h.x, h.y);
+        FX.impact(this.P, hx, hy, h.s, r);
+        if (h.s > 0.3) this.shake.kick(2 + h.s * 8);
+        a.sq.set(h.i, { t: now, a: h.ang, s: h.s }); a.sq.set(h.j, { t: now, a: h.ang, s: h.s });
+      }
+      if ((phase === 'shrink' || phase === 'party') && !a.shrunk) {
+        a.shrunk = true;
+        if (rec.H1 < rec.H) { FX.crumble(this.P, kind, v.cx, v.cy, Hpx, r); this.shake.kick(2.5); }
+      }
+    }
+    // a fall (off the edge mid-slide, or left outside when the edge melts): the score bar loses an icon at once
+    rec.falls.forEach((i, n) => {
+      const at = rec.fallAt ? rec.fallAt[n] : 0;
+      if (fk >= at && !a.fallsDone.has(i)) {
+        a.fallsDone.add(i);
+        this._hudKO(rec.before[i].s);
+        if (!calm) {
+          const f = a.frames[Math.min(last, at)], pf = a.frames[Math.max(0, Math.min(last, at) - 1)];
+          const [fx, fy] = this._toScreen(f[i * 2], f[i * 2 + 1]);
+          FX.splash(this.P, kind, fx, fy, r, (f[i * 2] - pf[i * 2]) * v.k * 60 * STEPS_PER_FRAME, (f[i * 2 + 1] - pf[i * 2 + 1]) * v.k * 60 * STEPS_PER_FRAME);
+          this.shake.kick(5);
+        }
+      }
+    });
+    if (phase === 'shrink' || phase === 'party') for (const i of rec.shrinkFalls) {
+      if (a.fallsDone.has(i)) continue;
+      a.fallsDone.add(i);
+      this._hudKO(rec.before[i].s);
+      if (!calm) { const f = a.frames[last]; FX.splash(this.P, kind, ...this._toScreen(f[i * 2], f[i * 2 + 1]), r); }
+    }
+    if (phase === 'party' && !a.partied) {
+      a.partied = true;
+      if (!calm && a.m.winner === this.mp.side) this._confetti();
+    }
+    // --- trails under the pieces ---
+    if (phase === 'slide' && !calm) {
+      const trail = kind === 'puck' ? '40,70,120' : kind === 'sumo' ? '255,240,215' : '255,255,255';
+      rec.before.forEach((p, i) => {
+        if (!p.alive || a.fallsDone.has(i)) return;
+        const k0 = Math.max(0, k - TRAIL * STEPS_PER_FRAME);
+        const f0 = a.frames[k0];
+        const dx = frame[i * 2] - f0[i * 2], dy = frame[i * 2 + 1] - f0[i * 2 + 1];
+        const d = Math.sqrt(dx * dx + dy * dy) * v.k;
+        if (d < r * 0.6) return;
+        ctx.save();
+        ctx.lineCap = 'round';
+        const steps = 6;
+        for (let s = 0; s < steps; s++) {
+          const ka = Math.max(0, k - Math.round((s / steps) * (k - k0))), kb = Math.max(0, k - Math.round(((s + 1) / steps) * (k - k0)));
+          const [x1, y1] = this._toScreen(a.frames[ka][i * 2], a.frames[ka][i * 2 + 1]);
+          const [x2, y2] = this._toScreen(a.frames[kb][i * 2], a.frames[kb][i * 2 + 1]);
+          ctx.strokeStyle = `rgba(${trail},${0.22 * (1 - s / steps) * Math.min(1, d / (r * 3))})`;
+          ctx.lineWidth = r * 1.5 * (1 - s / steps);
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
+        ctx.restore();
+      });
+    }
+    // --- the pieces ---
+    const grow = Math.min(1, el / ARROW_GROW_MS);
+    const growK = calm ? 1 : easeOutBack(grow);
+    const wind = calm || phase !== 'reveal' ? 0 : Math.max(0, (el - (REVEAL_MS - WINDUP_MS)) / WINDUP_MS);
     rec.before.forEach((p, i) => {
       if (!p.alive) return;
       const aim = rec.aims[p.s] && rec.aims[p.s][p.i];
-      let wx = p.x, wy = p.y, alpha = 1, scale = 1;
+      let wx = p.x, wy = p.y, alpha = 1, scale = 1, tilt = 0;
       if (frame) { wx = frame[i * 2]; wy = frame[i * 2 + 1]; }
-      const fell = rec.falls.indexOf(i) >= 0;
-      if (fell && phase !== 'reveal') {
-        const fi = rec.falls.indexOf(i);
-        const fs = rec.fallAt ? rec.fallAt[fi] : Math.max(0, a.frames.findIndex((f) => Math.abs(f[i * 2]) > rec.H || Math.abs(f[i * 2 + 1]) > rec.H));
-        const since = (phase === 'slide' ? k : a.frames.length + 20) - fs;
-        if (since > 0) { const q = Math.min(1, since / 26); scale = 1 - q * 0.65; alpha = 1 - q; if (q < 1) A.drawSplash(ctx, kind, ...this._toScreen(wx, wy), r, q); }
+      const fi = rec.falls.indexOf(i);
+      if (fi >= 0 && phase !== 'reveal') {
+        const fs = rec.fallAt ? rec.fallAt[fi] : 0;
+        const since = (phase === 'slide' ? k : a.frames.length + FALL_STEPS) - fs;
+        if (since > 0) { const f = Math.min(1, since / FALL_STEPS); scale = 1 - f * 0.7; alpha = 1 - f * f; tilt = f * 3 * (i % 2 ? 1 : -1); }
       }
-      if (phase === 'shrink' && rec.shrinkFalls.indexOf(i) >= 0) { scale = 1 - k * 0.65; alpha = 1 - k; A.drawSplash(ctx, kind, ...this._toScreen(wx, wy), r, k); }
+      if ((phase === 'shrink' || phase === 'party') && rec.shrinkFalls.indexOf(i) >= 0) {
+        const f = phase === 'party' ? 1 : Math.min(1, q * 1.4);
+        scale = 1 - f * 0.7; alpha = 1 - f * f; tilt = f * 3 * (i % 2 ? 1 : -1);
+      }
       if (alpha <= 0.02) return;
-      const [x, y] = this._toScreen(wx, wy);
-      A.drawPiece(ctx, x, y, r, looks[p.s], p.s, face(p, aim), { alpha, scale });
-      if (phase === 'reveal' && aim) A.drawArrow(ctx, x, y, aim[0] * v.k, aim[1] * v.k, r, { color: p.s === this.mp.side ? '#ffce3a' : '#ffffff', alpha: Math.min(1, el / 300) });
+      let [x, y] = this._toScreen(wx, wy);
+      const o = { alpha, scale, tilt };
+      const kd = A.kindOf(looks[p.s]);
+      let ang = aim ? Math.atan2(aim[1], aim[0]) : this._faceOf(p);
+      if (fk >= 0) {
+        const L = a.path[i][fk];
+        if (kd === 'car') ang = a.head[i][fk];
+        else if (kd === 'puck') ang += L / E.R * 0.6;                                     // pucks spin as they slide
+        else if (!calm && phase === 'slide') {                                           // sumo: a waddle while moving
+          const sp = fk > 0 ? Math.abs(L - a.path[i][fk - 1]) : 0;
+          o.tilt += Math.sin(L / E.R * 2.4) * 0.22 * Math.min(1, sp / 8);
+        }
+      }
+      if (wind > 0 && aim) {
+        // wind-up: pull back against the aim, squashed along it, harder shoves pull further
+        const len = Math.sqrt(aim[0] * aim[0] + aim[1] * aim[1]) || 1;
+        const pull = easeOut(Math.min(1, wind)) * r * 0.28 * (len / E.MAX_AIM);
+        x -= aim[0] / len * pull; y -= aim[1] / len * pull;
+        o.squash = { a: Math.atan2(aim[1], aim[0]), k: 0.12 * easeOut(Math.min(1, wind)) };
+      }
+      const sq = a.sq.get(i);
+      if (sq && !calm) { const t2 = (now - sq.t) / 180; if (t2 < 1) o.squash = { a: sq.a, k: (0.06 + sq.s * 0.12) * Math.sin(t2 * Math.PI) }; }
+      if (phase === 'party' && !calm && p.s === a.m.winner && fi < 0 && rec.shrinkFalls.indexOf(i) < 0) {
+        const hop = Math.abs(Math.sin(q * Math.PI * 3 + i * 0.5)) * (1 - q * 0.5);
+        o.lift = hop * r * 0.7; o.scale = scale * (1 + hop * 0.08);
+      }
+      A.drawPiece(ctx, x, y, r, looks[p.s], p.s, ang, o);
+      if (phase === 'reveal' && aim) A.drawArrow(ctx, x, y, aim[0] * v.k * growK, aim[1] * v.k * growK, r, { color: p.s === this.mp.side ? '#ffce3a' : '#ffffff', alpha: Math.min(1, el / 200) });
     });
+  }
+  /** A win: confetti over everything (the card included) on its own canvas, until the last piece lands. */
+  _confetti() {
+    if (FX.reduced()) return;
+    const c = this.fxCanvas, rect = this.root.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    c.width = Math.round(rect.width * dpr); c.height = Math.round(rect.height * dpr);
+    FX.confetti(this.PC, rect.width, rect.height);
+    if (this._fxRaf) return;
+    const tick = () => {
+      this._fxRaf = 0;
+      if (this.destroyed) return;
+      const x = c.getContext('2d');
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      x.clearRect(0, 0, rect.width, rect.height);
+      this.PC.draw(x);
+      if (this.PC.busy) this._fxRaf = requestAnimationFrame(tick);
+      else x.clearRect(0, 0, rect.width, rect.height);
+    };
+    this._fxRaf = requestAnimationFrame(tick);
   }
 
   // --- aiming input -------------------------------------------------------------------------------
@@ -745,8 +1027,12 @@ class ShoveOff {
     const mp = this.mp;
     if (!d.moved) mp.draft.a[d.p.i] = null;    // a tap clears that piece's arrow (then drag again)
     writeDraft(mp.game.id, mp.draft.r, mp.draft.a);
+    if (!mp.pop) mp.pop = new Map();
+    mp.pop.set(d.p.s + d.p.i, performance.now()); // a little bounce as it is let go
+    this._popUntil = performance.now() + 280;
     this._renderFoot();
     this._draw();
+    this._loop();
   }
   async _launch() {
     const mp = this.mp, g = mp && mp.game;
@@ -858,7 +1144,7 @@ class ShoveOff {
     const face = o.result === 'won' ? me.emoji : o.result === 'lost' ? (o.them && o.them.emoji) : '🤝';
     const why = o.why === 'resign' ? t(o.result === 'won' ? 'why_resign_them' : 'why_resign_me', { name }) : o.why === 'timeout' ? t('why_timeout')
       : o.why === 'sudden' ? t('sudden') : o.why === 'count' ? t('why_count') : '';
-    ov.innerHTML = `<div class="so-card so-over" role="dialog" aria-modal="true" aria-label="${esc(head)}">
+    ov.innerHTML = `<div class="so-card so-over is-${o.result === 'won' ? 'won' : o.result === 'lost' ? 'lost' : 'draw'}" role="dialog" aria-modal="true" aria-label="${esc(head)}">
       <button type="button" class="so-x" data-act="close" aria-label="${esc(t('close'))}">${X_SVG}</button>
       <div class="so-overface" aria-hidden="true">${esc(face || '🙂')}</div>
       <h2 class="so-overhead">${esc(head)}</h2>
@@ -870,6 +1156,7 @@ class ShoveOff {
       </div>
     </div>`;
     ov.hidden = false;
+    if (o.result === 'won' && !this.PC.busy) this._confetti();
   }
 
   // --- quick chat (js/match-chat-ui.js + js/match-chat.js, `shoveoff/chat/<id>`) -----------------
@@ -914,6 +1201,10 @@ class ShoveOff {
     this.mp = null;
     this.anim = null;
     this.drag = null;
+    this._lastHave = null;
+    this.P.clear();
+    clearTimeout(this._bannerT);
+    const b = this.el('.so-banner'); if (b) b.hidden = true;
     if (mp && mp.stop) { try { mp.stop(); } catch { /* detached */ } }
   }
 
@@ -928,6 +1219,7 @@ class ShoveOff {
       for (const x of scope.querySelectorAll('.so-look')) {
         const on = x.dataset.v === this.s.look;
         x.classList.toggle('is-sel', on); x.setAttribute('aria-checked', String(on));
+        x.classList.toggle('is-pop', on && x === b);
         const chk = x.querySelector('.so-chk');
         if (on && !chk) x.insertAdjacentHTML('beforeend', '<span class="so-chk" aria-hidden="true">&#10003;</span>');
         if (!on && chk) chk.remove();
@@ -977,7 +1269,9 @@ class ShoveOff {
     if (this._bs) { try { this._bs.close(); } catch { /* gone */ } this._bs = null; }
     this._leaveMatch();
     if (this.raf) cancelAnimationFrame(this.raf);
+    if (this._fxRaf) cancelAnimationFrame(this._fxRaf);
     clearTimeout(this._toastT);
+    clearTimeout(this._bannerT);
     this.root.removeEventListener('click', this._onClick);
     this.root.removeEventListener('input', this._onInput);
     this.root.removeEventListener('touchmove', this._onTouchMove);
@@ -999,6 +1293,7 @@ function peopleRow({ p, i }) {
       <span class="so-rowtext"><span class="so-rowname">${esc(p.name)}</span></span><span class="so-chev" aria-hidden="true">›</span></button>`;
 }
 function easeOut(k) { return 1 - (1 - k) * (1 - k); }
+function easeOutBack(k) { const c = 1.7; const u = k - 1; return 1 + (c + 1) * u * u * u + c * u * u; }
 
 /** How to play's diagram: the platform, an aimed piece of each side (circle / triangle markers, never
  *  colour alone), one shoved off the edge, and the smaller platform of the next round dashed. */
