@@ -68,3 +68,18 @@ with its own small board like Spelling Bee's, so the family compares every day.
   wrapped the same day (`{ mode: 'ladder', lang }`, the band), so Word Weaver is in `tools/game-modes.json`.
 - `recordWordWeaverFreeHint`/`FreeLost` were failing `tools/test-rate-guard.mjs` on main (costs, not plays): exempted
   with the new `recordWordWeaverDailyHint`.
+
+
+## 2026-11-23: a full grid that never ended, and erasing (King of Games' bug report, v1635)
+
+"I beat t level and it won't go past it. Also ... can't erase. Delete button doesn't work."
+- **Stuck level:** Medium 548's SHE is made entirely of HERS' S, HER's H and SEE's E. Found in that order the grid was
+  full, `isDone` still wanted SHE, the hint had nothing to reveal (bulb disabled): no way on. The "every letter showing
+  counts as found" rule ran only after hints. Now `claimCovered` (engine) runs after every grid word, every hint and in
+  `cleanState`, so stuck saves open done and are recorded. A scan of the data found 151 EN ladder levels, 142 ES, 67 EN
+  and 54 ES dailies with such a word. His play log: nothing recorded between Medium 547 (4:16 PM) and the report (6:41 PM).
+- **Erasing:** tapping a picked letter other than the last counted as a swipe (any finger wobble "moved" off the last
+  letter) and entered the word. A touch is now a swipe only once it reaches a letter other than the one it started on; a
+  tap on a picked letter takes it and every later letter off; a swipe starting on an earlier picked letter carries on from
+  it. There was no delete button: added `.ww-erase` beside the word (44px, icon only, `erase_aria`).
+- Proved on the old and new code with real pointer input at 402x874 (the reporter's phone size); engine tests added.
