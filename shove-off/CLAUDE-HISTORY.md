@@ -70,3 +70,11 @@ that say sumo at a glance (the fan topknot, a body wider than tall, the belt run
 the crouch); the car is seen from the front with the three things every bumper car has (the fat rubber skirt, the
 driver at a wheel, the pole up to the ceiling with a spark). A car on a base of its own colour blurred into one blob, so
 the car's base is the darker shade. Engine untouched.
+
+## 2026-11-23 (evening): the sumo platform is only a circle
+
+Matt: *"do you fall off the edge of the circle? or is the platform a square? it's confusing. please make it clearer"*.
+Pieces fall off the circle (rules v2). The Sumo look drew a square clay mound behind the round ring, so the board looked
+square. The mound is gone: the ring is a raised round clay platform on the dark hall floor, its shadow and darker clay
+side showing the drop all the way round. Bumper cars and Pucks were already plain circles. Old rv 1 matches keep their
+square (it is their rule).
