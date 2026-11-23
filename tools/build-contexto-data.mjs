@@ -6,7 +6,8 @@ const __ROOT_DIR = __toolsF2P(new URL('..', import.meta.url)).replace(/[\\/]$/, 
 // data). Run it, then `node tools/validate-sw-assets.mjs`, then commit the data files and sw.js.
 //
 //   node tools/build-contexto-data.mjs [--lang en|es] [--cache <dir>] [--top 200000] [--far-only]
-//   Since 2026-11-22: English is `--lang en` (full build); Spanish is `--lang es --nb-only` ONLY.
+//   Since 2026-11-23: BOTH languages are `--nb-only` (the blend over the shipped vocabulary). A full
+//   build (no flag) re-derives the vocabulary; Spanish's no longer matches the shipped one.
 //
 // Behind a proxy (a cloud session), prefix NODE_USE_ENV_PROXY=1 so Node's fetch uses it.
 //
@@ -80,8 +81,10 @@ const RANKED = 15000;
 // NORMAL MEANINGS (2026-11-21). Matt, on the 'sock' puzzle (#55), where the Common Crawl vectors put
 // fetish 38, vandal 10, troll 28 and anon 41 near sock (web forums: "sock puppet" accounts, porn):
 // "Keep adult words. But just use normal ones. Fetishized being anywhere near sock is crazy."
-//   1. Closeness comes from ConceptNet Numberbatch (English 2026-11-21, Spanish 2026-11-22 via
-//      --nb-only, see below). English details: (built from ConceptNet's common-sense
+//   1. Closeness: since 2026-11-23 the AVERAGE of Common Crawl and Numberbatch (NB_WEIGHT), for both
+//      languages, via --nb-only. Numberbatch alone (English 2026-11-21) had its own quirks, found by
+//      scanning every answer: fox -> broadcasting 3, television 5 (Fox TV); penguin -> publisher;
+//      father -> mater, fra. The average keeps what both models agree on. First English notes: (built from ConceptNet's common-sense
 //      links, so everyday meanings win): sock -> stocking shoe footwear pantyhose; monkey 19 ->
 //      ~1250, troll 28 -> ~1400, vandal 10 -> ~8600. The VOCABULARY (which words exist, their
 //      frequency order, forms, secrets) still comes from Common Crawl exactly as before, so every
@@ -105,12 +108,37 @@ prostitute prostitution brothel orgasm orgasmic foreplay masturbate masturbation
 raunchy slutty slut horny lust lustful seductive seduce seduction sensual sensuality intercourse
 lewd smut smutty xxx threesome voyeur voyeurism playboy nympho pimp sadomasochism masochism
 masochist sadist sadism kinkster libido aphrodisiac arousal aroused arouse genital genitalia penis
-vagina nipple bdsm hentai milf camgirl busty`,
+vagina nipple bdsm hentai milf camgirl busty
+gigolo nymphomaniac whore whoring whorehouse harlot hussy sadomasochistic nudie pornos pornographer
+exhibitionism exhibitionist voyeuristic necrophilia masturbator masturbatory molester molest
+molestation pederasty pedophile pedophilia nubile fornication fornicate eroticism sexiness sexualized
+sexualize lecherous lascivious licentious salacious prurient carnal bordello seductress temptress
+seducer promiscuous promiscuity lewdness titillation titillate psychosexual incestuous incest cuckold
+bimbo minx womanizer womanizing pervert perverted perversion sleazy sleaze
+fucker cocksucker wanker jackass honky jap homo midget turd retard sodomized sodomize sodomite
+sodomites sodomy scumbag transvestite`,
   es: `fetiche fetichismo fetichista erótico erótica erotismo sexy sexual sexualidad sexo porno
 pornografía pornográfico stripper prostituta prostitución burdel orgasmo masturbación bondage
 lujuria lujurioso seductor seductora seducción sensual sensualidad proxeneta sadomasoquismo
-masoquista sádico libido afrodisíaco excitación genital pene vagina pezón`,
+masoquista sádico libido afrodisíaco excitación genital pene vagina pezón
+felación eyaculación vaginal exhibicionismo exhibicionista sadomasoquista voyeurismo voyeur lascivo
+lascivia carnal onanismo líbido coito zoofilia sodomía incestuoso incesto proxenetismo fornicación
+fornicar pedofilia pedófilo pederastia pederasta ninfómana sexi obsceno obscenidad sexshop necrofilia
+striptease estupro promiscuidad promiscuo cachondo perversión concupiscencia masturbar orgía
+bestialidad putón prostitutas clítoris violador abusador analmente gigoló guarrada putero vibrador
+falo fálico
+puto joder culero mamón carajo puñetero sudaca polla follada follar prostíbulo eyacular guarrilla
+travestismo travesti consolador dildo`,
 };
+
+// Numberbatch's share of the closeness average, per language (see NORMAL MEANINGS, nbOnly).
+// Spanish 0.3 (2026-11-23 scan): Numberbatch's Spanish leaks English double meanings (banco ->
+// ribera, invierno -> resorte "spring", piedra -> rock); at 0.5 that was 365 such words in the 445
+// answers' top 100s, at 0.3 it is 26, and what Common Crawl adds back is real Spanish polysemy
+// (cartera = portfolio, papel = role). English 0.6: Common Crawl's web senses all leave the top 100
+// (at 0.5 sock still had troll 215 and vandal 283, the "close" band; at 0.6, 315 and 535), while
+// Numberbatch's own (fox -> broadcaster) stays past 20.
+const NB_WEIGHT = { en: 0.6, es: 0.3 };
 
 const SRC = {
   nb: (l) => (l === 'en'
@@ -493,7 +521,7 @@ function writeModel(lang, vocab, index, forms, secrets, ranked) {
     nb.set(top, si * K);
   });
 
-  const outDir = path.join(ROOT, 'contexto/data');
+  const outDir = arg('--out', path.join(ROOT, 'contexto/data'));
   fs.mkdirSync(outDir, { recursive: true });
   const json = { v: 1, lang, dim: DIM, k: K, ranked, far, words: vocab.map((c) => c.w), forms, secrets };
   fs.writeFileSync(path.join(outDir, `${lang}.json`), JSON.stringify(json));
@@ -522,8 +550,11 @@ function farOnly(lang) {
 // Spanish rankings too"). words, forms, secrets and ranked are kept byte for byte, so every puzzle
 // keeps its word; only the .bin (vectors + exact neighbours) and `far` are rewritten. A word
 // Numberbatch lacks is filled from its 10 nearest words in the OLD .bin's compressed vectors.
+// --mix cc|nb|blend (default blend) and --out <dir> (default contexto/data) exist for SCANS: build
+// each model alone into a scratch folder and compare (2026-11-23, every answer scanned).
 async function nbOnly(lang) {
-  console.log(`\n== ${lang} (Common Crawl + Numberbatch blend, vocabulary kept) ==`);
+  const mix = arg('--mix', 'blend');
+  console.log(`\n== ${lang} (${mix}, vocabulary kept) ==`);
   const dir = path.join(ROOT, 'contexto/data');
   const j = JSON.parse(fs.readFileSync(path.join(dir, `${lang}.json`), 'utf8'));
   const index = new Map(j.words.map((w, i) => [w, i]));
@@ -548,9 +579,14 @@ async function nbOnly(lang) {
   // models' closeness. Measured 2026-11-22: Numberbatch alone was worse in Spanish (reloj: once
   // doce treinta; manzana: cuadra androide; cama: yacimiento), Common Crawl alone carries web
   // senses; the average keeps what both agree on.
+  // NB_WEIGHT: Numberbatch's share of the average (closeness = (1-w) x Common Crawl + w x Numberbatch).
+  const w = Number(arg('--nbw', NB_WEIGHT[lang])), wc = Math.sqrt(1 - w), wn = Math.sqrt(w);
+  console.log(`  Numberbatch weight ${w}`);
   for (let i = 0; i < vocab.length; i++) {
+    if (mix === 'cc') { vocab[i].v = cc[i]; continue; }
+    if (mix === 'nb') continue;
     const b = new Float32Array(600), a = cc[i], c = vocab[i].v;
-    for (let k = 0; k < 300; k++) { b[k] = a[k] * Math.SQRT1_2; b[300 + k] = c[k] * Math.SQRT1_2; }
+    for (let k = 0; k < 300; k++) { b[k] = a[k] * wc; b[300 + k] = c[k] * wn; }
     vocab[i].v = b;
   }
   writeModel(lang, vocab, index, j.forms, j.secrets, j.ranked);
