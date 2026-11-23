@@ -946,10 +946,11 @@ class ShoveOff {
       let ang = aim ? Math.atan2(aim[1], aim[0]) : this._faceOf(p);
       if (fk >= 0) {
         const L = a.path[i][fk];
-        if (kd === 'car') ang = a.head[i][fk];
-        else if (kd === 'puck') ang += L / E.R * 0.6;                                     // pucks spin as they slide
-        else if (!calm && phase === 'slide') {                                           // sumo: a waddle while moving
-          const sp = fk > 0 ? Math.abs(L - a.path[i][fk - 1]) : 0;
+        const sp = fk > 0 ? Math.abs(L - a.path[i][fk - 1]) : 0;
+        if (kd === 'puck') ang += L / E.R * 0.6;                                         // pucks spin as they slide
+        else if (!calm && phase === 'slide' && kd === 'car') {                           // cars lean into the slide, rattling
+          o.tilt += Math.cos(a.head[i][fk]) * 0.22 * Math.min(1, sp / 8) + Math.sin(L / E.R * 6) * 0.04 * Math.min(1, sp / 8);
+        } else if (!calm && phase === 'slide') {                                         // sumo: a waddle while moving
           o.tilt += Math.sin(L / E.R * 2.4) * 0.22 * Math.min(1, sp / 8);
         }
       }
