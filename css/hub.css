@@ -1048,7 +1048,7 @@ html.gh-desk:not(.gh-ingame) .hub-card + .hub-sec { margin-top: 26px; padding-to
 .hub-sec-n { font-size: 15px; font-weight: 700; color: var(--hub-ink); background: var(--hub-surface-2); border-radius: 10px; padding: 2px 10px; }
 /* The tab bar floats, centered, with labels. */
 html.gh-desk.gh-compact:not(.gh-ingame) .hub-tabs {
-  left: 50%; right: auto; bottom: 22px; transform: translateX(-50%);
+  left: 0; right: 0; bottom: 22px; width: max-content; margin: 0 auto; transform: none;
   grid-auto-columns: auto; gap: 4px; padding: 6px; border: 1px solid var(--hub-surface-2); border-radius: 18px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
 }
@@ -1070,3 +1070,12 @@ html.gh-desk:not(.gh-ingame) .hub-listhead > .hub-sort:only-child { margin-left:
 .hub-dock.is-row { position: static; margin-left: auto; width: 440px; max-width: 50%; box-shadow: none; }
 .hub-dock.is-row::after { display: none; }
 html.gh-desk:not(.gh-ingame) .hub-sortbtn { font-size: 15px; min-height: 40px; padding: 0 16px; }
+/* Desktop view on a phone (js/desk-preview.js, html.gh-deskview): the page is zoomed out to ~0.28, so the one way back is
+   sized in REAL phone pixels (divided by the zoom, --dv-s). */
+.hub-dvexit { display: none; }
+html.gh-deskview:not(.gh-ingame) .hub-dvexit {
+  display: block; position: fixed; z-index: 30; top: calc(12px / var(--dv-s, 1)); left: 0; right: 0; margin: 0 auto; width: max-content;
+  appearance: none; border: 0; cursor: pointer; touch-action: manipulation;
+  font-family: inherit; font-weight: 700; line-height: 1; font-size: calc(17px / var(--dv-s, 1)); padding: calc(12px / var(--dv-s, 1)) calc(20px / var(--dv-s, 1));
+  border-radius: calc(24px / var(--dv-s, 1)); background: #1769d4; color: #fff; box-shadow: 0 calc(4px / var(--dv-s, 1)) calc(14px / var(--dv-s, 1)) rgba(0, 0, 0, 0.3);
+}

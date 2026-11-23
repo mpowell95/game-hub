@@ -57,6 +57,7 @@ import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { backStack } from './back-stack.js';
+import { deskPreviewOn, setDeskPreview } from './desk-preview.js';
 
 const t = makeT(STRINGS);
 /** t() with an English fallback: js/strings.js is cache-first, so a new key can be missing for one visit. */
@@ -1362,6 +1363,18 @@ function renderSheet(cfg) {
   // READ the admin-only logs (play log, flags, alerts) and change nothing (database.rules.json readers/).
   // The key is copied for Matt to put in the session environment as GAMEHUB_READER (tools/reader-auth.mjs).
   rows.push(link(tx('adm_reader_key', 'Reader key for Claude'), () => makeReaderKey()));
+  // DESKTOP VIEW (2026-11-23, Matt: "view desktop mode while on mobile"; js/desk-preview.js): this phone shows the launcher
+  // as a computer does, zoomed out. Turning it on closes this page so the launcher shows; "Phone view" on the launcher ends it.
+  { const dv = deskPreviewOn();
+    rows.push(row({ title: tx('adm_desk_view', 'Desktop view'),
+      acts: [`<button type="button" class="adm-sw" aria-pressed="${dv}" aria-label="${esc(tx('adm_desk_view', 'Desktop view'))}" ${act(() => {
+        if (!dv) closeAdmin();
+        setDeskPreview(!dv);
+        if (dv) { render(); return; }
+        // Opened from the profile page: go to the launcher, where Desktop view shows.
+        // After closeAdmin()'s history unwind has settled, or the unwind cancels the navigation.
+        try { if (/\/profile\/?(index\.html)?$/.test(location.pathname)) { const to = new URL('../', location.href).href; setTimeout(() => location.assign(to), 400); } } catch { /* stays */ }
+      })}></button>`] })); }
   if (isDevOrigin()) {
     rows.push(link(devWritesOn() ? tx('adm_devwrites_off', 'Block writes from this dev server') : tx('adm_devwrites_on', 'Allow writes from this dev server'), () => {
       try { if (devWritesOn()) localStorage.removeItem(DEV_SYNC_OK); else localStorage.setItem(DEV_SYNC_OK, '1'); render(); } catch (err) { toast(String(err), true); }

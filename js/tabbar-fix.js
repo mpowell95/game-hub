@@ -37,8 +37,10 @@ export function watchTabBar() {
   if (typeof window === 'undefined') return () => {};
   let frame = 0, shift = 0, retried = false, stopped = false, noted = false;
 
+  // Not the desktop launcher (html.gh-desk, 2026-11-23): its bar floats 22px up ON PURPOSE, centred without a transform.
   const bar = () => (document.documentElement.classList.contains('gh-compact')
-    && !document.documentElement.classList.contains('gh-ingame'))
+    && !document.documentElement.classList.contains('gh-ingame')
+    && !document.documentElement.classList.contains('gh-desk'))
     ? document.querySelector('.hub-tabs') : null;
 
   const setShift = (el, px) => {

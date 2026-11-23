@@ -24,6 +24,7 @@ import { getLang, setLang, makeT, myName } from './i18n.js';
 import { getTheme, setTheme, resolvedTheme, onThemeChange } from './theme.js';
 import { loadFavorites, toggleFavorite, moveFavorite } from './favorites.js';
 import { isCompact, setLayout, onLayoutChange } from './layout.js';
+import { deskPreviewActive, applyDeskViewport, setDeskPreview } from './desk-preview.js';
 import { watchTabBar } from './tabbar-fix.js';
 import { backStack } from './back-stack.js';
 import { GAME_ART } from './game-art.js';
@@ -96,7 +97,8 @@ const DESK_MQ = '(min-width: 900px) and (hover: hover) and (pointer: fine)';
 const PHONE_GAMES = new Set(['air-hockey', 'ball-run', 'brick-blitz', 'hoops4', 'cuppong', 'darts', 'flick-soccer', 'golf',
   'hill-climb', 'eight-ball', 'skeeball', 'snake', 'tower', 'archery', 'baseball', 'shove-off']);
 function deskOn() {
-  try { return isCompact() && isAdminDevice() && matchMedia(DESK_MQ).matches; } catch { return false; }
+  // Admin > gear > Desktop view (js/desk-preview.js): a phone lays the launcher out as a computer would.
+  try { return isCompact() && isAdminDevice() && (matchMedia(DESK_MQ).matches || deskPreviewActive()); } catch { return false; }
 }
 
 // Record uncaught errors from load, not from the Hub constructor: the most interesting throws
@@ -932,7 +934,10 @@ class Hub {
       const mq = matchMedia(DESK_MQ);
       const onDesk = () => { if (!this.current && this.root && deskOn() !== !!this._desk) { this.render(); this._paintReplyBadge(); } };
       mq.addEventListener('change', onDesk);
-      this._deskUnsub = () => mq.removeEventListener('change', onDesk);
+      // Admin > gear > Desktop view switched: repaint now (the admin page sits over the launcher).
+      const onPreview = () => { if (!this.current && this.root) { this.render(); this._paintReplyBadge(); } };
+      window.addEventListener('gamehub:deskpreview', onPreview);
+      this._deskUnsub = () => { mq.removeEventListener('change', onDesk); window.removeEventListener('gamehub:deskpreview', onPreview); };
     } catch { /* no matchMedia: the phone layout */ }
     // Compact's tab bar: repaired in place if iOS 26 places it halfway up the screen (js/tabbar-fix.js).
     this._tabBarUnsub = watchTabBar();
@@ -1382,6 +1387,7 @@ class Hub {
     const desk = compact && deskOn();
     this._desk = desk;
     document.documentElement.classList.toggle('gh-desk', desk);
+    this._deskView();
     // Compact edit mode also REMOVES favorites, so one is enough there.
     if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;
     // The divider only earns its place between two non-empty groups; with zero favorites
@@ -1463,6 +1469,7 @@ class Hub {
           <section class="hub-game" data-role="game" hidden></section>
         </main>
         ${compact ? this._tabsHTML(prof, hasMp) : ''}
+        ${desk && deskPreviewActive() ? `<button type="button" class="hub-dvexit" data-role="dv-exit">${tf('hub_dv_exit', 'Phone view')}</button>` : ''}
         <div class="hub-confirm" data-role="confirm" hidden>
           <div class="hub-confirm-scrim" data-role="confirm-cancel"></div>
           <div class="hub-confirm-card" role="dialog" aria-modal="true" aria-label="${t('hub_confirm_dialog_aria')}">
@@ -1505,6 +1512,8 @@ class Hub {
     this.el.profile.classList.toggle('hub-profile-empty', !(prof && prof.name));
 
     this.el.back.addEventListener('click', this._onBack);
+    const dvExit = this.root.querySelector('[data-role="dv-exit"]');
+    if (dvExit) dvExit.addEventListener('click', () => setDeskPreview(false));   // Desktop view off (js/desk-preview.js)
     if (this.el.gamebug) this.el.gamebug.addEventListener('click', () => { this._coverGame(); this.openBugReport(); });
     this._watchRotate();
     this.root.querySelectorAll('[data-role="confirm-cancel"]').forEach((el) =>
@@ -1781,6 +1790,12 @@ class Hub {
   /** Games / Challenges / Messages / Leaderboards / Profile, icons only (Matt: "Most apps wouldn't
    *  have those words there"). The open tab is yellow AND underlined by a bar, never hue alone.
    *  Challenges only when this launcher has a challenge game, like the comfortable layout's bar. */
+  /** Desktop view on a phone (js/desk-preview.js): the launcher laid out 1440 px wide, zoomed out; never under a game. */
+  _deskView() {
+    try { applyDeskViewport(!!this._desk && !this.current && deskPreviewActive() && !document.documentElement.classList.contains('gh-ingame')); }
+    catch (err) { console.warn('[hub] desktop view', err); }
+  }
+
   /** The desktop launcher's two groups (DESK_MQ): each keeps the chosen sort; an empty group is not drawn. */
   _deskSectionsHTML(games) {
     const ico = (d) => `<svg class="hub-sec-ico" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
@@ -3266,6 +3281,7 @@ class Hub {
     // NO GAMEPLAY SCREEN SCROLLS (Matt, 2026-10-15): while a game is mounted the PAGE behind it is
     // locked too (css/hub.css, `html.gh-ingame`), so a fast tap or flick can never pan or bounce it.
     document.documentElement.classList.add('gh-ingame');
+    applyDeskViewport(false);   // a game always gets the phone's own viewport (js/desk-preview.js)
     this.el.title.textContent = titleText(game);
     this.el.back.hidden = false;
     // `html.gh-gamebug` lets css/hub.css move a game's own top-right control out of its way.
@@ -3443,6 +3459,7 @@ class Hub {
     this._retGesture = false;
     await this.unmount();
     document.documentElement.classList.remove('gh-ingame');
+    this._deskView();
     this.el.game.hidden = true;
     this.el.grid.hidden = false;
     if (this.el.extra) this.el.extra.hidden = false;
