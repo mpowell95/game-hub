@@ -984,14 +984,32 @@ function render({ keepScroll = false, restore = false } = {}) {
   if (_bs) _bs.sync(levelNow());
 }
 /** A name in a top bar stays on ONE line (2026-11-16, Matt: "I don't like how his name is on two lines"): the font
- *  steps down until it fits, never under 16px; past that the end is cut with "…". */
+ *  steps down until it fits, never under 16px; past that the end is cut with "…".
+ *  A GAME's title on its board (2026-11-23, Matt: "fix the spanish title": "Arena de Batalla" showed "Arena de..."): after
+ *  the font, the small game picture beside it goes (`lb2-tight`), then the title takes two lines (`lb2-two`), never cut. */
 function fitNames(page) {
-  for (const h of page.querySelectorAll('.lb2-bar h1')) {
+  const shrink = (h) => {
     h.style.fontSize = '';
     let px = parseFloat(getComputedStyle(h).fontSize) || 20;
-    while (h.scrollWidth > h.clientWidth + 1 && px > 16) { px -= 1; h.style.fontSize = px + 'px'; }
+    // One line: wider than its box. Two lines: taller than its two lines (a single line's height is never compared:
+    // a glyph's ink can stand a pixel above or below the line and read as "too tall").
+    const two = h.closest('.lb2-two');
+    const over = () => (two ? h.scrollHeight > h.clientHeight + 2 : h.scrollWidth > h.clientWidth + 1);
+    while (over() && px > 16) { px -= 1; h.style.fontSize = px + 'px'; }
+    return !over();
+  };
+  for (const h of page.querySelectorAll('.lb2-bar h1')) {
+    const bar = h.closest('.lb2-bar');
+    const game = bar && bar.querySelector('.lb2-ic.hd');
+    if (bar) bar.classList.remove('lb2-tight', 'lb2-two');
+    if (shrink(h) || !game) continue;
+    bar.classList.add('lb2-tight');
+    if (shrink(h)) continue;
+    bar.classList.add('lb2-two');
+    shrink(h);
   }
 }
+export function __fitNamesForTest() { const page = document.querySelector('.lb2'); if (page) fitNames(page); }
 /** Screens deep (1 = the first screen): the game it was opened on is level 1, the help sheet one more. */
 function levelNow() {
   const entry = _entryGame && _stack[0] && _stack[0].kind === 'board' && _stack[0].game === _entryGame ? 1 : 0;
@@ -1603,6 +1621,8 @@ ul.lb2-help{margin:0;padding:0 0 0 20px;display:flex;flex-direction:column;gap:1
 :root.gh-dark .lb2 .lb-ctm img,:root.gh-dark .gs-v2 .gs-ctm img{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .lb2-bar h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
 html[lang="es"] .lb2-bar h1{font-size:18px}
+.lb2-bar.lb2-tight .lb2-ic.hd{display:none}
+.lb2-bar.lb2-two h1{white-space:normal;text-overflow:clip;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-wrap:balance;line-height:1.1}
 .lb2-rview{flex:0 0 auto;width:46%;min-height:48px}
 .lb2-ctrlrow>.lb2-seg.stk{flex:1}
 :root:not(.gh-dark) .lb2-shape{background:#DCE0E6;border-radius:4px;padding:1px}
