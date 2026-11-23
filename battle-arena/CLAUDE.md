@@ -95,12 +95,12 @@ arena/board seam, move names blue; steel doors after the stage reveal; the endin
 
 | Thing | Value |
 |---|---|
-| Registry | `module: '../battle-arena/js/ui.js'`, `alerts: alert.js`, `immersive: true`, `devOnly: true`, no `released`; `LIVE_MP_GAMES` / `LIVE_GAMES` / `SOURCES` |
+| Registry | `module: '../battle-arena/js/ui.js'`, `alerts: alert.js`, `immersive: true`, `released: '2026-11-23'` (Matt: "if you're sure, then release it"); `LIVE_MP_GAMES` / `LIVE_GAMES` / `SOURCES` |
 | Stats id | `battlearena`: `recordResult('battlearena', 'easy'\|'medium'\|'hard', won)` once per finished match. In `js/game-stats.js` `GAMES`, `js/leaderboard-ui.js` `GAME_META`, `js/game-stats-ui.js` `TABS` + `HUB_ID`, label `game_title_battlearena` |
 | Look (2026-10-29) | Matt: home and Online "lackluster". Every screen outside a match wears the arena in BOTH themes (`art.js lobbyBG`; `--bas-*` dark always): home = logo + two random unlocked monsters "VS" on the floor, menu on the floor; one yellow `.ba-bigbtn` per screen, `.ba-steelbtn` for the rest |
 | Monsters (2026-10-29) | Home > Monsters (`renderMonsters`): all 12, unlocked in full (tap = the card: both forms side by side, each one's special); LOCKED = black silhouette + lock + wins to go, no name/element, its card the same ("???"). The draft's locked tiles and cards are silhouettes too (`tileHTML`) |
 | Unlocks | DERIVED from `loadStats().games.battlearena.total.won` at read time; never stored. Testers get the 6 starters, the rest by wins (Matt, 2026-10-28). A locked tile shows wins still to go; a win that crosses a threshold shows "New monster!" (`showUnlock`) |
-| TEST MODE | `TEST_MODE` in `ui.js`: a "TEST" tag on every screen (`.ba-root.is-test::after`) and "(TEST)" in the push title (`functions/decide.js` `BATTLE_TEXT`). Matt, 2026-10-28: testers "know it's in test mode... always clearly present". **Remove both at release.** Open it to chosen players: Admin > games > Battle Arena (`ALLOW_PICKER`) |
+| TEST MODE | Ended at the release (2026-11-23): `TEST_MODE` false in `ui.js` (the flag stays), the `.is-test` CSS removed, no "(TEST)"/"(PRUEBA)" in the push title (`functions/decide.js`) |
 | CSS | `.ba-root` / `.ba-` (every rule under `.ba-root`); battle screen dark in both themes |
 | Settings | `gamehub.battlearena.v1`: `{ diff, team, nextFirst, tips }` (preferences only) |
 | Save | `gamehub.battlearena.save.v1`: `{ v:1, diff, state }`, written BEFORE each move's animation; removed only after the result is recorded. A save whose last move won is resumed and recorded on the next mount. Menu > New match / Home abandons (nothing recorded) |
@@ -182,7 +182,7 @@ Matt: "do a full exhaustive thorough review of Battle Arena to get it ready to b
 - **Rules versions now exist (2026-11-14, `rv`)**: absent = v1; **any later change to a number or rule must add a version (monsters.js `OLD`, bump `RULES_VERSION`) and keep every older one**, or open challenges stop replaying.
 - Left as is: the 25 s live clock runs under the hub's covers (no `onCovered`: the other phone is waiting); `battlearena` rules let an existing log entry be rewritten (same as every challenge game).
 
-**Release checklist (only on Matt's "release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; (`CARRY_TEST.battlearena` is ALREADY set, below); `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.
+**Release checklist (DONE 2026-11-23, Matt: "if you're sure, then release it")**: `TEST_MODE` false (`ui.js`) + the `is-test` CSS; "(TEST)" off `functions/decide.js` `BATTLE_TEXT`; `devOnly` off `js/hub.js` (add `released`) and `js/game-stats-ui.js` TABS; `battlearena` out of `ADMIN_ONLY`; (`CARRY_TEST.battlearena` is ALREADY set, below); `./battle-arena/js/attacks.js` into `sw.js` ASSETS; `tools/validate-sw-assets.mjs`, CACHE bump; root CLAUDE.md games table.
 
 ## Test plays count (2026-11-13, Matt: "have test plays count. and have plays from non-admins count")
 
@@ -390,3 +390,11 @@ without the round-by-round change; the 77% above was measured on v4's numbers). 
 
 Easy 1 a win (in the 20-point group), Medium 3, Hard 6, online 3 (`js/lb-points.js`). Before, the game was not in the points
 table, so its board would have ranked by plain wins. Off the board for players until the release, like the rest of the game.
+
+## Released (2026-11-23, Matt: "if you're sure, then release it")
+
+The checklist above, plus: `tools/test-admin-only-plays.mjs` now uses Shove Off where it used Battle Arena,
+`tools/test-sw-strategy.mjs` no longer expects a held-back entry, `tools/test-push.mjs` reads the plain Spanish title. Not yet
+played for real on two phones: a LIVE ROOM on any version, and a challenge on rules v5 (the one real challenge, MattyIce vs
+Anita Bonita, Nov 13, was v1 and finished cleanly on both phones).
+
