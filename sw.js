@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1617;
-const CACHE = 'game-hub-v1636';
+const IMPORTANT_SINCE = 1637;
+const CACHE = 'game-hub-v1637';
 
 const ASSETS = [
   './',
@@ -1086,12 +1086,12 @@ const REST_MANIFEST = {
   './gridlock/js/strings.js': 'f15ede65c4',
   './word-weaver/': '80f9e5cc7f',
   './word-weaver/index.html': '80f9e5cc7f',
-  './word-weaver/css/word-weaver.css': 'd20083a052',
-  './word-weaver/js/ui.js': '4664bdd32b',
-  './word-weaver/js/engine.js': 'fd399c2d42',
+  './word-weaver/css/word-weaver.css': '6b2bb2cc98',
+  './word-weaver/js/ui.js': 'a741cbb33f',
+  './word-weaver/js/engine.js': '158d12840e',
   './word-weaver/js/daily.js': '4bc8b1e063',
   './word-weaver/js/board.js': 'd23a562192',
-  './word-weaver/js/strings.js': 'b8d080e3dd',
+  './word-weaver/js/strings.js': 'e4ca382684',
   './word-weaver/data/index.json': 'b8a9e23ac2',
   './word-weaver/data/levels-0.json': 'e9d72f774c',
   './word-weaver/data/levels-1.json': 'd35dce34ac',

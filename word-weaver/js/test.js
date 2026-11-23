@@ -2,7 +2,7 @@
 // (levels in the data contract's format; the real data is built by tools/build-word-weaver-data.mjs).
 // Run: node word-weaver/js/test.js
 import {
-  loadIndex, loadLevel, loadDailyData, dailyLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells,
+  loadIndex, loadLevel, loadDailyData, dailyLevel, bonusCells, cleanLevel, cellsOf, canMake, checkWord, applyWord, claimCovered, hintCell, hintWordCells, emptyCells, starsFor, isDone, cleanState, freshState, foundCells,
 } from './engine.js';
 
 let fails = 0;
@@ -197,6 +197,26 @@ eq('junk hints = 3 stars', starsFor(undefined), 3);
   const k = a[0];
   eq('a collected square survives a reload', cleanState(lv, { sym: [k, '9,9', 7] }).sym, [k]);
   eq('a square a hint revealed is never collected', cleanState(lv, { revealed: [k], sym: [k] }).sym, []);
+}
+
+// --- a word filled in by its crossings counts as found (2026-11-23, King of Games' bug report) --------------
+// The real Medium 548: SHE is made of HERS' S, HER's H and SEE's E. Found last, the grid was full and the level never ended.
+{
+  const lv = cleanLevel({ l: 'CEEHRS', g: [6, 7], w: [['CHEERS', 0, 2, 'd'], ['CHEER', 2, 0, 'a'], ['HERE', 4, 0, 'a'], ['HERS', 0, 4, 'd'], ['SHE', 3, 4, 'a'], ['SEE', 1, 6, 'd'], ['HER', 3, 5, 'd']], x: ['ERE', 'HES', 'SCREE', 'SEER', 'SERE', 'SHEER'] }, 548);
+  const st = freshState();
+  for (const w of ['CHEERS', 'CHEER', 'HERE', 'HERS', 'SEE']) eq(`548: ${w} claims nothing extra`, applyWord(lv, st, w).also, []);
+  const r = applyWord(lv, st, 'HER');
+  eq('548: HER fills the last square of SHE, which counts as found', r.also, ['SHE']);
+  ok('548: the level is done', isDone(lv, st));
+  ok('548: SHE swiped afterwards is "found", not a new word', checkWord(lv, st, 'SHE').kind === 'found');
+  eq('548: no hint was charged', st.hints, 0);
+  // The stuck save (every square showing, SHE never swiped) opens done.
+  const stuck = cleanState(lv, { found: ['CHEERS', 'CHEER', 'HERE', 'HERS', 'SEE', 'HER'], hints: 0 });
+  ok('548: a stuck save opens done', isDone(lv, stuck) && stuck.found.includes('SHE') && stuck.hints === 0);
+  eq('548: claimCovered on a done state claims nothing', claimCovered(lv, stuck), []);
+  // A word only partly filled is never claimed.
+  const part = cleanState(lv, { found: ['HERS', 'SEE'] });
+  ok('548: SHE half filled is not found', !part.found.includes('SHE'));
 }
 
 // --- the daily puzzles (2026-11-02): data/daily.json, day d plays levels[d] --------------------------------

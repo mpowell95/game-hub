@@ -36,8 +36,10 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   (Gridlock's rule, `docs/BUILDING-A-GAME.md` Part 0); the chips and level number stay on the Hub button's row.
   Next on the done screen continues in the same band.
 - Swipe (pointer events, `touch-action: none`): lift submits; sliding back onto the previous letter un-selects
-  it. **Or TAP (Matt, 2026-10-29)**: a touch that stays on one letter adds it (nothing entered); tapping the last picked
-  letter again takes it off; the check in the wheel's middle enters the word: small, INK with a white tick (gold means only a
+  it. **Or TAP (Matt, 2026-10-29)**: a touch that stays on one letter adds it (nothing entered); tapping a picked letter takes it and every letter after it off (a touch is a
+  swipe only once it reaches a letter other than the one it started on: before 2026-11-23 a finger wobble on an earlier
+  picked letter ENTERED the word, King of Games' "can't erase"); a delete button beside the word (`.ww-erase`, shown while
+  letters are picked) takes the last one off; the check in the wheel's middle enters the word: small, INK with a white tick (gold means only a
   picked letter; Matt, 2026-10-29: the gold check "is distracting"), shown and tappable only from 3 letters.
   Taps and a swipe join (tapped letters stay, the swipe carries on). Grid word: its letters fly from the pill into the grid. Found again: that word flashes. Extra word (the
   level's `x`): made OBVIOUS (Matt, 2026-10-30): the pill turns gold with a star and pops, "Bonus word!" over it (`bonus_word`; Matt: "say bonus word tho"), a star flies to the extra-words chip
@@ -47,7 +49,7 @@ words. Spanish title **Tejepalabras**. The story and the decisions: `CLAUDE-HIST
   of the shortest unfound grid word (ties: earlier in `w`; cells a found word already shows are skipped). Each
   reveal is one hint, **recorded at once in the synced stats store** (`recordWordWeaverHint`, `ww.hint`/`ww.esHint`;
   Matt, 2026-10-29: "Close the hint gap"): reopening a level takes the larger of the save's and the store's count, and a
-  level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side). (x1 / 3 / 6 / 12 was tried on admin devices 2026-11-16 and REMOVED within the hour, Matt: "24 points for a single game? ... insanity". Do not raise without his ask.)
+  level's stars are READ as at most what hints recorded before its completion allow, so wiping the save gains nothing. A word whose letters are all showing counts as found (no swipe needed, as in Wordscapes): `engine.js` `claimCovered`, after every grid word, hint and save read (until 2026-11-23 only after hints, so a word made wholly of its crossings, e.g. Medium 548's SHE, left a full grid that never ended and a dead hint: 151 EN, 142 ES levels, 121 dailies; King of Games' bug report). **Stars: 0 hints 3, 1 hint 2, 2+ 1.** Leaderboard = points (stars x Easy 1 / Medium 2 / Hard 3 / Expert 4; the stats agent's side). (x1 / 3 / 6 / 12 was tried on admin devices 2026-11-16 and REMOVED within the hour, Matt: "24 points for a single game? ... insanity". Do not raise without his ask.)
 - **Bonus stars BUY hints (Matt, 2026-11-02, "build it"; mockup `docs/mockups/word-weaver-hint-shop.html`)**: the bulb opens
   a bottom sheet: **Letter 40, Square 60, Word 120** bonus stars (`WW_PRICE`, `js/word-weaver-points.js`), greyed when
   unaffordable, plus the PLAIN letter (shows the stars it leaves; costs a level star as before). A bought hint never lowers the
