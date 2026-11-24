@@ -840,3 +840,14 @@ ALERTS from each play-log RESULT entry, judged on the server as it lands (`funct
 - `ballrun-score-without-touch`: 30+ obstacles with under 10 real events since the last result.
 - `tower-blocks-without-taps`: more blocks than real presses (one press drops one block; nothing drops on its own).
 Ball Run and Tower Stack have no history with `i` yet: their limits are deliberately loose; tighten with real data.
+
+## Trip wires on every play (2026-11-24, later)
+
+Matt: "We MUST be able to identify and void games and rounds where he cheated" and "Option A, of course". Every play
+is judged by `js/integrity.js` `checkPlayInput`; each hit carries `proven` (`PLAY_INPUT_PROVEN`): true = impossible
+through the game's screen (Option A voids it, once per-play voids exist), false = suspicious (alert + one-tap Void).
+The server stores `proven` on each alert (`functions/integrity.js` `checkPlayInputLog`). Nothing here voids anything.
+The rule table, each rule's reason, and the replay over every real play (8,479 results, Oct 28 to Nov 24: 2 hits,
+both King of Games' Snake 62s, no other player) are in `docs/AUDIT-KING-OF-GAMES-2026-11-24.md`. Every rule has a
+passing and a failing case in `tools/test-play-input.mjs`; rerun `--db <playLog.json>` before making any new rule
+PROVEN, and make it PROVEN only with zero hits on honest plays.

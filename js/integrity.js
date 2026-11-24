@@ -296,40 +296,199 @@ export function checkMatch(node, m) {
   }
   return out;
 }
-// --- SCRIPTED PLAY, from the play log (2026-11-24, Matt: "How the fuck are we allowing him to run a script to
-// get better scores without immediately being notified???"). ALERTS, pushed to every admin the moment the
-// entry lands (functions/integrity.js checkPlayInputLog); never a void (a void changes what players see:
-// Matt's word first). `e` = one playLog entry; `i` = js/play-log-queue.js's input report (t real events,
-// p real presses, u events a page script made up), absent before 2026-11-24.
-//   input-made-by-code   any made-up touch or key press during the play (our own code makes none).
-//   snake-turns-without-input   Snake: more turns than taps + swipes + keys (every turn the screen can make
-//                        counts one first, snake/js/ui.js _steer's three callers). PROVEN: replayed over every
-//                        Snake run with this data (2026-11-24), the only hits are King of Games' two 62s.
-//   ballrun-score-without-touch   Ball Run: 30+ obstacles with under 10 real touches or keys since the last run.
-//   tower-blocks-without-taps     Tower Stack: more blocks than real presses (one press drops one block).
+// --- TRIP WIRES ON EVERY PLAY, from the play log (2026-11-24, Matt: "We MUST be able to identify and void games
+// and rounds where he cheated"; "EVERY game should have that"). Judged on the server the moment an entry lands
+// (functions/integrity.js checkPlayInputLog) and replayed over every real play by tools/test-play-input.mjs --db.
+// `e` = one playLog entry: `a` the recorder's arguments, `d` its detail, `x` the private play data (2026-11-16 on),
+// `i` js/play-log-queue.js's input report (t real events, p real presses, u made-up events; 2026-11-24 on).
+// Every hit carries `proven`: TRUE = no person can do it through the game's own screen (derived from the game's
+// code, replayed over every real play with no hit on an honest one), so Option A voids it (Matt, 2026-11-24:
+// "Option A, of course"); FALSE = suspicious, an alert with a one-tap Void. THIS CODE VOIDS NOTHING; it judges.
+// Each rule's proof and its replay: docs/INTEGRITY-CHECKS-SPEC.md, "Trip wires on every play".
 export const PLAY_INPUT_TEXT = {
   'input-made-by-code': 'touches or key presses made by a script, not a person',
+  'no-real-touch': 'a game played with no touch or key press at all',
   'snake-turns-without-input': 'snake turns with no tap, swipe or key behind them',
   'ballrun-score-without-touch': 'a Ball Run score with almost no touches',
   'tower-blocks-without-taps': 'more blocks than taps',
+  'tower-more-blocks-than-drops': 'more blocks than drops',
+  'tower-machine-precision': 'every drop landed almost dead centre',
+  'arrowmaze-machine-taps': 'arrows cleared faster than a finger can tap',
+  'hillclimb-more-cans-than-road': 'more fuel cans than the road holds',
+  'hillclimb-fuel-from-nowhere': 'a run longer than its fuel lasts',
+  'gridlock-under-fewest': 'solved in fewer moves than the fewest possible',
+  'wordladder-under-par': 'a ladder in fewer moves than the shortest possible',
+  'wordladder-bad-step': 'a ladder step that changes more than one letter',
+  'yahtzee-held-die-changed': 'a held die changed value',
+  'yahtzee-four-rolls': 'more than 3 rolls in a turn',
+  'dotsboxes-too-many-boxes': 'more boxes than the board has',
+  'filler-too-many-cells': 'more squares than the board has',
+  'hoops-more-made-than-shot': 'more baskets made than shots',
+  'cuppong-more-made-than-thrown': 'more cups made than throws',
+  'cuppong-solo-under-10': 'a 10-cup rack cleared in under 10 throws',
+  'airhockey-goals-over-target': 'more goals than the game is played to',
+  'golf-hole-in-zero': 'a hole played in 0 strokes',
+  'battleship-impossible-shots': 'more hits than shots, or a win in under 17 shots',
+  'boggle-word-not-on-board': 'a word that is not on the board',
 };
+// Which rules prove a play impossible (Option A voids these); every other one is suspicious.
+export const PLAY_INPUT_PROVEN = new Set(['input-made-by-code', 'snake-turns-without-input', 'tower-blocks-without-taps',
+  'tower-more-blocks-than-drops', 'hillclimb-more-cans-than-road', 'hillclimb-fuel-from-nowhere', 'gridlock-under-fewest',
+  'wordladder-under-par', 'wordladder-bad-step', 'yahtzee-held-die-changed', 'yahtzee-four-rolls', 'dotsboxes-too-many-boxes',
+  'filler-too-many-cells', 'hoops-more-made-than-shot', 'cuppong-more-made-than-thrown', 'cuppong-solo-under-10',
+  'airhockey-goals-over-target', 'golf-hole-in-zero', 'battleship-impossible-shots', 'boggle-word-not-on-board']);
 const jsonOf = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+// Recorders that are not a game a person just played (hands inside a game, hints, purchases, Genius, a queued
+// result drained later, a quit): never judged by `no-real-touch`. Online results ('mp') are counted when the OTHER
+// player moves, so they are skipped too.
+const NOT_A_PLAY = /Hand$|Bank$|Hint$|Buy$|FreeHint$|FreeLost$|Genius$|^quitLoss$|\(queued\)/;
+const HC_FUEL_IDLE = 2.8;        // hill-climb/js/physics.js FUEL_IDLE: burned every second, throttle or not
+const HC_CAN = 44;               // hill-climb/js/terrain.js: one can's fuel
+const HC_CHUNK = 50;             // hill-climb/js/terrain.js CHUNK: at most one can per 50 m of road
+/** Can `word` be traced on the Boggle board `faces` (rows of faces, a face may be 'QU'), each die used once? */
+export function boggleOnBoard(faces, word) {
+  const g = (Array.isArray(faces) ? faces : []).map((row) => (Array.isArray(row) ? row : []).map((f) => String(f).toUpperCase()));
+  const R = g.length, C = R ? g[0].length : 0, W = String(word || '').toUpperCase();
+  const used = new Set();
+  const go = (r, c, k) => {
+    if (r < 0 || c < 0 || r >= R || c >= C || used.has(r * 16 + c)) return false;
+    const f = g[r][c];
+    if (!f || !W.startsWith(f, k)) return false;
+    if (k + f.length === W.length) return true;
+    used.add(r * 16 + c);
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if ((dr || dc) && go(r + dr, c + dc, k + f.length)) { used.delete(r * 16 + c); return true; }
+    }
+    used.delete(r * 16 + c);
+    return false;
+  };
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (go(r, c, 0)) return true;
+  return false;
+}
 export function checkPlayInput(e) {
   if (!e || typeof e !== 'object' || !/^record/.test(String(e.f || ''))) return [];
   const out = [];
-  const i = jsonOf(e.i);
-  const a = jsonOf(e.a);
+  const hit = (rule, v, lim = '') => out.push({ rule, proven: PLAY_INPUT_PROVEN.has(rule), v, lim });
+  const i = jsonOf(e.i), a = jsonOf(e.a), d = jsonOf(e.d) || {}, x = jsonOf(e.x) || {};
   const score = Array.isArray(a) ? Number(a[0]) || 0 : 0;
-  if (i && (i.u | 0) > 0) out.push({ rule: 'input-made-by-code', v: i.u | 0, lim: 0 });
-  if (e.g === 'snake') {
-    const x = jsonOf(e.x), d = jsonOf(e.d);
-    if (x && d && Array.isArray(x.turns)) {
-      const inputs = (d.padTaps | 0) + (d.swipes | 0) + (d.keys | 0);
-      if (x.turns.length > inputs + 3) out.push({ rule: 'snake-turns-without-input', v: `${x.turns.length} turns, ${inputs} inputs, length ${score}`, lim: '' });
+  const ex = Array.isArray(a) ? (a.find((v, k) => k > 0 && v && typeof v === 'object' && !Array.isArray(v)) || {}) : {};
+  // Every game, from the input report (plays from 2026-11-24 on).
+  if (i && (i.u | 0) > 0) hit('input-made-by-code', i.u | 0, 0);
+  if (i && (i.t | 0) === 0 && !NOT_A_PLAY.test(String(e.f)) && !(Array.isArray(a) && a.includes('mp'))) hit('no-real-touch', 0);
+  switch (e.g) {
+    case 'snake':
+      if (Array.isArray(x.turns) && e.d) {
+        const inputs = (d.padTaps | 0) + (d.swipes | 0) + (d.keys | 0);
+        if (x.turns.length > inputs + 3) hit('snake-turns-without-input', `${x.turns.length} turns, ${inputs} inputs, length ${score}`);
+      }
+      break;
+    case 'ballrun':
+      if (i && score >= 30 && (i.t | 0) < 10) hit('ballrun-score-without-touch', `${score} obstacles, ${i.t | 0} touches`, 10);
+      break;
+    case 'tower': {
+      if (i && score >= 10 && (i.p | 0) < score) hit('tower-blocks-without-taps', `${score} blocks, ${i.p | 0} taps`);
+      const drops = Array.isArray(x.drops) ? x.drops : null;
+      if (drops && drops.length && score > drops.length) hit('tower-more-blocks-than-drops', `${score} blocks, ${drops.length} drops`);
+      if (drops) {
+        const perf = drops.filter((q) => Array.isArray(q) && q[1] === 'p').map((q) => Math.abs(Number(q[0]) || 0));
+        const mean = perf.length ? perf.reduce((s, v) => s + v, 0) / perf.length : 99;
+        if (perf.length >= 20 && mean < 0.6) hit('tower-machine-precision', `${perf.length} perfects, ${mean.toFixed(2)} off on average`, 0.6);
+      }
+      break;
     }
+    case 'wayout': {
+      const g = (Array.isArray(x.taps) ? x.taps : []).filter((s) => /^\d+g@/.test(s)).map((s) => Number(String(s).split('@')[1].split(':')[0]));
+      if (g.length >= 15) {
+        const gaps = g.slice(1).map((v, k) => v - g[k]).sort((p, q) => p - q);
+        const med = gaps[gaps.length >> 1];
+        if (med < 120) hit('arrowmaze-machine-taps', `${g.length} arrows, ${med} ms apart (middle value)`, 120);
+      }
+      break;
+    }
+    case 'hillclimb': {
+      const dist = Number(x.dist ?? score) || 0, cans = Number(x.cans), secs = Number(x.secs), left = Number(x.fuelLeft), max = Number(x.maxFuel);
+      const room = Math.floor(dist / HC_CHUNK) + 1;
+      if (Number.isFinite(cans) && cans > room) hit('hillclimb-more-cans-than-road', `${cans} cans in ${dist} m`, room);
+      if ([cans, secs, left, max].every(Number.isFinite) && max + HC_CAN * cans + 1 < left + HC_FUEL_IDLE * secs) {
+        hit('hillclimb-fuel-from-nowhere', `${secs} s burns at least ${Math.round(HC_FUEL_IDLE * secs)} fuel, at most ${Math.round(max + HC_CAN * cans - left)} was there`);
+      }
+      break;
+    }
+    case 'gridlock':
+      if (Number(d.fewest) > 0 && Number(d.moves) > 0 && Number(d.moves) < Number(d.fewest)) hit('gridlock-under-fewest', `${d.moves} moves, fewest ${d.fewest}`, d.fewest);
+      break;
+    case 'wordladder': {
+      if (Number(d.par) > 0 && Number(d.moves) > 0 && Number(d.moves) < Number(d.par)) hit('wordladder-under-par', `${d.moves} moves, par ${d.par}`, d.par);
+      const path = Array.isArray(x.path) ? x.path.map((w) => String(w).toUpperCase()) : null;
+      if (path) {
+        for (let k = 1; k < path.length; k++) {
+          const p = path[k - 1], q = path[k];
+          let diff = p.length === q.length ? 0 : 9;
+          if (!diff) for (let c = 0; c < p.length; c++) if (p[c] !== q[c]) diff++;
+          if (diff !== 1) { hit('wordladder-bad-step', `${p} to ${q}`); break; }
+        }
+      }
+      break;
+    }
+    case 'yahtzee': {
+      const last = {}, rolls = {};
+      for (const q of Array.isArray(x.ev) ? x.ev : []) {
+        if (!Array.isArray(q)) continue;
+        if (q[0] === 'c') { delete last[q[1]]; rolls[q[1]] = 0; continue; }
+        if (q[0] !== 'r' || !Array.isArray(q[2])) continue;
+        const seat = q[1], vals = q[2], mask = String(q[3] || '');
+        rolls[seat] = (rolls[seat] | 0) + 1;
+        if (rolls[seat] === 4) hit('yahtzee-four-rolls', `seat ${seat}`);
+        const prev = last[seat];
+        if (prev) for (let k = 0; k < 5; k++) if (mask[k] === '1' && vals[k] !== prev[k]) { hit('yahtzee-held-die-changed', `die ${k + 1}: ${prev[k]} to ${vals[k]}`); break; }
+        last[seat] = vals.map((v, k) => (prev && mask[k] === '1' ? prev[k] : v));
+      }
+      break;
+    }
+    case 'dotsboxes': {
+      const boxes = (Number(x.rows) || 0) * (Number(x.cols) || 0);
+      if (boxes > 0 && (Number(d.mine) || 0) + (Number(d.theirs) || 0) > boxes) hit('dotsboxes-too-many-boxes', `${d.mine} + ${d.theirs} on ${boxes}`, boxes);
+      break;
+    }
+    case 'filler': {
+      const cells = typeof x.start === 'string' ? x.start.length : 0;
+      if (cells > 0 && (Number(d.mine) || 0) + (Number(d.theirs) || 0) > cells) hit('filler-too-many-cells', `${d.mine} + ${d.theirs} on ${cells}`, cells);
+      break;
+    }
+    case 'hoops4':
+      if (Number(d.made) > Number(d.shots)) hit('hoops-more-made-than-shot', `${d.made} of ${d.shots}`);
+      break;
+    case 'cuppong': {
+      const thrown = Number(d.throws ?? d.mt), made = Number(d.made ?? d.mm);
+      if (Number.isFinite(thrown) && Number.isFinite(made) && made > thrown) hit('cuppong-more-made-than-thrown', `${made} of ${thrown}`);
+      if (e.f === 'recordCupPongSolo' && score > 0 && score < 10 && (x.end == null || x.end === 'cleared')) hit('cuppong-solo-under-10', score, 10);
+      break;
+    }
+    case 'airhockey': {
+      const to = Number((/(?:^|\|)to=(\d+)/.exec(String(e.m || '')) || [])[1]) || 7;
+      if ((Number(ex.goalsFor) || 0) > to || (Number(ex.goalsAgainst) || 0) > to) hit('airhockey-goals-over-target', `${ex.goalsFor}-${ex.goalsAgainst} to ${to}`, to);
+      break;
+    }
+    case 'golf': {
+      const hs = ex.holeScores && typeof ex.holeScores === 'object' ? Object.values(ex.holeScores) : [];
+      if (hs.some((v) => Number(v) < 1)) hit('golf-hole-in-zero', hs.join(','));
+      break;
+    }
+    case 'battleship':
+      if ((Number(ex.hits) || 0) > (Number(ex.shots) || 0) || (Array.isArray(a) && a[1] === true && Number(ex.shots) > 0 && Number(ex.shots) < 17)) {
+        hit('battleship-impossible-shots', `${ex.hits} hits, ${ex.shots} shots`);
+      }
+      break;
+    case 'boggle':
+      if (Array.isArray(x.faces) && x.faces.length) {
+        for (const w of Array.isArray(x.found) ? x.found : []) {
+          const word = Array.isArray(w) ? w[0] : w;
+          if (word && !boggleOnBoard(x.faces, word)) { hit('boggle-word-not-on-board', word); break; }
+        }
+      }
+      break;
+    default: break;
   }
-  if (i && e.g === 'ballrun' && score >= 30 && (i.t | 0) < 10) out.push({ rule: 'ballrun-score-without-touch', v: `${score} obstacles, ${i.t | 0} touches`, lim: 10 });
-  if (i && e.g === 'tower' && score >= 10 && (i.p | 0) < score) out.push({ rule: 'tower-blocks-without-taps', v: `${score} blocks, ${i.p | 0} taps`, lim: '' });
   return out;
 }
 
