@@ -35,10 +35,9 @@
       // iOS 26 top-edge blur test (2026-11-09, Matt: "yes build the blur test, admin only"): every top
       // row sits 48px lower on an admin device (css/hub.css --gh-st). Cached admin answer, same key as isAdminDevice().
       if (localStorage.getItem('gamehub.adminDevice.v1') === '1') document.documentElement.className += ' gh-edgepad';
-      // The desktop layout (js/hub.js deskOn(): a wide window with a mouse) and its pages' layout, ADMIN DEVICES ONLY
-      // until Matt releases it (Matt 2026-11-23: "build it" on docs/mockups/desktop/pages.html). Kept current by deskPg() below.
-      if (localStorage.getItem('gamehub.adminDevice.v1') === '1'
-        && matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)').matches) document.documentElement.className += ' gh-desk gh-deskpg';
+      // The desktop layout (js/hub.js deskOn(): a wide window with a mouse) and its pages' layout, RELEASED to
+      // everyone 2026-11-24 (Matt: "Yes release it"). Kept current by deskPg() below.
+      if (matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)').matches) document.documentElement.className += ' gh-desk gh-deskpg';
     } catch (e) { /* private mode: the deferred module still themes it a moment later */ }
   </script>
   <style>
@@ -1422,9 +1421,7 @@
     // The desktop layout follows the window (and the admin answer) live, like the launcher's.
     const DESK_MQ = matchMedia('(min-width: 900px) and (hover: hover) and (pointer: fine)');
     function deskPg() {
-      let admin = false;
-      try { admin = localStorage.getItem('gamehub.adminDevice.v1') === '1'; } catch { admin = false; }
-      const on = getLayout() === 'compact' && admin && DESK_MQ.matches;
+      const on = getLayout() === 'compact' && DESK_MQ.matches;
       document.documentElement.classList.toggle('gh-desk', on);
       document.documentElement.classList.toggle('gh-deskpg', on);
     }
