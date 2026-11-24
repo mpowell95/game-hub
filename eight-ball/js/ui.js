@@ -11,6 +11,7 @@
 // recorded once it is won, against the computer only. An ONLINE challenge (Stage 2, mp.js) lives on
 // the server, every shot written the moment it is taken, so leaving one loses nothing either.
 
+import { exposeSeam } from '../../js/seams.js';
 import {
   RULES_NOW, newMatch, validMatch, step, atRest, freeze, settle, begin, play, nextRack, runToRest, maxShotSteps,
   aimContact, rayStop, canPlace, nearestPlace, onEight, needCall, targetsOf, cloneBalls, ballsOf,
@@ -1937,7 +1938,7 @@ export function init(container) {
   if (instance) destroy();
   instance = new PoolUI(container);
   // Test seam: lets the headless checks drive a shot.
-  if (typeof window !== 'undefined') window.__epTest = { ui: instance };
+  exposeSeam('__epTest', { ui: instance });
 }
 export function destroy() {
   if (!instance) return;

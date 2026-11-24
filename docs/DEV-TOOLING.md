@@ -201,3 +201,5 @@ table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/
   `[w=1440] [h=900] [theme=light] [lang=en] [admin=1]` (`admin` 0 = a player's view, the old pages); shots in `.visual-out/desk-pages/`.
   `INTERACT=1` clicks through each page (switch conversations, tabs close Messages, a board's person and back, the pick sheet, a
   Profile screen) and prints what opened.
+
+- `tools/test-play-input.mjs [--db <playLog.json>]` (2026-11-24): the scripted-play alert rules (`js/integrity.js` `checkPlayInput`), that no game puts its insides on `window` on the live site, and with `--db` a replay of every real result in a play-log snapshot.

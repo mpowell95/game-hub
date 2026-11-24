@@ -826,3 +826,17 @@ word and words are never dropped, so a later data change only LOWERS par (a stor
 undo, and hint adds a move (a Redo only refunds the Undo it takes back, never below the chain's length); `wlBest` keeps one attempt
 WHOLE. Not yet replayed over a snapshot (no reader key in that session): an alert, never a void, until
 `node tools/test-integrity.mjs --db <snapshot>` shows 0 hits. Tests: `tools/test-word-ladder-points.mjs`.
+
+
+## Scripted play (2026-11-24)
+
+ALERTS from each play-log RESULT entry, judged on the server as it lands (`functions/index.js` `playInputCheck`, rules in
+`js/integrity.js` `checkPlayInput`), stored at `integrityAlerts/<game>~<code>~<entry id>/<rule>~x`, pushed to every admin.
+- `input-made-by-code`: the entry's input report `i` has made-up events (`u` > 0). Our code makes no pointer, touch,
+  mouse, or key events (checked 2026-11-24: only `.click()`, which is not watched).
+- `snake-turns-without-input`: more turns than taps + swipes + keys, by more than 3. Proof: snake/js/ui.js calls
+  `game.setDirection` only from `_steer`, whose three callers each count first; a refused turn only makes inputs larger.
+  Replay over every Snake run with detail (Nov 16-24): 2 hits, King of Games' two 62s.
+- `ballrun-score-without-touch`: 30+ obstacles with under 10 real events since the last result.
+- `tower-blocks-without-taps`: more blocks than real presses (one press drops one block; nothing drops on its own).
+Ball Run and Tower Stack have no history with `i` yet: their limits are deliberately loose; tighten with real data.

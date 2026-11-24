@@ -1758,3 +1758,23 @@ Matt asked to move Mockup Pad (his claude.ai markup artifact) into his `personal
 and README now live in `mpowell95/personal`, `mockup-pad/`. Removed `tools/mockup-pad/` here, its
 row in `docs/DEV-TOOLING.md`, and its exclusion line in `tools/validate-sw-assets.mjs`. The live
 artifact URL is unchanged.
+
+
+## 2026-11-24: scripted Snake scores, open test seams, the input report
+
+Matt asked why a player kept getting better scores and told a session to investigate King of Games. The play log showed:
+- Nov 17, 11:25 AM and 1:47 PM, a Safari tab: Snake Hard 62 twice. 223 and 242 turns, and the run's own counters say
+  1 D-pad tap, 0 swipes, 0 keys. Every turn the screen can make passes through one of three handlers that count first
+  (snake/js/ui.js `_steer`), so the turns were made by code calling the game directly. 158 and 165 turns came 1-2 ticks
+  (85 ms) apart. Matt had scored 61 the evening before; 62 took first place. Replayed over every Snake run with this
+  data: these two are the only runs with more turns than inputs.
+- The same night: an account "El Fantasma" (code CRK7E, the name only in `usernames/`, its profile reset to "You" at
+  1:23 AM) played Ball Run Classic Hard in that Safari tab; then a second iPhone, used once, signed in as King of Games
+  and scored 200 in 3 runs, one more than Matt's 199 (Orbital Hard; the board takes the best of both tracks, so every
+  player saw 199). Ball Run kept no input data, so this is unproven.
+- How: most games put their insides on `window` on the live site (test seams: `__sbTest.answers`, `__sdTest.game`,
+  `__twTest.drop()`, `__ghHub` and through it the mounted game). A browser console (Safari tab, computer) could read
+  answers or drive a game; the Home Screen app has none.
+Fixed the same day: `js/seams.js` (seams on localhost only), the input report `i` on every play-log entry (made-up
+events blocked live), `playInputCheck` (alert + push to admins at once), `tools/test-play-input.mjs`. A session first
+told Matt it was "not a cheat"; it was. Nothing was voided: Matt decides.

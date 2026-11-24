@@ -15,7 +15,7 @@
 // THE LAW: nothing here changes players/, a match, or a stats store. Flags and alerts are new nodes,
 // never removed by this code.
 import './shared-env.js';
-import { checkStats, checkMatch, checkContextoWin, contextoWinForRecord, hitText, gameName, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './shared/js/integrity.js';
+import { checkStats, checkMatch, checkContextoWin, checkPlayInput, contextoWinForRecord, hitText, gameName, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts } from './shared/js/integrity.js';
 import { isHiddenDeviceId, isHiddenName } from './shared/js/hidden-players.js';
 
 const valOf = async (db, path) => (await db.ref(path).get()).val();
@@ -109,6 +109,23 @@ export async function checkContextoLogWin(db, code, id, entry, now = Date.now())
     const key = `contexto~${code}~${String(win.k).replace(/[.#$/[\]]/g, '_')}`;
     const res = await db.ref(`integrityAlerts/${key}/${h.rule}~x`).transaction((cur) => (cur ? undefined : alert));
     if (res && res.committed) written.push({ ...h, ...alert, node: 'contexto' });
+  }
+  return written;
+}
+
+/** SCRIPTED PLAY (2026-11-24, js/integrity.js checkPlayInput): one playLog entry, judged the moment it lands.
+ *  Each alert is written ONCE to integrityAlerts/<game>~<code>~<entry id>/<rule>~x (the admin page lists it
+ *  under that game) and returned for the push. Event data only: one small read (the name). */
+export async function checkPlayInputLog(db, code, id, entry, now = Date.now()) {
+  const hits = checkPlayInput(entry);
+  if (!hits.length) return [];
+  const name = String(((await db.ref(`directory/${code}/name`).get()).val()) || code).slice(0, 40);
+  const g = String(entry.g || '').replace(/[.#$/[\]~]/g, '_');
+  const written = [];
+  for (const h of hits) {
+    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(id), t: Number(entry.t) || 0, when: now };
+    const res = await db.ref(`integrityAlerts/${g}~${code}~${id}/${h.rule}~x`).transaction((cur) => (cur ? undefined : alert));
+    if (res && res.committed) written.push({ ...h, ...alert, node: g });
   }
   return written;
 }

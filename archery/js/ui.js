@@ -10,6 +10,7 @@
 // comes up in under 0.25 s with the target magnified in the sight; drag to aim, the sight sways, the
 // ring round it runs down; let go and the camera chases the arrow for 0.75 s; cut to the target, the
 // number pops 0.6 s later with a burst of stars; 2 s on the target, then back to the line.
+import { exposeSeam } from '../../js/seams.js';
 import { newMatch, shoot, totals, stageShots, arrowsFor, isShootOff, windFor, driftOf, landing, panicPoint,
   drainGauge, swayAt, GAUGE, newHand, stepHand, cpuShot, gauss, DIFFS, ROUNDS, validMatch, scoreAt, hashStr, BOSS, shotOrder } from './engine.js';
 import { Renderer, ARROW_COLORS, FLIGHT_T } from './render.js';
@@ -1682,7 +1683,7 @@ export function init(container) {
   if (instance) destroy();
   instance = new ArcheryUI(container);
   // Test seam (like Darts' window.__dtTest): lets the headless checks drive the game.
-  if (typeof window !== 'undefined') window.__arTest = { ui: instance, hashStr };
+  exposeSeam('__arTest', { ui: instance, hashStr });
 }
 export function destroy() {
   if (!instance) return;

@@ -8,6 +8,7 @@
 // vs the computer goes to the shared recorder, `recordResult('battlearena', diff, won)`, exactly
 // once, and only then is the save removed. Unlocks are DERIVED from total wins at read time;
 // nothing here stores an unlock.
+import { exposeSeam } from '../../js/seams.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { backStack } from '../../js/back-stack.js';
 import { makeT, myName } from '../../js/i18n.js';
@@ -325,7 +326,7 @@ class BattleArena {
     this.root.classList.add('ba-root');
     if (TEST_MODE) { this.root.classList.add('is-test'); this.root.dataset.test = t('test'); }
     // Read-only hook for headless drivers (Cup Pong's `__cpTest` precedent). Never read by the game.
-    try { window.__baTest = this; } catch {}
+    exposeSeam('__baTest', this);
     this.armBack();
     // ONLINE FIRST: a match handed over by the launcher / Multiplayer screen / a notification
     // (alert.js armOpen, armChallenge), or a live room this phone was in when it left. Both are

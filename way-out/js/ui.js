@@ -10,6 +10,7 @@
 // THE MODULE CONTRACT: init / destroy / isInProgress (docs/BUILDING-A-GAME.md).
 // isInProgress() RETURNS FALSE, DELIBERATELY: the level is written to `gamehub.wayout.save.v1`
 // after every tap that changes it (arrows gone, arrows bumped, lives), so leaving is lossless.
+import { DEV_SEAMS } from '../../js/seams.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so the standalone page themes too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -1396,7 +1397,7 @@ class WayOut {
     // Test seam for test-visual.mjs's PLAY probe (the sudoku pattern): read-only state, and where
     // on screen an arrow is, so the probe can tap it through the real input path.
     try {
-      window.__woTest = {
+      if (DEV_SEAMS) window.__woTest = {
         state: () => ({ left: this._left(), lives: this.lives, level: this.level, tier: this.tier, cols: this.lvl ? this.lvl.cols : 0, total: this.lvl ? this.lvl.arrows.length : 0,
           rush: this.rush ? { arrows: this.rush.arrows, boards: this.rush.boards, mistakes: this.rush.mistakes, over: this.rush.over, msLeft: Math.round(this._rushLeft()),
             paused: this.rush.paused, counting: this.rush.counting } : null }),

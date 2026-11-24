@@ -169,6 +169,16 @@ floating bar. Shots + click-through: `tools/desk-pages-shots.cjs` (`INTERACT=1`)
 **Game setup screens on desktop (2026-11-23, Matt: "build it" on `docs/mockups/desktop/setup.html`; same class, `html.gh-deskpg`, released with it)**: Darts (options left, board + Play right;
 Online = Matches | Challenge), Sudoku (picture left, difficulty right), Golf Solo (courses left, holes right). CSS only in each game's css; shots `SETUP=darts,sudoku,golf`.
 
+## Scripted play is caught the moment it lands (2026-11-24, Matt: "How the fuck are we allowing him to run a script")
+
+King of Games' two Snake 62s (Nov 17, Safari tab) turned the snake 223 and 242 times from ONE tap: code drove the game.
+**No game puts its insides on `window` on the live site** (`js/seams.js` `exposeSeam`/`DEV_SEAMS`: localhost only; until
+this day `__sbTest.answers`, `__sdTest.game`, `__ghHub`... were open to any browser console). **Every play-log entry carries
+`i`** = real touches/presses and made-up events since that game's last result (`js/play-log-queue.js`; made-up touches and
+keys are BLOCKED on the live site); `playInputCheck` judges each result (`js/integrity.js` `checkPlayInput`) and pushes the
+admins at once: alerts, never a void (a void needs Matt's word). A new skill game needs its own input-vs-actions rule there.
+`tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
+
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")
 
 A code alone must stop being an identity. Step A LIVE (v1465, invisible): each claimed phone registers a device key

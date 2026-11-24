@@ -12,6 +12,7 @@
 // mid-rack - the between-throws state is snapshotted after every settled ball, so leaving is
 // lossless. A ball in flight is not part of the saved state.
 
+import { exposeSeam } from '../../js/seams.js';
 import { SkeeballGame, BALLS_PER_GAME } from './game.js';
 import { engineFor, loadEngine } from './engines.js';
 import { BOARDS as ALL_BOARDS, boardById, DEFAULT_BOARD, liveBoards } from './boards.js';
@@ -2668,7 +2669,7 @@ export function init(container) {
   instance = new SkeeballUI(container);
   // Test hook (the __yzTest precedent): read-only access for the drivers that PLAY this game
   // headlessly - test-visual.mjs's probe and the session play scripts. Never used by the game.
-  if (typeof window !== 'undefined') window.__skTest = { get ui() { return instance; } };
+  exposeSeam('__skTest', { get ui() { return instance; } });
   return instance;
 }
 

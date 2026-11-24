@@ -296,6 +296,7 @@
           "m": { ".validate": "newData.isString() && newData.val().length <= 150" },
           "d": { ".validate": "newData.isString() && newData.val().length <= 400" },
           "x": { ".validate": "newData.isString() && newData.val().length <= 20000" },
+          "i": { ".validate": "newData.isString() && newData.val().length <= 200" },
           "$other": { ".validate": false }
         }
       }

@@ -34,6 +34,7 @@
 // transmitted either -- previewScore()/applyCommit() are pure functions of
 // already-synced state, so both sides compute the identical result deterministically.
 
+import { DEV_SEAMS } from '../../js/seams.js';
 import * as net from '../../js/net.js';
 import { onlineGateText } from '../../js/online-gate.js';
 import { enableCodeCopy } from '../../js/mp-code-copy.js';
@@ -1865,7 +1866,7 @@ export function init(container){
   // harness drive deterministic rounds (forced dice) without real randomness
   // or AI timing, so scoring math can be asserted headlessly. For MP tests,
   // exposes the internal move-apply pipeline directly (see __yzTest.mp*).
-  window.__yzTest = {
+  if (DEV_SEAMS) window.__yzTest = {
     getState: () => state,
     render, newGame, doRoll, toggleHold, selectCategory, commitSelection, endTurn,
     categoryScore, previewScore, availableCategories, totalScore, upperSum, upperBonus,
