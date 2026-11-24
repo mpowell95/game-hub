@@ -17,13 +17,16 @@
 import { getStatsApp } from './firebase-boot.js';
 import { writesAllowed } from './stats-net.js';
 import { ensureAuthClaim, myCode } from './messages.js';
-import { readQueue, writeQueue, onAppend } from './play-log-queue.js';
+import { readQueue, writeQueue, readInputQueue, writeInputQueue, onAppend } from './play-log-queue.js';
 
 let timer = null;
 let sending = false;
 
 /** Send what is queued for the active player. Safe to call any time; one send at a time. */
 export async function flushPlayLog() {
+  try { await flushLogEntries(); } finally { await flushPlayInput(); }
+}
+async function flushLogEntries() {
   if (sending) return;
   const code = myCode();
   const mine = readQueue().filter((x) => x && x.c === code);
@@ -54,6 +57,37 @@ export async function flushPlayLog() {
   }
 }
 
+// EVERY TOUCH AND KEY (2026-11-24, js/play-log-queue.js INPUT_KEY): each play's input log goes to
+// playInput/<CODE>/<entry id> = { t, n, s } (admins and the reader key only), apart from playLog so the
+// admin page's play list stays small. Same rules as above: claimed code, verified by re-read, kept on failure.
+let sendingIn = false;
+export async function flushPlayInput() {
+  if (sendingIn) return;
+  const code = myCode();
+  const mine = readInputQueue().filter((x) => x && x.c === code && x.n);
+  if (!code || !mine.length || !writesAllowed('play input')) return;
+  sendingIn = true;
+  try {
+    const boot = await getStatsApp();
+    if (!boot || !(await ensureAuthClaim(boot))) return;
+    const { db, api } = boot;
+    const batch = mine.slice(0, 20);
+    const patch = {};
+    for (const x of batch) patch[`playInput/${code}/${x.id}`] = { t: x.t, n: x.n, s: api.serverTimestamp() };
+    await api.update(api.ref(db), patch);
+    const last = batch[batch.length - 1];
+    const snap = await api.get(api.ref(db, `playInput/${code}/${last.id}/t`));
+    if (!snap || !snap.exists()) { console.error('[play-log] input send did not read back; kept for retry'); return; }
+    const sent = new Set(batch.map((x) => x.id));
+    writeInputQueue(readInputQueue().filter((x) => !(x && x.c === code && sent.has(x.id))));
+    if (readInputQueue().some((x) => x && x.c === code)) setTimeout(() => flushPlayInput(), 500);
+  } catch (err) {
+    console.error('[play-log] input send FAILED; kept for retry', err);
+  } finally {
+    sendingIn = false;
+  }
+}
+
 /** Send a few seconds after the last entry (a burst of guesses goes up together). */
 export function startPlayLog() {
   onAppend(() => { if (!timer) timer = setTimeout(() => { timer = null; flushPlayLog(); }, 5000); });
@@ -61,4 +95,4 @@ export function startPlayLog() {
   flushPlayLog();
 }
 
-export default { flushPlayLog, startPlayLog };
+export default { flushPlayLog, flushPlayInput, startPlayLog };

@@ -102,6 +102,79 @@
   // THE PLAY LOG (2026-10-29): every accepted result, queued exactly as js/play-log-queue.js's
   // appendPlayLog does (`gamehub.playlog.v1`, newest 3,000 kept), for js/play-log.js to send from the
   // next hub page. Evidence only, never read back. Keep in step with appendPlayLog().
+  // EVERY TOUCH AND KEY (2026-11-24, Matt: "EVERY thing like this in EVERY game MUST be logged"): the same
+  // input report `i` and input log as js/play-log-queue.js (keep in step): counts on every entry; the full log
+  // of a result's touches and keys queued in INPUT_KEY for js/play-log.js to send to playInput/<CODE>/<id>.
+  var INPUT_KEY = 'gamehub.playinput.v1', INPUT_MAX = 200, N_MAX = 12000, MOVE_MS = 50;
+  var inC = { t: 0, p: 0, u: 0 }, inLog = null, inLastMove = 0;
+  var inLive = (function () { try { return !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch (e) { return false; } })();
+  var inPointer = (function () { try { return 'PointerEvent' in window; } catch (e) { return false; } })();
+  function inTok(kind, data, fake, isMove) {
+    var now = Date.now();
+    if (!inLog) inLog = { t0: now, last: now, pt: '', toks: [], len: 0, cut: 0 };
+    var tk = (now - inLog.last) + (fake ? '!' : '') + kind + data;
+    if (inLog.len + tk.length + 1 > N_MAX) {
+      if (isMove) { inLog.cut++; return; }
+      var drop = -1;
+      for (var q = 0; q < inLog.toks.length; q++) if (/^\d+!?m/.test(inLog.toks[q])) { drop = q; break; }
+      if (drop < 0) { inLog.cut++; return; }
+      inLog.len -= inLog.toks[drop].length + 1; inLog.toks.splice(drop, 1); inLog.cut++;
+    }
+    inLog.toks.push(tk); inLog.len += tk.length + 1; inLog.last = now;
+  }
+  (function watchInput() {
+    try {
+      if (typeof window === 'undefined' || !window.addEventListener) return;
+      var types = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
+      var on = function (e) {
+        var real = e.isTrusted, ty = e.type;
+        if (real) { inC.t++; if (/down|start/.test(ty)) inC.p++; } else inC.u++;
+        try {
+          var logIt = !real || ty === 'touchmove' || (inPointer ? (ty.indexOf('pointer') === 0 || ty === 'keydown') : true);
+          if (logIt) {
+            if (ty === 'keydown') {
+              var tg = e.target, ed = tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.isContentEditable);
+              inTok('k', ed ? 'T' : String(e.key || '?').slice(0, 12).replace(/\s/g, '_'), !real, false);
+            } else {
+              var pt = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+              var xy = Math.round(pt.clientX || 0) + ',' + Math.round(pt.clientY || 0);
+              if (/down|start/.test(ty)) { inTok('d', xy, !real, false); if (inLog && !inLog.pt) inLog.pt = e.pointerType || (ty.indexOf('touch') === 0 ? 'touch' : 'mouse'); }
+              else if (/up|end/.test(ty)) inTok('u', xy, !real, false);
+              else if (ty === 'pointercancel') inTok('c', xy, !real, false);
+              else if (((e.buttons | 0) > 0 || e.pointerType === 'touch' || ty === 'touchmove') && Date.now() - inLastMove >= MOVE_MS) { inLastMove = Date.now(); inTok('m', xy, !real, true); }
+            }
+          }
+        } catch (err) { /* the count above still stands */ }
+        if (!real && inLive) { try { e.stopImmediatePropagation(); e.preventDefault(); } catch (err) { /* still counted */ } }
+      };
+      for (var k = 0; k < types.length; k++) window.addEventListener(types[k], on, { capture: true, passive: false });
+    } catch (e) { console.error('[game-stats-global] input report not started', e); }
+  })();
+  function takeInput(isResult) {
+    var out = { i: JSON.stringify({ t: inC.t, p: inC.p, u: inC.u }), n: null };
+    if (isResult) {
+      if (inLog && inLog.toks.length) {
+        var o = { v: 1, t0: inLog.t0, w: Math.round(window.innerWidth || 0), h: Math.round(window.innerHeight || 0), pt: inLog.pt || '' };
+        if (inLog.cut) o.cut = inLog.cut;
+        o.ev = inLog.toks.join(' ');
+        out.n = JSON.stringify(o);
+      }
+      inC = { t: 0, p: 0, u: 0 }; inLog = null;
+    }
+    return out;
+  }
+  function queueInput(code, id, t, n) {
+    try {
+      var iq = readJSON(INPUT_KEY); if (!Array.isArray(iq)) iq = [];
+      iq.push({ c: code, id: id, t: t, n: n });
+      var keep = iq.slice(-INPUT_MAX);
+      for (var tries = 0; tries < 4; tries++) {
+        try { localStorage.setItem(INPUT_KEY, JSON.stringify(keep)); return; }
+        catch (e) { console.error('[game-stats-global] input log not saved; keeping fewer', keep.length, e); keep = keep.slice(-Math.max(1, keep.length >> 1)); }
+      }
+    } catch (e) { console.error('[game-stats-global] input log not queued', e); }
+  }
+
   var PLAYLOG_KEY = 'gamehub.playlog.v1';
   var PLAYLOG_MAX = 3000;
   var playSeq = 0;
@@ -118,7 +191,10 @@
       if (m) q[q.length - 1].m = String(m).slice(0, 150);
       if (d) q[q.length - 1].d = String(d).slice(0, 400);
       if (x) q[q.length - 1].x = String(x).slice(0, X_MAX);
+      var inp = takeInput(true);
+      q[q.length - 1].i = inp.i;
       localStorage.setItem(PLAYLOG_KEY, JSON.stringify(q.slice(-PLAYLOG_MAX)));
+      if (inp.n) queueInput(code, q[q.length - 1].id, t, inp.n);
     } catch (e) { console.error('[game-stats-global] play not logged', e); }
   }
 

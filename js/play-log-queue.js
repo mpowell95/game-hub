@@ -36,26 +36,99 @@ const str = (v, n) => String(v == null ? '' : v).slice(0, n);
 // the admins at once. On the live site a made-up touch or key press is also STOPPED before any game sees it
 // (none of our code makes one: only .click(), which is not watched). Evidence only; nothing reads it back.
 // Guarded so the server copy (no window) does nothing.
-const IN_TYPES = ['pointerdown', 'pointermove', 'pointerup', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
+// EVERY TOUCH AND KEY, LOGGED (2026-11-24, Matt: "EVERY thing like this in EVERY game MUST be logged"). Ball
+// Run kept no touches, so its 200 could not be checked. Now every play carries `n`: each touch down, move
+// (one every 50 ms while pressed or touching), touch up and key press since the last RESULT, with its time and
+// place, kept apart in INPUT_KEY and sent to playInput/<CODE>/<entry id> (js/play-log.js; admins only).
+// Format: { v: 1, t0: epoch ms of the first event, w, h: the window, pt: touch|mouse|pen, ev: "<token> ..." },
+// token = <ms since the previous token><kind><data>: d x,y (down) | m x,y (move) | u x,y (up) | c x,y (the
+// browser took the touch, e.g. a page pan) | k <key>
+// (k T = typed into a text box, the letter not kept) | ! before a made-up one. Moves are dropped first when a
+// play passes N_MAX characters; presses are never dropped until the cap itself (then `cut` says how many).
+const IN_TYPES = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'mousedown', 'mousemove', 'keydown'];
 const IN_PRESS = new Set(['pointerdown', 'touchstart', 'mousedown', 'keydown']);
 const _in = { t: 0, p: 0, u: 0 };
+export const INPUT_KEY = 'gamehub.playinput.v1';
+export const INPUT_MAX = 200;          // queued plays kept on the phone (newest), each at most N_MAX characters
+export const N_MAX = 12000;
+const MOVE_MS = 50;
+let _log = null;                       // { t0, last, pt, toks: [], moves: count, presses: count, cut }
+let _lastMove = 0;
 const _inLive = (() => { try { return !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname); } catch { return false; } })();
+const _hasPointer = (() => { try { return typeof window !== 'undefined' && 'PointerEvent' in window; } catch { return false; } })();
+function _editable(t) {
+  try { const n = t && t.tagName; return n === 'INPUT' || n === 'TEXTAREA' || !!(t && t.isContentEditable); } catch { return false; }
+}
+function _tok(kind, data, fake, isMove) {
+  const now = Date.now();
+  if (!_log) _log = { t0: now, last: now, pt: '', toks: [], len: 0, moves: 0, cut: 0 };
+  const tk = `${now - _log.last}${fake ? '!' : ''}${kind}${data}`;
+  if (_log.len + tk.length + 1 > N_MAX) {
+    if (isMove) { _log.cut++; return; }
+    // full: drop the oldest MOVE to make room for a press; with none left, count it as cut
+    const i = _log.toks.findIndex((x) => /^\d+!?m/.test(x));
+    if (i < 0) { _log.cut++; return; }
+    _log.len -= _log.toks[i].length + 1; _log.toks.splice(i, 1); _log.cut++;
+  }
+  _log.toks.push(tk); _log.len += tk.length + 1; _log.last = now;
+}
 (function watchInput() {
   try {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const on = (e) => {
-      if (e.isTrusted) { _in.t++; if (IN_PRESS.has(e.type)) _in.p++; return; }
-      _in.u++;
-      if (_inLive) { try { e.stopImmediatePropagation(); e.preventDefault(); } catch { /* still counted */ } }
+      const real = e.isTrusted;
+      if (real) { _in.t++; if (IN_PRESS.has(e.type)) _in.p++; } else _in.u++;
+      try {
+        const ty = e.type;
+        // One logged copy per touch: pointer events where the browser has them; made-up ones always.
+        // (moves: pointer or touch, sampled by time, so a page pan that cancels the pointer still logs the finger)
+        const logIt = !real || ty === 'touchmove' || (_hasPointer ? (ty.startsWith('pointer') || ty === 'keydown') : true);
+        if (logIt) {
+          if (ty === 'keydown') _tok('k', _editable(e.target) ? 'T' : String(e.key || '?').slice(0, 12).replace(/\s/g, '_'), !real, false);
+          else {
+            const p = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+            const xy = `${Math.round(p.clientX || 0)},${Math.round(p.clientY || 0)}`;
+            if (/down|start/.test(ty)) { _tok('d', xy, !real, false); if (_log && !_log.pt) _log.pt = e.pointerType || (ty.startsWith('touch') ? 'touch' : 'mouse'); }
+            else if (/up|end/.test(ty)) _tok('u', xy, !real, false);
+            else if (ty === 'pointercancel') _tok('c', xy, !real, false);
+            else {
+              const pressed = (e.buttons | 0) > 0 || e.pointerType === 'touch' || ty === 'touchmove';
+              const now = Date.now();
+              if (pressed && now - _lastMove >= MOVE_MS) { _lastMove = now; _tok('m', xy, !real, true); if (_log) _log.moves++; }
+            }
+          }
+        }
+      } catch { /* the count above still stands */ }
+      if (!real && _inLive) { try { e.stopImmediatePropagation(); e.preventDefault(); } catch { /* still counted */ } }
     };
     for (const ty of IN_TYPES) window.addEventListener(ty, on, { capture: true, passive: false });
   } catch (err) { console.error('[play-log] input report not started', err); }
 })();
-/** The input report for an entry; a RESULT entry (a recorder) starts the next count. */
+/** The input report for an entry: `i` (counts) and, for a RESULT entry, `n` (every event since the last
+ *  result, the log then starts again). */
 function takeInput(isResult) {
-  const out = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u });
-  if (isResult) { _in.t = 0; _in.p = 0; _in.u = 0; }
-  return out;
+  const i = JSON.stringify({ t: _in.t, p: _in.p, u: _in.u });
+  let n = null;
+  if (isResult) {
+    if (_log && _log.toks.length) {
+      let w = 0, h = 0;
+      try { w = Math.round(window.innerWidth); h = Math.round(window.innerHeight); } catch { /* no window */ }
+      n = JSON.stringify({ v: 1, t0: _log.t0, w, h, pt: _log.pt || '', ...(_log.cut ? { cut: _log.cut } : {}), ev: _log.toks.join(' ') });
+    }
+    _in.t = 0; _in.p = 0; _in.u = 0; _log = null;
+  }
+  return { i, n };
+}
+export function readInputQueue() {
+  try { const q = JSON.parse(localStorage.getItem(INPUT_KEY) || '[]'); return Array.isArray(q) ? q : []; } catch { return []; }
+}
+export function writeInputQueue(q) {
+  let keep = q.slice(-INPUT_MAX);
+  // A full phone: keep the newest half, then a quarter, rather than lose the whole queue (rule 6: said loudly).
+  for (let tries = 0; tries < 4; tries++) {
+    try { localStorage.setItem(INPUT_KEY, JSON.stringify(keep)); return; }
+    catch (err) { console.error('[play-log] input log not saved; keeping fewer', keep.length, err); keep = keep.slice(-Math.max(1, keep.length >> 1)); }
+  }
 }
 
 /** Append one entry: { g: game, f?: recorder, a?: JSON of its arguments, e?: event, k?: puzzle/level,
@@ -74,10 +147,12 @@ export function appendPlayLog(code, entry) {
     if (entry.m != null) x.m = str(entry.m, 150);   // the game's mode (game-stats.js withMode, 2026-10-30); '?' = none given
     if (entry.d != null) x.d = str(entry.d, 400);   // the match's detail, JSON (withMode's `detail`, 2026-11-02)
     if (entry.x != null) x.x = str(entry.x, 20000); // the play's PRIVATE data, JSON (withMode's `log`, logPlayData; 2026-11-16)
-    x.i = takeInput(!!entry.f);                     // what really touched the screen (2026-11-24, above)
+    const inp = takeInput(!!entry.f);               // what really touched the screen (2026-11-24, above)
+    x.i = inp.i;
     const q = readQueue();
     q.push(x);
     writeQueue(q);
+    if (inp.n) { const iq = readInputQueue(); iq.push({ c: code, id: x.id, t, n: inp.n }); writeInputQueue(iq); }
     for (const fn of listeners) { try { fn(); } catch { /* a listener never blocks a log */ } }
     return x.id;   // its key in playLog/<CODE> (Contexto keeps its finishing entry's, 2026-10-29)
   } catch (err) { console.error('[play-log] not logged', err); }
@@ -89,4 +164,4 @@ export function argsJSON(args) {
   try { return JSON.stringify(Array.from(args || [], (v) => (typeof v === 'function' ? null : v === undefined ? null : v))); } catch { return '[]'; }
 }
 
-export default { QUEUE_KEY, MAX_QUEUE, readQueue, writeQueue, onAppend, appendPlayLog, argsJSON };
+export default { QUEUE_KEY, MAX_QUEUE, INPUT_KEY, readQueue, writeQueue, readInputQueue, writeInputQueue, onAppend, appendPlayLog, argsJSON };

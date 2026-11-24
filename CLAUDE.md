@@ -177,6 +177,11 @@ this day `__sbTest.answers`, `__sdTest.game`, `__ghHub`... were open to any brow
 `i`** = real touches/presses and made-up events since that game's last result (`js/play-log-queue.js`; made-up touches and
 keys are BLOCKED on the live site); `playInputCheck` judges each result (`js/integrity.js` `checkPlayInput`) and pushes the
 admins at once: alerts, never a void (a void needs Matt's word). A new skill game needs its own input-vs-actions rule there.
+**EVERY touch and key press of EVERY play is logged (2026-11-24, Matt: "EVERY thing like this in EVERY game MUST be logged";
+Ball Run had kept no touches, so its 200 could not be checked)**: `n` = each down/move (50 ms)/up/cancel/key with its time and
+place since the last result, queued in `gamehub.playinput.v1` (`js/play-log-queue.js`; the classic recorder `js/game-stats-global.js` the
+same), sent to `playInput/<CODE>/<entry id>` (admins + reader, apart from `playLog` so the admin play list stays small). A new
+recorder gets it free; a game that records outside `notePlay` gets none, so never do that.
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

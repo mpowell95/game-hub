@@ -49,6 +49,21 @@ const bad = [];
 })(root);
 ok(`no game puts its insides on window on the live site${bad.length ? ': ' + bad.join(' | ') : ''}`, bad.length === 0);
 
+// Every touch and key (2026-11-24): the full input log is queued and sent, the rules accept it, and the
+// classic recorder (Monopoly Deal, Parchís) logs the same way.
+const R = JSON.parse(fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8')).rules;
+ok('rules: playInput exists, admins + reader read it', !!R.playInput && /admins/.test(R.playInput['.read']) && /readers/.test(R.playInput['.read']));
+ok('rules: playInput n up to 12,000 chars, nothing else', /12000/.test(R.playInput.$code.$k.n['.validate']) && R.playInput.$code.$k.$other['.validate'] === false);
+ok('rules: playLog i allowed', !!R.playLog.$code.$k.i);
+const plq = fs.readFileSync(path.join(root, 'js/play-log-queue.js'), 'utf8');
+const pls = fs.readFileSync(path.join(root, 'js/play-log.js'), 'utf8');
+const gsg = fs.readFileSync(path.join(root, 'js/game-stats-global.js'), 'utf8');
+ok('queue: a result entry queues its input log', /iq\.push\(\{ c: code, id: x\.id, t, n: inp\.n \}\)/.test(plq));
+ok('sender: input logs go to playInput/<CODE>/<id>', pls.includes('playInput/${code}/${x.id}'));
+ok('sender: every flush also sends input logs', /finally \{ await flushPlayInput\(\); \}/.test(pls));
+ok('classic recorder: same input key and log', gsg.includes("'gamehub.playinput.v1'") && /queueInput\(code, q\[q\.length - 1\]\.id, t, inp\.n\)/.test(gsg));
+ok('backup lists playInput', fs.readFileSync(path.join(root, 'backups/rtdb-backup.mjs'), 'utf8').includes("'playInput'"));
+
 const i = process.argv.indexOf('--db');
 if (i > 0) {
   const log = JSON.parse(fs.readFileSync(process.argv[i + 1], 'utf8'));

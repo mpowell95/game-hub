@@ -179,6 +179,7 @@ const SUITES = [
   { file: 'test-no-codes.mjs' },
   { file: 'test-online-pairs.mjs' },
   { file: 'test-private-log.mjs' },
+  { file: 'test-play-input.mjs' },
   { file: 'test-push.mjs' },
   { file: 'test-rate-guard.mjs' },
   { file: 'test-repair-1109.mjs' },

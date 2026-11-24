@@ -4,8 +4,8 @@
 // build at its next visit to the launcher (never mid-game), instead of waiting for a fresh open
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
-const IMPORTANT_SINCE = 1656;
-const CACHE = 'game-hub-v1656';
+const IMPORTANT_SINCE = 1657;
+const CACHE = 'game-hub-v1657';
 
 const ASSETS = [
   './',
@@ -888,7 +888,7 @@ const REST_MANIFEST = {
   './js/firebase-config.js': '66cb4bbdb3',
   './js/game-stats.js': '7ae7c6fdfe',
   './js/arcade-scores.js': 'a0497ce069',
-  './js/game-stats-global.js': 'eed519db96',
+  './js/game-stats-global.js': '612680313d',
   './js/game-stats-ui.js': 'c0ec072b33',
   './js/stats-net.js': '83be7bad7a',
   './js/tips-log.js': '7bc02856dd',
@@ -916,8 +916,8 @@ const REST_MANIFEST = {
   './js/admin-config.js': 'a1d0989fa0',
   './js/admin-ui.js': '8da35cf065',
   './js/integrity.js': '6ea6807e32',
-  './js/play-log-queue.js': '149394c8a8',
-  './js/play-log.js': '396d3fa13d',
+  './js/play-log-queue.js': '6924749f5d',
+  './js/play-log.js': '7f269cd5ca',
   './js/seams.js': '979f4cf8b2',
   './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
