@@ -1387,10 +1387,9 @@ class Hub {
     const desk = compact && deskOn();
     this._desk = desk;
     document.documentElement.classList.toggle('gh-desk', desk);
-    // The other pages' desktop layouts (Multiplayer, Messages, Leaderboards, Profile; docs/mockups/desktop/pages.html,
-    // Matt 2026-11-23: "build it"): ADMIN DEVICES ONLY until Matt says "release it". Release = drop isAdminDevice() here
-    // and in profile/index.html's deskPg().
-    document.documentElement.classList.toggle('gh-deskpg', desk && isAdminDevice());
+    // The other pages' desktop layouts (Multiplayer, Messages, Leaderboards, Profile, game setup screens;
+    // docs/mockups/desktop/pages.html + setup.html): RELEASED to everyone 2026-11-24 (Matt: "Yes release it").
+    document.documentElement.classList.toggle('gh-deskpg', desk);
     this._deskView();
     // Compact edit mode also REMOVES favorites, so one is enough there.
     if (favGames.length < (compact ? 1 : 2)) this._favEdit = false;

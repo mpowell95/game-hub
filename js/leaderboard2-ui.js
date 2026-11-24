@@ -1692,7 +1692,7 @@ html[lang="es"] .lb2-bar h1{font-size:18px}
 .lb2-scroll{overflow-x:hidden;touch-action:pan-y}
 .lb2-body,.lb2-card{max-width:100%;min-width:0}
 .lb2 .gs-v2{min-width:0;max-width:100%;overflow-x:hidden}
-/* DESKTOP (html.gh-deskpg, admin devices until Matt releases it): docs/mockups/desktop/pages.html. Under the floating tab
+/* DESKTOP (html.gh-deskpg, released 2026-11-24): docs/mockups/desktop/pages.html. Under the floating tab
    bar; the Games tab is the list left and one board right (.lb2-split); every other screen a wider single column. */
 html.gh-compact.gh-deskpg .lb2{padding-top:16px;padding-bottom:104px}
 html.gh-deskpg .lb2-page{width:min(760px,100%)}
