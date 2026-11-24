@@ -508,6 +508,21 @@ export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...O
   }
 });
 
+// EVERY NAME, KEPT (2026-11-24, Matt: "just because he deleted it doesn't mean it should be deleted from anything i
+// see"): a rename deletes the old name from usernames/ and Reset profile leaves only "You", so every change of a
+// device's profile name is appended here for ever: nameLog/<CODE>/<push> = { from, to, dev, at }. Server writes
+// only (rules), admins + reader read. One small read per change (the record's code); never a whole node.
+export const nameLogOnChange = onValueWritten({ ref: '/players/{id}/profile/name', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 3 }, async (event) => {
+  const from = event.data.before.exists() ? String(event.data.before.val() || '') : null;
+  const to = event.data.after.exists() ? String(event.data.after.val() || '') : null;
+  if (from === to) return;
+  const db = getDatabase();
+  const id = String(event.params.id);
+  const code = String(((await db.ref(`players/${id}/profile/playerId`).get()).val()) || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || '_nocode';
+  await db.ref(`nameLog/${code}`).push({ from: from == null ? null : from.slice(0, 40), to: to == null ? null : to.slice(0, 40), dev: id.slice(0, 80), at: Date.now() });
+  logger.info('name change', { code, dev: id, from, to });
+});
+
 // CONTEXTO'S CROSS-PHONE CHECK, WITHOUT THE PLAY LOG (2026-11-16, Matt: the play log is "somewhere that
 // only I can see"). Players can no longer read playLog/, so each Contexto hint / giveup / win entry is
 // copied here as { t, s, k, e } (no word, no rank) to ctSync/<CODE>/<id>, which that code's own phones

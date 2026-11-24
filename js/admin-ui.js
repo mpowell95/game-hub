@@ -58,6 +58,7 @@ import { flagStands } from './bee-fairplay.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { backStack } from './back-stack.js';
+import { personNames } from './name-history.js';
 import { deskPreviewOn, setDeskPreview } from './desk-preview.js';
 
 const t = makeT(STRINGS);
@@ -224,6 +225,7 @@ let _tapped = null;         // the element of the last tap, dimmed while its wri
 const _filters = new Map(); // search box selector -> what is typed, kept across repaints
 const _scroll = new Map();  // view key -> scrollTop
 const _plays = new Map();   // player code -> playLog entries (newest first) | 'loading' | 'error'
+let _names = null;           // Names and other accounts (2026-11-24): { usernames, nameLog } | 'loading' (read on first person page)
 let _pairSrc = null;        // Online pairs: { indexes, usernames } | 'loading' (read on first open)
 let _adjType = new Map();  // Adjust: stats game id -> the game type picked ('' = Standard)
 let _peopleAll = false;     // People tab: false = played in the last 30 days (Matt, 2026-11-09), true = everyone
@@ -240,6 +242,12 @@ async function readNodes(paths) {
     const vals = await Promise.all(paths.map(get));
     return Object.fromEntries(paths.map((p, i) => [p, vals[i]]));
   } catch { return {}; }
+}
+/** usernames/ + nameLog/ for the person page's Names and Other accounts (read once per admin open). */
+function loadNames() {
+  if (_names) return;
+  _names = 'loading';
+  readNodes(['usernames', 'nameLog']).then((r) => { _names = { usernames: r.usernames || {}, nameLog: r.nameLog || {} }; if (_host && !_busy) render(); });
 }
 /** Spelling Bee's server flags and missing-log alerts (functions/bee.js). {flags, alerts}, {} offline. */
 async function readBee() {
@@ -1365,6 +1373,23 @@ function personPage(cfg, key) {
       acts: [`<button type="button" class="adm-sw" aria-pressed="${on}" aria-label="${esc(tx('adm_signin_ask', 'Ask to sign in'))}" ${act(() => save(() => setSigninAsk(code, !on)))}></button>`] }); })()] : []),
     ...(code && hidden.length ? [row({ title: (tx('adm_tester_for', 'Tester for')), value: tests.length ? tests.join(', ') : tx('adm_none', 'None'), go: () => push({ k: 'testerfor', key }) })] : []),
   ], true);
+  // Every name this person has used, and every other account on the same phones or computers (2026-11-24,
+  // Matt: "just because he deleted it doesn't mean it should be deleted from anything i see"; js/name-history.js).
+  loadNames();
+  if (_names && _names !== 'loading') {
+    const recIds = idsOf(key);
+    const codes = [...new Set(recIds.map((id) => (((_players[id] || {}).profile || {}).playerId || '').toUpperCase()).filter(Boolean))];
+    const nh = personNames({ players: _players, recIds, codes, usernames: _names.usernames, nameLog: _names.nameLog });
+    const srcWord = (x) => ({ profile: tx('adm_nm_profile', 'on a device'), reserved: tx('adm_nm_reserved', 'reserved'), changed: tx('adm_nm_changed', 'renamed'), archived: tx('adm_nm_archived', 'archived') })[x] || x;
+    body += gh(tx('adm_names', 'Names'), nh.names.length) + grp(nh.names.map((n) => row({ title: n.name, sub: `${n.srcs.map(srcWord).join(', ')}${n.at ? ` · ${shortDate(n.at)}` : ''}` })));
+    if (nh.others.length) {
+      body += gh(tx('adm_other_accounts', 'Other accounts on the same devices'), nh.others.length) + grp(nh.others.map((o) => {
+        const g = (_agg || []).find((x) => (x.playerId || '').toUpperCase() === o.code);
+        return row({ title: o.names.map((n) => n.name).join(', ') || o.code, sub: `${o.code} · ${fmt(o.plays)} ${tx('adm_plays_lc', 'plays')}${o.seen ? ` · ${shortDate(o.seen)}` : ''}`,
+          ...(g ? { go: () => push({ k: 'person', key: g.key }) } : {}) });
+      }));
+    }
+  }
   const voids = voidsOf(cfg, key);
   const vk = Object.keys(voids);
   if (vk.length) {

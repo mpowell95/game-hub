@@ -182,6 +182,10 @@ Ball Run had kept no touches, so its 200 could not be checked)**: `n` = each dow
 place since the last result, queued in `gamehub.playinput.v1` (`js/play-log-queue.js`; the classic recorder `js/game-stats-global.js` the
 same), sent to `playInput/<CODE>/<entry id>` (admins + reader, apart from `playLog` so the admin play list stays small). A new
 recorder gets it free; a game that records outside `notePlay` gets none, so never do that.
+**Every name, and every other account on the same devices (2026-11-24, Matt: "just because he deleted it doesn't mean it should be
+deleted from anything i see")**: a rename deletes the old name from `usernames/` and Reset profile leaves "You", so the server logs every
+profile name change for ever (`nameLog/<CODE>`, `functions/index.js` `nameLogOnChange`); Admin > person shows Names and Other accounts
+on the same devices (`js/name-history.js`: same browser = same first 36 characters of the record id). `tools/test-name-history.mjs`.
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

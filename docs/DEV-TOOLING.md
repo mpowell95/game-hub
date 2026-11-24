@@ -203,3 +203,4 @@ table first, cup first, makes lost and gained. `NODE_USE_ENV_PROXY=1 node tools/
   Profile screen) and prints what opened.
 
 - `tools/test-play-input.mjs [--db <playLog.json>]` (2026-11-24): the scripted-play alert rules (`js/integrity.js` `checkPlayInput`), that no game puts its insides on `window` on the live site, and with `--db` a replay of every real result in a play-log snapshot.
+- `tools/test-name-history.mjs` (2026-11-24): every name a person used and every other account on the same devices (`js/name-history.js`).

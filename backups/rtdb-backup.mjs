@@ -92,6 +92,8 @@ export const BRANCHES = [
   // playInput/ (2026-11-24): every touch and key press of each play, <CODE>/<entry id> (js/play-log.js).
   // Admin-read only, so an anonymous backup is denied (the reader key reads it).
   'playInput',
+  // nameLog/ (2026-11-24): every profile name change, <CODE>/<push> (functions nameLogOnChange). Admin-read only.
+  'nameLog',
   // ctHistory/ (2026-10-30): every Contexto puzzle in each phone's save, <CODE>/<deviceId>/<lang>-<n>
   // (js/contexto-history.js). Admin-read only, so an anonymous backup is denied.
   'ctHistory',
