@@ -123,7 +123,8 @@ export async function checkPlayInputLog(db, code, id, entry, now = Date.now()) {
   const g = String(entry.g || '').replace(/[.#$/[\]~]/g, '_');
   const written = [];
   for (const h of hits) {
-    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(id), t: Number(entry.t) || 0, when: now };
+    // `proven` (2026-11-24): true = impossible through the game's screen (Option A voids it), false = suspicious.
+    const alert = { v: h.v, lim: h.lim, side: '', name, code, k: String(id), t: Number(entry.t) || 0, g, proven: h.proven === true, when: now };
     const res = await db.ref(`integrityAlerts/${g}~${code}~${id}/${h.rule}~x`).transaction((cur) => (cur ? undefined : alert));
     if (res && res.committed) written.push({ ...h, ...alert, node: g });
   }
