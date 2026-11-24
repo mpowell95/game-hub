@@ -840,3 +840,6 @@ ALERTS from each play-log RESULT entry, judged on the server as it lands (`funct
 - `ballrun-score-without-touch`: 30+ obstacles with under 10 real events since the last result.
 - `tower-blocks-without-taps`: more blocks than real presses (one press drops one block; nothing drops on its own).
 Ball Run and Tower Stack have no history with `i` yet: their limits are deliberately loose; tighten with real data.
+
+**Every touch and key (2026-11-24, later)**: each result's full input log is at `playInput/<CODE>/<entry id>` (`n`,
+format in `js/play-log-queue.js`). Trip wires for every game are built from it (next section, when written).

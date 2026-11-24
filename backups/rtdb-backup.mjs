@@ -89,6 +89,9 @@ export const BRANCHES = [
   // playLog/ (2026-10-28): every finished game in every game + Contexto's guesses, <CODE>/<t>-<n>
   // (js/play-log.js). Admin-read only (Contexto's guesses hold answers), so an anonymous backup is denied.
   'playLog',
+  // playInput/ (2026-11-24): every touch and key press of each play, <CODE>/<entry id> (js/play-log.js).
+  // Admin-read only, so an anonymous backup is denied (the reader key reads it).
+  'playInput',
   // ctHistory/ (2026-10-30): every Contexto puzzle in each phone's save, <CODE>/<deviceId>/<lang>-<n>
   // (js/contexto-history.js). Admin-read only, so an anonymous backup is denied.
   'ctHistory',

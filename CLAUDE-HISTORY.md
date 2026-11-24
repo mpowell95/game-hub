@@ -1778,3 +1778,8 @@ Matt asked why a player kept getting better scores and told a session to investi
 Fixed the same day: `js/seams.js` (seams on localhost only), the input report `i` on every play-log entry (made-up
 events blocked live), `playInputCheck` (alert + push to admins at once), `tools/test-play-input.mjs`. A session first
 told Matt it was "not a cheat"; it was. Nothing was voided: Matt decides.
+
+Later the same day (Matt: "I have told you over 5 times that EVERY thing like this in EVERY game MUST be logged"):
+the Nov 16 "log everything" work had given Ball Run each run's score only, so its 200 could not be checked. Every play
+now carries its full input log (`n`: every touch down, move every 50 ms, up, cancel and key press with time and place),
+queued apart (`gamehub.playinput.v1`) and sent to `playInput/<CODE>/<entry id>`, in the module and the classic recorder.
