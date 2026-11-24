@@ -378,7 +378,7 @@ console.log('\n--- Contexto: hints and solves follow the player; alerts on a win
       && /if \(r && rec\.done === 'won' && \(r\.won \|\| r\.gave\)\)/.test(ui) && /_recordFinished\(this\.rec, this\.lang, this\._k\(\)\)/.test(ui);
   })());
   ok('server: a Contexto win is judged when it is logged', /contextoWinCheck = onValueCreated\(\{ ref: '\/playLog\/\{code\}\/\{id\}'/.test(readFileSync(new URL('../functions/index.js', import.meta.url), 'utf8')));
-  ok('rules: the play log is indexed on the puzzle key', JSON.stringify(JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules.playLog.$code['.indexOn']) === '["k"]');
+  ok('rules: the play log is indexed on the puzzle key', (JSON.parse(readFileSync(new URL('../database.rules.json', import.meta.url), 'utf8')).rules.playLog.$code['.indexOn'] || []).includes('k'));   // + 'g' since 2026-11-24 (functions/play-voids.js)
   void E;
 }
 
