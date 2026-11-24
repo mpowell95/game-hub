@@ -28,6 +28,53 @@ ok('tower 41 blocks from 3 taps alerts', rules({ f: 'recordTower', g: 'tower', a
 ok('tower 41 blocks from 45 taps passes', rules({ f: 'recordTower', g: 'tower', a: '[41,"easy"]', i: '{"t":90,"p":45,"u":0}' }).length === 0);
 ok('a non-result entry is never judged', rules({ e: 'guess', g: 'contexto', i: '{"t":0,"p":0,"u":9}' }).length === 0);
 
+// Trip wires on every play (2026-11-24): one passing and one failing case per rule, and its proven flag.
+const P = (e) => checkPlayInput(e);
+const has = (e, rule, proven) => P(e).some((h) => h.rule === rule && h.proven === proven);
+const J = JSON.stringify;
+ok('every hit says proven or not', P(snake(223, 1, 62)).every((h) => typeof h.proven === 'boolean'));
+ok('snake turns without input is PROVEN', has(snake(223, 1, 62), 'snake-turns-without-input', true));
+ok('made-up input is PROVEN', has({ f: 'recordTower', g: 'tower', a: '[3]', i: '{"t":40,"p":20,"u":5}' }, 'input-made-by-code', true));
+ok('no real touch: alerts, suspicious', has({ f: 'recordTower', g: 'tower', a: '[3]', i: '{"t":0,"p":0,"u":0}' }, 'no-real-touch', false));
+ok('no real touch: a Hold\'em hand, an online result and a hint are not judged',
+  !P({ f: 'recordHoldemHand', g: 'holdem', a: '[{}]', i: '{"t":0,"p":0,"u":0}' }).length
+  && !P({ f: 'recordResult', g: 'darts', a: J(['darts', 'mp', true]), i: '{"t":0,"p":0,"u":0}' }).length
+  && !P({ f: 'recordWordWeaverHint', g: 'wordweaver', a: '[1,1]', i: '{"t":0,"p":0,"u":0}' }).length);
+const tower = (score, drops) => ({ f: 'recordTower', g: 'tower', a: J([score, 'easy']), x: J({ drops }) });
+const humanDrops = Array.from({ length: 30 }, (_, k) => [((k * 37) % 13) - 6, 'p', 250, k * 900]);
+const botDrops = Array.from({ length: 30 }, (_, k) => [0.1, 'p', 250, k * 900]);
+ok('tower: more blocks than drops is PROVEN', has(tower(40, humanDrops), 'tower-more-blocks-than-drops', true));
+ok('tower: a human run passes', P(tower(29, humanDrops)).length === 0);
+ok('tower: 30 dead-centre drops is suspicious', has(tower(29, botDrops), 'tower-machine-precision', false));
+const maze = (gap) => ({ f: 'recordWayOut', g: 'wayout', a: '["easy",{}]', x: J({ taps: Array.from({ length: 20 }, (_, k) => `${k}g@${k * gap}`) }) });
+ok('arrow maze: taps 80 ms apart is suspicious', has(maze(80), 'arrowmaze-machine-taps', false));
+ok('arrow maze: taps 350 ms apart pass', P(maze(350)).length === 0);
+const hc = (x) => ({ f: 'recordHillClimb', g: 'hillclimb', a: J([x.dist, 'countryside', {}]), x: J(x) });
+ok('hill climb: a real run passes (King of Games 3,308 m, Nov 19)', P(hc({ dist: 3308, secs: 203.9, fuelLeft: 77, maxFuel: 100, cans: 36 })).length === 0);
+ok('hill climb: more cans than the road holds is PROVEN', has(hc({ dist: 300, secs: 20, fuelLeft: 50, maxFuel: 100, cans: 9 }), 'hillclimb-more-cans-than-road', true));
+ok('hill climb: a run longer than its fuel is PROVEN', has(hc({ dist: 900, secs: 200, fuelLeft: 50, maxFuel: 100, cans: 2 }), 'hillclimb-fuel-from-nowhere', true));
+ok('gridlock: under the fewest moves is PROVEN', has({ f: 'recordGridlock', g: 'gridlock', a: '["easy",{}]', d: J({ moves: 9, fewest: 12 }) }, 'gridlock-under-fewest', true));
+ok('gridlock: at the fewest passes', P({ f: 'recordGridlock', g: 'gridlock', a: '["easy",{}]', d: J({ moves: 12, fewest: 12 }) }).length === 0);
+const wl = (moves, par, path) => ({ f: 'recordWordLadder', g: 'wordladder', a: '[1,{}]', d: J({ moves, par }), x: J({ path }) });
+ok('word ladder: a real ladder passes', P(wl(3, 3, ['ASK', 'ARK', 'ARE', 'AYE'])).length === 0);
+ok('word ladder: under par is PROVEN', has(wl(2, 3, ['ASK', 'ARE', 'AYE']), 'wordladder-under-par', true));
+ok('word ladder: a two-letter step is PROVEN', has(wl(3, 3, ['ASK', 'ARE', 'ARK', 'AYE']), 'wordladder-bad-step', true));
+const yz = (ev) => ({ f: 'recordYahtzee', g: 'yahtzee', a: '["ai",true,{}]', x: J({ ev }) });
+ok('yahtzee: a real turn passes', P(yz([['r', 0, [5, 4, 5, 4, 3], '00000', 1], ['r', 0, [5, 4, 5, 4, 5], '11110', 2], ['c', 0, 'fullHouse', 25, 3]])).length === 0);
+ok('yahtzee: a held die that changed is PROVEN', has(yz([['r', 0, [5, 4, 5, 4, 3], '00000', 1], ['r', 0, [6, 4, 5, 4, 5], '11110', 2]]), 'yahtzee-held-die-changed', true));
+ok('yahtzee: a 4th roll is PROVEN', has(yz([['r', 0, [1, 2, 3, 4, 5], '00000', 1], ['r', 0, [1, 2, 3, 4, 5], '00000', 2], ['r', 0, [1, 2, 3, 4, 5], '00000', 3], ['r', 0, [1, 2, 3, 4, 5], '00000', 4]]), 'yahtzee-four-rolls', true));
+ok('dots and boxes: more boxes than the board is PROVEN', has({ f: 'recordDotsBoxes', g: 'dotsboxes', a: '["pro",true]', d: J({ mine: 8, theirs: 3 }), x: J({ rows: 3, cols: 3 }) }, 'dotsboxes-too-many-boxes', true));
+ok('filler: more squares than the board is PROVEN', has({ f: 'recordResult', g: 'filler', a: '["filler","pro",true]', d: J({ mine: 40, theirs: 30 }), x: J({ start: 'x'.repeat(63) }) }, 'filler-too-many-cells', true));
+ok('hoops: more made than shot is PROVEN', has({ f: 'recordResult', g: 'hoops4', a: '["hoops4","medium",true]', d: J({ shots: 3, made: 4 }) }, 'hoops-more-made-than-shot', true));
+ok('cup pong: more made than thrown is PROVEN', has({ f: 'recordCupPong', g: 'cuppong', a: '["hard",true,0]', d: J({ throws: 5, made: 6 }) }, 'cuppong-more-made-than-thrown', true));
+ok('cup pong solo: 9 throws is PROVEN', has({ f: 'recordCupPongSolo', g: 'cuppong', a: '[9]', x: J({ end: 'cleared' }) }, 'cuppong-solo-under-10', true));
+ok('air hockey: 8 goals to 7 is PROVEN', has({ f: 'recordAirHockey', g: 'airhockey', m: 'to=7@medium', a: J(['medium', true, { goalsFor: 8, goalsAgainst: 1 }]) }, 'airhockey-goals-over-target', true));
+ok('golf: a hole in 0 is PROVEN', has({ f: 'recordGolf', g: 'golf', a: J(['pinevalley', { holeScores: { 'pinevalley:1': 0 } }]) }, 'golf-hole-in-zero', true));
+ok('battleship: a win in 12 shots is PROVEN', has({ f: 'recordBattleship', g: 'battleship', a: J(['pro', true, { shots: 12, hits: 12 }]) }, 'battleship-impossible-shots', true));
+const bog = (word) => ({ f: 'recordBoggle', g: 'boggle', a: '["beginner",false,{}]', x: J({ faces: [['O', 'S', 'B', 'N'], ['H', 'I', 'N', 'H'], ['M', 'K', 'T', 'A'], ['T', 'E', 'V', 'O']], found: [[word, 1]] }) });
+ok('boggle: a word on the board passes (VETO)', P(bog('VETO')).length === 0);
+ok('boggle: a word not on the board is PROVEN (ZEBRA)', has(bog('ZEBRA'), 'boggle-word-not-on-board', true));
+
 // No game file puts its insides on window outside js/seams.js (or behind DEV_SEAMS / DEV_HOST / this.dev).
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const skip = /(^|\/)(node_modules|tools|archive|functions|vendor|docs|backups|pinball2|hole-editor|\.git)(\/|$)|test[^/]*\.js$|net-test\.js$/;
@@ -71,7 +118,7 @@ if (i > 0) {
   for (const [code, rows] of Object.entries(log || {})) for (const [id, e] of Object.entries(rows || {})) {
     if (!e || !/^record/.test(String(e.f || ''))) continue;
     n++;
-    for (const h of checkPlayInput(e)) { hits++; console.log(`ALERT ${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
+    for (const h of checkPlayInput(e)) { hits++; console.log(`ALERT ${h.proven ? 'PROVEN' : 'suspicious'} ${code} ${id} ${e.g} ${h.rule}: ${h.v}`); }
   }
   console.log(`replayed ${n} real results: ${hits} alerts`);
 }

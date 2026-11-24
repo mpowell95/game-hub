@@ -54,6 +54,7 @@ import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
 import { writeFlags, checkFinishedMatch, checkContextoLogWin, checkPlayInputLog, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
+import { rebuildPlayVoids, maybeRefreshPlayVoids } from './play-voids.js';
 import { handleClaim } from './claim.js';
 import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
@@ -500,12 +501,23 @@ export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...O
   if (!v || !/^record/.test(String(v.f || ''))) return;
   const db = getDatabase();
   const written = await checkPlayInputLog(db, event.params.code, event.params.id, v);
+  // Option A (2026-11-24, Matt: "Option A, of course"): a PROVEN hit voids that play at once (js/play-voids.js);
+  // any other new play in a game with voids may raise a best the voids capped, so the overlay is refreshed.
+  try {
+    if (written.some((a) => a.proven === true)) await rebuildPlayVoids(db, event.params.code);
+    else await maybeRefreshPlayVoids(db, event.params.code, v);
+  } catch (err) { logger.error('play voids not rebuilt', { code: event.params.code, err: String(err) }); }
   if (!written.length) return;
   const codes = await adminCodes(db);
   for (const a of written) {
     logger.info('integrity alert', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
   }
+});
+
+// MATT VOIDS OR UNDOES ONE PLAY (2026-11-24, js/play-voids.js): rebuild that code's overlay at once.
+export const playVoidDecision = onValueWritten({ ref: '/adminConfig/v1/integrity/plays/{code}/{id}', instance: OPTS.instance, region: OPTS.region, retry: false, maxInstances: 2 }, async (event) => {
+  await rebuildPlayVoids(getDatabase(), event.params.code);
 });
 
 // EVERY NAME, KEPT (2026-11-24, Matt: "just because he deleted it doesn't mean it should be deleted from anything i

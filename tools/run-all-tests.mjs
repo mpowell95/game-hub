@@ -181,6 +181,7 @@ const SUITES = [
   { file: 'test-private-log.mjs' },
   { file: 'test-play-input.mjs' },
   { file: 'test-name-history.mjs' },
+  { file: 'test-play-voids.mjs' },
   { file: 'test-push.mjs' },
   { file: 'test-rate-guard.mjs' },
   { file: 'test-repair-1109.mjs' },

@@ -50,8 +50,7 @@ import {
   setSkeeballCorrection, corrections, resolveHoldemCorrection, setHoldemCorrection,
   resolveOnlineAllowed, onlineOverride, setOnlineAllowed, resolveBeeUndone, setBeeUndone,
   setIntegrityVoided, resolveReviewed, setReviewed, resolveAdjust, setAdjust, setAdjustMode,
-  resolveSigninAsk, setSigninAsk,
-} from './admin-config.js';
+  resolveSigninAsk, setSigninAsk, setPlayVoided, resolvePlayDecision } from './admin-config.js';
 import { correctionFor, snapshotOf, holdemSnapshotOf, VOIDED_MATCHES, FULL_LEVEL_GAMES } from './stats-corrections.js';
 import { hitText, gameName, isVoided, activeVoids, HAND_VOIDS, PAIR_NODES, PAIR_LIMITS, pairCodes, onlinePairs, pairAlerts, isClearedPair } from './integrity.js';
 import { flagStands } from './bee-fairplay.js';
@@ -59,6 +58,7 @@ import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import { backStack } from './back-stack.js';
 import { personNames } from './name-history.js';
+import { isPlayVoided } from './play-voids.js';
 import { deskPreviewOn, setDeskPreview } from './desk-preview.js';
 
 const t = makeT(STRINGS);
@@ -449,6 +449,8 @@ function nowRows(cfg) {
       acts: [
         // An online-pairs alert (2026-11-02) opens that pair's page.
         ...(String(m.key).startsWith('pair~') ? [`<button type="button" class="adm-a" ${act(() => push({ k: 'pair', key: String(m.key).slice(5) }))}>${esc(tx('adm_see', 'See'))}</button>`] : []),
+        // A play alert (2026-11-24, `<game>~<CODE>~<entry id>`): proven = voided automatically (Undo); suspicious = Void.
+        ...((() => { const pp = String(m.key).split('~'); return pp.length === 3 && /^[0-9]{13}-[0-9]{1,4}$/.test(pp[2]) ? playVoidActs(cfg, pp[1], pp[0], pp[2]) : []; })()),
         btn(tx('adm_keep', 'Dismiss'), () => setReviewed('ma', m.key, m.rk, true)),
       ],
     }));
@@ -991,7 +993,7 @@ function gamePlayerPage(cfg, sid, key) {
       acts: [voided ? btn(tx('adm_undo', 'Undo'), gameVoid(key, sid, false)) : btn(tx('adm_void', 'Void'), gameVoid(key, sid, true), 'x')] })]);
   }
   if (sid === 'battlearena') body += baPersonHTML(key, g);
-  body += playsHTML(p, sid, key);
+  body += playsHTML(p, sid, key, cfg);
   return { title: p.name, body };
 }
 
@@ -1060,7 +1062,19 @@ function argsText(a) {
   };
   return (Array.isArray(v) ? v : [v]).map(part).filter(Boolean).join(' · ').slice(0, 120);
 }
-function playsHTML(p, sid, key) {
+/** One play's void state (2026-11-24, js/play-voids.js): { voided, auto, decided } from Matt's decision and a proven alert. */
+function playVoidState(cfg, code, sid, id) {
+  const al = obj(obj(_integ && _integ.alerts)[`${sid}~${code}~${id}`]);
+  const auto = Object.values(al).some((a) => a && a.proven === true);
+  const dec = resolvePlayDecision(cfg, code, id);
+  return { voided: isPlayVoided(dec, auto), auto, decided: !!dec, rules: Object.keys(al).map((k) => k.split('~')[0]) };
+}
+function playVoidActs(cfg, code, sid, id) {
+  const st = playVoidState(cfg, code, sid, id);
+  return st.voided ? [btn(tx('adm_undo', 'Undo'), () => setPlayVoided(code, id, sid, false))]
+    : [btn(tx('adm_void', 'Void'), () => setPlayVoided(code, id, sid, true), 'x')];
+}
+function playsHTML(p, sid, key, cfg) {
   const code = (p.playerId || '').toUpperCase();
   if (!code) return '';
   const got = _plays.get(code);
@@ -1071,7 +1085,10 @@ function playsHTML(p, sid, key) {
   const mine = got.filter((x) => x.g === sid && x.f);
   if (!mine.length) return head + `<p class="adm-empty">${esc(tx('adm_no_plays', 'No plays logged.'))}</p>`;
   if (sid === 'battlearena') return head + grp(mine.slice(0, 60).map((x) => { const d = baX(x); return row({ cls: 'wrap', title: when(+x.t), sub: d ? baPlayLine(d) : argsText(x.a), sub2: d ? baPlayLine2(d) : '', go: d ? () => push({ k: 'baplay', code, id: x.id, key }) : null }); }));
-  return head + grp(mine.slice(0, 60).map((x) => row({ title: (when(+x.t)), sub: argsText(x.a) })));
+  // Every play can be voided on its own (2026-11-24, Matt: "We MUST be able to identify and void games and rounds").
+  return head + grp(mine.slice(0, 60).map((x) => { const st = playVoidState(cfg, code, sid, x.id);
+    return row({ title: (when(+x.t)), sub: argsText(x.a), sub2: st.voided ? `${tx('adm_voided_one', 'Voided')}${st.auto && !st.decided ? ` · ${tx('adm_auto', 'automatically')}` : ''}${st.rules.length ? ` · ${st.rules.join(', ')}` : ''}` : (st.rules.length ? st.rules.join(', ') : ''),
+      acts: playVoidActs(cfg, code, sid, x.id) }); }));
 }
 
 // --- Battle Arena: unlocks, teams and every match (2026-11-23, Matt: "Make sure I can see what characters people have

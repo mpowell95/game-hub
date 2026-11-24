@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1657;
-const CACHE = 'game-hub-v1658';
+const CACHE = 'game-hub-v1659';
 
 const ASSETS = [
   './',
@@ -96,6 +96,7 @@ const ASSETS = [
   './js/play-log.js',
   './js/seams.js',
   './js/name-history.js',
+  './js/play-voids.js',
   './js/contexto-history.js',
   './js/server-time.js',
   './js/challenge-clock.js',
@@ -890,7 +891,7 @@ const REST_MANIFEST = {
   './js/game-stats.js': '7ae7c6fdfe',
   './js/arcade-scores.js': 'a0497ce069',
   './js/game-stats-global.js': '612680313d',
-  './js/game-stats-ui.js': 'c0ec072b33',
+  './js/game-stats-ui.js': 'a034e7639b',
   './js/stats-net.js': '83be7bad7a',
   './js/tips-log.js': '7bc02856dd',
   './js/firebase-boot.js': 'e7380681ea',
@@ -914,13 +915,14 @@ const REST_MANIFEST = {
   './js/mp-records.js': '8c1ff025c7',
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
-  './js/admin-config.js': 'a1d0989fa0',
-  './js/admin-ui.js': 'f14383a45c',
-  './js/integrity.js': '6ea6807e32',
+  './js/admin-config.js': '2e4c9a835d',
+  './js/admin-ui.js': '458aece1f3',
+  './js/integrity.js': 'e98f39d2ae',
   './js/play-log-queue.js': '6924749f5d',
   './js/play-log.js': '7f269cd5ca',
   './js/seams.js': '979f4cf8b2',
   './js/name-history.js': '7d720c1075',
+  './js/play-voids.js': '32b435b5ff',
   './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
@@ -929,7 +931,7 @@ const REST_MANIFEST = {
   './js/bee-fairplay.js': '7a17ef9239',
   './js/bee-board.js': '4f8c4124f7',
   './js/install-state.js': '697e4dc90b',
-  './js/players-agg.js': '0ec1e9d5a4',
+  './js/players-agg.js': 'ea4dae4dda',
   './js/game-art.js': '2ba8b833bd',
   './js/hidden-players.js': 'acb66a6163',
   './js/automation.js': '788dc38547',
