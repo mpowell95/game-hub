@@ -3701,6 +3701,7 @@ class ChinchonUI {
     const chat = UI.createMatchChat({
       root: this.root,
       send: (p) => DATA.sendChat({ node, id: ch.id, side }, p),
+      photos: { node, id: ch.id, side },
       them: () => ({ name: ch.them.name || '?', emoji: ch.them.emoji || '' }),
       place: CH_CHAT_PLACE,
     });

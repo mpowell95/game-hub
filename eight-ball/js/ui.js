@@ -1600,6 +1600,7 @@ class PoolUI {
     const chat = CUI.createMatchChat({
       root: this.root,
       send: (pl) => DATA.sendChat({ node, id, side }, pl),
+      photos: { node, id, side },
       them: () => ({ name: others.map((x) => x.name || '?').join(' & '), emoji: (others[0] && others[0].emoji) || '' }),
       place: CHAT_PLACE,
     });

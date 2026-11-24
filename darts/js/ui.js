@@ -1476,6 +1476,7 @@ class DartsUI {
     const chat = UI.createMatchChat({
       root: this.root,
       send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      photos: { node, id: mp.id, side },
       them: () => ({ name: mp.them.name || '?', emoji: mp.them.emoji || '' }),
       place: CHAT_PLACE,
     });

@@ -1176,6 +1176,7 @@ class ShoveOff {
     const chat = UI.createMatchChat({
       root: this.el('[data-scr="play"]'),
       send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      photos: { node, id: mp.id, side },
       them: () => ({ name: (mp.them && mp.them.name) || '?', emoji: (mp.them && mp.them.emoji) || '' }),
       place: { top: `${y}px`, right: '10px', popsTop: `${y + 54}px` },
     });

@@ -652,6 +652,7 @@ export class SkeeballUI {
     const chat = UI.createMatchChat({
       root: host,
       send: (p) => DATA.sendChat({ node, id, side }, p),
+      photos: { node, id, side },
       them: () => {
         const g = (this._chatCtx && this._chatCtx.game) || {};
         const o = (side === 'a' ? g.b : g.a) || {};
