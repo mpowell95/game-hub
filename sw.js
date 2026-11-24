@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1654';
+const CACHE = 'game-hub-v1655';
 
 const ASSETS = [
   './',
@@ -854,7 +854,7 @@ const REST_MANIFEST = {
   './css/hub.css': '042be6c9bc',
   './css/name-gate.css': 'ed0001bef0',
   './css/ui.css': '967c4f25e3',
-  './js/hub.js': 'fbbde06163',
+  './js/hub.js': '7cebca7a38',
   './js/new-dock-log.js': '4d32e770a7',
   './js/name-gate.js': 'e8758cc628',
   './js/signin-ask.js': '9f55d083d6',
@@ -880,7 +880,7 @@ const REST_MANIFEST = {
   './js/tabbar-fix.js': 'ee9e1bf920',
   './js/desk-preview.js': 'c230b735be',
   './js/viewport.js': '756ba19ed9',
-  './js/strings.js': '6454cca525',
+  './js/strings.js': 'd2faecb6b1',
   './js/profile-store.js': '33523b1fdd',
   './js/emoji.js': 'a60ec09c12',
   './js/emoji-data.js': '7506ef6d21',
@@ -914,7 +914,7 @@ const REST_MANIFEST = {
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'a1d0989fa0',
   './js/admin-ui.js': '8da35cf065',
-  './js/integrity.js': '54554dc9ad',
+  './js/integrity.js': '43a56274a3',
   './js/play-log-queue.js': '8a29ef8f25',
   './js/play-log.js': 'a4d025ca04',
   './js/contexto-history.js': '343da78a44',

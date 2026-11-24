@@ -824,7 +824,7 @@ export const GAMES = [
     // (shove-off/CLAUDE.md). Hub id = folder `shove-off`; stats id `shoveoff`.
     id: 'shove-off',
     added: '2026-11-18',            // sort-only (the launcher's Newest order); never the New pill
-    title: { en: 'Shove Off', es: 'Empujón' },
+    title: { en: 'Knockout', es: 'K.O.' },
     blurb: { en: 'Aim in secret, then everything slides. Last one on the platform wins.',
       es: 'Apunta en secreto y todo se desliza. Gana el último en la plataforma.' },
     module: '../shove-off/js/ui.js',

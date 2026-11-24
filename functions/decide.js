@@ -391,7 +391,7 @@ export function decideGolf({ code, id, before, after }) {
 // row, so the other is never told about it. Your own writes never notify you.
 const SHOVE_TEXT = {
   en: {
-    title: 'Shove Off',
+    title: 'Knockout',
     challenge: (w) => `${w} challenged you. Your move!`,
     turn: (w, r, a, b) => `Round ${r} vs ${w}: you ${a}, ${w} ${b}. Your move!`,
     sudden: (w) => `Sudden death vs ${w}. Your move!`,
@@ -401,7 +401,7 @@ const SHOVE_TEXT = {
     draw: (w) => `A draw with ${w}.`,
   },
   es: {
-    title: 'Empujón',
+    title: 'K.O.',
     challenge: (w) => `${w} te ha retado. ¡Te toca!`,
     turn: (w, r, a, b) => `Ronda ${r} contra ${w}: tú ${a}, ${w} ${b}. ¡Te toca!`,
     sudden: (w) => `Muerte súbita contra ${w}. ¡Te toca!`,
@@ -765,7 +765,7 @@ export const REMINDER_GAMES = [
   { node: 'battlearena', game: 'battle-arena', tag: 'battlearena', en: 'Battle Arena', es: 'Arena de Batalla' },
   { node: 'battleship', game: 'battleship', tag: 'battleship', en: 'Battleship', es: 'Hundir la Flota' },
   { node: 'golf', game: 'golf', tag: 'golf', en: 'Golf', es: 'Golf' },
-  { node: 'shoveoff', game: 'shove-off', tag: 'shoveoff', en: 'Shove Off', es: 'Empujón' },
+  { node: 'shoveoff', game: 'shove-off', tag: 'shoveoff', en: 'Knockout', es: 'K.O.' },
 ];
 const REMIND_TEXT = {
   en: (w) => `Reminder: your turn vs ${w}`,

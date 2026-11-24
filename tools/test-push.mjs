@@ -376,7 +376,7 @@ console.log('\nBattleship challenges (2026-10-27)');
     && body(d(row(), row({ over: true, result: 'won' }))) === 'You beat Test2!' && /resigned/.test(body(d(row(), row({ over: true, result: 'won', why: 'resign' }))))
     && body(d(row(), row({ over: true, result: 'draw' }))) === 'A draw with Test2.');
   check('shove off: a finished row again is not news; a called-off row says nothing', d(row({ over: true, result: 'lost' }), row({ over: true, result: 'lost' })) === null && d(row({ yourTurn: true }), row({ ended: 'declined' })) === null);
-  check('shove off: Spanish wording', d(null, row({ yourTurn: true })).text('es').title === 'Empujón');
+  check('shove off: Spanish wording', d(null, row({ yourTurn: true })).text('es').title === 'K.O.');
   check('shove off: the trigger watches shoveoff/index and names the match', /ref: '\/shoveoff\/index\/\{code\}\/\{id\}'/.test(fnSrc) && /\{ game: 'shove-off', match: id \}/.test(fnSrc) && /export const shoveOffTurnPush/.test(fnSrc));
   check('shove off: in the 24-hour reminder and the Remind bell', REMINDER_GAMES.some((x) => x.node === 'shoveoff' && x.game === 'shove-off')
     && decideNudge({ key: 'shoveoff~m1', from: 'TESTA', row: { name: 'Test', with: 'TESTA', updated: 1, yourTurn: true, over: false } }) !== null
