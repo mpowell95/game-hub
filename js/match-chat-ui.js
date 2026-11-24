@@ -52,8 +52,8 @@ const t = makeT({
   },
 });
 
-const SHOW = 20;          // lines the panel's conversation holds (it scrolls; the newest is in view)
-const KEEP = 30;          // lines this device remembers for the match
+const SHOW = 60;          // lines the panel's conversation holds (it scrolls; the newest is in view)
+const KEEP = 80;          // lines this device remembers: this match and the earlier ones with this person (2026-11-24)
 const POP_MS = 4500;      // your own line
 const POP_THEM_MS = 8000; // theirs: long enough to read a 120-character line
 const MAX_POPS = 3;
@@ -109,6 +109,7 @@ export function createMatchChat({ root, send, them, place, failText, photos } = 
   let unread = 0, open = false, busy = false, err = '', seeded = false, destroyed = false, sendingPhoto = false;
   const photoOn = !!(photos && photos.node && photos.id && photos.side);
   const pics = new Map();   // photo key -> data URL, once loaded
+  const picAt = new Map();  // photo key -> the match it was sent in, when not this one (an earlier match)
   const listen = (tg, ty, fn, o) => { tg.addEventListener(ty, fn, o); offs.push(() => tg.removeEventListener(ty, fn, o)); };
   const host = root || document.body;
   const sendFn = typeof send === 'function' ? send : async () => ({ ok: false, reason: 'no-send' });
@@ -158,7 +159,7 @@ export function createMatchChat({ root, send, them, place, failText, photos } = 
       if (pics.has(k)) { if (!im.src) im.src = pics.get(k); continue; }
       if (pics.has(`?${k}`)) continue;
       pics.set(`?${k}`, true);
-      readPhoto(photos, k).then((d) => {
+      readPhoto(picAt.get(k) || photos, k).then((d) => {
         pics.delete(`?${k}`);
         if (!d || destroyed) return;
         pics.set(k, d);
@@ -358,6 +359,7 @@ export function createMatchChat({ root, send, them, place, failText, photos } = 
     if (destroyed || !e || known.has(e.key)) return;
     if (e.t === 'i' && !photoOn) e = { ...e, t: 'c', v: textOf(e) };   // a photo where photos are off: say so in words
     known.add(e.key);
+    if (e.t === 'i' && e.pm) picAt.set(e.v, e.pm);
     log.push(e);
     log.sort((x, y) => x.at - y.at);
     while (log.length > KEEP) log.shift();
@@ -402,6 +404,14 @@ export function createMatchChat({ root, send, them, place, failText, photos } = 
   }
 
   paintBtn();
+  // The chat carries on from match to match (2026-11-24): the earlier lines with this person in this
+  // game join the thread, quietly (no card, no count). Read once, lazily, after the panel is up.
+  if (photoOn) {
+    import('./game-chat-history.js')
+      .then((m) => m.readEarlierChats(photos))
+      .then((lines) => { for (const e of lines || []) add(e, { pop: false }); })
+      .catch((err) => console.warn('[match-chat] earlier chats', err));
+  }
   return { add, onReactions, setOpen, setActive, destroy, get log() { return log.slice(); }, get el() { return layer; } };
 }
 

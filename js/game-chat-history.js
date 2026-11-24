@@ -58,13 +58,13 @@ export function __setDepsForTest(d) { deps = d ? { ...deps, ...d } : { loadAll, 
  * `{ atMs, mine, t, v, game, statsId, matchId }`. `gameIds` limits it to games this launcher shows.
  * Never rejects; a game that cannot be read just adds nothing.
  */
-export async function readGameChatsWith(me, them, gameIds = Object.keys(GAMES)) {
+export async function readGameChatsWith(me, them, gameIds = Object.keys(GAMES), cap = MATCH_CAP) {
   if (!me || !them) return [];
   const ids = gameIds.filter((g) => GAMES[g]);
   let rows = [];
   try { rows = (await deps.loadAll(ids)).rows || []; } catch { return []; }
   const mine = rows.filter((r) => r && r.with === them)
-    .sort((a, b) => b.updated - a.updated).slice(0, MATCH_CAP);
+    .sort((a, b) => b.updated - a.updated).slice(0, cap);
   const parts = await Promise.all(mine.map(async (r) => {
     const cfg = GAMES[r.game];
     try {
@@ -82,8 +82,8 @@ export async function readGameChatsWith(me, them, gameIds = Object.keys(GAMES)) 
       const side = M.sideOf(match, me);
       if (side !== 'a' && side !== 'b') return [];
       return chat.map((c) => ({
-        atMs: Number(c.at) || 0, mine: c.by === side, t: c.t, v: c.v,
-        game: r.game, statsId: cfg.stats, matchId: r.id,
+        atMs: Number(c.at) || 0, mine: c.by === side, t: c.t, v: c.v, key: c.key,
+        game: r.game, node: cfg.node, statsId: cfg.stats, matchId: r.id,
       }));
     } catch (err) {
       console.warn('[game-chat-history] could not read', r.game, r.id, err);
@@ -93,5 +93,35 @@ export async function readGameChatsWith(me, them, gameIds = Object.keys(GAMES)) 
   return parts.flat().filter((x) => x.atMs > 0).sort((a, b) => a.atMs - b.atMs);
 }
 
+/**
+ * THE CHAT CARRIES ON FROM MATCH TO MATCH (2026-11-24, Matt: "have chats continue game to game. I
+ * sent it to Joe but the game ended immediately and now the chat is cleared"). For the match open
+ * now (`node`, `id`, the player's `side`): every earlier chat line with the SAME person in the SAME
+ * game, oldest first, as panel lines `{ key, mine, t, v, at, pm }` (`pm` = the match it was said in,
+ * where its photo lives). READ ONLY; [] on any failure. The open match's own lines are left out (its
+ * watch delivers them).
+ */
+const EARLIER_CAP = 15;
+export async function readEarlierChats({ node, id, side }) {
+  try {
+    const hub = Object.keys(GAMES).find((g) => GAMES[g].node === node);
+    if (!hub || (side !== 'a' && side !== 'b')) return [];
+    const cfg = GAMES[hub];
+    const M = await deps.loaders[hub]();
+    const match = await (cfg.readMatch ? cfg.readMatch(M, id) : M.readGame(id));
+    const other = side === 'a' ? 'b' : 'a';
+    const me = match && match[side] && match[side].code;
+    const them = match && match[other] && match[other].code;
+    if (!me || !them) return [];
+    const lines = await readGameChatsWith(me, them, [hub], EARLIER_CAP);
+    return lines.filter((l) => l.matchId !== id && l.key).map((l) => ({
+      key: `${l.matchId}~${l.key}`, mine: l.mine, t: l.t, v: l.v, at: l.atMs, pm: { node, id: l.matchId },
+    }));
+  } catch (err) {
+    console.warn('[game-chat-history] earlier chats', err);
+    return [];
+  }
+}
+
 export const CHAT_GAMES = Object.keys(GAMES);
-export default { readGameChatsWith, CHAT_GAMES };
+export default { readGameChatsWith, readEarlierChats, CHAT_GAMES };

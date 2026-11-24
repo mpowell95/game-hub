@@ -1,7 +1,7 @@
 // tools/test-game-chat-history.mjs - js/game-chat-history.js: in-game quick chat folded into a
 // Messages conversation (2026-10-17). Headless, with fakes for the index read, the chat read and
 // each game's match module. Run: node tools/test-game-chat-history.mjs
-import { readGameChatsWith, __setDepsForTest } from '../js/game-chat-history.js';
+import { readGameChatsWith, readEarlierChats, __setDepsForTest } from '../js/game-chat-history.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) { pass++; console.log('ok   ', name); } else { fail++; console.log('FAIL ', name, extra); } };
@@ -44,6 +44,27 @@ ok('each line names its game', lines[0].game === 'darts' && lines[2].game === 'h
 ok('a match with no chat is not opened', !reads.includes('match:s1'));
 ok('Bob\'s match chat is never read', !reads.includes('darts/d2'));
 ok('no person, no lines', (await readGameChatsWith(ME, '')).length === 0);
+
+// --- the chat carries on from match to match (2026-11-24) ----------------------------------------
+games.d3 = match(ANA, ME);   // the match open now: I am b
+chats['darts/d1'] = [{ key: 'k1a', by: 'a', t: 'p', v: 'nice', at: 100 }, { key: 'k2b', by: 'b', t: 'i', v: 'photo0001b', at: 200 }];
+chats['darts/d3'] = [{ key: 'k3a', by: 'a', t: 'c', v: 'this match', at: 500 }];
+__setDepsForTest({
+  loadAll: async (ids) => ({ rows: [
+    { game: 'darts', id: 'd1', with: ANA, updated: 10 },
+    { game: 'darts', id: 'd2', with: BOB, updated: 11 },
+    { game: 'darts', id: 'd3', with: ANA, updated: 20 },
+    { game: 'hoops4', id: 'h1', with: ANA, updated: 12 },
+  ].filter((r) => ids.includes(r.game)) }),
+});
+const early = await readEarlierChats({ node: 'darts', id: 'd3', side: 'b' });
+ok('earlier: lines from the earlier match with the same person', early.length === 2, JSON.stringify(early));
+ok('earlier: the open match\'s own lines are left out', early.every((l) => l.pm.id !== 'd3'));
+ok('earlier: same game only (no Hoops lines)', early.every((l) => l.pm.node === 'darts'));
+ok('earlier: my side from THAT match (d1: I was a)', early[0].mine === true && early[1].mine === false);
+ok('earlier: keys never collide with the open match\'s', early[0].key === 'd1~k1a');
+ok('earlier: a photo keeps the match it lives in', early[1].t === 'i' && early[1].pm.id === 'd1');
+ok('earlier: a game with no chat node gives nothing', (await readEarlierChats({ node: 'nope', id: 'd3', side: 'b' })).length === 0);
 
 __setDepsForTest({ loadAll: async () => { throw new Error('offline'); } });
 ok('a failed index read gives nothing, never throws', (await readGameChatsWith(ME, ANA)).length === 0);
