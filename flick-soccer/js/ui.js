@@ -1540,6 +1540,7 @@ class FlickSoccerUI {
       send: (p) => DATA.sendChat({ node, id, side }, p),
       them: () => ({ name: (desc.them && desc.them.name) || '?', emoji: (desc.them && desc.them.emoji) || '' }),
       place: CHAT_PLACE,
+      photos: { node, id, side },
     });
     this._chat = chat;
     const stop = await DATA.watchChat({ node, id }, (list) => {

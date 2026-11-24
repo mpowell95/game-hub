@@ -38,7 +38,14 @@ import { getStatsApp } from './firebase-boot.js';
 
 export const CHAT_MAXLEN = 120;     // Hoops' cap (Matt, 2026-09-24: "please increase that")
 export const MAX_CHAT = 40;         // how many lines a match shows (the newest)
-const TYPES = ['e', 'p', 'c'];
+// 'i' = a PHOTO (2026-11-24, Matt: "Let me send photos via in game chat"). The line's `v` is the
+// photo's key; the picture itself lives at `chatPhotos/<node>/<matchId>/<key>` (PHOTO_ROOT), so a
+// game's chat watch downloads a few bytes per photo and the picture only when it is shown. A build
+// from before 2026-11-24 drops an 'i' line on read (its TYPES had no 'i'): it never sees the photo.
+const TYPES = ['e', 'p', 'c', 'i'];
+const PHOTO_KEY_RE = /^[a-z0-9]{8,30}$/;
+export const PHOTO_ROOT = 'chatPhotos';
+export const PHOTO_MAX = 450000;    // characters of data URL (~330 KB of JPEG); the rules allow 800,000
 const ID_RE = /^[A-Za-z0-9_-]{4,40}$/;
 const NODE_RE = /^[A-Za-z][A-Za-z0-9]{1,30}$/;
 const ROOM_RE = /^[A-Za-z0-9]{3,12}$/;
@@ -52,6 +59,7 @@ export function cleanChat(v) {
 /** One payload, cleaned, or null. */
 export function cleanPayload(p) {
   if (!p || !TYPES.includes(p.t)) return null;
+  if (p.t === 'i') return PHOTO_KEY_RE.test(String(p.v || '')) ? { t: 'i', v: String(p.v) } : null;
   const v = p.t === 'c' ? cleanChat(p.v) : String(p.v == null ? '' : p.v).slice(0, CHAT_MAXLEN);
   return v ? { t: p.t, v } : null;
 }
@@ -148,6 +156,77 @@ export async function sendChat({ node, id, side }, payload) {
   }
 }
 
+/** Where one photo of a turn-by-turn match lives. Null for anything malformed. */
+export function photoPath(node, id, key) {
+  if (!chatPath(node, id) || !PHOTO_KEY_RE.test(String(key || ''))) return null;
+  return `${PHOTO_ROOT}/${node}/${id}/${key}`;
+}
+
+/**
+ * Send a PHOTO in a turn-by-turn match: the picture first (`chatPhotos/<node>/<id>/<key>`, written
+ * once, verified by re-read), then the chat line `{ t: 'i', v: <key> }` pointing at it (verified).
+ * `dataUrl` is a JPEG data URL already shrunk by the panel (match-chat-ui.js preparePhoto). Resolves
+ * like sendChat: `{ ok: true, entry }` or `{ ok: false, reason, retryable }`.
+ */
+export async function sendPhoto({ node, id, side }, dataUrl) {
+  const path = chatPath(node, id);
+  if (!path) return { ok: false, reason: 'not-found', retryable: false };
+  if (side !== 'a' && side !== 'b' && side !== 'c') return { ok: false, reason: 'not-your-game', retryable: false };
+  const d = String(dataUrl || '');
+  if (!d.startsWith('data:image/jpeg;base64,') || d.length > PHOTO_MAX) return { ok: false, reason: 'bad-photo', retryable: false };
+  if (!writesAllowed()) return { ok: false, reason: 'dev-origin-blocked', retryable: false };
+  try {
+    const boot = await ready();
+    if (!boot) return { ok: false, reason: 'offline', retryable: true };
+    const { db, api } = boot;
+    const key = mintKey(side);
+    const at = Date.now();
+    const pic = photoPath(node, id, key);
+    await api.set(api.ref(db, pic), { by: side, d, at });
+    const backPic = await api.get(api.ref(db, pic));
+    const gotPic = backPic && backPic.exists() ? backPic.val() : null;
+    if (!gotPic || gotPic.d !== d || gotPic.by !== side) {
+      console.error(`[match-chat] PHOTO VERIFY FAILED for ${pic} - nothing landed.`);
+      return { ok: false, reason: 'did-not-land', retryable: true };
+    }
+    photoCache.set(pic, d);
+    const entry = { by: side, t: 'i', v: key, at };
+    await api.set(api.ref(db, `${path}/${key}`), entry);
+    const back = await api.get(api.ref(db, `${path}/${key}`));
+    const got = back && back.exists() ? back.val() : null;
+    if (!got || got.v !== key || got.by !== side) {
+      console.error(`[match-chat] VERIFY FAILED for ${path}/${key} - the photo is stored, its chat line is not.`);
+      return { ok: false, reason: 'did-not-land', retryable: true };
+    }
+    return { ok: true, entry: { key, ...entry } };
+  } catch (err) {
+    console.error('[match-chat] could not send the photo', err);
+    const reason = reasonOf(err);
+    return { ok: false, reason, retryable: reason !== 'denied' };
+  }
+}
+
+// One download per photo per page: a repaint of the panel never fetches a picture again.
+const photoCache = new Map();
+/** One photo's data URL, or '' (missing, malformed, offline). READ ONLY. */
+export async function readPhoto({ node, id }, key) {
+  const pic = photoPath(node, id, key);
+  if (!pic) return '';
+  if (photoCache.has(pic)) return photoCache.get(pic);
+  try {
+    const boot = await ready();
+    if (!boot) return '';
+    const snap = await boot.api.get(boot.api.ref(boot.db, pic));
+    const v = snap && snap.exists() ? snap.val() : null;
+    const d = v && typeof v.d === 'string' && v.d.startsWith('data:image/') ? v.d : '';
+    if (d) photoCache.set(pic, d);
+    return d;
+  } catch (err) {
+    console.warn('[match-chat] could not read photo', pic, err);
+    return '';
+  }
+}
+
 /** Watch one turn-by-turn match's chat. READ ONLY. `cb(list)` gets `chatFrom`'s cleaned list on
  *  every change. Resolves an unsubscribe that is always safe to call. */
 export async function watchChat({ node, id }, cb) {
@@ -225,5 +304,5 @@ export function markChatSeen(node, id, at) {
 
 export default {
   CHAT_MAXLEN, MAX_CHAT, cleanChat, cleanPayload, chatFrom, unseenChat, chatPath,
-  sendChat, watchChat, readChat, watchRoomReactions, readChatSeen, markChatSeen, SEEN_KEY,
+  sendChat, sendPhoto, readPhoto, photoPath, PHOTO_ROOT, PHOTO_MAX, watchChat, readChat, watchRoomReactions, readChatSeen, markChatSeen, SEEN_KEY,
 };

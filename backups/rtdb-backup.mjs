@@ -66,6 +66,8 @@ export const BRANCHES = [
   // hoops/ (2026-09-22): Connect 4 Hoops' turn-by-turn matches and their per-player index. Same
   // auth shape as players/ - readable by any signed-in anonymous session.
   'hoops',
+  // chatPhotos/ (2026-11-24): photos sent in a match's chat, <node>/<matchId>/<key> (js/match-chat.js). Any signed-in session reads.
+  'chatPhotos',
   // beeDaily/ (2026-10-26): Spelling Bee's daily board, <puzzle>/<CODE> = words found. Readable by
   // any signed-in session.
   'beeDaily',

@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1637;
-const CACHE = 'game-hub-v1650';
+const CACHE = 'game-hub-v1651';
 
 const ASSETS = [
   './',
@@ -903,7 +903,7 @@ const REST_MANIFEST = {
   './js/messages.js': '4e008582d0',
   './js/device-key.js': '4a749275f3',
   './js/live-read.js': '0c8419185d',
-  './js/messages-ui.js': 'a3bfcf0ead',
+  './js/messages-ui.js': 'e23c15c99f',
   './js/hub-messages.js': 'c91ce9936a',
   './js/challenges.js': '83208cb320',
   './js/challenges-ui.js': '4011d21b9d',
@@ -945,8 +945,8 @@ const REST_MANIFEST = {
   './js/mp-code-copy.js': '2acdbe0e22',
   './js/mp-reactions.js': 'ce1900931d',
   './js/mp-reactions-ui.js': 'dce07d73bf',
-  './js/match-chat.js': '784d478433',
-  './js/match-chat-ui.js': 'c938ce6a68',
+  './js/match-chat.js': '32e5415b8b',
+  './js/match-chat-ui.js': '493f90d169',
   './js/game-chat-history.js': '0990d42f0d',
   './js/challenge/crypt.js': '8d4c5fe938',
   './js/challenge/secrets.js': '0ddf67616f',
@@ -1118,7 +1118,7 @@ const REST_MANIFEST = {
   './flick-soccer/': '1e587a65ea',
   './flick-soccer/index.html': '1e587a65ea',
   './flick-soccer/css/flick-soccer.css': '617002d42b',
-  './flick-soccer/js/ui.js': 'b0bc1b5d2f',
+  './flick-soccer/js/ui.js': '493898526d',
   './flick-soccer/js/engine.js': '1270a062f5',
   './flick-soccer/js/ai.js': 'ada469fb1f',
   './flick-soccer/js/render.js': 'ea9cf2297b',
