@@ -78,3 +78,10 @@ Pieces fall off the circle (rules v2). The Sumo look drew a square clay mound be
 square. The mound is gone: the ring is a raised round clay platform on the dark hall floor, its shadow and darker clay
 side showing the drop all the way round. Bumper cars and Pucks were already plain circles. Old rv 1 matches keep their
 square (it is their rule).
+
+## 2026-11-24: renamed Knockout
+
+Matt asked for a better name; Ring Out was suggested, then Matt: *"Should we just go with knockout? It's not like that's
+trademarked or anything"* and *"yes rename"*. Shown as Knockout (Spanish K.O.) in the game, the launcher, the
+leaderboard, notifications, and the admin page. Nothing stored was renamed: the folder, hub id, stats id, keys, the
+`shoveoff/` node, and the push tag keep the first name (THE LAW, rule 5). The trademark question was not checked.

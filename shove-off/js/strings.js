@@ -2,7 +2,7 @@
 // RENDER time (js/i18n.js makeT). Fewest words: names, numbers and one action word per button.
 export const STRINGS = {
   en: {
-    title: 'Shove Off',
+    title: 'Knockout',
     look_sumo: 'Sumo', look_car: 'Bumper cars', look_puck: 'Pucks',
     aria_look: 'Look',
     aria_record: 'Won {w}, lost {l}',
@@ -69,7 +69,7 @@ export const STRINGS = {
     mp_failed: 'That did not send. Try again.',
   },
   es: {
-    title: 'Empujón',
+    title: 'K.O.',
     look_sumo: 'Sumo', look_car: 'Autochoques', look_puck: 'Discos',
     aria_look: 'Aspecto',
     aria_record: '{w} ganadas, {l} perdidas',

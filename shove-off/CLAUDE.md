@@ -1,4 +1,4 @@
-# Shove Off — shove-off/CLAUDE.md
+# Knockout (first named Shove Off) — shove-off/CLAUDE.md
 
 > **THE LAW applies to every file in this folder.** Player data is never deleted, never lost, never put at
 > risk. The law and its nine working rules are at the top of the root `CLAUDE.md` (full text: `js/CLAUDE.md`).
@@ -10,7 +10,8 @@ Matt filmed GamePigeon's Knockout (2026-11-18): *"Yes, this is gamepigeons knock
 version of this"*. Looks: *"Can we have sumo wrestlers, bumper boats/cars, and plain pucks as options? Two colors
 of each. And let people choose which they play with. Like tower stack or brick lock"*. Tie: *"Sudden death"*.
 Modes: *"Online challenges"*, and vs the computer (2026-11-18, *"Add computer play to the game so i can test it"*).
-Our OWN game: never GamePigeon's name, penguins, art or look.
+Our OWN game: never GamePigeon's penguins, art or look. **Shown as "Knockout" (Spanish "K.O.") since 2026-11-24** (Matt: "Should we just go
+with knockout?" ... "yes rename"); the folder, ids, keys, node and push tag keep `shove-off`/`shoveoff` (rule 5).
 
 ## Status: ADMIN ONLY (`devOnly: true`), NOT cleared for players
 
