@@ -186,6 +186,13 @@ recorder gets it free; a game that records outside `notePlay` gets none, so neve
 deleted from anything i see")**: a rename deletes the old name from `usernames/` and Reset profile leaves "You", so the server logs every
 profile name change for ever (`nameLog/<CODE>`, `functions/index.js` `nameLogOnChange`); Admin > person shows Names and Other accounts
 on the same devices (`js/name-history.js`: same browser = same first 36 characters of the record id). `tools/test-name-history.mjs`.
+**One play can be voided (2026-11-24, Matt: "We MUST be able to identify and void games and rounds where he cheated"; "Option A, of course")**:
+a PROVEN trip wire (`js/integrity.js` `PLAY_INPUT_PROVEN`) voids that play at once and pushes "voided"; a suspicious one alerts with a
+Void button; Matt's Void / Undo on any play or alert (`adminConfig/v1/integrity/plays/<CODE>/<id>`) wins. The SERVER builds what the
+voids take away (`functions/play-voids.js` -> `adminConfig/v1/corrections/playVoids/<CODE>/<game>`: counters via the adjust path, a
+best a voided play set falls back to the best real one, mode totals); every screen applies it (`js/play-voids.js`, players-agg, My
+Stats). Nothing stored changes. `tools/test-play-voids.mjs [--db <dir> <CODE> <ids>]` shows what a void would change on real data.
+**The King of Games audit since Oct 28: `docs/AUDIT-KING-OF-GAMES-2026-11-24.md`. Nothing of his is voided until Matt says.**
 `tools/test-play-input.mjs [--db <playLog.json>]` (also fails a game that sets `window.__…` unguarded).
 
 ## Privacy and security: device keys (2026-11-04, Matt: "Yes start on 1-3")

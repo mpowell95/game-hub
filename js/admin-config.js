@@ -105,6 +105,7 @@ export function normalizeConfig(raw) {
   const skCorr = (corr.skeeball && typeof corr.skeeball === 'object') ? corr.skeeball : {};
   const hbCorr = (corr.holdem && typeof corr.holdem === 'object') ? corr.holdem : {};
   const adjCorr = (corr.adjust && typeof corr.adjust === 'object') ? corr.adjust : {};   // Matt's console edits (js/stats-corrections.js adjustGame)
+  const pvCorr = (corr.playVoids && typeof corr.playVoids === 'object') ? corr.playVoids : {};   // voided plays, built by the server (js/play-voids.js)
   const golf = (src.golf && typeof src.golf === 'object') ? src.golf : {};
   const courses = (golf.courses && typeof golf.courses === 'object') ? golf.courses : {};
   const resets = (src.deviceResets && typeof src.deviceResets === 'object') ? src.deviceResets : {};
@@ -114,10 +115,11 @@ export function normalizeConfig(raw) {
   const integ = (src.integrity && typeof src.integrity === 'object') ? src.integrity : {};
   const integUndo = (integ.undo && typeof integ.undo === 'object') ? integ.undo : {};
   const integVoid = (integ.void && typeof integ.void === 'object') ? integ.void : {};
+  const integPlays = (integ.plays && typeof integ.plays === 'object') ? integ.plays : {};   // Matt's void / undo of one play (js/play-voids.js)
   const reviewed = (src.reviewed && typeof src.reviewed === 'object') ? src.reviewed : {};
   const si = (src.signin && typeof src.signin === 'object') ? src.signin : {};
   const signin = { ask: (si.ask && typeof si.ask === 'object') ? si.ask : {}, everyone: si.everyone === true };
-  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid }, reviewed, signin };
+  return { games, skeeball: { boards }, corrections: { skeeball: skCorr, holdem: hbCorr, adjust: adjCorr, playVoids: pvCorr }, golf: { courses }, deviceResets: resets, online, bee: { undo: beeUndo }, integrity: { undo: integUndo, void: integVoid, plays: integPlays }, reviewed, signin };
 }
 
 // --- ONLINE PLAY NEEDS AN ACCOUNT MATT HAS LET IN (2026-10-08) ----------------------------------
@@ -773,6 +775,21 @@ export function setIntegrityVoided(statsIdOf, gameId, voided) {
   const on = !!voided;
   return writeNode('integrity', { [`void/${statsIdOf}/${gameId}`]: on ? true : null, [`undo/${statsIdOf}/${gameId}`]: on ? null : true },
     (cfg) => resolveIntegrityVoid(cfg, statsIdOf, gameId) === on && resolveIntegrityUndone(cfg, statsIdOf, gameId) === !on, { stamp: false });
+}
+/** ONE PLAY (2026-11-24, js/play-voids.js): Matt's decision on one play-log entry, or undefined. */
+export function resolvePlayDecision(cfg, code, id) {
+  const row = (normalizeConfig(cfg).integrity.plays[String(code || '').toUpperCase()] || {})[id];
+  return row && typeof row === 'object' && typeof row.void === 'boolean' ? row : undefined;
+}
+/** Void (`on` true) or Undo (false) one play: adminConfig/v1/integrity/plays/<CODE>/<id> = { void, g, at }. The
+ *  server rebuilds that code's overlay (functions playVoidDecision). Verified by re-read. */
+export function setPlayVoided(code, id, g, on) {
+  const c = String(code || '').toUpperCase();
+  if (!/^[A-Z0-9]{3,12}$/.test(c) || !/^[0-9]{13}-[0-9]{1,4}$/.test(String(id || '')) || !/^[a-z0-9]{2,24}$/.test(String(g || ''))) {
+    return Promise.resolve(fail(`not a play: ${code} ${id} ${g}`));
+  }
+  return writeNode('integrity', { [`plays/${c}/${id}`]: { void: !!on, g: String(g), at: Date.now() } },
+    (cfg) => { const d = resolvePlayDecision(cfg, c, id); return !!d && d.void === !!on; }, { stamp: false });
 }
 /** Kept for the first admin page build (2026-10-28): Undo (`on` true) / Void again. */
 export function setIntegrityUndone(statsIdOf, gameId, on) { return setIntegrityVoided(statsIdOf, gameId, !on); }

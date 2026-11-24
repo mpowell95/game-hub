@@ -67,7 +67,7 @@ export async function checkFinishedMatch(db, node, id, m, now = Date.now()) {
 /** The push an admin gets. `kind` 'flag' (a record) or 'match'. */
 export function integrityNote(kind, info) {
   const game = gameName(kind === 'flag' ? info.gid : info.node);
-  const strong = kind === 'flag' && info.flag.void;
+  const strong = (kind === 'flag' && info.flag.void) || (kind !== 'flag' && info.proven === true);   // a proven play is voided at once (Option A)
   const name = (kind === 'flag' ? info.flag.name : info.name) || '?';
   const what = hitText(kind === 'flag' ? { rule: info.rule, v: info.flag.v, lim: info.flag.lim } : info);
   return {

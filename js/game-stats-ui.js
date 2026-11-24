@@ -16,6 +16,7 @@ import { loadStoredStats, statsId, holdemBalance, wlLevels } from './game-stats.
 import { loadProfile } from './profile-store.js';
 import { isGameLive, corrections, isAdminDevice } from './admin-config.js';
 import { correctStats, fullLevelStats, adjustStats, adjustModesStats, withHandAdjust, handResultsStats, flickTestStats, TOWER_BEFORE } from './stats-corrections.js';
+import { mergePlayVoidAdj, applyPlayCaps } from './play-voids.js';
 import { makeT, getLang } from './i18n.js';
 import STRINGS from './strings.js';
 import LB2 from './leaderboard2-strings.js';
@@ -3032,7 +3033,10 @@ export function openStatsOverlay() {
   // The first paint is local, before the network answers - so it applies the corrections too.
   // Without this, a voided score flashes up for a second and then disappears, which reads as a bug.
   { const me = (loadProfile() || {}).playerId, c = corrections() || {};
-    _st = adjustStats(fullLevelStats(adjustModesStats(handResultsStats(flickTestStats(correctStats(loadStoredStats(), statsId(), c)), me), me ? withHandAdjust(c.adjust ? c.adjust[me] : null, me) : null), me), me ? withHandAdjust(c.adjust ? c.adjust[me] : null, me) : null); }
+    const pvs = me && c.playVoids ? c.playVoids[String(me).toUpperCase()] : null;   // voided plays (js/play-voids.js, 2026-11-24)
+    const adj = me ? mergePlayVoidAdj(withHandAdjust(c.adjust ? c.adjust[me] : null, me), pvs) : null;
+    _st = adjustStats(fullLevelStats(adjustModesStats(handResultsStats(flickTestStats(correctStats(loadStoredStats(), statsId(), c)), me), adj), me), adj);
+    if (pvs && _st && _st.games) { const games = Object.assign({}, _st.games); for (const g of Object.keys(pvs)) if (games[g]) games[g] = applyPlayCaps(games[g], pvs[g]); _st = Object.assign({}, _st, { games }); } }
   _combinedDevices = 1;
   _places = null;
   _s4 = true;   // the v2 look for everyone since 2026-11-04 (Matt: "release it")
