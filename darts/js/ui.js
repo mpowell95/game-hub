@@ -7,6 +7,7 @@
 // false. A match is only recorded once it is won. An ONLINE match (2026-10-01, mp.js) lives on the
 // server, every dart written as it lands, so leaving one loses nothing either.
 
+import { exposeSeam } from '../../js/seams.js';
 import { newMatch, throwDart, nextTurn, validMatch, DRAW, computerThrow, flickLanding, scoreAt, DIFFS, DARTS_PER_TURN, RING, isCricket, kindOf, CRICKET, cricketNext, bedLabel, inOrder, noPoints, assistTargets, assistLanding, inOvertime, dartsPerTurn, dartRow, XL_COLS } from './engine.js';
 import { isAdmin } from '../../js/challenge/hooks.js';
 import { isAdminDevice } from '../../js/admin-config.js';
@@ -1700,7 +1701,7 @@ export function init(container) {
   if (instance) destroy();
   instance = new DartsUI(container);
   // Test seam (like Murdoku's window.__muTest): lets the headless checks drive a throw.
-  if (typeof window !== 'undefined') window.__dtTest = { ui: instance, scoreAt };
+  exposeSeam('__dtTest', { ui: instance, scoreAt });
 }
 export function destroy() {
   if (!instance) return;

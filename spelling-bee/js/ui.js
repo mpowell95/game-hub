@@ -8,6 +8,7 @@
 //
 // isInProgress() RETURNS FALSE, DELIBERATELY: every found word is saved at once, so leaving is
 // lossless (the Contexto / Sudoku class).
+import { DEV_SEAMS } from '../../js/seams.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, getLang, onLangChange } from '../../js/i18n.js';
@@ -342,7 +343,7 @@ class SpellingBee {
     this._postSoon(0);
     this._log('open', { r: `day ${this.n}${this.old ? ' old' : ''}${this.mode === 'live' ? '' : ' ' + this.mode}` });
     flushLog();   // anything queued from an earlier session (offline, closed too fast)
-    try { window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old, how) => this._startDay(d, old, how), liveTime: (o) => __setServerTimeForTest(o) }; } catch { /* ignore */ }
+    try { if (DEV_SEAMS) window.__sbTest = { ui: this, answers: this.answers, submit: (w) => { this.input = w; this.submit(); }, play: (d, old, how) => this._startDay(d, old, how), liveTime: (o) => __setServerTimeForTest(o) }; } catch { /* ignore */ }
   }
 
   _checkDay() {

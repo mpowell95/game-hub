@@ -8,6 +8,7 @@
 // isInProgress() RETURNS FALSE, DELIBERATELY. Autosave/resume built in (root CLAUDE.md's second
 // isInProgress() meaning): the board and the clock are saved after every input, so leaving is
 // lossless. The Sudoku / Nuts & Bolts class, not the Ball Run class.
+import { DEV_SEAMS } from '../../js/seams.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -546,7 +547,7 @@ class MinesweeperUI {
     // find a safe cell to tap, rather than guessing and hitting a mine. Read-only; nothing in the
     // game reads it back.
     try {
-      window.__msTest = {
+      if (DEV_SEAMS) window.__msTest = {
         state: () => ({
           w: g.w, h: g.h, mines: g.mines,
           mine: g.mine.slice(), cell: g.cell.slice(), num: g.num.slice(),

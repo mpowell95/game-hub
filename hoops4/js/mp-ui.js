@@ -13,6 +13,7 @@
 //               follows a person to every device they own. You take your turn and hand it over;
 //               they play next time they open the hub. There is no push notification in this repo
 //               (js/CLAUDE.md says so in as many words), so the game waits for them on this list.
+import { exposeSeam } from '../../js/seams.js';
 import { makeT, getLang } from '../../js/i18n.js';
 import { loadPalette, paletteItems, reactionText } from '../../js/mp-reactions.js';
 import { STRINGS } from './strings.js';
@@ -348,7 +349,7 @@ export function openMultiplayer(ui, { pickFor = null, view = '' } = {}) {
   // `window.__h4Test`. The opponent list comes from Firebase, which a local probe has no access
   // to, so there is no other way to reach the terms screen and LOOK at it. The game never reads
   // this; `reference/hoops/` does.
-  try { window.__h4Mp = { go, state, viewTerms, viewHistory }; } catch { /* no window */ }
+  exposeSeam('__h4Mp', { go, state, viewTerms, viewHistory });
   return { close };
 }
 

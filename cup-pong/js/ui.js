@@ -6,6 +6,7 @@
 // rack goes to `recordCupPongSolo(throws)`, exactly once. A match vs the computer is SAVED as it goes
 // (`gamehub.cuppong.save.v1`, 2026-11-03) and continues from the setup screen; a solo rack is not -
 // see isInProgress() for which meaning of the contract each is.
+import { exposeSeam } from '../../js/seams.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { recordCupPong, recordCupPongSolo, loadStats, oneTierDown, armQuitLoss, takeQuitLoss, withMode, modeTag, activeCode, logPlayData } from '../../js/game-stats.js';
@@ -339,7 +340,7 @@ class CupPong {
       else if (!opts.resume) this.newMatch();
       this.startLoop();
       // Read-only hook for headless drivers (skeeball's `__skTest` precedent). Never read by the game.
-      try { window.__cpTest = this; } catch {}
+      exposeSeam('__cpTest', this);
     } catch (err) {
       // Land somewhere recoverable, never on a dead canvas (skeeball, 2026-09-01).
       console.error('[cup-pong] engine failed to load', err);

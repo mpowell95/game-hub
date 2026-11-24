@@ -7,6 +7,7 @@
 // isInProgress() RETURNS FALSE, DELIBERATELY. Autosave/resume built in (root CLAUDE.md's second
 // isInProgress() meaning): the board is saved after every input, so leaving is lossless - the
 // Nuts & Bolts class, not the Ball Run class.
+import { DEV_SEAMS } from '../../js/seams.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { loadProfile } from '../../js/profile-store.js';
 import { onViewportResize } from '../../js/viewport.js';
@@ -355,7 +356,7 @@ class SudokuUI {
     this._onRootKey = (ev) => this._handleKey(ev);
     this.root.addEventListener('keydown', this._onRootKey);
 
-    try { window.__sdTest = { state: () => this._testState(), selected: () => this.selected, ui: this, game: this.game }; } catch { /* no window */ }
+    try { if (DEV_SEAMS) window.__sdTest = { state: () => this._testState(), selected: () => this.selected, ui: this, game: this.game }; } catch { /* no window */ }
 
     this._paintAll();
     this._fit();

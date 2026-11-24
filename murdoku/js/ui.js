@@ -8,6 +8,7 @@
 // isInProgress() RETURNS FALSE, DELIBERATELY. Autosave/resume built in (root CLAUDE.md's second
 // isInProgress() meaning): the case is written to `gamehub.murdoku.save.v1` after EVERY change, so
 // leaving mid-case is lossless - the Sudoku / Nuts & Bolts class, not the Ball Run class.
+import { DEV_SEAMS } from '../../js/seams.js';
 import '../../js/theme.js';   // side effect: stamps .gh-dark so this screen themes standalone too
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -1123,7 +1124,7 @@ class MurdokuUI {
   _exposeSeam() {
     const ui = this;
     try {
-      window.__muTest = {
+      if (DEV_SEAMS) window.__muTest = {
         get puzzle() { return ui.puz; },
         get pos() { return ui.pos.slice(); },
         get ui() { return ui; },

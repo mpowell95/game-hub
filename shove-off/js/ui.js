@@ -10,6 +10,7 @@
 // look, Challenge), play (the board, both players' pieces left, Launch / Sent / Waiting), and three
 // overlays (How to play, the match menu, Game over). The rules are engine.js (pure), the data mp.js,
 // the drawing art.js. NOTHING SCROLLS: lists are paged by measurement.
+import { exposeSeam } from '../../js/seams.js';
 import * as E from './engine.js';
 import * as A from './art.js';
 import * as MP from './mp.js';
@@ -1318,7 +1319,7 @@ let instance = null;
 export function init(container) {
   if (instance) instance.destroy();
   instance = new ShoveOff(container);
-  if (typeof window !== 'undefined') window.__soTest = instance;
+  exposeSeam('__soTest', instance);
 }
 export function destroy() {
   if (instance) { instance.destroy(); instance = null; }

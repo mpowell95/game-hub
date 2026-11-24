@@ -6,6 +6,7 @@
 //
 // Adding a game = drop its folder under the hub and add an entry to GAMES.
 
+import { setHubRef, exposeSeam } from './seams.js';
 import { loadProfile, hasName } from './profile-store.js';
 import { isChallengeActive, isAdmin, isDevProfile } from './challenge/hooks.js';
 // stats-net.js and name-gate.js are imported LAZILY, at their call sites (2026-09-01).
@@ -3535,7 +3536,7 @@ export function initHub(root) {
   // in-flight async (afterPaint, admin-config refresh) to run against the shared root, which
   // clobbers whatever the new instance mounted. test-visual.mjs reuses this handle so there is
   // only ever one hub. Never used by the app itself.
-  try { if (typeof window !== 'undefined') window.__ghHub = hubInstance; } catch { /* no window */ }
+  setHubRef(hubInstance); exposeSeam('__ghHub', hubInstance);
   return hubInstance;
 }
 

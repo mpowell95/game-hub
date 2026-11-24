@@ -53,7 +53,7 @@ import { buildBoardParts, packBoard, sumOf } from './boards.js';
 import { scanRecent, rebuildBee, rebuildBeeIfDue, beeNote } from './bee.js';
 import { isHiddenName } from './shared/js/hidden-players.js';
 import { handAddDueSince } from './shared/js/stats-corrections.js';
-import { writeFlags, checkFinishedMatch, checkContextoLogWin, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
+import { writeFlags, checkFinishedMatch, checkContextoLogWin, checkPlayInputLog, integrityNote, checkOnlinePairs, pairsDue } from './integrity.js';
 import { handleClaim } from './claim.js';
 import { handleSignIn } from './signin.js';
 import { readPlayers, readNodeCached } from './cache.js';
@@ -489,6 +489,22 @@ export const contextoWinCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ..
   for (const a of written) {
     logger.info('integrity alert', { node: 'contexto', code: a.code, k: a.k, rule: a.rule, v: a.v });
     for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-contexto-${a.code}-${a.k}`, { game: 'admin' });
+  }
+});
+
+// SCRIPTED PLAY (2026-11-24, Matt: "without immediately being notified???"): every RESULT a phone logs is
+// judged at once (js/integrity.js checkPlayInput: made-up touches, Snake turns with no input, Ball Run and
+// Tower Stack scores with no taps); an alert, never a void, is pushed to every admin within seconds.
+export const playInputCheck = onValueCreated({ ref: '/playLog/{code}/{id}', ...OPTS, maxInstances: 5 }, async (event) => {
+  const v = event.data.val();
+  if (!v || !/^record/.test(String(v.f || ''))) return;
+  const db = getDatabase();
+  const written = await checkPlayInputLog(db, event.params.code, event.params.id, v);
+  if (!written.length) return;
+  const codes = await adminCodes(db);
+  for (const a of written) {
+    logger.info('integrity alert', { node: a.node, code: a.code, id: a.k, rule: a.rule, v: a.v });
+    for (const c of codes) await sendTo(db, c, integrityNote('match', a), `integrity-play-${a.code}-${a.k}`, { game: 'admin' });
   }
 });
 

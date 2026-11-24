@@ -296,7 +296,45 @@ export function checkMatch(node, m) {
   }
   return out;
 }
+// --- SCRIPTED PLAY, from the play log (2026-11-24, Matt: "How the fuck are we allowing him to run a script to
+// get better scores without immediately being notified???"). ALERTS, pushed to every admin the moment the
+// entry lands (functions/integrity.js checkPlayInputLog); never a void (a void changes what players see:
+// Matt's word first). `e` = one playLog entry; `i` = js/play-log-queue.js's input report (t real events,
+// p real presses, u events a page script made up), absent before 2026-11-24.
+//   input-made-by-code   any made-up touch or key press during the play (our own code makes none).
+//   snake-turns-without-input   Snake: more turns than taps + swipes + keys (every turn the screen can make
+//                        counts one first, snake/js/ui.js _steer's three callers). PROVEN: replayed over every
+//                        Snake run with this data (2026-11-24), the only hits are King of Games' two 62s.
+//   ballrun-score-without-touch   Ball Run: 30+ obstacles with under 10 real touches or keys since the last run.
+//   tower-blocks-without-taps     Tower Stack: more blocks than real presses (one press drops one block).
+export const PLAY_INPUT_TEXT = {
+  'input-made-by-code': 'touches or key presses made by a script, not a person',
+  'snake-turns-without-input': 'snake turns with no tap, swipe or key behind them',
+  'ballrun-score-without-touch': 'a Ball Run score with almost no touches',
+  'tower-blocks-without-taps': 'more blocks than taps',
+};
+const jsonOf = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+export function checkPlayInput(e) {
+  if (!e || typeof e !== 'object' || !/^record/.test(String(e.f || ''))) return [];
+  const out = [];
+  const i = jsonOf(e.i);
+  const a = jsonOf(e.a);
+  const score = Array.isArray(a) ? Number(a[0]) || 0 : 0;
+  if (i && (i.u | 0) > 0) out.push({ rule: 'input-made-by-code', v: i.u | 0, lim: 0 });
+  if (e.g === 'snake') {
+    const x = jsonOf(e.x), d = jsonOf(e.d);
+    if (x && d && Array.isArray(x.turns)) {
+      const inputs = (d.padTaps | 0) + (d.swipes | 0) + (d.keys | 0);
+      if (x.turns.length > inputs + 3) out.push({ rule: 'snake-turns-without-input', v: `${x.turns.length} turns, ${inputs} inputs, length ${score}`, lim: '' });
+    }
+  }
+  if (i && e.g === 'ballrun' && score >= 30 && (i.t | 0) < 10) out.push({ rule: 'ballrun-score-without-touch', v: `${score} obstacles, ${i.t | 0} touches`, lim: 10 });
+  if (i && e.g === 'tower' && score >= 10 && (i.p | 0) < score) out.push({ rule: 'tower-blocks-without-taps', v: `${score} blocks, ${i.p | 0} taps`, lim: '' });
+  return out;
+}
+
 export const MATCH_RULE_TEXT = Object.fromEntries([...MATCH_RULES.map((r) => [r.id, r.text]), ['hoops-winner-not-moves', 'a winner the moves do not give'],
+  ...Object.entries(PLAY_INPUT_TEXT),
   ['contexto-first-guess', 'solved in 1 typed guess (alert retired: hints do not count as guesses)'],
   ['contexto-solved-elsewhere', 'solved a puzzle already solved or given up on another phone'],
   ['contexto-hints-not-counted', 'hints taken elsewhere not counted (counted, taken)'],
@@ -618,4 +656,4 @@ export const GAME_NAMES = {
 };
 export const gameName = (id) => GAME_NAMES[id] || id;
 
-export default { PAIR_LIMITS, PAIR_NODES, CLEARED_PAIRS, isClearedPair, pairCodes, onlinePairs, pairAlerts, RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };
+export default { checkPlayInput, PLAY_INPUT_TEXT, PAIR_LIMITS, PAIR_NODES, CLEARED_PAIRS, isClearedPair, pairCodes, onlinePairs, pairAlerts, RULES, RULE_BY_ID, checkGame, checkStats, checkMatch, checkContextoWin, contextoWinForRecord, activeVoids, isVoided, HAND_VOIDS, hitText, GAME_NAMES, gameName };

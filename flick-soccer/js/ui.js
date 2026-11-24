@@ -9,6 +9,7 @@
 // against the computer only. An ONLINE challenge (2026-10-11, mp.js) lives on the server, every flick
 // written the moment it is made, so leaving one loses nothing either.
 
+import { exposeSeam } from '../../js/seams.js';
 import {
   newMatch, validMatch, step, atRest, freeze, settle, flick, discAt, aimContact, runToRest, restScorer,
   shotPath, maxShotSteps, teamOf, BALL, BALL_R, DISC_R, DT, GOAL_OPTIONS, FORMATIONS, FORM_IDS, W, H,
@@ -1798,7 +1799,7 @@ export function init(container) {
   if (instance) destroy();
   instance = new FlickSoccerUI(container);
   // Test seam: lets the headless checks drive a shot.
-  if (typeof window !== 'undefined') window.__fsTest = { ui: instance };
+  exposeSeam('__fsTest', { ui: instance });
 }
 export function destroy() {
   if (!instance) return;

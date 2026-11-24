@@ -8,6 +8,7 @@
 // play (canvas, score, best, perfect streak, pause button -> Paused card: Resume / Quit), game over (card with an X: score, best, perfects, Again).
 // Every finished run is recorded ONCE through recordTower inside withMode({ look }, diff, ..., { hi }).
 
+import { exposeSeam } from '../../js/seams.js';
 import * as E from './engine.js';
 import { STRINGS } from './strings.js';
 import { makeT, onLangChange } from '../../js/i18n.js';
@@ -941,7 +942,7 @@ let instance = null;
 export function init(container) {
   if (instance) instance.destroy();
   instance = new Tower(container);
-  try { if (typeof window !== 'undefined') window.__twTest = instance._seam(); } catch { /* no window */ }
+  exposeSeam('__twTest', instance._seam());
 }
 export function destroy() {
   if (instance) instance.destroy();

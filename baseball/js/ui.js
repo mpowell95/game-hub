@@ -4,6 +4,7 @@
 //
 // Module contract (docs/BUILDING-A-GAME.md, "Part 1 - Building a game"): init/destroy/isInProgress.
 
+import { DEV_SEAMS } from '../../js/seams.js';
 import { makeT } from '../../js/i18n.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { isDevProfile } from '../../js/challenge/hooks.js';
@@ -1634,7 +1635,7 @@ class BaseballPlayScreen {
   _installDevGameSeams() {
     if (!this.dev) return;
     const forceHalf = (h) => { if (this.game) this.game.half = h; };
-    if (window.__bbForceHalfNext) { forceHalf(window.__bbForceHalfNext); window.__bbForceHalfNext = null; }
+    if (DEV_SEAMS && window.__bbForceHalfNext) { forceHalf(window.__bbForceHalfNext); window.__bbForceHalfNext = null; }
     const putOnFirst = () => {
       if (!this.game) return null;
       const side = this.game.half === 'top' ? 'away' : 'home';

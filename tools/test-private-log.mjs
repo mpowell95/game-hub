@@ -56,7 +56,7 @@ ok('rules: playLog read = admins + reader only', /admins/.test(R.playLog['.read'
 ok('rules: a phone reads back only `t` of an entry', /msgAuth/.test(R.playLog.$code.$k.t['.read']) && !R.playLog.$code.$k['.read']);
 ok('rules: x allowed, up to 20,000 chars', /20000/.test(R.playLog.$code.$k.x['.validate']));
 ok('rules: beeLog no longer readable by every signed-in player', !R.beeLog.$puzzle['.read'] && /msgAuth/.test(R.beeLog.$puzzle.$code['.read']));
-ok('the sender copies x', readFileSync(new URL('../js/play-log.js', import.meta.url), 'utf8').includes("'d', 'x']"));
+ok('the sender copies x (and i, the input report, 2026-11-24)', readFileSync(new URL('../js/play-log.js', import.meta.url), 'utf8').includes("'d', 'x', 'i']"));
 
 // 7. The server's Contexto copy keeps no word or rank.
 const src = readFileSync(new URL('../functions/index.js', import.meta.url), 'utf8');

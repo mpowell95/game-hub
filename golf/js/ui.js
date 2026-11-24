@@ -10,6 +10,7 @@
 // scorecard are Stage C, and the stats write is Stage D - so a holed putt here reports and stops
 // rather than scoring a round. See golf/CLAUDE.md.
 
+import { exposeSeam } from '../../js/seams.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT, myName } from '../../js/i18n.js';
 import { clubArtSVG, CLUB_ART_DEFS } from './club-art.js';
@@ -4158,7 +4159,7 @@ export function init(container) {
   ensureCSS(() => { if (instance && !instance.destroyed) instance._fit(); });
   if (instance) instance.destroy();
   instance = new GolfGame(container);
-  if (typeof window !== 'undefined') window.__gfTest = instance;   // test-visual.mjs's PLAY probe
+  exposeSeam('__gfTest', instance);   // test-visual.mjs's PLAY probe
 }
 export function destroy() {
   if (instance) { instance.destroy(); instance = null; }

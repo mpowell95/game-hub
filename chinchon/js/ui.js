@@ -5,6 +5,7 @@
 // exactly as it resolves instantly on the AI. "Thinking" delays for AI turns are
 // added here (never in the engine), in the awaited onEvent hook.
 
+import { exposeSeam } from '../../js/seams.js';
 import { SUIT_META } from './deck.js';
 import { Game, DEFAULT_CONFIG, makePlayer, modeOfMatch } from './game.js';
 import { AIAgent } from './ai.js';
@@ -3803,7 +3804,7 @@ export function init(container) {
   if (instance) instance.destroy();
   instance = new ChinchonUI(container);
   // Test seam (like Darts' window.__dtTest): lets the headless checks open a challenge match.
-  if (typeof window !== 'undefined') window.__ccTest = { ui: instance };
+  exposeSeam('__ccTest', { ui: instance });
   return instance;
 }
 

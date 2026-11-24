@@ -13,6 +13,7 @@
 //   openMessages({ admin: true }) - Matt's read-only view of every conversation
 //   myUnreadMessages()            - the count behind the profile pill's badge
 
+import { hubRef } from './seams.js';
 import {
   MAX_MESSAGE, myCode, readMyThreads, cachedThreads, threadReadCount, readThread, watchThread, markThreadSeen, hideThread,
   readContacts, sendMessage, sendBroadcast, unreadMessageCount, readAllThreads,
@@ -861,7 +862,7 @@ function joinInvite(game, code) {
   if (!asInvite({ game, code })) return;
   try { sessionStorage.setItem('gamehub.airhockey.join', code); } catch { /* the code is in the text too */ }
   closeOverlay();
-  const hub = typeof window !== 'undefined' && window.__ghHub;
+  const hub = hubRef();
   if (hub && typeof hub._openPushedGame === 'function') hub._openPushedGame(game);
   else location.href = new URL(`../?open=${encodeURIComponent(game)}`, import.meta.url).href;
 }
@@ -906,7 +907,7 @@ function renderHubThread(card) {
 function playFresh(game, btn) {
   if (!game) return;
   if (btn) { btn.disabled = true; btn.textContent = t('msg_loading'); }
-  const hub = typeof window !== 'undefined' && window.__ghHub;
+  const hub = hubRef();
   if (hub && typeof hub.openGameFresh === 'function') {
     hub.openGameFresh(game, { beforeOpen: closeOverlay })
       .catch((err) => console.error('[messages] could not open the game', err))

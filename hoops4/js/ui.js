@@ -4,6 +4,7 @@
 // one preference (the opponent) and nothing else. A match vs the computer, and a pass-and-play match,
 // is SAVED after every settled shot (2026-11-06, `gamehub.hoops4.save.v1` / `.passSave.v1`) and
 // continues; see isInProgress() below for which meaning of the contract that is.
+import { exposeSeam } from '../../js/seams.js';
 import { onViewportResize } from '../../js/viewport.js';
 import { makeT } from '../../js/i18n.js';
 import { loadProfile } from '../../js/profile-store.js';
@@ -1261,7 +1262,7 @@ class Hoops4 {
       // Read-only hook for the headless drivers (skeeball's `window.__skTest` precedent). The
       // game itself never reads it; `reference/hoops/check-display.mjs` projects the display and
       // the hoops through the real play camera with it.
-      try { window.__h4Test = this; } catch {}
+      exposeSeam('__h4Test', this);
     } catch (err) {
       // A mount that throws lands somewhere recoverable rather than on a dead canvas - the exact
       // failure skeeball shipped on 2026-09-01, where the HUD painted over a 300x150 default.
