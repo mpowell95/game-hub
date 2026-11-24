@@ -5,7 +5,7 @@
 // (js/hub.js, "FEWER UPDATES FOR PLAYERS"). Raise it to the new CACHE number on a deploy that every
 // phone should get now; leave it alone for small fixes.
 const IMPORTANT_SINCE = 1657;
-const CACHE = 'game-hub-v1657';
+const CACHE = 'game-hub-v1658';
 
 const ASSETS = [
   './',
@@ -95,6 +95,7 @@ const ASSETS = [
   './js/play-log-queue.js',
   './js/play-log.js',
   './js/seams.js',
+  './js/name-history.js',
   './js/contexto-history.js',
   './js/server-time.js',
   './js/challenge-clock.js',
@@ -914,11 +915,12 @@ const REST_MANIFEST = {
   './js/push.js': 'c31f8ad464',
   './js/career-store.js': 'a815a02653',
   './js/admin-config.js': 'a1d0989fa0',
-  './js/admin-ui.js': '8da35cf065',
+  './js/admin-ui.js': 'f14383a45c',
   './js/integrity.js': '6ea6807e32',
   './js/play-log-queue.js': '6924749f5d',
   './js/play-log.js': '7f269cd5ca',
   './js/seams.js': '979f4cf8b2',
+  './js/name-history.js': '7d720c1075',
   './js/contexto-history.js': '343da78a44',
   './js/server-time.js': '3c47cee4a4',
   './js/challenge-clock.js': 'dea6da61f2',
