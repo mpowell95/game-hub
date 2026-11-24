@@ -125,6 +125,32 @@ const all = JSON.parse(localStorage.getItem(C.SEEN_KEY));
 ok('the seen list is capped (a convenience, not history)', Object.keys(all).length === 200);
 ok('...keeping the newest', all['darts/m0229x'] === 1229);
 
+// --- photos (2026-11-24) -----------------------------------------------------------------------
+const JPG = 'data:image/jpeg;base64,' + 'A'.repeat(2000);
+ok('photoPath sits under chatPhotos/, never in the game node', C.photoPath('flicksoccer', 'match0002', 'abcdefgh12') === 'chatPhotos/flicksoccer/match0002/abcdefgh12');
+ok('photoPath refuses a bad key', C.photoPath('flicksoccer', 'match0002', '../x') === null);
+ok('cleanPayload keeps a photo line with a minted key', JSON.stringify(C.cleanPayload({ t: 'i', v: 'abcdefgh12' })) === '{"t":"i","v":"abcdefgh12"}');
+ok('cleanPayload drops a photo line with junk in v', C.cleanPayload({ t: 'i', v: 'data:image/jpeg;base64,xx' }) === null);
+const ph = await C.sendPhoto({ node: 'flicksoccer', id: 'match0002', side: 'a' }, JPG);
+ok('sendPhoto lands and is verified', ph.ok && ph.entry.t === 'i', JSON.stringify(ph));
+ok('the picture is stored beside the game, the line in chat/', getAt(`chatPhotos/flicksoccer/match0002/${ph.entry.v}`).d === JPG
+  && getAt(`flicksoccer/chat/match0002/${ph.entry.key}`).v === ph.entry.v && !getAt('flicksoccer/games'));
+ok('the chat line carries no picture', !JSON.stringify(getAt('flicksoccer/chat/match0002')).includes('base64'));
+ok('chatFrom keeps the photo line', C.chatFrom(getAt('flicksoccer/chat/match0002')).some((c) => c.t === 'i' && c.v === ph.entry.v));
+ok('readPhoto reads it back', (await C.readPhoto({ node: 'flicksoccer', id: 'match0002' }, ph.entry.v)) === JPG);
+ok('readPhoto of a missing key is empty', (await C.readPhoto({ node: 'flicksoccer', id: 'match0002' }, 'zzzzzzzz99')) === '');
+ok('sendPhoto refuses a non-JPEG', (await C.sendPhoto({ node: 'flicksoccer', id: 'match0002', side: 'a' }, 'data:image/png;base64,AA')).reason === 'bad-photo');
+ok('sendPhoto refuses one over PHOTO_MAX', (await C.sendPhoto({ node: 'flicksoccer', id: 'match0002', side: 'a' }, 'data:image/jpeg;base64,' + 'A'.repeat(C.PHOTO_MAX))).reason === 'bad-photo');
+dropWrites = true;
+const ph2 = await C.sendPhoto({ node: 'flicksoccer', id: 'match0002', side: 'b' }, JPG);
+dropWrites = false;
+ok('a photo write that never landed says so (rule 6)', !ph2.ok && ph2.reason === 'did-not-land' && ph2.retryable);
+const rules = JSON.parse(readFileSync('./database.rules.json', 'utf8')).rules;
+const pr = rules.chatPhotos && rules.chatPhotos.$node && rules.chatPhotos.$node.$id && rules.chatPhotos.$node.$id.$k;
+ok('rules: chatPhotos is written once, never deleted', pr && /!data\.exists\(\)/.test(pr['.write']) && /newData\.exists\(\)/.test(pr['.write']));
+ok('rules: only a JPEG data URL under 800,000 characters', pr && /data:image\/jpeg;base64,/.test(pr['.validate']) && /800000/.test(pr['.validate']));
+ok('backup reads chatPhotos/', readFileSync('./backups/rtdb-backup.mjs', 'utf8').includes("'chatPhotos'"));
+
 // --- structural ---------------------------------------------------------------------------------
 const src = readFileSync('./js/match-chat.js', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 ok('match-chat.js deletes nothing (no remove, no null write)', !/\.remove\(|set\([^)]*,\s*null\)/.test(src));

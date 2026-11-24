@@ -515,7 +515,7 @@ game's mount/unmount lifecycle. Optional `onCovered()` (2026-11-12): the hub cal
 | Difficulty markers | `diffShapeSVG()` / `tierOf()` | hue-only tiers (Matt is red/green colorblind) |
 | Name gate | `await requireName()` in `index.html` before `init()` | mounting ungated |
 | Multiplayer | `js/net.js`; read `js/CLAUDE.md`'s lockstep invariants first | a second Firebase app or own room layer |
-| Chat in an online match (REQUIRED, Matt 2026-10-14) | `createMatchChat()` + `js/match-chat.js` | online play without it, or chat inside the match document |
+| Chat in an online match (REQUIRED, Matt 2026-10-14; photos too, 2026-11-24: pass `photos: {node, id, side}`) | `createMatchChat()` + `js/match-chat.js` | online play without it, or chat inside the match document |
 | Tile art | `GAME_ART[id]` (`js/game-art.js`) | inline SVG in `GAMES` |
 | Buttons, cards, fields, modals | `css/ui.css` `.gh-*` + `--gh-*` tokens | chrome from scratch |
 

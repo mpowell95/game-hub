@@ -934,7 +934,9 @@ async function renderThread(card, who) {
   // by time. Loaded once, after the messages paint, so the conversation never waits on it.
   let gameLines = [];
   let lastMsgs = null;
-  const gameText = (g) => (g.t === 'c' ? String(g.v || '') : reactionText({ t: g.t, v: g.v }, getLang()));
+  // 'i' = a photo sent in the game's chat (2026-11-24); the picture stays in the game.
+  const gameText = (g) => (g.t === 'i' ? (getLang() === 'es' ? '📷 Foto' : '📷 Photo')
+    : g.t === 'c' ? String(g.v || '') : reactionText({ t: g.t, v: g.v }, getLang()));
   const gameHead = (g) => {
     const name = t(`game_title_${g.statsId}`);
     return `<li class="msg-gamehead"><span class="msg-gamehead-art" aria-hidden="true">${GAME_ART[g.game] || ''}</span>`

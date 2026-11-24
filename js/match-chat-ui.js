@@ -28,23 +28,27 @@
 //          defaults sit the button at the top right, LEFT of a 44px menu button at `right: 12px`
 //          (the hub's floating chip owns the top left), and the bubbles under it.
 // `failText` optional (reason) => sentence when a line did not send.
+// `photos`  optional { node, id, side } of a TURN-BY-TURN match: adds a 📷 button that sends a photo
+//           (2026-11-24, Matt: "Let me send photos via in game chat"). Without it, no button.
 //
-// No storage, no network: this file can be cache-first in sw.js.
+// No storage and no Firebase of its own (photos go through match-chat.js): cache-first in sw.js.
 
 import { getLang, makeT, myName } from './i18n.js';
 import { loadPalette, paletteItems, reactionText } from './mp-reactions.js';
-import { cleanChat, CHAT_MAXLEN } from './match-chat.js';
+import { cleanChat, CHAT_MAXLEN, sendPhoto, readPhoto, PHOTO_MAX } from './match-chat.js';
 
 const t = makeT({
   en: {
     chat: 'Chat', with: 'Chat with {name}', ph: 'Say something', send: 'Send', none: 'Nothing said yet.',
     notSent: 'Message not sent. Try again.', offline: 'No connection. Try again.',
     blocked: 'Chat is off on a test server.', dismiss: 'Tap to close', close: 'Close',
+    photo: 'Photo', addPhoto: 'Send a photo', sending: 'Sending photo...', badPhoto: 'That photo could not be sent.',
   },
   es: {
     chat: 'Chat', with: 'Chat con {name}', ph: 'Di algo', send: 'Enviar', none: 'Nadie ha dicho nada.',
     notSent: 'Mensaje no enviado. Inténtalo otra vez.', offline: 'Sin conexión. Inténtalo otra vez.',
     blocked: 'El chat está apagado en un servidor de pruebas.', dismiss: 'Toca para cerrar', close: 'Cerrar',
+    photo: 'Foto', addPhoto: 'Enviar una foto', sending: 'Enviando foto...', badPhoto: 'No se pudo enviar esa foto.',
   },
 });
 
@@ -60,17 +64,51 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
 function defaultFail(reason) {
   if (reason === 'offline') return t('offline');
   if (reason === 'dev-origin-blocked') return t('blocked');
+  if (reason === 'bad-photo') return t('badPhoto');
   return t('notSent');
 }
 
-export function createMatchChat({ root, send, them, place, failText } = {}) {
+// A picked photo, shrunk to send: 1280 px on the long edge, JPEG, stepping quality down until it fits
+// PHOTO_MAX (the bug report's prepareScreenshot, smaller). Resolves a data URL or throws.
+const PHOTO_EDGE = 1280;
+async function preparePhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error('not an image'));
+      im.src = url;
+    });
+    const w0 = img.naturalWidth || img.width, h0 = img.naturalHeight || img.height;
+    for (const edge of [PHOTO_EDGE, 960, 720]) {
+      const sc = Math.min(1, edge / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * sc)), h = Math.max(1, Math.round(h0 * sc));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      for (const q of [0.8, 0.66, 0.52, 0.4]) {
+        const d = cv.toDataURL('image/jpeg', q);
+        if (d.startsWith('data:image/jpeg') && d.length <= PHOTO_MAX) return d;
+      }
+    }
+    throw new Error('too large');
+  } finally { URL.revokeObjectURL(url); }
+}
+
+export function createMatchChat({ root, send, them, place, failText, photos } = {}) {
   injectCss();
   const log = [];
   const known = new Set();
   const timers = new Set();
   const offs = [];
   const lastAt = Object.create(null);
-  let unread = 0, open = false, busy = false, err = '', seeded = false, destroyed = false;
+  let unread = 0, open = false, busy = false, err = '', seeded = false, destroyed = false, sendingPhoto = false;
+  const photoOn = !!(photos && photos.node && photos.id && photos.side);
+  const pics = new Map();   // photo key -> data URL, once loaded
   const listen = (tg, ty, fn, o) => { tg.addEventListener(ty, fn, o); offs.push(() => tg.removeEventListener(ty, fn, o)); };
   const host = root || document.body;
   const sendFn = typeof send === 'function' ? send : async () => ({ ok: false, reason: 'no-send' });
@@ -93,12 +131,51 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
   const pops = document.createElement('div');
   pops.className = 'ghc-pops';
   pops.setAttribute('aria-live', 'polite');
-  layer.append(pops, panel, btn);
+  // The file picker lives OUTSIDE the panel: the panel is repainted whenever a line arrives, and a
+  // picker inside it would be replaced while the phone's photo sheet is open (its pick then lost).
+  const file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/*';
+  file.hidden = true;
+  file.className = 'ghc-file';
+  // Full-size view of one photo: tap anywhere to close.
+  const view = document.createElement('div');
+  view.className = 'ghc-view';
+  view.hidden = true;
+  layer.append(pops, panel, btn, file, view);
   host.appendChild(layer);
 
   // A typed line shows WHOLE up to CHAT_MAXLEN; reactionText() would cut it at the 24-character
   // floating-bubble cap that js/mp-reactions-ui.js uses.
-  const textOf = (e) => (e.t === 'c' ? cleanChat(e.v) : reactionText({ t: e.t, v: e.v }, getLang()));
+  const textOf = (e) => (e.t === 'i' ? `📷 ${t('photo')}` : e.t === 'c' ? cleanChat(e.v) : reactionText({ t: e.t, v: e.v }, getLang()));
+
+  // Photos load only when shown (the panel or a card), once each; every <img data-pk> waiting for
+  // that key is filled when it arrives.
+  function fillPhotos(scope) {
+    if (!photoOn || !scope) return;
+    for (const im of scope.querySelectorAll('img[data-pk]')) {
+      const k = im.getAttribute('data-pk');
+      if (pics.has(k)) { if (!im.src) im.src = pics.get(k); continue; }
+      if (pics.has(`?${k}`)) continue;
+      pics.set(`?${k}`, true);
+      readPhoto(photos, k).then((d) => {
+        pics.delete(`?${k}`);
+        if (!d || destroyed) return;
+        pics.set(k, d);
+        for (const el of layer.querySelectorAll(`img[data-pk="${k}"]`)) el.src = d;
+      });
+    }
+  }
+  const photoHTML = (e) => `<button type="button" class="ghc-pic" data-view="${esc(e.v)}" aria-label="${esc(t('photo'))}">`
+    + `<img data-pk="${esc(e.v)}" alt="${esc(t('photo'))}"></button>`;
+  function showPhoto(k) {
+    const d = pics.get(k);
+    if (!d) return;
+    view.innerHTML = `<img alt="${esc(t('photo'))}">`
+      + `<button type="button" class="ghc-x ghc-view-x" aria-label="${esc(t('close'))}">✕</button>`;
+    view.querySelector('img').src = d;   // assigned, never written into HTML (another phone wrote it)
+    view.hidden = false;
+  }
   const whoOf = (e) => (e.mine ? myName() : ((e.who || themFn() || {}).name || '?'));
 
   function paintBtn() {
@@ -125,22 +202,26 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
       <div class="ghc-head"><b class="ghc-title">${esc(them ? t('with', { name: them }) : t('chat'))}</b>
         <button type="button" class="ghc-x" data-role="close" aria-label="${esc(t('close'))}">✕</button></div>
       <div class="ghc-log">${lines.length ? lines.map((e) => `
-        <p class="ghc-line ${e.mine ? 'is-mine' : 'is-them'}"><b class="ghc-who">${esc(whoOf(e))}</b><span class="ghc-said">${esc(textOf(e))}</span></p>`).join('')
+        <p class="ghc-line ${e.mine ? 'is-mine' : 'is-them'}"><b class="ghc-who">${esc(whoOf(e))}</b>${e.t === 'i' && photoOn
+          ? photoHTML(e) : `<span class="ghc-said">${esc(textOf(e))}</span>`}</p>`).join('')
         : `<p class="ghc-none">${esc(t('none'))}</p>`}</div>
       <div class="ghc-quick">${emojis.map((i) => `
         <button type="button" class="ghc-emoji" data-k="${esc(i.key)}" aria-label="${esc(i.text)}">${esc(i.text)}</button>`).join('')}</div>
       <div class="ghc-quick">${words.map((i) => `
         <button type="button" class="ghc-phrase" data-k="${esc(i.key)}">${esc(i.text)}</button>`).join('')}</div>
-      <form class="ghc-form">
+      <form class="ghc-form">${photoOn ? `
+        <button type="button" class="ghc-cam" data-role="photo" aria-label="${esc(t('addPhoto'))}"${sendingPhoto ? ' disabled' : ''}>📷</button>` : ''}
         <input class="ghc-input" type="text" maxlength="${CHAT_MAXLEN}" autocomplete="off"
                enterkeyhint="send" placeholder="${esc(t('ph'))}" aria-label="${esc(t('ph'))}">
         <button type="submit" class="ghc-send">${esc(t('send'))}</button>
       </form>
+      ${sendingPhoto ? `<p class="ghc-note" role="status">${esc(t('sending'))}</p>` : ''}
       ${err ? `<p class="ghc-err" role="alert">${esc(err)}</p>` : ''}`;
     panel._items = Object.create(null);
     for (const i of items) panel._items[i.key] = i.payload;
     const logEl = panel.querySelector('.ghc-log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;   // the newest line in view
+    fillPhotos(panel);
   }
 
   function setOpen(on) {
@@ -174,6 +255,9 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
   listen(btn, 'click', () => setOpen(!open));
   listen(panel, 'click', (e) => {
     if (e.target.closest('[data-role="close"]')) { setOpen(false); return; }
+    if (e.target.closest('[data-role="photo"]')) { if (!sendingPhoto) { file.value = ''; file.click(); } return; }
+    const pic = e.target.closest('[data-view]');
+    if (pic) { showPhoto(pic.getAttribute('data-view')); return; }
     const b = e.target.closest('button[data-k]');
     if (b && panel._items) doSend(panel._items[b.getAttribute('data-k')]);
   });
@@ -183,14 +267,36 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
     const v = cleanChat(input ? input.value : '');
     if (v) doSend({ t: 'c', v });
   });
+  // A PHOTO: picked, shrunk, stored, then its chat line. NO SILENT FAILURE: the panel says so.
+  listen(file, 'change', async () => {
+    const f = file.files && file.files[0];
+    if (!f || !photoOn || sendingPhoto || destroyed) return;
+    sendingPhoto = true; err = '';
+    if (!open) setOpen(true); else paintPanel();
+    let res;
+    try {
+      const d = await preparePhoto(f);
+      res = await sendPhoto(photos, d);
+      if (res && res.ok) pics.set(res.entry.v, d);
+    } catch (e2) { res = { ok: false, reason: 'bad-photo' }; console.warn('[match-chat] photo', e2); }
+    sendingPhoto = false;
+    file.value = '';
+    if (destroyed) return;
+    if (!res || !res.ok) { err = failFn(res && res.reason); if (!open) setOpen(true); else paintPanel(); return; }
+    const e = res.entry;
+    add({ key: e.key, mine: true, t: 'i', v: e.v, at: e.at }, { pop: false });
+    if (open) paintPanel();
+  });
+  listen(view, 'click', () => { view.hidden = true; view.innerHTML = ''; });
   // A tap on the chat must never reach the game underneath (a swipe pad, a mallet, a dart).
   for (const ty of ['pointerdown', 'touchstart', 'mousedown']) {
     listen(btn, ty, (e) => e.stopPropagation(), { passive: true });
     listen(panel, ty, (e) => e.stopPropagation(), { passive: true });
+    listen(view, ty, (e) => e.stopPropagation(), { passive: true });
   }
   // Closing on a tap anywhere else - bound to the game's own root, never document.
   listen(host, 'pointerdown', (e) => {
-    if (!open || panel.contains(e.target) || btn.contains(e.target)) return;
+    if (!open || panel.contains(e.target) || btn.contains(e.target) || view.contains(e.target)) return;
     setOpen(false);
   }, true);
 
@@ -221,7 +327,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
     const text = textOf(e);
     if (!text) return;
     const ms = e.mine ? POP_MS : POP_THEM_MS;
-    const sig = `${e.mine ? 1 : 0}|${e.t}|${text}`;
+    const sig = `${e.mine ? 1 : 0}|${e.t}|${e.t === 'i' ? e.v : text}`;
     const same = Array.from(pops.children).find((n) => n._sig === sig && !n.classList.contains('is-off'));
     if (same) {
       same._n += 1;
@@ -237,11 +343,12 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
     el._sig = sig;
     el._n = 1;
     el.innerHTML = `<span class="ghc-pop-who">${who.emoji ? `<span aria-hidden="true">${esc(who.emoji)}</span> ` : ''}${esc(who.name || '?')}</span>`
-      + `<span class="ghc-pop-text">${esc(text)}</span>`
+      + (e.t === 'i' && photoOn ? `<img class="ghc-pop-pic" data-pk="${esc(e.v)}" alt="${esc(t('photo'))}">` : `<span class="ghc-pop-text">${esc(text)}</span>`)
       + '<span class="ghc-pop-n" hidden></span>'
       + (e.mine ? '' : `<button type="button" class="ghc-pop-x" aria-label="${esc(t('close'))}">✕</button>`);
     pops.appendChild(el);
     while (pops.children.length > MAX_POPS) dismiss(pops.firstChild);
+    fillPhotos(el);
     arm(el, ms);
   }
 
@@ -249,6 +356,7 @@ export function createMatchChat({ root, send, them, place, failText } = {}) {
    *  this device already added cannot show it twice. */
   function add(e, { pop = false } = {}) {
     if (destroyed || !e || known.has(e.key)) return;
+    if (e.t === 'i' && !photoOn) e = { ...e, t: 'c', v: textOf(e) };   // a photo where photos are off: say so in words
     known.add(e.key);
     log.push(e);
     log.sort((x, y) => x.at - y.at);
@@ -358,6 +466,19 @@ function injectCss() {
 .ghc-send { appearance: none; flex: 0 0 auto; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 0;
   background: var(--ghc-accent); color: #1d1f24; font: inherit; font-size: 15px; font-weight: 800;
   cursor: pointer; touch-action: manipulation; }
+.ghc-cam { appearance: none; flex: 0 0 auto; width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--ghc-edge);
+  background: rgba(255, 255, 255, 0.09); font-size: 20px; line-height: 1; padding: 0; cursor: pointer; touch-action: manipulation; }
+.ghc-cam:disabled { opacity: .5; }
+.ghc-note { margin: 6px 0 0; font-size: 15px; font-weight: 700; color: var(--ghc-ink); }
+.ghc-pic { appearance: none; display: block; padding: 0; margin-top: 3px; border: 0; background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px; overflow: hidden; cursor: pointer; touch-action: manipulation; }
+.ghc-pic img { display: block; width: 168px; height: 168px; object-fit: cover; }
+.ghc-pop-pic { display: block; width: 150px; height: 150px; object-fit: cover; border-radius: 10px; background: rgba(255, 255, 255, 0.08); }
+.ghc-view { pointer-events: auto; position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.92); touch-action: manipulation; }
+.ghc-view[hidden] { display: none; }
+.ghc-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ghc-view-x { position: absolute; top: var(--ghc-top); right: 12px; margin: 0; }
 .ghc-err { margin: 6px 0 0; font-size: 13px; font-weight: 700; }
 .ghc-err::before { content: "⚠ "; }
 .ghc.is-open .ghc-pops { display: none; }

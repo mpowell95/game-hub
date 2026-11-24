@@ -128,6 +128,9 @@
         "updated": { ".validate": "newData.val() === data.val() || (newData.isNumber() && newData.val() >= now - 120000 && newData.val() <= now + 120000)" },
         "log": { "$k": { ".validate": "data.exists() || (newData.child('at').isNumber() && newData.child('at').val() >= now - 120000 && newData.child('at').val() <= now + 120000)" } }
       } } },
+    "chatPhotos": { ".read": "auth != null",
+      "$node": { "$id": { "$k": { ".write": "auth != null && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['by', 'd', 'at']) && newData.child('d').isString() && newData.child('d').val().beginsWith('data:image/jpeg;base64,') && newData.child('d').val().length <= 800000 && newData.child('at').isNumber() && (newData.child('by').val() === 'a' || newData.child('by').val() === 'b' || newData.child('by').val() === 'c')" } } } },
     "flicksoccer": { ".read": "auth != null",
       "index": { "$code": { "$id": { ".write": "auth != null && newData.exists()" } } },
       "chat": { "$id": { "$k": { ".write": "auth != null && newData.exists()" } } },
