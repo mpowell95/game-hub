@@ -217,7 +217,7 @@ function ensureCss() {
   .cx-person[aria-pressed="true"] { border: 2px solid #ffce3a; padding: 5px 11px; }
   .cx-tick { flex: 0 0 auto; width: 18px; color: #ffce3a; font-weight: 900; }
   .cx-sheet .gh-btn { margin-top: 12px; }
-  /* Desktop (html.gh-deskpg = a wide window with a mouse, admin devices until Matt releases it; js/hub.js):
+  /* Desktop (html.gh-deskpg = a wide window with a mouse, released 2026-11-24; js/hub.js):
      Matt's mockup docs/mockups/desktop/pages.html. Matches left, games right, the floating tab bar below. */
   html.gh-deskpg .cx-overlay { padding-bottom: 104px; }
   html.gh-deskpg .cx-page { width: min(1240px, 100%); }
