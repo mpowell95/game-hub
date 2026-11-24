@@ -617,7 +617,8 @@ async function mountChat(ui, link, send) {
     const top = Math.round(s.top - b.top);
     place = { top: `${top}px`, right: `${Math.round(b.right - s.left - 44)}px`, popsTop: `${top + 54}px` };
   }
-  const chat = UI.createMatchChat({ root: host, send, them: () => ({ name: link.them.name, emoji: link.them.emoji }), place });
+  const photos = link.kind === 'ch' ? { node: NODE, id: link.id, side: link.side } : null;   // challenges only (a live room has no match id)
+  const chat = UI.createMatchChat({ root: host, send, them: () => ({ name: link.them.name, emoji: link.them.emoji }), place, photos });
   link.chat = chat;
   if (link.kind === 'ch') {
     const seenAt = DATA.readChatSeen(NODE, link.id);

@@ -3460,6 +3460,7 @@ class EscobaUI {
     const chat = UI.createMatchChat({
       root: this.el.game,
       send: (p) => DATA.sendChat({ node, id: ch.id, side }, p),
+      photos: { node, id: ch.id, side },
       them: () => ({ name: ch.them.name || '?', emoji: ch.them.emoji || '' }),
       place: this._chChatPlace(),
     });

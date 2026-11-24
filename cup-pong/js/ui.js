@@ -817,6 +817,7 @@ class CupPong {
     const chat = UI.createMatchChat({
       root: this.root,
       send: (p) => DATA.sendChat({ node, id: mp.id, side }, p),
+      photos: { node, id: mp.id, side },
       them: () => ({ name: mp.themName, emoji: mp.themEmoji }),
       place: CHAT_PLACE,
     });

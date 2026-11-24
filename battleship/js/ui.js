@@ -3795,6 +3795,7 @@ class BattleshipUI {
     const chat = UI.createMatchChat({
       root: this.root,
       send: (p) => DATA.sendChat({ node: CH.NODE, id: link.id, side: link.side }, p),
+      photos: { node: CH.NODE, id: link.id, side: link.side },
       them: () => ({ name: link.them.name, emoji: link.them.emoji }),
     });
     link.chat = chat;
